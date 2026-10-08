@@ -140,7 +140,7 @@ body(weeksSheet.getRange('A13:F28'));
 weeksSheet.getRange('D13:E28').format.numberFormat = 'yyyy-mm-dd';
 for (let i = 0; i < workdays.length; i++) {
   const col = String.fromCharCode(71 + i);
-  weeksSheet.getRange(`${col}13:${col}28`).formulas = tasks.map((_, rowIndex) => [`=IF(AND(${col}$12>=$D${rowIndex + 13},${col}$12<=$E${rowIndex + 13}),\"■\",\"\")`]);
+  weeksSheet.getRange(`${col}13:${col}28`).formulas = tasks.map((_, rowIndex) => [`=IF(AND(${col}$12>=$D${rowIndex + 13},${col}$12<=$E${rowIndex + 13}),"■","")`]);
   weeksSheet.getRange(`${col}13:${col}28`).format = { fill: i < 8 ? c.paleBlue : i < 14 ? c.paleGreen : c.paleAmber, font: { bold: true, color: c.navy }, horizontalAlignment: 'center', verticalAlignment: 'center' };
   weeksSheet.getRangeByIndexes(0, 6 + i, 28, 1).format.columnWidth = 5;
 }

@@ -5,6 +5,12 @@ import {
   WebGLRenderer,
 } from 'three';
 
+import type {
+  ExplicitLayoutInput,
+  LayoutResult,
+  NormalizedDimensionInput,
+} from '@/dimension/kernel/types';
+
 import { DEFAULT_DIMENSION_FORMAT } from '@/dimension/kernel/format';
 import { buildHitIndex, type HitIndex } from '@/dimension/kernel/hit/hitIndex';
 import { SOLVESPACE_DIMENSION_THEME } from '@/dimension/kernel/theme';
@@ -12,12 +18,6 @@ import { layoutViewport } from '@/dimension/kernel/viewport/layoutViewport';
 import { loadDimensionFont } from '@/dimension/viewport/loadDimensionFont';
 import { ThreeSceneDimensionPainter } from '@/dimension/viewport/scenePainter';
 import { ThreeViewportProjector } from '@/dimension/viewport/threeViewportProjector';
-
-import type {
-  ExplicitLayoutInput,
-  LayoutResult,
-  NormalizedDimensionInput,
-} from '@/dimension/kernel/types';
 
 type PerfResult = {
   loaded: number;

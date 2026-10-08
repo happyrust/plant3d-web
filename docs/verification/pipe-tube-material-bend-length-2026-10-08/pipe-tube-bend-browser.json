@@ -1,0 +1,3749 @@
+{
+  "diameterFixtures": true,
+  "versionFixtures": true,
+  "pinnedSessions": {
+    "24381_145018": 339,
+    "24384_23257": 640,
+    "24381_103251": 339
+  },
+  "mismatchErrors": [
+    "管道信息读取失败，原标注已保留：属性与中心线版本不一致（属性 7997@339，中心线 7997@353），请重新读取",
+    "管道信息读取失败，原标注已保留：属性与中心线版本不一致（属性 8000@640，中心线 8000@646），请重新读取"
+  ],
+  "records": [
+    {
+      "refno": "24381_145018",
+      "name": "/Copy-of-RCS0014-1R43012新",
+      "sesno": 339,
+      "fetchedAt": "2026-10-08T08:11:45.881Z",
+      "stale": false,
+      "anchorMm": [
+        1515.72,
+        8156.67,
+        13293.23
+      ],
+      "fields": [
+        {
+          "key": "head-bore",
+          "label": "首端通径",
+          "text": "100 mm",
+          "source": "24381_145018@339:HBOR",
+          "status": "read"
+        },
+        {
+          "key": "tail-bore",
+          "label": "末端通径",
+          "text": "100 mm",
+          "source": "24381_145018@339:TBOR",
+          "status": "read"
+        },
+        {
+          "key": "outer-diameter",
+          "label": "成员外径范围",
+          "text": "114.3 mm（21/21段）",
+          "source": "逐段读取；详情区分管子目录值、通径估算及缺失，不包含构件实体最大包络",
+          "status": "read"
+        },
+        {
+          "key": "material",
+          "label": "业务材质",
+          "text": "未设置",
+          "source": "24381_145018@339:MATN/MATR",
+          "status": "missing"
+        },
+        {
+          "key": "insulation",
+          "label": "保温规格",
+          "text": "13246/496399",
+          "source": "24381_145018@339:ISPE（规格参考号）",
+          "status": "read"
+        },
+        {
+          "key": "envelope",
+          "label": "业务包络",
+          "text": "口径待确认（是否含保温/操作空间）",
+          "source": "专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "model-bounds",
+          "label": "模型包围尺寸",
+          "text": "8906.95 mm × 3744.8 mm × 6631.66 mm",
+          "source": "model-memory",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "straight-length",
+          "label": "直管段总长",
+          "text": "16521.38 mm",
+          "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+          "status": "derived"
+        },
+        {
+          "key": "length-with-bends",
+          "label": "管长（含弯头）",
+          "text": "18529.5 mm",
+          "source": "直管段总长 + 9 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "elevation",
+          "label": "标注锚点标高",
+          "text": "13293.23 mm",
+          "source": "E3D 世界 Z，非管顶/管底",
+          "status": "derived"
+        },
+        {
+          "key": "coordinates",
+          "label": "标注锚点坐标",
+          "text": "1515.72 mm, 8156.67 mm, 13293.23 mm",
+          "source": "E3D 世界 X/Y/Z",
+          "status": "derived"
+        },
+        {
+          "key": "source-version",
+          "label": "版本核对",
+          "text": "属性与中心线同版本（7997@339），模型版本待核实",
+          "source": "属性/中心线实读会话；模型记录会话不替代完整生成及发布回执",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "member-materials",
+          "label": "成员材质",
+          "text": "Z2CN1810 RCCM 01（20/21段）",
+          "source": "成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质",
+          "status": "unconfirmed"
+        }
+      ],
+      "memberDiameters": [
+        {
+          "refno": "Head~24381_145019",
+          "order": 0,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145019",
+          "order": 1,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145019~24381_145021",
+          "order": 3,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145021",
+          "order": 4,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145021~24381_145023",
+          "order": 6,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145023",
+          "order": 7,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145023~24381_145025",
+          "order": 9,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145025",
+          "order": 10,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145025~24381_145026",
+          "order": 11,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145026",
+          "order": 12,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145026~24381_145028",
+          "order": 14,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145028",
+          "order": 15,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145028~24381_145029",
+          "order": 16,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145029",
+          "order": 17,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145029~24381_145031",
+          "order": 19,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145031",
+          "order": 20,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145031~24381_145032",
+          "order": 21,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145032~24381_145033",
+          "order": 23,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145033",
+          "order": 24,
+          "noun": "ELBO",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145033~24381_145035",
+          "order": 26,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        },
+        {
+          "refno": "24381_145035",
+          "order": 27,
+          "noun": "VALV",
+          "implicit": false,
+          "outsideDiameterMm": 114.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：114.3 mm"
+        }
+      ],
+      "memberMaterials": [
+        {
+          "refno": "Head~24381_145019",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145018@339:HSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145019",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145019@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145019~24381_145021",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145019@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145021",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145021@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145021~24381_145023",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145021@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145023",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145023@339:SPRE → 13246/465608@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145023~24381_145025",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145023@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145025",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145025@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145025~24381_145026",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145025@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145026",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145026@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145026~24381_145028",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145026@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145028",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145028@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145028~24381_145029",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145028@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145029",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145029@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145029~24381_145031",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145029@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145031",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145031@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145031~24381_145032",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145031@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145032~24381_145033",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145032@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145033",
+          "noun": "ELBO",
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145033@339:SPRE → 13246/465608@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145033~24381_145035",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "Z2CN1810 RCCM 01",
+          "source": "24381/145033@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24381_145035",
+          "noun": "VALV",
+          "text": "未设置",
+          "source": "24381/145035@339:SPRE → 13246/465874@48:MATX（未设置）",
+          "status": "missing"
+        }
+      ],
+      "bendArcs": [
+        {
+          "refno": "24381_145019",
+          "noun": "ELBO",
+          "angleDeg": 89.7473,
+          "chordMm": 214.48616394359777,
+          "radiusMm": 152.000184693441,
+          "arcMm": 238.0909430270143,
+          "source": "24381/145019@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145021",
+          "noun": "ELBO",
+          "angleDeg": 89.6864,
+          "chordMm": 214.37172761854674,
+          "radiusMm": 152.00024643627438,
+          "arcMm": 237.92947783997963,
+          "source": "24381/145021@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145023",
+          "noun": "ELBO",
+          "angleDeg": 38.5543,
+          "chordMm": 100.36224291535167,
+          "radiusMm": 152.00045380104865,
+          "arcMm": 102.28102568433852,
+          "source": "24381/145023@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145025",
+          "noun": "ELBO",
+          "angleDeg": 89.8213,
+          "chordMm": 214.62570206058626,
+          "radiusMm": 152.0005115261528,
+          "arcMm": 238.2877702680818,
+          "source": "24381/145025@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145026",
+          "noun": "ELBO",
+          "angleDeg": 89.7142,
+          "chordMm": 214.42443725937582,
+          "radiusMm": 152.00054683802313,
+          "arcMm": 238.00369896393735,
+          "source": "24381/145026@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145028",
+          "noun": "ELBO",
+          "angleDeg": 89.7142,
+          "chordMm": 214.42372841604993,
+          "radiusMm": 152.00004435530923,
+          "arcMm": 238.00291217239572,
+          "source": "24381/145028@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145029",
+          "noun": "ELBO",
+          "angleDeg": 89.7142,
+          "chordMm": 214.42372669086768,
+          "radiusMm": 152.00004313236727,
+          "arcMm": 238.0029102575032,
+          "source": "24381/145029@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145031",
+          "noun": "ELBO",
+          "angleDeg": 90,
+          "chordMm": 214.96044956214672,
+          "radiusMm": 151.99999157230278,
+          "arcMm": 238.76102843462843,
+          "source": "24381/145031@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_145033",
+          "noun": "ELBO",
+          "angleDeg": 89.9988,
+          "chordMm": 214.95856803579557,
+          "radiusMm": 152.0002528835212,
+          "arcMm": 238.7582554154785,
+          "source": "24381/145033@339:ANGL + 中心线端口弦长"
+        }
+      ],
+      "sourceVersion": {
+        "dbnum": 7997,
+        "sesno": 339,
+        "databases": [
+          {
+            "dbnum": 5054,
+            "sesno": 48,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 339,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "warnings": [
+        "外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值",
+        "7 个成员没有长度（穿过件），不参与走廊"
+      ]
+    },
+    {
+      "refno": "24384_23257",
+      "name": "/C-OR-1R345-C",
+      "sesno": 640,
+      "fetchedAt": "2026-10-08T08:11:46.307Z",
+      "stale": false,
+      "anchorMm": [
+        8550.54,
+        14060.42,
+        2900
+      ],
+      "fields": [
+        {
+          "key": "head-bore",
+          "label": "首端通径",
+          "text": "50 mm",
+          "source": "24384_23257@640:HBOR",
+          "status": "read"
+        },
+        {
+          "key": "tail-bore",
+          "label": "末端通径",
+          "text": "50 mm",
+          "source": "24384_23257@640:TBOR",
+          "status": "read"
+        },
+        {
+          "key": "outer-diameter",
+          "label": "成员外径范围",
+          "text": "21.3 mm ～ 25 mm（9/9段）",
+          "source": "逐段读取；详情区分管子目录值、通径估算及缺失，不包含构件实体最大包络",
+          "status": "read"
+        },
+        {
+          "key": "material",
+          "label": "业务材质",
+          "text": "未设置",
+          "source": "24384_23257@640:MATN/MATR",
+          "status": "missing"
+        },
+        {
+          "key": "insulation",
+          "label": "保温规格",
+          "text": "未设置",
+          "source": "24384_23257@640:ISPE（规格参考号）",
+          "status": "missing"
+        },
+        {
+          "key": "envelope",
+          "label": "业务包络",
+          "text": "口径待确认（是否含保温/操作空间）",
+          "source": "专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "model-bounds",
+          "label": "模型包围尺寸",
+          "text": "未设置",
+          "source": "未生成模型",
+          "status": "missing"
+        },
+        {
+          "key": "straight-length",
+          "label": "直管段总长",
+          "text": "6300 mm",
+          "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+          "status": "derived"
+        },
+        {
+          "key": "length-with-bends",
+          "label": "管长（含弯头）",
+          "text": "6343.01 mm",
+          "source": "直管段总长 + 2 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "elevation",
+          "label": "标注锚点标高",
+          "text": "2900 mm",
+          "source": "E3D 世界 Z，非管顶/管底",
+          "status": "derived"
+        },
+        {
+          "key": "coordinates",
+          "label": "标注锚点坐标",
+          "text": "8550.54 mm, 14060.42 mm, 2900 mm",
+          "source": "E3D 世界 X/Y/Z",
+          "status": "derived"
+        },
+        {
+          "key": "source-version",
+          "label": "版本核对",
+          "text": "属性与中心线同版本（8000@640），模型版本待核实",
+          "source": "属性/中心线实读会话；模型记录会话不替代完整生成及发布回执",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "member-materials",
+          "label": "成员材质",
+          "text": "Hot Dip Galvanized（9/9段）",
+          "source": "成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质",
+          "status": "read"
+        }
+      ],
+      "memberDiameters": [
+        {
+          "refno": "24384_23258",
+          "order": 0,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23259",
+          "order": 1,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23260",
+          "order": 2,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23261",
+          "order": 3,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23262",
+          "order": 4,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23263",
+          "order": 5,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23264",
+          "order": 6,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 21.3,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：21.3 mm"
+        },
+        {
+          "refno": "24384_23265",
+          "order": 7,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        },
+        {
+          "refno": "24384_23266",
+          "order": 8,
+          "noun": "FTUB",
+          "implicit": false,
+          "outsideDiameterMm": 25,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：25 mm"
+        }
+      ],
+      "memberMaterials": [
+        {
+          "refno": "24384_23258",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23258@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23259",
+          "noun": "BEND",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23259@640:SPRE → 13244/108844@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23260",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23260@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23261",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23261@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23262",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23262@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23263",
+          "noun": "BEND",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23263@640:SPRE → 13244/108844@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23264",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23264@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23265",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23265@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        },
+        {
+          "refno": "24384_23266",
+          "noun": "FTUB",
+          "text": "Hot Dip Galvanized",
+          "source": "24384/23266@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+          "status": "read"
+        }
+      ],
+      "bendArcs": [
+        {
+          "refno": "24384_23259",
+          "noun": "BEND",
+          "angleDeg": 3,
+          "chordMm": 1.386602322225918,
+          "radiusMm": 26.48517898109755,
+          "arcMm": 1.3867607286004477,
+          "source": "24384/23259@640:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24384_23263",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 37.47683257693981,
+          "radiusMm": 26.50012245254706,
+          "arcMm": 41.626295008075886,
+          "source": "24384/23263@640:ANGL + 中心线端口弦长"
+        }
+      ],
+      "sourceVersion": {
+        "dbnum": 8000,
+        "sesno": 640,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 640,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "warnings": [
+        "当前模型边界不可用，模型包围尺寸缺失",
+        "外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值"
+      ]
+    },
+    {
+      "refno": "24381_103251",
+      "name": "/Copy-of-1CIS001MT-YK/B1",
+      "sesno": 339,
+      "fetchedAt": "2026-10-08T08:11:46.877Z",
+      "stale": false,
+      "anchorMm": [
+        1090.41,
+        1500.82,
+        -2905
+      ],
+      "fields": [
+        {
+          "key": "head-bore",
+          "label": "首端通径",
+          "text": "7 mm",
+          "source": "24381_103251@339:HBOR",
+          "status": "read"
+        },
+        {
+          "key": "tail-bore",
+          "label": "末端通径",
+          "text": "7 mm",
+          "source": "24381_103251@339:TBOR",
+          "status": "read"
+        },
+        {
+          "key": "outer-diameter",
+          "label": "成员外径范围",
+          "text": "6.35 mm（27/27段）",
+          "source": "逐段读取；详情区分管子目录值、通径估算及缺失，不包含构件实体最大包络",
+          "status": "read"
+        },
+        {
+          "key": "material",
+          "label": "业务材质",
+          "text": "未设置",
+          "source": "24381_103251@339:MATN/MATR",
+          "status": "missing"
+        },
+        {
+          "key": "insulation",
+          "label": "保温规格",
+          "text": "未设置",
+          "source": "24381_103251@339:ISPE（规格参考号）",
+          "status": "missing"
+        },
+        {
+          "key": "envelope",
+          "label": "业务包络",
+          "text": "口径待确认（是否含保温/操作空间）",
+          "source": "专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "model-bounds",
+          "label": "模型包围尺寸",
+          "text": "未设置",
+          "source": "未生成模型",
+          "status": "missing"
+        },
+        {
+          "key": "straight-length",
+          "label": "直管段总长",
+          "text": "14959.77 mm",
+          "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+          "status": "derived"
+        },
+        {
+          "key": "length-with-bends",
+          "label": "管长（含弯头）",
+          "text": "15151.93 mm",
+          "source": "直管段总长 + 13 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "elevation",
+          "label": "标注锚点标高",
+          "text": "-2905 mm",
+          "source": "E3D 世界 Z，非管顶/管底",
+          "status": "derived"
+        },
+        {
+          "key": "coordinates",
+          "label": "标注锚点坐标",
+          "text": "1090.41 mm, 1500.82 mm, -2905 mm",
+          "source": "E3D 世界 X/Y/Z",
+          "status": "derived"
+        },
+        {
+          "key": "source-version",
+          "label": "版本核对",
+          "text": "属性与中心线同版本（7997@339），模型版本待核实",
+          "source": "属性/中心线实读会话；模型记录会话不替代完整生成及发布回执",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "member-materials",
+          "label": "成员材质",
+          "text": "未设置",
+          "source": "成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质",
+          "status": "missing"
+        }
+      ],
+      "memberDiameters": [
+        {
+          "refno": "Head~24381_103252",
+          "order": 0,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103252",
+          "order": 1,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103252~24381_103253",
+          "order": 2,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103253",
+          "order": 3,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103253~24381_103254",
+          "order": 4,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103254",
+          "order": 5,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103254~24381_103255",
+          "order": 6,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103255",
+          "order": 7,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103255~24381_103256",
+          "order": 8,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103256",
+          "order": 9,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103256~24381_103257",
+          "order": 10,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103257",
+          "order": 11,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103257~24381_103258",
+          "order": 12,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103258",
+          "order": 13,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103258~24381_103259",
+          "order": 14,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103259",
+          "order": 15,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103259~24381_103260",
+          "order": 16,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103260",
+          "order": 17,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103260~24381_103261",
+          "order": 18,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103261",
+          "order": 19,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103261~24381_103262",
+          "order": 20,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103262",
+          "order": 21,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103262~24381_103263",
+          "order": 22,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103263",
+          "order": 23,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103263~24381_103264",
+          "order": 24,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103264",
+          "order": 25,
+          "noun": "BEND",
+          "implicit": false,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        },
+        {
+          "refno": "24381_103264~Tail",
+          "order": 26,
+          "noun": "TUBI",
+          "implicit": true,
+          "outsideDiameterMm": 6.35,
+          "source": "catalogue",
+          "sourceText": "管子目录 PARA[2]：6.35 mm"
+        }
+      ],
+      "memberMaterials": [
+        {
+          "refno": "Head~24381_103252",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103251@339:HSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103252",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103252@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103252~24381_103253",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103252@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103253",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103253@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103253~24381_103254",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103253@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103254",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103254@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103254~24381_103255",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103254@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103255",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103255@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103255~24381_103256",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103255@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103256",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103256@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103256~24381_103257",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103256@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103257",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103257@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103257~24381_103258",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103257@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103258",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103258@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103258~24381_103259",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103258@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103259",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103259@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103259~24381_103260",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103259@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103260",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103260@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103260~24381_103261",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103260@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103261",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103261@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103261~24381_103262",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103261@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103262",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103262@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103262~24381_103263",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103262@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103263",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103263@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103263~24381_103264",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103263@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103264",
+          "noun": "BEND",
+          "text": "未设置",
+          "source": "24381/103264@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+          "status": "missing"
+        },
+        {
+          "refno": "24381_103264~Tail",
+          "noun": "TUBI",
+          "implicit": true,
+          "text": "未设置",
+          "source": "24381/103264@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+          "status": "missing"
+        }
+      ],
+      "bendArcs": [
+        {
+          "refno": "24381_103252",
+          "noun": "BEND",
+          "angleDeg": 94.9433,
+          "chordMm": 23.397916114047494,
+          "radiusMm": 15.874984400495636,
+          "arcMm": 26.306011005355703,
+          "source": "24381/103252@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103253",
+          "noun": "BEND",
+          "angleDeg": 12.1456,
+          "chordMm": 3.3589950699578175,
+          "radiusMm": 15.875465563529493,
+          "arcMm": 3.3652924558671544,
+          "source": "24381/103253@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103254",
+          "noun": "BEND",
+          "angleDeg": 9.62484,
+          "chordMm": 2.6636190305672747,
+          "radiusMm": 15.874935995512184,
+          "arcMm": 2.666753472341853,
+          "source": "24381/103254@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103255",
+          "noun": "BEND",
+          "angleDeg": 8.96494,
+          "chordMm": 2.481396947286104,
+          "radiusMm": 15.875031597380474,
+          "arcMm": 2.483930002839468,
+          "source": "24381/103255@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103256",
+          "noun": "BEND",
+          "angleDeg": 11.9399,
+          "chordMm": 3.3021889380984595,
+          "radiusMm": 15.874862663098376,
+          "arcMm": 3.3081716371072276,
+          "source": "24381/103256@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103257",
+          "noun": "BEND",
+          "angleDeg": 9.61098,
+          "chordMm": 2.65980195503349,
+          "radiusMm": 15.874993262834556,
+          "arcMm": 2.662922889711282,
+          "source": "24381/103257@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103258",
+          "noun": "BEND",
+          "angleDeg": 6.30875,
+          "chordMm": 1.7471178347209786,
+          "radiusMm": 15.875262775253237,
+          "arcMm": 1.748000723343173,
+          "source": "24381/103258@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103259",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 22.450620517259622,
+          "radiusMm": 15.874986009600116,
+          "arcMm": 24.936369711800236,
+          "source": "24381/103259@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103260",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 22.450591375061634,
+          "radiusMm": 15.874965402954299,
+          "arcMm": 24.936337342956676,
+          "source": "24381/103260@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103261",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 22.4506595569042,
+          "radiusMm": 15.875013614797531,
+          "arcMm": 24.936413073942933,
+          "source": "24381/103261@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103262",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 22.450899874169618,
+          "radiusMm": 15.875183544765544,
+          "arcMm": 24.936679999312503,
+          "source": "24381/103262@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103263",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 22.45074279595226,
+          "radiusMm": 15.875072473692873,
+          "arcMm": 24.936505529279536,
+          "source": "24381/103263@339:ANGL + 中心线端口弦长"
+        },
+        {
+          "refno": "24381_103264",
+          "noun": "BEND",
+          "angleDeg": 90,
+          "chordMm": 22.450695185672863,
+          "radiusMm": 15.87503880814146,
+          "arcMm": 24.936452647555036,
+          "source": "24381/103264@339:ANGL + 中心线端口弦长"
+        }
+      ],
+      "sourceVersion": {
+        "dbnum": 7997,
+        "sesno": 339,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 339,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "warnings": [
+        "当前模型边界不可用，模型包围尺寸缺失",
+        "外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值"
+      ]
+    }
+  ],
+  "render": {
+    "glyphTexts": [
+      "/Copy-of-RCS0014-1R43012新",
+      "首端通径：100 mm",
+      "末端通径：100 mm",
+      "成员外径范围：114.3 mm（21/21段）",
+      "业务材质：未设置",
+      "保温规格：13246/496399",
+      "业务包络：口径待确认（是否含保温/操作空间）",
+      "模型包围尺寸：8906.95 mm × 3744.8 mm × 6631.66 mm",
+      "直管段总长：16521.38 mm",
+      "管长（含弯头）：18529.5 mm",
+      "标注锚点标高：13293.23 mm",
+      "标注锚点坐标：1515.72 mm, 8156.67 mm, 13293.23 mm",
+      "版本核对：属性与中心线同版本（7997@339），模型版本待核实",
+      "成员材质：Z2CN1810 RCCM 01（20/21段）"
+    ],
+    "primitiveCount": 18,
+    "svgBytes": 145155
+  },
+  "failed": "管道信息读取失败，原标注已保留：controlled read failure",
+  "reopened": {
+    "records": [
+      {
+        "refno": "24381_145018",
+        "name": "/Copy-of-RCS0014-1R43012新",
+        "sesno": 339,
+        "fetchedAt": "2026-10-08T08:11:45.881Z",
+        "stale": true,
+        "anchorMm": [
+          1515.72,
+          8156.67,
+          13293.23
+        ],
+        "fields": [
+          {
+            "key": "head-bore",
+            "label": "首端通径",
+            "text": "100 mm",
+            "source": "24381_145018@339:HBOR",
+            "status": "read"
+          },
+          {
+            "key": "tail-bore",
+            "label": "末端通径",
+            "text": "100 mm",
+            "source": "24381_145018@339:TBOR",
+            "status": "read"
+          },
+          {
+            "key": "outer-diameter",
+            "label": "成员外径范围",
+            "text": "114.3 mm（21/21段）",
+            "source": "逐段读取；详情区分管子目录值、通径估算及缺失，不包含构件实体最大包络",
+            "status": "read"
+          },
+          {
+            "key": "material",
+            "label": "业务材质",
+            "text": "未设置",
+            "source": "24381_145018@339:MATN/MATR",
+            "status": "missing"
+          },
+          {
+            "key": "insulation",
+            "label": "保温规格",
+            "text": "13246/496399",
+            "source": "24381_145018@339:ISPE（规格参考号）",
+            "status": "read"
+          },
+          {
+            "key": "envelope",
+            "label": "业务包络",
+            "text": "口径待确认（是否含保温/操作空间）",
+            "source": "专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "model-bounds",
+            "label": "模型包围尺寸",
+            "text": "8906.95 mm × 3744.8 mm × 6631.66 mm",
+            "source": "model-memory",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "straight-length",
+            "label": "直管段总长",
+            "text": "16521.38 mm",
+            "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+            "status": "derived"
+          },
+          {
+            "key": "length-with-bends",
+            "label": "管长（含弯头）",
+            "text": "18529.5 mm",
+            "source": "直管段总长 + 9 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "elevation",
+            "label": "标注锚点标高",
+            "text": "13293.23 mm",
+            "source": "E3D 世界 Z，非管顶/管底",
+            "status": "derived"
+          },
+          {
+            "key": "coordinates",
+            "label": "标注锚点坐标",
+            "text": "1515.72 mm, 8156.67 mm, 13293.23 mm",
+            "source": "E3D 世界 X/Y/Z",
+            "status": "derived"
+          },
+          {
+            "key": "source-version",
+            "label": "版本核对",
+            "text": "属性与中心线同版本（7997@339），模型版本待核实",
+            "source": "属性/中心线实读会话；模型记录会话不替代完整生成及发布回执",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "member-materials",
+            "label": "成员材质",
+            "text": "Z2CN1810 RCCM 01（20/21段）",
+            "source": "成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质",
+            "status": "unconfirmed"
+          }
+        ],
+        "memberDiameters": [
+          {
+            "refno": "Head~24381_145019",
+            "order": 0,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145019",
+            "order": 1,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145019~24381_145021",
+            "order": 3,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145021",
+            "order": 4,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145021~24381_145023",
+            "order": 6,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145023",
+            "order": 7,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145023~24381_145025",
+            "order": 9,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145025",
+            "order": 10,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145025~24381_145026",
+            "order": 11,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145026",
+            "order": 12,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145026~24381_145028",
+            "order": 14,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145028",
+            "order": 15,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145028~24381_145029",
+            "order": 16,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145029",
+            "order": 17,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145029~24381_145031",
+            "order": 19,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145031",
+            "order": 20,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145031~24381_145032",
+            "order": 21,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145032~24381_145033",
+            "order": 23,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145033",
+            "order": 24,
+            "noun": "ELBO",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145033~24381_145035",
+            "order": 26,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          },
+          {
+            "refno": "24381_145035",
+            "order": 27,
+            "noun": "VALV",
+            "implicit": false,
+            "outsideDiameterMm": 114.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：114.3 mm"
+          }
+        ],
+        "memberMaterials": [
+          {
+            "refno": "Head~24381_145019",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145018@339:HSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145019",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145019@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145019~24381_145021",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145019@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145021",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145021@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145021~24381_145023",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145021@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145023",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145023@339:SPRE → 13246/465608@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145023~24381_145025",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145023@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145025",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145025@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145025~24381_145026",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145025@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145026",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145026@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145026~24381_145028",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145026@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145028",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145028@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145028~24381_145029",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145028@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145029",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145029@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145029~24381_145031",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145029@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145031",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145031@339:SPRE → 13246/465610@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145031~24381_145032",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145031@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145032~24381_145033",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145032@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145033",
+            "noun": "ELBO",
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145033@339:SPRE → 13246/465608@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145033~24381_145035",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "Z2CN1810 RCCM 01",
+            "source": "24381/145033@339:LSTU → 13246/465801@48:MATX → 13246/371258@48:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24381_145035",
+            "noun": "VALV",
+            "text": "未设置",
+            "source": "24381/145035@339:SPRE → 13246/465874@48:MATX（未设置）",
+            "status": "missing"
+          }
+        ],
+        "bendArcs": [
+          {
+            "refno": "24381_145019",
+            "noun": "ELBO",
+            "angleDeg": 89.7473,
+            "chordMm": 214.48616394359777,
+            "radiusMm": 152.000184693441,
+            "arcMm": 238.0909430270143,
+            "source": "24381/145019@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145021",
+            "noun": "ELBO",
+            "angleDeg": 89.6864,
+            "chordMm": 214.37172761854674,
+            "radiusMm": 152.00024643627438,
+            "arcMm": 237.92947783997963,
+            "source": "24381/145021@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145023",
+            "noun": "ELBO",
+            "angleDeg": 38.5543,
+            "chordMm": 100.36224291535167,
+            "radiusMm": 152.00045380104865,
+            "arcMm": 102.28102568433852,
+            "source": "24381/145023@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145025",
+            "noun": "ELBO",
+            "angleDeg": 89.8213,
+            "chordMm": 214.62570206058626,
+            "radiusMm": 152.0005115261528,
+            "arcMm": 238.2877702680818,
+            "source": "24381/145025@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145026",
+            "noun": "ELBO",
+            "angleDeg": 89.7142,
+            "chordMm": 214.42443725937582,
+            "radiusMm": 152.00054683802313,
+            "arcMm": 238.00369896393735,
+            "source": "24381/145026@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145028",
+            "noun": "ELBO",
+            "angleDeg": 89.7142,
+            "chordMm": 214.42372841604993,
+            "radiusMm": 152.00004435530923,
+            "arcMm": 238.00291217239572,
+            "source": "24381/145028@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145029",
+            "noun": "ELBO",
+            "angleDeg": 89.7142,
+            "chordMm": 214.42372669086768,
+            "radiusMm": 152.00004313236727,
+            "arcMm": 238.0029102575032,
+            "source": "24381/145029@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145031",
+            "noun": "ELBO",
+            "angleDeg": 90,
+            "chordMm": 214.96044956214672,
+            "radiusMm": 151.99999157230278,
+            "arcMm": 238.76102843462843,
+            "source": "24381/145031@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_145033",
+            "noun": "ELBO",
+            "angleDeg": 89.9988,
+            "chordMm": 214.95856803579557,
+            "radiusMm": 152.0002528835212,
+            "arcMm": 238.7582554154785,
+            "source": "24381/145033@339:ANGL + 中心线端口弦长"
+          }
+        ],
+        "sourceVersion": {
+          "dbnum": 7997,
+          "sesno": 339,
+          "databases": [
+            {
+              "dbnum": 5054,
+              "sesno": 48,
+              "db_type": "CATA"
+            },
+            {
+              "dbnum": 7997,
+              "sesno": 339,
+              "db_type": "DESI"
+            }
+          ]
+        },
+        "warnings": [
+          "外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值",
+          "7 个成员没有长度（穿过件），不参与走廊"
+        ]
+      },
+      {
+        "refno": "24384_23257",
+        "name": "/C-OR-1R345-C",
+        "sesno": 640,
+        "fetchedAt": "2026-10-08T08:11:46.307Z",
+        "stale": true,
+        "anchorMm": [
+          8550.54,
+          14060.42,
+          2900
+        ],
+        "fields": [
+          {
+            "key": "head-bore",
+            "label": "首端通径",
+            "text": "50 mm",
+            "source": "24384_23257@640:HBOR",
+            "status": "read"
+          },
+          {
+            "key": "tail-bore",
+            "label": "末端通径",
+            "text": "50 mm",
+            "source": "24384_23257@640:TBOR",
+            "status": "read"
+          },
+          {
+            "key": "outer-diameter",
+            "label": "成员外径范围",
+            "text": "21.3 mm ～ 25 mm（9/9段）",
+            "source": "逐段读取；详情区分管子目录值、通径估算及缺失，不包含构件实体最大包络",
+            "status": "read"
+          },
+          {
+            "key": "material",
+            "label": "业务材质",
+            "text": "未设置",
+            "source": "24384_23257@640:MATN/MATR",
+            "status": "missing"
+          },
+          {
+            "key": "insulation",
+            "label": "保温规格",
+            "text": "未设置",
+            "source": "24384_23257@640:ISPE（规格参考号）",
+            "status": "missing"
+          },
+          {
+            "key": "envelope",
+            "label": "业务包络",
+            "text": "口径待确认（是否含保温/操作空间）",
+            "source": "专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "model-bounds",
+            "label": "模型包围尺寸",
+            "text": "未设置",
+            "source": "未生成模型",
+            "status": "missing"
+          },
+          {
+            "key": "straight-length",
+            "label": "直管段总长",
+            "text": "6300 mm",
+            "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+            "status": "derived"
+          },
+          {
+            "key": "length-with-bends",
+            "label": "管长（含弯头）",
+            "text": "6343.01 mm",
+            "source": "直管段总长 + 2 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "elevation",
+            "label": "标注锚点标高",
+            "text": "2900 mm",
+            "source": "E3D 世界 Z，非管顶/管底",
+            "status": "derived"
+          },
+          {
+            "key": "coordinates",
+            "label": "标注锚点坐标",
+            "text": "8550.54 mm, 14060.42 mm, 2900 mm",
+            "source": "E3D 世界 X/Y/Z",
+            "status": "derived"
+          },
+          {
+            "key": "source-version",
+            "label": "版本核对",
+            "text": "属性与中心线同版本（8000@640），模型版本待核实",
+            "source": "属性/中心线实读会话；模型记录会话不替代完整生成及发布回执",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "member-materials",
+            "label": "成员材质",
+            "text": "Hot Dip Galvanized（9/9段）",
+            "source": "成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质",
+            "status": "read"
+          }
+        ],
+        "memberDiameters": [
+          {
+            "refno": "24384_23258",
+            "order": 0,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23259",
+            "order": 1,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23260",
+            "order": 2,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23261",
+            "order": 3,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23262",
+            "order": 4,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23263",
+            "order": 5,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23264",
+            "order": 6,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 21.3,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：21.3 mm"
+          },
+          {
+            "refno": "24384_23265",
+            "order": 7,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          },
+          {
+            "refno": "24384_23266",
+            "order": 8,
+            "noun": "FTUB",
+            "implicit": false,
+            "outsideDiameterMm": 25,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：25 mm"
+          }
+        ],
+        "memberMaterials": [
+          {
+            "refno": "24384_23258",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23258@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23259",
+            "noun": "BEND",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23259@640:SPRE → 13244/108844@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23260",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23260@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23261",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23261@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23262",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23262@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23263",
+            "noun": "BEND",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23263@640:SPRE → 13244/108844@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23264",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23264@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23265",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23265@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          },
+          {
+            "refno": "24384_23266",
+            "noun": "FTUB",
+            "text": "Hot Dip Galvanized",
+            "source": "24384/23266@640:SPRE → 13244/108794@190:MATX → 13244/95080@190:XTEX",
+            "status": "read"
+          }
+        ],
+        "bendArcs": [
+          {
+            "refno": "24384_23259",
+            "noun": "BEND",
+            "angleDeg": 3,
+            "chordMm": 1.386602322225918,
+            "radiusMm": 26.48517898109755,
+            "arcMm": 1.3867607286004477,
+            "source": "24384/23259@640:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24384_23263",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 37.47683257693981,
+            "radiusMm": 26.50012245254706,
+            "arcMm": 41.626295008075886,
+            "source": "24384/23263@640:ANGL + 中心线端口弦长"
+          }
+        ],
+        "sourceVersion": {
+          "dbnum": 8000,
+          "sesno": 640,
+          "databases": [
+            {
+              "dbnum": 5052,
+              "sesno": 190,
+              "db_type": "CATA"
+            },
+            {
+              "dbnum": 8000,
+              "sesno": 640,
+              "db_type": "DESI"
+            }
+          ]
+        },
+        "warnings": [
+          "当前模型边界不可用，模型包围尺寸缺失",
+          "外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值"
+        ]
+      },
+      {
+        "refno": "24381_103251",
+        "name": "/Copy-of-1CIS001MT-YK/B1",
+        "sesno": 339,
+        "fetchedAt": "2026-10-08T08:11:46.877Z",
+        "stale": true,
+        "anchorMm": [
+          1090.41,
+          1500.82,
+          -2905
+        ],
+        "fields": [
+          {
+            "key": "head-bore",
+            "label": "首端通径",
+            "text": "7 mm",
+            "source": "24381_103251@339:HBOR",
+            "status": "read"
+          },
+          {
+            "key": "tail-bore",
+            "label": "末端通径",
+            "text": "7 mm",
+            "source": "24381_103251@339:TBOR",
+            "status": "read"
+          },
+          {
+            "key": "outer-diameter",
+            "label": "成员外径范围",
+            "text": "6.35 mm（27/27段）",
+            "source": "逐段读取；详情区分管子目录值、通径估算及缺失，不包含构件实体最大包络",
+            "status": "read"
+          },
+          {
+            "key": "material",
+            "label": "业务材质",
+            "text": "未设置",
+            "source": "24381_103251@339:MATN/MATR",
+            "status": "missing"
+          },
+          {
+            "key": "insulation",
+            "label": "保温规格",
+            "text": "未设置",
+            "source": "24381_103251@339:ISPE（规格参考号）",
+            "status": "missing"
+          },
+          {
+            "key": "envelope",
+            "label": "业务包络",
+            "text": "口径待确认（是否含保温/操作空间）",
+            "source": "专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "model-bounds",
+            "label": "模型包围尺寸",
+            "text": "未设置",
+            "source": "未生成模型",
+            "status": "missing"
+          },
+          {
+            "key": "straight-length",
+            "label": "直管段总长",
+            "text": "14959.77 mm",
+            "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+            "status": "derived"
+          },
+          {
+            "key": "length-with-bends",
+            "label": "管长（含弯头）",
+            "text": "15151.93 mm",
+            "source": "直管段总长 + 13 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "elevation",
+            "label": "标注锚点标高",
+            "text": "-2905 mm",
+            "source": "E3D 世界 Z，非管顶/管底",
+            "status": "derived"
+          },
+          {
+            "key": "coordinates",
+            "label": "标注锚点坐标",
+            "text": "1090.41 mm, 1500.82 mm, -2905 mm",
+            "source": "E3D 世界 X/Y/Z",
+            "status": "derived"
+          },
+          {
+            "key": "source-version",
+            "label": "版本核对",
+            "text": "属性与中心线同版本（7997@339），模型版本待核实",
+            "source": "属性/中心线实读会话；模型记录会话不替代完整生成及发布回执",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "member-materials",
+            "label": "成员材质",
+            "text": "未设置",
+            "source": "成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质",
+            "status": "missing"
+          }
+        ],
+        "memberDiameters": [
+          {
+            "refno": "Head~24381_103252",
+            "order": 0,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103252",
+            "order": 1,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103252~24381_103253",
+            "order": 2,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103253",
+            "order": 3,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103253~24381_103254",
+            "order": 4,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103254",
+            "order": 5,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103254~24381_103255",
+            "order": 6,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103255",
+            "order": 7,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103255~24381_103256",
+            "order": 8,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103256",
+            "order": 9,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103256~24381_103257",
+            "order": 10,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103257",
+            "order": 11,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103257~24381_103258",
+            "order": 12,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103258",
+            "order": 13,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103258~24381_103259",
+            "order": 14,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103259",
+            "order": 15,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103259~24381_103260",
+            "order": 16,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103260",
+            "order": 17,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103260~24381_103261",
+            "order": 18,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103261",
+            "order": 19,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103261~24381_103262",
+            "order": 20,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103262",
+            "order": 21,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103262~24381_103263",
+            "order": 22,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103263",
+            "order": 23,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103263~24381_103264",
+            "order": 24,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103264",
+            "order": 25,
+            "noun": "BEND",
+            "implicit": false,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          },
+          {
+            "refno": "24381_103264~Tail",
+            "order": 26,
+            "noun": "TUBI",
+            "implicit": true,
+            "outsideDiameterMm": 6.35,
+            "source": "catalogue",
+            "sourceText": "管子目录 PARA[2]：6.35 mm"
+          }
+        ],
+        "memberMaterials": [
+          {
+            "refno": "Head~24381_103252",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103251@339:HSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103252",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103252@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103252~24381_103253",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103252@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103253",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103253@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103253~24381_103254",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103253@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103254",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103254@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103254~24381_103255",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103254@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103255",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103255@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103255~24381_103256",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103255@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103256",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103256@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103256~24381_103257",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103256@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103257",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103257@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103257~24381_103258",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103257@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103258",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103258@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103258~24381_103259",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103258@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103259",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103259@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103259~24381_103260",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103259@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103260",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103260@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103260~24381_103261",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103260@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103261",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103261@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103261~24381_103262",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103261@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103262",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103262@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103262~24381_103263",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103262@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103263",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103263@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103263~24381_103264",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103263@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103264",
+            "noun": "BEND",
+            "text": "未设置",
+            "source": "24381/103264@339:SPRE → 13244/690208@190:MATX → 13244/680871@190:XTEX（未设置）",
+            "status": "missing"
+          },
+          {
+            "refno": "24381_103264~Tail",
+            "noun": "TUBI",
+            "implicit": true,
+            "text": "未设置",
+            "source": "24381/103264@339:LSTU → 13244/690104@190:MATX → 13244/680910@190:XTEX（未设置）",
+            "status": "missing"
+          }
+        ],
+        "bendArcs": [
+          {
+            "refno": "24381_103252",
+            "noun": "BEND",
+            "angleDeg": 94.9433,
+            "chordMm": 23.397916114047494,
+            "radiusMm": 15.874984400495636,
+            "arcMm": 26.306011005355703,
+            "source": "24381/103252@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103253",
+            "noun": "BEND",
+            "angleDeg": 12.1456,
+            "chordMm": 3.3589950699578175,
+            "radiusMm": 15.875465563529493,
+            "arcMm": 3.3652924558671544,
+            "source": "24381/103253@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103254",
+            "noun": "BEND",
+            "angleDeg": 9.62484,
+            "chordMm": 2.6636190305672747,
+            "radiusMm": 15.874935995512184,
+            "arcMm": 2.666753472341853,
+            "source": "24381/103254@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103255",
+            "noun": "BEND",
+            "angleDeg": 8.96494,
+            "chordMm": 2.481396947286104,
+            "radiusMm": 15.875031597380474,
+            "arcMm": 2.483930002839468,
+            "source": "24381/103255@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103256",
+            "noun": "BEND",
+            "angleDeg": 11.9399,
+            "chordMm": 3.3021889380984595,
+            "radiusMm": 15.874862663098376,
+            "arcMm": 3.3081716371072276,
+            "source": "24381/103256@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103257",
+            "noun": "BEND",
+            "angleDeg": 9.61098,
+            "chordMm": 2.65980195503349,
+            "radiusMm": 15.874993262834556,
+            "arcMm": 2.662922889711282,
+            "source": "24381/103257@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103258",
+            "noun": "BEND",
+            "angleDeg": 6.30875,
+            "chordMm": 1.7471178347209786,
+            "radiusMm": 15.875262775253237,
+            "arcMm": 1.748000723343173,
+            "source": "24381/103258@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103259",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 22.450620517259622,
+            "radiusMm": 15.874986009600116,
+            "arcMm": 24.936369711800236,
+            "source": "24381/103259@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103260",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 22.450591375061634,
+            "radiusMm": 15.874965402954299,
+            "arcMm": 24.936337342956676,
+            "source": "24381/103260@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103261",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 22.4506595569042,
+            "radiusMm": 15.875013614797531,
+            "arcMm": 24.936413073942933,
+            "source": "24381/103261@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103262",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 22.450899874169618,
+            "radiusMm": 15.875183544765544,
+            "arcMm": 24.936679999312503,
+            "source": "24381/103262@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103263",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 22.45074279595226,
+            "radiusMm": 15.875072473692873,
+            "arcMm": 24.936505529279536,
+            "source": "24381/103263@339:ANGL + 中心线端口弦长"
+          },
+          {
+            "refno": "24381_103264",
+            "noun": "BEND",
+            "angleDeg": 90,
+            "chordMm": 22.450695185672863,
+            "radiusMm": 15.87503880814146,
+            "arcMm": 24.936452647555036,
+            "source": "24381/103264@339:ANGL + 中心线端口弦长"
+          }
+        ],
+        "sourceVersion": {
+          "dbnum": 7997,
+          "sesno": 339,
+          "databases": [
+            {
+              "dbnum": 5052,
+              "sesno": 190,
+              "db_type": "CATA"
+            },
+            {
+              "dbnum": 7997,
+              "sesno": 339,
+              "db_type": "DESI"
+            }
+          ]
+        },
+        "warnings": [
+          "当前模型边界不可用，模型包围尺寸缺失",
+          "外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值"
+        ]
+      }
+    ],
+    "hidden": [
+      "24384_23257",
+      "24381_103251"
+    ],
+    "label": "已恢复本机记录，模型版本未核实，请重算"
+  },
+  "calls": [
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145018"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "query": {
+        "refno": "24381/145018"
+      },
+      "status": 200,
+      "fixture": "pipe-diameters-24381_145018-s339.json",
+      "sourceVersion": {
+        "dbnum": 7997,
+        "sesno": 339,
+        "databases": [
+          {
+            "dbnum": 5054,
+            "sesno": 48,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 339,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "source": "local E3D production adapter CLI; not deployed HTTP"
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24381/145018",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/144975"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13246/465801"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145021"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145019"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13246/371258"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13246/465610"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145023"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145025"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145026"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13246/465608"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145028"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145029"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145031"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145032"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145033"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145035"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13246/465874"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23257"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "query": {
+        "refno": "24384/23257"
+      },
+      "status": 200,
+      "fixture": "pipe-diameters-24384_23257-s640.json",
+      "sourceVersion": {
+        "dbnum": 8000,
+        "sesno": 640,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 640,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "source": "local E3D production adapter CLI; not deployed HTTP"
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24384/23257",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 422
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23225"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23260"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23258"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23259"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/108794"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23261"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/108844"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/95080"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23262"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23265"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23264"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23263"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23266"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103251"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "query": {
+        "refno": "24381/103251"
+      },
+      "status": 200,
+      "fixture": "pipe-diameters-24381_103251-s339.json",
+      "sourceVersion": {
+        "dbnum": 7997,
+        "sesno": 339,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 339,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "source": "local E3D production adapter CLI; not deployed HTTP"
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24381/103251",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 422
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103250"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/690104"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103253"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103252"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/680910"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/690208"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103254"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "13244/680871"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103255"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103256"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103257"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103258"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103260"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103259"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103261"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103262"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103263"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103264"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103251"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "query": {
+        "refno": "24381/103251"
+      },
+      "status": 200,
+      "fixture": "pipe-diameters-24381_103251.json",
+      "sourceVersion": {
+        "dbnum": 7997,
+        "sesno": 353,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 353,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "source": "local E3D production adapter CLI; not deployed HTTP"
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24381/103251",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 422
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23257"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "query": {
+        "refno": "24384/23257"
+      },
+      "status": 200,
+      "fixture": "pipe-diameters-24384_23257.json",
+      "sourceVersion": {
+        "dbnum": 8000,
+        "sesno": 646,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 646,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "source": "local E3D production adapter CLI; not deployed HTTP"
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24384/23257",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 422
+    }
+  ],
+  "errors": []
+}

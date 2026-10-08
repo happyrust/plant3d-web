@@ -73,7 +73,14 @@ vi.mock('./confirmedRecordsRestore', () => ({
     confirmedRecordsRestorerOptions.push(options);
     return {
       currentTaskRecords: computed(() => confirmedRecordsRef.value as any[]),
+      sceneRecords: computed(() => confirmedRecordsRef.value as any[]),
+      modelVersionGroups: computed(() => []),
+      activeModelGroup: computed(() => undefined),
+      selectModelVersionGroup: vi.fn(),
       lastRestoredSceneKey: ref<string | null>(null),
+      restoreError: ref<string | null>(null),
+      restoring: ref(false),
+      cancelPendingRestore: vi.fn(),
       restoreConfirmedRecordsIntoScene: restoreConfirmedRecordsIntoSceneMock,
     };
   },

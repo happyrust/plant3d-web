@@ -7,11 +7,18 @@ import { computed, ref } from 'vue';
 
 import type { Vec3 } from '@/types/vec3';
 
-import { genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModelV1Api';
+import { genModelV1SpatialNearbyBranches, genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModelV1Api';
+import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
+import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 
 export type PipeDistanceResult = {
+  /** 与当前场景矩阵无关的 E3D 世界毫米坐标。 */
+  designPoints?: { start: Vec3; end: Vec3; pipeAStart?: Vec3; pipeAEnd?: Vec3; pipeBStart?: Vec3; pipeBEnd?: Vec3 };
+  status?: 'current' | 'stale';
+  modelVersion?: { sourceSesno: number | null; targetSesno: number | null };
   id: string;
   distance: number; // mm
+  measurementKind?: 'surface' | 'axis-estimate';
   pipeA: string;
   pipeB: string;
   start: Vec3;
@@ -25,6 +32,8 @@ export type PipeDistanceResult = {
 export type PipeDistanceDetectionOptions = {
   refnos?: string[];
   transformPoint?: (point: Vec3) => Vec3 | null | undefined;
+  pairMode?: 'source-to-targets' | 'all-pairs';
+  withinMaxDistance?: boolean;
 };
 
 const showAnnotations = ref(true);
@@ -38,6 +47,88 @@ const detectError = ref<string | null>(null);
 
 const hiddenResultIds = ref<Set<string>>(new Set());
 const resultMinDistance = ref<number | null>(null);
+let detectionSequence = 0;
+let calculationsAllowed = true;
+
+function preparePipeSnapshot(value: unknown): () => void {
+  if (value === null) return () => resetPipeSnapshot();
+  // 脱离响应及实时 store，校验期间不改变任何显示或本机草稿。
+  value = cloneResultSnapshot(value);
+  const data = value as Record<string, unknown>;
+  const apply = validatePipeSnapshot(data);
+  return () => { resetPipeSnapshot(); apply(); };
+}
+
+function resetPipeSnapshot() {
+  results.value = [];
+  selectedBranRefnos.value = [];
+  activeResultIndex.value = null;
+  hiddenResultIds.value = new Set();
+  resultMinDistance.value = null;
+  showAnnotations.value = true;
+  maxDistance.value = 500;
+  maxAngle.value = 5;
+  detectError.value = null;
+}
+
+function validatePipeSnapshot(data: Record<string, unknown>): () => void {
+  if (!data || data.coordinateSpace !== 'e3d-world-mm' || !Array.isArray(data.results) || !Array.isArray(data.selectedBranRefnos)
+    || !data.selectedBranRefnos.every(item => typeof item === 'string') || !Array.isArray(data.hiddenIds)
+    || !data.hiddenIds.every(item => typeof item === 'string') || typeof data.showAnnotations !== 'boolean'
+    || typeof data.maxDistance !== 'number' || !Number.isFinite(data.maxDistance) || data.maxDistance <= 0
+    || typeof data.maxAngle !== 'number' || !Number.isFinite(data.maxAngle) || data.maxAngle < 0 || data.maxAngle > 90
+    || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
+  const loaded = data.results.map(raw => {
+    const result = raw as PipeDistanceResult;
+    if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
+      || !result.pipeA || !result.pipeB || result.pipeA === result.pipeB || !Number.isFinite(result.distance) || result.distance < 0
+      || !['surface', 'axis-estimate'].includes(result.measurementKind ?? '') || !result.designPoints
+      || !optionalVec3(result.designPoints.start) || !optionalVec3(result.designPoints.end)
+      || ['pipeAStart', 'pipeAEnd', 'pipeBStart', 'pipeBEnd'].some(key => {
+        const point = result.designPoints?.[key as keyof NonNullable<PipeDistanceResult['designPoints']>];
+        return point !== undefined && !optionalVec3(point);
+      })) throw new Error('管间结果缺少可靠的世界毫米坐标');
+    if (result.modelVersion && [result.modelVersion.sourceSesno, result.modelVersion.targetSesno].some(sesno => sesno !== null && (!Number.isInteger(sesno) || sesno < 0))) throw new Error('管间模型版本无效');
+    return { ...result, start: [...result.designPoints.start] as Vec3, end: [...result.designPoints.end] as Vec3, status: 'stale' as const };
+  });
+  if (new Set(loaded.map(result => result.id)).size !== loaded.length) throw new Error('管间结果标识重复');
+  const minDistance = data.minDistance as number | null;
+  const annotations = data.showAnnotations;
+  const distanceLimit = data.maxDistance;
+  const angleLimit = data.maxAngle;
+  return () => {
+    results.value = loaded;
+    selectedBranRefnos.value = data.selectedBranRefnos as string[];
+    hiddenResultIds.value = new Set((data.hiddenIds as string[]).filter(id => loaded.some(result => result.id === id)));
+    activeResultIndex.value = typeof data.activeIndex === 'number' && Number.isInteger(data.activeIndex) && data.activeIndex >= 0 && data.activeIndex < loaded.length ? data.activeIndex : null;
+    resultMinDistance.value = minDistance;
+    showAnnotations.value = annotations;
+    maxDistance.value = distanceLimit;
+    maxAngle.value = angleLimit;
+  };
+}
+
+function restorePipeSnapshot(value: unknown) { preparePipeSnapshot(value)(); }
+
+function capturePipeSnapshot() {
+  if (results.value.some(result => !result.designPoints)) throw new Error('结果未取得世界毫米坐标，不能保存场景坐标；请重新检测。');
+  return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
+    results: results.value.map(result => ({ ...result,
+      start: result.designPoints!.start, end: result.designPoints!.end,
+      pipeAStart: result.designPoints!.pipeAStart, pipeAEnd: result.designPoints!.pipeAEnd,
+      pipeBStart: result.designPoints!.pipeBStart, pipeBEnd: result.designPoints!.pipeBEnd })),
+    selectedBranRefnos: selectedBranRefnos.value, hiddenIds: [...hiddenResultIds.value],
+    activeIndex: activeResultIndex.value, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
+    maxDistance: maxDistance.value, maxAngle: maxAngle.value });
+}
+
+const persistence = createScopedResultPersistence({
+  prefix: 'plant3d-pipe-distance-v1',
+  sources: [results, selectedBranRefnos, hiddenResultIds, activeResultIndex, resultMinDistance, showAnnotations, maxDistance, maxAngle],
+  capture: capturePipeSnapshot,
+  restore: restorePipeSnapshot,
+  invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
+});
 
 function normalizeBranRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
@@ -59,8 +150,7 @@ function transformResultPoint(point: Vec3, transformPoint?: PipeDistanceDetectio
 
 function optionalVec3(value: unknown): Vec3 | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
-  const point = value.map(Number);
-  return point.every(Number.isFinite) ? point as Vec3 : undefined;
+  return value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [...value] as Vec3 : undefined;
 }
 
 function transformOptionalPoint(
@@ -132,22 +222,31 @@ export function usePipeDistanceStore() {
   }
 
   async function runDetection(options: PipeDistanceDetectionOptions = {}) {
+    const sequence = ++detectionSequence;
+    if (!calculationsAllowed) { detectError.value = '历史版本对比中不能使用当前模型检测管间净距，请退出对比后重算。'; return false; }
     if (options.refnos) {
       setBranRefnos(options.refnos);
     }
 
-    const branRefnos = selectedBranRefnos.value;
+    const branRefnos = [...selectedBranRefnos.value];
     if (branRefnos.length < 2) {
+      results.value = [];
+      activeResultIndex.value = null;
+      isDetecting.value = false;
       detectError.value = '请至少选择 2 个构件';
-      return;
+      return false;
     }
 
     isDetecting.value = true;
     detectError.value = null;
 
-    // 第一个作为源，其余为目标：逐对向 gen-model `/api/v1/spatial/surface-clearance`（`target_kind=any`）要外表面最近点。
-    // 旧后端 `/api/space/nearest-points` 一发算全部目标的路 2026-09-20 随 legacy 退役；这里一对一发，结果形状不变（E3D 世界 mm）。
-    const [sourceRefno, ...targetRefnos] = branRefnos;
+    // 工作台批量检测所有唯一管对；保留源→目标模式供既有调用使用。
+    const pairs: [string, string][] = [];
+    for (let i = 0; i < branRefnos.length - 1; i += 1) {
+      if (i > 0 && options.pairMode !== 'all-pairs') break;
+      for (let j = i + 1; j < branRefnos.length; j += 1) pairs.push([branRefnos[i]!, branRefnos[j]!]);
+    }
+    const distanceLimit = Number.isFinite(maxDistance.value) && maxDistance.value > 0 ? maxDistance.value : 500;
 
     try {
       const transform = options.transformPoint;
@@ -157,32 +256,57 @@ export function usePipeDistanceStore() {
       };
 
       const warnings: string[] = [];
-      const settled = await Promise.all(targetRefnos.map(async (targetRefno) => {
-        try {
-          const resp = await genModelV1SurfaceClearance({
-            sourceRefno: sourceRefno!,
-            targetRefno,
-            targetKind: 'any',
-            perpendicular: false,
-          });
-          if (!resp.result) {
-            warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
-            return null;
+      const settled: (PipeDistanceResult | null)[] = Array(pairs.length).fill(null);
+      let cursor = 0;
+      // ponytail: O(n²) pairs; at most four mesh queries in flight, spatial candidate filtering can reduce large selections later.
+      const worker = async () => {
+        while (cursor < pairs.length && sequence === detectionSequence) {
+          const index = cursor++;
+          const [sourceRefno, targetRefno] = pairs[index]!;
+          try {
+            const resp = await genModelV1SurfaceClearance({
+              sourceRefno,
+              targetRefno,
+              targetKind: 'any',
+              perpendicular: false,
+              ...(options.pairMode === 'all-pairs' || options.withinMaxDistance ? { maxDistanceMm: distanceLimit } : {}),
+            });
+            if (!resp.success || resp.unit !== 'mm' || resp.method !== 'surface_to_surface' || resp.accuracy_class !== 'exact-surface'
+              || !Number.isFinite(resp.error_bound_mm) || resp.error_bound_mm < 0 || resp.error_bound_mm > 10) {
+              warnings.push(`${sourceRefno} ↔ ${targetRefno}：净距口径或误差界无效`);
+              continue;
+            }
+            if (!resp.result) {
+              warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
+              continue;
+            }
+            if ((options.pairMode === 'all-pairs' || options.withinMaxDistance) && resp.result.distance_mm > distanceLimit) continue;
+            if (!Number.isFinite(resp.result.distance_mm) || resp.result.distance_mm < 0
+            || ![resp.result.source_point, resp.result.target_point].every(point =>
+              [point.x, point.y, point.z].every(Number.isFinite))) {
+              warnings.push(`${sourceRefno} ↔ ${targetRefno}：距离或最近点无效`);
+              continue;
+            }
+            settled[index] = {
+              designPoints: { start: [resp.result.source_point.x, resp.result.source_point.y, resp.result.source_point.z], end: [resp.result.target_point.x, resp.result.target_point.y, resp.result.target_point.z] },
+              status: 'current',
+              modelVersion: { sourceSesno: resp.model?.source_sesno ?? null, targetSesno: resp.model?.target_sesno ?? null },
+              id: [sourceRefno, targetRefno].sort().join('__'),
+              distance: resp.result.distance_mm,
+              measurementKind: 'surface',
+              pipeA: sourceRefno,
+              pipeB: targetRefno,
+              start: toVec3(resp.result.source_point),
+              end: toVec3(resp.result.target_point),
+            };
+          } catch (error) {
+            const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
+            warnings.push(`${targetRefno}：${message}`);
           }
-          return {
-            id: `${sourceRefno}__${targetRefno}`,
-            distance: resp.result.distance_mm,
-            pipeA: sourceRefno!,
-            pipeB: targetRefno,
-            start: toVec3(resp.result.source_point),
-            end: toVec3(resp.result.target_point),
-          } satisfies PipeDistanceResult;
-        } catch (error) {
-          const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
-          warnings.push(`${targetRefno}：${message}`);
-          return null;
         }
-      }));
+      };
+      await Promise.all(Array.from({ length: Math.min(4, pairs.length) }, worker));
+      if (sequence !== detectionSequence) return false;
 
       results.value = settled.filter((item): item is PipeDistanceResult => item !== null);
       activeResultIndex.value = results.value.length > 0 ? 0 : null;
@@ -194,22 +318,85 @@ export function usePipeDistanceStore() {
         detectError.value = warnings.join('；');
       }
     } catch (e) {
+      if (sequence !== detectionSequence) return false;
       const msg = e instanceof Error ? e.message : String(e);
       detectError.value = `检测失败: ${msg}`;
       console.error('[PipeDistance] runDetection failed:', e);
     } finally {
-      isDetecting.value = false;
+      if (sequence === detectionSequence) isDetecting.value = false;
     }
+    return true;
   }
 
   async function autoDetectBrans(refnos: string[], options: Omit<PipeDistanceDetectionOptions, 'refnos'> = {}) {
-    await runDetection({
+    return runDetection({
       ...options,
       refnos,
     });
   }
 
+  async function detectNearbyBrans(sourceRefno: string, options: Pick<PipeDistanceDetectionOptions, 'transformPoint'> = {}) {
+    const sequence = ++detectionSequence;
+    const source = normalizeBranRefno(sourceRefno);
+    const originalSelection = selectedBranRefnos.value.join('|');
+    if (!calculationsAllowed) { detectError.value = '历史版本对比中不能使用当前模型检测管间净距，请退出对比后重算。'; return false; }
+    if (!source) { detectError.value = '请先选择一根 BRAN 管道'; return false; }
+    isDetecting.value = true;
+    detectError.value = null;
+    const radius = Number.isFinite(maxDistance.value) && maxDistance.value > 0 ? maxDistance.value : 500;
+    const originalLimit = maxDistance.value;
+    try {
+      // Aggregate model bounds cover the full finite branch, including its outer surface.
+      // A center-point sphere would miss neighbours near the ends of a long branch.
+      const targetSet = new Set<string>();
+      const warnings = new Set<string>();
+      let total: number | null = null;
+      let truncated = false;
+      for (let page = 1; ; page += 1) {
+        const response = await genModelV1SpatialNearbyBranches({ refno: source, radius, page, perPage: 1000 });
+        if (sequence !== detectionSequence || selectedBranRefnos.value.join('|') !== originalSelection) return false;
+        if (maxDistance.value !== originalLimit) throw new Error('检测范围已变化，请重新检测');
+        if (!Array.isArray(response.results) || !Number.isSafeInteger(response.total_count) || response.total_count < 0
+          || typeof response.truncated_candidates !== 'boolean' || typeof response.has_more !== 'boolean'
+          || response.radius !== radius || response.center?.source !== 'refno_aabb_center'
+          || response.results.some(item => item.noun !== 'BRAN' || !normalizeBranRefno(item.refno) || !Number.isFinite(item.distance) || item.distance < 0))
+          throw new Error('周边查询响应无效，请更新服务后重试');
+        if (total !== null && total !== response.total_count) throw new Error('周边集合在分页期间发生变化，请重新检测');
+        total = response.total_count;
+        let added = 0;
+        for (const item of response.results) {
+          const refno = normalizeBranRefno(item.refno);
+          if (refno !== source && !targetSet.has(refno)) { targetSet.add(refno); added += 1; }
+        }
+        for (const warning of response.warnings ?? []) warnings.add(warning);
+        truncated ||= response.truncated_candidates;
+        if (!response.has_more) break;
+        if (!added || targetSet.size >= total) throw new Error('周边分页没有进展，请重新检测');
+      }
+      const targets = [...targetSet];
+      const incomplete = truncated || total !== targets.length;
+      const coverage = incomplete ? '周边候选未全部计算（空间索引候选被截断或集合不完整），请缩小最大距离后重算。' : '';
+      if (!targets.length) {
+        detectError.value = [coverage, '已加载模型范围内没有找到周边 BRAN 管道；原有结果已保留。'].filter(Boolean).join('；');
+        return true;
+      }
+      const applied = await runDetection({ ...options, refnos: [source, ...targets], pairMode: 'source-to-targets', withinMaxDistance: true });
+      if (applied && sequence + 1 === detectionSequence) {
+        detectError.value = [coverage, ...warnings, detectError.value].filter(Boolean).join('；') || null;
+      }
+      return applied;
+    } catch (error) {
+      if (sequence !== detectionSequence) return false;
+      detectError.value = `周边检测失败，原有结果已保留：${error instanceof Error ? error.message : String(error)}`;
+      return false;
+    } finally {
+      if (sequence === detectionSequence) isDetecting.value = false;
+    }
+  }
+
   function clearResults() {
+    detectionSequence += 1;
+    isDetecting.value = false;
     results.value = [];
     activeResultIndex.value = null;
     detectError.value = null;
@@ -217,6 +404,12 @@ export function usePipeDistanceStore() {
   }
 
   return {
+    ...persistence,
+    captureSnapshot: capturePipeSnapshot,
+    prepareSnapshotRestore: (value: unknown) => {
+      const apply = preparePipeSnapshot(value);
+      return () => persistence.applyPreparedRestore(apply);
+    },
     showAnnotations,
     maxDistance,
     maxAngle,
@@ -235,6 +428,7 @@ export function usePipeDistanceStore() {
     setActiveResult,
     runDetection,
     autoDetectBrans,
+    detectNearbyBrans,
     clearResults,
     toggleResultHidden,
     setResultMinDistance,

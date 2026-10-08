@@ -1,0 +1,167 @@
+{
+  "fixtureOnly": true,
+  "result": {
+    "loaded": {
+      "unitRefno": "1_100",
+      "units": [
+        "1_100"
+      ],
+      "splitOutline": {
+        "compositor": true,
+        "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      },
+      "beforeSesno": 10,
+      "afterSesno": 20,
+      "beforeObjects": 1,
+      "afterObjects": 1,
+      "environmentLoadedRefnos": 0,
+      "activeSide": "before",
+      "viewMode": "split",
+      "diffOnly": true,
+      "statusCounts": {
+        "added": 0,
+        "deleted": 0,
+        "modified": 1,
+        "unchanged": 0
+      },
+      "hiddenWhenDiffOnly": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "calls": [
+      [
+        "1_100",
+        10
+      ],
+      [
+        "1_100",
+        20
+      ],
+      [
+        "1_100",
+        10
+      ],
+      [
+        "1_100",
+        30
+      ],
+      [
+        "1_100",
+        10
+      ],
+      [
+        "1_100",
+        20
+      ]
+    ],
+    "releases": [
+      10,
+      10,
+      10,
+      20,
+      20,
+      30
+    ],
+    "successReleases": [
+      10,
+      20
+    ],
+    "captured": {
+      "schemaVersion": 1,
+      "project": "AvevaMarineSample",
+      "dbnum": null,
+      "taskId": "history-replay-fixture",
+      "formId": "history-form",
+      "node": "sj",
+      "comparison": null
+    },
+    "replayState": {
+      "model": {
+        "unitRefno": "1_100",
+        "units": [
+          "1_100"
+        ],
+        "splitOutline": {
+          "compositor": true,
+          "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+        },
+        "beforeSesno": 10,
+        "afterSesno": 20,
+        "beforeObjects": 1,
+        "afterObjects": 1,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "before",
+        "viewMode": "split",
+        "diffOnly": true,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "payload": {
+        "version": 7,
+        "measurements": [],
+        "legacyMeasurements": [],
+        "annotations": [],
+        "obbAnnotations": [],
+        "cloudAnnotations": [],
+        "rectAnnotations": []
+      }
+    },
+    "deleted": {
+      "unitRefno": "1_100",
+      "units": [
+        "1_100"
+      ],
+      "splitOutline": {
+        "compositor": true,
+        "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      },
+      "beforeSesno": 10,
+      "afterSesno": 30,
+      "beforeObjects": 1,
+      "afterObjects": 0,
+      "environmentLoadedRefnos": 0,
+      "activeSide": "after",
+      "viewMode": "single",
+      "diffOnly": false,
+      "statusCounts": {
+        "added": 0,
+        "deleted": 1,
+        "modified": 0,
+        "unchanged": 0
+      },
+      "hiddenWhenDiffOnly": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "clearedOnTaskSwitch": true,
+    "cancelled": "历史模型恢复已取消",
+    "cameraBefore": [
+      2000.0000000000005,
+      749.9999999999989,
+      999.9999999999985,
+      1000,
+      0,
+      0
+    ],
+    "cameraAfter": [
+      2000.0000000000005,
+      749.9999999999989,
+      999.9999999999985,
+      1000,
+      0,
+      0
+    ],
+    "staleSceneAbsent": true
+  },
+  "errors": []
+}

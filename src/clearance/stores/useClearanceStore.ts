@@ -1,8 +1,9 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import {
   clearanceModelChanged,
   clearanceRecordId,
+  createClearanceRecord,
   withClearanceStatus,
   type ClearanceRecord,
 } from '@/clearance/domain/clearanceRecord';
@@ -11,6 +12,7 @@ import {
   type ClearanceService,
   type ComputeClearanceInput,
 } from '@/clearance/services/clearanceService';
+import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 
 /**
  * Clearance 记录的状态（09-11 PR1.1：拾取流与抽屉共享同一个 store——选择、隐藏、删除、定位、精度标签都在这里）。
@@ -24,6 +26,45 @@ const hiddenIds = ref<Set<string>>(new Set());
 const showAnnotations = ref(true);
 const isComputing = ref(false);
 const lastError = ref<string | null>(null);
+const persistenceError = ref<string | null>(null);
+const persistenceLabel = ref('尚未保存到本机');
+let recordEpoch = 0;
+let pendingComputations = 0;
+let persistenceScope: string | null = null;
+let persistenceStorage: Pick<Storage, 'getItem' | 'setItem'> | null = null;
+let restoring = false;
+let loadBlocked = false;
+let calculationsAllowed = true;
+const pairRequests = new Map<string, number>();
+let nextRequest = 0;
+const unsavedScopes = new Map<string, { raw: string; blocked: boolean }>();
+
+function persistRecords(): boolean {
+  if (restoring || !persistenceScope) return false;
+  const raw = JSON.stringify({
+    version: 1, scope: persistenceScope, records: records.value,
+    hiddenIds: [...hiddenIds.value], activeId: activeId.value, showAnnotations: showAnnotations.value,
+  });
+  unsavedScopes.set(persistenceScope, { raw, blocked: loadBlocked });
+  if (!persistenceStorage) return false;
+  if (loadBlocked) {
+    persistenceLabel.value = '本机记录损坏，未覆盖原文件';
+    return false;
+  }
+  try {
+    persistenceStorage.setItem(`plant3d-clearance-v1:${persistenceScope}`, raw);
+    unsavedScopes.delete(persistenceScope);
+    persistenceError.value = null;
+    persistenceLabel.value = '本机已保存（未提交校审）';
+    return true;
+  } catch (error) {
+    persistenceError.value = errorText(error);
+    persistenceLabel.value = '本机保存失败，记录仍在内存中';
+    return false;
+  }
+}
+
+watch([records, hiddenIds, activeId, showAnnotations], () => { persistRecords(); }, { deep: true, flush: 'sync' });
 
 const visibleRecords = computed(() => records.value.filter(record => !hiddenIds.value.has(record.id)));
 const activeRecord = computed(() => records.value.find(record => record.id === activeId.value) ?? null);
@@ -41,6 +82,109 @@ function errorText(error: unknown): string {
 }
 
 export function useClearanceStore() {
+  function captureSnapshot() {
+    return cloneResultSnapshot({ records: records.value, hiddenIds: [...hiddenIds.value],
+      activeId: activeId.value, showAnnotations: showAnnotations.value });
+  }
+
+  /** 先验证并脱离外部对象；调用返回动作之前不会替换本机结果。 */
+  function prepareSnapshotRestore(value: unknown): () => void {
+    const data = JSON.parse(JSON.stringify(value));
+    if (!data || !Array.isArray(data.records) || !Array.isArray(data.hiddenIds)
+      || !data.hiddenIds.every((id: unknown) => typeof id === 'string')
+      || (data.activeId !== null && typeof data.activeId !== 'string') || typeof data.showAnnotations !== 'boolean') {
+      throw new Error('净距结果格式无效');
+    }
+    const loaded: ClearanceRecord[] = data.records.map((record: Parameters<typeof createClearanceRecord>[0]) => createClearanceRecord(record));
+    if (new Set(loaded.map(record => record.id)).size !== loaded.length
+      || loaded.some(record => record.id !== clearanceRecordId(record.inputs))) throw new Error('净距记录标识重复或不匹配');
+    const stale = loaded.map(record => withClearanceStatus(record, 'stale'));
+    const ids = new Set(stale.map(record => record.id));
+    const hidden = new Set<string>(data.hiddenIds.filter((id: string) => ids.has(id)));
+    const selected = ids.has(data.activeId) ? data.activeId : null;
+    return () => {
+      restoring = true;
+      recordEpoch += 1;
+      pendingComputations = 0;
+      pairRequests.clear();
+      isComputing.value = false;
+      try {
+        records.value = stale;
+        hiddenIds.value = hidden;
+        activeId.value = selected;
+        showAnnotations.value = data.showAnnotations;
+        lastError.value = null;
+      } finally { restoring = false; }
+    };
+  }
+
+  /** 与 Viewer 的项目/库/任务/轮次/用户/节点/模型版本上下文绑定；旧请求不能写入新上下文。 */
+  function bindPersistence(scope: string, storage: Pick<Storage, 'getItem' | 'setItem'> | null, allowCalculations = true) {
+    if (calculationsAllowed !== allowCalculations) {
+      recordEpoch += 1;
+      pairRequests.clear();
+      pendingComputations = 0;
+      isComputing.value = false;
+    }
+    calculationsAllowed = allowCalculations;
+    if (scope === persistenceScope && storage === persistenceStorage) return;
+    persistRecords();
+    recordEpoch += 1;
+    pendingComputations = 0;
+    pairRequests.clear();
+    isComputing.value = false;
+    restoring = true;
+    try {
+      persistenceScope = scope;
+      persistenceStorage = storage;
+      loadBlocked = false;
+      records.value = [];
+      hiddenIds.value = new Set();
+      activeId.value = null;
+      showAnnotations.value = true;
+      lastError.value = null;
+      persistenceError.value = null;
+      persistenceLabel.value = storage ? '尚无本机记录' : '本机存储不可用';
+      const unsaved = unsavedScopes.get(scope);
+      loadBlocked = unsaved?.blocked ?? false;
+      const raw = unsaved?.raw ?? storage?.getItem(`plant3d-clearance-v1:${scope}`);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || data.version !== 1 || data.scope !== scope || !Array.isArray(data.records)
+        || !Array.isArray(data.hiddenIds) || !data.hiddenIds.every((id: unknown) => typeof id === 'string')
+        || (data.activeId !== null && typeof data.activeId !== 'string') || typeof data.showAnnotations !== 'boolean') {
+        throw new Error('净距记录格式或所属上下文不匹配');
+      }
+      const loaded = data.records.map((record: Parameters<typeof createClearanceRecord>[0]) => createClearanceRecord(record));
+      if (new Set(loaded.map((record: ClearanceRecord) => record.id)).size !== loaded.length
+        || loaded.some((record: ClearanceRecord) => record.id !== clearanceRecordId(record.inputs))) throw new Error('净距记录标识重复或不匹配');
+      // 同一上下文重开也不能证明服务器模型未变；快照保留，显式标记待重算。
+      records.value = loaded.map((record: ClearanceRecord) => withClearanceStatus(record, 'stale'));
+      const ids = new Set(records.value.map(record => record.id));
+      hiddenIds.value = new Set(data.hiddenIds.filter((id: string) => ids.has(id)));
+      activeId.value = ids.has(data.activeId) ? data.activeId : null;
+      showAnnotations.value = data.showAnnotations;
+      persistenceLabel.value = unsaved ? '已恢复未落盘的内存记录，请重试保存并重算' : '已恢复本机记录，模型版本未核实，请重算';
+    } catch (error) {
+      loadBlocked = true;
+      persistenceError.value = errorText(error);
+      persistenceLabel.value = '本机记录读取失败，原记录未覆盖';
+    } finally {
+      restoring = false;
+    }
+  }
+
+  function detachPersistence() {
+    persistRecords();
+    persistenceScope = null;
+    persistenceStorage = null;
+    calculationsAllowed = true;
+    recordEpoch += 1;
+    pendingComputations = 0;
+    pairRequests.clear();
+    isComputing.value = false;
+  }
+
   function findRecord(id: string): ClearanceRecord | null {
     return records.value.find(record => record.id === id) ?? null;
   }
@@ -73,6 +217,10 @@ export function useClearanceStore() {
   }
 
   function clearRecords() {
+    recordEpoch += 1;
+    pendingComputations = 0;
+    pairRequests.clear();
+    isComputing.value = false;
     records.value = [];
     activeId.value = null;
     hiddenIds.value = new Set();
@@ -127,21 +275,35 @@ export function useClearanceStore() {
     options: ClearanceComputeOptions = {},
   ): Promise<ClearanceRecord | null> {
     const service = options.service ?? defaultClearanceService();
+    if (!calculationsAllowed) {
+      lastError.value = '历史版本对比中不能用当前模型计算净距；请退出版本对比后重算。';
+      return null;
+    }
+    const epoch = recordEpoch;
+    const id = clearanceRecordId(input);
+    const request = ++nextRequest;
+    pairRequests.set(id, request);
+    pendingComputations += 1;
     isComputing.value = true;
     lastError.value = null;
     try {
-      const record = upsertRecord(await service.compute(input));
+      const computed = await service.compute(input);
+      if (epoch !== recordEpoch || pairRequests.get(id) !== request) return null;
+      const record = upsertRecord(computed);
       if (options.activate !== false) activeId.value = record.id;
       setHidden(record.id, false);
       return record;
     } catch (error) {
+      if (epoch !== recordEpoch || pairRequests.get(id) !== request) return null;
       lastError.value = errorText(error);
-      const id = clearanceRecordId(input);
       const previous = findRecord(id);
       if (previous) upsertRecord(withClearanceStatus(previous, 'failed'));
       return null;
     } finally {
-      isComputing.value = false;
+      if (epoch === recordEpoch) {
+        pendingComputations -= 1;
+        isComputing.value = pendingComputations > 0;
+      }
     }
   }
 
@@ -160,6 +322,8 @@ export function useClearanceStore() {
   }
 
   return {
+    captureSnapshot,
+    prepareSnapshotRestore,
     records,
     activeId,
     activeRecord,
@@ -168,6 +332,11 @@ export function useClearanceStore() {
     showAnnotations,
     isComputing,
     lastError,
+    persistenceError,
+    persistenceLabel,
+    bindPersistence,
+    detachPersistence,
+    persistRecords,
     findRecord,
     upsertRecord,
     removeRecord,

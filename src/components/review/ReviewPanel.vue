@@ -40,7 +40,10 @@ import {
 } from './embedRoleLanding';
 import FileUploadSection, { type UploadedFile } from './FileUploadSection.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
+import { createReviewClearanceConflictActions } from './reviewClearanceConflictActions';
+import ReviewClearanceConflictNotice from './ReviewClearanceConflictNotice.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
+import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
@@ -159,12 +162,28 @@ const unitSettings = useUnitSettingsStore();
 // 确认记录场景恢复（公共模块）
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  selectedModelGroupKey: () => reviewStore.getSelectedReviewModelGroup?.() ?? null,
+  onSelectModelGroup: key => reviewStore.selectReviewModelGroup?.(key),
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  prepareClearanceRestore: (snapshot, context) => reviewStore.prepareBoundClearanceRestore(snapshot, context),
+  ensureModelContext: async (context, shouldApply) => {
+    const ensure = viewerContext.ensureReviewModelContext?.value;
+    if (!ensure) throw new Error('模型版本恢复入口尚未就绪，已停止标注回放');
+    await ensure(context, shouldApply);
+  },
 });
 const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
+const restoreError = confirmedRecordsRestorer.restoreError;
+const clearanceConflictActions = createReviewClearanceConflictActions({
+  resolve: action => reviewStore.resolveClearanceSnapshotConflict?.(action) ?? false,
+  undo: () => reviewStore.restoreClearanceSnapshotBackup?.() ?? false,
+  recompare: () => reviewStore.reopenClearanceSnapshotConflict?.() ?? false,
+}, confirmedRecordsRestorer);
+onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const persistedEmbedParams = ref(readPersistedEmbedModeParams());
@@ -317,7 +336,7 @@ function getConfirmedMeasurementSummary(record: ConfirmedRecordEntry, measuremen
 type SeverityBucket = AnnotationSeverity | 'unset';
 
 const confirmedMeasurementPathRecords = computed(() => (
-  reviewStore.sortedConfirmedRecords.value.flatMap((record) => (
+  confirmedRecordsRestorer.sceneRecords.value.flatMap((record) => (
     record.measurements
       .filter((measurement) => measurement.kind === 'distance' || measurement.kind === 'angle')
       .map((measurement) => ({
@@ -354,7 +373,7 @@ function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<Sev
 
 const CONFIRMED_SEVERITY_ORDER: SeverityBucket[] = ['critical', 'severe', 'normal', 'suggestion', 'unset'];
 
-const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const currentTaskConfirmedRecords = confirmedRecordsRestorer.sceneRecords;
 
 const { restoreConfirmedRecordsIntoScene } = confirmedRecordsRestorer;
 
@@ -887,11 +906,11 @@ async function refreshWorkflowContext() {
 }
 
 async function handleClearConfirmedRecords() {
-  if (!window.confirm('确定要清空所有已确认的数据？此操作不可撤销。')) return;
+  if (!window.confirm('确定清空你在当前节点的已确认数据？其他节点历史会保留。此操作不可撤销。')) return;
   const cleared = await reviewStore.clearConfirmedRecords();
   if (cleared) {
     emitToast({
-      message: '已清空确认记录',
+      message: '已清空当前节点本人的确认记录，其他节点历史保留',
     });
     return;
   }
@@ -2002,6 +2021,17 @@ function handleAnnotationQueueCompleted() {
         class="w-full text-xs text-muted-foreground">
         当前批注/测量已保存，新增或修改后可再次确认
       </div>
+      <div v-if="restoreError" role="alert" class="w-full text-xs text-danger">
+        {{ restoreError }}
+        <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="restoreConfirmedRecordsIntoScene(true)">重试回放</button>
+      </div>
+      <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
+        :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
+        @select="confirmedRecordsRestorer.selectModelVersionGroup" />
+      <ReviewClearanceConflictNotice :conflict="reviewStore.clearanceSnapshotConflict?.value"
+        :kept-local="reviewStore.clearanceSnapshotKeptLocal?.value"
+        :backup="reviewStore.clearanceSnapshotBackup?.value" :busy="confirmedRecordsRestorer.restoring.value"
+        @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
       <div v-if="confirmError" class="w-full text-xs text-danger">{{ confirmError }}</div>
 
       <!-- U0 三行状态：本机草稿 / 云端草稿（U3 前不显示）/ 已确认到修订 N（方案 §3.6，d-565 #4） -->

@@ -1,3 +1,4 @@
+import type { TransformResponse } from '@/api/genModelPdmsAttrApi';
 import type {
   MaybePromise,
   ReferenceFrameDataPort,
@@ -9,7 +10,6 @@ import type {
   ReferenceFrameElementData,
 } from '@/measurement/reference-frame/types';
 
-import type { TransformResponse } from '@/api/genModelPdmsAttrApi';
 import {
   deriveSectionBasisFromPlines,
   type SectionPlineSample,

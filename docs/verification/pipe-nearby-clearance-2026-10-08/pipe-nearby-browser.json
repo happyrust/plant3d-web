@@ -1,0 +1,183 @@
+{
+  "fixtureOnly": true,
+  "mockedSpatialServer": true,
+  "actualStoreAndDrawer": true,
+  "snapshot": {
+    "results": [
+      {
+        "designPoints": {
+          "start": [
+            0,
+            0,
+            0
+          ],
+          "end": [
+            100,
+            0,
+            0
+          ]
+        },
+        "status": "current",
+        "modelVersion": {
+          "sourceSesno": 1,
+          "targetSesno": 1
+        },
+        "id": "1_101__1_102",
+        "distance": 100,
+        "measurementKind": "surface",
+        "pipeA": "1_101",
+        "pipeB": "1_102",
+        "start": [
+          0,
+          0,
+          0
+        ],
+        "end": [
+          100,
+          0,
+          0
+        ]
+      },
+      {
+        "designPoints": {
+          "start": [
+            0,
+            0,
+            0
+          ],
+          "end": [
+            500,
+            0,
+            0
+          ]
+        },
+        "status": "current",
+        "modelVersion": {
+          "sourceSesno": 1,
+          "targetSesno": 1
+        },
+        "id": "1_101__1_103",
+        "distance": 500,
+        "measurementKind": "surface",
+        "pipeA": "1_101",
+        "pipeB": "1_103",
+        "start": [
+          0,
+          0,
+          0
+        ],
+        "end": [
+          500,
+          0,
+          0
+        ]
+      }
+    ],
+    "selection": [
+      "1_101",
+      "1_102",
+      "1_103"
+    ],
+    "error": null,
+    "truncated": {
+      "distances": [
+        100,
+        500
+      ],
+      "error": "周边候选未全部计算（空间索引候选被截断或集合不完整），请缩小最大距离后重算。"
+    },
+    "failed": {
+      "distances": [
+        100,
+        500
+      ],
+      "error": "周边检测失败，原有结果已保留：fixture unavailable"
+    },
+    "empty": {
+      "distances": [
+        100,
+        500
+      ],
+      "error": "已加载模型范围内没有找到周边 BRAN 管道；原有结果已保留。"
+    }
+  },
+  "calls": [
+    {
+      "path": "/api/v1/spatial/nearby/branches",
+      "query": {
+        "refno": "1/101",
+        "radius": "500",
+        "page": "1",
+        "per_page": "1000"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/surface-clearance",
+      "query": {
+        "source_refno": "1/101",
+        "target_refno": "1/102",
+        "target_kind": "any",
+        "perpendicular": "false",
+        "max_distance_mm": "500"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/surface-clearance",
+      "query": {
+        "source_refno": "1/101",
+        "target_refno": "1/103",
+        "target_kind": "any",
+        "perpendicular": "false",
+        "max_distance_mm": "500"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/nearby/branches",
+      "query": {
+        "refno": "1/101",
+        "radius": "500",
+        "page": "1",
+        "per_page": "1000"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/surface-clearance",
+      "query": {
+        "source_refno": "1/101",
+        "target_refno": "1/102",
+        "target_kind": "any",
+        "perpendicular": "false",
+        "max_distance_mm": "500"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/surface-clearance",
+      "query": {
+        "source_refno": "1/101",
+        "target_refno": "1/103",
+        "target_kind": "any",
+        "perpendicular": "false",
+        "max_distance_mm": "500"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/nearby/branches",
+      "query": {
+        "refno": "1/101",
+        "radius": "500",
+        "page": "1",
+        "per_page": "1000"
+      }
+    },
+    {
+      "path": "/api/v1/spatial/nearby/branches",
+      "query": {
+        "refno": "1/101",
+        "radius": "500",
+        "page": "1",
+        "per_page": "1000"
+      }
+    }
+  ],
+  "errors": []
+}

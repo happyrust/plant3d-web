@@ -6,7 +6,11 @@ import {
   isLayeredDraftRestoreActive,
   layerConfirmedReplayForStore,
 } from './confirmedRecordsRestore';
+import { loadReviewModelComparison } from './reviewModelContextRestore';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
+
+import type { ReviewModelContext } from './reviewModelContext';
+import type { ModelAttributeDiff, ModelVersion, ModelVersionGeometry } from '@/model-source/ports';
 
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { getReviewCommentThreadStore } from '@/review/services/sharedStores';
@@ -25,7 +29,266 @@ function createRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe('saved historical model comparison', () => {
+  const context: ReviewModelContext = { schemaVersion: 1, project: 'p', dbnum: 1, taskId: 't', formId: 'f', node: 'sj',
+    comparison: { dbnum: 1, refno: '1_100', a: 10, b: 20, units: [], viewMode: 'split', activeSide: 'before', diffOnly: true } };
+  const diff = (refno: string, kind: ModelAttributeDiff['kind'] = 'modified'): ModelAttributeDiff => ({
+    dbnum: 1, refno, unitRefno: refno, noun: 'BRAN', unitNoun: 'BRAN', a: 10, b: 20,
+    kind, impact: null, changedCount: 0, changes: [], members: null, owner: null, attributesUnavailable: null, warnings: [],
+  });
+  const geometry = (version: ModelVersion): ModelVersionGeometry => ({
+    refnos: version.impactKind === 'tombstone' ? [] : [`${version.unitRefno}1`], entries: new Map(),
+    handle: `${version.unitRefno}@${version.sesno}`, release: vi.fn(async () => {}),
+  });
+  function source() {
+    return { attributeDiff: vi.fn(async (_dbnum: number, refno: string) => diff(refno)),
+      loadVersion: vi.fn(async (version: ModelVersion) => geometry(version)),
+      attributesAt: vi.fn(async (_geometry: ModelVersionGeometry, _refno: string) => ({ sesno: 10, exists: true, noun: 'BRAN', attributes: [] })),
+    };
+  }
+
+  it('按保存的两端会话加载、保留视图模式，属性使用同一历史句柄直到关闭', async () => {
+    const backend = source();
+    const loaded = await loadReviewModelComparison(context, backend, () => true);
+    expect(backend.attributeDiff).toHaveBeenCalledWith(1, '1_100', 10, 20);
+    expect(backend.loadVersion.mock.calls.map(([version]) => version.sesno)).toEqual([10, 20]);
+    expect(loaded.detail.viewMode).toBe('split');
+    await loaded.detail.attributesAt!('before', '1/100');
+    const before = await backend.loadVersion.mock.results[0]!.value;
+    expect(backend.attributesAt).toHaveBeenCalledWith(before, '1_100', { signal: undefined });
+    expect(before.release).not.toHaveBeenCalled();
+    await loaded.release();
+    await loaded.release();
+    expect(before.release).toHaveBeenCalledTimes(1);
+    await expect(loaded.detail.attributesAt!('before', '1_100')).rejects.toThrow('已关闭');
+  });
+
+  it.each(['created', 'deleted'] as const)('从服务端存在性恢复 %s 单元的空侧，保留删除根树信息', async kind => {
+    const backend = source();
+    backend.attributeDiff.mockResolvedValue(diff('1_100', kind));
+    const loaded = await loadReviewModelComparison(context, backend, () => true);
+    const absent = kind === 'created' ? loaded.detail.before : loaded.detail.after;
+    expect(absent.version.impactKind).toBe('tombstone');
+    expect(absent.refnos).toEqual([]);
+    if (kind === 'deleted') expect(loaded.treeContext.models).toContainEqual(expect.objectContaining({ refno: '1_100', status: 'deleted' }));
+    await loaded.release();
+  });
+
+  it('查询身份不符、会话不存在或单元不是根时不生成任何投影', async () => {
+    const backend = source();
+    backend.attributeDiff.mockResolvedValue({ ...diff('1_100'), a: 9 });
+    await expect(loadReviewModelComparison(context, backend, () => true)).rejects.toThrow('精确 A/B');
+    expect(backend.loadVersion).not.toHaveBeenCalled();
+    backend.attributeDiff.mockRejectedValue(new Error('SESSION_NOT_FOUND'));
+    await expect(loadReviewModelComparison(context, backend, () => true)).rejects.toThrow('SESSION_NOT_FOUND');
+    expect(backend.loadVersion).not.toHaveBeenCalled();
+  });
+
+  it('一侧失败也等待另一侧落地并释放，不遗留成功的历史快照', async () => {
+    const backend = source();
+    let finish!: (value: ModelVersionGeometry) => void;
+    backend.loadVersion.mockRejectedValueOnce(new Error('投影失败')).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = loadReviewModelComparison(context, backend, () => true);
+    const assertion = expect(pending).rejects.toThrow('投影失败');
+    await vi.waitFor(() => expect(backend.loadVersion).toHaveBeenCalledTimes(2));
+    const held = geometry({ dbnum: 1, unitRefno: '1_100', unitNoun: 'BRAN', sesno: 20, sessionTime: null, impactKind: 'mesh' });
+    finish(held);
+    await assertion;
+    expect(held.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('恢复被新任务取代时释放已获取的两份，不返回旧场景', async () => {
+    const backend = source();
+    let live = true;
+    backend.loadVersion.mockImplementation(async version => { live = false; return geometry(version); });
+    await expect(loadReviewModelComparison(context, backend, () => live)).rejects.toThrow('已取消');
+    for (const result of backend.loadVersion.mock.results) expect((await result.value).release).toHaveBeenCalledTimes(1);
+  });
+
+  it('多单元合并保持精确会话和单元根，属性不猜测不存在的构件归属', async () => {
+    const backend = source();
+    const multi: ReviewModelContext = { ...context, comparison: { ...context.comparison!, refno: '1_999',
+      units: [{ refno: '1_100', a: 10, b: 20 }, { refno: '1/200', a: 10, b: 20 }] } };
+    const loaded = await loadReviewModelComparison(multi, backend, () => true);
+    expect(loaded.detail.unitRefno).toBe('1_999');
+    expect(loaded.detail.units?.map(unit => unit.unitRefno)).toEqual(['1_100', '1_200']);
+    await loaded.detail.attributesAt!('after', '1_200');
+    expect(backend.attributesAt.mock.calls[0]![0].handle).toBe('1_200@20');
+    await expect(loaded.detail.attributesAt!('after', '1_888')).rejects.toThrow('无法唯一确定');
+    await loaded.release();
+    for (const result of backend.loadVersion.mock.results) expect((await result.value).release).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('createConfirmedRecordsRestorer', () => {
+  const modelContext = { schemaVersion: 1 as const, project: 'project-1', dbnum: 1,
+    taskId: 'task-1', formId: 'form-1', node: 'sj', comparison: null };
+
+  function contextRestorer(records = ref([createRecord({ modelContext })]),
+    ensureModelContext?: (context: ReviewModelContext, shouldApply: () => boolean) => Promise<void>) {
+    const importJSON = vi.fn();
+    const syncFromStore = vi.fn();
+    const restorer = createConfirmedRecordsRestorer({ currentTaskId: () => 'task-1', currentFormId: () => 'form-1',
+      confirmedRecords: () => records.value.map(record => ({ ...record, note: '', type: 'batch' as const })), toolStore: { clearAll: vi.fn(), importJSON },
+      waitForViewerReady: async () => true, getViewerTools: () => ({ syncFromStore }), ensureModelContext });
+    return { records, importJSON, syncFromStore, restorer };
+  }
+
+  it('模型版本检查成功后才导入标注，修订变化即使时间不变也重新恢复', async () => {
+    const order: string[] = [];
+    const ensure = vi.fn(async () => { order.push('model'); });
+    const fixture = contextRestorer(undefined, ensure);
+    fixture.importJSON.mockImplementation(() => { order.push('annotations'); });
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(order).toEqual(['model', 'annotations']);
+    fixture.records.value = [createRecord({ modelContext, recordRevision: 'revision-2' })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(ensure).toHaveBeenCalledTimes(2);
+    expect(fixture.restorer.restoreError.value).toBeNull();
+  });
+
+  it('净距先预检再与标注回放，预检失败不清草稿，旧记录无修订时快照变化仍触发恢复', async () => {
+    const order: string[] = [];
+    const snapshot = { schemaVersion: 1 as const, modelContext, coordinateSpaces: { component: 'design-world-m' as const, pipe: 'e3d-world-mm' as const, bran: 'e3d-world-mm' as const },
+      component: { records: [], showAnnotations: true }, pipe: { results: [] }, bran: { branGroups: [] } };
+    const records = ref([{ ...createRecord(), type: 'batch' as const, note: '', modelContext, clearanceSnapshot: snapshot }]);
+    const importJSON = vi.fn(() => { order.push('annotations'); });
+    const prepare = vi.fn(() => { order.push('preflight'); return () => { order.push('clearance'); }; });
+    const restorer = createConfirmedRecordsRestorer({ currentTaskId: () => 'task-1', currentFormId: () => 'form-1',
+      confirmedRecords: () => records.value, toolStore: { clearAll: vi.fn(), importJSON }, waitForViewerReady: async () => true,
+      getViewerTools: () => ({ syncFromStore: vi.fn() }), ensureModelContext: async () => { order.push('model'); }, prepareClearanceRestore: prepare });
+    prepare.mockImplementationOnce(() => { throw new Error('本机草稿冲突'); });
+    await restorer.restoreConfirmedRecordsIntoScene();
+    expect(importJSON).not.toHaveBeenCalled();
+    expect(restorer.restoreError.value).toContain('草稿冲突');
+    order.length = 0;
+    await restorer.restoreConfirmedRecordsIntoScene();
+    expect(order).toEqual(['model', 'preflight', 'annotations', 'clearance']);
+    records.value[0]!.clearanceSnapshot.component = { records: [], showAnnotations: false };
+    await restorer.restoreConfirmedRecordsIntoScene();
+    expect(importJSON).toHaveBeenCalledTimes(2);
+  });
+
+  it('版本入口缺失或加载失败时不导入标注、不缓存成功状态，允许重试', async () => {
+    const missing = contextRestorer();
+    await missing.restorer.restoreConfirmedRecordsIntoScene();
+    expect(missing.importJSON).not.toHaveBeenCalled();
+    expect(missing.restorer.restoreError.value).toContain('尚未就绪');
+    const ensure = vi.fn().mockRejectedValueOnce(new Error('历史投影不可用')).mockResolvedValue(undefined);
+    const fixture = contextRestorer(undefined, ensure);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    expect(fixture.restorer.lastRestoredSceneKey.value).toBeNull();
+    expect(fixture.restorer.restoring.value).toBe(false);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it('混合版本显式分组回放，同版本不同查看方式仍归一组，旧记录不猜版本', async () => {
+    const a: ReviewModelContext = { ...modelContext, comparison: { dbnum: 1, refno: '1_100', a: 10, b: 20, units: [], viewMode: 'single', activeSide: 'after', diffOnly: false } };
+    const b: ReviewModelContext = { ...a, comparison: { ...a.comparison!, b: 30 } };
+    const latestA: ReviewModelContext = { ...a, node: 'jd', comparison: { ...a.comparison!, viewMode: 'split', activeSide: 'before', diffOnly: true } };
+    const records = ref([createRecord({ id: 'a1', modelContext: a, annotations: [{ id: 'annotation-a1' }] }),
+      createRecord({ id: 'b1', modelContext: b, confirmedAt: 2, annotations: [{ id: 'annotation-b1' }] }),
+      createRecord({ id: 'a2', modelContext: latestA, confirmedAt: 3, annotations: [{ id: 'annotation-a2' }] }), createRecord({ id: 'legacy', confirmedAt: 4 })]);
+    const ensure = vi.fn(async (_context: ReviewModelContext, _shouldApply: () => boolean) => {});
+    const fixture = contextRestorer(records, ensure);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(ensure).not.toHaveBeenCalled();
+    expect(fixture.restorer.restoreError.value).toContain('选择一个版本');
+    expect(fixture.restorer.modelVersionGroups.value).toHaveLength(3);
+    expect(fixture.restorer.modelVersionGroups.value.find(group => group.key === '__legacy__')?.disabled).toBe(true);
+    const groupA = fixture.restorer.modelVersionGroups.value.find(group => group.count === 2)!;
+    await fixture.restorer.selectModelVersionGroup(groupA.key);
+    expect(ensure.mock.calls.at(-1)?.[0]).toEqual(latestA);
+    expect(JSON.parse(fixture.importJSON.mock.calls.at(-1)![0]).annotations.map((item: { id: string }) => item.id)).toEqual(['annotation-a1', 'annotation-a2']);
+    const groupB = fixture.restorer.modelVersionGroups.value.find(group => group.records.some(record => record.id === 'b1'))!;
+    await fixture.restorer.selectModelVersionGroup(groupB.key);
+    expect(JSON.parse(fixture.importJSON.mock.calls.at(-1)![0]).annotations.map((item: { id: string }) => item.id)).toEqual(['annotation-b1']);
+  });
+
+  it('切换版本不把其他版本已确认记录当草稿叠加；真正未确认草稿阻止切换且不清除', async () => {
+    const a = { ...modelContext, dbnum: 1 }, b = { ...modelContext, dbnum: 2 };
+    const records = [createRecord({ id: 'a', modelContext: a, annotations: [{ id: 'annotation-a' }] }), createRecord({ id: 'b', modelContext: b, annotations: [{ id: 'annotation-b' }] })]
+      .map(record => ({ ...record, type: 'batch' as const, note: '' }));
+    let local = JSON.stringify({ version: 7, annotations: [{ id: 'annotation-a' }, { id: 'draft' }] });
+    const ensure = vi.fn(async () => {}), importJSON = vi.fn();
+    const restorer = createConfirmedRecordsRestorer({ currentTaskId: () => 'task-1', currentFormId: () => 'form-1', confirmedRecords: () => records,
+      toolStore: { clearAll: vi.fn(), exportJSON: () => local, importJSON }, layeredDrafts: () => true,
+      waitForViewerReady: async () => true, getViewerTools: () => ({ syncFromStore: vi.fn() }), ensureModelContext: ensure });
+    const groupB = restorer.modelVersionGroups.value.find(group => group.records[0]?.id === 'b')!;
+    await restorer.selectModelVersionGroup(groupB.key);
+    expect(restorer.restoreError.value).toContain('未确认');
+    expect(ensure).not.toHaveBeenCalled();
+    expect(importJSON).not.toHaveBeenCalled();
+    expect(JSON.parse(local).annotations).toHaveLength(2);
+    local = JSON.stringify({ version: 7, annotations: [{ id: 'annotation-a' }] });
+    await restorer.selectModelVersionGroup(groupB.key);
+    expect(JSON.parse(importJSON.mock.calls[0]![0]).annotations.map((item: { id: string }) => item.id)).toEqual(['annotation-b']);
+  });
+
+  it('混合模型版本或混合无版本旧记录时拒绝整批回放，但前序节点同模型可回放', async () => {
+    const ensure = vi.fn(async () => {});
+    const fixture = contextRestorer(ref([createRecord({ modelContext }), createRecord({ id: 'record-2' })]), ensure);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(ensure).not.toHaveBeenCalled();
+    fixture.records.value = [createRecord({ modelContext }), createRecord({ id: 'record-2', modelContext: { ...modelContext, dbnum: 2 } })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    fixture.records.value = [createRecord({ modelContext }), createRecord({ id: 'record-2', modelContext: { ...modelContext, node: 'jd' } })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it('迟到的版本恢复回执不能覆盖更新后的记录或错误提示', async () => {
+    let finish!: () => void;
+    let oldShouldApply!: () => boolean;
+    const ensure = vi.fn().mockImplementationOnce((_context, shouldApply) => {
+      oldShouldApply = shouldApply;
+      return new Promise<void>(resolve => { finish = resolve; });
+    }).mockRejectedValueOnce(new Error('新版本加载失败'));
+    const fixture = contextRestorer(undefined, ensure);
+    const old = fixture.restorer.restoreConfirmedRecordsIntoScene();
+    await vi.waitFor(() => expect(ensure).toHaveBeenCalledTimes(1));
+    fixture.records.value = [createRecord({ modelContext, recordRevision: 'revision-2' })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(oldShouldApply()).toBe(false);
+    finish();
+    await old;
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    expect(fixture.restorer.restoreError.value).toBe('新版本加载失败');
+    const records = ref([createRecord({ id: 'a', modelContext }), createRecord({ id: 'b', modelContext: { ...modelContext, dbnum: 2 } })]);
+    let finishGroup!: () => void;
+    let groupShouldApply!: () => boolean;
+    const ensureGroup = vi.fn().mockImplementationOnce((_context, shouldApply) => {
+      groupShouldApply = shouldApply;
+      return new Promise<void>(resolve => { finishGroup = resolve; });
+    }).mockRejectedValueOnce(new Error('所选版本加载失败'));
+    const grouped = contextRestorer(records, ensureGroup);
+    const oldGroup = grouped.restorer.selectModelVersionGroup(grouped.restorer.modelVersionGroups.value[0]!.key);
+    await vi.waitFor(() => expect(ensureGroup).toHaveBeenCalledTimes(1));
+    await grouped.restorer.selectModelVersionGroup(grouped.restorer.modelVersionGroups.value[1]!.key);
+    expect(groupShouldApply()).toBe(false);
+    finishGroup();
+    await oldGroup;
+    expect(grouped.importJSON).not.toHaveBeenCalled();
+    expect(grouped.restorer.restoreError.value).toBe('所选版本加载失败');
+  });
+
+  it('面板卸载取消待处理回放，版本恢复落地后不再写场景', async () => {
+    let finish!: () => void;
+    const ensure = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const fixture = contextRestorer(undefined, ensure);
+    const pending = fixture.restorer.restoreConfirmedRecordsIntoScene();
+    await vi.waitFor(() => expect(ensure).toHaveBeenCalledTimes(1));
+    fixture.restorer.cancelPendingRestore();
+    finish();
+    await pending;
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    expect(fixture.syncFromStore).not.toHaveBeenCalled();
+    expect(fixture.restorer.restoring.value).toBe(false);
+  });
+
   beforeEach(() => {
     getReviewCommentThreadStore().clear();
   });
@@ -340,7 +603,7 @@ describe('createConfirmedRecordsRestorer', () => {
       expect(importJSON).not.toHaveBeenCalled();
       expect(syncFromStore).toHaveBeenCalledTimes(1);
       expect(getReviewCommentThreadStore().getThread(threadKey)).toBeFalsy();
-      expect(restorer.lastRestoredSceneKey.value).toBe('task-empty:empty');
+      expect(restorer.lastRestoredSceneKey.value).toContain('task-empty:empty');
     });
 
     it('显式 layeredDrafts 取法优先于缺省判定；关掉就回旧行为', async () => {

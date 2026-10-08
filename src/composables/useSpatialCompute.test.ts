@@ -21,7 +21,6 @@ vi.mock('@/composables/useSelectionStore', () => ({
   }),
 }));
 
-
 describe('useSpatialCompute BRAN nearest clearance', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -103,6 +102,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       source_mode: 'bran_centerline',
       source_refno: '24381/145018',
       group_by: 'noun',
+      structural_angle_deg: '5',
       exclude_nouns: 'WELD,ATTA',
       radius: '5000',
       scope: 'all_loaded',
@@ -132,9 +132,9 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       sourceSegmentRefno: '24381_14503',
       sourceSegmentOrder: 3,
       candidateKey: 'WALL:24381_1',
-      label: 'segment 24381_14503#3',
+      label: '包围盒估算 · segment 24381_14503#3',
     }));
-    expect(state.resultRows[2]?.label).toBe('相交 · segment 24381_14504#4');
+    expect(state.resultRows[2]?.label).toBe('相交 · 包围盒估算 · segment 24381_14504#4');
 
     // 三维标注候选 = 每类最近 1 条，index 是桶内位置
     expect(state.annotationCandidates.map((item) => [item.targetGroup, item.candidate.refno, item.index])).toEqual([
@@ -147,6 +147,138 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
 
   /** 一个 `Response` 的 body 只能读一次：连发两次的用例每次都要造新的。 */
   const freshNounGroupedResponse = () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 });
+
+  it('preflights BRAN cloud results atomically and detaches them from later response mutation', async () => {
+    const store = createSpatialComputeStore();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    const before = store.scenarios.branNearestClearance.resultRows.map(row => row.label);
+    const snapshot = store.captureSnapshot();
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, candidateProvenance: { broken: {} } })).toThrow();
+    expect(store.scenarios.branNearestClearance.resultRows.map(row => row.label)).toEqual(before);
+    const apply = store.prepareSnapshotRestore(snapshot);
+    snapshot.branGroups.length = 0;
+    apply();
+    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(6);
+    expect(store.scenarios.branNearestClearance.resultRows[0]?.label).toContain('过期');
+    store.dispose();
+  });
+
+  it('restores BRAN selections and annotations as stale without crossing project contexts', async () => {
+    const values = new Map<string, string>();
+    const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const store = createSpatialComputeStore();
+    store.bindPersistence('A', local);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    const keys = [...store.scenarios.branNearestClearance.drawnCandidateKeys];
+    store.bindPersistence('B', local);
+    expect(store.scenarios.branNearestClearance.branGroups).toEqual([]);
+    store.bindPersistence('A', local);
+    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(6);
+    expect(store.scenarios.branNearestClearance.drawnCandidateKeys).toEqual(keys);
+    expect(store.scenarios.branNearestClearance.resultRows[0]?.label).toContain('过期');
+    store.bindPersistence('history', local, false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await store.submitScenario('branNearestClearance');
+    expect(fetchMock).not.toHaveBeenCalled();
+    store.dispose();
+  });
+
+  it('rejects missing precision metadata and keeps the original snapshot intact', async () => {
+    const values = new Map<string, string>();
+    const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const store = createSpatialComputeStore();
+    store.bindPersistence('A', local);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    store.detachPersistence();
+    const key = 'plant3d-bran-clearance-v1:A';
+    const broken = JSON.parse(values.get(key)!);
+    broken.data.candidateProvenance['WALL:24381_1'] = {};
+    const raw = JSON.stringify(broken);
+    values.set(key, raw);
+    store.bindPersistence('A', local);
+    expect(store.persistenceError.value).toContain('精度');
+    expect(store.persistRecords()).toBe(false);
+    expect(values.get(key)).toBe(raw);
+    store.dispose();
+  });
+
+  it.each(['wall', 'column', 'beam', 'slab'] as const)('queries the independent %s structure group and preserves warnings', async (category) => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ...nounGroupedResponse, warnings: ['unclassified sections'] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    store.currentScenarioState.value.structureCategory = category;
+    store.currentScenarioState.value.structuralAngleDeg = '3';
+    await store.submitScenario();
+    const query = new URL(String(fetchMock.mock.calls[0]?.[0]), 'http://localhost').searchParams;
+    expect(query.get('group_by')).toBe('target_groups');
+    expect(query.get('target_groups')).toBe(category);
+    expect(query.get('structural_angle_deg')).toBe('3');
+    expect(store.currentScenarioState.value.warnings).toEqual(['unclassified sections']);
+  });
+
+  const surfaceResponse = () => ({
+    success: true, unit: 'mm', accuracy_class: 'exact-surface', error_bound_mm: 0.5, warnings: [],
+    result: { distance_mm: 600, intersects: false, witness: 'closest-points',
+      source_leaf_refno: '24381/145019', source_point: { x: 100, y: 0, z: 0 }, target_point: { x: 100, y: 600, z: 0 } },
+  });
+
+  it('refines using the queried source, updates both points and distance, and preserves the annotation key', async () => {
+    const fetchMock = vi.fn().mockImplementationOnce(async () => freshNounGroupedResponse())
+      .mockImplementationOnce(async () => new Response(JSON.stringify(surfaceResponse()), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+    store.currentScenarioState.value.suppoRefno = 'changed_input';
+    await store.refineBranCandidate('WALL:24381_1');
+    const query = new URL(String(fetchMock.mock.calls[1]?.[0]), 'http://localhost').searchParams;
+    expect(query.get('source_refno')).toBe('24381/145018');
+    expect(query.get('target_kind')).toBe('any');
+    expect(store.currentScenarioState.value.resultRows[0]).toMatchObject({ candidateKey: 'WALL:24381_1', distanceMm: 600, drawn: true });
+    expect(store.currentScenarioState.value.resultRows[0]?.label).toContain('实体外表面净距');
+    expect(store.currentScenarioState.value.annotationCandidates[0]).toMatchObject({
+      provenance: { method: 'surface-to-surface', accuracyClass: 'exact-surface' },
+      candidate: { annotation: { label_mm: 600, start_point: { x: 100, y: 0, z: 0 }, end_point: { x: 100, y: 600, z: 0 } } },
+    });
+    expect(store.currentScenarioState.value.refiningKeys).toEqual([]);
+  });
+
+  it.each(['placeholder', 'invalid-distance', 'invalid-point', 'too-large-error', 'no-result'])('retains estimates when refinement returns %s', async (reason) => {
+    const response = surfaceResponse();
+    if (reason === 'placeholder') response.result.witness = 'aabb-overlap-center';
+    if (reason === 'invalid-distance') response.result.distance_mm = -1;
+    if (reason === 'invalid-point') response.result.source_point.x = NaN;
+    if (reason === 'too-large-error') response.error_bound_mm = 11;
+    const data = reason === 'no-result' ? { ...response, result: null } : response;
+    vi.stubGlobal('fetch', vi.fn().mockImplementationOnce(async () => freshNounGroupedResponse())
+      .mockImplementationOnce(async () => new Response(JSON.stringify(data), { status: 200 })));
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+    await store.refineBranCandidate('WALL:24381_1');
+    expect(store.currentScenarioState.value.resultRows[0]?.distanceMm).toBe(1200.4);
+    expect(store.currentScenarioState.value.candidateProvenance['WALL:24381_1']).toBeUndefined();
+    expect(store.currentScenarioState.value.error).toContain('保留包围盒估算');
+  });
+
+  it('discards refinement after reset and prevents duplicate pair requests', async () => {
+    let resolve!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementationOnce(async () => freshNounGroupedResponse())
+      .mockImplementationOnce(() => new Promise<Response>((done) => { resolve = done; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+    const pending = store.refineBranCandidate('WALL:24381_1');
+    await store.refineBranCandidate('WALL:24381_1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    store.resetScenario();
+    resolve(new Response(JSON.stringify(surfaceResponse()), { status: 200 }));
+    await pending;
+    expect(store.currentScenarioState.value.resultRows).toEqual([]);
+    expect(store.currentScenarioState.value.warnings).toEqual([]);
+  });
 
   it('typed exclude_nouns are trimmed and sent; empty field sends none', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => freshNounGroupedResponse());
@@ -336,6 +468,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
         target_nouns: [],
         target_groups: [],
         group_by: 'noun',
+        structural_angle_deg: '5',
         exclude_nouns: ['ATTA', 'WELD'],
         scope: 'all_loaded',
         dbnums: null,
@@ -372,6 +505,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
         source_refno: '24381/145018',
         source_mode: 'bran_centerline',
         group_by: 'noun',
+        structural_angle_deg: '5',
         exclude_nouns: 'WELD,ATTA',
         radius: '1500',
         scope: 'all_loaded',
@@ -509,7 +643,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       // 服务端候选不带来源标签，只有点选那条带；两条都画：默认那条 + 新写进来的
       expect(state.annotationCandidates.filter((item) => item.targetGroup === 'WALL').map((item) => [item.candidate.refno, item.index, item.provenance?.method ?? 'server']))
         .toEqual([['24381_1', 0, 'server'], ['24381_900', 2, 'sampled-object']]);
-      expect(state.resultRows.find((row) => row.refno === '24381_1')?.label).toBe('segment 24381_14503#3');
+      expect(state.resultRows.find((row) => row.refno === '24381_1')?.label).toBe('包围盒估算 · segment 24381_14503#3');
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
       store.recordInteractiveBranClearance({ ...interactive, targetPointMm: { x: 1000, y: 2000, z: 3300 } });

@@ -83,6 +83,20 @@ describe('SpatialComputePanel · BRAN 净距的类型 facet', () => {
     resetSpatialComputeStore();
   });
 
+  it('offers wall/column/beam/slab choices and shows classification and query warnings', async () => {
+    mounted = mountPanel();
+    const select = mounted.host.querySelector<HTMLSelectElement>('[data-testid="structure-category"]')!;
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(['all', 'wall', 'column', 'beam', 'slab']);
+    select.value = 'beam';
+    select.dispatchEvent(new Event('change'));
+    await nextTick();
+    expect(useSpatialCompute().currentScenarioState.value.structureCategory).toBe('beam');
+    expect(mounted.host.querySelector('[data-testid="structural-angle"]')).not.toBeNull();
+    useSpatialCompute().currentScenarioState.value.warnings = ['缺少可靠轴线'];
+    await nextTick();
+    expect(mounted.host.querySelector('[data-testid="clearance-warnings"]')?.textContent).toContain('缺少可靠轴线');
+  });
+
   it('计算前没有 facet、有 exclude_nouns 输入；计算后 chips 按桶序出现、带截断前计数、全部勾选，行按「已标注」高亮', async () => {
     mounted = mountPanel();
     const { host } = mounted;
@@ -99,7 +113,7 @@ describe('SpatialComputePanel · BRAN 净距的类型 facet', () => {
     await nextTick();
 
     expect(host.querySelector('[data-testid="bran-noun-facet"]')?.textContent).toContain('半径内 2 类 / 10 个候选');
-    expect(host.querySelector('[data-testid="bran-noun-facet"]')?.textContent).toContain('已排除 BRAN 自身成员 37 个');
+    expect(host.querySelector('[data-testid="bran-noun-facet"]')?.textContent).toContain('已排除自身成员 37 个');
     expect(chipTexts(host)).toEqual(['WALL 3|true', 'SCTN 7|true']);
     expect(rowStates(host)).toEqual(['24381_1|true', '24381_11|false', '24381_3|true']);
     expect(host.querySelector('[data-testid="bran-draw-toggle-WALL:24381_1"]')?.textContent?.trim()).toBe('已标注');

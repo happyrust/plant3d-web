@@ -1,0 +1,234 @@
+{
+  "refno": "24384_23257",
+  "dbnum": 8000,
+  "segment_count": 9,
+  "outside_diameter_mm": 25.0,
+  "outside_diameter_refno": "24384_23258",
+  "diameter_evidence": {
+    "source": "catalogue",
+    "catalogue_od_mm": 25.0,
+    "arrive_bore_mm": 50.0
+  },
+  "centerline_bbox": {
+    "min": {
+      "x": 8550.54,
+      "y": 9972.952,
+      "z": 2900.0
+    },
+    "max": {
+      "x": 11232.283,
+      "y": 14060.42,
+      "z": 2900.0
+    }
+  },
+  "segments": [
+    {
+      "refno": "24384_23258",
+      "order": 0,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 8550.54,
+        "y": 14060.42,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 9379.577,
+        "y": 13501.228,
+        "z": 2900.0
+      },
+      "length_mm": 999.9993,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23259",
+      "order": 1,
+      "noun": "BEND",
+      "implicit": false,
+      "start": {
+        "x": 9380.125,
+        "y": 13500.858,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 9381.254,
+        "y": 13500.053,
+        "z": 2900.0
+      },
+      "length_mm": 1.3869116,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23260",
+      "order": 2,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 9381.77,
+        "y": 13499.66,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 10499.859,
+        "y": 12657.119,
+        "z": 2900.0
+      },
+      "length_mm": 1400.0001,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23261",
+      "order": 3,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 10501.97,
+        "y": 12655.44,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 10884.992,
+        "y": 12334.046,
+        "z": 2900.0
+      },
+      "length_mm": 500.00067,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23262",
+      "order": 4,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 10887.0,
+        "y": 12332.0,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 11232.283,
+        "y": 11998.564,
+        "z": 2900.0
+      },
+      "length_mm": 479.99973,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23263",
+      "order": 5,
+      "noun": "BEND",
+      "implicit": false,
+      "start": {
+        "x": 11229.857,
+        "y": 12001.841,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 11228.549,
+        "y": 11964.387,
+        "z": 2900.0
+      },
+      "length_mm": 37.476955,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23264",
+      "order": 6,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 11228.55,
+        "y": 11964.39,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 10921.382,
+        "y": 11677.951,
+        "z": 2900.0
+      },
+      "length_mm": 419.999,
+      "outside_diameter_mm": 21.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 21.3,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23265",
+      "order": 7,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 10921.38,
+        "y": 11677.95,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 10190.026,
+        "y": 10995.951,
+        "z": 2900.0
+      },
+      "length_mm": 1000.0003,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    },
+    {
+      "refno": "24384_23266",
+      "order": 8,
+      "noun": "FTUB",
+      "implicit": false,
+      "start": {
+        "x": 10190.03,
+        "y": 10995.95,
+        "z": 2900.0
+      },
+      "end": {
+        "x": 9092.999,
+        "y": 9972.952,
+        "z": 2900.0
+      },
+      "length_mm": 1500.0009,
+      "outside_diameter_mm": 25.0,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 25.0,
+        "arrive_bore_mm": 50.0
+      }
+    }
+  ],
+  "warnings": []
+}

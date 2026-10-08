@@ -31,7 +31,7 @@ describe('branClearanceToExternalDimensions', () => {
           kind: 'linear',
           a: [1, 2, 3],
           b: [2.2, 2, 3],
-          authoritativeText: '1200mm',
+          authoritativeText: '≈1200mm',
         }),
       }),
     ]);
@@ -87,6 +87,17 @@ describe('branClearanceToExternalDimensions', () => {
       ['bran-clearance:bran:24381_144924:0', 'BRAN: 24381_144924（平行直段中心距）', '1584mm'],
       ['bran-clearance:bran:24381_144924:1', 'BRAN: 24381_144924（平行直段中心距）', '1920mm'],
     ]);
+  });
+
+  it('marks refined mesh measurements as surface clearance and keeps exact text', () => {
+    const result = branClearanceToExternalDimensions([{
+      targetGroup: 'beam', index: 0,
+      provenance: { method: 'surface-to-surface', accuracyClass: 'exact-surface' },
+      candidate: { refno: '24381_901', noun: 'SCTN', distance_mm: 600,
+        annotation: { start_point: { x: 0, y: 0, z: 0 }, end_point: { x: 0, y: 600, z: 0 }, label_mm: 600 } },
+    }], point => point);
+    expect(result.records[0]?.sourceLabel).toBe('beam: 24381_901（实体外表面净距）');
+    expect(result.records[0]?.layout).toMatchObject({ authoritativeText: '600mm' });
   });
 
   it('skips incomplete coordinates without creating a user record', () => {

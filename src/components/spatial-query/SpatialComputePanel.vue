@@ -3,8 +3,16 @@
     <!-- Header -->
     <div class="flex items-start justify-between border-b border-border px-5 py-4">
       <div>
-        <div class="text-lg font-bold text-foreground">支架空间计算</div>
-        <div class="mt-0.5 text-[11px] text-muted-foreground">快速估算支架占用空间。</div>
+        <div class="text-lg font-bold text-foreground">管道与结构净距</div>
+        <div class="mt-0.5 text-[11px] text-muted-foreground">查询周边候选并精算实体外表面距离。</div>
+      </div>
+    </div>
+
+    <div v-if="spatialCompute.hasPersistenceContext.value" class="border-b border-border px-5 py-2 text-xs text-muted-foreground" role="status">
+      {{ spatialCompute.persistenceLabel.value }}
+      <div v-if="spatialCompute.persistenceError.value" class="mt-1 text-destructive">
+        {{ spatialCompute.persistenceError.value }}
+        <button type="button" class="ml-2 underline" @click="spatialCompute.persistRecords()">重试保存</button>
       </div>
     </div>
 
@@ -97,6 +105,21 @@
           <!-- Form -->
           <div class="mt-3 space-y-2.5">
             <label class="block">
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">目标结构类别</span>
+              <select v-model="computeState.structureCategory" data-testid="structure-category" class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px]">
+                <option value="all">全部构件类型</option>
+                <option value="wall">墙</option>
+                <option value="column">柱</option>
+                <option value="beam">梁</option>
+                <option value="slab">板</option>
+              </select>
+            </label>
+            <label v-if="computeState.structureCategory === 'column' || computeState.structureCategory === 'beam'" class="block">
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">梁柱分类角度容差（度）</span>
+              <input v-model="computeState.structuralAngleDeg" data-testid="structural-angle" type="number" min="0" max="45" class="h-10 w-full rounded-[10px] border border-gray-200 px-3" />
+              <span class="text-[11px] text-muted-foreground">按世界轴线与水平/垂直方向分类，默认 5° 待专业确认；斜向、弯曲和缺少轴线的构件不归入梁柱。</span>
+            </label>
+            <label class="block">
               <span class="mb-1 block text-xs font-semibold text-muted-foreground">{{ currentScenarioMeta.sourceLabel }}</span>
               <input v-model="computeState.suppoRefno"
                 type="text"
@@ -178,7 +201,7 @@
           <div v-if="isBranScenario && computeState.nounFacets.length > 0" class="mt-3" data-testid="bran-noun-facet">
             <div class="flex items-center justify-between pb-1.5">
               <div class="text-xs font-semibold text-muted-foreground">
-                目标类型 · 半径内 {{ computeState.nounFacets.length }} 类 / {{ branFacetTotal }} 个候选
+                目标类型 · {{ computeState.structureCategory === 'all' ? '半径内' : '返回' }} {{ computeState.nounFacets.length }} 类 / {{ branFacetTotal }} 个候选
               </div>
               <div class="flex items-center gap-2 text-[11px] font-semibold">
                 <button type="button" class="text-brand hover:underline" data-testid="bran-noun-facet-all" @click="setAllBranNounFacets(true)">全选</button>
@@ -202,11 +225,14 @@
               </button>
             </div>
             <div class="mt-1.5 text-[11px] leading-relaxed text-gray-400">
-              每类默认只标注最近 1 条，其余候选可在下表逐条开关「标注」；已排除 BRAN 自身成员 {{ computeState.excludedSelfMembers }} 个。
+              每类最多返回 3 条，默认只标注最近 1 条；其余候选可逐条开关「标注」。已排除自身成员 {{ computeState.excludedSelfMembers }} 个。
             </div>
           </div>
 
           <!-- Result Table -->
+          <div v-if="computeState.warnings.length" data-testid="clearance-warnings" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <p v-for="warning in computeState.warnings" :key="warning">{{ warning }}</p>
+          </div>
           <div v-if="computeState.resultRows.length > 0 || computeState.error || computeState.responseText" class="mt-3">
             <div class="flex items-center justify-between pb-2">
               <div class="text-[13px] font-bold text-foreground">查询结果表</div>
@@ -238,10 +264,16 @@
                   :class="isRowEmphasized(row, idx) ? 'font-semibold text-brand' : 'text-muted-foreground'">
                   {{ formatDistanceMm(row.distanceMm) }}
                 </div>
-                <div v-if="isBranScenario" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
+                <div v-if="isBranScenario" :title="row.label" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
                   {{ row.label || '-' }}
                 </div>
-                <div class="flex items-center justify-end gap-1 px-2.5 py-2" :class="isBranScenario ? 'w-[150px]' : 'flex-1'">
+                <div class="flex flex-wrap items-center justify-end gap-1 px-2.5 py-2" :class="isBranScenario ? 'w-[150px]' : 'flex-1'">
+                  <button v-if="row.candidateKey" type="button" :data-testid="`bran-refine-${row.candidateKey}`"
+                    :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading"
+                    class="rounded-md border border-gray-200 px-2 py-1.5 text-[11px] disabled:opacity-50"
+                    @click="refineBranCandidate(row.candidateKey)">
+                    {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}
+                  </button>
                   <button v-if="isBranScenario && row.candidateKey"
                     type="button"
                     :data-testid="`bran-draw-toggle-${row.candidateKey}`"
@@ -319,6 +351,7 @@ const {
   setActiveScenario,
   applyCurrentSelection: applyComputeSelection,
   submitScenario,
+  refineBranCandidate,
   toggleScenarioExpanded,
   toggleBranNounFacet,
   setAllBranNounFacets,

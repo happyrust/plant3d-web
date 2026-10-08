@@ -1,5 +1,6 @@
 export * from './adapters/archivedV5Source';
 export * from './adapters/branExternalDimensions';
+export * from './adapters/pipeInformation';
 export * from './adapters/dtxDimensionAnchorResolver';
 export * from './adapters/dtxDimensionViewerAdapter';
 export * from './adapters/dtxDimensionSnapPort';

@@ -83,10 +83,11 @@ describe('PropertiesPanel × 版本钉住选中（版本对比里点 A / B 构�
     // 同一 refno 普通选中：钉住复位、走当前会话、那一版的值不串过来
     setGlobalSelectedRefno(FTUB);
     await flushUi();
+    // 数据源动态加载在全套并行测试下可能超过一次 UI 刷新，等待查询完成再验证复位。
+    await vi.waitFor(() => expect(uiAttr).toHaveBeenCalledWith(FTUB));
     expect(getGlobalSelectedVersionPin()).toBeNull();
     expect(notice(host)).toBeNull();
-    expect(uiAttr).toHaveBeenCalledWith(FTUB);
-    expect(host.textContent).toContain('/CURRENT');
+    await vi.waitFor(() => expect(host.textContent).toContain('/CURRENT'));
     expect(host.textContent).not.toContain('/AT-626');
 
     // 再钉到 B 那版：另一个 sesno 是另一份缓存，load 照发

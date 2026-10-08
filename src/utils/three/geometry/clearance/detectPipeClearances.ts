@@ -12,18 +12,16 @@ export type PipePair = {
   bran2: string
 }
 
-const DEFAULT_PIPE_OUTSIDE_DIAMETER_MM = 229;
-
 function areAxesWithinAngle(axis1: THREE.Vector3, axis2: THREE.Vector3, maxAngleDeg: number): boolean {
   if (axis1.lengthSq() < 1e-12 || axis2.lengthSq() < 1e-12) return false;
   const maxAngleRad = (Math.max(0, Math.min(180, maxAngleDeg)) * Math.PI) / 180;
   return Math.abs(axis1.clone().normalize().dot(axis2.clone().normalize())) >= Math.cos(maxAngleRad);
 }
 
-function resolveOutsideDiameter(segment: PipeSegmentDto): number {
+function resolveOutsideDiameter(segment: PipeSegmentDto): number | null {
   const outsideDiameter = Number(segment.outside_diameter ?? NaN);
   if (Number.isFinite(outsideDiameter) && outsideDiameter > 0) return outsideDiameter;
-  return DEFAULT_PIPE_OUTSIDE_DIAMETER_MM;
+  return null;
 }
 
 /**
@@ -51,10 +49,12 @@ export function detectPipeClearances(
       for (const seg1 of segs1) {
         if (!seg1.arrive || !seg1.leave) continue;
         const outsideDiameter1 = resolveOutsideDiameter(seg1);
+        if (outsideDiameter1 === null) continue;
         
         for (const seg2 of segs2) {
           if (!seg2.arrive || !seg2.leave) continue;
           const outsideDiameter2 = resolveOutsideDiameter(seg2);
+          if (outsideDiameter2 === null) continue;
 
           const start1 = new THREE.Vector3(seg1.arrive[0], seg1.arrive[1], seg1.arrive[2]);
           const end1 = new THREE.Vector3(seg1.leave[0], seg1.leave[1], seg1.leave[2]);

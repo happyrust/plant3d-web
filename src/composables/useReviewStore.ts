@@ -32,6 +32,9 @@ import {
   readPersistedEmbedModeParams,
   resolveTrustedEmbedIdentity,
 } from '@/components/review/embedRoleLanding';
+import { ReviewClearanceConflictError, reviewClearanceSnapshotKey, type ReviewClearanceConflict, type ReviewClearanceResolution, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
+import { isReviewModelContext, reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
+import { groupReviewRecordsByModelVersion } from '@/components/review/reviewModelVersionGroups';
 import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
@@ -49,6 +52,11 @@ import {
 } from '@/dimension';
 
 export type ConfirmedRecord = {
+  clearanceSnapshot?: ReviewClearanceSnapshot;
+  recordRevision?: string;
+  currentNode?: string;
+  operatorId?: string;
+  modelContext?: ReviewModelContext;
   id: string;
   taskId?: string;
   formId?: string;
@@ -123,10 +131,142 @@ USE_BACKEND.value = persisted.useBackend;
 const reviewMode = ref<boolean>(persisted.reviewMode);
 const confirmedRecords = ref<ConfirmedRecord[]>([]);
 const currentTask = ref<ReviewTask | null>(null);
+const selectedReviewModelGroup = ref<{ scope: string; key: string | null } | null>(null);
+function reviewModelGroupScope(): string { return JSON.stringify([currentTask.value?.id ?? null, currentTask.value?.formId ?? null]); }
+function getSelectedReviewModelGroup(): string | null {
+  return selectedReviewModelGroup.value?.scope === reviewModelGroupScope() ? selectedReviewModelGroup.value.key : null;
+}
+function selectReviewModelGroup(key: string | null): void {
+  selectedReviewModelGroup.value = { scope: reviewModelGroupScope(), key };
+}
+let taskActivationEpoch = 0;
+let recordsLoadSequence = 0;
 const loading = ref(false);
 const error = ref<string | null>(null);
 const reviewHistory = ref<ReviewHistoryItem[]>([]);
 let activeDimensionDocumentSession: DimensionDocumentSession | null = null;
+let modelContextProvider: (() => ReviewModelContext | null) | null = null;
+type ReviewClearanceProvider = { capture: (context: ReviewModelContext) => ReviewClearanceSnapshot; prepare: (snapshot: ReviewClearanceSnapshot, context: ReviewModelContext, resolution?: ReviewClearanceResolution) => () => void };
+let clearanceProvider: ReviewClearanceProvider | null = null;
+type BoundClearanceConflict = { conflict: ReviewClearanceConflict; scope: string; provider: ReviewClearanceProvider };
+const pendingClearanceConflict = ref<ReviewClearanceConflict | null>(null);
+const backupClearanceConflict = ref<ReviewClearanceConflict | null>(null);
+const keptLocalClearanceConflict = ref<ReviewClearanceConflict | null>(null);
+let pendingClearanceBinding: BoundClearanceConflict | null = null;
+let backupClearanceBinding: BoundClearanceConflict | null = null;
+let acceptedClearanceResolution: (BoundClearanceConflict & { resolution: ReviewClearanceResolution }) | null = null;
+const clearanceConflictScope = () => JSON.stringify([currentTask.value?.id, currentTask.value?.formId, currentTask.value?.currentNode, resolveRealtimeUserId(), taskActivationEpoch]);
+function isClearanceBindingCurrent(binding: BoundClearanceConflict | null): boolean {
+  if (!binding || binding.scope !== clearanceConflictScope() || binding.provider !== clearanceProvider) return false;
+  try {
+    const current = modelContextProvider?.();
+    return !current || reviewModelVersionKey(current) === reviewModelVersionKey(binding.conflict.context);
+  } catch { return false; }
+}
+const clearanceSnapshotConflict = computed(() => {
+  const conflict = pendingClearanceConflict.value;
+  return conflict && isClearanceBindingCurrent(pendingClearanceBinding) ? conflict : null;
+});
+const clearanceSnapshotBackup = computed(() => {
+  const backup = backupClearanceConflict.value;
+  return backup && isClearanceBindingCurrent(backupClearanceBinding) ? backup : null;
+});
+const clearanceSnapshotKeptLocal = computed(() => {
+  const conflict = keptLocalClearanceConflict.value;
+  return conflict && isClearanceBindingCurrent(acceptedClearanceResolution) ? conflict : null;
+});
+
+function bindClearanceSnapshotProvider(provider: ReviewClearanceProvider): () => void {
+  acceptedClearanceResolution = null;
+  pendingClearanceBinding = null;
+  backupClearanceBinding = null;
+  pendingClearanceConflict.value = null;
+  backupClearanceConflict.value = null;
+  keptLocalClearanceConflict.value = null;
+  clearanceProvider = provider;
+  return () => {
+    if (clearanceProvider === provider) {
+      clearanceProvider = null;
+      acceptedClearanceResolution = null;
+      pendingClearanceBinding = null;
+      backupClearanceBinding = null;
+      pendingClearanceConflict.value = null;
+      backupClearanceConflict.value = null;
+      keptLocalClearanceConflict.value = null;
+    }
+  };
+}
+
+function prepareBoundClearanceRestore(snapshot: ReviewClearanceSnapshot, context: ReviewModelContext): () => void {
+  if (!clearanceProvider) throw new Error('净距恢复入口尚未就绪，请重试');
+  if (context.taskId !== currentTask.value?.id || context.formId !== currentTask.value?.formId)
+    throw new Error('净距恢复所属任务或单据已切换，请重新比较');
+  const provider = clearanceProvider;
+  const binding = acceptedClearanceResolution;
+  const resolution = isClearanceBindingCurrent(binding) && binding?.resolution.cloudKey === reviewClearanceSnapshotKey(snapshot) ? binding.resolution : undefined;
+  try {
+    const apply = provider.prepare(snapshot, context, resolution);
+    return () => {
+      if (clearanceProvider !== provider || (binding && resolution && !isClearanceBindingCurrent(binding))) throw new Error('净距恢复所属任务或版本已切换，请重新比较');
+      apply();
+      if (resolution?.action === 'use-cloud' && binding) {
+        backupClearanceBinding = binding;
+        backupClearanceConflict.value = binding.conflict;
+      }
+      pendingClearanceBinding = null;
+      pendingClearanceConflict.value = null;
+    };
+  } catch (error) {
+    if (error instanceof ReviewClearanceConflictError) {
+      pendingClearanceBinding = { conflict: error.conflict, scope: clearanceConflictScope(), provider };
+      pendingClearanceConflict.value = error.conflict;
+      acceptedClearanceResolution = null;
+      keptLocalClearanceConflict.value = null;
+    }
+    throw error;
+  }
+}
+
+function resolveClearanceSnapshotConflict(action: ReviewClearanceResolution['action']): boolean {
+  const binding = pendingClearanceBinding;
+  if (!isClearanceBindingCurrent(binding) || !binding) return false;
+  acceptedClearanceResolution = { ...binding, resolution: { action,
+    localKey: reviewClearanceSnapshotKey(binding.conflict.local), cloudKey: reviewClearanceSnapshotKey(binding.conflict.cloud) } };
+  keptLocalClearanceConflict.value = action === 'keep-local' ? binding.conflict : null;
+  return true;
+}
+
+function reopenClearanceSnapshotConflict(): boolean {
+  if (!isClearanceBindingCurrent(acceptedClearanceResolution)) return false;
+  acceptedClearanceResolution = null;
+  keptLocalClearanceConflict.value = null;
+  return true;
+}
+
+function restoreClearanceSnapshotBackup(): boolean {
+  const binding = backupClearanceBinding;
+  if (!binding || !isClearanceBindingCurrent(binding) || !clearanceProvider) return false;
+  const { local, cloud, context } = binding.conflict;
+  const current = clearanceProvider.capture(context);
+  if (reviewClearanceSnapshotKey(current) !== reviewClearanceSnapshotKey(cloud)) throw new Error('恢复云端后本机结果又有修改，已保留当前修改；请下载备份后分别核对');
+  const apply = clearanceProvider.prepare(local, context, { action: 'use-cloud', backup: false,
+    localKey: reviewClearanceSnapshotKey(current), cloudKey: reviewClearanceSnapshotKey(local) });
+  apply();
+  // 撤销后保留本机备份供下一次保存，旧云端回放不能再覆盖它。
+  acceptedClearanceResolution = { ...binding, resolution: { action: 'keep-local',
+    localKey: reviewClearanceSnapshotKey(local), cloudKey: reviewClearanceSnapshotKey(cloud) } };
+  keptLocalClearanceConflict.value = binding.conflict;
+  backupClearanceBinding = null;
+  backupClearanceConflict.value = null;
+  pendingClearanceBinding = null;
+  pendingClearanceConflict.value = null;
+  return true;
+}
+
+function bindModelContextProvider(provider: () => ReviewModelContext | null): () => void {
+  modelContextProvider = provider;
+  return () => { if (modelContextProvider === provider) modelContextProvider = null; };
+}
 let activeDimensionDocumentUnsubscribe: (() => void) | null = null;
 const dimensionDocumentDirty = ref(false);
 const dimensionDocumentRecordCount = ref(0);
@@ -174,16 +314,24 @@ function clearBoundDimensionDocumentSession(): void {
 }
 
 function getBoundDimensionConfirmPayload(): Readonly<{
+  clearanceSnapshot?: ReviewClearanceSnapshot;
+  modelContext?: ReviewModelContext;
   dimensionDocument?: SnapshotDimensionDocument;
   dimensionDocumentVersion?: number;
 }> {
   const state = activeDimensionDocumentSession?.state;
-  return state
-    ? {
+  let modelContext: ReviewModelContext | undefined;
+  let clearanceSnapshot: ReviewClearanceSnapshot | undefined;
+  try { modelContext = modelContextProvider?.() ?? undefined; } catch { /* 保存时会再次检查尚未就绪的对比，显示错误；渲染不抛出。 */ }
+  try { if (modelContext) clearanceSnapshot = clearanceProvider?.capture(modelContext); } catch { /* 保存入口再次执行严格校验；渲染不抛出。 */ }
+  return {
+    ...(clearanceSnapshot ? { clearanceSnapshot } : {}),
+    ...(modelContext ? { modelContext } : {}),
+    ...(state ? {
       dimensionDocument: dimensionDocumentToSnapshot(state),
       dimensionDocumentVersion: state.baseVersion,
-    }
-    : {};
+    } : {}),
+  };
 }
 
 function resolveDimensionDocumentConflict(
@@ -249,7 +397,12 @@ async function addConfirmedRecord(
   record: Omit<ConfirmedRecord, 'id' | 'confirmedAt'>
 ): Promise<string> {
   const taskId = currentTask.value?.id;
+  const activationEpoch = taskActivationEpoch;
+  const node = currentTask.value?.currentNode;
   const formId = currentTask.value?.formId?.trim() || record.formId;
+  const operatorId = resolveRealtimeUserId()?.trim();
+  const currentNode = node ?? 'sj';
+  if (isCurrentTaskTerminal()) throw new Error(error.value!);
 
   if (!USE_BACKEND.value) {
     const message = '校审确认记录必须保存到数据库，当前不允许切换到本地模式';
@@ -273,7 +426,24 @@ async function addConfirmedRecord(
         : undefined);
     const dimensionDocumentVersion = record.dimensionDocumentVersion
       ?? boundDimensionState?.baseVersion;
+    const modelContext = record.modelContext ?? modelContextProvider?.() ?? undefined;
+    const groups = groupReviewRecordsByModelVersion(confirmedRecords.value.filter(item => item.taskId === taskId && (!item.formId || item.formId === formId)));
+    if (groups.length > 1) {
+      const selected = groups.find(group => group.key === getSelectedReviewModelGroup());
+      if (!selected || selected.disabled || !modelContext || !isReviewModelContext(modelContext) || reviewModelVersionKey(modelContext) !== selected.key)
+        throw new Error('请先选择并恢复要保存的模型版本，不能把不同版本的结果合并确认');
+    }
+    const clearanceSnapshot = record.clearanceSnapshot ?? (modelContext ? clearanceProvider?.capture(modelContext) : undefined);
+    const slotRecords = confirmedRecords.value.filter(item => item.formId === formId
+      && item.currentNode === currentNode && item.operatorId === operatorId);
+    if (slotRecords.length > 1) throw new Error('当前节点存在多条确认记录，请核对服务器数据后重开任务');
+    const recordBaseRevision = slotRecords[0]?.recordRevision;
+    if (modelContext && (!isReviewModelContext(modelContext) || modelContext.taskId !== taskId || modelContext.formId !== formId
+      || modelContext.node !== (currentTask.value?.currentNode ?? 'sj'))) throw new Error('校审模型版本上下文无效或已切换，请重新打开任务后保存');
     const response = await reviewRecordCreate({
+      clearanceSnapshot,
+      recordBaseRevision,
+      modelContext,
       taskId,
       formId,
       type: record.type,
@@ -286,9 +456,24 @@ async function addConfirmedRecord(
       dimensionDocumentBaseVersion: dimensionDocumentVersion,
       note: record.note,
     });
+    if (activationEpoch !== taskActivationEpoch || currentTask.value?.id !== taskId || currentTask.value?.currentNode !== node) {
+      throw new Error('保存期间任务或流程节点已切换；原任务保存回执未导入当前任务，请重开原任务核对');
+    }
 
     if (response.success && response.record) {
+      if (!response.record.recordRevision || !response.record.recordRevision.trim()) throw new Error('后端未返回确认记录修订标识，不能确认保存成功');
+      if (response.record.recordRevision === recordBaseRevision) throw new Error('后端未推进确认记录修订标识，不能确认保存成功');
+      if (response.record.currentNode !== currentNode || response.record.operatorId !== operatorId) throw new Error('后端确认记录节点或作者与当前任务不一致，请重新核对');
+      if (modelContext && (!isReviewModelContext(response.record.modelContext)
+        || reviewModelContextKey(response.record.modelContext) !== reviewModelContextKey(modelContext))) throw new Error('后端未完整保存模型版本上下文，不能确认保存成功');
+      if (clearanceSnapshot && reviewClearanceSnapshotKey(response.record.clearanceSnapshot) !== reviewClearanceSnapshotKey(clearanceSnapshot))
+        throw new Error('后端未完整保存三类净距结果，不能确认保存成功');
       const newRecord: ConfirmedRecord = {
+        clearanceSnapshot: response.record.clearanceSnapshot,
+        recordRevision: response.record.recordRevision,
+        currentNode: response.record.currentNode,
+        operatorId: response.record.operatorId,
+        modelContext: response.record.modelContext,
         id: response.record.id,
         taskId,
         formId: response.record.formId || formId,
@@ -334,6 +519,13 @@ async function addConfirmedRecord(
         nextRecords.push(newRecord);
       }
       confirmedRecords.value = nextRecords;
+      if (clearanceSnapshot && isClearanceBindingCurrent(acceptedClearanceResolution)
+        && reviewClearanceSnapshotKey(clearanceSnapshot) === reviewClearanceSnapshotKey(acceptedClearanceResolution?.conflict.local)) {
+        acceptedClearanceResolution = null;
+        keptLocalClearanceConflict.value = null;
+        pendingClearanceBinding = null;
+        pendingClearanceConflict.value = null;
+      }
       dimensionDocumentConflict.value = null;
       return newRecord.id;
     }
@@ -341,7 +533,9 @@ async function addConfirmedRecord(
     throw new Error(response.error_message || '保存确认记录失败');
   } catch (e) {
     const session = activeDimensionDocumentSession;
-    if (session) {
+    const recordRevisionConflict = e instanceof Error && (e.message.includes('确认记录已更新或删除') || e.message.includes('REVIEW_RECORD_REVISION_CONFLICT'));
+    // 整条快照过期不能只重放尺寸命令，否则会覆盖另一端的批注、测量和模型上下文。
+    if (session && !recordRevisionConflict && activationEpoch === taskActivationEpoch) {
       const latest = dimensionConflictStateFromError(e, { taskId, formId });
       if (latest) {
         const preview = session.previewPendingCommands(latest);
@@ -357,14 +551,22 @@ async function addConfirmedRecord(
         throw conflictError;
       }
     }
-    error.value = e instanceof Error ? e.message : '保存确认记录失败';
+    if (activationEpoch === taskActivationEpoch) error.value = e instanceof Error ? e.message : '保存确认记录失败';
     throw e;
   } finally {
-    loading.value = false;
+    if (activationEpoch === taskActivationEpoch) loading.value = false;
   }
 }
 
+function isCurrentTaskTerminal(): boolean {
+  if (!['approved', 'cancelled'].includes(currentTask.value?.status?.trim().toLowerCase() ?? '')) return false;
+  error.value = '当前校审任务已结束，确认记录只读';
+  return true;
+}
+
 async function removeConfirmedRecord(id: string): Promise<void> {
+  if (isCurrentTaskTerminal()) return;
+  const activationEpoch = taskActivationEpoch;
   let canRemoveLocal = true;
 
   if (USE_BACKEND.value) {
@@ -376,20 +578,23 @@ async function removeConfirmedRecord(id: string): Promise<void> {
         throw new Error(response.error_message || '删除确认记录失败');
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '删除确认记录失败';
+      if (activationEpoch === taskActivationEpoch) error.value = e instanceof Error ? e.message : '删除确认记录失败';
       canRemoveLocal = false;
     } finally {
-      loading.value = false;
+      if (activationEpoch === taskActivationEpoch) loading.value = false;
     }
   }
 
-  if (canRemoveLocal) {
+  if (canRemoveLocal && activationEpoch === taskActivationEpoch) {
     confirmedRecords.value = confirmedRecords.value.filter((r) => r.id !== id);
   }
 }
 
 async function clearConfirmedRecords(): Promise<boolean> {
+  if (isCurrentTaskTerminal()) return false;
   const taskId = currentTask.value?.id;
+  const formId = currentTask.value?.formId;
+  const activationEpoch = taskActivationEpoch;
 
   if (USE_BACKEND.value && taskId) {
     loading.value = true;
@@ -399,14 +604,19 @@ async function clearConfirmedRecords(): Promise<boolean> {
       if (!response.success) {
         throw new Error(response.error_message || '清空确认记录失败');
       }
+      if (activationEpoch !== taskActivationEpoch) return false;
+      // 后端只清当前节点本人槽位，必须重读以保留其他节点的确认历史。
+      await loadConfirmedRecords(taskId, { formId });
+      return activationEpoch === taskActivationEpoch && !error.value;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '清空确认记录失败';
+      if (activationEpoch === taskActivationEpoch) error.value = e instanceof Error ? e.message : '清空确认记录失败';
       return false;
     } finally {
-      loading.value = false;
+      if (activationEpoch === taskActivationEpoch) loading.value = false;
     }
   }
 
+  if (activationEpoch !== taskActivationEpoch) return false;
   confirmedRecords.value = [];
   return true;
 }
@@ -416,6 +626,7 @@ async function loadConfirmedRecords(
   options?: { formId?: string | null },
 ): Promise<void> {
   if (!USE_BACKEND.value) return;
+  const sequence = ++recordsLoadSequence;
 
   loading.value = true;
   error.value = null;
@@ -423,12 +634,14 @@ async function loadConfirmedRecords(
     let response = await reviewRecordGetByTaskId(taskId, {
       formId: options?.formId,
     });
+    if (sequence !== recordsLoadSequence) return;
     const scopedFormId = options?.formId?.trim();
     let usedTaskScopeFallback = false;
     if (response.success && scopedFormId && (response.records?.length ?? 0) === 0) {
       response = await reviewRecordGetByTaskId(taskId, {
         formId: undefined,
       });
+      if (sequence !== recordsLoadSequence) return;
       usedTaskScopeFallback = true;
     }
     if (response.success && response.records) {
@@ -439,6 +652,11 @@ async function loadConfirmedRecords(
         })
         : response.records;
       confirmedRecords.value = records.map((r) => ({
+        recordRevision: r.recordRevision,
+        currentNode: r.currentNode,
+        operatorId: r.operatorId,
+        modelContext: r.modelContext,
+        clearanceSnapshot: r.clearanceSnapshot,
         id: r.id,
         taskId: r.taskId,
         formId: r.formId,
@@ -457,9 +675,9 @@ async function loadConfirmedRecords(
       throw new Error(response.error_message);
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载确认记录失败';
+    if (sequence === recordsLoadSequence) error.value = e instanceof Error ? e.message : '加载确认记录失败';
   } finally {
-    loading.value = false;
+    if (sequence === recordsLoadSequence) loading.value = false;
   }
 }
 
@@ -484,6 +702,8 @@ async function loadReviewHistory(taskId: string): Promise<void> {
 // ============ 当前任务管理 ============
 
 async function setCurrentTask(task: ReviewTask | null) {
+  const activationEpoch = ++taskActivationEpoch;
+  recordsLoadSequence += 1;
   if (task?.id !== currentTask.value?.id) {
     clearBoundDimensionDocumentSession();
   }
@@ -510,11 +730,13 @@ async function setCurrentTask(task: ReviewTask | null) {
     }
   }
 
+  if (activationEpoch !== taskActivationEpoch) return;
   currentTask.value = task;
   if (task) {
     reviewMode.value = true;
     // 任务详情与确认记录先恢复，历史流转失败或超时不阻断详情页批注/评论。
     await loadConfirmedRecords(task.id, { formId: task.formId });
+    if (activationEpoch !== taskActivationEpoch) return;
     void loadReviewHistory(task.id);
     // 连接 WebSocket 获取实时更新
     connectWebSocket(resolveRealtimeUserId());
@@ -526,6 +748,8 @@ async function setCurrentTask(task: ReviewTask | null) {
 }
 
 function clearCurrentTask() {
+  taskActivationEpoch += 1;
+  recordsLoadSequence += 1;
   clearBoundDimensionDocumentSession();
   currentTask.value = null;
   disconnectWebSocket();
@@ -726,6 +950,7 @@ async function flushPendingConfirmForExternalAction(
   const toolStore = useToolStore();
   const activeDimensionState = activeDimensionDocumentSession?.state;
   const draftPayload = buildReviewConfirmSnapshotPayload({
+    ...getBoundDimensionConfirmPayload(),
     annotations: [...toolStore.annotations.value],
     cloudAnnotations: [...toolStore.cloudAnnotations.value],
     rectAnnotations: [...toolStore.rectAnnotations.value],
@@ -1112,6 +1337,17 @@ export function useReviewStore() {
     setCurrentTask,
     clearCurrentTask,
     bindDimensionDocumentSession,
+    bindModelContextProvider,
+    getSelectedReviewModelGroup,
+    selectReviewModelGroup,
+    bindClearanceSnapshotProvider,
+    prepareBoundClearanceRestore,
+    clearanceSnapshotConflict,
+    clearanceSnapshotBackup,
+    clearanceSnapshotKeptLocal,
+    resolveClearanceSnapshotConflict,
+    restoreClearanceSnapshotBackup,
+    reopenClearanceSnapshotConflict,
     getBoundDimensionConfirmPayload,
     resolveDimensionDocumentConflict,
 

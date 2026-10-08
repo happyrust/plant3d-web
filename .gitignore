@@ -92,6 +92,9 @@ scripts/*
 !scripts/pms-chrome-devtools-flow.ts
 !scripts/pms-api-sniffer.ts
 !scripts/pms-plant3d-initiate-flow.ts
+!scripts/verify-d07-environment.mjs
+!scripts/verify-acceptance-gate.mjs
+!scripts/verify-build-provenance.mjs
 !scripts/pms-contract-sequence.ts
 !scripts/review-annotation-flow-contract.ts
 !scripts/online-review-acceptance.mjs

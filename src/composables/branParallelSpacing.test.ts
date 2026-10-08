@@ -39,7 +39,7 @@ function centerline(refno: string, segments: SpatialCenterlineSegment[], od: num
 function lShapedBran(refno: string, y = 0, z = 0): BranCenterlineInput {
   return centerline(refno, [
     seg(`${refno}_1~${refno}_2`, 0, [0, y, z], [800, y, z]),
-    seg(`${refno}_2`, 1, [800, y, z], [1000, y, z], { noun: 'VALV', outside_diameter_mm: 168.3 }),
+    seg(`${refno}_2`, 1, [800, y, z], [1000, y, z], { noun: 'VALV', outside_diameter_mm: 114.3 }),
     seg(`${refno}_2~${refno}_3`, 2, [1000, y, z], [2000, y, z]),
     seg(`${refno}_3`, 3, [2000, y, z], [2100, y + 100, z], { noun: 'ELBO' }),
     seg(`${refno}_3~${refno}_4`, 4, [2100, y + 100, z], [2100, y + 1100, z]),
@@ -56,8 +56,8 @@ describe('buildStraightRuns：连续共线的段合成直段', () => {
     expect(first!.end).toEqual({ x: 2000, y: 0, z: 0 });
     expect(first!.lengthMm).toBeCloseTo(2000, 9);
     expect(first!.direction).toEqual({ x: 1, y: 0, z: 0 });
-    // 直段外径取段上首个成员外径（阀 168.3），不是 BRAN 顶层的 114.3
-    expect(first!.outsideDiameterMm).toBe(168.3);
+    // 同径管身和阀才能合并；下面单独覆盖变径情况。
+    expect(first!.outsideDiameterMm).toBe(114.3);
     expect(second!.segments.map((s) => s.refno)).toEqual(['1_3~1_4']);
     expect(second!.direction).toEqual({ x: 0, y: 1, z: 0 });
     // 只有隐式管身的直段用 BRAN 顶层外径
@@ -97,6 +97,15 @@ describe('buildStraightRuns：连续共线的段合成直段', () => {
     expect(buildStraightRuns(centerline('4', [seg('4_1', 0, [0, 0, 0], [10, 10, 0], { noun: 'BEND' })]))).toEqual([]);
     // 顶层外径也没有 → null
     expect(buildStraightRuns(centerline('5', [seg('5_1~5_2', 0, [0, 0, 0], [10, 0, 0])], null))[0]!.outsideDiameterMm).toBeNull();
+    const variable = [
+      seg('6_1~6_2', 0, [0, 0, 0], [100, 0, 0], { outside_diameter_mm: 114.3 }),
+      seg('6_2~6_3', 1, [100, 0, 0], [200, 0, 0], { outside_diameter_mm: 60.3 }),
+      { ...seg('6_3~6_4', 2, [200, 0, 0], [300, 0, 0]), diameter_evidence: { source: 'missing' as const, catalogue_od_mm: null, arrive_bore_mm: null } },
+    ];
+    const variedRuns = buildStraightRuns(centerline('6', variable, 999));
+    expect(variedRuns.map(run => run.outsideDiameterMm)).toEqual([114.3, 60.3, null]);
+    const other = buildStraightRuns(centerline('7', [seg('7_1~7_2', 0, [0, 300, 0], [300, 300, 0], { outside_diameter_mm: 100 })]));
+    expect(findParallelRunPairs(variedRuns, other).map(pair => pair.clearanceMm)).toEqual([300 - (114.3 + 100) / 2, 300 - (60.3 + 100) / 2, null]);
   });
 });
 
@@ -117,8 +126,8 @@ describe('findParallelRunPairs：两条 BRAN 的直段配平行对', () => {
     expect(alongX!.axisDistanceMm).toBeCloseTo(600, 9);
     expect(alongX!.sourcePointMm).toEqual({ x: 1000, y: 0, z: 0 });
     expect(alongX!.targetPointMm).toEqual({ x: 1000, y: 0, z: 600 });
-    // 两侧直段外径都是 168.3（阀）→ 净距 600 − 168.3
-    expect(alongX!.clearanceMm).toBeCloseTo(600 - 168.3, 9);
+    // 两侧同径直段外径都是 114.3。
+    expect(alongX!.clearanceMm).toBeCloseTo(600 - 114.3, 9);
 
     expect(alongY!.source.direction).toEqual({ x: 0, y: 1, z: 0 });
     expect(alongY!.axisDistanceMm).toBeCloseTo(600, 9);

@@ -4,13 +4,16 @@ import { ensurePanelAndActivate } from './useDockApi';
 
 import type { ReviewAttachment } from '@/types/auth';
 
+import { getAuthToken } from '@/api/reviewApi';
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
 import {
   FileValidationError,
   failFileValidation,
   validateAttachmentBytes,
 } from '@/utils/fileValidation';
+import { renderWordPreview } from '@/utils/wordPreview';
 
-export type ReviewAttachmentPreviewKind = 'pdf' | 'image';
+export type ReviewAttachmentPreviewKind = 'pdf' | 'image' | 'word';
 
 export type ReviewAttachmentPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -24,6 +27,10 @@ export interface ReviewAttachmentPreviewTarget {
 const previewTarget = shallowRef<ReviewAttachmentPreviewTarget | null>(null);
 const previewStatus = ref<ReviewAttachmentPreviewStatus>('idle');
 const previewError = ref<string | null>(null);
+const previewWordHtml = ref<string | null>(null);
+let validationController: AbortController | null = null;
+const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const MAX_WORD_BYTES = 50 * 1024 * 1024;
 
 // 校验请求的序号；切换附件后旧请求的结果直接丢弃
 let validationSeq = 0;
@@ -31,6 +38,7 @@ let validationSeq = 0;
 export const activeReviewAttachmentPreview = readonly(previewTarget);
 export const reviewAttachmentPreviewStatus = readonly(previewStatus);
 export const reviewAttachmentPreviewError = readonly(previewError);
+export const reviewAttachmentWordHtml = readonly(previewWordHtml);
 
 export function getReviewAttachmentPreviewKind(
   attachment: ReviewAttachment,
@@ -49,6 +57,7 @@ export function getReviewAttachmentPreviewKind(
   ) return 'image';
 
   const extension = attachment.name.split('.').pop()?.toLowerCase();
+  if (extension === 'doc' || extension === 'docx' || declaredType === WORD_MIME || declaredType === 'application/msword') return 'word';
   if (extension === 'pdf') return 'pdf';
   if (extension === 'png' || extension === 'jpg' || extension === 'jpeg') return 'image';
   return null;
@@ -111,11 +120,39 @@ function resolveSafeAttachmentUrl(url: string): string | null {
 
 function attachmentValidationFormat(
   target: ReviewAttachmentPreviewTarget,
-): 'pdf' | 'png' | 'jpeg' {
+): 'pdf' | 'png' | 'jpeg' | 'docx' {
+  if (target.kind === 'word') return 'docx';
   if (target.kind === 'pdf') return 'pdf';
   const declared = (target.attachment.mimeType || target.attachment.type || '').toLowerCase();
   const extension = target.attachment.name.split('.').pop()?.toLowerCase();
   return declared.includes('png') || extension === 'png' ? 'png' : 'jpeg';
+}
+
+async function readWordBuffer(response: Response): Promise<ArrayBuffer> {
+  if (Number(response.headers.get('content-length')) > MAX_WORD_BYTES) throw new Error('Word 文件超过 50MB 预览上限，请下载后查看');
+  if (!response.body) {
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > MAX_WORD_BYTES) throw new Error('Word 文件超过 50MB 预览上限，请下载后查看');
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_WORD_BYTES) throw new Error('Word 文件超过 50MB 预览上限，请下载后查看');
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes.buffer;
 }
 
 async function readResponsePrefix(response: Response, maxBytes = 1024): Promise<Uint8Array> {
@@ -142,18 +179,38 @@ async function readResponsePrefix(response: Response, maxBytes = 1024): Promise<
 /** Validate status, declared media type and file signature before rendering. */
 async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Promise<void> {
   const seq = ++validationSeq;
+  validationController?.abort();
+  const controller = new AbortController();
+  validationController = controller;
+  const timeout = setTimeout(() => controller.abort(), 60_000);
   previewStatus.value = 'loading';
   previewError.value = null;
+  previewWordHtml.value = null;
 
   try {
     const format = attachmentValidationFormat(target);
-    const response = await fetch(target.url, {
+    const legacyWord = target.kind === 'word' && (
+      target.attachment.name.toLowerCase().endsWith('.doc')
+      || (target.attachment.mimeType === 'application/msword' && !target.attachment.name.toLowerCase().endsWith('.docx'))
+    );
+    const token = legacyWord ? getAuthToken() : null;
+    const fetchUrl = legacyWord
+      ? `${getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '')}/api/review/attachments/${encodeURIComponent(target.attachment.id)}/word-preview`
+      : target.url;
+    const response = await fetch(fetchUrl, {
       method: 'GET',
-      headers: { Range: 'bytes=0-1023' },
+      headers: target.kind === 'word'
+        ? { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+        : { Range: 'bytes=0-1023' },
       cache: 'no-store',
+      signal: controller.signal,
     });
     if (seq !== validationSeq) return;
-    if (!response.ok) {
+    if (!response.ok || (target.kind === 'word' && response.status !== 200)) {
+      if (legacyWord && !response.ok) {
+        const detail = await response.json().catch(() => null) as { error_message?: string } | null;
+        throw new Error(detail?.error_message || `Word 转换失败（HTTP ${response.status}），可以重试或下载后查看`);
+      }
       failFileValidation({
         source: target.attachment.name,
         format,
@@ -163,11 +220,13 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
       });
     }
     const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
-    const expectedTypes = format === 'pdf'
-      ? ['application/pdf', 'application/octet-stream']
-      : format === 'png'
-        ? ['image/png', 'application/octet-stream']
-        : ['image/jpeg', 'application/octet-stream'];
+    const expectedTypes = format === 'docx'
+      ? [WORD_MIME, 'application/octet-stream']
+      : format === 'pdf'
+        ? ['application/pdf', 'application/octet-stream']
+        : format === 'png'
+          ? ['image/png', 'application/octet-stream']
+          : ['image/jpeg', 'application/octet-stream'];
     if (contentType && !expectedTypes.includes(contentType)) {
       failFileValidation({
         source: target.attachment.name,
@@ -177,9 +236,15 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
         actual: contentType,
       });
     }
-    const prefix = await readResponsePrefix(response);
+    const wordBuffer = target.kind === 'word' ? await readWordBuffer(response) : null;
+    const prefix = wordBuffer ? new Uint8Array(wordBuffer).subarray(0, 1024) : await readResponsePrefix(response);
     if (seq !== validationSeq) return;
     validateAttachmentBytes(prefix, target.attachment.name, format);
+    if (wordBuffer) {
+      const html = await renderWordPreview(wordBuffer);
+      if (seq !== validationSeq) return;
+      previewWordHtml.value = html;
+    }
     previewStatus.value = 'ready';
   } catch (error) {
     if (seq !== validationSeq) return;
@@ -187,6 +252,9 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
     previewError.value = error instanceof FileValidationError
       ? error.message
       : `附件加载失败：${error instanceof Error ? error.message : '请检查网络连接'}`;
+  } finally {
+    clearTimeout(timeout);
+    if (validationController === controller) validationController = null;
   }
 }
 
@@ -231,7 +299,10 @@ export function markReviewAttachmentPreviewFailed(message: string): void {
 
 export function clearReviewAttachmentPreview(): void {
   validationSeq++;
+  validationController?.abort();
+  validationController = null;
   previewTarget.value = null;
   previewStatus.value = 'idle';
   previewError.value = null;
+  previewWordHtml.value = null;
 }

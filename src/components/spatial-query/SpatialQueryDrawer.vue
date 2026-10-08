@@ -463,6 +463,24 @@
           {{ error }}
         </div>
 
+        <div class="text-[11px] text-muted-foreground" data-testid="clearance-persistence-status">
+          {{ clearanceStore.persistenceLabel.value }}
+          <span v-if="clearanceStore.persistenceError.value" class="text-danger">：{{ clearanceStore.persistenceError.value }}</span>
+          <button v-if="clearanceStore.persistenceError.value || clearanceStore.persistenceLabel.value.includes('未落盘')" type="button" class="ml-2 rounded border px-2 py-1" @click="clearanceStore.persistRecords()">重试保存</button>
+        </div>
+        <section v-if="clearanceStore.records.value.length" class="rounded-lg border border-gray-200 bg-white p-3" data-testid="saved-clearance-records">
+          <div class="mb-2 text-xs font-semibold">已保存的构件净距</div>
+          <div v-for="record in clearanceStore.records.value" :key="record.id" class="flex items-center gap-2 border-t border-gray-100 py-2 text-[11px]">
+            <div class="min-w-0 flex-1">
+              <div class="truncate font-mono" :title="`${record.inputs.sourceRefno} → ${record.inputs.targetRefno}`">{{ record.inputs.sourceRefno }} → {{ record.inputs.targetRefno }}</div>
+              <div>{{ record.snapshot ? `${Math.round(record.snapshot.distanceM * 1000)} mm` : '无距离结果' }} · {{ record.status === 'current' ? '当前计算' : record.status === 'stale' ? '模型未核实，待重算' : '重算失败，保留旧值' }}</div>
+            </div>
+            <button type="button" :disabled="clearanceStore.isComputing.value" class="rounded border px-2 py-1 disabled:opacity-50" @click="clearanceStore.recompute(record.id)">重算</button>
+            <button type="button" class="rounded border px-2 py-1" @click="clearanceStore.toggleHidden(record.id)">{{ clearanceStore.hiddenIds.value.has(record.id) ? '显示' : '隐藏' }}</button>
+            <button type="button" class="rounded border px-2 py-1" @click="clearanceStore.removeRecord(record.id)">移除</button>
+          </div>
+          <p v-if="clearanceStore.lastError.value" class="text-xs text-danger">{{ clearanceStore.lastError.value }}</p>
+        </section>
         <section class="rounded-lg border border-gray-100 bg-white">
           <div class="border-b border-gray-100 px-3 py-2">
             <div class="flex items-start justify-between gap-2">

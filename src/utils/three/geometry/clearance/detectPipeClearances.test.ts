@@ -171,7 +171,7 @@ describe('detectPipeClearances', () => {
     expect(result[0]!.distance).toBeCloseTo(0, 8);
   });
 
-  it('should use the layout default outside diameter when segment OD is missing', () => {
+  it('does not invent a default outside diameter when segment OD is missing', () => {
     const branches = {
       'bran1': [
         {
@@ -198,8 +198,7 @@ describe('detectPipeClearances', () => {
     };
 
     const result = detectPipeClearances(branches, 500);
-    expect(result.length).toBe(1);
-    expect(result[0]!.distance).toBeCloseTo(100, 8);
+    expect(result).toEqual([]);
   });
 
   it('should not report far offset finite pipe segments as close', () => {

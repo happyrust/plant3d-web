@@ -6,6 +6,9 @@ vi.mock('@/api/reviewApi', () => ({
     record: {
       ...record,
       id: 'record-mocked-1',
+      recordRevision: 'revision-confirmed',
+      currentNode: 'jd',
+      operatorId: 'reviewer-1',
       confirmedAt: 1700000000000,
       dimensionDocumentVersion: record.dimensionDocument
         ? record.dimensionDocumentBaseVersion + 1
@@ -29,7 +32,11 @@ vi.mock('@/composables/useUserStore', () => ({
 import { useReviewStore } from './useReviewStore';
 import { useToolStore } from './useToolStore';
 
+import type { ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
+
 import { reviewRecordCreate } from '@/api/reviewApi';
+import { ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
+import { reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { dimensionDocumentToSnapshot } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { emptyDimensionDocument, linearRecord } from '@/dimension/domain/testFixtures';
 import { DimensionDocumentSession } from '@/dimension/services/dimensionDocumentSession';
@@ -51,6 +58,44 @@ describe('useReviewStore - confirm without OBB', () => {
     vi.mocked(reviewRecordCreate).mockClear();
     memoryJournal.append.mockClear();
     memoryJournal.clear.mockClear();
+  });
+
+  it('scopes clearance decisions to the task and rejects a stale decision after local results change', async () => {
+    const review = useReviewStore();
+    await review.setCurrentTask({ id: 'conflict-task', formId: 'conflict-form', title: 'Conflict', description: '', modelName: 'Fixture',
+      status: 'in_review', priority: 'medium', requesterId: 'designer', requesterName: 'Designer', checkerId: 'reviewer-1', checkerName: 'Reviewer',
+      reviewerId: 'reviewer-1', reviewerName: 'Reviewer', approverId: 'approver', approverName: 'Approver', components: [], createdAt: 1, updatedAt: 1, currentNode: 'jd' });
+    const context = { schemaVersion: 1 as const, project: 'P', dbnum: null, taskId: 'conflict-task', formId: 'conflict-form', node: 'jd', comparison: null };
+    const cloud: ReviewClearanceSnapshot = { schemaVersion: 1, modelContext: context,
+      coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+      component: { records: [] }, pipe: { results: [{ distance: 100 }] }, bran: { branGroups: [] } };
+    let local = { ...cloud, pipe: { results: [{ distance: 200 }] } };
+    const prepare = vi.fn((snapshot: ReviewClearanceSnapshot, target: ReviewModelContext, resolution?: { action: string; localKey: string; cloudKey: string }) => {
+      if (!resolution || resolution.localKey !== reviewClearanceSnapshotKey(local) || resolution.cloudKey !== reviewClearanceSnapshotKey(snapshot))
+        throw new ReviewClearanceConflictError(local, snapshot, target);
+      return vi.fn();
+    });
+    const offContext = review.bindModelContextProvider(() => context);
+    const offClearance = review.bindClearanceSnapshotProvider({ capture: () => local, prepare });
+    try {
+      expect(review.clearanceSnapshotConflict.value).toBeNull();
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow('已保留本机');
+      expect(review.clearanceSnapshotConflict.value?.local).toEqual(local);
+      expect(review.resolveClearanceSnapshotConflict('use-cloud')).toBe(true);
+      local = { ...cloud, pipe: { results: [{ distance: 300 }] } };
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow('已保留本机');
+      expect(review.clearanceSnapshotConflict.value?.local).toEqual(local);
+      expect(review.resolveClearanceSnapshotConflict('keep-local')).toBe(true);
+      review.prepareBoundClearanceRestore(cloud, context)();
+      expect(review.clearanceSnapshotConflict.value).toBeNull();
+      expect(review.clearanceSnapshotKeptLocal.value?.local).toEqual(local);
+      expect(review.reopenClearanceSnapshotConflict()).toBe(true);
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow();
+      review.currentTask.value = { ...review.currentTask.value!, id: 'other-task' };
+      expect(review.clearanceSnapshotConflict.value).toBeNull();
+      expect(review.resolveClearanceSnapshotConflict('use-cloud')).toBe(false);
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow('任务或单据已切换');
+    } finally { offClearance(); offContext(); }
   });
 
   it('should preserve empty obbAnnotations in confirmed records', async () => {
@@ -181,6 +226,34 @@ describe('useReviewStore - confirm without OBB', () => {
     const confirmed = reviewStore.confirmedRecords.value[0];
     expect(confirmed?.taskId).toBe('task-lineage-1');
     expect(confirmed?.formId).toBe('FORM-LINEAGE-1');
+
+    const context = { schemaVersion: 1 as const, project: 'P', dbnum: null, taskId: 'task-lineage-1', formId: 'FORM-LINEAGE-1', node: 'jd', comparison: null };
+    const snapshot: ReviewClearanceSnapshot = { schemaVersion: 1, modelContext: context,
+      coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+      component: { records: [] }, pipe: { results: [] }, bran: { branGroups: [] } };
+    const offContext = reviewStore.bindModelContextProvider(() => context);
+    const offClearance = reviewStore.bindClearanceSnapshotProvider({ capture: () => snapshot, prepare: () => () => {} });
+    const payload = { type: 'batch' as const, annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: '' };
+    try {
+      vi.mocked(reviewRecordCreate).mockResolvedValueOnce({ success: true, record: { ...payload, id: confirmed!.id, taskId: context.taskId,
+        recordRevision: 'revision-clearance-dropped', currentNode: 'jd', operatorId: 'reviewer-1', confirmedAt: Date.now(), modelContext: context } });
+      await expect(reviewStore.addConfirmedRecord(payload)).rejects.toThrow('未完整保存三类净距');
+      expect(reviewStore.confirmedRecords.value[0]?.recordRevision).toBe('revision-confirmed');
+      vi.mocked(reviewRecordCreate).mockResolvedValueOnce({ success: true, record: { ...payload, id: confirmed!.id, taskId: context.taskId,
+        recordRevision: 'revision-clearance-saved', currentNode: 'jd', operatorId: 'reviewer-1', confirmedAt: Date.now(), modelContext: context, clearanceSnapshot: snapshot } });
+      await reviewStore.addConfirmedRecord(payload);
+      expect(reviewStore.confirmedRecords.value[0]?.clearanceSnapshot).toEqual(snapshot);
+      expect(vi.mocked(reviewRecordCreate).mock.calls.at(-1)?.[0].clearanceSnapshot).toEqual(snapshot);
+      const saved = reviewStore.confirmedRecords.value[0]!;
+      const otherContext = { ...context, dbnum: 2 };
+      reviewStore.confirmedRecords.value = [saved, { ...saved, id: 'other-model-record', currentNode: 'sh', operatorId: 'other-user', modelContext: otherContext }];
+      reviewStore.selectReviewModelGroup(null);
+      const requests = vi.mocked(reviewRecordCreate).mock.calls.length;
+      await expect(reviewStore.addConfirmedRecord(payload)).rejects.toThrow('先选择并恢复');
+      reviewStore.selectReviewModelGroup(reviewModelVersionKey(otherContext));
+      await expect(reviewStore.addConfirmedRecord(payload)).rejects.toThrow('不同版本');
+      expect(vi.mocked(reviewRecordCreate).mock.calls).toHaveLength(requests);
+    } finally { reviewStore.selectReviewModelGroup(null); offClearance(); offContext(); }
   });
 
   it('should save and accept a versioned dimension document with the review record', async () => {

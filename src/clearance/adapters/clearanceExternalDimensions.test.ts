@@ -49,6 +49,7 @@ describe('clearanceExternalDimensions', () => {
     expect(clearanceDimensionText(straight)).toBe('885mm');
     expect(clearanceSourceLabel(straight)).toBe('外表面净距: 24384_24830 → 17496_105812（墙面）');
     expect(clearanceDimensionText(withClearanceStatus(straight, 'stale'))).toBe('（过期）885mm');
+    expect(clearanceDimensionText(withClearanceStatus(straight, 'failed'))).toBe('（重算失败，旧值）885mm');
 
     const tiny = surfaceClearanceToRecord(
       elboToCurvedWallResponse({ result: { ...elboToCurvedWallResponse().result!, distance_mm: 6.44, perpendicular: null } }),

@@ -1,0 +1,5169 @@
+[
+  {
+    "requested_refno": "24381/145018",
+    "status": 200,
+    "response": {
+      "source": "e3d-io",
+      "refno": "24381/145018",
+      "dbnum": 7997,
+      "db_type": "DESI",
+      "sesno": 339,
+      "noun": "BRAN",
+      "complete": true,
+      "attributes": [
+        {
+          "name": "AEXCES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "AREA",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "BENDMA",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BRLO",
+          "value_type": "int",
+          "value": 0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BSTA",
+          "value_type": "int",
+          "value": 0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BUIL",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BranHigh",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "BranWidth",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CACHID",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CASR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "CCEN",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CCLA",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CLEAN",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DELDSG",
+          "value_type": "word",
+          "value": "FALS",
+          "display": "FALS",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DESC",
+          "value_type": "text",
+          "value": "A",
+          "display": "A",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DETA",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DRRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DSCO",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DUTY",
+          "value_type": "text",
+          "value": "反应堆冷却剂",
+          "display": "反应堆冷却剂",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "EREC",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "FLOW",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "FLUR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "FUNC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "G_ICS",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "H-AIRQUANTITY",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-FLOWDIRECTION",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-PRESSURESPEC",
+          "value_type": "text",
+          "value": "TRUE",
+          "display": "TRUE",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-TEMPERATURE",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HBOR",
+          "value_type": "real",
+          "value": 100.0,
+          "display": "100",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HCON",
+          "value_type": "word",
+          "value": "BWD",
+          "display": "BWD",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HDIR",
+          "value_type": "vec3",
+          "value": [
+            0.9954549614008328,
+            0.09513129580125136,
+            0.0044109388616625335
+          ],
+          "display": "0.9954549614008328, 0.09513129580125136, 0.0044109388616625335",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HDMF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HDMT",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HDSHAP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HEADH",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "HEADW",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "HPOS",
+          "value_type": "vec3",
+          "value": [
+            1515.72,
+            8156.67,
+            13293.23
+          ],
+          "display": "1515.72, 8156.67, 13293.23",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HSTU",
+          "value_type": "ref",
+          "value": "13246/465801",
+          "display": "13246/465801",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HWRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HXYsize",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HYDROLOOP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HZAXI",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-Acci",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-NrOp",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-NrSh",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "INCO",
+          "value_type": "text",
+          "value": "",
+          "display": "",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "INPRTR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "INSC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISODrawingNo",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISOH",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "ISOREF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISPE",
+          "value_type": "ref",
+          "value": "13246/496399",
+          "display": "13246/496399",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "JMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "JNUM",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "JOIP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "LCHKDA",
+          "value_type": "raw-words",
+          "value": [
+            0,
+            0
+          ],
+          "display": "0, 0",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "LEXCES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LHEA",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LISS",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LNTP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "LOOS",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LSTR",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LTAI",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MATR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSComment",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp1",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp2",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp3",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSDType",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSTrun",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSVprmMto",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSYSF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "MTOH",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "NAME",
+          "value_type": "text",
+          "value": "/Copy-of-RCS0014-1R43012新",
+          "display": "/Copy-of-RCS0014-1R43012新",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "ORRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "OUPRTR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "OWNER",
+          "value_type": "text",
+          "value": "24381/144975",
+          "display": "24381/144975",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "PFConsChk",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PFIAExcess",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PFILExcess",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PFILoose",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF1",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF2",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF3",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANU",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PRES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PSIWEIGHT",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PSPE",
+          "value_type": "ref",
+          "value": "13246/465579",
+          "display": "13246/465579",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PTNB",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PTNH",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PTSP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PURP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PsiSystem",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "REFNO",
+          "value_type": "text",
+          "value": "24381/145018",
+          "display": "24381/145018",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "RLST",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ROOM_NO",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SAFC",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SCHrefHole",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SHOP",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SLOREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SPAMAP",
+          "value_type": "int-array",
+          "value": [
+            -2147483647,
+            1500131361
+          ],
+          "display": "-2147483647, 1500131361",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SPLH",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SPSP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TAILH",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TAILW",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TBOR",
+          "value_type": "real",
+          "value": 100.0,
+          "display": "100",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TCON",
+          "value_type": "word",
+          "value": "BWD",
+          "display": "BWD",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TDIR",
+          "value_type": "vec3",
+          "value": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "display": "0, -1, 0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TDMF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TDMT",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TDSHAP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TEMP",
+          "value_type": "real",
+          "value": 360.0,
+          "display": "360",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPOS",
+          "value_type": "vec3",
+          "value": [
+            9769.75,
+            10220.18,
+            18664.8
+          ],
+          "display": "9769.75, 10220.18, 18664.8",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPRESS",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPress",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TREF",
+          "value_type": "ref",
+          "value": "24381/145012",
+          "display": "24381/145012",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TSFBR",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TSPE",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TWRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TXYsize",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TYPE",
+          "value_type": "text",
+          "value": "BRAN",
+          "display": "BRAN",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TYPEX",
+          "value_type": "raw-words",
+          "value": [
+            1,
+            808220
+          ],
+          "display": "1, 808220",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TZAXI",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "UUIDIA",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "WMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        }
+      ],
+      "diagnostics": {
+        "shape_conflicts": [],
+        "undecoded": [],
+        "uda_issues": [],
+        "outside_schema": [],
+        "view_divergence": [
+          {
+            "name": "TYPEX",
+            "found": "RawWords[2]",
+            "declared": "StringType"
+          },
+          {
+            "name": "SPAMAP",
+            "found": "IntArray[2]",
+            "declared": "StringType"
+          }
+        ],
+        "catalog_issues": []
+      },
+      "backup": {
+        "status": "skipped-ingest"
+      }
+    },
+    "centerline": {
+      "status": 200,
+      "response": {
+        "refno": "24381_145018",
+        "dbnum": 7997,
+        "segment_count": 21,
+        "outside_diameter_mm": 114.3,
+        "centerline_bbox": {
+          "min": {
+            "x": 1515.72,
+            "y": 8156.67,
+            "z": 13293.23
+          },
+          "max": {
+            "x": 9769.75,
+            "y": 11787.49,
+            "z": 18664.8
+          }
+        },
+        "segments": [
+          {
+            "refno": "Head~24381_145019",
+            "order": 0,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 1515.72,
+              "y": 8156.67,
+              "z": 13293.23
+            },
+            "end": {
+              "x": 3190.9868,
+              "y": 8316.174,
+              "z": 13300.662
+            },
+            "length_mm": 1682.8594,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145019",
+            "order": 1,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 3190.9868,
+              "y": 8316.174,
+              "z": 13300.662
+            },
+            "end": {
+              "x": 3341.63,
+              "y": 8330.57,
+              "z": 13452.661
+            },
+            "length_mm": 214.48613,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145019~24381_145021",
+            "order": 3,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 3341.63,
+              "y": 8330.57,
+              "z": 13452.661
+            },
+            "end": {
+              "x": 3341.63,
+              "y": 8330.57,
+              "z": 13909.05
+            },
+            "length_mm": 456.38867,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145021",
+            "order": 4,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 3341.63,
+              "y": 8330.57,
+              "z": 13909.05
+            },
+            "end": {
+              "x": 3492.2354,
+              "y": 8343.603,
+              "z": 14061.048
+            },
+            "length_mm": 214.37177,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145021~24381_145023",
+            "order": 6,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 3492.2354,
+              "y": 8343.603,
+              "z": 14061.048
+            },
+            "end": {
+              "x": 5794.397,
+              "y": 8542.817,
+              "z": 14073.699
+            },
+            "length_mm": 2310.7996,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145023",
+            "order": 7,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 5794.397,
+              "y": 8542.817,
+              "z": 14073.699
+            },
+            "end": {
+              "x": 5885.922,
+              "y": 8583.994,
+              "z": 14074.156
+            },
+            "length_mm": 100.36205,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145023~24381_145025",
+            "order": 9,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 5885.922,
+              "y": 8583.994,
+              "z": 14074.156
+            },
+            "end": {
+              "x": 7739.697,
+              "y": 10343.156,
+              "z": 14082.127
+            },
+            "length_mm": 2555.6206,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145025",
+            "order": 10,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 7739.697,
+              "y": 10343.156,
+              "z": 14082.127
+            },
+            "end": {
+              "x": 7849.61,
+              "y": 10447.46,
+              "z": 14234.127
+            },
+            "length_mm": 214.6256,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145025~24381_145026",
+            "order": 11,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 7849.61,
+              "y": 10447.46,
+              "z": 14234.127
+            },
+            "end": {
+              "x": 7849.61,
+              "y": 10447.46,
+              "z": 16583.355
+            },
+            "length_mm": 2349.2285,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145026",
+            "order": 12,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 7849.61,
+              "y": 10447.46,
+              "z": 16583.355
+            },
+            "end": {
+              "x": 7849.637,
+              "y": 10598.702,
+              "z": 16735.354
+            },
+            "length_mm": 214.42389,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145026~24381_145028",
+            "order": 14,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 7849.637,
+              "y": 10598.702,
+              "z": 16735.354
+            },
+            "end": {
+              "x": 7849.8228,
+              "y": 11636.248,
+              "z": 16740.525
+            },
+            "length_mm": 1037.5588,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145028",
+            "order": 15,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 7849.8228,
+              "y": 11636.248,
+              "z": 16740.525
+            },
+            "end": {
+              "x": 7849.85,
+              "y": 11787.49,
+              "z": 16892.523
+            },
+            "length_mm": 214.42389,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145028~24381_145029",
+            "order": 16,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 7849.85,
+              "y": 11787.49,
+              "z": 16892.523
+            },
+            "end": {
+              "x": 7849.85,
+              "y": 11787.49,
+              "z": 18492.387
+            },
+            "length_mm": 1599.8633,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145029",
+            "order": 17,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 7849.85,
+              "y": 11787.49,
+              "z": 18492.387
+            },
+            "end": {
+              "x": 7849.85,
+              "y": 11636.248,
+              "z": 18644.385
+            },
+            "length_mm": 214.42389,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145029~24381_145031",
+            "order": 19,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 7849.85,
+              "y": 11636.248,
+              "z": 18644.385
+            },
+            "end": {
+              "x": 7849.85,
+              "y": 9298.628,
+              "z": 18656.041
+            },
+            "length_mm": 2337.6492,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145031",
+            "order": 20,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 7849.85,
+              "y": 9298.628,
+              "z": 18656.041
+            },
+            "end": {
+              "x": 8001.8486,
+              "y": 9146.633,
+              "z": 18657.434
+            },
+            "length_mm": 214.96048,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145031~24381_145032",
+            "order": 21,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 8001.8486,
+              "y": 9146.633,
+              "z": 18657.434
+            },
+            "end": {
+              "x": 9201.84,
+              "y": 9146.65,
+              "z": 18662.44
+            },
+            "length_mm": 1200.0016,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145032~24381_145033",
+            "order": 23,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 9201.84,
+              "y": 9146.65,
+              "z": 18662.44
+            },
+            "end": {
+              "x": 9617.734,
+              "y": 9146.667,
+              "z": 18664.166
+            },
+            "length_mm": 415.89813,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145033",
+            "order": 24,
+            "noun": "ELBO",
+            "implicit": false,
+            "start": {
+              "x": 9617.734,
+              "y": 9146.667,
+              "z": 18664.166
+            },
+            "end": {
+              "x": 9769.73,
+              "y": 9298.667,
+              "z": 18664.8
+            },
+            "length_mm": 214.95863,
+            "outside_diameter_mm": 114.3
+          },
+          {
+            "refno": "24381_145033~24381_145035",
+            "order": 26,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 9769.73,
+              "y": 9298.667,
+              "z": 18664.8
+            },
+            "end": {
+              "x": 9769.75,
+              "y": 9874.18,
+              "z": 18664.8
+            },
+            "length_mm": 575.5127,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_145035",
+            "order": 27,
+            "noun": "VALV",
+            "implicit": false,
+            "start": {
+              "x": 9769.75,
+              "y": 9874.18,
+              "z": 18664.8
+            },
+            "end": {
+              "x": 9769.75,
+              "y": 10220.18,
+              "z": 18664.8
+            },
+            "length_mm": 346.0,
+            "outside_diameter_mm": 114.3
+          }
+        ],
+        "warnings": [
+          "7 个成员没有长度（穿过件），不参与走廊"
+        ]
+      }
+    },
+    "bounds": {
+      "status": 200,
+      "response": {
+        "tool": "model.spatial.bounds",
+        "result": {
+          "refno": "24381_145018",
+          "scope": "subtree",
+          "model_count": 22,
+          "min_mm": [
+            1510.29736328125,
+            8099.83935546875,
+            13236.1416015625
+          ],
+          "max_mm": [
+            10417.25,
+            11844.6396484375,
+            19867.80078125
+          ],
+          "source": "model-memory",
+          "published_version": null,
+          "stale": null,
+          "publication_status": "unsupported"
+        }
+      }
+    }
+  },
+  {
+    "requested_refno": "24384/23257",
+    "status": 200,
+    "response": {
+      "source": "e3d-io",
+      "refno": "24384/23257",
+      "dbnum": 8000,
+      "db_type": "DESI",
+      "sesno": 640,
+      "noun": "BRAN",
+      "complete": true,
+      "attributes": [
+        {
+          "name": "AEXCES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "AREA",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "BENDMA",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BRLO",
+          "value_type": "int",
+          "value": 0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BSTA",
+          "value_type": "int",
+          "value": 0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BUIL",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BranHigh",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "BranWidth",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CACHID",
+          "value_type": "word",
+          "value": "56",
+          "display": "56",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "CASR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "CCEN",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CCLA",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CLEAN",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DELDSG",
+          "value_type": "word",
+          "value": "FALS",
+          "display": "FALS",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DESC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DETA",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DRRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DSCO",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DUTY",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "EREC",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "FLOW",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "FLUR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "FUNC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "G_ICS",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "H-AIRQUANTITY",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-FLOWDIRECTION",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-PRESSURESPEC",
+          "value_type": "text",
+          "value": "TRUE",
+          "display": "TRUE",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-TEMPERATURE",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HBOR",
+          "value_type": "real",
+          "value": 50.0,
+          "display": "50",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HCON",
+          "value_type": "word",
+          "value": "BOXI",
+          "display": "BOXI",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HDIR",
+          "value_type": "vec3",
+          "value": [
+            0.8290375725550417,
+            -0.5591929034707468,
+            0.0
+          ],
+          "display": "0.8290375725550417, -0.5591929034707468, 0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HDMF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HDMT",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HDSHAP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HEADH",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "HEADW",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "HPOS",
+          "value_type": "vec3",
+          "value": [
+            8551.0,
+            14060.0,
+            2900.0
+          ],
+          "display": "8551, 14060, 2900",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HSTU",
+          "value_type": "ref",
+          "value": "13244/109240",
+          "display": "13244/109240",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HWRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HXYsize",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HYDROLOOP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HZAXI",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-Acci",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-NrOp",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-NrSh",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "INCO",
+          "value_type": "text",
+          "value": "",
+          "display": "",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "INPRTR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "INSC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISODrawingNo",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISOH",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "ISOREF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISPE",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "JMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "JNUM",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "JOIP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "LCHKDA",
+          "value_type": "raw-words",
+          "value": [
+            0,
+            0
+          ],
+          "display": "0, 0",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "LEXCES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LHEA",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LISS",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LNTP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "LOOS",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LSTR",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LTAI",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MATR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSComment",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp1",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp2",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp3",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSDType",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSTrun",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSVprmMto",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSYSF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "MTOH",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "NAME",
+          "value_type": "text",
+          "value": "/C-OR-1R345-C",
+          "display": "/C-OR-1R345-C",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "ORRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "OUPRTR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "OWNER",
+          "value_type": "text",
+          "value": "24384/23225",
+          "display": "24384/23225",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "PFConsChk",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PFIAExcess",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PFILExcess",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PFILoose",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF1",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF2",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF3",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANU",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PRES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PSIWEIGHT",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PSPE",
+          "value_type": "ref",
+          "value": "13244/108765",
+          "display": "13244/108765",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PTNB",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PTNH",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PTSP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PURP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PsiSystem",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "REFNO",
+          "value_type": "text",
+          "value": "24384/23257",
+          "display": "24384/23257",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "RLST",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ROOM_NO",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SAFC",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SCHrefHole",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SHOP",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SLOREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SPAMAP",
+          "value_type": "int-array",
+          "value": [
+            -2147483647,
+            -2147483647
+          ],
+          "display": "-2147483647, -2147483647",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SPLH",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SPSP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TAILH",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TAILW",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TBOR",
+          "value_type": "real",
+          "value": 50.0,
+          "display": "50",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TCON",
+          "value_type": "word",
+          "value": "BOXI",
+          "display": "BOXI",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TDIR",
+          "value_type": "vec3",
+          "value": [
+            0.7313537016191706,
+            0.6819983600624985,
+            0.0
+          ],
+          "display": "0.7313537016191706, 0.6819983600624985, 0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TDMF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TDMT",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TDSHAP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TEMP",
+          "value_type": "real",
+          "value": -100000.0,
+          "display": "-100000",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPOS",
+          "value_type": "vec3",
+          "value": [
+            9093.0,
+            9972.95,
+            2900.0
+          ],
+          "display": "9093, 9972.95, 2900",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPRESS",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPress",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TSFBR",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TSPE",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TWRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TXYsize",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TYPE",
+          "value_type": "text",
+          "value": "BRAN",
+          "display": "BRAN",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TYPEX",
+          "value_type": "raw-words",
+          "value": [
+            1,
+            808220
+          ],
+          "display": "1, 808220",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TZAXI",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "UUIDIA",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "WMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        }
+      ],
+      "diagnostics": {
+        "shape_conflicts": [],
+        "undecoded": [],
+        "uda_issues": [],
+        "outside_schema": [],
+        "view_divergence": [
+          {
+            "name": "TYPEX",
+            "found": "RawWords[2]",
+            "declared": "StringType"
+          },
+          {
+            "name": "SPAMAP",
+            "found": "IntArray[2]",
+            "declared": "StringType"
+          }
+        ],
+        "catalog_issues": []
+      },
+      "backup": {
+        "status": "skipped-ingest"
+      }
+    },
+    "centerline": {
+      "status": 200,
+      "response": {
+        "refno": "24384_23257",
+        "dbnum": 8000,
+        "segment_count": 9,
+        "outside_diameter_mm": 25.0,
+        "centerline_bbox": {
+          "min": {
+            "x": 8550.54,
+            "y": 9972.952,
+            "z": 2900.0
+          },
+          "max": {
+            "x": 11232.283,
+            "y": 14060.42,
+            "z": 2900.0
+          }
+        },
+        "segments": [
+          {
+            "refno": "24384_23258",
+            "order": 0,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 8550.54,
+              "y": 14060.42,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 9379.577,
+              "y": 13501.228,
+              "z": 2900.0
+            },
+            "length_mm": 999.9993,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23259",
+            "order": 1,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 9380.125,
+              "y": 13500.858,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 9381.254,
+              "y": 13500.053,
+              "z": 2900.0
+            },
+            "length_mm": 1.3869116,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23260",
+            "order": 2,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 9381.77,
+              "y": 13499.66,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 10499.859,
+              "y": 12657.119,
+              "z": 2900.0
+            },
+            "length_mm": 1400.0001,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23261",
+            "order": 3,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 10501.97,
+              "y": 12655.44,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 10884.992,
+              "y": 12334.046,
+              "z": 2900.0
+            },
+            "length_mm": 500.00067,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23262",
+            "order": 4,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 10887.0,
+              "y": 12332.0,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 11232.283,
+              "y": 11998.564,
+              "z": 2900.0
+            },
+            "length_mm": 479.99973,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23263",
+            "order": 5,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 11229.857,
+              "y": 12001.841,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 11228.549,
+              "y": 11964.387,
+              "z": 2900.0
+            },
+            "length_mm": 37.476955,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23264",
+            "order": 6,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 11228.55,
+              "y": 11964.39,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 10921.382,
+              "y": 11677.951,
+              "z": 2900.0
+            },
+            "length_mm": 419.999,
+            "outside_diameter_mm": 21.3
+          },
+          {
+            "refno": "24384_23265",
+            "order": 7,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 10921.38,
+              "y": 11677.95,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 10190.026,
+              "y": 10995.951,
+              "z": 2900.0
+            },
+            "length_mm": 1000.0003,
+            "outside_diameter_mm": 25.0
+          },
+          {
+            "refno": "24384_23266",
+            "order": 8,
+            "noun": "FTUB",
+            "implicit": false,
+            "start": {
+              "x": 10190.03,
+              "y": 10995.95,
+              "z": 2900.0
+            },
+            "end": {
+              "x": 9092.999,
+              "y": 9972.952,
+              "z": 2900.0
+            },
+            "length_mm": 1500.0009,
+            "outside_diameter_mm": 25.0
+          }
+        ],
+        "warnings": []
+      }
+    },
+    "bounds": {
+      "status": 422,
+      "response": {
+        "code": "no_renderable_geometry",
+        "message": "no in-memory AABB for 24384_23257",
+        "detail": null
+      }
+    }
+  },
+  {
+    "requested_refno": "24381/103251",
+    "status": 200,
+    "response": {
+      "source": "e3d-io",
+      "refno": "24381/103251",
+      "dbnum": 7997,
+      "db_type": "DESI",
+      "sesno": 339,
+      "noun": "BRAN",
+      "complete": true,
+      "attributes": [
+        {
+          "name": "AEXCES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "AREA",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "BENDMA",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BRLO",
+          "value_type": "int",
+          "value": 0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BSTA",
+          "value_type": "int",
+          "value": 0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BUIL",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "BranHigh",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "BranWidth",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CACHID",
+          "value_type": "word",
+          "value": "8",
+          "display": "8",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "CASR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "CCEN",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CCLA",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "CLEAN",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DELDSG",
+          "value_type": "word",
+          "value": "FALS",
+          "display": "FALS",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DESC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DETA",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DRRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "DSCO",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "DUTY",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "EREC",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "FLOW",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "FLUR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "FUNC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "G_ICS",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "H-AIRQUANTITY",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-FLOWDIRECTION",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-PRESSURESPEC",
+          "value_type": "text",
+          "value": "TRUE",
+          "display": "TRUE",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "H-TEMPERATURE",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HBOR",
+          "value_type": "real",
+          "value": 7.0,
+          "display": "7",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HCON",
+          "value_type": "word",
+          "value": "OPEN",
+          "display": "OPEN",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HDIR",
+          "value_type": "vec3",
+          "value": [
+            0.5877852522924731,
+            0.8090169943749475,
+            0.0
+          ],
+          "display": "0.5877852522924731, 0.8090169943749475, 0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HDMF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HDMT",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HDSHAP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HEADH",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "HEADW",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "HPOS",
+          "value_type": "vec3",
+          "value": [
+            1090.4100341796875,
+            1500.8199462890625,
+            -2905.0
+          ],
+          "display": "1090.4100341796875, 1500.8199462890625, -2905",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HSTU",
+          "value_type": "ref",
+          "value": "13244/690104",
+          "display": "13244/690104",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HWRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "HXYsize",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HYDROLOOP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "HZAXI",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-Acci",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-NrOp",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ICSR-DoseRate-NrSh",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "INCO",
+          "value_type": "text",
+          "value": "",
+          "display": "",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "INPRTR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "INSC",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISODrawingNo",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISOH",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "ISOREF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ISPE",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "JMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "JNUM",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "JOIP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "LCHKDA",
+          "value_type": "raw-words",
+          "value": [
+            0,
+            0
+          ],
+          "display": "0, 0",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "LEXCES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LHEA",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LISS",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LNTP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "LOOS",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LSTR",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "LTAI",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MATR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSComment",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp1",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp2",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSCp3",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSDType",
+          "value_type": "text",
+          "value": "unset",
+          "display": "unset",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSTrun",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSVprmMto",
+          "value_type": "bool",
+          "value": true,
+          "display": "true",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "MDSYSF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "MTOH",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "NAME",
+          "value_type": "text",
+          "value": "/Copy-of-1CIS001MT-YK/B1",
+          "display": "/Copy-of-1CIS001MT-YK/B1",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "ORRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "OUPRTR",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "OWNER",
+          "value_type": "text",
+          "value": "24381/103250",
+          "display": "24381/103250",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "PFConsChk",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PFIAExcess",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PFILExcess",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PFILoose",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF1",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF2",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANREF3",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PLANU",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PRES",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PSIWEIGHT",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "uda-default",
+          "is_uda": true,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PSPE",
+          "value_type": "ref",
+          "value": "13244/690092",
+          "display": "13244/690092",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "PTNB",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PTNH",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PTSP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PURP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "PsiSystem",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "REFNO",
+          "value_type": "text",
+          "value": "24381/103251",
+          "display": "24381/103251",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "RLST",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "ROOM_NO",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SAFC",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SCHrefHole",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SHOP",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SLOREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SPAMAP",
+          "value_type": "int-array",
+          "value": [
+            -2147483647,
+            1299970918
+          ],
+          "display": "-2147483647, 1299970918",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "SPLH",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "SPSP",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TAILH",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TAILW",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "derived",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TBOR",
+          "value_type": "real",
+          "value": 7.0,
+          "display": "7",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TCON",
+          "value_type": "word",
+          "value": "OPEN",
+          "display": "OPEN",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TDIR",
+          "value_type": "vec3",
+          "value": [
+            -0.3165597469598324,
+            -0.9485725731881177,
+            0.0
+          ],
+          "display": "-0.3165597469598324, -0.9485725731881177, 0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TDMF",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TDMT",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TDSHAP",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "schema-default",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TEMP",
+          "value_type": "real",
+          "value": -100000.0,
+          "display": "-100000",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPOS",
+          "value_type": "vec3",
+          "value": [
+            7658.45,
+            -2183.45,
+            -2192.5
+          ],
+          "display": "7658.45, -2183.45, -2192.5",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPRESS",
+          "value_type": "real",
+          "value": 0.0,
+          "display": "0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TPress",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TREF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TSFBR",
+          "value_type": "bool",
+          "value": false,
+          "display": "false",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TSPE",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TWRF",
+          "value_type": "ref",
+          "value": "0/0",
+          "display": "0/0",
+          "origin": "type-default",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": true
+        },
+        {
+          "name": "TXYsize",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": true,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "TYPE",
+          "value_type": "text",
+          "value": "BRAN",
+          "display": "BRAN",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TYPEX",
+          "value_type": "raw-words",
+          "value": [
+            1,
+            808220
+          ],
+          "display": "1, 808220",
+          "origin": "explicit",
+          "is_uda": false,
+          "is_unset": false,
+          "editable": false
+        },
+        {
+          "name": "TZAXI",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "UUIDIA",
+          "value_type": "unset",
+          "value": null,
+          "display": "unset",
+          "origin": "unset",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        },
+        {
+          "name": "WMAX",
+          "value_type": "word",
+          "value": "",
+          "display": "unset",
+          "origin": "stored",
+          "is_uda": false,
+          "is_unset": true,
+          "editable": false
+        }
+      ],
+      "diagnostics": {
+        "shape_conflicts": [],
+        "undecoded": [],
+        "uda_issues": [],
+        "outside_schema": [],
+        "view_divergence": [
+          {
+            "name": "TYPEX",
+            "found": "RawWords[2]",
+            "declared": "StringType"
+          },
+          {
+            "name": "SPAMAP",
+            "found": "IntArray[2]",
+            "declared": "StringType"
+          }
+        ],
+        "catalog_issues": []
+      },
+      "backup": {
+        "status": "skipped-ingest"
+      }
+    },
+    "centerline": {
+      "status": 200,
+      "response": {
+        "refno": "24381_103251",
+        "dbnum": 7997,
+        "segment_count": 27,
+        "outside_diameter_mm": 6.35,
+        "centerline_bbox": {
+          "min": {
+            "x": 1090.41,
+            "y": -2325.74,
+            "z": -4950.0
+          },
+          "max": {
+            "x": 7658.45,
+            "y": 2170.1482,
+            "z": -1750.0
+          }
+        },
+        "segments": [
+          {
+            "refno": "Head~24381_103252",
+            "order": 0,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 1090.41,
+              "y": 1500.82,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 1574.777,
+              "y": 2167.488,
+              "z": -2905.0
+            },
+            "length_mm": 824.04956,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103252",
+            "order": 1,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 1574.777,
+              "y": 2167.488,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 1598.0232,
+              "y": 2170.1482,
+              "z": -2905.0
+            },
+            "length_mm": 23.397926,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103252~24381_103253",
+            "order": 2,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 1598.0232,
+              "y": 2170.1482,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2004.9442,
+              "y": 1817.1268,
+              "z": -2905.0
+            },
+            "length_mm": 538.7103,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103253",
+            "order": 3,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2004.9442,
+              "y": 1817.1268,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2007.2344,
+              "y": 1814.6696,
+              "z": -2905.0
+            },
+            "length_mm": 3.3590238,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103253~24381_103254",
+            "order": 4,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2007.2344,
+              "y": 1814.6696,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2290.3174,
+              "y": 1437.7887,
+              "z": -2905.0
+            },
+            "length_mm": 471.35464,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103254",
+            "order": 5,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2290.3174,
+              "y": 1437.7887,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2291.7327,
+              "y": 1435.5322,
+              "z": -2905.0
+            },
+            "length_mm": 2.6635845,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103254~24381_103255",
+            "order": 6,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2291.7327,
+              "y": 1435.5322,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2484.1494,
+              "y": 1062.526,
+              "z": -2905.0
+            },
+            "length_mm": 419.7116,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103255",
+            "order": 7,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2484.1494,
+              "y": 1062.526,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2485.111,
+              "y": 1060.2385,
+              "z": -2905.0
+            },
+            "length_mm": 2.4814014,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103255~24381_103256",
+            "order": 8,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2485.111,
+              "y": 1060.2385,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2647.8281,
+              "y": 568.83594,
+              "z": -2905.0
+            },
+            "length_mm": 517.6421,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103256",
+            "order": 9,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2647.8281,
+              "y": 568.83594,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2648.5344,
+              "y": 565.61017,
+              "z": -2905.0
+            },
+            "length_mm": 3.302188,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103256~24381_103257",
+            "order": 10,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2648.5344,
+              "y": 565.61017,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2700.3218,
+              "y": 102.51633,
+              "z": -2905.0
+            },
+            "length_mm": 465.98053,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103257",
+            "order": 11,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2700.3218,
+              "y": 102.51633,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2700.3948,
+              "y": 99.85753,
+              "z": -2905.0
+            },
+            "length_mm": 2.6598,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103257~24381_103258",
+            "order": 12,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2700.3948,
+              "y": 99.85753,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2679.2493,
+              "y": -274.8965,
+              "z": -2905.0
+            },
+            "length_mm": 375.3501,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103258",
+            "order": 13,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2679.2493,
+              "y": -274.8965,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2679.055,
+              "y": -276.63278,
+              "z": -2905.0
+            },
+            "length_mm": 1.747109,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103258~24381_103259",
+            "order": 14,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2679.055,
+              "y": -276.63278,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2609.4106,
+              "y": -691.1045,
+              "z": -2905.0
+            },
+            "length_mm": 420.2822,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103259",
+            "order": 15,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2609.4106,
+              "y": -691.1045,
+              "z": -2905.0
+            },
+            "end": {
+              "x": 2606.78,
+              "y": -706.76,
+              "z": -2920.875
+            },
+            "length_mm": 22.450634,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103259~24381_103260",
+            "order": 16,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2606.78,
+              "y": -706.76,
+              "z": -2920.875
+            },
+            "end": {
+              "x": 2606.78,
+              "y": -706.76,
+              "z": -4934.125
+            },
+            "length_mm": 2013.25,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103260",
+            "order": 17,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 2606.78,
+              "y": -706.76,
+              "z": -4934.125
+            },
+            "end": {
+              "x": 2622.0872,
+              "y": -710.9675,
+              "z": -4950.0
+            },
+            "length_mm": 22.450546,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103260~24381_103261",
+            "order": 18,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 2622.0872,
+              "y": -710.9675,
+              "z": -4950.0
+            },
+            "end": {
+              "x": 4863.0327,
+              "y": -1326.9325,
+              "z": -4950.0
+            },
+            "length_mm": 2324.0588,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103261",
+            "order": 19,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 4863.0327,
+              "y": -1326.9325,
+              "z": -4950.0
+            },
+            "end": {
+              "x": 4878.34,
+              "y": -1331.14,
+              "z": -4934.125
+            },
+            "length_mm": 22.450546,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103261~24381_103262",
+            "order": 20,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 4878.34,
+              "y": -1331.14,
+              "z": -4934.125
+            },
+            "end": {
+              "x": 4878.34,
+              "y": -1331.14,
+              "z": -1765.875
+            },
+            "length_mm": 3168.25,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103262",
+            "order": 21,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 4878.34,
+              "y": -1331.14,
+              "z": -1765.875
+            },
+            "end": {
+              "x": 4893.258,
+              "y": -1336.5696,
+              "z": -1750.0
+            },
+            "length_mm": 22.45087,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103262~24381_103263",
+            "order": 22,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 4893.258,
+              "y": -1336.5696,
+              "z": -1750.0
+            },
+            "end": {
+              "x": 7596.0522,
+              "y": -2320.3105,
+              "z": -1750.0
+            },
+            "length_mm": 2876.2554,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103263",
+            "order": 23,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 7596.0522,
+              "y": -2320.3105,
+              "z": -1750.0
+            },
+            "end": {
+              "x": 7610.97,
+              "y": -2325.74,
+              "z": -1765.875
+            },
+            "length_mm": 22.450842,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103263~24381_103264",
+            "order": 24,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 7610.97,
+              "y": -2325.74,
+              "z": -1765.875
+            },
+            "end": {
+              "x": 7610.97,
+              "y": -2325.74,
+              "z": -2176.625
+            },
+            "length_mm": 410.75,
+            "outside_diameter_mm": null
+          },
+          {
+            "refno": "24381_103264",
+            "order": 25,
+            "noun": "BEND",
+            "implicit": false,
+            "start": {
+              "x": 7610.97,
+              "y": -2325.74,
+              "z": -2176.625
+            },
+            "end": {
+              "x": 7615.9956,
+              "y": -2310.6814,
+              "z": -2192.5
+            },
+            "length_mm": 22.450644,
+            "outside_diameter_mm": 6.35
+          },
+          {
+            "refno": "24381_103264~Tail",
+            "order": 26,
+            "noun": "TUBI",
+            "implicit": true,
+            "start": {
+              "x": 7615.9956,
+              "y": -2310.6814,
+              "z": -2192.5
+            },
+            "end": {
+              "x": 7658.45,
+              "y": -2183.45,
+              "z": -2192.5
+            },
+            "length_mm": 134.12767,
+            "outside_diameter_mm": null
+          }
+        ],
+        "warnings": []
+      }
+    },
+    "bounds": {
+      "status": 422,
+      "response": {
+        "code": "no_renderable_geometry",
+        "message": "no in-memory AABB for 24381_103251",
+        "detail": null
+      }
+    }
+  }
+]

@@ -5,6 +5,7 @@ import type { useDtxTools } from './useDtxTools';
 import type { UsePtsetVisualizationThreeReturn } from './usePtsetVisualizationThree';
 import type { useToolStore } from './useToolStore';
 import type { useXeokitMeasurementTools } from './useXeokitMeasurementTools';
+import type { ReviewModelContext } from '@/components/review/reviewModelContext';
 import type { DimensionSystem } from '@/dimension';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
@@ -18,6 +19,7 @@ export type ViewerContext = {
   ptsetVis: ShallowRef<UsePtsetVisualizationThreeReturn | null>;
   annotationSystem: ShallowRef<UseAnnotationThreeReturn | null>;
   dimensionSystem: ShallowRef<DimensionSystem | null>;
+  ensureReviewModelContext?: ShallowRef<((context: ReviewModelContext, shouldApply: () => boolean) => Promise<void>) | null>;
 };
 
 const globalViewerContext: ViewerContext = {
@@ -30,6 +32,7 @@ const globalViewerContext: ViewerContext = {
   ptsetVis: shallowRef(null),
   annotationSystem: shallowRef(null),
   dimensionSystem: shallowRef(null),
+  ensureReviewModelContext: shallowRef(null),
 };
 
 export function useViewerContext(): ViewerContext {

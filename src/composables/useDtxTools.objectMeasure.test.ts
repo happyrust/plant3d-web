@@ -72,7 +72,6 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
   genModelV1SpatialCenterline: (refno: string) => genModelV1SpatialCenterline(refno),
 }));
 
-
 import {
   computeApproxNearestBetweenObjects,
   useDtxTools,

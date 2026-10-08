@@ -1,7 +1,6 @@
-const { chromium } = require('playwright');
-const path = require('path');
-
 (async () => {
+  const path = await import('node:path');
+  const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1536 }, deviceScaleFactor: 1 });
   await page.goto(`file://${path.join(__dirname, 'render.html').replace(/\\/g, '/')}`);

@@ -477,7 +477,7 @@ type GeometryEntryLike = {
   geo_hash?: unknown
   geo_index?: unknown
   matrix?: unknown
-  uniforms?: { noun?: unknown }
+  uniforms?: { noun?: unknown } | null
 }
 
 export function geometrySnapshotsFromInstanceEntries(

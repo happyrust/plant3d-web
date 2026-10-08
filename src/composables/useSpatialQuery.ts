@@ -199,7 +199,6 @@ const negativeNounRegistry = new Set<string>();
 let negativeNounsFetched = false;
 let negativeNounsFetching: Promise<void> | null = null;
 
-
 function registerNegativeNoun(noun: string): void {
   const normalized = noun.trim().toUpperCase();
   if (normalized) {

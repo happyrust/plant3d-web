@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useClearanceStore } from './useClearanceStore';
 
@@ -26,7 +26,146 @@ function serviceReturning(responses: SurfaceClearanceResponse[], clock = { now: 
 
 describe('useClearanceStore', () => {
   beforeEach(() => {
+    useClearanceStore().detachPersistence();
     useClearanceStore().clearRecords();
+  });
+  afterEach(() => { useClearanceStore().detachPersistence(); });
+
+  function memoryStorage() {
+    const data = new Map<string, string>();
+    return { data, getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };
+  }
+
+  it('persists result snapshots and visibility per scope, restores as stale, and isolates projects/tasks/versions', async () => {
+    const storage = memoryStorage();
+    const store = useClearanceStore();
+    store.bindPersistence('project-A/task-A/node-SJ/626-630', storage);
+    const record = await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });
+    store.setHidden(record!.id, true);
+    store.showAnnotations.value = false;
+    expect(store.persistenceLabel.value).toContain('本机已保存');
+    expect(JSON.parse(storage.data.get('plant3d-clearance-v1:project-A/task-A/node-SJ/626-630')!).records[0].modelVersion).toEqual(record!.modelVersion);
+    store.bindPersistence('project-B/task-A/node-SJ/626-630', storage);
+    expect(store.records.value).toEqual([]);
+    store.bindPersistence('project-A/task-A/node-SJ/626-630', storage);
+    expect(store.records.value).toHaveLength(1);
+    expect(store.records.value[0]?.status).toBe('stale');
+    expect(store.records.value[0]?.snapshot).toEqual(record!.snapshot);
+    expect(store.activeId.value).toBe(record!.id);
+    expect(store.hiddenIds.value.has(record!.id)).toBe(true);
+    expect(store.showAnnotations.value).toBe(false);
+    expect(store.persistenceLabel.value).toContain('请重算');
+    store.bindPersistence('project-A/task-A/node-SJ/627-631', storage);
+    expect(store.records.value).toEqual([]);
+  });
+
+  it('preflights a detached cloud snapshot without clearing a draft or accepting later response changes', async () => {
+    const store = useClearanceStore();
+    const record = await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });
+    const snapshot = store.captureSnapshot();
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, records: [{ ...snapshot.records[0], id: 'wrong' }] })).toThrow();
+    expect(store.records.value[0]).toBe(record);
+    const apply = store.prepareSnapshotRestore(snapshot);
+    snapshot.records.length = 0;
+    expect(store.records.value[0]?.status).toBe('current');
+    apply();
+    expect(store.records.value).toHaveLength(1);
+    expect(store.records.value[0]?.status).toBe('stale');
+  });
+
+  it('keeps corrupt persisted data intact and does not label rejected data as saved', async () => {
+    const storage = memoryStorage();
+    const scope = 'corrupt-test';
+    storage.data.set(`plant3d-clearance-v1:${scope}`, '{not json');
+    const store = useClearanceStore();
+    store.bindPersistence(scope, storage);
+    expect(store.persistenceError.value).not.toBeNull();
+    await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });
+    expect(storage.data.get(`plant3d-clearance-v1:${scope}`)).toBe('{not json');
+    expect(store.persistenceLabel.value).toContain('未覆盖');
+  });
+
+  it('retains unsaved records across scope switches when local storage is full, then allows retry', async () => {
+    const storage = memoryStorage();
+    const store = useClearanceStore();
+    const blocked = { getItem: storage.getItem, setItem: () => { throw new Error('quota'); } };
+    store.bindPersistence('quota-test', blocked);
+    const record = await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });
+    expect(store.persistenceError.value).toBe('quota');
+    expect(store.persistenceLabel.value).toContain('保存失败');
+    store.bindPersistence('quota-other', storage);
+    expect(store.records.value).toEqual([]);
+    store.bindPersistence('quota-test', storage);
+    expect(store.records.value[0]?.snapshot).toEqual(record!.snapshot);
+    expect(store.persistRecords()).toBe(true);
+    expect(store.persistenceError.value).toBeNull();
+  });
+
+  it('rejects a persisted envelope copied from another context', () => {
+    const storage = memoryStorage();
+    storage.data.set('plant3d-clearance-v1:context-B', JSON.stringify({ version: 1, scope: 'context-A', records: [], hiddenIds: [], activeId: null, showAnnotations: true }));
+    const store = useClearanceStore();
+    store.bindPersistence('context-B', storage);
+    expect(store.persistenceError.value).toContain('上下文不匹配');
+    expect(store.persistRecords()).toBe(false);
+  });
+
+  it('discards an in-flight response after changing scope or clearing records', async () => {
+    const storage = memoryStorage();
+    const store = useClearanceStore();
+    store.bindPersistence('slow-A', storage);
+    let resolve!: (value: SurfaceClearanceResponse) => void;
+    const service = createClearanceService({ fetchSurfaceClearance: () => new Promise(done => { resolve = done; }) });
+    const pending = store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service });
+    store.bindPersistence('slow-B', storage);
+    resolve(elboToCurvedWallResponse());
+    expect(await pending).toBeNull();
+    expect(store.records.value).toEqual([]);
+    const second = store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service });
+    store.clearRecords();
+    resolve(elboToCurvedWallResponse());
+    expect(await second).toBeNull();
+    expect(store.records.value).toEqual([]);
+  });
+
+  it('blocks current-mesh calculations in historical comparison contexts', async () => {
+    const store = useClearanceStore();
+    const compute = vi.fn(serviceReturning([elboToCurvedWallResponse()]).compute);
+    const service = { compute, computeComponentToWall: compute };
+    store.bindPersistence('historical-626-630', memoryStorage(), false);
+    expect(await store.compute({ sourceRefno: '1_2', targetRefno: '1_3' }, { service })).toBeNull();
+    expect(compute).not.toHaveBeenCalled();
+    expect(store.lastError.value).toContain('历史版本');
+  });
+
+  it('keeps the latest same-pair response and reports busy until all current-context requests settle', async () => {
+    const store = useClearanceStore();
+    const resolvers: ((response: SurfaceClearanceResponse) => void)[] = [];
+    const service = createClearanceService({ fetchSurfaceClearance: () => new Promise(done => { resolvers.push(done); }) });
+    const input = { sourceRefno: '24384_22582', targetRefno: '17496_105912' };
+    const older = store.compute(input, { service });
+    const newer = store.compute(input, { service });
+    const response = elboToCurvedWallResponse();
+    resolvers[1]!({ ...response, result: { ...response.result!, distance_mm: 70 } });
+    expect((await newer)?.snapshot?.distanceM).toBe(0.07);
+    expect(store.isComputing.value).toBe(true);
+    resolvers[0]!(response);
+    expect(await older).toBeNull();
+    expect(store.records.value[0]?.snapshot?.distanceM).toBe(0.07);
+    expect(store.isComputing.value).toBe(false);
+  });
+
+  it('invalidates a pending calculation as soon as historical mode starts, before its detail is available', async () => {
+    const store = useClearanceStore();
+    const storage = memoryStorage();
+    store.bindPersistence('same-scope-loading', storage);
+    let resolve!: (value: SurfaceClearanceResponse) => void;
+    const service = createClearanceService({ fetchSurfaceClearance: () => new Promise(done => { resolve = done; }) });
+    const pending = store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service });
+    store.bindPersistence('same-scope-loading', storage, false);
+    resolve(elboToCurvedWallResponse());
+    expect(await pending).toBeNull();
+    expect(store.records.value).toEqual([]);
   });
 
   it('compute upserts one record per input pair, activates it and unhides it', async () => {

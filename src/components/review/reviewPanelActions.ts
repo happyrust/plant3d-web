@@ -1,3 +1,7 @@
+import { reviewClearanceSnapshotKey, type ReviewClearanceSnapshot } from './reviewClearanceSnapshot';
+import { reviewModelContextKey } from './reviewModelContext';
+
+import type { ReviewModelContext } from './reviewModelContext';
 import type { UnifiedMeasurementRecord } from '@/composables/unifiedMeasurement';
 import type {
   ElevationDeltaMeasurementRecord,
@@ -77,6 +81,8 @@ export function mapWorkflowHistoryToTaskDetailItems(history: WorkflowStep[]): Ta
 }
 
 export type ReviewConfirmSnapshotPayload = {
+  clearanceSnapshot?: ReviewClearanceSnapshot;
+  modelContext?: ReviewModelContext;
   annotations: unknown[];
   cloudAnnotations: unknown[];
   rectAnnotations: unknown[];
@@ -87,6 +93,8 @@ export type ReviewConfirmSnapshotPayload = {
 };
 
 type ReviewConfirmSnapshotRecordLike = {
+  clearanceSnapshot?: ReviewClearanceSnapshot;
+  modelContext?: ReviewModelContext;
   annotations?: unknown[];
   cloudAnnotations?: unknown[];
   rectAnnotations?: unknown[];
@@ -246,6 +254,8 @@ export function buildReviewConfirmSnapshotPayload(
 
   return {
     annotations: [...(payload.annotations ?? [])],
+    ...(payload.clearanceSnapshot ? { clearanceSnapshot: payload.clearanceSnapshot } : {}),
+    ...(payload.modelContext ? { modelContext: payload.modelContext } : {}),
     cloudAnnotations: [...(payload.cloudAnnotations ?? [])],
     rectAnnotations: [...(payload.rectAnnotations ?? [])],
     obbAnnotations: [...(payload.obbAnnotations ?? [])],
@@ -274,6 +284,8 @@ export function buildReviewConfirmSnapshotPayloadFromRecords(
       || (b.confirmedAt ?? 0) - (a.confirmedAt ?? 0)
     ))[0];
   return buildReviewConfirmSnapshotPayload({
+    clearanceSnapshot: records.filter(record => record.clearanceSnapshot).sort((a, b) => (b.confirmedAt ?? 0) - (a.confirmedAt ?? 0))[0]?.clearanceSnapshot,
+    modelContext: records.filter(record => record.modelContext).sort((a, b) => (b.confirmedAt ?? 0) - (a.confirmedAt ?? 0))[0]?.modelContext,
     annotations: records.flatMap((record) => record.annotations ?? []),
     cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
     rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
@@ -354,6 +366,8 @@ function normalizeDimensionDocumentForComparison(
 
 export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
   return JSON.stringify({
+    clearanceSnapshot: payload.clearanceSnapshot ? reviewClearanceSnapshotKey(payload.clearanceSnapshot) : undefined,
+    modelContext: payload.modelContext ? reviewModelContextKey(payload.modelContext) : undefined,
     annotations: normalizeSnapshotForComparison(payload.annotations),
     cloudAnnotations: normalizeSnapshotForComparison(payload.cloudAnnotations),
     rectAnnotations: normalizeSnapshotForComparison(payload.rectAnnotations),
@@ -414,6 +428,10 @@ export function buildUnsavedReviewConfirmPayload(
   baseline: ReviewConfirmSnapshotPayload
 ): ReviewConfirmSnapshotPayload {
   return {
+    ...(current.clearanceSnapshot && reviewClearanceSnapshotKey(current.clearanceSnapshot) !== reviewClearanceSnapshotKey(baseline.clearanceSnapshot)
+      ? { clearanceSnapshot: current.clearanceSnapshot } : {}),
+    ...(current.modelContext && (!baseline.modelContext || reviewModelContextKey(current.modelContext) !== reviewModelContextKey(baseline.modelContext))
+      ? { modelContext: current.modelContext } : {}),
     annotations: diffSnapshotCollection(current.annotations, baseline.annotations),
     cloudAnnotations: diffSnapshotCollection(current.cloudAnnotations, baseline.cloudAnnotations),
     rectAnnotations: diffSnapshotCollection(current.rectAnnotations, baseline.rectAnnotations),
@@ -446,6 +464,8 @@ export function buildReviewEvidenceSnapshotPayload(
   payload: ReviewConfirmSnapshotPayload
 ): ReviewConfirmSnapshotPayload {
   return {
+    ...(payload.clearanceSnapshot ? { clearanceSnapshot: payload.clearanceSnapshot } : {}),
+    ...(payload.modelContext ? { modelContext: payload.modelContext } : {}),
     annotations: payload.annotations.map((item) => omitReviewState(item)),
     cloudAnnotations: payload.cloudAnnotations.map((item) => omitReviewState(item)),
     rectAnnotations: payload.rectAnnotations.map((item) => omitReviewState(item)),
@@ -491,7 +511,9 @@ export function hasReviewConfirmPayloadData(payload: ReviewConfirmSnapshotPayloa
     || payload.rectAnnotations.length > 0
     || payload.obbAnnotations.length > 0
     || payload.measurements.length > 0
-    || payload.dimensionDocument !== undefined;
+    || payload.dimensionDocument !== undefined
+    || payload.modelContext !== undefined
+    || payload.clearanceSnapshot !== undefined;
 }
 
 export function hasSubmitBlockingReviewConfirmPayloadData(
@@ -501,7 +523,9 @@ export function hasSubmitBlockingReviewConfirmPayloadData(
     || payload.cloudAnnotations.length > 0
     || payload.rectAnnotations.length > 0
     || payload.measurements.length > 0
-    || payload.dimensionDocument !== undefined;
+    || payload.dimensionDocument !== undefined
+    || payload.modelContext !== undefined
+    || payload.clearanceSnapshot !== undefined;
 }
 
 function resolveReviewAnnotationCheckMessage(

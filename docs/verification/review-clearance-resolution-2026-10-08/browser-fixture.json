@@ -1,0 +1,286 @@
+{
+  "fixtureOnly": true,
+  "mockedReviewServer": true,
+  "isolatedBrowserContexts": 2,
+  "captured": {
+    "clearanceSnapshot": {
+      "schemaVersion": 1,
+      "modelContext": {
+        "schemaVersion": 1,
+        "project": "AvevaMarineSample",
+        "dbnum": null,
+        "taskId": "clearance-cloud-fixture",
+        "formId": "cloud-form",
+        "node": "sj",
+        "comparison": null
+      },
+      "coordinateSpaces": {
+        "component": "design-world-m",
+        "pipe": "e3d-world-mm",
+        "bran": "e3d-world-mm"
+      },
+      "component": {
+        "records": [
+          {
+            "id": "clearance:24384_22582:17496_105912",
+            "kind": "component-to-wall",
+            "inputs": {
+              "sourceRefno": "24384_22582",
+              "targetRefno": "17496_105912",
+              "targetKind": "wall"
+            },
+            "sourceNoun": "ELBO",
+            "targetNoun": "WALL",
+            "provenance": {
+              "method": "surface-to-surface",
+              "accuracyClass": "exact-surface",
+              "coordinateSpace": "design-world",
+              "lengthUnit": "m",
+              "sourceModelVersion": "src:586;tgt:729",
+              "source": {
+                "entityId": "24384_22582",
+                "refno": "24384_22582",
+                "segmentRefno": "24384_22582"
+              },
+              "target": {
+                "entityId": "17496_105912",
+                "refno": "17496_105912",
+                "segmentRefno": "17496_105912"
+              },
+              "warnings": [],
+              "errorBoundM": 0.0005
+            },
+            "snapshot": {
+              "distanceM": 0.06443,
+              "intersects": false,
+              "sourcePoint": [
+                120,
+                45,
+                3.2
+              ],
+              "targetPoint": [
+                120.06439999999999,
+                44.9989,
+                3.2
+              ],
+              "vector": [
+                0.0644,
+                -0.0011,
+                0
+              ],
+              "sourceLeafRefno": "24384_22582",
+              "targetLeafRefno": "17496_105912",
+              "targetLeafNoun": "WALL",
+              "targetFace": {
+                "kind": "outer",
+                "normal": [
+                  -0.9998,
+                  0.0171,
+                  0
+                ],
+                "confidence": "geometric"
+              },
+              "perpendicular": {
+                "distanceM": 0.0645,
+                "from": [
+                  120,
+                  45,
+                  3.2
+                ],
+                "to": [
+                  120.06449,
+                  44.9989,
+                  3.2
+                ],
+                "method": "ray"
+              },
+              "witness": "closest-points"
+            },
+            "modelVersion": {
+              "sourceSesno": 586,
+              "targetSesno": 729
+            },
+            "status": "current",
+            "createdAt": "2026-10-08T00:00:00.000Z",
+            "computedAt": "2026-10-08T00:00:00.000Z"
+          }
+        ],
+        "hiddenIds": [],
+        "activeId": "clearance:24384_22582:17496_105912",
+        "showAnnotations": true
+      },
+      "pipe": {
+        "coordinateSpace": "e3d-world-mm",
+        "results": [
+          {
+            "id": "pipe-fixture",
+            "pipeA": "1_101",
+            "pipeB": "1_102",
+            "distance": 100,
+            "measurementKind": "surface",
+            "start": [
+              1000,
+              2000,
+              3000
+            ],
+            "end": [
+              1100,
+              2000,
+              3000
+            ],
+            "designPoints": {
+              "start": [
+                1000,
+                2000,
+                3000
+              ],
+              "end": [
+                1100,
+                2000,
+                3000
+              ]
+            },
+            "modelVersion": {
+              "sourceSesno": null,
+              "targetSesno": null
+            },
+            "status": "current"
+          }
+        ],
+        "selectedBranRefnos": [],
+        "hiddenIds": [],
+        "activeIndex": 0,
+        "minDistance": null,
+        "showAnnotations": true,
+        "maxDistance": 500,
+        "maxAngle": 5
+      },
+      "bran": {
+        "coordinateSpace": "e3d-world-mm",
+        "inputs": {
+          "suppoRefno": "24381_145018",
+          "structureCategory": "all",
+          "structuralAngleDeg": "5",
+          "searchRadius": "5000",
+          "excludeNouns": "WELD,ATTA"
+        },
+        "queriedSourceRefno": "1_101",
+        "branGroups": [
+          {
+            "group": "WALL",
+            "candidates": [
+              {
+                "refno": "1_200",
+                "noun": "WALL",
+                "distance_mm": 100,
+                "intersects": false,
+                "annotation": {
+                  "label_mm": 100,
+                  "start_point": {
+                    "x": 1000,
+                    "y": 2000,
+                    "z": 3000
+                  },
+                  "end_point": {
+                    "x": 1100,
+                    "y": 2000,
+                    "z": 3000
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "nounFacets": [
+          {
+            "noun": "WALL",
+            "count": 1,
+            "selected": true
+          }
+        ],
+        "drawnCandidateKeys": [
+          "WALL:1_200"
+        ],
+        "candidateProvenance": {
+          "WALL:1_200": {
+            "method": "centerline-to-aabb",
+            "accuracyClass": "approximate-bounds",
+            "status": "stale"
+          }
+        },
+        "excludedSelfMembers": 0,
+        "warnings": [
+          "已恢复本机结果，模型版本未核实；请重新查询或精算后验收。"
+        ]
+      }
+    },
+    "recordRevision": "fixture-revision-1",
+    "currentNode": "sj",
+    "operatorId": "fixture-user",
+    "modelContext": {
+      "schemaVersion": 1,
+      "project": "AvevaMarineSample",
+      "dbnum": null,
+      "taskId": "clearance-cloud-fixture",
+      "formId": "cloud-form",
+      "node": "sj",
+      "comparison": null
+    },
+    "id": "cloud-fixture-record",
+    "taskId": "clearance-cloud-fixture",
+    "formId": "cloud-form",
+    "type": "batch",
+    "annotations": [],
+    "cloudAnnotations": [],
+    "rectAnnotations": [],
+    "obbAnnotations": [],
+    "measurements": [],
+    "dimensionDocument": {
+      "schemaVersion": 2,
+      "documentId": "dimension-document:form:cloud-form",
+      "records": []
+    },
+    "dimensionDocumentVersion": 1,
+    "confirmedAt": 1791413088689,
+    "note": "fixture device A"
+  },
+  "restored": {
+    "componentCount": 1,
+    "componentStatus": "stale",
+    "pipeCount": 1,
+    "pipeStart": [
+      1000,
+      2000,
+      3000
+    ],
+    "pipeStatus": "stale",
+    "branCount": 1,
+    "branLabel": "（过期，待重算）包围盒估算",
+    "revision": "fixture-revision-1",
+    "order": [
+      "annotations",
+      "annotations",
+      "annotations",
+      "annotations",
+      "annotations",
+      "annotations",
+      "annotations"
+    ],
+    "conflict": "本机净距结果与云端不同，已保留本机草稿；请选择保留本机或备份后恢复云端",
+    "preservedDraftDistance": 200,
+    "secondRevision": "fixture-revision-2",
+    "secondRestoreError": null,
+    "resolution": {
+      "keepLocal": true,
+      "staleChoiceRejected": true,
+      "cloudRestoreBackedUp": true,
+      "undoRestoredDistance": 300,
+      "undoAfterEditRejected": true,
+      "backupDownloadDistance": 300,
+      "quotaPreservedDistance": 350,
+      "finalSavedDistance": 350,
+      "keptBannerCleared": true
+    }
+  },
+  "errors": []
+}

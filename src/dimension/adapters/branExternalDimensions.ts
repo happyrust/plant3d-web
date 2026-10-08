@@ -30,8 +30,10 @@ function sourceLabelSuffix(item: BranNearestClearanceAnnotationCandidate): strin
       return '（估算）';
     case 'parallel-centerline':
       return '（平行直段中心距）';
+    case 'surface-to-surface':
+      return '（实体外表面净距）';
     default:
-      return '';
+      return '（包围盒估算）';
   }
 }
 
@@ -55,7 +57,7 @@ export function branClearanceToExternalDimensions(
       skipped.push({ id, reason: 'Missing finite annotation start/end point' });
       continue;
     }
-    const approximate = item.provenance?.accuracyClass === 'approximate-sampled';
+    const approximate = !item.provenance || item.provenance.accuracyClass.startsWith('approximate-');
     const labelMm = Number(item.candidate.annotation?.label_mm);
     records.push({
       id,
@@ -68,7 +70,7 @@ export function branClearanceToExternalDimensions(
         role: 'external',
         labelPinned: false,
         ...(Number.isFinite(labelMm)
-          ? { authoritativeText: `${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
+          ? { authoritativeText: `${item.provenance?.status === 'stale' ? '（过期）' : ''}${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
           : {}),
         a: millimetresToDesignMetres(start),
         b: millimetresToDesignMetres(end),

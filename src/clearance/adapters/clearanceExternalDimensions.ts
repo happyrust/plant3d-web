@@ -40,7 +40,7 @@ function formatMillimetres(distanceM: number): string {
 export function clearanceDimensionText(record: ClearanceRecord): string {
   const snapshot = record.snapshot;
   if (!snapshot) return '';
-  const stale = record.status === 'stale' ? '（过期）' : '';
+  const stale = record.status === 'stale' ? '（过期）' : record.status === 'failed' ? '（重算失败，旧值）' : '';
   if (snapshot.intersects) return `${stale}相交`;
   const approximate = toLegacyApproximate(record.provenance.accuracyClass) ? '≈' : '';
   const perpendicular = snapshot.perpendicular ? ' ⊥' : '';

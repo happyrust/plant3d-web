@@ -437,6 +437,8 @@ export type SearchResponse = {
 };
 
 export type ElementAttribute = {
+  value?: unknown;
+  origin?: string;
   name: string;
   value_type: string;
   display: string;
@@ -446,6 +448,10 @@ export type ElementAttribute = {
 };
 
 export type ElementAttributesResponse = {
+  refno?: string;
+  noun?: string;
+  dbnum?: number;
+  sesno?: number;
   source: string;
   complete: boolean;
   attributes: ElementAttribute[];
@@ -641,6 +647,28 @@ export function genModelV1ElementAttributes(
     method: 'POST',
     body: { refno: toV1Refno(refno) },
   });
+}
+
+export type ModelBoundsResponse = {
+  refno: string;
+  scope: 'subtree';
+  min_mm: [number, number, number];
+  max_mm: [number, number, number];
+  model_count: number;
+  source: string;
+  stale: boolean | null;
+  publication_status: string;
+  /** Per-record source sessions; does not prove a complete generation/publish receipt. */
+  record_source_sessions?: { dbnum: number; sesno: number }[];
+};
+
+/** Current generated model bounds, including tubes; does not define the business envelope. */
+export async function genModelV1ModelBounds(refno: string, options?: GenModelV1RequestOptions): Promise<ModelBoundsResponse> {
+  const response = await genModelV1Fetch<{ tool: string; result: ModelBoundsResponse }>('/api/v1/query', {
+    ...options, method: 'POST', body: { tool: 'model.spatial.bounds', arguments: { refno: toV1Refno(refno), scope: 'subtree' } },
+  });
+  if (response.tool !== 'model.spatial.bounds') throw new Error('模型边界响应类型不匹配');
+  return response.result;
 }
 
 /** `element/ptset` 里的一个 P 点：构件局部系，mm，`dir` 已归一化（spec §4.11.1）。 */
@@ -1664,6 +1692,21 @@ export function genModelV1SpatialNearby(
   });
 }
 
+/** Loaded BRAN owners; includes implicit tubes absent from the ordinary spatial tree. */
+export type SpatialNearbyBranchesResponse = Pick<SpatialNearbyResponse,
+  'center' | 'radius' | 'total_count' | 'returned_count' | 'has_more' | 'truncated_candidates' | 'coverage' | 'warnings'> & {
+  results: (Omit<SpatialNearbyItem, 'dbnum'> & { dbnum: number | null })[];
+};
+
+export function genModelV1SpatialNearbyBranches(
+  req: Pick<GenModelV1SpatialNearbyRequest, 'refno' | 'radius' | 'page' | 'perPage'>,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialNearbyBranchesResponse> {
+  return genModelV1Fetch<SpatialNearbyBranchesResponse>('/api/v1/spatial/nearby/branches', {
+    ...options, query: spatialNearbyQuery(req),
+  });
+}
+
 /** `GET /api/v1/spatial/nearby/refnos`：同参、不分页的完整命中 refno 集（`page / per_page` 不发）。 */
 export function genModelV1SpatialNearbyRefnos(
   req: GenModelV1SpatialNearbyRequest,
@@ -1879,8 +1922,10 @@ export type GenModelV1SpatialNearestClearanceRequest = {
   /** 源构件，`a_b` / `a/b`。中心线模式必须是 BRAN（不是 → 422 `precondition`；库里没有 → 404）；`aabb` 模式任意有盒的构件 */
   sourceRefno: string;
   sourceMode?: SpatialClearanceSourceMode;
-  /** 预置组：`wall` = WALL/PANE/GWALL/STWALL，`column` = COLU/SCTN/GENSEC；服务端收逗号分隔 */
+  /** 预置组 wall/column/beam/slab；SCTN/GENSEC 按世界轴线区分梁柱，无法可靠分类的构件不进入梁柱组。 */
   targetGroups?: string[];
+  /** 梁柱轴线与水平/垂直方向的分类容差，0..45 度；缺省 5 度，待专业确认。 */
+  structuralAngleDeg?: number;
   /** 直接点名的 NOUN 白名单，与 `targetGroups` 可并用。`target_groups` 分桶下两者都不给 → 400（与 legacy 同，默认值由调用方补） */
   targetNouns?: string[];
   groupBy?: SpatialClearanceGroupBy;
@@ -1924,6 +1969,7 @@ export type SpatialClearanceCandidate = {
   /** `a_b` */
   refno: string;
   noun: string;
+  structural_class?: 'wall' | 'column' | 'beam' | 'slab' | null;
   /** 答不出为 null */
   dbnum: number | null;
   distance_mm: number;
@@ -2026,6 +2072,7 @@ function spatialNearestClearanceQuery(req: GenModelV1SpatialNearestClearanceRequ
     source_refno: toV1Refno(req.sourceRefno),
     source_mode: req.sourceMode,
     target_groups: joinCsv(req.targetGroups),
+    structural_angle_deg: req.structuralAngleDeg,
     target_nouns: joinCsv(req.targetNouns),
     group_by: req.groupBy,
     exclude_nouns: joinCsv(req.excludeNouns),
@@ -2062,6 +2109,12 @@ export function genModelV1SpatialNearestClearance(
  * `implicit = true` 是按 E3D 规则合成的隐式管身（refno `a_b~c_d`，不是构件），`noun` 给 `TUBI`；其余段的 `noun` 是成员自身类型
  * （大写；成员没给 → `UNKNOWN`）。挑「直段」就靠这两格：隐式管身一定直，ELBO / BEND 的到达→离开是弦不是轴。
  */
+export type PipeDiameterEvidence = {
+  source: 'catalogue' | 'bore-estimate' | 'missing';
+  catalogue_od_mm: number | null;
+  arrive_bore_mm: number | null;
+};
+
 export type SpatialCenterlineSegment = {
   refno: string;
   /** 成员序（`BranchMember.order`） */
@@ -2071,18 +2124,26 @@ export type SpatialCenterlineSegment = {
   start: SpatialPosition;
   end: SpatialPosition;
   length_mm: number;
-  /** 这一段成员自己的外径（mm）；隐式管身为 null，用顶层 `outside_diameter_mm` */
+  /** 这一段自己的外径（mm），包括隐式直段；旧服务可能缺失隐式直段的外径。 */
   outside_diameter_mm: number | null;
+  diameter_evidence?: PipeDiameterEvidence | null;
 };
 
 export type SpatialCenterlineResponse = {
+  source_version?: {
+    dbnum: number;
+    sesno: number;
+    databases: { dbnum: number; sesno: number; db_type: string }[];
+  } | null;
   /** `a_b` */
   refno: string;
   dbnum: number | null;
   /** 成段的成员数（穿过件 `start == end` 不成段，所以 ≤ 成员数） */
   segment_count: number;
-  /** 首个给出外径的成员的外径（mm）；隐式管身按它算半径。取不到为 null */
+  /** 首个给出外径的成员，仅作兼容；变径管道需逐段核对。 */
   outside_diameter_mm: number | null;
+  outside_diameter_refno?: string | null;
+  diameter_evidence?: PipeDiameterEvidence | null;
   centerline_bbox: SpatialClearanceAabb | null;
   /** 按成员序排好 */
   segments: SpatialCenterlineSegment[];

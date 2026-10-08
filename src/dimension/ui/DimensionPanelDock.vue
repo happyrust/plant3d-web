@@ -18,12 +18,14 @@ import {
 } from './dimensionBoundActions';
 import DimensionSemanticList from './DimensionSemanticList.vue';
 import DimensionToolbar from './DimensionToolbar.vue';
+import PipeInformationPanel from './PipeInformationPanel.vue';
 
 import type { DimensionBoundAction } from './dimensionBoundActions';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '../domain/types';
 import type { LayoutResult } from '../kernel/types';
 
+import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
@@ -252,6 +254,12 @@ function act(
   if (isExternalDimensionRecord(item)) {
     if (action === 'hide-external') {
       const registry = viewerContext.dimensionSystem.value?.externalRegistry;
+      if (item.source === 'pipe-information') {
+        const store = usePipeInformationStore();
+        const refno = item.id.slice('pipe-information:'.length);
+        store.setHidden(refno, !store.hiddenRefnos.value.includes(refno));
+        return;
+      }
       registry?.setHidden(item.id, !registry.isHidden(item.id));
     }
     return;
@@ -346,6 +354,7 @@ function act(
       :can-undo="viewerContext.dimensionSystem.value?.document.canUndo ?? false"
       :can-redo="viewerContext.dimensionSystem.value?.document.canRedo ?? false"
       @export-svg="exportSvg" />
+    <div class="max-h-[45%] shrink-0 overflow-auto"><PipeInformationPanel /></div>
     <div v-if="recoveryPreview"
       class="m-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
       <div class="font-semibold">发现未保存的尺寸修改</div>

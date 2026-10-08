@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { shallowRef } from 'vue';
 
+import { Matrix4 } from 'three';
+
 import { usePipeDistanceAnnotationThree } from './usePipeDistanceAnnotationThree';
 
 import type { PipeDistanceResult } from './usePipeDistanceStore';
@@ -52,6 +54,19 @@ describe('usePipeDistanceAnnotationThree', () => {
     vi.clearAllMocks();
   });
 
+  it('uses canonical millimetres as design metres despite the current scene transform', () => {
+    const { viewerRef } = createCompatViewerMock();
+    (viewerRef.value as any).__dtxLayer = { getGlobalModelMatrix: () => new Matrix4().makeScale(0.001, 0.001, 0.001).setPosition(20, 30, 40) };
+    const replaceExternalSource = vi.fn();
+    const adapter = usePipeDistanceAnnotationThree(viewerRef,
+      shallowRef([{ ...pipeDistanceResult(), designPoints: { start: [1000, 2000, 3000] as [number, number, number], end: [2000, 2000, 3000] as [number, number, number] }, status: 'stale' as const }]),
+      shallowRef(true), undefined, shallowRef({ replaceExternalSource } as any));
+    adapter.renderAnnotations();
+    const record = replaceExternalSource.mock.calls.at(-1)![1][0];
+    expect(record.layout.lines).toContainEqual(expect.objectContaining({ from: [1, 2, 3], to: [2, 2, 3] }));
+    expect(record.layout.formattedLabel).toBe('（过期）141 mm');
+  });
+
   it('uses the dimension external source when the dimension system is available', () => {
     const { viewerRef, realSceneAdd, requestRender } = createCompatViewerMock();
     const replaceExternalSource = vi.fn();
@@ -74,5 +89,21 @@ describe('usePipeDistanceAnnotationThree', () => {
       })],
     );
     expect(requestRender).toHaveBeenCalled();
+  });
+
+  it('keeps an estimated center distance visibly distinct in the 3D dimension label', () => {
+    const { viewerRef } = createCompatViewerMock();
+    const replaceExternalSource = vi.fn();
+    const adapter = usePipeDistanceAnnotationThree(
+      viewerRef,
+      shallowRef([{ ...pipeDistanceResult(), measurementKind: 'axis-estimate' as const }]),
+      shallowRef(true),
+      undefined,
+      shallowRef({ replaceExternalSource } as any),
+    );
+    adapter.renderAnnotations();
+    expect(replaceExternalSource).toHaveBeenCalledWith('pipe-distance', [expect.objectContaining({
+      layout: expect.objectContaining({ formattedLabel: '中心距估算 141 mm' }),
+    })]);
   });
 });

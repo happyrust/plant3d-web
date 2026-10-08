@@ -1,0 +1,82 @@
+[
+  {
+    "refno": "24384/23257",
+    "url": "http://123.57.182.243:3100/api/v1/spatial/nearby?project=AvevaMarineSample&refno=24384%2F23257&radius=500&nouns=BRAN&include_self=false&sort=distance&per_page=1000",
+    "status": 404,
+    "response": {
+      "code": "not_found",
+      "message": "构件 24384/23257 在模型投影与空间树里都没有包围盒（还没生成过模型）",
+      "detail": null
+    }
+  },
+  {
+    "refno": "24381/145018",
+    "url": "http://123.57.182.243:3100/api/v1/spatial/nearby?project=AvevaMarineSample&refno=24381%2F145018&radius=500&nouns=BRAN&include_self=false&sort=distance&per_page=1000",
+    "status": 200,
+    "response": {
+      "results": [],
+      "center": {
+        "x": 5963.7734,
+        "y": 9972.239,
+        "z": 16551.97,
+        "source": "refno_aabb_center"
+      },
+      "radius": 500.0,
+      "shape": "sphere",
+      "total_count": 0,
+      "returned_count": 0,
+      "page": 1,
+      "per_page": 1000,
+      "has_more": false,
+      "candidate_count": 1112,
+      "truncated_candidates": false,
+      "candidate_cap": 200000,
+      "groups": [],
+      "spec_groups": [],
+      "filter_options": {
+        "nouns": [
+          {
+            "value": "UNSET",
+            "count": 1095,
+            "is_negative": false
+          },
+          {
+            "value": "WELD",
+            "count": 3,
+            "is_negative": false
+          },
+          {
+            "value": "WALL",
+            "count": 2,
+            "is_negative": false
+          },
+          {
+            "value": "VALV",
+            "count": 1,
+            "is_negative": false
+          }
+        ],
+        "spec_values": [
+          {
+            "value": 3,
+            "count": 1006
+          },
+          {
+            "value": 5,
+            "count": 55
+          },
+          {
+            "value": 4,
+            "count": 36
+          },
+          {
+            "value": 1,
+            "count": 4
+          }
+        ]
+      },
+      "spatial_state": "ready",
+      "coverage": "global-tree"
+    }
+  }
+]

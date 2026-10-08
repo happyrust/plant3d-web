@@ -15,6 +15,7 @@ export type ExternalDimensionSource =
   | 'mbd'
   | 'measurement'
   | 'pipe-distance'
+  | 'pipe-information'
   | 'xeokit-measurement';
 
 export type ExternalDimensionRecord = Readonly<{

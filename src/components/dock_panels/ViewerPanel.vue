@@ -1,6 +1,6 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { computed, markRaw, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import {
   Aperture,
@@ -39,7 +39,10 @@ import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
+import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
+import { reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
+import { loadReviewModelComparison, type LoadedReviewModelComparison } from '@/components/review/reviewModelContextRestore';
 import { buildReviewConfirmSnapshotPayload } from '@/components/review/reviewPanelActions';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
@@ -65,6 +68,8 @@ import { useDtxTools } from '@/composables/useDtxTools';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
+import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
+import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -72,6 +77,7 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore } from '@/composables/useToolStore';
+import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
 import { useUnitSettingsStore, type LengthUnit } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { applyLoadedModelHighlight, useViewerContext } from '@/composables/useViewerContext';
@@ -80,6 +86,7 @@ import {
   DIMENSION_XEOKIT_PREFIX,
   useXeokitMeasurementTools,
 } from '@/composables/useXeokitMeasurementTools';
+import { pipeInformationToExternalDimensions } from '@/dimension';
 import {
   branClearanceToExternalDimensions,
   canEditUserDimension,
@@ -102,8 +109,9 @@ import {
   type DimensionDocumentState,
   type DimensionSystem,
 } from '@/dimension';
-import { getOutputProjectFromUrl } from '@/lib/currentProject';
+import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/currentProject';
 import { getModelSource, modelVersionAttributesToUiAttr } from '@/model-source';
+import { annotationScopeKey } from '@/review/domain/annotationScope';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { DEFAULT_DROPDOWN_PLACEMENT, measureNaturalHeight, resolveDropdownPlacement, type DropdownPlacement } from '@/utils/dropdownPlacement';
@@ -181,6 +189,8 @@ const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
 const clearanceStore = useClearanceStore();
+const pipeDistanceStore = usePipeDistanceStore();
+const pipeInformationStore = usePipeInformationStore();
 
 const initError = ref<string | null>(null);
 
@@ -550,6 +560,143 @@ const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const showDbnumExtraDtxLayers: DTXLayer[] = [];
 const attachedShowDbnumExtraDtxLayers = new WeakSet<DTXLayer>();
 const modelUnitCompareState = ref<ModelUnitVersionCompareRuntimeState | null>(null);
+const clearanceProject = ref(getOutputProjectFromUrl());
+const offClearanceProject = onCurrentProjectPathChange((project) => { clearanceProject.value = project; });
+const clearanceStorageContext = computed(() => {
+  const params = new URLSearchParams(window.location.search);
+  const project = clearanceProject.value || params.get('project_id');
+  const task = reviewStore.currentTask.value;
+  const comparison = modelUnitCompareState.value?.detail;
+  const draftScope = store.annotationDraftScope.value;
+  return {
+    project,
+    key: JSON.stringify({
+      project, dbnum: params.get('show_dbnum') || '__all__', user: userStore.currentUser.value?.id || 'anonymous',
+      draft: draftScope ? annotationScopeKey(draftScope) : null,
+      taskId: task?.id || null, formId: task?.formId || null, node: task?.currentNode || null,
+      comparison: comparison ? { dbnum: comparison.dbnum, refno: comparison.unitRefno,
+        a: comparison.before.sesno, b: comparison.after.sesno,
+        units: comparison.units?.map(unit => [unit.unitRefno, unit.before.sesno, unit.after.sesno]).sort() ?? [] } : null,
+    }),
+    allowCalculations: modelUnitCompareState.value === null,
+  };
+});
+watch(clearanceStorageContext, (context) => {
+  let storage: Storage | null = null;
+  try { if (context.project) storage = window.localStorage; } catch { /* 本机存储不可用时保留内存记录 */ }
+  clearanceStore.bindPersistence(context.key, storage, context.allowCalculations);
+  pipeDistanceStore.bindPersistence(context.key, storage, context.allowCalculations);
+  pipeInformationStore.bindPersistence(context.key, storage, context.allowCalculations);
+  spatialComputeStore.bindPersistence(context.key, storage, context.allowCalculations);
+}, { immediate: true, flush: 'sync' });
+function captureReviewModelContext(): ReviewModelContext | null {
+  const task = reviewStore.currentTask.value;
+  const project = clearanceStorageContext.value.project;
+  if (!task?.id || !task.formId || !project) return null;
+  const runtime = modelUnitCompareState.value;
+  if (runtime && runtime.status !== 'ready') throw new Error('版本对比尚未就绪，不能保存校审版本上下文');
+  const detail = runtime?.detail;
+  const rawDbnum = new URLSearchParams(window.location.search).get('show_dbnum');
+  return { schemaVersion: 1, project, dbnum: rawDbnum ? Number(rawDbnum) : null,
+    taskId: task.id, formId: task.formId, node: task.currentNode ?? 'sj',
+    comparison: detail ? { dbnum: detail.dbnum, refno: detail.unitRefno, a: detail.before.sesno, b: detail.after.sesno,
+      units: detail.units?.map(unit => ({ refno: unit.unitRefno, a: unit.before.sesno, b: unit.after.sesno })) ?? [],
+      viewMode: runtime.viewMode, activeSide: runtime.activeSide, diffOnly: runtime.diffOnly ?? false } : null };
+}
+const offReviewModelContext = reviewStore.bindModelContextProvider(captureReviewModelContext);
+const reviewClearanceStores = { component: clearanceStore, pipe: pipeDistanceStore, bran: spatialComputeStore };
+const offReviewClearance = reviewStore.bindClearanceSnapshotProvider({
+  capture: context => captureReviewClearanceSnapshot(context, reviewClearanceStores),
+  prepare: (snapshot, context, resolution) => {
+    const current = captureReviewModelContext();
+    if (!current || reviewModelVersionKey(current) !== reviewModelVersionKey(context))
+      throw new Error('净距恢复期间模型或任务已切换，请重试');
+    const applyCloud = prepareReviewClearanceRestore(snapshot, context, reviewClearanceStores);
+    const local = captureReviewClearanceSnapshot(snapshot.modelContext, reviewClearanceStores);
+    if ((hasReviewClearanceResults(local) || resolution) && reviewClearanceSnapshotKey(local) !== reviewClearanceSnapshotKey(snapshot)) {
+      if (!resolution || resolution.localKey !== reviewClearanceSnapshotKey(local) || resolution.cloudKey !== reviewClearanceSnapshotKey(snapshot))
+        throw new ReviewClearanceConflictError(local, snapshot, context);
+      if (resolution.action === 'keep-local') return () => {};
+      if (resolution.backup !== false) {
+        // 回放开始前保存整份本机快照；备份失败则不改变场景或结果。
+        const storage = window.localStorage;
+        storage.setItem(`plant3d-review-clearance-conflict-backup-v1:${clearanceStorageContext.value.key}`,
+          JSON.stringify({ schemaVersion: 1, snapshot: local, savedAt: new Date().toISOString() }));
+      }
+      return applyCloud;
+    }
+    return applyCloud;
+  },
+});
+let restoredReviewComparison: LoadedReviewModelComparison | null = null;
+let openingReviewComparison: ModelUnitVersionCompareOpenDetail | null = null;
+let reviewModelRestoreSequence = 0;
+let activeReviewModelRestore: { key: string; waiters: (() => boolean)[]; promise: Promise<void> } | null = null;
+async function ensureReviewModelContext(context: ReviewModelContext, shouldApply: () => boolean): Promise<void> {
+  if (!shouldApply()) return;
+  const matchesScope = () => reviewStore.currentTask.value?.id === context.taskId
+    && reviewStore.currentTask.value?.formId === context.formId
+    && clearanceStorageContext.value.project === context.project
+    && (new URLSearchParams(window.location.search).get('show_dbnum') ? Number(new URLSearchParams(window.location.search).get('show_dbnum')) : null) === context.dbnum;
+  if (!matchesScope())
+    throw new Error('确认记录属于其他项目或模型库，请打开对应项目后重试');
+  const key = reviewModelContextKey({ ...context, node: 'sj' });
+  // 两个校审面板共用一份查看器；同上下文同时恢复只生成一组历史投影。
+  if (activeReviewModelRestore?.key === key) {
+    activeReviewModelRestore.waiters.push(shouldApply);
+    return activeReviewModelRestore.promise;
+  }
+  if (!modelUnitCompareState.value || modelUnitCompareState.value.status === 'ready') {
+    const current = captureReviewModelContext();
+    if (current && reviewModelContextKey({ ...current, node: 'sj' }) === key) return;
+  }
+  const sequence = ++reviewModelRestoreSequence;
+  const attempt = { key, waiters: [shouldApply], promise: Promise.resolve() };
+  const live = () => sequence === reviewModelRestoreSequence && matchesScope() && attempt.waiters.some(waiter => waiter());
+  const previousRun = modelUnitCompareRunId;
+  attempt.promise = (async () => {
+    if (!context.comparison) {
+      if (live()) clearModelUnitVersionCompare();
+      return;
+    }
+    const loaded = await loadReviewModelComparison(context, getModelSource().versions, () => live() && modelUnitCompareRunId === previousRun);
+    let adopted = false;
+    try {
+      if (!live() || modelUnitCompareRunId !== previousRun) throw new Error('历史模型恢复已取消');
+      markRaw(loaded.detail);
+      openingReviewComparison = loaded.detail;
+      await openModelUnitVersionCompare(loaded.detail, { shouldApply: live, refreshEnvironment: false });
+      const state = modelUnitCompareState.value;
+      if (!live() || !state || state.detail !== loaded.detail || state.status !== 'ready')
+        throw new Error(state?.detail === loaded.detail && state.error ? state.error : '历史模型恢复未完成或已取消');
+      setModelUnitCompareSide(context.comparison.activeSide);
+      setModelUnitCompareDiffOnly(context.comparison.diffOnly);
+      setModelUnitCompareViewMode(context.comparison.viewMode);
+      const restored = captureReviewModelContext();
+      if (!restored || reviewModelContextKey({ ...restored, node: 'sj' }) !== key)
+        throw new Error('历史模型恢复结果与保存版本不一致');
+      restoredReviewComparison = loaded;
+      adopted = true;
+      dispatchTreeDiffContext(loaded.treeContext);
+    } finally {
+      if (openingReviewComparison === loaded.detail) openingReviewComparison = null;
+      if (!adopted) {
+        if (modelUnitCompareState.value?.detail === loaded.detail) clearModelUnitVersionCompare(false);
+        await loaded.release();
+      }
+    }
+  })().finally(() => { if (activeReviewModelRestore === attempt) activeReviewModelRestore = null; });
+  activeReviewModelRestore = attempt;
+  return attempt.promise;
+}
+if (viewerContext.ensureReviewModelContext) viewerContext.ensureReviewModelContext.value = ensureReviewModelContext;
+onUnmounted(() => {
+  reviewModelRestoreSequence += 1;
+  if (viewerContext.ensureReviewModelContext?.value === ensureReviewModelContext) viewerContext.ensureReviewModelContext.value = null;
+});
+onUnmounted(offReviewModelContext);
+onUnmounted(offReviewClearance);
+onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); pipeInformationStore.detachPersistence(); });
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;
   const detail: ModelUnitVersionCompareRuntimeState | null = state
@@ -583,6 +730,12 @@ let modelUnitCompareCameraState: {
   far: number;
 } | null = null;
 let modelUnitCompareRunId = 0;
+watch(() => JSON.stringify([reviewStore.currentTask.value?.id ?? null, reviewStore.currentTask.value?.formId ?? null,
+  clearanceStorageContext.value.project, new URLSearchParams(window.location.search).get('show_dbnum')]), () => {
+  reviewModelRestoreSequence += 1;
+  if (restoredReviewComparison || (openingReviewComparison && modelUnitCompareState.value?.detail === openingReviewComparison))
+    clearModelUnitVersionCompare(false);
+}, { flush: 'sync' });
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
 const globalEdgeOverlayRef = shallowRef<DTXOverlayHighlighter | null>(null);
 const viewCullControllerRef = shallowRef<DTXViewCullController | null>(null);
@@ -1625,6 +1778,12 @@ const componentToWallClearance = useComponentToWallClearance({
   onRecord: flyToClearanceRecord,
 });
 useClearanceDimensionSync(viewerContext.dimensionSystem, clearanceStore, requestRender);
+watch(selectionStore.selectedRefno, value => { pipeInformationStore.suggestedRefno.value = value ?? ''; });
+watch([viewerContext.dimensionSystem, pipeInformationStore.visibleRecords], ([system, records]) => {
+  if (!system) return;
+  system.replaceExternalSource('pipe-information', pipeInformationToExternalDimensions(records));
+  requestRender();
+}, { deep: true, immediate: true });
 
 function nextDimensionId(prefix: string): string {
   return typeof crypto.randomUUID === 'function'
@@ -2095,8 +2254,14 @@ async function requestRefreshModelUnitCompareEnvironment(): Promise<void> {
   }
 }
 
-function clearModelUnitVersionCompare(): void {
+function clearModelUnitVersionCompare(restoreCamera = true): void {
   modelUnitCompareRunId += 1;
+  if (restoredReviewComparison) {
+    const held = restoredReviewComparison;
+    restoredReviewComparison = null;
+    dispatchTreeDiffContext(null);
+    void held.release();
+  }
   for (const layer of modelUnitCompareLayers.splice(0)) {
     disposeModelUnitCompareLayer(layer);
   }
@@ -2114,7 +2279,7 @@ function clearModelUnitVersionCompare(): void {
   modelUnitCompareTargetRefnos = [];
   modelUnitCompareTargetUnitRefnos = [];
   const viewer = dtxViewerRef.value;
-  if (viewer && modelUnitCompareCameraState) {
+  if (restoreCamera && viewer && modelUnitCompareCameraState) {
     viewer.camera.position.copy(modelUnitCompareCameraState.position);
     viewer.controls.target.copy(modelUnitCompareCameraState.target);
     viewer.camera.near = modelUnitCompareCameraState.near;
@@ -2183,7 +2348,10 @@ function focusModelUnitVersionCompare(refno: string): void {
   requestRender();
 }
 
-async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDetail): Promise<void> {
+async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDetail,
+  options: { shouldApply?: () => boolean; refreshEnvironment?: boolean } = {}): Promise<void> {
+  const shouldApply = options.shouldApply ?? (() => true);
+  if (!shouldApply()) return;
   clearModelUnitVersionCompare();
   const viewer = dtxViewerRef.value;
   const primaryLayer = dtxLayerRef.value;
@@ -2214,13 +2382,16 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
   const runLayers: DTXLayer[] = [];
 
   try {
-    const environmentResult = await refreshModelUnitCompareEnvironment(detail, runId)
+    const environmentResult = await (options.refreshEnvironment === false
+      ? Promise.resolve({ loadedRefnos: collectLoadedRefnoVisibility(primaryLayer, detail.dbnum).size, refreshing: false as const })
+      : refreshModelUnitCompareEnvironment(detail, runId))
       .then((environment) => ({ environment, error: undefined }))
       .catch((error: unknown) => ({
         environment: undefined,
         error: error instanceof Error ? error.message : String(error),
       }));
     if (runId !== modelUnitCompareRunId) return;
+    if (!shouldApply()) { clearModelUnitVersionCompare(false); return; }
     const environment: ModelUnitVersionCompareEnvironment = environmentResult.environment ?? {
       loadedRefnos: collectLoadedRefnoVisibility(primaryLayer, detail.dbnum).size,
       refreshing: false as const,
@@ -2270,6 +2441,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
       disposeModelUnitCompareRunLayers(runLayers);
       return;
     }
+    if (!shouldApply()) { clearModelUnitVersionCompare(false); return; }
     const beforeObjects = beforeResult?.loadedObjects ?? 0;
     const afterObjects = afterResult?.loadedObjects ?? 0;
     if (sideHasGeometry(detail.before) && beforeObjects === 0) {
@@ -2344,6 +2516,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
       disposeModelUnitCompareRunLayers(runLayers);
       return;
     }
+    if (!shouldApply()) { clearModelUnitVersionCompare(false); return; }
     const message = error instanceof Error ? error.message : String(error);
     clearModelUnitVersionCompare();
     modelUnitCompareState.value = {

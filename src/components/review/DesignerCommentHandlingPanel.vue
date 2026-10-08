@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import {
   AlertCircle,
@@ -24,6 +24,9 @@ import { startAnnotationMemberPick } from './cloudMemberPick';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import NonReturnedGuidanceCard from './NonReturnedGuidanceCard.vue';
 import ResubmissionTaskList from './ResubmissionTaskList.vue';
+import { createReviewClearanceConflictActions } from './reviewClearanceConflictActions';
+import ReviewClearanceConflictNotice from './ReviewClearanceConflictNotice.vue';
+import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
   buildReviewConfirmSnapshotKey,
   buildReviewConfirmSnapshotPayload,
@@ -89,12 +92,28 @@ const embeddedLandingFormId = ref(readEmbeddedLandingFormId());
 
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  selectedModelGroupKey: () => reviewStore.getSelectedReviewModelGroup?.() ?? null,
+  onSelectModelGroup: key => reviewStore.selectReviewModelGroup?.(key),
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  prepareClearanceRestore: (snapshot, context) => reviewStore.prepareBoundClearanceRestore(snapshot, context),
+  ensureModelContext: async (context, shouldApply) => {
+    const ensure = viewerContext.ensureReviewModelContext?.value;
+    if (!ensure) throw new Error('模型版本恢复入口尚未就绪，已停止标注回放');
+    await ensure(context, shouldApply);
+  },
   skipClearOnEmpty: true,
 });
+const restoreError = confirmedRecordsRestorer.restoreError;
+const clearanceConflictActions = createReviewClearanceConflictActions({
+  resolve: action => reviewStore.resolveClearanceSnapshotConflict?.(action) ?? false,
+  undo: () => reviewStore.restoreClearanceSnapshotBackup?.() ?? false,
+  recompare: () => reviewStore.reopenClearanceSnapshotConflict?.() ?? false,
+}, confirmedRecordsRestorer);
+onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 
 // U0 草稿 scope（sj 侧）：与 ReviewPanel 共用同一份同步，任务 / 用户一变就切本机草稿容器；
 // 两个面板在 dock 里同时开着时各登记一次，最后一个卸载才回到旧作用域。
@@ -116,7 +135,7 @@ const returnedMetadata = computed(() => (currentTask.value ? getCanonicalReturne
 const latestReturnTimestamp = computed(() => (
   currentTask.value ? getResubmissionLatestReturnTime(currentTask.value.workflowHistory || []) : null
 ));
-const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const currentTaskConfirmedRecords = confirmedRecordsRestorer.sceneRecords;
 const activeReviewFormId = computed(() => (
   annotationProcessingEntryTarget.value?.formId?.trim()
   || currentTask.value?.formId?.trim()
@@ -744,6 +763,13 @@ onMounted(() => {
           <div v-if="currentTask"
             class="mt-4 rounded-2xl border border-slate-200 bg-slate-950 px-4 py-4 text-white shadow-lg"
             data-testid="designer-task-confirmation">
+            <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
+              :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
+              @select="confirmedRecordsRestorer.selectModelVersionGroup" />
+            <ReviewClearanceConflictNotice :conflict="reviewStore.clearanceSnapshotConflict?.value"
+              :kept-local="reviewStore.clearanceSnapshotKeptLocal?.value"
+              :backup="reviewStore.clearanceSnapshotBackup?.value" :busy="confirmedRecordsRestorer.restoring.value"
+              @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
             <div class="flex items-start justify-between gap-4">
               <div>
                 <div class="text-sm font-semibold">确认当前数据</div>
@@ -759,6 +785,10 @@ onMounted(() => {
               class="mt-3 min-h-[60px] w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:outline-none"
               placeholder="可补充本轮处理说明（可选）" />
             <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+              <span v-if="restoreError" role="alert" class="mr-auto text-xs text-rose-300">
+                {{ restoreError }}
+                <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="confirmedRecordsRestorer.restoreConfirmedRecordsIntoScene(true)">重试回放</button>
+              </span>
               <span v-if="confirmError" class="mr-auto text-xs text-rose-300">{{ confirmError }}</span>
               <button type="button"
                 class="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"

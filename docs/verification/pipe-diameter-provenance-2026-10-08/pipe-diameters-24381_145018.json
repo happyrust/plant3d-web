@@ -1,0 +1,512 @@
+{
+  "refno": "24381_145018",
+  "dbnum": 7997,
+  "segment_count": 21,
+  "outside_diameter_mm": 114.3,
+  "outside_diameter_refno": "Head~24381_145019",
+  "diameter_evidence": {
+    "source": "catalogue",
+    "catalogue_od_mm": 114.3,
+    "arrive_bore_mm": 100.0
+  },
+  "centerline_bbox": {
+    "min": {
+      "x": 1515.72,
+      "y": 8156.67,
+      "z": 13293.23
+    },
+    "max": {
+      "x": 9769.75,
+      "y": 11787.49,
+      "z": 18664.8
+    }
+  },
+  "segments": [
+    {
+      "refno": "Head~24381_145019",
+      "order": 0,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 1515.72,
+        "y": 8156.67,
+        "z": 13293.23
+      },
+      "end": {
+        "x": 3190.9868,
+        "y": 8316.174,
+        "z": 13300.662
+      },
+      "length_mm": 1682.8594,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145019",
+      "order": 1,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 3190.9868,
+        "y": 8316.174,
+        "z": 13300.662
+      },
+      "end": {
+        "x": 3341.63,
+        "y": 8330.57,
+        "z": 13452.661
+      },
+      "length_mm": 214.48613,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145019~24381_145021",
+      "order": 3,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 3341.63,
+        "y": 8330.57,
+        "z": 13452.661
+      },
+      "end": {
+        "x": 3341.63,
+        "y": 8330.57,
+        "z": 13909.05
+      },
+      "length_mm": 456.38867,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145021",
+      "order": 4,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 3341.63,
+        "y": 8330.57,
+        "z": 13909.05
+      },
+      "end": {
+        "x": 3492.2354,
+        "y": 8343.603,
+        "z": 14061.048
+      },
+      "length_mm": 214.37177,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145021~24381_145023",
+      "order": 6,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 3492.2354,
+        "y": 8343.603,
+        "z": 14061.048
+      },
+      "end": {
+        "x": 5794.397,
+        "y": 8542.817,
+        "z": 14073.699
+      },
+      "length_mm": 2310.7996,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145023",
+      "order": 7,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 5794.397,
+        "y": 8542.817,
+        "z": 14073.699
+      },
+      "end": {
+        "x": 5885.922,
+        "y": 8583.994,
+        "z": 14074.156
+      },
+      "length_mm": 100.36205,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145023~24381_145025",
+      "order": 9,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 5885.922,
+        "y": 8583.994,
+        "z": 14074.156
+      },
+      "end": {
+        "x": 7739.697,
+        "y": 10343.156,
+        "z": 14082.127
+      },
+      "length_mm": 2555.6206,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145025",
+      "order": 10,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 7739.697,
+        "y": 10343.156,
+        "z": 14082.127
+      },
+      "end": {
+        "x": 7849.61,
+        "y": 10447.46,
+        "z": 14234.127
+      },
+      "length_mm": 214.6256,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145025~24381_145026",
+      "order": 11,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 7849.61,
+        "y": 10447.46,
+        "z": 14234.127
+      },
+      "end": {
+        "x": 7849.61,
+        "y": 10447.46,
+        "z": 16583.355
+      },
+      "length_mm": 2349.2285,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145026",
+      "order": 12,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 7849.61,
+        "y": 10447.46,
+        "z": 16583.355
+      },
+      "end": {
+        "x": 7849.637,
+        "y": 10598.702,
+        "z": 16735.354
+      },
+      "length_mm": 214.42389,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145026~24381_145028",
+      "order": 14,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 7849.637,
+        "y": 10598.702,
+        "z": 16735.354
+      },
+      "end": {
+        "x": 7849.8228,
+        "y": 11636.248,
+        "z": 16740.525
+      },
+      "length_mm": 1037.5588,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145028",
+      "order": 15,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 7849.8228,
+        "y": 11636.248,
+        "z": 16740.525
+      },
+      "end": {
+        "x": 7849.85,
+        "y": 11787.49,
+        "z": 16892.523
+      },
+      "length_mm": 214.42389,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145028~24381_145029",
+      "order": 16,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 7849.85,
+        "y": 11787.49,
+        "z": 16892.523
+      },
+      "end": {
+        "x": 7849.85,
+        "y": 11787.49,
+        "z": 18492.387
+      },
+      "length_mm": 1599.8633,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145029",
+      "order": 17,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 7849.85,
+        "y": 11787.49,
+        "z": 18492.387
+      },
+      "end": {
+        "x": 7849.85,
+        "y": 11636.248,
+        "z": 18644.385
+      },
+      "length_mm": 214.42389,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145029~24381_145031",
+      "order": 19,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 7849.85,
+        "y": 11636.248,
+        "z": 18644.385
+      },
+      "end": {
+        "x": 7849.85,
+        "y": 9298.628,
+        "z": 18656.041
+      },
+      "length_mm": 2337.6492,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145031",
+      "order": 20,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 7849.85,
+        "y": 9298.628,
+        "z": 18656.041
+      },
+      "end": {
+        "x": 8001.8486,
+        "y": 9146.633,
+        "z": 18657.434
+      },
+      "length_mm": 214.96048,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145031~24381_145032",
+      "order": 21,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 8001.8486,
+        "y": 9146.633,
+        "z": 18657.434
+      },
+      "end": {
+        "x": 9201.84,
+        "y": 9146.65,
+        "z": 18662.44
+      },
+      "length_mm": 1200.0016,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145032~24381_145033",
+      "order": 23,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 9201.84,
+        "y": 9146.65,
+        "z": 18662.44
+      },
+      "end": {
+        "x": 9617.734,
+        "y": 9146.667,
+        "z": 18664.166
+      },
+      "length_mm": 415.89813,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145033",
+      "order": 24,
+      "noun": "ELBO",
+      "implicit": false,
+      "start": {
+        "x": 9617.734,
+        "y": 9146.667,
+        "z": 18664.166
+      },
+      "end": {
+        "x": 9769.73,
+        "y": 9298.667,
+        "z": 18664.8
+      },
+      "length_mm": 214.95863,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145033~24381_145035",
+      "order": 26,
+      "noun": "TUBI",
+      "implicit": true,
+      "start": {
+        "x": 9769.73,
+        "y": 9298.667,
+        "z": 18664.8
+      },
+      "end": {
+        "x": 9769.75,
+        "y": 9874.18,
+        "z": 18664.8
+      },
+      "length_mm": 575.5127,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    },
+    {
+      "refno": "24381_145035",
+      "order": 27,
+      "noun": "VALV",
+      "implicit": false,
+      "start": {
+        "x": 9769.75,
+        "y": 9874.18,
+        "z": 18664.8
+      },
+      "end": {
+        "x": 9769.75,
+        "y": 10220.18,
+        "z": 18664.8
+      },
+      "length_mm": 346.0,
+      "outside_diameter_mm": 114.3,
+      "diameter_evidence": {
+        "source": "catalogue",
+        "catalogue_od_mm": 114.3,
+        "arrive_bore_mm": 100.0
+      }
+    }
+  ],
+  "warnings": [
+    "7 个成员没有长度（穿过件），不参与走廊"
+  ]
+}

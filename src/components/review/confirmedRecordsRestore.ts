@@ -1,12 +1,15 @@
 import { computed, ref } from 'vue';
 
+import { isReviewModelContext, reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from './reviewModelContext';
+import { groupReviewRecordsByModelVersion } from './reviewModelVersionGroups';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
+import type { ReviewClearanceSnapshot } from './reviewClearanceSnapshot';
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 
 import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
 import { buildSnapshotFromTaskRecords } from '@/review/adapters/reviewRecordAdapter';
-import { mergeConfirmedReplayWithLocalDrafts } from '@/review/domain/draftLayerMerge';
+import { LAYERED_PAYLOAD_ARRAY_FIELDS, mergeConfirmedReplayWithLocalDrafts, parseLayeredPayload } from '@/review/domain/draftLayerMerge';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
@@ -34,6 +37,10 @@ export type ConfirmedRecordsRestoreOptions = {
   toolStore: ToolStoreForRestore;
   waitForViewerReady: (options?: { timeoutMs?: number }) => Promise<boolean>;
   getViewerTools: () => ViewerToolsHandle | null;
+  ensureModelContext?: (context: ReviewModelContext, shouldApply: () => boolean) => Promise<void>;
+  prepareClearanceRestore?: (snapshot: ReviewClearanceSnapshot, context: ReviewModelContext) => () => void;
+  selectedModelGroupKey?: () => string | null;
+  onSelectModelGroup?: (key: string | null) => void;
   /** 设为 true 时，空记录不会 clearAll (避免覆盖外部快照已恢复的数据) */
   skipClearOnEmpty?: boolean;
   /**
@@ -52,7 +59,9 @@ function buildSceneKey(
   if (!taskId) return '__no-task__';
   const scope = formId ? `${taskId}@${formId}` : taskId;
   if (records.length === 0) return `${scope}:empty`;
-  return `${scope}:${records.map((r) => `${r.id}:${r.confirmedAt}`).join('|')}`;
+  return `${scope}:${JSON.stringify(records.map(r => [r.id, r.confirmedAt, r.recordRevision,
+    r.modelContext ? (isReviewModelContext(r.modelContext) ? reviewModelContextKey(r.modelContext) : r.modelContext) : null,
+    r.clearanceSnapshot ?? null]))}`;
 }
 
 function buildReplayPayload(
@@ -97,6 +106,11 @@ export function layerConfirmedReplayForStore(store: ToolStoreForRestore, confirm
 
 export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreOptions) {
   const lastRestoredSceneKey = ref<string | null>(null);
+  const restoreError = ref<string | null>(null);
+  const restoring = ref(false);
+  let requestSequence = 0;
+  const localSelection = ref<{ scope: string; key: string | null } | null>(null);
+  const scopeKey = () => JSON.stringify([options.currentTaskId(), options.currentFormId?.() ?? null]);
 
   function isLayeredDraftsActive(): boolean {
     if (options.layeredDrafts) return options.layeredDrafts();
@@ -117,86 +131,175 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       .slice()
       .sort((a, b) => a.confirmedAt - b.confirmedAt);
   });
+  const modelVersionGroups = computed(() => groupReviewRecordsByModelVersion(currentTaskRecords.value));
+  const selectedModelGroupKey = computed(() => options.selectedModelGroupKey ? options.selectedModelGroupKey()
+    : localSelection.value?.scope === scopeKey() ? localSelection.value.key : null);
+  const activeModelGroup = computed(() => {
+    const groups = modelVersionGroups.value;
+    return groups.length === 1 ? groups[0] : groups.find(group => group.key === selectedModelGroupKey.value);
+  });
+  const sceneRecords = computed(() => activeModelGroup.value?.disabled ? [] : activeModelGroup.value?.records ?? []);
+  function readGroupedLocalPayload(): string | null {
+    if (typeof options.toolStore.exportJSON !== 'function') return null;
+    const local = parseLayeredPayload(readLocalPayload(options.toolStore));
+    const allConfirmed = parseLayeredPayload(buildReplayPayload(currentTaskRecords.value, {
+      taskId: options.currentTaskId() ?? undefined, formId: options.currentFormId?.() ?? undefined,
+    }));
+    if (!local || !allConfirmed) throw new Error('无法核对本机草稿，已停止版本切换');
+    for (const field of LAYERED_PAYLOAD_ARRAY_FIELDS) {
+      const ids = new Set(allConfirmed[field].map(item => (item as { id?: unknown })?.id));
+      const drafts = local[field].filter(item => {
+        const id = (item as { id?: unknown })?.id;
+        return typeof id !== 'string' || !ids.has(id);
+      });
+      if (drafts.length > 0) throw new Error('存在未确认的本机批注或测量，请先保存或清除草稿后切换模型版本');
+      local[field] = [];
+    }
+    return JSON.stringify(local);
+  }
+  async function selectModelVersionGroup(key: string | null) {
+    const group = modelVersionGroups.value.find(item => item.key === key);
+    if (key && (!group || group.disabled)) return;
+    if (modelVersionGroups.value.length > 1 && key !== activeModelGroup.value?.key) {
+      try { readGroupedLocalPayload(); }
+      catch (error) { restoreError.value = error instanceof Error ? error.message : '无法核对本机草稿'; return; }
+    }
+    requestSequence += 1;
+    if (options.onSelectModelGroup) options.onSelectModelGroup(key);
+    else localSelection.value = { scope: scopeKey(), key };
+    await restoreConfirmedRecordsIntoScene(true);
+  }
 
   async function restoreConfirmedRecordsIntoScene(force = false): Promise<void> {
+    const request = ++requestSequence;
     const taskId = options.currentTaskId();
     const formId = options.currentFormId?.()?.trim() || null;
-    const records = currentTaskRecords.value;
-    const restoreKey = buildSceneKey(taskId, formId, records);
-    if (!force && lastRestoredSceneKey.value === restoreKey) return;
+    const records = sceneRecords.value;
+    const selection = selectedModelGroupKey.value;
+    const sourceKey = buildSceneKey(taskId, formId, currentTaskRecords.value);
+    const restoreKey = JSON.stringify([sourceKey, activeModelGroup.value?.key ?? null, buildSceneKey(taskId, formId, records)]);
+    if (!force && lastRestoredSceneKey.value === restoreKey) {
+      restoring.value = false;
+      restoreError.value = null;
+      return;
+    }
+    const shouldApply = () => request === requestSequence
+      && options.currentTaskId() === taskId
+      && (options.currentFormId?.()?.trim() || null) === formId
+      && selectedModelGroupKey.value === selection
+      && buildSceneKey(taskId, formId, currentTaskRecords.value) === sourceKey;
+    restoring.value = true;
+    restoreError.value = null;
+    try {
+      if (currentTaskRecords.value.length > 0 && !activeModelGroup.value)
+        throw new Error('确认记录包含不同模型版本或缺少版本信息，请选择一个版本分别查看');
+      if (activeModelGroup.value?.disabled) throw new Error('确认记录的模型版本上下文无效，或旧记录无法归属模型版本，请核对后重试');
+      const layered = isLayeredDraftsActive();
+      let localPayload = layered ? readLocalPayload(options.toolStore) : null;
+      if (modelVersionGroups.value.length > 1) localPayload = readGroupedLocalPayload();
 
-    const viewerReady = await options.waitForViewerReady({ timeoutMs: 4000 });
-    const tools = options.getViewerTools();
-    if (!viewerReady || !tools) return;
-    // 任务可能在等待 viewer 期间变了
-    if (options.currentTaskId() !== taskId) return;
-    if ((options.currentFormId?.()?.trim() || null) !== formId) return;
+      const viewerReady = await options.waitForViewerReady({ timeoutMs: 4000 });
+      const tools = options.getViewerTools();
+      if (!viewerReady || !tools) return;
+      // 任务可能在等待 viewer 期间变了
+      if (!shouldApply()) return;
 
-    const layered = isLayeredDraftsActive();
+      const contexts = records.flatMap(record => record.modelContext ? [record.modelContext] : []);
+      if (contexts.some(context => !isReviewModelContext(context) || context.taskId !== taskId
+      || (formId !== null && context.formId !== formId))) throw new Error('确认记录的模型版本上下文无效，请核对任务和单据');
+      // 不把多个历史模型上的坐标合并导入同一个场景；旧记录没有上下文时也不能猜它属于某一版本。
+      if (contexts.length > 0) {
+        if (contexts.length !== records.length || new Set(contexts.map(reviewModelVersionKey)).size !== 1)
+          throw new Error('确认记录包含不同模型版本或缺少版本信息，请按版本分别查看');
+        if (!options.ensureModelContext) throw new Error('模型版本恢复入口尚未就绪，已停止标注回放');
+        await options.ensureModelContext(contexts[contexts.length - 1]!, shouldApply);
+        if (!shouldApply()) return;
+      }
 
-    if (!taskId || records.length === 0) {
-      const shouldClear =
+      const latestClearance = [...records].reverse().find(record => record.clearanceSnapshot)?.clearanceSnapshot;
+      let applyClearance: (() => void) | undefined;
+      if (latestClearance) {
+        if (!contexts[0] || !options.prepareClearanceRestore) throw new Error('净距恢复入口或模型版本信息缺失，已停止回放');
+        applyClearance = options.prepareClearanceRestore(latestClearance, latestClearance.modelContext);
+      }
+
+      if (!taskId || records.length === 0) {
+        const shouldClear =
         !options.skipClearOnEmpty
         || (lastRestoredSceneKey.value !== null && lastRestoredSceneKey.value !== restoreKey);
 
-      if (shouldClear) {
+        if (shouldClear) {
         // U0 分层：草稿是数据边界——容器已按 scope 切好，内存里就是本任务自己的本机草稿，不再 clearAll 抹掉；
         // 评论线程跟着确认记录走，照旧清。
-        if (!layered) options.toolStore.clearAll();
-        tools.syncFromStore();
-        const cleared = getReviewCommentThreadStore().clear();
-        if (cleared.changed) {
-          getReviewCommentEventLog().push({
-            kind: 'thread_clear',
-            key: 'task_records',
-            payload: { taskId: taskId ?? null, formId },
-          });
+          if (!layered) options.toolStore.clearAll();
+          tools.syncFromStore();
+          const cleared = getReviewCommentThreadStore().clear();
+          if (cleared.changed) {
+            getReviewCommentEventLog().push({
+              kind: 'thread_clear',
+              key: 'task_records',
+              payload: { taskId: taskId ?? null, formId },
+            });
+          }
+        }
+        lastRestoredSceneKey.value = restoreKey;
+        return;
+      }
+
+      const buildContext = {
+        taskId: taskId ?? undefined,
+        formId: formId ?? undefined,
+      };
+      const legacyPayload = buildReplayPayload(records, buildContext);
+
+      try {
+        const snapshot = buildSnapshotFromTaskRecords(records, buildContext);
+        if (snapshot.comments.length > 0) {
+          const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+          if (merge.changed) {
+            getReviewCommentEventLog().push({
+              kind: 'snapshot_merged',
+              key: 'task_records',
+              payload: {
+                taskId: taskId ?? null,
+                formId,
+                comments: snapshot.comments.length,
+                annotations: snapshot.annotations.length,
+              },
+            });
+          }
+        }
+      } catch (err) {
+        if (typeof console !== 'undefined') {
+          console.warn('[review thread store] task_records merge failed', err);
         }
       }
+
+      // U0 分层：已确认层按 id 覆盖，本机草稿（id 不在已确认层）保留；不分层就是旧的整份替换
+      options.toolStore.importJSON(
+        layered ? mergeConfirmedReplayWithLocalDrafts(legacyPayload, localPayload).payload : legacyPayload,
+      );
+      applyClearance?.();
+      tools.syncFromStore();
       lastRestoredSceneKey.value = restoreKey;
-      return;
+    } catch (error) {
+      if (shouldApply()) restoreError.value = error instanceof Error ? error.message : '确认记录恢复失败';
+    } finally {
+      if (request === requestSequence) restoring.value = false;
     }
-
-    const buildContext = {
-      taskId: taskId ?? undefined,
-      formId: formId ?? undefined,
-    };
-    const legacyPayload = buildReplayPayload(records, buildContext);
-
-    try {
-      const snapshot = buildSnapshotFromTaskRecords(records, buildContext);
-      if (snapshot.comments.length > 0) {
-        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
-        if (merge.changed) {
-          getReviewCommentEventLog().push({
-            kind: 'snapshot_merged',
-            key: 'task_records',
-            payload: {
-              taskId: taskId ?? null,
-              formId,
-              comments: snapshot.comments.length,
-              annotations: snapshot.annotations.length,
-            },
-          });
-        }
-      }
-    } catch (err) {
-      if (typeof console !== 'undefined') {
-        console.warn('[review thread store] task_records merge failed', err);
-      }
-    }
-
-    // U0 分层：已确认层按 id 覆盖，本机草稿（id 不在已确认层）保留；不分层就是旧的整份替换
-    options.toolStore.importJSON(
-      layered ? mergeConfirmedReplayWithLocalDrafts(legacyPayload, readLocalPayload(options.toolStore)).payload : legacyPayload,
-    );
-    tools.syncFromStore();
-    lastRestoredSceneKey.value = restoreKey;
   }
 
   return {
     lastRestoredSceneKey,
     currentTaskRecords,
+    sceneRecords,
+    modelVersionGroups,
+    selectedModelGroupKey,
+    activeModelGroup,
+    selectModelVersionGroup,
+    restoreError,
+    restoring,
+    cancelPendingRestore: () => { requestSequence += 1; restoring.value = false; },
     restoreConfirmedRecordsIntoScene,
   };
 }
