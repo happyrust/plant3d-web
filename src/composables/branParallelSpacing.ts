@@ -5,7 +5,7 @@
  * 口径来自用户 2026-09-16 的纠正：「两个排管的距离测量是指两条 BRAN 的直段之间，如果有平行的部分就可以标注它们的间距」。
  * 输入是 `GET /api/v1/spatial/centerline` 原样给的中心线线段表（成员到达→离开点，E3D 世界 mm，按成员序）：
  *
- * 1. `buildStraightRuns`：连续**共线**的段合成一条**直段**（隐式管身 + 同轴的阀 / 法兰 / 大小头…）。ELBO / BEND 的到达→离开是弦不是轴，
+ * 1. `buildStraightRuns`：连续共线且同径的段合成一条直段（隐式管身 + 同轴阀/法兰…）；不同外径分别量距。ELBO / BEND 的到达→离开是弦不是轴，
  *    它们把链断开、自己也不成直段。
  * 2. `findParallelRunPairs`：两条 BRAN 的直段两两配对，夹角 ≤ 容差**且**沿轴投影区间有重叠（真正「并排」的那一截）才算一对；
  *    每对给出**中心距**（两条轴线之间的垂距，落在重叠区中点、两端都在轴线上）、重叠长度，以及两侧外径都知道时扣掉两个半径的净距。
@@ -20,7 +20,7 @@ export type Vec3Mm = { x: number; y: number; z: number };
 export type BranCenterlineInput = {
   /** BRAN 的 refno（`a_b`） */
   refno: string;
-  /** 首个给出外径的成员的外径（mm）；隐式管身按它算半径 */
+  /** 旧服务缺少逐段外径来源时的兼容参考；明确缺失的段不使用此值。 */
   outside_diameter_mm: number | null;
   segments: readonly SpatialCenterlineSegment[];
 };
@@ -34,7 +34,7 @@ export type BranStraightRun = {
   lengthMm: number;
   /** 组成它的段（按成员序） */
   segments: SpatialCenterlineSegment[];
-  /** 这条直段的外径（mm）：段上首个成员外径，都没有就用 BRAN 顶层外径；都取不到为 null */
+  /** 这条直段的外径（mm）：同径段才合并；明确缺失时不取顶层值。 */
   outsideDiameterMm: number | null;
 };
 
@@ -149,9 +149,7 @@ function finishRun(
   }
   const lengthMm = maxT - minT;
   if (!(lengthMm > 0)) return null;
-  const memberDiameter = segments
-    .map((segment) => positiveDiameter(segment.outside_diameter_mm))
-    .find((value): value is number => value != null) ?? null;
+  const memberDiameter = segmentDiameter(first, fallbackDiameter);
   return {
     branRefno,
     start: add(clonePoint(first.start), scale(direction, minT)),
@@ -159,8 +157,12 @@ function finishRun(
     direction,
     lengthMm,
     segments,
-    outsideDiameterMm: memberDiameter ?? fallbackDiameter,
+    outsideDiameterMm: memberDiameter,
   };
+}
+
+function segmentDiameter(segment: SpatialCenterlineSegment, fallback: number | null): number | null {
+  return positiveDiameter(segment.outside_diameter_mm) ?? (segment.diameter_evidence ? null : fallback);
 }
 
 /**
@@ -201,7 +203,11 @@ export function buildStraightRuns(
       const direction = scale(axis, 1 / length(axis));
       const collinear = distanceToLine(segment.start, head.start, direction) <= collinearTol
         && distanceToLine(segment.end, head.start, direction) <= collinearTol;
-      if (!collinear) flush();
+      const headDiameter = segmentDiameter(head, fallbackDiameter);
+      const nextDiameter = segmentDiameter(segment, fallbackDiameter);
+      const sameDiameter = headDiameter === null || nextDiameter === null ? headDiameter === nextDiameter
+        : Math.abs(headDiameter - nextDiameter) <= 0.001;
+      if (!collinear || !sameDiameter) flush();
     }
     current.push(segment);
   }

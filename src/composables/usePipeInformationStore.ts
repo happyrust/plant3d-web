@@ -40,6 +40,7 @@ async function readMaterial(root: ElementAttributesResponse, warnings: string[])
       try {
         const parent = await genModelV1ElementAttributes(owner);
         if (pipeInformationRefno(parent.refno ?? '') !== pipeInformationRefno(owner)) throw new Error('PIPE 引用所属上下文不匹配');
+        if (!Number.isSafeInteger(parent.sesno) || parent.sesno! < 0) throw new Error('PIPE 属性会话缺失');
         if (parent.noun === 'PIPE') attrs = parent;
       } catch { warnings.push('所属 PIPE 属性读取失败，不能补全业务材质'); }
     }

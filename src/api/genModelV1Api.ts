@@ -2107,6 +2107,12 @@ export function genModelV1SpatialNearestClearance(
  * `implicit = true` 是按 E3D 规则合成的隐式管身（refno `a_b~c_d`，不是构件），`noun` 给 `TUBI`；其余段的 `noun` 是成员自身类型
  * （大写；成员没给 → `UNKNOWN`）。挑「直段」就靠这两格：隐式管身一定直，ELBO / BEND 的到达→离开是弦不是轴。
  */
+export type PipeDiameterEvidence = {
+  source: 'catalogue' | 'bore-estimate' | 'missing';
+  catalogue_od_mm: number | null;
+  arrive_bore_mm: number | null;
+};
+
 export type SpatialCenterlineSegment = {
   refno: string;
   /** 成员序（`BranchMember.order`） */
@@ -2116,8 +2122,9 @@ export type SpatialCenterlineSegment = {
   start: SpatialPosition;
   end: SpatialPosition;
   length_mm: number;
-  /** 这一段成员自己的外径（mm）；隐式管身为 null，用顶层 `outside_diameter_mm` */
+  /** 这一段自己的外径（mm），包括隐式直段；旧服务可能缺失隐式直段的外径。 */
   outside_diameter_mm: number | null;
+  diameter_evidence?: PipeDiameterEvidence | null;
 };
 
 export type SpatialCenterlineResponse = {
@@ -2126,8 +2133,10 @@ export type SpatialCenterlineResponse = {
   dbnum: number | null;
   /** 成段的成员数（穿过件 `start == end` 不成段，所以 ≤ 成员数） */
   segment_count: number;
-  /** 首个给出外径的成员的外径（mm）；隐式管身按它算半径。取不到为 null */
+  /** 首个给出外径的成员，仅作兼容；变径管道需逐段核对。 */
   outside_diameter_mm: number | null;
+  outside_diameter_refno?: string | null;
+  diameter_evidence?: PipeDiameterEvidence | null;
   centerline_bbox: SpatialClearanceAabb | null;
   /** 按成员序排好 */
   segments: SpatialCenterlineSegment[];

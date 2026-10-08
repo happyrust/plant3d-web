@@ -39,6 +39,16 @@ watch(store.suggestedRefno, value => { refno.value = value; });
           <dt>{{ field.label }}</dt><dd :title="field.source" class="break-all" :class="field.status === 'missing' || field.status === 'unconfirmed' ? 'text-amber-700' : ''">{{ field.text }}</dd>
         </template>
       </dl>
+      <details v-if="record.memberDiameters?.length" class="mt-2">
+        <summary class="cursor-pointer">逐段外径及来源（{{ record.memberDiameters.length }}）</summary>
+        <ul class="mt-1 space-y-1">
+          <li v-for="member in record.memberDiameters" :key="`${member.order}:${member.refno}`" class="rounded bg-slate-50 p-1"
+            :class="member.source !== 'catalogue' ? 'text-amber-700' : ''">
+            <span class="break-all">{{ member.order + 1 }} · {{ member.refno }} · {{ member.implicit ? '隐式直管' : member.noun }}</span>
+            <p>{{ member.outsideDiameterMm === null ? '外径缺失' : `${Number(member.outsideDiameterMm.toFixed(2))} mm` }} · {{ member.sourceText }}</p>
+          </li>
+        </ul>
+      </details>
       <ul v-if="record.warnings.length" class="mt-2 list-disc pl-4 text-amber-700"><li v-for="warning in record.warnings" :key="warning">{{ warning }}</li></ul>
     </article>
   </details>

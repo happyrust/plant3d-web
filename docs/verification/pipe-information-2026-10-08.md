@@ -4,6 +4,8 @@
 
 ## 实现和字段口径
 
+逐段外径及变径处理已在后续提交补齐，最新进度见 [逐段外径来源验证](pipe-diameter-provenance-2026-10-08.md)；以下保留本轮初始证据及当时限制。
+
 - BRAN 属性来自现有 `element/attributes` 的原始业务值，保留 refno、sesno、字段来源。首末端通径使用 HBOR/TBOR，不把名义通径与外径混为一个“管径”。
 - 业务材质读 MATN 或 MATR 指向材料记录的 DESC/NAME；BRAN 未设时只补所属 PIPE 的明确业务属性。空引用 0/0、unset 不当成材质。未解析引用标待解析；没有从 Three.js 显示材质、管道名称或规格号推断材料牌号。
 - ISPE 显示为保温规格参考号。业务包络保留“口径待确认”；`model.spatial.bounds scope=subtree` 只作为当前生成模型的三轴包围尺寸展示，不能替代含保温/操作空间的专业包络。

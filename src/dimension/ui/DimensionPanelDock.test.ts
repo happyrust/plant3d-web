@@ -145,9 +145,30 @@ describe('DimensionPanelDock', () => {
       const host = mountPanel(); host.querySelector('details')?.setAttribute('open', '');
       expect(host.textContent).toContain('属性会话 42');
       expect(host.textContent).toContain('业务材质');
+      expect(record.memberDiameters?.map(member => member.source)).toEqual(['missing', 'unknown']);
+      // A varying branch must retain implicit-tube diameter and distinguish estimates.
+      const enrichedLine = { ...centerline, segments: [
+        { ...centerline.segments[0]!, outside_diameter_mm: 114.3, diameter_evidence: { source: 'catalogue' as const, catalogue_od_mm: 114.3, arrive_bore_mm: 100 } },
+        { ...centerline.segments[1]!, outside_diameter_mm: 55, diameter_evidence: { source: 'bore-estimate' as const, catalogue_od_mm: null, arrive_bore_mm: 50 } },
+      ] };
+      const enriched = buildPipeInformation({ refno: '7997_1', attributes, centerline: enrichedLine });
+      expect(enriched.fields.find(field => field.key === 'outer-diameter')).toMatchObject({ text: '55 mm ～ 114.3 mm（2/2段）', status: 'unconfirmed' });
+      expect(enriched.memberDiameters?.map(member => member.source)).toEqual(['catalogue', 'bore-estimate']);
+      expect(enriched.memberDiameters?.[1]?.sourceText).toContain('到达通径 50 mm');
+      const inconsistent = buildPipeInformation({ refno: '7997_1', attributes, centerline: { ...enrichedLine, segments: [
+        { ...enrichedLine.segments[0]!, diameter_evidence: { source: 'catalogue', catalogue_od_mm: 999, arrive_bore_mm: 100 } },
+      ] } });
+      expect(inconsistent.memberDiameters?.[0]?.source).toBe('unknown');
+      centerSpy.mockResolvedValueOnce(enrichedLine);
+      expect(await store.refresh('7997_1')).toBe(true);
+      await nextTick();
+      expect(host.textContent).toContain('逐段外径及来源');
+      expect(host.textContent).toContain('管子目录 PARA[2]');
+      expect(host.textContent).toContain('估算：min');
       store.setHidden('7997_1', true); store.persistRecords();
       store.bindPersistence('pipe-info-B', storage); expect(store.records.value).toEqual([]);
       store.bindPersistence('pipe-info-A', storage); expect(store.records.value[0]?.stale).toBe(true);
+      expect(store.records.value[0]?.memberDiameters?.map(member => member.source)).toEqual(['catalogue', 'bore-estimate']);
       expect(store.hiddenRefnos.value).toEqual(['7997_1']);
       expect((pipeInformationToExternalDimensions(store.records.value)[0]!.layout as any).tag.lines[0].text).toContain('过期');
       const retained = JSON.parse(JSON.stringify(store.records.value));
