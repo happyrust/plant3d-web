@@ -28,7 +28,7 @@ import {
   type EmbedLandingState,
   type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
-import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
+import { isCanonicalReturnedTask, isSavedDesignerDraftTask } from '@/components/review/reviewTaskFilters';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
 import { dockPanelExists, ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
@@ -1595,18 +1595,23 @@ async function applyInitialLanding() {
           openPanel('designerCommentHandling');
           activatePanel('designerCommentHandling');
         }
+        const shouldShowSavedDraftInitiate = landingTarget === 'designer'
+          && isExternalSjFormFocused
+          && !shouldShowReturnedSjReviewPanel
+          && !shouldShowDesignerCommentHandling
+          && !!restoreResult.restoredTask
+          && isSavedDesignerDraftTask(restoreResult.restoredTask);
+        const landingPanelOverride = shouldShowReturnedSjReviewPanel
+          ? 'review'
+          : shouldShowDesignerCommentHandling
+            ? 'designerCommentHandling'
+            : shouldShowSavedDraftInitiate
+              ? 'initiateReview'
+              : null;
         persistEmbedLandingState({
           ...landingState,
-          primaryPanelId: shouldShowReturnedSjReviewPanel
-            ? 'review'
-            : shouldShowDesignerCommentHandling
-              ? 'designerCommentHandling'
-              : landingState.primaryPanelId,
-          visiblePanelIds: shouldShowReturnedSjReviewPanel
-            ? ['review']
-            : shouldShowDesignerCommentHandling
-              ? ['designerCommentHandling']
-              : landingState.visiblePanelIds,
+          primaryPanelId: landingPanelOverride ?? landingState.primaryPanelId,
+          visiblePanelIds: landingPanelOverride ? [landingPanelOverride] : landingState.visiblePanelIds,
           formId: verifiedFormId,
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,
@@ -1615,6 +1620,11 @@ async function applyInitialLanding() {
           matchedSource: restoreResult.matchedSource,
           missReason: restoreResult.missReason,
         });
+        if (shouldShowSavedDraftInitiate) {
+          // 落点状态（含 restoredTaskDraft）先写好再开面板，面板挂载时直接按「修改已保存的编校审单」回填
+          openPanel('initiateReview');
+          activatePanel('initiateReview');
+        }
       }
       return;
     }

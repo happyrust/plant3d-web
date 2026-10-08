@@ -534,6 +534,87 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
+  function mockExternalSjClaims(formId: string) {
+    window.history.replaceState({}, '', `/?user_token=jwt-designer&workflow_mode=external&form_id=${formId}`);
+    authVerifyTokenMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: {
+        valid: true,
+        claims: {
+          projectId: 'PROJECT-CLAIMS',
+          userId: 'designer-1',
+          formId,
+          role: 'sj',
+          workflowMode: 'external',
+          exp: 1999999999,
+          iat: 1700000000,
+        },
+      },
+    });
+  }
+
+  function mockRestoredDesignerTask(task: ReviewTask) {
+    restoreEmbedWorkbenchContextMock.mockResolvedValue({
+      target: 'designer',
+      restoreStatus: 'matched',
+      restoredTaskId: task.id,
+      restoredTaskSummary: { title: task.title, status: task.status, currentNode: task.currentNode },
+      restoredTaskDraft: { taskId: task.id, formId: task.formId, title: task.title, draftComponents: [] },
+      restoredTask: task,
+    });
+    restoreEmbedFormSnapshotContextMock.mockResolvedValue({
+      modelRefnos: [],
+      recordCount: 0,
+      attachmentCount: 0,
+      attachments: [],
+      task,
+    });
+  }
+
+  it('SJ 外部 form_id 重开停在编制节点、未退回的已保存草稿：自动落到发起面板，落点状态带回草稿', async () => {
+    const savedDraft = createTask({ id: 'task-draft-1', formId: 'FORM-DRAFT-1', status: 'draft', currentNode: 'sj' });
+    reviewTasksRef.value = [savedDraft];
+    mockRestoredDesignerTask(savedDraft);
+    mockExternalSjClaims('FORM-DRAFT-1');
+
+    const mounted = await mountDockLayout();
+
+    expect(dockPanels.has('initiateReview')).toBe(true);
+    expect(activatedPanels).toContain('initiateReview');
+    expect(dockPanels.has('review')).toBe(false);
+    expect(dockPanels.has('designerCommentHandling')).toBe(false);
+    expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
+      target: 'designer',
+      formId: 'FORM-DRAFT-1',
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview'],
+      restoredTaskDraft: { taskId: 'task-draft-1' },
+    });
+
+    mounted.unmount();
+  });
+
+  it('SJ 外部 form_id 重开已送审单据：不自动打开发起面板，落点留在 viewer', async () => {
+    const submitted = createTask({ id: 'task-submitted-1', formId: 'FORM-SUBMITTED-1', status: 'submitted', currentNode: 'jd' });
+    reviewTasksRef.value = [submitted];
+    mockRestoredDesignerTask(submitted);
+    mockExternalSjClaims('FORM-SUBMITTED-1');
+
+    const mounted = await mountDockLayout();
+
+    expect(dockPanels.has('initiateReview')).toBe(false);
+    expect(dockPanels.has('review')).toBe(false);
+    expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
+      target: 'designer',
+      formId: 'FORM-SUBMITTED-1',
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
+    });
+
+    mounted.unmount();
+  });
+
   it('SJ 外部 form_id 被动恢复未匹配内部任务但 workflow/sync 有批注记录时，不单独开 DCH，落点留在设计端 viewer', async () => {
     // 2026-05-18 产品策略更新：SJ 经 PMS 外部流程打开带 form_id 单据时，
     // 所有批注处理统一在 review 面板内完成，不再单独开「批注处理」（DCH）面板。

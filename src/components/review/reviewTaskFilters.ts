@@ -78,6 +78,11 @@ export function isRejectedDesignerTask(task: ReviewTask): boolean {
   return isCanonicalReturnedTask(task);
 }
 
+/** 已保存、还停在编制节点、没被退回过的草稿：设计端重开时可以直接「修改已保存的编校审单」 */
+export function isSavedDesignerDraftTask(task: ReviewTask): boolean {
+  return task.status === 'draft' && task.currentNode === 'sj' && !isCanonicalReturnedTask(task);
+}
+
 export function getDesignerTaskStatusBucket(task: ReviewTask): 'returned' | 'pending' | 'approved' | 'other' {
   if (isCanonicalReturnedTask(task)) return 'returned';
   if (task.status === 'submitted' || task.status === 'in_review') return 'pending';

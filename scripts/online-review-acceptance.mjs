@@ -6,15 +6,17 @@
  *   node scripts/online-review-acceptance.mjs all        # TC1 + TC2
  *   node scripts/online-review-acceptance.mjs tc1        # 正向全通：SJ 发起 → active → JH 测量+确认 → agree → SH → PZ → approved → reopen
  *   node scripts/online-review-acceptance.mjs tc2        # 驳回回路：JH 批注 → verify 被拦 → return → SJ「已修改」→ 重提 → JH「同意」→ agree → SH → PZ → approved
+ *   node scripts/online-review-acceptance.mjs resave     # 二次保存：重开自动落到发起面板 →「保存修改」→ 同一 task → active → 送审后再保存 409 → JH 看到新构件 → approved
  *   node scripts/online-review-acceptance.mjs smoke      # 只领 token / embed-url，开 SJ 嵌入页确认面板出现；不建单、不推流程
  *
  * 环境变量：
  *   P3D_BASE      模型中心 / 前端站点，默认 http://123.57.182.243（nginx 80：前端 + /api 反代 gen-model）
  *   P3D_PROJECT   output_project / project_id，默认 AvevaMarineSample
  *   P3D_BRAN      发起编校审注入的 BRAN，默认 24381_145018
+ *   P3D_BRAN2     RESAVE 二次保存时加进去的第二个构件，默认 24384_24935
  *   OUT_DIR       截图 / 报告输出目录，默认 tmp/online-review-acceptance（已 gitignore）
  *
- * 每张单都是真建：TC1 / TC2 各在模型中心留一张 approved 的单（包名 ACCEPT-<时间戳>-TCn），可在 PMS 仿真页或 API 里查看 / 删除。
+ * 每张单都是真建：TC1 / TC2 / RESAVE 各在模型中心留一张 approved 的单（包名 ACCEPT-<时间戳>-<用例>），可在 PMS 仿真页或 API 里查看 / 删除。
  * 做法与 2026-09-28 首次实跑结果见 docs/verification/online-3d-review-acceptance-2026-09-28/README.md。
  *
  * 两个时序坑（首轮实跑踩到，脚本已绕开）：
@@ -34,8 +36,8 @@ const OUT = process.env.OUT_DIR || path.resolve('tmp/online-review-acceptance');
 const WHICH = (process.argv[2] || 'all').toLowerCase();
 const STAMP = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
 
-if (WHICH === '--help' || WHICH === '-h' || !['all', 'tc1', 'tc2', 'smoke'].includes(WHICH)) {
-  console.log('用法：node scripts/online-review-acceptance.mjs <all|tc1|tc2|smoke>\n环境变量：P3D_BASE P3D_PROJECT P3D_BRAN OUT_DIR（见文件头注释）');
+if (WHICH === '--help' || WHICH === '-h' || !['all', 'tc1', 'tc2', 'resave', 'smoke'].includes(WHICH)) {
+  console.log('用法：node scripts/online-review-acceptance.mjs <all|tc1|tc2|resave|smoke>\n环境变量：P3D_BASE P3D_PROJECT P3D_BRAN P3D_BRAN2 OUT_DIR（见文件头注释）');
   process.exit(WHICH === '--help' || WHICH === '-h' ? 0 : 2);
 }
 
@@ -239,19 +241,24 @@ async function closeRole(s) {
 // ---------------------------------------------------------------------------
 // UI：SJ 发起编校审
 // ---------------------------------------------------------------------------
+/** 新建单据和已送审单据的设计端落点是三维查看器，不会自动弹发起面板；只有重开编制节点的已保存草稿才自动落到发起面板 */
+async function openInitiatePanel(page) {
+  const panel = '[data-testid="designer-landing-workspace"]';
+  const hit = await waitAny(page, [panel], 60_000);
+  if (hit) return hit;
+  // 照人的走法：Ribbon 校审 → 发起编校审
+  const tab = page.locator('[data-ribbon-tab="review"]').first();
+  if (await tab.count()) await tab.click({ timeout: 5000 }).catch(() => {});
+  const btn = page.locator('[data-command="panel.initiateReview"]').first();
+  if (await btn.count()) await btn.click({ timeout: 5000 }).catch(() => {});
+  return waitAny(page, [panel], 60_000);
+}
+
 async function uiSjInitiate(formId, sjToken, pkg, { submit = true } = {}) {
   const s = await openRole(formId, sjToken, 'SJ-initiate');
   const { page } = s;
   try {
-    let hit = await waitAny(page, ['[data-testid="designer-landing-workspace"]'], 60_000);
-    if (!hit) {
-      // 照人的走法：Ribbon 校审 → 发起编校审
-      const tab = page.locator('[data-ribbon-tab="review"]').first();
-      if (await tab.count()) await tab.click({ timeout: 5000 }).catch(() => {});
-      const btn = page.locator('[data-command="panel.initiateReview"]').first();
-      if (await btn.count()) await btn.click({ timeout: 5000 }).catch(() => {});
-      hit = await waitAny(page, ['[data-testid="designer-landing-workspace"]'], 60_000);
-    }
+    const hit = await openInitiatePanel(page);
     step('SJ 嵌入页出现发起编校审面板', !!hit, hit || (await bodyText(page)).slice(0, 300));
     if (!submit) {
       await shot(page, `${current.id}-01-sj-initiate-panel`);
@@ -604,6 +611,143 @@ async function tc2(tokens) {
 }
 
 // ---------------------------------------------------------------------------
+// RESAVE 二次保存（PMS 端到端案例 TC-1 第 2b / 2c / 2d 步，后端 2026-09-28 缺陷修复计划 T1 / T5）
+// ---------------------------------------------------------------------------
+const refVariants = (ref) => [ref, ref.replace('_', '/')];
+const mentionsRef = (value, ref) => refVariants(ref).some((v) => JSON.stringify(value ?? '').includes(v));
+
+async function taskDetail(taskId, token) {
+  const r = await api('GET', `/api/review/tasks/${encodeURIComponent(taskId)}`, undefined, token);
+  const task = r.json?.task || r.json?.data || {};
+  return { http: r.status, task, components: task.components || [] };
+}
+
+async function queryModels(formId, token) {
+  const r = await sync(formId, token, ROLES.SJ, 'query');
+  return { ...snap(r), models: r.json?.data?.models || [] };
+}
+
+/** SJ 重开嵌入页：断言「修改已保存的编校审单」，可加一个构件后点「保存修改」；expectRejected 时断言页面原文显示 409 */
+async function uiSjResave(formId, sjToken, tag, { extraRef, firstTaskId, expectRejected = false }) {
+  const s = await openRole(formId, sjToken, tag);
+  const { page } = s;
+  const createBodies = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && /\/api\/review\/tasks(\?|$)/.test(req.url())) createBodies.push(req.postData());
+  });
+  try {
+    const hit = expectRejected
+      ? await openInitiatePanel(page)
+      : await waitAny(page, ['[data-testid="designer-landing-workspace"]'], 60_000);
+    step(
+      expectRejected
+        ? `送审后重开，校审 → 发起编校审打开发起面板（${tag}）`
+        : `SJ 重开已保存草稿，嵌入页自动落到发起面板（${tag}）`,
+      !!hit,
+      hit || (await bodyText(page)).slice(0, 300),
+    );
+    if (!hit) return { createBodies };
+    await waitStable(page, `SJ-${tag}`);
+    const title = await textOf(page, '[data-testid="initiate-review-panel-title"]', 60);
+    const banner = await page.locator('[data-testid="initiate-review-editing-saved-task"]').first().isVisible().catch(() => false);
+    step(`面板标题「修改已保存的编校审单」+ 黄条提示（${tag}）`, /修改已保存的编校审单/.test(title || '') && banner, { title, banner });
+    await page.waitForFunction(() => typeof window.__plant3dInitiateReviewE2E?.addMockComponent === 'function', null, { timeout: 45_000 });
+    if (extraRef) {
+      await page.evaluate(async (ref) => {
+        await window.__plant3dInitiateReviewE2E.addMockComponent(ref, `BRAN ${ref}`);
+      }, extraRef);
+      const listed = await page
+        .waitForFunction((refs) => refs.some((r) => document.body.innerText.includes(r)), refVariants(extraRef), { timeout: 15_000 })
+        .then(() => true)
+        .catch(() => false);
+      step(`构件列表加进第二个构件 ${extraRef}`, listed);
+    }
+    const submitBtn = page.locator('[data-guide="submit-btn"]').first();
+    await submitBtn.waitFor({ state: 'visible', timeout: 20_000 });
+    const label = (await submitBtn.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const d = await submitBtn.getAttribute('disabled');
+      const ad = await submitBtn.getAttribute('aria-disabled');
+      if (!d && ad !== 'true') break;
+      await page.waitForTimeout(400);
+    }
+    await shot(page, `${current.id}-${tag}-before-save`);
+    await submitBtn.click({ timeout: 20_000 });
+    if (expectRejected) {
+      const shown = await page.getByText(/单据已送审|不可修改/).first().waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false);
+      const line = ((await bodyText(page)).match(/[^\n]*(单据已送审|不可修改)[^\n]*/) || [null])[0];
+      step('送审后再保存：页面显示后端 409 原文（单据已送审…不可修改），不被笼统文案盖掉', shown, { label, line });
+      await shot(page, `${current.id}-${tag}-rejected`);
+      return { label, line, createBodies };
+    }
+    const toast = await page.getByText(/编校审单(创建|保存)成功|保存成功/).first().waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false);
+    let result = null;
+    for (let i = 0; i < 40 && !result?.taskId; i += 1) {
+      result = await page.evaluate(() => window.__plant3dInitiateReviewE2E?.getLastCreateResult?.() || null).catch(() => null);
+      if (!result?.taskId) await page.waitForTimeout(500);
+    }
+    step('按钮是「保存修改」，二次保存成功且仍是同一个 task', /保存修改/.test(label) && (toast || !!result?.taskId) && result?.taskId === firstTaskId, { label, toast, taskId: result?.taskId, firstTaskId });
+    await shot(page, `${current.id}-${tag}-saved`);
+    return { label, result, createBodies };
+  } finally {
+    await closeRole(s);
+  }
+}
+
+async function resave(tokens) {
+  const bran2 = process.env.P3D_BRAN2 || '24384_24935';
+  begin('RESAVE', '二次保存：SJ 建单 → 重开自动落到发起面板 → 加构件「保存修改」→ 同一 task、两路读回一致、历史一条 resave → active → 送审后再保存 409 → JH 看到 2 个构件 → agree 到 approved');
+  const { formId } = await embedUrlForm(tokens.SJ);
+  step('embed-url 领 form_id', !!formId, { formId });
+  current.api.formId = formId;
+  const pkg = `ACCEPT-${STAMP}-RESAVE`;
+  const created = await uiSjInitiate(formId, tokens.SJ, pkg);
+  const taskId = created?.taskId;
+  Object.assign(current.api, { taskId, packageName: pkg, bran2 });
+  if (!taskId) throw new Error('首次保存没拿到 taskId');
+
+  const saved = await uiSjResave(formId, tokens.SJ, 'resave-1', { extraRef: bran2, firstTaskId: taskId });
+  const d1 = await taskDetail(taskId, tokens.SJ);
+  step('GET /api/review/tasks/{id}：两个构件都在', d1.http === 200 && mentionsRef(d1.components, BRAN) && mentionsRef(d1.components, bran2), { http: d1.http, components: d1.components.length });
+  const q1 = await queryModels(formId, tokens.SJ);
+  step('workflow/sync query：models 与任务一致（两个构件，仍 draft / sj）', mentionsRef(q1.models, BRAN) && mentionsRef(q1.models, bran2) && q1.current_node === 'sj', { models: q1.models, task_status: q1.task_status, current_node: q1.current_node, task_id: q1.task_id });
+  let h = await history(taskId, tokens.SJ);
+  const resaveLines = h.lines.filter((l) => /resave/.test(l));
+  step('workflow history 恰好一条 resave', resaveLines.length === 1, h.lines);
+
+  const v = await verify(formId, tokens.SJ, ROLES.SJ, 'active', ROLES.JH);
+  step('verify active 通过', verifyPassed(v), brief(v));
+  const r = snap(await sync(formId, tokens.SJ, ROLES.SJ, 'active', '送审（线上验收 RESAVE）', ROLES.JH));
+  step('sync active：submitted / jd', r.task_status === 'submitted' && r.current_node === 'jd', r);
+
+  const rejected = await uiSjResave(formId, tokens.SJ, 'resave-after-submit', { expectRejected: true });
+  const body = saved.createBodies?.[saved.createBodies.length - 1];
+  if (body) {
+    const replay = await api('POST', '/api/review/tasks', JSON.parse(body), tokens.SJ);
+    step('接口复核：送审后按前端同一请求再保存 → 409 且带原因', replay.status === 409, { http: replay.status, body: JSON.stringify(replay.json).slice(0, 260) });
+  } else {
+    step('接口复核：没截到前端保存请求，跳过重放', false, '未截到 POST /api/review/tasks');
+  }
+  const d2 = await taskDetail(taskId, tokens.SJ);
+  h = await history(taskId, tokens.SJ);
+  step('被拒后任务构件不变、历史没多 resave', mentionsRef(d2.components, bran2) && d2.components.length === d1.components.length && h.lines.filter((l) => /resave/.test(l)).length === 1, { components: d2.components.length, history: h.lines });
+  current.api.rejectedLine = rejected.line;
+
+  await uiView(formId, tokens.JH, ROLES.JH, 'resave-jh-view', /2\s*(个)?构件/);
+
+  let s2 = snap(await sync(formId, tokens.JH, ROLES.JH, 'agree', '校对同意（线上验收 RESAVE）', ROLES.SH));
+  step('JH sync agree：/ sh', s2.current_node === 'sh', s2);
+  s2 = snap(await sync(formId, tokens.SH, ROLES.SH, 'agree', '审核同意（线上验收 RESAVE）', ROLES.PZ));
+  step('SH sync agree：/ pz', s2.current_node === 'pz', s2);
+  s2 = snap(await sync(formId, tokens.PZ, ROLES.PZ, 'agree', '批准通过（线上验收 RESAVE）'));
+  step('PZ sync agree：approved', s2.form_status === 'approved' && s2.task_status === 'approved', s2);
+  h = await history(taskId, tokens.PZ);
+  step('history：sj resave → sj submit → jd approve → sh approve → pz approve', /resave/.test(h.lines.join(' ')) && /pz approve/.test(h.lines[h.lines.length - 1] || ''), h.lines);
+  current.api.history = h.lines;
+}
+
+// ---------------------------------------------------------------------------
 // smoke：不建单、不推流程
 // ---------------------------------------------------------------------------
 async function smoke(tokens) {
@@ -639,6 +783,7 @@ async function main() {
     if (WHICH === 'smoke') await runCase(smoke, 'SMOKE');
     if (WHICH === 'tc1' || WHICH === 'all') await runCase(tc1, 'TC1');
     if (WHICH === 'tc2' || WHICH === 'all') await runCase(tc2, 'TC2');
+    if (WHICH === 'resave' || WHICH === 'all') await runCase(resave, 'RESAVE');
   } finally {
     await browser.close();
   }

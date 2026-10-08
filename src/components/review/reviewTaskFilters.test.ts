@@ -4,6 +4,7 @@ import {
   isCanonicalReturnedTask,
   isDesignerResubmissionTask,
   isRejectedDesignerTask,
+  isSavedDesignerDraftTask,
   getDesignerTaskStatusBucket,
   getResubmissionSubmissionCount,
   getResubmissionLatestReturnTime,
@@ -154,6 +155,17 @@ describe('reviewTaskFilters', () => {
     const task = createTask({ currentNode: 'pz', status: 'approved' });
 
     expect(getDesignerTaskStatusBucket(task)).toBe('approved');
+  });
+
+  it('treats plain sj drafts as saved designer drafts', () => {
+    expect(isSavedDesignerDraftTask(createTask({ currentNode: 'sj', status: 'draft' }))).toBe(true);
+  });
+
+  it('does not treat returned, submitted, rejected or cancelled tasks as saved designer drafts', () => {
+    expect(isSavedDesignerDraftTask(createTask({ currentNode: 'sj', status: 'draft', returnReason: '请补充材料' }))).toBe(false);
+    expect(isSavedDesignerDraftTask(createTask({ currentNode: 'jd', status: 'submitted' }))).toBe(false);
+    expect(isSavedDesignerDraftTask(createTask({ currentNode: 'sj', status: 'rejected', returnReason: '继续修改' }))).toBe(false);
+    expect(isSavedDesignerDraftTask(createTask({ currentNode: 'sj', status: 'cancelled' }))).toBe(false);
   });
 
   it('treats cancelled tasks as non-returned designer-visible other bucket', () => {
