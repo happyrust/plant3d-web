@@ -39,7 +39,7 @@
 - 需要专业关注的真实发现：24384/23257 与同一 PIPE 下名为 `/CODEX_DB8000_PIPE_SCR_A` 的 BRAN（32576/12）表面净距为 0（网格相交），该分支名称像是此前测试写入模型的临时管道，可能污染 D12 验收样例；24381/103251 与 24381/103294 两根 7 mm 仪表管表面相交，两者 HREF/TREF 都未连接，不是接管点接触。
 - 这是本机内存模式、ZONE 范围的开发验证，不是联调环境全量模型；没有和专业参考值对照。
 
-附件补充：[生成记录](pipe-local-backend-http-2026-10-08/local-backend-ensure.log)、[周边候选](pipe-local-backend-http-2026-10-08/local-backend-nearby.json)、[分页/子集/表面净距](pipe-local-backend-http-2026-10-08/local-backend-nearby-depth.json)。
+附件补充：[生成记录](pipe-local-backend-http-2026-10-08/local-backend-ensure.txt)、[周边候选](pipe-local-backend-http-2026-10-08/local-backend-nearby.json)、[分页/子集/表面净距](pipe-local-backend-http-2026-10-08/local-backend-nearby-depth.json)。
 
 ## 仍未完成
 
