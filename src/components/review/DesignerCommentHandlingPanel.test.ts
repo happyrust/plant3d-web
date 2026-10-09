@@ -778,6 +778,8 @@ describe('DesignerCommentHandlingPanel', () => {
     ];
 
     const mounted = await mountPanel();
+    document.querySelector<HTMLButtonElement>('[data-testid="designer-status-tab-all"]')!.click();
+    await flushUi();
     const fixedRow = document.querySelector<HTMLElement>('[data-testid="annotation-table-row-annot-fixed"]');
     expect(fixedRow).toBeTruthy();
     fixedRow!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
@@ -860,15 +862,19 @@ describe('DesignerCommentHandlingPanel', () => {
     mounted.unmount();
   });
 
-  it('确认与流转按钮禁用时写明原因', async () => {
+  it('单据没有任何批注时可直接流转，有未确认改动时写明原因', async () => {
     currentTaskRef.value = createTask();
     annotationsRef.value = [];
     measurementsRef.value = [];
 
     const mounted = await mountPanel();
+    const resubmitButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('流转回校对'));
 
+    expect(document.querySelector('[data-testid="annotation-table-empty"]')?.textContent).toContain('这张单没有需要处理的批注');
     expect(document.querySelector('[data-testid="designer-confirm-disabled-reason"]')?.textContent).toContain('没有未确认的改动');
-    expect(document.querySelector('[data-testid="designer-resubmit-disabled-reason"]')?.textContent).toContain('先确认当前数据后才能流转');
+    expect(document.querySelector('[data-testid="designer-resubmit-disabled-reason"]')).toBeNull();
+    expect(resubmitButton()?.disabled).toBe(false);
 
     annotationsRef.value = [{
       id: 'annot-new',
@@ -883,6 +889,112 @@ describe('DesignerCommentHandlingPanel', () => {
 
     expect(document.querySelector('[data-testid="designer-confirm-disabled-reason"]')).toBeNull();
     expect(document.querySelector('[data-testid="designer-resubmit-disabled-reason"]')?.textContent).toContain('还有未确认的改动');
+    expect(resubmitButton()?.disabled).toBe(true);
+
+    mounted.unmount();
+  });
+
+  it('顶栏显示退回来源与时间、不再显示草稿状态，退回意见单独成条', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const taskBar = document.querySelector('[data-testid="designer-task-bar"]');
+
+    expect(taskBar?.textContent).toContain('已退回');
+    expect(taskBar?.textContent).not.toContain('草稿');
+    expect(document.querySelector('[data-testid="designer-task-meta"]')?.textContent).toContain('（校核甲）');
+    expect(document.querySelector('[data-testid="designer-task-meta"]')?.textContent).not.toContain('约');
+    expect(document.querySelector('[data-testid="designer-return-opinion"]')?.textContent).toContain('请先处理批注');
+    expect(document.querySelector('[data-testid="designer-state-1"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('没有 return 步时退回来源显示「—」，时间标「约」', async () => {
+    currentTaskRef.value = createTask({ workflowHistory: [] });
+    returnedTasksRef.value = [currentTaskRef.value];
+
+    const mounted = await mountPanel();
+    const meta = document.querySelector('[data-testid="designer-task-meta"]')?.textContent ?? '';
+
+    expect(meta).toContain('退回自 —');
+    expect(meta).toContain('约');
+
+    mounted.unmount();
+  });
+
+  it('状态页签默认停在待处理，切到全部看到已处理的批注；进度按已处理计数', async () => {
+    currentTaskRef.value = createTask();
+    annotationsRef.value = [
+      {
+        id: 'annot-pending',
+        title: '待处理批注',
+        description: '',
+        createdAt: 10,
+        visible: true,
+        refnos: ['24381_145018'],
+        formId: 'FORM-1001',
+      },
+      {
+        id: 'annot-fixed',
+        title: '已修改批注',
+        description: '',
+        createdAt: 20,
+        visible: true,
+        refnos: ['24381_145020'],
+        formId: 'FORM-1001',
+        reviewState: { resolutionStatus: 'fixed', decisionStatus: 'pending', updatedAt: 1710000000000, history: [] },
+      },
+    ];
+
+    const mounted = await mountPanel();
+
+    expect(document.querySelector('[data-testid="designer-status-tab-pending"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[data-testid="annotation-table-row-annot-pending"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-table-row-annot-fixed"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-progress-count"]')?.textContent?.replace(/\s+/g, '')).toBe('1/2');
+    expect(document.querySelector('[data-testid="annotation-table-summary-pending"]')).toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-status-filter"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-pending-hint"]')?.textContent).toContain('还有 1 条待处理');
+
+    document.querySelector<HTMLButtonElement>('[data-testid="designer-status-tab-all"]')!.click();
+    await flushUi();
+
+    expect(document.querySelector('[data-testid="annotation-table-row-annot-pending"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-table-row-annot-fixed"]')).toBeTruthy();
+
+    mounted.unmount();
+  });
+
+  it('外部入口指向不在当前页签的批注时切到「全部」并展开它', async () => {
+    currentTaskRef.value = createTask();
+    annotationsRef.value = [
+      {
+        id: 'annot-pending',
+        title: '待处理批注',
+        description: '',
+        createdAt: 10,
+        visible: true,
+        refnos: ['24381_145018'],
+        formId: 'FORM-1001',
+      },
+      {
+        id: 'annot-fixed',
+        title: '已修改批注',
+        description: '',
+        createdAt: 20,
+        visible: true,
+        refnos: ['24381_145020'],
+        formId: 'FORM-1001',
+        reviewState: { resolutionStatus: 'fixed', decisionStatus: 'pending', updatedAt: 1710000000000, history: [] },
+      },
+    ];
+    setExternalEntryTarget({ annotationId: 'annot-fixed', annotationType: 'text', formId: 'FORM-1001' });
+
+    const mounted = await mountPanel();
+
+    expect(document.querySelector('[data-testid="designer-status-tab-all"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[data-testid="annotation-inline-detail-card"]')?.textContent).toContain('已修改批注');
 
     mounted.unmount();
   });

@@ -88,8 +88,9 @@ describe('DesignerTaskSwitcher', () => {
     expect(option2?.getAttribute('aria-selected')).toBe('false');
     expect(option1?.textContent).toContain('校对驳回：请处理批注后重提');
     expect(option1?.textContent).toContain('退回于');
+    expect(option1?.textContent).not.toContain('约');
     expect(option2?.textContent).toContain('请处理批注后重提');
-    expect(option2?.textContent).not.toContain('退回于');
+    expect(option2?.textContent).toContain('退回于 约');
   });
 
   it('选中另一张发 select 并收起；选中当前单只收起不发事件', async () => {

@@ -85,7 +85,8 @@ const reviewStates: Record<string, ReviewStateLike> = {
 };
 
 function makeTextAnnotation(partial: Partial<AnnotationRecord> & Pick<AnnotationRecord, 'id' | 'title'>): AnnotationRecord {
-  return {
+  // formId 不在 AnnotationRecord 类型里，按单据收敛时由 annotationWorkspaceModel 直接读记录上的这个字段
+  const record: AnnotationRecord & { formId?: string } = {
     entityId: 'harness-entity',
     worldPos: [0, 0, 0],
     visible: true,
@@ -96,6 +97,7 @@ function makeTextAnnotation(partial: Partial<AnnotationRecord> & Pick<Annotation
     formId: tasks[0]!.formId,
     ...partial,
   };
+  return record;
 }
 
 const seededAnnotations = [

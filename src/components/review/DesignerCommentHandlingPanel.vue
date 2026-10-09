@@ -39,8 +39,9 @@ import {
 } from './reviewPanelActions';
 import {
   getCanonicalReturnedMetadata,
-  getResubmissionLatestReturnTime,
+  getResubmissionReturnTimeInfo,
   isCanonicalReturnedTask,
+  sortTasksByLatestReturn,
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 import UnattributedDraftNotice from './UnattributedDraftNotice.vue';
@@ -121,7 +122,9 @@ onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 useAnnotationDraftScopeSync({ userId: () => userStore.currentUser.value?.id ?? null });
 const draftSession = useAnnotationDraftSession();
 
-const returnedTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
+const returnedTasks = computed(() => sortTasksByLatestReturn(
+  userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)),
+));
 const currentTask = computed(() => reviewStore.currentTask.value);
 const currentTaskIsReturned = computed(
   () => !!(currentTask.value && isCanonicalReturnedTask(currentTask.value)),
@@ -133,9 +136,39 @@ function goToReviewPanel() {
 const currentTaskStatus = computed(() => currentTask.value ? getTaskStatusDisplayName(currentTask.value.status) : null);
 const currentTaskPriority = computed(() => currentTask.value ? getPriorityDisplayName(currentTask.value.priority) : null);
 const returnedMetadata = computed(() => (currentTask.value ? getCanonicalReturnedMetadata(currentTask.value) : null));
-const latestReturnTimestamp = computed(() => (
-  currentTask.value ? getResubmissionLatestReturnTime(currentTask.value.workflowHistory || []) : null
-));
+const returnReasonText = computed(() => returnedMetadata.value?.returnReason || '未填写退回意见');
+const currentTaskMetaText = computed(() => {
+  const task = currentTask.value;
+  if (!task) return '';
+  const parts: string[] = [];
+  if (currentTaskIsReturned.value) {
+    const fromNode = returnedMetadata.value?.returnFromNode;
+    const operator = returnedMetadata.value?.latestReturnStep?.operatorName;
+    parts.push(`退回自 ${fromNode ? formatWorkflowNode(fromNode) : '—'}${operator ? `（${operator}）` : ''}`);
+    const { timestamp, approximate } = getResubmissionReturnTimeInfo(task);
+    if (timestamp) parts.push(`${approximate ? '约 ' : ''}${formatDateTime(timestamp)}`);
+  }
+  parts.push(`构件 ${task.components.length} 个`);
+  return parts.join(' · ');
+});
+
+const returnOpinionEl = ref<HTMLElement | null>(null);
+const returnOpinionExpanded = ref(false);
+const returnOpinionOverflows = ref(false);
+function measureReturnOpinion() {
+  const el = returnOpinionEl.value;
+  returnOpinionOverflows.value = !!el && el.scrollWidth > el.clientWidth + 1;
+}
+watch(returnOpinionEl, (el, _previous, onCleanup) => {
+  if (!el || typeof ResizeObserver === 'undefined') return;
+  const observer = new ResizeObserver(measureReturnOpinion);
+  observer.observe(el);
+  onCleanup(() => observer.disconnect());
+});
+watch(returnReasonText, () => {
+  returnOpinionExpanded.value = false;
+  void nextTick(measureReturnOpinion);
+});
 const currentTaskConfirmedRecords = confirmedRecordsRestorer.sceneRecords;
 const activeReviewFormId = computed(() => (
   annotationProcessingEntryTarget.value?.formId?.trim()
@@ -180,17 +213,60 @@ const scopedAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => (
 const annotationSummary = computed(() => (
   buildAnnotationWorkspaceSummary(scopedAnnotationItems.value)
 ));
-const annotationSummaryCards = computed(() => [
-  { id: 'total', label: '全部批注', count: annotationSummary.value.total },
-  { id: 'pending', label: '待处理', count: annotationSummary.value.pending },
-  { id: 'rejected', label: '已驳回', count: annotationSummary.value.rejected },
-  { id: 'fixed', label: '已修改', count: annotationSummary.value.fixed },
-  {
-    id: 'approved',
-    label: '已同意 / 不需解决',
-    count: annotationSummary.value.approved + annotationSummary.value.wontFix,
-  },
-]);
+// 状态页签与表格统计同一口径：待处理 = pending + rejected，已处理 = fixed + wont_fix，已通过 = approved
+type DesignerStatusTab = 'all' | 'pending' | 'handled' | 'approved';
+const STATUS_TAB_LABELS: Record<DesignerStatusTab, string> = {
+  all: '全部',
+  pending: '待处理',
+  handled: '已处理',
+  approved: '已通过',
+};
+
+function statusTabOf(item: AnnotationWorkspaceItem): Exclude<DesignerStatusTab, 'all'> {
+  if (item.statusKey === 'pending' || item.statusKey === 'rejected') return 'pending';
+  if (item.statusKey === 'approved') return 'approved';
+  return 'handled';
+}
+
+const statusTabCounts = computed<Record<DesignerStatusTab, number>>(() => ({
+  all: annotationSummary.value.total,
+  pending: annotationSummary.value.pending + annotationSummary.value.rejected,
+  handled: annotationSummary.value.fixed + annotationSummary.value.wontFix,
+  approved: annotationSummary.value.approved,
+}));
+const statusTabs = computed(() => (Object.keys(STATUS_TAB_LABELS) as DesignerStatusTab[]).map((id) => ({
+  id,
+  label: STATUS_TAB_LABELS[id],
+  count: statusTabCounts.value[id],
+})));
+// 只记用户点过的页签（按任务 / 单据分开）；没点过时有待处理就停在「待处理」
+const chosenStatusTabs = ref<Record<string, DesignerStatusTab>>({});
+const statusTabScopeKey = computed(() => currentTask.value?.id ?? activeReviewFormId.value ?? '');
+const activeStatusTab = computed<DesignerStatusTab>(() => (
+  chosenStatusTabs.value[statusTabScopeKey.value] ?? (statusTabCounts.value.pending > 0 ? 'pending' : 'all')
+));
+function setStatusTab(tab: DesignerStatusTab) {
+  chosenStatusTabs.value = { ...chosenStatusTabs.value, [statusTabScopeKey.value]: tab };
+}
+const tabAnnotationItems = computed(() => (
+  activeStatusTab.value === 'all'
+    ? scopedAnnotationItems.value
+    : scopedAnnotationItems.value.filter((item) => statusTabOf(item) === activeStatusTab.value)
+));
+const processedAnnotationCount = computed(() => statusTabCounts.value.handled + statusTabCounts.value.approved);
+const progressPercent = computed(() => (
+  statusTabCounts.value.all > 0 ? Math.round((processedAnnotationCount.value / statusTabCounts.value.all) * 100) : 0
+));
+const annotationEmptyTitle = computed(() => {
+  if (scopedAnnotationItems.value.length > 0) return `「${STATUS_TAB_LABELS[activeStatusTab.value]}」里没有批注`;
+  return currentTask.value ? '这张单没有需要处理的批注' : '当前单据还没有可处理的批注';
+});
+const annotationEmptyDescription = computed(() => {
+  if (scopedAnnotationItems.value.length > 0) return '切到「全部」查看其余批注。';
+  return currentTask.value
+    ? '可直接流转回校对；如果校对那边有批注，点「刷新任务」重新同步。'
+    : '批注同步后会自动出现在这里。';
+});
 const selectedAnnotation = computed(() => (
   scopedAnnotationItems.value.find(
     (item) => item.id === selectedAnnotationId.value && item.type === selectedAnnotationType.value,
@@ -241,10 +317,12 @@ const unsavedAnnotationCount = computed(() => (
 ));
 const unsavedMeasurementCount = computed(() => unsavedConfirmPayload.value.measurements.length);
 const canConfirmCurrentData = computed(() => hasUnsavedPendingData.value && hasReviewConfirmPayloadData(unsavedConfirmPayload.value));
+// 单据上没有任何批注 / 测量可确认时，「确认」永远点不了；不放行流转就会两头卡死（后端批注检查仍会把关）
+const hasNothingToConfirm = computed(() => !hasReviewConfirmPayloadData(currentDraftConfirmPayload.value));
 const canResubmitTask = computed(() => (
   !!currentTask.value
-  && currentTaskConfirmedRecords.value.length > 0
   && !hasUnsavedPendingData.value
+  && (currentTaskConfirmedRecords.value.length > 0 || hasNothingToConfirm.value)
 ));
 const confirmDisabledReason = computed(() => (
   canConfirmCurrentData.value || confirmSaving.value ? null : '没有未确认的改动'
@@ -254,7 +332,7 @@ const resubmitDisabledReason = computed(() => {
   if (hasUnsavedPendingData.value) {
     return canConfirmCurrentData.value ? '还有未确认的改动，请先确认当前数据' : '当前数据与已确认版本不一致';
   }
-  if (currentTaskConfirmedRecords.value.length === 0) return '先确认当前数据后才能流转';
+  if (currentTaskConfirmedRecords.value.length === 0 && !hasNothingToConfirm.value) return '先确认当前数据后才能流转';
   return null;
 });
 
@@ -332,11 +410,6 @@ function formatDateTime(timestamp?: number | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function getCurrentTaskNodeLabel(task?: ReviewTask | null): string {
-  if (!task?.currentNode) return '未开始';
-  return WORKFLOW_NODE_NAMES[task.currentNode] || task.currentNode;
 }
 
 function formatWorkflowNode(node?: ReviewTask['currentNode'] | null): string {
@@ -636,6 +709,9 @@ watch(
         (item) => item.id === target.annotationId && item.type === target.annotationType,
       )
       : null;
+    if (requested && activeStatusTab.value !== 'all' && statusTabOf(requested) !== activeStatusTab.value) {
+      setStatusTab('all');
+    }
     selectAnnotation(requested ?? null);
   },
   { immediate: true },
@@ -656,6 +732,25 @@ onMounted(() => {
         :error="tasksError"
         @select="selectTask"
         @retry="loadTasks" />
+      <template v-if="currentTask">
+        <span v-if="currentTaskIsReturned"
+          class="whitespace-nowrap rounded-full bg-danger-subtle px-2.5 py-0.5 text-xs font-semibold text-danger">
+          已退回
+        </span>
+        <span v-else-if="currentTaskStatus"
+          class="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold"
+          :class="currentTaskStatus.color">
+          {{ currentTaskStatus.label }}
+        </span>
+        <span v-if="currentTaskPriority"
+          class="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold"
+          :class="currentTaskPriority.color">
+          优先级 {{ currentTaskPriority.label }}
+        </span>
+        <span class="min-w-0 truncate text-xs text-slate-500" data-testid="designer-task-meta" :title="currentTaskMetaText">
+          {{ currentTaskMetaText }}
+        </span>
+      </template>
       <div v-if="currentTask" class="ml-auto flex shrink-0 items-center gap-2">
         <button type="button"
           class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -673,57 +768,30 @@ onMounted(() => {
       </div>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto bg-[#FCFDFE]" data-testid="designer-comment-scroll">
-      <div class="flex min-h-full flex-col p-4">
-        <template v-if="canShowAnnotationSheet">
-          <div v-if="currentTask" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="designer-state-1">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0 space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="text-xl font-semibold text-slate-950">{{ currentTask.title }}</h2>
-                  <span class="rounded-full bg-danger-subtle px-2.5 py-1 text-xs font-semibold text-danger">已退回</span>
-                  <span v-if="currentTaskStatus" class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                    :class="currentTaskStatus.color">
-                    {{ currentTaskStatus.label }}
-                  </span>
-                  <span v-if="currentTaskPriority" class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                    :class="currentTaskPriority.color">
-                    {{ currentTaskPriority.label }}
-                  </span>
-                </div>
-                <p class="text-sm leading-6 text-slate-600">{{ currentTask.description || '请逐条处理被退回批注，并在确认当前数据后回外部平台继续流转。' }}</p>
-                <div class="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
-                  <div class="rounded-xl bg-slate-50 px-3 py-2.5">
-                    <div class="text-xs text-slate-400">退回节点</div>
-                    <div class="mt-1 font-medium text-slate-900">{{ returnedMetadata?.returnNode ? getCurrentTaskNodeLabel({ currentNode: returnedMetadata.returnNode } as ReviewTask) : '—' }}</div>
-                  </div>
-                  <div class="rounded-xl bg-slate-50 px-3 py-2.5">
-                    <div class="text-xs text-slate-400">退回时间</div>
-                    <div class="mt-1 font-medium text-slate-900">{{ formatDateTime(latestReturnTimestamp) }}</div>
-                  </div>
-                  <div class="rounded-xl bg-slate-50 px-3 py-2.5">
-                    <div class="text-xs text-slate-400">当前节点</div>
-                    <div class="mt-1 font-medium text-slate-900">{{ getCurrentTaskNodeLabel(currentTask) }}</div>
-                  </div>
-                  <div class="rounded-xl bg-slate-50 px-3 py-2.5">
-                    <div class="text-xs text-slate-400">构件数</div>
-                    <div class="mt-1 font-medium text-slate-900">{{ currentTask.components.length }} 个</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="mt-4 rounded-2xl border border-danger/30 bg-danger-subtle px-4 py-3 text-sm text-danger">
-              <div class="flex items-start gap-2">
-                <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  <div class="font-semibold">退回意见</div>
-                  <div class="mt-1 leading-6">{{ returnedMetadata?.returnReason || '未填写退回意见' }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
+    <div v-if="currentTask && currentTaskIsReturned"
+      class="flex shrink-0 items-start gap-2 border-b border-danger/20 bg-danger-subtle px-4 py-2 text-sm text-danger"
+      data-testid="designer-return-opinion">
+      <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+      <span class="shrink-0 font-semibold">退回意见</span>
+      <span ref="returnOpinionEl"
+        class="min-w-0 flex-1"
+        :class="returnOpinionExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'"
+        :title="returnOpinionExpanded ? undefined : returnReasonText">
+        {{ returnReasonText }}
+      </span>
+      <button v-if="returnOpinionExpanded || returnOpinionOverflows"
+        type="button"
+        class="shrink-0 whitespace-nowrap border-0 bg-transparent p-0 text-xs font-medium text-danger underline"
+        data-testid="designer-return-opinion-toggle"
+        @click="returnOpinionExpanded = !returnOpinionExpanded">
+        {{ returnOpinionExpanded ? '收起' : '展开全文' }}
+      </button>
+    </div>
 
-          <div v-else
+    <div class="min-h-0 flex-1 overflow-y-auto bg-[#FCFDFE]" data-testid="designer-comment-scroll">
+      <div class="flex min-h-full flex-col gap-3 p-4">
+        <template v-if="canShowAnnotationSheet">
+          <div v-if="!currentTask"
             class="rounded-2xl border border-brand/30 bg-brand-subtle p-5"
             data-testid="designer-state-1">
             <h2 class="text-xl font-semibold text-slate-950">外部批注单</h2>
@@ -734,21 +802,42 @@ onMounted(() => {
 
           <div v-if="hasUnmatchedExternalEntry"
             data-testid="external-entry-unmatched-task"
-            class="mt-3 rounded-xl border border-warning bg-warning-subtle px-4 py-3 text-sm text-warning">
+            class="rounded-xl border border-warning bg-warning-subtle px-4 py-3 text-sm text-warning">
             当前批注未匹配到内部任务，处理动作与任务级确认暂不可用。
           </div>
 
-          <div class="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
-            <div v-for="card in annotationSummaryCards"
-              :key="card.id"
-              class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div class="text-xs text-slate-400">{{ card.label }}</div>
-              <div class="mt-2 text-2xl font-semibold text-slate-950">{{ card.count }}</div>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="designer-annotation-progress">
+            <div class="w-44 shrink-0">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-500">处理进度</span>
+                <span class="font-semibold text-slate-900" data-testid="designer-progress-count">
+                  {{ processedAnnotationCount }} / {{ statusTabCounts.all }}
+                </span>
+              </div>
+              <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div class="h-full rounded-full bg-success transition-[width]" :style="{ width: `${progressPercent}%` }" />
+              </div>
+            </div>
+            <div class="flex items-center gap-0.5 rounded-lg bg-slate-200/70 p-0.5" role="tablist" aria-label="批注处理状态">
+              <button v-for="tab in statusTabs"
+                :key="tab.id"
+                type="button"
+                role="tab"
+                class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border-0 px-2.5 py-1 text-xs"
+                :class="activeStatusTab === tab.id ? 'bg-white font-semibold text-slate-950 shadow-sm' : 'bg-transparent font-medium text-slate-600 hover:text-slate-900'"
+                :aria-selected="activeStatusTab === tab.id"
+                :data-testid="`designer-status-tab-${tab.id}`"
+                @click="setStatusTab(tab.id)">
+                {{ tab.label }}
+                <span class="text-[11px] font-semibold" :class="tab.id === 'pending' && tab.count > 0 ? 'text-warning' : 'text-slate-400'">
+                  {{ tab.count }}
+                </span>
+              </button>
             </div>
           </div>
 
           <div v-if="currentTask"
-            class="mt-4 space-y-2 empty:hidden"
+            class="space-y-2 empty:hidden"
             data-testid="designer-task-restore-notices">
             <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
               :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
@@ -759,11 +848,11 @@ onMounted(() => {
               @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
           </div>
 
-          <div class="mt-4 flex flex-col"
+          <div class="flex flex-col"
             data-testid="designer-comment-annotation-list">
             <UnattributedDraftNotice />
             <AnnotationSheetWorkspace class="min-h-0 flex-1"
-              :items="scopedAnnotationItems"
+              :items="tabAnnotationItems"
               :current-annotation-id="selectedAnnotationId"
               :current-annotation-type="selectedAnnotationType"
               :current-user-role="userStore.currentUser.value?.role ?? null"
@@ -781,8 +870,9 @@ onMounted(() => {
               :saving-severity-keys="savingSeverityKeys"
               :saving-title-keys="savingTitleKeys"
               designer-only
-              empty-title="当前单据还没有可处理的批注"
-              empty-description="批注同步后会自动出现在这里。"
+              hide-status-controls
+              :empty-title="annotationEmptyTitle"
+              :empty-description="annotationEmptyDescription"
               @select-annotation="selectAnnotation"
               @locate-annotation="(item) => void locateAnnotation(item)"
               @locate-elements="(payload) => void locateElements(payload)"
@@ -827,6 +917,9 @@ onMounted(() => {
             :class="unsavedAnnotationCount + unsavedMeasurementCount > 0 ? 'text-warning' : 'text-slate-500'"
             data-testid="designer-unconfirmed-summary">
             未确认 {{ unsavedAnnotationCount }} 条批注 / {{ unsavedMeasurementCount }} 条测量
+            <span v-if="statusTabCounts.pending > 0" class="text-slate-500" data-testid="designer-pending-hint">
+              · 还有 {{ statusTabCounts.pending }} 条待处理
+            </span>
           </div>
         </div>
         <input v-model="confirmNote"

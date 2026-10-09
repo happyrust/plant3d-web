@@ -79,6 +79,8 @@ const props = withDefaults(defineProps<{
   savingTitleKeys?: string[];
   /** 判断处理成功后仍需要当前角色处理的批注。 */
   isItemActionable?: (item: AnnotationWorkspaceItem) => boolean;
+  /** 状态分组由父组件的页签负责时，隐藏表内的状态下拉与三颗统计药丸 */
+  hideStatusControls?: boolean;
 }>(), {
   currentAnnotationId: null,
   currentAnnotationType: null,
@@ -91,6 +93,7 @@ const props = withDefaults(defineProps<{
   savingSeverityKeys: () => [],
   savingTitleKeys: () => [],
   isItemActionable: () => false,
+  hideStatusControls: false,
 });
 
 const emit = defineEmits<{
@@ -679,7 +682,8 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
       </select>
 
       <!-- Status filter -->
-      <select :value="filters.status"
+      <select v-if="!hideStatusControls"
+        :value="filters.status"
         class="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300"
         data-testid="annotation-table-status-filter"
         @change="setStatusFilter(($event.target as HTMLSelectElement).value as any)">
@@ -690,19 +694,21 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
     <!-- Stats -->
     <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px]">
       <span class="font-semibold text-slate-950">共 {{ summaryCounts.total }} 条</span>
-      <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-warning" data-testid="annotation-table-summary-pending">待处理 {{ summaryCounts.pending }}</span>
-      <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-brand" data-testid="annotation-table-summary-handled">已处理 {{ summaryCounts.handled }}</span>
-      <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-success" data-testid="annotation-table-summary-approved">已通过 {{ summaryCounts.approved }}</span>
+      <template v-if="!hideStatusControls">
+        <span class="h-1 w-1 rounded-full bg-slate-300" />
+        <span class="font-medium text-warning" data-testid="annotation-table-summary-pending">待处理 {{ summaryCounts.pending }}</span>
+        <span class="h-1 w-1 rounded-full bg-slate-300" />
+        <span class="font-medium text-brand" data-testid="annotation-table-summary-handled">已处理 {{ summaryCounts.handled }}</span>
+        <span class="h-1 w-1 rounded-full bg-slate-300" />
+        <span class="font-medium text-success" data-testid="annotation-table-summary-approved">已通过 {{ summaryCounts.approved }}</span>
+      </template>
       <span v-if="totalCount !== summaryCounts.total" class="ml-2 italic text-slate-400"
         data-testid="annotation-table-filter-hint">
         · 筛选后 {{ totalCount }} 条
       </span>
       <button v-if="hasActiveFilters"
         type="button"
-        class="ml-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-white hover:text-slate-900"
+        class="ml-2 inline-flex items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-white hover:text-slate-900"
         data-testid="annotation-table-clear-filters"
         title="清除搜索与筛选条件"
         @click="clearFilters">
@@ -712,7 +718,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
       <div class="flex-1" />
 
       <button type="button"
-        class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        class="inline-flex items-center gap-1.5 rounded-md border border-solid border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
         :disabled="totalCount === 0"
         data-testid="annotation-table-export"
         @click="handleExport">
@@ -733,7 +739,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           当前共 {{ summaryCounts.total }} 条批注，全部被搜索或筛选条件排除。
         </div>
         <button type="button"
-          class="mt-1 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          class="mt-1 inline-flex items-center gap-1.5 rounded-md border border-solid border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
           data-testid="annotation-table-empty-clear-filters"
           @click="clearFilters">
           <FilterX class="h-3.5 w-3.5" />
@@ -754,7 +760,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         <div role="row" class="flex h-9 items-center border-b border-slate-200 bg-slate-50 px-4 text-[11px] font-semibold text-slate-950">
           <div role="columnheader" :aria-sort="ariaSortFor('index')" class="w-10">
             <button type="button"
-              class="w-full text-center flex items-center justify-center gap-1 hover:text-brand"
+              class="flex w-full items-center justify-center gap-1 border-0 bg-transparent p-0 text-center hover:text-brand"
               data-testid="annotation-table-sort-index"
               @click="onHeaderClick('index')">
               <span>序号</span>
@@ -765,7 +771,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           </div>
           <div role="columnheader" :aria-sort="ariaSortFor('severity')" class="w-24">
             <button type="button"
-              class="w-full text-left flex items-center gap-1 hover:text-brand"
+              class="flex w-full items-center gap-1 border-0 bg-transparent p-0 text-left hover:text-brand"
               data-testid="annotation-table-sort-severity"
               @click="onHeaderClick('severity')">
               <span>错误标记</span>
@@ -777,7 +783,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <div role="columnheader" class="flex-1">校核发现问题</div>
           <div role="columnheader" :aria-sort="ariaSortFor('status')" :class="isWide ? 'w-56' : 'w-40'">
             <button type="button"
-              class="w-full text-left flex items-center gap-1 hover:text-brand"
+              class="flex w-full items-center gap-1 border-0 bg-transparent p-0 text-left hover:text-brand"
               data-testid="annotation-table-sort-status"
               @click="onHeaderClick('status')">
               <span>处理情况</span>
@@ -840,7 +846,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               <div role="gridcell" class="flex flex-1 items-center gap-3 pr-4 text-xs leading-snug text-slate-700">
                 <button v-if="item.thumbnailUrl"
                   type="button"
-                  class="h-11 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                  class="h-11 w-14 shrink-0 overflow-hidden rounded-lg border border-solid border-slate-200 bg-slate-100 p-0"
                   title="查看批注截图"
                   @click.stop="openScreenshotPreview(item)">
                   <img :src="item.thumbnailUrl"
@@ -864,7 +870,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                     @blur="commitTitleEdit($event, item)" />
                   <button v-else-if="canEditInline(item)"
                     type="button"
-                    class="max-w-full text-left font-semibold text-slate-950 hover:text-brand disabled:cursor-wait disabled:opacity-60"
+                    class="max-w-full border-0 bg-transparent p-0 text-left font-semibold text-slate-950 hover:text-brand disabled:cursor-wait disabled:opacity-60"
                     :disabled="isTitleSaving(item)"
                     :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
                     :data-testid="`annotation-table-title-${item.id}`"
@@ -901,21 +907,21 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               <!-- 操作列 -->
               <div role="gridcell" class="w-24 flex justify-center gap-2 text-slate-400">
                 <button type="button"
-                  class="hover:text-slate-900"
+                  class="rounded border-0 bg-transparent p-1 hover:bg-slate-100 hover:text-slate-900"
                   title="定位"
                   :data-testid="`annotation-table-locate-${item.id}`"
                   @click.stop="emit('locate-annotation', item)">
                   <LocateFixed class="h-3.5 w-3.5" />
                 </button>
                 <button type="button"
-                  class="hover:text-slate-900"
+                  class="rounded border-0 bg-transparent p-1 hover:bg-slate-100 hover:text-slate-900"
                   title="详情"
                   :data-testid="`annotation-table-comment-${item.id}`"
                   @click.stop="openInlineDetail(item)">
                   <MessageSquare class="h-3.5 w-3.5" />
                 </button>
                 <button type="button"
-                  class="hover:text-slate-900"
+                  class="rounded border-0 bg-transparent p-1 hover:bg-slate-100 hover:text-slate-900"
                   title="复制"
                   :data-testid="`annotation-table-copy-${item.id}`"
                   @click.stop="() => void copyRowInline(item)">
@@ -980,21 +986,21 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             </span>
             <span class="ml-auto flex gap-1.5 text-slate-400">
               <button type="button"
-                class="hover:text-slate-900"
+                class="rounded border-0 bg-transparent p-1 hover:bg-slate-100 hover:text-slate-900"
                 title="定位"
                 :data-testid="`annotation-table-locate-${item.id}`"
                 @click.stop="emit('locate-annotation', item)">
                 <LocateFixed class="h-4 w-4" />
               </button>
               <button type="button"
-                class="hover:text-slate-900"
+                class="rounded border-0 bg-transparent p-1 hover:bg-slate-100 hover:text-slate-900"
                 title="详情"
                 :data-testid="`annotation-table-comment-${item.id}`"
                 @click.stop="openInlineDetail(item)">
                 <MessageSquare class="h-4 w-4" />
               </button>
               <button type="button"
-                class="hover:text-slate-900"
+                class="rounded border-0 bg-transparent p-1 hover:bg-slate-100 hover:text-slate-900"
                 title="复制"
                 :data-testid="`annotation-table-copy-${item.id}`"
                 @click.stop="() => void copyRowInline(item)">
@@ -1007,7 +1013,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <div class="mt-2 flex gap-3">
             <button v-if="item.thumbnailUrl"
               type="button"
-              class="h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+              class="h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-solid border-slate-200 bg-slate-100 p-0"
               title="查看批注截图"
               @click.stop="openScreenshotPreview(item)">
               <img :src="item.thumbnailUrl"
@@ -1030,7 +1036,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                 @blur="commitTitleEdit($event, item)" />
               <button v-else-if="canEditInline(item)"
                 type="button"
-                class="max-w-full text-left text-sm font-semibold text-slate-950 line-clamp-1 hover:text-brand disabled:cursor-wait disabled:opacity-60"
+                class="max-w-full border-0 bg-transparent p-0 text-left text-sm font-semibold text-slate-950 line-clamp-1 hover:text-brand disabled:cursor-wait disabled:opacity-60"
                 :disabled="isTitleSaving(item)"
                 :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
                 :data-testid="`annotation-table-title-${item.id}`"
@@ -1073,7 +1079,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         <span>当前 {{ pageStart }}-{{ pageEnd }} · 共 {{ totalCount }} 条</span>
         <div class="flex items-center gap-1.5">
           <button type="button"
-            class="rounded border border-slate-200 bg-white p-1 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            class="rounded border border-solid border-slate-200 bg-white p-1 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="currentPage <= 1"
             data-testid="annotation-table-prev"
             @click="goPrev">
@@ -1083,7 +1089,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             {{ currentPage }}/{{ totalPages }}
           </span>
           <button type="button"
-            class="rounded border border-slate-200 bg-white p-1 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            class="rounded border border-solid border-slate-200 bg-white p-1 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="currentPage >= totalPages"
             data-testid="annotation-table-next"
             @click="goNext">
@@ -1105,7 +1111,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           批注 #{{ (currentPage - 1) * pageSize + filteredItems.indexOf(contextMenu.item) + 1 }}
         </div>
         <button type="button"
-          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          class="flex w-full items-center gap-3 border-0 bg-transparent px-3 py-1.5 text-left hover:bg-slate-50"
           data-testid="annotation-table-ctx-locate"
           @click="menuLocate">
           <LocateFixed class="h-4 w-4 text-slate-500" />
@@ -1113,7 +1119,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <span class="text-[11px] text-slate-400">Enter</span>
         </button>
         <button type="button"
-          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          class="flex w-full items-center gap-3 border-0 bg-transparent px-3 py-1.5 text-left hover:bg-slate-50"
           data-testid="annotation-table-ctx-open"
           @click="menuOpenDetail">
           <MessageSquare class="h-4 w-4 text-slate-500" />
@@ -1121,7 +1127,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         </button>
         <div class="my-1 h-px bg-slate-100" />
         <button type="button"
-          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          class="flex w-full items-center gap-3 border-0 bg-transparent px-3 py-1.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="!pickItemRefno(contextMenu.item)"
           data-testid="annotation-table-ctx-copy-refno"
           @click="menuCopyRefno">
@@ -1133,7 +1139,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           </span>
         </button>
         <button type="button"
-          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          class="flex w-full items-center gap-3 border-0 bg-transparent px-3 py-1.5 text-left hover:bg-slate-50"
           data-testid="annotation-table-ctx-copy-row"
           @click="menuCopyRowAsCsv">
           <span class="inline-flex h-4 w-4 items-center justify-center text-[13px] text-slate-500">📋</span>

@@ -26,6 +26,8 @@ export function getCanonicalReturnedMetadata(task: ReviewTask): {
   latestReturnStep: WorkflowStep | null;
   returnReason: string | null;
   returnNode: WorkflowStep['node'] | ReviewTask['currentNode'] | null;
+  /** 执行退回的节点；流转历史里没有 return 步时为 null，不拿 currentNode 顶替 */
+  returnFromNode: WorkflowStep['node'] | null;
 } {
   const latestReturnStep = getLatestReturnStep(task);
 
@@ -33,6 +35,7 @@ export function getCanonicalReturnedMetadata(task: ReviewTask): {
     latestReturnStep,
     returnReason: latestReturnStep?.comment || task.returnReason || task.reviewComment || null,
     returnNode: latestReturnStep?.node || task.currentNode || null,
+    returnFromNode: latestReturnStep?.node ?? null,
   };
 }
 
@@ -98,4 +101,22 @@ export function getResubmissionLatestReturnTime(history: WorkflowStep[]): number
   const returnSteps = history.filter((item) => item.action === 'return');
   if (returnSteps.length === 0) return null;
   return Math.max(...returnSteps.map((item) => item.timestamp));
+}
+
+/**
+ * 退回时间：优先取流转历史里最近的 return 步；外部流转只带了 returnReason、没写 return 步时
+ * 回退到 updatedAt，并标 approximate，界面上要写「约」。
+ */
+export function getResubmissionReturnTimeInfo(task: ReviewTask): { timestamp: number | null; approximate: boolean } {
+  const exact = getResubmissionLatestReturnTime(task.workflowHistory || []);
+  if (exact) return { timestamp: exact, approximate: false };
+  if (task.updatedAt) return { timestamp: task.updatedAt, approximate: true };
+  return { timestamp: null, approximate: false };
+}
+
+/** 按退回时间倒序（口径同 getResubmissionReturnTimeInfo），时间相同保持原顺序 */
+export function sortTasksByLatestReturn(tasks: ReviewTask[]): ReviewTask[] {
+  return [...tasks].sort((a, b) => (
+    (getResubmissionReturnTimeInfo(b).timestamp ?? 0) - (getResubmissionReturnTimeInfo(a).timestamp ?? 0)
+  ));
 }

@@ -8,6 +8,9 @@ import {
   getDesignerTaskStatusBucket,
   getResubmissionSubmissionCount,
   getResubmissionLatestReturnTime,
+  getCanonicalReturnedMetadata,
+  getResubmissionReturnTimeInfo,
+  sortTasksByLatestReturn,
 } from './reviewTaskFilters';
 
 import type { ReviewTask } from '@/types/auth';
@@ -192,5 +195,39 @@ describe('reviewTaskFilters', () => {
     ]);
 
     expect(latest).toBe(5);
+  });
+
+  it('reports the returning node only from a real return step', () => {
+    const withStep = createTask({
+      workflowHistory: [{ node: 'jd', action: 'return', operatorId: 'u2', operatorName: 'B', timestamp: 2 }],
+    });
+    const withoutStep = createTask({ returnReason: '请处理批注后重提' });
+
+    expect(getCanonicalReturnedMetadata(withStep)).toMatchObject({ returnFromNode: 'jd', returnNode: 'jd' });
+    expect(getCanonicalReturnedMetadata(withoutStep)).toMatchObject({ returnFromNode: null, returnNode: 'sj' });
+  });
+
+  it('falls back to updatedAt as an approximate return time when no return step exists', () => {
+    const withStep = createTask({
+      updatedAt: 9,
+      workflowHistory: [{ node: 'jd', action: 'return', operatorId: 'u2', operatorName: 'B', timestamp: 5 }],
+    });
+    const withoutStep = createTask({ updatedAt: 7, returnReason: '请处理批注后重提' });
+
+    expect(getResubmissionReturnTimeInfo(withStep)).toEqual({ timestamp: 5, approximate: false });
+    expect(getResubmissionReturnTimeInfo(withoutStep)).toEqual({ timestamp: 7, approximate: true });
+  });
+
+  it('sorts tasks by latest (exact or approximate) return time and keeps ties stable', () => {
+    const exactOld = createTask({
+      id: 'exact-old',
+      workflowHistory: [{ node: 'jd', action: 'return', operatorId: 'u2', operatorName: 'B', timestamp: 3 }],
+    });
+    const approxNew = createTask({ id: 'approx-new', updatedAt: 8 });
+    const tieA = createTask({ id: 'tie-a', updatedAt: 5 });
+    const tieB = createTask({ id: 'tie-b', updatedAt: 5 });
+
+    expect(sortTasksByLatestReturn([exactOld, tieA, approxNew, tieB]).map((task) => task.id))
+      .toEqual(['approx-new', 'tie-a', 'tie-b', 'exact-old']);
   });
 });

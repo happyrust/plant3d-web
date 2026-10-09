@@ -44,6 +44,7 @@ const props = withDefaults(defineProps<{
   designerOnly?: boolean;
   showMeasurementActions?: boolean;
   showElevationMeasurementActions?: boolean;
+  hideStatusControls?: boolean;
 }>(), {
   currentAnnotationId: null,
   currentAnnotationType: null,
@@ -67,6 +68,7 @@ const props = withDefaults(defineProps<{
   designerOnly: undefined,
   showMeasurementActions: true,
   showElevationMeasurementActions: true,
+  hideStatusControls: false,
 });
 
 const emit = defineEmits<{
@@ -145,6 +147,7 @@ watch(
       :is-item-actionable="isItemActionable"
       :saving-severity-keys="savingSeverityKeys"
       :saving-title-keys="savingTitleKeys"
+      :hide-status-controls="hideStatusControls"
       @select-annotation="emit('select-annotation', $event)"
       @locate-annotation="emit('locate-annotation', $event)"
       @copy-feedback="emit('copy-feedback', $event)"

@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import { ChevronsUpDown, FileText, RefreshCw } from 'lucide-vue-next';
 
-import { getCanonicalReturnedMetadata, getResubmissionLatestReturnTime } from './reviewTaskFilters';
+import { getCanonicalReturnedMetadata, getResubmissionReturnTimeInfo } from './reviewTaskFilters';
 
 import type { ReviewTask } from '@/types/auth';
 
@@ -60,14 +60,15 @@ function returnReasonOf(task: ReviewTask): string {
 }
 
 function returnTimeOf(task: ReviewTask): string | null {
-  const timestamp = getResubmissionLatestReturnTime(task.workflowHistory || []);
+  const { timestamp, approximate } = getResubmissionReturnTimeInfo(task);
   if (!timestamp) return null;
-  return new Date(timestamp).toLocaleString('zh-CN', {
+  const text = new Date(timestamp).toLocaleString('zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   });
+  return approximate ? `约 ${text}` : text;
 }
 
 function focusOption(index: number) {
