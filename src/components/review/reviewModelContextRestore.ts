@@ -1,16 +1,16 @@
 import { isReviewModelContext, type ReviewModelContext } from './reviewModelContext';
 
 import type { TreeDiffContext } from '@/composables/useTreeVersionDiff';
-import type { ModelVersion, ModelVersionGeometry, ModelVersionSource } from '@/model-source/ports';
+import type { ModelVersion, ModelVersionSource } from '@/model-source/ports';
+import type { ModelUnitCompareAttributesAt, ModelUnitVersionCompareOpenDetail } from '@/utils/modelUnitVersionCompare';
 
 import {
-  buildTreeDiffModels,
-  compareModelUnitGeometry,
-  geometrySnapshotsFromInstanceEntries,
-  mergeModelUnitVersionSides,
-  type ModelUnitVersionCompareOpenDetail,
-  type ModelUnitVersionCompareUnit,
-} from '@/utils/modelUnitVersionCompare';
+  buildModelUnitCompareView,
+  loadModelUnitComparePairs,
+  ModelUnitCompareCancelledError,
+  pickModelUnitCompareGeometry,
+  type ModelUnitComparePair,
+} from '@/utils/modelUnitCompareLoader';
 
 export type LoadedReviewModelComparison = {
   detail: ModelUnitVersionCompareOpenDetail;
@@ -56,83 +56,57 @@ export async function loadReviewModelComparison(
     throw new Error('保存的容器会话与首个单元会话不一致');
   const sessionTimes = lookupSessionTimes(source, comparison.dbnum, normalize(comparison.refno),
     [...new Set(pairs.flatMap(pair => [pair.a, pair.b]))]);
-  const held = new Set<ModelVersionGeometry>();
+  const check = () => { if (!shouldApply()) throw new Error('历史模型恢复已取消'); };
+  const resolved: ModelUnitComparePair[] = [];
+  for (const pair of pairs) {
+    check();
+    const refno = normalize(pair.refno);
+    // 精确属性净差在服务端校验会话链序和两端存在性；两端都不存在会报 REFNO_NOT_FOUND。
+    const identity = await source.attributeDiff(comparison.dbnum, refno, pair.a, pair.b);
+    check();
+    if (identity.dbnum !== comparison.dbnum || normalize(identity.refno) !== refno
+      || identity.a !== pair.a || identity.b !== pair.b || !identity.unitRefno || normalize(identity.unitRefno) !== refno)
+      throw new Error(`历史查询未返回单元 ${refno} 的精确 A/B 身份`);
+    const unitNoun = identity.unitNoun ?? identity.noun;
+    const version = (sesno: number, absent: boolean): ModelVersion => ({
+      dbnum: comparison.dbnum, unitRefno: refno, unitNoun, sesno, sessionTime: null, impactKind: absent ? 'tombstone' : 'mesh',
+    });
+    resolved.push({ unitRefno: refno, unitNoun,
+      before: version(pair.a, identity.kind === 'created'), after: version(pair.b, identity.kind === 'deleted') });
+  }
+  const load = await loadModelUnitComparePairs(resolved, { loadVersion: version => source.loadVersion(version), shouldApply })
+    .catch((error: unknown) => { throw error instanceof ModelUnitCompareCancelledError ? new Error('历史模型恢复已取消') : error; });
   let released = false;
   const release = async () => {
-    if (released) return;
     released = true;
-    const results = await Promise.allSettled([...held].map(geometry => geometry.release()));
-    for (const result of results) if (result.status === 'rejected') console.warn('[review model restore] snapshot release failed', result.reason);
+    await load.release();
   };
-  const check = () => { if (!shouldApply()) throw new Error('历史模型恢复已取消'); };
-  const loaded: { unit: ModelUnitVersionCompareUnit; before: ModelVersionGeometry; after: ModelVersionGeometry }[] = [];
   try {
-    for (const pair of pairs) {
-      check();
-      const refno = normalize(pair.refno);
-      // 精确属性净差在服务端校验会话链序和两端存在性；两端都不存在会报 REFNO_NOT_FOUND。
-      const identity = await source.attributeDiff(comparison.dbnum, refno, pair.a, pair.b);
-      check();
-      if (identity.dbnum !== comparison.dbnum || normalize(identity.refno) !== refno
-        || identity.a !== pair.a || identity.b !== pair.b || !identity.unitRefno || normalize(identity.unitRefno) !== refno)
-        throw new Error(`历史查询未返回单元 ${refno} 的精确 A/B 身份`);
-      const version = (sesno: number, absent: boolean): ModelVersion => ({
-        dbnum: comparison.dbnum, unitRefno: refno, unitNoun: identity.unitNoun ?? identity.noun,
-        sesno, sessionTime: null, impactKind: absent ? 'tombstone' : 'mesh',
-      });
-      const beforeVersion = version(pair.a, identity.kind === 'created');
-      const afterVersion = version(pair.b, identity.kind === 'deleted');
-      // 每个单元两份并发；等待两份都落地后再处理失败，以便释放成功的那一份。
-      const results = await Promise.allSettled([beforeVersion, afterVersion].map(async item => {
-        const geometry = await source.loadVersion(item);
-        held.add(geometry);
-        return geometry;
-      }));
-      const failure = results.find(result => result.status === 'rejected');
-      if (failure?.status === 'rejected') throw failure.reason;
-      check();
-      const before = (results[0] as PromiseFulfilledResult<ModelVersionGeometry>).value;
-      const after = (results[1] as PromiseFulfilledResult<ModelVersionGeometry>).value;
-      for (const [item, geometry] of [[beforeVersion, before], [afterVersion, after]] as const) {
-        if (item.impactKind === 'tombstone' && (geometry.refnos.length || geometry.entries.size))
-          throw new Error(`历史查询为不存在的单元 ${refno}@${item.sesno} 返回了几何`);
-      }
-      const rows = compareModelUnitGeometry(geometrySnapshotsFromInstanceEntries(before.entries), geometrySnapshotsFromInstanceEntries(after.entries));
-      loaded.push({ before, after, unit: {
-        unitRefno: refno, unitNoun: beforeVersion.unitNoun,
-        before: { version: beforeVersion, sesno: pair.a, refnos: before.refnos, entries: before.entries },
-        after: { version: afterVersion, sesno: pair.b, refnos: after.refnos, entries: after.entries }, rows,
-      } });
-    }
     check();
+    for (const { pair, geometries } of load.pairs) {
+      for (const side of ['before', 'after'] as const) {
+        if (pair[side].impactKind === 'tombstone' && (geometries[side].refnos.length || geometries[side].entries.size))
+          throw new Error(`历史查询为不存在的单元 ${pair.unitRefno}@${pair[side].sesno} 返回了几何`);
+      }
+    }
     const times = await sessionTimes;
     check();
-    for (const { unit } of loaded) for (const side of [unit.before, unit.after])
-      side.version = { ...side.version, sessionTime: times.get(side.sesno) ?? null };
-    const units = loaded.map(item => item.unit);
-    const attributesAt: NonNullable<ModelUnitVersionCompareOpenDetail['attributesAt']> = async (side, rawRefno, signal) => {
+    const timed = (version: ModelVersion): ModelVersion => ({ ...version, sessionTime: times.get(version.sesno) ?? null });
+    const loaded = load.pairs.map(({ pair, geometries }) => ({ pair: { ...pair, before: timed(pair.before), after: timed(pair.after) }, geometries }));
+    const attributesAt: ModelUnitCompareAttributesAt = async (side, rawRefno, signal) => {
       if (released) throw new Error('历史模型已关闭，请重新打开版本');
       const refno = normalize(rawRefno);
-      const matches = loaded.filter(item => item.unit.unitRefno === refno || item[side].refnos.includes(refno) || item[side].ownerByRefno?.has(refno));
-      if (matches.length !== 1) throw new Error(`无法唯一确定 ${refno} 的历史单元`);
-      return source.attributesAt(matches[0]![side], refno, { signal });
+      return source.attributesAt(pickModelUnitCompareGeometry(loaded, side, refno, 'strict'), refno, { signal });
     };
-    const identity = { dbnum: comparison.dbnum, unitRefno: normalize(comparison.refno), unitNoun: '' };
-    const rows = units.flatMap(unit => unit.rows);
-    const single = comparison.units.length === 0 ? units[0]! : null;
-    const detail: ModelUnitVersionCompareOpenDetail = {
-      action: 'open', dbnum: comparison.dbnum, unitRefno: normalize(comparison.refno),
-      before: single ? single.before : mergeModelUnitVersionSides(units, 'before', identity),
-      after: single ? single.after : mergeModelUnitVersionSides(units, 'after', identity),
-      rows, refnos: rows.map(row => row.refno), attributesAt,
-      ...(single ? {} : { units }), viewMode: comparison.viewMode,
-    };
-    const models = loaded.flatMap(item => buildTreeDiffModels({ dbnum: comparison.dbnum,
-      before: item.unit.before.version, after: item.unit.after.version, rows: item.unit.rows,
-      beforeOwners: item.before.ownerByRefno, afterOwners: item.after.ownerByRefno }));
-    return { detail, treeContext: { project: context.project, dbnum: comparison.dbnum,
-      fromSesno: comparison.a, toSesno: comparison.b, mode: 'compare',
-      models, refnos: models.map(model => model.refno), attributesAt }, release };
+    const { detail, treeContext } = buildModelUnitCompareView(loaded, {
+      dbnum: comparison.dbnum,
+      container: { unitRefno: normalize(comparison.refno), unitNoun: '' },
+      attributesAt,
+      viewMode: comparison.viewMode,
+      asUnits: comparison.units.length > 0,
+      project: context.project,
+    });
+    return { detail, treeContext, release };
   } catch (error) {
     await release();
     throw error;

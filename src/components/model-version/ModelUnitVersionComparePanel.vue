@@ -5,7 +5,7 @@ import { Check, GitCompare, Link, RefreshCw, X } from 'lucide-vue-next';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
-import { dispatchTreeDiffContext, type TreeDiffAttributesAt } from '@/composables/useTreeVersionDiff';
+import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
 import {
   getModelSource,
   ModelVersionRouteUnavailableError,
@@ -22,14 +22,17 @@ import {
   type ModelVersionImpactKind,
 } from '@/model-source';
 import {
-  buildTreeDiffModels,
+  buildModelUnitCompareView,
+  loadModelUnitComparePairs,
+  pickModelUnitCompareGeometry,
+  sameModelUnitGeometryKey,
+  type ModelUnitCompareLoad,
+  type ModelUnitComparePair,
+} from '@/utils/modelUnitCompareLoader';
+import {
   buildModelUnitVersionCompareUrl,
-  type TreeDiffDispatchInput,
-  compareModelUnitGeometry,
   countGroupProjections,
   formatModelUnitVersionTime,
-  geometrySnapshotsFromInstanceEntries,
-  mergeModelUnitVersionSides,
   modelUnitGroupSideImpactKinds,
   modelUnitVersionAbsentNote,
   MODEL_UNIT_COMPARE_MAX_UNITS,
@@ -40,14 +43,13 @@ import {
   pickMostChangedGroups,
   readModelUnitVersionCompareUrl,
   takePendingModelVersionInspect,
+  type ModelUnitCompareAttributesAt,
   type ModelUnitCompareSide,
   type ModelUnitCompareViewMode,
   type ModelUnitGeometryDiff,
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEventDetail,
   type ModelUnitVersionCompareRuntimeState,
-  type ModelUnitVersionCompareUnit,
-  type ModelUnitVersionSide,
 } from '@/utils/modelUnitVersionCompare';
 import {
   buildNodeTimelineRows,
@@ -191,7 +193,7 @@ const timelineSlice = computed(() => sliceNodeTimelineRows(visibleTimelineRows.v
 const selectedBefore = computed(() => versionFor(beforeSesno.value));
 const selectedAfter = computed(() => versionFor(afterSesno.value));
 /** 两个版本几何相同的承诺（`ModelVersion.geometryKey` 相等）；键缺失时不承诺 */
-const sameGeometry = computed(() => sameGeometryKey(selectedBefore.value, selectedAfter.value));
+const sameGeometry = computed(() => sameModelUnitGeometryKey(selectedBefore.value, selectedAfter.value));
 const pairReady = computed(() => beforeSesno.value !== null && afterSesno.value !== null && beforeSesno.value < afterSesno.value);
 const shareStatus = ref<'idle' | 'copied' | 'address'>('idle');
 
@@ -209,10 +211,6 @@ const changedElementRows = computed(() => {
 });
 /** `所有子节点` 下有几何要重算的组，每组一个「在三维中对比」 */
 const geometryGroups = computed(() => (diffSummary.value?.groups ?? []).filter((group) => group.unitRefno && group.geometryChanged));
-
-function sameGeometryKey(a: ModelVersion | null, b: ModelVersion | null): boolean {
-  return !!a && !!b && a.geometryKey !== undefined && a.geometryKey === b.geometryKey;
-}
 
 /** 单元版本表里的那一版；A/B 选在只有节点自己变过的会话上时（单元表没这一行）合成一版，`loadVersion` 照 sesno 生成 */
 function versionFor(sesno: number | null): ModelVersion | null {
@@ -249,40 +247,6 @@ const visibleRows = computed(() => rows.value.filter((row) => {
 
 function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
   window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_EVENT, { detail }));
-}
-
-/**
- * 把本次模型几何差异送进模型树的差异模式（徽章 / 幽灵节点 / 筛选）。本面板是该通道唯一的派发方（ADR 0065 §1.4）；
- * 模型列表怎么折（`unchanged` 不进、`ownerRefno` 从哪侧取、tombstone 补单元根）见 `buildTreeDiffModels`。
- */
-type TreeDiffUnit = { input: TreeDiffDispatchInput; geometries: { before: ModelVersionGeometry; after: ModelVersionGeometry } };
-
-/**
- * 「哪一侧、哪个 refno」→ 该去哪份版本几何里取属性：多单元一次装载时每个单元一对句柄，按 refno 在那一侧的 `refnos` 里找它属于哪份；
- * 找不到（单元根自己 / 幽灵）就退到第一份。单单元就只有一份。
- */
-function attributesAtFor(units: readonly TreeDiffUnit[]): TreeDiffAttributesAt {
-  const pick = (side: ModelUnitCompareSide, refno: string): ModelVersionGeometry => {
-    const hit = units.length > 1 ? units.find((unit) => unit.geometries[side].refnos.includes(refno)) : undefined;
-    return (hit ?? units[0]!).geometries[side];
-  };
-  return (side, refno, signal) => getModelSource().versions.attributesAt(pick(side, refno), refno, { signal });
-}
-
-/** 模型树差异模式：每个单元各折一份模型列表（B 侧 tombstone 的单元根也进树）拼起来；`attributesAt` 闭包住本次持有的全部版本几何 */
-function dispatchTreeDiff(units: readonly TreeDiffUnit[]): void {
-  const first = units[0];
-  if (!first) return;
-  const models = units.flatMap((unit) => buildTreeDiffModels(unit.input));
-  dispatchTreeDiffContext({
-    dbnum: first.input.dbnum,
-    fromSesno: first.input.before.sesno,
-    toSesno: first.input.after.sesno,
-    mode: 'compare',
-    refnos: models.map((model) => model.refno),
-    models,
-    attributesAt: attributesAtFor(units),
-  });
 }
 
 function messageOf(value: unknown): string {
@@ -714,18 +678,6 @@ async function toggleElementDiff(refno: string): Promise<void> {
   }
 }
 
-type LoadedSide = {
-  snapshots: ReturnType<typeof geometrySnapshotsFromInstanceEntries>
-  refnos: string[]
-  geometry: ModelVersionGeometry
-}
-
-/** 经模型来源端口取一个版本的几何；tombstone 由适配器回空集（「已删除单元版本」）。 */
-async function loadSide(version: ModelVersion): Promise<LoadedSide> {
-  const geometry = await getModelSource().versions.loadVersion(version);
-  return { snapshots: geometrySnapshotsFromInstanceEntries(geometry.entries), refnos: geometry.refnos, geometry };
-}
-
 /** 节点自己所属的那个单元：与旧面板同一条路 */
 async function runCompare(): Promise<void> {
   normalizeSelectedPair();
@@ -793,14 +745,11 @@ async function runCompareVersions(before: ModelVersion, after: ModelVersion, uni
   await runCompareUnits([{ unitRefno: unit, unitNoun: after.unitNoun, before, after }]);
 }
 
-type UnitPair = { unitRefno: string; unitNoun: string; before: ModelVersion; after: ModelVersion };
-
 /**
- * 装载路（单单元与多单元同一条）：按份取几何（并发 ≤ 2，进度进 `compareProgress`）→ 每单元各比一份差异 → 树差异模式 → 一发 `open`。
- * 多单元时 `open` 的 `before` / `after` 是各单元并起来的一侧、`rows` 拼起来、`units` 各自一份、`unitRefno` 是查的那个容器；
- * 单单元 detail 与从前逐字相同（不带 `units`）。几何相同的承诺（同一 geometryKey）→ 那个单元只取一次、两侧共用。
+ * 装载路（单单元与多单元同一条，与校审恢复共用 `modelUnitCompareLoader`）：按份取几何（并发 ≤ 2，进度进 `compareProgress`）→
+ * 每单元各比一份差异 → 树差异模式 → 一发 `open`。多单元时 `open` 的两侧是各单元并起来的、`units` 各自一份、`unitRefno` 是查的那个容器。
  */
-async function runCompareUnits(pairs: readonly UnitPair[]): Promise<void> {
+async function runCompareUnits(pairs: readonly ModelUnitComparePair[]): Promise<void> {
   // 换单元（容器逐组）/ 换版本重开：视口的单视口 / 分屏跟上一轮走，不用每组再点一次「双视口分屏」
   const keepViewMode = compareRuntime.value?.status === 'ready' ? compareRuntime.value.viewMode : undefined;
   closeCompare();
@@ -811,122 +760,43 @@ async function runCompareUnits(pairs: readonly UnitPair[]): Promise<void> {
   comparing.value = true;
   error.value = null;
   activeTab.value = 'model';
-  const loaded = new Map<string, { before: LoadedSide; after: LoadedSide }>();
-  const taken: LoadedSide[] = [];
+  let load: ModelUnitCompareLoad | null = null;
+  let adopted = false;
   try {
-    // 一份 = 一次 loadSide；同 geometryKey 只取 B 那一份两侧共用。tombstone 侧适配器回空集、不去服务端，不算进度里的份
-    type Task = { label: string; counts: boolean; run: () => Promise<void> };
-    const tasks: Task[] = [];
-    const partial = new Map<string, { before?: LoadedSide; after?: LoadedSide }>();
-    for (const pair of pairs) {
-      const slot: { before?: LoadedSide; after?: LoadedSide } = {};
-      partial.set(pair.unitRefno, slot);
-      const label = (version: ModelVersion) => `${pair.unitNoun || '单元'} ${pair.unitRefno}@${version.sesno}`;
-      if (sameGeometryKey(pair.before, pair.after)) {
-        tasks.push({ label: label(pair.after), counts: true, run: async () => { const data = await loadSide(pair.after); taken.push(data); slot.before = data; slot.after = data; } });
-      } else {
-        tasks.push({ label: label(pair.before), counts: pair.before.impactKind !== 'tombstone', run: async () => { const data = await loadSide(pair.before); taken.push(data); slot.before = data; } });
-        tasks.push({ label: label(pair.after), counts: pair.after.impactKind !== 'tombstone', run: async () => { const data = await loadSide(pair.after); taken.push(data); slot.after = data; } });
-      }
-    }
-    const total = tasks.filter((task) => task.counts).length;
-    compareProgress.value = { done: 0, total, current: [] };
-    const queue = tasks.slice();
-    // 并发 ≤ 2 的小工位：一份失败 / 本次被更新的请求作废，就不再开新的份；正在飞的那份等它落地再一起还回去（不然那份快照漏掉）
-    const failure: { current: { cause: unknown } | null } = { current: null };
-    const worker = async (): Promise<void> => {
-      for (let task = queue.shift(); task && !failure.current && run === requestId; task = queue.shift()) {
-        if (task.counts) compareProgress.value = { ...compareProgress.value!, current: [...compareProgress.value!.current, task.label] };
-        try {
-          await task.run();
-        } catch (cause) {
-          failure.current ??= { cause };
-          return;
-        }
-        if (task.counts && run === requestId) {
-          const progress = compareProgress.value!;
-          compareProgress.value = { done: progress.done + 1, total, current: progress.current.filter((item) => item !== task.label) };
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, () => worker()));
-    if (failure.current) throw failure.current.cause;
-    if (run !== requestId) {
-      // 本次比较已被更新的请求作废：几何拿到了也不留，直接还给来源
-      releaseTaken();
-      return;
-    }
-    for (const [unitRefno, slot] of partial) loaded.set(unitRefno, { before: slot.before!, after: slot.after! });
-    heldGeometries = [...new Set(taken.map((data) => data.geometry))];
-
-    const units: ModelUnitVersionCompareUnit[] = pairs.map((pair) => {
-      const data = loaded.get(pair.unitRefno)!;
-      const side = (version: ModelVersion, item: LoadedSide): ModelUnitVersionSide => ({
-        version, sesno: version.sesno, refnos: item.refnos, entries: markRaw(item.geometry.entries),
-      });
-      return {
-        unitRefno: pair.unitRefno,
-        unitNoun: pair.unitNoun,
-        before: side(pair.before, data.before),
-        after: side(pair.after, data.after),
-        rows: compareModelUnitGeometry(data.before.snapshots, data.after.snapshots),
-      };
+    load = await loadModelUnitComparePairs(pairs, {
+      loadVersion: (version) => getModelSource().versions.loadVersion(version),
+      shouldApply: () => run === requestId,
+      onProgress: (progress) => { compareProgress.value = progress; },
     });
-    rows.value = units.flatMap((unit) => unit.rows);
+    if (run !== requestId) return;
+    const loaded = load.pairs;
+    // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
+    const attributesAt: ModelUnitCompareAttributesAt = (side, refno, signal) => getModelSource().versions.attributesAt(
+      pickModelUnitCompareGeometry(loaded, side, refno, 'lenient'), refno, { signal });
+    const view = buildModelUnitCompareView(loaded, {
+      dbnum: dbnum.value,
+      container: { unitRefno: normalizedRefno.value, unitNoun: nodeNoun.value },
+      attributesAt,
+      viewMode: keepViewMode,
+      rawEntries: markRaw,
+    });
+    heldGeometries = load.geometries;
+    adopted = true;
+    rows.value = view.detail.rows;
     compareCompleted.value = true;
     compareActive.value = true;
-    comparedInViewer.value = units.map((unit) => unit.unitRefno);
-    const treeUnits: TreeDiffUnit[] = units.map((unit) => {
-      const data = loaded.get(unit.unitRefno)!;
-      return {
-        input: {
-          dbnum: dbnum.value!,
-          before: unit.before.version,
-          after: unit.after.version,
-          rows: unit.rows,
-          beforeOwners: data.before.geometry.ownerByRefno,
-          afterOwners: data.after.geometry.ownerByRefno,
-        },
-        geometries: { before: data.before.geometry, after: data.after.geometry },
-      };
-    });
-    dispatchTreeDiff(treeUnits);
-    const single = units.length === 1 ? units[0]! : null;
-    const container = { dbnum: dbnum.value, unitRefno: normalizedRefno.value, unitNoun: nodeNoun.value };
-    dispatch({
-      action: 'open',
-      dbnum: dbnum.value,
-      unitRefno: single ? single.unitRefno : normalizedRefno.value,
-      before: single ? single.before : mergeModelUnitVersionSides(units, 'before', container),
-      after: single ? single.after : mergeModelUnitVersionSides(units, 'after', container),
-      refnos: rows.value.map((row) => row.refno),
-      rows: rows.value,
-      // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
-      attributesAt: attributesAtFor(treeUnits),
-      ...(keepViewMode ? { viewMode: keepViewMode } : {}),
-      ...(single ? {} : { units }),
-    });
+    comparedInViewer.value = view.units.map((unit) => unit.unitRefno);
+    dispatchTreeDiffContext(view.treeContext);
+    dispatch(view.detail);
     focusQueriedElement();
   } catch (cause) {
     if (run === requestId) error.value = messageOf(cause);
-    // 半路失败（或作废后才失败）：本次已取到的几份还回去，别留着快照
-    releaseTaken();
   } finally {
+    // 作废或半路出错：本次已取到的几何不留，还给来源（装载器自己失败时已经还过）
+    if (load && !adopted) void load.release();
     if (run === requestId) {
       comparing.value = false;
       compareProgress.value = null;
-    }
-  }
-
-  /** 把本次取到的几份几何还给来源（只动本次的，别的请求持有的不碰） */
-  function releaseTaken(): void {
-    const mine = new Set(taken.map((data) => data.geometry));
-    heldGeometries = heldGeometries.filter((geometry) => !mine.has(geometry));
-    taken.length = 0;
-    for (const geometry of mine) {
-      void geometry.release().catch((reason) => {
-        console.warn('[ModelUnitVersionComparePanel] release version geometry failed', reason);
-      });
     }
   }
 }

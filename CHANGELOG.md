@@ -4,6 +4,12 @@
 
 ### 变更
 
+- **版本对比「取两侧几何 → 比几何 → 进三维 / 树差异」收成一份：节点版本面板与校审单恢复共用 `utils/modelUnitCompareLoader.ts`** (2026-10-09，版本对比审核计划 P2-1)
+  - 起因：面板 `runCompareUnits` 与校审恢复 `loadReviewModelComparison` 各写一遍装载与拼装，已在并发、进度、geometryKey 复用、会话时间、tombstone 判定上分叉。
+  - 现在：`loadModelUnitComparePairs`（两工位并发、进度、同 geometryKey 只取一份、一份失败或请求作废时等在飞的落地后全部还回去）+ `buildModelUnitCompareView`（各单元几何差异行、单 / 多单元 `open` detail、树差异上下文）+ `pickModelUnitCompareGeometry`（属性归属：面板宽松、校审严格不猜）。两边只留各自怎么得到 A / B 版本：面板按时间线 / 差异摘要，校审按 `attributeDiff` 校过的身份。
+  - 行为变化只有一处：校审恢复多单元时先逐个校完身份再统一装载，装载改为跨单元两工位并发（总并发仍 ≤ 2；原来是单元依次、每单元两份），后面某个单元身份不对时不再白装前面的单元。面板行为不变。
+  - 验证：新增 `modelUnitCompareLoader.test.ts` 9 例（geometryKey 复用与 tombstone 不计份、并发峰值 2 与进度、失败等在飞再释放、作废抛取消并释放、release 幂等、两种属性归属、单 / 多单元 detail 与树模型）；面板 26 例、校审恢复 31 例原样全绿；全仓 339 文件 3169 例全绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 触及 4 文件 0。
+
 - **校审单恢复历史版本对比后，三维 A / B 角标显示会话时间，不再是「时间未知」** (2026-10-09，版本对比审核计划 P0)
   - 现象：`c8c7bb24` 起角标只显示会话时间（sesno 在悬停提示里），而校审恢复 `loadReviewModelComparison`（`67849918`）按保存的 sesno 重建版本时把 `sessionTime` 写死成 null，回放历史对比时两枚角标都是「时间未知」。
   - 改法：与取几何并行，按保存时那个节点（单元根 / 容器）的版本表查 A / B 会话时间——依次构件版本表、子树版本表、属性变化时间线，找齐就停；查不到不挡恢复，角标照旧「时间未知」。保存结构不变，旧单据同样补得上。
