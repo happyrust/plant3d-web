@@ -1,0 +1,1221 @@
+{
+  "backend": "http://127.0.0.1:39738",
+  "ensure": [],
+  "nearby": [
+    {
+      "refno": "24381/145018",
+      "radius": 100,
+      "status": 200,
+      "seconds": 0.11,
+      "meta": {
+        "results": [
+          {
+            "refno": "24381_144924",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0011-1R43008新-缺温度计管座",
+            "aabb": {
+              "min": [
+                4659.52,
+                7325.055,
+                11350.861
+              ],
+              "max": [
+                10417.26,
+                12327.01,
+                19867.8
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_144941",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0011-1R43009新",
+            "aabb": {
+              "min": [
+                9685.75,
+                10870.71,
+                18604.8
+              ],
+              "max": [
+                9853.75,
+                11250.19,
+                18775.8
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_144947",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0012-1R43010新",
+            "aabb": {
+              "min": [
+                8909.99,
+                10584.71,
+                18603.424
+              ],
+              "max": [
+                9853.749,
+                10870.71,
+                21383.35
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_144991",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0014-1R70002",
+            "aabb": {
+              "min": [
+                -6819.643,
+                6415.284,
+                12440.991
+              ],
+              "max": [
+                1521.1533,
+                8213.41,
+                13351.77
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_145012",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0014-1R43013新",
+            "aabb": {
+              "min": [
+                9679.75,
+                10218.18,
+                18601.8
+              ],
+              "max": [
+                9859.75,
+                10584.71,
+                18781.8
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146164",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0648-1R43047",
+            "aabb": {
+              "min": [
+                6649.0,
+                10602.21,
+                19415.56
+              ],
+              "max": [
+                7150.9194,
+                12139.72,
+                22626.34
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146249",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0657-1R43003-2/2",
+            "aabb": {
+              "min": [
+                7324.184,
+                8424.496,
+                11977.15
+              ],
+              "max": [
+                10743.87,
+                11671.71,
+                13778.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146262",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0657-1R43004",
+            "aabb": {
+              "min": [
+                5515.05,
+                11632.168,
+                13046.82
+              ],
+              "max": [
+                10750.012,
+                14627.36,
+                13822.85
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146181",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0660-1R43048-2020su-1RX",
+            "aabb": {
+              "min": [
+                2296.51,
+                11933.715,
+                19675.0
+              ],
+              "max": [
+                3319.58,
+                13205.64,
+                23501.11
+              ]
+            },
+            "distance": 89.075195,
+            "within_radius": true
+          }
+        ],
+        "center": {
+          "x": 5963.7734,
+          "y": 9972.239,
+          "z": 16551.97,
+          "source": "refno_aabb_center"
+        },
+        "radius": 100.0,
+        "total_count": 9,
+        "returned_count": 9,
+        "has_more": false,
+        "truncated_candidates": false,
+        "coverage": "global-tree-and-current-bran-projection",
+        "warnings": []
+      },
+      "items": []
+    },
+    {
+      "refno": "24381/145018",
+      "radius": 500,
+      "status": 200,
+      "seconds": 0.09,
+      "meta": {
+        "results": [
+          {
+            "refno": "24381_144924",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0011-1R43008新-缺温度计管座",
+            "aabb": {
+              "min": [
+                4659.52,
+                7325.055,
+                11350.861
+              ],
+              "max": [
+                10417.26,
+                12327.01,
+                19867.8
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_144941",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0011-1R43009新",
+            "aabb": {
+              "min": [
+                9685.75,
+                10870.71,
+                18604.8
+              ],
+              "max": [
+                9853.75,
+                11250.19,
+                18775.8
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_144947",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0012-1R43010新",
+            "aabb": {
+              "min": [
+                8909.99,
+                10584.71,
+                18603.424
+              ],
+              "max": [
+                9853.749,
+                10870.71,
+                21383.35
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_144991",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0014-1R70002",
+            "aabb": {
+              "min": [
+                -6819.643,
+                6415.284,
+                12440.991
+              ],
+              "max": [
+                1521.1533,
+                8213.41,
+                13351.77
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_145012",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0014-1R43013新",
+            "aabb": {
+              "min": [
+                9679.75,
+                10218.18,
+                18601.8
+              ],
+              "max": [
+                9859.75,
+                10584.71,
+                18781.8
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146164",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0648-1R43047",
+            "aabb": {
+              "min": [
+                6649.0,
+                10602.21,
+                19415.56
+              ],
+              "max": [
+                7150.9194,
+                12139.72,
+                22626.34
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146249",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0657-1R43003-2/2",
+            "aabb": {
+              "min": [
+                7324.184,
+                8424.496,
+                11977.15
+              ],
+              "max": [
+                10743.87,
+                11671.71,
+                13778.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146262",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0657-1R43004",
+            "aabb": {
+              "min": [
+                5515.05,
+                11632.168,
+                13046.82
+              ],
+              "max": [
+                10750.012,
+                14627.36,
+                13822.85
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146181",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0660-1R43048-2020su-1RX",
+            "aabb": {
+              "min": [
+                2296.51,
+                11933.715,
+                19675.0
+              ],
+              "max": [
+                3319.58,
+                13205.64,
+                23501.11
+              ]
+            },
+            "distance": 89.075195,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_145037",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-RCS0017-1R43014新",
+            "aabb": {
+              "min": [
+                8950.0,
+                10844.68,
+                20114.83
+              ],
+              "max": [
+                9050.0,
+                11495.81,
+                21130.5
+              ]
+            },
+            "distance": 247.0293,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_145381",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0055-1R43026-2/3",
+            "aabb": {
+              "min": [
+                2657.01,
+                12110.54,
+                13331.897
+              ],
+              "max": [
+                3375.8328,
+                15666.49,
+                22222.04
+              ]
+            },
+            "distance": 265.9004,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_145854",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0095-1R43049-2020su-1RX",
+            "aabb": {
+              "min": [
+                3238.6677,
+                12224.35,
+                19047.21
+              ],
+              "max": [
+                3424.602,
+                12499.97,
+                19748.0
+              ]
+            },
+            "distance": 379.70996,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_146146",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0647-1R43046",
+            "aabb": {
+              "min": [
+                4841.84,
+                12274.2705,
+                19415.56
+              ],
+              "max": [
+                6380.19,
+                13205.28,
+                22626.34
+              ]
+            },
+            "distance": 429.63086,
+            "within_radius": true
+          }
+        ],
+        "center": {
+          "x": 5963.7734,
+          "y": 9972.239,
+          "z": 16551.97,
+          "source": "refno_aabb_center"
+        },
+        "radius": 500.0,
+        "total_count": 13,
+        "returned_count": 13,
+        "has_more": false,
+        "truncated_candidates": false,
+        "coverage": "global-tree-and-current-bran-projection",
+        "warnings": []
+      },
+      "items": []
+    },
+    {
+      "refno": "24384/23257",
+      "radius": 100,
+      "status": 200,
+      "seconds": 0.06,
+      "meta": {
+        "results": [
+          {
+            "refno": "24381_145764",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0073-1R22002",
+            "aabb": {
+              "min": [
+                6635.54,
+                9908.01,
+                343.0
+              ],
+              "max": [
+                10481.999,
+                12212.081,
+                4698.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_23247",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/C-OR-1R345-B",
+            "aabb": {
+              "min": [
+                4112.1416,
+                14019.029,
+                2900.0
+              ],
+              "max": [
+                8570.95,
+                15967.976,
+                2950.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "32576_12",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/CODEX_DB8000_PIPE_SCR_A",
+            "aabb": {
+              "min": [
+                8536.561,
+                9954.669,
+                2900.0
+              ],
+              "max": [
+                11285.384,
+                14081.1455,
+                2930.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "32576_2",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/CODEX_DB8000_BR_COPY",
+            "aabb": {
+              "min": [
+                8536.561,
+                9954.669,
+                2900.0
+              ],
+              "max": [
+                11285.384,
+                14081.1455,
+                2930.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "32576_22",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/CODEX_DB8000_PIPE_SCR_B",
+            "aabb": {
+              "min": [
+                8536.561,
+                9954.669,
+                2900.0
+              ],
+              "max": [
+                11285.384,
+                14081.1455,
+                2930.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24332",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-YE-1R310-A",
+            "aabb": {
+              "min": [
+                5922.683,
+                13337.866,
+                2746.35
+              ],
+              "max": [
+                14752.8955,
+                18885.674,
+                2806.65
+              ]
+            },
+            "distance": 93.3501,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24379",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-BR-1R310-C",
+            "aabb": {
+              "min": [
+                10791.075,
+                13988.991,
+                2754.85
+              ],
+              "max": [
+                12555.151,
+                15376.538,
+                2803.15
+              ]
+            },
+            "distance": 96.8501,
+            "within_radius": true
+          }
+        ],
+        "center": {
+          "x": 9910.973,
+          "y": 12017.907,
+          "z": 2915.0,
+          "source": "refno_aabb_center"
+        },
+        "radius": 100.0,
+        "total_count": 7,
+        "returned_count": 7,
+        "has_more": false,
+        "truncated_candidates": false,
+        "coverage": "global-tree-and-current-bran-projection",
+        "warnings": []
+      },
+      "items": []
+    },
+    {
+      "refno": "24384/23257",
+      "radius": 500,
+      "status": 200,
+      "seconds": 0.06,
+      "meta": {
+        "results": [
+          {
+            "refno": "24381_145764",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1RCS0073-1R22002",
+            "aabb": {
+              "min": [
+                6635.54,
+                9908.01,
+                343.0
+              ],
+              "max": [
+                10481.999,
+                12212.081,
+                4698.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_23247",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/C-OR-1R345-B",
+            "aabb": {
+              "min": [
+                4112.1416,
+                14019.029,
+                2900.0
+              ],
+              "max": [
+                8570.95,
+                15967.976,
+                2950.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "32576_12",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/CODEX_DB8000_PIPE_SCR_A",
+            "aabb": {
+              "min": [
+                8536.561,
+                9954.669,
+                2900.0
+              ],
+              "max": [
+                11285.384,
+                14081.1455,
+                2930.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "32576_2",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/CODEX_DB8000_BR_COPY",
+            "aabb": {
+              "min": [
+                8536.561,
+                9954.669,
+                2900.0
+              ],
+              "max": [
+                11285.384,
+                14081.1455,
+                2930.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "32576_22",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/CODEX_DB8000_PIPE_SCR_B",
+            "aabb": {
+              "min": [
+                8536.561,
+                9954.669,
+                2900.0
+              ],
+              "max": [
+                11285.384,
+                14081.1455,
+                2930.0
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24332",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-YE-1R310-A",
+            "aabb": {
+              "min": [
+                5922.683,
+                13337.866,
+                2746.35
+              ],
+              "max": [
+                14752.8955,
+                18885.674,
+                2806.65
+              ]
+            },
+            "distance": 93.3501,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24379",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-BR-1R310-C",
+            "aabb": {
+              "min": [
+                10791.075,
+                13988.991,
+                2754.85
+              ],
+              "max": [
+                12555.151,
+                15376.538,
+                2803.15
+              ]
+            },
+            "distance": 96.8501,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_23267",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/C-OR-1R345-A",
+            "aabb": {
+              "min": [
+                8369.988,
+                14052.019,
+                600.0
+              ],
+              "max": [
+                8481.591,
+                14145.32,
+                2800.0
+              ]
+            },
+            "distance": 114.11253,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24138",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-CO-1R310-TA",
+            "aabb": {
+              "min": [
+                10347.921,
+                13994.855,
+                2693.35
+              ],
+              "max": [
+                12803.344,
+                17225.69,
+                2753.65
+              ]
+            },
+            "distance": 146.3501,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24281",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/LV-CO-1R310-B2",
+            "aabb": {
+              "min": [
+                7931.049,
+                12839.744,
+                2600.0
+              ],
+              "max": [
+                11856.925,
+                15583.841,
+                2650.0
+              ]
+            },
+            "distance": 250.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24152",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-BR-1R310-KB",
+            "aabb": {
+              "min": [
+                11565.157,
+                12995.79,
+                2758.3
+              ],
+              "max": [
+                12294.083,
+                14224.926,
+                2791.7
+              ]
+            },
+            "distance": 300.00345,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24154",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-BR-1R310-KC",
+            "aabb": {
+              "min": [
+                11593.3,
+                12987.3,
+                1275.0
+              ],
+              "max": [
+                11626.7,
+                13020.7,
+                2775.0
+              ]
+            },
+            "distance": 332.32104,
+            "within_radius": true
+          },
+          {
+            "refno": "24384_24136",
+            "dbnum": 8000,
+            "noun": "BRAN",
+            "spec_value": 0,
+            "name": "/M-CO-1R310-T",
+            "aabb": {
+              "min": [
+                10316.144,
+                13983.144,
+                590.0
+              ],
+              "max": [
+                10375.856,
+                14042.856,
+                2550.0
+              ]
+            },
+            "distance": 350.0,
+            "within_radius": true
+          }
+        ],
+        "center": {
+          "x": 9910.973,
+          "y": 12017.907,
+          "z": 2915.0,
+          "source": "refno_aabb_center"
+        },
+        "radius": 500.0,
+        "total_count": 13,
+        "returned_count": 13,
+        "has_more": false,
+        "truncated_candidates": false,
+        "coverage": "global-tree-and-current-bran-projection",
+        "warnings": []
+      },
+      "items": []
+    },
+    {
+      "refno": "24381/103251",
+      "radius": 100,
+      "status": 200,
+      "seconds": 0.07,
+      "meta": {
+        "results": [
+          {
+            "refno": "24381_103281",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS003MT-YK/B1",
+            "aabb": {
+              "min": [
+                753.1595,
+                -2469.105,
+                -4953.175
+              ],
+              "max": [
+                7649.897,
+                -726.295,
+                -1746.825
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103294",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS004MT-YK/B1",
+            "aabb": {
+              "min": [
+                2480.0,
+                -2336.605,
+                -4953.175
+              ],
+              "max": [
+                7657.541,
+                3.175,
+                -1746.825
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103339",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS007MT-YK/B1",
+            "aabb": {
+              "min": [
+                -3.175,
+                -2705.605,
+                -4953.175
+              ],
+              "max": [
+                7653.2617,
+                -718.875,
+                -1746.825
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103354",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS001MN-YK/B1",
+            "aabb": {
+              "min": [
+                1525.047,
+                -4579.6265,
+                -4021.0
+              ],
+              "max": [
+                7607.499,
+                -195.94038,
+                -2484.125
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          }
+        ],
+        "center": {
+          "x": 4374.652,
+          "y": -75.86682,
+          "z": -3350.0,
+          "source": "refno_aabb_center"
+        },
+        "radius": 100.0,
+        "total_count": 4,
+        "returned_count": 4,
+        "has_more": false,
+        "truncated_candidates": false,
+        "coverage": "global-tree-and-current-bran-projection",
+        "warnings": []
+      },
+      "items": []
+    },
+    {
+      "refno": "24381/103251",
+      "radius": 500,
+      "status": 200,
+      "seconds": 0.08,
+      "meta": {
+        "results": [
+          {
+            "refno": "24381_103281",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS003MT-YK/B1",
+            "aabb": {
+              "min": [
+                753.1595,
+                -2469.105,
+                -4953.175
+              ],
+              "max": [
+                7649.897,
+                -726.295,
+                -1746.825
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103294",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS004MT-YK/B1",
+            "aabb": {
+              "min": [
+                2480.0,
+                -2336.605,
+                -4953.175
+              ],
+              "max": [
+                7657.541,
+                3.175,
+                -1746.825
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103339",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS007MT-YK/B1",
+            "aabb": {
+              "min": [
+                -3.175,
+                -2705.605,
+                -4953.175
+              ],
+              "max": [
+                7653.2617,
+                -718.875,
+                -1746.825
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103354",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS001MN-YK/B1",
+            "aabb": {
+              "min": [
+                1525.047,
+                -4579.6265,
+                -4021.0
+              ],
+              "max": [
+                7607.499,
+                -195.94038,
+                -2484.125
+              ]
+            },
+            "distance": 0.0,
+            "within_radius": true
+          },
+          {
+            "refno": "24381_103380",
+            "dbnum": 7997,
+            "noun": "BRAN",
+            "spec_value": 3,
+            "name": "/Copy-of-1CIS001MN-YK/B2",
+            "aabb": {
+              "min": [
+                4380.9136,
+                -2597.56,
+                -4434.05
+              ],
+              "max": [
+                4582.047,
+                -2464.8735,
+                -4008.4
+              ]
+            },
+            "distance": 135.9585,
+            "within_radius": true
+          }
+        ],
+        "center": {
+          "x": 4374.652,
+          "y": -75.86682,
+          "z": -3350.0,
+          "source": "refno_aabb_center"
+        },
+        "radius": 500.0,
+        "total_count": 5,
+        "returned_count": 5,
+        "has_more": false,
+        "truncated_candidates": false,
+        "coverage": "global-tree-and-current-bran-projection",
+        "warnings": []
+      },
+      "items": []
+    }
+  ]
+}
