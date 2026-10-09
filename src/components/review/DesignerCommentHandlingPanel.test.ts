@@ -93,16 +93,6 @@ vi.mock('./annotationProcessingEntry', () => ({
   },
 }));
 
-vi.mock('./ResubmissionTaskList.vue', () => ({
-  default: {
-    name: 'ResubmissionTaskListStub',
-    props: {
-      selectedTaskId: { type: String, default: null },
-    },
-    template: '<div data-testid="resubmission-task-list-stub">{{ selectedTaskId || "none" }}</div>',
-  },
-}));
-
 vi.mock('./ReviewCommentsTimeline.vue', () => ({
   default: {
     name: 'ReviewCommentsTimelineStub',
@@ -635,7 +625,32 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeNull();
     expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
-    expect(document.querySelector('[data-testid="resubmission-task-list-stub"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-task-switcher-summary"]')?.textContent).toContain('暂无退回单据');
+    expect(document.querySelector('[data-testid="designer-task-confirmation"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('顶部切换器列出全部退回单，选中另一张即切换当前任务', async () => {
+    const task1 = createTask();
+    const task2 = createTask({ id: 'task-designer-2', formId: 'FORM-2002', title: 'BOX2 审核单' });
+    returnedTasksRef.value = [task1, task2];
+    currentTaskRef.value = task1;
+
+    const mounted = await mountPanel();
+    const trigger = document.querySelector<HTMLButtonElement>('[data-testid="designer-task-switcher-trigger"]');
+    expect(trigger?.textContent).toContain('退回单据 1 / 2 · 其余 1 张待处理');
+    expect(trigger?.textContent).toContain('BOX1 审核单');
+
+    trigger!.click();
+    await flushUi();
+    const option = document.querySelector<HTMLButtonElement>('[data-testid="designer-task-switcher-option-task-designer-2"]');
+    expect(option).toBeTruthy();
+    option!.click();
+    await flushUi();
+
+    expect(setCurrentTaskMock).toHaveBeenLastCalledWith(task2);
+    expect(document.querySelector('[data-testid="designer-task-switcher-list"]')).toBeNull();
 
     mounted.unmount();
   });
@@ -831,14 +846,43 @@ describe('DesignerCommentHandlingPanel', () => {
     mounted.unmount();
   });
 
-  it('任务级确认区只在统一工作台下方渲染一次', async () => {
+  it('任务级确认区只渲染一次，固定在滚动区之外', async () => {
     currentTaskRef.value = createTask();
 
     const mounted = await mountPanel();
+    const footer = document.querySelector('[data-testid="designer-task-confirmation"]');
 
     expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeTruthy();
     expect(document.querySelectorAll('[data-testid="designer-task-confirmation"]')).toHaveLength(1);
-    expect(document.body.textContent).toContain('任务级批注与测量证据只在这里统一确认一次');
+    expect(document.querySelector('[data-testid="designer-comment-scroll"]')?.contains(footer)).toBe(false);
+    expect(footer?.textContent).toContain('未确认');
+
+    mounted.unmount();
+  });
+
+  it('确认与流转按钮禁用时写明原因', async () => {
+    currentTaskRef.value = createTask();
+    annotationsRef.value = [];
+    measurementsRef.value = [];
+
+    const mounted = await mountPanel();
+
+    expect(document.querySelector('[data-testid="designer-confirm-disabled-reason"]')?.textContent).toContain('没有未确认的改动');
+    expect(document.querySelector('[data-testid="designer-resubmit-disabled-reason"]')?.textContent).toContain('先确认当前数据后才能流转');
+
+    annotationsRef.value = [{
+      id: 'annot-new',
+      title: '新补的批注',
+      description: '',
+      createdAt: 40,
+      visible: true,
+      refnos: ['24381_145018'],
+      formId: 'FORM-1001',
+    }];
+    await flushUi();
+
+    expect(document.querySelector('[data-testid="designer-confirm-disabled-reason"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-resubmit-disabled-reason"]')?.textContent).toContain('还有未确认的改动');
 
     mounted.unmount();
   });

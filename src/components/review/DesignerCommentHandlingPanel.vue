@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Calendar,
   RefreshCw,
+  Save,
   Send,
   XCircle,
 } from 'lucide-vue-next';
@@ -22,8 +23,8 @@ import {
 } from './annotationWorkspaceModel';
 import { startAnnotationMemberPick } from './cloudMemberPick';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
+import DesignerTaskSwitcher from './DesignerTaskSwitcher.vue';
 import NonReturnedGuidanceCard from './NonReturnedGuidanceCard.vue';
-import ResubmissionTaskList from './ResubmissionTaskList.vue';
 import { createReviewClearanceConflictActions } from './reviewClearanceConflictActions';
 import ReviewClearanceConflictNotice from './ReviewClearanceConflictNotice.vue';
 import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
@@ -245,6 +246,26 @@ const canResubmitTask = computed(() => (
   && currentTaskConfirmedRecords.value.length > 0
   && !hasUnsavedPendingData.value
 ));
+const confirmDisabledReason = computed(() => (
+  canConfirmCurrentData.value || confirmSaving.value ? null : '没有未确认的改动'
+));
+const resubmitDisabledReason = computed(() => {
+  if (!currentTask.value || resubmitting.value) return null;
+  if (hasUnsavedPendingData.value) {
+    return canConfirmCurrentData.value ? '还有未确认的改动，请先确认当前数据' : '当前数据与已确认版本不一致';
+  }
+  if (currentTaskConfirmedRecords.value.length === 0) return '先确认当前数据后才能流转';
+  return null;
+});
+
+// 测试替身的 userStore 可能没有 loading / error
+const tasksLoading = computed(() => !!userStore.loading?.value);
+const tasksError = computed(() => userStore.error?.value ?? null);
+const emptyEntryText = computed(() => {
+  if (tasksLoading.value) return '正在加载退回单据…';
+  if (tasksError.value) return '退回单据加载失败';
+  return '当前没有需要处理的退回单据';
+});
 
 function setActiveAnnotation(type: AnnotationType | null, id: string | null) {
   toolStore.activeAnnotationId.value = type === 'text' ? id : null;
@@ -626,18 +647,34 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 overflow-hidden bg-[#F8FAFC]" data-panel="designer-comment-handling">
-    <section class="w-[360px] shrink-0 border-r border-slate-200 bg-white">
-      <ResubmissionTaskList :auto-load="false"
-        detail-mode="external"
-        :selected-task-id="currentTask?.id ?? null"
-        cta-label="进入批注处理"
-        @select-task="selectTask"
-        @view-task="openTaskHistory" />
-    </section>
+  <div class="flex h-full min-h-0 flex-col overflow-hidden bg-[#F8FAFC]" data-panel="designer-comment-handling">
+    <header class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2.5"
+      data-testid="designer-task-bar">
+      <DesignerTaskSwitcher :tasks="returnedTasks"
+        :current-task="currentTask"
+        :loading="tasksLoading"
+        :error="tasksError"
+        @select="selectTask"
+        @retry="loadTasks" />
+      <div v-if="currentTask" class="ml-auto flex shrink-0 items-center gap-2">
+        <button type="button"
+          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          :disabled="refreshingTask"
+          @click="refreshCurrentTask">
+          <RefreshCw class="h-4 w-4" :class="refreshingTask ? 'animate-spin' : ''" />
+          刷新任务
+        </button>
+        <button type="button"
+          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          @click="openTaskHistory(currentTask)">
+          <Calendar class="h-4 w-4" />
+          流转历史
+        </button>
+      </div>
+    </header>
 
-    <section class="min-w-0 flex-1 overflow-hidden bg-[#FCFDFE]">
-      <div class="flex h-full min-h-0 flex-col overflow-hidden p-4">
+    <div class="min-h-0 flex-1 overflow-y-auto bg-[#FCFDFE]" data-testid="designer-comment-scroll">
+      <div class="flex min-h-full flex-col p-4">
         <template v-if="canShowAnnotationSheet">
           <div v-if="currentTask" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="designer-state-1">
             <div class="flex items-start justify-between gap-4">
@@ -673,21 +710,6 @@ onMounted(() => {
                     <div class="mt-1 font-medium text-slate-900">{{ currentTask.components.length }} 个</div>
                   </div>
                 </div>
-              </div>
-              <div class="flex shrink-0 flex-col gap-2">
-                <button type="button"
-                  class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  :disabled="refreshingTask"
-                  @click="refreshCurrentTask">
-                  <RefreshCw class="h-4 w-4" :class="refreshingTask ? 'animate-spin' : ''" />
-                  刷新任务
-                </button>
-                <button type="button"
-                  class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  @click="openTaskHistory(currentTask)">
-                  <Calendar class="h-4 w-4" />
-                  流转历史
-                </button>
               </div>
             </div>
             <div class="mt-4 rounded-2xl border border-danger/30 bg-danger-subtle px-4 py-3 text-sm text-danger">
@@ -725,10 +747,23 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="mt-4 min-h-[420px] flex-1 overflow-hidden"
+          <div v-if="currentTask"
+            class="mt-4 space-y-2 empty:hidden"
+            data-testid="designer-task-restore-notices">
+            <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
+              :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
+              @select="confirmedRecordsRestorer.selectModelVersionGroup" />
+            <ReviewClearanceConflictNotice :conflict="reviewStore.clearanceSnapshotConflict?.value"
+              :kept-local="reviewStore.clearanceSnapshotKeptLocal?.value"
+              :backup="reviewStore.clearanceSnapshotBackup?.value" :busy="confirmedRecordsRestorer.restoring.value"
+              @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
+          </div>
+
+          <div class="mt-4 flex flex-col"
             data-testid="designer-comment-annotation-list">
             <UnattributedDraftNotice />
-            <AnnotationSheetWorkspace :items="scopedAnnotationItems"
+            <AnnotationSheetWorkspace class="min-h-0 flex-1"
+              :items="scopedAnnotationItems"
               :current-annotation-id="selectedAnnotationId"
               :current-annotation-type="selectedAnnotationType"
               :current-user-role="userStore.currentUser.value?.role ?? null"
@@ -759,52 +794,6 @@ onMounted(() => {
               @update-title="(payload) => void updateWorkspaceTitle(payload)"
               @queue-completed="handleQueueCompleted" />
           </div>
-
-          <div v-if="currentTask"
-            class="mt-4 rounded-2xl border border-slate-200 bg-slate-950 px-4 py-4 text-white shadow-lg"
-            data-testid="designer-task-confirmation">
-            <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
-              :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
-              @select="confirmedRecordsRestorer.selectModelVersionGroup" />
-            <ReviewClearanceConflictNotice :conflict="reviewStore.clearanceSnapshotConflict?.value"
-              :kept-local="reviewStore.clearanceSnapshotKeptLocal?.value"
-              :backup="reviewStore.clearanceSnapshotBackup?.value" :busy="confirmedRecordsRestorer.restoring.value"
-              @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <div class="text-sm font-semibold">确认当前数据</div>
-                <div class="mt-1 text-xs leading-5 text-slate-300">
-                  任务级批注与测量证据只在这里统一确认一次。
-                </div>
-              </div>
-              <div class="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100">
-                未确认 {{ unsavedAnnotationCount }} 批注 / {{ unsavedMeasurementCount }} 测量
-              </div>
-            </div>
-            <textarea v-model="confirmNote"
-              class="mt-3 min-h-[60px] w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:outline-none"
-              placeholder="可补充本轮处理说明（可选）" />
-            <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
-              <span v-if="restoreError" role="alert" class="mr-auto text-xs text-rose-300">
-                {{ restoreError }}
-                <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="confirmedRecordsRestorer.restoreConfirmedRecordsIntoScene(true)">重试回放</button>
-              </span>
-              <span v-if="confirmError" class="mr-auto text-xs text-rose-300">{{ confirmError }}</span>
-              <button type="button"
-                class="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                :disabled="!canConfirmCurrentData || confirmSaving"
-                @click="confirmCurrentData">
-                {{ confirmSaving ? '保存中...' : '确认当前数据' }}
-              </button>
-              <button type="button"
-                class="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-                :disabled="!canResubmitTask || resubmitting"
-                @click="resubmitToProofreader">
-                <Send class="h-4 w-4" />
-                {{ resubmitting ? '流转中...' : '流转回校对' }}
-              </button>
-            </div>
-          </div>
         </template>
 
         <NonReturnedGuidanceCard v-else-if="currentTask"
@@ -813,14 +802,77 @@ onMounted(() => {
 
         <div v-else
           data-testid="designer-comment-task-entry"
-          class="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
+          class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
           <div class="text-center text-sm text-slate-500">
             <XCircle class="mx-auto mb-3 h-9 w-9 text-slate-300" />
-            当前没有需要处理的退回单据
+            {{ emptyEntryText }}
+            <button v-if="tasksError && !tasksLoading"
+              type="button"
+              class="mt-3 block w-full border-0 bg-transparent text-xs font-medium text-brand hover:underline"
+              @click="loadTasks">
+              重试
+            </button>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+
+    <footer v-if="currentTask && canShowAnnotationSheet"
+      class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(15,23,42,0.06)]"
+      data-testid="designer-task-confirmation">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div class="shrink-0">
+          <div class="text-sm font-semibold text-slate-950">确认当前数据</div>
+          <div class="mt-0.5 text-xs"
+            :class="unsavedAnnotationCount + unsavedMeasurementCount > 0 ? 'text-warning' : 'text-slate-500'"
+            data-testid="designer-unconfirmed-summary">
+            未确认 {{ unsavedAnnotationCount }} 条批注 / {{ unsavedMeasurementCount }} 条测量
+          </div>
+        </div>
+        <input v-model="confirmNote"
+          type="text"
+          class="min-w-[160px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+          placeholder="本轮处理说明（可选）"
+          aria-label="本轮处理说明" />
+        <div class="flex shrink-0 items-start gap-2">
+          <div class="flex flex-col items-end gap-1">
+            <button type="button"
+              class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!canConfirmCurrentData || confirmSaving"
+              @click="confirmCurrentData">
+              <Save class="h-4 w-4" />
+              {{ confirmSaving ? '保存中...' : '确认当前数据' }}
+            </button>
+            <span v-if="confirmDisabledReason"
+              class="text-[11px] text-slate-400"
+              data-testid="designer-confirm-disabled-reason">
+              {{ confirmDisabledReason }}
+            </span>
+          </div>
+          <div class="flex flex-col items-end gap-1">
+            <button type="button"
+              class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border-0 bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-slate-300"
+              :disabled="!canResubmitTask || resubmitting"
+              @click="resubmitToProofreader">
+              <Send class="h-4 w-4" />
+              {{ resubmitting ? '流转中...' : '流转回校对' }}
+            </button>
+            <span v-if="resubmitDisabledReason"
+              class="text-[11px] text-slate-400"
+              data-testid="designer-resubmit-disabled-reason">
+              {{ resubmitDisabledReason }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div v-if="restoreError || confirmError" class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-danger">
+        <span v-if="restoreError" role="alert">
+          {{ restoreError }}
+          <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="confirmedRecordsRestorer.restoreConfirmedRecordsIntoScene(true)">重试回放</button>
+        </span>
+        <span v-if="confirmError">{{ confirmError }}</span>
+      </div>
+    </footer>
 
     <Teleport to="body">
       <TaskReviewDetail v-if="detailTask" :task="detailTask" @close="detailTask = null" />
