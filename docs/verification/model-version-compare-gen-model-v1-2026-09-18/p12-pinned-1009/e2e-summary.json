@@ -1,0 +1,296 @@
+{
+  "ranAt": "2026-10-09 22:10–22:25 +08:00",
+  "purpose": "版本对比审核计划 P1-2「在隔离环境把两份 spec 各跑一遍」——用户拍板先本机跑通；README §10",
+  "frontend": {
+    "dev": "vite :3111，Playwright webServer 自起自关；工作树 = main c3eb547f（P0 / P1-2 / P2-1 / P2-2 / P2-3 都已在）+ 别的会话未提交的 versionSource.ts 快照重建改动 + 本次 node-version-view spec 的一处夹具修正",
+    "specs": [
+      "e2e/model-version-compare-gen-model-v1.spec.ts（5 条，10-09 钉死版本对）",
+      "e2e/node-version-view-gen-model-v1.spec.ts（4 条；容器那条「定位被删构件」改挑不是单元根的被删行）"
+    ]
+  },
+  "backend": {
+    "exe": "_runs\\review-full-8031\\aios-database-dae43cfd8.exe（= D:\\Rust\\target\\release\\aios-database.exe 10-08 19:17 的拷贝）",
+    "build_id": "0.1.34+gdae43cfd8e9d.1791452157",
+    "launch": "cwd _runs\\node-versions-8022（DbOption.toml 同 §7：0.0.0.0:8022、watch_dbnums [7998, 8000]、startup_autorun），serve，Invoke-CimMethod Win32_Process.Create（cmd /d /s /c 包 env 与 >> 重定向，不挂终端），env AIOS_STORE_MODE=mem RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1",
+    "pid": 4812,
+    "pidFile": "gm-8022-dae43cfd8.pid",
+    "health": "status degraded · in_memory_db true · features.history available · route_count 71，2 s 后 ok",
+    "previousRun": "gmmc-4c305d820（09-24 13:29 起，stdout.log 最后一行 09-29 13:51）日志挪到 stdout.run6-gmmc-4c305d820-0924-1329-to-0929-1351.log"
+  },
+  "command": "GEN_MODEL_V1_BASE_URL=http://127.0.0.1:8022 PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts e2e/node-version-view-gen-model-v1.spec.ts --workers=1",
+  "firstRun": "22:17 冷 :8022 · Chrome 缺省：8 passed / 1 failed（1.2 m）——容器那条「装好组后定位 B 版已删的构件」相机没动：本机 ams8000 最新一段 643 → 645 整条 BRAN 24384/26496 被删，summaryRows 里第一行 deleted 正是单元根，它自己没有几何对象（成员 FTUB / BEND 才有），focus 在 A 层找不到、主图层也没有 → 不动相机。是活库漂移碰上 spec 的取样假设，不是回归；spec 改挑不是单元根的被删行（24384/26497 FTUB）后 1 passed（11.3 s）",
+  "runs": [
+    {
+      "mode": "default",
+      "label": "Chrome 缺省 headless",
+      "passed": 9,
+      "total": 9,
+      "durationSeconds": 35.5,
+      "tests": [
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "钉死的 A / B（缺省 BRAN 24384_23257 626 → 630）：compare_a / compare_b 开面板、时间线与版本表来自服务端、A/B 按 URL 选中、对比结果与两侧对象数自洽、角标 / 图例 / 只看差异、分屏、树差异、关闭 DELETE 快照",
+          "status": "passed",
+          "seconds": 7.2,
+          "annotations": {
+            "timeline": "24384_23257 范围 subtree · 画出 57 行 · 本范围 57 版 · A 626（placement）/ B 630（placement）",
+            "splitOutline": "{\"compositor\":true,\"renderer\":\"ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)\"}"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "钉死的整单元被删现场（缺省 EQUI 24384_26480 602 → 604，B 版 tombstone）：B 侧 0 对象且全部删除、幽灵行「已删除」、属性面板不拉当前会话、「在 3D 中定位」飞得动、关闭只 DELETE 有几何的那一份",
+          "status": "passed",
+          "seconds": 5.1,
+          "annotations": {
+            "timeline": "24384_26480 范围 self · 画出 11 行 · 本范围 11 版 · A 602（placement）/ B 604（tombstone）",
+            "splitOutline": "{\"compositor\":true,\"renderer\":\"ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)\"}"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "不传 compare_a / compare_b：A / B 自动选时间线最近两版（跟活库走，只留轻断言）、对比跑完、两侧对象数与 tombstone 口径自洽、关闭 DELETE = generate",
+          "status": "passed",
+          "seconds": 2.2,
+          "annotations": {
+            "latest-two": "24384_23257 范围 subtree · A 626（placement）→ B 630（placement）· 对象 9 / 9"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "B 版之后又被删的构件：幽灵行标「当前已不在」且徽章仍是「增」、属性面板不拉当前会话、「在 3D 中定位」照样找得到",
+          "status": "passed",
+          "seconds": 2.3,
+          "annotations": {}
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "URL 指定的版本不在时间线里：回落最近两版并在面板里说明",
+          "status": "passed",
+          "seconds": 2.2,
+          "annotations": {}
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "叶子构件：时间线带 user / comment / 属性 n，叶子缺省「仅自身」（「所有子节点」置灰），属性对比 tab 折出 (A, B] 的净差，所属单元的 A / B 自动对比",
+          "status": "passed",
+          "seconds": 2.7,
+          "annotations": {
+            "attribute-diff source": "server（element/attribute-diff HTTP 200）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "容器节点：子树时间线来自 node/versions（不再手填会话号），「所有子节点」下每行带「单元 n」，差异摘要按单元分组、逐组三维对比",
+          "status": "passed",
+          "seconds": 4.2,
+          "annotations": {
+            "timeline filters": "全表 302 · 只看自身变的 5 · 只看几何变的 300（A 643 / B 645）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进三维 → 分屏 → 换成只看一组分屏保持（收口计划 P3-a / P2-a / P3-b）",
+          "status": "passed",
+          "seconds": 4.3,
+          "annotations": {
+            "history/generate": "8 份（5 组，4 侧不存在）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "服务端带 element/attribute-diff：「所有子节点」里有变的构件点开是两端真差——成员增删 / 重排、owner 改挂另列，不再说「折出来的」（收口计划 P2-c）",
+          "status": "passed",
+          "seconds": 2.6,
+          "annotations": {
+            "attribute-diff samples": "24384/24776：成员 +1 -0（属性 1）；24384/24775：成员 +1 -0（属性 0）"
+          }
+        }
+      ]
+    },
+    {
+      "mode": "gpu",
+      "label": "PLAYWRIGHT_GPU=1（ANGLE → D3D11）",
+      "passed": 9,
+      "total": 9,
+      "durationSeconds": 36.4,
+      "tests": [
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "钉死的 A / B（缺省 BRAN 24384_23257 626 → 630）：compare_a / compare_b 开面板、时间线与版本表来自服务端、A/B 按 URL 选中、对比结果与两侧对象数自洽、角标 / 图例 / 只看差异、分屏、树差异、关闭 DELETE 快照",
+          "status": "passed",
+          "seconds": 7.3,
+          "annotations": {
+            "timeline": "24384_23257 范围 subtree · 画出 57 行 · 本范围 57 版 · A 626（placement）/ B 630（placement）",
+            "splitOutline": "{\"compositor\":true,\"renderer\":\"ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)\"}"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "钉死的整单元被删现场（缺省 EQUI 24384_26480 602 → 604，B 版 tombstone）：B 侧 0 对象且全部删除、幽灵行「已删除」、属性面板不拉当前会话、「在 3D 中定位」飞得动、关闭只 DELETE 有几何的那一份",
+          "status": "passed",
+          "seconds": 5.1,
+          "annotations": {
+            "timeline": "24384_26480 范围 self · 画出 11 行 · 本范围 11 版 · A 602（placement）/ B 604（tombstone）",
+            "splitOutline": "{\"compositor\":true,\"renderer\":\"ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)\"}"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "不传 compare_a / compare_b：A / B 自动选时间线最近两版（跟活库走，只留轻断言）、对比跑完、两侧对象数与 tombstone 口径自洽、关闭 DELETE = generate",
+          "status": "passed",
+          "seconds": 2.2,
+          "annotations": {
+            "latest-two": "24384_23257 范围 subtree · A 626（placement）→ B 630（placement）· 对象 9 / 9"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "B 版之后又被删的构件：幽灵行标「当前已不在」且徽章仍是「增」、属性面板不拉当前会话、「在 3D 中定位」照样找得到",
+          "status": "passed",
+          "seconds": 2.2,
+          "annotations": {}
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "URL 指定的版本不在时间线里：回落最近两版并在面板里说明",
+          "status": "passed",
+          "seconds": 2.5,
+          "annotations": {}
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "叶子构件：时间线带 user / comment / 属性 n，叶子缺省「仅自身」（「所有子节点」置灰），属性对比 tab 折出 (A, B] 的净差，所属单元的 A / B 自动对比",
+          "status": "passed",
+          "seconds": 2.5,
+          "annotations": {
+            "attribute-diff source": "server（element/attribute-diff HTTP 200）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "容器节点：子树时间线来自 node/versions（不再手填会话号），「所有子节点」下每行带「单元 n」，差异摘要按单元分组、逐组三维对比",
+          "status": "passed",
+          "seconds": 4.3,
+          "annotations": {
+            "timeline filters": "全表 302 · 只看自身变的 5 · 只看几何变的 300（A 643 / B 645）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进三维 → 分屏 → 换成只看一组分屏保持（收口计划 P3-a / P2-a / P3-b）",
+          "status": "passed",
+          "seconds": 5,
+          "annotations": {
+            "history/generate": "8 份（5 组，4 侧不存在）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "服务端带 element/attribute-diff：「所有子节点」里有变的构件点开是两端真差——成员增删 / 重排、owner 改挂另列，不再说「折出来的」（收口计划 P2-c）",
+          "status": "passed",
+          "seconds": 2.7,
+          "annotations": {
+            "attribute-diff samples": "24384/24776：成员 +1 -0（属性 1）；24384/24775：成员 +1 -0（属性 0）"
+          }
+        }
+      ]
+    },
+    {
+      "mode": "swgl",
+      "label": "PLAYWRIGHT_SOFTWARE_GL=1（ANGLE → SwiftShader）",
+      "passed": 9,
+      "total": 9,
+      "durationSeconds": 51.4,
+      "tests": [
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "钉死的 A / B（缺省 BRAN 24384_23257 626 → 630）：compare_a / compare_b 开面板、时间线与版本表来自服务端、A/B 按 URL 选中、对比结果与两侧对象数自洽、角标 / 图例 / 只看差异、分屏、树差异、关闭 DELETE 快照",
+          "status": "passed",
+          "seconds": 19.5,
+          "annotations": {
+            "timeline": "24384_23257 范围 subtree · 画出 57 行 · 本范围 57 版 · A 626（placement）/ B 630（placement）",
+            "splitOutline": "{\"compositor\":false,\"renderer\":\"ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)\"}"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "钉死的整单元被删现场（缺省 EQUI 24384_26480 602 → 604，B 版 tombstone）：B 侧 0 对象且全部删除、幽灵行「已删除」、属性面板不拉当前会话、「在 3D 中定位」飞得动、关闭只 DELETE 有几何的那一份",
+          "status": "passed",
+          "seconds": 5.8,
+          "annotations": {
+            "timeline": "24384_26480 范围 self · 画出 11 行 · 本范围 11 版 · A 602（placement）/ B 604（tombstone）",
+            "splitOutline": "{\"compositor\":false,\"renderer\":\"ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)\"}"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "不传 compare_a / compare_b：A / B 自动选时间线最近两版（跟活库走，只留轻断言）、对比跑完、两侧对象数与 tombstone 口径自洽、关闭 DELETE = generate",
+          "status": "passed",
+          "seconds": 2.7,
+          "annotations": {
+            "latest-two": "24384_23257 范围 subtree · A 626（placement）→ B 630（placement）· 对象 9 / 9"
+          }
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "B 版之后又被删的构件：幽灵行标「当前已不在」且徽章仍是「增」、属性面板不拉当前会话、「在 3D 中定位」照样找得到",
+          "status": "passed",
+          "seconds": 2.6,
+          "annotations": {}
+        },
+        {
+          "file": "model-version-compare-gen-model-v1.spec.ts",
+          "title": "URL 指定的版本不在时间线里：回落最近两版并在面板里说明",
+          "status": "passed",
+          "seconds": 2.4,
+          "annotations": {}
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "叶子构件：时间线带 user / comment / 属性 n，叶子缺省「仅自身」（「所有子节点」置灰），属性对比 tab 折出 (A, B] 的净差，所属单元的 A / B 自动对比",
+          "status": "passed",
+          "seconds": 2.8,
+          "annotations": {
+            "attribute-diff source": "server（element/attribute-diff HTTP 200）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "容器节点：子树时间线来自 node/versions（不再手填会话号），「所有子节点」下每行带「单元 n」，差异摘要按单元分组、逐组三维对比",
+          "status": "passed",
+          "seconds": 4.8,
+          "annotations": {
+            "timeline filters": "全表 302 · 只看自身变的 5 · 只看几何变的 300（A 643 / B 645）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进三维 → 分屏 → 换成只看一组分屏保持（收口计划 P3-a / P2-a / P3-b）",
+          "status": "passed",
+          "seconds": 5.5,
+          "annotations": {
+            "history/generate": "8 份（5 组，4 侧不存在）"
+          }
+        },
+        {
+          "file": "node-version-view-gen-model-v1.spec.ts",
+          "title": "服务端带 element/attribute-diff：「所有子节点」里有变的构件点开是两端真差——成员增删 / 重排、owner 改挂另列，不再说「折出来的」（收口计划 P2-c）",
+          "status": "passed",
+          "seconds": 3,
+          "annotations": {
+            "attribute-diff samples": "24384/24776：成员 +1 -0（属性 1）；24384/24775：成员 +1 -0（属性 0）"
+          }
+        }
+      ]
+    }
+  ],
+  "dataDrift": {
+    "site_24384_22399_subtree": "301 版（09-22 是 298）+ 仅属性 1 = 302 行；容器用例自动挑到 A 643 / B 645（变了的单元 1：BRAN 24384/26496 整条删除，删除 9 / 未变 0）",
+    "bran_24384_23257": "57 版不变，626 / 630 现在都是 placement（09-18 是 mesh）",
+    "equi_24384_26480": "11 版不变，604 tombstone",
+    "equi_24384_24776": "23 版不变，618 / 628 在",
+    "pipe_24384_23225_300_380": "diff-summary 6 组（含 1 组无 unit_root），几何变过 5 组，generate 8 份 = DELETE 8"
+  },
+  "files": "本目录 = Chrome 缺省那一档的 NODE_VERSION_E2E_EVIDENCE 截图 + 数字 JSON（三档内容相同，只存一份）；model-version-compare 那份 spec 不落截图，数字见 runs[].tests[].annotations"
+}

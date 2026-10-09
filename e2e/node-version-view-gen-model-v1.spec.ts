@@ -360,7 +360,10 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   // 2026-09-21 起（收口计划 P1-b，设计稿 S3）每行行尾一颗「定位」：还没「在三维中对比」时 B 版已删的构件当前模型里没有 → 置灰并说明；其余可点
   const locateButton = (refno: string) => page.getByTestId(`model-unit-compare-element-locate-${underscore(refno)}`);
   await expect(page.locator('[data-testid^="model-unit-compare-element-locate-"]')).toHaveCount(summaryRows.length);
-  const deletedRow = summaryRows.find((row) => row.status === 'deleted');
+  // 「定位」飞的是它自己的几何：整个单元被删时单元根那一行也是 deleted，可单元根自己没有几何对象（成员才有）、飞不过去——
+  // 挑一个不是单元根的被删构件（2026-10-09 本机 ams8000 643 → 645 整条 BRAN 24384/26496 被删，首行正是单元根）
+  const unitRoots = new Set(summary.groups.map((group) => group.unit_root).filter((root): root is string => !!root));
+  const deletedRow = summaryRows.find((row) => row.status === 'deleted' && !unitRoots.has(row.refno));
   if (modifiedRow) await expect(locateButton(modifiedRow.refno)).toBeEnabled();
   if (deletedRow) {
     await expect(locateButton(deletedRow.refno)).toBeDisabled();

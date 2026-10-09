@@ -9,7 +9,11 @@
   - 视口 `ViewerPanel.vue` 5639 → 4951 行：三维版本对比的 open / clear / 切 A-B / 只看差异 / 分屏 pass / 指针落格射线 / 隔离图层拾取与钉到那一版 / 定位 / 运行态发布 / 事件路由抽成 `viewer/modelUnitCompareController.ts`；图层怎么建 / 挂、工具怎么收、相机怎么飞、几何从哪儿装、选中存哪儿、校审持有的那份怎么放，经 `ModelUnitCompareHost` 回到 ViewerPanel，所以控制器能在没有 WebGL 的单测里用假 host 跑完整条路。
   - 验证：面板 27 例一个没改全绿；新增 `useNodeVersionTimeline.test.ts` 5 例、`modelUnitCompareController.test.ts` 8 例（open 装两侧并着色 / 环境藏目标 / 运行态发布、tombstone 不装、装出 0 件走 error、clear 还显隐相机图层、切换守卫、事件路由、作废、定位、拾取与钉版）；全仓 341 文件 3190 例全绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 触及文件 0。e2e 断言没改（认的 `data-testid` 全部保留），真机未跑（没有隔离环境）。
 
-- **版本对比 e2e 夹具钉死版本对，活库漂了就 skip 并说明、不再变红** (2026-10-09，版本对比审核计划 P1-2 / F7，代码部分；隔离环境里还没跑)
+- **版本对比两份 e2e 本机三档全绿；`node-version-view` 容器用例「定位被删构件」改挑不是单元根的被删行** (2026-10-09 22:xx，版本对比审核计划 P1-2 的「跑」)
+  - `:8022` 用 `0.1.34+gdae43cfd8`（10-08 构建）重起后，`model-version-compare`（5 条）+ `node-version-view`（4 条）Chrome 缺省 / `PLAYWRIGHT_GPU=1` / `PLAYWRIGHT_SOFTWARE_GL=1` 各 **9 passed**（35.5 / 36.4 / 51.4 s），`splitOutline` 真显卡 `compositor true`、SwiftShader `false`，pageerror 0。
+  - 第一遍 1 failed 是活库漂了：本机 ams8000 最新一段 643 → 645 整条 BRAN 24384/26496 被删，spec 挑到的「被删构件」是单元根，它自己没有几何对象、定位按设计不动相机。spec 改挑不是单元根的被删行（FTUB 24384/26497）。记录与证据：验证 README §10 + `p12-pinned-1009/`。
+
+- **版本对比 e2e 夹具钉死版本对，活库漂了就 skip 并说明、不再变红** (2026-10-09，版本对比审核计划 P1-2 / F7，代码部分)
   - 起因：`e2e/model-version-compare-gen-model-v1.spec.ts` 缺省绑「EQUI 24384_26480 的最近两版」+ 活库，该单元在 604 已删，第二条又取首尾两个有几何的版本——库一长、一换，断言跟着漂。
   - 现在：全量检查点走钉死的 A / B——主夹具 `MODEL_VERSION_E2E_UNIT` / `_A` / `_B`（缺省 BRAN `24384_23257` 626 → 630，两版都有几何），整单元被删现场 `MODEL_VERSION_E2E_TOMBSTONE_UNIT` / `_A` / `_B`（缺省 EQUI `24384_26480` 602 → 604，走 tombstone 分支），幽灵构件 `MODEL_VERSION_E2E_GHOST_*` 照旧；跑前拿 `element/versions` 探单元根身份与这对在不在链上，不在就 `skip` 并把链尾、该换的变量写进理由。「不传 compare_a / compare_b 自动选最近两版」与「URL 那对不在就回落」只留轻断言。时间线行数 / 「本范围 n 版」/ 行徽章按面板实际落的范围从 `element/versions` ∪ `element/attribute-history` 算，与 `buildNodeTimelineRows` 同一口径。
   - 验证：ESLint 0；两份 e2e 在 strict tsconfig 下 0 错；门的空跑（只读 GET 线上后端、浏览器指向关闭端口、不建快照）：缺省三组夹具全部过门，错配的 A / 叶子 / 容器 / 非 tombstone 四种情况各 skip 且理由对。**浏览器里的断言未跑**（要隔离环境，`history/generate` 会建快照，D5 不对生产跑），记录见验证 README §10。
