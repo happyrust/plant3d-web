@@ -385,3 +385,20 @@ pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `G
 - **真修法**：把 gen-model-refactor（≥ `a382b2cf3`；`0b2bf527b` 六条都有，本机 `:8022` 就是它）并进 `deploy/backend-20260918`（该分支比 refactor 多 19 笔部署 / Linux CI 提交，refactor 比它多 50 笔）再走 `.github/workflows/deploy-linux-ubuntu.yml`（提交信息带 `[deploy]` 才真发）。线上是 rocksdb 持久库 + PMS 在用，换后端是后端仓的部署动作，本轮没做、等拍板。
 
 - **上线复验（10:3x）**：用户拍板后 `15964f7f` push 到 origin/main，`gh workflow run deploy-ubuntu.yml --ref main` → run [35810771014](https://github.com/happyrust/plant3d-web/actions/runs/35810771014) success（02:32:36 → 02:35:12 UTC）；`/version.json` `commit 15964f7f… buildDate 2026-09-23 02:33:56 UTC`，bundle `index-DMoQMQJ8.js`（上一版 `index-BDGT5ORu.js`）。同一探针再开线上 `?unit_refno=24384_26480&compare_autorun=1`：请求账仍 `404 element/versions` → `404 model/versions`（后端没换），错误框已是「服务端还没有 model/versions：…当前站点接的后端还是旧构建」，pageerror 0（`03-online-15964f7f-honest-message.png`）。后端仍是 `0.1.27+gc04a9e558`，换后端另拍板。
+
+## 10. e2e 夹具钉死版本对（2026-10-09，版本对比审核计划 P1-2 / F7；代码已改，隔离环境里还没跑）
+
+`e2e/model-version-compare-gen-model-v1.spec.ts` 之前缺省绑「EQUI 24384_26480 的最近两版」+ 活库：单元在 604 已删、第二条又取「首尾两个有几何的版本」，库一长、一换，断言就跟着漂（审核发现 F7）。现在：
+
+| 用例 | 夹具（环境变量 → 缺省） | 门 |
+|---|---|---|
+| 钉死的 A / B 全量检查点（时间线 / A-B / 对比 / 角标图例 / 只看差异 / 分屏 / 树差异 / 关闭 DELETE） | `MODEL_VERSION_E2E_UNIT` / `_A` / `_B` → BRAN `24384_23257` 626 → 630（§6 那次抬管 / 放回，修改 1 / 未变 8） | `element/versions` 链上有这两版且 `model/versions` 有这两版；没有就 skip，理由写链尾与该换的变量 |
+| 钉死的整单元被删现场（同一套检查点走 tombstone 分支） | `MODEL_VERSION_E2E_TOMBSTONE_UNIT` / `_A` / `_B` → EQUI `24384_26480` 602 → 604 | 同上 + B 版 `impact_kind` 必须是 `tombstone` |
+| B 版之后又被删的构件 | `MODEL_VERSION_E2E_GHOST_UNIT` / `_A` / `_B` → EQUI `24384_24776` 618 → 628（原样） | 同第一行 |
+| 不传 compare_a / compare_b 自动选最近两版 | 主夹具单元 | 只留轻断言：选中的是时间线最新两行、对比跑完、两侧对象数与 tombstone 口径自洽、DELETE = generate |
+| URL 那对不在时间线里回落最近两版 | 主夹具单元 | 同上，轻断言 |
+
+- 整文件的门：服务在；`element/versions` 说这个 refno 是单元根（`unit_root` 是它自己——叶子报「所属单元是 X，换成它」、容器报「不在任何最小交付单元下，走 node-version-view 那份」）；至少两版。
+- 时间线行数与「本范围 n 版」不再只对 `model/versions`，而是按面板实际落的范围（`aria-pressed`）从 `element/versions` ∪ `element/attribute-history` 算（`expectedTimeline`，与 `buildNodeTimelineRows` / `countNodeTimeline` 同一口径）——EQUI 24384_24776 的属性时间线就比版本表多一行 sesno 15（仅属性），只数版本表会少一行。行上那颗徽章也按范围取单元列 / 自身列（`rowImpact`）。
+- **门的空跑（10-09 20:5x，只读 GET 线上 `123.57.182.243`，浏览器指向关闭的端口、一条 `history/generate` 都没发）**：缺省三组夹具全部过门（BRAN 57 版、unit_root 自己、626 / 630 在；EQUI 24384_26480 11 版、604 tombstone；EQUI 24384_24776 23 版、618 / 628 在），五条用例都走到 `page.goto`；`MODEL_VERSION_E2E_A=999999` → 第一条 skip「链上没有 999999（共 57 版，链尾 … 573 / 626 / 630）」；`MODEL_VERSION_E2E_UNIT=24384_23262`（FTUB 叶子）→ 整文件 skip「不是单元根，所属单元是 24384_23257」；`=24384_22399`（SITE）→ 整文件 skip「不在任何最小交付单元下（容器）」（线上 `model/versions` 对 SITE 回 422）；`MODEL_VERSION_E2E_TOMBSTONE_B=602` → 那条 skip「602 是 placement、不是 tombstone」。ESLint 0；两份 spec 在 strict tsconfig 下 0 错。
+- **还没跑**：浏览器里的那串断言要 dev server + 带六条路由的 gen-model，`history/generate` 会在服务端建快照，按审核计划 D5 不对生产跑；等 M2 / M3 同版部署进隔离联调环境后，`PLAYWRIGHT_PORT=<port> GEN_MODEL_V1_BASE_URL=<隔离环境> npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts e2e/node-version-view-gen-model-v1.spec.ts --workers=1` 三档（缺省 / `PLAYWRIGHT_GPU=1` / `PLAYWRIGHT_SOFTWARE_GL=1`）各跑一遍，结果补在这里。`node-version-view` 那份的夹具本来就是钉死 + 有门的（LEAF / CONTAINER / MULTI 300 → 380 / ATTRDIFF 573 → 628），这次没动。

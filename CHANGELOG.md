@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比 e2e 夹具钉死版本对，活库漂了就 skip 并说明、不再变红** (2026-10-09，版本对比审核计划 P1-2 / F7，代码部分；隔离环境里还没跑)
+  - 起因：`e2e/model-version-compare-gen-model-v1.spec.ts` 缺省绑「EQUI 24384_26480 的最近两版」+ 活库，该单元在 604 已删，第二条又取首尾两个有几何的版本——库一长、一换，断言跟着漂。
+  - 现在：全量检查点走钉死的 A / B——主夹具 `MODEL_VERSION_E2E_UNIT` / `_A` / `_B`（缺省 BRAN `24384_23257` 626 → 630，两版都有几何），整单元被删现场 `MODEL_VERSION_E2E_TOMBSTONE_UNIT` / `_A` / `_B`（缺省 EQUI `24384_26480` 602 → 604，走 tombstone 分支），幽灵构件 `MODEL_VERSION_E2E_GHOST_*` 照旧；跑前拿 `element/versions` 探单元根身份与这对在不在链上，不在就 `skip` 并把链尾、该换的变量写进理由。「不传 compare_a / compare_b 自动选最近两版」与「URL 那对不在就回落」只留轻断言。时间线行数 / 「本范围 n 版」/ 行徽章按面板实际落的范围从 `element/versions` ∪ `element/attribute-history` 算，与 `buildNodeTimelineRows` 同一口径。
+  - 验证：ESLint 0；两份 e2e 在 strict tsconfig 下 0 错；门的空跑（只读 GET 线上后端、浏览器指向关闭端口、不建快照）：缺省三组夹具全部过门，错配的 A / 叶子 / 容器 / 非 tombstone 四种情况各 skip 且理由对。**浏览器里的断言未跑**（要隔离环境，`history/generate` 会建快照，D5 不对生产跑），记录见验证 README §10。
+
 - **版本对比三维装载失败时，面板立即把两侧历史快照还给服务端** (2026-10-09，版本对比审核计划 P2-3)
   - 从前：视口报 error（如「版本 A 没有可显示的几何对象」「三维查看器尚未就绪」）后，面板仍持有两侧几何，`history/{snapshot_key}` 要等用户点「退出」才 DELETE；树差异模式还挂着一个已用不上的属性取数口。
   - 现在：面板收到 error 态运行态时释放持有的几何、树退出差异模式；错误卡照旧显示，「退出」照旧收尾，不会重复释放。
