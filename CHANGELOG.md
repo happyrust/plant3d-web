@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比三维装载失败时，面板立即把两侧历史快照还给服务端** (2026-10-09，版本对比审核计划 P2-3)
+  - 从前：视口报 error（如「版本 A 没有可显示的几何对象」「三维查看器尚未就绪」）后，面板仍持有两侧几何，`history/{snapshot_key}` 要等用户点「退出」才 DELETE；树差异模式还挂着一个已用不上的属性取数口。
+  - 现在：面板收到 error 态运行态时释放持有的几何、树退出差异模式；错误卡照旧显示，「退出」照旧收尾，不会重复释放。
+  - 验证：面板单测 +1（error 态后两份各 `release` 一次、树收到空上下文、错误文案在；再收一次 error、点退出都不再释放）——去掉改动时该用例红（`release` 0 次）；全仓 339 文件 3170 例全绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 触及 2 文件 0。
+
 - **版本对比「取两侧几何 → 比几何 → 进三维 / 树差异」收成一份：节点版本面板与校审单恢复共用 `utils/modelUnitCompareLoader.ts`** (2026-10-09，版本对比审核计划 P2-1)
   - 起因：面板 `runCompareUnits` 与校审恢复 `loadReviewModelComparison` 各写一遍装载与拼装，已在并发、进度、geometryKey 复用、会话时间、tombstone 判定上分叉。
   - 现在：`loadModelUnitComparePairs`（两工位并发、进度、同 geometryKey 只取一份、一份失败或请求作废时等在飞的落地后全部还回去）+ `buildModelUnitCompareView`（各单元几何差异行、单 / 多单元 `open` detail、树差异上下文）+ `pickModelUnitCompareGeometry`（属性归属：面板宽松、校审严格不猜）。两边只留各自怎么得到 A / B 版本：面板按时间线 / 差异摘要，校审按 `attributeDiff` 校过的身份。

@@ -342,6 +342,53 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('三维装载失败（error 态）就把两侧快照还回去、树退出差异模式，错误卡留着；再收到 error 或点退出都不重复释放', async () => {
+    const treeDiffEvents: CustomEvent[] = [];
+    const treeListener = (event: Event) => treeDiffEvents.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-version-tree-diff', treeListener);
+    const compareEvents: CustomEvent[] = [];
+    const compareListener = (event: Event) => compareEvents.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', compareListener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381_145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const held = await Promise.all(versionSourceMocks.loadVersion.mock.results.map((result) => result.value as Promise<ModelVersionGeometry>));
+    expect(held).toHaveLength(2);
+    const detail = compareEvents.map((event) => event.detail).find((item) => item.action === 'open');
+    expect(detail).toBeDefined();
+    const publishError = async () => {
+      window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', {
+        detail: { detail, status: 'error', activeSide: 'after', viewMode: 'single', error: '版本 A（sesno 791）没有可显示的几何对象' },
+      }));
+      await flushUi();
+    };
+    await publishError();
+    for (const geometry of held) expect(geometry.release).toHaveBeenCalledTimes(1);
+    expect(treeDiffEvents[treeDiffEvents.length - 1]?.detail).toEqual({ refnos: [], models: [] });
+    expect(host.textContent).toContain('版本 A（sesno 791）没有可显示的几何对象');
+
+    await publishError();
+    (host.querySelector('[data-testid="model-unit-compare-close"]') as HTMLButtonElement).click();
+    await flushUi();
+    for (const geometry of held) expect(geometry.release).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener('plant3d:model-version-tree-diff', treeListener);
+    window.removeEventListener('plant3d:model-unit-version-compare', compareListener);
+    app.unmount();
+  });
+
   it('「三维只看差异」：跟着视口运行态显示，勾选派发 set-diff-only；两版没几何差异时置灰', async () => {
     const events: CustomEvent[] = [];
     const listener = (event: Event) => events.push(event as CustomEvent);

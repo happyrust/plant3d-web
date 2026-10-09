@@ -895,6 +895,11 @@ function handleCompareLifecycle(event: Event): void {
 function handleCompareRuntime(event: Event): void {
   compareRuntime.value = (event as CustomEvent<ModelUnitVersionCompareRuntimeState | null>).detail ?? null;
   compareActive.value = compareRuntime.value !== null;
+  // 三维装载失败：两侧几何已用不上，服务端快照现在就还；树差异模式的属性取数口随之失效，一并退出。错误卡留着，「退出」照旧收尾
+  if (compareRuntime.value?.status === 'error' && heldGeometries.length > 0) {
+    releaseHeldGeometries();
+    dispatchTreeDiffContext(null);
+  }
 }
 
 /**
