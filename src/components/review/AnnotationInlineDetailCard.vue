@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-vue-next';
 
+import AnnotationDecisionForm from './AnnotationDecisionForm.vue';
 import { getAnnotationWorkspaceTypeDisplay } from './annotationWorkspaceModel';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 
@@ -103,6 +104,8 @@ const measurementLaunchActions = computed<MeasurementLaunchAction[]>(() => [
 const isDesignerOnly = computed(() => (
   props.designerOnly ?? props.currentUserRole === UserRole.DESIGNER
 ));
+// dock 档的评论输入框嵌在时间线的处理区里，拆出去会把它一起带走，所以只在 normal 档把处理结论提到最上面
+const showDecisionForm = computed(() => isDesignerOnly.value && !isDockDensity.value);
 // 四类批注统一为带角色绑定（ADR-0049）：`bindings` 恒有；`cloudBindings` 是云线条目的旧名，过渡期兜底。
 const itemBindings = computed(() => props.item.bindings ?? props.item.cloudBindings ?? []);
 const memberBindings = computed(() => itemBindings.value.filter((binding) => binding.role === 'member'));
@@ -266,6 +269,13 @@ function formatDateTime(timestamp: number): string {
     <div class="grid min-w-0 gap-3"
       :class="isDockDensity ? 'p-3' : 'p-4 xl:grid-cols-[minmax(220px,0.75fr)_minmax(340px,1.25fr)]'">
       <div class="min-w-0 space-y-3">
+        <AnnotationDecisionForm v-if="showDecisionForm"
+          :annotation-type="item.type"
+          :annotation-id="item.id"
+          :context-form-id="formId"
+          :context-task-id="taskId"
+          :allow-review-actions="allowReviewActions"
+          @review-action-completed="emit('review-action-completed', $event)" />
         <div class="rounded-lg border border-slate-200 bg-white p-3">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -619,7 +629,7 @@ function formatDateTime(timestamp: number): string {
       <div class="min-h-0 min-w-0 overflow-hidden rounded-lg bg-white">
         <div class="flex items-center gap-1.5 border-x border-t border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
           <MessageSquareText class="h-3.5 w-3.5 text-brand" />
-          讨论与处理
+          {{ showDecisionForm ? '讨论' : '讨论与处理' }}
         </div>
         <ReviewCommentsTimeline :annotation-type="item.type"
           :annotation-id="item.id"
@@ -629,6 +639,7 @@ function formatDateTime(timestamp: number): string {
           :context-task-id="taskId"
           :allow-review-actions="allowReviewActions"
           :density="density"
+          :show-action-composer="!showDecisionForm"
           @close="emit('close')"
           @review-action-completed="emit('review-action-completed', $event)" />
       </div>

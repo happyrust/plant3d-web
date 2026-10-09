@@ -100,8 +100,21 @@ vi.mock('./ReviewCommentsTimeline.vue', () => ({
       designerOnly: { type: Boolean, default: false },
       composerSubmitLabel: { type: String, default: '' },
       annotationLabel: { type: String, default: '' },
+      showActionComposer: { type: Boolean, default: true },
     },
-    template: '<div data-testid="timeline-stub">{{ designerOnly ? "designerOnly" : "review" }}|{{ composerSubmitLabel }}|{{ annotationLabel }}</div>',
+    template: '<div data-testid="timeline-stub" :data-show-action-composer="String(showActionComposer)">{{ designerOnly ? "designerOnly" : "review" }}|{{ composerSubmitLabel }}|{{ annotationLabel }}</div>',
+  },
+}));
+
+vi.mock('./AnnotationDecisionForm.vue', () => ({
+  default: {
+    name: 'AnnotationDecisionFormStub',
+    props: {
+      annotationType: { type: String, default: null },
+      annotationId: { type: String, default: null },
+    },
+    emits: ['review-action-completed'],
+    template: '<button data-testid="decision-form-stub" @click="$emit(\'review-action-completed\', { action: \'fixed\', annotationType, annotationId, state: { resolutionStatus: \'fixed\' } })">保存并处理下一条</button>',
   },
 }));
 
@@ -1037,6 +1050,45 @@ describe('DesignerCommentHandlingPanel', () => {
 
     expect(document.querySelectorAll('[data-testid="timeline-stub"]')).toHaveLength(1);
     expect(document.body.textContent).toContain('文字批注 / 第二条待处理批注');
+
+    mounted.unmount();
+  });
+
+  it('展开区先给处理表单；保存后自动展开下一条待处理，最后一条处理完焦点落到底栏', async () => {
+    currentTaskRef.value = createTask();
+    annotationsRef.value = [
+      { id: 'annot-open', title: '待处理批注', description: '', createdAt: 10, visible: true, refnos: ['24381_145018'], formId: 'FORM-1001' },
+      { id: 'annot-second', title: '第二条待处理批注', description: '', createdAt: 30, visible: true, refnos: ['24381_145020'], formId: 'FORM-1001' },
+    ];
+    const markFixed = (id: string) => {
+      annotationsRef.value = annotationsRef.value.map((annotation) => (
+        annotation.id === id
+          ? { ...annotation, reviewState: { resolutionStatus: 'fixed', decisionStatus: 'pending', updatedAt: 1710000000000, history: [] } }
+          : annotation
+      ));
+    };
+
+    const mounted = await mountPanel();
+    document.querySelector<HTMLElement>('[data-testid="annotation-table-row-annot-open"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    await flushUi();
+
+    expect(document.querySelector('[data-testid="decision-form-stub"]')).toBeTruthy();
+    expect(document.querySelector<HTMLElement>('[data-testid="timeline-stub"]')?.dataset.showActionComposer).toBe('false');
+
+    markFixed('annot-open');
+    document.querySelector<HTMLButtonElement>('[data-testid="decision-form-stub"]')!.click();
+    await flushUi();
+
+    expect(activeAnnotationIdRef.value).toBe('annot-second');
+    expect(document.querySelector('[data-testid="annotation-inline-detail-card"]')?.textContent).toContain('第二条待处理批注');
+
+    markFixed('annot-second');
+    document.querySelector<HTMLButtonElement>('[data-testid="decision-form-stub"]')!.click();
+    await flushUi();
+
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('下一步') }));
+    expect(document.activeElement).toBe(document.querySelector('[data-testid="designer-confirm-button"]'));
 
     mounted.unmount();
   });

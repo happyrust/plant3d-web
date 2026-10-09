@@ -90,6 +90,7 @@ vi.mock('./ReviewCommentsTimeline.vue', () => ({
       'designerOnly',
       'allowReviewActions',
       'density',
+      'showActionComposer',
     ],
     emits: ['close', 'review-action-completed'],
     template: `
@@ -100,8 +101,27 @@ vi.mock('./ReviewCommentsTimeline.vue', () => ({
         :data-task-id="contextTaskId"
         :data-designer-only="String(designerOnly)"
         :data-density="density"
+        :data-show-action-composer="String(showActionComposer)"
       >
         <button data-testid="timeline-complete" @click="$emit('review-action-completed', { action: 'fixed', annotationId, annotationType, state: { resolutionStatus: 'fixed' } })">完成</button>
+      </div>
+    `,
+  },
+}));
+
+vi.mock('./AnnotationDecisionForm.vue', () => ({
+  default: {
+    name: 'AnnotationDecisionFormStub',
+    props: ['annotationType', 'annotationId', 'contextFormId', 'contextTaskId', 'allowReviewActions'],
+    emits: ['review-action-completed'],
+    template: `
+      <div
+        data-testid="decision-form-stub"
+        :data-annotation-id="annotationId"
+        :data-form-id="contextFormId"
+        :data-task-id="contextTaskId"
+      >
+        <button data-testid="decision-form-complete" @click="$emit('review-action-completed', { action: 'wont_fix', annotationId, annotationType, state: { resolutionStatus: 'wont_fix' } })">保存</button>
       </div>
     `,
   },
@@ -210,6 +230,38 @@ describe('AnnotationInlineDetailCard', () => {
     expect(timeline?.dataset.designerOnly).toBe('true');
 
     mounted.unmount();
+  });
+
+  it('设计侧 normal 档：处理表单排在最前，时间线不再带处理区，表单的完成事件照常透传', async () => {
+    const mounted = await mountCard();
+    const form = mounted.host.querySelector<HTMLElement>('[data-testid="decision-form-stub"]');
+    const timeline = mounted.host.querySelector<HTMLElement>('[data-testid="timeline-stub"]');
+    const firstCard = mounted.host.querySelector('.space-y-3')?.firstElementChild;
+
+    expect(form?.dataset.annotationId).toBe('annot-1');
+    expect(form?.dataset.formId).toBe('FORM-1');
+    expect(form?.dataset.taskId).toBe('task-1');
+    expect(firstCard).toBe(form);
+    expect(timeline?.dataset.showActionComposer).toBe('false');
+    expect(mounted.host.textContent).not.toContain('讨论与处理');
+
+    mounted.host.querySelector<HTMLButtonElement>('[data-testid="decision-form-complete"]')!.click();
+    expect(mounted.completedSpy).toHaveBeenCalledWith(expect.objectContaining({ action: 'wont_fix', annotationId: 'annot-1' }));
+
+    mounted.unmount();
+  });
+
+  it('dock 档或校核角色不出处理表单，处理区留在时间线里', async () => {
+    const dock = await mountCard({ density: 'dock' });
+    expect(dock.host.querySelector('[data-testid="decision-form-stub"]')).toBeNull();
+    expect(dock.host.querySelector<HTMLElement>('[data-testid="timeline-stub"]')?.dataset.showActionComposer).toBe('true');
+    dock.unmount();
+
+    const reviewer = await mountCard({ currentUserRole: UserRole.PROOFREADER });
+    expect(reviewer.host.querySelector('[data-testid="decision-form-stub"]')).toBeNull();
+    expect(reviewer.host.querySelector<HTMLElement>('[data-testid="timeline-stub"]')?.dataset.showActionComposer).toBe('true');
+    expect(reviewer.host.textContent).toContain('讨论与处理');
+    reviewer.unmount();
   });
 
   it('从批注单据预览并关闭问题截图', async () => {

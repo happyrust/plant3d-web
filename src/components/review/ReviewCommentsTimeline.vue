@@ -11,19 +11,16 @@ import {
   X,
 } from 'lucide-vue-next';
 
+import { useAnnotationReviewAction } from './useAnnotationReviewAction';
+
 import type { AnnotationType } from '@/composables/useToolStore';
 
 import {
-  annotationReviewStateApply,
-  annotationReviewStatesQuery,
-  normalizeAnnotationReviewStateView,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
-import { invalidateAnnotationReviewStatesCache } from '@/composables/useAnnotationReviewStateSync';
 import { useCommentThread } from '@/composables/useCommentThread';
-import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitToast } from '@/ribbon/toastBus';
@@ -34,7 +31,6 @@ import {
   type AnnotationReviewState,
   type AnnotationScreenshot,
   getAnnotationReviewActionLabel,
-  getAnnotationReviewDisplay,
   getRoleDisplayName,
   getRoleTheme,
   UserRole,
@@ -64,6 +60,8 @@ const props = withDefaults(defineProps<{
    */
   allowReviewActions?: boolean;
   density?: 'normal' | 'dock';
+  /** 处理结果按钮与备注由外部表单（AnnotationDecisionForm）承担时传 false，时间线只留状态与讨论 */
+  showActionComposer?: boolean;
 }>(), {
   annotationLabel: undefined,
   composerPlaceholder: '输入意见...',
@@ -74,6 +72,7 @@ const props = withDefaults(defineProps<{
   contextTaskId: undefined,
   allowReviewActions: true,
   density: 'normal',
+  showActionComposer: true,
 });
 
 const emit = defineEmits<{
@@ -87,45 +86,45 @@ const emit = defineEmits<{
 }>();
 
 const store = useToolStore();
-const reviewStore = useReviewStore();
 const userStore = useUserStore();
 const newCommentContent = ref('');
 const replyToCommentId = ref<string | null>(null);
 const editingCommentId = ref<string | null>(null);
 const editingCommentContent = ref('');
-const actionNote = ref('');
-const selectedReviewAction = ref<AnnotationReviewAction | null>(null);
 const screenshotPreviewUrl = ref<string | null>(null);
 const isDockDensity = computed(() => props.density === 'dock');
 
-function normalizeContextString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed || null;
-}
-
-/**
- * 集中计算评论 / 处理动作的上下文：
- * - 调用方显式传入的 `contextFormId / contextTaskId` 优先；
- * - 都未提供时（调用方未明确）退回 `reviewStore.currentTask` 兜底，保持向后兼容；
- * - 正式 `formId` 存在但 `taskId` 缺失时仍要求显式表态，避免假成功。
- *
- * 该 computed 是读取后端、加载 store、写入与本地降级的唯一上下文来源。
- */
-const commentContext = computed(() => {
-  const explicitFormId = normalizeContextString(props.contextFormId);
-  const explicitTaskId = normalizeContextString(props.contextTaskId);
-  if (props.contextFormId !== undefined || props.contextTaskId !== undefined) {
-    return {
-      formId: explicitFormId,
-      taskId: explicitTaskId,
-    };
-  }
-  const task = reviewStore.currentTask.value;
-  return {
-    formId: normalizeContextString(task?.formId ?? null),
-    taskId: normalizeContextString(task?.id ?? null),
-  };
+const {
+  commentContext,
+  currentUser,
+  actionNote,
+  selectedReviewAction,
+  actionSubmitting,
+  reviewState,
+  reviewDisplay,
+  showReviewActions,
+  canSubmitReviewAction,
+  reviewContextWarning,
+  canDesignHandle,
+  canReviewDecide,
+  canDecisionAct,
+  reviewActionNoteRequired,
+  reviewActionNoteMissing,
+  reviewActionPlaceholder,
+  reviewActionNoteRequiredHint,
+  reviewActionHint,
+  reviewActionSubmitLabel,
+  canSelectReviewAction,
+  selectReviewAction,
+  submitSelectedReviewAction,
+} = useAnnotationReviewAction({
+  annotationType: () => props.annotationType,
+  annotationId: () => props.annotationId,
+  contextFormId: () => props.contextFormId,
+  contextTaskId: () => props.contextTaskId,
+  allowReviewActions: () => props.allowReviewActions,
+  designerOnly: () => props.designerOnly,
+  onCompleted: (payload) => emit('review-action-completed', payload),
 });
 
 type TimelineItem =
@@ -175,144 +174,6 @@ const replyToComment = computed<AnnotationComment | null>(() => {
   if (!replyToCommentId.value) return null;
   return allComments.value.find((c) => c.id === replyToCommentId.value) || null;
 });
-
-const currentUser = computed(() => userStore.currentUser.value);
-
-const reviewState = computed(() => {
-  if (!props.annotationType || !props.annotationId) return null;
-  return store.getAnnotationReviewState(props.annotationType, props.annotationId);
-});
-
-const reviewDisplay = computed(() => (
-  reviewState.value ? getAnnotationReviewDisplay(reviewState.value) : null
-));
-
-const showReviewActions = computed(() => {
-  if (props.allowReviewActions === false) return false;
-  const role = currentUser.value?.role;
-  if (!role) return false;
-  if (props.designerOnly) {
-    return canDesignHandle.value;
-  }
-  return [
-    UserRole.DESIGNER,
-    UserRole.PROOFREADER,
-    UserRole.REVIEWER,
-    UserRole.MANAGER,
-    UserRole.ADMIN,
-  ].includes(role);
-});
-
-/**
- * 处理动作提交门禁。
- *
- * 设计原则：
- * - 任何正式流程动作都必须同时具备 `formId + taskId`，否则直接屏蔽提交，
- *   避免无任务上下文写本地状态再被当作流转依据；
- * - 没有 `formId` 的纯草稿（例如外部入口未匹配到单据）允许本地处理，
- *   但本组件本身仍由调用方通过 `allowReviewActions` 决定是否暴露按钮。
- */
-const hasFormalReviewContext = computed(() => (
-  !!commentContext.value.formId && !!commentContext.value.taskId
-));
-const isLocalDraftReviewContext = computed(() => !commentContext.value.formId);
-const canSubmitReviewAction = computed(() => (
-  props.allowReviewActions !== false
-  && (hasFormalReviewContext.value || isLocalDraftReviewContext.value)
-));
-const reviewContextWarning = computed(() => {
-  if (props.allowReviewActions === false) return null;
-  if (!commentContext.value.formId) return null;
-  if (commentContext.value.taskId) return null;
-  return '未匹配到内部任务，不能保存处理状态';
-});
-
-const canDesignHandle = computed(() => {
-  const role = currentUser.value?.role;
-  return role === UserRole.DESIGNER || role === UserRole.ADMIN;
-});
-
-const canReviewDecide = computed(() => {
-  if (props.designerOnly) return false;
-  const role = currentUser.value?.role;
-  return role === UserRole.PROOFREADER
-    || role === UserRole.REVIEWER
-    || role === UserRole.MANAGER
-    || role === UserRole.ADMIN;
-});
-
-const canDecisionAct = computed(() => {
-  return canReviewDecide.value && reviewState.value?.resolutionStatus !== 'open';
-});
-
-/** 「不需解决」与「驳回」必须说明原因（applyReviewAction 里会拦）；占位符与提示要与这条校验说一样的话。 */
-const reviewActionNoteRequired = computed(() => (
-  selectedReviewAction.value === 'wont_fix' || selectedReviewAction.value === 'reject'
-));
-const reviewActionNoteMissing = computed(() => (
-  reviewActionNoteRequired.value && !actionNote.value.trim()
-));
-
-/**
- * 备注占位符随所选动作变化：选了必填动作就明说「必填」，没选时把两种口径都写出来，
- * 不再一律写「可选」（09-21 真机：设计点「不需解决」直接提交，被 toast 拦下才知道要填原因）。
- * 前缀「处理备注」/「决定备注」保持不变，自动化按 placeholder 子串定位不受影响。
- */
-const reviewActionPlaceholder = computed(() => {
-  if (canDesignHandle.value) {
-    switch (selectedReviewAction.value) {
-      case 'wont_fix':
-        return '处理备注（必填：为什么不需解决，依据是什么）';
-      case 'fixed':
-        return '处理备注（可选，例如修改说明）';
-      default:
-        return '处理备注（已修改可不填；不需解决必填原因）';
-    }
-  }
-  if (canReviewDecide.value) {
-    switch (selectedReviewAction.value) {
-      case 'reject':
-        return '决定备注（必填：驳回原因，设计要按这个重新处理）';
-      case 'agree':
-        return '决定备注（可选，例如同意理由）';
-      default:
-        return '决定备注（同意可不填；驳回必填原因）';
-    }
-  }
-  return '输入意见...';
-});
-
-const reviewActionNoteRequiredHint = computed(() => {
-  if (!reviewActionNoteMissing.value) return null;
-  return selectedReviewAction.value === 'wont_fix'
-    ? '「不需解决」需先填写原因，才能提交处理结果'
-    : '「驳回」需先填写驳回原因，才能提交确认结果';
-});
-
-const reviewActionHint = computed(() => {
-  if (!currentUser.value) return '登录后可参与该批注的处理和讨论。';
-  if (canDesignHandle.value) return '设计人员可将批注标记为已修改或不需解决，动作会记录在时间线中。';
-  if (canReviewDecide.value && !canDecisionAct.value) {
-    return '请等待设计人员先标记为已修改或不需解决，然后再做同意或驳回。';
-  }
-  if (canReviewDecide.value) return '校对/审核人员可对设计处理结果执行同意或驳回，并继续补充意见。';
-  return `当前角色为${getRoleDisplayName(currentUser.value.role)}，仅可查看处理状态与讨论。`;
-});
-
-const reviewActionSubmitLabel = computed(() => (
-  canDesignHandle.value ? '提交处理结果' : '提交确认结果'
-));
-
-function canSelectReviewAction(action: AnnotationReviewAction): boolean {
-  if (action === 'fixed' || action === 'wont_fix') return canDesignHandle.value;
-  if (action === 'agree' || action === 'reject') return canDecisionAct.value;
-  return false;
-}
-
-function selectReviewAction(action: AnnotationReviewAction) {
-  if (!canSelectReviewAction(action)) return;
-  selectedReviewAction.value = action;
-}
 
 function actionButtonClass(action: AnnotationReviewAction): string {
   const isSelected = selectedReviewAction.value === action;
@@ -525,140 +386,6 @@ async function submitComment() {
   replyToCommentId.value = null;
 }
 
-const actionSubmitting = ref(false);
-
-async function submitSelectedReviewAction() {
-  if (!selectedReviewAction.value || actionSubmitting.value) return;
-  await applyReviewAction(selectedReviewAction.value);
-}
-
-async function resolvePersistedReviewState(options: {
-  formId: string;
-  taskId: string;
-  annotationId: string;
-  annotationType: AnnotationType;
-  actionResponseState?: import('@/api/reviewApi').AnnotationReviewStateView;
-}) {
-  if (options.actionResponseState) {
-    return normalizeAnnotationReviewStateView(options.actionResponseState);
-  }
-
-  const queryResp = await annotationReviewStatesQuery({
-    formId: options.formId,
-    taskId: options.taskId,
-  });
-  const matched = queryResp.states?.find((state) => (
-    state.annotationId === options.annotationId && state.annotationType === options.annotationType
-  ));
-  return matched ? normalizeAnnotationReviewStateView(matched) : null;
-}
-
-async function applyReviewAction(action: AnnotationReviewAction) {
-  if (!props.annotationType || !props.annotationId) return;
-  const user = currentUser.value;
-  if (!user) return;
-
-  if (props.allowReviewActions === false) return;
-
-  if ((action === 'fixed' || action === 'wont_fix') && !canDesignHandle.value) return;
-  if ((action === 'agree' || action === 'reject') && !canDecisionAct.value) return;
-
-  const note = actionNote.value.trim();
-  if (action === 'wont_fix' && !note) {
-    emitToast({ message: '请填写不需解决原因', level: 'warning' });
-    return;
-  }
-  if (action === 'reject' && !note) {
-    emitToast({ message: '请填写驳回原因', level: 'warning' });
-    return;
-  }
-
-  const ctx = commentContext.value;
-  const formId = ctx.formId;
-  const taskId = ctx.taskId;
-
-  // 正式上下文必须同时具备 formId + taskId 才允许后端落库；
-  // 仅 formId 没有 taskId（例如外部入口未匹配到内部任务）属于"无内部任务"状态，
-  // 不再走本地 applyAnnotationReviewAction 假成功，避免本地状态被当作流转依据。
-  if (formId && !taskId) {
-    emitToast({ message: '未匹配到内部任务，不能保存处理状态', level: 'warning' });
-    return;
-  }
-
-  let persistedState: ReturnType<typeof normalizeAnnotationReviewStateView> | null = null;
-
-  if (formId && taskId) {
-    actionSubmitting.value = true;
-    try {
-      const resp = await annotationReviewStateApply({
-        formId,
-        taskId,
-        annotationId: props.annotationId,
-        annotationType: props.annotationType as 'text' | 'cloud' | 'rect' | 'obb',
-        action,
-        note: note || undefined,
-      });
-      if (!resp.success) {
-        emitToast({ message: resp.errorMessage || '更新批注处理状态失败', level: 'error' });
-        return;
-      }
-      // 服务端状态刚变：作废 syncAnnotationReviewStates 短窗里这张单据的旧回包，免得面板紧接着 sync 把旧状态写回来
-      invalidateAnnotationReviewStatesCache(formId);
-      persistedState = await resolvePersistedReviewState({
-        formId,
-        taskId,
-        annotationId: props.annotationId,
-        annotationType: props.annotationType,
-        actionResponseState: resp.state,
-      });
-      if (!persistedState) {
-        emitToast({ message: '处理状态已提交，请刷新后查看最新状态', level: 'warning' });
-        return;
-      }
-    } catch (err) {
-      emitToast({
-        message: err instanceof Error ? err.message : '更新批注处理状态失败',
-        level: 'error',
-      });
-      return;
-    } finally {
-      actionSubmitting.value = false;
-    }
-  }
-
-  const nextState = persistedState
-    ? (store.setAnnotationReviewState(props.annotationType, props.annotationId, persistedState) ? persistedState : null)
-    : store.applyAnnotationReviewAction(props.annotationType, props.annotationId, {
-      action,
-      actor: user,
-      note,
-    });
-
-  if (!nextState) {
-    emitToast({ message: '更新批注处理状态失败', level: 'error' });
-    return;
-  }
-
-  actionNote.value = '';
-  selectedReviewAction.value = null;
-  const successMessageMap: Record<AnnotationReviewAction, string> = {
-    fixed: '批注已标记为已修改',
-    wont_fix: '批注已标记为不需解决',
-    agree: '已同意该批注处理结果',
-    reject: '已驳回该批注处理结果',
-  };
-  emitToast({
-    message: successMessageMap[action],
-    level: 'success',
-  });
-  emit('review-action-completed', {
-    action,
-    annotationType: props.annotationType,
-    annotationId: props.annotationId,
-    state: nextState,
-  });
-}
-
 function canEditComment(comment: AnnotationComment): boolean {
   const user = userStore.currentUser.value;
   if (!user) return false;
@@ -735,7 +462,7 @@ function canEditComment(comment: AnnotationComment): boolean {
           </span>
         </button>
 
-        <div v-if="showReviewActions" :class="isDockDensity ? 'mt-1.5' : 'mt-3'">
+        <div v-if="showReviewActions && showActionComposer" :class="isDockDensity ? 'mt-1.5' : 'mt-3'">
           <div class="rounded-lg border border-[#E5E7EB] bg-white"
             :class="isDockDensity ? 'p-1.5' : 'p-3'">
             <div class="flex flex-wrap items-center gap-1.5">

@@ -526,10 +526,17 @@ function handleCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copied' |
   });
 }
 
+const confirmButtonEl = ref<HTMLButtonElement | null>(null);
+const resubmitButtonEl = ref<HTMLButtonElement | null>(null);
+
 function handleQueueCompleted() {
   emitToast({
-    message: '当前筛选范围内已没有下一条待处理批注',
+    message: '当前页签里已没有待处理批注，下一步：确认当前数据并流转回校对',
     level: 'success',
+  });
+  void nextTick(() => {
+    const target = [confirmButtonEl.value, resubmitButtonEl.value].find((button) => button && !button.disabled);
+    target?.focus();
   });
 }
 
@@ -929,9 +936,11 @@ onMounted(() => {
           aria-label="本轮处理说明" />
         <div class="flex shrink-0 items-start gap-2">
           <div class="flex flex-col items-end gap-1">
-            <button type="button"
+            <button ref="confirmButtonEl"
+              type="button"
               class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="!canConfirmCurrentData || confirmSaving"
+              data-testid="designer-confirm-button"
               @click="confirmCurrentData">
               <Save class="h-4 w-4" />
               {{ confirmSaving ? '保存中...' : '确认当前数据' }}
@@ -943,9 +952,11 @@ onMounted(() => {
             </span>
           </div>
           <div class="flex flex-col items-end gap-1">
-            <button type="button"
+            <button ref="resubmitButtonEl"
+              type="button"
               class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border-0 bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-slate-300"
               :disabled="!canResubmitTask || resubmitting"
+              data-testid="designer-resubmit-button"
               @click="resubmitToProofreader">
               <Send class="h-4 w-4" />
               {{ resubmitting ? '流转中...' : '流转回校对' }}
