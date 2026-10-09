@@ -84,8 +84,8 @@
 **PMS 数据接口可见性（默认开）**：`test:pms:cdp:full` 在 plant3d「编校审单创建成功」后，会再次进入「三维校审单」并监听 **PMS 域名** 上 `xhr`/`fetch` 的 **JSON** 响应，确认其中出现本次 **编校审包名** 或 **测试 BRAN**（`24381_145018` 及斜杠形式）。不需要时用 `PMS_CDP_VERIFY_PMS_API=0` 关闭；列表接口路径固定时可设 `PMS_API_URL_SUBSTRING` 缩小匹配范围。
 
 <!-- SPECKIT START -->
-Current Spec Kit feature plan:
-`specs/004-model-version-timeline/plan.md`
+当前没有进行中的 Spec Kit feature。`specs/004-model-version-timeline/` 已于 2026-09-18 废弃（release 线放弃，只作史料）；
+版本对比 / 节点版本查看的现行依据见 `docs/adr/0066-compare-any-node-by-a-scope-toggle-and-fold-subtree-geometry-by-delivery-unit-summary-first.md` 与 `docs/guides/MODEL_VERSION_VIEW_TUTORIAL.md`。
 <!-- SPECKIT END -->
 
 <!-- code-review-graph MCP tools -->

@@ -18,18 +18,44 @@ export type LoadedReviewModelComparison = {
   release: () => Promise<void>;
 };
 
+type SessionTimeSource = Partial<Pick<ModelVersionSource, 'listElementVersions' | 'listNodeVersions' | 'attributeHistory'>>;
+
+/**
+ * 单据只存了 sesno，三维角标要显示会话时间：按保存时那个节点（单元根 / 容器）的版本表查，依次构件版本表、子树版本表、
+ * 属性变化时间线，找齐就停。不用单元自己的 `listVersions`——容器级会话不一定在单元链上。查不到不挡恢复，角标照旧「时间未知」。
+ */
+async function lookupSessionTimes(source: SessionTimeSource, dbnum: number, refno: string, sesnos: number[]): Promise<Map<number, string>> {
+  const times = new Map<number, string>();
+  const tables: (() => Promise<{ sesno: number; sessionTime: string | null }[]> | undefined)[] = [
+    () => source.listElementVersions?.(dbnum, refno).then(timeline => timeline.versions),
+    () => source.listNodeVersions?.(dbnum, refno, 'subtree').then(timeline => timeline.versions),
+    () => source.attributeHistory?.(dbnum, refno).then(history => history.entries),
+  ];
+  for (const table of tables) {
+    if (sesnos.every(sesno => times.has(sesno))) break;
+    try {
+      for (const row of await table() ?? []) if (row.sessionTime && !times.has(row.sesno)) times.set(row.sesno, row.sessionTime);
+    } catch (error) {
+      console.warn('[review model restore] session time lookup failed', error);
+    }
+  }
+  return times;
+}
+
 /** 每次按保存的精确会话重新生成投影；不会采用版本列表的最近一版或旧快照句柄。 */
 export async function loadReviewModelComparison(
   context: ReviewModelContext,
-  source: Pick<ModelVersionSource, 'attributeDiff' | 'loadVersion' | 'attributesAt'>,
+  source: Pick<ModelVersionSource, 'attributeDiff' | 'loadVersion' | 'attributesAt'> & SessionTimeSource,
   shouldApply: () => boolean,
 ): Promise<LoadedReviewModelComparison> {
   if (!isReviewModelContext(context) || !context.comparison) throw new Error('缺少有效的历史版本对比上下文');
   const comparison = context.comparison;
-  const normalize = (refno: string) => refno.replace('/', '_');
+  const normalize = (refno: string) => refno.replace(/\//g, '_');
   const pairs = comparison.units.length ? comparison.units : [{ refno: comparison.refno, a: comparison.a, b: comparison.b }];
   if (pairs[0]!.a !== comparison.a || pairs[0]!.b !== comparison.b)
     throw new Error('保存的容器会话与首个单元会话不一致');
+  const sessionTimes = lookupSessionTimes(source, comparison.dbnum, normalize(comparison.refno),
+    [...new Set(pairs.flatMap(pair => [pair.a, pair.b]))]);
   const held = new Set<ModelVersionGeometry>();
   let released = false;
   const release = async () => {
@@ -79,6 +105,10 @@ export async function loadReviewModelComparison(
       } });
     }
     check();
+    const times = await sessionTimes;
+    check();
+    for (const { unit } of loaded) for (const side of [unit.before, unit.after])
+      side.version = { ...side.version, sessionTime: times.get(side.sesno) ?? null };
     const units = loaded.map(item => item.unit);
     const attributesAt: NonNullable<ModelUnitVersionCompareOpenDetail['attributesAt']> = async (side, rawRefno, signal) => {
       if (released) throw new Error('历史模型已关闭，请重新打开版本');

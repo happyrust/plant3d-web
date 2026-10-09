@@ -32,15 +32,15 @@ export function isReviewModelContext(value: unknown): value is ReviewModelContex
     && ['single', 'split'].includes(comparison.viewMode) && ['before', 'after'].includes(comparison.activeSide)
     && typeof comparison.diffOnly === 'boolean' && Array.isArray(comparison.units)
     && comparison.units.every(unit => unit && refno(unit.refno) && positive(unit.a) && positive(unit.b) && unit.a < unit.b)
-    && new Set(comparison.units.map(unit => unit.refno.replace('/', '_'))).size === comparison.units.length;
+    && new Set(comparison.units.map(unit => unit.refno.replace(/\//g, '_'))).size === comparison.units.length;
 }
 
 /** JSON 对象字段顺序不参与版本上下文是否相同的判断。 */
 export function reviewModelContextKey(context: ReviewModelContext): string {
   const comparison = context.comparison;
   return JSON.stringify([context.schemaVersion, context.project, context.dbnum, context.taskId, context.formId, context.node,
-    comparison ? [comparison.dbnum, comparison.refno.replace('/', '_'), comparison.a, comparison.b,
-      comparison.units.map(unit => [unit.refno.replace('/', '_'), unit.a, unit.b]).sort(),
+    comparison ? [comparison.dbnum, comparison.refno.replace(/\//g, '_'), comparison.a, comparison.b,
+      comparison.units.map(unit => [unit.refno.replace(/\//g, '_'), unit.a, unit.b]).sort(),
       comparison.viewMode, comparison.activeSide, comparison.diffOnly] : null]);
 }
 

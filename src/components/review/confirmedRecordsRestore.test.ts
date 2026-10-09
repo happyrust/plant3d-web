@@ -6,11 +6,19 @@ import {
   isLayeredDraftRestoreActive,
   layerConfirmedReplayForStore,
 } from './confirmedRecordsRestore';
+import { reviewModelContextKey } from './reviewModelContext';
 import { loadReviewModelComparison } from './reviewModelContextRestore';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
 import type { ReviewModelContext } from './reviewModelContext';
-import type { ModelAttributeDiff, ModelVersion, ModelVersionGeometry } from '@/model-source/ports';
+import type {
+  ModelAttributeDiff,
+  ModelElementVersionTimeline,
+  ModelNodeDiffScope,
+  ModelNodeVersionTimeline,
+  ModelVersion,
+  ModelVersionGeometry,
+} from '@/model-source/ports';
 
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { getReviewCommentThreadStore } from '@/review/services/sharedStores';
@@ -117,6 +125,46 @@ describe('saved historical model comparison', () => {
     await expect(loaded.detail.attributesAt!('after', '1_888')).rejects.toThrow('无法唯一确定');
     await loaded.release();
     for (const result of backend.loadVersion.mock.results) expect((await result.value).release).toHaveBeenCalledTimes(1);
+  });
+
+  it('角标要的 A / B 会话时间按保存时节点的版本表补上：构件表缺的再查子树表，找齐就停', async () => {
+    const time: Record<number, string> = { 10: '2026-09-01T08:00:00+00:00', 20: '2026-09-02T09:30:00+00:00' };
+    const row = (sesno: number) => ({ sesno, sessionTime: time[sesno] ?? null });
+    const backend = { ...source(),
+      listElementVersions: vi.fn(async (_dbnum: number, _refno: string) => ({ versions: [row(10)] }) as ModelElementVersionTimeline),
+      listNodeVersions: vi.fn(async (_dbnum: number, _refno: string, _scope: ModelNodeDiffScope) => (
+        { versions: [row(10), row(20)] }) as ModelNodeVersionTimeline),
+      attributeHistory: vi.fn(),
+    };
+    const multi: ReviewModelContext = { ...context, comparison: { ...context.comparison!, refno: '1/999',
+      units: [{ refno: '1_100', a: 10, b: 20 }, { refno: '1_200', a: 10, b: 20 }] } };
+    const loaded = await loadReviewModelComparison(multi, backend, () => true);
+    expect(backend.listElementVersions).toHaveBeenCalledWith(1, '1_999');
+    expect(backend.listNodeVersions).toHaveBeenCalledWith(1, '1_999', 'subtree');
+    expect(backend.attributeHistory).not.toHaveBeenCalled();
+    expect([loaded.detail.before.version.sessionTime, loaded.detail.after.version.sessionTime]).toEqual([time[10], time[20]]);
+    expect(loaded.detail.units?.map(unit => [unit.before.version.sessionTime, unit.after.version.sessionTime]))
+      .toEqual([[time[10], time[20]], [time[10], time[20]]]);
+    await loaded.release();
+  });
+
+  it('版本表都取不到时照常恢复，角标时间留空', async () => {
+    const backend = { ...source(),
+      listElementVersions: vi.fn(async (_dbnum: number, _refno: string): Promise<ModelElementVersionTimeline> => { throw new Error('404'); }),
+    };
+    const loaded = await loadReviewModelComparison(context, backend, () => true);
+    expect(backend.listElementVersions).toHaveBeenCalledWith(1, '1_100');
+    expect([loaded.detail.before.version.sessionTime, loaded.detail.after.version.sessionTime]).toEqual([null, null]);
+    expect(backend.loadVersion).toHaveBeenCalledTimes(2);
+    await loaded.release();
+  });
+
+  it('refno 写成斜杠或下划线得到同一个版本键，已存单据的键不变', () => {
+    const underscore: ReviewModelContext = { ...context, comparison: { ...context.comparison!, units: [{ refno: '1_200', a: 10, b: 20 }] } };
+    const slash: ReviewModelContext = { ...context, comparison: { ...context.comparison!, refno: '1/100', units: [{ refno: '1/200', a: 10, b: 20 }] } };
+    expect(reviewModelContextKey(slash)).toBe(reviewModelContextKey(underscore));
+    expect(reviewModelContextKey(underscore))
+      .toBe(JSON.stringify([1, 'p', 1, 't', 'f', 'sj', [1, '1_100', 10, 20, [['1_200', 10, 20]], 'split', 'before', true]]));
   });
 });
 
