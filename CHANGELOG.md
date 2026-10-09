@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **节点版本面板与三维视口的版本对比各拆成几块，行为不变** (2026-10-09，版本对比审核计划 P2-2 / F8；三个本地提交)
+  - 面板 `ModelUnitVersionComparePanel.vue` 1634 → 968 行：时间线那一半抽成 `composables/useNodeVersionTimeline`（三条时间线并表、对比范围、A / B、两个勾选、折叠、手填；换 A / B 前经 `beforePairChange` 让面板收三维对比），模板拆成 `NodeVersionTimeline.vue` / `NodeVersionAttributesTab.vue` / `NodeVersionModelTab.vue` 三个子组件（props + emits + `defineModel`，模板逐字搬出，`data-testid` 不变；「含戳」与「包含未变化」照旧共用同一个开关）；徽章取列口径进 `utils/nodeVersionTimeline`，文案配色进 `nodeVersionPanelFormat.ts`。面板只剩取数、装载路、事件收发、表头。
+  - 视口 `ViewerPanel.vue` 5639 → 4951 行：三维版本对比的 open / clear / 切 A-B / 只看差异 / 分屏 pass / 指针落格射线 / 隔离图层拾取与钉到那一版 / 定位 / 运行态发布 / 事件路由抽成 `viewer/modelUnitCompareController.ts`；图层怎么建 / 挂、工具怎么收、相机怎么飞、几何从哪儿装、选中存哪儿、校审持有的那份怎么放，经 `ModelUnitCompareHost` 回到 ViewerPanel，所以控制器能在没有 WebGL 的单测里用假 host 跑完整条路。
+  - 验证：面板 27 例一个没改全绿；新增 `useNodeVersionTimeline.test.ts` 5 例、`modelUnitCompareController.test.ts` 8 例（open 装两侧并着色 / 环境藏目标 / 运行态发布、tombstone 不装、装出 0 件走 error、clear 还显隐相机图层、切换守卫、事件路由、作废、定位、拾取与钉版）；全仓 341 文件 3190 例全绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 触及文件 0。e2e 断言没改（认的 `data-testid` 全部保留），真机未跑（没有隔离环境）。
+
 - **版本对比 e2e 夹具钉死版本对，活库漂了就 skip 并说明、不再变红** (2026-10-09，版本对比审核计划 P1-2 / F7，代码部分；隔离环境里还没跑)
   - 起因：`e2e/model-version-compare-gen-model-v1.spec.ts` 缺省绑「EQUI 24384_26480 的最近两版」+ 活库，该单元在 604 已删，第二条又取首尾两个有几何的版本——库一长、一换，断言跟着漂。
   - 现在：全量检查点走钉死的 A / B——主夹具 `MODEL_VERSION_E2E_UNIT` / `_A` / `_B`（缺省 BRAN `24384_23257` 626 → 630，两版都有几何），整单元被删现场 `MODEL_VERSION_E2E_TOMBSTONE_UNIT` / `_A` / `_B`（缺省 EQUI `24384_26480` 602 → 604，走 tombstone 分支），幽灵构件 `MODEL_VERSION_E2E_GHOST_*` 照旧；跑前拿 `element/versions` 探单元根身份与这对在不在链上，不在就 `skip` 并把链尾、该换的变量写进理由。「不传 compare_a / compare_b 自动选最近两版」与「URL 那对不在就回落」只留轻断言。时间线行数 / 「本范围 n 版」/ 行徽章按面板实际落的范围从 `element/versions` ∪ `element/attribute-history` 算，与 `buildNodeTimelineRows` 同一口径。
