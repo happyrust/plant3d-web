@@ -114,6 +114,8 @@ export type ModelUnitCompareHost = {
   selection: {
     clearSelection(): void;
     setSelectedRefno(refno: string): void;
+    /** 选中一个当前会话里已不存在的构件（`rows` 里 `deleted` 的行 / 整单元被删时的单元根）：属性面板给提示、不拉当前会话 */
+    setSelectedDeletedRefno(refno: string): void;
     setSelectedRefnoAtVersion(refno: string, pin: SelectedVersionPin): void;
     hasVersionPin(): boolean;
     selectedIsDeleted(): boolean;
@@ -466,10 +468,30 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
   }
 
   /**
+   * 这个 refno（已归一化）在本次对比里是不是「B 版已删、当前会话里没有它」：`rows` 里它那一行是 `deleted`，或它是装着的单元根而那个单元
+   * 的 B 侧是「已删除单元版本」（tombstone——单元根自己没有几何、不进 `rows`，与 `buildTreeDiffModels` 给树补单元根幽灵行同一口径）。
+   * 多单元一次装载按 `detail.units` 里它自己那一组的 B 侧看。
+   */
+  function compareRefnoIsDeleted(normalized: string): boolean {
+    const detail = state.value?.detail;
+    if (!detail) return false;
+    if (detail.rows.some((row) => row.status === 'deleted' && host.normalizeRefno(row.refno) === normalized)) return true;
+    if (!targetUnitRefnos.includes(normalized)) return false;
+    const unit = detail.units?.length
+      ? detail.units.find((item) => host.normalizeRefno(item.unitRefno) === normalized)
+      : detail;
+    return unit?.after.version.impactKind === 'tombstone';
+  }
+
+  /**
    * 版本对比事件的 `focus`：先在 A / B 隔离图层里找它自己的几何（两层都找，被删的构件在 A 层也找得到）；它是本次对比装着的单元根而自己
    * 没有几何对象（BRAN / EQUI 一类单元根的几何都在成员上，整单元被删时单元根那一行也是 deleted）就退一步飞到那个单元在 A / B 层的整体包围盒；
    * 没装 A / B 或这个 refno 不在装着的那个单元里（容器差异摘要 / 属性对比 tab 里别的单元的构件，设计稿 S3「定位」）就回落到主图层（环境模型）
    * 里的同一 refno；哪儿都没有就不动相机（e2e 拿「相机动没动」当信号）。
+   *
+   * 选中：在 A / B 里找到、且它在本次对比里是被删的（`compareRefnoIsDeleted`）就按「已删除」登记（属性面板给提示、不去拉当前会话——
+   * 拉了只是 404 红条）；树差异模式已按「已删除」登记过的（含 B 版之后才被删的新增 / 修改，只有树知道）不覆盖；其余普通选中。
+   * 单视口下几何只在一侧有（被删的只在 A、新增的只在 B）而当前显示的是另一侧，顺手切到那一侧——不然飞过去看到的是空的；分屏两侧都在，不切。
    */
   function focus(refno: string): void {
     const viewer = host.viewer();
@@ -478,12 +500,16 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
 
     const box = new Box3();
     const objectBox = new Box3();
+    const hitSides = new Set<ModelUnitCompareSide>();
     const unionCompareObjects = (matches: (objectId: string) => boolean): void => {
       for (const layer of layers) {
         for (const objectId of layer.getAllObjectIds()) {
           if (!matches(objectId)) continue;
           const found = layer.getObjectBoundingBoxInto(objectId, objectBox);
-          if (found && !found.isEmpty()) box.union(found);
+          if (!found || found.isEmpty()) continue;
+          box.union(found);
+          const hitSide = sideFromCompareObjectId(objectId);
+          if (hitSide) hitSides.add(hitSide);
         }
       }
     };
@@ -510,12 +536,21 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
     }
     if (box.isEmpty()) return;
 
-    // 差异模式里定位的可能是幽灵构件（当前会话里已经没有它）：那时它已按「已删除」登记过，别用普通选中覆盖，
-    // 否则属性面板又去拉当前会话、换回 404 红条。回落到主图层找到的一定是当前会话里有的，普通选中即可。
+    // 已按「已删除」登记过的（树差异模式的幽灵行，含 B 版之后才被删的新增 / 修改）不覆盖；本次对比里被删的按「已删除」登记——
+    // 两种都是当前会话里没有它，普通选中会让属性面板去拉当前会话、换回 404 红条。回落到主图层找到的一定是当前会话里有的，普通选中即可。
     const alreadyDeletedRegistered = inCompareLayers
       && host.selection.selectedIsDeleted()
       && host.selection.selectedRefno() === normalized;
-    if (!alreadyDeletedRegistered) host.selection.setSelectedRefno(normalized);
+    if (!alreadyDeletedRegistered) {
+      if (inCompareLayers && compareRefnoIsDeleted(normalized)) host.selection.setSelectedDeletedRefno(normalized);
+      else host.selection.setSelectedRefno(normalized);
+    }
+    // 单视口里几何只在一侧有、当前显示的却是另一侧：切过去，不然飞到的是空的（分屏两侧都画着，不动）
+    const current = state.value;
+    if (inCompareLayers && hitSides.size === 1 && current?.status === 'ready' && current.viewMode === 'single') {
+      const [onlySide] = hitSides;
+      if (onlySide && onlySide !== current.activeSide) setSide(onlySide);
+    }
     viewer.fitClipPlanesToBox(box);
     const center = new Vector3();
     const size = new Vector3();

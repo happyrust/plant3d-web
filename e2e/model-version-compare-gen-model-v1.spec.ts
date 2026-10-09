@@ -448,6 +448,8 @@ async function runPinnedCompare(page: Page, fixture: UnitFixture, aSesno: number
     await parkCamera(page);
     await page.getByTestId('attr-diff-locate').click();
     await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
+    // 定位后仍是「已删除」登记（本次对比里它就是被删的），不得换成普通选中去拉当前会话
+    await expect(page.getByTestId('properties-deleted-notice')).toBeVisible();
   }
 
   // 关闭：每份生成过的历史快照各一条 DELETE；差异模式退出

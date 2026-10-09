@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比里「定位」被删的构件：按「已删除」登记、不再去拉当前会话；几何只在一侧时单视口顺手切到那一侧** (2026-10-10)
+  - 起因（10-09 真机顺带看到）：从属性对比 tab 定位一个还没按「已删除」登记过的被删行（成员、或整单元被删时的单元根），`modelUnitCompareController.focus` 走普通选中 → 属性面板去拉当前会话 → 404 红条；定位到只在 A 层有的构件（被删的、整单元被删时全部都是）时视口仍停在 B 侧，看到的是空的，要手动切 A。
+  - 现在：`focus` 在 A / B 层找到它后，按本次对比判它是不是被删的——`rows` 里那一行 `deleted`，或它是装着的单元根而那个单元的 B 侧是 tombstone（单元根自己没有几何、不进 `rows`，与 `buildTreeDiffModels` 给树补单元根幽灵行同一口径；多单元按 `detail.units` 里自己那一组看）——是就 `setSelectedDeletedRefno`（host 新加的口，接 `useSelectionStore` 同名方法），属性面板给「该构件已删除」提示、不发属性查询；树差异模式已登记过的（含 B 版之后才被删的新增 / 修改，只有树知道）照旧不覆盖；回落到主图层找到的仍普通选中。几何只命中一侧（被删的只在 A、新增的只在 B）而单视口当前显示另一侧，就 `setSide` 切过去再飞；分屏两侧都画着，不切。
+  - 验证：`modelUnitCompareController.test.ts` 9 → 11 例（deleted 行登记 / 已登记不覆盖 / 回落主图层普通选中；切侧——只在 A 切 A、只在 B 切 B、两侧都有不切、分屏不切、回落主图层不切；整单元 tombstone 时单元根与成员都登记并切 A、多单元只看自己那组的 B 侧），全仓 341 文件 3193 例绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 0。本机 `:8022`（`0.1.34+gdae43cfd8`）两份 e2e 三档各一遍 **9 / 9 / 9 passed**（35.1 / 35.3 / 39.7 s）：`node-version-view` 容器用例补了断言——定位被删成员 24384/26497 后 `properties-deleted-notice` 可见、`element/attributes` 请求数不增、`activeSide` 切到 `before`；单元根 24384/26496（deleted）同样；`model-version-compare` tombstone 用例定位后「已删除」提示仍在。
+
 - **校审附件的 Word（.docx / .doc）预览改用 canvas-editor 只读分页排版** (2026-10-10)
   - 从前：mammoth 转出的 HTML 清理后塞进空 sandbox 的 iframe，整篇是一条长网页，没有页的概念。
   - 现在：`utils/wordPreview.buildWordPreviewElements` 照旧用 mammoth 解析 DOCX 并按白名单清理（链接一律降为纯文本，属性只留内联图片数据与单元格跨行跨列）；图片按 A4 正文区或所在单元格宽度定好尺寸，再交给 canvas-editor 的 `getElementListByHTML` 转成元素，并去掉宿主页 CSS 带进来的颜色与字号，让标题字号、加粗按 canvas-editor 默认。预览面板换成新组件 `review/WordDocumentViewer.vue`：只读模式，A4 加 Word 默认页边距分页绘制，带「第 n / N 页」、缩放（30%–200%）和适应宽度（面板变宽变窄时自动重算）。.doc 照旧由后端 `/word-preview` 转成 DOCX 后走同一条路。canvas-editor 按需加载，是独立 chunk（567 KB，gzip 172 KB），不进首屏。

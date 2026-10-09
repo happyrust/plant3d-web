@@ -589,6 +589,7 @@ const modelUnitCompare = createModelUnitCompareController({
   selection: {
     clearSelection: () => selectionStore.clearSelection(),
     setSelectedRefno: (refno) => selectionStore.setSelectedRefno(refno),
+    setSelectedDeletedRefno: (refno) => selectionStore.setSelectedDeletedRefno(refno),
     setSelectedRefnoAtVersion: (refno, pin) => selectionStore.setSelectedRefnoAtVersion(refno, pin),
     hasVersionPin: () => selectionStore.selectedVersionPin.value !== null,
     selectedIsDeleted: () => selectionStore.selectedIsDeleted.value,

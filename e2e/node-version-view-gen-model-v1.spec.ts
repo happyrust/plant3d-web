@@ -394,9 +394,16 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
     await expect(locateButton(deletedInFirst.refno)).toBeEnabled();
     await expect(locateButton(deletedInFirst.refno)).toHaveAttribute('title', /A \/ B 那一版/);
     await parkCamera(page);
+    const attributeFetchesBefore = apiRequests.filter((r) => r.method === 'POST' && /element\/attributes(\?|$)/.test(r.url)).length;
     await locateButton(deletedInFirst.refno).click();
     await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
-    await evidence(page, 'container-subtree-locate-deleted', { refno: deletedInFirst.refno, unit: first.unit_root });
+    // 2026-10-10 起：B 版已删的行定位后按「已删除」登记——属性面板给提示、不去拉当前会话（拉了只是 404 红条）；
+    // 它只在 A 层有而单视口缺省显 B，focus 顺手切到 A（dev 钩子的 activeSide 跟着变）
+    await expect(page.getByTestId('properties-deleted-notice')).toBeVisible();
+    expect(apiRequests.filter((r) => r.method === 'POST' && /element\/attributes(\?|$)/.test(r.url)).length).toBe(attributeFetchesBefore);
+    await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: { activeSide?: string } }).__modelUnitVersionCompare?.activeSide === 'before');
+    test.info().annotations.push({ type: 'locate deleted', description: `被删构件 ${deletedInFirst.refno} 定位 → 相机离停靠点 ${Math.round(await cameraDistanceFromParked(page))} · 已删除登记、未拉当前会话属性 · activeSide → before` });
+    await evidence(page, 'container-subtree-locate-deleted', { refno: deletedInFirst.refno, unit: first.unit_root, activeSide: 'before' });
     await page.getByTestId('model-unit-compare-tab-model').click();
   }
   // 2026-10-09 起：装着的单元根自己那一行（整单元被删时是 deleted、自己属性改了时是 modified）也能「定位」——它自己没有几何对象，
@@ -408,6 +415,12 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
     await parkCamera(page);
     await locateButton(rootRowInFirst.refno).click();
     await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
+    // 整单元被删（单元根那一行 deleted、B 侧 tombstone）：单元根不在几何差异行里，focus 按它那个单元的 B 侧 tombstone 认作已删除——
+    // 属性面板给提示而不是去拉当前会话（2026-10-09 真机看到的那条 404 红条），成员都只在 A 层 → 切到 A
+    if (rootRowInFirst.status === 'deleted') {
+      await expect(page.getByTestId('properties-deleted-notice')).toBeVisible();
+      await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: { activeSide?: string } }).__modelUnitVersionCompare?.activeSide === 'before');
+    }
     test.info().annotations.push({ type: 'locate unit root', description: `单元根 ${rootRowInFirst.refno}（${rootRowInFirst.status}）定位 → 相机离停靠点 ${Math.round(await cameraDistanceFromParked(page))}` });
     await evidence(page, 'container-subtree-locate-unit-root', { refno: rootRowInFirst.refno, status: rootRowInFirst.status, unit: first.unit_root });
     await page.getByTestId('model-unit-compare-tab-model').click();

@@ -120,6 +120,7 @@ function harness(options: { isDev?: boolean; loadedObjects?: (prefix: string) =>
     refno: null as string | null,
     clearSelection: vi.fn(),
     setSelectedRefno: vi.fn(),
+    setSelectedDeletedRefno: vi.fn(),
     setSelectedRefnoAtVersion: vi.fn(),
   };
   const host: ModelUnitCompareHost = {
@@ -151,6 +152,7 @@ function harness(options: { isDev?: boolean; loadedObjects?: (prefix: string) =>
     selection: {
       clearSelection: selection.clearSelection,
       setSelectedRefno: selection.setSelectedRefno,
+      setSelectedDeletedRefno: selection.setSelectedDeletedRefno,
       setSelectedRefnoAtVersion: selection.setSelectedRefnoAtVersion,
       hasVersionPin: () => selection.pin,
       selectedIsDeleted: () => selection.deleted,
@@ -326,26 +328,112 @@ describe('modelUnitCompareController', () => {
     expect(h.created.filter((layer) => !layer.disposed)).toHaveLength(2);
   });
 
-  it('focus：隔离图层里找到就飞过去并普通选中；已按「已删除」登记过的幽灵不覆盖选中；哪儿都没有相机不动', async () => {
+  it('focus：隔离图层里找到就飞过去并普通选中；rows 里 deleted 的按「已删除」登记；已登记过的幽灵不覆盖；回落主图层的普通选中；哪儿都没有相机不动', async () => {
     const h = current = harness();
     await h.controller.open(detailOf());
-    h.controller.focus('1/4');
+    // 两侧都有的 modified 行：普通选中
+    h.controller.focus('1/2');
     expect(h.viewer.flyTo).toHaveBeenCalledTimes(1);
-    expect(h.selection.setSelectedRefno).toHaveBeenCalledWith('1_4');
+    expect(h.selection.setSelectedRefno).toHaveBeenCalledWith('1_2');
+    expect(h.selection.setSelectedDeletedRefno).not.toHaveBeenCalled();
 
+    // rows 里 deleted 的行（只在 A 层有）：按「已删除」登记，不走普通选中——否则属性面板去拉当前会话、404 红条
+    h.controller.focus('1/4');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(2);
+    expect(h.selection.setSelectedDeletedRefno).toHaveBeenCalledWith('1_4');
+    expect(h.selection.setSelectedRefno).toHaveBeenCalledTimes(1);
+
+    // 树差异模式已按「已删除」登记过的（含 B 版之后才被删的新增 / 修改）：两种选中都不再调，相机照飞
     h.selection.deleted = true;
     h.selection.refno = '1_4';
     h.controller.focus('1_4');
-    expect(h.viewer.flyTo).toHaveBeenCalledTimes(2);
-    expect(h.selection.setSelectedRefno).toHaveBeenCalledTimes(1);
-
-    // 不在 A / B 里、主图层里有 → 回落主图层、普通选中
-    h.controller.focus('9_9');
     expect(h.viewer.flyTo).toHaveBeenCalledTimes(3);
+    expect(h.selection.setSelectedRefno).toHaveBeenCalledTimes(1);
+    expect(h.selection.setSelectedDeletedRefno).toHaveBeenCalledTimes(1);
+    h.selection.refno = '1_2';
+    h.controller.focus('1_2');
+    expect(h.selection.setSelectedRefno).toHaveBeenCalledTimes(1);
+    expect(h.selection.setSelectedDeletedRefno).toHaveBeenCalledTimes(1);
+    h.selection.deleted = false;
+    h.selection.refno = null;
+
+    // 不在 A / B 里、主图层里有 → 回落主图层、普通选中（它一定在当前会话里）
+    h.controller.focus('9_9');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(5);
     expect(h.selection.setSelectedRefno).toHaveBeenLastCalledWith('9_9');
 
     h.controller.focus('7_7');
-    expect(h.viewer.flyTo).toHaveBeenCalledTimes(3);
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(5);
+  });
+
+  it('focus 切侧：单视口里几何只在一侧有而当前显示另一侧 → 顺手切到那一侧；两侧都有不切；分屏不切；回落主图层不切', async () => {
+    const h = current = harness();
+    await h.controller.open(detailOf());
+    const [a, b] = h.created as [FakeLayer, FakeLayer];
+    expect(h.controller.state.value?.activeSide).toBe('after');
+
+    // 被删的 1_4 只在 A 层：缺省显 B → 切到 A（A 层开、B 层关），dev 钩子没开不报错
+    h.controller.focus('1_4');
+    expect(h.controller.state.value?.activeSide).toBe('before');
+    expect(a.getVisibleObjectIds()).toHaveLength(3);
+    expect(b.getVisibleObjectIds()).toEqual([]);
+    // 两侧都有的 1_2：留在当前侧
+    h.controller.focus('1_2');
+    expect(h.controller.state.value?.activeSide).toBe('before');
+    // 新增的只在 B 层：从 A 切回 B
+    b.objects.set('unit-compare:b:1_5:0', { id: 'unit-compare:b:1_5:0', visible: false, box: new Box3(new Vector3(3, 3, 3), new Vector3(4, 4, 4)) });
+    h.controller.focus('1_5');
+    expect(h.controller.state.value?.activeSide).toBe('after');
+    expect(b.isObjectVisible('unit-compare:b:1_5:0')).toBe(true);
+    // 回落主图层的环境构件：与 A / B 无关，不切
+    h.controller.focus('9_9');
+    expect(h.controller.state.value?.activeSide).toBe('after');
+
+    // 分屏两侧都画着：只在 A 层的也不切
+    h.controller.setViewMode('split');
+    h.controller.focus('1_4');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(5);
+    expect(h.controller.state.value?.activeSide).toBe('after');
+  });
+
+  it('focus 整单元被删（B 侧 tombstone）：单元根与成员都按「已删除」登记并切到 A；多单元只看它自己那一组的 B 侧', async () => {
+    const h = current = harness();
+    const deletedRows: ModelUnitGeometryDiff[] = [
+      { refno: '1_2', noun: 'FTUB', status: 'deleted' },
+      { refno: '1_3', noun: 'FTUB', status: 'deleted' },
+      { refno: '1_4', noun: 'ELBO', status: 'deleted' },
+    ];
+    await h.controller.open(detailOf({ after: side(20, [], 'tombstone'), rows: deletedRows }));
+    expect(h.controller.state.value?.activeSide).toBe('after');
+    // 单元根 1_1 不在 rows 里、自己没几何：按它那个单元的 B 侧 tombstone 认作已删除，并起 A 层成员飞过去，切到 A
+    h.controller.focus('1/1');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(1);
+    expect(h.selection.setSelectedDeletedRefno).toHaveBeenLastCalledWith('1_1');
+    expect(h.selection.setSelectedRefno).not.toHaveBeenCalled();
+    expect(h.controller.state.value?.activeSide).toBe('before');
+    // 成员行 deleted：同样登记为已删除
+    h.controller.focus('1_3');
+    expect(h.selection.setSelectedDeletedRefno).toHaveBeenLastCalledWith('1_3');
+    expect(h.selection.setSelectedRefno).not.toHaveBeenCalled();
+
+    // 多单元：1_1 两版都在（单元根不算删除、普通选中），2_1 的 B 侧 tombstone（单元根按已删除登记）
+    const unit1 = { unitRefno: '1_1', unitNoun: 'BRAN', before: side(10, ['1_2', '1_3', '1_4']), after: side(20, ['1_2', '1_3']), rows: ROWS };
+    const unit2 = { unitRefno: '2_1', unitNoun: 'EQUI', before: side(10, ['2_2']), after: side(20, [], 'tombstone'), rows: [{ refno: '2_2', noun: 'SUBE', status: 'deleted' as const }] };
+    await h.controller.open(detailOf({
+      unitRefno: '0_0',
+      before: side(10, [...unit1.before.refnos, ...unit2.before.refnos]),
+      after: side(20, [...unit1.after.refnos, ...unit2.after.refnos]),
+      refnos: ['1_2', '1_3', '1_4', '2_2'],
+      rows: [...unit1.rows, ...unit2.rows],
+      units: [unit1, unit2],
+    }));
+    h.controller.focus('1_1');
+    expect(h.selection.setSelectedRefno).toHaveBeenLastCalledWith('1_1');
+    expect(h.controller.state.value?.activeSide).toBe('after');
+    h.controller.focus('2_1');
+    expect(h.selection.setSelectedDeletedRefno).toHaveBeenLastCalledWith('2_1');
+    expect(h.selection.setSelectedRefno).toHaveBeenCalledTimes(1);
+    expect(h.controller.state.value?.activeSide).toBe('before');
   });
 
   it('focus 单元根：它自己没有几何对象时退一步飞到那个单元在 A / B 层的整体包围盒；多单元只并它自己那一组；容器 / 关掉对比后不动相机', async () => {
