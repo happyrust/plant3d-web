@@ -1,5 +1,8 @@
-import type { ModelVersionImpactKind } from '@/model-source';
+import type { ModelNodeDiffRow, ModelVersionImpactKind } from '@/model-source';
 import type { AttributeNetDiffView } from '@/utils/nodeVersionTimeline';
+
+/** 差异摘要里有变的一行 + 它所属的单元（面板 `changedElementRows` 拼的，属性对比 tab 列的） */
+export type ChangedElementRow = ModelNodeDiffRow & { unitRefno: string | null; unitNoun: string | null };
 
 /**
  * 节点版本面板（`ModelUnitVersionComparePanel` 与它拆出来的三个子组件）共用的显示口径：徽章文案 / 配色、净差去向、成员差一句话。

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
+import { GitCompare, RefreshCw } from 'lucide-vue-next';
 
-import { DIFF_KIND_CLASS, DIFF_KIND_LABEL, diffSourceText, membersText, STATUS_CLASS, STATUS_LABEL } from './nodeVersionPanelFormat';
+import NodeVersionAttributesTab from './NodeVersionAttributesTab.vue';
+import NodeVersionModelTab from './NodeVersionModelTab.vue';
 import NodeVersionTimeline from './NodeVersionTimeline.vue';
+
+import type { ChangedElementRow } from './nodeVersionPanelFormat';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
@@ -33,10 +36,7 @@ import {
 } from '@/utils/modelUnitCompareLoader';
 import {
   buildModelUnitVersionCompareUrl,
-  countGroupProjections,
-  formatModelUnitVersionTime,
   modelUnitGroupSideImpactKinds,
-  modelUnitVersionAbsentNote,
   MODEL_UNIT_COMPARE_MAX_UNITS,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
@@ -55,7 +55,6 @@ import {
 } from '@/utils/modelUnitVersionCompare';
 import {
   buildNodeTimelineRows,
-  emptyNetDiffText,
   foldAttributeChanges,
   viewFromAttributeDiff,
   viewFromFold,
@@ -178,12 +177,8 @@ const selectedAfter = computed(() => versionFor(afterSesno.value));
 const sameGeometry = computed(() => sameModelUnitGeometryKey(selectedBefore.value, selectedAfter.value));
 const shareStatus = ref<'idle' | 'copied' | 'address'>('idle');
 
-/** 属性对比（仅自身）表里实际列出的行：戳（`CACHID` 一类）缺省不列，勾「含戳」才列 */
-const selfDiffVisible = computed(() => (selfDiff.value?.changes ?? []).filter((change) => includeUnchanged.value || !change.stamp));
-/** 「n 项变化」只数属性行（不含戳）；成员 / owner 另说一句 */
-const selfDiffCount = computed(() => (selfDiff.value?.changes ?? []).filter((change) => !change.stamp).length);
 /** `所有子节点` 下属性对比的构件清单：差异摘要里有变的行，节点自身置顶（Q12 a） */
-const changedElementRows = computed(() => {
+const changedElementRows = computed<ChangedElementRow[]>(() => {
   const summary = diffSummary.value;
   if (!summary) return [];
   const list = summary.groups.flatMap((group) => group.rows.map((row) => ({ ...row, unitRefno: group.unitRefno, unitNoun: group.unitNoun })));
@@ -210,21 +205,6 @@ function versionFor(sesno: number | null): ModelVersion | null {
     impactKind: row?.unitImpact ?? row?.selfImpact ?? 'mesh',
   };
 }
-
-const summary = computed(() => {
-  const counts: Record<ModelUnitGeometryStatus, number> = { added: 0, deleted: 0, modified: 0, unchanged: 0 };
-  for (const row of rows.value) counts[row.status] += 1;
-  return counts;
-});
-const noGeometryDifference = computed(() => compareCompleted.value
-  && summary.value.added === 0
-  && summary.value.deleted === 0
-  && summary.value.modified === 0);
-
-const visibleRows = computed(() => rows.value.filter((row) => {
-  if (!includeUnchanged.value && row.status === 'unchanged') return false;
-  return statusFilter.value === 'all' || row.status === statusFilter.value;
-}));
 
 function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
   window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_EVENT, { detail }));
@@ -495,7 +475,8 @@ async function loadDiffSummary(): Promise<void> {
       scope.value,
     );
     if (run !== summaryRequestId) return;
-    diffSummary.value = result;
+    // 来源返回空（测试里的最小桩）当没有摘要，别把 undefined 交给子组件的 prop
+    diffSummary.value = result ?? null;
   } catch (cause) {
     if (run !== summaryRequestId) return;
     if (cause instanceof ModelVersionRouteUnavailableError) diffSummaryUnavailable.value = true;
@@ -508,12 +489,6 @@ async function loadDiffSummary(): Promise<void> {
 watch([beforeSesno, afterSesno, scope, dbnum], () => {
   void loadDiffSummary();
 });
-
-/** 展开的构件那一格已经算出来的净差；还在算 / 失败（字串）时为 null */
-function elementDiffView(refno: string): AttributeNetDiffView | null {
-  const entry = elementDiffs.value.get(refno);
-  return entry && typeof entry === 'object' ? entry : null;
-}
 
 /** `所有子节点` 下展开一个构件：取它 A / B 两版的属性净差（服务端直接给；旧服务端拉它的时间线折）。节点自己那一行复用手上的时间线。 */
 async function toggleElementDiff(refno: string): Promise<void> {
@@ -598,9 +573,6 @@ function confirmGroups(choice: 'all' | 'top' | 'cancel'): void {
   void runCompareUnits(picked.map(groupVersions));
 }
 
-/** 总按钮 / 确认框上的「N 个单元 · 约 M 份历史投影」 */
-const groupsProjectionText = computed(() => `${geometryGroups.value.length} 个单元 · 约 ${countGroupProjections(geometryGroups.value)} 份历史投影`);
-
 /** 节点自己所属的那个单元（旧面板同一条路）/ 单独一组：与多单元同一条装载路，只是 detail 不带 `units` */
 async function runCompareVersions(before: ModelVersion, after: ModelVersion, unit: string): Promise<void> {
   await runCompareUnits([{ unitRefno: unit, unitNoun: after.unitNoun, before, after }]);
@@ -669,19 +641,9 @@ function focusRow(refno: string): void {
 /**
  * 属性对比 tab（`所有子节点`）每行的「定位」（设计稿 S3）：走版本对比事件的 `focus`——三维里装着 A / B 时飞到隔离图层里的它
  * （幽灵也找得到），没装时 ViewerPanel 回落到主图层（环境模型）里的同一 refno；哪儿都没有就不动相机。
- * B 侧已删且三维里没装 A / B 时按钮置灰：当前会话里已经没有它，环境模型里找不到。
+ * 能不能点（B 侧已删且三维里没装 A / B 时置灰）由 tab 子组件按 `compareActive` 判，这里只收能点的。
  */
-function canLocateElement(row: { status: ModelNodeDiffStatus }): boolean {
-  return compareActive.value || row.status !== 'deleted';
-}
-
-function locateElementTitle(row: { status: ModelNodeDiffStatus }): string {
-  if (!canLocateElement(row)) return 'B 版已删除，当前模型里没有它；先「在三维中对比」再定位';
-  return compareActive.value ? '飞到三维里 A / B 那一版的它' : '飞到当前模型里的它（已加载时）';
-}
-
 function locateElement(row: { refno: string; status: ModelNodeDiffStatus }): void {
-  if (!canLocateElement(row)) return;
   ensurePanelAndActivate('viewer');
   focusRow(row.refno);
 }
@@ -704,11 +666,6 @@ function setCompareSide(side: ModelUnitCompareSide): void {
   dispatch({ action: 'set-side', side });
 }
 
-/** 多单元一次装载时，这一侧不存在（tombstone）的那几个单元根：A / B 卡上列出来（并起来的那一侧只有全空才标 tombstone） */
-function absentUnits(detail: ModelUnitVersionCompareRuntimeState['detail'], side: ModelUnitCompareSide): string[] {
-  return (detail.units ?? []).filter((unit) => unit[side].version.impactKind === 'tombstone').map((unit) => unit.unitRefno);
-}
-
 function setCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
   dispatch({ action: 'set-view-mode', viewMode });
 }
@@ -717,11 +674,6 @@ function setCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
 function setCompareDiffOnly(diffOnly: boolean): void {
   dispatch({ action: 'set-diff-only', diffOnly });
 }
-
-/** 视口那边正在对比的那份 `rows` 里有没有非 unchanged 的行（没有就把「三维只看差异」置灰） */
-const compareRuntimeHasGeometryDifference = computed(() => (
-  (compareRuntime.value?.detail.rows ?? []).some((row) => row.status !== 'unchanged')
-));
 
 function refreshCompareEnvironment(): void {
   dispatch({ action: 'refresh-environment' });
@@ -956,419 +908,60 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 属性对比 -->
-        <section v-if="activeTab === 'attributes'" class="mt-2" data-testid="model-unit-compare-attributes">
-          <p v-if="!pairReady" class="py-3 text-center text-xs text-muted-foreground">先在时间线上选好 A / B（A 早于 B）</p>
-          <template v-else-if="scope === 'self'">
-            <p v-if="loadingSelfDiff" class="py-3 text-center text-xs text-muted-foreground" data-testid="model-unit-compare-attr-loading">正在算属性净差…</p>
-            <div v-else-if="selfDiffError" class="rounded-md border border-border bg-muted/20 p-2 text-[11px] text-muted-foreground" data-testid="model-unit-compare-attr-error">
-              {{ selfDiffError }}。跑一次「在三维中对比」后，模型树差异模式底部仍有 A / B 两版的属性逐项对比。
-            </div>
-            <template v-else-if="selfDiff">
-              <div class="flex items-center justify-between gap-2 text-[11px]">
-                <span class="font-semibold text-foreground">
-                  A {{ beforeSesno }} → B {{ afterSesno }} · {{ selfDiffCount }} 项变化
-                  <span v-if="selfDiff.kind" class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-normal" :class="DIFF_KIND_CLASS[selfDiff.kind]" data-testid="model-unit-compare-attr-kind">
-                    {{ DIFF_KIND_LABEL[selfDiff.kind] }}<template v-if="selfDiff.impact"> · {{ selfDiff.impact }}</template>
-                  </span>
-                </span>
-                <label class="flex items-center gap-1 text-muted-foreground">
-                  <input v-model="includeUnchanged" type="checkbox" />含戳
-                </label>
-              </div>
-              <p v-if="selfDiff.kind === 'created' && selfDiff.source === 'server'" class="mt-1 text-[10px] text-amber-700">
-                该节点在 A（sesno {{ beforeSesno }}）侧不存在：列的是 B 侧全部已设的属性，before 为空。
-              </p>
-              <p v-else-if="selfDiff.kind === 'deleted' && selfDiff.source === 'server'" class="mt-1 text-[10px] text-amber-700">
-                该节点在 B（sesno {{ afterSesno }}）侧已删除：列的是 A 侧全部已设的属性，after 为空。
-              </p>
-              <p v-else-if="selfDiff.createdAt !== null || selfDiff.deletedAt !== null" class="mt-1 text-[10px] text-amber-700">
-                <template v-if="selfDiff.createdAt !== null">该节点在 sesno {{ selfDiff.createdAt }} 被创建；</template>
-                <template v-if="selfDiff.deletedAt !== null">在 sesno {{ selfDiff.deletedAt }} 被删除；</template>
-                A 侧不存在的属性 before 为空。
-              </p>
-              <p v-if="selfDiff.members || selfDiff.owner" class="mt-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-attr-members">
-                <template v-if="selfDiff.members">成员 {{ membersText(selfDiff.members) }}</template>
-                <template v-if="selfDiff.members && selfDiff.owner">；</template>
-                <template v-if="selfDiff.owner">owner {{ selfDiff.owner[0] }} → {{ selfDiff.owner[1] }}</template>
-              </p>
-              <p v-else-if="selfDiff.membersTouched || selfDiff.ownerTouched" class="mt-1 text-[10px] text-muted-foreground">
-                这段区间里<template v-if="selfDiff.membersTouched">成员表动过</template><template v-if="selfDiff.membersTouched && selfDiff.ownerTouched">、</template><template v-if="selfDiff.ownerTouched">owner 改挂过</template>（折出来的净差看不出来，看时间线逐行）。
-              </p>
-              <p v-if="selfDiff.attributesUnavailable" class="mt-1 text-[10px] text-amber-700">属性行渲染不出来：{{ selfDiff.attributesUnavailable }}（去向与影响档仍成立）</p>
-              <div class="mt-2 overflow-hidden rounded-md border border-border" data-testid="model-unit-compare-attr-table" :data-source="selfDiff.source">
-                <div class="grid grid-cols-[76px_1fr_1fr] gap-2 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
-                  <span>属性</span><span class="font-semibold text-blue-700">A · {{ beforeSesno }}</span><span class="font-semibold text-emerald-700">B · {{ afterSesno }}</span>
-                </div>
-                <div v-for="change in selfDiffVisible" :key="change.name"
-                  class="grid grid-cols-[76px_1fr_1fr] gap-2 border-t border-border px-2 py-1 text-[10px]"
-                  :class="change.stamp ? 'bg-slate-50 text-slate-500' : 'bg-amber-50/60'">
-                  <span class="font-mono font-semibold">{{ change.name }}<span v-if="change.stamp" class="ml-1 rounded bg-slate-200 px-1 text-[9px] font-normal">戳</span><span v-if="change.hops > 1" class="ml-1 text-[9px] font-normal text-muted-foreground">×{{ change.hops }}</span></span>
-                  <span class="break-all font-mono text-muted-foreground">{{ change.before ?? '—' }}</span>
-                  <span class="break-all font-mono font-semibold text-foreground">{{ change.after ?? '—' }}</span>
-                </div>
-                <p v-if="selfDiffVisible.length === 0" class="border-t border-border px-2 py-2 text-center text-[10px] text-muted-foreground">
-                  {{ emptyNetDiffText(selfDiff, 0) }}
-                </p>
-              </div>
-              <p v-if="selfDiff.warnings.length" class="mt-1 text-[10px] text-muted-foreground">{{ selfDiff.warnings[0] }}</p>
-              <p class="mt-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-attr-source">{{ diffSourceText(selfDiff) }}</p>
-            </template>
-          </template>
-          <template v-else>
-            <div v-if="diffSummaryUnavailable" class="rounded-md border border-border bg-muted/20 p-2 text-[11px] text-muted-foreground" data-testid="model-unit-compare-summary-missing">
-              服务端还没有 <code>node/diff-summary</code>：「所有子节点」下有变的构件清单要新版服务端；先跑「在三维中对比」看几何差异。
-            </div>
-            <p v-else-if="loadingSummary" class="py-3 text-center text-xs text-muted-foreground">正在算差异摘要…</p>
-            <p v-else-if="diffSummaryError" class="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{{ diffSummaryError }}</p>
-            <template v-else-if="diffSummary">
-              <div class="text-[11px] font-semibold text-foreground">A {{ beforeSesno }} → B {{ afterSesno }} · 有变的构件 {{ changedElementRows.length }} 个</div>
-              <ul class="mt-2 space-y-1" data-testid="model-unit-compare-changed-elements">
-                <li v-for="row in changedElementRows" :key="row.refno" class="rounded-md border" :class="row.isNode ? 'border-primary bg-primary/5' : 'border-border'">
-                  <div class="flex items-stretch">
-                    <button type="button" class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40"
-                      :data-testid="`model-unit-compare-element-${row.refno}`"
-                      @click="toggleElementDiff(row.refno)">
-                      <span class="text-[10px] text-muted-foreground">{{ expandedElement === row.refno ? '▾' : '▸' }}</span>
-                      <span class="font-mono font-semibold">{{ row.noun }} {{ row.refno }}</span>
-                      <span v-if="row.isNode" class="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">本节点</span>
-                      <span v-if="row.unitRefno && row.unitRefno !== row.refno" class="truncate text-[10px] text-muted-foreground">{{ row.unitNoun }} {{ row.unitRefno }} 下</span>
-                      <span class="ml-auto rounded px-1.5 py-0.5 text-[10px]" :class="STATUS_CLASS[row.status]">{{ STATUS_LABEL[row.status] }} · {{ row.impact }}</span>
-                    </button>
-                    <button type="button" class="shrink-0 border-l border-border px-2 text-[10px] text-muted-foreground hover:bg-muted/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      :data-testid="`model-unit-compare-element-locate-${row.refno}`"
-                      :disabled="!canLocateElement(row)"
-                      :title="locateElementTitle(row)"
-                      @click.stop="locateElement(row)">
-                      定位
-                    </button>
-                  </div>
-                  <div v-if="expandedElement === row.refno" class="border-t border-border px-2 py-1.5 text-[10px]" :data-testid="`model-unit-compare-element-diff-${row.refno}`">
-                    <template v-if="elementDiffs.get(row.refno) === 'loading'">正在算它的属性净差…</template>
-                    <template v-else-if="typeof elementDiffs.get(row.refno) === 'string'">
-                      <span class="text-amber-700">{{ elementDiffs.get(row.refno) }}</span>
-                    </template>
-                    <template v-else-if="elementDiffView(row.refno)">
-                      <p v-if="elementDiffView(row.refno)!.kind === 'created' && elementDiffView(row.refno)!.source === 'server'" class="text-amber-700">A 侧不存在：列的是 B 侧全部已设的属性</p>
-                      <p v-else-if="elementDiffView(row.refno)!.kind === 'deleted' && elementDiffView(row.refno)!.source === 'server'" class="text-amber-700">B 侧已删除：列的是 A 侧全部已设的属性</p>
-                      <div v-for="change in elementDiffView(row.refno)!.changes" :key="change.name"
-                        class="grid grid-cols-[76px_1fr_1fr] gap-2 py-0.5" :class="change.stamp ? 'text-slate-500' : ''">
-                        <span class="font-mono font-semibold">{{ change.name }}<span v-if="change.stamp" class="ml-1 rounded bg-slate-200 px-1 text-[9px] font-normal">戳</span></span>
-                        <span class="break-all font-mono text-muted-foreground">{{ change.before ?? '—' }}</span>
-                        <span class="break-all font-mono font-semibold">{{ change.after ?? '—' }}</span>
-                      </div>
-                      <p v-if="elementDiffView(row.refno)!.changes.length === 0" class="text-muted-foreground">{{ emptyNetDiffText(elementDiffView(row.refno)!, 0) }}</p>
-                      <p v-if="elementDiffView(row.refno)!.members" class="text-muted-foreground">成员 {{ membersText(elementDiffView(row.refno)!.members!) }}</p>
-                      <p v-else-if="elementDiffView(row.refno)!.membersTouched" class="text-muted-foreground">成员表动过（增删或重排）</p>
-                      <p v-if="elementDiffView(row.refno)!.owner" class="text-muted-foreground">owner {{ elementDiffView(row.refno)!.owner![0] }} → {{ elementDiffView(row.refno)!.owner![1] }}</p>
-                      <p v-if="elementDiffView(row.refno)!.source === 'folded'" class="text-muted-foreground">服务端还没有 element/attribute-diff：这是把它的时间线在 (A, B] 里折出来的</p>
-                    </template>
-                  </div>
-                </li>
-                <li v-if="changedElementRows.length === 0" class="py-3 text-center text-xs text-muted-foreground">这段区间里子树内没有任何记录变过</li>
-              </ul>
-            </template>
-          </template>
-        </section>
+        <NodeVersionAttributesTab v-if="activeTab === 'attributes'"
+          v-model:include-unchanged="includeUnchanged"
+          :scope="scope"
+          :pair-ready="pairReady"
+          :before-sesno="beforeSesno"
+          :after-sesno="afterSesno"
+          :loading-self-diff="loadingSelfDiff"
+          :self-diff-error="selfDiffError"
+          :self-diff="selfDiff"
+          :diff-summary-unavailable="diffSummaryUnavailable"
+          :loading-summary="loadingSummary"
+          :diff-summary-error="diffSummaryError"
+          :diff-summary="diffSummary"
+          :changed-element-rows="changedElementRows"
+          :expanded-element="expandedElement"
+          :element-diffs="elementDiffs"
+          :compare-active="compareActive"
+          @toggle-element="toggleElementDiff"
+          @locate="locateElement" />
 
         <!-- 模型对比 -->
-        <section v-if="activeTab === 'model'" class="mt-2" data-testid="model-unit-compare-model">
-          <div v-if="diffSummary && pairReady" class="rounded-md border border-border bg-muted/20 p-2" data-testid="model-unit-compare-diff-summary">
-            <div class="text-[11px] font-semibold text-foreground">A {{ beforeSesno }} → B {{ afterSesno }} · 差异摘要（未生成几何）</div>
-            <div class="mt-1 flex flex-wrap gap-1 text-[10px]">
-              <span class="rounded bg-primary/10 px-1.5 py-0.5 text-primary">变了的单元 {{ diffSummary.units.changed }}</span>
-              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">未变单元 {{ diffSummary.units.unchanged }}<template v-if="!diffSummary.units.complete">+</template></span>
-              <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">新增 {{ diffSummary.elements.added }}</span>
-              <span class="rounded bg-rose-100 px-1.5 py-0.5 text-rose-700">删除 {{ diffSummary.elements.deleted }}</span>
-              <span class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">修改 {{ diffSummary.elements.modified }}</span>
-              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">noop {{ diffSummary.elements.noop }}</span>
-            </div>
-            <p v-if="diffSummary.needsConfirm" class="mt-1 text-[10px] text-amber-700" data-testid="model-unit-compare-needs-confirm">
-              变了的单元超过阈值 {{ diffSummary.confirmThresholdUnits }} 个（服务端估约 {{ diffSummary.estimatedProjections }} 份历史投影）：一起进三维前会先问一句，也可以逐组点开看。
-            </p>
-            <p v-if="diffSummary.warnings.length" class="mt-1 text-[10px] text-muted-foreground">{{ diffSummary.warnings[0] }}</p>
-          </div>
-          <p v-else-if="loadingSummary" class="text-[10px] text-muted-foreground">正在算差异摘要…</p>
-          <p v-else-if="diffSummaryUnavailable && pairReady" class="text-[10px] text-amber-600" data-testid="model-unit-compare-summary-missing">
-            服务端还没有 <code>node/diff-summary</code>：差异摘要要新版服务端，直接「在三维中对比」也能拿到几何差异。
-          </p>
-
-          <div class="mt-2 flex gap-2">
-            <button class="flex-1 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50"
-              data-testid="model-unit-compare-run"
-              :disabled="comparing || loadingVersions || !hasUnit"
-              :title="hasUnit ? `装载 ${comparedUnitRefno} 的 A / B 两版` : '不在任何最小交付单元下，没有几何'"
-              @click="runCompare">
-              {{ comparing ? '正在比较…' : (scope === 'subtree' && geometryGroups.length > 1 ? `在三维中对比 · ${comparedUnitRefno}` : '在三维中对比') }}
-            </button>
-          </div>
-
-          <!-- 多单元一次装载的进度（P2-a，设计稿 S2b「正在生成历史投影 3 / 4」）：份 = 要去 history/generate 的单元@sesno；单单元（≤ 2 份）不露 -->
-          <div v-if="compareProgress && compareProgress.total > 2"
-            class="mt-2 rounded-md border border-indigo-200 bg-indigo-50/40 p-2 text-[11px] text-indigo-900"
-            data-testid="model-unit-compare-progress"
-            :data-done="compareProgress.done"
-            :data-total="compareProgress.total">
-            <div class="flex items-center justify-between gap-2">
-              <span class="font-semibold">正在生成历史投影 {{ compareProgress.done }} / {{ compareProgress.total }}</span>
-              <span class="truncate font-mono text-[10px] opacity-75">{{ compareProgress.current.join(' · ') }}</span>
-            </div>
-            <div class="mt-1 h-1.5 overflow-hidden rounded bg-indigo-100">
-              <div class="h-full rounded bg-indigo-500 transition-[width]" :style="{ width: `${Math.round((compareProgress.done / Math.max(1, compareProgress.total)) * 100)}%` }" />
-            </div>
-          </div>
-
-          <!-- 阈值确认（P2-b，设计稿 S2b ②）：超过一次装载上限或服务端说要确认时先问；「先装变化最大的 N 个」按组内变更数排 -->
-          <div v-if="pendingGroupsConfirm"
-            class="mt-2 rounded-md border border-amber-300 bg-amber-50/70 p-2 text-[11px] text-amber-900"
-            data-testid="model-unit-compare-confirm"
-            role="alertdialog">
-            <div class="font-semibold">
-              一次要装 {{ pendingGroupsConfirm.length }} 个单元、约 {{ countGroupProjections(pendingGroupsConfirm) }} 份历史投影
-              <template v-if="pendingGroupsConfirm.length > MODEL_UNIT_COMPARE_MAX_UNITS">，超过一次装载上限 {{ MODEL_UNIT_COMPARE_MAX_UNITS }} 个</template>
-              <template v-else-if="diffSummary?.needsConfirm">，服务端提示超过阈值 {{ diffSummary.confirmThresholdUnits }} 个</template>
-            </div>
-            <div class="mt-0.5 opacity-80">每份都要服务端按会话重算一遍几何，多的话要等一会儿；装进来的单元越多，三维里越挤。</div>
-            <div class="mt-1.5 flex flex-wrap gap-1.5">
-              <button type="button"
-                class="rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground"
-                data-testid="model-unit-compare-confirm-all"
-                @click="confirmGroups('all')">
-                全部生成
-              </button>
-              <button v-if="pendingGroupsConfirm.length > MODEL_UNIT_COMPARE_MAX_UNITS"
-                type="button"
-                class="rounded-md border border-amber-400 bg-background px-2 py-1 text-[11px] text-foreground hover:bg-muted/50"
-                data-testid="model-unit-compare-confirm-top"
-                @click="confirmGroups('top')">
-                先装变化最大的 {{ MODEL_UNIT_COMPARE_MAX_UNITS }} 个
-              </button>
-              <button type="button"
-                class="rounded-md border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-                data-testid="model-unit-compare-confirm-cancel"
-                @click="confirmGroups('cancel')">
-                取消
-              </button>
-            </div>
-          </div>
-
-          <!-- 设计稿 S2 那一颗总按钮：变了的单元一起进三维（P2-a）；只有一组时没必要，组里那颗就是。放在分组列表外（e2e 数的是列表里的 div） -->
-          <div v-if="scope === 'subtree' && geometryGroups.length > 1"
-            class="mt-2 flex items-center gap-2 rounded-md border border-dashed border-indigo-300 bg-indigo-50/30 px-2 py-1.5 text-xs"
-            data-testid="model-unit-compare-run-groups-row">
-            <div class="min-w-0 flex-1">
-              <div class="font-semibold text-foreground">全部变了的单元一起进三维</div>
-              <div class="text-[10px] text-muted-foreground">{{ groupsProjectionText }}<template v-if="geometryGroups.length > MODEL_UNIT_COMPARE_MAX_UNITS">（超过一次装载上限 {{ MODEL_UNIT_COMPARE_MAX_UNITS }}，会先问）</template></div>
-            </div>
-            <button type="button"
-              class="shrink-0 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
-              :disabled="comparing || pendingGroupsConfirm !== null"
-              :title="`把这 ${geometryGroups.length} 个单元的 A / B 一起装进三维（每份历史投影都要服务端按会话重算）`"
-              data-testid="model-unit-compare-run-groups"
-              @click="runCompareGroups(geometryGroups)">
-              {{ comparedInViewer.length > 1 && comparedInViewer.length === geometryGroups.length ? '三维中' : '在三维中对比' }}
-            </button>
-          </div>
-          <div v-if="scope === 'subtree' && geometryGroups.length > 0" class="mt-2 space-y-1" data-testid="model-unit-compare-groups">
-            <div v-for="group in geometryGroups" :key="group.unitRefno ?? 'orphan'"
-              class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs"
-              :class="group.unitRefno && comparedInViewer.includes(group.unitRefno) ? 'border-indigo-300 bg-indigo-50/50' : 'border-border'">
-              <div class="min-w-0 flex-1">
-                <div class="truncate font-mono font-semibold">{{ group.unitNoun }} {{ group.unitRefno }}<span v-if="group.unitName" class="ml-1 font-sans text-[10px] font-normal text-muted-foreground">{{ group.unitName }}</span></div>
-                <div class="flex flex-wrap gap-1 text-[10px]">
-                  <span v-if="group.counts.added" class="rounded bg-emerald-100 px-1 text-emerald-700">新增 {{ group.counts.added }}</span>
-                  <span v-if="group.counts.deleted" class="rounded bg-rose-100 px-1 text-rose-700">删除 {{ group.counts.deleted }}</span>
-                  <span v-if="group.counts.modified" class="rounded bg-amber-100 px-1 text-amber-700">修改 {{ group.counts.modified }}</span>
-                  <span v-if="group.counts.noop" class="rounded bg-slate-100 px-1 text-slate-600">noop {{ group.counts.noop }}</span>
-                </div>
-              </div>
-              <button type="button"
-                class="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground hover:bg-muted/50 disabled:opacity-50"
-                :disabled="comparing"
-                :data-testid="`model-unit-compare-run-group-${group.unitRefno}`"
-                @click="runCompareGroup(group)">
-                {{ group.unitRefno && comparedInViewer.includes(group.unitRefno) ? (comparedInViewer.length > 1 ? '三维中 · 只看这组' : '三维中') : '在三维中对比' }}
-              </button>
-            </div>
-          </div>
-
-          <section v-if="compareRuntime"
-            class="mt-3 rounded-md border border-indigo-200 bg-indigo-50/30 p-2.5"
-            data-testid="model-unit-compare-runtime">
-            <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0">
-                <div class="text-xs font-semibold text-foreground">三维查看</div>
-                <div class="truncate font-mono text-[10px] text-muted-foreground" data-testid="model-unit-compare-runtime-title">
-                  <template v-if="compareRuntime.detail.units?.length">{{ compareRuntime.detail.units.length }} 个单元 · {{ compareRuntime.detail.unitRefno }} 下 · </template>
-                  <template v-else>{{ compareRuntime.detail.unitRefno }} · </template>DB {{ compareRuntime.detail.dbnum }}
-                </div>
-              </div>
-              <button type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground"
-                data-testid="model-unit-compare-close"
-                @click="closeCompare">
-                <X class="h-3 w-3" />退出
-              </button>
-            </div>
-
-            <div v-if="compareRuntime.status === 'loading'" class="mt-2 text-xs text-muted-foreground">
-              正在加载两个精确版本…
-            </div>
-            <div v-else-if="compareRuntime.status === 'error'"
-              class="mt-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-              {{ compareRuntime.error }}
-            </div>
-            <template v-else>
-              <div class="mt-2 grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
-                <button type="button"
-                  class="rounded px-2 py-1.5"
-                  :class="compareRuntime.viewMode === 'single' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                  :aria-pressed="compareRuntime.viewMode === 'single'"
-                  data-testid="model-unit-compare-single-mode"
-                  @click="setCompareViewMode('single')">
-                  单视口切换
-                </button>
-                <button type="button"
-                  class="rounded px-2 py-1.5"
-                  :class="compareRuntime.viewMode === 'split' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                  :aria-pressed="compareRuntime.viewMode === 'split'"
-                  data-testid="model-unit-compare-split-mode"
-                  @click="setCompareViewMode('split')">
-                  双视口分屏
-                </button>
-              </div>
-
-              <div v-if="compareRuntime.viewMode === 'single'" class="mt-2 grid grid-cols-2 gap-2 text-xs">
-                <button type="button"
-                  class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-left text-blue-700 transition-opacity"
-                  :class="compareRuntime.activeSide === 'before' ? 'ring-2 ring-blue-500' : 'opacity-60'"
-                  data-testid="model-unit-compare-show-before"
-                  @click="setCompareSide('before')">
-                  <div class="font-semibold">A · sesno {{ compareRuntime.detail.before.sesno }}</div>
-                  <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.version.sessionTime ?? '') }}</div>
-                  <div v-if="compareRuntime.detail.before.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">{{ modelUnitVersionAbsentNote('before') }}</div>
-                  <div v-else-if="absentUnits(compareRuntime.detail, 'before').length" class="mt-0.5 text-[10px] opacity-75" data-testid="model-unit-compare-absent-before">
-                    {{ absentUnits(compareRuntime.detail, 'before').length }} 个单元{{ modelUnitVersionAbsentNote('before') }}：{{ absentUnits(compareRuntime.detail, 'before').join('、') }}
-                  </div>
-                </button>
-                <button type="button"
-                  class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
-                  :class="compareRuntime.activeSide === 'after' ? 'ring-2 ring-emerald-500' : 'opacity-60'"
-                  data-testid="model-unit-compare-show-after"
-                  @click="setCompareSide('after')">
-                  <div class="font-semibold">B · sesno {{ compareRuntime.detail.after.sesno }}</div>
-                  <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.version.sessionTime ?? '') }}</div>
-                  <div v-if="compareRuntime.detail.after.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">{{ modelUnitVersionAbsentNote('after') }}</div>
-                  <div v-else-if="absentUnits(compareRuntime.detail, 'after').length" class="mt-0.5 text-[10px] opacity-75" data-testid="model-unit-compare-absent-after">
-                    {{ absentUnits(compareRuntime.detail, 'after').length }} 个单元{{ modelUnitVersionAbsentNote('after') }}：{{ absentUnits(compareRuntime.detail, 'after').join('、') }}
-                  </div>
-                </button>
-              </div>
-              <div v-else
-                class="mt-2 rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-muted-foreground"
-                data-testid="model-unit-compare-split-summary">
-                左 A · sesno {{ compareRuntime.detail.before.sesno }}
-                <span class="px-1">·</span>
-                右 B · sesno {{ compareRuntime.detail.after.sesno }}
-                <!-- P3-c：软渲染（远程桌面 / 虚拟机 / 无显卡驱动）下分屏不走描边合成器，照实说 -->
-                <div v-if="compareRuntime.splitOutline && !compareRuntime.splitOutline.compositor"
-                  class="mt-1 text-[10px] text-amber-700"
-                  :title="compareRuntime.splitOutline.renderer ?? ''"
-                  data-testid="model-unit-compare-split-direct-render">
-                  这台机子是软渲染（{{ compareRuntime.splitOutline.renderer ?? '显卡串未知' }}）：分屏走直接渲染、不走描边合成器——选中的环境构件按选中色显示、没有描边，帧率优先。
-                </div>
-              </div>
-              <label class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
-                :class="compareRuntimeHasGeometryDifference ? '' : 'opacity-60'"
-                :title="compareRuntimeHasGeometryDifference
-                  ? '三维里藏掉两版都没变的构件，只剩新增 / 删除 / 修改；着色与下方徽章同一套'
-                  : '本次对比没有几何差异，三维里没有可单看的构件'">
-                <input type="checkbox"
-                  :checked="compareRuntime.diffOnly === true"
-                  :disabled="!compareRuntimeHasGeometryDifference"
-                  data-testid="model-unit-compare-diff-only"
-                  @change="setCompareDiffOnly(($event.target as HTMLInputElement).checked)" />
-                三维只看差异
-              </label>
-            </template>
-
-            <div v-if="compareRuntime.environment"
-              class="mt-2 rounded-md border border-amber-200 bg-amber-50/80 p-2 text-[10px] text-amber-900"
-              data-testid="model-unit-compare-environment">
-              <div class="flex items-start justify-between gap-2">
-                <div>
-                  <div class="font-semibold">
-                    {{ compareRuntime.environment.error ? '当前环境（刷新失败）' : '最新环境' }}
-                  </div>
-                  <div class="mt-0.5 opacity-80">已固定当前加载范围：{{ compareRuntime.environment.loadedRefnos }} 个 refno</div>
-                </div>
-                <button type="button"
-                  class="inline-flex shrink-0 items-center gap-1 rounded border border-amber-300 bg-background px-1.5 py-1 font-medium disabled:opacity-50"
-                  data-testid="model-unit-compare-refresh-environment"
-                  :disabled="compareRuntime.environment.refreshing"
-                  @click="refreshCompareEnvironment">
-                  <RefreshCw class="h-3 w-3" :class="{ 'animate-spin': compareRuntime.environment.refreshing }" />
-                  刷新
-                </button>
-              </div>
-              <div class="mt-1 border-t border-amber-200 pt-1">
-                {{ compareRuntime.environment.error
-                  ? '整库最新环境不可用；当前仅显示两个所选最小交付单元。'
-                  : '混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。' }}
-              </div>
-              <div v-if="compareRuntime.environment.error" class="mt-1 text-destructive">
-                {{ compareRuntime.environment.error }}
-              </div>
-            </div>
-          </section>
-
-          <template v-if="compareCompleted">
-            <div class="mt-3 rounded-md border border-border bg-muted/20 p-2" data-testid="model-unit-compare-summary">
-              <div v-if="comparedInViewer.length" class="mb-1 font-mono text-[10px] text-muted-foreground" data-testid="model-unit-compare-summary-title">
-                <template v-if="comparedInViewer.length === 1">{{ comparedInViewer[0] }} · 几何差异</template>
-                <template v-else>{{ comparedInViewer.length }} 个单元 · 几何差异（{{ comparedInViewer.join('、') }}）</template>
-              </div>
-              <div class="flex flex-wrap gap-1.5 text-[11px]">
-                <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">新增 {{ summary.added }}</span>
-                <span class="rounded bg-rose-100 px-1.5 py-0.5 text-rose-700">删除 {{ summary.deleted }}</span>
-                <span class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">修改 {{ summary.modified }}</span>
-                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">未变 {{ summary.unchanged }}</span>
-              </div>
-              <p v-if="noGeometryDifference" class="mt-2 text-xs font-medium text-emerald-700" data-testid="model-unit-compare-noop">
-                无几何差异<span v-if="sameGeometry">；A/B 几何相同，只加载了一次</span>
-              </p>
-            </div>
-
-            <div class="mt-3 flex flex-wrap items-center gap-1" data-testid="model-unit-compare-filters">
-              <button v-for="filter in ['all', 'added', 'deleted', 'modified'] as const"
-                :key="filter"
-                class="rounded border px-2 py-1 text-[11px]"
-                :class="statusFilter === filter ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'"
-                @click="statusFilter = filter">
-                {{ { all: '全部差异', added: '新增', deleted: '删除', modified: '修改' }[filter] }}
-              </button>
-              <label class="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
-                <input v-model="includeUnchanged" type="checkbox" />包含未变化
-              </label>
-            </div>
-
-            <div class="mt-2 space-y-1" data-testid="model-unit-compare-list">
-              <button v-for="row in visibleRows"
-                :key="row.refno"
-                class="flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left text-xs hover:bg-muted/50"
-                :class="row.refno === queriedElementRefno ? 'border-primary bg-primary/5' : 'border-border'"
-                :data-queried-element="row.refno === queriedElementRefno ? 'true' : undefined"
-                @click="focusRow(row.refno)">
-                <span class="rounded px-1.5 py-0.5 text-[10px]" :class="STATUS_CLASS[row.status]">
-                  {{ STATUS_LABEL[row.status] }}
-                </span>
-                <span class="min-w-0 flex-1 truncate font-mono">{{ row.refno }}</span>
-                <span v-if="row.refno === queriedElementRefno" class="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">本构件</span>
-                <span class="text-[10px] text-muted-foreground">{{ row.noun }}</span>
-              </button>
-              <p v-if="visibleRows.length === 0" class="py-4 text-center text-xs text-muted-foreground">当前筛选没有差异项</p>
-            </div>
-          </template>
-        </section>
+        <NodeVersionModelTab v-if="activeTab === 'model'"
+          v-model:status-filter="statusFilter"
+          v-model:include-unchanged="includeUnchanged"
+          :scope="scope"
+          :pair-ready="pairReady"
+          :before-sesno="beforeSesno"
+          :after-sesno="afterSesno"
+          :has-unit="hasUnit"
+          :compared-unit-refno="comparedUnitRefno"
+          :queried-element-refno="queriedElementRefno"
+          :diff-summary="diffSummary"
+          :loading-summary="loadingSummary"
+          :diff-summary-unavailable="diffSummaryUnavailable"
+          :geometry-groups="geometryGroups"
+          :comparing="comparing"
+          :loading-versions="loadingVersions"
+          :compare-progress="compareProgress"
+          :pending-groups-confirm="pendingGroupsConfirm"
+          :compared-in-viewer="comparedInViewer"
+          :compare-runtime="compareRuntime"
+          :compare-completed="compareCompleted"
+          :rows="rows"
+          :same-geometry="sameGeometry"
+          @run="runCompare"
+          @run-group="runCompareGroup"
+          @run-groups="runCompareGroups"
+          @confirm="confirmGroups"
+          @close="closeCompare"
+          @set-view-mode="setCompareViewMode"
+          @set-side="setCompareSide"
+          @set-diff-only="setCompareDiffOnly"
+          @refresh-environment="refreshCompareEnvironment"
+          @focus-row="focusRow" />
       </template>
     </div>
   </section>
