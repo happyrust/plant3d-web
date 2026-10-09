@@ -4,6 +4,12 @@
 
 ### 变更
 
+- **版本对比里单元根的「定位」补了退路：它自己没有几何对象时飞到那个单元在 A / B 层的整体包围盒** (2026-10-09 23:xx)
+  - 起因：BRAN / EQUI 一类单元根的几何都在成员上，整单元被删时单元根那一行也是 `deleted`，属性对比 tab 里点它的「定位」，`focus` 在 A / B 层按 `:refno:` 找不到、主图层里也早没了 → 相机不动（10-09 本机 643 → 645 整条 BRAN 24384/26496 被删时碰上的，当时 e2e 改挑了成员行绕开）。
+  - 现在：`modelUnitCompareController.focus` 在 A / B 层找不到它自己的几何、而它是本次对比装着的单元根时，并起它两侧几何列到的成员在 A / B 层的包围盒再飞（多单元一次装载只并它自己那一组，`detail.units` 里按单元根取；容器 / 别的单元的构件照旧回落主图层、哪儿都没有仍不动相机）。选中与从前一样（已按「已删除」登记过的不覆盖）。
+  - 验证：`modelUnitCompareController.test.ts` +1（单单元并全部成员、tombstone 已登记不覆盖选中、多单元只并自己那组、容器与关掉后不动）共 9 例绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 触及文件 0。`node-version-view` 容器用例新增一段：装好组后清单里有单元根自己那一行就点它的「定位」、要求相机动（本机 `:8022` 三档各一遍 4 passed，annotation `单元根 24384/26496（deleted）定位 → 相机离停靠点 6 万`）；`model-version-compare` 5 条 Chrome 缺省档照旧全绿。
+  - 顺带看到（没改）：从属性对比 tab 定位一个**不是当前登记为「已删除」的**被删行（单元根或成员都一样），`focus` 走普通选中，属性面板去拉当前会话 → 404 红条；从模型树差异模式点幽灵行再「在 3D 中定位」的没这个问题（点行时已登记为「已删除」）。另：定位到只在 A 层有的构件时视口仍显示 B 侧，要手动切到 A 才看得见。
+
 - **节点版本面板与三维视口的版本对比各拆成几块，行为不变** (2026-10-09，版本对比审核计划 P2-2 / F8；三个本地提交)
   - 面板 `ModelUnitVersionComparePanel.vue` 1634 → 968 行：时间线那一半抽成 `composables/useNodeVersionTimeline`（三条时间线并表、对比范围、A / B、两个勾选、折叠、手填；换 A / B 前经 `beforePairChange` 让面板收三维对比），模板拆成 `NodeVersionTimeline.vue` / `NodeVersionAttributesTab.vue` / `NodeVersionModelTab.vue` 三个子组件（props + emits + `defineModel`，模板逐字搬出，`data-testid` 不变；「含戳」与「包含未变化」照旧共用同一个开关）；徽章取列口径进 `utils/nodeVersionTimeline`，文案配色进 `nodeVersionPanelFormat.ts`。面板只剩取数、装载路、事件收发、表头。
   - 视口 `ViewerPanel.vue` 5639 → 4951 行：三维版本对比的 open / clear / 切 A-B / 只看差异 / 分屏 pass / 指针落格射线 / 隔离图层拾取与钉到那一版 / 定位 / 运行态发布 / 事件路由抽成 `viewer/modelUnitCompareController.ts`；图层怎么建 / 挂、工具怎么收、相机怎么飞、几何从哪儿装、选中存哪儿、校审持有的那份怎么放，经 `ModelUnitCompareHost` 回到 ViewerPanel，所以控制器能在没有 WebGL 的单测里用假 host 跑完整条路。

@@ -447,9 +447,29 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
   }
 
   /**
-   * 版本对比事件的 `focus`：先在 A / B 隔离图层里找（两层都找，被删的构件在 A 层也找得到），没装 A / B 或这个 refno 不在装着的那个单元里
-   * （容器差异摘要 / 属性对比 tab 里别的单元的构件，设计稿 S3「定位」）就回落到主图层（环境模型）里的同一 refno；哪儿都没有就不动相机
-   * （e2e 拿「相机动没动」当信号）。
+   * 本次对比装着的单元根 `unitRefno`（已归一化）→ 它两侧几何列到的成员 refno（已归一化）；不是装着的单元根回 null。
+   * 单单元就是 `detail.before / after`；多单元一次装载按 `detail.units` 里它自己那一组取（`detail.before / after` 是全部单元并起来的）。
+   */
+  function compareUnitMemberRefnos(unitRefno: string): Set<string> | null {
+    const detail = state.value?.detail;
+    if (!detail || !targetUnitRefnos.includes(unitRefno)) return null;
+    const unit = detail.units?.length
+      ? detail.units.find((item) => host.normalizeRefno(item.unitRefno) === unitRefno)
+      : detail;
+    if (!unit) return null;
+    const members = new Set<string>();
+    for (const raw of [...unit.before.refnos, ...unit.after.refnos]) {
+      const member = host.normalizeRefno(raw);
+      if (member) members.add(member);
+    }
+    return members;
+  }
+
+  /**
+   * 版本对比事件的 `focus`：先在 A / B 隔离图层里找它自己的几何（两层都找，被删的构件在 A 层也找得到）；它是本次对比装着的单元根而自己
+   * 没有几何对象（BRAN / EQUI 一类单元根的几何都在成员上，整单元被删时单元根那一行也是 deleted）就退一步飞到那个单元在 A / B 层的整体包围盒；
+   * 没装 A / B 或这个 refno 不在装着的那个单元里（容器差异摘要 / 属性对比 tab 里别的单元的构件，设计稿 S3「定位」）就回落到主图层（环境模型）
+   * 里的同一 refno；哪儿都没有就不动相机（e2e 拿「相机动没动」当信号）。
    */
   function focus(refno: string): void {
     const viewer = host.viewer();
@@ -458,11 +478,24 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
 
     const box = new Box3();
     const objectBox = new Box3();
-    for (const layer of layers) {
-      for (const objectId of layer.getAllObjectIds()) {
-        if (!objectId.includes(`:${normalized}:`)) continue;
-        const found = layer.getObjectBoundingBoxInto(objectId, objectBox);
-        if (found && !found.isEmpty()) box.union(found);
+    const unionCompareObjects = (matches: (objectId: string) => boolean): void => {
+      for (const layer of layers) {
+        for (const objectId of layer.getAllObjectIds()) {
+          if (!matches(objectId)) continue;
+          const found = layer.getObjectBoundingBoxInto(objectId, objectBox);
+          if (found && !found.isEmpty()) box.union(found);
+        }
+      }
+    };
+    unionCompareObjects((objectId) => objectId.includes(`:${normalized}:`));
+    if (box.isEmpty()) {
+      // 单元根自己没有几何对象（成员才有）：退一步并起它的成员在 A / B 层的包围盒
+      const members = compareUnitMemberRefnos(normalized);
+      if (members) {
+        unionCompareObjects((objectId) => {
+          const memberRefno = refnoFromCompareObjectId(objectId);
+          return !!memberRefno && members.has(host.normalizeRefno(memberRefno) || memberRefno);
+        });
       }
     }
     const inCompareLayers = !box.isEmpty();

@@ -640,7 +640,8 @@ function focusRow(refno: string): void {
 
 /**
  * 属性对比 tab（`所有子节点`）每行的「定位」（设计稿 S3）：走版本对比事件的 `focus`——三维里装着 A / B 时飞到隔离图层里的它
- * （幽灵也找得到），没装时 ViewerPanel 回落到主图层（环境模型）里的同一 refno；哪儿都没有就不动相机。
+ * （幽灵也找得到；装着的单元根自己没有几何对象时退一步飞到那个单元在 A / B 层的整体包围盒），没装时 ViewerPanel 回落到主图层（环境模型）
+ * 里的同一 refno；哪儿都没有就不动相机。
  * 能不能点（B 侧已删且三维里没装 A / B 时置灰）由 tab 子组件按 `compareActive` 判，这里只收能点的。
  */
 function locateElement(row: { refno: string; status: ModelNodeDiffStatus }): void {

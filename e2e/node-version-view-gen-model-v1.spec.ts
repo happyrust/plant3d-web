@@ -360,8 +360,9 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   // 2026-09-21 起（收口计划 P1-b，设计稿 S3）每行行尾一颗「定位」：还没「在三维中对比」时 B 版已删的构件当前模型里没有 → 置灰并说明；其余可点
   const locateButton = (refno: string) => page.getByTestId(`model-unit-compare-element-locate-${underscore(refno)}`);
   await expect(page.locator('[data-testid^="model-unit-compare-element-locate-"]')).toHaveCount(summaryRows.length);
-  // 「定位」飞的是它自己的几何：整个单元被删时单元根那一行也是 deleted，可单元根自己没有几何对象（成员才有）、飞不过去——
-  // 挑一个不是单元根的被删构件（2026-10-09 本机 ams8000 643 → 645 整条 BRAN 24384/26496 被删，首行正是单元根）
+  // 「定位」飞的是它自己的几何：整个单元被删时单元根那一行也是 deleted，可单元根自己没有几何对象（成员才有）——
+  // 这里挑一个不是单元根的被删构件走成员那条路（2026-10-09 本机 ams8000 643 → 645 整条 BRAN 24384/26496 被删，首行正是单元根）；
+  // 单元根自己走下面「退一步飞到那个单元在 A / B 层的整体包围盒」那条
   const unitRoots = new Set(summary.groups.map((group) => group.unit_root).filter((root): root is string => !!root));
   const deletedRow = summaryRows.find((row) => row.status === 'deleted' && !unitRoots.has(row.refno));
   if (modifiedRow) await expect(locateButton(modifiedRow.refno)).toBeEnabled();
@@ -397,6 +398,21 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
     await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
     await evidence(page, 'container-subtree-locate-deleted', { refno: deletedInFirst.refno, unit: first.unit_root });
     await page.getByTestId('model-unit-compare-tab-model').click();
+  }
+  // 2026-10-09 起：装着的单元根自己那一行（整单元被删时是 deleted、自己属性改了时是 modified）也能「定位」——它自己没有几何对象，
+  // focus 退一步飞到那个单元在 A / B 层的整体包围盒；单元根不在清单里（只有成员变了）就没有这颗按钮，跳过
+  const rootRowInFirst = summaryRows.find((row) => row.refno === first.unit_root);
+  if (rootRowInFirst) {
+    await page.getByTestId('model-unit-compare-tab-attributes').click();
+    await expect(locateButton(rootRowInFirst.refno)).toBeEnabled();
+    await parkCamera(page);
+    await locateButton(rootRowInFirst.refno).click();
+    await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
+    test.info().annotations.push({ type: 'locate unit root', description: `单元根 ${rootRowInFirst.refno}（${rootRowInFirst.status}）定位 → 相机离停靠点 ${Math.round(await cameraDistanceFromParked(page))}` });
+    await evidence(page, 'container-subtree-locate-unit-root', { refno: rootRowInFirst.refno, status: rootRowInFirst.status, unit: first.unit_root });
+    await page.getByTestId('model-unit-compare-tab-model').click();
+  } else {
+    test.info().annotations.push({ type: 'locate unit root', description: `清单里没有单元根 ${first.unit_root} 自己那一行（只有成员变了），跳过` });
   }
 
   // 2026-09-21 起（收口计划 P2-a）：不止一组时有一颗总按钮，变了的单元一起进三维；≤ 20 组且服务端没说要确认就直接装（多了会先弹确认框，这里不进那条路）

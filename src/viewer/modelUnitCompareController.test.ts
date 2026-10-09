@@ -348,6 +348,58 @@ describe('modelUnitCompareController', () => {
     expect(h.viewer.flyTo).toHaveBeenCalledTimes(3);
   });
 
+  it('focus 单元根：它自己没有几何对象时退一步飞到那个单元在 A / B 层的整体包围盒；多单元只并它自己那一组；容器 / 关掉对比后不动相机', async () => {
+    const h = current = harness();
+    await h.controller.open(detailOf());
+    const [a, b] = h.created as [FakeLayer, FakeLayer];
+    a.objects.get('unit-compare:a:1_4:0')!.box = new Box3(new Vector3(-5, -5, -5), new Vector3(-3, -3, -3));
+    // 单元根 1_1 在 A / B / 主图层里都没有自己的对象 → 并起成员：A 的 1_2 / 1_3 / 1_4 + B 的 1_2 / 1_3
+    h.controller.focus('1/1');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(1);
+    expect(h.selection.setSelectedRefno).toHaveBeenLastCalledWith('1_1');
+    const unitBox = (h.viewer.fitClipPlanesToBox.mock.calls.at(-1) as [Box3])[0];
+    expect(unitBox.min.toArray()).toEqual([-5, -5, -5]);
+    expect(unitBox.max.toArray()).toEqual([2, 2, 2]);
+    // 整单元被删（B 侧 tombstone）时单元根那一行已按「已删除」登记过：照旧不覆盖选中，但相机飞过去
+    h.selection.deleted = true;
+    h.selection.refno = '1_1';
+    h.controller.focus('1_1');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(2);
+    expect(h.selection.setSelectedRefno).toHaveBeenCalledTimes(1);
+    h.selection.deleted = false;
+    h.selection.refno = null;
+
+    // 多单元一次装载：容器 0_0 下 1_1 与 2_1 两组；定位 2_1 只并它那一组的成员，容器自己既不是单元根也没几何 → 不动
+    const unit1 = { unitRefno: '1_1', unitNoun: 'BRAN', before: side(10, ['1_2', '1_3', '1_4']), after: side(20, ['1_2', '1_3']), rows: ROWS };
+    const unit2 = { unitRefno: '2_1', unitNoun: 'EQUI', before: side(10, ['2_2']), after: side(20, ['2_2', '2_3']), rows: [{ refno: '2_3', noun: 'SUBE', status: 'added' as const }] };
+    await h.controller.open(detailOf({
+      unitRefno: '0_0',
+      before: side(10, [...unit1.before.refnos, ...unit2.before.refnos]),
+      after: side(20, [...unit1.after.refnos, ...unit2.after.refnos]),
+      refnos: ['1_2', '1_3', '1_4', '2_2', '2_3'],
+      rows: [...unit1.rows, ...unit2.rows],
+      units: [unit1, unit2],
+    }));
+    const [, , a2, b2] = h.created as [FakeLayer, FakeLayer, FakeLayer, FakeLayer];
+    b2.objects.get('unit-compare:b:2_3:0')!.box = new Box3(new Vector3(10, 10, 10), new Vector3(12, 12, 12));
+    a2.objects.get('unit-compare:a:1_4:0')!.box = new Box3(new Vector3(-5, -5, -5), new Vector3(-3, -3, -3));
+    h.controller.focus('2_1');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(3);
+    const unit2Box = (h.viewer.fitClipPlanesToBox.mock.calls.at(-1) as [Box3])[0];
+    expect(unit2Box.min.toArray()).toEqual([0, 0, 0]);
+    expect(unit2Box.max.toArray()).toEqual([12, 12, 12]);
+    h.controller.focus('1_1');
+    const unit1Box = (h.viewer.fitClipPlanesToBox.mock.calls.at(-1) as [Box3])[0];
+    expect(unit1Box.min.toArray()).toEqual([-5, -5, -5]);
+    expect(unit1Box.max.toArray()).toEqual([2, 2, 2]);
+    h.controller.focus('0_0');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(4);
+
+    h.controller.clear();
+    h.controller.focus('1_1');
+    expect(h.viewer.flyTo).toHaveBeenCalledTimes(4);
+  });
+
   it('pickObject 按那一侧的隔离图层 CPU 拾取最近命中（拾非当前侧时临时开那一侧、测完复位）；selectObject 带 attributesAt 就钉到那一版', async () => {
     const attributesAt = vi.fn(async () => ({ refno: '1_2', exists: true, attributes: [] }));
     const h = current = harness();
