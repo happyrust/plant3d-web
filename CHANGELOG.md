@@ -4,6 +4,12 @@
 
 ### 变更
 
+- **校审附件的 Word（.docx / .doc）预览改用 canvas-editor 只读分页排版** (2026-10-10)
+  - 从前：mammoth 转出的 HTML 清理后塞进空 sandbox 的 iframe，整篇是一条长网页，没有页的概念。
+  - 现在：`utils/wordPreview.buildWordPreviewElements` 照旧用 mammoth 解析 DOCX 并按白名单清理（链接一律降为纯文本，属性只留内联图片数据与单元格跨行跨列）；图片按 A4 正文区或所在单元格宽度定好尺寸，再交给 canvas-editor 的 `getElementListByHTML` 转成元素，并去掉宿主页 CSS 带进来的颜色与字号，让标题字号、加粗按 canvas-editor 默认。预览面板换成新组件 `review/WordDocumentViewer.vue`：只读模式，A4 加 Word 默认页边距分页绘制，带「第 n / N 页」、缩放（30%–200%）和适应宽度（面板变宽变窄时自动重算）。.doc 照旧由后端 `/word-preview` 转成 DOCX 后走同一条路。canvas-editor 按需加载，是独立 chunk（567 KB，gzip 172 KB），不进首屏。
+  - 验证：全仓 341 文件 3191 例全绿；`npm run type-check` 499 条 = 基线、新增 0；ESLint 触及文件 0；`vite build` 通过。`node scripts/verify-review-word-preview.mjs`（脚本改为自起 Vite、查完即关）在真浏览器里跑通：样例 DOCX 文字、表格可见，链接只剩文字，损坏文件被拒；`docs/guides` 里带截图的操作说明排成 8 页，7 张图、10 个表都在；缩放与适应宽度正常，pageerror 0。截图与结果写在 `test-results/word-preview-canvas/`（不提交）。
+  - 已知限制：mammoth 只取语义结构，段落对齐、字体、页眉页脚、文本框与形状不保留，EMF / WMF 图片会被丢掉。.doc 仍要服务器装 LibreOffice，本机没有，未验证。
+
 - **版本对比里单元根的「定位」补了退路：它自己没有几何对象时飞到那个单元在 A / B 层的整体包围盒** (2026-10-09 23:xx)
   - 起因：BRAN / EQUI 一类单元根的几何都在成员上，整单元被删时单元根那一行也是 `deleted`，属性对比 tab 里点它的「定位」，`focus` 在 A / B 层按 `:refno:` 找不到、主图层里也早没了 → 相机不动（10-09 本机 643 → 645 整条 BRAN 24384/26496 被删时碰上的，当时 e2e 改挑了成员行绕开）。
   - 现在：`modelUnitCompareController.focus` 在 A / B 层找不到它自己的几何、而它是本次对比装着的单元根时，并起它两侧几何列到的成员在 A / B 层的包围盒再飞（多单元一次装载只并它自己那一组，`detail.units` 里按单元根取；容器 / 别的单元的构件照旧回落主图层、哪儿都没有仍不动相机）。选中与从前一样（已按「已删除」登记过的不覆盖）。

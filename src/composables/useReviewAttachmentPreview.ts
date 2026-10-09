@@ -1,8 +1,9 @@
-import { readonly, ref, shallowRef } from 'vue';
+import { markRaw, readonly, ref, shallowReadonly, shallowRef } from 'vue';
 
 import { ensurePanelAndActivate } from './useDockApi';
 
 import type { ReviewAttachment } from '@/types/auth';
+import type { IElement } from '@hufe921/canvas-editor';
 
 import { getAuthToken } from '@/api/reviewApi';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
@@ -11,7 +12,7 @@ import {
   failFileValidation,
   validateAttachmentBytes,
 } from '@/utils/fileValidation';
-import { renderWordPreview } from '@/utils/wordPreview';
+import { buildWordPreviewElements } from '@/utils/wordPreview';
 
 export type ReviewAttachmentPreviewKind = 'pdf' | 'image' | 'word';
 
@@ -27,7 +28,7 @@ export interface ReviewAttachmentPreviewTarget {
 const previewTarget = shallowRef<ReviewAttachmentPreviewTarget | null>(null);
 const previewStatus = ref<ReviewAttachmentPreviewStatus>('idle');
 const previewError = ref<string | null>(null);
-const previewWordHtml = ref<string | null>(null);
+const previewWordElements = shallowRef<IElement[] | null>(null);
 let validationController: AbortController | null = null;
 const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_WORD_BYTES = 50 * 1024 * 1024;
@@ -38,7 +39,7 @@ let validationSeq = 0;
 export const activeReviewAttachmentPreview = readonly(previewTarget);
 export const reviewAttachmentPreviewStatus = readonly(previewStatus);
 export const reviewAttachmentPreviewError = readonly(previewError);
-export const reviewAttachmentWordHtml = readonly(previewWordHtml);
+export const reviewAttachmentWordElements = shallowReadonly(previewWordElements);
 
 export function getReviewAttachmentPreviewKind(
   attachment: ReviewAttachment,
@@ -185,7 +186,7 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
   const timeout = setTimeout(() => controller.abort(), 60_000);
   previewStatus.value = 'loading';
   previewError.value = null;
-  previewWordHtml.value = null;
+  previewWordElements.value = null;
 
   try {
     const format = attachmentValidationFormat(target);
@@ -241,9 +242,9 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
     if (seq !== validationSeq) return;
     validateAttachmentBytes(prefix, target.attachment.name, format);
     if (wordBuffer) {
-      const html = await renderWordPreview(wordBuffer);
+      const elements = await buildWordPreviewElements(wordBuffer);
       if (seq !== validationSeq) return;
-      previewWordHtml.value = html;
+      previewWordElements.value = markRaw(elements);
     }
     previewStatus.value = 'ready';
   } catch (error) {
@@ -304,5 +305,5 @@ export function clearReviewAttachmentPreview(): void {
   previewTarget.value = null;
   previewStatus.value = 'idle';
   previewError.value = null;
-  previewWordHtml.value = null;
+  previewWordElements.value = null;
 }

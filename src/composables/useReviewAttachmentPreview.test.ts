@@ -9,16 +9,17 @@ import {
   openReviewAttachmentPreview,
   reviewAttachmentPreviewError,
   reviewAttachmentPreviewStatus,
-  reviewAttachmentWordHtml,
+  reviewAttachmentWordElements,
   retryReviewAttachmentPreview,
 } from './useReviewAttachmentPreview';
 
 import type { ReviewAttachment } from '@/types/auth';
+import type { IElement } from '@hufe921/canvas-editor';
 
 const ensurePanelAndActivateMock = vi.hoisted(() => vi.fn());
-const renderWordPreviewMock = vi.hoisted(() => vi.fn());
+const buildWordPreviewElementsMock = vi.hoisted(() => vi.fn());
 const getAuthTokenMock = vi.hoisted(() => vi.fn());
-vi.mock('@/utils/wordPreview', () => ({ renderWordPreview: renderWordPreviewMock }));
+vi.mock('@/utils/wordPreview', () => ({ buildWordPreviewElements: buildWordPreviewElementsMock }));
 vi.mock('@/api/reviewApi', () => ({ getAuthToken: getAuthTokenMock }));
 
 vi.mock('@/composables/useDockApi', () => ({
@@ -40,7 +41,7 @@ describe('useReviewAttachmentPreview', () => {
   beforeEach(() => {
     clearReviewAttachmentPreview();
     ensurePanelAndActivateMock.mockClear();
-    renderWordPreviewMock.mockReset().mockResolvedValue('<html><body>Word content</body></html>');
+    buildWordPreviewElementsMock.mockReset().mockResolvedValue([{ value: 'Word content' }]);
     getAuthTokenMock.mockReturnValue(null);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -193,8 +194,8 @@ describe('useReviewAttachmentPreview', () => {
     }));
     expect(openReviewAttachmentPreview('task-1', attachment({ name: 'notes.docx', mimeType: undefined }))).toBe(true);
     await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
-    expect(renderWordPreviewMock).toHaveBeenCalledWith(expect.any(ArrayBuffer));
-    expect(reviewAttachmentWordHtml.value).toContain('Word content');
+    expect(buildWordPreviewElementsMock).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    expect(reviewAttachmentWordElements.value).toEqual([{ value: 'Word content' }]);
     expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toEqual({});
   });
 
@@ -216,19 +217,19 @@ describe('useReviewAttachmentPreview', () => {
       headers: { 'Content-Type': 'application/octet-stream' },
     });
     vi.mocked(fetch).mockResolvedValueOnce(response()).mockResolvedValueOnce(response());
-    renderWordPreviewMock.mockRejectedValueOnce(new Error('corrupt DOCX'));
+    buildWordPreviewElementsMock.mockRejectedValueOnce(new Error('corrupt DOCX'));
     openReviewAttachmentPreview('task-1', attachment({ name: 'notes.docx', mimeType: undefined }));
     await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('error'));
     expect(reviewAttachmentPreviewError.value).toContain('corrupt DOCX');
-    let finish!: (html: string) => void;
-    renderWordPreviewMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let finish!: (elements: IElement[]) => void;
+    buildWordPreviewElementsMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     retryReviewAttachmentPreview();
     await vi.waitFor(() => expect(finish).toBeDefined());
     openReviewAttachmentPreview('task-1', attachment());
-    finish('<html>stale</html>');
+    finish([{ value: 'stale' }]);
     await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
     expect(activeReviewAttachmentPreview.value?.kind).toBe('pdf');
-    expect(reviewAttachmentWordHtml.value).toBeNull();
+    expect(reviewAttachmentWordElements.value).toBeNull();
   });
 
   it('rejects partial or oversized Word responses before parsing', async () => {
@@ -242,6 +243,6 @@ describe('useReviewAttachmentPreview', () => {
     }));
     retryReviewAttachmentPreview();
     await vi.waitFor(() => expect(reviewAttachmentPreviewError.value).toContain('50MB'));
-    expect(renderWordPreviewMock).not.toHaveBeenCalled();
+    expect(buildWordPreviewElementsMock).not.toHaveBeenCalled();
   });
 });

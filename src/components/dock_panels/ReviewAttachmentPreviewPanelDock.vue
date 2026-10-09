@@ -4,6 +4,7 @@ import { watch } from 'vue';
 import { Download, ExternalLink, FileSearch, Loader2, RefreshCw } from 'lucide-vue-next';
 
 import { formatAttachmentSize } from '@/components/review/reviewAttachmentFlow';
+import WordDocumentViewer from '@/components/review/WordDocumentViewer.vue';
 import {
   activeReviewAttachmentPreview,
   buildReviewAttachmentDownloadUrl,
@@ -13,7 +14,7 @@ import {
   retryReviewAttachmentPreview,
   reviewAttachmentPreviewError,
   reviewAttachmentPreviewStatus,
-  reviewAttachmentWordHtml,
+  reviewAttachmentWordElements,
 } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 
@@ -166,13 +167,11 @@ function describeAttachment(): string {
           class="max-h-full max-w-full rounded-md object-contain shadow-lg shadow-black/40"
           @error="handleImageError" />
       </div>
-      <iframe v-else-if="activeReviewAttachmentPreview?.kind === 'word' && reviewAttachmentPreviewStatus === 'ready'"
+      <WordDocumentViewer v-else-if="activeReviewAttachmentPreview?.kind === 'word' && reviewAttachmentPreviewStatus === 'ready' && reviewAttachmentWordElements"
         data-testid="review-attachment-word"
-        :srcdoc="reviewAttachmentWordHtml || ''"
-        :title="activeReviewAttachmentPreview.attachment.name"
-        sandbox=""
-        referrerpolicy="no-referrer"
-        class="h-full w-full border-0 bg-white" />
+        :elements="reviewAttachmentWordElements"
+        :label="activeReviewAttachmentPreview.attachment.name"
+        @error="markReviewAttachmentPreviewFailed" />
       <div v-else
         class="flex h-full flex-col items-center justify-center gap-2.5 p-6 text-center">
         <FileSearch class="h-7 w-7 text-slate-600" aria-hidden="true" />
