@@ -178,6 +178,18 @@ export function filterNodeTimelineRows(rows: NodeTimelineRow[], filter: NodeTime
   });
 }
 
+/** 行上那颗徽章显示哪一列：`仅自身` 看自身列；自身列未知（旧服务端）时只剩单元那一列可显示，别谎报「未变」 */
+export function timelineRowImpact(row: NodeTimelineRow, scope: ModelNodeDiffScope, selfColumnUnknown: boolean): ModelVersionImpactKind | null {
+  if (scope === 'self' && !selfColumnUnknown) return row.selfImpact;
+  return row.unitImpact ?? row.selfImpact;
+}
+
+/** 单元根 / 容器的那一颗徽章要不要画成「仅属性」：显示的是自身列、且版本表没把这一会话算成一版 */
+export function timelineRowAttributeOnly(row: NodeTimelineRow, scope: ModelNodeDiffScope, selfColumnUnknown: boolean): boolean {
+  if (!row.attributeOnly) return false;
+  return scope === 'self' ? !selfColumnUnknown : row.unitImpact === null;
+}
+
 /** 时间线缺省画出来的行数（设计稿 S1「加载更早 n 版…」）；取数不分页，只是展示上先折起更早的 */
 export const NODE_TIMELINE_INITIAL_ROWS = 20;
 

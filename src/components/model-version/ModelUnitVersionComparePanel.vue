@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { Check, GitCompare, Link, RefreshCw, X } from 'lucide-vue-next';
+import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
+
+import { DIFF_KIND_CLASS, DIFF_KIND_LABEL, diffSourceText, membersText, STATUS_CLASS, STATUS_LABEL } from './nodeVersionPanelFormat';
+import NodeVersionTimeline from './NodeVersionTimeline.vue';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useNodeVersionTimeline } from '@/composables/useNodeVersionTimeline';
 import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
 import {
   getModelSource,
   ModelVersionRouteUnavailableError,
   type ModelAttributeHistory,
-  type ModelElementVersionTimeline,
   type ModelNodeDiffGroup,
-  type ModelNodeDiffScope,
   type ModelNodeDiffStatus,
   type ModelNodeDiffSummary,
   type ModelNodeVersionTimeline,
@@ -53,17 +55,8 @@ import {
 } from '@/utils/modelUnitVersionCompare';
 import {
   buildNodeTimelineRows,
-  countNodeTimeline,
-  defaultNodeScope,
-  defaultNodeVersionPair,
   emptyNetDiffText,
-  filterNodeTimelineRows,
   foldAttributeChanges,
-  NODE_TIMELINE_INITIAL_ROWS,
-  pairWithLatest,
-  pairWithPrevious,
-  pickNodeVersionSide,
-  sliceNodeTimelineRows,
   viewFromAttributeDiff,
   viewFromFold,
   type AttributeNetDiffView,
@@ -90,25 +83,15 @@ const unitRefno = ref(urlConfig.unitRefno);
 const dbnum = ref<number | null>(null);
 /** 所属单元的版本表（几何只按单元生成，A/B 历史投影要拿它的 `ModelVersion` 去 `loadVersion`） */
 const versions = ref<ModelVersion[]>([]);
-/** 查的那个节点的两列版本时间线（`listElementVersions`）：它自己变没变、所属单元变没变 */
-const elementTimeline = ref<ModelElementVersionTimeline | null>(null);
-/** 属性变化时间线（`attributeHistory`）；旧服务端没有这条路由时为 null，`historyUnavailable` 说明原因 */
-const attributeHistory = ref<ModelAttributeHistory | null>(null);
+/** 属性变化时间线取不到的原因（旧服务端没有这条路由等）；取到了为 null */
 const historyUnavailable = ref<string | null>(null);
 /**
- * 节点版本表（`listNodeVersions` scope=subtree，CONTEXT「节点版本表」）：只在节点是容器（不在任何单元下）时去取——
- * 单元及以下的子树 ≈ 所属单元，单元表已经给了。旧服务端没有这条路由时为 null，`nodeVersionsUnavailable` 说明原因，
- * 面板退回「手填会话号」。
+ * 节点版本表（`listNodeVersions` scope=subtree，CONTEXT「节点版本表」）只在节点是容器（不在任何单元下）时去取——
+ * 单元及以下的子树 ≈ 所属单元，单元表已经给了。旧服务端没有这条路由时 `nodeVersionsUnavailable` 说明原因，面板退回「手填会话号」。
  */
-const nodeVersions = ref<ModelNodeVersionTimeline | null>(null);
 const nodeVersionsUnavailable = ref<string | null>(null);
-/** 节点有没有成员：null = 没问到（模型来源没给树口），false = 叶子（「所有子节点」置灰） */
-const hasMembers = ref<boolean | null>(null);
-const scope = ref<ModelNodeDiffScope>('subtree');
 /** 本次对比持有的版本几何，关闭 / 重查时 `release()`（gen-model-v1 下是服务端快照） */
 let heldGeometries: ModelVersionGeometry[] = [];
-const beforeSesno = ref<number | null>(null);
-const afterSesno = ref<number | null>(null);
 const loadingVersions = ref(false);
 const comparing = ref(false);
 const error = ref<string | null>(null);
@@ -117,11 +100,6 @@ const notice = ref<string | null>(null);
 const rows = ref<ModelUnitGeometryDiff[]>([]);
 const statusFilter = ref<'all' | Exclude<ModelUnitGeometryStatus, 'unchanged'>>('all');
 const includeUnchanged = ref(false);
-const geometryOnly = ref(false);
-/** 「只看自身变的」（设计稿 S2，`所有子节点` 下才露出）：子树动了、节点自身没动的会话不列；自身列未知（旧服务端）时置灰不筛 */
-const selfOnly = ref(false);
-/** 时间线「加载更早 n 版…」点开了没（设计稿 S1）：缺省只画最近 `NODE_TIMELINE_INITIAL_ROWS` 行；换节点重载时折回去，切范围 / 勾选不折 */
-const timelineExpanded = ref(false);
 const activeTab = ref<'attributes' | 'model'>('attributes');
 const compareActive = ref(false);
 const compareRuntime = ref<ModelUnitVersionCompareRuntimeState | null>(null);
@@ -155,46 +133,49 @@ let summaryRequestId = 0;
 let selfDiffRequestId = 0;
 
 const normalizedRefno = computed(() => unitRefno.value.trim().replace(/\//g, '_'));
-/** 查的那个节点自己就是单元根时，两列说的是同一件事，界面上不再多说一遍 */
-const queriedIsUnitRoot = computed(() => {
-  const timeline = elementTimeline.value;
-  return !timeline || timeline.unitRefno === null || timeline.unitRefno === timeline.refno;
+
+/**
+ * 时间线那一半（`useNodeVersionTimeline`，P2-2 抽出）：三条时间线并成一条、对比范围、A / B、两个勾选、折叠、手填。
+ * 用户换 A / B 之前先收掉上一轮的三维对比；换范围后收起「所有子节点」下展开的构件那一格。
+ */
+const nodeTimeline = useNodeVersionTimeline({
+  beforePairChange: () => closeCompare(),
+  afterScopeChange: () => { expandedElement.value = null; },
 });
+const {
+  elementTimeline,
+  attributeHistory,
+  nodeVersions,
+  hasMembers,
+  scope,
+  beforeSesno,
+  afterSesno,
+  geometryOnly,
+  selfOnly,
+  timelineExpanded,
+  manualA,
+  manualB,
+  selfColumnUnknown,
+  hasUnit,
+  queriedIsUnitRoot,
+  queriedElementRefno,
+  nodeNoun,
+  pairReady,
+  setScope,
+  pickSide,
+  compareWithPrevious,
+  compareWithLatest,
+} = nodeTimeline;
+const timelineRows = nodeTimeline.rows;
+const timelineCounts = nodeTimeline.counts;
+const timelineSlice = nodeTimeline.slice;
 /** 对比按这个单元跑（几何只按单元生成）；查的是构件时它是解出来的所属单元根 */
 const comparedUnitRefno = computed(() => elementTimeline.value?.unitRefno ?? normalizedRefno.value);
-/** 查的那个构件（不是单元根时才有）：对比结果与三维定位都收窄到它 */
-const queriedElementRefno = computed(() => (queriedIsUnitRoot.value ? null : elementTimeline.value?.refno ?? null));
-const nodeNoun = computed(() => elementTimeline.value?.noun || attributeHistory.value?.noun || '');
-const hasUnit = computed(() => !!elementTimeline.value?.unitRefno);
-/** 旧服务端只给得出单元那一列：自身那一列是未知，不是「没变」 */
-const selfColumnUnknown = computed(() => elementTimeline.value?.unitColumnOnly === true);
 
-const timelineRows = computed<NodeTimelineRow[]>(() => buildNodeTimelineRows({
-  timeline: elementTimeline.value,
-  history: attributeHistory.value,
-  nodeVersions: nodeVersions.value,
-  scope: scope.value,
-}));
-/** 「本范围 n 版 · 仅属性 m」：n 与服务端版本表的行数对得上，m 是只在属性变化时间线里的会话（UDA 之类） */
-const timelineCounts = computed(() => countNodeTimeline(timelineRows.value, scope.value));
-/** 范围内的行 + 被选为 A/B 但已不在范围内的行（灰掉、标「本范围无变化」，Q9 a）；两个勾选各筛一维（`filterNodeTimelineRows`） */
-const visibleTimelineRows = computed(() => filterNodeTimelineRows(timelineRows.value, {
-  scope: scope.value,
-  selected: [beforeSesno.value, afterSesno.value],
-  geometryOnly: geometryOnly.value,
-  selfOnly: selfOnly.value,
-  selfColumnUnknown: selfColumnUnknown.value,
-}));
-/** 实际画出来的那一段 + 折起的更早版数（`sliceNodeTimelineRows`）：被选为 A / B 的行一定在画出来的那段里 */
-const timelineSlice = computed(() => sliceNodeTimelineRows(visibleTimelineRows.value, {
-  expanded: timelineExpanded.value,
-  selected: [beforeSesno.value, afterSesno.value],
-}));
 const selectedBefore = computed(() => versionFor(beforeSesno.value));
 const selectedAfter = computed(() => versionFor(afterSesno.value));
 /** 两个版本几何相同的承诺（`ModelVersion.geometryKey` 相等）；键缺失时不承诺 */
 const sameGeometry = computed(() => sameModelUnitGeometryKey(selectedBefore.value, selectedAfter.value));
-const pairReady = computed(() => beforeSesno.value !== null && afterSesno.value !== null && beforeSesno.value < afterSesno.value);
 const shareStatus = ref<'idle' | 'copied' | 'address'>('idle');
 
 /** 属性对比（仅自身）表里实际列出的行：戳（`CACHID` 一类）缺省不列，勾「含戳」才列 */
@@ -251,66 +232,6 @@ function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
 
 function messageOf(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
-}
-
-function impactLabel(impact: ModelVersionImpactKind | null): string {
-  return impact ?? '未变';
-}
-
-/** 行上那颗徽章显示哪一列：`仅自身` 看自身列；自身列未知（旧服务端）时只剩单元那一列可显示，别谎报「未变」 */
-function rowImpact(row: NodeTimelineRow): ModelVersionImpactKind | null {
-  if (scope.value === 'self' && !selfColumnUnknown.value) return row.selfImpact;
-  return row.unitImpact ?? row.selfImpact;
-}
-
-/** 单元根 / 容器的那一颗徽章要不要画成「仅属性」：显示的是自身列、且版本表没把这一会话算成一版 */
-function attributeOnlyShown(row: NodeTimelineRow): boolean {
-  if (!row.attributeOnly) return false;
-  return scope.value === 'self' ? !selfColumnUnknown.value : row.unitImpact === null;
-}
-
-function impactClass(impact: ModelVersionImpactKind | null): string {
-  switch (impact) {
-    case 'mesh': return 'bg-amber-100 text-amber-700';
-    case 'placement': return 'bg-blue-100 text-blue-700';
-    case 'delivery': return 'bg-emerald-100 text-emerald-700';
-    case 'tombstone': return 'bg-rose-100 text-rose-700';
-    case 'noop': return 'bg-slate-100 text-slate-600';
-    default: return 'bg-slate-100 text-slate-500';
-  }
-}
-
-const STATUS_LABEL: Record<string, string> = { added: '新增', deleted: '删除', modified: '修改', unchanged: '未变', noop: 'noop' };
-const STATUS_CLASS: Record<string, string> = {
-  added: 'bg-emerald-100 text-emerald-700',
-  deleted: 'bg-rose-100 text-rose-700',
-  modified: 'bg-amber-100 text-amber-700',
-  unchanged: 'bg-slate-100 text-slate-600',
-  noop: 'bg-slate-100 text-slate-600',
-};
-/** 属性净差的去向（服务端 `kind`）：created = A 侧不存在，deleted = B 侧不存在 */
-const DIFF_KIND_LABEL: Record<string, string> = { created: 'A 侧不存在 · 新建', modified: '修改', deleted: 'B 侧不存在 · 已删', unchanged: '两端一字没差' };
-const DIFF_KIND_CLASS: Record<string, string> = {
-  created: 'bg-emerald-100 text-emerald-700',
-  modified: 'bg-amber-100 text-amber-700',
-  deleted: 'bg-rose-100 text-rose-700',
-  unchanged: 'bg-slate-100 text-slate-600',
-};
-
-/** 成员表两端真差的一句话：`新增 n · 移除 m · 重排` */
-function membersText(members: NonNullable<AttributeNetDiffView['members']>): string {
-  const parts: string[] = [];
-  if (members.added.length) parts.push(`新增 ${members.added.length}（${members.added.slice(0, 3).join('、')}${members.added.length > 3 ? '…' : ''}）`);
-  if (members.removed.length) parts.push(`移除 ${members.removed.length}（${members.removed.slice(0, 3).join('、')}${members.removed.length > 3 ? '…' : ''}）`);
-  if (members.reordered) parts.push('重排');
-  return parts.join(' · ');
-}
-
-/** 一格净差的取数口径，写在表底：服务端两端直接读终态，还是旧服务端下折出来的 */
-function diffSourceText(view: AttributeNetDiffView): string {
-  return view.source === 'server'
-    ? '取数：服务端 element/attribute-diff——A / B 各钉一个会话、同一个属性渲染器两端各出一次字，直接读终态；未变的属性不列。'
-    : '取数：服务端还没有 element/attribute-diff，这里把 (A, B] 里逐会话的 before / after 折成净差；成员 / owner 只能说「动过」。';
 }
 
 function releaseHeldGeometries(): void {
@@ -385,12 +306,10 @@ async function loadVersions(): Promise<void> {
   notice.value = null;
   rows.value = [];
   versions.value = [];
-  elementTimeline.value = null;
-  attributeHistory.value = null;
+  // 时间线那一半（三条时间线、成员、A / B、折叠）一并清掉
+  nodeTimeline.reset();
   historyUnavailable.value = null;
-  nodeVersions.value = null;
   nodeVersionsUnavailable.value = null;
-  hasMembers.value = null;
   diffSummary.value = null;
   diffSummaryError.value = null;
   diffSummaryUnavailable.value = false;
@@ -399,11 +318,8 @@ async function loadVersions(): Promise<void> {
   attributeDiffUnavailable.value = false;
   elementDiffs.value = new Map();
   expandedElement.value = null;
-  timelineExpanded.value = false;
   pendingGroupsConfirm.value = null;
   dbnum.value = null;
-  beforeSesno.value = null;
-  afterSesno.value = null;
   compareCompleted.value = false;
   const refno = normalizedRefno.value;
   if (!/^\d+_\d+$/.test(refno)) {
@@ -436,24 +352,16 @@ async function loadVersions(): Promise<void> {
         + `属性变化时间线照常可看；${nodeVersionsUnavailable.value ?? '子树时间线取不到'}。`;
     }
     dbnum.value = resolvedDbnum;
-    elementTimeline.value = timeline;
-    attributeHistory.value = history;
-    nodeVersions.value = subtree;
-    hasMembers.value = members;
     versions.value = unitVersions;
-    scope.value = defaultNodeScope({ unitRefno: timeline.unitRefno, hasMembers: members });
-    const pair = defaultNodeVersionPair(timelineRows.value);
-    beforeSesno.value = pair.a;
-    afterSesno.value = pair.b;
+    // 缺省范围（Q10 c）与缺省 A / B（范围内最近两版）由时间线那一半定
+    nodeTimeline.setNode({ timeline, history, nodeVersions: subtree, hasMembers: members });
     if (timelineRows.value.length === 0) {
       notice.value = [notice.value, `${refno} 在整条会话链上没有任何一版变化`].filter(Boolean).join(' ');
     }
   } catch (cause) {
     if (run === requestId) {
       versions.value = [];
-      elementTimeline.value = null;
-      attributeHistory.value = null;
-      nodeVersions.value = null;
+      nodeTimeline.reset();
       dbnum.value = null;
       // 旧构建（ADR-081 之前）连 `model/versions` 都没有：版本表本身取不到，整块都没法用；照实说要新版服务端，别露裸 404
       error.value = cause instanceof ModelVersionRouteUnavailableError
@@ -463,43 +371,6 @@ async function loadVersions(): Promise<void> {
   } finally {
     if (run === requestId) loadingVersions.value = false;
   }
-}
-
-function setScope(next: ModelNodeDiffScope): void {
-  if (next === scope.value) return;
-  if (next === 'subtree' && hasMembers.value === false) return;
-  scope.value = next;
-  // 切范围不重选 A/B（Q9 a）：两端保留，越界的行灰掉；只有一端还没选时才补缺省
-  if (beforeSesno.value === null || afterSesno.value === null) {
-    const pair = defaultNodeVersionPair(timelineRows.value);
-    beforeSesno.value = beforeSesno.value ?? pair.a;
-    afterSesno.value = afterSesno.value ?? pair.b;
-  }
-  expandedElement.value = null;
-}
-
-function pickSide(side: 'a' | 'b', sesno: number): void {
-  const pair = pickNodeVersionSide(timelineRows.value, { a: beforeSesno.value, b: afterSesno.value }, side, sesno);
-  if (pair.a === beforeSesno.value && pair.b === afterSesno.value) return;
-  closeCompare();
-  beforeSesno.value = pair.a;
-  afterSesno.value = pair.b;
-}
-
-function compareWithPrevious(): void {
-  const pair = pairWithPrevious(timelineRows.value, { a: beforeSesno.value, b: afterSesno.value });
-  if (pair.a === beforeSesno.value && pair.b === afterSesno.value) return;
-  closeCompare();
-  beforeSesno.value = pair.a;
-  afterSesno.value = pair.b;
-}
-
-function compareWithLatest(): void {
-  const pair = pairWithLatest(timelineRows.value, { a: beforeSesno.value, b: afterSesno.value });
-  if (pair.a === beforeSesno.value && pair.b === afterSesno.value) return;
-  closeCompare();
-  beforeSesno.value = pair.a;
-  afterSesno.value = pair.b;
 }
 
 async function copyCompareLink(): Promise<void> {
@@ -527,20 +398,10 @@ watch([elementTimeline, beforeSesno, afterSesno], () => {
 /**
  * 手填 A / B（容器节点撞上旧服务端时的兜底）：子树的时间线要 `node/versions?scope=subtree`，没有这条路由的服务端上容器
  * 只列得出它自己变过的那几版；差异摘要与分组三维对比却能吃任意两个会话号，所以这里让人直接填。填完按新旧摆正。
- * 节点版本表取到了就不再露出这一栏。
+ * 节点版本表取到了就不再露出这一栏。填错了的文案进 `error`。
  */
-const manualA = ref('');
-const manualB = ref('');
 function applyManualPair(): void {
-  const a = Number.parseInt(manualA.value, 10);
-  const b = Number.parseInt(manualB.value, 10);
-  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) {
-    error.value = '手填的 A / B 要是两个不同的会话号';
-    return;
-  }
-  error.value = null;
-  beforeSesno.value = Math.min(a, b);
-  afterSesno.value = Math.max(a, b);
+  error.value = nodeTimeline.applyManualPair();
 }
 
 function normalizeSelectedPair(): void {
@@ -703,7 +564,7 @@ function groupVersions(group: ModelNodeDiffGroup): { unitRefno: string; unitNoun
     unitRefno: group.unitRefno!,
     unitNoun: group.unitNoun ?? '',
     sesno,
-    sessionTime: timelineRows.value.find((row) => row.sesno === sesno)?.sessionTime ?? null,
+    sessionTime: nodeTimeline.sessionTimeOf(sesno),
     impactKind,
   });
   return { unitRefno: group.unitRefno!, unitNoun: group.unitNoun ?? '', before: make(beforeSesno.value!, kinds.before), after: make(afterSesno.value!, kinds.after) };
@@ -1054,148 +915,28 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-if="timelineRows.length > 0">
-        <div class="mt-1 flex items-center justify-between gap-2">
-          <h3 class="text-xs font-semibold text-foreground" data-testid="model-unit-compare-timeline-head">
-            版本时间线 · 本范围 {{ timelineCounts.versions }} 版<template v-if="timelineCounts.attributeOnly"> · 仅属性 {{ timelineCounts.attributeOnly }}</template>
-          </h3>
-          <span class="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <label v-if="scope === 'subtree'" class="flex items-center gap-1" :class="selfColumnUnknown ? 'opacity-50' : ''"
-              :title="selfColumnUnknown ? '服务端没给出节点自身那一列，分不出哪些会话是它自己变的' : '只列节点自身记录变过的会话（含只改了属性的）；子树里别的构件动了、它自己没动的不列'">
-              <input v-model="selfOnly" type="checkbox" :disabled="selfColumnUnknown" data-testid="model-unit-compare-self-only" />只看自身变的
-            </label>
-            <label class="flex items-center gap-1">
-              <input v-model="geometryOnly" type="checkbox" data-testid="model-unit-compare-geometry-only" />只看几何变的
-            </label>
-          </span>
-        </div>
-        <p v-if="historyUnavailable" class="mt-1 text-[10px] text-amber-600" data-testid="model-unit-compare-history-missing">{{ historyUnavailable }}</p>
-
-        <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-          <button type="button" class="rounded-md border border-border bg-background px-2 py-1 text-foreground hover:bg-muted/50"
-            data-testid="model-unit-compare-with-previous" @click="compareWithPrevious">
-            与上一版比
-          </button>
-          <button type="button" class="rounded-md border border-border bg-background px-2 py-1 text-foreground hover:bg-muted/50"
-            data-testid="model-unit-compare-with-latest" @click="compareWithLatest">
-            与最新比
-          </button>
-          <button type="button"
-            class="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-background text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="!pairReady"
-            :aria-label="shareStatus === 'copied' ? '对比链接已复制' : '复制对比链接'"
-            :title="shareStatus === 'copied' ? '对比链接已复制' : '复制当前节点与 A/B 版本的直达链接'"
-            data-testid="model-unit-compare-copy-link"
-            @click="copyCompareLink">
-            <Check v-if="shareStatus === 'copied'" class="h-3 w-3 text-emerald-600" />
-            <Link v-else class="h-3 w-3" />
-          </button>
-        </div>
-        <div class="mt-2 grid grid-cols-1 gap-1.5 text-[10px]">
-          <label class="min-w-0 text-blue-700" data-testid="model-unit-compare-a" :data-sesno="beforeSesno ?? ''">
-            <span class="mb-0.5 block font-semibold">A 时间</span>
-            <select class="h-8 w-full rounded-md border border-blue-200 bg-blue-50 px-1.5 text-[11px] font-medium text-blue-800 outline-none focus:ring-2 focus:ring-blue-500"
-              :value="beforeSesno ?? ''"
-              aria-label="选择 A 版本时间"
-              data-testid="model-unit-compare-a-time-select"
-              @change="pickSide('a', Number(($event.target as HTMLSelectElement).value))">
-              <option v-for="row in timelineRows" :key="`a-${row.sesno}`" :value="row.sesno">
-                {{ formatModelUnitVersionTime(row.sessionTime ?? '') || '时间未知' }} · {{ row.sesno }}
-              </option>
-            </select>
-          </label>
-          <label class="min-w-0 text-emerald-700" data-testid="model-unit-compare-b" :data-sesno="afterSesno ?? ''">
-            <span class="mb-0.5 block font-semibold">B 时间</span>
-            <select class="h-8 w-full rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500"
-              :value="afterSesno ?? ''"
-              aria-label="选择 B 版本时间"
-              data-testid="model-unit-compare-b-time-select"
-              @change="pickSide('b', Number(($event.target as HTMLSelectElement).value))">
-              <option v-for="row in timelineRows" :key="`b-${row.sesno}`" :value="row.sesno">
-                {{ formatModelUnitVersionTime(row.sessionTime ?? '') || '时间未知' }} · {{ row.sesno }}
-              </option>
-            </select>
-          </label>
-        </div>
-        <p v-if="shareStatus === 'address'" class="mt-1 text-right text-[10px] text-amber-700" data-testid="model-unit-compare-copy-link-status">
-          浏览器未开放剪贴板，直达链接已写入地址栏
-        </p>
-
-        <form v-if="!hasUnit && !nodeVersions" class="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-manual-pair" @submit.prevent="applyManualPair">
-          <span>手填会话号</span>
-          <input v-model="manualA" class="w-14 rounded border border-input bg-background px-1 py-0.5 font-mono text-[10px]" placeholder="A" inputmode="numeric" data-testid="model-unit-compare-manual-a" />
-          <span>→</span>
-          <input v-model="manualB" class="w-14 rounded border border-input bg-background px-1 py-0.5 font-mono text-[10px]" placeholder="B" inputmode="numeric" data-testid="model-unit-compare-manual-b" />
-          <button type="submit" class="rounded border border-border bg-background px-1.5 py-0.5 text-foreground hover:bg-muted/50" data-testid="model-unit-compare-manual-apply">应用</button>
-          <span class="truncate">（容器的子树时间线要新版 node/versions，先手填）</span>
-        </form>
-
-        <ul class="mt-2 space-y-1" data-testid="model-unit-compare-timeline">
-          <li v-for="row in timelineSlice.rows"
-            :key="row.sesno"
-            class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs"
-            :class="[
-              row.sesno === afterSesno ? 'border-emerald-300 bg-emerald-50/60' : row.sesno === beforeSesno ? 'border-blue-300 bg-blue-50/60' : 'border-border',
-              row.inScope ? '' : 'opacity-50',
-            ]"
-            :data-sesno="row.sesno"
-            :data-in-scope="row.inScope ? 'true' : 'false'">
-            <span class="flex shrink-0 flex-col gap-0.5">
-              <button type="button"
-                class="rounded px-1 text-[9px] font-bold leading-4"
-                :class="row.sesno === beforeSesno ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground hover:bg-blue-100 hover:text-blue-700'"
-                :title="`把 sesno ${row.sesno} 设为 A`"
-                :data-testid="`model-unit-compare-pick-a-${row.sesno}`"
-                @click="pickSide('a', row.sesno)">A</button>
-              <button type="button"
-                class="rounded px-1 text-[9px] font-bold leading-4"
-                :class="row.sesno === afterSesno ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground hover:bg-emerald-100 hover:text-emerald-700'"
-                :title="`把 sesno ${row.sesno} 设为 B`"
-                :data-testid="`model-unit-compare-pick-b-${row.sesno}`"
-                @click="pickSide('b', row.sesno)">B</button>
-            </span>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-baseline gap-x-2">
-                <span class="font-mono font-semibold text-foreground">sesno {{ row.sesno }}</span>
-                <span class="text-[10px] text-muted-foreground">{{ formatModelUnitVersionTime(row.sessionTime ?? '') }}</span>
-                <span v-if="row.user" class="text-[10px] text-foreground/80">{{ row.user }}</span>
-              </div>
-              <div v-if="row.comment" class="truncate text-[10px] text-muted-foreground" :title="row.comment">{{ row.comment }}</div>
-            </div>
-            <span class="flex shrink-0 flex-wrap justify-end gap-1">
-              <span v-if="!row.inScope" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">本范围无变化</span>
-              <span v-if="row.changedCount" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">属性 {{ row.changedCount }}</span>
-              <span v-if="scope === 'subtree' && row.unitsChanged !== null && row.unitsChanged > 0"
-                class="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-700"
-                :title="`这一会话有几何要重算的最小交付单元数`"
-                data-testid="model-unit-compare-units-changed">单元 {{ row.unitsChanged }}</span>
-              <template v-if="queriedIsUnitRoot">
-                <span v-if="attributeOnlyShown(row)" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
-                  title="这一会话只改了不进模型提取的属性（UDA 之类）：版本表不算它一版，属性变化时间线照列"
-                  data-testid="model-unit-compare-attribute-only">仅属性</span>
-                <span v-else class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(rowImpact(row))">
-                  {{ impactLabel(rowImpact(row)) }}
-                </span>
-              </template>
-              <template v-else>
-                <span v-if="scope === 'subtree'" class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.unitImpact)">单元 {{ impactLabel(row.unitImpact) }}</span>
-                <span v-if="row.attributeOnly" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
-                  title="这一会话本构件只改了不进模型提取的属性（UDA 之类）：版本表不算它一版，属性变化时间线照列"
-                  data-testid="model-unit-compare-attribute-only">本构件 仅属性</span>
-                <span v-else class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.selfImpact)">
-                  本构件 {{ selfColumnUnknown ? '?' : impactLabel(row.selfImpact) }}
-                </span>
-              </template>
-            </span>
-          </li>
-        </ul>
-        <button v-if="timelineSlice.hidden > 0" type="button"
-          class="mt-1 w-full rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-          :title="`缺省只列最近 ${NODE_TIMELINE_INITIAL_ROWS} 版；点开列全（版本表早已取回，不再请求服务端）`"
-          data-testid="model-unit-compare-timeline-more"
-          :data-hidden="timelineSlice.hidden"
-          @click="timelineExpanded = true">
-          加载更早 {{ timelineSlice.hidden }} 版…
-        </button>
+        <NodeVersionTimeline v-model:self-only="selfOnly"
+          v-model:geometry-only="geometryOnly"
+          v-model:manual-a="manualA"
+          v-model:manual-b="manualB"
+          :rows="timelineRows"
+          :slice="timelineSlice"
+          :counts="timelineCounts"
+          :scope="scope"
+          :before-sesno="beforeSesno"
+          :after-sesno="afterSesno"
+          :pair-ready="pairReady"
+          :self-column-unknown="selfColumnUnknown"
+          :queried-is-unit-root="queriedIsUnitRoot"
+          :history-unavailable="historyUnavailable"
+          :show-manual-pair="!hasUnit && !nodeVersions"
+          :share-status="shareStatus"
+          @pick="pickSide"
+          @with-previous="compareWithPrevious"
+          @with-latest="compareWithLatest"
+          @copy-link="copyCompareLink"
+          @apply-manual-pair="applyManualPair"
+          @expand="timelineExpanded = true" />
 
         <div class="mt-3 grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs" data-testid="model-unit-compare-tabs">
           <button type="button" class="rounded px-2 py-1.5"
