@@ -26,6 +26,7 @@ import { reviewAttachmentDelete } from '@/api/reviewApi';
 import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
+import { useContainerQuery } from '@/composables/useContainerQuery';
 import { useScreenshot } from '@/composables/useScreenshot';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -106,6 +107,18 @@ const isDesignerOnly = computed(() => (
 ));
 // dock 档的评论输入框嵌在时间线的处理区里，拆出去会把它一起带走，所以只在 normal 档把处理结论提到最上面
 const showDecisionForm = computed(() => isDesignerOnly.value && !isDockDensity.value);
+
+const cardEl = ref<HTMLElement | null>(null);
+// 分不分两列按卡片自身宽度（≈ 面板宽度）定，不按视口：dock 面板在宽屏上也可能很窄
+const { mode: cardWidthMode } = useContainerQuery(cardEl, { mediumMax: 900 });
+const twoColumnLayout = computed(() => !isDockDensity.value && cardWidthMode.value === 'wide');
+// 设计侧左列是处理表单和证据，给宽；校核侧的处理动作在右列时间线里，右列宽
+const gridColumnsClass = computed(() => {
+  if (!twoColumnLayout.value) return '';
+  return showDecisionForm.value
+    ? 'grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]'
+    : 'grid-cols-[minmax(220px,0.75fr)_minmax(340px,1.25fr)]';
+});
 // 四类批注统一为带角色绑定（ADR-0049）：`bindings` 恒有；`cloudBindings` 是云线条目的旧名，过渡期兜底。
 const itemBindings = computed(() => props.item.bindings ?? props.item.cloudBindings ?? []);
 const memberBindings = computed(() => itemBindings.value.filter((binding) => binding.role === 'member'));
@@ -262,12 +275,15 @@ function formatDateTime(timestamp: number): string {
 </script>
 
 <template>
-  <section data-testid="annotation-inline-detail-card"
+  <section ref="cardEl"
+    data-testid="annotation-inline-detail-card"
     :data-density="density"
+    :data-columns="twoColumnLayout ? 2 : 1"
     class="overflow-hidden border border-brand/25 bg-slate-50/80 shadow-inner"
     :class="isDockDensity ? 'rounded-lg' : 'rounded-xl'">
     <div class="grid min-w-0 gap-3"
-      :class="isDockDensity ? 'p-3' : 'p-4 xl:grid-cols-[minmax(220px,0.75fr)_minmax(340px,1.25fr)]'">
+      data-testid="annotation-inline-detail-grid"
+      :class="isDockDensity ? 'p-3' : ['p-4', gridColumnsClass]">
       <div class="min-w-0 space-y-3">
         <AnnotationDecisionForm v-if="showDecisionForm"
           :annotation-type="item.type"

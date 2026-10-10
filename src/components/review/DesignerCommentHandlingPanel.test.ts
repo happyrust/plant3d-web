@@ -5,6 +5,8 @@ import { UserRole, type ReviewTask } from '@/types/auth';
 
 const currentTaskRef = ref<ReviewTask | null>(null);
 const returnedTasksRef = ref<ReviewTask[]>([]);
+const tasksLoadingRef = ref(false);
+const tasksErrorRef = ref<string | null>(null);
 const confirmedRecordsRef = ref<unknown[]>([]);
 const annotationsRef = ref<any[]>([]);
 const cloudAnnotationsRef = ref<any[]>([]);
@@ -232,6 +234,8 @@ vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
     currentUser: ref({ id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER }),
     returnedInitiatedTasks: returnedTasksRef,
+    loading: tasksLoadingRef,
+    error: tasksErrorRef,
     loadReviewTasks: loadReviewTasksMock,
     submitTaskToNextNode: submitTaskToNextNodeMock,
   }),
@@ -269,6 +273,35 @@ vi.mock('@/ribbon/commandBus', () => ({
 vi.mock('@/ribbon/toastBus', () => ({
   emitToast: emitToastMock,
 }));
+
+type RoRecord = { callback: ResizeObserverCallback; elements: Element[] };
+let roRegistry: RoRecord[] = [];
+
+class MockResizeObserver {
+  private record: RoRecord;
+  constructor(cb: ResizeObserverCallback) {
+    this.record = { callback: cb, elements: [] };
+    roRegistry.push(this.record);
+  }
+  observe(el: Element) { this.record.elements.push(el); }
+  disconnect() {
+    this.record.elements = [];
+    roRegistry = roRegistry.filter((r) => r !== this.record);
+  }
+  unobserve(el: Element) {
+    this.record.elements = this.record.elements.filter((x) => x !== el);
+  }
+}
+
+function fireContainerResize(target: Element, width: number) {
+  for (const r of roRegistry) {
+    if (!r.elements.includes(target)) continue;
+    r.callback(
+      [{ target, contentRect: { width, height: 800 } } as unknown as ResizeObserverEntry],
+      {} as ResizeObserver,
+    );
+  }
+}
 
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
   return {
@@ -356,6 +389,8 @@ describe('DesignerCommentHandlingPanel', () => {
     confirmedRecordsRestorerOptions.length = 0;
     currentTaskRef.value = null;
     returnedTasksRef.value = [createTask()];
+    tasksLoadingRef.value = false;
+    tasksErrorRef.value = null;
     confirmedRecordsRef.value = [];
     annotationsRef.value = [
       {
@@ -640,6 +675,22 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
     expect(document.querySelector('[data-testid="designer-task-switcher-summary"]')?.textContent).toContain('暂无退回单据');
     expect(document.querySelector('[data-testid="designer-task-confirmation"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('退回单据加载失败时写明原因，点「重试」重新加载', async () => {
+    returnedTasksRef.value = [];
+    tasksErrorRef.value = '加载任务列表失败：网络连接超时';
+    const mounted = await mountPanel();
+    const entry = document.querySelector<HTMLElement>('[data-testid="designer-comment-task-entry"]');
+
+    expect(entry?.textContent).toContain('退回单据加载失败');
+    expect(document.querySelector('[data-testid="designer-task-load-error"]')?.textContent).toContain('网络连接超时');
+
+    loadReviewTasksMock.mockClear();
+    Array.from(entry!.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('重试'))!.click();
+    expect(loadReviewTasksMock).toHaveBeenCalledTimes(1);
 
     mounted.unmount();
   });
@@ -1091,5 +1142,41 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.activeElement).toBe(document.querySelector('[data-testid="designer-confirm-button"]'));
 
     mounted.unmount();
+  });
+
+  it('面板窄于 960px 时顶栏按钮只留图标、元信息另起一行；放宽后恢复', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    try {
+      currentTaskRef.value = createTask();
+
+      const mounted = await mountPanel();
+      const panel = document.querySelector<HTMLElement>('[data-panel="designer-comment-handling"]')!;
+      const refreshButton = () => document.querySelector<HTMLButtonElement>('button[aria-label="刷新任务"]');
+      const historyButton = () => document.querySelector<HTMLButtonElement>('button[aria-label="流转历史"]');
+      const meta = () => document.querySelector<HTMLElement>('[data-testid="designer-task-meta"]');
+
+      fireContainerResize(panel, 800);
+      await nextTick();
+
+      expect(panel.dataset.layoutMode).toBe('medium');
+      expect(refreshButton()?.textContent?.trim()).toBe('');
+      expect(refreshButton()?.title).toBe('刷新任务');
+      expect(historyButton()?.textContent?.trim()).toBe('');
+      expect(meta()?.classList.contains('basis-full')).toBe(true);
+      expect(meta()?.classList.contains('truncate')).toBe(false);
+
+      fireContainerResize(panel, 1200);
+      await nextTick();
+
+      expect(panel.dataset.layoutMode).toBe('wide');
+      expect(refreshButton()?.textContent).toContain('刷新任务');
+      expect(historyButton()?.textContent).toContain('流转历史');
+      expect(meta()?.classList.contains('truncate')).toBe(true);
+
+      mounted.unmount();
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
   });
 });

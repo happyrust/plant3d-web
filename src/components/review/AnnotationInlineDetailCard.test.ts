@@ -25,6 +25,35 @@ vi.hoisted(() => {
   if (typeof globalThis.sessionStorage === 'undefined') vi.stubGlobal('sessionStorage', createMemoryStorage());
 });
 
+type RoRecord = { callback: ResizeObserverCallback; elements: Element[] };
+let roRegistry: RoRecord[] = [];
+
+class MockResizeObserver {
+  private record: RoRecord;
+  constructor(cb: ResizeObserverCallback) {
+    this.record = { callback: cb, elements: [] };
+    roRegistry.push(this.record);
+  }
+  observe(el: Element) { this.record.elements.push(el); }
+  disconnect() {
+    this.record.elements = [];
+    roRegistry = roRegistry.filter((r) => r !== this.record);
+  }
+  unobserve(el: Element) {
+    this.record.elements = this.record.elements.filter((x) => x !== el);
+  }
+}
+
+function fireContainerResize(target: Element, width: number) {
+  for (const r of roRegistry) {
+    if (!r.elements.includes(target)) continue;
+    r.callback(
+      [{ target, contentRect: { width, height: 600 } } as unknown as ResizeObserverEntry],
+      {} as ResizeObserver,
+    );
+  }
+}
+
 /** 关联元素的编辑权限取自当前用户，逐例改写 */
 const { currentUser } = vi.hoisted(() => ({
   currentUser: { value: null as null | { id: string; role: string; name: string } },
@@ -262,6 +291,35 @@ describe('AnnotationInlineDetailCard', () => {
     expect(reviewer.host.querySelector<HTMLElement>('[data-testid="timeline-stub"]')?.dataset.showActionComposer).toBe('true');
     expect(reviewer.host.textContent).toContain('讨论与处理');
     reviewer.unmount();
+  });
+
+  it('normal 档按卡片宽度分列：够宽两列（设计侧左列宽），窄于 900px 上下排；dock 档始终一列', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    try {
+      const designer = await mountCard();
+      const card = designer.host.querySelector<HTMLElement>('[data-testid="annotation-inline-detail-card"]')!;
+      const grid = designer.host.querySelector<HTMLElement>('[data-testid="annotation-inline-detail-grid"]')!;
+      expect(card.dataset.columns).toBe('2');
+      expect(grid.className).toContain('grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]');
+
+      fireContainerResize(card, 800);
+      await nextTick();
+      expect(card.dataset.columns).toBe('1');
+      expect(grid.className).not.toContain('grid-cols-');
+      designer.unmount();
+
+      const reviewer = await mountCard({ currentUserRole: UserRole.PROOFREADER });
+      expect(reviewer.host.querySelector<HTMLElement>('[data-testid="annotation-inline-detail-grid"]')?.className)
+        .toContain('grid-cols-[minmax(220px,0.75fr)_minmax(340px,1.25fr)]');
+      reviewer.unmount();
+
+      const dock = await mountCard({ density: 'dock' });
+      expect(dock.host.querySelector<HTMLElement>('[data-testid="annotation-inline-detail-card"]')?.dataset.columns).toBe('1');
+      dock.unmount();
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
   });
 
   it('从批注单据预览并关闭问题截图', async () => {

@@ -75,7 +75,6 @@ src/components/review/InitiateReviewPanel.vue|TS2339|Property 'launchInput' does
 src/components/review/InitiateReviewPanel.vue|TS2339|Property 'launchInput' does not exist on type '{ formId: string | null; userToken: string | null; userId: string | null; projectId: string | null; isEmbedMode: boolean; }'.
 src/components/review/InitiateReviewPanel.vue|TS2345|Argument of type 'TreeNodeDto | undefined' is not assignable to parameter of type 'TreeNodeDto'.
 src/components/review/InitiateReviewPanel.vue|TS2559|Type '{ formId: string | null; userToken: string | null; userId: string | null; projectId: string | null; isEmbedMode: boolean; }' has no properties in common with type 'WorkflowModeEmbedParams'.
-src/components/review/ResubmissionTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewAuxData.vue|TS2339|Property 'setObjectsHighlighted' does not exist on type 'DtxCompatScene'.
 src/components/review/ReviewAuxData.vue|TS2339|Property 'setObjectsHighlighted' does not exist on type 'DtxCompatScene'.
 src/components/review/ReviewCommentsPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.

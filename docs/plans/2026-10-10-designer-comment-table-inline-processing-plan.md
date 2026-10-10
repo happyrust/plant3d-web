@@ -1,6 +1,6 @@
 # 设计侧「批注处理」面板改为表格逐条处理（方案 A）开发计划（2026-10-10）
 
-> 状态：**执行中**。plannotator 评审已通过（2026-10-10，无批注）；§6 五项 2026-10-10 用户拍板「全按推荐」；**P0、P1、P2 已完成**（实施记录见 §8），剩 P3。
+> 状态：**已完成**。plannotator 评审已通过（2026-10-10，无批注）；§6 五项 2026-10-10 用户拍板「全按推荐」；**P0–P3 全部完成**（实施记录见 §8）。可选项 P3.3 按 §6-2 不做。
 > 依据：`plant3d-web@252cf5eb`（main）；方案原型 `ui/三维校审/designer-comment-table.pen` 中的方案 A（PNG 见同目录 `designer-comment-table-png/`）；2026-10-10 截图问题分析（共 14 条，下文按「分析 #n」引用）。
 > 本文只定「改什么、分几批、怎样算完成」；交互细节以原型为准，原型与本文冲突时先改原型再改本文。
 
@@ -146,3 +146,14 @@ P0 1.5 天 + P1 1 天 + P2 2 天 + P3 1 天，合计约 5.5 人日（不含拍�
 - 保存后沿用表格已有的「自动展开下一条待处理」；没有下一条时提示「下一步：确认当前数据并流转回校对」，焦点移到底栏可用的按钮（先「确认当前数据」，不可用时「流转回校对」）。最后一条处理完、「待处理」清零后，页签按 P1 的默认规则回到「全部」。
 - 与计划的偏差：「在三维中定位 / 收起」没挪到展开区底部，仍在问题信息卡里（改动最小，不影响操作）；展开区两列布局仍按视口 `xl` 断点，面板窄时讨论区排在下方，留给 P3.1 的容器查询。
 - 验证：全量 vitest 343 个文件 3215 例全过；其中双胞胎 5 套 + `AnnotationDecisionForm` / `AnnotationInlineDetailCard` / `DesignerTaskSwitcher` 共 159 例（面板 25 → 26、行内详情卡 15 → 17、处理表单新增 5、时间线 13 例原样通过）；`type-check` 499 / 基线 499、新增 0；eslint 无告警。截图 `p2-*.png`（出图时加 `SHOT_STAGE=p2`）。
+
+### P3（2026-10-10）
+
+- 面板按自身宽度切布局：`DesignerCommentHandlingPanel` 根上挂 `useContainerQuery`（`mediumMax` 960）。窄于 960 时顶栏「刷新任务 / 流转历史」只留图标（`title` / `aria-label` 保留），元信息另起一整行、不再截断；底栏按钮组加 `ml-auto`，折到第二行时靠右。
+- 展开区分列改按卡片自身宽度：`AnnotationInlineDetailCard` normal 档挂 `useContainerQuery`（`mediumMax` 900，约等于面板 950），够宽时两列。设计侧左列（处理表单 + 问题信息 + 关联元素 + 测量证据）`1.5fr`、右列讨论 `1fr`（不小于 300px）；校核角色保持原来的 `0.75fr : 1.25fr`。原来的视口 `xl:` 断点去掉——harness 视口 1232 时 1200 宽的面板也只有一列（P2 截图就是这样），反过来宽屏上的窄 dock 面板会被硬分两列。dock 档不变；校核侧生产环境走 dock 档（`ReviewPanelDock` 传 `density="dock"`），不受影响。
+- 「序号」表头折行：根因是项目关了 preflight，`<button>` 吃浏览器默认的 13.33px 字号。表头三颗排序按钮补 `text-[11px] font-semibold`（「序号」再加 `whitespace-nowrap`），和其余表头同字号。校核侧共用这张表，一并修好。
+- 走查截图时修的三处同源问题（preflight 关闭后默认 `box-sizing: content-box`、SVG 是行内元素）：处理表单的说明框 `w-full` 加内边距后溢出卡片右边（P2 起就有）→ `box-border`；滚动区内层 `min-h-full` 加 `p-4` 多出 32px 滚动，空单 / 失败态的虚线框底边被切 → `box-border`；加载失败入口的图标和文字错位 → `block`，并在下面写出失败原因（`userStore.error`）。
+- 与计划的偏差：搜索框没有收成图标。面板 720 宽时表格工具行（标题 + 搜索 + 错误类型）一行放得下，不挤；那又是校核侧共用的表格，没有必要动。
+- harness：`src/harness/designerCommentTable.ts` 加 `state` 参数（`annotated` / `empty` / `error`）；`harness/designer-comment-table.shots.mjs` 改成 P3 出图矩阵：面板宽 720 / 1000 / 1200 × 三种状态（有批注的展开第一行），另补一张 720×600。截图 `p3-*.png` 共 10 张，出图命令：`SHOT_STAGE=p3 node scripts/visual-baseline/shot.mjs harness/designer-comment-table.html --port 5193 --out docs/verification/2026-10-10-designer-comment-table`。
+- §6-1 落实：删除 `ResubmissionTaskList.vue` 及其测试（rg 核过 `src/`、`e2e/` 再无引用；`ResubmissionTaskListPanelDock` 包的是本面板，保留）。type-check 基线里属于该测试文件的 1 条随之删掉（499 → 498，只收紧）。
+- 验证：双胞胎 5 套 baseline 132 例全过 → after 134 例全过（面板 26 → 28：窄面板顶栏、加载失败写明原因并可重试），不新增 fail；行内详情卡 17 → 18（按卡片宽度分列）；全量 vitest 342 个文件 3213 例全过（少的 1 个文件 5 例是删掉的旧列表测试）；`type-check` 498 / 基线 498、新增 0；触及文件 eslint 无告警。

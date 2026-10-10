@@ -760,7 +760,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         <div role="row" class="flex h-9 items-center border-b border-slate-200 bg-slate-50 px-4 text-[11px] font-semibold text-slate-950">
           <div role="columnheader" :aria-sort="ariaSortFor('index')" class="w-10">
             <button type="button"
-              class="flex w-full items-center justify-center gap-1 border-0 bg-transparent p-0 text-center hover:text-brand"
+              class="flex w-full items-center justify-center gap-1 whitespace-nowrap border-0 bg-transparent p-0 text-center text-[11px] font-semibold hover:text-brand"
               data-testid="annotation-table-sort-index"
               @click="onHeaderClick('index')">
               <span>序号</span>
@@ -771,7 +771,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           </div>
           <div role="columnheader" :aria-sort="ariaSortFor('severity')" class="w-24">
             <button type="button"
-              class="flex w-full items-center gap-1 border-0 bg-transparent p-0 text-left hover:text-brand"
+              class="flex w-full items-center gap-1 border-0 bg-transparent p-0 text-left text-[11px] font-semibold hover:text-brand"
               data-testid="annotation-table-sort-severity"
               @click="onHeaderClick('severity')">
               <span>错误标记</span>
@@ -783,7 +783,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <div role="columnheader" class="flex-1">校核发现问题</div>
           <div role="columnheader" :aria-sort="ariaSortFor('status')" :class="isWide ? 'w-56' : 'w-40'">
             <button type="button"
-              class="flex w-full items-center gap-1 border-0 bg-transparent p-0 text-left hover:text-brand"
+              class="flex w-full items-center gap-1 border-0 bg-transparent p-0 text-left text-[11px] font-semibold hover:text-brand"
               data-testid="annotation-table-sort-status"
               @click="onHeaderClick('status')">
               <span>处理情况</span>

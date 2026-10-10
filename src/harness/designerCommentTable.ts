@@ -3,6 +3,7 @@
  *
  * 挂载真实 DesignerCommentHandlingPanel：种子三张退回单（看顶部切换器）、当前单五种处理状态的批注。
  * 面板宿主尺寸取 URL 参数 `w` / `h`（默认 1200×900），用来核对窄面板、矮面板下底栏是否可达。
+ * URL 参数 `state`：`annotated`（默认，有批注）/ `empty`（当前单没有批注）/ `error`（退回单据加载失败）。
  *
  * 仅供 `node scripts/visual-baseline/shot.mjs harness/designer-comment-table.html` 使用，不参与生产构建入口。
  */
@@ -70,9 +71,19 @@ const tasks: ReviewTask[] = [
   }),
 ];
 
+const params = new URLSearchParams(location.search);
+const width = Number(params.get('w')) || 1200;
+const height = Number(params.get('h')) || 900;
+const state = params.get('state') ?? 'annotated';
+
 const userStore = useUserStore();
 userStore.setUseBackend(false);
-userStore.reviewTasks.value = tasks;
+if (state === 'error') {
+  userStore.reviewTasks.value = [];
+  userStore.error.value = '加载任务列表失败：网络连接超时';
+} else {
+  userStore.reviewTasks.value = tasks;
+}
 
 type ReviewStateLike = AnnotationRecord['reviewState'];
 
@@ -110,10 +121,6 @@ const seededAnnotations = [
   makeTextAnnotation({ id: 'h-a7', title: '仪表 PT-305 取压口位置与 PID 不符', severity: 'general', reviewState: reviewStates.agreed, createdAt: BASE_TS + HOUR }),
 ];
 
-const params = new URLSearchParams(location.search);
-const width = Number(params.get('w')) || 1200;
-const height = Number(params.get('h')) || 900;
-
 createApp({
   render: () => h('div', {
     class: 'panel-host',
@@ -123,7 +130,8 @@ createApp({
 
 // 面板挂载后草稿容器才按当前任务切到 scope key；先种批注会落进旧容器、被当成「未归属草稿」
 void (async () => {
+  if (state === 'error') return;
   await useReviewStore().setCurrentTask(tasks[0]!).catch(() => undefined);
   await nextTick();
-  useToolStore().annotations.value = seededAnnotations;
+  useToolStore().annotations.value = state === 'empty' ? [] : seededAnnotations;
 })();

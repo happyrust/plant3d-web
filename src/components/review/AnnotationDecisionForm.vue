@@ -98,7 +98,7 @@ function optionClass(action: 'fixed' | 'wont_fix'): string {
 
     <textarea v-model="actionNote"
       rows="2"
-      class="mt-2 w-full resize-y rounded-lg border border-solid px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1"
+      class="mt-2 box-border w-full resize-y rounded-lg border border-solid px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1"
       :class="reviewActionNoteMissing ? 'border-amber-400 focus:ring-amber-400' : 'border-slate-200 focus:border-brand focus:ring-brand'"
       :placeholder="reviewActionPlaceholder"
       :aria-required="reviewActionNoteRequired ? 'true' : undefined"

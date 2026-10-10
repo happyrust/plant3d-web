@@ -53,6 +53,7 @@ import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftSco
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
+import { useContainerQuery } from '@/composables/useContainerQuery';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import {
@@ -91,6 +92,11 @@ const confirmError = ref<string | null>(null);
 const refreshingTask = ref(false);
 const resubmitting = ref(false);
 const embeddedLandingFormId = ref(readEmbeddedLandingFormId());
+
+const panelRootEl = ref<HTMLElement | null>(null);
+// 按面板自身宽度切布局，不按视口：dock 面板在宽屏上也可能很窄。窄于 960 时顶栏按钮只留图标、元信息另起一行
+const { mode: panelLayoutMode } = useContainerQuery(panelRootEl, { mediumMax: 960 });
+const isPanelWide = computed(() => panelLayoutMode.value === 'wide');
 
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
@@ -730,7 +736,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col overflow-hidden bg-[#F8FAFC]" data-panel="designer-comment-handling">
+  <div ref="panelRootEl"
+    class="flex h-full min-h-0 flex-col overflow-hidden bg-[#F8FAFC]"
+    data-panel="designer-comment-handling"
+    :data-layout-mode="panelLayoutMode">
     <header class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2.5"
       data-testid="designer-task-bar">
       <DesignerTaskSwitcher :tasks="returnedTasks"
@@ -754,23 +763,32 @@ onMounted(() => {
           :class="currentTaskPriority.color">
           优先级 {{ currentTaskPriority.label }}
         </span>
-        <span class="min-w-0 truncate text-xs text-slate-500" data-testid="designer-task-meta" :title="currentTaskMetaText">
+        <span class="min-w-0 text-xs text-slate-500"
+          :class="isPanelWide ? 'truncate' : 'order-last basis-full'"
+          data-testid="designer-task-meta"
+          :title="currentTaskMetaText">
           {{ currentTaskMetaText }}
         </span>
       </template>
       <div v-if="currentTask" class="ml-auto flex shrink-0 items-center gap-2">
         <button type="button"
-          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          :class="isPanelWide ? 'px-3' : 'px-2'"
           :disabled="refreshingTask"
+          :title="isPanelWide ? undefined : '刷新任务'"
+          aria-label="刷新任务"
           @click="refreshCurrentTask">
           <RefreshCw class="h-4 w-4" :class="refreshingTask ? 'animate-spin' : ''" />
-          刷新任务
+          <span v-if="isPanelWide">刷新任务</span>
         </button>
         <button type="button"
-          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-solid border-slate-200 bg-white py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          :class="isPanelWide ? 'px-3' : 'px-2'"
+          :title="isPanelWide ? undefined : '流转历史'"
+          aria-label="流转历史"
           @click="openTaskHistory(currentTask)">
           <Calendar class="h-4 w-4" />
-          流转历史
+          <span v-if="isPanelWide">流转历史</span>
         </button>
       </div>
     </header>
@@ -796,7 +814,7 @@ onMounted(() => {
     </div>
 
     <div class="min-h-0 flex-1 overflow-y-auto bg-[#FCFDFE]" data-testid="designer-comment-scroll">
-      <div class="flex min-h-full flex-col gap-3 p-4">
+      <div class="box-border flex min-h-full flex-col gap-3 p-4">
         <template v-if="canShowAnnotationSheet">
           <div v-if="!currentTask"
             class="rounded-2xl border border-brand/30 bg-brand-subtle p-5"
@@ -901,8 +919,13 @@ onMounted(() => {
           data-testid="designer-comment-task-entry"
           class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
           <div class="text-center text-sm text-slate-500">
-            <XCircle class="mx-auto mb-3 h-9 w-9 text-slate-300" />
+            <XCircle class="mx-auto mb-3 block h-9 w-9 text-slate-300" />
             {{ emptyEntryText }}
+            <p v-if="tasksError && !tasksLoading"
+              class="mb-0 mt-1 text-xs text-slate-400"
+              data-testid="designer-task-load-error">
+              {{ tasksError }}
+            </p>
             <button v-if="tasksError && !tasksLoading"
               type="button"
               class="mt-3 block w-full border-0 bg-transparent text-xs font-medium text-brand hover:underline"
@@ -934,7 +957,7 @@ onMounted(() => {
           class="min-w-[160px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           placeholder="本轮处理说明（可选）"
           aria-label="本轮处理说明" />
-        <div class="flex shrink-0 items-start gap-2">
+        <div class="ml-auto flex shrink-0 items-start gap-2">
           <div class="flex flex-col items-end gap-1">
             <button ref="confirmButtonEl"
               type="button"
