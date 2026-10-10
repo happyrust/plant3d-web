@@ -16,6 +16,7 @@ import {
   reviewRecordGetByTaskId,
   reviewTaskGetHistory,
   reviewTaskGetList,
+  reviewTaskGetWorkflow,
   reviewTaskSubmitToNext,
   reviewVerifyWorkflow,
   reviewWorkflowSyncQuery,
@@ -168,6 +169,29 @@ describe('reviewApi base url defaults', () => {
     expect(fetchMock.mock.calls[0][0]).toEqual(
       expect.stringMatching(/\/api\/review\/tasks\?form_id=FORM-FB4EF9F13DF1$/),
     );
+  });
+
+  it('normalizes /workflow history steps with the same rule as task workflowHistory', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        currentNode: 'sj',
+        currentNodeName: '编制',
+        history: [
+          { node: 'sj', action: 'submit', operatorId: 'SJ', operatorName: '王设计', comment: null, timestamp: '2026-10-10 06:52:00' },
+          { node: 'jd', action: 'return', operatorId: 'JH', operatorName: '张校对员', comment: '退回', timestamp: '2026-10-10 06:55:00' },
+        ],
+      }), { status: 200 })
+    ));
+
+    const response = await reviewTaskGetWorkflow('task-1');
+
+    expect(response.currentNode).toBe('sj');
+    expect(response.history.map((step) => step.timestamp)).toEqual([
+      new Date('2026-10-10 06:52:00').getTime(),
+      new Date('2026-10-10 06:55:00').getTime(),
+    ]);
+    expect(response.history[1]).toMatchObject({ node: 'jd', action: 'return', operatorName: '张校对员', comment: '退回' });
   });
 
   it('normalizes standalone review task lists returned in data', async () => {
@@ -1256,6 +1280,40 @@ describe('normalizeReviewTask', () => {
     expect(task.checkerId).toBe('r1');
     expect(task.checkerName).toBe('OldReviewer');
     expect(task.reviewerId).toBe('r1');
+  });
+
+  // #86 T5：后端 WorkflowStep 的 timestamp 是 "YYYY-MM-DD HH:MM:SS" 字符串，前端要的是毫秒数
+  it('normalizes backend-shaped workflow_history steps into numeric timestamps and camelCase operators', () => {
+    const task = normalizeReviewTask({
+      id: 'task-returned',
+      title: 'Returned',
+      status: 'draft',
+      current_node: 'sj',
+      return_reason: '支架选型复核',
+      components: [],
+      created_at: '2026-10-10 06:50:00',
+      updated_at: '2026-10-10 08:30:00',
+      workflow_history: [
+        { node: 'sj', action: 'submit', operator_id: 'SJ', operator_name: '王设计', comment: null, timestamp: '2026-10-10 06:52:00' },
+        { node: 'jd', action: 'return', actor_id: 'JH', actor_name: '张校对员', comment: '支架选型复核', timestamp: '2026-10-10 06:55:00' },
+        { node: 'jd', action: 'return', operator_id: 'JH', operator_name: '张校对员', timestamp: 'not-a-date' },
+        { action: 'return', operatorId: 'JH', timestamp: '2026-10-10 06:56:00' },
+        'legacy-string-payload',
+      ],
+    });
+
+    expect(task.workflowHistory).toEqual([
+      { node: 'sj', action: 'submit', operatorId: 'SJ', operatorName: '王设计', timestamp: new Date('2026-10-10 06:52:00').getTime() },
+      { node: 'jd', action: 'return', operatorId: 'JH', operatorName: '张校对员', comment: '支架选型复核', timestamp: new Date('2026-10-10 06:55:00').getTime() },
+    ]);
+    expect(task.workflowHistory?.every((step) => Number.isFinite(step.timestamp))).toBe(true);
+    expect(Math.max(...(task.workflowHistory ?? []).filter((step) => step.action === 'return').map((step) => step.timestamp)))
+      .toBe(new Date('2026-10-10 06:55:00').getTime());
+  });
+
+  it('keeps workflowHistory undefined when the backend omits it and empty when it sends []', () => {
+    expect(normalizeReviewTask({ id: 'a', components: [] }).workflowHistory).toBeUndefined();
+    expect(normalizeReviewTask({ id: 'b', components: [], workflow_history: [] }).workflowHistory).toEqual([]);
   });
 
   it('preserves explicit checker and approver semantics with stable component payload fields', () => {

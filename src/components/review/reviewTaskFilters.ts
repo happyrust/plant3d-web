@@ -104,8 +104,11 @@ export function getResubmissionLatestReturnTime(history: WorkflowStep[]): number
 }
 
 /**
- * 退回时间：优先取流转历史里最近的 return 步；外部流转只带了 returnReason、没写 return 步时
- * 回退到 updatedAt，并标 approximate，界面上要写「约」。
+ * 退回时间：优先取流转历史里最近的 return 步；任务对象上没有 return 步时回退到 updatedAt，
+ * 并标 approximate，界面上要写「约」。
+ * 没有 return 步的根因不是「外部流转漏写」：#86 修复前，后端列表 / 详情接口只吐任务行上
+ * 从建单起就是 [] 的 workflow_history，真流转步在 review_workflow_history 表里、只有
+ * /tasks/{id}/workflow 读它（记录见 docs/issues/review-task-workflow-history-missing-return-step-2026-10-10.md）。
  */
 export function getResubmissionReturnTimeInfo(task: ReviewTask): { timestamp: number | null; approximate: boolean } {
   const exact = getResubmissionLatestReturnTime(task.workflowHistory || []);

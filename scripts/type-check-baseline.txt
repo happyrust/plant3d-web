@@ -80,7 +80,7 @@ src/components/review/ReviewAuxData.vue|TS2339|Property 'setObjectsHighlighted' 
 src/components/review/ReviewCommentsPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewCommentsPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewCommentsTimeline.test.ts|TS2345|Argument of type '() => Promise<{ success: true; }>' is not assignable to parameter of type '() => Promise<{ success: boolean; comment: unknown; }>'.
-src/components/review/ReviewCommentsTimeline.test.ts|TS2345|Argument of type '(id: string) => Promise<{ success: boolean; comments: AnnotationComment[]; }>' is not assignable to parameter of type '() => Promise<{ success: boolean; comments: { id: string; annotationId: string; annotationType: "rect" | "text" | "cloud" | "obb"; authorId: string; authorName: string; authorRole: UserRole; content: string; replyToId?: string | undefined; createdAt: number; updatedAt?: number | undefined; }[]; }>'.
+src/components/review/ReviewCommentsTimeline.test.ts|TS2345|Argument of type '(id: string) => Promise<{ success: boolean; comments: AnnotationComment[]; }>' is not assignable to parameter of type '() => Promise<{ success: boolean; comments: { id: string; annotationId: string; annotationType: "text" | "cloud" | "rect" | "obb"; authorId: string; authorName: string; authorRole: UserRole; content: string; replyToId?: string | undefined; createdAt: number; updatedAt?: number | undefined; }[]; }>'.
 src/components/review/ReviewCommentsTimeline.test.ts|TS2353|Object literal may only specify known properties, and 'state' does not exist in type '{ success: boolean; }'.
 src/components/review/ReviewCommentsTimeline.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewCommentsTimeline.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
@@ -118,7 +118,7 @@ src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must eit
 src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewerTaskList.vue|TS2322|Type 'WorkflowNode | undefined' is not assignable to type 'WorkflowNode'.
 src/components/review/TaskReviewDetail.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/TaskReviewDetail.vue|TS2322|Type '{ node: string; action: string; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]' is not assignable to type 'WorkflowStep[] | { node: WorkflowNode; action: "submit" | "reject" | "return" | "approve"; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]'.
+src/components/review/TaskReviewDetail.vue|TS2322|Type '{ node: string; action: string; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]' is not assignable to type 'WorkflowStep[] | { node: WorkflowNode; action: "reject" | "submit" | "return" | "approve"; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]'.
 src/components/review/annotationTableClipboard.test.ts|TS2322|Type '"severe"' is not assignable to type 'AnnotationSeverity | undefined'.
 src/components/review/annotationTableExport.test.ts|TS2322|Type '"severe"' is not assignable to type 'AnnotationSeverity | undefined'.
 src/components/review/annotationTableExport.test.ts|TS2532|Object is possibly 'undefined'.
@@ -280,9 +280,6 @@ src/composables/useUserStore.test.ts|TS2349|This expression is not callable.
 src/composables/useUserStore.test.ts|TS2353|Object literal may only specify known properties, and 'username' does not exist in type 'Pick<User, "id" | "role">'.
 src/composables/useUserStore.test.ts|TS2353|Object literal may only specify known properties, and 'username' does not exist in type 'Pick<User, "id" | "role">'.
 src/composables/useUserStore.test.ts|TS2820|Type '"reviewer"' is not assignable to type 'UserRole | undefined'. Did you mean 'UserRole.VIEWER'?
-src/composables/useUserStore.ts|TS2339|Property 'map' does not exist on type '{}'.
-src/composables/useUserStore.ts|TS7006|Parameter 'item' implicitly has an 'any' type.
-src/composables/useUserStore.ts|TS7006|Parameter 'item' implicitly has an 'any' type.
 src/composables/useXeokitMeasurementTools.test.ts|TS18048|'record' is possibly 'undefined'.
 src/composables/useXeokitMeasurementTools.test.ts|TS18048|'record' is possibly 'undefined'.
 src/composables/useXeokitMeasurementTools.test.ts|TS18048|'record' is possibly 'undefined'.

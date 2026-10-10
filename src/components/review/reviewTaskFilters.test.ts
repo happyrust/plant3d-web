@@ -15,6 +15,8 @@ import {
 
 import type { ReviewTask } from '@/types/auth';
 
+import { normalizeReviewTask } from '@/api/reviewApi';
+
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
   return {
     id: 'task-1',
@@ -229,5 +231,49 @@ describe('reviewTaskFilters', () => {
 
     expect(sortTasksByLatestReturn([exactOld, tieA, approxNew, tieB]).map((task) => task.id))
       .toEqual(['approx-new', 'tie-a', 'tie-b', 'exact-old']);
+  });
+
+  // #86：后端修好列表 / 详情接口后，任务对象上的 return 步 timestamp 是 "YYYY-MM-DD HH:MM:SS" 字符串；
+  // 经 normalizeReviewTask 归一后这里必须拿到精确时间（不再「约」）、退回节点和操作人，排序按真实退回时间。
+  describe('backend-shaped tasks (string step timestamps) after normalizeReviewTask', () => {
+    function backendTask(id: string, returnAt: string, updatedAt: string) {
+      return normalizeReviewTask({
+        id,
+        title: id,
+        status: 'draft',
+        current_node: 'sj',
+        return_reason: '请复核',
+        components: [],
+        created_at: '2026-10-10 06:00:00',
+        updated_at: updatedAt,
+        workflow_history: [
+          { node: 'sj', action: 'submit', operator_id: 'SJ', operator_name: '王设计', timestamp: '2026-10-10 06:10:00' },
+          { node: 'jd', action: 'return', operator_id: 'JH', operator_name: '张校对员', comment: '请复核', timestamp: returnAt },
+        ],
+      });
+    }
+
+    it('reports an exact return time, the returning node and operator', () => {
+      const task = backendTask('t-exact', '2026-10-10 06:55:00', '2026-10-10 08:30:00');
+
+      expect(isDesignerResubmissionTask(task)).toBe(true);
+      expect(getResubmissionReturnTimeInfo(task)).toEqual({
+        timestamp: new Date('2026-10-10 06:55:00').getTime(),
+        approximate: false,
+      });
+      expect(getCanonicalReturnedMetadata(task)).toMatchObject({
+        returnFromNode: 'jd',
+        returnReason: '请复核',
+        latestReturnStep: expect.objectContaining({ operatorName: '张校对员' }),
+      });
+    });
+
+    it('orders by the real return time, not by updatedAt', () => {
+      const returnedEarlierTouchedLater = backendTask('returned-06:55', '2026-10-10 06:55:00', '2026-10-10 09:00:00');
+      const returnedLater = backendTask('returned-07:30', '2026-10-10 07:30:00', '2026-10-10 07:30:00');
+
+      expect(sortTasksByLatestReturn([returnedEarlierTouchedLater, returnedLater]).map((task) => task.id))
+        .toEqual(['returned-07:30', 'returned-06:55']);
+    });
   });
 });

@@ -22,6 +22,7 @@ import {
   getReviewUserWebSocketUrl,
   type ReviewTaskCreateRequest,
 } from '@/api/reviewApi';
+import { normalizeWorkflowSteps } from '@/api/workflowStepNormalize';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import {
   fromBackendRole,
@@ -193,34 +194,6 @@ function toNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-function normalizeWorkflowStep(raw: unknown): WorkflowStep | null {
-  if (!raw || typeof raw !== 'object') return null;
-
-  const record = raw as Record<string, unknown>;
-  const node = typeof record.node === 'string' ? record.node : undefined;
-  const action = typeof record.action === 'string' ? record.action : undefined;
-  const timestamp = toNumber(record.timestamp);
-
-  if (!node || !action || !timestamp) return null;
-
-  return {
-    node: node as WorkflowNode,
-    action: action as WorkflowStep['action'],
-    operatorId: typeof record.operatorId === 'string'
-      ? record.operatorId
-      : typeof record.operator_id === 'string'
-        ? record.operator_id
-        : '',
-    operatorName: typeof record.operatorName === 'string'
-      ? record.operatorName
-      : typeof record.operator_name === 'string'
-        ? record.operator_name
-        : '',
-    comment: typeof record.comment === 'string' ? record.comment : undefined,
-    timestamp,
-  };
-}
-
 function isNetworkFailure(error: unknown): boolean {
   if (error instanceof TypeError) return true;
 
@@ -356,9 +329,7 @@ export function normalizeReviewTask(raw: unknown): ReviewTask | null {
   if (!validPriorities.includes(priority as ReviewTask['priority'])) return null;
 
   const workflowHistory = Array.isArray(record.workflowHistory ?? record.workflow_history)
-    ? (record.workflowHistory ?? record.workflow_history as unknown[])
-      .map((item) => normalizeWorkflowStep(item))
-      .filter((item): item is WorkflowStep => item !== null)
+    ? normalizeWorkflowSteps(record.workflowHistory ?? record.workflow_history)
     : undefined;
 
   return {

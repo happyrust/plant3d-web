@@ -1,6 +1,6 @@
 # 任务对象补回流转历史——修复 #86「退回没写 return 步」开发计划（2026-10-10）
 
-> 状态：**待拍板**。plannotator 评审已通过（2026-10-10，`{"decision":"approved"}`，无批注）；§7 五项待拍板，拍板后开工。
+> 状态：**进行中**。plannotator 评审已通过（2026-10-10，`{"decision":"approved"}`，无批注）；§7 五项 2026-10-10 用户拍板「全按推荐」；**T5 已落地**（本仓，见 §9），T1–T4 待在 gen-model 开工。
 > 依据：问题记录 `docs/issues/review-task-workflow-history-missing-return-step-2026-10-10.md` 与 [happyrust/plant3d-web #86](https://github.com/happyrust/plant3d-web/issues/86)；后端 `gen-model@858c94fb0`（main）；前端 `plant3d-web@d4dcdc6a`（main）。
 > 性质：跨仓计划（gen-model 校审后端为主 · 本仓一处归一 + 走查）。本文只定「改什么、分几步、怎样算完成」；契约字段形状以 `gen-model/docs/specs/review-api.md` 为准，改契约先改那份再改本文。
 
@@ -126,7 +126,7 @@ A 内部两种实现：
 | `review_workflow_history` 里 `timestamp` 为 `NONE` 的脏行 | 低 | helper 对 `NONE` 用 `created_at` 兜底，再无则排最后 |
 | 工作树多会话共用（两仓都是） | 中 | 只 `git add` 本计划涉及的明确路径 |
 
-## 7. 需要拍板
+## 7. 需要拍板（2026-10-10 已拍板：五项全按推荐）
 
 1. **聚合方式**：A1 一次 `IN` 查询 + 内存分组（推荐，不碰脆弱的整页反序列化、同仓有先例） / A2 子查询列。
 2. **死字段处置**：建单停写 `workflow_history = []` 并让 `TaskRow` 不再读它（推荐，避免「写进去是 `[]`、读出来是别的」的双义） / 保留列不动只覆盖读值。老数据不迁移。
@@ -143,4 +143,4 @@ A 内部两种实现：
 
 ## 9. 落地记录
 
-（待填）
+- 2026-10-10 · **T5 落地**（plant3d-web，fable-5-1-92）· 改动文件：`src/api/workflowStepNormalize.ts`（新：`normalizeTimestampMillis` / `normalizeWorkflowStep` / `normalizeWorkflowSteps`；独立成模块是因为十余个测试把 `@/api/reviewApi` 整个 mock 掉，放 reviewApi 里 `useUserStore` 一调就报「mock 缺导出」）、`src/api/reviewApi.ts`（`normalizeReviewTask` 对 `workflow_history` 逐步归一；`reviewTaskGetWorkflow` 的 `history` 同一函数；`normalizeTimestamp` 改为委托；re-export 两个归一函数）、`src/composables/useUserStore.ts`（删本地 `normalizeWorkflowStep`，改引用）、`src/components/review/reviewTaskFilters.ts`（T5.2 注释改口指向 #86，口径不变）、`src/api/reviewApi.test.ts`（+3）、`src/components/review/reviewTaskFilters.test.ts`（+2，后端形状经 `normalizeReviewTask` 后 `approximate === false`、按真实退回时间排序）、`scripts/type-check-baseline.txt`（498 → 495，`useUserStore` 原 `.map` on `{}` / 隐式 any 三条随删除消失）、`CHANGELOG.md` 一条。与计划的偏差：T5.3「二选一保留」落成「第三处新模块、两处引用」，原因如上。**验证**：9 个直接相关文件 157 例全过；双胞胎 5 套 134 例全过；全仓 342 文件 **3218 例全过**（3213 + 5 新增）；`npm run type-check` **495 / 基线 495、新增 0**；ESLint 触及 6 个文件 0（修了 2 处 import 顺序）。V7 前端半边达成；V1–V6 等 T1–T4。

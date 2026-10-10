@@ -1,6 +1,8 @@
 // 校审管理 API 模块
 // 提供编校审单、审核任务、确认记录的 CRUD 操作
 
+import { normalizeTimestampMillis, normalizeWorkflowSteps } from './workflowStepNormalize';
+
 import type { ReviewModelContext } from '@/components/review/reviewModelContext';
 import type { SnapshotDimensionDocument } from '@/dimension';
 import type { ComputationProvenance } from '@/measurement/domain/computationProvenance';
@@ -21,6 +23,8 @@ import {
 } from '@/types/auth';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 import { resolveReviewAssetUrl } from '@/utils/reviewAssetUrl';
+
+export { normalizeWorkflowStep, normalizeWorkflowSteps } from './workflowStepNormalize';
 
 // ============ 基础配置 ============
 
@@ -1207,9 +1211,14 @@ export async function reviewTaskReturn(
 export async function reviewTaskGetWorkflow(
   taskId: string
 ): Promise<WorkflowHistoryResponse> {
-  return await fetchJson<WorkflowHistoryResponse>(
+  const response = await fetchJson<WorkflowHistoryResponse>(
     `/api/review/tasks/${encodeURIComponent(taskId)}/workflow`
   );
+  // 后端把每步 timestamp 序列化成 "YYYY-MM-DD HH:MM:SS"，与任务对象上的 workflowHistory 走同一归一（#86 T5）
+  return {
+    ...response,
+    history: normalizeWorkflowSteps(response.history),
+  };
 }
 
 // ============ 外部校审集成 API ============
@@ -2179,7 +2188,7 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
     // 多级审批流程字段
     currentNode: normalizeWorkflowNode(raw.current_node || raw.currentNode),
     workflowHistory: Array.isArray(raw.workflow_history || raw.workflowHistory)
-      ? (raw.workflow_history || raw.workflowHistory) as ReviewTask['workflowHistory']
+      ? normalizeWorkflowSteps(raw.workflow_history || raw.workflowHistory)
       : undefined,
     returnReason: raw.return_reason || raw.returnReason
       ? String(raw.return_reason || raw.returnReason)
@@ -2290,17 +2299,7 @@ function normalizeReviewPriority(priority: unknown): ReviewTask['priority'] {
 }
 
 function normalizeTimestamp(value: unknown): number | undefined {
-  if (!value) return undefined;
-  if (typeof value === 'number') {
-    return value < 1e12 ? value * 1000 : value;
-  }
-  if (typeof value === 'string') {
-    const date = new Date(value);
-    if (!isNaN(date.getTime())) {
-      return date.getTime();
-    }
-  }
-  return undefined;
+  return normalizeTimestampMillis(value);
 }
 
 // ============ 认证 API ============

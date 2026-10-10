@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **校审任务对象与 `/workflow` 的流转步统一归一：时间戳从后端的北京时间字符串转成毫秒数** (2026-10-10，#86 修复计划 T5，`docs/plans/2026-10-10-review-task-workflow-history-fix-plan.md`)
+  - 背景：设计侧「批注处理」面板的「退回自 —」和带「约」的退回时间，根因在后端——`review_tasks.workflow_history` 自建单后从不追加，列表 / 详情接口不合并 `review_workflow_history` 表（问题记录 `docs/issues/review-task-workflow-history-missing-return-step-2026-10-10.md`）。后端修好之后前端还有一道坎：后端每步 `timestamp` 是 `"YYYY-MM-DD HH:MM:SS"` 字符串，`reviewTaskFilters` 里 `Math.max(...)` 对字符串得 `NaN`，面板会继续走「约」。
+  - 现在：新模块 `src/api/workflowStepNormalize.ts`（`normalizeWorkflowStep / normalizeWorkflowSteps / normalizeTimestampMillis`），`normalizeReviewTask` 对 `workflow_history` 逐步归一、`reviewTaskGetWorkflow` 的 `history` 走同一函数；字段名兼容 snake / camel，`operator*` 空时回退 `actor*`，缺 node / action / 可解析时间戳的步丢弃；`useUserStore` 里那份同名归一删掉改为引用。`reviewTaskFilters` 口径不变，注释改为指向 #86。对现状无害：后端上线那一刻面板自动拿到精确的「退回自 校对（操作人）· 时间」和真实退回时间排序。
+  - 验证：`reviewApi.test.ts` +3（后端形状的 `workflow_history` → 毫秒数 / 丢弃非法步 / `/workflow` 同一归一）、`reviewTaskFilters.test.ts` +2（归一后 `approximate === false`、按真实退回时间而非 `updatedAt` 排序）；双胞胎 5 套 134 例全过；全仓 342 文件 3218 例全过；`npm run type-check` 495 条（基线 498 → 495，`useUserStore` 原来那 3 条随删除消失，基线已收紧）、新增 0；ESLint 触及文件 0。
+
 - **版本对比 e2e 补「时间下拉选 A / B」与「复制链接直达」一条；两份 spec 本机三档回归基线没漂** (2026-10-10 08:3x–09:1x，版本对比审核计划 P1-3 本机能做的部分)
   - 回归基线：`:8022`（`0.1.34+gdae43cfd8`，重起为 pid 42120，ams8000 到 sesno 646）上两份 spec 三档各一遍 **9 / 9 / 9 passed、0 skipped**，三组钉死夹具全部过门、容器子树最近两版仍是 643 → 645、annotations 与 10-09 逐字相同——活库多走了一段没碰到夹具；spec / 源码一行没改。
   - 新用例（`e2e/model-version-compare-gen-model-v1.spec.ts` 第 6 条，P1-3 清单里 e2e 之前没碰的两项）：A 时间下拉选到更早一版 → 面板先收掉三维对比（DELETE = generate、dev 钩子撤掉）、两端与时间线选中行跟着换、下拉项数 = 该范围时间线全部行；点「在三维中对比」按新一对重跑；B 下拉选回原 A 两端摆正。复制链接：按钮变「已复制」、剪贴板里的就是 `replaceState` 写进地址栏的那条，带 `unit_refno / compare_a / compare_b / compare_autorun=1` 且保留 `model_source / gm_backend / output_project`；新开一页打开它直达同一对并自动跑完，关闭 DELETE = generate。spec 另拆出 `attachProbes` / `openCompareLink`，加 `MODEL_VERSION_E2E_EVIDENCE` 截图钩子。
