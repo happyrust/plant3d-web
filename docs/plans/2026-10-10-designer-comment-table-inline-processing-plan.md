@@ -119,6 +119,8 @@ P0 1.5 天 + P1 1 天 + P2 2 天 + P3 1 天，合计约 5.5 人日（不含拍�
 - 新增 `DesignerTaskSwitcher.vue` 替代左栏：触发按钮显示「退回单据 i / n · 其余 k 张待处理」+ 当前单号；下拉每行显示单号、优先级、退回意见、退回时间；支持 ↑↓ / Home / End / Esc、点外部收起；无单据时区分加载中 / 加载失败（可重试）/ 确实为空。面板不再引用 `ResubmissionTaskList`（组件按 §6-1 在 P3.4 删除）。
 - 底栏禁用原因：「没有未确认的改动」「还有未确认的改动，请先确认当前数据」「先确认当前数据后才能流转」「当前数据与已确认版本不一致」。
 - 与计划的偏差：**切换器下拉里没有放每张单的批注进度条**——`ReviewTask` 不带批注统计，非当前单的批注也不在本机，要做得等后端给单据级批注汇总；当前单的进度留给 P1.4 的进度条。
+- 与计划的偏差（2026-10-10 审核补记）：**P0.2 / G3 的下拉行内容没有「退回自」和「可流转」标记**，实际每行是单号、优先级、退回意见、退回时间。「可流转」要知道非当前单的确认记录，和进度条是同一个原因拿不到；「退回自」当时没放，P1 把它并进了顶栏元信息（只对当前单显示）。
+- 与计划的偏差（2026-10-10 审核补记）：**G3「切换时保留各自的展开状态」没做**——切单走 `selectTask` 会清空选中批注，`AnnotationSheetWorkspace` 对 `taskKey` 变化也发 `select-annotation(null)`，展开行一律收起；切回来要重新点。只有状态页签按任务记住（P1）。
 - 验证：双胞胎 5 套 + `DesignerTaskSwitcher.test.ts` 共 6 个文件 132 例全过（面板用例 19 → 21，其中 2 例改断言、2 例新增；切换器新增 5 例）；`type-check` 499 / 基线 499、新增 0；eslint 无告警。harness 截图见 `docs/verification/2026-10-10-designer-comment-table/p0-*.png`（1200×900、1200×640、760×768，切换器展开，行展开），出图命令：`node scripts/visual-baseline/shot.mjs harness/designer-comment-table.html --port 5193 --out docs/verification/2026-10-10-designer-comment-table`。
 - P0 过程中发现、留给后续批次：
   1. 项目关了 Tailwind preflight，没写边框 / 背景类的 `<button>` 会吃浏览器默认样式；`AnnotationTableView` 表头排序按钮和行操作图标按钮在截图里带默认边框，P1 顺手补 `border-0 bg-transparent`。
@@ -136,6 +138,7 @@ P0 1.5 天 + P1 1 天 + P2 2 天 + P3 1 天，合计约 5.5 人日（不含拍�
 - 顺手修：`AnnotationTableView` 的按钮全部补显式边框 / 背景类（表头排序、行操作图标、标题编辑、缩略图、分页、右键菜单、导出、清除筛选），校核侧 `ReviewPanel` 共用同一表格，一并受益。
 - 修正 P0 遗留：P0 的 type-check 是在加 harness 之前跑的，harness 种子批注上的 `formId`（不在 `AnnotationRecord` 类型里）多出 1 条类型错误，随 P0 提交进了 main；本批改为显式类型，type-check 回到 499 = 基线。
 - 与 P0 断言的差异：「可直接从统一批注单展开已修改批注」先切到「全部」页签再点行（默认页签是「待处理」）；P0 的「禁用时写明原因」用例改为「空单可直接流转，有未确认改动时写明原因」。
+- 与计划的偏差（2026-10-10 审核补记）：**G3「切换时保留各自的筛选」只做到了状态页签**。表内搜索词和错误类型下拉是 `AnnotationTableView` 的组件态，`taskKey` 只用来起 CSV 文件名，切单时它们原样带过去，不是每张单各一份。
 - 验证：双胞胎 5 套 + `DesignerTaskSwitcher` / `reviewTaskFilters` / `ResubmissionTaskList` 共 8 个文件 164 例全过（面板 21 → 25，reviewTaskFilters 20 → 23）；`type-check` 499 / 基线 499、新增 0；eslint 无告警。截图 `docs/verification/2026-10-10-designer-comment-table/p1-*.png`（出图时加 `SHOT_STAGE=p1`）。
 - 留给后续：表头「序号」列 40px 放不下文字 + 排序图标，会折成两行（P3）；760px 宽时顶栏按钮、底栏按钮各折到第二行，能用，P3.1 再看。
 
@@ -155,5 +158,6 @@ P0 1.5 天 + P1 1 天 + P2 2 天 + P3 1 天，合计约 5.5 人日（不含拍�
 - 走查截图时修的三处同源问题（preflight 关闭后默认 `box-sizing: content-box`、SVG 是行内元素）：处理表单的说明框 `w-full` 加内边距后溢出卡片右边（P2 起就有）→ `box-border`；滚动区内层 `min-h-full` 加 `p-4` 多出 32px 滚动，空单 / 失败态的虚线框底边被切 → `box-border`；加载失败入口的图标和文字错位 → `block`，并在下面写出失败原因（`userStore.error`）。
 - 与计划的偏差：搜索框没有收成图标。面板 720 宽时表格工具行（标题 + 搜索 + 错误类型）一行放得下，不挤；那又是校核侧共用的表格，没有必要动。
 - harness：`src/harness/designerCommentTable.ts` 加 `state` 参数（`annotated` / `empty` / `error`）；`harness/designer-comment-table.shots.mjs` 改成 P3 出图矩阵：面板宽 720 / 1000 / 1200 × 三种状态（有批注的展开第一行），另补一张 720×600。截图 `p3-*.png` 共 10 张，出图命令：`SHOT_STAGE=p3 node scripts/visual-baseline/shot.mjs harness/designer-comment-table.html --port 5193 --out docs/verification/2026-10-10-designer-comment-table`。
-- §6-1 落实：删除 `ResubmissionTaskList.vue` 及其测试（rg 核过 `src/`、`e2e/` 再无引用；`ResubmissionTaskListPanelDock` 包的是本面板，保留）。type-check 基线里属于该测试文件的 1 条随之删掉（499 → 498，只收紧）。
+- §6-1 落实：删除 `ResubmissionTaskList.vue` 及其测试（rg 核过 `src/`、`e2e/` 再无引用；`ResubmissionTaskListPanelDock` 包的是本面板，当时保留）。type-check 基线里属于该测试文件的 1 条随之删掉（499 → 498，只收紧）。
+- 收尾（2026-10-10 审核后）：`ResubmissionTaskListPanelDock.vue` 与 `DesignerCommentHandlingPanelDock.vue` 逐字节相同（都只包 `DesignerCommentHandlingPanel`），删掉前者，`main.ts` 去掉它的导入和 `'ResubmissionTaskListPanel'` 注册；`src/ e2e/ scripts/` 对该注册名再无引用，`DockLayout` 开面板用的一直是 `'DesignerCommentHandlingPanel'`，旧面板 id `resubmissionTasks` 仍按别名归一到 `designerCommentHandling`。影响：localStorage 里若还存着早年带 `component: 'ResubmissionTaskListPanel'` 的布局，恢复时 `fromJSON` 抛错 → 被 `DockLayout` 的 catch 接住、清掉存档回默认布局，只丢一次保存的布局。
 - 验证：双胞胎 5 套 baseline 132 例全过 → after 134 例全过（面板 26 → 28：窄面板顶栏、加载失败写明原因并可重试），不新增 fail；行内详情卡 17 → 18（按卡片宽度分列）；全量 vitest 342 个文件 3213 例全过（少的 1 个文件 5 例是删掉的旧列表测试）；`type-check` 498 / 基线 498、新增 0；触及文件 eslint 无告警。

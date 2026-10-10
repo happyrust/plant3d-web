@@ -25,7 +25,6 @@ import ModelTreePanelDock from '@/components/dock_panels/ModelTreePanelDock.vue'
 import ModelVersionComparePanelDock from '@/components/dock_panels/ModelVersionComparePanelDock.vue';
 import PropertiesPanelDock from '@/components/dock_panels/PropertiesPanelDock.vue';
 import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
-import ResubmissionTaskListPanelDock from '@/components/dock_panels/ResubmissionTaskListPanelDock.vue';
 import ReviewAttachmentPreviewPanelDock from '@/components/dock_panels/ReviewAttachmentPreviewPanelDock.vue';
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
@@ -53,7 +52,6 @@ app.component('InitiateReviewPanel', InitiateReviewPanelDock);
 app.component('ReviewerTaskListPanel', ReviewerTaskListPanelDock);
 app.component('DesignerTaskListPanel', DesignerTaskListPanelDock);
 app.component('DesignerCommentHandlingPanel', DesignerCommentHandlingPanelDock);
-app.component('ResubmissionTaskListPanel', ResubmissionTaskListPanelDock);
 app.component('ModelVersionComparePanel', ModelVersionComparePanelDock);
 app.component('ReviewAttachmentPreviewPanel', ReviewAttachmentPreviewPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
