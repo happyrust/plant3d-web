@@ -1,0 +1,13 @@
+{
+  "leaf": "24384_23262",
+  "a": 626,
+  "b": 630,
+  "names": [
+    "POS"
+  ],
+  "stampNames": [
+    "SPAMAP"
+  ],
+  "source": "server",
+  "attrText": " A 626 → B 630 · 1 项变化 修改 · placement含戳 属性A · 626B · 630POS10887, 12332, 340010887, 12332, 2900取数：服务端 element/attribute-diff——A / B 各钉一个会话、同一个属性渲染器两端各出一次字，直接读终态；未变的属性不列。"
+}
