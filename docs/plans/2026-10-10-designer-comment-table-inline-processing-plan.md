@@ -37,7 +37,7 @@
 
 **非目标**
 
-- 不改后端接口；「退回没写 return 步」的根因另开问题追，P1.2 只做前端兜底。
+- 不改后端接口；「退回没写 return 步」的根因另开问题追（已立：[#86](https://github.com/happyrust/plant3d-web/issues/86)，记录 `docs/issues/review-task-workflow-history-missing-return-step-2026-10-10.md`，修复计划 `docs/plans/2026-10-10-review-task-workflow-history-fix-plan.md`），P1.2 只做前端兜底。
 - 不改校核侧 `ReviewPanel` 的交互；共用组件只做向后兼容的扩展，默认行为不变。
 - 方案 B 的两级表、方案 C 的批量标记不做；C 的「图面错误一键已修改」列为可选项 P3.3，需拍板。
 
@@ -96,7 +96,7 @@
 | `ReviewCommentsTimeline` 与校核侧共用，抽处理动作可能改坏校核流程 | 高 | 先抽 composable、不改行为；新 prop 默认值保持原 DOM；跑 5 套回归和校核侧用例 |
 | 双胞胎面板整段消失式回归（05-17 事故） | 高 | 每批小提交；PR 写 5 套 baseline / after |
 | 外部嵌入（PMS iframe，`embed_landing_state` 带 `form_id`、未匹配内部任务）走「外部批注单」头部 | 中 | 顶栏保留这个分支和 `hasUnmatchedExternalEntry` 提示；相关现有用例断言不改 |
-| 退回步缺失是数据问题，前端回退到 `updatedAt` 可能误导 | 低 | 标「约」并加 tooltip；根因另开问题 |
+| 退回步缺失是数据问题，前端回退到 `updatedAt` 可能误导 | 低 | 标「约」并加 tooltip；根因另开问题（[#86](https://github.com/happyrust/plant3d-web/issues/86)：后端 `review_tasks.workflow_history` 自建单后从不追加，列表 / 详情接口不合并 `review_workflow_history` 表） |
 | 工作树多会话共用 | 中 | 只 `git add` 本计划涉及的明确路径 |
 
 ## 6. 需要拍板（2026-10-10 已拍板：五项全按推荐）
