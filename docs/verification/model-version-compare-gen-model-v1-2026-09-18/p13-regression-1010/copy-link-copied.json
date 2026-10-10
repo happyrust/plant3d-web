@@ -1,0 +1,12 @@
+{
+  "link": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend=http%3A%2F%2F127.0.0.1%3A8022&output_project=AvevaMarineSample&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626",
+  "params": {
+    "model_source": "gen-model-v1",
+    "gm_backend": "http://127.0.0.1:8022",
+    "output_project": "AvevaMarineSample",
+    "unit_refno": "24384_23257",
+    "compare_autorun": "1",
+    "compare_a": "573",
+    "compare_b": "626"
+  }
+}

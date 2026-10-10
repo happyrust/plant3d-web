@@ -28,13 +28,19 @@
  * 而是版本时间线上的徽章（`model-unit-compare-a/b` 的 `data-sesno`）+ 每行一对 A / B 按钮，其余检查点原样。
  * 2026-09-22 加了分屏描边合成器按显卡串自动退回那条（P3-c）：`PLAYWRIGHT_SOFTWARE_GL=1`（SwiftShader）与 `PLAYWRIGHT_GPU=1`（真显卡）各跑一遍。
  * 2026-10-09 钉死版本对（本段开头）；改完还没有隔离环境可跑，等 M2 / M3 同版部署后把两份 spec 各跑一遍（审核计划 P1-2）。
+ * 2026-10-10 加「时间下拉选 A / B + 复制链接直达」一条（审核计划 P1-3 真机回归清单里 e2e 之前没碰的两项，见文件末尾）。
  */
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { expect, test, type Page } from '@playwright/test';
 
 import { formatModelUnitVersionTime } from '../src/utils/modelUnitVersionCompare';
 import { isSoftwareRendererName } from '../src/utils/three/webglRendererInfo';
 
 const GEN_MODEL_BASE = process.env.GEN_MODEL_V1_BASE_URL || 'http://127.0.0.1:8022';
+/** 给了目录就把截图 + 数字 JSON 落进去（验证 README 的证据），没给就只断言 */
+const EVIDENCE_DIR = process.env.MODEL_VERSION_E2E_EVIDENCE || '';
 const DBNUM = Number(process.env.MODEL_VERSION_E2E_DBNUM || '8000');
 const PROJECT = process.env.MODEL_VERSION_E2E_PROJECT || 'AvevaMarineSample';
 /** 主夹具：链上稳定的单元根 + 明确的 A / B（两版都有几何；BRAN 24384/23257 626 → 630 = 修改 1 / 未变 8） */
@@ -210,7 +216,8 @@ type OpenedPage = {
   elementAttributeRequests: string[];
 };
 
-async function openComparePage(page: Page, unit: string, extra: Record<string, string> = {}): Promise<OpenedPage> {
+/** 挂上 pageerror / 历史快照请求 / 属性请求三个探针，并掐掉 Vite HMR（别的会话改代码时 dev server 会 full-reload，把半路的对比冲掉） */
+async function attachProbes(page: Page): Promise<OpenedPage> {
   const pageErrors: string[] = [];
   const historyRequests: { method: string; url: string }[] = [];
   const elementAttributeRequests: string[] = [];
@@ -220,12 +227,15 @@ async function openComparePage(page: Page, unit: string, extra: Record<string, s
     if (/\/api\/v1\/element\/attributes/.test(request.url())) elementAttributeRequests.push(request.postData() ?? '');
   });
 
-  // 掐掉 Vite HMR：别的会话改代码时 dev server 会 full-reload，把半路的对比冲掉
   const devHost = new URL(test.info().project.use.baseURL ?? 'http://127.0.0.1:3101').host;
   await page.routeWebSocket((url) => url.host === devHost, () => {
     // 不 connectToServer
   });
+  return { pageErrors, historyRequests, elementAttributeRequests };
+}
 
+async function openComparePage(page: Page, unit: string, extra: Record<string, string> = {}): Promise<OpenedPage> {
+  const probes = await attachProbes(page);
   const params = new URLSearchParams({
     model_source: 'gen-model-v1',
     gm_backend: GEN_MODEL_BASE,
@@ -236,7 +246,25 @@ async function openComparePage(page: Page, unit: string, extra: Record<string, s
   });
   await page.goto(`/?${params.toString()}`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('model-unit-version-compare-panel')).toBeVisible({ timeout: 60_000 });
-  return { pageErrors, historyRequests, elementAttributeRequests };
+  return probes;
+}
+
+/** 按一条现成的直达链接打开（「复制链接」复制出来的那种）：链接里已带 model_source / gm_backend / unit_refno / compare_* */
+async function openCompareLink(page: Page, href: string): Promise<OpenedPage> {
+  const probes = await attachProbes(page);
+  await page.goto(href, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('model-unit-version-compare-panel')).toBeVisible({ timeout: 60_000 });
+  return probes;
+}
+
+const historyGenerated = (requests: { method: string; url: string }[]) => requests.filter((r) => r.method === 'POST' && /history\/generate/.test(r.url)).length;
+const historyDeleted = (requests: { method: string; url: string }[]) => requests.filter((r) => r.method === 'DELETE').length;
+
+async function evidence(page: Page, name: string, data?: unknown): Promise<void> {
+  if (!EVIDENCE_DIR) return;
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  await page.screenshot({ path: path.join(EVIDENCE_DIR, `${name}.png`), fullPage: false });
+  if (data !== undefined) writeFileSync(path.join(EVIDENCE_DIR, `${name}.json`), JSON.stringify(data, null, 2));
 }
 
 /** 等时间线列出来，读面板实际落的对比范围（单元根有成员 → 「所有子节点」；探不出成员 / 没成员 → 「仅自身」） */
@@ -561,4 +589,140 @@ test('URL 指定的版本不在时间线里：回落最近两版并在面板里�
   await waitForCompare(page);
   await expect(page.getByTestId('model-unit-compare-error')).toContainText(`compare_a=${bogus}`);
   await page.getByTestId('model-unit-compare-close').click();
+});
+
+/**
+ * 版本对比审核计划 P1-3 真机回归清单里 e2e 之前没碰的两项（2026-10-10）：
+ * - **时间下拉选 A / B**（`model-unit-compare-a/b-time-select`，`c8c7bb24` 09-28 起）：换 A 之前先收掉上一轮三维对比（面板
+ *   `beforePairChange` → `closeCompare`，生成过的快照各一条 DELETE、dev 钩子撤掉）、两端按新旧摆正、时间线上选中行跟着换；
+ *   再点「在三维中对比」能按新的一对重跑；换 B 同理。
+ * - **复制链接直达**（`model-unit-compare-copy-link`）：按钮写剪贴板 + 地址栏 `replaceState`，链接带 `unit_refno / compare_a / compare_b /
+ *   compare_autorun=1` 且保留 `model_source / gm_backend / output_project`；新开一页打开它，面板按链接选中同一对并自动跑完，关闭 DELETE = generate。
+ * 夹具沿用主夹具：从 A 往前挑单元表里最近一版有几何的会话当新 A（缺省 BRAN 24384/23257：573 → 630，再把 B 下拉到 626 → 573 → 626）。
+ */
+test('时间下拉选 A / B：换 A 先收三维对比（DELETE = generate）并重跑新的一对、换 B 两端摆正；复制链接：剪贴板与地址栏同一条直达链接，新页打开直达同一对并自动跑完（审核计划 P1-3）', async ({ page, context }) => {
+  const fixture = main!;
+  const reason = pinnedPairReason(fixture, PINNED_A, PINNED_B, 'MODEL_VERSION_E2E', '这条要两版都有几何的一对');
+  test.skip(reason !== null, reason ?? '');
+  const a = rowOf(fixture, PINNED_A);
+  const b = rowOf(fixture, PINNED_B);
+  test.skip(a.impact_kind === 'tombstone' || b.impact_kind === 'tombstone', '这条要两版都有几何的一对');
+  // 新 A：单元表里比 A 更早、离 A 最近、有几何的一版（下拉的选项 = 时间线全部行，含「仅属性」行；重跑对比要有几何，所以从单元表挑）
+  const earlier = fixture.versions.filter((row) => row.sesno < a.sesno && row.impact_kind !== 'tombstone').sort((x, y) => y.sesno - x.sesno)[0];
+  test.skip(!earlier, `单元 ${fixture.unit} 的单元表里 ${a.sesno} 之前没有别的有几何的版本，换不了 A——换一对更靠后的 MODEL_VERSION_E2E_A / _B`);
+  const altA = earlier!;
+
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const { pageErrors, historyRequests } = await openComparePage(page, fixture.unit, { compare_a: String(a.sesno), compare_b: String(b.sesno) });
+  const scope = await activeScope(page);
+  // 下拉的选项 = 这个范围下时间线的全部行；新 A 得在里面
+  const timeline = expectedTimeline(fixture, scope, [a.sesno, b.sesno]);
+  test.skip(!timeline.sesnos.has(altA.sesno), `单元 ${fixture.unit} 范围「${scope}」的时间线里没有 ${altA.sesno}，下拉选不到它`);
+  const first = await waitForCompare(page);
+  expect([first.beforeSesno, first.afterSesno]).toEqual([a.sesno, b.sesno]);
+  const generatedFirst = historyGenerated(historyRequests);
+  expect(generatedFirst).toBeGreaterThan(0);
+
+  const aSelect = page.getByTestId('model-unit-compare-a-time-select');
+  const bSelect = page.getByTestId('model-unit-compare-b-time-select');
+  await expect(aSelect).toHaveValue(String(a.sesno));
+  await expect(bSelect).toHaveValue(String(b.sesno));
+  // 下拉选项按时间线全部行、新 → 旧；每一项带时间与会话号
+  const optionCount = await aSelect.locator('option').count();
+  expect(optionCount).toBe(timeline.sesnos.size);
+  await expect(aSelect.locator(`option[value="${altA.sesno}"]`)).toHaveText(new RegExp(`${altA.sesno}$`));
+
+  // 1. 下拉换 A → 面板先收掉上一轮三维对比（快照 DELETE 与 generate 对上、dev 钩子撤掉），两端 = (新 A, B)，时间线选中行跟着换
+  await aSelect.selectOption({ value: String(altA.sesno) });
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(altA.sesno));
+  await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(b.sesno));
+  await expect(aSelect).toHaveValue(String(altA.sesno));
+  await expect.poll(() => historyDeleted(historyRequests), { timeout: 15_000 }).toBe(generatedFirst);
+  await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: unknown }).__modelUnitVersionCompare === undefined);
+  await expect(page.getByTestId('model-unit-compare-runtime')).toHaveCount(0);
+  await page.getByTestId('model-unit-compare-timeline-more').click({ timeout: 3_000 }).catch(() => undefined);
+  const timelineRow = (sesno: number) => page.locator(`[data-testid="model-unit-compare-timeline"] > li[data-sesno="${sesno}"]`);
+  await expect(timelineRow(altA.sesno)).toHaveClass(/border-blue-300/);
+  await expect(timelineRow(a.sesno)).not.toHaveClass(/border-blue-300/);
+  await expect(timelineRow(b.sesno)).toHaveClass(/border-emerald-300/);
+  await evidence(page, 'time-select-a-changed-compare-closed', {
+    pair: [altA.sesno, b.sesno], generated: generatedFirst, deleted: historyDeleted(historyRequests), options: optionCount,
+  });
+
+  // 2. 按新的一对重跑：两侧会话号 = (新 A, B)，又生成了新快照
+  await page.getByTestId('model-unit-compare-run').click();
+  const second = await waitForCompare(page);
+  expect([second.beforeSesno, second.afterSesno]).toEqual([altA.sesno, b.sesno]);
+  expect(second.beforeObjects).toBeGreaterThan(0);
+  expect(second.afterObjects).toBeGreaterThan(0);
+  const generatedSecond = historyGenerated(historyRequests);
+  expect(generatedSecond).toBeGreaterThan(generatedFirst);
+  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`B · ${formatModelUnitVersionTime(b.session_time ?? '')}`);
+  await evidence(page, 'time-select-rerun-new-pair', {
+    pair: [second.beforeSesno, second.afterSesno], objects: [second.beforeObjects, second.afterObjects], generated: generatedSecond,
+  });
+
+  // 3. 下拉换 B 到原来的 A：两端摆正 = (新 A, 原 A)，三维对比再次收掉
+  await bSelect.selectOption({ value: String(a.sesno) });
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(altA.sesno));
+  await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(a.sesno));
+  await expect(bSelect).toHaveValue(String(a.sesno));
+  await expect.poll(() => historyDeleted(historyRequests), { timeout: 15_000 }).toBe(generatedSecond);
+  await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: unknown }).__modelUnitVersionCompare === undefined);
+  await expect(timelineRow(a.sesno)).toHaveClass(/border-emerald-300/);
+  await expect(timelineRow(b.sesno)).not.toHaveClass(/border-emerald-300/);
+  test.info().annotations.push({
+    type: 'time-select',
+    description: `${fixture.unit} 范围 ${scope} · 下拉 ${timeline.sesnos.size} 项 · A ${a.sesno} → ${altA.sesno}（收掉三维对比 DELETE ${generatedFirst} = generate ${generatedFirst}）`
+      + ` · 重跑 ${altA.sesno} → ${b.sesno} 对象 ${second.beforeObjects} / ${second.afterObjects}（累计 generate ${generatedSecond}）· B ${b.sesno} → ${a.sesno}（DELETE ${generatedSecond}）`,
+  });
+
+  // 4. 复制链接：剪贴板里的就是地址栏那条；带 unit_refno / compare_a / compare_b / compare_autorun，保留 gm_backend 等
+  const copyLink = page.getByTestId('model-unit-compare-copy-link');
+  await expect(copyLink).toBeEnabled();
+  await copyLink.click();
+  await expect(copyLink).toHaveAttribute('aria-label', '对比链接已复制');
+  await expect(page.getByTestId('model-unit-compare-copy-link-status')).toHaveCount(0);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(page.url());
+  const link = new URL(copied);
+  expect(link.searchParams.get('unit_refno')).toBe(fixture.unit);
+  expect(link.searchParams.get('compare_a')).toBe(String(altA.sesno));
+  expect(link.searchParams.get('compare_b')).toBe(String(a.sesno));
+  expect(link.searchParams.get('compare_autorun')).toBe('1');
+  expect(link.searchParams.get('model_source')).toBe('gen-model-v1');
+  expect(link.searchParams.get('gm_backend')).toBe(GEN_MODEL_BASE);
+  expect(link.searchParams.get('output_project')).toBe(PROJECT);
+  await evidence(page, 'copy-link-copied', { link: copied, params: Object.fromEntries(link.searchParams) });
+
+  // 5. 新开一页打开复制出来的链接：面板按链接选中同一对、自动跑完、两侧有几何；关闭 DELETE = generate
+  const direct = await context.newPage();
+  const directProbes = await openCompareLink(direct, copied);
+  await expect(direct.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(altA.sesno), { timeout: 120_000 });
+  await expect(direct.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(a.sesno));
+  const directState = await waitForCompare(direct);
+  expect([directState.beforeSesno, directState.afterSesno]).toEqual([altA.sesno, a.sesno]);
+  expect(directState.beforeObjects).toBeGreaterThan(0);
+  expect(directState.afterObjects).toBeGreaterThan(0);
+  await expect(direct.getByTestId('model-unit-compare-error')).toHaveCount(0);
+  await expect(direct.getByTestId('viewer-model-unit-side-badge')).toContainText(`B · ${formatModelUnitVersionTime(a.session_time ?? '')}`);
+  const directGenerated = historyGenerated(directProbes.historyRequests);
+  expect(directGenerated).toBeGreaterThan(0);
+  await evidence(direct, 'copy-link-direct-open', {
+    pair: [directState.beforeSesno, directState.afterSesno], objects: [directState.beforeObjects, directState.afterObjects], generated: directGenerated,
+  });
+  await direct.getByTestId('model-unit-compare-close').click();
+  await expect.poll(() => historyDeleted(directProbes.historyRequests), { timeout: 15_000 }).toBe(directGenerated);
+  test.info().annotations.push({
+    type: 'copy-link',
+    description: `${link.pathname}?unit_refno=${fixture.unit}&compare_a=${altA.sesno}&compare_b=${a.sesno}&compare_autorun=1（+ model_source / gm_backend / output_project）`
+      + ` · 新页直达 ${directState.beforeSesno} → ${directState.afterSesno} 对象 ${directState.beforeObjects} / ${directState.afterObjects} · DELETE ${directGenerated} = generate ${directGenerated}`,
+  });
+  expect(directProbes.pageErrors, directProbes.pageErrors.join('\n')).toEqual([]);
+  await direct.close();
+
+  // 原页：三维对比已随换 B 收掉（运行态卡与「退出」都不在），快照账已平，没有多余的 DELETE
+  await expect(page.getByTestId('model-unit-compare-runtime')).toHaveCount(0);
+  expect(historyDeleted(historyRequests)).toBe(generatedSecond);
+  expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });

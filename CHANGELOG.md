@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比 e2e 补「时间下拉选 A / B」与「复制链接直达」一条；两份 spec 本机三档回归基线没漂** (2026-10-10 08:3x–09:1x，版本对比审核计划 P1-3 本机能做的部分)
+  - 回归基线：`:8022`（`0.1.34+gdae43cfd8`，重起为 pid 42120，ams8000 到 sesno 646）上两份 spec 三档各一遍 **9 / 9 / 9 passed、0 skipped**，三组钉死夹具全部过门、容器子树最近两版仍是 643 → 645、annotations 与 10-09 逐字相同——活库多走了一段没碰到夹具；spec / 源码一行没改。
+  - 新用例（`e2e/model-version-compare-gen-model-v1.spec.ts` 第 6 条，P1-3 清单里 e2e 之前没碰的两项）：A 时间下拉选到更早一版 → 面板先收掉三维对比（DELETE = generate、dev 钩子撤掉）、两端与时间线选中行跟着换、下拉项数 = 该范围时间线全部行；点「在三维中对比」按新一对重跑；B 下拉选回原 A 两端摆正。复制链接：按钮变「已复制」、剪贴板里的就是 `replaceState` 写进地址栏的那条，带 `unit_refno / compare_a / compare_b / compare_autorun=1` 且保留 `model_source / gm_backend / output_project`；新开一页打开它直达同一对并自动跑完，关闭 DELETE = generate。spec 另拆出 `attachProbes` / `openCompareLink`，加 `MODEL_VERSION_E2E_EVIDENCE` 截图钩子。
+  - 验证：ESLint 0；两份 spec strict tsconfig 0 错；两份 spec 三档再各跑一遍（10 条）**10 / 10 / 10 passed**（43.3 / 65.3 / 50.4 s），pageerror 0。证据与清单进验证 README 新 §11 + `p13-regression-1010/`。P1-3 还没验的只剩「校审单恢复：角标时间 / 运行态卡 / 退出后 DELETE = generate」（要一张带 `model_context` 的确认记录）。
+
 - **设计侧「批注处理」面板改成一张表逐条处理：顶部切换退回单，点一行展开就地处理，确认栏固定在底部** (2026-10-10，方案 A，计划 `docs/plans/2026-10-10-designer-comment-table-inline-processing-plan.md` P0–P3)
   - 从前：左侧 360px 的退回任务列表把卡片挤成窄条（按钮一字一行、徽章竖排）；右栏写死最小高度，常见屏幕高度下「确认当前数据 / 流转回校对」被裁掉、也滚不到，按钮灰掉时不说缺什么；退回来源和时间随数据漂移，加载失败和「没有任务」看起来一样；「已修改 / 不需解决」藏在讨论时间线里。
   - 现在：左栏换成顶部的退回单切换器（`DesignerTaskSwitcher`）；面板分成固定顶栏 / 中间滚动 / 固定底栏，底栏两颗按钮灰掉时写明原因，还有待处理时提示条数。退回来源和时间只认流转历史里的退回记录（没有时来源显示「—」，时间用更新时间并标「约」）。5 张统计卡换成处理进度 + 状态页签（默认「待处理」）；单据上没有可确认的内容时可以直接流转。点一行展开，最上面是处理表单（已修改 / 不需解决 + 说明，「保存并处理下一条」后自动展开下一条待处理，最后一条处理完焦点落到底栏）；处理动作抽成共用的 `useAnnotationReviewAction`，校核侧行为不变。布局按面板自身宽度切换：窄于 960px 时顶栏按钮只留图标、元信息另起一行，展开区改上下排。不再使用的 `ResubmissionTaskList` 组件删除。
