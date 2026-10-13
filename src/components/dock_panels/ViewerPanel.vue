@@ -3596,7 +3596,7 @@ onMounted(async () => {
     })();
   }
 
-  // show_dbnum URL 参数：整库加载（gen-model-v1：该库全部 SITE 逐个 ensure → records）。
+  // show_dbnum URL 参数：整库显示（gen-model-v1：该库全部 SITE 逐个按祖先查 records，不生成。ADR 0069）。
   if (showDbnumValue !== null && !showRefno && demoMode !== 'primitives') {
     const dbno = showDbnumValue;
     if (Number.isFinite(dbno) && dbno > 0) {
@@ -3623,7 +3623,7 @@ onMounted(async () => {
             noGeoRowsRefnos: 0,
           });
 
-          // 整库 = 该库全部 SITE 逐个 ensure → records，分批装入（plan P3-c / P3-f）；进度与收尾在 useModelGeneration 里。
+          // 整库 = 该库全部 SITE 逐个按祖先查 records，分批装入（ADR 0069）；进度与收尾在 useModelGeneration 里。
           const generation = modelGenerationRef.value;
           if (!generation) throw new Error('模型加载器未初始化');
           emitToast({ message: `[信息] 正在从 gen-model 加载 dbnum=${dbno} 的全部 SITE…`, level: 'info' });
@@ -3672,7 +3672,7 @@ onMounted(async () => {
         }
         console.log(`[debug_refno] refno=${refnoStr} → dbnum=${dbno}`);
 
-        // 2. 查询该 refno 下的可见实例（经数据源端口：legacy = /api/e3d/visible-insts，gen-model-v1 = ensure → records）
+        // 2. 查询该 refno 下的可见实例（经数据源端口：gen-model-v1 = 以节点为祖先查 records，不生成）
         const visResp = await getModelSource().tree.visibleInsts(refnoStr);
         const refnos = mergeRootRefnoWithVisibleRefnos(refnoStr, visResp?.refnos ?? []);
         console.log(`[debug_refno] visible-insts 合并根节点后返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
@@ -3688,7 +3688,7 @@ onMounted(async () => {
           level: 'info',
         });
 
-        // 3. 加载实例到 DTX（gen-model-v1 ensure → records）
+        // 3. 加载实例到 DTX（gen-model-v1 按祖先查 records，不生成）
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
           dtxLayer,
           dbno,
