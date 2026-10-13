@@ -312,14 +312,14 @@ describe('freshness 与 gen-model 基址（?gm_backend= 切服务）', () => {
     expect(await ensureGenModelV1Freshness({ force: true })).toMatchObject({ baseUrl: '/gm-a', generation: 1 });
   });
 
-  it('跨层：窗口内切换基址后，记录源对同一节点不再命中旧服务的备忘结果，重新 ensure 且换代', async () => {
+  it('跨层：窗口内切换基址后，记录源对同一节点不再命中旧服务的备忘结果，重新查 records 且换代', async () => {
     const health = useGenModelV1Health();
     health.__reset();
     healthByBase();
-    const ensure = vi.fn(async () => ({ status: 'AlreadyAvailable', generation_root: '1/1' }));
+    const generate = vi.fn();
     const records = vi.fn(async () => ({ source: 'model-memory', items: [item('1_10', '1_1')], total: 1, truncated: false, next_cursor: null }));
     const source = createGenModelV1ModelRecordSource({
-      api: { ensure: ensure as never, records: records as never, children: vi.fn() as never },
+      api: { generate: generate as never, records: records as never, children: vi.fn() as never },
       ensureFreshness: () => ensureGenModelV1Freshness(),
       noteRequestFailure: noteGenModelV1RequestFailure,
     });
@@ -327,15 +327,17 @@ describe('freshness 与 gen-model 基址（?gm_backend= 切服务）', () => {
     const unsubscribe = subscribeGenModelV1GenerationChange(() => source.invalidate());
     window.history.replaceState({}, '', '?gm_backend=/gm-a');
     try {
-      const viaA = await source.ensureAndCollect('1_1');
-      expect(await source.ensureAndCollect('1_1')).toBe(viaA);
-      expect(ensure).toHaveBeenCalledTimes(1);
+      const viaA = await source.collectByAncestor('1_1');
+      expect(await source.collectByAncestor('1_1')).toBe(viaA);
+      expect(records).toHaveBeenCalledTimes(1);
+      expect(generate).not.toHaveBeenCalled();
       expect(source.peek('1_10')).toHaveLength(1);
 
       window.history.replaceState({}, '', '?gm_backend=/gm-b');
-      const viaB = await source.ensureAndCollect('1_1');
+      const viaB = await source.collectByAncestor('1_1');
       expect(viaB).not.toBe(viaA);
-      expect(ensure).toHaveBeenCalledTimes(2);
+      expect(records).toHaveBeenCalledTimes(2);
+      expect(generate).not.toHaveBeenCalled();
       expect(getGenModelV1ServiceSnapshot()).toMatchObject({ baseUrl: '/gm-b', startedAt: 'b', generation: 1 });
     } finally {
       unsubscribe();

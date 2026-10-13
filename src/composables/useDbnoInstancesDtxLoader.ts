@@ -28,13 +28,11 @@ type LoaderOptions = {
   /** 即使 geoHash 未变化也重新拉取网格，用于显式模型重建。 */
   forceRefreshGeometries?: boolean
   /**
-   * 数据源：只剩 `'gen-model-v1'`（gen-model `/api/v1`，ensure → records，plan 2026-09-06 P3-e）；
+   * 数据源：只剩 `'gen-model-v1'`（gen-model `/api/v1`，按祖先查 records，ADR 0069）；
    * legacy 的 `'parquet'` / `'backend'` 两档 2026-09-20 退役。调用方自带 `instanceEntriesByRefno`
    * （版本对比的 A/B 几何由模型来源端口取好后钉入）时不经数据源。
    */
   dataSource?: 'gen-model-v1'
-  /** 人明确要求重生成（gen-model-v1 = `ensure(force=true)`）；其它数据源忽略 */
-  forceRegenerate?: boolean
   includeOwnedTubings?: boolean
   /** 透传给模型来源的 `instanceEntriesByRefnos`（`InstanceEntryQueryOptions.expectedRootRefno`）。 */
   expectedRootRefno?: string
@@ -1004,7 +1002,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     index = await getModelSource().records.instanceEntriesByRefnos(dbno, toLoad, {
       debug,
       forceRefresh: normalizedForceReload !== null,
-      forceRegenerate: options.forceRegenerate === true,
       includeOwnedTubings: options.includeOwnedTubings,
       expectedRootRefno: options.expectedRootRefno,
     });

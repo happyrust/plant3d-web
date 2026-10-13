@@ -337,21 +337,33 @@ _Avoid_: `data_source`（legacy 内部 parquet | backend 的选择，已随其�
 取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → 网格 URL`：gen-model-v1 给 `.mesh` rkyv 直连，`parseMeshGeometry` 解；legacy 的 `.glb` 与 GLB 解析器已随其退役）、`AttributeSource`（属性面板 / 类型）。接口形状沿用 legacy 时代的函数形状（历史原因：当年 legacy 适配器是零逻辑委托）；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。测量参考系（wrt）的元素帧没进这四个接口：取 `element/ptset` 的 `world_transform`（`get_world_mat4` 的局部→世界矩阵），owner / 元素类型取树节点（d-533）。
 _Avoid_: API 客户端、fetch 封装、拿 `element/attributes` 的 stored POS / ORI 自己拼元素帧（那是相对属主的）
 
+**显示**:
+让三维里出现某个范围已生成的模型。点下去的节点就是查询范围：`POST /model/records` 以它为祖先回答子树里已生成的实例。不 generate、不展开容器、不持锁。查空停在「未加载」，INFO「范围内没有已生成的模型；右键「重新生成模型」可生成」，不记 ERROR。409 `not_generated` 也当查空；409 `conflict`（库正被整库任务占用）是「稍后再显示」。
+_Avoid_: ensure、显示时补齐、眼睛触发生成
+
+**生成**:
+只有右键「重新生成模型」会改模型库。确认框不带数字，然后对目标 `POST /model/generate { refno, force: true }`（老服务端 404 退回 `/model/ensure` 同一请求体）。成功回执之后再按「显示」查 records 并替换场景里的旧几何。`generation_pending` / `timeout` 不显示，日志写「服务端后台继续生成，完成后再点眼睛」。
+_Avoid_: 显示路径上的 generate、眼睛触发生成
+
+**重新生成**:
+右键「重新生成模型」这一条，见「生成」。整库 `POST dbnums/{n}/model/ensure` 不由 `show_dbnum` 触发；那是以后单独的「重新生成模型（整库）」。
+_Avoid_: 显示整库时起生成任务
+
 **虚拟根 (Virtual Root)**:
-gen-model-v1 源下模型树合成的唯一根 `gm-root:<project>:<mdb>`，children 是该 MDB 全部 DESI / ISOD 库的 SITE。它不是 refno，不能 ensure、不能整体显示；祖先链以它为终点。id 里不含 `/` `,` `<` `>`——树的 refno 归一化会改写这些字符。
+gen-model-v1 源下模型树合成的唯一根 `gm-root:<project>:<mdb>`，children 是该 MDB 全部 DESI / ISOD 库的 SITE。它不是 refno，不能整体显示；祖先链以它为终点。id 里不含 `/` `,` `<` `>`——树的 refno 归一化会改写这些字符。
 _Avoid_: WORL、树根 refno
 
 **生成根投影 (Generation-Root Projection)**:
-gen-model 的几何记录（`model/records`）按生成根组织：记录上的 `owner` 是生成根而不是直接属主，一个构件的几何要经它所在的根整体取回。前端因此「按根收、按构件缓存」——对任一构件 ensure，服务端解到根、整根记录写进缓存，同根其它构件直接命中。一次 ensure 解出多根时 `records` **多根打包**取（`generation_roots[]`，同 Ref0 的根一批 ≤64，平铺响应按 `owner` 归根；spec §4.5.2，2026-09-10 起），旧服务端不认识该字段就自动退回逐根——批量只是传输形态，缓存与分型口径不变。
-_Avoid_: 直接属主、按 refno 单条查询、parquet 分桶、逐根一次请求当成契约
+gen-model 的几何记录（`model/records`）按生成根组织：记录上的 `owner` 是生成根而不是直接属主。显示时以点下去的节点为祖先查，服务端按 `anc` 把子树里已生成的实例一次答回来，前端按根收、按构件缓存。同根的其它构件直接命中，一根只查一次。
+_Avoid_: 直接属主、显示时 ensure、按 refno 单条查询
 
 **即时生成数据 (On-Demand Data)**:
-gen-model-v1 源下前端拿到的树与三维模型**全部是 API 即时给出的**：树读 `/tree/*`（内存里的 MDB 骨架），几何走 `model/ensure`（当场生成）→ `model/records` → `/meshes/{hash}.mesh`。前端不依赖服务端库里的持久数据、不看 `model-memory` / `model-database` 之分、不订阅 `model_drain` / WS 任务事件、不做被动重载——要新几何就再显示一次或「重新生成」。原「模型变更同步」（WS + 15 s 轮询 `GET /tasks?kind=model_drain` → reload）2026-09-09 按用户口径整条下线（收口计划 §12，决策见共享决策库）。
-_Avoid_: 模型变更同步、被动重载、库侧水位、等 drain
+gen-model-v1 源下前端拿到的树与三维模型全部是 API 即时给出的：树读 `/tree/*`，显示走 `model/records`，网格走 `/meshes/{hash}.mesh`。生成只在右键 `model/generate`。前端不订阅 `model_drain` / WS 任务事件、不做被动重载。SAVEWORK 之后三维不会自己追新，要人右键。
+_Avoid_: 模型变更同步、被动重载、显示时 ensure
 
-**整库入口 (Whole-Dbnum Entry)**:
-`show_dbnum` 整库显示在 gen-model 读透 / kv-mem 形态下的取数路（spec §4.5.3，收口计划 §17，2026-09-10 起）：`POST dbnums/{dbnum}/model/ensure`（服务端自己枚举该库全部生成根、202 回 `task_id` + 真数 `expected_roots`、e3d-model 流水线并行生成、按片提交进进程内投影）→ 每拍只查**自己刚发起的这一个** `task_id`（进度）+ `GET dbnums/{dbnum}/model/roots?ready=1`（哪些根的投影已提交）→ 新就绪的根**立刻**多根 `records` 进视口，不等终态——「实时」（plan 2026-09-10 §12）。生成的编排全在服务端，前端一根也不催。旧构建没有这条路由（404）按 api 对象记一次、以后直接走逐 SITE 老路；该库以 rocksdb 为准（409）只退这一次。任务与投影都只活在服务端进程内，重启后要重新点显示。它不是 `dbnums/{dbnum}/model/rebuild`——那是摄入形态、durable 队列的强制整库重建，前端不用。
-_Avoid_: rebuild、整库重建、`/tasks` 列表轮询、订阅任务、把逐 SITE ensure 当成整库的契约
+**整库显示 (Whole-Dbnum Display)**:
+`show_dbnum` 是该库 `tree/roots` 下的 SITE 逐个按祖先查 records，再分批装进视口。不发起 `dbnums/{n}/model/ensure`，不轮询任务。查空就是空。构件预算缺省 50 000；`?show_dbnum_full=1` 不设这个上限。
+_Avoid_: 显示整库时起生成任务、`/tasks` 列表轮询、把 ensure 当成整库显示的契约
 
 ## 空间查询
 

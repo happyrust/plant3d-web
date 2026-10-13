@@ -6,12 +6,12 @@
  * `getModelSource()` 给进程内唯一一份 `GenModelV1ModelSource`（惰性建、首次取用时 `activate()`）。
  * 只想判「现在是哪个源」的模块请引 `./kind`，别把整套适配器拖进来。
  */
-import { createGenModelV1ModelSource, type GenModelV1EnsureProgress, type GenModelV1ModelSource } from './genModelV1';
+import { createGenModelV1ModelSource, type GenModelV1ModelSource, type GenModelV1RecordsProgress } from './genModelV1';
 
 export * from './ports';
 export * from './kind';
 export * from './modelVersionErrors';
-export type { GenModelV1EnsureProgress, GenModelV1ModelSource } from './genModelV1';
+export type { GenModelV1ModelSource, GenModelV1RecordsProgress } from './genModelV1';
 export type { CollectDbnumProgress, CollectDbnumResult } from './genModelV1';
 /** 某模型版本下的属性 → 属性面板契约（版本对比里点 A / B 构件时属性面板钉到那一版用） */
 export { modelVersionAttributesToUiAttr } from './genModelV1/attributeSource';
@@ -32,8 +32,8 @@ export function getGenModelV1ModelSource(): GenModelV1ModelSource {
   return getModelSource();
 }
 
-/** 订阅 gen-model-v1 的逐根 ensure → records 进度（显示流程里 `visibleInsts` 内部那次 ensure 只能从这里听）。 */
-export function subscribeModelSourceProgress(listener: (progress: GenModelV1EnsureProgress) => void): () => void {
+/** 订阅 gen-model-v1 的按祖先查询进度（显示流程里 `visibleInsts` 内部那次 records 只能从这里听）。 */
+export function subscribeModelSourceProgress(listener: (progress: GenModelV1RecordsProgress) => void): () => void {
   return getModelSource().records.subscribeProgress(listener);
 }
 

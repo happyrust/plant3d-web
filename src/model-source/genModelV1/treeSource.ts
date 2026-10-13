@@ -9,11 +9,11 @@
  *   不依赖顺序，也不在乎多出来的 WORL。
  * - **搜索**：服务端只做 NAME 子串；`nouns` 过滤在这里做（靠 P0-2 的 `noun`），不够一页就翻下一页，
  *   扫描上限 `SEARCH_SCAN_CAP`。
- * - **subtreeRefnos / visibleInsts**：见各方法注释；后者就是 D5-A 的「显式显示 = ensure + records」。
+ * - **subtreeRefnos / visibleInsts**：见各方法注释；后者是 ADR 0069 的「显示 = 以节点为祖先查已生成的记录」，不生成。
  * - 一切 `GenModelV1ApiError` 都折成 `{ success:false, error_message }`——现有调用方按 `success` 分支，
  *   抛错反而会绕开它们的重试 / 提示逻辑。
  */
-import { ensureAndCollectRecords, mapWithConcurrency, refnosOfRecords, type EnsureAndCollectOptions, type EnsureAndCollectResult, type ModelRecordsApi } from './modelRecords';
+import { collectRecordsByAncestor, mapWithConcurrency, refnosOfRecords, type CollectRecordsOptions, type CollectRecordsResult, type ModelRecordsApi } from './modelRecords';
 
 import type { SubtreeRefnosParams, TreeSource } from '../ports';
 import type {
@@ -115,15 +115,15 @@ export type GenModelV1TreeSourceOptions = {
   api?: GenModelV1TreeApi;
   recordsApi?: ModelRecordsApi;
   /**
-   * `visibleInsts` 用哪一份 ensure → records。组装时传记录源的 `ensureAndCollect`，树查「有几何的构件」那一次
-   * 就把整根记录写进记录源缓存，紧接着的几何加载直接命中——一次显示只打一次 ensure + 一次 records。
-   * 缺省用无缓存的 `ensureAndCollectRecords(…, recordsApi)`。
+   * `visibleInsts` 用哪一份按祖先查询。组装时传记录源的 `collectByAncestor`，树查「有几何的构件」那一次
+   * 就把整根记录写进记录源缓存，紧接着的几何加载直接命中——一次显示只打一次 records。
+   * 缺省用无缓存的 `collectRecordsByAncestor`。显示路径不 generate。
    */
-  ensureAndCollect?: (refno: string, options: EnsureAndCollectOptions) => Promise<EnsureAndCollectResult>;
+  collectByAncestor?: (refno: string, options?: CollectRecordsOptions) => Promise<CollectRecordsResult>;
   /** `tree/roots` 结果复用窗口（`worldRoot()` 紧接着 `children(root)`，不必打两次） */
   rootsCacheMs?: number;
-  /** 传给 `visibleInsts` 的 ensure/records 上限 */
-  ensureOptions?: Pick<EnsureAndCollectOptions, 'maxContainerDepth' | 'maxRoots' | 'pageSize'>;
+  /** 传给 `visibleInsts` 的 records 分页上限 */
+  recordsOptions?: Pick<CollectRecordsOptions, 'pageSize' | 'concurrency'>;
   now?: () => number;
   /** 生产组装点注入 health freshness；低层单测缺省不发额外请求。 */
   ensureFreshness?: () => Promise<unknown>;
@@ -143,8 +143,9 @@ function errorMessage(error: unknown): string {
 export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions = {}): GenModelV1TreeSource {
   const api = options.api ?? defaultGenModelV1TreeApi;
   const recordsApi = options.recordsApi;
-  const ensureAndCollect = options.ensureAndCollect
-    ?? ((refno: string, ensureOptions: EnsureAndCollectOptions) => ensureAndCollectRecords(refno, ensureOptions, recordsApi));
+  const collectByAncestor = options.collectByAncestor
+    ?? ((refno: string, collectOptions?: CollectRecordsOptions) =>
+      collectRecordsByAncestor(refno, { ...options.recordsOptions, ...collectOptions }, recordsApi));
   const rootsCacheMs = options.rootsCacheMs ?? 60_000;
   const now = options.now ?? (() => Date.now());
   const ensureFreshness = options.ensureFreshness ?? (() => Promise.resolve());
@@ -388,8 +389,8 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
   }
 
   /**
-   * 「有几何的构件 refno 集」= 显式显示语义（D5-A）：ensure(force=false) → records → 构件 refno 去重。
-   * 虚拟根拒绝（整 MDB 的 ensure 不是一次点击该做的事，P3-c 的 `show_dbnum` 分批走别的入口）。
+   * 「有几何的构件 refno 集」= 以节点为祖先查已生成的记录，再把构件 refno 去重（ADR 0069）。
+   * 不 generate、不展开容器。虚拟根拒绝（整 MDB 不是一次点击该显示的范围，`show_dbnum` 按 SITE 查）。
    */
   async function visibleInsts(refno: string): Promise<VisibleInstsResponse> {
     const key = fromV1Refno(refno);
@@ -400,7 +401,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     try {
       await ensureFreshness();
       guard = createGenModelV1GenerationGuard();
-      const result = await ensureAndCollect(key, { ...options.ensureOptions });
+      const result = await collectByAncestor(key, options.recordsOptions);
       guard.assertCurrent();
       const refnos = refnosOfRecords(result.items);
       const failed = Object.keys(result.errors);

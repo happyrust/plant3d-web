@@ -160,11 +160,11 @@ function normalizeVisibleInstsIncomplete(raw: VisibleInstsResponse['incomplete']
   return { pending, truncated_roots: truncated, errors };
 }
 
-/** 「生成中 2 根、预算外未取 1 根、出错 1 根」——给状态栏 / toast / 日志用。 */
+/** 「稍后再显示 2 处、预算外未取 1 根、出错 1 根」——给状态栏 / toast / 日志用。pending 是 409，库正被占用，不是生成。 */
 export function describeVisibleInstsIncomplete(incomplete: VisibleInstsIncomplete): string {
   const failed = Object.keys(incomplete.errors).length;
   return [
-    incomplete.pending.length ? `生成中 ${incomplete.pending.length} 根` : '',
+    incomplete.pending.length ? `稍后再显示 ${incomplete.pending.length} 处` : '',
     incomplete.truncated_roots.length ? `预算外未取 ${incomplete.truncated_roots.length} 根` : '',
     failed ? `出错 ${failed} 根` : '',
   ].filter(Boolean).join('、');
@@ -175,8 +175,8 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
   source: 'visible-insts' | 'subtree-refnos'
   truncated: boolean
   /**
-   * gen-model-v1：visibleInsts 那次 ensure → records 没收齐的明细（pending / 截断 / 出错的根）；legacy 与收齐时为 `null`。
-   * 退到 subtree-refnos 时照样带着——范围虽换了来源，「这个节点还没生成完」这件事没变。
+   * gen-model-v1：visibleInsts 那次按祖先查询没收齐的明细（409 / 截断 / 出错）；收齐时为 `null`。
+   * visibleInsts 成功但查空时不退到 subtree——查空就是未加载。只有查询失败才退到 subtree-refnos，incomplete 照样带着。
    */
   incomplete: VisibleInstsIncomplete | null
 }> {
@@ -194,9 +194,8 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
     incomplete = normalizeVisibleInstsIncomplete(resp.incomplete);
     const list = Array.isArray(resp.refnos) ? resp.refnos : [];
     const refnos = uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean);
-    if (refnos.length > 0) {
-      return { refnos, source: 'visible-insts', truncated: false, incomplete };
-    }
+    // 查成功就是查询结果：空也是空，不退到整棵子树去装没生成的构件。
+    return { refnos, source: 'visible-insts', truncated: false, incomplete };
   } catch {
     // 继续使用同一 root 的受限 subtree 范围。
   }
@@ -302,15 +301,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   /**
    * gen-model-v1：把记录源缓存里的构件装进 DTX。超过一页（`VISIBLE_REFNOS_PAGE_SIZE`）就分批，进度在 `progressRange` 里走，
-   * 每批之间让出一帧（P3-c 分批 + 进度）。`replace`（重生成 / 重载）**不分批**：它要 forceRefresh，分了批每一批都会把同一个根
-   * 再 ensure 一遍（重生成还会再提交一次生成）。
+   * 每批之间让出一帧（P3-c 分批 + 进度）。`replace`（右键重新生成之后的替换）**不分批**：它要 forceRefresh，
+   * 分了批每一批都会把同一个根再查一遍。生成已经在进这里之前做完，装载本身不再 generate。
    */
   async function loadGenModelV1Refnos(
     dtxLayer: any,
     dbno: number,
     refnos: string[],
     anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void },
-    mode: { regenerate: boolean; replace: boolean },
+    mode: { replace: boolean },
     progressRange: [number, number],
     label: string,
   ): Promise<GenModelV1LoadTotals> {
@@ -331,7 +330,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         lodAssetKey: 'L1',
         debug: false,
         dataSource: 'gen-model-v1',
-        forceRegenerate: mode.regenerate,
         forceReloadRefnos: mode.replace ? batch : undefined,
         replaceExistingObjects: mode.replace,
         forceRefreshGeometries: mode.replace,
@@ -448,13 +446,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       currentRefno: currentRefno.value,
     });
 
-    // gen-model-v1（P3-c）：范围查询里 visibleInsts 那次 ensure → records 的逐根进度只能从记录源听；
-    // 容器（SITE / ZONE）展开出多根时把进度弹窗挂出来，单根 BRAN 不弹。legacy 下这是个空订阅。
+    // gen-model-v1：范围查询里那次按祖先查 records 的进度只能从记录源听。
+    // 多个祖先时把进度弹窗挂出来，单根不弹。
     const unsubscribeProgress = subscribeModelSourceProgress(({ done, total, root }) => {
       totalCount.value = total;
       currentIndex.value = Math.min(total, done + 1);
       currentRefno.value = root;
-      statusMessage.value = `gen-model 生成 / 取回记录：${done}/${total} 个生成根`;
+      statusMessage.value = `gen-model 查询记录：${done}/${total} 个生成根`;
       progress.value = 10 + Math.floor((done / Math.max(1, total)) * 20);
       if (total > 1) showProgressModal.value = true;
       syncGlobalLoadStatus();
@@ -486,6 +484,27 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
 
+      const regenerate = loadOptions?.regenerate === true;
+      if (regenerate) {
+        statusMessage.value = `正在重新生成 ${normalizedRoot}...`;
+        progress.value = 5;
+        syncGlobalLoadStatus();
+        const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot);
+        if (generated.items.length === 0) {
+          const timedOut = generated.pending.length > 0;
+          const failed = Object.entries(generated.errors).map(([root, message]) => `${root}: ${message}`).join('; ');
+          const hint = timedOut
+            ? '服务端后台继续生成，完成后再点眼睛'
+            : (failed || '没有可显示的新产物');
+          statusMessage.value = hint;
+          progress.value = 100;
+          syncGlobalLoadStatus();
+          consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 重新生成后不显示：${hint}`);
+          emitToast({ message: `[提示] ${normalizedRoot}：${hint}`, level: 'info' });
+          return false;
+        }
+      }
+
       statusMessage.value = '查询可见实例范围...';
       progress.value = 10;
       syncGlobalLoadStatus();
@@ -493,7 +512,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let visibleErr: string | null = null;
       let visibleRefnos: string[] = [];
       let visibleSource: 'visible-insts' | 'subtree-refnos' = 'visible-insts';
-      // gen-model-v1：这次 ensure → records 有没有收齐。没收齐的节点**不能**进 loadedRoots（B1）：下一次普通显示要能补齐
+      // gen-model-v1：这次按祖先查询有没有收齐。没收齐的节点不进 loadedRoots：下一次普通显示还要能再查
       let scopeIncomplete: VisibleInstsIncomplete | null = null;
       try {
         const { refnos, source, truncated, incomplete } = await queryLoadScopeRefnos(normalizedRoot);
@@ -529,19 +548,18 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           message: `[警告] 查询加载范围失败：${visibleErr}`,
           level: 'warning',
         });
-      } else if (visibleOk && visibleRefnos.length === 0 && scopeIncomplete) {
-        // 一个构件都没取到，但不是「没有」：根还在生成 / 出错 / 预算外——别说成「未查询到可见实例」
-        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 尚未取得可见实例：${incompleteTail}`);
-        emitToast({ message: `[提示] ${normalizedRoot} 尚未取得可见实例（${incompleteTail}），稍后再显示一次`, level: 'warning' });
       } else if (visibleOk && visibleRefnos.length === 0) {
-        consoleStore.addLog(
-          'warning',
-          `[model-load] 未查询到可见实例 refno（${normalizedRoot}），本次不再回退加载本库全部几何`
-        );
-        emitToast({
-          message: `[警告] 未查询到可见实例 refno（${normalizedRoot}），本次不再回退加载本库全部几何`,
-          level: 'warning',
-        });
+        const emptyHint = scopeIncomplete
+          ? `${normalizedRoot} 尚未取得可见实例（${incompleteTail}）`
+          : `${normalizedRoot}：范围内没有已生成的模型；右键「重新生成模型」可生成`;
+        consoleStore.addLog('info', `[model-load] ${emptyHint}`);
+        emitToast({ message: `[提示] ${emptyHint}`, level: 'info' });
+        statusMessage.value = scopeIncomplete
+          ? `refno=${normalizedRoot} 模型尚未就绪（${incompleteTail}）`
+          : `refno=${normalizedRoot} 未加载`;
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        return false;
       }
 
       const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos);
@@ -585,13 +603,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         return !scopeIncomplete;
       }
 
-      // ========== gen-model-v1（plan 2026-09-06 P3-f）==========
-      // 显式显示 = ensure(force=false) → records（D5-A），已在 visibleInsts 里做过一遍并进了记录缓存，这里只是把
-      // 缓存里的实例装进 DTX；重生成 = ensure(force=true)。（旧后端的 realtime / parquet / SSE 那几条路 2026-09-20 随 legacy 删除。）
+      // ========== gen-model-v1（ADR 0069）==========
+      // 显式显示 = 按祖先查 records，已在 visibleInsts 里做过一遍并进了记录缓存，这里只是把缓存里的实例装进 DTX。
+      // 右键重新生成已经在上面 generateThenCollect 过；这里替换场景里的旧对象，不再 generate。
       const loadRefnos = loadScope.actualLoadRefnos;
-      // regenerate（人要求重算）= ensure(force=true) 并替换场景里的旧对象。前端只吃自己 ensure 出来的数据，
-      // 没有「服务端替你重算了、这里被动重载」这一路（2026-09-09 用户口径，收口计划 §12）。
-      const regenerate = loadOptions?.regenerate === true;
       statusMessage.value = regenerate
         ? `正在重新生成 ${normalizedRoot}（gen-model）...`
         : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
@@ -602,7 +617,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno,
         loadRefnos,
         anyViewer,
-        { regenerate, replace: regenerate },
+        { replace: regenerate },
         [30, 95],
         `从 gen-model 加载 ${normalizedRoot}`,
       );
@@ -646,9 +661,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 有 ${v1Result.invalidTubi} 段无效直管（is_invalid_tubi），已画成告警色`);
       }
       progress.value = 100;
-      // 收集没完成（有根 pending / 预算外 / 出错）：已取得的构件照画，但这个节点**不**记进 loadedRoots——
-      // 记了就会被 genuinelyLoaded 短路，恰好恢复的那几根永远补不上。记录源那边同样不备忘未收齐的结果，
-      // 下一次普通显示会重新 ensure → records 把剩下的根补齐（B1）。
+      // 收集没完成（409 / 预算外 / 出错）：已取得的构件照画，但这个节点不记进 loadedRoots。
+      // 记了就会被 genuinelyLoaded 短路。记录源同样不备忘未收齐的结果，下一次普通显示会再查。
       const collectionIncomplete = scopeIncomplete !== null;
       if (v1Result.loadedObjects > 0) {
         if (collectionIncomplete) {
@@ -656,10 +670,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           syncGlobalLoadStatus();
           consoleStore.addLog(
             'warning',
-            `[model-load] gen-model-v1 refno=${normalizedRoot} 收集未完成（${incompleteTail}），已画 ${v1Result.loadedObjects} 个实例，未记为已加载；再显示一次可补齐`,
+            `[model-load] gen-model-v1 refno=${normalizedRoot} 收集未完成（${incompleteTail}），已画 ${v1Result.loadedObjects} 个实例，未记为已加载`,
           );
           emitToast({
-            message: `[提示] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例，但 ${incompleteTail}；稍后再显示一次 ${normalizedRoot} 可补齐`,
+            message: `[提示] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例，但 ${incompleteTail}`,
             level: 'warning',
           });
           return true;
@@ -717,12 +731,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /**
-   * gen-model-v1 的整库显示（plan P3-c / P3-f `show_dbnum`）。两条路（`collectDbnum` 自己选）：
-   * - 服务端整库入口（收口计划 §17；plan 2026-09-10 §12 **实时**）：服务端流水线每提交一片，`onRefnosReady` 就把那些根的构件
-   *   装进 DTX——几何边生成边进视口，不等整库生成完；进度弹窗第一段是服务端的 `completed/expected_roots`。
-   * - 逐 SITE 老路：该库全部 SITE 逐个 ensure → records（进度按 SITE / 生成根走），收完再把构件分批装进 DTX。
-   * 两条路收尾都以 `collected.refnos` 对账：还没进视口的构件在这里补装。由 `showModelByDbnum` 在 v1 源下调用，
-   * 错误与收尾都由它的 try/finally 兜住。
+   * gen-model-v1 的整库显示（ADR 0069）：该库全部 SITE 逐个按祖先查 records，每个 SITE 收完经 `onRefnosReady` 装进 DTX。
+   * 不发起整库生成。收尾以 `collected.refnos` 对账。错误与收尾由 `showModelByDbnum` 的 try/finally 兜住。
    */
   async function showModelByDbnumGenModelV1(
     source: GenModelV1ModelSource,
@@ -768,35 +778,21 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       progress.value = Math.max(progress.value, Math.min(95, Math.floor(value)));
     };
 
-    // 逐 SITE 老路：收集阶段占 5 → 55，SITE 之间按个数走，SITE 内按已收完的生成根走；
-    // 服务端整库入口：没有 SITE 维度，`generate` 是服务端流水线的进度（占到 50），`roots` 是这边已收记录的根（占到 95）
+    // 逐 SITE 查询：收集阶段占 5 → 55，SITE 之间按个数走。
     const collected = await source.collectDbnum(dbno, {
       maxTotalRoots: fullLoad ? Number.POSITIVE_INFINITY : undefined,
       maxRefnos: fullLoad ? Number.POSITIVE_INFINITY : undefined,
-      onFallback: ({ message }) => {
-        statusMessage.value = `gen-model：${message}`;
-        consoleStore.addLog('warning', `[model-load] gen-model-v1 dbnum=${dbno} ${message}`);
-        syncGlobalLoadStatus();
-      },
       onProgress: ({ phase, siteIndex, siteCount, site, rootsDone, rootsTotal, root }) => {
         totalCount.value = siteCount;
         currentIndex.value = siteIndex;
         const scope = site?.name ?? `dbnum=${dbno}`;
         currentRefno.value = root ? `${scope} › ${root}` : scope;
-        if (!site) {
-          const viewport = loadedRootCount > 0 ? ` · 已进视口 ${loadedRootCount} 根` : '';
-          statusMessage.value = phase === 'generate'
-            ? `gen-model：服务端生成 ${scope}，已完成 ${rootsDone}/${rootsTotal} 根${viewport}`
-            : `gen-model：${scope}，已收记录 ${rootsDone}/${rootsTotal} 根${viewport}`;
-          const fraction = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
-          bumpProgress(5 + fraction * (phase === 'generate' ? 45 : 90));
-        } else {
-          statusMessage.value = phase === 'roots'
-            ? `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，生成根 ${rootsDone}/${rootsTotal}`
-            : `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，正在 ensure...`;
-          const withinSite = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
-          progress.value = 5 + Math.floor(((siteIndex - 1 + withinSite) / Math.max(1, siteCount)) * 50);
-        }
+        statusMessage.value = phase === 'roots'
+          ? `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，已查 ${rootsDone}/${rootsTotal}`
+          : `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，正在查询已生成的记录...`;
+        const withinSite = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
+        const next = 5 + Math.floor(((siteIndex - 1 + withinSite) / Math.max(1, siteCount)) * 50);
+        progress.value = Math.max(progress.value, next);
         syncGlobalLoadStatus();
       },
       onRefnosReady: async ({ refnos, rootsDone, rootsTotal }) => {
@@ -810,7 +806,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           dbno,
           refnos,
           anyViewer,
-          { regenerate: false, replace: false },
+          { replace: false },
           [from, to],
           `gen-model 整库 dbnum=${dbno} 第 ${liveBatches} 批`,
         ));
@@ -821,10 +817,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       },
     });
 
-    const compatibility = collected.fallback ? `${collected.fallback.message}；` : '';
     const failedRoots = Object.keys(collected.errors);
     const tail =
-      (collected.pending.length ? `，生成中 ${collected.pending.length} 根` : '') +
+      (collected.pending.length ? `，稍后再显示 ${collected.pending.length} 处` : '') +
       (collected.truncatedRoots.length ? `，预算外未取 ${collected.truncatedRoots.length} 根` : '') +
       (collected.skippedSites.length ? `，未轮到 ${collected.skippedSites.length} 个 SITE` : '') +
       (failedRoots.length ? `，出错 ${failedRoots.length} 根` : '');
@@ -846,7 +841,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       progress.value = 100;
       syncGlobalLoadStatus();
       const detail = tail || '，受安全预算限制';
-      const message = `[提示] ${compatibility}dbnum=${dbno}（${siteSummary}）尚未取得可加载几何${detail}`;
+      const message = `[提示] dbnum=${dbno}（${siteSummary}）尚未取得可加载几何${detail}`;
       consoleStore.addLog('warning', `[model-load] gen-model-v1 ${message}`);
       emitToast({ message, level: 'warning' });
       return { loaded: false, instanceCount: 0, refnoCount: 0, refnos: [] };
@@ -859,10 +854,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       && collected.sites.length === 0
       && collected.refnos.length === 0
     ) {
-      statusMessage.value = `${compatibility}dbnum=${dbno} 在当前 MDB 里没有 SITE`;
+      statusMessage.value = `dbnum=${dbno} 在当前 MDB 里没有 SITE`;
       progress.value = 100;
       syncGlobalLoadStatus();
-      const message = `[警告] ${compatibility}dbnum=${dbno} 在 gen-model 当前 MDB 的 tree/roots 里没有 SITE，无法整库加载`;
+      const message = `[警告] dbnum=${dbno} 在 gen-model 当前 MDB 的 tree/roots 里没有 SITE，无法整库加载`;
       consoleStore.addLog('warning', `[model-load] ${message}`);
       emitToast({ message, level: 'warning' });
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
@@ -871,11 +866,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       statusMessage.value = 'Model is empty (0 instances)';
       progress.value = 100;
       syncGlobalLoadStatus();
+      const emptyHint = '范围内没有已生成的模型；右键「重新生成模型」可生成';
       const message = collected.siteSummaryAvailable === false
-        ? `[警告] ${compatibility}dbnum=${dbno} 的模型结果没有任何几何记录（SITE 摘要不可用）${tail}`
-        : `[警告] ${compatibility}dbnum=${dbno} 的 ${collected.sites.length} 个 SITE 没有任何几何记录${tail}`;
-      consoleStore.addLog('warning', `[model-load] gen-model-v1 ${message}`);
-      emitToast({ message, level: 'warning' });
+        ? `[提示] dbnum=${dbno} 的模型结果没有任何几何记录（SITE 摘要不可用）。${emptyHint}${tail}`
+        : `[提示] dbnum=${dbno} 的 ${collected.sites.length} 个 SITE 没有任何几何记录。${emptyHint}${tail}`;
+      consoleStore.addLog('info', `[model-load] gen-model-v1 ${message}`);
+      emitToast({ message, level: 'info' });
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
     }
 
@@ -887,7 +883,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno,
         remaining,
         anyViewer,
-        { regenerate: false, replace: false },
+        { replace: false },
         [Math.max(55, progress.value), 95],
         `gen-model 整库 dbnum=${dbno}`,
       ));
@@ -930,7 +926,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     syncGlobalLoadStatus();
     consoleStore.addLog(
       'info',
-      `[model-load] gen-model-v1 dbnum=${dbno} path=${collected.fallback?.reason ?? 'whole-dbnum'} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} live_batches=${liveBatches} ms=${Date.now() - startedAt}`
+      `[model-load] gen-model-v1 dbnum=${dbno} path=query-sites sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} live_batches=${liveBatches} ms=${Date.now() - startedAt}`
     );
     const loadedSummary = alreadyLoaded
       ? `全部 ${collected.refnos.length} 个 refno 已在场景中，本次未新增实例`
@@ -938,7 +934,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         ? `已取得 ${collected.refnos.length} 个 refno，本次尚未绘制实例`
         : `已加载 ${totals.loadedObjects} 个实例（${totals.loadedRefnos} 个 refno）`;
     const summary =
-      `${compatibility}${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${siteSummary} / ${collected.generationRoots.length} 个生成根，` +
+      `${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${siteSummary} / ${collected.generationRoots.length} 个生成根，` +
       `${loadedSummary}${tail}${loadTail}`;
     if (alreadyLoaded) {
       emitToast({ message: `[信息] ${summary}`, level: 'info' });
@@ -983,7 +979,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         throw new Error(`Invalid dbnum: ${dbno}`);
       }
 
-      // 整库 = 该库全部 SITE 逐个 ensure（P3-c）。
+      // 整库显示 = 该库全部 SITE 逐个按祖先查（ADR 0069）。
       // （2026-09-18 起不再有「带 manifestUrl 把某个版本装进主层」的分支：版本只在隔离图层里看，见 plan 2026-09-18 Q18。）
       return await showModelByDbnumGenModelV1(getGenModelV1ModelSource(), dbno, { flyTo: loadOptions?.flyTo });
     } catch (e) {

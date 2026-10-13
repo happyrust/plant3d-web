@@ -1,52 +1,46 @@
 /**
- * gen-model-v1：「显式显示一个节点」= `model/ensure(force=false)` → 逐生成根分页 `model/records`（D5-A，plan P3-a）。
+ * gen-model-v1 记录层（ADR 0069；服务端半边 gen-model ADR-086）。
  *
- * 这一层只负责**把记录收齐**（`GeomInstQuery[]`），不做 `InstanceEntry` 映射（那是 P3-b 的事）。
- * 树的 `visibleInsts`（P2）与视口的几何加载（P3）共用它。
+ * - **显示 = 查询**：`collectRecordsByAncestor(refno)` 对节点自己发 `model/records`，服务端以它为**祖先**回答子树里已生成的
+ *   全部实例（ADR-086 D1），没生成过是 200 空（D2）。不 generate、不展开容器、不解根。多个节点（整库显示逐 SITE）走
+ *   `collectRecordsForAncestors`，一个祖先一次分页读取、有界并发。
+ * - **生成只在右键**：`generateThenCollect(refno, { force: true })` = `model/generate` → 摄入形态回 `422 container` 时展开一层子节点
+ *   逐个 generate（深度 / 根数有上限）→ 回执不是 pending 的根有了新产物，再按祖先查一次记录。`generation_pending` / `timeout`
+ *   的根**不显示**，记进 `pending` 交给调用方提示。
  *
- * 容器语义（plan P3-c / spec §4.5）：
- * - 读透形态的服务端对 SITE/ZONE 会自己解出全部生成根，`generation_roots` 直接给；
- * - 摄入形态回 `422 container`——**不是失败**，这里按契约展开一层、对子节点逐个 ensure，深度与根数都有上限；
- * - `202 generation_pending` / `504 timeout`：后台还在跑，**不重试同一 refno**，把它记进 `pending` 交给调用方；
- * - `404 not_found` / `422 precondition` / `NoRenderableGeometry`：这根没有几何，跳过。
- *
- * 多根批量（收口计划 2026-09-09 P9-3，spec §4.5.2）：一次 ensure 解出的根先切批再取 `records`——同一 Ref0（同库）才同批、
- * 一批 ≤ `recordsBatchSize`（缺省 = 服务端上限 64）、小根集先摊到 `recordsConcurrency` 路上再切（5 根仍是 5 个单根请求）；
- * `recordsConcurrency` 是**同时在飞的批数**。整批失败（旧服务端不认识 `generation_roots`、409 有根未 ensure、5xx、网络）
- * 一律退回逐根，分型与逐根口径一字不差；旧服务端只会被识别一次，此后同一 api 直接逐根。
+ * 这一层只负责**把记录收齐**（`GeomInstQuery[]`），不做 `InstanceEntry` 映射（那是 `instanceMapping.ts` 的事）。
  */
 import {
   fromV1Refno,
-  genModelV1ModelEnsure,
+  genModelV1ModelGenerate,
   genModelV1ModelRecords,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
-  MAX_MODEL_RECORDS_ROOTS,
   type GeomInstQuery,
   type GenModelV1RequestOptions,
-  type ModelEnsureResponse,
+  type ModelGenerateResponse,
   type ModelRecordsResponse,
   type TreeChildrenResponse,
 } from '@/api/genModelV1Api';
 import {
   GenModelV1ServiceGenerationChangedError,
-  getGenModelV1ServiceGeneration,
   toGenModelV1CancelledError,
 } from '@/model-source/genModelV1/serviceLifecycle';
 
 export type ModelRecordsApi = {
-  ensure: typeof genModelV1ModelEnsure;
+  /** 只有 `generateThenCollect` 会调它；显示路径不碰（源码钉 `display_never_generates`）。 */
+  generate: typeof genModelV1ModelGenerate;
   records: typeof genModelV1ModelRecords;
   children: typeof genModelV1TreeChildren;
 };
 
 export const defaultModelRecordsApi: ModelRecordsApi = {
-  ensure: genModelV1ModelEnsure,
+  generate: genModelV1ModelGenerate,
   records: genModelV1ModelRecords,
   children: genModelV1TreeChildren,
 };
 
-/** 防止异常服务端游标让一次显式显示无限翻页；达到上限仍 truncated 必须按未完成处理。 */
+/** 防止异常服务端游标让一次读取无限翻页；达到上限仍 truncated 必须按未完成处理。 */
 export const MAX_MODEL_RECORD_PAGES = 10_000;
 
 class ModelRecordsPaginationIncompleteError extends Error {
@@ -56,52 +50,61 @@ class ModelRecordsPaginationIncompleteError extends Error {
   }
 }
 
-export type EnsureAndCollectOptions = GenModelV1RequestOptions & {
-  /** 只给「人明确要求重生成」用（spec §4.5）：显示补齐**不要**传，否则每显示一次都提交新的重生成工作 */
-  force?: boolean;
-  /** 同一次 ensure 解出多根时，同时在飞的 `records` **批**数（默认 6）；每批最多 `recordsBatchSize` 根 */
-  recordsConcurrency?: number;
-  /**
-   * 一次 `records` 最多打包几根（默认 = 服务端上限 `MAX_MODEL_RECORDS_ROOTS`）。`1` = 逐根旧口径。
-   * 实际批大小 = `min(recordsBatchSize, ceil(根数 / recordsConcurrency))`，小根集也摊满并发路、进度也更细。
-   */
-  recordsBatchSize?: number;
-  /** 容器展开的最大层数（默认 3：SITE → ZONE → 生成根一般够了） */
-  maxContainerDepth?: number;
-  /** 一次调用最多 ensure 多少个根（默认 128）；超出的记进 `truncatedRoots` */
-  maxRoots?: number;
-  /**
-   * 一次调用最多为多少个生成根取 `records`（默认不限）。摄入形态的 SITE 一次 ensure 就能解出几百个根，每根一次 `records`
-   * 要 0.5–10 s——整库入口拿它做「安全概览」预算；超出的根记进 `truncatedRoots`，不取。
-   */
-  maxRecordsRoots?: number;
+/** 显示（按祖先查）的可选项。 */
+export type CollectRecordsOptions = GenModelV1RequestOptions & {
   /** `model/records` 的页大小（服务端上限 5000） */
   pageSize?: number;
-  /** 每处理完一个根回调一次（进度） */
+  /** 多个祖先同时在飞的读取数（默认 6） */
+  concurrency?: number;
+  /** 每收完一个祖先 / 生成根回调一次（进度） */
   onRootDone?: (progress: { done: number; total: number; root: string }) => void;
-  /** records 发现精确 `not_generated:` 时，在重试 ensure 之前清掉该根的调用方缓存。 */
-  onNotGenerated?: (root: string) => void;
   /** 原始请求错误被折叠进结果前的观察器；用于让服务生命周期看见 network 断线。 */
   onRequestFailure?: (error: unknown) => void;
 };
 
-export type EnsureAndCollectResult = {
-  /** 请求的 refno（`a_b`） */
+/** 右键「重新生成模型」的可选项。 */
+export type GenerateThenCollectOptions = CollectRecordsOptions & {
+  /** 缺省 `true`：范围内已有的产物重算替换。只有右键会走到这里，所以没有「不带 force」的显示补齐语义。 */
+  force?: boolean;
+  /** 容器展开的最大层数（默认 3：SITE → ZONE → 生成根一般够了） */
+  maxContainerDepth?: number;
+  /** 一次右键最多 generate 多少个根（默认 128）；超出的记进 `truncatedRoots` */
+  maxRoots?: number;
+};
+
+/**
+ * 显示与重新生成共用的结果形状。
+ * - 显示：`generationRoots` 是记录里出现过的 `owner`（生成根）；`pending` 只有 409 `conflict`（该库正被整库任务占用）；
+ *   `empty` 是一条记录都没有的祖先；`truncatedRoots` / `statuses` 恒空。
+ * - 重新生成：`generationRoots` 是 generate 回执里的根 ∪ 记录里的 owner；`pending` 是回了 `generation_pending` / `timeout` 的根；
+ *   `empty` 是 `NoRenderableGeometry` / `not_found` / `precondition` 的根；`truncatedRoots` 是容器展开上限外没处理的；`statuses` 是各根的 generate 状态。
+ */
+export type CollectRecordsResult = {
+  /** 请求的节点（`a_b`） */
   refno: string;
-  /** 实际走过 ensure 的生成根（`a_b`），含容器展开出来的 */
   generationRoots: string[];
-  /** 全部记录（按根去重后拼接） */
+  /** 全部记录（按祖先去重后拼接） */
   items: GeomInstQuery[];
-  /** ensure 回了 `generation_pending` / `timeout` 的根（`a_b`）——几何暂时没有，稍后再问 */
   pending: string[];
-  /** 没有几何或不存在的根（`a_b`）：`NoRenderableGeometry` / `not_found` / `precondition` */
   empty: string[];
-  /** 因 `maxRoots` / `maxContainerDepth` 没处理到的容器或根（`a_b`） */
   truncatedRoots: string[];
   /** 其它错误（`a_b` → 错误信息），调用方决定要不要报 */
   errors: Record<string, string>;
-  /** 各根的 ensure 状态（`a_b` → status） */
   statuses: Record<string, string>;
+};
+
+/** 多个祖先一起查的结果（整库显示逐 SITE 用）。 */
+export type CollectAncestorsResult = {
+  /** 去重后的请求节点（`a_b`，保持传入顺序） */
+  ancestors: string[];
+  /** 记录里出现过的生成根（`owner`，`a_b`，去重保序） */
+  generationRoots: string[];
+  items: GeomInstQuery[];
+  /** 409 `conflict`（该库正被整库任务占用）的祖先——稍后再显示，不生成 */
+  pending: string[];
+  /** 一条记录都没有的祖先 */
+  empty: string[];
+  errors: Record<string, string>;
 };
 
 function pushUnique(list: string[], value: string): void {
@@ -117,7 +120,7 @@ function reportRequestFailure(observer: ((error: unknown) => void) | undefined, 
 }
 
 /**
- * 取消 / 服务换代不是「这根出了问题」：不进 `errors`、不当 pending、不退回逐根，整次读取一起停、原样向上抛。
+ * 取消 / 服务换代不是「这根出了问题」：不进 `errors`、不当 pending，整次读取一起停、原样向上抛。
  * `signal.aborted` 也算——假 api 或别的实现未必把取消包成 `cancelled`。
  */
 function isReadAborted(error: unknown, signal?: AbortSignal): boolean {
@@ -146,222 +149,139 @@ export async function mapWithConcurrency<T, R>(items: T[], concurrency: number, 
   return out;
 }
 
-function rootsOf(ensured: ModelEnsureResponse, fallback: string): string[] {
-  const roots = Array.isArray(ensured.generation_roots) && ensured.generation_roots.length > 0
-    ? ensured.generation_roots
-    : ensured.generation_root
-      ? [ensured.generation_root]
+/** generate 回执里的根（`a_b`）：读透形态给 `generation_roots`，否则 `generation_root`，都没有就是请求的节点自己。 */
+function rootsOf(generated: ModelGenerateResponse, fallback: string): string[] {
+  const roots = Array.isArray(generated.generation_roots) && generated.generation_roots.length > 0
+    ? generated.generation_roots
+    : generated.generation_root
+      ? [generated.generation_root]
       : [fallback];
   return roots.map((root) => fromV1Refno(String(root)));
 }
 
-async function collectRootRecords(
+/** 以一个节点为祖先分页读完 `model/records`。 */
+async function collectAncestorRecords(
   api: ModelRecordsApi,
-  root: string,
+  ancestor: string,
   pageSize: number,
   requestOptions: GenModelV1RequestOptions,
 ): Promise<GeomInstQuery[]> {
   const out: GeomInstQuery[] = [];
   let cursor: number | undefined;
   for (let page = 0; page < MAX_MODEL_RECORD_PAGES; page++) {
-    const resp: ModelRecordsResponse = await api.records({ generationRoot: root, limit: pageSize, cursor }, requestOptions);
+    throwIfAborted(requestOptions.signal);
+    const resp: ModelRecordsResponse = await api.records({ generationRoot: ancestor, limit: pageSize, cursor }, requestOptions);
     out.push(...resp.items);
     if (!resp.truncated) return out;
     if (resp.next_cursor === null || resp.next_cursor === undefined) {
-      throw new ModelRecordsPaginationIncompleteError(root, 'truncated=true 但缺少 next_cursor');
+      throw new ModelRecordsPaginationIncompleteError(ancestor, 'truncated=true 但缺少 next_cursor');
     }
     cursor = resp.next_cursor;
   }
   throw new ModelRecordsPaginationIncompleteError(
-    root,
+    ancestor,
     `达到 ${MAX_MODEL_RECORD_PAGES} 页护栏后仍有下一页（next_cursor=${cursor ?? 'unknown'}）`,
   );
 }
 
-/** `a_b` 的 Ref0（`a`）：一个 Ref0 只属一个 dbnum，同 Ref0 的根一定同库（spec §4.5.2 一批须同库）。 */
-function ref0Of(root: string): string {
-  const at = root.indexOf('_');
-  return at > 0 ? root.slice(0, at) : root;
+/**
+ * 老服务端（< v0.1.38 的内存投影路由）对没生成过的范围仍回 409 `conflict` + `not_generated:`（gen-model ADR-086 之前的口径）。
+ * ADR 0069：客户端当**查空**处理——同一句「右键可生成」的提示，不记 ERROR，更不去生成。
+ */
+export function isLegacyNotGenerated(error: unknown): boolean {
+  return isGenModelV1ApiError(error) && error.status === 409 && error.code === 'conflict' && error.message.startsWith('not_generated:');
 }
 
 /**
- * 把一次 ensure 解出的根切成 `records` 批（导出给单测）：
- * - 同一 Ref0 才同批（同库约束）；批内、批间都保持首次出现的顺序；
- * - 批大小 = `min(batchSize, ceil(根数 / concurrency))`，至少 1——5 根 / 6 路仍是 5 个单根请求，335 根 / 6 路是 6 批各 ≤56，
- *   上千根才顶到 64 一批。
+ * 显示：对一批节点各自以祖先身份查 `model/records`（一个祖先一次分页读取，`concurrency` 路并发）。
+ * 没生成过是空；409 `conflict`（库正被整库任务占用）记 `pending`；取消 / 服务换代整次向上抛。
  */
-export function planRecordsBatches(roots: string[], batchSize: number, concurrency: number): string[][] {
-  if (roots.length === 0) return [];
-  const size = Math.max(1, Math.min(Math.floor(batchSize) || 1, Math.ceil(roots.length / Math.max(1, concurrency))));
-  const groups = new Map<string, string[]>();
-  for (const root of roots) {
-    const key = ref0Of(root);
-    const group = groups.get(key);
-    if (group) group.push(root);
-    else groups.set(key, [root]);
-  }
-  const batches: string[][] = [];
-  for (const group of groups.values()) {
-    for (let at = 0; at < group.length; at += size) batches.push(group.slice(at, at + size));
-  }
-  return batches;
-}
-
-type BatchRecordsSupport = 'unknown' | 'yes' | 'no';
-
-/** 按 api 对象记「服务端认不认识 `generation_roots`」：生产只有一个 `defaultModelRecordsApi`，测试各造各的假 api 互不影响。 */
-let batchRecordsSupportByApi = new WeakMap<ModelRecordsApi, { generation: number; support: BatchRecordsSupport }>();
-
-/** 诊断 / 单测用：这个 api 的服务端对批量 `records` 的已知态。 */
-export function batchRecordsSupport(api: ModelRecordsApi = defaultModelRecordsApi): BatchRecordsSupport {
-  const remembered = batchRecordsSupportByApi.get(api);
-  return remembered?.generation === getGenModelV1ServiceGeneration() ? remembered.support : 'unknown';
-}
-
-export function resetBatchRecordsSupport(): void {
-  batchRecordsSupportByApi = new WeakMap();
-}
-
-/**
- * 旧服务端（如 0.1.21 出厂包）不认识 `generation_roots`：axum 在 JSON 反序列化就拒掉——422 纯文本
- * 「Failed to deserialize the JSON body …: missing field `generation_root`」（没有信封，客户端按状态兜成 `precondition`）；
- * 别的实现也可能是 400「unknown field」。只有这种「字段都没认出来」才算不支持；新服务端对越界 / 跨库 / 重复根回的
- * 400 信封是这批的问题，不是能力问题（照样退回逐根，但不记「不支持」）。
- */
-function isBatchRecordsUnsupportedError(error: unknown): boolean {
-  if (!isGenModelV1ApiError(error)) return false;
-  if (error.status !== 422 && error.status !== 400) return false;
-  return /generation_roots?/.test(error.message) && /missing field|unknown field|deserialize/i.test(error.message);
-}
-
-/** 一批根一次分页取完，按 `owner`（= 生成根）归到各根名下；`owner` 不在批里的记录不丢，进 `extra`。 */
-async function collectBatchRecords(
-  api: ModelRecordsApi,
-  roots: string[],
-  pageSize: number,
-  requestOptions: GenModelV1RequestOptions,
-): Promise<{ byRoot: Map<string, GeomInstQuery[]>; extra: GeomInstQuery[] }> {
-  const byRoot = new Map<string, GeomInstQuery[]>(roots.map((root) => [root, [] as GeomInstQuery[]]));
-  const extra: GeomInstQuery[] = [];
-  let cursor: number | undefined;
-  for (let page = 0; page < MAX_MODEL_RECORD_PAGES; page++) {
-    const resp: ModelRecordsResponse = await api.records({ generationRoots: roots, limit: pageSize, cursor }, requestOptions);
-    for (const item of resp.items) {
-      const bucket = byRoot.get(fromV1Refno(String(item.owner ?? '')));
-      if (bucket) bucket.push(item);
-      else extra.push(item);
-    }
-    if (!resp.truncated) return { byRoot, extra };
-    if (resp.next_cursor === null || resp.next_cursor === undefined) {
-      throw new ModelRecordsPaginationIncompleteError(
-        `${roots.length} roots`,
-        'truncated=true 但缺少 next_cursor',
-      );
-    }
-    cursor = resp.next_cursor;
-  }
-  throw new ModelRecordsPaginationIncompleteError(
-    `${roots.length} roots`,
-    `达到 ${MAX_MODEL_RECORD_PAGES} 页护栏后仍有下一页（next_cursor=${cursor ?? 'unknown'}）`,
-  );
-}
-
-type RootRecordsOutcome = { root: string; items: GeomInstQuery[]; error: unknown };
-
-export function isNotGeneratedConflict(error: unknown): boolean {
-  return (
-    isGenModelV1ApiError(error)
-    && error.status === 409
-    && error.code === 'conflict'
-    && error.message.startsWith('not_generated:')
-  );
-}
-
-async function collectRootRecordsWithRetry(
-  api: ModelRecordsApi,
-  root: string,
-  pageSize: number,
-  requestOptions: GenModelV1RequestOptions,
-  onNotGenerated?: (root: string) => void,
-): Promise<GeomInstQuery[]> {
-  try {
-    return await collectRootRecords(api, root, pageSize, requestOptions);
-  } catch (error) {
-    if (!isNotGeneratedConflict(error)) throw error;
-    onNotGenerated?.(root);
-    await api.ensure({ refno: root }, requestOptions);
-    // Exactly one retry. A second conflict escapes to the normal pending classification.
-    return collectRootRecords(api, root, pageSize, requestOptions);
-  }
-}
-
-/**
- * 取一批根的记录：多于一根且服务端没被认定「不支持」就先试批量；整批失败退回逐根（一根一根串行——这一路就是一条并发道），
- * 每根一出结果就 `report` 一次（进度靠它）。逐根的分型（409 → pending、其它 → errors）由调用方按 outcome.error 定，与旧口径相同。
- */
-async function collectBatchOrEachRoot(
-  api: ModelRecordsApi,
-  batch: string[],
-  pageSize: number,
-  requestOptions: GenModelV1RequestOptions,
-  report: (outcome: RootRecordsOutcome) => void,
-  onNotGenerated?: (root: string) => void,
-  onRequestFailure?: (error: unknown) => void,
-): Promise<void> {
-  const supportGeneration = getGenModelV1ServiceGeneration();
-  if (batch.length > 1 && batchRecordsSupport(api) !== 'no') {
-    try {
-      const { byRoot, extra } = await collectBatchRecords(api, batch, pageSize, requestOptions);
-      if (supportGeneration === getGenModelV1ServiceGeneration()) {
-        batchRecordsSupportByApi.set(api, { generation: supportGeneration, support: 'yes' });
-      }
-      batch.forEach((root, index) => {
-        const items = byRoot.get(root) ?? [];
-        report({ root, items: index === 0 ? [...items, ...extra] : items, error: null });
-      });
-      return;
-    } catch (error) {
-      reportRequestFailure(onRequestFailure, error);
-      // 调用方取消 / 服务换代：不是这批的问题，不退回逐根（退了就是取消后还在逐根打请求）
-      if (isReadAborted(error, requestOptions.signal)) throw error;
-      if (isBatchRecordsUnsupportedError(error) && supportGeneration === getGenModelV1ServiceGeneration()) {
-        batchRecordsSupportByApi.set(api, { generation: supportGeneration, support: 'no' });
-      }
-      // 整批一起失败（409 有根未 ensure、5xx、网络、旧服务端）：退回逐根，一根的问题不拖垮同批其它根
-    }
-  }
-  for (const root of batch) {
-    throwIfAborted(requestOptions.signal);
-    try {
-      report({
-        root,
-        items: await collectRootRecordsWithRetry(api, root, pageSize, requestOptions, onNotGenerated),
-        error: null,
-      });
-    } catch (error) {
-      reportRequestFailure(onRequestFailure, error);
-      if (isReadAborted(error, requestOptions.signal)) throw error;
-      report({ root, items: [], error });
-    }
-  }
-}
-
-/**
- * 对一个节点做「显式显示」：ensure → records。容器按契约展开一层递归；一切上限都在 options 里。
- */
-export async function ensureAndCollectRecords(
-  refno: string,
-  options: EnsureAndCollectOptions = {},
+export async function collectRecordsForAncestors(
+  ancestors: string[],
+  options: CollectRecordsOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
-): Promise<EnsureAndCollectResult> {
+): Promise<CollectAncestorsResult> {
+  const { pageSize = 5000, concurrency = 6, onRootDone, onRequestFailure, ...requestOptions } = options;
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of ancestors) {
+    const key = fromV1Refno(String(raw ?? ''));
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(key);
+  }
+  const result: CollectAncestorsResult = { ancestors: unique, generationRoots: [], items: [], pending: [], empty: [], errors: {} };
+  if (unique.length === 0) return result;
+
+  let done = 0;
+  const outcomes = await mapWithConcurrency(unique, concurrency, async (ancestor) => {
+    throwIfAborted(requestOptions.signal);
+    let items: GeomInstQuery[] = [];
+    let error: unknown = null;
+    try {
+      items = await collectAncestorRecords(api, ancestor, pageSize, requestOptions);
+    } catch (caught) {
+      reportRequestFailure(onRequestFailure, caught);
+      if (isReadAborted(caught, requestOptions.signal)) throw caught;
+      error = caught;
+    }
+    done++;
+    onRootDone?.({ done, total: unique.length, root: ancestor });
+    return { ancestor, items, error };
+  });
+  for (const { ancestor, items, error } of outcomes) {
+    if (error) {
+      if (isLegacyNotGenerated(error)) {
+        pushUnique(result.empty, ancestor);
+      } else if (isGenModelV1ApiError(error) && error.code === 'conflict') {
+        pushUnique(result.pending, ancestor);
+      } else {
+        result.errors[ancestor] = error instanceof Error ? error.message : String(error);
+      }
+      continue;
+    }
+    if (items.length === 0) pushUnique(result.empty, ancestor);
+    result.items.push(...items);
+    for (const owner of ownersOfRecords(items)) pushUnique(result.generationRoots, owner);
+  }
+  return result;
+}
+
+/** 显示一个节点：以它为祖先查一次记录。结果形状与 `generateThenCollect` 相同，`truncatedRoots` / `statuses` 恒空。 */
+export async function collectRecordsByAncestor(
+  refno: string,
+  options: CollectRecordsOptions = {},
+  api: ModelRecordsApi = defaultModelRecordsApi,
+): Promise<CollectRecordsResult> {
+  const requested = fromV1Refno(refno);
+  const collected = await collectRecordsForAncestors([requested], options, api);
+  return {
+    refno: requested,
+    generationRoots: collected.generationRoots,
+    items: collected.items,
+    pending: collected.pending,
+    empty: collected.empty,
+    truncatedRoots: [],
+    errors: collected.errors,
+    statuses: {},
+  };
+}
+
+/**
+ * 右键「重新生成模型」：`model/generate(force)` → 容器按契约展开一层递归（上限在 options 里）→ 对请求的节点按祖先查一次记录。
+ * 全部根都回了 pending / 都没产物时不查记录（`items` 为空），由调用方按 `pending` 提示「服务端后台继续生成，完成后再点眼睛」。
+ */
+export async function generateThenCollect(
+  refno: string,
+  options: GenerateThenCollectOptions = {},
+  api: ModelRecordsApi = defaultModelRecordsApi,
+): Promise<CollectRecordsResult> {
   const {
-    force, maxContainerDepth = 3, maxRoots = 128, maxRecordsRoots = Number.POSITIVE_INFINITY, pageSize = 5000,
-    recordsConcurrency = 6, recordsBatchSize = MAX_MODEL_RECORDS_ROOTS,
-    onRootDone, onNotGenerated, onRequestFailure,
+    force = true, maxContainerDepth = 3, maxRoots = 128, pageSize, concurrency, onRootDone, onRequestFailure,
     ...requestOptions
   } = options;
   const start = fromV1Refno(refno);
-  const result: EnsureAndCollectResult = {
+  const result: CollectRecordsResult = {
     refno: start,
     generationRoots: [],
     items: [],
@@ -371,28 +291,29 @@ export async function ensureAndCollectRecords(
     errors: {},
     statuses: {},
   };
-  const seenRoots = new Set<string>();
-  const collected = new Set<string>();
-  let ensureCalls = 0;
+  const seen = new Set<string>();
+  let generateCalls = 0;
+  let generatedRoots = 0;
 
-  // 队列元素：待 ensure 的节点 + 它是第几层容器展开出来的
+  // 队列元素：待 generate 的节点 + 它是第几层容器展开出来的
   const queue: { refno: string; depth: number }[] = [{ refno: start, depth: 0 }];
   while (queue.length > 0) {
     const { refno: current, depth } = queue.shift()!;
-    if (seenRoots.has(current)) continue;
-    seenRoots.add(current);
-    if (ensureCalls >= maxRoots || collected.size >= maxRecordsRoots) {
+    if (seen.has(current)) continue;
+    seen.add(current);
+    if (generateCalls >= maxRoots) {
       pushUnique(result.truncatedRoots, current);
       continue;
     }
-    ensureCalls++;
+    throwIfAborted(requestOptions.signal);
+    generateCalls++;
 
-    let ensured: ModelEnsureResponse;
+    let generated: ModelGenerateResponse;
     try {
-      ensured = await api.ensure(force ? { refno: current, force: true } : { refno: current }, requestOptions);
+      generated = await api.generate(force ? { refno: current, force: true } : { refno: current }, requestOptions);
     } catch (error) {
       reportRequestFailure(onRequestFailure, error);
-      // 取消 / 换代不能折进 errors 当成「这根出错」——整次读取一起停
+      // 取消 / 换代不能折进 errors 当成「这根出错」——整次一起停
       if (!isGenModelV1ApiError(error) || isReadAborted(error, requestOptions.signal)) throw error;
       if (error.isContainer) {
         if (depth >= maxContainerDepth) {
@@ -414,6 +335,7 @@ export async function ensureAndCollectRecords(
       if (error.isPending) {
         pushUnique(result.pending, current);
         result.statuses[current] = error.code;
+        onRootDone?.({ done: result.pending.length + generatedRoots + result.empty.length, total: seen.size + queue.length, root: current });
         continue;
       }
       if (error.code === 'not_found' || error.code === 'precondition') {
@@ -425,121 +347,23 @@ export async function ensureAndCollectRecords(
       continue;
     }
 
-    result.statuses[current] = String(ensured.status ?? '');
-    if (ensured.status === 'NoRenderableGeometry' || ensured.model_available === false) {
+    result.statuses[current] = String(generated.status ?? '');
+    if (generated.status === 'NoRenderableGeometry' || generated.model_available === false) {
       pushUnique(result.empty, current);
       continue;
     }
-    const roots = rootsOf(ensured, current).filter((root) => {
-      if (collected.has(root)) return false;
-      if (collected.size >= maxRecordsRoots) {
-        pushUnique(result.truncatedRoots, root);
-        return false;
-      }
-      collected.add(root);
-      pushUnique(result.generationRoots, root);
-      return true;
-    });
-    // 一次 ensure 解出的多根切批并发取 records（`recordsConcurrency` 路，每路一批）；结果按根的顺序拼回，去重与缓存都不受并发影响
-    let done = 0;
-    const outcomes = new Map<string, RootRecordsOutcome>();
-    const batches = planRecordsBatches(roots, recordsBatchSize, recordsConcurrency);
-    await mapWithConcurrency(batches, recordsConcurrency, (batch) =>
-      collectBatchOrEachRoot(api, batch, pageSize, requestOptions, (outcome) => {
-        outcomes.set(outcome.root, outcome);
-        done++;
-        onRootDone?.({ done, total: roots.length + queue.length, root: outcome.root });
-      }, onNotGenerated, onRequestFailure),
-    );
-    for (const root of roots) {
-      const { items, error } = outcomes.get(root) ?? { items: [], error: null };
-      if (error) {
-        if (isGenModelV1ApiError(error) && (error.code === 'conflict' || error.isPending)) {
-          // 409 not_generated：这根还没进投影（并发被别人的 ensure 抢先又没收口）；当 pending 处理
-          pushUnique(result.pending, root);
-        } else {
-          result.errors[root] = error instanceof Error ? error.message : String(error);
-        }
-        continue;
-      }
-      if (items.length === 0) pushUnique(result.empty, root);
-      result.items.push(...items);
-    }
+    for (const root of rootsOf(generated, current)) pushUnique(result.generationRoots, root);
+    generatedRoots++;
+    onRootDone?.({ done: result.pending.length + generatedRoots + result.empty.length, total: seen.size + queue.length, root: current });
   }
-  return result;
-}
 
-export type CollectRootsOptions = GenModelV1RequestOptions & {
-  /** 同时在飞的 `records` 批数（默认 6） */
-  recordsConcurrency?: number;
-  /** 一批最多几根（默认 = 服务端上限 64）；`1` = 逐根 */
-  recordsBatchSize?: number;
-  /** `model/records` 的页大小（服务端上限 5000） */
-  pageSize?: number;
-  onRootDone?: (progress: { done: number; total: number; root: string }) => void;
-  /** records 发现精确 `not_generated:` 时，在重试 ensure 之前清掉该根的调用方缓存。 */
-  onNotGenerated?: (root: string) => void;
-  /** 原始请求错误被折叠进结果前的观察器；用于让服务生命周期看见 network 断线。 */
-  onRequestFailure?: (error: unknown) => void;
-};
-
-export type CollectRootsResult = {
-  /** 实际取过记录的生成根（`a_b`，去重、保持传入顺序） */
-  generationRoots: string[];
-  items: GeomInstQuery[];
-  /** 409（这根服务端手里还没有）——几何暂时没有，稍后再问 */
-  pending: string[];
-  /** 一条记录都没有的根 */
-  empty: string[];
-  errors: Record<string, string>;
-};
-
-/**
- * 根清单**已知**时只取记录：整库入口（spec §4.5.3）先让服务端把该库生成完、再 `…/model/roots` 拿清单，
- * 到这一步已经没有 ensure 可打了。切批 / 退回逐根 / 分型与 `ensureAndCollectRecords` 共用同一套代码，
- * 所以两条入口的结果口径一字不差。
- */
-export async function collectRecordsForRoots(
-  roots: string[],
-  options: CollectRootsOptions = {},
-  api: ModelRecordsApi = defaultModelRecordsApi,
-): Promise<CollectRootsResult> {
-  const {
-    pageSize = 5000, recordsConcurrency = 6, recordsBatchSize = MAX_MODEL_RECORDS_ROOTS,
-    onRootDone, onNotGenerated, onRequestFailure, ...requestOptions
-  } = options;
-  const unique: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of roots) {
-    const root = fromV1Refno(String(raw ?? ''));
-    if (!root || seen.has(root)) continue;
-    seen.add(root);
-    unique.push(root);
-  }
-  const result: CollectRootsResult = { generationRoots: unique, items: [], pending: [], empty: [], errors: {} };
-  if (unique.length === 0) return result;
-
-  let done = 0;
-  const outcomes = new Map<string, RootRecordsOutcome>();
-  const batches = planRecordsBatches(unique, recordsBatchSize, recordsConcurrency);
-  await mapWithConcurrency(batches, recordsConcurrency, (batch) =>
-    collectBatchOrEachRoot(api, batch, pageSize, requestOptions, (outcome) => {
-      outcomes.set(outcome.root, outcome);
-      done++;
-      onRootDone?.({ done, total: unique.length, root: outcome.root });
-    }, onNotGenerated, onRequestFailure),
-  );
-  for (const root of unique) {
-    const { items, error } = outcomes.get(root) ?? { items: [], error: null };
-    if (error) {
-      if (isGenModelV1ApiError(error) && (error.code === 'conflict' || error.isPending)) {
-        pushUnique(result.pending, root);
-      } else result.errors[root] = error instanceof Error ? error.message : String(error);
-      continue;
-    }
-    if (items.length === 0) pushUnique(result.empty, root);
-    result.items.push(...items);
-  }
+  // 生成完成之后，再调用显示接口（ADR 0069 / plant-ui ADR-0030 D2）：一根都没生成出来就不查，调用方按 pending 提示
+  if (result.generationRoots.length === 0) return result;
+  const collected = await collectRecordsForAncestors([start], { pageSize, concurrency, onRequestFailure, ...requestOptions }, api);
+  result.items = collected.items;
+  for (const owner of collected.generationRoots) pushUnique(result.generationRoots, owner);
+  for (const ancestor of collected.pending) pushUnique(result.pending, ancestor);
+  Object.assign(result.errors, collected.errors);
   return result;
 }
 
@@ -549,6 +373,19 @@ export function refnosOfRecords(items: GeomInstQuery[]): string[] {
   const out: string[] = [];
   for (const item of items) {
     const key = fromV1Refno(item.refno);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+/** 记录里全部生成根（`owner`，`a_b`，去重、保持首次出现顺序）。 */
+export function ownersOfRecords(items: GeomInstQuery[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const key = fromV1Refno(String(item.owner ?? ''));
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(key);

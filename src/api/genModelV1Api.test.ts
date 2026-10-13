@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   fromV1Refno,
   GenModelV1ApiError,
-  genModelV1DbnumModelEnsure,
+  genModelV1DbnumModelGenerate,
   genModelV1DbnumModelRoots,
   genModelV1Fetch,
   genModelV1MeshUrl,
-  genModelV1ModelEnsure,
+  genModelV1ModelGenerate,
   genModelV1ModelRecords,
   genModelV1SpatialNearby,
   genModelV1SpatialCenterline,
@@ -91,12 +91,12 @@ describe('genModelV1Fetch 基座', () => {
     expect(init?.method).toBe('GET');
   });
 
-  it('POST 把身份并进 JSON body；ensure 默认不带 force', async () => {
+  it('POST 把身份并进 JSON body；generate 默认不带 force', async () => {
     const fetchImpl = fetchMockReturning(jsonResponse(200, { status: 'AlreadyAvailable', generation_root: '24381/145018' }));
-    const resp = await genModelV1ModelEnsure({ refno: '24381_145018' }, { baseUrl: BASE, fetchImpl, identity: { project: 'P' } });
+    const resp = await genModelV1ModelGenerate({ refno: '24381_145018' }, { baseUrl: BASE, fetchImpl, identity: { project: 'P' } });
     expect(resp.status).toBe('AlreadyAvailable');
     const [url, init] = fetchImpl.mock.calls[0]!;
-    expect(String(url)).toBe(`${BASE}/api/v1/model/ensure`);
+    expect(String(url)).toBe(`${BASE}/api/v1/model/generate`);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ project: 'P', refno: '24381/145018' });
   });
@@ -135,7 +135,7 @@ describe('genModelV1Fetch 基座', () => {
       task_id: 'dbnum-model-ensure-7997-1', dbnum: 7997, expected_roots: 2720, state: 'queued',
       model_source: 'memory', model_source_reason: 'read-through', durable: false,
     }));
-    const receipt = await genModelV1DbnumModelEnsure(7997, { baseUrl: BASE, fetchImpl: ensure, identity: { project: 'P' } });
+    const receipt = await genModelV1DbnumModelGenerate(7997, { baseUrl: BASE, fetchImpl: ensure, identity: { project: 'P' } });
     expect(receipt.expected_roots).toBe(2720);
     expect(receipt.durable).toBe(false);
     expect(String(ensure.mock.calls[0]![0])).toBe(`${BASE}/api/v1/dbnums/7997/model/ensure`);
@@ -227,7 +227,7 @@ describe('genModelV1Fetch 基座', () => {
       { code: 'generation_pending', generation_root: '24381/145018' },
       { 'Retry-After': '5' },
     ));
-    const error = await genModelV1ModelEnsure({ refno: '24381/145018' }, { baseUrl: BASE, fetchImpl })
+    const error = await genModelV1ModelGenerate({ refno: '24381/145018' }, { baseUrl: BASE, fetchImpl })
       .then(() => null, (e: unknown) => e as GenModelV1ApiError);
     expect(error?.code).toBe('generation_pending');
     expect(error?.status).toBe(202);

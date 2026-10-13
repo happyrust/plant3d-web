@@ -233,17 +233,10 @@ describe('createGenModelV1TreeSource', () => {
     expect(maxInFlight).toBeLessThanOrEqual(SUBTREE_CONCURRENCY);
   });
 
-  it('visibleInsts = ensure → records → 构件 refno 去重；容器 422 展开一层逐个 ensure', async () => {
-    const ensure = vi.fn(async ({ refno: raw }: { refno: string }) => {
-      const refno = toV1Refno(raw);
-      if (refno === '9304/2') {
-        throw new GenModelV1ApiError({ code: 'container', status: 422, path: '/api/v1/model/ensure', message: 'SITE' });
-      }
-      if (refno === '17496/8517') return { status: 'NoRenderableGeometry', model_available: false, generation_root: refno };
-      return { status: 'Generated', generation_root: refno, generation_roots: [refno] };
-    });
+  it('visibleInsts = 按祖先查 records → 构件 refno 去重，不 generate', async () => {
+    const generate = vi.fn();
     const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => ({
-      source: 'model-memory',
+      source: 'model-database',
       items: [
         { refno: '17496_9001', old_refno: null, owner: generationRoot, world_aabb: null, world_trans: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, insts: [], has_neg: false, generic: 'ELBO', pts: null, date: null },
         { refno: '17496/9001', old_refno: null, owner: generationRoot, world_aabb: null, world_trans: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, insts: [], has_neg: false, generic: 'TUBI', pts: null, date: null },
@@ -252,57 +245,38 @@ describe('createGenModelV1TreeSource', () => {
       total: 3, truncated: false, next_cursor: null,
     }));
     const api = fakeApi();
-    const recordsApi: ModelRecordsApi = { ensure: ensure as never, records: records as never, children: api.children };
+    const recordsApi: ModelRecordsApi = { generate: generate as never, records: records as never, children: api.children };
     const tree = createGenModelV1TreeSource({ api, recordsApi });
 
     const resp = await tree.visibleInsts('9304_2');
     expect(resp.success).toBe(true);
     expect(resp.refnos).toEqual(['17496_9001', '17496_9002']);
-    // SITE → container → 展开 → ZONE_A1 生成、ZONE_A2 无几何
-    expect(ensure).toHaveBeenCalledTimes(3);
+    expect(generate).not.toHaveBeenCalled();
     expect(records).toHaveBeenCalledTimes(1);
-    expect(records).toHaveBeenCalledWith({ generationRoot: '17496_8518', limit: 5000, cursor: undefined }, expect.anything());
+    expect(records).toHaveBeenCalledWith({ generationRoot: '9304_2', limit: 5000, cursor: undefined }, expect.anything());
     expect(resp.debug?.source).toContain('roots=1');
-    expect(resp.debug?.source).toContain('empty=1');
     expect(resp.incomplete).toBeNull();
 
     expect((await tree.visibleInsts(ROOT_ID)).success).toBe(false);
   });
 
-  it('visibleInsts 没收齐（有根 pending / 出错 / 预算外）时结构化地给 incomplete，已取得的 refnos 照回', async () => {
-    const ensure = vi.fn(async ({ refno: raw }: { refno: string }) => {
-      const refno = toV1Refno(raw);
-      if (refno === '9304/2') throw new GenModelV1ApiError({ code: 'container', status: 422, path: '/api/v1/model/ensure', message: 'SITE' });
-      if (refno === '17496/8517') throw new GenModelV1ApiError({ code: 'generation_pending', status: 202, path: '/api/v1/model/ensure', message: 'pending' });
-      return { status: 'Generated', generation_root: refno, generation_roots: [refno] };
+  it('visibleInsts 碰上 409 conflict 时把范围放进 incomplete.pending，不 generate', async () => {
+    const generate = vi.fn();
+    const records = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'conflict', status: 409, path: '/api/v1/model/records', message: 'dbnum task running' });
     });
-    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => {
-      if (toV1Refno(generationRoot) === '17496/8518') {
-        return {
-          source: 'model-memory',
-          items: [{ refno: '17496_9001', old_refno: null, owner: generationRoot, world_aabb: null, world_trans: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, insts: [], has_neg: false, generic: 'ELBO', pts: null, date: null }],
-          total: 1, truncated: false, next_cursor: null,
-        };
-      }
-      throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '/api/v1/model/records', message: 'boom' });
-    });
-    const api = fakeApi({
-      children: vi.fn(async (refno: string) => {
-        const parent = toV1Refno(refno);
-        if (parent === '9304/2') return { source: 'direct', parent, nodes: [ZONE_A1, ZONE_A2, { ...BRAN, refno: '17496_8519', owner: '9304_2' }] };
-        return { source: 'direct', parent, nodes: [] };
-      }),
-    });
-    const recordsApi: ModelRecordsApi = { ensure: ensure as never, records: records as never, children: api.children };
+    const api = fakeApi();
+    const recordsApi: ModelRecordsApi = { generate: generate as never, records: records as never, children: api.children };
     const tree = createGenModelV1TreeSource({ api, recordsApi });
 
     const resp = await tree.visibleInsts('9304_2');
     expect(resp.success).toBe(true);
-    expect(resp.refnos).toEqual(['17496_9001']);
+    expect(resp.refnos).toEqual([]);
+    expect(generate).not.toHaveBeenCalled();
     expect(resp.incomplete).toEqual({
-      pending: ['17496_8517'],
+      pending: ['9304_2'],
       truncated_roots: [],
-      errors: { '17496_8519': 'boom' },
+      errors: {},
     });
   });
 

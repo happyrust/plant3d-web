@@ -995,7 +995,7 @@ async function regenerateNode() {
   const id = normalizeRefnoKeyLike(contextNodeId.value);
   if (!isRefnoLike(id)) return;
   closeContextMenu();
-  if (!window.confirm(`确认重新生成 ${id} 及其模型子树？`)) return;
+  if (!window.confirm(`对 ${id} 重新生成模型？范围内已有的产物会被重算替换`)) return;
 
   setNodeLoading(id, true);
   try {

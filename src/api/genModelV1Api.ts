@@ -10,9 +10,10 @@
  * - 错误信封 `{ code, message, detail }`，HTTP 状态只是它的影子，分型看 `code`；
  * - refno 服务端**收** `a/b` 与 `a_b` 两种写法、**回** `a_b`（`RefU64` 序列化）或 `a/b`（`to_pdms_str`），
  *   本仓内部统一 `a_b`（`normalizeRefnoKey` 口径），这里提供双向转换；
- * - `model/ensure` 等待超过 120 s 回 `202 { code: "generation_pending" }`——它不是失败，但对调用方
- *   而言与 `504 timeout` 是同一条路（plan P3-c：不重试同一 refno，改为展开一层），所以统一走
+ * - `model/generate` 等待超过 120 s 回 `202 { code: "generation_pending" }`——它不是失败，但对调用方
+ *   而言与 `504 timeout` 是同一条路（ADR 0069：这根不显示，等服务端后台跑完再点眼睛），所以统一走
  *   `GenModelV1ApiError` 通道，`retryAfterMs` 从 `Retry-After` 取。
+ * - 显示只查 `model/records`（以节点为祖先，gen-model ADR-086），生成只有右键调 `model/generate`（ADR 0069）。
  */
 import { buildGenModelV1Url } from '@/utils/apiBase';
 
@@ -93,7 +94,7 @@ export class GenModelV1ApiError extends Error {
     return this.code === 'not_found';
   }
 
-  /** WORL / SITE / ZONE 不能做生成根——不是失败，客户端该展开一层对子节点逐个 ensure。 */
+  /** 摄入形态下 WORL / SITE / ZONE 不能做生成根——不是失败；只有右键的 generate 会展开一层对子节点逐个生成（ADR 0069）。 */
   get isContainer(): boolean {
     return this.code === 'container';
   }
@@ -160,7 +161,7 @@ export function isValidGeoHash(geoHash: string): boolean {
 export type GenModelV1RequestOptions = {
   identity?: GenModelV1Identity;
   signal?: AbortSignal;
-  /** 客户端超时；`model/ensure` 的服务端等待预算是 120 s，这里默认给 130 s，其余 30 s。 */
+  /** 客户端超时；`model/generate` 的服务端等待预算是 120 s，这里默认给 130 s，其余 30 s。 */
   timeoutMs?: number;
   /** 测试注入；缺省用全局 `fetch`。 */
   fetchImpl?: typeof fetch;
@@ -178,8 +179,8 @@ type InternalRequest = GenModelV1RequestOptions & {
 };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-/** spec §4.5：服务端同步等待预算 120 s，客户端不能设得比它更短。 */
-export const ENSURE_TIMEOUT_MS = 130_000;
+/** spec §4.5：`model/generate` 的服务端同步等待预算 120 s，客户端不能设得比它更短。 */
+export const GENERATE_TIMEOUT_MS = 130_000;
 
 function joinUrl(base: string, path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -458,10 +459,11 @@ export type ElementAttributesResponse = {
   diagnostics?: { undecoded?: string[]; [key: string]: unknown } | null;
 };
 
-export type ModelEnsureStatus = 'Generated' | 'AlreadyAvailable' | 'NoRenderableGeometry';
+export type ModelGenerateStatus = 'Generated' | 'AlreadyAvailable' | 'NoRenderableGeometry';
 
-export type ModelEnsureResponse = {
-  status: ModelEnsureStatus | (string & {});
+/** `POST /model/generate` 的回执（旧名 `/model/ensure`，gen-model ADR-086 D4；形状没变）。 */
+export type ModelGenerateResponse = {
+  status: ModelGenerateStatus | (string & {});
   /** `a/b` */
   generation_root?: string;
   /** 读透形态对容器节点解出的全部生成根（`a/b`）；空 / 缺省时用请求的 refno 自己 */
@@ -803,19 +805,52 @@ export function genModelV1ElementPlines(
   });
 }
 
-export type GenModelV1EnsureRequest = {
+export type GenModelV1GenerateRequest = {
   refno: string;
-  /** 只给「人明确要求重生成」用；显示补齐**不要**传（spec §4.5） */
+  /** 右键「重新生成模型」传 `true`：范围内已有的产物会被重算替换（spec §4.5）。 */
   force?: boolean;
 };
 
-export function genModelV1ModelEnsure(req: GenModelV1EnsureRequest, options?: GenModelV1RequestOptions): Promise<ModelEnsureResponse> {
-  return genModelV1Fetch<ModelEnsureResponse>('/api/v1/model/ensure', {
+/** 老服务端（< v0.1.38）没有 `/model/generate`：同一进程里只记一次「是旧版」，之后直接走旧名。 */
+let legacyGenerateRouteNoted = false;
+
+/** 诊断 / 单测用：忘掉「服务端是旧版」这件事。 */
+export function resetLegacyGenerateRoute(): void {
+  legacyGenerateRouteNoted = false;
+}
+
+/**
+ * 「`/model/generate` 这条路由不存在」：axum 对缺失路由回**裸** 404 / 405（没有 `{code,message}` 信封，message 是兜出来的 `HTTP 404 …`）。
+ * refno 不存在也是 404，但那是服务端信封里的 `not_found`，不算旧版。
+ */
+function isLegacyGenerateRouteMissing(error: unknown): boolean {
+  if (!isGenModelV1ApiError(error) || error.path !== '/api/v1/model/generate') return false;
+  if (error.status === 405 || error.status === 501) return true;
+  return error.status === 404 && /^HTTP 404\b/.test(error.message);
+}
+
+/**
+ * `POST /api/v1/model/generate`（gen-model ADR-086 D4；旧名 `/model/ensure`）：对节点范围内全部生成根生成最新模型，同步等待最多 120 s。
+ * **只给右键「重新生成模型」用**（ADR 0069）——显示路径只查 `model/records`，不调这个。
+ * 老服务端 404 `not_found` 时退回 `/model/ensure` 同一请求体，日志点名一次「模型服务是旧版」。
+ */
+export async function genModelV1ModelGenerate(req: GenModelV1GenerateRequest, options?: GenModelV1RequestOptions): Promise<ModelGenerateResponse> {
+  const request = {
     ...options,
-    timeoutMs: options?.timeoutMs ?? ENSURE_TIMEOUT_MS,
-    method: 'POST',
+    timeoutMs: options?.timeoutMs ?? GENERATE_TIMEOUT_MS,
+    method: 'POST' as const,
     body: req.force ? { refno: toV1Refno(req.refno), force: true } : { refno: toV1Refno(req.refno) },
-  });
+  };
+  if (!legacyGenerateRouteNoted) {
+    try {
+      return await genModelV1Fetch<ModelGenerateResponse>('/api/v1/model/generate', request);
+    } catch (error) {
+      if (!isLegacyGenerateRouteMissing(error)) throw error;
+      legacyGenerateRouteNoted = true;
+      console.warn('[gen-model-v1] 模型服务是旧版：没有 /api/v1/model/generate，本次及之后退回 /api/v1/model/ensure（请升级到 ≥ v0.1.38）');
+    }
+  }
+  return genModelV1Fetch<ModelGenerateResponse>('/api/v1/model/ensure', request);
 }
 
 /** spec §4.5.2：一次 `model/records` 最多打包几根（与服务端 `MAX_MODEL_RECORDS_ROOTS` 同值；多给 400）。 */
@@ -827,13 +862,18 @@ export const MAX_MODEL_RECORDS_ROOTS = 64;
  */
 export const RECORDS_TIMEOUT_MS = 300_000;
 
+/**
+ * `model/records` 的请求。字段名随服务端仍叫 `generation_root(s)`，但语义自 gen-model ADR-086 起是**祖先**：给任何一个节点
+ * （SITE / ZONE / BRAN，或 BRAN 下的一个 VALV），服务端回它子树里已生成的全部实例，`owner` 是各实例所属的生成根；没生成过是 200 空、不是 409。
+ * 显示路径只用它（ADR 0069）。
+ */
 export type GenModelV1RecordsRequest = {
-  /** 单根（`a_b` / `a/b`）；与 `generationRoots` 必须且只能给一个 */
+  /** 单个祖先（`a_b` / `a/b`）；与 `generationRoots` 必须且只能给一个 */
   generationRoot?: string;
   /**
-   * 多根批量（spec §4.5.2，2026-09-09）：`1..=MAX_MODEL_RECORDS_ROOTS` 根、同库、不重复。响应 `items` **平铺**（按 `owner`
-   * 分组即是按根）、`cursor` 跨根连续、`limit` 仍是总条数；回显 `generation_roots` 并多一格 `roots[]`（逐根总数）。
-   * 旧服务端（如 0.1.21）不认识这个字段：JSON 反序列化就被拒（422，非信封），调用方据此退回逐根（`modelRecords.ts`）。
+   * 多祖先批量（spec §4.5.2，2026-09-09）：`1..=MAX_MODEL_RECORDS_ROOTS` 个、同库、不重复。响应 `items` **平铺**（按 `owner`
+   * 分组即是按生成根）、`cursor` 跨根连续、`limit` 仍是总条数；回显 `generation_roots` 并多一格 `roots[]`（逐根总数）。
+   * 旧服务端（如 0.1.21）不认识这个字段：JSON 反序列化就被拒（422，非信封），调用方据此退回逐个（`modelRecords.ts`）。
    */
   generationRoots?: string[];
   /** 服务端夹在 1..=5000，默认 1000；批量时仍是这一页的总条数 */
@@ -884,8 +924,8 @@ export function genModelV1Dbnums(options?: GenModelV1RequestOptions): Promise<Db
 // 整库入口（读透 / kv-mem 形态，spec §4.5.3；收口计划 §17）
 // ---------------------------------------------------------------------------
 
-/** `POST /api/v1/dbnums/{dbnum}/model/ensure` 的 202 回执。`durable` 恒 false：投影活不过服务端进程重启。 */
-export type DbnumModelEnsureResponse = {
+/** `POST /api/v1/dbnums/{dbnum}/model/ensure`（整库生成）的 202 回执。`durable` 恒 false：投影活不过服务端进程重启。 */
+export type DbnumModelGenerateResponse = {
   task_id: string;
   dbnum: number;
   /** 服务端真枚举出来的根数，不是估计——进度条的分母 */
@@ -900,19 +940,19 @@ export type DbnumModelEnsureResponse = {
 };
 
 /**
- * 整库按需生成：服务端解出该库全部生成根并投进进程内投影，202 先回、后台跑（spec §4.5.3）。
+ * 整库生成：服务端解出该库全部生成根并投进进程内投影，202 先回、后台跑（spec §4.5.3；服务端路径仍叫 `model/ensure`，ADR-086 D4 只改了单节点那条）。
+ * **不在任何显示路径上**（ADR 0069）：整库显示只按 SITE 查 `model/records`；这一发留给显式的「重新生成模型（整库）」动作，本轮没有 UI 调它。
  *
- * 客户端超时按 `ENSURE_TIMEOUT_MS` 给：202 之前服务端要**同步**把根枚举完（大库几秒到几十秒），
- * 30 s 缺省会把它误判成网络错误。
- * 旧构建没有这条路由（404 `not_found`）、`database` 形态的库回 409——两者都由调用方退回逐 SITE ensure。
+ * 客户端超时按 `GENERATE_TIMEOUT_MS` 给：202 之前服务端要**同步**把根枚举完（大库几秒到几十秒），
+ * 30 s 缺省会把它误判成网络错误。旧构建没有这条路由（404 `not_found`）、`database` 形态的库回 409 `conflict`。
  */
-export function genModelV1DbnumModelEnsure(
+export function genModelV1DbnumModelGenerate(
   dbnum: number,
   options?: GenModelV1RequestOptions,
-): Promise<DbnumModelEnsureResponse> {
-  return genModelV1Fetch<DbnumModelEnsureResponse>(`/api/v1/dbnums/${dbnum}/model/ensure`, {
+): Promise<DbnumModelGenerateResponse> {
+  return genModelV1Fetch<DbnumModelGenerateResponse>(`/api/v1/dbnums/${dbnum}/model/ensure`, {
     ...options,
-    timeoutMs: options?.timeoutMs ?? ENSURE_TIMEOUT_MS,
+    timeoutMs: options?.timeoutMs ?? GENERATE_TIMEOUT_MS,
     method: 'POST',
     body: {},
   });
@@ -944,8 +984,8 @@ export type GenModelV1DbnumModelRootsOptions = GenModelV1RequestOptions & {
 };
 
 /**
- * 该库的全部生成根（只读，不生成）：拿它直接喂多根 `records`，不必靠逐 SITE ensure 的回执凑清单。
- * 每行的 `ready` 说这根的 `records` 现在读得到；`ready: true` 只回就绪的那些。
+ * 该库的全部生成根（只读，不生成）。每行的 `ready` 说这根的 `records` 现在读得到；`ready: true` 只回就绪的那些。
+ * 显示路径不再需要它（按 SITE 为祖先查 `records` 即可，ADR 0069）；留给整库生成任务的进度 / 对账。
  */
 export function genModelV1DbnumModelRoots(
   dbnum: number,
@@ -2153,7 +2193,7 @@ export type SpatialCenterlineResponse = {
 
 /**
  * `GET /api/v1/spatial/centerline`：一条 BRAN 的真实中心线线段表原样取回（成员到达→离开点 + 隐式管身）。
- * 只读库、不碰空间树（没有 503 `spatial_not_ready` 一档，库没 ensure 过也答得出）；不是 BRAN → 422 `precondition`、库里没有 → 404。
+ * 只读库、不碰空间树（没有 503 `spatial_not_ready` 一档，库没生成过模型也答得出）；不是 BRAN → 422 `precondition`、库里没有 → 404。
  */
 export function genModelV1SpatialCenterline(
   refno: string,

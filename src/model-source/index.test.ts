@@ -54,14 +54,14 @@ describe('gen-model-v1 数据源', () => {
     expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true });
   });
 
-  it('树的 visibleInsts 与几何加载共用记录源缓存（一次显示只 ensure 一次）', async () => {
+  it('树的 visibleInsts 与几何加载共用记录源缓存（一次显示只查一次）', async () => {
     const source = getModelSource();
-    const records = source.records as { ensureAndCollect: (refno: string) => Promise<unknown>; peek: (refno: string) => unknown };
-    const spy = vi.spyOn(records, 'ensureAndCollect').mockResolvedValue({
+    const records = source.records as { collectByAncestor: (refno: string) => Promise<unknown>; peek: (refno: string) => unknown };
+    const spy = vi.spyOn(records, 'collectByAncestor').mockResolvedValue({
       refno: '24381_145018', generationRoots: ['24381_145018'], items: [], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {},
     });
     await source.tree.visibleInsts('24381_145018');
-    expect(spy).toHaveBeenCalledWith('24381_145018', expect.anything());
+    expect(spy).toHaveBeenCalledWith('24381_145018', undefined);
     spy.mockRestore();
   });
 

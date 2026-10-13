@@ -107,7 +107,7 @@ export type TreeSource = {
   search(req: SearchRequest): Promise<SearchResponse>;
   /** 子树 refno 集；gen-model 源下改为「有几何的构件集 ∪ BFS children」（plan §3）。 */
   subtreeRefnos(refno: string, params?: SubtreeRefnosParams): Promise<SubtreeRefnosResponse>;
-  /** 有几何的叶子 refno；gen-model 源下 = `ensure(force=false)` 的 `generation_roots` + `records`（D5-A）。 */
+  /** 有几何的叶子 refno；gen-model 源下 = 以节点为祖先查 `model/records`，不生成（ADR 0069）。 */
   visibleInsts(refno: string): Promise<VisibleInstsResponse>;
 };
 
@@ -118,8 +118,6 @@ export type InstanceEntryQueryOptions = {
   includeOwnedTubings?: boolean;
   /** 调用方声明这批 refno 所属的最小交付单元根；两个适配器目前都不校验，透传保留（plan 2026-09-18 §7.2 第 2 组）。 */
   expectedRootRefno?: string;
-  /** 人明确要求重生成（gen-model 源下 = `ensure(force=true)`）；legacy 源忽略 */
-  forceRegenerate?: boolean;
 };
 
 /** 几何实例取数：`dbno` 是 DTX 缓存 / 可见性 / 选中的分桶键（D3），gen-model 源下由 `ref0s` 表解出。 */
