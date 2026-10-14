@@ -108,6 +108,7 @@ scripts/*
 !scripts/build-offline-release.mjs
 !scripts/test-offline-deploy.ps1
 !scripts/acceptance-api-test.mjs
+!scripts/test-document-upload-preview.mjs
 
 # Local live-gate evidence (contains generated macros, logs, and root snapshots).
 output/gen-model-v1-frozen-source-live/
