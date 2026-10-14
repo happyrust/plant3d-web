@@ -761,6 +761,14 @@ function ensurePanel(panelId: string) {
     : viewerPanel
       ? { referencePanel: viewerPanel, direction: 'right' }
       : undefined);
+  // onDidAddGroup 触发时新分组还没挂面板，识别不了 zone；右侧 zone 重新打开时
+  // 直接给 initialWidth，让 dockview 建组时就用关闭前记住的宽度。
+  const rightZoneExtras = () => ({
+    position: rightZonePosition(),
+    ...(!rightZoneAnchorPanel && sideZoneSizeCache.right
+      ? { initialWidth: sideZoneSizeCache.right }
+      : {}),
+  });
 
   if (normalizedPanelId === 'modelTree') {
     return addPanelSafely(dockApi, {
@@ -769,6 +777,7 @@ function ensurePanel(panelId: string) {
       title: '模型树',
       renderer: 'always',
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'left' } : undefined,
+      ...(sideZoneSizeCache.left ? { initialWidth: sideZoneSizeCache.left } : {}),
     });
   }
   if (normalizedPanelId === 'measurement') {
@@ -776,7 +785,7 @@ function ensurePanel(panelId: string) {
       id: 'measurement',
       component: 'MeasurementPanel',
       title: '测量',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'dimension') {
@@ -784,7 +793,7 @@ function ensurePanel(panelId: string) {
       id: 'dimension',
       component: 'DimensionPanel',
       title: '尺寸标注',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'annotation') {
@@ -792,7 +801,7 @@ function ensurePanel(panelId: string) {
       id: 'annotation',
       component: 'AnnotationPanel',
       title: '批注',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'manager') {
@@ -800,7 +809,7 @@ function ensurePanel(panelId: string) {
       id: 'manager',
       component: 'ManagerPanel',
       title: '管理',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'hydraulic') {
@@ -808,7 +817,7 @@ function ensurePanel(panelId: string) {
       id: 'hydraulic',
       component: 'HydraulicPanel',
       title: '水力计算',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'properties') {
@@ -816,7 +825,7 @@ function ensurePanel(panelId: string) {
       id: 'properties',
       component: 'PropertiesPanel',
       title: '属性',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'ptset') {
@@ -824,7 +833,7 @@ function ensurePanel(panelId: string) {
       id: 'ptset',
       component: 'PtsetPanel',
       title: '点集',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (panelId === 'annotationStyle') {
@@ -832,7 +841,7 @@ function ensurePanel(panelId: string) {
       id: 'annotationStyle',
       component: 'AnnotationStylePanel',
       title: '批注样式',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (panelId === 'materialConfig') {
@@ -840,7 +849,7 @@ function ensurePanel(panelId: string) {
       id: 'materialConfig',
       component: 'DtxMaterialConfigPanel',
       title: '颜色配置',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'review') {
@@ -848,7 +857,7 @@ function ensurePanel(panelId: string) {
       id: 'review',
       component: 'ReviewPanelDock',
       title: '校审',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'initiateReview') {
@@ -856,7 +865,7 @@ function ensurePanel(panelId: string) {
       id: 'initiateReview',
       component: 'InitiateReviewPanel',
       title: '发起编校审',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'reviewerTasks') {
@@ -864,7 +873,7 @@ function ensurePanel(panelId: string) {
       id: 'reviewerTasks',
       component: 'ReviewerTaskListPanel',
       title: '待审核任务',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'myTasks') {
@@ -872,7 +881,7 @@ function ensurePanel(panelId: string) {
       id: 'myTasks',
       component: 'DesignerTaskListPanel',
       title: '我的编校审',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'designerCommentHandling') {
@@ -880,7 +889,7 @@ function ensurePanel(panelId: string) {
       id: 'designerCommentHandling',
       component: 'DesignerCommentHandlingPanel',
       title: '批注处理',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
   if (normalizedPanelId === 'modelVersionCompare') {
@@ -918,7 +927,7 @@ function ensurePanel(panelId: string) {
       id: 'spatialCompute',
       component: 'SpatialComputePanel',
       title: '中心线净距',
-      position: rightZonePosition(),
+      ...rightZoneExtras(),
     });
   }
 }
