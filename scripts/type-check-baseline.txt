@@ -28,9 +28,6 @@ src/components/DockLayout.test.ts|TS2556|A spread argument must either have a tu
 src/components/DockLayout.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/DockLayout.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/DockLayout.vue|TS2322|Type 'string | null | undefined' is not assignable to type 'string | undefined'.
-src/components/DockLayout.vue|TS2554|Expected 1 arguments, but got 2.
-src/components/DockLayout.vue|TS7022|'measurementPanel' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
-src/components/DockLayout.vue|TS7023|'ensurePanel' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.
 src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefined'.
 src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefined'.
 src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefined'.
@@ -65,11 +62,7 @@ src/components/review/AnnotationWorkspace.test.ts|TS2769|No overload matches thi
 src/components/review/AnnotationWorkspace.vue|TS2305|Module '"@/types/auth"' has no exported member 'AnnotationType'.
 src/components/review/DesignerCommentHandlingPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/DesignerCommentHandlingPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/DesignerCommentHandlingPanel.vue|TS2322|Type '(record: Omit<ConfirmedRecord, "id" | "confirmedAt">) => Promise<string>' is not assignable to type '(payload: unknown) => Promise<string>'.
 src/components/review/DesignerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
-src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
-src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
 src/components/review/FileUploadSection.vue|TS2345|Argument of type '{ 'data-testid': string; class: string; type: "button"; onClick: (lineage?: { taskId?: string | null; formId?: string | null; }) => Promise<void>; }' is not assignable to parameter of type 'ButtonHTMLAttributes & ReservedProps & Record<string, unknown>'.
 src/components/review/InitiateReviewPanel.vue|TS2339|Property 'launchInput' does not exist on type '{ formId: string | null; userToken: string | null; userId: string | null; projectId: string | null; isEmbedMode: boolean; }'.
 src/components/review/InitiateReviewPanel.vue|TS2339|Property 'launchInput' does not exist on type '{ formId: string | null; userToken: string | null; userId: string | null; projectId: string | null; isEmbedMode: boolean; }'.
@@ -97,25 +90,13 @@ src/components/review/ReviewPanel.test.ts|TS2322|Type '{ id: string; annotationI
 src/components/review/ReviewPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/ReviewPanel.vue|TS2322|Type '"critical"' is not assignable to type 'SeverityBucket'.
-src/components/review/ReviewPanel.vue|TS2322|Type '"normal"' is not assignable to type 'SeverityBucket'.
-src/components/review/ReviewPanel.vue|TS2322|Type '"severe"' is not assignable to type 'SeverityBucket'.
-src/components/review/ReviewPanel.vue|TS2322|Type '"suggestion"' is not assignable to type 'SeverityBucket'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'ReviewSnapshotMeasurementPayload[]' is not assignable to type 'MeasurementRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'AnnotationRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'CloudAnnotationRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'ObbAnnotationRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'RectAnnotationRecord[]'.
-src/components/review/ReviewPanel.vue|TS2353|Object literal may only specify known properties, and 'critical' does not exist in type 'Record<SeverityBucket, number>'.
 src/components/review/ReviewPanel.vue|TS2353|Object literal may only specify known properties, and 'type' does not exist in type 'ToastPayload'.
-src/components/review/ReviewPanel.vue|TS2367|This comparison appears to be unintentional because the types 'AnnotationSeverity | undefined' and '"critical"' have no overlap.
-src/components/review/ReviewPanel.vue|TS2367|This comparison appears to be unintentional because the types 'AnnotationSeverity | undefined' and '"normal"' have no overlap.
-src/components/review/ReviewPanel.vue|TS2367|This comparison appears to be unintentional because the types 'AnnotationSeverity | undefined' and '"severe"' have no overlap.
-src/components/review/ReviewPanel.vue|TS2367|This comparison appears to be unintentional because the types 'AnnotationSeverity | undefined' and '"suggestion"' have no overlap.
 src/components/review/ReviewerTaskList.test.ts|TS2353|Object literal may only specify known properties, and 'task' does not exist in type '{ success: boolean; }'.
-src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewerTaskList.vue|TS2322|Type 'WorkflowNode | undefined' is not assignable to type 'WorkflowNode'.
 src/components/review/TaskReviewDetail.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/TaskReviewDetail.vue|TS2322|Type '{ node: string; action: string; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]' is not assignable to type 'WorkflowStep[] | { node: WorkflowNode; action: "reject" | "submit" | "return" | "approve"; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]'.
