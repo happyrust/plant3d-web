@@ -305,6 +305,45 @@ export function fullMatchesFromTree(tree: SpatialTreeResult): SpatialQueryFullMa
   return { refnos, byDbnum: {}, bySpecValue, total: tree.total_count, truncated: false, cap: null };
 }
 
+export function filterTreeLeaves(tree: SpatialTreeResult, keep: (refno: string) => boolean): SpatialTreeResult {
+  const refnos = new Set<string>();
+  const tubes = new Set<string>();
+  let leafCount = 0;
+  const filterLeaves = (leaves: SpatialTreeLeafNode[] | undefined) => (leaves ?? []).filter((leaf) => {
+    if (!keep(leaf.refno)) return false;
+    refnos.add(leaf.refno);
+    leafCount += 1;
+    return true;
+  });
+  const rooms = tree.rooms.map((room) => {
+    const specs = room.specs.map((spec) => {
+      const unitTypes = spec.unit_types.map((group) => {
+        const units = group.units.map((unit) => {
+          const elements = filterLeaves(unit.elements);
+          if (elements.length === 0) return null;
+          for (const tube of unit.tubes ?? []) tubes.add(tubeKey(unit.refno, tube));
+          leafCount += unit.tubes?.length ?? 0;
+          return { ...unit, elements, count: elements.length, min_distance: elements[0]!.distance };
+        }).filter((unit): unit is NonNullable<typeof unit> => unit !== null);
+        return { ...group, units, count: units.reduce((sum, unit) => sum + unit.count, 0),
+          ...(group.tube_count === undefined ? {} : { tube_count: units.reduce((sum, unit) => sum + (unit.tubes?.length ?? 0), 0) }) };
+      }).filter((group) => group.count > 0);
+      const byNoun = spec.others.by_noun.map((group) => {
+        const elements = filterLeaves(group.elements);
+        return { ...group, elements, count: elements.length,
+          min_distance: elements[0]?.distance ?? 0 };
+      }).filter((group) => group.count > 0);
+      const others = { ...spec.others, by_noun: byNoun, count: byNoun.reduce((sum, group) => sum + group.count, 0) };
+      return { ...spec, unit_types: unitTypes, others, count: others.count + unitTypes.reduce((sum, group) => sum + group.count, 0),
+        ...(spec.tube_count === undefined ? {} : { tube_count: unitTypes.reduce((sum, group) => sum + (group.tube_count ?? 0), 0) }) };
+    }).filter((spec) => spec.count > 0);
+    return { ...room, specs, count: specs.reduce((sum, spec) => sum + spec.count, 0),
+      ...(room.tube_count === undefined ? {} : { tube_count: specs.reduce((sum, spec) => sum + (spec.tube_count ?? 0), 0) }) };
+  }).filter((room) => room.count > 0);
+  return { ...tree, rooms, total_count: refnos.size, leaf_count: leafCount, leaves_inline: true,
+    ...(tree.total_tube_count === undefined ? {} : { total_tube_count: tubes.size }) };
+}
+
 /**
  * 把按 `unit=` / `other_noun=` 补回来的叶子合进已有的树：同一单元 refno / 同一 noun 组的 `elements` 用新响应里的填上
  * （单元的 `tubes` 跟 `elements` 一起来、一起填——同一套内联规则），别的节点不动。回一棵新树（不改入参）。

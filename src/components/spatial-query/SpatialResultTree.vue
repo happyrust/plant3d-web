@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-1 text-xs" data-testid="spatial-tree">
     <div v-if="tree.rooms.length === 0" class="px-1 py-3 text-center text-[11px] text-gray-400">
-      所选房间里没有命中的构件。
+      当前范围内没有命中的构件。
     </div>
 
     <div v-for="room in tree.rooms" :key="room.refno" data-testid="spatial-tree-room" :data-room-refno="room.refno">

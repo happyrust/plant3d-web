@@ -2942,6 +2942,41 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     return { viewer, store };
   }
 
+  it('范围查询树接口不支持时明确报错，不静默退回按库平铺', async () => {
+    const { store } = makeStore({ queryNearbyByPosition: vi.fn(async () => facetResult()) });
+    store.clearRooms();
+    await store.submitQuery();
+    expect(store.status.value).toBe('error');
+    expect(store.error.value).toBe('tree not mocked');
+    expect(store.resultSet.value).toBeNull();
+  });
+
+  it('范围查询仅看已加载时仍按树展示，叶子和各层计数同步过滤', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
+    const { store } = makeStore({ fetchTree, queryNearbyByPosition: vi.fn(async () => facetResult()) });
+    store.clearRooms();
+    store.draft.onlyLoaded = true;
+    await store.submitQuery();
+    expect(fetchTree).toHaveBeenCalledTimes(1);
+    const result = store.resultSet.value!;
+    expect(result.items.map((item) => item.refno)).toEqual(['loaded_a']);
+    expect(result.total).toBe(1);
+    expect(result.tree?.rooms.map((room) => room.count)).toEqual([1]);
+    expect(result.tree?.rooms[0]?.specs[0]?.unit_types[0]?.units[0]?.count).toBe(1);
+  });
+
+  it('未选房间的范围查询默认请求房间层级树，不隐式加入房间过滤', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
+    const { store } = makeStore({ fetchTree, queryNearbyByPosition: vi.fn(async () => facetResult()) });
+    store.clearRooms();
+    await store.submitQuery();
+    expect(fetchTree).toHaveBeenCalledTimes(1);
+    expect(fetchTree).toHaveBeenCalledWith(expect.not.objectContaining({ rooms: expect.anything() }));
+    expect(store.resultSet.value?.tree?.total_count).toBe(4);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['pane_1', 'loaded_a', 'server_only', 'shared_b']);
+    expect(store.resultSet.value?.hasMore).toBe(false);
+  });
+
   it('选了房间且源有树：打树路由（带 rooms）+ 同参 nearby 只取 1 条拿 facet；结果集带 tree，items = 叶子按 refno 去重、按请求排序（范围缺省先专业后距离），total = 去重数、不分页、全集 = 整树', async () => {
     const fetchTree = vi.fn(async (_params: SpatialNearbyParams, _only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult> => treeResult());
     const queryNearbyByPosition = vi.fn(async () => facetResult());
@@ -2984,6 +3019,8 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
   it('树路由「不支持」（源 / 旧构建没这条）退回平铺分组：nearby 按草稿每页数打、结果集没有 tree；真错误（房间体制不可用）直接报错清结果', async () => {
     const queryNearbyByPosition = vi.fn(async () => ({ ...facetResult(), per_page: 100, has_more: false, total_count: 1 }));
     const { store } = makeStore({ queryNearbyByPosition });
+    store.setMode('distance');
+    store.draft.distanceCenterSource = 'coordinates';
 
     await store.submitQuery();
     expect(store.status.value).toBe('ready');
@@ -3001,6 +3038,7 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     expect(failing.error.value).toBe('房间过滤此刻不可用（disabled）');
     expect(failing.resultSet.value).toBeNull();
 
+    spatialSourceMocks.state.tree = false;
     // 没选房间：树一次都不打
     const { store: noRooms } = makeStore({ fetchTree, queryNearbyByPosition });
     noRooms.clearRooms();

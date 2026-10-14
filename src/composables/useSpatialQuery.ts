@@ -27,6 +27,7 @@ import { sceneCompanionsOf } from '@/composables/deliveryUnitScene';
 import {
   branUnitRefnosCoveredBy,
   branUnitRefnosOfTree,
+  filterTreeLeaves,
   forEachTreeLeaf,
   fullMatchesFromTree,
   mergeTreeLeaves,
@@ -1940,7 +1941,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     // 负实体判定依赖服务端清单；失败不阻断查询（响应里的 is_negative 兜底）。
     await ensureNegativeNounsLoaded(negativeNounsFetcher);
 
-    if (isLocalOnlyRequest(request)) {
+    if (isLocalOnlyRequest(request) && !(request.mode === 'range' && spatialSource().capabilities.tree)) {
       status.value = 'querying-local';
       const localItems = viewer ? queryLocal(viewer, request) : [];
       status.value = 'merging-results';
@@ -1951,7 +1952,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
     status.value = 'querying-server';
     // 选了房间且源有房间层级树（ADR 0068）：改打树路由，结果区以树代替平铺分组；树拿不到（旧构建没这条路由）退回平铺
-    if (hasRoomFilter(request) && spatialSource().capabilities.tree) {
+    if ((request.mode === 'range' || hasRoomFilter(request)) && spatialSource().capabilities.tree) {
       const handled = await runTreeQuery(request, options, viewer);
       if (handled) return;
     }
@@ -2015,16 +2016,45 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
    */
   async function runTreeQuery(request: SpatialQueryRequest, options: RunQueryOptions, viewer: ViewerLike | null): Promise<boolean> {
     const params = toNearbyParams(request);
-    const [treeResp, facets] = await Promise.all([
+    const [initialTree, facets] = await Promise.all([
       fetchTree(params),
       querySpatialServer(request, 1, 1).catch(() => null),
     ]);
+    let treeResp = initialTree;
     if (!treeResp.success) {
       // 房间体制不可用 / 中心没盒这类是真错误（nearby 也会同样失败），直接抛；「源 / 构建没有这条路由」才退回平铺
       if (!treeResp.unsupported && treeResp.error) {
         throw new Error(treeResp.error);
       }
+      if (request.mode === 'range') {
+        throw new Error(treeResp.error || '当前服务端不支持范围查询房间层级树，请更新 refactor 分支后端');
+      }
       return false;
+    }
+    if (request.filters.onlyLoaded || request.filters.onlyVisible) {
+      if (!treeResp.leaves_inline) {
+        const selectors = new Map<string, SpatialTreeLeafSelector>();
+        for (const room of treeResp.rooms) for (const spec of room.specs) {
+          for (const group of spec.unit_types) for (const unit of group.units) {
+            if (!unit.elements) selectors.set(`unit:${unit.refno}`, { unit: unit.refno });
+          }
+          for (const group of spec.others.by_noun) {
+            if (!group.elements) selectors.set(`noun:${group.noun}`, { otherNoun: group.noun });
+          }
+        }
+        const pending = [...selectors.values()];
+        await Promise.all(Array.from({ length: Math.min(4, pending.length) }, async () => {
+          let selector: SpatialTreeLeafSelector | undefined;
+          while ((selector = pending.shift())) {
+            const partial = await fetchTree(params, selector);
+            if (!partial.success) throw new Error(partial.error || '无法读取层级树构件');
+            treeResp = mergeTreeLeaves(treeResp, partial);
+          }
+        }));
+      }
+      const loaded = new Set(viewer ? resolveLoadedRefnos(viewer) : []);
+      treeResp = filterTreeLeaves(treeResp, (refno) => loaded.has(refno)
+        && (!request.filters.onlyVisible || Boolean(viewer && isViewerObjectVisible(viewer, refno))));
     }
     if (facets?.success) {
       learnNegativeNounsFromFilterOptions(facets.filter_options);
@@ -2049,6 +2079,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       isVisible: viewer ? (refno) => isViewerObjectVisible(viewer, refno) : undefined,
       nameSortExact: spatialSource().capabilities.nameSortExact,
     });
+    if (request.filters.onlyLoaded || request.filters.onlyVisible) {
+      merged.warnings = merged.warnings.filter((warning) => warning !== '「仅看已加载 / 仅看当前可见」只在本页内后筛，总数与页数按服务端全量计');
+    }
     if (!treeResp.leaves_inline) {
       merged.warnings.push(`构件太多（${treeResp.leaf_count} 项，超过 ${treeResp.leaf_cap}），树里先只给计数；展开单元或构件类型时再取该组构件`);
     }

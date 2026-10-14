@@ -635,7 +635,7 @@
           </div>
 
           <div v-if="!resultSet && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
-            暂无结果，执行一次空间查询后会在这里{{ groupDimensionLabel }}分组显示。
+            暂无结果，执行一次空间查询后会在这里{{ draft.mode === 'range' && spatialCapabilities.tree ? '按房间 → 专业 → 最小交付单元' : groupDimensionLabel }}分组显示。
           </div>
 
           <div v-else-if="resultsExpanded && resultSet && resultSet.items.length === 0 && !isQueryBusy && !treeResult" class="px-3 py-6 text-center text-xs text-gray-400">
@@ -1210,7 +1210,9 @@ const statusLabel = computed(() => {
 
 const summaryText = computed(() => {
   if (!resultSet.value) {
-    return `支持范围查询与距离查询，结果会${groupDimensionLabel.value}分组。`;
+    return draft.mode === 'range' && spatialCapabilities.value.tree
+      ? '范围查询按房间 → 专业 → 最小交付单元展示。'
+      : `支持范围查询与距离查询，结果会${groupDimensionLabel.value}分组。`;
   }
   // 树态（ADR 0068）：全集一次给、按 refno 去重、不分页——没有「当前页」；跨房构件只算一次。
   // 直段（方案 B）另说一句「M 段直管」——不是构件、不进「共 N 项」，服务端没给（老构建）就不说。
@@ -1508,7 +1510,7 @@ function setSortBy(sortBy: SpatialQuerySortBy) {
 }
 
 function runQuery() {
-  resultsExpanded.value = false;
+  resultsExpanded.value = draft.mode === 'range' && spatialCapabilities.value.tree;
   void submitQuery();
 }
 

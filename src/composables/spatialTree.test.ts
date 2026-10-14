@@ -4,6 +4,7 @@ import {
   branUnitRefnosCoveredBy,
   branUnitRefnosOfTree,
   countPhrase,
+  filterTreeLeaves,
   forEachTreeLeaf,
   formatTubeLength,
   fullMatchesFromTree,
@@ -82,6 +83,17 @@ function tree(overrides: Partial<SpatialTreeResult> = {}): SpatialTreeResult {
 }
 
 describe('spatialTree（ADR 0068 纯函数）', () => {
+  it('按加载状态过滤叶子仍保留房间、专业、单元层级，跨房构件去重且空节点消失', () => {
+    const original = tree();
+    const filtered = filterTreeLeaves(original, (refno) => refno === 'x1');
+    expect(filtered.total_count).toBe(1);
+    expect(filtered.leaf_count).toBe(2);
+    expect(filtered.rooms.map((room) => room.count)).toEqual([1, 1]);
+    expect(filtered.rooms[0]?.specs.map((spec) => spec.spec_value)).toEqual([3]);
+    expect(filtered.rooms[0]?.specs[0]?.unit_types.map((group) => group.noun)).toEqual(['BRAN']);
+    expect(original.total_count).toBe(4);
+    expect(filterTreeLeaves(original, () => false).rooms).toEqual([]);
+  });
   it('forEachTreeLeaf 走遍全树，跨房构件每间房各来一次并带所在专业与房间', () => {
     const seen: string[] = [];
     forEachTreeLeaf(tree(), (leaf, spec, room) => seen.push(`${room.room_num}/${spec}/${leaf.refno}`));

@@ -464,7 +464,7 @@ describe('SpatialResultTree（ADR 0068 房间层级树）', () => {
     unmountCurrent?.();
 
     const empty = mountTree({ tree: tree({ rooms: [], total_count: 0, leaf_count: 0 }) });
-    expect(text(q(empty.host, 'spatial-tree')[0])).toBe('所选房间里没有命中的构件。');
+    expect(text(q(empty.host, 'spatial-tree')[0])).toBe('当前范围内没有命中的构件。');
     expect(q(empty.host, 'spatial-tree-room')).toHaveLength(0);
   });
 });
