@@ -254,6 +254,20 @@ async function main() {
       process.exit(1);
     }
   }
+  
+  // 确保 nginx.conf 存在（从模板复制）
+  const nginxConfDest = join(NGINX_DIR, 'conf', 'nginx.conf');
+  const nginxConfTemplate = join(OFFLINE_DIR, 'nginx.conf.template');
+  if (!existsSync(nginxConfDest)) {
+    if (existsSync(nginxConfTemplate)) {
+      mkdirSync(join(NGINX_DIR, 'conf'), { recursive: true });
+      copyFileSync(nginxConfTemplate, nginxConfDest);
+      log('已从模板复制 nginx.conf');
+    } else {
+      logError(`找不到 nginx.conf 模板: ${nginxConfTemplate}`);
+      process.exit(1);
+    }
+  }
   console.log('');
 
   // Step 3: 复制前端构建产物到 www
