@@ -61,7 +61,11 @@ type PanelStub = {
   };
   group: {
     id: string;
-    api: { setSize: (size: { width?: number; height?: number }) => void };
+    api: {
+      width: number;
+      height: number;
+      setSize: (size: { width?: number; height?: number }) => void;
+    };
     panels: PanelStub[];
   };
 };
@@ -70,9 +74,23 @@ const dockPanels = new Map<string, PanelStub>();
 const addPanelFailures = new Map<string, Error>();
 const activatedPanels: string[] = [];
 let lastDockApi: ReturnType<typeof createDockApi> | null = null;
+let groupAddedHandler: ((group: PanelStub['group']) => void) | null = null;
+let groupRemovedHandler: ((group: PanelStub['group']) => void) | null = null;
 
 function createPanel(id: string): PanelStub {
-  const panel = {
+  const group = {
+    id: `${id}-group`,
+    api: {
+      width: 350,
+      height: 800,
+      setSize: vi.fn((size: { width?: number; height?: number }) => {
+        if (typeof size.width === 'number') group.api.width = size.width;
+        if (typeof size.height === 'number') group.api.height = size.height;
+      }),
+    },
+    panels: [] as PanelStub[],
+  };
+  const panel: PanelStub = {
     id,
     api: {
       close: vi.fn(),
@@ -80,13 +98,9 @@ function createPanel(id: string): PanelStub {
         activatedPanels.push(id);
       }),
     },
-    group: {
-      id: `${id}-group`,
-      api: { setSize: vi.fn() },
-      panels: [] as PanelStub[],
-    },
+    group,
   };
-  panel.group.panels.push(panel);
+  group.panels.push(panel);
   return panel;
 }
 
@@ -116,6 +130,12 @@ function createDockApi() {
     })),
     fromJSON: vi.fn(),
     onDidLayoutChange: vi.fn(),
+    onDidAddGroup: vi.fn((cb: (group: PanelStub['group']) => void) => {
+      groupAddedHandler = cb;
+    }),
+    onDidRemoveGroup: vi.fn((cb: (group: PanelStub['group']) => void) => {
+      groupRemovedHandler = cb;
+    }),
     addPopoutGroup: vi.fn(),
     activeGroup: undefined,
   };
@@ -167,9 +187,20 @@ vi.mock('@/composables/useModelProjects', () => ({
 vi.mock('@/composables/usePanelZones', () => ({
   initPanelZones: vi.fn(),
   disposePanelZones: vi.fn(),
+  getCollapsedZones: vi.fn(() => []),
   toggleZone: vi.fn(),
   onPanelOpened: vi.fn(),
   resetZoneState: vi.fn(),
+  ZONE_PANELS: {
+    left: ['modelTree'],
+    right: [
+      'measurement', 'dimension', 'annotation', 'manager', 'properties',
+      'ptset', 'annotationStyle', 'materialConfig', 'review',
+      'initiateReview', 'reviewerTasks', 'myTasks', 'designerCommentHandling',
+      'modelVersionCompare', 'hydraulic', 'spatialCompute',
+    ],
+    bottom: ['console'],
+  },
 }));
 
 const currentTaskRef = ref<ReviewTask | null>(null);
@@ -329,6 +360,8 @@ describe('DockLayout embed bootstrap', () => {
     addPanelFailures.clear();
     activatedPanels.length = 0;
     lastDockApi = null;
+    groupAddedHandler = null;
+    groupRemovedHandler = null;
     document.body.innerHTML = '';
     Object.defineProperty(globalThis, 'localStorage', {
       value: createStorageMock(),
@@ -763,13 +796,57 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
-  it('默认布局创建尺寸面板（V2 cutover 后常驻）', async () => {
+  it('默认布局右侧 dock 只创建「属性」页签', async () => {
     const mounted = await mountDockLayout();
 
-    expect(dockPanels.has('dimension')).toBe(true);
-    expect(lastDockApi?.addPanel).toHaveBeenCalledWith(expect.objectContaining({
-      component: 'DimensionPanel',
+    expect(dockPanels.has('viewer')).toBe(true);
+    expect(dockPanels.has('modelTree')).toBe(true);
+    expect(dockPanels.has('properties')).toBe(true);
+    expect(dockPanels.has('console')).toBe(true);
+    expect(dockPanels.has('measurement')).toBe(false);
+    expect(dockPanels.has('dimension')).toBe(false);
+    expect(dockPanels.has('annotation')).toBe(false);
+    expect(dockPanels.has('manager')).toBe(false);
+
+    mounted.unmount();
+  });
+
+  it('存档面板集合与旧版默认一致时按新默认重建，右侧不再恢复整套页签', async () => {
+    localStorage.setItem('plant3d-web-dock-layout-v3', JSON.stringify({
+      grid: {},
+      panels: Object.fromEntries(
+        ['viewer', 'modelTree', 'measurement', 'dimension', 'annotation', 'manager', 'properties', 'console']
+          .map((id) => [id, {}]),
+      ),
     }));
+
+    const mounted = await mountDockLayout();
+
+    expect(lastDockApi?.fromJSON).not.toHaveBeenCalled();
+    expect(localStorage.getItem('plant3d-web-dock-layout-v3')).toBeNull();
+    expect(dockPanels.has('properties')).toBe(true);
+    expect(dockPanels.has('measurement')).toBe(false);
+    expect(dockPanels.has('dimension')).toBe(false);
+
+    mounted.unmount();
+  });
+
+  it('右侧 dock 分组关闭后，左侧 dock 宽度恢复为关闭前的值', async () => {
+    const mounted = await mountDockLayout();
+
+    const leftGroup = dockPanels.get('modelTree')?.group;
+    const rightGroup = dockPanels.get('properties')?.group;
+    expect(leftGroup).toBeTruthy();
+    expect(rightGroup).toBeTruthy();
+    expect(groupRemovedHandler).toBeTypeOf('function');
+
+    // 模拟 dockview Sizing.Distribute：右侧分组移除后左侧被按比例拉大
+    leftGroup!.api.width = 500;
+    dockPanels.delete('properties');
+    groupRemovedHandler!(rightGroup!);
+
+    expect(leftGroup!.api.setSize).toHaveBeenLastCalledWith({ width: 350 });
+    expect(leftGroup!.api.width).toBe(350);
 
     mounted.unmount();
   });

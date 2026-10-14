@@ -105,6 +105,10 @@ scripts/*
 !scripts/verify-gen-model-v1.ps1
 !scripts/type-check.mjs
 !scripts/type-check-baseline.txt
+!scripts/build-offline-release.mjs
+!scripts/test-offline-deploy.ps1
+!scripts/acceptance-api-test.mjs
+!scripts/test-document-upload-preview.mjs
 
 # Local live-gate evidence (contains generated macros, logs, and root snapshots).
 output/gen-model-v1-frozen-source-live/
@@ -127,4 +131,14 @@ state/
 .cursor/kc-chat-exports/
 # Added by code-review-graph
 .code-review-graph/
+
+# Zrimo viewer 静态资源（prebuild 脚本自动生成，不入库）
+public/vendor/
+
+# 离线部署包：nginx 二进制与构建产物由打包脚本生成，不入库
+deploy/offline/nginx/
+!deploy/offline/nginx.conf.template
+deploy/offline/www/
+deploy/offline/config/deploy.env
+.tmp-nginx-download/
 
