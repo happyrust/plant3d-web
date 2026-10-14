@@ -8,7 +8,8 @@
 worker_processes  1;
 
 error_log  logs/error.log warn;
-pid        logs/nginx.pid;
+# Windows 上注释 pid，避免目录权限问题导致启动失败
+# pid        logs/nginx.pid;
 
 events {
     worker_connections  1024;
