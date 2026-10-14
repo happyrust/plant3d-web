@@ -61,6 +61,24 @@ describe('usePanelZones', () => {
     expect(ensurePanel.mock.calls.map(([id]) => id)).toEqual(['measurement', 'dimension']);
     disposePanelZones();
   });
+
+  it('收起右侧区时不关掉文档预览', () => {
+    const closed: string[] = [];
+    const panels = new Map<string, ReturnType<typeof createPanel>>();
+    for (const id of ['measurement', 'reviewAttachmentPreview']) {
+      panels.set(id, createPanel('right', 412, () => {
+        closed.push(id);
+        panels.delete(id);
+      }));
+    }
+
+    initPanelZones({ getPanel: (id) => panels.get(id) }, vi.fn());
+    toggleZone('right');
+
+    expect(closed).toEqual(['measurement']);
+    expect(panels.has('reviewAttachmentPreview')).toBe(true);
+    disposePanelZones();
+  });
 });
 
 function createPanel(zone: ZoneName, size: number, close: () => void) {

@@ -17,6 +17,9 @@ $OFFLINE_DIR = Join-Path $PSScriptRoot "..\deploy\offline"
 $NGINX_DIR = Join-Path $OFFLINE_DIR "nginx"
 $NGINX_EXE = Join-Path $NGINX_DIR "nginx.exe"
 $WWW_DIR = Join-Path $OFFLINE_DIR "www"
+$BACKEND_DIR = Join-Path $OFFLINE_DIR "backend"
+$BACKEND_EXE = Join-Path $BACKEND_DIR "aios-database.exe"
+$RELEASE_MANIFEST = Join-Path $OFFLINE_DIR "release.json"
 
 function Write-TestHeader {
     param([string]$Title)
@@ -86,6 +89,25 @@ Test-Command "检查 version.json 存在" {
         $content = Get-Content $versionPath -Raw | ConvertFrom-Json
         "版本: $($content.version), Commit: $($content.commit.Substring(0,7))"
     } else { throw "未找到 version.json" }
+}
+
+Test-Command "检查集成后端存在" {
+    if (Test-Path $BACKEND_EXE) { "找到: $BACKEND_EXE" } else { throw "未找到集成后端 aios-database.exe" }
+}
+
+Test-Command "检查后端运行资源" {
+    $required = @("Start-AMS.ps1", "DbOption.toml", "resource\surreal", "schema", "web\pkg\rs-plant_bg.wasm")
+    $missing = @($required | Where-Object { -not (Test-Path (Join-Path $BACKEND_DIR $_)) })
+    if ($missing.Count -gt 0) { throw "缺少后端资源: $($missing -join ', ')" }
+    "后端启动器、配置、数据库脚本、schema 和 Web 资源齐全"
+}
+
+Test-Command "检查前后端发布清单" {
+    if (-not (Test-Path $RELEASE_MANIFEST)) { throw "未找到 release.json" }
+    $manifest = Get-Content $RELEASE_MANIFEST -Raw | ConvertFrom-Json
+    if ($manifest.mode -ne "integrated") { throw "发布模式不是 integrated: $($manifest.mode)" }
+    if (-not $manifest.backend.version) { throw "发布清单缺少后端版本" }
+    "前端 $($manifest.frontend.version), 后端 $($manifest.backend.version)"
 }
 
 # ============================================================
@@ -226,9 +248,8 @@ if ($backendUp) {
         Write-TestResult -Name "API 代理 /api/v1/health" -Passed $false -Detail $_.Exception.Message
     }
 } else {
-    Write-Host "  [SKIP] 后端 127.0.0.1:8022 未启动，跳过 API 代理测试" -ForegroundColor Yellow
-    Write-Host "         提示：启动 gen-model (aios-database.exe) 后可测试完整代理功能" -ForegroundColor Gray
-    $script:TestResults += [PSCustomObject]@{ Name = "API 代理测试"; Passed = $null; Detail = "跳过（后端未启动）" }
+    Write-TestResult -Name "集成后端健康检查" -Passed $false `
+        -Detail "127.0.0.1:8022 未就绪；请先运行 deploy/offline/start.bat"
 }
 
 # ============================================================

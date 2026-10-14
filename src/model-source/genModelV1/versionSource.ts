@@ -8,9 +8,13 @@
  * - `loadVersion`：`POST model/history/generate` → 轮询 `tasks/{id}` 到 `succeeded`（`result.snapshot_key`）→
  *   `history/query tool=instances` + `tool=tubes` → 与生产 `model/records` 同一条映射（`projection_record_to_query`
  *   的 TS 对偶 + `groupInstanceEntriesByRefno`）→ `InstanceEntry[]`。`tombstone` 版本不打后端、回空集。
- *   `release()` = `DELETE model/history/{snapshot_key}`；`handle` = snapshot_key，给 `attributesAt` 用。
+ *   `release()` = `DELETE model/history/{当前 snapshot_key}`；`handle` = snapshot_key，给 `attributesAt` 用。
  * - `attributesAt`：`history/query tool=attributes { refno }`（属性历史对比，契约见 gen-model-refactor ADR-081 候选条），
  *   行与 `element/attributes` 同型；没有句柄的几何（tombstone）不打后端、回 `exists: false`。
+ * - 快照被回收：服务端按条数封顶（缺省 16 格，最久没 generate 的先丢），键 `refno@sesno` 全局共用（别的标签页 / 别人
+ *   退出对比的 DELETE 会删到同一格）。`attributesAt` 撞上 404 `SNAPSHOT_NOT_FOUND`、`loadVersion` 取几何时那一格已经没了
+ *   （服务端对没了的快照取 instances / tubes 回空数组而不是 404，所以两样都空时再问 `tool=snapshot`，回执为 null 才算没了），
+ *   都按几何自己的版本重建一次、换上新句柄再取；重建后仍不在才报错。同一个键同时只重建一份。
  * - 节点版本视图（ADR 0066）的四条：`attributeHistory`（`element/attribute-history`）、`attributeDiff`（`element/attribute-diff`）、
  *   `listNodeVersions`（`node/versions`）、`diffSummary`（`node/diff-summary`）；旧服务端没有那条路由（无信封 404）一律抛
  *   `ModelVersionRouteUnavailableError`，面板据此回落、照实说。
@@ -127,6 +131,41 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 async function releaseNothing(): Promise<void> {
   // 「已删除单元版本」没有打后端，也就没有快照要还
 }
+
+/** 一份共用的等待（同键重建）不跟某个调用方的 signal 走——别人还在等它；调用方取消只让自己先退出。 */
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason instanceof Error ? signal.reason : new Error('cancelled'));
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/** 那一格历史快照在服务端已经没了（被条数上限顶掉 / 被同键 DELETE 删了 / 服务端重启）。 */
+function isSnapshotGone(error: unknown): boolean {
+  return isGenModelV1ApiError(error) && error.status === 404 && error.code === 'SNAPSHOT_NOT_FOUND';
+}
+
+function snapshotGoneError(snapshotKey: string): Error {
+  return new Error(`服务端已回收这一版的历史投影（${snapshotKey}），重建后仍取不到`);
+}
+
+/** `loadVersion` 交出去的一份几何在服务端占的那一格：重建要用的版本、当前键、是否已还。 */
+type SnapshotLease = {
+  version: ModelVersion;
+  key: string;
+  released: boolean;
+};
+
+type GeometryRows = {
+  instances: HistoryInstanceRowDto[];
+  tubes: HistoryTubeRowDto[];
+};
 
 function readTypes(detail: unknown): string[] {
   const types = (detail as { delivery_unit_types?: unknown } | null | undefined)?.delivery_unit_types;
@@ -250,6 +289,9 @@ function taskFailureMessage(task: TaskEntryDto): string {
 export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = defaultApi): ModelVersionSource {
   const wait = api.sleep ?? sleep;
   const now = api.now ?? (() => Date.now());
+  const leases = new WeakMap<ModelVersionGeometry, SnapshotLease>();
+  /** 服务端 generate 开头先丢掉同键的旧格，同一个键并发重建会互相顶掉，所以按旧键合并成一份。 */
+  const renewing = new Map<string, Promise<string>>();
 
   async function listVersions(dbnum: number, unitRefno: string): Promise<ModelVersion[]> {
     const normalized = fromV1Refno(unitRefno);
@@ -577,55 +619,103 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     }
   }
 
+  async function generateSnapshot(version: ModelVersion, requestOptions: GenModelV1RequestOptions): Promise<string> {
+    const { task_id: taskId } = await api.historyGenerate(
+      { dbnum: version.dbnum, refno: version.unitRefno, sesno: version.sesno },
+      requestOptions,
+    );
+    return waitForSnapshot(taskId, requestOptions);
+  }
+
+  function renewSnapshot(staleKey: string, version: ModelVersion, signal?: AbortSignal): Promise<string> {
+    let pending = renewing.get(staleKey);
+    if (!pending) {
+      pending = generateSnapshot(version, {}).finally(() => renewing.delete(staleKey));
+      // 等的人各自接错；全都先取消了也不该冒成未处理的拒绝
+      pending.catch(() => undefined);
+      renewing.set(staleKey, pending);
+    }
+    return untilAborted(pending, signal);
+  }
+
+  /** instances + tubes；两样都空且回执也没了 = 那一格在 generate 之后就被回收了，回 null。回执还在 = 这一版本来就没几何。 */
+  async function queryGeometryRows(snapshotKey: string, requestOptions: GenModelV1RequestOptions): Promise<GeometryRows | null> {
+    const [instances, tubes] = await Promise.all([
+      api.historyQuery<HistoryInstanceRowDto[]>(snapshotKey, 'instances', requestOptions),
+      api.historyQuery<HistoryTubeRowDto[]>(snapshotKey, 'tubes', requestOptions),
+    ]);
+    const rows: GeometryRows = {
+      instances: Array.isArray(instances) ? instances : [],
+      tubes: Array.isArray(tubes) ? tubes : [],
+    };
+    if (rows.instances.length > 0 || rows.tubes.length > 0) return rows;
+    const receipt = await api.historyQuery<unknown>(snapshotKey, 'snapshot', requestOptions);
+    return receipt ? rows : null;
+  }
+
   async function loadVersion(version: ModelVersion, options: ModelVersionLoadOptions = {}): Promise<ModelVersionGeometry> {
     if (version.impactKind === 'tombstone') {
       return { refnos: [], entries: new Map(), release: releaseNothing };
     }
     const requestOptions: GenModelV1RequestOptions = { signal: options.signal };
-    const { task_id: taskId } = await api.historyGenerate(
-      { dbnum: version.dbnum, refno: version.unitRefno, sesno: version.sesno },
-      requestOptions,
-    );
-    const snapshotKey = await waitForSnapshot(taskId, requestOptions);
-    const [instances, tubes] = await Promise.all([
-      api.historyQuery<HistoryInstanceRowDto[]>(snapshotKey, 'instances', requestOptions),
-      api.historyQuery<HistoryTubeRowDto[]>(snapshotKey, 'tubes', requestOptions),
-    ]);
-    const items = historyRowsToGeomInstQueries(
-      version.unitRefno,
-      Array.isArray(instances) ? instances : [],
-      Array.isArray(tubes) ? tubes : [],
-    );
-    const entries = groupInstanceEntriesByRefno(items);
-    const ownerByRefno = ownerMapFromHistoryRows([
-      ...(Array.isArray(instances) ? instances : []),
-      ...(Array.isArray(tubes) ? tubes : []),
-    ]);
-    let released = false;
-    return {
+    let snapshotKey = await generateSnapshot(version, requestOptions);
+    let rows = await queryGeometryRows(snapshotKey, requestOptions);
+    if (!rows) {
+      snapshotKey = await renewSnapshot(snapshotKey, version, options.signal);
+      rows = await queryGeometryRows(snapshotKey, requestOptions);
+      if (!rows) throw snapshotGoneError(snapshotKey);
+    }
+    const entries = groupInstanceEntriesByRefno(historyRowsToGeomInstQueries(version.unitRefno, rows.instances, rows.tubes));
+    const ownerByRefno = ownerMapFromHistoryRows([...rows.instances, ...rows.tubes]);
+    const lease: SnapshotLease = { version, key: snapshotKey, released: false };
+    const geometry: ModelVersionGeometry = {
       refnos: [...entries.keys()],
       entries,
       ownerByRefno,
       handle: snapshotKey,
       async release() {
-        if (released) return;
-        released = true;
-        await api.historyDelete(snapshotKey);
+        if (lease.released) return;
+        lease.released = true;
+        await api.historyDelete(lease.key);
       },
     };
+    leases.set(geometry, lease);
+    return geometry;
   }
 
   /**
    * 属性历史对比的一侧：`history/query tool=attributes`（契约见 gen-model-refactor ADR-081 候选条）。
    * 几何没有句柄（tombstone / 空几何）= 该版本下整个单元都不存在，不打后端直接回 `exists: false`。
+   * 句柄那一格被回收（404 `SNAPSHOT_NOT_FOUND`）→ 按几何自己的版本重建一次、换上新句柄再查；已经 `release()` 的几何不重建。
    */
   async function attributesAt(
     geometry: ModelVersionGeometry,
     refno: string,
     options: ModelVersionLoadOptions = {},
   ): Promise<ModelVersionAttributes> {
-    const snapshotKey = typeof geometry.handle === 'string' ? geometry.handle : null;
+    const lease = leases.get(geometry);
+    const snapshotKey = lease?.key ?? (typeof geometry.handle === 'string' ? geometry.handle : null);
     if (!snapshotKey) return { sesno: sesnoOfSnapshotKey(snapshotKey), exists: false, noun: null, attributes: [] };
+    try {
+      return await queryAttributes(snapshotKey, refno, options);
+    } catch (error) {
+      if (!lease || lease.released || !isSnapshotGone(error)) throw error;
+    }
+    const renewed = await renewSnapshot(snapshotKey, lease.version, options.signal);
+    lease.key = renewed;
+    geometry.handle = renewed;
+    try {
+      return await queryAttributes(renewed, refno, options);
+    } catch (error) {
+      throw isSnapshotGone(error) ? snapshotGoneError(renewed) : error;
+    }
+  }
+
+  async function queryAttributes(
+    snapshotKey: string,
+    refno: string,
+    options: ModelVersionLoadOptions,
+  ): Promise<ModelVersionAttributes> {
     const response = await api.historyQuery<HistoryAttributesDto>(snapshotKey, 'attributes', {
       signal: options.signal,
       arguments: { refno: toV1Refno(refno) },

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { watch } from 'vue';
 
-import { Download, ExternalLink, FileSearch, Loader2, RefreshCw } from 'lucide-vue-next';
+import { AppWindow, Download, ExternalLink, FileSearch, Loader2, RefreshCw } from 'lucide-vue-next';
 
+import { popoutReviewAttachmentPanel } from '@/components/dock_panels/reviewAttachmentPreviewLayout';
 import { formatAttachmentSize } from '@/components/review/reviewAttachmentFlow';
 import WordDocumentViewer from '@/components/review/WordDocumentViewer.vue';
 import {
@@ -14,17 +15,36 @@ import {
   retryReviewAttachmentPreview,
   reviewAttachmentPreviewError,
   reviewAttachmentPreviewStatus,
-  reviewAttachmentWordElements,
+  reviewAttachmentWordFile,
 } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 
+const props = defineProps<{
+  params?: {
+    containerApi?: {
+      getPanel: (id: string) => { api?: { location?: { type?: string } } } | undefined;
+      addPopoutGroup: (item: unknown) => void;
+    };
+  };
+}>();
+
 const reviewStore = useReviewStore();
+
+function popoutPreview(): void {
+  const containerApi = props.params?.containerApi;
+  if (!containerApi) return;
+  popoutReviewAttachmentPanel(containerApi);
+}
 
 watch(
   () => reviewStore.currentTask.value?.id,
   taskId => {
     const preview = activeReviewAttachmentPreview.value;
-    if (preview && preview.taskId !== taskId) clearReviewAttachmentPreview();
+    if (!preview) return;
+    // 发起单在任务还没成为当前任务时按单据号预览。当前任务为空不能把这块清掉。
+    if (!taskId) return;
+    const formId = reviewStore.currentTask.value?.formId;
+    if (preview.taskId !== taskId && preview.taskId !== formId) clearReviewAttachmentPreview();
   },
   { immediate: true },
 );
@@ -92,6 +112,15 @@ function describeAttachment(): string {
         title="下载"
         @click="downloadAttachment">
         <Download class="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button v-if="params?.containerApi"
+        type="button"
+        class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60"
+        aria-label="弹出文档预览"
+        title="弹出文档面板"
+        data-testid="review-attachment-preview-popout"
+        @click="popoutPreview">
+        <AppWindow class="h-4 w-4" aria-hidden="true" />
       </button>
       <button type="button"
         class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60"
@@ -167,17 +196,26 @@ function describeAttachment(): string {
           class="max-h-full max-w-full rounded-md object-contain shadow-lg shadow-black/40"
           @error="handleImageError" />
       </div>
-      <WordDocumentViewer v-else-if="activeReviewAttachmentPreview?.kind === 'word' && reviewAttachmentPreviewStatus === 'ready' && reviewAttachmentWordElements"
-        data-testid="review-attachment-word"
-        :elements="reviewAttachmentWordElements"
+      <WordDocumentViewer v-else-if="activeReviewAttachmentPreview?.kind === 'word' && reviewAttachmentPreviewStatus === 'ready' && reviewAttachmentWordFile"
+        :bytes="reviewAttachmentWordFile.bytes"
+        :file-name="reviewAttachmentWordFile.fileName"
         :label="activeReviewAttachmentPreview.attachment.name"
         @error="markReviewAttachmentPreviewFailed" />
       <div v-else
-        class="flex h-full flex-col items-center justify-center gap-2.5 p-6 text-center">
+        class="relative flex h-full flex-col items-center justify-center gap-2.5 p-6 text-center">
+        <button v-if="params?.containerApi"
+          type="button"
+          class="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60"
+          aria-label="弹出文档预览"
+          title="弹出文档面板"
+          data-testid="review-attachment-preview-popout"
+          @click="popoutPreview">
+          <AppWindow class="h-4 w-4" aria-hidden="true" />
+        </button>
         <FileSearch class="h-7 w-7 text-slate-600" aria-hidden="true" />
         <p class="text-sm text-slate-300">请从校审附件列表中选择文档</p>
         <p class="max-w-[36ch] text-xs leading-relaxed text-slate-400">
-          在附件材料里点「查看」，PDF、Word 与图片会直接在这里打开，模型和资料可以并排看。
+          在附件材料里点「查看」，PDF、Word 与图片会分在模型右侧。中间的分隔条可以拖宽度，弹出只拆走这一块。
           CAD 图纸与表格需下载后查看。
         </p>
       </div>

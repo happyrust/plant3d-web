@@ -5,27 +5,37 @@ import ReviewerTaskList from './ReviewerTaskList.vue';
 
 import { UserRole, type ReviewTask } from '@/types/auth';
 
-const loadReviewTasksMock = vi.fn(() => Promise.resolve());
-const setCurrentTaskMock = vi.fn();
-const reviewTaskGetByIdMock = vi.fn(async () => ({ success: false }));
-const reviewAnnotationCheckMock = vi.fn(async () => ({
-  success: true,
-  data: {
-    passed: true,
-    recommendedAction: 'submit',
-    currentNode: 'jd',
-    summary: {
-      total: 0,
-      open: 0,
-      pendingReview: 0,
-      approved: 0,
-      rejected: 0,
+const mocks = vi.hoisted(() => ({
+  loadReviewTasks: vi.fn(() => Promise.resolve()),
+  setCurrentTask: vi.fn(),
+  reviewTaskGetById: vi.fn(async () => ({ success: false })),
+  reviewAnnotationCheck: vi.fn(async () => ({
+    success: true,
+    data: {
+      passed: true,
+      recommendedAction: 'submit',
+      currentNode: 'jd',
+      summary: {
+        total: 0,
+        open: 0,
+        pendingReview: 0,
+        approved: 0,
+        rejected: 0,
+      },
+      blockers: [],
+      message: 'ok',
     },
-    blockers: [],
-    message: 'ok',
-  },
+  })),
+  emitToast: vi.fn(),
+  openReviewAttachmentPreview: vi.fn(() => true),
 }));
-const emitToastMock = vi.fn();
+
+const loadReviewTasksMock = mocks.loadReviewTasks;
+const setCurrentTaskMock = mocks.setCurrentTask;
+const reviewTaskGetByIdMock = mocks.reviewTaskGetById;
+const reviewAnnotationCheckMock = mocks.reviewAnnotationCheck;
+const emitToastMock = mocks.emitToast;
+const openReviewAttachmentPreviewMock = mocks.openReviewAttachmentPreview;
 const persistenceState = new Map<string, unknown>();
 const persistenceStorageKeys: string[] = [];
 const currentWorkbenchTask = { value: null as ReviewTask | null };
@@ -45,7 +55,7 @@ const mockUserStore = {
   currentUser: { value: { id: 'checker-1', name: '张校对员', role: UserRole.PROOFREADER } },
   isChecker: { value: true },
   isApprover: { value: false },
-  loadReviewTasks: (...args: unknown[]) => loadReviewTasksMock(...args),
+  loadReviewTasks: mocks.loadReviewTasks,
   submitTaskToNextNode: vi.fn(() => Promise.resolve()),
   returnTaskToNode: vi.fn(() => Promise.resolve()),
 };
@@ -58,7 +68,7 @@ vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
     currentTask: currentWorkbenchTask,
     sortedConfirmedRecords,
-    setCurrentTask: setCurrentTaskMock,
+    setCurrentTask: mocks.setCurrentTask,
   }),
 }));
 
@@ -67,8 +77,8 @@ vi.mock('@/composables/useToolStore', () => ({
 }));
 
 vi.mock('@/api/reviewApi', () => ({
-  reviewTaskGetById: (...args: unknown[]) => reviewTaskGetByIdMock(...args),
-  reviewAnnotationCheck: (...args: unknown[]) => reviewAnnotationCheckMock(...args),
+  reviewTaskGetById: mocks.reviewTaskGetById,
+  reviewAnnotationCheck: mocks.reviewAnnotationCheck,
 }));
 
 vi.mock('@/composables/useNavigationStatePersistence', () => ({
@@ -106,8 +116,19 @@ vi.mock('@/ribbon/commandBus', () => ({
   emitCommand: vi.fn(),
 }));
 
+vi.mock('@/composables/useReviewAttachmentPreview', () => ({
+  openReviewAttachmentPreview: mocks.openReviewAttachmentPreview,
+  activeReviewAttachmentPreview: { value: null },
+  buildReviewAttachmentDownloadUrl: (attachment: { url?: string; name?: string }) => attachment.url ?? '',
+  getReviewAttachmentPreviewKind: (attachment: { mimeType?: string; name?: string }) => {
+    const name = attachment.name?.toLowerCase() ?? '';
+    if (attachment.mimeType === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+    return null;
+  },
+}));
+
 vi.mock('@/ribbon/toastBus', () => ({
-  emitToast: (...args: unknown[]) => emitToastMock(...args),
+  emitToast: mocks.emitToast,
 }));
 
 describe('ReviewerTaskList', () => {
@@ -137,6 +158,8 @@ describe('ReviewerTaskList', () => {
       },
     });
     emitToastMock.mockClear();
+    openReviewAttachmentPreviewMock.mockClear();
+    openReviewAttachmentPreviewMock.mockReturnValue(true);
     mockUserStore.pendingReviewTasks.value = [];
     mockUserStore.submitTaskToNextNode.mockClear();
     mockUserStore.returnTaskToNode.mockClear();
@@ -264,6 +287,14 @@ describe('ReviewerTaskList', () => {
     expect(document.body.textContent).toContain('FORM-REVIEW-226');
     expect(document.body.textContent).toContain('设计编校审说明.pdf');
     expect(document.body.textContent).toContain('完整的设计编校审包说明');
+    expect(document.querySelector('a[target="_blank"]')).toBeNull();
+    const viewButton = document.querySelector('[data-testid="review-attachment-preview-att-1"]') as HTMLButtonElement | null;
+    expect(viewButton).not.toBeNull();
+    viewButton!.click();
+    expect(openReviewAttachmentPreviewMock).toHaveBeenCalledWith(
+      'review-task-detail',
+      expect.objectContaining({ id: 'att-1', name: '设计编校审说明.pdf' }),
+    );
   });
 
   it('同意入口会先执行批注检查，再继续提交流转', async () => {
@@ -288,7 +319,7 @@ describe('ReviewerTaskList', () => {
       taskId: 'review-task-submit',
       formId: 'FORM-SUBMIT-1',
       currentNode: 'jd',
-      includedTypes: ['text', 'cloud', 'rect'],
+      includedTypes: ['text', 'cloud', 'rect', 'obb'],
     }));
     expect(mockUserStore.submitTaskToNextNode).toHaveBeenCalledWith('review-task-submit', undefined);
   });

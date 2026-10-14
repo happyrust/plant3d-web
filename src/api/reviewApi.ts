@@ -473,7 +473,7 @@ export type ReviewAnnotationCheckRequest = {
   formId?: string;
   currentNode?: string;
   intent?: 'submit_next';
-  includedTypes?: ('text' | 'cloud' | 'rect')[];
+  includedTypes?: ('text' | 'cloud' | 'rect' | 'obb')[];
   token?: string;
 };
 

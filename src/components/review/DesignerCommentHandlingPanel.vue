@@ -21,6 +21,7 @@ import {
   type AnnotationWorkspaceItem,
   type LinkedMeasurementItem,
 } from './annotationWorkspaceModel';
+import AssociatedFilesList from './AssociatedFilesList.vue';
 import { startAnnotationMemberPick } from './cloudMemberPick';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import DesignerTaskSwitcher from './DesignerTaskSwitcher.vue';
@@ -55,6 +56,7 @@ import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewSta
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { useContainerQuery } from '@/composables/useContainerQuery';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import {
   useToolStore,
@@ -71,6 +73,7 @@ import {
   getTaskStatusDisplayName,
   WORKFLOW_NODE_NAMES,
   type AnnotationSeverity,
+  type ReviewAttachment,
   type ReviewTask,
 } from '@/types/auth';
 
@@ -127,6 +130,13 @@ onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 // 两个面板在 dock 里同时开着时各登记一次，最后一个卸载才回到旧作用域。
 useAnnotationDraftScopeSync({ userId: () => userStore.currentUser.value?.id ?? null });
 const draftSession = useAnnotationDraftSession();
+
+function previewTaskAttachment(attachment: ReviewAttachment): void {
+  const taskId = currentTask.value?.id?.trim();
+  if (!taskId || !openReviewAttachmentPreview(taskId, attachment)) {
+    emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
+  }
+}
 
 const returnedTasks = computed(() => sortTasksByLatestReturn(
   userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)),
@@ -564,9 +574,9 @@ async function confirmCurrentData() {
         dimensionDocument: currentDraftConfirmPayload.value.dimensionDocument,
         dimensionDocumentVersion: currentDraftConfirmPayload.value.dimensionDocumentVersion,
         note: confirmNote.value.trim(),
-      },
+      } as never,
       addConfirmedRecord: reviewStore.addConfirmedRecord,
-      clearAll: () => {
+      clearDraftData: () => {
         toolStore.clearAll();
       },
       resetNote: () => {
@@ -595,7 +605,7 @@ async function resubmitToProofreader() {
       formId: task.formId,
       currentNode: 'sj',
       intent: 'submit_next',
-      includedTypes: ['text', 'cloud', 'rect'],
+      includedTypes: ['text', 'cloud', 'rect', 'obb'],
     });
     if (!check.success || !check.data?.passed) {
       emitToast({
@@ -816,6 +826,15 @@ onMounted(() => {
     <div class="min-h-0 flex-1 overflow-y-auto bg-[#FCFDFE]" data-testid="designer-comment-scroll">
       <div class="box-border flex min-h-full flex-col gap-3 p-4">
         <template v-if="canShowAnnotationSheet">
+          <AssociatedFilesList v-if="currentTask"
+            :attachments="currentTask.attachments ?? []"
+            title="附件"
+            description=""
+            empty-text="暂无附件"
+            empty-hint=""
+            :previewable="true"
+            @preview="previewTaskAttachment" />
+
           <div v-if="!currentTask"
             class="rounded-2xl border border-brand/30 bg-brand-subtle p-5"
             data-testid="designer-state-1">

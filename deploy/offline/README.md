@@ -1,117 +1,80 @@
-# Plant3D-Web 离线部署包（Windows 内网版）
+# Plant3D-Web 一体化离线部署包（Windows）
 
-本目录是 Plant3D-Web 前端的**离线部署包**，适用于无法访问外网的内网 Windows 环境。包含 nginx（Windows 版）和前端构建产物，开箱即用。
+本包包含 Plant3D-Web 前端、Windows nginx，以及 gen-model 官方发布包中的 `aios-database.exe`、运行资源和配置向导。默认不依赖已安装的 Node.js、Rust 或外部后端。
 
 ## 目录结构
 
-```
+```text
 offline/
+├── backend/                  # gen-model 官方 Windows 发布包
+│   ├── aios-database.exe
+│   ├── DbOption.toml
+│   ├── Start-AMS.ps1
+│   ├── resource/
+│   ├── schema/
+│   └── web/
 ├── nginx/                    # nginx Windows 便携版
-│   ├── nginx.exe             # nginx 主程序
-│   ├── conf/
-│   │   ├── nginx.conf        # 主配置文件
-│   │   └── mime.types        # MIME 类型映射
-│   ├── logs/                 # 日志目录
-│   └── temp/                 # 临时文件目录
-├── www/                      # 前端构建产物（dist 内容）
-│   ├── index.html
-│   ├── assets/
-│   └── version.json          # 版本信息
-├── config/                   # 配置目录
-│   └── deploy.env            # 部署配置（后端地址、端口）
-├── start.bat                 # 启动脚本
-├── stop.bat                  # 停止脚本
-├── config.bat                # 配置脚本（交互式修改后端地址和端口）
-└── README.md                 # 本文件
+├── www/                      # Plant3D-Web 前端构建产物
+├── config/                   # 运行 config.bat 后生成 deploy.env
+├── release.json              # 前后端版本清单
+├── config.bat
+├── start.bat
+└── stop.bat
 ```
 
-## 快速开始
+模型源文件、现场 workspace 和既有数据库数据不进入发布包。首次启动后通过后端配置向导选择现场 E3D 项目目录。
 
-### 1. 配置后端地址（首次部署必做）
+## 打包
 
-双击运行 `config.bat`，或手动编辑 `config\deploy.env`：
+默认从相邻 `gen-model/releases/` 自动选择修改时间最新的 `ams-local-*.zip`：
 
-```ini
-# gen-model (aios-database) 后端地址
-BACKEND_ADDR=http://127.0.0.1:8022
-
-# 前端监听端口（同时会监听 3100）
-FRONTEND_PORT=80
+```bash
+npm run build:offline
 ```
 
-- 如果后端（gen-model）和前端在**同一台机器**：保持 `http://127.0.0.1:8022` 不变
-- 如果后端在**其他机器**：改为实际 IP，如 `http://192.168.1.100:8022`
+推荐在正式发版时显式指定经过验证的后端包：
 
-### 2. 启动服务
-
-双击运行 `start.bat`，会自动：
-1. 检查环境
-2. 更新 nginx 配置
-3. 启动 nginx
-4. 打开浏览器访问 `http://localhost`
-
-### 3. 停止服务
-
-双击运行 `stop.bat` 即可停止 nginx。
-
-## 访问地址
-
-| 地址 | 说明 |
-|------|------|
-| `http://localhost` | 本机访问（端口 80） |
-| `http://localhost:3100` | 本机访问（端口 3100，兼容 PowerPMS） |
-| `http://<本机IP>` | 局域网其他电脑访问 |
-| `http://<本机IP>/version.json` | 查看版本信息 |
-
-## 与 gen-model 后端配合
-
-本前端需要配合 gen-model（aios-database）后端使用：
-
-1. **后端**：运行 `aios-database.exe`（默认监听 8022 端口）
-2. **前端**：运行本目录的 `start.bat`
-
-nginx 会自动将以下请求反代到后端：
-- `/api/*` → 后端 API（模型树、三维模型、校审等）
-- `/files/*` → 后端附件下载
-
-## PowerPMS 集成
-
-PowerPMS 中的「模型中心」地址配置为：
-
-```
-http://<前端服务器IP>:3100
+```bash
+npm run build:offline -- --backend-package ../gen-model/releases/ams-local-<version>.zip
 ```
 
-（3100 端口与 80 端口内容完全相同，专为兼容 PowerPMS 历史配置）
+兼容旧部署、只需要前端和 nginx 时：
 
-## 版本信息
-
-查看 `www\version.json` 或访问 `http://<服务器地址>/version.json`：
-
-```json
-{
-  "version": "0.2.0",
-  "commit": "<git commit hash>",
-  "buildDate": "<构建时间>"
-}
+```bash
+npm run build:offline:frontend-only
 ```
 
-## 常见问题
+输出位置：`../gen-model/releases/plant3d-web-offline-v<前端版本>-backend-v<后端版本>-<date>.zip`。默认拒绝覆盖同名发布物，确需覆盖时添加 `--force`。
 
-### Q: 启动时报端口被占用
-**A**: 修改 `config\deploy.env` 中的 `FRONTEND_PORT`，或停止占用 80/3100 端口的程序。
+## 启动
 
-### Q: 页面打不开/白屏
-**A**: 检查：
-1. 后端 `aios-database.exe` 是否已启动
-2. `config\deploy.env` 中的 `BACKEND_ADDR` 是否正确
-3. 查看 `nginx\logs\error.log` 日志
+1. 解压 ZIP。
+2. 可选运行 `config.bat`。默认 `BACKEND_MODE=integrated`，无需填写后端地址。
+3. 运行 `start.bat`。
+4. 脚本先启动包内后端并等待 `/api/v1/health`，再启动 nginx 和浏览器。
+5. 首次运行按后端配置向导填写 E3D 项目路径；保存后按向导提示重启。
 
-### Q: 如何更新前端版本
-**A**: 重新运行打包脚本生成新的离线包，替换 `www` 目录即可。
+访问地址：
 
-## 技术说明
+- `http://localhost`：默认入口。
+- `http://localhost:3100`：PowerPMS 兼容入口。
+- `http://<服务器 IP>`：局域网入口。
 
-- **nginx 版本**: 1.30.5 (Windows x64 稳定版)
-- **前端框架**: Vue 3 + TypeScript + Vite
-- **构建产物**: 纯静态文件，无需 Node.js 运行时
+运行 `stop.bat` 会停止 nginx，并依据 `backend/process.json` 校验 PID 和可执行文件路径后停止包内后端，不会按进程名误杀其他实例。
+
+## 使用外部后端
+
+运行 `config.bat`，将 backend mode 改为 `external`，再填写后端地址。外部后端必须提供 `/api`、`/api/v1` 和 `/files` 接口。此模式下 `start.bat` 不启动或停止后端。
+
+## 数据持久化
+
+默认以 `mem` 模式启动，适合首次配置与验证，后端重启后数据库内容不会保留。需要持久化时，应按 `backend/README.md` 使用包内 `Start-Surreal.ps1` 启动 rocksdb，并以 `Start-AMS.ps1 -StoreMode rocksdb` 启动后端；现场数据目录不应覆盖在升级包内。
+
+## 日志与排障
+
+- 后端日志：`backend/logs/`
+- nginx 日志：`nginx/logs/`
+- 前后端版本：`release.json`
+- 后端健康检查：`http://127.0.0.1:8022/api/v1/health`
+
+端口默认使用 80、3100 和 8022。部署前应确认端口未占用并配置防火墙。

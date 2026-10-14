@@ -5,22 +5,35 @@
  * 功能：
  *   1. 构建前端 (vite build)
  *   2. 下载 nginx Windows 稳定版
- *   3. 整合前端构建产物 + nginx + bat 脚本
- *   4. 生成 version.json
- *   5. 打包成 zip 放到 ../gen-model/releases/
+ *   3. 整合 gen-model 官方 Windows 发布包
+ *   4. 整合前端构建产物 + nginx + bat 脚本
+ *   5. 生成前后端版本清单
+ *   6. 打包成 zip 放到 ../gen-model/releases/
  *
  * 使用：
- *   node scripts/build-offline-release.mjs
+ *   node scripts/build-offline-release.mjs --backend-package <ams-local.zip>
+ *   node scripts/build-offline-release.mjs                 # 自动使用 releases 下最新后端包
+ *   node scripts/build-offline-release.mjs --frontend-only # 仅打前端兼容包
  *   node scripts/build-offline-release.mjs --skip-build    # 跳过构建，直接打包
  *   node scripts/build-offline-release.mjs --skip-nginx    # 跳过下载 nginx（已有的话）
+ *   node scripts/build-offline-release.mjs --force         # 允许覆盖同名输出
  */
 
-import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, copyFileSync, readdirSync, statSync, writeFileSync, readFileSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFileSync, execSync } from 'node:child_process';
+import {
+  copyFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import https from 'node:https';
-import { createWriteStream } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = resolve(__dirname, '..');
@@ -28,7 +41,9 @@ const OFFLINE_DIR = join(PROJECT_DIR, 'deploy', 'offline');
 const DIST_DIR = join(PROJECT_DIR, 'dist');
 const NGINX_DIR = join(OFFLINE_DIR, 'nginx');
 const WWW_DIR = join(OFFLINE_DIR, 'www');
-const RELEASES_DIR = resolve(PROJECT_DIR, '..', 'gen-model', 'releases');
+const BACKEND_DIR = join(OFFLINE_DIR, 'backend');
+const GEN_MODEL_DIR = resolve(PROJECT_DIR, '..', 'gen-model');
+const RELEASES_DIR = join(GEN_MODEL_DIR, 'releases');
 
 // nginx Windows 稳定版下载地址
 const NGINX_VERSION = '1.30.5';
@@ -38,6 +53,18 @@ const NGINX_DOWNLOAD_URL = `https://nginx.org/download/nginx-${NGINX_VERSION}.zi
 const args = process.argv.slice(2);
 const skipBuild = args.includes('--skip-build');
 const skipNginx = args.includes('--skip-nginx');
+const frontendOnly = args.includes('--frontend-only');
+const force = args.includes('--force');
+const backendPackageArg = args.find((arg) => arg.startsWith('--backend-package='));
+const backendPackageIndex = args.indexOf('--backend-package');
+const backendPackage = backendPackageArg
+  ? resolve(PROJECT_DIR, backendPackageArg.slice('--backend-package='.length))
+  : backendPackageIndex >= 0 && args[backendPackageIndex + 1]
+    ? resolve(PROJECT_DIR, args[backendPackageIndex + 1])
+    : null;
+if (backendPackageIndex >= 0 && !backendPackage) {
+  throw new Error('--backend-package 需要提供 zip 路径');
+}
 
 function log(msg) {
   console.log(`[offline-release] ${msg}`);
@@ -103,28 +130,81 @@ function downloadFile(url, destPath) {
   });
 }
 
-/** 解压 zip（使用 PowerShell，因为 Node 没有内置 zip 解压） */
+/** 使用 Windows 自带 bsdtar 解压 zip，避免依赖 PowerShell Archive 模块。 */
 function extractZip(zipPath, destDir) {
   log(`解压: ${zipPath}`);
   mkdirSync(destDir, { recursive: true });
-  execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force"`, {
-    stdio: 'inherit',
-  });
+  execFileSync('tar.exe', ['-xf', zipPath, '-C', destDir], { stdio: 'inherit' });
 }
 
-/** 递归打包目录为 zip（使用 PowerShell Compress-Archive） */
+/** 使用 Windows 自带 bsdtar 打包 zip。 */
 function createZip(srcDir, zipPath) {
   log(`打包: ${srcDir}`);
   log(`  → ${zipPath}`);
-  // 确保目标目录存在
   mkdirSync(dirname(zipPath), { recursive: true });
-  // 删除已存在的 zip
   if (existsSync(zipPath)) {
+    if (!force) throw new Error(`输出文件已存在，拒绝覆盖: ${zipPath}（确需覆盖请加 --force）`);
     rmSync(zipPath);
   }
-  execSync(`powershell -Command "Compress-Archive -Path '${srcDir}\\*' -DestinationPath '${zipPath}' -Force"`, {
-    stdio: 'inherit',
-  });
+  execFileSync('tar.exe', ['-a', '-cf', zipPath, '-C', srcDir, '.'], { stdio: 'inherit' });
+}
+
+function findLatestBackendPackage() {
+  if (!existsSync(RELEASES_DIR)) return null;
+  const candidates = readdirSync(RELEASES_DIR)
+    .filter((name) => /^ams-local-.*\.zip$/i.test(name))
+    .map((name) => join(RELEASES_DIR, name))
+    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+  return candidates[0] ?? null;
+}
+
+function prepareBackend(packagePath) {
+  if (!existsSync(packagePath)) {
+    throw new Error(`后端发布包不存在: ${packagePath}`);
+  }
+  const tmpDir = join(PROJECT_DIR, '.tmp-backend-release');
+  removeDir(tmpDir);
+  removeDir(BACKEND_DIR);
+  extractZip(packagePath, tmpDir);
+
+  const entries = readdirSync(tmpDir);
+  const packageRoot = entries.length === 1 && statSync(join(tmpDir, entries[0])).isDirectory()
+    ? join(tmpDir, entries[0])
+    : tmpDir;
+  const requiredPaths = [
+    'aios-database.exe',
+    'Start-AMS.ps1',
+    'DbOption.toml',
+    'release.json',
+    join('resource', 'surreal'),
+    'schema',
+    join('web', 'pkg', 'rs-plant_bg.wasm'),
+  ];
+  for (const required of requiredPaths) {
+    if (!existsSync(join(packageRoot, required))) {
+      throw new Error(`后端发布包缺少 ${required}: ${packagePath}`);
+    }
+  }
+
+  copyDir(packageRoot, BACKEND_DIR);
+  const configPath = join(BACKEND_DIR, 'DbOption.toml');
+  const config = readFileSync(configPath, 'utf-8')
+    .replace(/^server_release_ip\s*=.*$/m, 'server_release_ip = "0.0.0.0:8022"')
+    .replace(/^http_api_addr\s*=.*$/m, 'http_api_addr = "0.0.0.0:8022"');
+  writeFileSync(configPath, config);
+  removeDir(tmpDir);
+  logSuccess(`后端发布包已整合: ${packagePath}`);
+}
+
+function readBackendVersion() {
+  const manifestPath = join(BACKEND_DIR, 'release.json');
+  if (!existsSync(manifestPath)) return null;
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  return {
+    version: manifest.backend_version ?? null,
+    buildId: manifest.backend_build_id ?? null,
+    commit: manifest.backend_git_commit ?? null,
+  };
 }
 
 /** 获取版本信息 */
@@ -175,11 +255,11 @@ async function main() {
 
   // Step 1: 构建前端
   if (!skipBuild) {
-    log('Step 1/5: 构建前端...');
-    execSync('npm run build-only', { cwd: PROJECT_DIR, stdio: 'inherit' });
+    log('Step 1/6: 构建前端...');
+    execSync('npm run build', { cwd: PROJECT_DIR, stdio: 'inherit' });
     logSuccess('前端构建完成');
   } else {
-    log('Step 1/5: 跳过前端构建 (--skip-build)');
+    log('Step 1/6: 跳过前端构建 (--skip-build)');
     if (!existsSync(DIST_DIR)) {
       logError('dist 目录不存在，请先构建或去掉 --skip-build 参数');
       process.exit(1);
@@ -189,7 +269,7 @@ async function main() {
 
   // Step 2: 准备 nginx
   if (!skipNginx) {
-    log('Step 2/5: 准备 nginx Windows 版...');
+    log('Step 2/6: 准备 nginx Windows 版...');
     const nginxExe = join(NGINX_DIR, 'nginx.exe');
     if (existsSync(nginxExe)) {
       log('nginx.exe 已存在，跳过下载');
@@ -248,7 +328,7 @@ async function main() {
       }
     }
   } else {
-    log('Step 2/5: 跳过 nginx 准备 (--skip-nginx)');
+    log('Step 2/6: 跳过 nginx 准备 (--skip-nginx)');
     if (!existsSync(join(NGINX_DIR, 'nginx.exe'))) {
       logError('nginx.exe 不存在，请先准备或去掉 --skip-nginx 参数');
       process.exit(1);
@@ -270,22 +350,43 @@ async function main() {
   }
   console.log('');
 
-  // Step 3: 复制前端构建产物到 www
-  log('Step 3/5: 复制前端构建产物...');
+  // Step 3: 准备后端
+  log('Step 3/6: 准备 gen-model 后端...');
+  if (frontendOnly) {
+    removeDir(BACKEND_DIR);
+    log('已选择纯前端包 (--frontend-only)');
+  } else {
+    const selectedBackendPackage = backendPackage ?? findLatestBackendPackage();
+    if (!selectedBackendPackage) {
+      throw new Error(`未找到后端发布包。请使用 --backend-package <zip>，或先在 ${RELEASES_DIR} 生成 ams-local-*.zip`);
+    }
+    prepareBackend(selectedBackendPackage);
+  }
+  console.log('');
+
+  // Step 4: 复制前端构建产物到 www
+  log('Step 4/6: 复制前端构建产物...');
   removeDir(WWW_DIR);
   copyDir(DIST_DIR, WWW_DIR);
   logSuccess(`前端文件已复制到: ${WWW_DIR}`);
   console.log('');
 
-  // Step 4: 生成 version.json
-  log('Step 4/5: 生成版本信息...');
+  // Step 5: 生成 version.json
+  log('Step 5/6: 生成版本信息...');
   writeVersionJson(versionInfo);
+  const backendVersion = frontendOnly ? null : readBackendVersion();
+  writeFileSync(join(OFFLINE_DIR, 'release.json'), JSON.stringify({
+    frontend: versionInfo,
+    backend: backendVersion,
+    mode: frontendOnly ? 'frontend-only' : 'integrated',
+  }, null, 2) + '\n');
   console.log('');
 
-  // Step 5: 打包成 zip
-  log('Step 5/5: 打包成 zip...');
+  // Step 6: 打包成 zip
+  log('Step 6/6: 打包成 zip...');
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const zipName = `plant3d-web-offline-v${versionInfo.version}-${dateStr}.zip`;
+  const backendSuffix = backendVersion?.version ? `-backend-v${backendVersion.version}` : '';
+  const zipName = `plant3d-web-offline-v${versionInfo.version}${backendSuffix}-${dateStr}.zip`;
   const zipPath = join(RELEASES_DIR, zipName);
   
   createZip(OFFLINE_DIR, zipPath);

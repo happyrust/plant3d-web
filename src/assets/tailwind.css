@@ -97,20 +97,26 @@
 /* ========================================================================== */
 /* DTX 批注严重度高亮（仅 HTML overlay 卡片，不影响 Three.js 线条材质） */
 /* 作用于 useDtxTools.ts 中 makeInlineAnnotationCardEl / makeTextAnnotationCardEl */
-/* 通过 label.dataset.severity = 'critical' | 'severe' | 'normal' | 'suggestion' */
+/* 通过 label.dataset.severity。现行枚举是 principle / general / drawing； */
+/* critical / severe / normal / suggestion 仍留着，避免旧数据失去颜色。 */
 /* ========================================================================== */
 .dtx-anno-label[data-severity] {
   border-left-width: 3px;
   border-left-style: solid;
 }
-.dtx-anno-label[data-severity="critical"]   { border-left-color: #ef4444; box-shadow: -1px 0 0 #ef4444 inset, 0 2px 8px rgba(239, 68, 68, 0.12); }
-.dtx-anno-label[data-severity="severe"]     { border-left-color: #f97316; box-shadow: -1px 0 0 #f97316 inset, 0 2px 8px rgba(249, 115, 22, 0.12); }
-.dtx-anno-label[data-severity="normal"]     { border-left-color: #3b82f6; }
+.dtx-anno-label[data-severity="critical"],
+.dtx-anno-label[data-severity="principle"] { border-left-color: #ef4444; box-shadow: -1px 0 0 #ef4444 inset, 0 2px 8px rgba(239, 68, 68, 0.12); }
+.dtx-anno-label[data-severity="severe"],
+.dtx-anno-label[data-severity="general"]   { border-left-color: #f97316; box-shadow: -1px 0 0 #f97316 inset, 0 2px 8px rgba(249, 115, 22, 0.12); }
+.dtx-anno-label[data-severity="normal"],
+.dtx-anno-label[data-severity="drawing"]   { border-left-color: #3b82f6; }
 .dtx-anno-label[data-severity="suggestion"] { border-left-color: #94a3b8; }
 
-/* 图钉样式：仅对致命/严重追加一个小红/橙点，避免视觉过载 */
+/* 图钉样式：原则/致命、一般/严重各追加一个小点，图面错误不加，避免视觉过载 */
 .dtx-anno-marker[data-severity="critical"]::after,
-.dtx-anno-marker[data-severity="severe"]::after {
+.dtx-anno-marker[data-severity="principle"]::after,
+.dtx-anno-marker[data-severity="severe"]::after,
+.dtx-anno-marker[data-severity="general"]::after {
   content: '';
   position: absolute;
   top: -2px;
@@ -121,5 +127,7 @@
   border: 1px solid #ffffff;
   pointer-events: none;
 }
-.dtx-anno-marker[data-severity="critical"]::after { background: #ef4444; }
-.dtx-anno-marker[data-severity="severe"]::after   { background: #f97316; }
+.dtx-anno-marker[data-severity="critical"]::after,
+.dtx-anno-marker[data-severity="principle"]::after { background: #ef4444; }
+.dtx-anno-marker[data-severity="severe"]::after,
+.dtx-anno-marker[data-severity="general"]::after   { background: #f97316; }

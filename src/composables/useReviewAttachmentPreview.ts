@@ -1,18 +1,14 @@
 import { markRaw, readonly, ref, shallowReadonly, shallowRef } from 'vue';
 
-import { ensurePanelAndActivate } from './useDockApi';
-
 import type { ReviewAttachment } from '@/types/auth';
-import type { IElement } from '@hufe921/canvas-editor';
 
 import { getAuthToken } from '@/api/reviewApi';
-import { getBackendApiBaseUrl } from '@/utils/apiBase';
+import { emitCommand } from '@/ribbon/commandBus';
 import {
   FileValidationError,
   failFileValidation,
   validateAttachmentBytes,
 } from '@/utils/fileValidation';
-import { buildWordPreviewElements } from '@/utils/wordPreview';
 
 export type ReviewAttachmentPreviewKind = 'pdf' | 'image' | 'word';
 
@@ -25,10 +21,15 @@ export interface ReviewAttachmentPreviewTarget {
   url: string;
 }
 
+export type ReviewAttachmentWordFile = {
+  bytes: ArrayBuffer;
+  fileName: string;
+};
+
 const previewTarget = shallowRef<ReviewAttachmentPreviewTarget | null>(null);
 const previewStatus = ref<ReviewAttachmentPreviewStatus>('idle');
 const previewError = ref<string | null>(null);
-const previewWordElements = shallowRef<IElement[] | null>(null);
+const previewWordFile = shallowRef<ReviewAttachmentWordFile | null>(null);
 let validationController: AbortController | null = null;
 const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_WORD_BYTES = 50 * 1024 * 1024;
@@ -39,7 +40,7 @@ let validationSeq = 0;
 export const activeReviewAttachmentPreview = readonly(previewTarget);
 export const reviewAttachmentPreviewStatus = readonly(previewStatus);
 export const reviewAttachmentPreviewError = readonly(previewError);
-export const reviewAttachmentWordElements = shallowReadonly(previewWordElements);
+export const reviewAttachmentWordFile = shallowReadonly(previewWordFile);
 
 export function getReviewAttachmentPreviewKind(
   attachment: ReviewAttachment,
@@ -108,15 +109,105 @@ export function buildReviewAttachmentInlineUrl(attachment: ReviewAttachmentLink)
   return buildAttachmentUrl(attachment, false);
 }
 
-function resolveSafeAttachmentUrl(url: string): string | null {
+function dataUrlMime(url: string): string | null {
+  if (!/^data:/i.test(url)) return null;
+  const comma = url.indexOf(',');
+  if (comma < 0) return null;
+  return url.slice(5, comma).split(';', 1)[0]?.trim().toLowerCase() || null;
+}
+
+function inlineMimeMatchesKind(mime: string, kind: ReviewAttachmentPreviewKind): boolean {
+  if (kind === 'pdf') return mime === 'application/pdf';
+  if (kind === 'image') return mime === 'image/png' || mime === 'image/jpeg' || mime === 'image/jpg';
+  return mime === 'application/msword' || mime === WORD_MIME;
+}
+
+function decodeDataUrlPrefix(url: string, maxBytes: number): Uint8Array | null {
+  const comma = url.indexOf(',');
+  if (comma < 0) return null;
+  const meta = url.slice(5, comma);
+  const payload = url.slice(comma + 1);
+  try {
+    if (/;base64/i.test(meta)) {
+      const clean = payload.replace(/\s/g, '');
+      let slice = clean.slice(0, Math.ceil(maxBytes / 3) * 4);
+      if (!slice) return null;
+      while (slice.length % 4 !== 0) slice += '=';
+      const binary = atob(slice);
+      const bytes = new Uint8Array(Math.min(binary.length, maxBytes));
+      for (let index = 0; index < bytes.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      return bytes;
+    }
+    return new TextEncoder().encode(decodeURIComponent(payload).slice(0, maxBytes));
+  } catch {
+    return null;
+  }
+}
+
+/** data URL 只接受本预览能核对签名的类型；blob 只接受当前页面自己创建的地址。 */
+function acceptInlinePreviewUrl(
+  url: string,
+  kind: ReviewAttachmentPreviewKind,
+  sourceName: string,
+): string | null {
+  if (/^blob:/i.test(url)) {
+    try {
+      if (new URL(url.slice(5)).origin !== window.location.origin) return null;
+    } catch {
+      return null;
+    }
+    return url;
+  }
+  const mime = dataUrlMime(url);
+  if (!mime || !inlineMimeMatchesKind(mime, kind)) return null;
+  const prefix = decodeDataUrlPrefix(url, 1024);
+  if (!prefix) return null;
+  try {
+    if (mime === 'application/msword') validateLegacyWordBytes(prefix, sourceName);
+    else if (mime === 'image/png') validateAttachmentBytes(prefix, sourceName, 'png');
+    else if (mime === 'image/jpeg' || mime === 'image/jpg') validateAttachmentBytes(prefix, sourceName, 'jpeg');
+    else if (mime === WORD_MIME) validateAttachmentBytes(prefix, sourceName, 'docx');
+    else validateAttachmentBytes(prefix, sourceName, 'pdf');
+  } catch {
+    return null;
+  }
+  return url;
+}
+
+function resolveSafeAttachmentUrl(
+  url: string,
+  kind: ReviewAttachmentPreviewKind,
+  sourceName: string,
+): string | null {
   const trimmedUrl = url.trim();
   if (!trimmedUrl) return null;
+  if (/^(data|blob):/i.test(trimmedUrl)) {
+    return acceptInlinePreviewUrl(trimmedUrl, kind, sourceName);
+  }
   try {
     const resolved = new URL(trimmedUrl, window.location.href);
     return resolved.protocol === 'http:' || resolved.protocol === 'https:' ? resolved.href : null;
   } catch {
     return null;
   }
+}
+
+function readPreviewToken(): string | null {
+  try {
+    return getAuthToken();
+  } catch {
+    return null;
+  }
+}
+
+function previewFetchHeaders(target: ReviewAttachmentPreviewTarget): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (target.kind !== 'word') headers.Range = 'bytes=0-1023';
+  if (/^https?:/i.test(target.url)) {
+    const token = readPreviewToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 function attachmentValidationFormat(
@@ -186,32 +277,19 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
   const timeout = setTimeout(() => controller.abort(), 60_000);
   previewStatus.value = 'loading';
   previewError.value = null;
-  previewWordElements.value = null;
+  previewWordFile.value = null;
 
   try {
     const format = attachmentValidationFormat(target);
-    const legacyWord = target.kind === 'word' && (
-      target.attachment.name.toLowerCase().endsWith('.doc')
-      || (target.attachment.mimeType === 'application/msword' && !target.attachment.name.toLowerCase().endsWith('.docx'))
-    );
-    const token = legacyWord ? getAuthToken() : null;
-    const fetchUrl = legacyWord
-      ? `${getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '')}/api/review/attachments/${encodeURIComponent(target.attachment.id)}/word-preview`
-      : target.url;
-    const response = await fetch(fetchUrl, {
+    const legacyWord = isLegacyWordAttachment(target);
+    const response = await fetch(target.url, {
       method: 'GET',
-      headers: target.kind === 'word'
-        ? { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-        : { Range: 'bytes=0-1023' },
+      headers: previewFetchHeaders(target),
       cache: 'no-store',
       signal: controller.signal,
     });
     if (seq !== validationSeq) return;
     if (!response.ok || (target.kind === 'word' && response.status !== 200)) {
-      if (legacyWord && !response.ok) {
-        const detail = await response.json().catch(() => null) as { error_message?: string } | null;
-        throw new Error(detail?.error_message || `Word 转换失败（HTTP ${response.status}），可以重试或下载后查看`);
-      }
       failFileValidation({
         source: target.attachment.name,
         format,
@@ -222,7 +300,9 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
     }
     const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
     const expectedTypes = format === 'docx'
-      ? [WORD_MIME, 'application/octet-stream']
+      ? legacyWord
+        ? ['application/msword', 'application/octet-stream']
+        : [WORD_MIME, 'application/octet-stream']
       : format === 'pdf'
         ? ['application/pdf', 'application/octet-stream']
         : format === 'png'
@@ -240,11 +320,10 @@ async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Pro
     const wordBuffer = target.kind === 'word' ? await readWordBuffer(response) : null;
     const prefix = wordBuffer ? new Uint8Array(wordBuffer).subarray(0, 1024) : await readResponsePrefix(response);
     if (seq !== validationSeq) return;
-    validateAttachmentBytes(prefix, target.attachment.name, format);
+    if (legacyWord) validateLegacyWordBytes(prefix, target.attachment.name);
+    else validateAttachmentBytes(prefix, target.attachment.name, format);
     if (wordBuffer) {
-      const elements = await buildWordPreviewElements(wordBuffer);
-      if (seq !== validationSeq) return;
-      previewWordElements.value = markRaw(elements);
+      previewWordFile.value = markRaw({ bytes: wordBuffer, fileName: target.attachment.name });
     }
     previewStatus.value = 'ready';
   } catch (error) {
@@ -265,7 +344,7 @@ export function openReviewAttachmentPreview(
 ): boolean {
   const normalizedTaskId = taskId.trim();
   const kind = getReviewAttachmentPreviewKind(attachment);
-  const url = resolveSafeAttachmentUrl(attachment.url);
+  const url = kind ? resolveSafeAttachmentUrl(attachment.url, kind, attachment.name) : null;
   if (!normalizedTaskId || !kind || !url) {
     clearReviewAttachmentPreview();
     return false;
@@ -280,8 +359,16 @@ export function openReviewAttachmentPreview(
   // 切换附件时清理上一附件的错误状态，避免错误信息残留
   previewTarget.value = target;
   void validatePreviewTarget(target);
-  ensurePanelAndActivate('reviewAttachmentPreview');
+  // 面板已经在别的页签里时，也要走分屏命令，不能只 setActive。
+  emitCommand('panel.reviewAttachmentPreview');
   return true;
+}
+
+/** 正在预览的附件被删掉时关掉预览。别的附件不受影响。 */
+export function clearReviewAttachmentPreviewIfShowing(attachmentId: string | null | undefined): void {
+  const id = attachmentId?.trim();
+  if (!id) return;
+  if (previewTarget.value?.attachment.id === id) clearReviewAttachmentPreview();
 }
 
 /** 失败后的重试入口（重新校验当前附件 URL） */
@@ -305,5 +392,27 @@ export function clearReviewAttachmentPreview(): void {
   previewTarget.value = null;
   previewStatus.value = 'idle';
   previewError.value = null;
-  previewWordElements.value = null;
+  previewWordFile.value = null;
+}
+
+const LEGACY_WORD_OLE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+
+function isLegacyWordAttachment(target: ReviewAttachmentPreviewTarget): boolean {
+  return target.kind === 'word' && (
+    target.attachment.name.toLowerCase().endsWith('.doc')
+    || (target.attachment.mimeType === 'application/msword' && !target.attachment.name.toLowerCase().endsWith('.docx'))
+  );
+}
+
+function validateLegacyWordBytes(bytes: Uint8Array, source: string): void {
+  const ole = LEGACY_WORD_OLE.every((byte, index) => bytes[index] === byte);
+  const rtf = bytes.length >= 5 && String.fromCharCode(...bytes.subarray(0, 5)) === '{\\rtf';
+  if (ole || rtf) return;
+  failFileValidation({
+    source,
+    format: 'docx',
+    reason: '文件签名与声明类型不一致',
+    expected: 'd0 cf 11 e0 a1 b1 1a e1 或 {\\rtf',
+    actual: Array.from(bytes.subarray(0, 8)).map(byte => byte.toString(16).padStart(2, '0')).join(' '),
+  });
 }

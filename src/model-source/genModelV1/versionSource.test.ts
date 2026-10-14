@@ -8,6 +8,8 @@ import {
   type GenModelV1VersionApi,
 } from './versionSource';
 
+import type { ModelVersion } from '@/model-source/ports';
+
 import {
   GenModelV1ApiError,
   unpackRefno,
@@ -623,5 +625,161 @@ describe('genModelV1 ModelVersionSource', () => {
       ['24384_23262', 'modified', false],
     ]);
     expect(summary.warnings).toEqual(['x']);
+  });
+});
+
+describe('genModelV1 ModelVersionSource：快照被服务端回收（条数上限顶掉 / 同键被别处 DELETE）', () => {
+  const version: ModelVersion = {
+    dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 66, sessionTime: null, impactKind: 'mesh',
+  };
+  const generateRequest = { dbnum: 7997, refno: '24381_145018', sesno: 66 };
+  const valveRow = {
+    id: 'r1', snapshot_key: '24381_145018@66', dbnum: 7997, generic: 'VALV', source_refno: '24381_145020', mesh_id: 'm-valve',
+    world_bounds: null, world_transform: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] },
+  };
+  const valveAttributes = {
+    snapshot_key: '24381_145018@66', dbnum: 7997, sesno: 66, refno: '24381/145020', exists: true, noun: 'VALV',
+    attributes: [{ name: 'NAME', value_type: 'string', display: '/V1', is_unset: false, editable: true, is_uda: false }],
+  };
+  const snapshotGone = () => new GenModelV1ApiError({
+    code: 'SNAPSHOT_NOT_FOUND' as never,
+    status: 404,
+    path: '/api/v1/model/history/query',
+    message: 'snapshot 不存在（已 DELETE 或从未 generate）: 24381_145018@66',
+  });
+  const succeeded = (snapshotKey: string) => ({ task_id: 't-1', kind: 'model-history', state: 'succeeded', result: { snapshot_key: snapshotKey } }) as TaskEntryDto;
+  /** instances 给一行阀门；attributes 交给 `attributes` 桩，按调用先后决定这一发是被回收还是答出来 */
+  const queryWith = (attributes: () => unknown) => vi.fn(async (_key: string, tool: string) => {
+    if (tool === 'attributes') return attributes();
+    return tool === 'instances' ? [valveRow] : [];
+  }) as unknown as GenModelV1VersionApi['historyQuery'];
+
+  it('loadVersion：generate 之后取 instances / tubes 时那一格已经没了（两样都空、回执 null）→ 按同一版本重建一次再取', async () => {
+    let round = 0;
+    const historyGenerate = vi.fn(async () => ({ task_id: `t-${++round}` }));
+    const historyQuery = vi.fn(async (_key: string, tool: string) => {
+      if (tool === 'snapshot') return null;
+      return tool === 'instances' && round === 2 ? [valveRow] : [];
+    }) as unknown as GenModelV1VersionApi['historyQuery'];
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, historyQuery }));
+
+    const geometry = await source.loadVersion(version);
+
+    expect(historyGenerate).toHaveBeenCalledTimes(2);
+    expect(historyGenerate).toHaveBeenLastCalledWith(generateRequest, {});
+    expect(geometry.refnos).toEqual(['24381_145020']);
+    expect(geometry.handle).toBe('24381_145018@66');
+  });
+
+  it('loadVersion：两样都空但回执还在 = 这一版本来就没有几何，不重建', async () => {
+    const historyGenerate = vi.fn(async () => ({ task_id: 't-1' }));
+    const historyQuery = vi.fn(async (key: string, tool: string) => (tool === 'snapshot' ? { snapshot_key: key } : [])) as unknown as GenModelV1VersionApi['historyQuery'];
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, historyQuery }));
+
+    const geometry = await source.loadVersion(version);
+
+    expect(historyGenerate).toHaveBeenCalledTimes(1);
+    expect(historyQuery).toHaveBeenCalledWith('24381_145018@66', 'snapshot', { signal: undefined });
+    expect(geometry.refnos).toEqual([]);
+    expect(geometry.handle).toBe('24381_145018@66');
+  });
+
+  it('loadVersion：重建之后那一格还是没了 → 报「重建后仍取不到」，不试第三次', async () => {
+    const historyGenerate = vi.fn(async () => ({ task_id: 't-1' }));
+    const historyQuery = vi.fn(async (_key: string, tool: string) => (tool === 'snapshot' ? null : [])) as unknown as GenModelV1VersionApi['historyQuery'];
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, historyQuery }));
+
+    await expect(source.loadVersion(version)).rejects.toThrow('服务端已回收这一版的历史投影（24381_145018@66），重建后仍取不到');
+    expect(historyGenerate).toHaveBeenCalledTimes(2);
+  });
+
+  it('attributesAt：句柄那一格被回收（404 SNAPSHOT_NOT_FOUND）→ 按几何自己的版本重建、换上服务端给的新句柄再查，只多一次 generate；release 删当前句柄', async () => {
+    const historyGenerate = vi.fn(async () => ({ task_id: 't-1' }));
+    const taskGet = vi.fn()
+      .mockResolvedValueOnce(succeeded('24381_145018@66'))
+      .mockResolvedValue(succeeded('24381_145018@66#renewed'));
+    const attributes = vi.fn()
+      .mockRejectedValueOnce(snapshotGone())
+      .mockResolvedValue(valveAttributes);
+    const historyQuery = queryWith(attributes);
+    const historyDelete = vi.fn(async (key: string) => ({ snapshot_key: key, status: 'deleted' }));
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, taskGet, historyQuery, historyDelete }));
+    const geometry = await source.loadVersion(version);
+
+    const side = await source.attributesAt(geometry, '24381_145020');
+
+    expect(side).toEqual({
+      sesno: 66, exists: true, noun: 'VALV',
+      attributes: [{ name: 'NAME', valueType: 'string', display: '/V1', isUnset: false, isUda: false }],
+    });
+    expect(historyGenerate).toHaveBeenCalledTimes(2);
+    expect(historyGenerate).toHaveBeenLastCalledWith(generateRequest, {});
+    const attributeKeys = vi.mocked(historyQuery).mock.calls.filter(([, tool]) => tool === 'attributes').map(([key]) => key);
+    expect(attributeKeys).toEqual(['24381_145018@66', '24381_145018@66#renewed']);
+    expect(geometry.handle).toBe('24381_145018@66#renewed');
+
+    // 句柄换过之后再查不再重建
+    await source.attributesAt(geometry, '24381_145020');
+    expect(historyGenerate).toHaveBeenCalledTimes(2);
+
+    await geometry.release();
+    await geometry.release();
+    expect(historyDelete).toHaveBeenCalledTimes(1);
+    expect(historyDelete).toHaveBeenCalledWith('24381_145018@66#renewed');
+  });
+
+  it('attributesAt：重建之后还是被回收 → 报「重建后仍取不到」，只重建一次', async () => {
+    const historyGenerate = vi.fn(async () => ({ task_id: 't-1' }));
+    const historyQuery = queryWith(() => { throw snapshotGone(); });
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, historyQuery }));
+    const geometry = await source.loadVersion(version);
+
+    await expect(source.attributesAt(geometry, '24381_145020')).rejects.toThrow('服务端已回收这一版的历史投影（24381_145018@66），重建后仍取不到');
+    expect(historyGenerate).toHaveBeenCalledTimes(2);
+  });
+
+  it('attributesAt：同一格同时撞上回收只重建一份；某个调用方中途取消只退出它自己，不打断别人在等的那份重建', async () => {
+    const historyGenerate = vi.fn(async () => ({ task_id: 't-1' }));
+    let openRenewal!: () => void;
+    const renewalGate = new Promise<void>((resolve) => { openRenewal = resolve; });
+    const taskGet = vi.fn()
+      .mockResolvedValueOnce(succeeded('24381_145018@66'))
+      .mockImplementationOnce(async () => {
+        await renewalGate;
+        return succeeded('24381_145018@66');
+      });
+    const attributes = vi.fn()
+      .mockRejectedValueOnce(snapshotGone())
+      .mockRejectedValueOnce(snapshotGone())
+      .mockResolvedValue(valveAttributes);
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, taskGet, historyQuery: queryWith(attributes) }));
+    const geometry = await source.loadVersion(version);
+    const controller = new AbortController();
+
+    const switched = source.attributesAt(geometry, '24381_145020', { signal: controller.signal });
+    const waiting = source.attributesAt(geometry, '24381_145020');
+    await vi.waitFor(() => expect(taskGet).toHaveBeenCalledTimes(2));
+    controller.abort(new Error('选中换了'));
+    await expect(switched).rejects.toThrow('选中换了');
+    openRenewal();
+
+    await expect(waiting).resolves.toMatchObject({ exists: true, noun: 'VALV' });
+    expect(historyGenerate).toHaveBeenCalledTimes(2);
+    expect(attributes).toHaveBeenCalledTimes(3);
+  });
+
+  it('attributesAt：已经 release 的几何撞上回收不重建、原错照抛；别的错（400 INVALID_REFNO）也不重建', async () => {
+    const historyGenerate = vi.fn(async () => ({ task_id: 't-1' }));
+    const invalidRefno = new GenModelV1ApiError({ code: 'INVALID_REFNO' as never, status: 400, path: '/api/v1/model/history/query', message: 'refno 不属于快照所在的库' });
+    const attributes = vi.fn()
+      .mockRejectedValueOnce(invalidRefno)
+      .mockRejectedValue(snapshotGone());
+    const source = createGenModelV1ModelVersionSource(api({ historyGenerate, historyQuery: queryWith(attributes) }));
+    const geometry = await source.loadVersion(version);
+
+    await expect(source.attributesAt(geometry, '1_1')).rejects.toBe(invalidRefno);
+    await geometry.release();
+    await expect(source.attributesAt(geometry, '24381_145020')).rejects.toMatchObject({ code: 'SNAPSHOT_NOT_FOUND' });
+    expect(historyGenerate).toHaveBeenCalledTimes(1);
   });
 });

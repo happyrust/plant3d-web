@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 
-import { FileText, Upload, X, AlertCircle, CheckCircle, Loader2, RefreshCw, Ban } from 'lucide-vue-next';
+import { Eye, FileText, Upload, X, AlertCircle, CheckCircle, Loader2, RefreshCw, Ban } from 'lucide-vue-next';
 
 import {
   ATTACHMENT_UPLOAD_CONCURRENCY,
@@ -12,11 +12,18 @@ import {
   shouldAutoUploadAttachments,
 } from './reviewAttachmentFlow';
 
+import type { ReviewAttachment } from '@/types/auth';
+
 import {
   isAttachmentUploadAborted,
   reviewAttachmentDelete,
   reviewAttachmentUploadWithProgress,
 } from '@/api/reviewApi';
+import {
+  activeReviewAttachmentPreview,
+  clearReviewAttachmentPreviewIfShowing,
+  getReviewAttachmentPreviewKind,
+} from '@/composables/useReviewAttachmentPreview';
 
 // 上传文件类型定义
 // `file` 仅本地待上传条目必有；后端恢复的历史附件没有本地 File 对象。
@@ -44,6 +51,7 @@ type Props = {
   autoUpload?: boolean; // 是否自动上传
   taskId?: string | null; // 关联的任务ID（创建任务前可为空）
   formId?: string | null; // 可选的稳定单据号，创建任务前可先用于附件归档
+  previewable?: boolean; // 已上传的 PDF / Word / 图片显示「查看」
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -54,6 +62,7 @@ const props = withDefaults(defineProps<Props>(), {
   autoUpload: true,
   taskId: null,
   formId: null,
+  previewable: false,
 });
 
 defineOptions({
@@ -66,7 +75,30 @@ const emit = defineEmits<{
   (e: 'uploadComplete', file: UploadedFile): void;
   (e: 'uploadError', file: UploadedFile, error: Error): void;
   (e: 'uploadCancel', file: UploadedFile): void;
+  (e: 'preview', file: UploadedFile): void;
 }>();
+
+function toPreviewAttachment(file: UploadedFile): ReviewAttachment | null {
+  if (file.status !== 'success' || !file.serverUrl) return null;
+  return {
+    id: file.serverAttachmentId || file.id,
+    name: file.name,
+    url: file.serverUrl,
+    size: file.size,
+    mimeType: file.type || undefined,
+    uploadedAt: file.uploadedAt || Date.now(),
+  };
+}
+
+function canPreviewFile(file: UploadedFile): boolean {
+  const attachment = toPreviewAttachment(file);
+  return props.previewable && !!attachment && getReviewAttachmentPreviewKind(attachment) !== null;
+}
+
+function isPreviewingFile(file: UploadedFile): boolean {
+  const attachment = toPreviewAttachment(file);
+  return !!attachment && activeReviewAttachmentPreview.value?.attachment.id === attachment.id;
+}
 
 // 进行中的上传，用于取消；仅在上传期间持有，settle 后立即清理
 const uploadControllers = new Map<string, AbortController>();
@@ -360,16 +392,41 @@ async function removeFile(id: string) {
     }
   }
 
+  clearReviewAttachmentPreviewIfShowing(serverAttachmentId);
+  clearReviewAttachmentPreviewIfShowing(target.id);
   commitFiles(currentFiles().filter((f) => f.id !== id));
 }
 
-// 清空所有文件
-function clearAll() {
+// 清空所有文件。已上传的条目先删服务端记录，失败的留在列表里并写明原因。
+async function clearAll() {
   if (props.disabled) return;
-  for (const file of currentFiles()) {
+  const files = currentFiles();
+  for (const file of files) {
     cancelUpload(file.id);
   }
-  commitFiles([]);
+  const kept: UploadedFile[] = [];
+  for (const file of files) {
+    const serverAttachmentId = file.serverAttachmentId?.trim();
+    if (!serverAttachmentId) {
+      clearReviewAttachmentPreviewIfShowing(file.id);
+      continue;
+    }
+    try {
+      const result = await reviewAttachmentDelete(serverAttachmentId);
+      if (!result.success) {
+        throw new Error(result.error_message || result.message || '删除失败');
+      }
+      clearReviewAttachmentPreviewIfShowing(serverAttachmentId);
+      clearReviewAttachmentPreviewIfShowing(file.id);
+    } catch (error) {
+      kept.push({
+        ...file,
+        status: 'error',
+        errorMessage: `删除失败：${error instanceof Error ? error.message : '请稍后重试'}`,
+      });
+    }
+  }
+  commitFiles(kept);
 }
 
 // 拖拽处理
@@ -537,6 +594,7 @@ defineExpose({
           <button v-if="!disabled"
             type="button"
             class="h-7 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-danger-subtle hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+            data-testid="file-upload-clear-all"
             @click.stop="clearAll">
             清空全部
           </button>
@@ -589,6 +647,16 @@ defineExpose({
 
         <!-- 操作按钮 -->
         <div class="flex shrink-0 items-center gap-1">
+          <button v-if="canPreviewFile(file)"
+            type="button"
+            class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            :class="isPreviewingFile(file) ? 'bg-brand text-brand-foreground' : 'text-brand hover:bg-brand-subtle'"
+            :data-testid="`file-upload-preview-${file.serverAttachmentId || file.id}`"
+            :aria-pressed="isPreviewingFile(file)"
+            @click.stop="emit('preview', file)">
+            <Eye class="h-3.5 w-3.5" aria-hidden="true" />
+            {{ isPreviewingFile(file) ? '预览中' : '查看' }}
+          </button>
           <!-- 取消按钮（上传中显示；大文件误传时不必干等） -->
           <button v-if="file.status === 'uploading'"
             type="button"

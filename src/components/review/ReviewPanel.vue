@@ -83,7 +83,11 @@ import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables
 import { refreshCommentThread } from '@/composables/useCommentThread';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
-import { openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
+import {
+  activeReviewAttachmentPreview,
+  clearReviewAttachmentPreview,
+  openReviewAttachmentPreview,
+} from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import {
@@ -352,7 +356,7 @@ const {
 /** 汇总一条确认记录内所有批注的严重度分布，供审核侧一眼看到批次风险画像。 */
 function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<SeverityBucket, number> {
   const buckets: Record<SeverityBucket, number> = {
-    critical: 0, severe: 0, normal: 0, suggestion: 0, unset: 0,
+    principle: 0, general: 0, drawing: 0, unset: 0,
   };
   const all = [
     ...record.annotations,
@@ -362,7 +366,7 @@ function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<Sev
   ];
   for (const item of all) {
     const sev = (item as { severity?: AnnotationSeverity } | null)?.severity;
-    if (sev === 'critical' || sev === 'severe' || sev === 'normal' || sev === 'suggestion') {
+    if (sev === 'principle' || sev === 'general' || sev === 'drawing') {
       buckets[sev]++;
     } else {
       buckets.unset++;
@@ -371,7 +375,7 @@ function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<Sev
   return buckets;
 }
 
-const CONFIRMED_SEVERITY_ORDER: SeverityBucket[] = ['critical', 'severe', 'normal', 'suggestion', 'unset'];
+const CONFIRMED_SEVERITY_ORDER: SeverityBucket[] = ['principle', 'general', 'drawing', 'unset'];
 
 const currentTaskConfirmedRecords = confirmedRecordsRestorer.sceneRecords;
 
@@ -385,6 +389,22 @@ function previewAttachment(attachment: ReviewAttachment) {
       level: 'warning',
     });
   }
+}
+
+function previewUploadedSupplement(file: UploadedFile): void {
+  const url = file.serverUrl?.trim() ?? '';
+  if (file.status !== 'success' || !url) {
+    emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
+    return;
+  }
+  previewAttachment({
+    id: file.serverAttachmentId || file.id,
+    name: file.name,
+    url,
+    size: file.size,
+    mimeType: file.type || undefined,
+    uploadedAt: file.uploadedAt || Date.now(),
+  });
 }
 
 // ─── 附件材料：补传 / 删除（后端强制权限，前端只做入口收敛） ───
@@ -428,12 +448,24 @@ watch(() => currentTask.value?.id, () => {
   supplementFiles.value = [];
 });
 
-/** 补传成功：后端已同步任务投影，刷新任务后把该条目从本地上传列表移除 */
+function supplementListedInTask(file: UploadedFile): boolean {
+  const attachments = currentTask.value?.attachments ?? [];
+  const serverId = file.serverAttachmentId?.trim();
+  const url = file.serverUrl?.trim();
+  return attachments.some((attachment) => {
+    if (serverId && attachment.id === serverId) return true;
+    const listedUrl = attachment.url?.trim();
+    return !!url && !!listedUrl && listedUrl === url;
+  });
+}
+
+/** 补传成功后先刷新任务。附件列表已经有同一条，再从本地上传列表拿掉；还没有就留着，查看仍可点。 */
 async function handleSupplementUploadComplete(file: UploadedFile) {
   const taskId = currentTask.value?.id;
   if (taskId) {
     await refreshCurrentTask(taskId);
   }
+  if (currentTask.value?.id !== taskId || !supplementListedInTask(file)) return;
   supplementFiles.value = supplementFiles.value.filter((item) => item.id !== file.id);
 }
 
@@ -457,6 +489,9 @@ async function handleDeleteAttachment(attachment: ReviewAttachment) {
     const result = await reviewAttachmentDelete(attachment.id);
     if (!result.success) {
       throw new Error(result.error_message || result.message || '删除失败');
+    }
+    if (activeReviewAttachmentPreview.value?.attachment.id === attachment.id) {
+      clearReviewAttachmentPreview();
     }
     emitToast({ message: `附件「${attachment.name}」已删除`, level: 'success' });
     await refreshCurrentTask(taskId);
@@ -797,7 +832,7 @@ async function handleSubmitToNextNode() {
         formId: formId || undefined,
         currentNode: currentNode.value,
         intent: 'submit_next',
-        includedTypes: ['text', 'cloud', 'rect'],
+        includedTypes: ['text', 'cloud', 'rect', 'obb'],
       }),
     }),
     submitTaskToNextNode: userStore.submitTaskToNextNode,
@@ -2275,7 +2310,9 @@ function handleAnnotationQueueCompleted() {
               :task-id="currentTask.id"
               :form-id="currentTask.formId || null"
               :auto-upload="true"
+              :previewable="true"
               accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
+              @preview="previewUploadedSupplement"
               @upload-complete="handleSupplementUploadComplete"
               @upload-cancel="handleSupplementUploadCancel" />
           </div>

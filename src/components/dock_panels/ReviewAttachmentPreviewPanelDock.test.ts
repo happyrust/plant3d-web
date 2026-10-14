@@ -55,10 +55,10 @@ function attachment(overrides: Partial<ReviewAttachment> = {}): ReviewAttachment
   };
 }
 
-function mountPanel() {
+function mountPanel(props?: Record<string, unknown>) {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const app = createApp(ReviewAttachmentPreviewPanelDock);
+  const app = createApp(ReviewAttachmentPreviewPanelDock, props);
   app.mount(host);
   return {
     host,
@@ -130,6 +130,32 @@ describe('ReviewAttachmentPreviewPanelDock', () => {
 
     expect(activeReviewAttachmentPreview.value).toBeNull();
     expect(mounted.host.textContent).toContain('请从校审附件列表中选择文档');
+
+    mounted.unmount();
+  });
+
+  it('弹出只把文档预览面板交给 dock', async () => {
+    const documentPanel = { id: 'reviewAttachmentPreview', api: { location: { type: 'grid' } } };
+    const measurementPanel = { id: 'measurement' };
+    const addPopoutGroup = vi.fn();
+    openReviewAttachmentPreview('task-1', attachment());
+    const mounted = mountPanel({
+      params: {
+        containerApi: {
+          getPanel: (id: string) => (id === 'reviewAttachmentPreview' ? documentPanel : measurementPanel),
+          addPopoutGroup,
+        },
+      },
+    });
+
+    const button = mounted.host.querySelector('[data-testid="review-attachment-preview-popout"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    button?.click();
+    await nextTick();
+
+    expect(addPopoutGroup).toHaveBeenCalledTimes(1);
+    expect(addPopoutGroup).toHaveBeenCalledWith(documentPanel);
+    expect(addPopoutGroup).not.toHaveBeenCalledWith(measurementPanel);
 
     mounted.unmount();
   });

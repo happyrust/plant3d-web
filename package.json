@@ -47,7 +47,8 @@
     "verify:dashboard": "bash scripts/verify-dashboard-workbench.sh",
     "deploy:ubuntu": "bash deploy/deploy_frontend_bundle.sh",
     "build:offline": "node scripts/build-offline-release.mjs",
-    "build:offline:skip-build": "node scripts/build-offline-release.mjs --skip-build"
+    "build:offline:skip-build": "node scripts/build-offline-release.mjs --skip-build",
+    "build:offline:frontend-only": "node scripts/build-offline-release.mjs --frontend-only"
   },
   "dependencies": {
     "@fontsource/fira-code": "^5.3.0",

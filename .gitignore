@@ -139,6 +139,9 @@ public/vendor/
 deploy/offline/nginx/
 !deploy/offline/nginx.conf.template
 deploy/offline/www/
+deploy/offline/backend/
 deploy/offline/config/deploy.env
+deploy/offline/release.json
 .tmp-nginx-download/
+.tmp-backend-release/
 

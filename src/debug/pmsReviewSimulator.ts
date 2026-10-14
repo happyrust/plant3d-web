@@ -5,6 +5,7 @@ import {
   type EmbeddedWorkflowActionMessage,
 } from './pmsReviewSimulatorEmbedMessages';
 
+import { GenModelV1ApiError, genModelV1Health } from '@/api/genModelV1Api';
 import {
   authVerifyToken,
   clearAuthToken,
@@ -1139,18 +1140,19 @@ async function loadAvailableProjects(): Promise<void> {
   renderActionStates();
 
   try {
-    const response = await fetch('/api/projects');
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`);
-    }
-    const data = await response.json() as { items?: Record<string, unknown>[] };
-    const items = Array.isArray(data.items) ? data.items : [];
-    state.availableProjects = items
-      .map((item) => normalizeProjectOption(item))
-      .filter((item): item is SimulatorProjectOption => item !== null);
+    // 旧 `/api/projects` 已随 legacy 退役。跟主站一样，只认 health 里这一个 project。
+    const health = await genModelV1Health();
+    const option = normalizeProjectOption({
+      name: health.project,
+      id: health.project,
+      notes: health.mdb ? `MDB ${health.mdb}` : '',
+    });
+    state.availableProjects = option ? [option] : [];
   } catch (error) {
     state.availableProjects = [];
-    state.projectsError = error instanceof Error ? error.message : String(error);
+    state.projectsError = error instanceof GenModelV1ApiError
+      ? `HTTP ${error.status} ${error.message}`.trim()
+      : (error instanceof Error ? error.message : String(error));
   } finally {
     state.loadingProjects = false;
     state.projectId = resolveEffectiveProjectId(state.projectId);

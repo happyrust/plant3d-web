@@ -133,11 +133,21 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url))
       }
     },
+    optimizeDeps: {
+      // Zrimo 的 docx 解析器用 import.meta.url 找 wasm。预构建会把地址改到
+      // .vite/deps 却不拷贝 wasm，浏览器拿到的是 index.html。
+      exclude: ['@zrimo/viewer', '@silurus/ooxml'],
+    },
     assetsInclude: ['**/*.wasm'],
     build: {
       // Rollup Options
       // https://vitejs.dev/config/build-options.html#build-rollupoptions
       rollupOptions: {
+        // 仿 PMS 调试页和主站一起进生产包。不写这条的话，下次 build 会把 dist 里的模拟器页清掉。
+        input: {
+          index: fileURLToPath(new URL('./index.html', import.meta.url)),
+          pmsReviewSimulator: fileURLToPath(new URL('./pms-review-simulator.html', import.meta.url)),
+        },
         output: {
           manualChunks: {
             ui: [

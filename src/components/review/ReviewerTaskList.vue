@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { Clock, FileText, Filter, HelpCircle, Paperclip, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
+import { Clock, FileText, Filter, HelpCircle, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
+import AssociatedFilesList from './AssociatedFilesList.vue';
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import {
   buildReviewConfirmSnapshotPayload,
@@ -19,12 +20,13 @@ import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import { reviewAnnotationCheck, reviewTaskGetById } from '@/api/reviewApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
+import { openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { UserRole, type ReviewTask } from '@/types/auth';
+import { UserRole, type ReviewAttachment, type ReviewTask } from '@/types/auth';
 import {
   getPriorityDisplayName,
   getReviewerInboxPanelTitle,
@@ -57,6 +59,13 @@ navigationState.bindRef('priorityFilter', priorityFilter, 'all');
 const tasks = computed(() => userStore.pendingReviewTasks.value);
 const inboxPanelTitle = computed(() => getReviewerInboxPanelTitle(userStore.currentUser.value?.role));
 const submittedInboxLabel = computed(() => getSubmittedInboxLabelForReviewer(userStore.currentUser.value?.role));
+function previewTaskAttachment(attachment: ReviewAttachment): void {
+  const taskId = selectedTask.value?.id?.trim();
+  if (!taskId || !openReviewAttachmentPreview(taskId, attachment)) {
+    emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
+  }
+}
+
 const reviewStageLabel = computed(() => {
   const r = userStore.currentUser.value?.role;
   if (r === UserRole.PROOFREADER) return '校对';
@@ -107,6 +116,8 @@ const selectedTaskDraftConfirmPayload = computed(() => buildReviewConfirmSnapsho
   legacyMeasurements: [...(toolStore.legacyMeasurements?.value ?? [])],
   xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
+  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
   ...(reviewStore.getBoundDimensionConfirmPayload?.() ?? {}),
 }));
 const selectedTaskConfirmedSnapshotPayload = computed(() => (
@@ -249,7 +260,7 @@ async function handleApprove(task: ReviewTask) {
         formId: task.formId || undefined,
         currentNode: task.currentNode,
         intent: 'submit_next',
-        includedTypes: ['text', 'cloud', 'rect'],
+        includedTypes: ['text', 'cloud', 'rect', 'obb'],
       }),
     }),
     submitTaskToNextNode: userStore.submitTaskToNextNode,
@@ -536,25 +547,14 @@ onMounted(() => {
               </div>
             </div>
             <div>
-              <div class="flex items-center justify-between gap-2">
-                <label class="text-sm text-gray-500">附件材料 ({{ selectedTask.attachments?.length || 0 }})</label>
-                <span v-if="selectedTaskLoading" class="text-xs text-gray-400">同步详情中...</span>
-              </div>
-              <div v-if="selectedTask.attachments?.length" class="mt-2 space-y-1 max-h-32 overflow-auto">
-                <a v-for="attachment in selectedTask.attachments"
-                  :key="attachment.id || attachment.url"
-                  :href="attachment.url"
-                  target="_blank"
-                  rel="noreferrer"
-                  class="flex items-center gap-2 rounded bg-gray-50 px-2 py-2 text-sm hover:bg-gray-100">
-                  <Paperclip class="h-4 w-4 text-brand" />
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate font-medium text-gray-900">{{ attachment.name || '未命名附件' }}</div>
-                    <div class="truncate text-xs text-gray-500">{{ attachment.mimeType || attachment.type || attachment.url }}</div>
-                  </div>
-                </a>
-              </div>
-              <p v-else class="mt-2 text-sm text-gray-500">暂无附件</p>
+              <div v-if="selectedTaskLoading" class="mb-2 text-xs text-gray-400">同步详情中...</div>
+              <AssociatedFilesList :attachments="selectedTask.attachments ?? []"
+                title="附件材料"
+                description=""
+                empty-text="暂无附件"
+                empty-hint=""
+                :previewable="true"
+                @preview="previewTaskAttachment" />
               <p v-if="selectedTaskError" class="mt-2 text-xs text-danger">{{ selectedTaskError }}</p>
             </div>
           </div>

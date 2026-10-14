@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch, type WatchStopHandle } from 'vue';
 
-import { Box, Calendar, CheckCircle, ChevronDown, Flag, HelpCircle, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
+import { Box, Calendar, CheckCircle, ChevronDown, Flag, HelpCircle, Paperclip, Plus, Send, User, X } from 'lucide-vue-next';
 
-import AssociatedFilesList from './AssociatedFilesList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import {
@@ -27,6 +26,7 @@ import Input from '@/components/ui/Input.vue';
 import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
+import { openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import {
   normalizeReviewDeliveryRefno,
   resolveReviewDeliveryUnitRefno,
@@ -38,7 +38,8 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { getModelSource } from '@/model-source';
-import { getRoleDisplayName } from '@/types/auth';
+import { emitToast } from '@/ribbon/toastBus';
+import { getRoleDisplayName, type ReviewAttachment } from '@/types/auth';
 
 type InitiateReviewAutomationCreateResult = {
   taskId: string | null;
@@ -223,11 +224,11 @@ function buildReviewComponent(params: {
   };
 }
 
-function ensureComponentSelected(refNo: string, name?: string, type = 'BRAN') {
+function ensureComponentSelected(refNo: string, name?: string, type?: string) {
   if (selectedComponents.value.some((c) => c.refNo === refNo)) return;
   selectedComponents.value.push(buildReviewComponent({
     refNo,
-    name: name || `BRAN/${refNo}`,
+    name: name || refNo,
     type,
   }));
 }
@@ -586,13 +587,42 @@ const activeUploadTaskId = computed(() => createdTaskId.value);
 const activeUploadFormId = computed(() => formId.value || createdTaskFormId.value);
 const canAutoUploadAttachments = computed(() => !!(activeUploadTaskId.value || activeUploadFormId.value));
 
+function previewUploadedFile(file: UploadedFile): void {
+  const url = file.serverUrl?.trim() ?? '';
+  const scope = (activeUploadTaskId.value || activeUploadFormId.value || '').trim();
+  if (file.status !== 'success' || !url || !scope) {
+    emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
+    return;
+  }
+  const attachment: ReviewAttachment = {
+    id: file.serverAttachmentId || file.id,
+    name: file.name,
+    url,
+    size: file.size,
+    mimeType: file.type || undefined,
+    uploadedAt: file.uploadedAt || Date.now(),
+  };
+  if (!openReviewAttachmentPreview(scope, attachment)) {
+    emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
+  }
+}
+
 const currentProjectId = computed<string>(() => {
   return resolveProjectId();
 });
 
-const selectedComponentSummary = computed(() => {
-  return `已选中 ${selectedComponents.value.length} 个 BRAN 管道构件`;
-});
+function summarizeSelectedComponents(components: { type?: string }[]): string {
+  const count = components.length;
+  if (count === 0) return '还没有选择构件';
+  const labels = components.map((item) => item.type?.trim() || '构件');
+  const unique = [...new Set(labels)];
+  if (unique.length === 1 && unique[0] !== '构件') {
+    return `已选中 ${count} 个 ${unique[0]}`;
+  }
+  return `已选中 ${count} 个构件`;
+}
+
+const selectedComponentSummary = computed(() => summarizeSelectedComponents(selectedComponents.value));
 
 const reviewerOptions = computed(() => {
   const combined = [...availableCheckers.value, ...availableApprovers.value];
@@ -1270,23 +1300,13 @@ function closePanel() {
           :task-id="activeUploadTaskId"
           :form-id="activeUploadFormId"
           :auto-upload="canAutoUploadAttachments"
-          accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg" />
-        <div class="-mt-1 rounded-[8px] border border-dashed border-[#E5E7EB] bg-[#FCFCFD] px-4 py-6 text-center">
-          <UploadCloud class="mx-auto h-6 w-6 text-[#9CA3AF]" />
-          <p class="mt-2 text-xs text-[#6B7280]">点击或拖拽上传 PDF / CAD 文件</p>
-        </div>
+          :previewable="true"
+          accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
+          @preview="previewUploadedFile" />
         <p class="text-xs text-[#6B7280]">支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB</p>
         <p v-if="!canAutoUploadAttachments" class="text-xs text-[#F59E0B]">
           {{ attachmentUploadHint }}
         </p>
-      </div>
-
-      <div class="space-y-2">
-        <label class="flex items-center gap-1 text-[13px] font-medium text-[#6B7280]">
-          <Link class="h-4 w-4" />
-          自动关联文件
-        </label>
-        <AssociatedFilesList :attachments="[]" />
       </div>
 
       <Button class="w-full" data-guide="submit-btn" :disabled="!canSubmit || isSubmitting" @click="handleSubmit">

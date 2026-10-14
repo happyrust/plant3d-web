@@ -184,11 +184,15 @@ describe('InitiateReviewPanel 最小交付单元约束', () => {
     });
 
     await mountPanel();
+    expect(getComponentListText()).toContain('还没有选择构件');
+    expect(getComponentListText()).not.toContain('管道构件');
     findAddButton().click();
     await flushUi();
 
     expect(mocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
     expect(getComponentListText()).toContain('24381_145018');
+    expect(getComponentListText()).toContain('已选中 1 个 BRAN');
+    expect(getComponentListText()).not.toContain('管道构件');
   });
 
   it('选中子构件时向上归并到最小交付单元', async () => {
@@ -456,7 +460,7 @@ describe('InitiateReviewPanel 最小交付单元约束', () => {
   it('automation addMockComponent 直接注入模拟构件：只做 a/b → a_b 字符归一，不查类型、不归并到最小交付单元', async () => {
     // 2026-09-10 重钉到源码现行为：E2E 钩子 `__plant3dInitiateReviewE2E.addMockComponent` 是「无三维选区时注入一条模拟构件」
     // 的旁路（InitiateReviewPanel 注释：不替代真实校审流程）——`ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name)`
-    // 直接按 BRAN 入列，不打 pdmsGetTypeInfo / pdmsGetUiAttr；最小交付单元归并只在真实的「添加构件」路径上做（上面几条用例）。
+    // 不查类型，也不写成 BRAN。最小交付单元归并只在真实的「添加构件」路径上做（上面几条用例）。
     enableAutomationReviewHook();
     mocks.pdmsGetTypeInfo.mockResolvedValue({
       success: true,

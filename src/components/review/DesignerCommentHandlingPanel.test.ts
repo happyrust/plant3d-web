@@ -486,6 +486,8 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeNull();
     expect(document.body.textContent).toContain('批注表格');
     expect(document.body.textContent).toContain('待处理批注');
+    expect(document.querySelector('[data-testid="review-attachment-preview-att-1"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('设计说明.pdf');
     expect(document.body.textContent).not.toContain('其他单据批注');
 
     mounted.unmount();
@@ -878,9 +880,30 @@ describe('DesignerCommentHandlingPanel', () => {
       formId: 'FORM-1001',
       currentNode: 'sj',
       intent: 'submit_next',
-      includedTypes: ['text', 'cloud', 'rect'],
+      includedTypes: ['text', 'cloud', 'rect', 'obb'],
     }));
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-designer-1');
+
+    mounted.unmount();
+  });
+
+  it('点击确认当前数据会写入确认记录、清理草稿并恢复场景确认态', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const confirmButton = document.querySelector<HTMLButtonElement>('[data-testid="designer-confirm-button"]');
+    expect(confirmButton).toBeTruthy();
+    expect(confirmButton?.disabled).toBe(false);
+
+    confirmButton!.click();
+    await flushUi();
+
+    expect(addConfirmedRecordMock).toHaveBeenCalledTimes(1);
+    expect(restoreConfirmedRecordsIntoSceneMock).toHaveBeenCalledWith(true);
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('确认数据已保存'),
+      level: 'success',
+    }));
 
     mounted.unmount();
   });

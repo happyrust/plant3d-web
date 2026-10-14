@@ -35,7 +35,7 @@ const v1Source = {
       empty: [],
       truncatedRoots: [],
       errors: {},
-      statuses: {},
+      statuses: {} as Record<string, string>,
     })),
   },
   meshes: { meshUrl: vi.fn() },
@@ -287,13 +287,99 @@ describe('showModelByRefno（gen-model-v1）', () => {
       truncatedRoots: [],
       errors: {},
       statuses: { '1_2': 'generation_pending' },
-    });
+    } as never);
 
     expect(await gen.showModelByRefno('1_2', { regenerate: true })).toBe(false);
     expect(visibleInstsMock).not.toHaveBeenCalled();
     expect(loadInstancesMock).not.toHaveBeenCalled();
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
       level: 'info', message: expect.stringContaining('服务端后台继续生成，完成后再点眼睛'),
+    }));
+  });
+
+  it('auto_generate_on_empty_records：BRAN 类型 records 为空时自动生成并装载', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    // 第一次查询 records：为空（触发自动生成）
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: '24381_145018', refnos: [] });
+    // 节点类型是 BRAN（有几何类型）
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_145018', noun: 'BRAN', owner_refno: null, owner_noun: null });
+    // generateThenCollect 返回 items（生成成功）
+    v1Source.records.generateThenCollect.mockResolvedValueOnce({
+      refno: '24381_145018',
+      generationRoots: ['24381_145018'],
+      items: [{ refno: '24381_145018' }],
+      pending: [],
+      empty: [],
+      truncatedRoots: [],
+      errors: {},
+      statuses: {},
+    } as never);
+    // 生成后重新查询 records：返回构件
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: '24381_145018', refnos: ['24381_145018'] });
+
+    const ok = await gen.showModelByRefno('24381_145018');
+
+    expect(ok).toBe(true);
+    expect(typeInfoMock).toHaveBeenCalledWith('24381_145018');
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_145018');
+    expect(loadInstancesMock).toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'success', message: expect.stringContaining('已自动生成并加载'),
+    }));
+  });
+
+  it('no_auto_generate_for_non_geometry_type：SITE 类型 records 为空时不自动生成', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    // records 为空
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_2', refnos: [] });
+    // 节点类型是 SITE（非几何类型）
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_2', noun: 'SITE', owner_refno: null, owner_noun: null });
+
+    const ok = await gen.showModelByRefno('24381_2');
+
+    expect(ok).toBe(false);
+    expect(typeInfoMock).toHaveBeenCalledWith('24381_2');
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(loadInstancesMock).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('右键「重新生成模型」可生成'),
+    }));
+  });
+
+  it('auto_generate_only_once：同一 refno 第二次显示不重复自动生成', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    // 第一次：records 为空，BRAN 类型，自动生成失败（items 为空）
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_145018', refnos: [] });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_145018', noun: 'BRAN', owner_refno: null, owner_noun: null });
+    v1Source.records.generateThenCollect.mockResolvedValueOnce({
+      refno: '24381_145018',
+      generationRoots: [],
+      items: [],
+      pending: ['24381_145018'],
+      empty: [],
+      truncatedRoots: [],
+      errors: {},
+      statuses: { '24381_145018': 'generation_pending' },
+    } as never);
+
+    const first = await gen.showModelByRefno('24381_145018');
+    expect(first).toBe(false);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+
+    // 第二次：records 仍为空，但已尝试过自动生成，不再自动生成
+    v1Source.records.generateThenCollect.mockClear();
+    const second = await gen.showModelByRefno('24381_145018');
+    expect(second).toBe(false);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('右键「重新生成模型」可生成'),
     }));
   });
 });

@@ -48,3 +48,21 @@ ADR-0030（2026-10-09）把原则改成「显示只按 `inst_relate` 的 `anc` �
 - 源码钉与用例：`display_never_generates`（`modelRecordSource` / `treeSource` / `collectDbnum` 的显示路径不出现 `generate`）、
   `an_empty_scope_is_a_hint_not_an_error`、`regenerate_generates_once_then_displays_the_targets`、`a_timed_out_generate_does_not_display`；
   `collectDbnum.test.ts` 按 query-only 重写。
+
+## Addendum (2026-10-14): 有几何类型的单元 records 为空时自动生成
+
+**背景**：用户反馈「显示模型时，如果是有几何节点的类型（BRAN/HANG/SUPPO/EQUI），但一个模型都没有，需要自动重新生成模型了再显示」，免去手动右键「重新生成模型」。
+
+**决策**：在 `useModelGeneration.showModelByRefno` 的 records 查空分支里，对**有几何的交付单元类型**（`GEOMETRY_UNIT_TYPES = {BRAN, HANG, SUPPO, EQUI}`，来自 gen-model `delivery_unit_types`）触发一次自动生成：
+
+1. 先 `tree.node` 读节点 `noun`，不是几何单元类型（如 SITE/ZONE 容器）不自动生成，保持原提示「范围内没有已生成的模型；右键可生成」。
+2. 几何单元类型且 records 为空 → 调 `records.generateThenCollect(refno)`（即 `POST /model/generate`，非 force），成功后重新 `queryLoadScopeRefnos` 再查 records，命中缓存直接装载。
+3. 同一 refno 只自动生成一次（`autoGenerateAttempted` 集合去重），避免反复点眼睛反复生成；生成失败（timeout/pending/errors）回退原提示，不进 `loadedRoots`。
+4. 生成成功后弹 `[成功] {refno} 模型已自动生成并加载`，失败弹 `[提示] 自动生成未完成：{原因}`。
+
+**与原 ADR 的关系**：原 ADR 「显示 = 查询」的原则不变——本追记是「**空 records 的兜底**」，只发生在「records 确实为空」且「节点类型明确有几何」这两个条件同时满足时；容器（SITE/ZONE）查空仍只是提示，不会自动生成整库。源码钉 `display_never_generates` 钉的是 `modelRecordSource` / `treeSource` / `collectDbnum` 三层，`useModelGeneration` 是显示流程的编排层，本追记不违反该钉。
+
+**验证**：
+- 单测：`auto_generate_on_empty_records`（BRAN 空 records 自动生成并装载）、`no_auto_generate_for_non_geometry_type`（SITE 不自动生成）、`auto_generate_only_once`（同一 refno 不重复生成）。
+- E2E：`scripts/verify-auto-generate-on-display.mjs` 通过 `showModelByRefnos` 事件触发显示 `24381_144976`（BRAN，records 空），观测到请求序列 `records(空) → tree/ancestors + tree/children(typeInfo) → model/generate → records(16 items) → meshes/*(8)`，确认自动生成正确触发并装载。
+- 回归：`useModelGeneration.genModelV1.test.ts` 33 tests、`model-source/genModelV1/` 全部、`model-tree/` 相关测试，共 181 tests 全绿；type-check 新增 0 错误。

@@ -1,10 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick, type Component } from 'vue';
+import { createApp, h, nextTick, ref, type Component } from 'vue';
 
 import type { ShowModelByRefnosResult } from '@/composables/useViewerContext';
 import type { ReviewTask } from '@/types/auth';
 
-const currentTask = { value: null as ReviewTask | null };
+const currentTask = ref<ReviewTask | null>(null);
 const reviewMode = { value: false };
 const reviewError = { value: null as string | null };
 const confirmedRecordCount = { value: 0 };
@@ -29,6 +29,7 @@ const workflowResponseState = {
 };
 
 const loadWorkflowMock = vi.fn(async () => workflowResponseState.value);
+const reviewTasksState = { value: [] as ReviewTask[] };
 const loadReviewTasksMock = vi.fn(async () => {});
 const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
   currentTask.value = task;
@@ -212,6 +213,7 @@ const reviewAttachmentPreviewMock = vi.hoisted(() => ({
     return null;
   }),
   open: vi.fn(() => true),
+  clear: vi.fn(),
   buildDownloadUrl: vi.fn((attachment: { name?: string; url?: string }) => (
     `${attachment.url ?? ''}?download=1&name=${encodeURIComponent(attachment.name ?? '')}`
   )),
@@ -231,6 +233,7 @@ vi.mock('@/composables/useDockApi', () => ({
 vi.mock('@/composables/useReviewAttachmentPreview', () => ({
   getReviewAttachmentPreviewKind: reviewAttachmentPreviewMock.getKind,
   openReviewAttachmentPreview: reviewAttachmentPreviewMock.open,
+  clearReviewAttachmentPreview: reviewAttachmentPreviewMock.clear,
   buildReviewAttachmentDownloadUrl: reviewAttachmentPreviewMock.buildDownloadUrl,
   activeReviewAttachmentPreview: reviewAttachmentPreviewMock.active,
 }));
@@ -315,7 +318,7 @@ vi.mock('./WorkflowReturnDialog.vue', () => ({ default: { template: '<div />' } 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
     currentUser: { value: { id: 'reviewer-1', name: '校对甲', role: 'proofreader' } },
-    reviewTasks: { value: [] as ReviewTask[] },
+    reviewTasks: reviewTasksState,
     loadReviewTasks: loadReviewTasksMock,
     getTaskWorkflowHistory: loadWorkflowMock,
     submitTaskToNextNode: submitTaskToNextNodeMock,
@@ -421,6 +424,7 @@ describe('ReviewPanel', () => {
       currentNodeName: '校核',
       history: [],
     };
+    reviewTasksState.value = [];
     loadWorkflowMock.mockClear();
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
@@ -465,6 +469,7 @@ describe('ReviewPanel', () => {
     reviewAttachmentPreviewMock.buildDownloadUrl.mockClear();
     reviewAttachmentPreviewMock.open.mockReset();
     reviewAttachmentPreviewMock.open.mockReturnValue(true);
+    reviewAttachmentPreviewMock.clear.mockClear();
     reviewAttachmentPreviewMock.active.value = null;
     showModelByRefnosWithAckMock.mockClear();
     showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });
@@ -1073,6 +1078,7 @@ describe('ReviewPanel', () => {
         },
       ],
     });
+    reviewAttachmentPreviewMock.active.value = { attachment: { id: 'attachment-1' } };
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const mounted = await mountReviewPanel();
     await settleVue();
@@ -1089,10 +1095,144 @@ describe('ReviewPanel', () => {
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(reviewAttachmentDeleteMock).toHaveBeenCalledWith('attachment-1');
+    expect(reviewAttachmentPreviewMock.clear).toHaveBeenCalledTimes(1);
     expect(loadReviewTasksMock).toHaveBeenCalled();
 
     confirmSpy.mockRestore();
     mounted.unmount();
+  });
+
+  it('previews a supplemented upload with the current task id', async () => {
+    reviewAttachmentPreviewMock.open.mockClear();
+    emitToastMock.mockClear();
+    currentTask.value = createTask({
+      currentNode: 'sj',
+      requesterId: 'reviewer-1',
+    });
+    const mounted = await mountReviewPanel();
+    await settleVue();
+
+    let releaseRefresh: () => void = () => {};
+    loadReviewTasksMock.mockImplementation(() => new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    }));
+
+    try {
+      const zone = document.querySelector('[data-testid="review-attachment-supplement-zone"]');
+      const input = zone?.querySelector('[data-testid="file-upload-input"]') as HTMLInputElement | null;
+      expect(input).not.toBeNull();
+      const file = new File([new Uint8Array(32)], 'extra.pdf', { type: 'application/pdf' });
+      Object.defineProperty(input!, 'files', { configurable: true, value: [file] });
+      input!.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const previewButton = await vi.waitFor(() => {
+        const button = document.querySelector('[data-testid="file-upload-preview-att-new"]') as HTMLButtonElement | null;
+        expect(button).not.toBeNull();
+        return button!;
+      });
+      expect(previewButton.textContent).toContain('查看');
+      previewButton.click();
+
+      expect(reviewAttachmentPreviewMock.open).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({
+          id: 'att-new',
+          name: 'extra.pdf',
+          url: '/files/review_attachments/att-new.pdf',
+          mimeType: 'application/pdf',
+        }),
+      );
+      expect(emitToastMock).not.toHaveBeenCalled();
+    } finally {
+      releaseRefresh();
+      loadReviewTasksMock.mockImplementation(async () => {});
+      await settleVue();
+      mounted.unmount();
+    }
+  });
+
+  it('keeps the supplement preview until the attachment list shows the same file', async () => {
+    reviewAttachmentPreviewMock.open.mockClear();
+    emitToastMock.mockClear();
+    currentTask.value = createTask({
+      currentNode: 'sj',
+      requesterId: 'reviewer-1',
+    });
+    const mounted = await mountReviewPanel();
+    await settleVue();
+
+    let releaseRefresh: () => void = () => {};
+    loadReviewTasksMock.mockImplementation(() => new Promise<void>((resolve) => {
+      reviewTasksState.value = [
+        createTask({
+          currentNode: 'sj',
+          requesterId: 'reviewer-1',
+          attachments: [
+            {
+              id: 'att-new',
+              name: 'extra.pdf',
+              url: '/files/review_attachments/att-new.pdf',
+              mimeType: 'application/pdf',
+              uploadedAt: 1710000002000,
+            },
+          ],
+        }),
+      ];
+      releaseRefresh = resolve;
+    }));
+
+    try {
+      const zone = document.querySelector('[data-testid="review-attachment-supplement-zone"]');
+      const input = zone?.querySelector('[data-testid="file-upload-input"]') as HTMLInputElement | null;
+      expect(input).not.toBeNull();
+      const file = new File([new Uint8Array(32)], 'extra.pdf', { type: 'application/pdf' });
+      Object.defineProperty(input!, 'files', { configurable: true, value: [file] });
+      input!.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const previewButton = await vi.waitFor(() => {
+        const button = document.querySelector('[data-testid="file-upload-preview-att-new"]') as HTMLButtonElement | null;
+        expect(button).not.toBeNull();
+        return button!;
+      });
+      expect(previewButton.textContent).toContain('查看');
+      expect(document.querySelector('[data-testid="review-attachment-preview-att-new"]')).toBeNull();
+      previewButton.click();
+      expect(reviewAttachmentPreviewMock.open).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({
+          id: 'att-new',
+          name: 'extra.pdf',
+          url: '/files/review_attachments/att-new.pdf',
+          mimeType: 'application/pdf',
+        }),
+      );
+
+      releaseRefresh();
+      const listed = await vi.waitFor(() => {
+        const button = document.querySelector('[data-testid="review-attachment-preview-att-new"]') as HTMLButtonElement | null;
+        expect(button).not.toBeNull();
+        return button!;
+      });
+      expect(document.querySelector('[data-testid="file-upload-preview-att-new"]')).toBeNull();
+      expect(listed.textContent).toContain('查看');
+      reviewAttachmentPreviewMock.open.mockClear();
+      listed.click();
+      expect(reviewAttachmentPreviewMock.open).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({
+          id: 'att-new',
+          name: 'extra.pdf',
+          url: '/files/review_attachments/att-new.pdf',
+        }),
+      );
+      expect(emitToastMock).not.toHaveBeenCalled();
+    } finally {
+      releaseRefresh();
+      loadReviewTasksMock.mockImplementation(async () => {});
+      reviewTasksState.value = [];
+      await settleVue();
+      mounted.unmount();
+    }
   });
 
   it('keeps attachments read-only outside the sj node and for non-requesters', async () => {
@@ -1614,7 +1754,7 @@ describe('ReviewPanel', () => {
     expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-1',
       currentNode: 'jd',
-      includedTypes: ['text', 'cloud', 'rect'],
+      includedTypes: ['text', 'cloud', 'rect', 'obb'],
     }));
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1', 'mock submit comment');
     expect(document.body.textContent).not.toContain('请先确认数据，再执行流转');
@@ -1658,7 +1798,7 @@ describe('ReviewPanel', () => {
     expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-1',
       currentNode: 'jd',
-      includedTypes: ['text', 'cloud', 'rect'],
+      includedTypes: ['text', 'cloud', 'rect', 'obb'],
     }));
     expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('存在待确认批注，请逐条确认后再继续');
