@@ -133,12 +133,8 @@ state/
 public/vendor/
 
 # 离线部署包：nginx 二进制与构建产物由打包脚本生成，不入库
-deploy/offline/nginx/nginx.exe
-deploy/offline/nginx/html/
-deploy/offline/nginx/contrib/
-deploy/offline/nginx/docs/
-deploy/offline/nginx/logs/*
-deploy/offline/nginx/temp/*
+deploy/offline/nginx/
+!deploy/offline/nginx.conf.template
 deploy/offline/www/
 deploy/offline/config/deploy.env
 .tmp-nginx-download/

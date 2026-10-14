@@ -206,15 +206,39 @@ async function main() {
         const extractDir = join(tmpDir, 'extracted');
         extractZip(zipPath, extractDir);
         
-        // 复制 nginx 文件到 offline 目录
+        // 复制 nginx 文件到 offline 目录（只复制需要的文件，减小包体积）
         // nginx zip 解压后是一个 nginx-1.30.5 目录
         const nginxExtracted = join(extractDir, `nginx-${NGINX_VERSION}`);
-        copyDir(nginxExtracted, NGINX_DIR);
+        
+        // 确保目标目录存在
+        mkdirSync(NGINX_DIR, { recursive: true });
+        
+        // 只复制 nginx.exe
+        copyFileSync(join(nginxExtracted, 'nginx.exe'), join(NGINX_DIR, 'nginx.exe'));
+        
+        // 复制 conf 目录：mime.types 从官方包复制，nginx.conf 使用我们的模板
+        const confSrc = join(nginxExtracted, 'conf');
+        const confDest = join(NGINX_DIR, 'conf');
+        mkdirSync(confDest, { recursive: true });
+        copyFileSync(join(confSrc, 'mime.types'), join(confDest, 'mime.types'));
+        
+        // 复制我们的 nginx.conf 模板
+        const nginxConfTemplate = join(OFFLINE_DIR, 'nginx.conf.template');
+        if (existsSync(nginxConfTemplate)) {
+          copyFileSync(nginxConfTemplate, join(confDest, 'nginx.conf'));
+        } else {
+          logError(`找不到 nginx.conf 模板: ${nginxConfTemplate}`);
+          process.exit(1);
+        }
+        
+        // 创建空的 logs 和 temp 目录
+        mkdirSync(join(NGINX_DIR, 'logs'), { recursive: true });
+        mkdirSync(join(NGINX_DIR, 'temp'), { recursive: true });
         
         // 清理临时文件
         removeDir(tmpDir);
         
-        logSuccess(`nginx ${NGINX_VERSION} 已下载并解压`);
+        logSuccess(`nginx ${NGINX_VERSION} 已下载并解压（精简版）`);
       } catch (err) {
         logError(`nginx 下载失败: ${err.message}`);
         logError('请手动下载 nginx for Windows:');
