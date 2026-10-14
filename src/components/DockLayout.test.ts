@@ -851,6 +851,25 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
+  it('右侧 zone 重新打开时按关闭前记住的宽度建组（initialWidth）', async () => {
+    const mounted = await mountDockLayout();
+
+    const rightGroup = dockPanels.get('properties')?.group;
+    dockPanels.delete('properties');
+    groupRemovedHandler!(rightGroup!);
+
+    lastDockApi!.addPanel.mockClear();
+    ribbonCommandHandler?.('panel.measurement');
+
+    expect(lastDockApi!.addPanel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'measurement',
+      initialWidth: 350,
+      position: expect.objectContaining({ direction: 'right' }),
+    }));
+
+    mounted.unmount();
+  });
+
   it('非嵌入模式仍优先恢复普通布局缓存', async () => {
     const savedLayout = {
       grid: {},
