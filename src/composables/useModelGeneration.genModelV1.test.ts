@@ -31,7 +31,7 @@ const v1Source = {
       refno,
       generationRoots: [refno],
       items: [{ refno }],
-      pending: [],
+      pending: [] as string[],
       empty: [],
       truncatedRoots: [],
       errors: {},
