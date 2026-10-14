@@ -106,6 +106,7 @@ scripts/*
 !scripts/type-check.mjs
 !scripts/type-check-baseline.txt
 !scripts/build-offline-release.mjs
+!scripts/test-offline-deploy.ps1
 
 # Local live-gate evidence (contains generated macros, logs, and root snapshots).
 output/gen-model-v1-frozen-source-live/

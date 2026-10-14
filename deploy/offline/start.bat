@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 :: ============================================================
-:: Plant3D-Web 离线部署版 - 启动脚本
+:: Plant3D-Web Offline Deploy - Start Script
 :: ============================================================
 
 set "SCRIPT_DIR=%~dp0"
@@ -12,7 +12,7 @@ set "NGINX_EXE=%NGINX_DIR%\nginx.exe"
 set "WWW_DIR=%SCRIPT_DIR%www"
 set "CONFIG_FILE=%SCRIPT_DIR%config\deploy.env"
 
-:: 读取配置
+:: Read config
 set "BACKEND_ADDR=http://127.0.0.1:8022"
 set "FRONTEND_PORT=80"
 if exist "%CONFIG_FILE%" (
@@ -22,67 +22,67 @@ if exist "%CONFIG_FILE%" (
 )
 
 echo ==========================================
-echo   Plant3D-Web 离线部署版
+echo   Plant3D-Web Offline Deploy
 echo ==========================================
 echo.
-echo   前端目录: %WWW_DIR%
-echo   后端地址: %BACKEND_ADDR%
-echo   监听端口: %FRONTEND_PORT% (同时监听 3100)
+echo   Frontend: %WWW_DIR%
+echo   Backend:  %BACKEND_ADDR%
+echo   Ports:    %FRONTEND_PORT% (also 3100)
 echo.
 
-:: 检查 nginx 是否存在
+:: Check nginx exists
 if not exist "%NGINX_EXE%" (
-    echo [错误] 找不到 nginx.exe: %NGINX_EXE%
-    echo 请先运行打包脚本准备 nginx，或参考 README.md 手动准备。
+    echo [ERROR] nginx.exe not found: %NGINX_EXE%
+    echo Please run the packaging script first.
     pause
     exit /b 1
 )
 
-:: 检查前端文件是否存在
+:: Check frontend files exist
 if not exist "%WWW_DIR%\index.html" (
-    echo [错误] 找不到前端文件: %WWW_DIR%\index.html
-    echo 请确认 www 目录包含构建产物。
+    echo [ERROR] index.html not found: %WWW_DIR%\index.html
+    echo Please check www directory.
     pause
     exit /b 1
 )
 
-:: 检查端口是否被占用
+:: Check port availability
 netstat -ano | findstr ":%FRONTEND_PORT% " >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [警告] 端口 %FRONTEND_PORT% 已被占用，尝试继续启动...
+    echo [WARN] Port %FRONTEND_PORT% is in use, trying to continue...
 )
 
-:: 更新 nginx 配置中的后端地址
+:: Update nginx config with backend address
 call :update_nginx_config
 
-:: 启动 nginx
-echo [启动] 正在启动 nginx...
+:: Start nginx
+echo [START] Starting nginx...
 cd /d "%NGINX_DIR%"
 start "Plant3D-Web Nginx" /min nginx.exe
 
-:: 等待启动
+:: Wait for startup
 timeout /t 2 /nobreak >nul
 
-:: 验证启动
+:: Verify startup
 curl -s -o nul -w "%%{http_code}" "http://localhost:%FRONTEND_PORT%/" 2>nul >nul
 if %errorlevel% equ 0 (
     echo.
     echo ==========================================
-    echo   启动成功！
+    echo   Started successfully!
     echo ==========================================
     echo.
-    echo   访问地址: http://localhost:%FRONTEND_PORT%/
-    echo   或:       http://localhost:3100/
-    echo   本机 IP:  http://^<本机IP^>:%FRONTEND_PORT%/
+    echo   URL:      http://localhost:%FRONTEND_PORT%/
+    echo   Alt:      http://localhost:3100/
+    echo   Network:  http://^<your-ip^>:%FRONTEND_PORT%/
     echo.
-    echo   按任意键在浏览器中打开...
+    echo   Press any key to open in browser...
     pause >nul
     start http://localhost:%FRONTEND_PORT%/
 ) else (
     echo.
-    echo [错误] nginx 启动失败，请检查：
-    echo   1. 端口 %FRONTEND_PORT% 和 3100 是否被占用
-    echo   2. 查看日志: %NGINX_DIR%\logs\error.log
+    echo [ERROR] nginx failed to start. Please check:
+    echo   1. Ports %FRONTEND_PORT% and 3100 are not in use
+    echo   2. Check log: %NGINX_DIR%\logs\error.log
     pause
     exit /b 1
 )
@@ -90,16 +90,16 @@ if %errorlevel% equ 0 (
 exit /b 0
 
 :: ============================================================
-:: 更新 nginx 配置中的后端地址
+:: Update nginx config with backend address
 :: ============================================================
 :update_nginx_config
 set "NGINX_CONF=%NGINX_DIR%\conf\nginx.conf"
 set "NGINX_CONF_BAK=%NGINX_DIR%\conf\nginx.conf.bak"
 
-:: 备份原配置
+:: Backup original config
 if not exist "%NGINX_CONF_BAK%" copy /y "%NGINX_CONF%" "%NGINX_CONF_BAK%" >nul
 
-:: 替换后端地址
+:: Replace backend address
 powershell -Command "(Get-Content '%NGINX_CONF%' -Raw) -replace 'server 127\.0\.0\.1:8022;', 'server %BACKEND_ADDR:http://=%;' -replace 'set \$backend_addr \"http://127\.0\.0\.1:8022\";', 'set \$backend_addr \"%BACKEND_ADDR%\";' | Set-Content '%NGINX_CONF%' -NoNewline"
 
 goto :eof
