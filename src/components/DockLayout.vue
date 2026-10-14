@@ -35,9 +35,11 @@ import { useModelProjects } from '@/composables/useModelProjects';
 import {
   initPanelZones,
   disposePanelZones,
+  getCollapsedZones,
   toggleZone as togglePanelZone,
   onPanelOpened,
   resetZoneState,
+  ZONE_PANELS,
   type ZoneName,
 } from '@/composables/usePanelZones';
 import { clearReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
@@ -60,6 +62,7 @@ type DockviewGroupLike = {
     readonly width: number;
     readonly height: number;
     setSize: (size: { width?: number; height?: number }) => void;
+    location?: { type?: string };
   };
   id: string;
   panels: DockviewPanelLike[];
@@ -86,6 +89,8 @@ type DockApi = {
   toJSON: () => unknown;
   fromJSON: (data: unknown) => void;
   onDidLayoutChange: (cb: () => void) => unknown;
+  onDidAddGroup?: (cb: (group: DockviewGroupLike) => void) => unknown;
+  onDidRemoveGroup?: (cb: (group: DockviewGroupLike) => void) => unknown;
   addPopoutGroup: (group: unknown) => void;
   activeGroup?: unknown;
 };
@@ -479,6 +484,80 @@ function closePanelIfExists(dockApi: DockApi, id: string) {
   }
 }
 
+// dockview 增删分组时用 Sizing.Distribute 把空间按比例摊给剩余分组，
+// 关掉右侧 dock 会连左侧 dock 一起拉大（反之亦然）。这里记住左右 dock
+// 最近一次宽度，分组增删后恢复它，让中间 viewer 吸收全部空间变化。
+const sideZoneSizeCache: Partial<Record<'left' | 'right', number>> = {};
+const sideZonePresence: Record<'left' | 'right', boolean> = { left: false, right: false };
+
+type SideZoneName = 'left' | 'right';
+
+function isGridDockGroup(group: DockviewGroupLike): boolean {
+  const locationType = group.api.location?.type;
+  return !locationType || locationType === 'grid';
+}
+
+function findSideZoneGroup(zone: SideZoneName): DockviewGroupLike | undefined {
+  const dockApi = api.value;
+  if (!dockApi) return undefined;
+  for (const panelId of ZONE_PANELS[zone]) {
+    const group = dockApi.getPanel(panelId)?.group;
+    if (group && isGridDockGroup(group)) return group;
+  }
+  return undefined;
+}
+
+function groupSideZone(group: DockviewGroupLike): SideZoneName | undefined {
+  return (['left', 'right'] as const).find((zone) =>
+    group.panels.some((panel) => ZONE_PANELS[zone].includes(panel.id)));
+}
+
+function rememberSideZoneSizes() {
+  (['left', 'right'] as const).forEach((zone) => {
+    const group = findSideZoneGroup(zone);
+    if (group && group.api.width > 0) {
+      sideZoneSizeCache[zone] = group.api.width;
+    }
+  });
+}
+
+function syncSideZonePresence() {
+  (['left', 'right'] as const).forEach((zone) => {
+    sideZonePresence[zone] = !!findSideZoneGroup(zone);
+  });
+}
+
+function reapplySideZoneSizes(except?: DockviewGroupLike) {
+  (['left', 'right'] as const).forEach((zone) => {
+    const group = findSideZoneGroup(zone);
+    if (!group || group === except) return;
+    const cached = sideZoneSizeCache[zone];
+    if (cached && Math.abs(group.api.width - cached) > 1) {
+      group.api.setSize({ width: cached });
+    }
+  });
+}
+
+function handleDockGroupAdded(group: DockviewGroupLike) {
+  if (isGridDockGroup(group)) {
+    const zone = groupSideZone(group);
+    const zoneReopened = !!zone && !sideZonePresence[zone];
+    reapplySideZoneSizes(group);
+    if (zone && zoneReopened) {
+      const cached = sideZoneSizeCache[zone];
+      if (cached && Math.abs(group.api.width - cached) > 1) {
+        group.api.setSize({ width: cached });
+      }
+    }
+  }
+  syncSideZonePresence();
+}
+
+function handleDockGroupRemoved() {
+  reapplySideZoneSizes();
+  syncSideZonePresence();
+}
+
 function clearEmbedLandingPersistence() {
   sessionStorage.removeItem(EMBED_MODE_PARAMS_STORAGE_KEY);
   sessionStorage.removeItem(EMBED_LANDING_STATE_STORAGE_KEY);
@@ -530,6 +609,8 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'reviewAttachmentPreview');
   closePanelIfExists(dockApi, 'spatialCompute');
 
+  const collapsedZones = getCollapsedZones();
+
   const viewerPanel = dockApi.addPanel({
     id: 'viewer',
     component: 'ViewerPanel',
@@ -537,66 +618,45 @@ function createDefaultLayout(dockApi: DockApi) {
     renderer: 'always',
   });
 
-  dockApi.addPanel({
-    id: 'modelTree',
-    component: 'ModelTreePanel',
-    title: '模型树',
-    renderer: 'always',
-    position: { referencePanel: viewerPanel, direction: 'left' },
-  });
+  if (!collapsedZones.includes('left')) {
+    dockApi.addPanel({
+      id: 'modelTree',
+      component: 'ModelTreePanel',
+      title: '模型树',
+      renderer: 'always',
+      position: { referencePanel: viewerPanel, direction: 'left' },
+    });
+  }
 
-  const measurementPanel = dockApi.addPanel({
-    id: 'measurement',
-    component: 'MeasurementPanel',
-    title: '测量',
-    position: { referencePanel: viewerPanel, direction: 'right' },
-  });
-
-  dockApi.addPanel({
-    id: 'dimension',
-    component: 'DimensionPanel',
-    title: '尺寸标注',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
-
-  dockApi.addPanel({
-    id: 'annotation',
-    component: 'AnnotationPanel',
-    title: '批注',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
-
-  dockApi.addPanel({
-    id: 'manager',
-    component: 'ManagerPanel',
-    title: '管理',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
-
-  dockApi.addPanel({
-    id: 'properties',
-    component: 'PropertiesPanel',
-    title: '属性',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
+  // 右侧默认只保留「属性」页，测量/尺寸标注/批注/管理等按需从 Ribbon 打开
+  if (!collapsedZones.includes('right')) {
+    dockApi.addPanel({
+      id: 'properties',
+      component: 'PropertiesPanel',
+      title: '属性',
+      position: { referencePanel: viewerPanel, direction: 'right' },
+    });
+  }
 
   // 概览（Dashboard）不加入默认布局，由 Ribbon「概览」或 ensurePanel 按需打开
 
   viewerPanel.api.setActive();
 
   const leftGroup = dockApi.getPanel('modelTree')?.group;
-  const rightGroup = dockApi.getPanel('measurement')?.group;
+  const rightGroup = dockApi.getPanel('properties')?.group;
   if (leftGroup) leftGroup.api.setSize({ width: 350 });
   if (rightGroup) rightGroup.api.setSize({ width: 350 });
-  
-  dockApi.addPanel({
-    id: 'console',
-    component: 'ConsolePanel',
-    title: '控制台',
-    position: { referencePanel: viewerPanel, direction: 'below' },
-  });
-  const bottomGroup = dockApi.getPanel('console')?.group;
-  if (bottomGroup) bottomGroup.api.setSize({ height: 200 });
+
+  if (!collapsedZones.includes('bottom')) {
+    dockApi.addPanel({
+      id: 'console',
+      component: 'ConsolePanel',
+      title: '控制台',
+      position: { referencePanel: viewerPanel, direction: 'below' },
+    });
+    const bottomGroup = dockApi.getPanel('console')?.group;
+    if (bottomGroup) bottomGroup.api.setSize({ height: 200 });
+  }
 
   console.log('[DockLayout] Default layout created');
 }
@@ -672,6 +732,16 @@ function activatePanel(panelId: string) {
   panel.api.setActive();
 }
 
+// 右侧 zone 里已存在的面板做锚点：新开的右侧面板并入现有右侧 dock 页签，
+// 不会在 viewer 右侧再裂出一个并排的新分组。
+function findRightZoneAnchorPanel(dockApi: DockApi): DockviewPanelLike | undefined {
+  for (const panelId of ZONE_PANELS.right) {
+    const panel = dockApi.getPanel(panelId);
+    if (panel && (!panel.group || isGridDockGroup(panel.group))) return panel;
+  }
+  return undefined;
+}
+
 function ensurePanel(panelId: string) {
   const dockApi = api.value;
   if (!dockApi) return;
@@ -685,7 +755,12 @@ function ensurePanel(panelId: string) {
   }
 
   const viewerPanel = dockApi.getPanel('viewer');
-  const measurementPanel = dockApi.getPanel('measurement');
+  const rightZoneAnchorPanel = findRightZoneAnchorPanel(dockApi);
+  const rightZonePosition = () => (rightZoneAnchorPanel
+    ? { referencePanel: rightZoneAnchorPanel, direction: 'within' }
+    : viewerPanel
+      ? { referencePanel: viewerPanel, direction: 'right' }
+      : undefined);
 
   if (normalizedPanelId === 'modelTree') {
     return addPanelSafely(dockApi, {
@@ -701,21 +776,15 @@ function ensurePanel(panelId: string) {
       id: 'measurement',
       component: 'MeasurementPanel',
       title: '测量',
-      position: viewerPanel ? { referencePanel: viewerPanel, direction: 'right' } : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'dimension') {
-    const measurementPanel = dockApi.getPanel('measurement')
-      ?? ensurePanel(dockApi, 'measurement');
     return addPanelSafely(dockApi, {
       id: 'dimension',
       component: 'DimensionPanel',
       title: '尺寸标注',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'annotation') {
@@ -723,11 +792,7 @@ function ensurePanel(panelId: string) {
       id: 'annotation',
       component: 'AnnotationPanel',
       title: '批注',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'manager') {
@@ -735,11 +800,7 @@ function ensurePanel(panelId: string) {
       id: 'manager',
       component: 'ManagerPanel',
       title: '管理',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'hydraulic') {
@@ -747,11 +808,7 @@ function ensurePanel(panelId: string) {
       id: 'hydraulic',
       component: 'HydraulicPanel',
       title: '水力计算',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'properties') {
@@ -759,11 +816,7 @@ function ensurePanel(panelId: string) {
       id: 'properties',
       component: 'PropertiesPanel',
       title: '属性',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'ptset') {
@@ -771,11 +824,7 @@ function ensurePanel(panelId: string) {
       id: 'ptset',
       component: 'PtsetPanel',
       title: '点集',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (panelId === 'annotationStyle') {
@@ -783,11 +832,7 @@ function ensurePanel(panelId: string) {
       id: 'annotationStyle',
       component: 'AnnotationStylePanel',
       title: '批注样式',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (panelId === 'materialConfig') {
@@ -795,11 +840,7 @@ function ensurePanel(panelId: string) {
       id: 'materialConfig',
       component: 'DtxMaterialConfigPanel',
       title: '颜色配置',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'review') {
@@ -807,11 +848,7 @@ function ensurePanel(panelId: string) {
       id: 'review',
       component: 'ReviewPanelDock',
       title: '校审',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'initiateReview') {
@@ -819,11 +856,7 @@ function ensurePanel(panelId: string) {
       id: 'initiateReview',
       component: 'InitiateReviewPanel',
       title: '发起编校审',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'reviewerTasks') {
@@ -831,11 +864,7 @@ function ensurePanel(panelId: string) {
       id: 'reviewerTasks',
       component: 'ReviewerTaskListPanel',
       title: '待审核任务',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'myTasks') {
@@ -843,11 +872,7 @@ function ensurePanel(panelId: string) {
       id: 'myTasks',
       component: 'DesignerTaskListPanel',
       title: '我的编校审',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'designerCommentHandling') {
@@ -855,11 +880,7 @@ function ensurePanel(panelId: string) {
       id: 'designerCommentHandling',
       component: 'DesignerCommentHandlingPanel',
       title: '批注处理',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
   if (normalizedPanelId === 'modelVersionCompare') {
@@ -897,11 +918,7 @@ function ensurePanel(panelId: string) {
       id: 'spatialCompute',
       component: 'SpatialComputePanel',
       title: '中心线净距',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
+      position: rightZonePosition(),
     });
   }
 }
@@ -1294,6 +1311,28 @@ function isValidLayout(layout: unknown): boolean {
   return 'viewer' in panels;
 }
 
+// 旧版默认布局会把「测量/尺寸标注/批注/管理/属性」整套塞进右侧 dock 并随即持久化，
+// 导致之后每次启动都恢复出这一坨页签。识别「面板集合与旧默认完全一致」的存档，
+// 不视为用户操作历史，直接按新默认布局重建（右侧只留「属性」）。
+const LEGACY_DEFAULT_PANEL_IDS = [
+  'annotation',
+  'console',
+  'dimension',
+  'manager',
+  'measurement',
+  'modelTree',
+  'properties',
+  'viewer',
+];
+
+function isLegacyDefaultLayout(layout: unknown): boolean {
+  if (!isValidLayout(layout)) return false;
+  const panels = (layout as { panels: Record<string, unknown> }).panels;
+  const ids = Object.keys(panels).sort();
+  const legacy = [...LEGACY_DEFAULT_PANEL_IDS].sort();
+  return ids.length === legacy.length && ids.every((id, index) => id === legacy[index]);
+}
+
 function migratePropertiesPanelOnce() {
   const dockApi = api.value;
   if (!dockApi) return;
@@ -1671,12 +1710,16 @@ function onReady(event: DockviewReadyEvent) {
     if (savedLayout) {
       try {
         const layout = JSON.parse(savedLayout);
-        if (isValidLayout(layout)) {
+        if (isValidLayout(layout) && !isLegacyDefaultLayout(layout)) {
           event.api.fromJSON(layout);
           loaded = true;
           console.log('[DockLayout] Layout restored from localStorage');
         } else {
-          console.warn('[DockLayout] Invalid layout data, skipping restore');
+          if (isValidLayout(layout)) {
+            console.info('[DockLayout] 检测到旧版默认布局存档，按新默认布局重建');
+          } else {
+            console.warn('[DockLayout] Invalid layout data, skipping restore');
+          }
           localStorage.removeItem(LAYOUT_STORAGE_KEY);
         }
       } catch (e) {
@@ -1692,10 +1735,18 @@ function onReady(event: DockviewReadyEvent) {
 
   closeBlockedReviewPanels();
 
+  // 记录左右 dock 的当前宽度作为恢复基准，再监听分组增删
+  rememberSideZoneSizes();
+  syncSideZonePresence();
+  api.value.onDidAddGroup?.(handleDockGroupAdded);
+  api.value.onDidRemoveGroup?.(handleDockGroupRemoved);
+
   event.api.onDidLayoutChange(() => {
     if (!isEmbedLayoutMode()) {
       saveLayout();
     }
+    rememberSideZoneSizes();
+    syncSideZonePresence();
     notifyDockLayoutChange();
   });
 
