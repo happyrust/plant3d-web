@@ -5,21 +5,26 @@
  * 功能：
  *   1. 构建前端 (vite build)
  *   2. 下载 nginx Windows 稳定版
- *   3. 整合 gen-model 官方 Windows 发布包
+ *   3. 可选调用 ../gen-model/scripts/New-LocalRelease.ps1 打包 gen-model + plant-ui（默认开启）并整合到 backend/
  *   4. 整合前端构建产物 + nginx + bat 脚本
- *   5. 生成前后端版本清单
+ *   5. 生成前后端（含 plant-ui）版本清单
  *   6. 打包成 zip 放到 ../gen-model/releases/
  *
  * 使用：
- *   node scripts/build-offline-release.mjs --backend-package <ams-local.zip>
- *   node scripts/build-offline-release.mjs                 # 自动使用 releases 下最新后端包
- *   node scripts/build-offline-release.mjs --frontend-only # 仅打前端兼容包
- *   node scripts/build-offline-release.mjs --skip-build    # 跳过构建，直接打包
- *   node scripts/build-offline-release.mjs --skip-nginx    # 跳过下载 nginx（已有的话）
- *   node scripts/build-offline-release.mjs --force         # 允许覆盖同名输出
+ *   node scripts/build-offline-release.mjs                     # 默认：构建 plant3d-web + 执行 ../gen-model 打包发布（含 plant-ui）并合包
+ *   node scripts/build-offline-release.mjs --with-gen-model    # 显式开启 ../gen-model 打包发布整合（默认已开启）
+ *   node scripts/build-offline-release.mjs --reuse-gen-model   # 整合 ../gen-model，但复用 releases 下最新 ams-local-*.zip 不重新编译
+ *   node scripts/build-offline-release.mjs --backend-package <ams-local.zip> # 指定现成后端包整合
+ *   node scripts/build-offline-release.mjs --no-gen-model      # 不打包 ../gen-model（同 --frontend-only）
+ *   node scripts/build-offline-release.mjs --frontend-only     # 仅打前端兼容包
+ *   node scripts/build-offline-release.mjs --skip-build        # 跳过前后端构建，直接用现成产物打包
+ *   node scripts/build-offline-release.mjs --skip-gen-model-smoke # 调用 ../gen-model 打包时跳过其冒烟门
+ *   node scripts/build-offline-release.mjs --skip-nginx        # 跳过下载 nginx（已有的话）
+ *   node scripts/build-offline-release.mjs --force             # 允许覆盖同名输出
  */
 
 import { execFileSync, execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   createWriteStream,
@@ -37,7 +42,14 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = resolve(__dirname, '..');
-const OFFLINE_DIR = join(PROJECT_DIR, 'deploy', 'offline');
+const OFFLINE_SOURCE_DIR = join(PROJECT_DIR, 'deploy', 'offline');
+const stagingIndex = process.argv.indexOf('--staging-dir');
+if (stagingIndex >= 0 && (!process.argv[stagingIndex + 1] || process.argv[stagingIndex + 1].startsWith('--'))) {
+  throw new Error('--staging-dir 需要提供一个空的暂存目录');
+}
+const OFFLINE_DIR = stagingIndex >= 0
+  ? resolve(PROJECT_DIR, process.argv[stagingIndex + 1])
+  : OFFLINE_SOURCE_DIR;
 const DIST_DIR = join(PROJECT_DIR, 'dist');
 const NGINX_DIR = join(OFFLINE_DIR, 'nginx');
 const WWW_DIR = join(OFFLINE_DIR, 'www');
@@ -53,8 +65,22 @@ const NGINX_DOWNLOAD_URL = `https://nginx.org/download/nginx-${NGINX_VERSION}.zi
 const args = process.argv.slice(2);
 const skipBuild = args.includes('--skip-build');
 const skipNginx = args.includes('--skip-nginx');
-const frontendOnly = args.includes('--frontend-only');
 const force = args.includes('--force');
+
+// 是否将 ../gen-model（含 plant-ui）打包到一起：默认开启
+const disableGenModel =
+  args.includes('--frontend-only') ||
+  args.includes('--no-gen-model') ||
+  args.includes('--without-gen-model');
+const enableGenModel =
+  args.includes('--with-gen-model') ||
+  args.includes('--include-gen-model');
+if (disableGenModel && enableGenModel) {
+  throw new Error('--with-gen-model 与 --no-gen-model/--frontend-only 互斥');
+}
+const includeGenModel = enableGenModel ? true : !disableGenModel;
+const frontendOnly = !includeGenModel;
+
 const backendPackageArg = args.find((arg) => arg.startsWith('--backend-package='));
 const backendPackageIndex = args.indexOf('--backend-package');
 const backendPackage = backendPackageArg
@@ -65,6 +91,26 @@ const backendPackage = backendPackageArg
 if (backendPackageIndex >= 0 && !backendPackage) {
   throw new Error('--backend-package 需要提供 zip 路径');
 }
+
+// 是否联动执行 ../gen-model/scripts/New-LocalRelease.ps1（含 plant-ui wasm 打包）：
+// 在开启 gen-model 合包且未指定现成包/未传 --skip-build/--reuse-gen-model 时默认开启
+const forceBuildGenModel =
+  args.includes('--build-gen-model') ||
+  args.includes('--build-backend');
+const skipGenModelBuild =
+  args.includes('--reuse-gen-model') ||
+  args.includes('--no-build-gen-model') ||
+  args.includes('--skip-gen-model-build') ||
+  args.includes('--skip-backend-build');
+if (forceBuildGenModel && skipGenModelBuild) {
+  throw new Error('--build-gen-model 与 --reuse-gen-model/--no-build-gen-model 互斥');
+}
+const shouldBuildGenModel =
+  includeGenModel &&
+  (forceBuildGenModel || (!skipBuild && !skipGenModelBuild && !backendPackage));
+const skipGenModelSmoke =
+  args.includes('--skip-gen-model-smoke') ||
+  args.includes('--skip-backend-smoke');
 
 function log(msg) {
   console.log(`[offline-release] ${msg}`);
@@ -158,6 +204,39 @@ function findLatestBackendPackage() {
   return candidates[0] ?? null;
 }
 
+/** 调用 ../gen-model/scripts/New-LocalRelease.ps1 构建并产出包含 plant-ui 的 ams-local-*.zip */
+function buildGenModelRelease() {
+  const releaseScript = join(GEN_MODEL_DIR, 'scripts', 'New-LocalRelease.ps1');
+  if (!existsSync(releaseScript)) {
+    throw new Error(`找不到 gen-model 发布脚本: ${releaseScript}`);
+  }
+  log('正在执行 ../gen-model 打包发布（含 plant-ui Web/WASM 构建）...');
+  const psArgs = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    releaseScript,
+    '-Force',
+  ];
+  if (skipGenModelSmoke) {
+    psArgs.push('-SkipSmoke');
+  }
+  const childEnv = { ...process.env };
+  delete childEnv.PSModulePath;
+  execFileSync('powershell.exe', psArgs, {
+    cwd: GEN_MODEL_DIR,
+    env: childEnv,
+    stdio: 'inherit',
+  });
+  const latest = findLatestBackendPackage();
+  if (!latest) {
+    throw new Error(`gen-model 打包完成后未在 ${RELEASES_DIR} 找到 ams-local-*.zip`);
+  }
+  logSuccess(`gen-model + plant-ui 发布包已生成: ${latest}`);
+  return latest;
+}
+
 function prepareBackend(packagePath) {
   if (!existsSync(packagePath)) {
     throw new Error(`后端发布包不存在: ${packagePath}`);
@@ -178,6 +257,7 @@ function prepareBackend(packagePath) {
     'release.json',
     join('resource', 'surreal'),
     'schema',
+    join('web', 'index.html'),
     join('web', 'pkg', 'rs-plant_bg.wasm'),
   ];
   for (const required of requiredPaths) {
@@ -190,10 +270,37 @@ function prepareBackend(packagePath) {
   const configPath = join(BACKEND_DIR, 'DbOption.toml');
   const config = readFileSync(configPath, 'utf-8')
     .replace(/^server_release_ip\s*=.*$/m, 'server_release_ip = "0.0.0.0:8022"')
-    .replace(/^http_api_addr\s*=.*$/m, 'http_api_addr = "0.0.0.0:8022"');
+    .replace(/^http_api_addr\s*=.*$/m, 'http_api_addr = "0.0.0.0:8022"')
+    .replace(/^frontend_(?:compat_)?port\s*=.*\r?\n?/gm, '') + '\nfrontend_port = 80\nfrontend_compat_port = 3100\n';
   writeFileSync(configPath, config);
+
+  const startAmsPath = join(BACKEND_DIR, 'Start-AMS.ps1');
+  const startAmsContent = readFileSync(startAmsPath, 'utf-8');
+  if (!startAmsContent.includes('Remove-Item Env:AIOS_ROOM_MEMBERSHIP')) {
+    const schemaLine = '$env:AIOS_E3D_SCHEMA_ROOT = Join-Path $root \'schema\'';
+    const patchedStartAms = startAmsContent.replace(
+      schemaLine,
+      [
+        schemaLine,
+        '    Remove-Item Env:AIOS_ROOM_MEMBERSHIP -ErrorAction SilentlyContinue',
+        '    Remove-Item Env:AIOS_SKIP_STARTUP_ROOM_BUILD -ErrorAction SilentlyContinue',
+      ].join('\r\n'),
+    );
+    writeFileSync(startAmsPath, patchedStartAms);
+  }
+
+  const manifestPath = join(BACKEND_DIR, 'release.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  for (const entry of manifest.files ?? []) {
+    if (!['DbOption.toml', 'Start-AMS.ps1'].includes(entry.path)) continue;
+    const content = readFileSync(join(BACKEND_DIR, entry.path));
+    entry.sha256 = createHash('sha256').update(content).digest('hex');
+    entry.bytes = content.length;
+  }
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+
   removeDir(tmpDir);
-  logSuccess(`后端发布包已整合: ${packagePath}`);
+  logSuccess(`后端发布包（含 gen-model + plant-ui）已整合: ${packagePath}`);
 }
 
 function readBackendVersion() {
@@ -201,9 +308,12 @@ function readBackendVersion() {
   if (!existsSync(manifestPath)) return null;
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
   return {
+    packageName: manifest.name ?? null,
     version: manifest.backend_version ?? null,
     buildId: manifest.backend_build_id ?? null,
     commit: manifest.backend_git_commit ?? null,
+    plantUiVersion: manifest.plant_ui_version ?? null,
+    webSource: manifest.web_source ?? null,
   };
 }
 
@@ -248,9 +358,32 @@ async function main() {
   console.log('==========================================');
   console.log('');
 
+  if (OFFLINE_DIR !== OFFLINE_SOURCE_DIR) {
+    if (existsSync(OFFLINE_DIR) && readdirSync(OFFLINE_DIR).length > 0) {
+      throw new Error(`暂存目录非空，拒绝覆盖: ${OFFLINE_DIR}`);
+    }
+    mkdirSync(OFFLINE_DIR, { recursive: true });
+    for (const name of ['README.md', 'start.bat', 'stop.bat', 'config.bat', 'Sync-OfflineConfig.ps1', 'nginx.conf.template']) {
+      copyFileSync(join(OFFLINE_SOURCE_DIR, name), join(OFFLINE_DIR, name));
+    }
+    if (existsSync(join(OFFLINE_SOURCE_DIR, 'nginx', 'nginx.exe'))) {
+      mkdirSync(join(NGINX_DIR, 'conf'), { recursive: true });
+      copyFileSync(join(OFFLINE_SOURCE_DIR, 'nginx', 'nginx.exe'), join(NGINX_DIR, 'nginx.exe'));
+      copyFileSync(join(OFFLINE_SOURCE_DIR, 'nginx', 'conf', 'mime.types'), join(NGINX_DIR, 'conf', 'mime.types'));
+      copyFileSync(join(OFFLINE_SOURCE_DIR, 'nginx.conf.template'), join(NGINX_DIR, 'conf', 'nginx.conf'));
+      mkdirSync(join(NGINX_DIR, 'logs'), { recursive: true });
+      mkdirSync(join(NGINX_DIR, 'temp'), { recursive: true });
+    }
+    log(`独立暂存目录: ${OFFLINE_DIR}`);
+  }
+
   const versionInfo = getVersionInfo();
   log(`版本: v${versionInfo.version}`);
   log(`Commit: ${versionInfo.commit.slice(0, 7)}`);
+  log(`合包 ../gen-model（含 plant-ui）: ${includeGenModel ? '开启（默认）' : '关闭'}`);
+  if (includeGenModel) {
+    log(`联动构建 ../gen-model 发布包: ${shouldBuildGenModel ? '开启（默认）' : '复用现有发布包'}`);
+  }
   log('');
 
   // Step 1: 构建前端
@@ -350,15 +483,17 @@ async function main() {
   }
   console.log('');
 
-  // Step 3: 准备后端
-  log('Step 3/6: 准备 gen-model 后端...');
+  // Step 3: 准备后端（含 gen-model + plant-ui）
+  log('Step 3/6: 准备 ../gen-model 发布包（含 plant-ui）...');
   if (frontendOnly) {
     removeDir(BACKEND_DIR);
-    log('已选择纯前端包 (--frontend-only)');
+    log('已跳过 ../gen-model 打包整合 (--no-gen-model / --frontend-only)');
   } else {
-    const selectedBackendPackage = backendPackage ?? findLatestBackendPackage();
+    const selectedBackendPackage = shouldBuildGenModel
+      ? buildGenModelRelease()
+      : (backendPackage ?? findLatestBackendPackage());
     if (!selectedBackendPackage) {
-      throw new Error(`未找到后端发布包。请使用 --backend-package <zip>，或先在 ${RELEASES_DIR} 生成 ams-local-*.zip`);
+      throw new Error(`未找到后端发布包。请去掉 --reuse-gen-model 自动打包，或使用 --backend-package <zip> 指定 ${RELEASES_DIR} 下的 ams-local-*.zip`);
     }
     prepareBackend(selectedBackendPackage);
   }
@@ -375,16 +510,25 @@ async function main() {
   log('Step 5/6: 生成版本信息...');
   writeVersionJson(versionInfo);
   const backendVersion = frontendOnly ? null : readBackendVersion();
+  const plantUiInfo = backendVersion?.plantUiVersion
+    ? {
+      version: backendVersion.plantUiVersion,
+      source: backendVersion.webSource ?? 'bundled-in-gen-model',
+      webRoot: 'backend/web',
+    }
+    : null;
   writeFileSync(join(OFFLINE_DIR, 'release.json'), JSON.stringify({
     frontend: versionInfo,
     backend: backendVersion,
+    plantUi: plantUiInfo,
+    genModelIncluded: includeGenModel,
     mode: frontendOnly ? 'frontend-only' : 'integrated',
   }, null, 2) + '\n');
   console.log('');
 
   // Step 6: 打包成 zip
   log('Step 6/6: 打包成 zip...');
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const dateStr = versionInfo.buildDate.slice(0, 10).replace(/-/g, '');
   const backendSuffix = backendVersion?.version ? `-backend-v${backendVersion.version}` : '';
   const zipName = `plant3d-web-offline-v${versionInfo.version}${backendSuffix}-${dateStr}.zip`;
   const zipPath = join(RELEASES_DIR, zipName);
@@ -400,8 +544,13 @@ async function main() {
   console.log('  打包完成！');
   console.log('==========================================');
   console.log('');
-  console.log(`  版本:     v${versionInfo.version}`);
-  console.log(`  Commit:   ${versionInfo.commit.slice(0, 7)}`);
+  console.log(`  前端 (plant3d-web): v${versionInfo.version} (${versionInfo.commit.slice(0, 7)})`);
+  if (backendVersion) {
+    console.log(`  后端 (gen-model):   v${backendVersion.version} (${backendVersion.buildId ?? 'unknown'})`);
+    console.log(`  内嵌 (plant-ui):    v${backendVersion.plantUiVersion ?? 'unknown'} (${backendVersion.webSource ?? 'backend/web'})`);
+  } else {
+    console.log('  后端 (gen-model):   未包含 (frontend-only)');
+  }
   console.log(`  构建时间: ${versionInfo.buildDate}`);
   console.log(`  输出文件: ${zipPath}`);
   console.log(`  文件大小: ${sizeMB} MB`);
@@ -410,8 +559,8 @@ async function main() {
   console.log('');
   console.log('  部署说明:');
   console.log('    1. 将 zip 解压到目标机器');
-  console.log('    2. 运行 config.bat 配置后端地址');
-  console.log('    3. 运行 start.bat 启动服务');
+  console.log('    2. 运行 start.bat 启动服务');
+  console.log('    3. 在 setup 页面统一配置项目路径和前后端端口（外部后端模式用 config.bat）');
   console.log('');
 }
 

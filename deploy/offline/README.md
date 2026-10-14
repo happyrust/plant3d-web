@@ -26,22 +26,32 @@ offline/
 
 ## 打包
 
-默认从相邻 `gen-model/releases/` 自动选择修改时间最新的 `ams-local-*.zip`：
+默认开启 `../gen-model` 打包发布联动（`--with-gen-model` 默认开启）：会先执行 `../gen-model/scripts/New-LocalRelease.ps1` 构建并打包 `gen-model` 后端与 `plant-ui`（`backend/web/`），再与 `plant3d-web` 前端及 nginx 一起打成整体离线包：
 
 ```bash
 npm run build:offline
 ```
 
-推荐在正式发版时显式指定经过验证的后端包：
+若 `deploy/offline` 正被运行中的服务使用，可指定一个新的空目录隔离组包，避免改写运行目录或带入 PID、日志和本机 `deploy.env`：
+
+```powershell
+npm run build:offline -- --staging-dir "$env:TEMP\plant3d-release-staging"
+```
+
+如果 `../gen-model/releases/` 下已有构建好的 `ams-local-*.zip`，可跳过重新构建直接复用合包：
 
 ```bash
+npm run build:offline:reuse-gen-model
+# 或显式指定某一个后端包：
 npm run build:offline -- --backend-package ../gen-model/releases/ams-local-<version>.zip
 ```
 
-兼容旧部署、只需要前端和 nginx 时：
+兼容旧部署、关闭 `../gen-model` 合包（仅打包 `plant3d-web` 前端 + nginx）时：
 
 ```bash
 npm run build:offline:frontend-only
+# 或：
+npm run build:offline -- --no-gen-model
 ```
 
 输出位置：`../gen-model/releases/plant3d-web-offline-v<前端版本>-backend-v<后端版本>-<date>.zip`。默认拒绝覆盖同名发布物，确需覆盖时添加 `--force`。
@@ -49,10 +59,11 @@ npm run build:offline:frontend-only
 ## 启动
 
 1. 解压 ZIP。
-2. 可选运行 `config.bat`。默认 `BACKEND_MODE=integrated`，无需填写后端地址。
-3. 运行 `start.bat`。
-4. 脚本先启动包内后端并等待 `/api/v1/health`，再启动 nginx 和浏览器。
-5. 首次运行按后端配置向导填写 E3D 项目路径；保存后按向导提示重启。
+2. 运行 `start.bat`；默认 `BACKEND_MODE=integrated`，无需先运行 `config.bat`。
+3. 脚本读取 `backend/DbOption.toml`，同步 nginx 配置，启动后端与 nginx。
+4. 首次启动自动打开后端 `/setup.html`，第①步填写 E3D 项目路径、主项目与 MDB；第③步统一设置后端监听地址、前端端口与兼容端口。
+5. 点击「保存并重启」：配置写入 `backend/DbOption.toml` 并备份，校验并重载包内 nginx，自动重启后端。兼容端口填 `0` 可关闭；端口重复或已占用时会报错，不停止其他实例。
+6. 完成初始化后可分别进入 plant-ui 和 plant3d-web。以后也可通过后端或前端的 `/setup.html` 修改配置；一体化模式不再从 `deploy.env` 读取端口。
 
 访问地址：
 
@@ -60,7 +71,7 @@ npm run build:offline:frontend-only
 - `http://localhost:3100`：PowerPMS 兼容入口。
 - `http://<服务器 IP>`：局域网入口。
 
-运行 `stop.bat` 会停止 nginx，并依据 `backend/process.json` 校验 PID 和可执行文件路径后停止包内后端，不会按进程名误杀其他实例。
+运行 `stop.bat` 会按包内可执行文件路径停止 nginx 与后端，包括向导重启后 PID 已变化的后端，不会按进程名误杀其他实例。
 
 ## 使用外部后端
 

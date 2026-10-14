@@ -19,17 +19,12 @@ echo.
 
 if exist "%NGINX_EXE%" (
     echo [STOP] Stopping nginx...
-    pushd "%NGINX_DIR%"
-    nginx.exe -s quit 2>nul
-    popd
-    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 2"
-    tasklist /FI "IMAGENAME eq nginx.exe" 2>nul | find /I "nginx.exe" >nul
-    if not errorlevel 1 taskkill /F /IM nginx.exe >nul 2>&1
+    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '%NGINX_EXE%' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 )
 
-if exist "%BACKEND_PROCESS%" (
+if exist "%BACKEND_DIR%\aios-database.exe" (
     echo [STOP] Stopping integrated backend...
-    powershell.exe -NoProfile -Command "$record = Get-Content '%BACKEND_PROCESS%' -Raw | ConvertFrom-Json; $process = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $record.pid) -ErrorAction SilentlyContinue; if ($process -and $process.ExecutablePath -eq $record.executable) { Stop-Process -Id $record.pid -Force; Remove-Item '%BACKEND_PROCESS%' -Force } elseif (-not $process) { Remove-Item '%BACKEND_PROCESS%' -Force } else { throw 'PID belongs to a different executable; refusing to stop it' }"
+    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '%BACKEND_DIR%\aios-database.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Remove-Item '%BACKEND_PROCESS%' -Force -ErrorAction SilentlyContinue"
     if errorlevel 1 (
         echo [ERROR] Backend could not be stopped safely. Check %BACKEND_PROCESS%
         pause

@@ -15,8 +15,11 @@ set "BACKEND_MODE=integrated"
 set "BACKEND_ADDR=http://127.0.0.1:8022"
 set "FRONTEND_PORT=80"
 if exist "%CONFIG_FILE%" (
-    for /f "usebackq tokens=1,* delims==" %%a in ("%CONFIG_FILE%") do set "%%a=%%b"
+    for /f "usebackq tokens=1,* delims== eol=#" %%a in ("%CONFIG_FILE%") do set "%%a=%%b"
 )
+set "BACKEND_MODE=%BACKEND_MODE: =%"
+set "BACKEND_ADDR=%BACKEND_ADDR: =%"
+set "FRONTEND_PORT=%FRONTEND_PORT: =%"
 
 echo ==========================================
 echo   Plant3D-Web Offline Deploy - Config
@@ -34,15 +37,19 @@ if /I "%BACKEND_MODE%"=="external" (
     if not "!NEW_BACKEND!"=="" set "BACKEND_ADDR=!NEW_BACKEND!"
 ) else (
     set "BACKEND_MODE=integrated"
-    set "BACKEND_ADDR=http://127.0.0.1:8022"
+    echo BACKEND_MODE=integrated>"%CONFIG_FILE%"
+    echo Integrated configuration is managed by the AMS setup page.
+    echo Run start.bat, then configure the project and all service ports in setup.
+    pause
+    exit /b 0
 )
 set /p "NEW_PORT=Frontend port [%FRONTEND_PORT%]: "
 if not "%NEW_PORT%"=="" set "FRONTEND_PORT=%NEW_PORT%"
 
-echo # Plant3D-Web Offline Deploy Config > "%CONFIG_FILE%"
-echo BACKEND_MODE=%BACKEND_MODE% >> "%CONFIG_FILE%"
-echo BACKEND_ADDR=%BACKEND_ADDR% >> "%CONFIG_FILE%"
-echo FRONTEND_PORT=%FRONTEND_PORT% >> "%CONFIG_FILE%"
+echo # Plant3D-Web Offline Deploy Config>"%CONFIG_FILE%"
+echo BACKEND_MODE=%BACKEND_MODE%>>"%CONFIG_FILE%"
+echo BACKEND_ADDR=%BACKEND_ADDR%>>"%CONFIG_FILE%"
+echo FRONTEND_PORT=%FRONTEND_PORT%>>"%CONFIG_FILE%"
 
 echo.
 echo Config saved: %CONFIG_FILE%

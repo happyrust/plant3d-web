@@ -86,6 +86,12 @@ http {
         }
 
         # API 反向代理：全部 /api（含 /api/v1）→ gen-model
+        location = /setup.html {
+            proxy_pass http://gen_model_backend;
+            proxy_set_header Host $host;
+            add_header Cache-Control "no-store" always;
+        }
+
         location /api {
             proxy_pass http://gen_model_backend;
             proxy_http_version 1.1;

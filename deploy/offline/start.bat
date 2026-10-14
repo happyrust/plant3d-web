@@ -17,9 +17,19 @@ set "BACKEND_MODE=integrated"
 set "BACKEND_ADDR=http://127.0.0.1:8022"
 set "FRONTEND_PORT=80"
 if exist "%CONFIG_FILE%" (
-    for /f "usebackq tokens=1,* delims==" %%a in ("%CONFIG_FILE%") do set "%%a=%%b"
+    for /f "usebackq tokens=1,* delims== eol=#" %%a in ("%CONFIG_FILE%") do set "%%a=%%b"
 )
-if /I "%BACKEND_MODE%"=="integrated" set "BACKEND_ADDR=http://127.0.0.1:8022"
+set "BACKEND_MODE=%BACKEND_MODE: =%"
+set "BACKEND_ADDR=%BACKEND_ADDR: =%"
+set "FRONTEND_PORT=%FRONTEND_PORT: =%"
+if not exist "%SCRIPT_DIR%config" mkdir "%SCRIPT_DIR%config"
+set "FRONTEND_COMPAT_PORT=3100"
+if /I "%BACKEND_MODE%"=="integrated" (
+    set "AIOS_OFFLINE_ROOT=%SCRIPT_DIR%"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Sync-OfflineConfig.ps1" -ExportEnv >"%SCRIPT_DIR%config\runtime.env"
+    if errorlevel 1 exit /b 1
+    for /f "usebackq tokens=1,* delims==" %%a in ("%SCRIPT_DIR%config\runtime.env") do set "%%a=%%b"
+)
 
 echo ==========================================
 echo   Plant3D-Web Offline Deploy
@@ -28,7 +38,7 @@ echo.
 echo   Frontend:     %WWW_DIR%
 echo   Backend mode: %BACKEND_MODE%
 echo   Backend:      %BACKEND_ADDR%
-echo   Ports:        %FRONTEND_PORT% (also 3100)
+echo   Ports:        %FRONTEND_PORT% (compat %FRONTEND_COMPAT_PORT%, 0=disabled)
 echo.
 
 if not exist "%NGINX_EXE%" (
@@ -87,18 +97,20 @@ echo   Started successfully!
 echo ==========================================
 echo.
 echo   URL:      http://localhost:%FRONTEND_PORT%/
-echo   Alt:      http://localhost:3100/
+if not "%FRONTEND_COMPAT_PORT%"=="0" echo   Alt:      http://localhost:%FRONTEND_COMPAT_PORT%/
 echo   Network:  http://^<your-ip^>:%FRONTEND_PORT%/
 echo.
+if /I "%~1"=="--no-browser" exit /b 0
+if /I "%BACKEND_MODE%"=="integrated" if exist "%BACKEND_DIR%\.first-run-pending" (
+    start %BACKEND_ADDR%/setup.html
+    exit /b 0
+)
 start http://localhost:%FRONTEND_PORT%/
 exit /b 0
 
 :update_nginx_config
-set "NGINX_CONF=%NGINX_DIR%\conf\nginx.conf"
-set "NGINX_CONF_BAK=%NGINX_DIR%\conf\nginx.conf.bak"
-if not exist "%NGINX_CONF_BAK%" copy /y "%NGINX_CONF%" "%NGINX_CONF_BAK%" >nul
-copy /y "%NGINX_CONF_BAK%" "%NGINX_CONF%" >nul
-powershell.exe -NoProfile -Command "$address = [Uri]'%BACKEND_ADDR%'; $upstream = $address.Host + ':' + $address.Port; (Get-Content '%NGINX_CONF%' -Raw) -replace 'server 127\.0\.0\.1:8022;', ('server ' + $upstream + ';') -replace 'listen       80;', 'listen       %FRONTEND_PORT%;' | Set-Content '%NGINX_CONF%' -NoNewline"
+if /I "%BACKEND_MODE%"=="integrated" exit /b 0
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Sync-OfflineConfig.ps1" -ExternalBackend "%BACKEND_ADDR%" -FrontendPort %FRONTEND_PORT% -CompatPort %FRONTEND_COMPAT_PORT%
 if errorlevel 1 (
     echo [ERROR] Failed to update nginx backend configuration.
     exit /b 1
