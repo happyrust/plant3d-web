@@ -183,6 +183,12 @@ const awaitingDbnums = computed(() =>
 );
 
 const taskList = computed(() => [...tasks.value.values()].reverse());
+
+/** 面板告警 = /dbnums 扫描告警 ∪ 上次 update/execute 回执告警；回执那份留在 lastReceipt 上派生，不被刷新列表覆盖。 */
+const combinedWarnings = computed(() => {
+  const receiptWarnings = (lastReceipt.value?.warnings ?? []).filter(Boolean);
+  return [...new Set([...dbWarnings.value, ...receiptWarnings])];
+});
 const hasActiveTasks = computed(() => taskList.value.some((t) => !TASK_TERMINAL.has(t.state)));
 
 // ---------------------------------------------------------------------------
@@ -301,10 +307,6 @@ async function executeSelected(): Promise<void> {
     lastReceipt.value = receipt;
     for (const info of [...(receipt.enqueued ?? []), ...(receipt.merged ?? [])]) {
       registerTask(info.task_id, info.dbnum ?? null, info.intent ?? null);
-    }
-    const receiptWarnings = (receipt.warnings ?? []).filter(Boolean);
-    if (receiptWarnings.length > 0) {
-      dbWarnings.value = [...new Set([...dbWarnings.value, ...receiptWarnings])];
     }
     if ((receipt.enqueued ?? []).length + (receipt.merged ?? []).length > 0) {
       ensurePolling();
@@ -435,6 +437,7 @@ export function useModelGenerationAdmin() {
     dbLoading,
     dbError,
     dbWarnings,
+    combinedWarnings,
     onlyUnfinished,
     selectedDbnums,
     awaitingDbnums,

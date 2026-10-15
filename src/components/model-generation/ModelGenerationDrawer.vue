@@ -312,7 +312,7 @@ watch(
             </div>
           </section>
 
-          <div v-if="admin.dbWarnings.value.length > 0"
+          <div v-if="admin.combinedWarnings.value.length > 0"
             class="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-800"
             data-testid="model-generation-warnings">
             <div class="flex items-center gap-1 font-medium">
@@ -320,7 +320,7 @@ watch(
               服务端告警
             </div>
             <ul class="mt-1 list-inside list-disc">
-              <li v-for="(warning, index) in admin.dbWarnings.value" :key="index">{{ warning }}</li>
+              <li v-for="(warning, index) in admin.combinedWarnings.value" :key="index">{{ warning }}</li>
             </ul>
           </div>
 
