@@ -32,6 +32,11 @@ if exist "%BACKEND_DIR%\aios-database.exe" (
     )
 )
 
+if exist "%BACKEND_DIR%\bin\surreal.exe" (
+    echo [STOP] Stopping bundled SurrealDB...
+    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '%BACKEND_DIR%\bin\surreal.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+)
+
 echo [DONE] Plant3D-Web offline services stopped.
 echo.
 pause

@@ -387,7 +387,7 @@ async function main() {
       throw new Error(`暂存目录非空，拒绝覆盖: ${OFFLINE_DIR}`);
     }
     mkdirSync(OFFLINE_DIR, { recursive: true });
-    for (const name of ['README.md', 'start.bat', 'stop.bat', 'config.bat', 'Sync-OfflineConfig.ps1', 'Test-OfflineHttp.ps1', 'nginx.conf.template']) {
+    for (const name of ['README.md', 'start.bat', 'stop.bat', 'config.bat', 'Sync-OfflineConfig.ps1', 'Test-OfflineHttp.ps1', 'Start-BundledStore.ps1', 'nginx.conf.template']) {
       copyFileSync(join(OFFLINE_SOURCE_DIR, name), join(OFFLINE_DIR, name));
     }
     if (existsSync(join(OFFLINE_SOURCE_DIR, 'nginx', 'nginx.exe'))) {

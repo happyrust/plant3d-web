@@ -16,12 +16,14 @@ set "CONFIG_FILE=%SCRIPT_DIR%config\deploy.env"
 set "BACKEND_MODE=integrated"
 set "BACKEND_ADDR=http://127.0.0.1:8022"
 set "FRONTEND_PORT=80"
+set "STORE_MODE=rocksdb"
 if exist "%CONFIG_FILE%" (
     for /f "usebackq tokens=1,* delims== eol=#" %%a in ("%CONFIG_FILE%") do set "%%a=%%b"
 )
 set "BACKEND_MODE=%BACKEND_MODE: =%"
 set "BACKEND_ADDR=%BACKEND_ADDR: =%"
 set "FRONTEND_PORT=%FRONTEND_PORT: =%"
+set "STORE_MODE=%STORE_MODE: =%"
 if not exist "%SCRIPT_DIR%config" mkdir "%SCRIPT_DIR%config"
 set "FRONTEND_COMPAT_PORT=3100"
 if /I "%BACKEND_MODE%"=="integrated" (
@@ -37,6 +39,7 @@ echo ==========================================
 echo.
 echo   Frontend:     %WWW_DIR%
 echo   Backend mode: %BACKEND_MODE%
+echo   Store mode:   %STORE_MODE%
 echo   Backend:      %BACKEND_ADDR%
 echo   Ports:        %FRONTEND_PORT% (compat %FRONTEND_COMPAT_PORT%, 0=disabled)
 echo.
@@ -63,8 +66,17 @@ if /I "%BACKEND_MODE%"=="integrated" (
         pause
         exit /b 1
     )
+    if /I "%STORE_MODE%"=="rocksdb" (
+        echo [START] Ensuring SurrealDB for rocksdb mode...
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Start-BundledStore.ps1"
+        if errorlevel 1 (
+            echo [ERROR] SurrealDB did not become ready. Check %BACKEND_DIR%\logs
+            pause
+            exit /b 1
+        )
+    )
     echo [START] Starting integrated backend...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%BACKEND_DIR%\Start-AMS.ps1" -StoreMode mem -NoBrowser -TimeoutSeconds 120
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%BACKEND_DIR%\Start-AMS.ps1" -StoreMode %STORE_MODE% -NoBrowser -TimeoutSeconds 120
     if errorlevel 1 (
         echo [ERROR] Backend failed to become ready. Check %BACKEND_DIR%\logs
         pause

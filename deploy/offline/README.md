@@ -65,8 +65,8 @@ npm run build:offline -- --no-gen-model
 ## 启动
 
 1. 解压 ZIP。
-2. 运行 `start.bat`；默认 `BACKEND_MODE=integrated`，无需先运行 `config.bat`。
-3. 脚本读取 `backend/DbOption.toml`，同步 nginx 配置，启动后端与 nginx。
+2. 运行 `start.bat`；默认 `BACKEND_MODE=integrated`、`STORE_MODE=rocksdb`，无需先运行 `config.bat`。
+3. 脚本读取 `backend/DbOption.toml`，同步 nginx 配置；rocksdb 档先确保 `v_ip:v_port` 上有可连的 SurrealDB（指向回环且未监听时用包内 `bin\surreal.exe` 起一台），再启动后端与 nginx。
 4. 首次启动自动打开后端 `/setup.html`，第①步填写 E3D 项目路径、主项目与 MDB；第③步统一设置后端监听地址、前端端口与兼容端口。
 5. 点击「保存并重启」：配置写入 `backend/DbOption.toml` 并备份，校验并重载包内 nginx，自动重启后端。兼容端口填 `0` 可关闭；端口重复或已占用时会报错，不停止其他实例。
 6. 完成初始化后可分别进入 plant-ui 和 plant3d-web。以后也可通过后端或前端的 `/setup.html` 修改配置；一体化模式不再从 `deploy.env` 读取端口。
@@ -77,7 +77,7 @@ npm run build:offline -- --no-gen-model
 - `http://localhost:3100`：PowerPMS 兼容入口。
 - `http://<服务器 IP>`：局域网入口。
 
-运行 `stop.bat` 会按包内可执行文件路径停止 nginx 与后端，包括向导重启后 PID 已变化的后端，不会按进程名误杀其他实例。
+运行 `stop.bat` 会按包内可执行文件路径停止 nginx、后端与包内 SurrealDB，包括向导重启后 PID 已变化的后端，不会按进程名误杀其他实例。
 
 ## 使用外部后端
 
@@ -85,7 +85,9 @@ npm run build:offline -- --no-gen-model
 
 ## 数据持久化
 
-默认以 `mem` 模式启动，适合首次配置与验证，后端重启后数据库内容不会保留。需要持久化时，应按 `backend/README.md` 使用包内 `Start-Surreal.ps1` 启动 rocksdb，并以 `Start-AMS.ps1 -StoreMode rocksdb` 启动后端；现场数据目录不应覆盖在升级包内。
+默认以 `rocksdb`（external）模式启动，数据活过重启：`start.bat` 先确保 `DbOption.toml` 的 `v_ip:v_port` 上有可连的 SurrealDB——指向本机回环且未监听时自动用包内 `bin\surreal.exe` 起一台（数据落 `backend\.surreal\ams`），指向外机时只探测、由现场自己保证库在跑。包内 SurrealDB 必须是本仓 fork 的 2.1.x，不能用官方 3.x。
+
+要临时回到内存库（库在进程里、重启即清空）：在 `config/deploy.env` 里写 `STORE_MODE=mem`，或不用 `deploy.env` 直接改 `start.bat` 顶部的默认值。现场数据目录不应覆盖在升级包内。
 
 ## 日志与排障
 
