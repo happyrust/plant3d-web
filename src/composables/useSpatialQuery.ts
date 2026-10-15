@@ -2344,9 +2344,17 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         { flyTo: options.flyTo, ...(dbnumByRefno.size > 0 ? { dbnumByRefno } : {}) }
       );
       const okSet = new Set(result.ok.map((item) => normalizeRefno(item)));
-      const failSet = new Set(result.fail.map((item) => normalizeRefno(item.refno)));
-      let unresolvedFail = result.fail;
       const viewer = viewerRef.value as ViewerRuntimeLike | null;
+      const targetRefnos = new Set(targets.map((item) => normalizeRefno(item.refno)));
+      const failed = result.fail.filter((item) => {
+        const refno = normalizeRefno(item.refno);
+        if (targetRefnos.has(refno) || !viewer) return true;
+        const cache = getModelSource().records;
+        return Boolean(cache.peek(refno)?.length)
+          || !cache.leavesOfRoot(refno).some((leaf) => leaf !== refno && hasRenderableSpatialResult(viewer, leaf));
+      });
+      const failSet = new Set(failed.map((item) => normalizeRefno(item.refno)));
+      let unresolvedFail = failed;
 
       if (viewer && okSet.size > 0) {
         const fakeOkTargets = targets.filter((item) => {
@@ -2390,7 +2398,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           proxyResult.ok.forEach((refno) => okSet.add(normalizeRefno(refno)));
           const proxyOkSet = new Set(proxyResult.ok.map((refno) => normalizeRefno(refno)));
           unresolvedFail = [
-            ...result.fail.filter((item) => !proxyOkSet.has(normalizeRefno(item.refno))),
+            ...failed.filter((item) => !proxyOkSet.has(normalizeRefno(item.refno))),
             ...proxyResult.fail,
           ].filter((item, index, list) => {
             const refno = normalizeRefno(item.refno);

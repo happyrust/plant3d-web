@@ -3115,6 +3115,25 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['shared_b', 'loaded_a', 'bran_1'], false);
   });
 
+  it.each([false, true])('伴随根没有自身几何且子构件已显示时不误报；有自身几何的失败仍保留（ownGeometry=%s）', async (ownGeometry) => {
+    const tree = treeResult();
+    tree.rooms = [tree.rooms[0]!];
+    const room = tree.rooms[0]!;
+    const spec = room.specs[1]!;
+    const unit = spec.unit_types[0]!.units[0]!;
+    unit.elements = [{ refno: 'loaded_a', noun: 'ELBO', distance: 0 }];
+    unit.count = spec.count = spec.unit_types[0]!.count = 1;
+    room.count = tree.total_count = tree.leaf_count = 2;
+    recordCacheMocks.leaves.set('bran_1', ['loaded_a']);
+    if (ownGeometry) recordCacheMocks.entries.set('bran_1', [{ uniforms: { refno: 'bran_1' } }]);
+    const batchLoadRefnos = vi.fn(async () => ({ ok: ['loaded_a'], fail: [{ refno: 'bran_1', error: '加载模型失败' }] }));
+    const { store } = makeStore({ fetchTree: vi.fn(async () => tree), queryNearbyByPosition: vi.fn(async () => facetResult()), batchLoadRefnos });
+    await store.submitQuery();
+    await store.loadResults({ refnos: ['loaded_a'] });
+    expect(store.error.value).toBe(ownGeometry ? '加载模型失败' : null);
+    expect(store.resultSet.value?.items.find((item) => item.refno === 'loaded_a')?.loaded).toBe(true);
+  });
+
   it('只加载未加载时按完整单元范围识别 BRAN，已有部分管件不应导致漏掉直管', async () => {
     const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult({ rooms: [treeResult().rooms[0]!] }));
     const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [] }));
