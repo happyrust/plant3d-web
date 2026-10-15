@@ -16,7 +16,9 @@ set "CONFIG_FILE=%SCRIPT_DIR%config\deploy.env"
 set "BACKEND_MODE=integrated"
 set "BACKEND_ADDR=http://127.0.0.1:8022"
 set "FRONTEND_PORT=80"
-set "STORE_MODE=rocksdb"
+:: STORE_MODE 留空 = 不 pin：介质由 DbOption.toml 的 store_mode（向导第②步选的档）决定。
+:: deploy.env 里写 STORE_MODE=mem / rocksdb 是运维 pin，会压过向导持久化的选择。
+set "STORE_MODE="
 if exist "%CONFIG_FILE%" (
     for /f "usebackq tokens=1,* delims== eol=#" %%a in ("%CONFIG_FILE%") do set "%%a=%%b"
 )
@@ -39,7 +41,7 @@ echo ==========================================
 echo.
 echo   Frontend:     %WWW_DIR%
 echo   Backend mode: %BACKEND_MODE%
-echo   Store mode:   %STORE_MODE%
+if "%STORE_MODE%"=="" (echo   Store mode:   ^<per DbOption.toml store_mode^>) else echo   Store mode:   %STORE_MODE% (pinned)
 echo   Backend:      %BACKEND_ADDR%
 echo   Ports:        %FRONTEND_PORT% (compat %FRONTEND_COMPAT_PORT%, 0=disabled)
 echo.
@@ -66,8 +68,10 @@ if /I "%BACKEND_MODE%"=="integrated" (
         pause
         exit /b 1
     )
-    if /I "%STORE_MODE%"=="rocksdb" (
-        echo [START] Ensuring SurrealDB for rocksdb mode...
+    :: 介质未定死时由脚本自己判：STORE_MODE pin 了按 pin，否则看 DbOption.toml 的
+    :: store_mode（向导持久化）；mem 档不用库，脚本直接放行。
+    if /I not "%STORE_MODE%"=="mem" (
+        echo [START] Ensuring SurrealDB if the store mode needs one...
         powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Start-BundledStore.ps1"
         if errorlevel 1 (
             echo [ERROR] SurrealDB did not become ready. Check %BACKEND_DIR%\logs
@@ -76,7 +80,11 @@ if /I "%BACKEND_MODE%"=="integrated" (
         )
     )
     echo [START] Starting integrated backend...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%BACKEND_DIR%\Start-AMS.ps1" -StoreMode %STORE_MODE% -NoBrowser -TimeoutSeconds 120
+    if defined STORE_MODE (
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%BACKEND_DIR%\Start-AMS.ps1" -StoreMode %STORE_MODE% -NoBrowser -TimeoutSeconds 120
+    ) else (
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%BACKEND_DIR%\Start-AMS.ps1" -NoBrowser -TimeoutSeconds 120
+    )
     if errorlevel 1 (
         echo [ERROR] Backend failed to become ready. Check %BACKEND_DIR%\logs
         pause

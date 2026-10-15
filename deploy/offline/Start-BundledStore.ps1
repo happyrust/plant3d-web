@@ -1,10 +1,11 @@
-﻿# 一体化启动的前置：rocksdb 档要确保 backend\DbOption.toml 里 v_ip:v_port 上有一台可连的
-# SurrealDB 2.x。只读配置文件：
+﻿# 一体化启动的前置：external（rocksdb）档要确保 backend\DbOption.toml 里 v_ip:v_port 上有
+# 一台可连的 SurrealDB 2.x。介质分层：deploy.env 的 STORE_MODE pin > DbOption.toml 的
+# store_mode（向导持久化）> 默认；mem 档不用库，直接放行。rocks 档下只读配置文件：
 #   - 已监听 → 对正在跑的服务查 /version，主版本 2 放行（现场自管的库不强求包内 exe）；
 #   - 未监听且指向回环 → 找可用的 surreal.exe（包内 bin\、PATH），二进制自报 2.x 才用，
 #     用 rocksdb:<backend>\.surreal\ams 起一台并记 surreal-process.json 供 stop.bat 停；
 #   - 未监听且指向外机 → 只警告放行，连不上由后端自己报。
-# mem 档不会走到这里。离线包默认不含 bin\surreal.exe——现场那台就是来源。
+# 离线包默认不含 bin\surreal.exe——现场那台就是来源。
 param([int]$TimeoutSeconds = 90)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
@@ -12,6 +13,15 @@ $backend = Join-Path $root 'backend'
 $configPath = Join-Path $backend 'DbOption.toml'
 if (-not (Test-Path -LiteralPath $configPath)) { throw "Missing backend config: $configPath" }
 $text = [System.IO.File]::ReadAllText($configPath)
+
+# 生效介质：STORE_MODE pin > 文件 store_mode > 默认 rocksdb。只有 mem 档可以直接放行；
+# 认不出的值与后端「按 rocksdb 兜底」同口径——宁可备着库，不能漏备。
+$fileMode = [regex]::Match($text, '(?m)^\s*store_mode\s*=\s*["'']?([^"''#\r\n]+)').Groups[1].Value.Trim()
+$mode = if ($env:STORE_MODE) { $env:STORE_MODE } elseif ($fileMode) { $fileMode } else { 'rocksdb' }
+if ($mode -match '^(?i)(mem|memory|embedded-mem|kv-mem|spawned-mem)$') {
+    Write-Output "STORE=mem (in-process); no SurrealDB needed"
+    exit 0
+}
 $ipMatch = [regex]::Match($text, '(?m)^\s*v_ip\s*=\s*["'']?([^"''#\r\n]+)')
 $vIp = if ($ipMatch.Success) { $ipMatch.Groups[1].Value.Trim() } else { '127.0.0.1' }
 $portMatch = [regex]::Match($text, '(?m)^\s*v_port\s*=\s*"?(\d+)"?')

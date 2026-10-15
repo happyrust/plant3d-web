@@ -307,10 +307,14 @@ function prepareBackend(packagePath) {
     }
   }
   const configPath = join(BACKEND_DIR, 'DbOption.toml');
-  const config = readFileSync(configPath, 'utf-8')
+  let config = readFileSync(configPath, 'utf-8')
     .replace(/^server_release_ip\s*=.*$/m, 'server_release_ip = "0.0.0.0:8022"')
     .replace(/^http_api_addr\s*=.*$/m, 'http_api_addr = "0.0.0.0:8022"')
+    .replace(/^store_mode\s*=.*\r?\n?/gm, '')
     .replace(/^frontend_(?:compat_)?port\s*=.*\r?\n?/gm, '') + '\nfrontend_port = 80\nfrontend_compat_port = 3100\n';
+  // 离线包出厂介质走配置文件层：store_mode = "rocksdb"（external，默认）。
+  // 向导第②步改选 memory 时重写这一行；deploy.env 的 STORE_MODE 仍可作运维 pin 覆盖。
+  config += 'store_mode = "rocksdb"\n';
   writeFileSync(configPath, config);
 
   const startAmsPath = join(BACKEND_DIR, 'Start-AMS.ps1');
