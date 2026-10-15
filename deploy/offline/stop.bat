@@ -32,6 +32,10 @@ if exist "%BACKEND_DIR%\aios-database.exe" (
     )
 )
 
+if exist "%BACKEND_DIR%\surreal-process.json" (
+    echo [STOP] Stopping SurrealDB started by this package...
+    powershell.exe -NoProfile -Command "try { $p = Get-Content '%BACKEND_DIR%\surreal-process.json' -Raw | ConvertFrom-Json; if ($p.pid) { Stop-Process -Id $p.pid -Force -ErrorAction SilentlyContinue } } catch {}; Remove-Item '%BACKEND_DIR%\surreal-process.json' -Force -ErrorAction SilentlyContinue"
+)
 if exist "%BACKEND_DIR%\bin\surreal.exe" (
     echo [STOP] Stopping bundled SurrealDB...
     powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '%BACKEND_DIR%\bin\surreal.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"

@@ -20,6 +20,7 @@
  *   node scripts/build-offline-release.mjs --skip-build        # 跳过前后端构建，直接用现成产物打包
  *   node scripts/build-offline-release.mjs --skip-gen-model-smoke # 调用 ../gen-model 打包时跳过其冒烟门
  *   node scripts/build-offline-release.mjs --skip-nginx        # 跳过下载 nginx（已有的话）
+ *   node scripts/build-offline-release.mjs --with-surreal      # 在 backend/bin 下附带 surreal.exe（默认不带：rocks 库由现场自己提供，启动时只查服务版本）
  *   node scripts/build-offline-release.mjs --force             # 允许覆盖同名输出
  */
 
@@ -116,6 +117,9 @@ const shouldBuildGenModel =
 const skipGenModelSmoke =
   args.includes('--skip-gen-model-smoke') ||
   args.includes('--skip-backend-smoke');
+// 默认不随包附带 SurrealDB 二进制：rocksdb 档指向的库由现场自己运行，
+// start.bat → Start-BundledStore.ps1 只对其做 /version 版本检查。
+const includeSurreal = args.includes('--with-surreal');
 
 function log(msg) {
   console.log(`[offline-release] ${msg}`);
@@ -290,6 +294,18 @@ function prepareBackend(packagePath) {
   }
 
   copyDir(packageRoot, BACKEND_DIR);
+  if (!includeSurreal) {
+    // 默认不带 SurrealDB 二进制：包内 Start-BundledStore.ps1 只对目标服务做版本检查；
+    // 需要打包时用 --with-surreal 加回。
+    const bundledSurreal = join(BACKEND_DIR, 'bin', 'surreal.exe');
+    if (existsSync(bundledSurreal)) {
+      rmSync(bundledSurreal);
+      const binDir = join(BACKEND_DIR, 'bin');
+      if (existsSync(binDir) && readdirSync(binDir).length === 0) {
+        rmSync(binDir, { recursive: true, force: true });
+      }
+    }
+  }
   const configPath = join(BACKEND_DIR, 'DbOption.toml');
   const config = readFileSync(configPath, 'utf-8')
     .replace(/^server_release_ip\s*=.*$/m, 'server_release_ip = "0.0.0.0:8022"')
@@ -315,6 +331,10 @@ function prepareBackend(packagePath) {
   normalizeWindowsScripts(BACKEND_DIR);
   const manifestPath = join(BACKEND_DIR, 'release.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  if (!includeSurreal && Array.isArray(manifest.files)) {
+    // 与上面剔除文件保持一致，避免按清单验签时报缺文件
+    manifest.files = manifest.files.filter((entry) => !/^bin[\\/]surreal\.exe$/i.test(entry.path));
+  }
   for (const entry of manifest.files ?? []) {
     if (entry.path !== 'DbOption.toml' && !/\.(ps1|bat|cmd)$/i.test(entry.path)) continue;
     const content = readFileSync(join(BACKEND_DIR, entry.path));
