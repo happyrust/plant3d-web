@@ -1822,10 +1822,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
    * 动作整个盖住的 BRAN 单元也算上（单元下的构件可能都没几何记录，靠属主认不出）。`all` = 「结果里的全部」那一档还带上树里全部 BRAN 单元。
    * 结果项自己的 loaded / visible 计数不含这些伴随 refno——它们不是命中。
    */
-  function withCompanions(refnos: string[], scope: 'given' | 'all' = 'given'): string[] {
+  function withCompanions(refnos: string[], scope: 'given' | 'all' = 'given', coveredRefnos: string[] = refnos): string[] {
     if (refnos.length === 0) return refnos;
     const tree = resultSet.value?.tree ?? null;
-    const units = tree ? (scope === 'all' ? branUnitRefnosOfTree(tree) : branUnitRefnosCoveredBy(tree, refnos)) : [];
+    const units = tree ? (scope === 'all' ? branUnitRefnosOfTree(tree) : branUnitRefnosCoveredBy(tree, coveredRefnos)) : [];
     const companions = sceneCompanions(refnos, units);
     if (companions.length === 0) return refnos;
     return uniqStrings([...refnos, ...companions]);
@@ -2336,8 +2336,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       error.value = null;
       status.value = 'loading-results-batch';
       const dbnumByRefno = collectDbnumHints(targets);
+      const coveredRefnos = options.onlyUnloaded
+        ? pickResultItems({ ...options, onlyUnloaded: false }).map((item) => item.refno)
+        : targets.map((item) => item.refno);
       const result = await batchLoadRefnos(
-        targets.map((item) => item.refno),
+        withCompanions(targets.map((item) => item.refno), 'given', coveredRefnos),
         { flyTo: options.flyTo, ...(dbnumByRefno.size > 0 ? { dbnumByRefno } : {}) }
       );
       const okSet = new Set(result.ok.map((item) => normalizeRefno(item)));

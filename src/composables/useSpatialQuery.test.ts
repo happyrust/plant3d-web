@@ -3115,6 +3115,35 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['shared_b', 'loaded_a', 'bran_1'], false);
   });
 
+  it('只加载未加载时按完整单元范围识别 BRAN，已有部分管件不应导致漏掉直管', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult({ rooms: [treeResult().rooms[0]!] }));
+    const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [] }));
+    const { store } = makeStore({ fetchTree, queryNearbyByPosition: vi.fn(async () => facetResult()), batchLoadRefnos });
+    await store.submitQuery();
+    await store.loadResults({ refnos: ['loaded_a', 'server_only', 'shared_b'], onlyUnloaded: true });
+    expect(batchLoadRefnos).toHaveBeenCalledWith(['server_only', 'shared_b', 'bran_1'], expect.anything());
+  });
+
+  it('仅加载单个管件时不误认为加载整个 BRAN 单元', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
+    const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [] }));
+    const { store } = makeStore({ fetchTree, queryNearbyByPosition: vi.fn(async () => facetResult()), batchLoadRefnos });
+    await store.submitQuery();
+    await store.loadResults({ refnos: ['server_only'] });
+    expect(batchLoadRefnos).toHaveBeenCalledWith(['server_only'], expect.anything());
+  });
+
+  it('冷缓存按单元加载时显式包含 BRAN 根，不依赖子构件记录推断 owner', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
+    const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [] }));
+    const { store } = makeStore({ fetchTree, queryNearbyByPosition: vi.fn(async () => facetResult()), batchLoadRefnos });
+    await store.submitQuery();
+    await store.loadResults({ refnos: ['loaded_a', 'server_only', 'shared_b'], flyTo: true });
+    expect(batchLoadRefnos).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1'], expect.objectContaining({ flyTo: true }));
+    expect(store.resultSet.value?.total).toBe(4);
+    expect(store.resultSet.value?.items.some((item) => item.refno === 'bran_1')).toBe(false);
+  });
+
   it('管件带直段：单元级「仅显示 / 隔离」与「全部显示 / 隐藏 / 隔离结果」连所属 BRAN 的整体（BRAN 自己 = 直管 + 范围外构件）一起动；叶子行的眼睛不扩；恢复场景把它们也放回去', async () => {
     const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
     const queryNearbyByPosition = vi.fn(async () => facetResult());
