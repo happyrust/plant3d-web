@@ -72,8 +72,16 @@ if /I "%BACKEND_MODE%"=="integrated" (
     )
 ) else (
     echo [CHECK] Checking external backend...
-    curl -f -s "%BACKEND_ADDR%/api/v1/health" >nul 2>&1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Test-OfflineHttp.ps1" -Uri "%BACKEND_ADDR%/api/v1/health" -BackendHealth >nul 2>&1
     if errorlevel 1 echo [WARN] External backend health check failed; nginx will still start.
+)
+
+if /I "%BACKEND_MODE%"=="integrated" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Test-OfflineHttp.ps1" -Uri "%BACKEND_ADDR%/api/v1/health" -BackendHealth
+    if errorlevel 1 (
+        echo [ERROR] Integrated backend health check failed; nginx will not start.
+        exit /b 1
+    )
 )
 
 call :update_nginx_config
@@ -84,7 +92,7 @@ cd /d "%NGINX_DIR%"
 start "Plant3D-Web Nginx" /min nginx.exe
 powershell.exe -NoProfile -Command "Start-Sleep -Seconds 2"
 
-curl -f -s "http://localhost:%FRONTEND_PORT%/" >nul 2>&1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Test-OfflineHttp.ps1" -Uri "http://127.0.0.1:%FRONTEND_PORT%/" >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] nginx failed to start. Check %NGINX_DIR%\logs\error.log
     pause

@@ -45,10 +45,13 @@ $rendered = $rendered.Replace('listen       3100;', $compatListen)
 $pidFile = Join-Path $nginxRoot 'logs\nginx.pid'
 $owned = $null
 if (Test-Path -LiteralPath $pidFile) {
-    $nginxPid = 0
-    if (-not [int]::TryParse(([System.IO.File]::ReadAllText($pidFile)).Trim(), [ref]$nginxPid)) { throw 'Invalid package nginx PID file' }
-    $owned = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $nginxPid) -ErrorAction SilentlyContinue
-    if ($owned -and $owned.ExecutablePath -ne $nginxExe) { throw 'nginx PID belongs to another executable; refusing reload' }
+    $pidText = ([System.IO.File]::ReadAllText($pidFile)).Trim()
+    if ($pidText) {
+        $nginxPid = 0
+        if (-not [int]::TryParse($pidText, [ref]$nginxPid) -or $nginxPid -le 0) { throw 'Invalid package nginx PID file' }
+        $owned = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $nginxPid) -ErrorAction SilentlyContinue
+        if ($owned -and $owned.ExecutablePath -ne $nginxExe) { throw 'nginx PID belongs to another executable; refusing reload' }
+    }
 }
 $previous = if (Test-Path -LiteralPath $configFile) { [System.IO.File]::ReadAllText($configFile) } else { '' }
 $oldPorts = @()
@@ -59,7 +62,7 @@ $probes = @()
 try {
     foreach ($port in @($FrontendPort, $CompatPort) | Where-Object { $_ -gt 0 }) {
         if ($port -in $oldPorts) { continue }
-        $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $port)
+        $probe = New-Object System.Net.Sockets.TcpListener -ArgumentList ([System.Net.IPAddress]::Any), $port
         $probe.Server.ExclusiveAddressUse = $true
         $probe.Start()
         $probes += $probe
@@ -67,7 +70,7 @@ try {
 } finally {
     foreach ($probe in $probes) { $probe.Stop() }
 }
-$utf8 = [System.Text.UTF8Encoding]::new($false)
+$utf8 = New-Object System.Text.UTF8Encoding -ArgumentList $false
 [System.IO.File]::WriteAllText($configFile, $rendered, $utf8)
 function Invoke-Nginx([string[]]$Arguments) {
     $preference = $ErrorActionPreference

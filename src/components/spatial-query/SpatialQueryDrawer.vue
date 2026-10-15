@@ -1,21 +1,24 @@
 <template>
-  <div v-if="open"
+  <div v-if="open" ref="drawerEl"
     class="pointer-events-auto absolute right-14 top-24 z-[950] flex max-h-[calc(100%-7.5rem)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-[width]"
     :class="isMiniMode ? 'w-[260px]' : 'w-[336px]'"
+    :style="dragPos ? { left: `${dragPos.left}px`, top: `${dragPos.top}px`, right: 'auto' } : undefined"
     @pointerdown.stop
     @wheel.stop>
-    <div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+    <div class="flex cursor-move select-none items-center justify-between border-b border-gray-100 px-3 py-2"
+      @pointerdown="onHeaderPointerDown">
       <div class="min-w-0">
         <div class="font-ui text-sm font-semibold text-gray-900">空间查询</div>
         <div v-if="!isMiniMode" class="mt-0.5 text-[11px] text-gray-500">范围查询与距离查询</div>
       </div>
       <div class="flex items-center gap-1">
         <button type="button"
-          class="rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+          class="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
           :title="isMiniMode ? '展开面板' : '迷你模式'"
           data-testid="spatial-query-mini-toggle"
           @click="toggleMiniMode">
-          {{ isMiniMode ? '展开' : '迷你' }}
+          <Maximize2 v-if="isMiniMode" class="h-4 w-4" />
+          <Minus v-else class="h-4 w-4" />
         </button>
         <button type="button" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900" title="关闭" @click="closePanel">
           <X class="h-4 w-4" />
@@ -789,7 +792,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { ArrowUpRight, Copy, Download, Eraser, Eye, EyeOff, Focus, Info, Loader2, MapPinned, MousePointerClick, RotateCcw, Ruler, Search, X } from 'lucide-vue-next';
+import { ArrowUpRight, Copy, Download, Eraser, Eye, EyeOff, Focus, Info, Loader2, MapPinned, Maximize2, Minus, MousePointerClick, RotateCcw, Ruler, Search, X } from 'lucide-vue-next';
 
 import SpatialResultTree from './SpatialResultTree.vue';
 
@@ -1467,6 +1470,40 @@ function closePanel() {
 
 function toggleMiniMode() {
   isMiniMode.value = !isMiniMode.value;
+}
+
+// 拖拽：标题栏按下后捕获 pointer，容器从 right/top 定位切到 left/top 绝对坐标，限制在父容器内
+const drawerEl = ref<HTMLElement | null>(null);
+const dragPos = ref<{ left: number; top: number } | null>(null);
+
+function onHeaderPointerDown(e: PointerEvent) {
+  if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+  const el = drawerEl.value;
+  if (!el) return;
+  const header = e.currentTarget as HTMLElement;
+  const rect = el.getBoundingClientRect();
+  const parent = el.offsetParent as HTMLElement | null;
+  const parentRect = parent?.getBoundingClientRect()
+    ?? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const startLeft = rect.left - parentRect.left;
+  const startTop = rect.top - parentRect.top;
+  header.setPointerCapture(e.pointerId);
+  const move = (ev: PointerEvent) => {
+    dragPos.value = {
+      left: Math.min(Math.max(0, startLeft + ev.clientX - startX), Math.max(0, parentRect.width - rect.width)),
+      top: Math.min(Math.max(0, startTop + ev.clientY - startY), Math.max(0, parentRect.height - rect.height)),
+    };
+  };
+  const stop = () => {
+    header.removeEventListener('pointermove', move);
+    header.removeEventListener('pointerup', stop);
+    header.removeEventListener('pointercancel', stop);
+  };
+  header.addEventListener('pointermove', move);
+  header.addEventListener('pointerup', stop);
+  header.addEventListener('pointercancel', stop);
 }
 
 function expandFromMiniMode() {

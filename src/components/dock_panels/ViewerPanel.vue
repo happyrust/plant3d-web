@@ -37,6 +37,7 @@ import { useComponentToWallClearance } from '@/clearance/composables/useComponen
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
+import ModelGenerationDrawer from '@/components/model-generation/ModelGenerationDrawer.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
@@ -531,6 +532,7 @@ const activeMeasureHoverText = computed(() => {
 const toolbarSettingsOpen = ref(false);
 const spatialQueryOpen = ref(false);
 const pipeDistDrawerOpen = ref(false);
+const modelGenerationOpen = ref(false);
 
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
@@ -857,6 +859,7 @@ let offBranClearanceWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offModelUnitVersionCompare: (() => void) | null = null;
 let offOpenSpatialQuery: (() => void) | null = null;
+let offOpenModelGeneration: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
@@ -2969,6 +2972,11 @@ function handleOpenSpatialQueryEvent(event: Event): void {
   });
 }
 
+function handleOpenModelGenerationEvent(): void {
+  modelGenerationOpen.value = true;
+  toolbarSettingsOpen.value = false;
+}
+
 onMounted(async () => {
   const canvas = mainCanvas.value;
   const container = containerRef.value;
@@ -4078,6 +4086,8 @@ onMounted(async () => {
   offRibbonCommand = onCommand(handleRibbonCommand);
   window.addEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
   offOpenSpatialQuery = () => window.removeEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
+  window.addEventListener('openModelGeneration', handleOpenModelGenerationEvent as EventListener);
+  offOpenModelGeneration = () => window.removeEventListener('openModelGeneration', handleOpenModelGenerationEvent as EventListener);
   initializeSpatialQueryFromUrl(window.location.search, spatialQueryStore, openSpatialQueryDrawer);
 
   // 点击工具栏外部时关闭“测量”下拉菜单（不影响当前工具模式）
@@ -4275,6 +4285,8 @@ onUnmounted(() => {
 
   offOpenSpatialQuery?.();
   offOpenSpatialQuery = null;
+  offOpenModelGeneration?.();
+  offOpenModelGeneration = null;
 
   offPtsetWatch?.();
   offPtsetWatch = null;
@@ -4885,6 +4897,9 @@ onUnmounted(() => {
 
     <!-- 管道间距离标注控制面板 -->
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />
+
+    <!-- 模型生成 / 库初始化面板 -->
+    <ModelGenerationDrawer v-model:open="modelGenerationOpen" />
 
     <div v-if="initError"
       class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur"

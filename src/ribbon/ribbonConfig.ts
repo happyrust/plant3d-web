@@ -27,6 +27,13 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
+        id: 'view.panel.modelgen',
+        label: '模型生成',
+        items: [
+          { kind: 'button', id: 'panel.modelGeneration', label: '模型生成', icon: 'database', commandId: 'panel.modelGeneration' },
+        ],
+      },
+      {
         id: 'view.panel.measurement',
         label: '测量',
         items: [

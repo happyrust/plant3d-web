@@ -56,6 +56,12 @@ npm run build:offline -- --no-gen-model
 
 输出位置：`../gen-model/releases/plant3d-web-offline-v<前端版本>-backend-v<后端版本>-<date>.zip`。默认拒绝覆盖同名发布物，确需覆盖时添加 `--force`。
 
+## Windows Server 2012 R2 脚本兼容
+
+运行脚本按 Windows PowerShell 4.0 / .NET Framework 4.5 编写，不依赖系统自带 `curl`。包内 `.ps1` 使用 UTF-8 BOM，避免中文系统按 ANSI 读取导致 `MissingCatchOrFinally` 等解析错误；不要用会移除 BOM 的编辑器重存脚本。
+
+一体化启动在后端启动命令和独立 HTTP 健康检查均通过后才启动 nginx。脚本兼容检查不等于已完成旧系统原生 EXE 兼容验收；`aios-database.exe`、`surreal.exe`、nginx 与所需 VC++ 运行库仍需在目标系统实测。
+
 ## 启动
 
 1. 解压 ZIP。

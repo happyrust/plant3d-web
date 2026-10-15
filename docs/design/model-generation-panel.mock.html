@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>模型生成面板 · 交互设计稿</title>
+<style>
+  /* 与 plant3d-web 深色主题同源的设计令牌（tailwind.css） */
+  :root {
+    --bg: hsl(222.2 84% 4.9%);
+    --card: hsl(222.2 84% 4.9%);
+    --fg: hsl(210 40% 98%);
+    --muted: hsl(217.2 32.6% 17.5%);
+    --muted-fg: hsl(215 20.2% 65.1%);
+    --border: hsl(217.2 32.6% 17.5%);
+    --brand: hsl(217 91% 60%);
+    --brand-fg: hsl(222 47% 11%);
+    --brand-subtle: hsl(222 47% 17%);
+    --success: hsl(160 84% 39%);
+    --success-subtle: hsl(161 60% 14%);
+    --warning: hsl(27 90% 55%);
+    --warning-subtle: hsl(27 60% 14%);
+    --danger: hsl(0 74% 55%);
+    --danger-subtle: hsl(0 60% 16%);
+    --radius: 8px;
+    font-size: 13px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #14161a; color: var(--fg); font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+         display: flex; justify-content: center; padding: 28px 16px; gap: 24px; align-items: flex-start; }
+  .frame { background: #0b0d10; border: 1px solid #23262c; border-radius: 12px; overflow: hidden; }
+  .frame-caption { color: #8b95a3; font-size: 12px; text-align: center; margin-top: 8px; }
+
+  /* ===== 面板本体（右侧停靠抽屉，420px） ===== */
+  .panel { width: 420px; background: var(--bg); border-left: 1px solid var(--border);
+           display: flex; flex-direction: column; height: 780px; }
+  .panel-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+                  border-bottom: 1px solid var(--border); }
+  .panel-header h2 { font-size: 15px; font-weight: 600; flex: 1; }
+  .src-badge { font-size: 11px; color: var(--brand); background: var(--brand-subtle);
+               border: 1px solid var(--brand); border-radius: 4px; padding: 1px 6px; }
+  .icon-btn { background: none; border: 1px solid var(--border); border-radius: 6px;
+              color: var(--muted-fg); width: 26px; height: 26px; cursor: pointer; }
+  .icon-btn:hover { color: var(--fg); background: var(--muted); }
+  .panel-body { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ===== 通用 ===== */
+  .seg { display: flex; background: var(--muted); border-radius: 7px; padding: 3px; gap: 2px; }
+  .seg button { flex: 1; border: 0; background: none; color: var(--muted-fg); padding: 5px 0;
+                border-radius: 5px; cursor: pointer; font-size: 12.5px; }
+  .seg button.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 3px #0006; }
+  .hint { color: var(--muted-fg); font-size: 12px; }
+  .banner { border-radius: var(--radius); padding: 8px 10px; font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
+  .banner.warn { background: var(--warning-subtle); color: var(--warning); border: 1px solid #7c4a03; }
+  .banner.info { background: var(--brand-subtle); color: var(--brand); border: 1px solid #1d4ed8; }
+  .banner .x { margin-left: auto; opacity: .6; cursor: pointer; }
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted-fg); letter-spacing: .4px;
+                   display: flex; align-items: center; gap: 6px; }
+  .section-title .count { background: var(--muted); border-radius: 8px; padding: 0 6px; font-weight: 500; }
+  .section-title .link { margin-left: auto; color: var(--brand); cursor: pointer; font-weight: 500; }
+
+  /* ===== 节点模式 ===== */
+  .input-row { display: flex; gap: 6px; }
+  .input-row input { flex: 1; background: var(--muted); border: 1px solid var(--border); border-radius: 6px;
+                     color: var(--fg); padding: 7px 10px; font-size: 12.5px; outline: none; }
+  .input-row input:focus { border-color: var(--brand); }
+  .mini-btn { background: var(--muted); border: 1px solid var(--border); color: var(--fg);
+              border-radius: 6px; padding: 0 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .mini-btn:hover { background: #2a3240; }
+  .chip-list { display: flex; flex-direction: column; gap: 6px; }
+  .chip { display: flex; align-items: center; gap: 8px; background: var(--muted);
+          border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; }
+  .chip .noun { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+                background: var(--brand-subtle); color: var(--brand); }
+  .chip .noun.equi { background: #12331f; color: var(--success); }
+  .chip .meta { flex: 1; min-width: 0; }
+  .chip .meta b { font-size: 12.5px; font-weight: 600; display: block; }
+  .chip .meta i { font-style: normal; color: var(--muted-fg); font-size: 11px;
+                  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip .st { font-size: 11px; }
+  .chip .st.ok { color: var(--success); }
+  .chip .st.no { color: var(--muted-fg); }
+  .chip .rm { color: var(--muted-fg); cursor: pointer; border: 0; background: none; font-size: 14px; }
+
+  /* ===== 库模式 ===== */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted-fg); font-weight: 500; padding: 5px 6px;
+       border-bottom: 1px solid var(--border); font-size: 11px; }
+  td { padding: 7px 6px; border-bottom: 1px solid #1b1f26; vertical-align: middle; }
+  tr:hover td { background: #ffffff06; }
+  .dbnum { font-weight: 600; }
+  .type-badge { font-size: 10px; color: var(--muted-fg); border: 1px solid var(--border);
+                border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+  .wm { font-family: Consolas, monospace; font-size: 11.5px; color: var(--muted-fg); }
+  .wm.cur { color: var(--fg); }
+  .st-badge { font-size: 11px; padding: 1px 7px; border-radius: 8px; white-space: nowrap; }
+  .st-badge.ok { background: var(--success-subtle); color: var(--success); }
+  .st-badge.wait { background: var(--warning-subtle); color: var(--warning); }
+  .st-badge.none { background: #1d2126; color: var(--muted-fg); }
+  .st-badge.run { background: var(--brand-subtle); color: var(--brand); }
+  .filter-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted-fg); }
+  .filter-row label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+
+  /* ===== 操作条 ===== */
+  .actions { display: flex; gap: 8px; }
+  .btn { border: 0; border-radius: 7px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn.primary { background: var(--brand); color: var(--brand-fg); flex: 1; }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.ghost { background: var(--muted); color: var(--fg); border: 1px solid var(--border); }
+  .btn.danger-outline { background: none; color: var(--danger); border: 1px solid var(--danger); }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  /* ===== 任务进度 ===== */
+  .task { border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 10px; }
+  .task + .task { margin-top: 8px; }
+  .task .t-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .task .t-id { color: var(--muted-fg); font-family: Consolas, monospace; font-size: 11px; }
+  .task .t-title { flex: 1; font-weight: 600; }
+  .stages { display: flex; gap: 4px; margin: 7px 0; }
+  .stage { flex: 1; text-align: center; font-size: 10.5px; padding: 3px 0; border-radius: 4px;
+           background: var(--muted); color: var(--muted-fg); }
+  .stage.done { background: var(--success-subtle); color: var(--success); }
+  .stage.doing { background: var(--brand-subtle); color: var(--brand); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  .bar { height: 5px; background: var(--muted); border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
+  .bar.done i { background: var(--success); }
+  .task .t-foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted-fg); margin-top: 5px; }
+
+  .foot-note { color: var(--muted-fg); font-size: 11px; border-top: 1px solid var(--border);
+               padding: 8px 14px; display: flex; gap: 6px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+</style>
+</head>
+<body>
+
+<!-- ============ 状态 A：按节点（SITE）生成 ============ -->
+<div>
+<div class="frame"><div class="panel">
+  <div class="panel-header">
+    <h2>模型生成</h2>
+    <span class="src-badge">gen-model :8022</span>
+    <button class="icon-btn" title="刷新状态">⟳</button>
+    <button class="icon-btn" title="关闭">×</button>
+  </div>
+  <div class="panel-body">
+
+    <div class="seg">
+      <button class="on">按节点 / SITE</button>
+      <button>按库（dbnum）</button>
+    </div>
+
+    <div class="banner warn">
+      ⚠ <span>本服务处于<b>监听限定</b>：仅 7997 / 7998 / 8000 的数据批次与生成会被处理。库外节点可生成几何，但<b>不会写房间边</b>。</span>
+      <span class="x">×</span>
+    </div>
+
+    <div>
+      <div class="section-title" style="margin-bottom:6px">生成目标 <span class="count">3</span>
+        <span class="link">从模型树勾选</span>
+      </div>
+      <div class="input-row" style="margin-bottom:8px">
+        <input placeholder="输入 refno，如 24381_145018 或 /SITE-NAME">
+        <button class="mini-btn">用选中构件</button>
+      </div>
+      <div class="chip-list">
+        <div class="chip">
+          <span class="noun">SITE</span>
+          <div class="meta"><b>/1RX-RM07 区域</b><i>24381_36000 · 上次生成 sesno 342</i></div>
+          <span class="st ok">已生成</span>
+          <button class="rm">×</button>
+        </div>
+        <div class="chip">
+          <span class="noun">BRAN</span>
+          <div class="meta"><b>/Copy-of-RCS0014-1R43012新</b><i>24381_145018 · 22 实例 · 9 直段</i></div>
+          <span class="st ok">已生成</span>
+          <button class="rm">×</button>
+        </div>
+        <div class="chip">
+          <span class="noun equi">EQUI</span>
+          <div class="meta"><b>/EQUI-PUMP-03</b><i>24381_134273 · 从未生成</i></div>
+          <span class="st no">未生成</span>
+          <button class="rm">×</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">
+      容器节点（SITE / ZONE）按契约逐层展开到生成根再逐根生成——与模型树右键「重新生成模型」同一条路径（<code>model/generate</code>）。已生成的范围会被重算替换。
+    </div>
+
+    <div class="actions">
+      <button class="btn primary">重新生成选中（3 个节点）</button>
+      <button class="btn ghost" title="只查询，不生成">查看就绪状态</button>
+    </div>
+
+    <div>
+      <div class="section-title" style="margin-bottom:8px">最近任务 <span class="count">2</span></div>
+
+      <div class="task">
+        <div class="t-head"><span class="t-title">EQUI /EQUI-PUMP-03</span><span class="st-badge run">生成中</span></div>
+        <div class="bar" style="margin-top:8px"><i style="width:64%"></i></div>
+        <div class="t-foot"><span>实例 14 / 22</span><span>24381_134273</span></div>
+      </div>
+
+      <div class="task">
+        <div class="t-head"><span class="t-title">BRAN 24381_145018</span><span class="st-badge ok">完成</span></div>
+        <div class="bar done" style="margin-top:8px"><i style="width:100%"></i></div>
+        <div class="t-foot"><span>22 实例 · publication ready</span><span>sesno 357</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot-note"><span class="dot"></span>队列正常 · 3s 轮询任务状态</div>
+</div></div>
+<div class="frame-caption">A · 按节点/SITE 重新生成（model/generate 逐 refno）</div>
+</div>
+
+<!-- ============ 状态 B：按库初始化 ============ -->
+<div>
+<div class="frame"><div class="panel">
+  <div class="panel-header">
+    <h2>模型生成</h2>
+    <span class="src-badge">gen-model :8022</span>
+    <button class="icon-btn" title="刷新状态">⟳</button>
+    <button class="icon-btn" title="关闭">×</button>
+  </div>
+  <div class="panel-body">
+
+    <div class="seg">
+      <button>按节点 / SITE</button>
+      <button class="on">按库（dbnum）</button>
+    </div>
+
+    <div class="banner info">
+      ⓘ <span>「初始化/更新」走摄入管线：<b>数据 → 生成 → 发布 → 空间 → 房间</b> 五阶段一次跑完（同服务端 setup.html 第⑤步）。已同步库不会重复入队。</span>
+    </div>
+
+    <div class="filter-row">
+      <label><input type="checkbox" checked> 只看未完成</label>
+      <label><input type="checkbox"> 含 SYS 元数据库</label>
+      <span class="link" style="margin-left:auto;color:var(--brand);cursor:pointer">全选待初始化</span>
+    </div>
+
+    <table>
+      <tr><th></th><th>库</th><th>水位 应用/模型/文件</th><th>状态</th></tr>
+      <tr>
+        <td><input type="checkbox" checked></td>
+        <td><span class="dbnum">7997</span><span class="type-badge">DESI</span></td>
+        <td class="wm cur">357 / 357 / 357</td>
+        <td><span class="st-badge ok">已同步</span></td>
+      </tr>
+      <tr>
+        <td><input type="checkbox" checked></td>
+        <td><span class="dbnum">7999</span><span class="type-badge">DESI</span></td>
+        <td class="wm">0 / 0 / —</td>
+        <td><span class="st-badge none">未初始化</span></td>
+      </tr>
+      <tr>
+        <td><input type="checkbox"></td>
+        <td><span class="dbnum">7998</span><span class="type-badge">DESI</span></td>
+        <td class="wm cur">540 / 540 / 540</td>
+        <td><span class="st-badge ok">已同步</span></td>
+      </tr>
+      <tr>
+        <td><input type="checkbox"></td>
+        <td><span class="dbnum">8000</span><span class="type-badge">DESI</span></td>
+        <td class="wm cur">646 / 646 / 646</td>
+        <td><span class="st-badge ok">已同步</span></td>
+      </tr>
+      <tr>
+        <td><input type="checkbox"></td>
+        <td><span class="dbnum">7507</span><span class="type-badge">DICT</span></td>
+        <td class="wm cur">13 / — / 13</td>
+        <td><span class="st-badge ok">已同步</span></td>
+      </tr>
+      <tr>
+        <td><input type="checkbox"></td>
+        <td><span class="dbnum">250206</span><span class="type-badge">DICT</span></td>
+        <td class="wm cur">5 / — / 5</td>
+        <td><span class="st-badge wait">待初始化</span></td>
+      </tr>
+    </table>
+
+    <div class="actions">
+      <button class="btn primary">初始化/更新所选（2 个库）</button>
+      <button class="btn ghost" disabled title="摄入形态下不可用（409）——整库模型由初始化管线负责">整库模型生成</button>
+    </div>
+
+    <div>
+      <div class="section-title" style="margin-bottom:8px">任务队列 <span class="count">2</span></div>
+
+      <div class="task">
+        <div class="t-head"><span class="t-title">dbnum 7997 · 首次初始化</span><span class="st-badge run">生成中</span></div>
+        <div class="t-id">db-20261015-003846-000000</div>
+        <div class="stages">
+          <span class="stage done">数据</span><span class="stage doing">生成</span><span class="stage">发布</span><span class="stage">空间</span><span class="stage">房间</span>
+        </div>
+        <div class="bar"><i style="width:73%"></i></div>
+        <div class="t-foot"><span>根 4961 / 6772 · 会话 1..=357</span><span>04:12</span></div>
+      </div>
+
+      <div class="task">
+        <div class="t-head"><span class="t-title">dbnum 7999 · 首次初始化</span><span class="st-badge none">排队中</span></div>
+        <div class="t-id">db-20261015-0041xx-000001</div>
+        <div class="stages">
+          <span class="stage">数据</span><span class="stage">生成</span><span class="stage">发布</span><span class="stage">空间</span><span class="stage">房间</span>
+        </div>
+        <div class="t-foot"><span>等待前一个任务</span><span>—</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot-note"><span class="dot"></span>队列正常 · GET /api/v1/tasks 3s 轮询</div>
+</div></div>
+<div class="frame-caption">B · 按库初始化（update/execute，五阶段管线 + 任务进度）</div>
+</div>
+
+</body>
+</html>

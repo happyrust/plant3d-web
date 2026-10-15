@@ -1185,6 +1185,10 @@ function handleRibbonCommand(commandId: string) {
         },
       }));
       return;
+    case 'panel.modelGeneration':
+      ensurePanelAndActivate('viewer');
+      window.dispatchEvent(new CustomEvent('openModelGeneration'));
+      return;
     case 'panel.spatialCompute':
       openPanel('spatialCompute');
       return;

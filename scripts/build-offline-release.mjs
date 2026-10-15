@@ -66,6 +66,11 @@ const args = process.argv.slice(2);
 const skipBuild = args.includes('--skip-build');
 const skipNginx = args.includes('--skip-nginx');
 const force = args.includes('--force');
+const releaseSuffixIndex = args.indexOf('--release-suffix');
+const releaseSuffix = releaseSuffixIndex >= 0 ? args[releaseSuffixIndex + 1] : '';
+if (releaseSuffixIndex >= 0 && (!releaseSuffix || !/^[a-zA-Z0-9_-]+$/.test(releaseSuffix))) {
+  throw new Error('--release-suffix 需要仅包含字母、数字、下划线或连字符的标识');
+}
 
 // 是否将 ../gen-model（含 plant-ui）打包到一起：默认开启
 const disableGenModel =
@@ -138,6 +143,24 @@ function copyDir(src, dest) {
       copyDir(srcPath, destPath);
     } else {
       copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+function normalizeWindowsScripts(dir) {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) {
+      normalizeWindowsScripts(path);
+    } else if (name.toLowerCase().endsWith('.ps1')) {
+      const content = readFileSync(path, 'utf-8').replace(/^\uFEFF/, '');
+      if (/::new\s*\(/i.test(content)) {
+        throw new Error(`运行脚本包含 PowerShell 5 构造语法，不兼容 Server 2012 R2: ${path}`);
+      }
+      writeFileSync(path, '\uFEFF' + content.replace(/\r?\n/g, '\r\n'));
+    } else if (/\.(bat|cmd)$/i.test(name)) {
+      const content = readFileSync(path, 'utf-8').replace(/^\uFEFF/, '');
+      writeFileSync(path, content.replace(/\r?\n/g, '\r\n'));
     }
   }
 }
@@ -289,10 +312,11 @@ function prepareBackend(packagePath) {
     writeFileSync(startAmsPath, patchedStartAms);
   }
 
+  normalizeWindowsScripts(BACKEND_DIR);
   const manifestPath = join(BACKEND_DIR, 'release.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
   for (const entry of manifest.files ?? []) {
-    if (!['DbOption.toml', 'Start-AMS.ps1'].includes(entry.path)) continue;
+    if (entry.path !== 'DbOption.toml' && !/\.(ps1|bat|cmd)$/i.test(entry.path)) continue;
     const content = readFileSync(join(BACKEND_DIR, entry.path));
     entry.sha256 = createHash('sha256').update(content).digest('hex');
     entry.bytes = content.length;
@@ -363,7 +387,7 @@ async function main() {
       throw new Error(`暂存目录非空，拒绝覆盖: ${OFFLINE_DIR}`);
     }
     mkdirSync(OFFLINE_DIR, { recursive: true });
-    for (const name of ['README.md', 'start.bat', 'stop.bat', 'config.bat', 'Sync-OfflineConfig.ps1', 'nginx.conf.template']) {
+    for (const name of ['README.md', 'start.bat', 'stop.bat', 'config.bat', 'Sync-OfflineConfig.ps1', 'Test-OfflineHttp.ps1', 'nginx.conf.template']) {
       copyFileSync(join(OFFLINE_SOURCE_DIR, name), join(OFFLINE_DIR, name));
     }
     if (existsSync(join(OFFLINE_SOURCE_DIR, 'nginx', 'nginx.exe'))) {
@@ -530,9 +554,10 @@ async function main() {
   log('Step 6/6: 打包成 zip...');
   const dateStr = versionInfo.buildDate.slice(0, 10).replace(/-/g, '');
   const backendSuffix = backendVersion?.version ? `-backend-v${backendVersion.version}` : '';
-  const zipName = `plant3d-web-offline-v${versionInfo.version}${backendSuffix}-${dateStr}.zip`;
+  const zipName = `plant3d-web-offline-v${versionInfo.version}${backendSuffix}-${dateStr}${releaseSuffix ? `-${releaseSuffix}` : ''}.zip`;
   const zipPath = join(RELEASES_DIR, zipName);
   
+  normalizeWindowsScripts(OFFLINE_DIR);
   createZip(OFFLINE_DIR, zipPath);
   
   // 计算文件大小

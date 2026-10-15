@@ -547,9 +547,29 @@ export type DbnumRow = {
   dbnum: number;
   db_type?: string;
   file_name?: string;
+  file_path?: string;
   /** 该库拥有的全部 Ref0（升序）；骨架没预热过的形态**整格不写**，不是空数组 */
   ref0s?: number[];
+  /** 三档水位：文件最新会话 / 数据已应用 / 模型已生成（`applied/model/file`） */
+  file_latest_sesno?: number;
+  applied_sesno?: number;
+  model_sesno?: number;
+  /** 数据水位立过（首次导入完成）；`false` = 未初始化 */
+  initialized?: boolean;
+  /** 服务端发现它但故意没排：等人工初始化（`/update/execute` 那条路不看这个格） */
+  awaiting_manual_initialization?: boolean;
+  blocked?: boolean;
+  excluded?: boolean;
+  /** 不在当前 MDB 声明范围（别的项目的库） */
+  not_in_project?: boolean;
+  /** 在飞的写回批次（`status: running` 时是「进行中」） */
+  write_state?: { status?: string; intent?: string; start_sesno?: number; end_sesno?: number } | null;
   model_verdict?: string;
+  model_verdict_reason?: string;
+  /** 房间归属对齐：`current` = 该库房间边已对齐到常驻房间模型当前代 */
+  room_alignment?: { generation?: string | null; resident_generation?: string | null; current?: boolean } | null;
+  model_source?: string;
+  model_source_reason?: string;
   [key: string]: unknown;
 };
 
