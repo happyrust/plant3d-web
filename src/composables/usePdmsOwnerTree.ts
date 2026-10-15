@@ -109,6 +109,15 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const childrenLoadedById = new Set<string>();
   const childrenLoadingById = new Set<string>();
 
+  // 空闲预取：用户展开一层后，把「下一层」的 children 也拉进树——钻取式浏览的
+  // 下一次展开直接命中 childrenLoadedById，不再等后端往返。只挂用户主动展开
+  // （toggleExpand）：批量路径（setVisible 级联 / 祖先链定位）不预取，免得一次
+  // 定位放大成整棵子树的请求风暴。预算 = 单次排队上限，逐条串行发。
+  const PREFETCH_CHILDREN_BUDGET = 8;
+  let prefetchSeq = 0;
+  const prefetchQueue: string[] = [];
+  let prefetchRunning = false;
+
   const SUBTREE_MAX_DEPTH = 256;
   const SUBTREE_LIMIT = 200_000;
 
@@ -135,6 +144,8 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     childrenCountById.value = new Map();
     childrenLoadedById.clear();
     childrenLoadingById.clear();
+    prefetchSeq++;
+    prefetchQueue.length = 0;
     visibleInstCache.clear();
   }
 
@@ -316,6 +327,40 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
+  function scheduleChildrenPrefetch(parentId: string) {
+    const seq = prefetchSeq;
+    const parent = nodesById.value[normalizeRefnoKey(parentId)];
+    if (!parent) return;
+    for (const childId of parent.childrenIds) {
+      if (prefetchQueue.length >= PREFETCH_CHILDREN_BUDGET) break;
+      if (childrenLoadedById.has(childId) || childrenLoadingById.has(childId)) continue;
+      const count = childrenCountById.value.get(childId);
+      if (typeof count === 'number' && count <= 0) continue;
+      if (!prefetchQueue.includes(childId)) prefetchQueue.push(childId);
+    }
+    if (!prefetchRunning) void runChildrenPrefetch(seq);
+  }
+
+  async function runChildrenPrefetch(seq: number) {
+    prefetchRunning = true;
+    try {
+      while (seq === prefetchSeq && prefetchQueue.length > 0) {
+        // 让出主线程：预取不许跟用户的下一次点击抢帧。
+        await yieldToMainThread();
+        const id = prefetchQueue.shift();
+        if (!id || seq !== prefetchSeq) break;
+        // ensureChildrenLoaded 自带 childrenLoadedById / childrenLoadingById 去重，
+        // 预取与真实展开共享同一条加载路径，副作用（勾选继承 / 可见性回放）同形。
+        // 预取失败静默跳过：真实展开会再试并在原路径上报错，后台不重复制造噪音。
+        await ensureChildrenLoaded(id).catch(() => undefined);
+      }
+    } finally {
+      prefetchRunning = false;
+      // seq 换代退出的 runner 可能留下新入队的项，补一个按当前 seq 的 runner。
+      if (prefetchQueue.length > 0) void runChildrenPrefetch(prefetchSeq);
+    }
+  }
+
   function toggleExpand(id: string) {
     const set = new Set(expandedIds.value);
     if (set.has(id)) {
@@ -326,7 +371,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
     set.add(id);
     expandedIds.value = set;
-    void ensureChildrenLoaded(id);
+    // 展开完成后顺带预取「下一层」：已加载的节点 ensureChildrenLoaded 直接 resolve，
+    // 折叠再展开同样会预热。
+    void ensureChildrenLoaded(id).then(() => scheduleChildrenPrefetch(id));
   }
 
   function setFilter(text: string) {
