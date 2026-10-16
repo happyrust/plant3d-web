@@ -318,6 +318,14 @@ function prepareBackend(packagePath) {
     overlay(plantUiWebDir, '');
     log('已用 ../plant-ui/web/public 覆盖 backend/web（assets/config、assets/meshes 除外）');
   }
+  // web/assets/config 里的 ron 是现场项目数据不是构建产物：它到不了浏览器（/assets/*
+  // 由 asset_root 服务），留在包里只会误导运维改错文件——真正的接入点由
+  // Sync-OfflineConfig 在现场生成到 backend/assets/config/。
+  const staleLegacyConfig = join(BACKEND_DIR, 'web', 'assets', 'config');
+  if (existsSync(staleLegacyConfig)) {
+    rmSync(staleLegacyConfig, { recursive: true, force: true });
+    log('已剔除 backend/web/assets/config（现场配置目录，不应随包分发）');
+  }
   if (!includeSurreal) {
     // 默认不带 SurrealDB 二进制：包内 Start-BundledStore.ps1 只对目标服务做版本检查；
     // 需要打包时用 --with-surreal 加回。
