@@ -271,6 +271,112 @@ async function promoteSelectedReviewEntryIntoViewer(page: import('playwright').P
   return false;
 }
 
+/** frame.url() 在 CDP/attach 下偶发回空串，兜底 evaluate（pms 文档 §6.2 同坑）。 */
+async function frameLocationHref(frame: import('playwright').Frame): Promise<string> {
+  try {
+    const u = frame.url();
+    if (u) return u;
+  } catch {
+    /* ignore */
+  }
+  return frame.evaluate(() => location.href).catch(() => '');
+}
+
+/**
+ * JH 的真机入口是顶栏「待审批事项」里的待办消息，不是三维校审单列表——JH 登进列表视图
+ * 只显示「设计|日期」，没有 FORM id / 包名，按匹配键搜永远落空（pms 文档 §1 入口表、§6.2）。
+ * 这里逐条打开含「三维校审单」的待办消息，等审批窗里的嵌入 plant3d frame，
+ * 校验 `form_id=` 与本次单据一致即算命中；不一致就关掉试下一条。
+ */
+async function tryOpenReviewEntryViaCheckerTodo(
+  page: import('playwright').Page,
+  context: import('playwright').BrowserContext,
+  formId: string,
+): Promise<{ opened: boolean; matchedNeedle: string | null }> {
+  const waitForFormFrame = async (timeoutMs: number): Promise<'hit' | 'other-doc' | 'none'> => {
+    const deadline = Date.now() + timeoutMs;
+    let sawEmbedded = false;
+    while (Date.now() < deadline) {
+      for (const p of context.pages()) {
+        if (p.isClosed()) continue;
+        for (const f of p.frames()) {
+          if (f.isDetached()) continue;
+          const u = await frameLocationHref(f);
+          if (!u.includes('/review/3d-view')) continue;
+          sawEmbedded = true;
+          if (u.includes(`form_id=${formId}`)) return 'hit';
+        }
+      }
+      await page.waitForTimeout(600).catch(() => undefined);
+    }
+    return sawEmbedded ? 'other-doc' : 'none';
+  };
+
+  const closeOpened = async (beforePages: Set<import('playwright').Page>) => {
+    for (const p of context.pages()) {
+      if (!beforePages.has(p) && !p.isClosed()) {
+        await p.close().catch(() => undefined);
+      }
+    }
+    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => undefined);
+    await page.keyboard.press('Escape').catch(() => undefined);
+    for (const f of page.frames()) {
+      if (f.isDetached()) continue;
+      const btn = f.getByText('关闭', { exact: false }).first();
+      if (await btn.isVisible().catch(() => false)) {
+        await btn.click({ timeout: 3_000 }).catch(() => undefined);
+        break;
+      }
+    }
+    await page.waitForTimeout(800).catch(() => undefined);
+  };
+
+  const toggle = page
+    .locator('a.dropdown-toggle[title*="审批事项"], a.dropdown-toggle[title*="待审批"]')
+    .first();
+  if ((await toggle.count()) === 0) {
+    console.error('[cdp] JH 待办路径：未找到顶栏「待审批事项」入口');
+    return { opened: false, matchedNeedle: null };
+  }
+
+  let tried = 0;
+  const triedIndexes = new Set<number>();
+  for (let i = 0; i < 8 && tried < 5; i++) {
+    await toggle.click({ timeout: 10_000 }).catch(() => undefined);
+    await page.waitForTimeout(700).catch(() => undefined);
+    const candidates = page.locator('a[href*="/Message/Show/"]');
+    const total = await candidates.count();
+    let picked: { index: number; text: string } | null = null;
+    for (let j = 0; j < total; j++) {
+      if (triedIndexes.has(j)) continue;
+      const text = (await candidates.nth(j).innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      if (text.includes('三维校审单')) {
+        picked = { index: j, text };
+        break;
+      }
+    }
+    if (!picked) {
+      console.error('[cdp] JH 待办路径：待审批事项里没有「三维校审单」消息');
+      return { opened: false, matchedNeedle: null };
+    }
+    const link = candidates.nth(picked.index);
+    tried++;
+    triedIndexes.add(picked.index);
+    const before = new Set(context.pages());
+    console.error(`[cdp] JH 待办路径：打开第 ${tried} 条候选「${picked.text.slice(0, 60)}」…`);
+    await link.click({ timeout: 10_000 }).catch(() => undefined);
+    const verdict = await waitForFormFrame(18_000);
+    if (verdict === 'hit') {
+      console.error(`[cdp] JH 待办路径：待办消息已命中 form_id（「${picked.text.slice(0, 40)}」）`);
+      return { opened: true, matchedNeedle: formId };
+    }
+    console.error(`[cdp] JH 待办路径：候选未命中（${verdict}），关闭后试下一条`);
+    await closeOpened(before);
+    // 已点过的消息被标记已读，「下一条」始终取当前列表里第一条校审单候选
+  }
+  return { opened: false, matchedNeedle: null };
+}
+
 async function login(page: import('playwright').Page, user: string, pwd: string): Promise<void> {
   await page.goto(`${base}/sysin.html`, { waitUntil: 'load', timeout: 60_000 });
   await page.waitForTimeout(500);
@@ -547,6 +653,151 @@ async function clickNewInAnyFrame(page: import('playwright').Page): Promise<void
     console.error(`[cdp] clickNewInAnyFrame 失败截图：${shot}`);
   }
   throw new Error('未找到可点击的「新增」');
+}
+
+/**
+ * JH 真机收尾：部署包默认 `VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE` 关闭 → 校核工作区恒为
+ * 外部流程模式、不渲染内部提交按钮。正确动作在 **PMS 审批窗**：「同意」→ WorkNodeSelect
+ * 「审批处理」→（目标人没预选时先补选下一节点）→ 意见 → 提 交。
+ * 目标人预选取决于送审时有没有在定义节点指人（本脚本送审路径有，issue #85）。
+ */
+async function submitCheckerAgreeInPms(
+  page: import('playwright').Page,
+  context: import('playwright').BrowserContext,
+  opinion: string,
+): Promise<void> {
+  const findFrame = async (
+    matches: (frame: import('playwright').Frame) => Promise<boolean>,
+    what: string,
+    timeoutMs: number,
+  ): Promise<import('playwright').Frame> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      for (const p of context.pages()) {
+        if (p.isClosed()) continue;
+        for (const frame of p.frames()) {
+          if (frame.isDetached()) continue;
+          if (await matches(frame).catch(() => false)) return frame;
+        }
+      }
+      await page.waitForTimeout(500);
+    }
+    const shot = await capturePmsPageScreenshot(page, 'pms-checker-agree-failed');
+    throw new Error(`PMS 同意：${timeoutMs}ms 内没等到${what}${shot ? `（截图 ${shot}）` : ''}`);
+  };
+
+  const validFrame = await findFrame(
+    async (f) =>
+      (await frameLocationHref(f)).includes('/Form/ValidForm/')
+      && (await f.getByText('同意', { exact: true }).count()) > 0,
+    '审批窗里的「同意」',
+    60_000,
+  );
+  await validFrame.getByText('同意', { exact: true }).first().click({ timeout: 10_000 });
+
+  // 「同意」后两种结局之一：审批处理弹窗（WorkNodeSelect），或批注未完成的拦截提示
+  // （「检测到批注未完成处理或确认」——有未决批注时正确语义是驳回，不是硬通过）。
+  const scanFor = async (sub: string) => {
+    for (const p of context.pages()) {
+      if (p.isClosed()) continue;
+      for (const f of p.frames()) {
+        if (f.isDetached()) continue;
+        if ((await frameLocationHref(f)).includes(sub)) return f;
+      }
+    }
+    return null;
+  };
+  const findBlockingTip = async () => {
+    for (const p of context.pages()) {
+      if (p.isClosed()) continue;
+      for (const f of p.frames()) {
+        if (f.isDetached()) continue;
+        const tip = f.getByText('批注未完成', { exact: false }).first();
+        if (await tip.isVisible().catch(() => false)) return f;
+      }
+    }
+    return null;
+  };
+  const waitEither = async (timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const node = await scanFor('WorkNodeSelect.html');
+      if (node) return { kind: 'node' as const, frame: node };
+      const blocked = await findBlockingTip();
+      if (blocked) return { kind: 'blocked' as const, frame: blocked };
+      await page.waitForTimeout(500);
+    }
+    const shot = await capturePmsPageScreenshot(page, 'pms-checker-agree-failed');
+    throw new Error(`PMS 同意：${timeoutMs}ms 内既没出「审批处理」弹窗也没见批注拦截提示${shot ? `（截图 ${shot}）` : ''}`);
+  };
+
+  const outcome = await waitEither(40_000);
+  if (outcome.kind === 'blocked') {
+    console.error('[cdp] PMS 同意被「批注未完成」拦截（语义正确：有未决批注应走驳回），改走驳回路径…');
+    const okBtn = outcome.frame.locator('a.mini-button', { hasText: /确\s*定/ }).first();
+    if (await okBtn.isVisible().catch(() => false)) {
+      await okBtn.click({ timeout: 5_000 }).catch(() => undefined);
+    } else {
+      await outcome.frame.getByText('确定', { exact: true }).first().click({ timeout: 5_000 }).catch(() => undefined);
+    }
+    await page.waitForTimeout(800);
+    await validFrame.getByText('驳回', { exact: true }).first().click({ timeout: 10_000 });
+    const retFrame = await findFrame(
+      async (f) => (await frameLocationHref(f)).includes('WorkReturnSelect.html'),
+      '「选择退回节点」弹窗',
+      40_000,
+    );
+    await page.waitForTimeout(1200);
+    await retFrame.locator('[id="txtMindInfo$text"]').fill(`${opinion}（存在未决批注，退回设计处理）`).catch(() => undefined);
+    const retSubmit = retFrame.locator('[id="btnNext"], a.mini-button').filter({ hasText: /提\s*交/ }).first();
+    await retSubmit.click({ timeout: 10_000 });
+    const retOpen = () => context.pages().some((p) =>
+      !p.isClosed() && p.frames().some((f) => !f.isDetached() && f.url().includes('WorkReturnSelect.html')));
+    const retDeadline = Date.now() + 20_000;
+    while (retOpen() && Date.now() < retDeadline) await page.waitForTimeout(500);
+    if (retOpen()) {
+      const shot = await capturePmsPageScreenshot(page, 'pms-checker-return-not-closed');
+      throw new Error(`PMS 驳回：提交后弹窗一直没关${shot ? `（截图 ${shot}）` : ''}`);
+    }
+    console.error('[cdp] PMS 驳回：已提交退回（存在未决批注，单据回到设计节点）');
+    return;
+  }
+
+  const nodeFrame = outcome.frame;
+  const dialogOpen = () => context.pages().some((p) =>
+    !p.isClosed() && p.frames().some((f) => !f.isDetached() && f.url().includes('WorkNodeSelect.html')));
+  const waitDialogClosed = async (timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (dialogOpen() && Date.now() < deadline) {
+      await page.waitForTimeout(500);
+    }
+    return !dialogOpen();
+  };
+  const submitOnce = async () => {
+    await nodeFrame.locator('[id="txtMindInfo$text"]').fill(opinion).catch(() => undefined);
+    const btn = nodeFrame.locator('[id="btnNext"], a.mini-button').filter({ hasText: /提\s*交/ }).first();
+    await btn.click({ timeout: 10_000 });
+  };
+
+  await submitOnce();
+  if (!(await waitDialogClosed(8_000))) {
+    // 「对不起，节点[审核]没有选择目标人」一闪而过——补选下一节点目标人再提交（issue #85 同坑）
+    console.error('[cdp] PMS 同意：提交后弹窗未关，补选「审核」目标人重试');
+    for (const sel of ['审核', '批准']) {
+      const row = nodeFrame.locator(`li:has-text("${sel}"), tr:has-text("${sel}")`).first();
+      if (await row.isVisible().catch(() => false)) {
+        await row.click().catch(() => undefined);
+        break;
+      }
+    }
+    await page.waitForTimeout(800);
+    await submitOnce();
+    if (!(await waitDialogClosed(20_000))) {
+      const shot = await capturePmsPageScreenshot(page, 'pms-checker-agree-not-closed');
+      throw new Error(`PMS 同意：提交后「审批处理」弹窗一直没关${shot ? `（截图 ${shot}）` : ''}`);
+    }
+  }
+  console.error(`[cdp] PMS 同意：已提交（意见「${opinion}」）`);
 }
 
 /**
@@ -1051,6 +1302,12 @@ async function main(): Promise<void> {
           await openReviewFormList(page);
           openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
         }
+        if (!openResult.opened && createdFormId) {
+          // 真机上 JH 的三维校审单列表只显示「设计|日期」、不含 FORM id，匹配键永远落空；
+          // 正确入口是顶栏「待审批事项」待办（送审后才有），见 pms 文档 §1/§6.2。
+          console.error('[cdp] 列表匹配键落空，改走 JH 顶栏「待审批事项」待办路径…');
+          openResult = await tryOpenReviewEntryViaCheckerTodo(page, context, createdFormId);
+        }
         if (!openResult.opened) {
           throw new Error(
             `JH 未能在 PMS 列表中打开已有单据。匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}。`
@@ -1112,8 +1369,33 @@ async function main(): Promise<void> {
         }
 
         console.error('[cdp] 扫描 iframe 内校核工作区并点击「提交到审核」类按钮…');
-        await runCheckerWorkflowAcrossContext(context);
-        console.error('[cdp] 校核流程：已在 plant3d 内点击流程区提交按钮');
+        // 部署包默认 VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE 关闭 → 外部流程模式不渲染
+        // 内部提交按钮。先短探内部按钮，探不到就走 PMS 审批窗「同意」（真机正确动作，§6.2）。
+        let internalSubmitVisible = false;
+        const probeDeadline = Date.now() + 8_000;
+        while (Date.now() < probeDeadline && !internalSubmitVisible) {
+          for (const p of context.pages()) {
+            if (p.isClosed()) continue;
+            for (const f of p.frames()) {
+              if (f.isDetached()) continue;
+              const btn = f.locator('[data-guide="workflow-actions"] button').filter({ hasText: /提交/ }).first();
+              if (await btn.isVisible().catch(() => false)) {
+                internalSubmitVisible = true;
+                break;
+              }
+            }
+            if (internalSubmitVisible) break;
+          }
+          if (!internalSubmitVisible) await page.waitForTimeout(500).catch(() => undefined);
+        }
+        if (internalSubmitVisible) {
+          await runCheckerWorkflowAcrossContext(context);
+          console.error('[cdp] 校核流程：已在 plant3d 内点击流程区提交按钮');
+        } else {
+          console.error('[cdp] 校核工作区为外部流程模式（无内部提交按钮），改走 PMS 审批窗「同意」…');
+          await submitCheckerAgreeInPms(page, context, 'E2E 自动化校核同意');
+          console.error('[cdp] 校核流程：已在 PMS 审批窗完成校核提交（同意，或批注拦截后的驳回）');
+        }
       }
     }
   } finally {
