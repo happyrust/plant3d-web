@@ -30,6 +30,10 @@ export type DTXSelectionControllerOptions = {
   renderer: WebGLRenderer
   container: HTMLElement
   selectionColor?: Color | number | string
+  /** 「当前元素」颜色（最近一批选中），见 SelectionManagerOptions.primarySelectionColor */
+  primarySelectionColor?: Color | number | string | null
+  /** 悬停高亮颜色 */
+  highlightColor?: Color | number | string
   enableOutline?: boolean
   /** 选中高亮模式：outline（后处理描边）| overlay（覆层填充+描边）| both */
   highlightMode?: 'outline' | 'overlay' | 'both'
@@ -93,6 +97,8 @@ export class DTXSelectionController extends EventEmitter {
 
     this._selectionManager = new SelectionManager({
       selectionColor: options.selectionColor ?? 0xff8800,
+      primarySelectionColor: options.primarySelectionColor ?? null,
+      ...(options.highlightColor !== undefined ? { highlightColor: options.highlightColor } : {}),
       multiSelect: true,
     });
     this._selectionManager.setColorUpdateCallback((objectId, color) => {
@@ -146,6 +152,20 @@ export class DTXSelectionController extends EventEmitter {
 
   setSelectionColor(color: Color | number | string): void {
     this._selectionManager.setSelectionColor(color);
+  }
+
+  /** 「当前元素」颜色（E3D 的 CE）：最近一次选进来的那批用它，其余选中用 selectionColor；null = 不区分 */
+  setPrimarySelectionColor(color: Color | number | string | null): void {
+    this._selectionManager.setPrimarySelectionColor(color);
+  }
+
+  /** 悬停高亮颜色 */
+  setHighlightColor(color: Color | number | string): void {
+    this._selectionManager.setHighlightColor(color);
+  }
+
+  getPrimarySelected(): string[] {
+    return this._selectionManager.getPrimarySelected();
   }
 
   setOutlineEnabled(enabled: boolean): void {

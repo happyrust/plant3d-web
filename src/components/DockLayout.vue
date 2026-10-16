@@ -763,6 +763,7 @@ function ensurePanel(panelId: string) {
   }
 
   const viewerPanel = dockApi.getPanel('viewer');
+  const measurementPanel = dockApi.getPanel('measurement');
   const rightZoneAnchorPanel = findRightZoneAnchorPanel(dockApi);
   const rightZonePosition = () => (rightZoneAnchorPanel
     ? { referencePanel: rightZoneAnchorPanel, direction: 'within' }
@@ -858,6 +859,18 @@ function ensurePanel(panelId: string) {
       component: 'DtxMaterialConfigPanel',
       title: '颜色配置',
       ...rightZoneExtras(),
+    });
+  }
+  if (panelId === 'renderModeSettings') {
+    return addPanelSafely(dockApi, {
+      id: 'renderModeSettings',
+      component: 'RenderModeSettingsPanel',
+      title: '渲染模式',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
     });
   }
   if (normalizedPanelId === 'review') {
@@ -1219,6 +1232,7 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('annotationStyle');
       return;
     case 'displayTheme.e3d':
+    case 'displayTheme.e3dFactory':
     case 'displayTheme.default':
     case 'displayTheme.design3d': {
       // 持久化在这里做（DockLayout 常驻）：ViewerPanel 通过 watch currentTheme 落到已装载场景
@@ -1240,6 +1254,9 @@ function handleRibbonCommand(commandId: string) {
       emitToast({ message: `绘制样式已切换为「${label}」`, level: 'success' });
       return;
     }
+    case 'settings.renderMode':
+      togglePanel('renderModeSettings');
+      return;
     case 'panel.review':
       togglePanel('review');
       return;

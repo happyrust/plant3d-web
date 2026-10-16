@@ -26,6 +26,7 @@ import ModelTreePanelDock from '@/components/dock_panels/ModelTreePanelDock.vue'
 import ModelVersionComparePanelDock from '@/components/dock_panels/ModelVersionComparePanelDock.vue';
 import PropertiesPanelDock from '@/components/dock_panels/PropertiesPanelDock.vue';
 import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
+import RenderModeSettingsPanelDock from '@/components/dock_panels/RenderModeSettingsPanelDock.vue';
 import ReviewAttachmentPreviewPanelDock from '@/components/dock_panels/ReviewAttachmentPreviewPanelDock.vue';
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
@@ -59,5 +60,6 @@ app.component('ConsolePanel', ConsolePanelDock);
 app.component('SpatialComputePanel', SpatialComputePanelDock);
 app.component('IncrementRecordsPanel', IncrementRecordsPanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
+app.component('RenderModeSettingsPanel', RenderModeSettingsPanelDock);
 
 app.use(vuetify).mount('#app');

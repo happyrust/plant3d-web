@@ -191,6 +191,90 @@ describe('materialConfig', () => {
     });
   });
 
+  describe('e3dFactory 主题（出厂 E3D 3.1：autocolour 关，全部 Add element colour = lightgrey）', () => {
+    const factoryConfig: ModelDisplayConfig = {
+      defaultMaterial: { color: '#90a4ae', metalness: 0.1, roughness: 0.5, opacity: 1 },
+      materialConfigs: {
+        TUBI: { color: '#4682b4', metalness: 0.18, roughness: 0.55 },
+        VALV: { color: '#f0c24a' },
+      },
+      instanceConfigs: { R_PIN: { color: 'pdms:yellow' } },
+      disciplineOverrides: { '1': '#4682b4' },
+      themes: {
+        e3dFactory: {
+          name: 'E3D 出厂',
+          baseMaterial: { color: 'pdms:lightgrey', metalness: 0.1, roughness: 0.6, opacity: 1 },
+        },
+      },
+    };
+
+    it('管路 / 阀门 / 设备 / 未知类型全部解成 PDMS lightgrey #bdbdbd（不是 CSS 的 #d3d3d3）', () => {
+      for (const [noun, owner, spec] of [['TUBI', 'BRAN', 1], ['VALV', 'BRAN', 1], ['EQUI', '', null], ['XXXX', 'ZONE', 6]] as const) {
+        const resolved = resolveMaterialWithTheme(factoryConfig, `R_${noun}`, noun, owner, 'e3dFactory', spec);
+        expect(resolved.color.getHexString()).toBe('bdbdbd');
+        expect(resolved.metalness).toBe(0.1);
+        expect(resolved.roughness).toBe(0.6);
+        expect(resolved.hidden).toBe(false);
+      }
+    });
+
+    it('instanceConfigs 的显式覆盖仍最高，且颜色可用 pdms: 颜色名', () => {
+      const resolved = resolveMaterialWithTheme(factoryConfig, 'R_PIN', 'TUBI', 'BRAN', 'e3dFactory', 1);
+      expect(resolved.color.getHexString()).toBe('ffff00');
+    });
+
+    it('baseMaterial 只在该主题下生效；e3d / default 主题照旧（类型基色 / 专业覆盖）', () => {
+      expect(resolveMaterialWithTheme(factoryConfig, 'R1', 'TUBI', 'BRAN', 'default', 1).color.getHexString()).toBe('4682b4');
+      // 没配 e3d 主题时走类型基色兜底：管路阀门吃 disciplineOverrides，设备保持类型基色 / 默认色
+      expect(resolveMaterialWithTheme(factoryConfig, 'R2', 'VALV', 'BRAN', 'e3d', 1).color.getHexString()).toBe('4682b4');
+      expect(resolveMaterialWithTheme(factoryConfig, 'R3', 'VALV', 'EQUI', 'e3d', 1).color.getHexString()).toBe('f0c24a');
+      expect(resolveMaterialWithTheme(factoryConfig, 'R4', 'EQUI', '', 'e3d', null).color.getHexString()).toBe('90a4ae');
+    });
+
+    it('无效直管告警色不跟出厂主题走', () => {
+      expect(resolveInvalidTubiMaterial(factoryConfig, 'R9').color.getHexString()).toBe('f59e0b');
+    });
+
+    it('pdms: 颜色引用：颜色号 / 名字都行，查不到落到兜底色而不是被 three 当 CSS 名解析', () => {
+      const cfg: ModelDisplayConfig = {
+        ...factoryConfig,
+        materialConfigs: { A: { color: 'pdms:271' }, B: { color: 'PDMS:Light Grey' }, C: { color: 'pdms:nosuch' } },
+      };
+      expect(resolveMaterialWithTheme(cfg, 'RA', 'A', '', 'default').color.getHexString()).toBe('bdbdbd');
+      expect(resolveMaterialWithTheme(cfg, 'RB', 'B', '', 'default').color.getHexString()).toBe('bdbdbd');
+      expect(resolveMaterialWithTheme(cfg, 'RC', 'C', '', 'default').color.getHexString()).toBe('90a4ae');
+    });
+
+    it('buildExportConfig 保留 baseMaterial，pdms: 引用按语义写法导出', () => {
+      const exported = buildExportConfig(factoryConfig);
+      expect(exported.themes?.e3dFactory?.baseMaterial).toEqual({
+        color: 'pdms:lightgrey',
+        metalness: 0.1,
+        roughness: 0.6,
+        opacity: 1,
+      });
+      expect(exported.materialConfigs?.VALV?.color).toBe('#f0c24a');
+    });
+
+    it('loadModelDisplayConfig 合并本地 themes 时保留并可覆盖 baseMaterial', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({
+            themes: { e3dFactory: { name: 'E3D 出厂', baseMaterial: { color: 'pdms:lightgrey', metalness: 0.1, roughness: 0.6 } } },
+          }),
+        }))
+      );
+      let loaded = await loadModelDisplayConfig({ force: true });
+      expect(loaded.themes?.e3dFactory?.baseMaterial?.color).toBe('pdms:lightgrey');
+
+      saveLocalMaterialConfig({ nounConfigs: {}, themes: { e3dFactory: { baseMaterial: { color: 'pdms:darkgrey' } } } });
+      loaded = await loadModelDisplayConfig({ force: true });
+      expect(loaded.themes?.e3dFactory?.baseMaterial).toEqual({ color: 'pdms:darkgrey', metalness: 0.1, roughness: 0.6 });
+    });
+  });
+
   it('buildExportConfig 会保留 ownerSpecOverrides', () => {
     const exported = buildExportConfig(config);
 

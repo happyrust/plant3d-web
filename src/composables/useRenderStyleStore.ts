@@ -31,7 +31,10 @@ export type RenderStylePreset = {
 
 export const RENDER_STYLE_PRESETS: RenderStylePreset[] = [
   {
-    // E3D 三维视图观感：深色渐变底 + 哑光近平涂着色 + 构件轮廓细边线
+    // E3D：实际渲染走 SGL 真复刻管线（ViewerPanel 里 renderStyle.e3d → renderLookStore.enabled，
+    // sglDx11 口径光照 + 环境立方体贴图 + HLR 边线 + HBAO 伪阴影 + D2D 渐变背景 + 4xMSAA，
+    // 见 docs/rendering/e3d-sgl-look-prototype.md）。下面这组近似参数只在 SGL 管线建不起来
+    // 的兜底场景才有意义——SGL 关着时材质退回 PBR，样式层参数照常下发。
     mode: 'e3d',
     label: 'E3D',
     colorHint: '#1e293b',

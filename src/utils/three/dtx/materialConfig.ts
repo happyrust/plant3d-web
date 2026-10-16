@@ -1,7 +1,15 @@
 import { Color } from 'three';
 
+import type { DisplayTheme } from '@/composables/useDisplayThemeStore';
+
+import { isPdmsColourRef, pdmsColourHex } from '@/viewer/e3dLook/pdmsColourTable';
+
 export type MaterialConfigEntry = {
   name?: string
+  /**
+   * 颜色：`#rrggbb` / `0x…` / 数字 / CSS 颜色名，或 **PDMS 颜色** `pdms:<名|号>`（如 `pdms:lightgrey`、`pdms:271`，
+   * 查 E3D 3.1 颜色表 `pdmsColourTable.ts`；注意 PDMS lightgrey = #bdbdbd，与 CSS lightgrey #d3d3d3 不是一回事）
+   */
   color?: string | number
   metalness?: number
   roughness?: number
@@ -23,6 +31,12 @@ export type ThemeConfig = {
    * 使阀门/法兰/仪表在同色管路中保持可辨识（对齐 E3D autocolour 惯例）。
    */
   nounAccents?: Record<string, MaterialConfigEntry>
+  /**
+   * 主题基础材质：nounAccents / disciplineMaterials / owner 覆盖都没命中时用它，**压过** materialConfigs 的类型基色。
+   * 对应 E3D 的「Add element colour」——出厂 E3D 3.1 autocolour 关、所有元素都画 lightgrey，
+   * 就是一条只有 baseMaterial 的主题（`e3dFactory`）。
+   */
+  baseMaterial?: MaterialConfigEntry
 }
 
 export type ModelDisplayConfig = {
@@ -87,6 +101,11 @@ function parseColorToNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
     const trimmed = value.trim();
+    // PDMS / E3D 颜色表：`pdms:lightgrey`、`pdms:271`
+    if (isPdmsColourRef(trimmed)) {
+      const hex = pdmsColourHex(trimmed);
+      return hex === undefined ? null : hex;
+    }
     if (trimmed.startsWith('#')) {
       const hex = trimmed.slice(1);
       if (hex.length === 6 || hex.length === 3) {
@@ -104,7 +123,8 @@ function parseColorToNumber(value: unknown): number | null {
 function toThreeColor(value: unknown, fallback: string | number): Color {
   const num = parseColorToNumber(value);
   if (num !== null) return new Color(num);
-  if (typeof value === 'string' && value.trim()) return new Color(value as string);
+  // 查不到的 pdms: 引用不要交给 three 当 CSS 颜色名解析，直接走兜底
+  if (typeof value === 'string' && value.trim() && !isPdmsColourRef(value)) return new Color(value as string);
   const fallbackNum = parseColorToNumber(fallback);
   if (fallbackNum !== null) return new Color(fallbackNum);
   if (typeof fallback === 'string' && fallback.trim()) return new Color(fallback as string);
@@ -241,6 +261,9 @@ function mergeThemes(
         ...(base.nounAccents || {}),
         ...normalizeMaterialMap(localTheme.nounAccents),
       },
+      ...(localTheme.baseMaterial || base.baseMaterial
+        ? { baseMaterial: { ...(base.baseMaterial || {}), ...(localTheme.baseMaterial || {}) } }
+        : {}),
     };
   }
   return Object.keys(merged).length > 0 ? merged : undefined;
@@ -321,6 +344,11 @@ export function saveLocalMaterialConfig(payload: {
 }
 
 export function normalizeColorString(value: unknown, fallback: string = DEFAULT_MATERIAL.color as string): string {
+  // PDMS 颜色引用保留语义写法（导出后还能看出是 E3D 的哪个颜色名），查不到才落成兜底 hex
+  if (typeof value === 'string' && isPdmsColourRef(value)) {
+    const hex = pdmsColourHex(value);
+    return hex === undefined ? fallback : `pdms:${value.trim().slice(5).trim().toLowerCase()}`;
+  }
   const num = parseColorToNumber(value);
   if (num !== null) {
     return `#${num.toString(16).padStart(6, '0')}`;
@@ -400,8 +428,6 @@ export function resolveMaterialForInstance(
   };
 }
 
-import type { DisplayTheme } from '@/composables/useDisplayThemeStore';
-
 /** spec_value -> 主题 ownerSpecOverrides 键（0/未知 -> UNKNOWN） */
 const SPEC_VALUE_KEY_MAP: Record<number, string> = {
   1: 'PIPE',
@@ -471,11 +497,12 @@ export function resolveThemeOwnerOverride(
 
 /**
  * 主题材质解析顺序（E3D 规则）：
- * 1. instanceConfigs[refno]        —— 显式按元素覆盖，最高优先级
+ * 1. instanceConfigs[refno]        —— 显式按元素覆盖，最高优先级（对应 E3D 对单个元素 COLOUR）
  * 2. theme.nounAccents[noun]       —— 重点构件强调色（阀门/法兰/仪表等）
  * 3. theme.disciplineMaterials     —— 管路元素按专业着色（spec_value > 0 时）
  * 4. theme.ownerSpecOverrides / ownerOverrides —— 旧版 owner 覆盖（design3d 主题）
- * 5. materialConfigs[noun] / defaultMaterial   —— 类型基色兜底
+ * 5. theme.baseMaterial            —— 主题基础材质（E3D「Add element colour」；e3dFactory 主题全靠它 → lightgrey）
+ * 6. materialConfigs[noun] / defaultMaterial   —— 类型基色兜底
  */
 export function resolveMaterialWithTheme(
   config: ModelDisplayConfig,
@@ -512,6 +539,10 @@ export function resolveMaterialWithTheme(
     const override = resolveThemeOwnerOverride(config, theme, ownerNoun, specValue);
     if (override) {
       return resolveEntryMaterial(config, override);
+    }
+
+    if (themeConfig.baseMaterial) {
+      return resolveEntryMaterial(config, themeConfig.baseMaterial);
     }
   }
 
@@ -583,6 +614,16 @@ export function buildExportConfig(config: ModelDisplayConfig): ModelDisplayConfi
         ? { disciplineMaterials: exportedDisciplineMaterials }
         : {}),
       ...(Object.keys(exportedNounAccents).length > 0 ? { nounAccents: exportedNounAccents } : {}),
+      ...(themeConfig.baseMaterial
+        ? {
+          baseMaterial: {
+            ...themeConfig.baseMaterial,
+            ...(themeConfig.baseMaterial.color !== undefined
+              ? { color: normalizeColorString(themeConfig.baseMaterial.color) }
+              : {}),
+          },
+        }
+        : {}),
     };
   }
 

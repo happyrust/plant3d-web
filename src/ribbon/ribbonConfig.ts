@@ -15,6 +15,7 @@ const renderStyleStore = useRenderStyleStore();
 /** ribbon「设置 → 模型显示」按钮图标（与 ViewerPanel 弹层共用 DISPLAY_THEME_PRESETS 的 mode/label） */
 const DISPLAY_THEME_RIBBON_ICONS: Record<DisplayTheme, string> = {
   e3d: 'palette',
+  e3dFactory: 'circle_dot',
   default: 'cube',
   design3d: 'component',
 };
@@ -235,6 +236,13 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
     label: '设置',
     groups: [
       {
+        id: 'settings.render',
+        label: '渲染',
+        items: [
+          { kind: 'button', id: 'settings.renderMode', label: '渲染模式', icon: 'cube', commandId: 'settings.renderMode' },
+        ],
+      },
+      {
         id: 'settings.style',
         label: '样式',
         items: [
@@ -260,12 +268,12 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
-        id: 'settings.render',
+        id: 'settings.drawStyle',
         label: '绘制样式',
         items: [
           {
             kind: 'stack',
-            id: 'settings.render.style',
+            id: 'settings.drawStyle.style',
             items: RENDER_STYLE_PRESETS.map((preset) => ({
               kind: 'button' as const,
               id: `settings.renderStyle.${preset.mode}`,
