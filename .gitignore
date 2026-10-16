@@ -106,6 +106,11 @@ scripts/*
 !scripts/type-check.mjs
 !scripts/type-check-baseline.txt
 !scripts/build-offline-release.mjs
+!scripts/build-offline-patch.ps1
+!scripts/build-offline-patch-maker.ps1
+!scripts/OfflinePatch.cs
+!scripts/OfflinePatchRules.cs
+!scripts/OfflinePatchMaker.cs
 !scripts/test-offline-deploy.ps1
 !scripts/acceptance-api-test.mjs
 !scripts/test-document-upload-preview.mjs

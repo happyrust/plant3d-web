@@ -25,7 +25,7 @@ if exist "%CONFIG_FILE%" (
 set "BACKEND_MODE=%BACKEND_MODE: =%"
 set "BACKEND_ADDR=%BACKEND_ADDR: =%"
 set "FRONTEND_PORT=%FRONTEND_PORT: =%"
-set "STORE_MODE=%STORE_MODE: =%"
+if defined STORE_MODE set "STORE_MODE=%STORE_MODE: =%"
 if not exist "%SCRIPT_DIR%config" mkdir "%SCRIPT_DIR%config"
 set "FRONTEND_COMPAT_PORT=3100"
 if /I "%BACKEND_MODE%"=="integrated" (

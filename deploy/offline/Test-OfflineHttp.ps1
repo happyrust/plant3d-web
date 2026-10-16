@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$Uri,
     [int]$TimeoutSeconds = 5,
     [switch]$BackendHealth

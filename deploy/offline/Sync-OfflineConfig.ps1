@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'backend\DbOption.toml'),
     [switch]$Reload,
     [switch]$ExportEnv,

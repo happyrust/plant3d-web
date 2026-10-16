@@ -1,6 +1,6 @@
 {
   "name": "plant3d-web",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -47,6 +47,8 @@
     "verify:dashboard": "bash scripts/verify-dashboard-workbench.sh",
     "deploy:ubuntu": "bash deploy/deploy_frontend_bundle.sh",
     "build:offline": "node scripts/build-offline-release.mjs",
+    "build:offline:patch": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-offline-patch.ps1",
+    "build:offline:patch-maker": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-offline-patch-maker.ps1",
     "build:offline:reuse-gen-model": "node scripts/build-offline-release.mjs --reuse-gen-model",
     "build:offline:skip-build": "node scripts/build-offline-release.mjs --skip-build",
     "build:offline:frontend-only": "node scripts/build-offline-release.mjs --no-gen-model"

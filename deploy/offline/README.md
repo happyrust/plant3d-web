@@ -66,6 +66,14 @@ npm run build:offline:patch -- -SourceZip "旧版.zip" -TargetZip "新版.zip" -
 
 构建机需有 .NET Framework C# 编译器。输出 EXE 与 `.sha256` 校验文件已存在时拒绝覆盖。
 
+也可以用补丁生成器直接从两个解压目录出包（无需先打 ZIP）。`plant3d-web-patch-maker.exe` 双击打开图形界面，选择旧版目录（现场基线）、新版目录和输出路径即可；命令行：
+
+```text
+plant3d-web-patch-maker.exe --source 旧版目录 --target 新版目录 [--output 补丁.exe] [--force]
+```
+
+省略 `--output` 时只对比差异不产出。两侧目录里的现场配置/数据（`DbOption.toml`、`deploy.env`、数据库、日志、`.patch-backups` 等）按保护规则自动排除；白名单外路径出现差异时拒绝打包。生成补丁需要本机 .NET Framework 4.x 自带的 `csc.exe`。规则清单与补丁运行器共用 `scripts/OfflinePatchRules.cs`，单点维护。
+
 双击补丁后选择旧包解压后的实际安装目录，不是 ZIP 文件或 ZIP 所在目录。可先点「只检查」；基线发布文件被手工修改时会拒绝覆盖。`backend/DbOption.toml`、`config/deploy.env`、初始化标记、Web 配置、数据库、workspace、assets 和日志等现场内容不纳入替换。
 
 「完成后启动服务」默认不勾选。应用前会停止所选目录内的 nginx 和后端，mem 模式状态不持久化；勾选自动启动时会提前检查端口及占用 PID，不会停止其它目录的实例。备份位于安装目录的 `.patch-backups`，失败会尝试恢复本次已修改的文件；也可使用同一个补丁的「恢复备份」入口。恢复失败时应保留备份和日志，不要手工清理。
