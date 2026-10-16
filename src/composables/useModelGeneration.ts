@@ -467,11 +467,24 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           emitToast({ message: `[错误] 定位异常：${em}`, level: 'error' });
         }
       }
-      if (genuinelyLoaded) return true;
+      // 「显示」= 保证可见：对象已在场景但 refno 级可见态是 false（此前「隐藏」写进 objects 状态表，
+      // 是显隐回放的权威）时，只 return 不会有任何视觉变化——把可见态拉回 true，并留一条日志让控制台不再静默。
+      const ensureShown = () => {
+        (viewer as any)?.scene?.setObjectsVisible?.([normalizedRoot], true);
+      };
+      if (genuinelyLoaded) {
+        ensureShown();
+        consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 已在场景中，恢复可见并跳过重复加载`);
+        return true;
+      }
       // 非 genuinelyLoaded 时检查 DTX 层是否真有几何
       const anyV = viewer as any;
       const dtxLayer = anyV?.__dtxLayer;
-      if (dtxLayer?.hasObject?.(normalizedRoot)) return true;
+      if (dtxLayer?.hasObject?.(normalizedRoot)) {
+        ensureShown();
+        consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} DTX 层已有几何，恢复可见并跳过重复加载`);
+        return true;
+      }
     }
 
     isGenerating.value = true;
@@ -699,6 +712,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         scene?: {
           ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
           getAABB?: (ids: string[]) => unknown
+          setObjectsVisible?: (ids: string[], visible: boolean) => void
         }
         cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
       };
@@ -726,6 +740,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 生成在上面已经收口：右键是显式重新生成；库无模型 / 节点查空走 tryAutoGenerate（各一发）。
       // 这里替换或新装场景里的对象，不再 generate。
       const loadRefnos = loadScope.actualLoadRefnos;
+      // 「显示」= 保证可见：先把本次范围的 refno 级可见态拉回 true（权威在 scene.objects 状态表）。
+      // 否则先前「隐藏」写过 false 的 refno，装完会被 __dtxAfterInstancesLoaded 的 applyStateToRefnos 立刻再藏掉；
+      // 已在层里、被 loader 跳过的旧对象也一并恢复可见。
+      anyViewer.scene?.setObjectsVisible?.(uniqStrings([normalizedRoot, ...loadRefnos]), true);
       statusMessage.value = regenerate
         ? `正在重新生成 ${normalizedRoot}（gen-model）...`
         : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;

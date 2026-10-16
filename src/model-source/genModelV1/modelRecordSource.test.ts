@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ModelRecordsApi } from './modelRecords';
 import { createGenModelV1ModelRecordSource } from './modelRecordSource';
+
+import type { ModelRecordsApi } from './modelRecords';
 
 import { GenModelV1ApiError, type GenModelV1RequestOptions, type GeomInstQuery } from '@/api/genModelV1Api';
 import {

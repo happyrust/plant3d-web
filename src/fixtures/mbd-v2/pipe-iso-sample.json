@@ -1,0 +1,226 @@
+{
+  "version": "v2",
+  "input_refno": "fixture:pipe-iso-sample",
+  "branch_refno": "pipe-iso-sample",
+  "meta": {
+    "geometry_space": "source_mm",
+    "layout_mode": "pipe_iso_sample",
+    "notes": [
+      "hand-authored representative MBD sample (subset of a real pipe ISO drawing)",
+      "coordinates are millimetres in the XY plane (z=0); scaled to design metres via source_to_design"
+    ],
+    "source_to_design": [
+      0.001, 0.0, 0.0, 0.0,
+      0.0, 0.001, 0.0, 0.0,
+      0.0, 0.0, 0.001, 0.0,
+      0.0, 0.0, 0.0, 1.0
+    ]
+  },
+  "issues": [],
+  "primitives": [
+    {
+      "kind": "aid_line",
+      "id": "pipe-iso-sample:pipe:P1",
+      "start": [0.0, 2084.0, 0.0],
+      "end": [0.0, 0.0, 0.0]
+    },
+    {
+      "kind": "aid_line",
+      "id": "pipe-iso-sample:pipe:P2",
+      "start": [0.0, 0.0, 0.0],
+      "end": [900.0, 0.0, 0.0]
+    },
+    {
+      "kind": "aid_line",
+      "id": "pipe-iso-sample:pipe:P3",
+      "start": [900.0, 0.0, 0.0],
+      "end": [2237.0, 0.0, 0.0]
+    },
+    {
+      "kind": "aid_line",
+      "id": "pipe-iso-sample:pipe:P4",
+      "start": [2237.0, 0.0, 0.0],
+      "end": [2237.0, 1350.0, 0.0]
+    },
+    {
+      "kind": "aid_line",
+      "id": "pipe-iso-sample:pipe:P5",
+      "start": [2237.0, 1350.0, 0.0],
+      "end": [2721.0, 1350.0, 0.0]
+    },
+
+    {
+      "kind": "linear_dim",
+      "id": "pipe-iso-sample:dim:left-riser-2084",
+      "sub_kind": "chain",
+      "text": "2084",
+      "start": [-450.0, 0.0, 0.0],
+      "end": [-450.0, 2084.0, 0.0],
+      "label_anchor": [-620.0, 1042.0, 0.0],
+      "extension_lines": [
+        { "from": [0.0, 2084.0, 0.0], "to": [-450.0, 2084.0, 0.0] },
+        { "from": [0.0, 0.0, 0.0], "to": [-450.0, 0.0, 0.0] }
+      ],
+      "arrow_lines": [
+        { "from": [-450.0, 0.0, 0.0], "to": [-468.0, 60.0, 0.0] },
+        { "from": [-450.0, 0.0, 0.0], "to": [-432.0, 60.0, 0.0] },
+        { "from": [-450.0, 2084.0, 0.0], "to": [-468.0, 2024.0, 0.0] },
+        { "from": [-450.0, 2084.0, 0.0], "to": [-432.0, 2024.0, 0.0] }
+      ]
+    },
+    {
+      "kind": "linear_dim",
+      "id": "pipe-iso-sample:dim:bottom-left-900",
+      "sub_kind": "chain",
+      "text": "900",
+      "start": [0.0, -450.0, 0.0],
+      "end": [900.0, -450.0, 0.0],
+      "label_anchor": [450.0, -620.0, 0.0],
+      "extension_lines": [
+        { "from": [0.0, 0.0, 0.0], "to": [0.0, -450.0, 0.0] },
+        { "from": [900.0, 0.0, 0.0], "to": [900.0, -450.0, 0.0] }
+      ],
+      "arrow_lines": [
+        { "from": [0.0, -450.0, 0.0], "to": [60.0, -468.0, 0.0] },
+        { "from": [0.0, -450.0, 0.0], "to": [60.0, -432.0, 0.0] },
+        { "from": [900.0, -450.0, 0.0], "to": [840.0, -468.0, 0.0] },
+        { "from": [900.0, -450.0, 0.0], "to": [840.0, -432.0, 0.0] }
+      ]
+    },
+    {
+      "kind": "linear_dim",
+      "id": "pipe-iso-sample:dim:bottom-right-1337",
+      "sub_kind": "chain",
+      "text": "1337",
+      "start": [900.0, -450.0, 0.0],
+      "end": [2237.0, -450.0, 0.0],
+      "label_anchor": [1568.0, -620.0, 0.0],
+      "extension_lines": [
+        { "from": [900.0, 0.0, 0.0], "to": [900.0, -450.0, 0.0] },
+        { "from": [2237.0, 0.0, 0.0], "to": [2237.0, -450.0, 0.0] }
+      ],
+      "arrow_lines": [
+        { "from": [900.0, -450.0, 0.0], "to": [960.0, -468.0, 0.0] },
+        { "from": [900.0, -450.0, 0.0], "to": [960.0, -432.0, 0.0] },
+        { "from": [2237.0, -450.0, 0.0], "to": [2177.0, -468.0, 0.0] },
+        { "from": [2237.0, -450.0, 0.0], "to": [2177.0, -432.0, 0.0] }
+      ]
+    },
+    {
+      "kind": "linear_dim",
+      "id": "pipe-iso-sample:dim:right-riser-1350",
+      "sub_kind": "chain",
+      "text": "1350",
+      "start": [3171.0, 0.0, 0.0],
+      "end": [3171.0, 1350.0, 0.0],
+      "label_anchor": [3341.0, 675.0, 0.0],
+      "extension_lines": [
+        { "from": [2237.0, 1350.0, 0.0], "to": [3171.0, 1350.0, 0.0] },
+        { "from": [2237.0, 0.0, 0.0], "to": [3171.0, 0.0, 0.0] }
+      ],
+      "arrow_lines": [
+        { "from": [3171.0, 0.0, 0.0], "to": [3153.0, 60.0, 0.0] },
+        { "from": [3171.0, 0.0, 0.0], "to": [3189.0, 60.0, 0.0] },
+        { "from": [3171.0, 1350.0, 0.0], "to": [3153.0, 1290.0, 0.0] },
+        { "from": [3171.0, 1350.0, 0.0], "to": [3189.0, 1290.0, 0.0] }
+      ]
+    },
+    {
+      "kind": "linear_dim",
+      "id": "pipe-iso-sample:dim:top-right-484",
+      "sub_kind": "small",
+      "text": "484",
+      "start": [2237.0, 1750.0, 0.0],
+      "end": [2721.0, 1750.0, 0.0],
+      "label_anchor": [2479.0, 1830.0, 0.0],
+      "extension_lines": [
+        { "from": [2237.0, 1350.0, 0.0], "to": [2237.0, 1750.0, 0.0] },
+        { "from": [2721.0, 1350.0, 0.0], "to": [2721.0, 1750.0, 0.0] }
+      ],
+      "arrow_lines": [
+        { "from": [2237.0, 1750.0, 0.0], "to": [2297.0, 1732.0, 0.0] },
+        { "from": [2237.0, 1750.0, 0.0], "to": [2297.0, 1768.0, 0.0] },
+        { "from": [2721.0, 1750.0, 0.0], "to": [2661.0, 1732.0, 0.0] },
+        { "from": [2721.0, 1750.0, 0.0], "to": [2661.0, 1768.0, 0.0] }
+      ]
+    },
+
+    {
+      "kind": "label",
+      "id": "pipe-iso-sample:node:head-coord",
+      "text": "X 4950\nY -42597\nPE -2316",
+      "position": [-120.0, 2320.0, 0.0]
+    },
+    {
+      "kind": "label",
+      "id": "pipe-iso-sample:node:tail-coord",
+      "text": "X 4950\nY -39876\nPE -3050",
+      "position": [2820.0, 1560.0, 0.0]
+    },
+    {
+      "kind": "label",
+      "id": "pipe-iso-sample:elev:bottom-pe",
+      "text": "PE -4400",
+      "position": [1000.0, -980.0, 0.0]
+    },
+
+    {
+      "kind": "leader_line",
+      "id": "pipe-iso-sample:lead:A8",
+      "start": [450.0, 0.0, 0.0],
+      "end": [560.0, 320.0, 0.0]
+    },
+    {
+      "kind": "label",
+      "id": "pipe-iso-sample:tag:A8",
+      "text": "A8",
+      "position": [560.0, 380.0, 0.0]
+    },
+    {
+      "kind": "leader_line",
+      "id": "pipe-iso-sample:lead:A6",
+      "start": [1568.0, 0.0, 0.0],
+      "end": [1680.0, 320.0, 0.0]
+    },
+    {
+      "kind": "label",
+      "id": "pipe-iso-sample:tag:A6",
+      "text": "A6",
+      "position": [1680.0, 380.0, 0.0]
+    },
+    {
+      "kind": "leader_line",
+      "id": "pipe-iso-sample:lead:A5",
+      "start": [2237.0, 900.0, 0.0],
+      "end": [2450.0, 980.0, 0.0]
+    },
+    {
+      "kind": "label",
+      "id": "pipe-iso-sample:tag:A5",
+      "text": "A5",
+      "position": [2470.0, 1010.0, 0.0]
+    },
+
+    {
+      "kind": "weld_mark",
+      "id": "pipe-iso-sample:weld:W1",
+      "position": [0.0, 0.0, 0.0]
+    },
+    {
+      "kind": "weld_mark",
+      "id": "pipe-iso-sample:weld:W2",
+      "position": [900.0, 0.0, 0.0],
+      "weld_type": "field"
+    },
+    {
+      "kind": "weld_mark",
+      "id": "pipe-iso-sample:weld:W3",
+      "position": [2237.0, 0.0, 0.0]
+    },
+    {
+      "kind": "weld_mark",
+      "id": "pipe-iso-sample:weld:W4",
+      "position": [2237.0, 1350.0, 0.0]
+    }
+  ]
+}

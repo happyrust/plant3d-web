@@ -158,7 +158,7 @@ async function main() {
     
     if (fs.existsSync(nginxExe)) {
       // 先停止可能残留的 nginx
-      try { execSync(`taskkill /F /IM nginx.exe`, { encoding: 'utf-8', stdio: 'ignore' }); } catch {}
+      try { execSync('taskkill /F /IM nginx.exe', { encoding: 'utf-8', stdio: 'ignore' }); } catch {}
       await new Promise(r => setTimeout(r, 1000));
       
       // 使用 spawn 后台启动 nginx（不等待退出）
@@ -203,7 +203,7 @@ async function main() {
   })();
 
   await test('前端 3100 端口（PowerPMS 兼容）', async () => {
-    const { data } = await fetchFrontendJson(`http://127.0.0.1:3100/version.json`);
+    const { data } = await fetchFrontendJson('http://127.0.0.1:3100/version.json');
     if (!data?.version) throw new Error('缺少 version 字段');
     return `version=${data.version}`;
   })();

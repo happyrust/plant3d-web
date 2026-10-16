@@ -2,7 +2,7 @@
  * 模型树「房间」页签 · gen-model-v1 源真机回归（ADR 0068 第二批 PR-D；plan `docs/plans/2026-09-21-model-tree-room-tab-pr-d-closeout-plan.md` §P1-b）。
  *
  * 三条用例对应 09-21 真机十步（`docs/verification/spatial-room-hierarchy-tree-2026-09-20/README.md` §8）：
- * ① 切页签 / 在册计数 / 搜索 / 无匹配 / 切回 PDMS；② 展开一间房逐层计数 = `GET /api/v1/spatial/rooms/{refno}/tree` 响应 + 无盒房间的一句原因；
+ * ① 切页签 / 在册计数 / 搜索 / 无匹配 / 切回 PDMS；② 展开一间房逐层计数 = `GET /api/v1/spatial/rooms/{refno}/tree` 响应 + 零面板空房标「空房」叶子不发请求；
  * ③ 右键单元「加载模型（N 个构件）」→ 几何进场景 → 眼睛切显隐 → 切页签状态保留。
  * ④（收口计划 P3-a / P3-b）页签记忆：切到「房间」后整页刷新仍在「房间」；选中联动：外部 `setGlobalSelectedRefno` 一个已取过树的房里的构件 → 展开到它、选中、滚到可见；树内点选不反弹。
  *
@@ -148,10 +148,10 @@ test('切到「房间」页签：状态句「在册 N 间房」N = /spatial/room
   expect(pageErrors).toEqual([]);
 });
 
-test('展开一间房：一发 rooms/{refno}/tree；房间 / 专业 / 单元类型 / 其他构件 / 前几个单元 / 构件 各行的文字与计数逐层等于响应；从没生成过面板模型的房间展开只给一句「还没有包围盒」', async ({ page }) => {
+test('展开一间房：一发 rooms/{refno}/tree；房间 / 专业 / 单元类型 / 其他构件 / 前几个单元 / 构件 各行的文字与计数逐层等于响应；零面板房标「空房」叶子、不发取树请求', async ({ page }) => {
   const rooms = await fetchRooms();
   const fixture = await pickFixtureRoom(rooms.rooms);
-  test.skip(fixture === null, '清单里前几间房都没有 rooms/{refno}/tree（都没生成过面板模型）');
+  test.skip(fixture === null, '清单里前几间房都取不出 rooms/{refno}/tree（空间范围不可用）');
   const { room } = fixture!;
   const { pageErrors } = await openRoomTab(page);
 
@@ -197,21 +197,23 @@ test('展开一间房：一发 rooms/{refno}/tree；房间 / 专业 / 单元类�
     await expect(rowsIn(page).filter({ hasText: /^\S+ \d+_\d+$/ }).first()).toBeVisible({ timeout: 60_000 });
   }
 
-  // 无盒房间：`panel_count` 为 0 的房展开时服务端 404，树上方一句原因、不出子级
-  const noBox = rooms.rooms.find((candidate) => candidate.panel_count === 0 && candidate.refno !== room.refno);
-  if (noBox) {
-    await searchRoom(page, noBox.room_num);
-    await expect(rowById(page, noBox.refno)).toBeVisible();
-    const pending = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(`/api/v1/spatial/rooms/${noBox.refno}/tree`), { timeout: 60_000 });
-    await expandRow(page, noBox.refno);
-    const status = (await pending).status();
-    if (status === 404) {
-      await expect(page.getByTestId('room-tree-node-errors')).toContainText('还没有包围盒', { timeout: 30_000 });
-      await expect(rowById(page, `spec:${noBox.refno}:0`)).toHaveCount(0);
-    } else {
-      // 面板数为 0 的房也可能有盒（盒来自子树几何而不是面板）——那就当一间普通房，只要求不报错
-      expect(status).toBe(200);
-    }
+  // 无边界面板的在册房（panel_count === 0）：行上标「空房」、是叶子（只剩眼睛钮、没有展开箭头），
+  // 任何交互都不发 rooms/{refno}/tree（在册清单已定恒空，不再拿请求去撞 404）
+  const noPanel = rooms.rooms.find((candidate) => candidate.panel_count === 0 && candidate.refno !== room.refno);
+  if (noPanel) {
+    await searchRoom(page, noPanel.room_num);
+    const emptyRow = rowById(page, noPanel.refno);
+    await expect(emptyRow).toBeVisible();
+    await expect(emptyRow).toContainText('空房');
+    await expect(emptyRow.locator('button')).toHaveCount(1);
+    const requests: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.endsWith(`/api/v1/spatial/rooms/${noPanel.refno}/tree`)) requests.push(request.url());
+    });
+    await emptyRow.click();
+    await emptyRow.locator('button').first().click();
+    await page.waitForTimeout(1500);
+    expect(requests, '空房行上的任何交互都不应请求 rooms/{refno}/tree').toEqual([]);
   }
 
   expect(pageErrors).toEqual([]);

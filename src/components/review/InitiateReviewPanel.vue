@@ -907,6 +907,8 @@ async function handleSubmit() {
     // 后续 active/agree/return 必须由 PMS workflow/sync 驱动。
     if (task?.id && !isExternal) {
       await userStore.submitTaskToNextNode(task.id, '发起编校审');
+    } else if (task?.id && isExternal && typeof reviewStore.setCurrentTask === 'function') {
+      await reviewStore.setCurrentTask(task);
     }
 
     const checker = checkerIdToSubmit ? reviewerOptions.value.find((r) => r.id === checkerIdToSubmit) : null;

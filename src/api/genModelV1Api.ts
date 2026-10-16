@@ -1044,6 +1044,93 @@ export function genModelV1TaskGet(taskId: string, options?: GenModelV1RequestOpt
 }
 
 // ---------------------------------------------------------------------------
+// 增量记录（`/tasks` 列表只读视图）
+// ---------------------------------------------------------------------------
+
+/**
+ * 数据批次里一个交付单元的终态（gen-model `DataBatchTaskResult.units[]`）。
+ * `kind`（ADR-066）缺席 = 旧回执，按整根重算画。
+ */
+export type TaskUnitDto = {
+  dbnum?: number;
+  root_refno?: string;
+  noun?: string;
+  /** `generated | failed` */
+  status?: string;
+  attempts?: number;
+  message?: string | null;
+  old_owner?: string | null;
+  new_owner?: string | null;
+  /** `regen | transform`（ADR-066：整根重算 / 刚体前移便宜路） */
+  kind?: string;
+};
+
+/** 数据批次的 `result.batch`（增 / 删 / 改三数是老服务端不发的可选组）。 */
+export type TaskBatchDto = {
+  dbnum?: number;
+  db_type?: string;
+  file_path?: string;
+  start_sesno?: number;
+  end_sesno?: number;
+  start_sesno_time?: string | null;
+  end_sesno_time?: string | null;
+  /** `applied | failed | skipped` */
+  status?: string;
+  message?: string | null;
+  merged_sesnos?: number[];
+  merged_sesno_times?: (string | null)[];
+  changed_elements?: number;
+  added_elements?: number;
+  modified_elements?: number;
+  deleted_elements?: number;
+};
+
+/** `result` 终态摘要，与 gen-model `DataBatchTaskResult` 同形。 */
+export type TaskOutcomeDto = {
+  project?: string;
+  /** `success | partial | failed | up_to_date | absorbed_by_running` */
+  status?: string;
+  absorbed?: boolean;
+  batch?: TaskBatchDto | null;
+  units?: TaskUnitDto[];
+  warnings?: string[];
+};
+
+/**
+ * `/tasks` 列表里的一行（增量记录视图用）。`TaskEntryDto` 的超集：列表返回的字段
+ * 与单条查询一致，只是这份声明把「记录账本」要读的几列标了出来。
+ */
+export type TaskListEntryDto = TaskEntryDto & {
+  project?: string;
+  created_at?: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  dbnum?: number | null;
+  db_type?: string | null;
+  start_sesno?: number | null;
+  end_sesno?: number | null;
+  /** 保存窗口两端的 E3D 写入时刻（RFC3339）；与 sesno 同生共死，缺席是正常态 */
+  start_sesno_time?: string | null;
+  end_sesno_time?: string | null;
+  /** 房间轮的 `{panels, elements, dead_letters}`；数据批次没有这一格 */
+  detail?: { panels?: number; elements?: number; dead_letters?: number } | Record<string, unknown> | null;
+  result?: TaskOutcomeDto | Record<string, unknown> | null;
+};
+
+export type TaskListDto = { tasks?: TaskListEntryDto[] };
+
+/**
+ * `GET /api/v1/tasks`：服务端任务表（200 条窗口，含终态摘要）。
+ *
+ * 只供「增量记录」面板做账本服——d-195 的口径没松：不拿它反推别人改了什么、
+ * 不订阅、不据此重载已加载的根。轮询节拍由面板自己管（打开才打）。
+ */
+export function genModelV1Tasks(options?: GenModelV1RequestOptions): Promise<TaskListDto> {
+  // `limit=200` 与 plant-ui 的轮询同一口径：服务端列表本来就封顶 200 条，写明是契约而不是巧合。
+  return genModelV1Fetch<TaskListDto>('/api/v1/tasks', { ...options, query: { limit: '200' } });
+}
+
+// ---------------------------------------------------------------------------
 // 模型版本（版本对比，ADR 0065 / gen-model-refactor ADR-081）
 // ---------------------------------------------------------------------------
 

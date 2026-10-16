@@ -1,5 +1,6 @@
-import { createDockview } from 'dockview-core';
 import { describe, expect, it, vi } from 'vitest';
+
+import { createDockview } from 'dockview-core';
 
 import {
   openReviewAttachmentSplit,

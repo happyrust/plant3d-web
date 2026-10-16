@@ -4,8 +4,8 @@ import { computed, onMounted, onUnmounted } from 'vue';
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 
 /**
- * 树面板顶部的 gen-model 连接徽标（plan P1-4）：一个状态点 + 身份摘要 + 库三态，点一下重探。
- * 只在 `model_source=gen-model-v1`（或 `?gm_health=1`）时被父组件挂出来；数据源本身持有轮询，
+ * 底部状态栏的 gen-model 连接徽标（plan P1-4）：一个状态点 + 身份摘要 + 库三态，点一下重探。
+ * 徽标常驻在 App.vue 底部状态栏左侧；数据源本身持有轮询，
  * 徽标挂载/卸载只增减自己的展示 owner，不再决定缓存正确性探针是否存活。
  * 这里只探 `/health` 与 `/dbnums`——前端只吃自己 ensure 出来的数据，不订阅服务端任务、不做被动重载
  * （原 P5 模型变更同步 2026-09-09 按用户口径整条下线，见收口计划 §12）。
@@ -65,7 +65,7 @@ onUnmounted(() => {
 <template>
   <button type="button"
     data-testid="gen-model-v1-health-badge"
-    class="inline-flex h-7 max-w-[360px] items-center gap-1.5 rounded-sm border border-border/60 px-2 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+    class="inline-flex h-5 max-w-[360px] items-center gap-1.5 rounded-sm px-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
     :title="title"
     @mousedown.stop
     @click="health.refresh()">

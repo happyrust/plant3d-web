@@ -4,6 +4,7 @@ import {
   resolveEmbedRestoreResult,
   restoreEmbedWorkbenchContext,
 } from './embedContextRestore';
+import { restoreEmbedFormSnapshotContext } from './embedFormSnapshotRestore';
 
 import type { ReviewTask } from '@/types/auth';
 
@@ -451,5 +452,40 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(result.restoreStatus).toBe('missing');
     expect(result.missReason).toBe('form_not_found');
     expect(result.matchedSource).toBeNull();
+  });
+
+  it('preserves existing rich component metadata when merging snapshot modelRefnos into task', async () => {
+    const task = createTask({
+      id: 'task-rich-comps',
+      formId: 'FORM-RICH',
+      components: [
+        { id: 'comp-equi-1', name: '反应釜 E-101', refNo: '24381_145018', type: 'EQUI' },
+      ],
+    });
+    const updateTask = vi.fn();
+
+    const restored = await restoreEmbedFormSnapshotContext({
+      formId: 'FORM-RICH',
+      token: 'tok-rich',
+      actor: { id: 'checker_001', name: '张校核', roles: 'jd' },
+      task,
+      updateTask,
+      request: vi.fn(async () => ({
+        code: 200,
+        message: 'ok',
+        data: {
+          models: ['24381/145018', '24381/145019'],
+          records: [],
+          attachmentCount: 0,
+          attachments: [],
+        },
+      })) as any,
+    });
+
+    expect(restored.task?.components).toEqual([
+      { id: 'comp-equi-1', name: '反应釜 E-101', refNo: '24381_145018', type: 'EQUI' },
+      { id: 'form-model-2-24381/145019', name: '24381/145019', refNo: '24381/145019', type: 'BRAN' },
+    ]);
+    expect(updateTask).toHaveBeenCalledWith(restored.task);
   });
 });

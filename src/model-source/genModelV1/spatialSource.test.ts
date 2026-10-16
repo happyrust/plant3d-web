@@ -642,13 +642,14 @@ describe('gen-model-v1 spatialSource', () => {
     const bare = createGenModelV1SpatialSource({ api: { nearby: api.nearby, nearbyRefnos: api.nearbyRefnos, negativeNouns: api.negativeNouns } });
     expect(await bare.roomTree('24381_35580')).toMatchObject({ success: false, unsupported: true, error: SPATIAL_TREE_UNSUPPORTED_MESSAGE, rooms: [] });
 
-    // 404 = 房间从没生成过面板模型（没有盒）；400 = 不在册 / 路径坏（服务端那句原样）；422 = 房间体制不可用
+    // 404 = 房间查不出空间范围（在册但面板几何未就绪 / 无面板数据）；400 = 不在册 / 路径坏（服务端那句原样）；422 = 房间体制不可用
     const notFound = new GenModelV1ApiError({ code: 'not_found', message: 'nope', status: 404, path: '/api/v1/spatial/rooms/24381_35580/tree' });
     const missing = await createGenModelV1SpatialSource({ api: { ...api, roomTree: vi.fn(async () => { throw notFound; }) } }).roomTree('24381_35580');
     expect(missing.success).toBe(false);
     expect(missing.unsupported).toBeUndefined();
     expect(missing.error).toContain('24381_35580');
-    expect(missing.error).toContain('包围盒');
+    expect(missing.error).toContain('空间范围不可用');
+    expect(missing.error).not.toContain('先显示');
     const badRequest = new GenModelV1ApiError({ code: 'bad_request', message: 'rooms 里的 1/1 不是在册房间', status: 400, path: '/api/v1/spatial/rooms/1_1/tree' });
     expect(await createGenModelV1SpatialSource({ api: { ...api, roomTree: vi.fn(async () => { throw badRequest; }) } }).roomTree('1_1'))
       .toMatchObject({ success: false, error: 'rooms 里的 1/1 不是在册房间' });

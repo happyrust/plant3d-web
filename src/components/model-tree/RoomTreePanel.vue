@@ -15,6 +15,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { setGlobalSelectedRefno, useSelectionStore } from '@/composables/useSelectionStore';
 import { showModelByRefnosWithAck } from '@/composables/useViewerContext';
@@ -262,6 +263,29 @@ function viewProperties() {
     ensurePanelAndActivate('properties');
   }
 }
+
+/** 「查看关联房间」（plant-ui 对应入口）：直段行看它所属 BRAN 的归属。 */
+function viewRoomInfo() {
+  const node = contextNode.value;
+  closeContextMenu();
+  const refno = node?.refno ?? node?.tube?.unitRefno;
+  if (refno) {
+    publishSelection(refno);
+    openRoomInfo(refno);
+  }
+}
+
+/** 外部（关联房间浮窗「在『房间』页签查看全部」）定位一间房：取树、展开、滚到可见；不在册 / 取树失败回 false。 */
+async function revealRoom(roomRefno: string): Promise<boolean> {
+  const hit = await tree.revealRoom(roomRefno);
+  if (!hit || hit.index < 0) return false;
+  await nextTick();
+  rowVirtualizer.value.measure();
+  rowVirtualizer.value.scrollToIndex(hit.index, { align: 'center' });
+  return true;
+}
+
+defineExpose({ revealRoom });
 </script>
 
 <template>
@@ -358,6 +382,12 @@ function viewProperties() {
         </template>
         <template v-if="contextIsElementOrUnit || contextIsTube">
           <div class="my-1 h-px bg-border" />
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            data-testid="room-tree-view-rooms"
+            @click="viewRoomInfo">
+            查看关联房间
+          </button>
           <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="viewProperties">查看属性</button>
         </template>
       </div>

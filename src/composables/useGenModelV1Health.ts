@@ -3,7 +3,7 @@
  *
  * 进程内单例 store：`GET /api/v1/health` → 服务身份（`project / mdb / namespace / version`）、
  * `delivery_unit_types`、`initialization.{data_ready, model_ready, model_phase_open}`、`data_face`。
- * 给树面板顶部的 `GenModelV1HealthBadge` 显示「已连接 gen-model :8022 · AvevaMarineSample · 模型门 开」用，
+ * 给底部状态栏的 `GenModelV1HealthBadge` 显示「已连接 gen-model :8022 · AvevaMarineSample · 模型门 开」用，
  * P2 起也给 `genModelV1` 适配器判「服务端就绪了没」。
  *
  * 探针由 `gen-model-v1` 数据源生命周期持有；徽标只增加/释放自己的展示 owner。

@@ -6,7 +6,6 @@ import { Filter, GitCompare, Plus, Search, X } from 'lucide-vue-next';
 
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
-import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
@@ -16,6 +15,7 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
+import { openRoomInfo, useRoomInfo } from '@/composables/useRoomInfo';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import {
@@ -28,14 +28,12 @@ import {
   type TreeDiffModel,
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
+import { emitToast } from '@/ribbon/toastBus';
 import { MODEL_UNIT_VERSION_COMPARE_EVENT, requestModelVersionInspect } from '@/utils/modelUnitVersionCompare';
 
 const props = defineProps<{
   viewer: DtxCompatViewer | null;
 }>();
-
-/** gen-model 连接徽标（plan 2026-09-06 P1-4）：legacy 退役后 gen-model-v1 是唯一数据源，徽标常驻。 */
-const showGenModelV1Badge = true;
 
 /**
  * 页签：PDMS 属主树 / 「房间」（ADR 0068 房间层级树，`RoomTreePanel`，2026-09-21 起；退役掉的旧 ROOM 页签走的是旧后端）。
@@ -75,6 +73,31 @@ setModelTreeInstance(pdmsTree);
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();
+
+const roomPanelRef = ref<InstanceType<typeof RoomTreePanel> | null>(null);
+const roomInfo = useRoomInfo();
+
+/**
+ * 关联房间浮窗「在『房间』页签查看全部」：切到房间页签、展开并滚到这间房。
+ * 请求是模块级挂起的（浮窗发请求时本面板可能还没挂上）：immediate watcher 兜底，
+ * RoomTreePanel 是 v-show 常驻，`nextTick` 后 ref 一定在。
+ */
+watch(
+  () => roomInfo.roomRevealRequest.value,
+  async (request) => {
+    if (!request) return;
+    // 消费即清：dock 面板销毁重建时 immediate watcher 不会把旧请求再演一遍
+    roomInfo.roomRevealRequest.value = null;
+    activeTab.value = 'room';
+    writeModelTreeTab('room');
+    await nextTick();
+    const ok = await roomPanelRef.value?.revealRoom(request.refno);
+    if (ok === false) {
+      emitToast({ message: `房间 ${request.refno} 不在在册清单，或它的层级树取数失败`, level: 'warning' });
+    }
+  },
+  { immediate: true },
+);
 
 // Debug: 用于排查点击 eye（显示/隐藏）导致卡死的问题。
 // - true: 禁用“显示时自动 showModelByRefno 加载/生成”，仅走树的 setVisible。
@@ -1035,6 +1058,17 @@ function viewProperties() {
   closeContextMenu();
 }
 
+/** 「查看关联房间」（plant-ui 树右键「查看所属房间」对应入口）：开「关联房间」浮窗列全部归属。 */
+function viewRoomInfo() {
+  if (!contextNodeId.value) return;
+  const refno = treeNodeRefno(contextNodeId.value);
+  if (refno) {
+    selection.setSelectedRefno(refno);
+    openRoomInfo(refno);
+  }
+  closeContextMenu();
+}
+
 /**
  * 「查看历史版本」：把这个构件交给版本对比面板。面板自己解它所属的最小交付单元——树里点的多半是
  * 单元里的某个构件（FTUB / BOX…），不是单元根。
@@ -1049,7 +1083,30 @@ function viewVersionHistory() {
   closeContextMenu();
 }
 
-// MBD 标注：右键菜单已移除
+/**
+ * 「查看尺寸标注」（仅 BRAN）：写 URL `mbd_refno` 并派发 popstate，走 ViewerPanel 的
+ * MBD 实时同步链路（`handleMbdLocationChange`）；同时选中构件并打开尺寸标注面板看诊断。
+ */
+const contextNodeIsBran = computed(() => {
+  const id = contextNodeId.value;
+  if (!id) return false;
+  const node = pdmsTree.nodesById.value[normalizeRefnoKeyLike(id)];
+  return String(node?.type ?? '').toUpperCase() === 'BRAN';
+});
+
+function viewMbdDimensions() {
+  if (!contextNodeId.value) return;
+  const refno = treeNodeRefno(contextNodeId.value);
+  if (refno) {
+    selection.setSelectedRefno(refno);
+    const url = new URL(window.location.href);
+    url.searchParams.set('mbd_refno', normalizeRefnoKeyLike(refno));
+    window.history.replaceState({}, '', url);
+    window.dispatchEvent(new Event('popstate'));
+    ensurePanelAndActivate('dimension');
+  }
+  closeContextMenu();
+}
 
 function onSearchEnter(value: string) {
   const trimmed = value.trim();
@@ -1092,8 +1149,6 @@ function onSearchEnter(value: string) {
             房间
           </button>
         </div>
-
-        <GenModelV1HealthBadge v-if="showGenModelV1Badge" />
 
         <div class="flex-1" />
 
@@ -1331,6 +1386,7 @@ function onSearchEnter(value: string) {
 
     <!-- 「房间」页签（ADR 0068）：在册房间平铺 + 展开一间房是服务端聚合的层级树；v-show 常驻，切回来状态还在 -->
     <RoomTreePanel v-show="!isPdmsTab"
+      ref="roomPanelRef"
       class="min-h-0 flex-1"
       :viewer="props.viewer"
       :active="!isPdmsTab" />
@@ -1395,11 +1451,23 @@ function onSearchEnter(value: string) {
           @click="viewProperties">
           查看属性
         </button>
+        <button v-if="contextNodeId && isRefnoLike(contextNodeId)" type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          data-testid="model-tree-view-rooms"
+          @click="viewRoomInfo">
+          查看关联房间
+        </button>
         <button type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           data-testid="model-tree-view-version-history"
           @click="viewVersionHistory">
           查看历史版本
+        </button>
+        <button v-if="contextNodeIsBran" type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          data-testid="model-tree-view-mbd-dimensions"
+          @click="viewMbdDimensions">
+          查看尺寸标注
         </button>
       </div>
     </Teleport>

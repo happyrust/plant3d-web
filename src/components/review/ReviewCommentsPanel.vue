@@ -191,8 +191,19 @@ async function saveEditComment() {
       );
       emitToast({ message: resp.error_message || '评论更新被拒绝，已回滚', level: 'warning' });
     }
-  } catch {
-    // 网络异常保留本地
+  } catch (err) {
+    store.updateAnnotationComment(
+      props.annotationType,
+      props.annotationId,
+      commentId,
+      { content: prevContent },
+      ctx.formId,
+      ctx.taskId,
+    );
+    emitToast({
+      message: err instanceof Error ? err.message : '评论更新失败，已回滚',
+      level: 'warning',
+    });
   }
 
   editingCommentId.value = null;
@@ -210,15 +221,21 @@ async function deleteComment(commentId: string) {
 
   const ctx = commentContext.value;
   try {
-    await reviewCommentDelete(commentId, {
+    const resp = await reviewCommentDelete(commentId, {
       formId: ctx.formId ?? undefined,
       taskId: ctx.taskId ?? undefined,
     });
-  } catch {
-    // 后端失败降级本地
+    if (resp && resp.success === false) {
+      emitToast({ message: resp.error_message || '评论删除被拒绝', level: 'warning' });
+      return;
+    }
+    store.removeAnnotationComment(props.annotationType, props.annotationId, commentId, ctx.formId, ctx.taskId);
+  } catch (err) {
+    emitToast({
+      message: err instanceof Error ? err.message : '评论删除失败',
+      level: 'warning',
+    });
   }
-
-  store.removeAnnotationComment(props.annotationType, props.annotationId, commentId, ctx.formId, ctx.taskId);
 }
 
 // 设置回复目标

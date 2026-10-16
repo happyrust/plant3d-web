@@ -33,7 +33,8 @@ import { useRoomTree } from '@/composables/useRoomTree';
 
 /**
  * 「房间」页签的状态（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tree §4.5）：在册房间平铺 + 搜索、展开一间房才取树且只取一次、
- * 未内联的单元展开时按选择器补叶子、眼睛作用于节点下全部构件并推导父链勾选、选中 / 定位 / 隔离只碰场景里已有的对象。
+ * 未内联的单元展开时按选择器补叶子、眼睛作用于节点下全部构件并推导父链勾选、点「显示」同时把构件模型装进场景（`showModels`）、
+ * 选中 / 定位 / 隔离只碰场景里已有的对象。
  * 管件带直段：单元级及以上的显隐 / 隔离连所属 BRAN 的整体（BRAN 自己 + 记录缓存里它的全部构件）一起；构件行、定位、选中不扩。
  */
 
@@ -243,14 +244,14 @@ describe('useRoomTree', () => {
     expect(tree.flatRows.value.filter((row) => row.depth === 4)).toHaveLength(3);
   });
 
-  it('展开一间房失败（房间没有盒 → success:false）：根不出子节点、nodeError 有一句；再展开一次会重试', async () => {
-    const roomTree = vi.fn(async () => ({ ...r432Tree(), success: false, error: '房间 24381_35580 还没有包围盒', rooms: [] } as SpatialTreeResult));
+  it('展开一间房失败（空间范围不可用 → success:false）：根不出子节点、nodeError 有一句；再展开一次会重试', async () => {
+    const roomTree = vi.fn(async () => ({ ...r432Tree(), success: false, error: '房间 24381_35580 的空间范围不可用（面板几何未就绪）', rooms: [] } as SpatialTreeResult));
     const { source } = makeSource({ roomTree: roomTree as unknown as SpatialSource['roomTree'] });
     const tree = useRoomTree({ value: null }, { source: () => source });
     await tree.loadRoots();
     tree.toggleExpand('room:24381_35580');
     await flush();
-    expect(tree.nodeError('room:24381_35580')).toBe('房间 24381_35580 还没有包围盒');
+    expect(tree.nodeError('room:24381_35580')).toBe('房间 24381_35580 的空间范围不可用（面板几何未就绪）');
     expect(tree.flatRows.value).toHaveLength(4);
     tree.toggleExpand('room:24381_35580');
     tree.toggleExpand('room:24381_35580');
@@ -258,10 +259,30 @@ describe('useRoomTree', () => {
     expect(roomTree).toHaveBeenCalledTimes(2);
   });
 
-  it('眼睛：节点下全部构件（先补齐未内联的）写进场景显隐，勾选整枝改、父链推导 indeterminate / unchecked；setVisible 回 true 只对已加载对象生效；单元级及以上连所属 BRAN 的整体（直段 + 房间外构件）一起', async () => {
+  it('无边界面板的在册房（panel_count === 0）：行上标「0 个构件」、是叶子不展开；展开 / 眼睛 / revealRoom 都不发 roomTree、不报错', async () => {
+    const empty = { refno: '24381_1280', room_num: 'R131', name: '/1RX-RM01-R131', dbnum: 7997, panel_count: 0 };
+    const { source, roomTree } = makeSource({
+      rooms: vi.fn(async () => roomsResult({ rooms: [...roomsResult().rooms, empty] })) as unknown as SpatialSource['rooms'],
+    });
+    const tree = useRoomTree({ value: null }, { source: () => source });
+    await tree.loadRoots();
+    expect(tree.rootsStatus.value.total).toBe(5);
+    const row = tree.flatRows.value.find((r) => r.id === 'room:24381_1280')!;
+    expect(row.name).toBe('R131 · /1RX-RM01-R131 · 空房');
+    expect(row.hasChildren).toBe(false);
+    tree.toggleExpand('room:24381_1280');
+    await tree.setVisible('room:24381_1280', true);
+    await tree.revealRoom('24381_1280');
+    await flush();
+    expect(roomTree).not.toHaveBeenCalled();
+    expect(tree.nodeError('room:24381_1280')).toBeNull();
+  });
+
+  it('眼睛：节点下全部构件（先补齐未内联的）写进场景显隐，勾选整枝改、父链推导 indeterminate / unchecked；setVisible 回 true 只对已加载对象生效；单元级及以上连所属 BRAN 的整体（直段 + 房间外构件）一起；点「显示」把构件模型装进场景、隐藏不触发', async () => {
     const viewer = makeViewer(['24381_1240', '24381_7001']);
     const { source, roomTree } = makeSource();
-    const tree = useRoomTree({ value: viewer }, { source: () => source });
+    const showModels = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [], error: null }));
+    const tree = useRoomTree({ value: viewer }, { source: () => source, showModels });
     await tree.loadRoots();
     tree.toggleExpand('room:24381_35580');
     await flush();
@@ -296,6 +317,33 @@ describe('useRoomTree', () => {
     expect(viewer.scene.setObjectsVisible).toHaveBeenLastCalledWith(['24381_7001', '24381_7002', '24381_1241', '24381_1200', '24381_1240', '24381_1242'], true);
     expect(tree.getCheckState('utype:24381_35580:3:EQUI')).toBe('checked');
     expect(tree.getCheckState('room:24381_35580')).toBe('indeterminate');
+
+    // 「显示」＝加载对应模型：该单元名下三条构件进加载链（BRAN 伴随不走它——加载按生成根把整条 BRAN 带进来）；上面两次「隐藏」没触发
+    expect(showModels).toHaveBeenCalledTimes(1);
+    expect(showModels).toHaveBeenLastCalledWith(['24381_7001', '24381_7002', '24381_1241']);
+  });
+
+  it('房间根的眼睛：没展开过也先取树（含按 unit= 补叶子）再收构件；点「显示」把全部构件模型装进场景，隐藏不触发加载', async () => {
+    const viewer = makeViewer([]);
+    const { source, roomTree } = makeSource();
+    const showModels = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [], error: null }));
+    const tree = useRoomTree({ value: viewer }, { source: () => source, showModels });
+    await tree.loadRoots();
+
+    // 房间行没展开过：eye 先把房间树取回来，按 unit= 补 EQUI 的叶子后收齐四个构件（1241 在 BRAN / EQUI 下各出现一次，去重）
+    await tree.setVisible('room:24381_35580', true);
+    await flush();
+    expect(roomTree).toHaveBeenCalledTimes(2);
+    expect(roomTree).toHaveBeenLastCalledWith('24381_35580', undefined, { unit: '24381_7000' });
+    expect(showModels).toHaveBeenCalledTimes(1);
+    expect(showModels).toHaveBeenLastCalledWith(['24381_1240', '24381_1241', '24381_7001', '24381_7002']);
+    expect(tree.getCheckState('room:24381_35580')).toBe('checked');
+
+    // 隐藏：只写显隐，不再触发加载
+    await tree.setVisible('room:24381_35580', false);
+    await flush();
+    expect(showModels).toHaveBeenCalledTimes(1);
+    expect(tree.getCheckState('room:24381_35580')).toBe('unchecked');
   });
 
   it('选中：单击一行把节点下已知构件选进场景、回唯一的单元 / 构件 refno 给全局选中；分组节点回 null；Ctrl 多选、Shift 连选；定位 / 隔离只碰已加载对象', async () => {

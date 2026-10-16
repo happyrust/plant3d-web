@@ -809,8 +809,7 @@ async function refreshEmbedSnapshot(task: ReviewTask): Promise<void> {
 }
 
 async function handleSubmitToNextNode() {
-  // 注：passive 模式下按钮仍 disabled（template :disabled），UI 不会触发；
-  // 仅由 imperative 调用（如 PMS workflow_changed）触达。
+  if (isPassiveWorkflow.value) return;
   const taskId = currentTask.value?.id;
   const formId = currentTask.value?.formId?.trim();
   const comments = submitComment.value.trim();
@@ -852,8 +851,7 @@ async function handleSubmitToNextNode() {
 }
 
 async function handleReturnToNode() {
-  // 注：passive 模式下按钮仍 disabled（template :disabled），UI 不会触发；
-  // 仅由 imperative 调用（如 PMS workflow_changed）触达。
+  if (isPassiveWorkflow.value) return;
   if (!currentTask.value || !canReturnToPrevNode.value) return;
   const taskId = currentTask.value.id;
   const formId = currentTask.value.formId?.trim();

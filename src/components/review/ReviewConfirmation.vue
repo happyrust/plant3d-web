@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 
 import { AlertCircle, CheckCircle, MessageSquare, RotateCw, Ruler, X } from 'lucide-vue-next';
 
+import { readPersistedEmbedModeParams } from './embedRoleLanding';
 import {
   buildReviewEvidenceSnapshotKey,
   buildReviewConfirmSnapshotPayload,
@@ -12,6 +13,7 @@ import {
   hasReviewConfirmPayloadData,
   resolveReviewEvidenceSaveErrorMessage,
 } from './reviewPanelActions';
+import { resolvePassiveWorkflowMode } from './workflowMode';
 
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -110,12 +112,30 @@ const hasUnsavedPendingData = computed(() => (
   hasReviewConfirmPayloadData(unsavedConfirmPayload.value)
 ));
 
+const canCreateReviewEvidence = computed(() => {
+  const embedParams = readPersistedEmbedModeParams();
+  if (!resolvePassiveWorkflowMode({ embedParams })) return true;
+  const role = String(
+    embedParams?.workflowRole
+    || embedParams?.verifiedClaims?.role
+    || ''
+  ).trim().toLowerCase();
+  const formId = String(
+    (reviewStore.currentTask.value as { formId?: string } | null)?.formId
+    || embedParams?.formId
+    || ''
+  ).trim();
+  return !(role === 'sj' && !!formId);
+});
+
 const isVisible = computed(() => {
-  return reviewStore.reviewMode.value && (hasPendingData.value || hasUnsavedPendingData.value);
+  return canCreateReviewEvidence.value
+    && reviewStore.reviewMode.value
+    && (hasPendingData.value || hasUnsavedPendingData.value);
 });
 
 async function confirmCurrentData() {
-  if (confirmSaving.value || !hasUnsavedPendingData.value) return;
+  if (!canCreateReviewEvidence.value || confirmSaving.value || !hasUnsavedPendingData.value) return;
 
   confirmSaving.value = true;
   confirmError.value = null;

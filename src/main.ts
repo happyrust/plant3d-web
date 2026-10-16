@@ -18,6 +18,7 @@ import DesignerCommentHandlingPanelDock from '@/components/dock_panels/DesignerC
 import DesignerTaskListPanelDock from '@/components/dock_panels/DesignerTaskListPanelDock.vue';
 import DtxMaterialConfigPanelDock from '@/components/dock_panels/DtxMaterialConfigPanelDock.vue';
 import HydraulicPanelDock from '@/components/dock_panels/HydraulicPanelDock.vue';
+import IncrementRecordsPanelDock from '@/components/dock_panels/IncrementRecordsPanelDock.vue';
 import InitiateReviewPanelDock from '@/components/dock_panels/InitiateReviewPanelDock.vue';
 import ManagerPanelDock from '@/components/dock_panels/ManagerPanelDock.vue';
 import MeasurementPanelDock from '@/components/dock_panels/MeasurementPanelDock.vue';
@@ -56,6 +57,7 @@ app.component('ModelVersionComparePanel', ModelVersionComparePanelDock);
 app.component('ReviewAttachmentPreviewPanel', ReviewAttachmentPreviewPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('SpatialComputePanel', SpatialComputePanelDock);
+app.component('IncrementRecordsPanel', IncrementRecordsPanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
 
 app.use(vuetify).mount('#app');

@@ -15,8 +15,8 @@
  *   node scripts/test-document-upload-preview.mjs --ui-only    # 只运行 UI 测试
  */
 
-import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -383,7 +383,7 @@ async function main() {
       const header = buffer.slice(0, 4);
       const isZip = header[0] === 0x50 && header[1] === 0x4B && header[2] === 0x03 && header[3] === 0x04;
       if (!isZip) {
-        throw new Error(`DOCX 文件头异常（应为 ZIP 格式 PK\\x03\\x04）`);
+        throw new Error('DOCX 文件头异常（应为 ZIP 格式 PK\\x03\\x04）');
       }
       return 'DOCX 是有效的 ZIP 格式';
     })();

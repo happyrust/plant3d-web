@@ -14,6 +14,8 @@ import { genModelV1UpdateExecute, type UpdateExecuteReceipt } from '@/api/genMod
 import {
   genModelV1ElementAttributes,
   genModelV1Dbnums,
+  genModelV1ModelBounds,
+  genModelV1ModelRecords,
   genModelV1TaskGet,
   isRefnoLike,
   type DbnumRow,
@@ -21,11 +23,13 @@ import {
 } from '@/api/genModelV1Api';
 import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
+  invalidateDbnumModelStatus,
   noteDbnumModelGenerated,
   scheduleDbnumModelReprobe,
 } from '@/composables/useGenModelV1DbnumStatus';
 import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import { getGenModelV1ModelSource } from '@/model-source';
+import { listSitesOfDbnum, type CollectDbnumSite } from '@/model-source/genModelV1/collectDbnum';
 
 // ---------------------------------------------------------------------------
 // 库状态
@@ -43,7 +47,14 @@ export const DBNUM_STATUS_LABEL: Record<DbnumPanelStatus, string> = {
   excluded: '不参与',
 };
 
-/** `/api/v1/dbnums` 行 → 面板状态徽标（实测字段见 DbnumRow）。 */
+/**
+ * `/api/v1/dbnums` 行 → 面板状态徽标（实测字段见 DbnumRow）。
+ *
+ * 模型段的判据就是「模型最近更新时间的对比」：`model_sesno`（模型最后一次生成对到的数据会话）对比
+ * `applied_sesno`（数据已应用会话）。服务端 `model_verdict` 已做过同一比较，表态了直接用（
+ * `in_sync`/`lagging`），`not_judged` / 读透形态缺省时退回两个水位自己比。非 DESI 行不生成模型，
+ * 只比数据段，免得目录库永远「待更新」。
+ */
 export function dbnumPanelStatus(row: DbnumRow): DbnumPanelStatus {
   if (row.excluded || row.not_in_project) return 'excluded';
   if (row.blocked) return 'blocked';
@@ -51,7 +62,18 @@ export function dbnumPanelStatus(row: DbnumRow): DbnumPanelStatus {
   if (!row.initialized) return row.awaiting_manual_initialization ? 'awaiting' : 'uninitialized';
   const applied = row.applied_sesno ?? 0;
   const file = row.file_latest_sesno ?? 0;
-  return applied < file ? 'pending' : 'synced';
+  if (applied < file) return 'pending';
+  if (String(row.db_type ?? '').toUpperCase() !== 'DESI') return 'synced';
+  const verdict = String(row.model_verdict ?? '').toLowerCase();
+  if (verdict === 'lagging') return 'pending';
+  if (verdict === 'in_sync') return 'synced';
+  return (row.model_sesno ?? 0) < applied ? 'pending' : 'synced';
+}
+
+/** `pending` 行是哪一段滞后：`data` = 数据还没应用完；`model` = 模型水位落后于已应用数据。 */
+export function dbnumLagReason(row: DbnumRow): 'data' | 'model' | null {
+  if (dbnumPanelStatus(row) !== 'pending') return null;
+  return (row.applied_sesno ?? 0) < (row.file_latest_sesno ?? 0) ? 'data' : 'model';
 }
 
 // ---------------------------------------------------------------------------
@@ -160,9 +182,49 @@ const targets = ref<ModelGenTarget[]>([]);
 const generateBusy = ref(false);
 const nodeError = ref<string | null>(null);
 
+// 「按库选 SITE」挑选器：dbnum → listSitesOfDbnum(tree/roots) → 勾 SITE 入目标队列
+const sitePickerDbnum = ref<number | null>(null);
+const sitePickerRows = ref<CollectDbnumSite[]>([]);
+const sitePickerLoading = ref(false);
+const sitePickerError = ref<string | null>(null);
+const sitePickerSelected = ref<Set<string>>(new Set());
+const sitePickerBusy = ref(false);
+const sitePickerCache = new Map<number, CollectDbnumSite[]>();
+
 const tasks = ref<Map<string, AdminTaskView>>(new Map());
 const taskPollBusy = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// ---------------------------------------------------------------------------
+// 模型刷新水位跟踪 + pending 目标复查（模型最近更新时间的对比判据）
+// ---------------------------------------------------------------------------
+
+/**
+ * 读透 / kv-mem 形态的 `update/execute` 不回 task_id（`status: model_refresh_queued`），完成信号
+ * 只能看水位：入队时记下 `file_latest_sesno`（数据最新时刻），轮询 `/dbnums` 直到
+ * `model_sesno`（模型最近更新）追平它——追平 = 模型刷新落账。
+ */
+export type DbnumRefreshWatch = {
+  dbnum: number;
+  /** 入队时刻的目标水位（file_latest_sesno；0 = 行还没见到，等首拍重估） */
+  targetSesno: number;
+  modelSesno: number;
+  appliedSesno: number;
+  state: 'watching' | 'done' | 'timeout';
+  startedAt: number;
+};
+
+const refreshWatches = ref<Map<number, DbnumRefreshWatch>>(new Map());
+const refreshWatchList = computed(() => [...refreshWatches.value.values()]);
+const REFRESH_WATCH_INTERVAL_MS = 4_000;
+const REFRESH_WATCH_TIMEOUT_MS = 5 * 60_000;
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+
+/** pending 目标的后台复查节奏与上限：轮 `model.spatial.bounds` 看模型水位追没追上最新数据。 */
+const PENDING_PROBE_INTERVAL_MS = 5_000;
+const PENDING_PROBE_TIMEOUT_MS = 10 * 60_000;
+const pendingProbes = new Map<string, number>(); // refno → deadline
+let pendingTimer: ReturnType<typeof setInterval> | null = null;
 
 const dbList = computed(() =>
   [...dbRows.value].sort((a, b) => {
@@ -282,6 +344,160 @@ function stopPolling(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 刷新水位跟踪 / pending 复查实现
+// ---------------------------------------------------------------------------
+
+function evaluateRefreshWatches(): void {
+  let changed = false;
+  const next = new Map(refreshWatches.value);
+  for (const [dbnum, watch] of next) {
+    if (watch.state !== 'watching') continue;
+    const row = dbRows.value.find((r) => r.dbnum === dbnum);
+    if (row) {
+      // 入队时还没拿到水位行的，首拍按现值重估目标
+      if (watch.targetSesno <= 0) {
+        watch.targetSesno = Math.max(row.file_latest_sesno ?? 0, row.applied_sesno ?? 0);
+      }
+      watch.modelSesno = row.model_sesno ?? 0;
+      watch.appliedSesno = row.applied_sesno ?? 0;
+      // 模型最近更新水位追平数据最新水位 → 刷新落账
+      if (watch.targetSesno > 0 && watch.modelSesno >= watch.targetSesno) {
+        watch.state = 'done';
+        invalidateDbnumModelStatus(dbnum);
+        changed = true;
+        continue;
+      }
+      changed = true;
+    }
+    if (Date.now() - watch.startedAt > REFRESH_WATCH_TIMEOUT_MS) {
+      watch.state = 'timeout';
+      changed = true;
+    }
+  }
+  if (changed) refreshWatches.value = next;
+}
+
+async function pollRefreshWatchesOnce(): Promise<void> {
+  const watching = [...refreshWatches.value.values()].some((w) => w.state === 'watching');
+  if (!watching) {
+    if (watchTimer) {
+      clearInterval(watchTimer);
+      watchTimer = null;
+    }
+    return;
+  }
+  // 不经过 refreshDbnums 的 dbLoading——跟踪节拍 4 s 会让「刷新」按钮的转圈常闪
+  try {
+    const resp = await genModelV1Dbnums({ identity: requestIdentity(), timeoutMs: 60_000 });
+    dbRows.value = Array.isArray(resp?.dbnums) ? resp.dbnums : [];
+    dbWarnings.value = (resp?.warnings ?? [])
+      .map((w) => (typeof w === 'string' ? w : JSON.stringify(w)))
+      .filter(Boolean);
+  } catch {
+    // 单拍失败不摘跟踪，下一轮再试
+  }
+  evaluateRefreshWatches();
+}
+
+function ensureWatchPolling(): void {
+  if (watchTimer) return;
+  watchTimer = setInterval(() => {
+    void pollRefreshWatchesOnce();
+  }, REFRESH_WATCH_INTERVAL_MS);
+  void pollRefreshWatchesOnce();
+}
+
+/** `update/execute` 回执是读透形态（无 task_id）时启用：逐库记目标水位，按「模型最近更新追平文件最新」判完成。 */
+function armRefreshWatches(dbnums: number[]): void {
+  const next = new Map(refreshWatches.value);
+  for (const dbnum of dbnums) {
+    const row = dbRows.value.find((r) => r.dbnum === dbnum);
+    next.set(dbnum, {
+      dbnum,
+      targetSesno: Math.max(row?.file_latest_sesno ?? 0, row?.applied_sesno ?? 0),
+      modelSesno: row?.model_sesno ?? 0,
+      appliedSesno: row?.applied_sesno ?? 0,
+      state: 'watching',
+      startedAt: Date.now(),
+    });
+  }
+  refreshWatches.value = next;
+  ensureWatchPolling();
+}
+
+/**
+ * pending（服务端后台继续生成）目标的复查：每拍问一次 `model.spatial.bounds`——
+ * `stale === false` 且 `publication_status === 'current'` 且 `model_count > 0` 就是
+ * 「模型最近更新已追上最新数据」；bounds 不可用的老服务端退回 `model/records` 条数兜底。
+ */
+async function probePendingTarget(target: ModelGenTarget, deadline: number): Promise<void> {
+  const dbnum = tryGetDbnumByRefno(target.refno);
+  try {
+    const bounds = await genModelV1ModelBounds(target.refno, { identity: requestIdentity(), timeoutMs: 30_000 });
+    if (bounds.model_count > 0 && bounds.stale === false && bounds.publication_status === 'current') {
+      target.status = 'done';
+      target.instanceCount = bounds.model_count;
+      target.detail = '后台生成完成，可点眼睛加载';
+      pendingProbes.delete(target.refno);
+      if (dbnum !== null) noteDbnumModelGenerated(dbnum);
+      return;
+    }
+    target.detail = `后台生成中（已见 ${bounds.model_count} 实例${bounds.stale === true ? '，模型水位仍滞后' : ''}）`;
+  } catch {
+    try {
+      const resp = await genModelV1ModelRecords({ generationRoot: target.refno, limit: 1 }, { identity: requestIdentity() });
+      if (resp.total > 0) {
+        target.status = 'done';
+        target.instanceCount = resp.total;
+        target.detail = '后台生成完成，可点眼睛加载';
+        pendingProbes.delete(target.refno);
+        if (dbnum !== null) noteDbnumModelGenerated(dbnum);
+        return;
+      }
+      target.detail = '后台生成中（尚无记录落账）';
+    } catch {
+      // 单拍失败不摘状态，下一轮再探
+    }
+  }
+  if (Date.now() > deadline) {
+    pendingProbes.delete(target.refno);
+    target.detail = '后台仍在生成（超时未确认，稍后可重新加载查看）';
+    if (dbnum !== null) scheduleDbnumModelReprobe(dbnum);
+  }
+}
+
+async function pollPendingTargetsOnce(): Promise<void> {
+  const pending = targets.value.filter((t) => t.status === 'pending' && pendingProbes.has(t.refno));
+  if (pending.length === 0) {
+    if (pendingTimer) {
+      clearInterval(pendingTimer);
+      pendingTimer = null;
+    }
+    return;
+  }
+  await Promise.allSettled(pending.map((t) => probePendingTarget(t, pendingProbes.get(t.refno)!)));
+  if (pendingProbes.size === 0 && pendingTimer) {
+    clearInterval(pendingTimer);
+    pendingTimer = null;
+  }
+}
+
+/** 目标转 pending 时登记复查：生成落账后 chip 自己翻绿。 */
+function trackPendingTarget(target: ModelGenTarget): void {
+  pendingProbes.set(target.refno, Date.now() + PENDING_PROBE_TIMEOUT_MS);
+  if (!pendingTimer) {
+    pendingTimer = setInterval(() => {
+      void pollPendingTargetsOnce();
+    }, PENDING_PROBE_INTERVAL_MS);
+    void pollPendingTargetsOnce();
+  }
+}
+
+function dropPendingProbe(refno: string): void {
+  pendingProbes.delete(refno);
+}
+
 function registerTask(taskId: string, dbnum: number | null, intent: string | null): void {
   if (!taskId) return;
   const next = new Map(tasks.value);
@@ -310,11 +526,15 @@ async function executeSelected(): Promise<void> {
   try {
     const receipt = await genModelV1UpdateExecute(dbnums, { identity: requestIdentity() });
     lastReceipt.value = receipt;
-    for (const info of [...(receipt.enqueued ?? []), ...(receipt.merged ?? [])]) {
+    const batches = [...(receipt.enqueued ?? []), ...(receipt.merged ?? [])];
+    for (const info of batches) {
       registerTask(info.task_id, info.dbnum ?? null, info.intent ?? null);
     }
-    if ((receipt.enqueued ?? []).length + (receipt.merged ?? []).length > 0) {
+    if (batches.length > 0) {
       ensurePolling();
+    } else if (typeof receipt.status === 'string' && receipt.status !== '') {
+      // 读透 / kv-mem 回执没有 task_id（`model_refresh_queued` 等）：改按模型水位追平文件水位判完成
+      armRefreshWatches(dbnums);
     }
     // 执行后库水位会动；等一拍再刷列表，让 running 行先立起来
     void pollTasksOnce().then(() => refreshDbnums());
@@ -373,11 +593,34 @@ async function addTargetByRefno(raw: string): Promise<ModelGenTarget | null> {
   return target;
 }
 
+/** SITE 挑选器直接入目标：noun/name 由 tree/roots 给出，省掉逐个 `element/attributes` 点查。 */
+function addTargetEntry(entry: { refno: string; noun?: string; name?: string }): ModelGenTarget {
+  const refno = entry.refno.trim().replace(/\//g, '_');
+  const existing = findTarget(refno);
+  if (existing) return existing;
+  const target = reactive<ModelGenTarget>({
+    refno,
+    noun: entry.noun ?? '',
+    name: entry.name ?? '',
+    status: 'idle',
+    detail: null,
+    instanceCount: null,
+    rootsDone: 0,
+    rootsTotal: 0,
+  });
+  targets.value = [...targets.value, target];
+  return target;
+}
+
 function removeTarget(refno: string): void {
+  dropPendingProbe(refno);
   targets.value = targets.value.filter((t) => t.refno !== refno);
 }
 
 function clearTargets(): void {
+  for (const t of targets.value) {
+    if (t.status !== 'running') dropPendingProbe(t.refno);
+  }
   targets.value = targets.value.filter((t) => t.status === 'running');
 }
 
@@ -391,6 +634,7 @@ async function generateTargets(): Promise<void> {
   const source = getGenModelV1ModelSource();
   try {
     for (const target of queue) {
+      dropPendingProbe(target.refno);
       target.status = 'running';
       target.detail = null;
       target.rootsDone = 0;
@@ -420,7 +664,8 @@ async function generateTargets(): Promise<void> {
           target.detail = tails.length > 0 ? tails.join('；') : '已生成，可点眼睛加载';
         } else if (result.pending.length > 0) {
           target.status = 'pending';
-          target.detail = '服务端后台继续生成，完成后再加载';
+          target.detail = '服务端后台继续生成，按模型水位自动复查';
+          trackPendingTarget(target);
         } else if (failedMessages.length > 0) {
           target.status = 'failed';
           target.detail = failedMessages.join('；');
@@ -435,6 +680,63 @@ async function generateTargets(): Promise<void> {
     }
   } finally {
     generateBusy.value = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 「按库选 SITE」挑选器
+// ---------------------------------------------------------------------------
+
+const sitePickerCount = computed(() => sitePickerSelected.value.size);
+
+/** 换库 / 首次选库时拉该库 SITE 清单；命中缓存不打第二次，勾选态随库切换清空。 */
+async function loadSitePickerSites(dbnum: number, options?: { force?: boolean }): Promise<void> {
+  sitePickerDbnum.value = dbnum;
+  sitePickerSelected.value = new Set();
+  sitePickerError.value = null;
+  const cached = sitePickerCache.get(dbnum);
+  if (cached && !options?.force) {
+    sitePickerRows.value = cached;
+    return;
+  }
+  sitePickerLoading.value = true;
+  try {
+    const rows = await listSitesOfDbnum(getGenModelV1ModelSource().tree, dbnum);
+    sitePickerCache.set(dbnum, rows);
+    sitePickerRows.value = rows;
+  } catch (error) {
+    sitePickerRows.value = [];
+    sitePickerError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    sitePickerLoading.value = false;
+  }
+}
+
+function toggleSitePick(refno: string): void {
+  const next = new Set(sitePickerSelected.value);
+  if (next.has(refno)) next.delete(refno);
+  else next.add(refno);
+  sitePickerSelected.value = next;
+}
+
+function setAllSitePicks(checked: boolean): void {
+  sitePickerSelected.value = checked ? new Set(sitePickerRows.value.map((s) => s.refno)) : new Set();
+}
+
+/** 勾选的 SITE 全部进目标队列（已在队列里的跳过），完了清勾选。 */
+function addPickedSites(): void {
+  if (sitePickerBusy.value || sitePickerSelected.value.size === 0) return;
+  sitePickerBusy.value = true;
+  try {
+    const picked = new Set(sitePickerSelected.value);
+    for (const site of sitePickerRows.value) {
+      if (!picked.has(site.refno)) continue;
+      addTargetEntry({ refno: site.refno, noun: 'SITE', name: site.name });
+    }
+    sitePickerSelected.value = new Set();
+    nodeError.value = null;
+  } finally {
+    sitePickerBusy.value = false;
   }
 }
 
@@ -466,14 +768,28 @@ export function useModelGenerationAdmin() {
     hasActiveTasks,
     taskPollBusy,
     stopPolling,
+    refreshWatchList,
     // 节点
     nodeInput,
     nodeError,
     targets,
     generateBusy,
     addTargetByRefno,
+    addTargetEntry,
     removeTarget,
     clearTargets,
     generateTargets,
+    // 「按库选 SITE」挑选器
+    sitePickerDbnum,
+    sitePickerRows,
+    sitePickerLoading,
+    sitePickerError,
+    sitePickerSelected,
+    sitePickerCount,
+    sitePickerBusy,
+    loadSitePickerSites,
+    toggleSitePick,
+    setAllSitePicks,
+    addPickedSites,
   };
 }

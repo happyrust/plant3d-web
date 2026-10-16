@@ -118,21 +118,32 @@ function roomLabel(roomNum: string, name: string | null | undefined, count: numb
   return parts.filter(Boolean).join(' · ');
 }
 
-/** 在册房间清单里的一间 → 页签根节点（树未取回：`count` null、`childrenIds` 空、`leavesInline` false 表示还要取）。 */
+/**
+ * 在册房间清单里的一间 → 页签根节点（树未取回：`count` null、`childrenIds` 空、`leavesInline` false 表示还要取）。
+ * `panel_count === 0` 的在册房在源模型里就没有边界面板（空房壳）：成员按面板归属恒空、`rooms/{refno}/tree` 恒答不出，
+ * 启动时在册清单已带这个事实——直接标成叶子（`count: 0`、`leavesInline`），不给展开钮、不发请求（2026-10-16）。
+ */
 export function roomRootNode(room: SpatialRoomOption): RoomTreeNode {
   const roomRefno = room.refno;
+  const empty = room.panel_count === 0;
   return {
     id: roomNodeId(roomRefno),
     kind: 'room',
     parentId: null,
     childrenIds: [],
-    name: roomLabel(room.room_num, room.name, null),
+    name: empty ? [room.room_num, room.name, '空房'].filter(Boolean).join(' · ') : roomLabel(room.room_num, room.name, null),
     type: 'ROOM',
     refno: roomRefno,
     roomRefno,
-    count: null,
-    leavesInline: false,
-    title: [room.room_num, room.name, roomRefno, room.dbnum != null ? `库 ${room.dbnum}` : null, `${room.panel_count} 块面板`].filter(Boolean).join(' · '),
+    count: empty ? 0 : null,
+    leavesInline: empty,
+    title: [
+      room.room_num,
+      room.name,
+      roomRefno,
+      room.dbnum != null ? `库 ${room.dbnum}` : null,
+      empty ? '空房间（无边界面板）' : `${room.panel_count} 块面板`,
+    ].filter(Boolean).join(' · '),
   };
 }
 

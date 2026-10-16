@@ -487,8 +487,9 @@ export function createGenModelV1SpatialSource(options: GenModelV1SpatialSourceOp
         }, only));
       } catch (error) {
         if (isGenModelV1ApiError(error)) {
-          // 404：房间从没生成过面板模型（没有盒）；400：不在册 / 路径坏——都折成一句原因，页签在房间行下显示
-          if (error.isNotFound) return emptyTreeFailure(`房间 ${fromV1Refno(roomRefno)} 还没有包围盒（从未生成过面板模型），先显示它再展开`);
+          // 404：房间查不出空间范围（在册但面板几何未就绪 / 无任何面板数据）；400：不在册 / 路径坏——都折成一句原因，
+          // 页签在房间行下显示。零面板空房由 `roomRootNode` / `ensureRoomTree` 在取数前标成叶子，根本到不了这里。
+          if (error.isNotFound) return emptyTreeFailure(`房间 ${fromV1Refno(roomRefno)} 的空间范围不可用（面板几何未就绪）`);
           if (error.status === 400) return emptyTreeFailure(error.message || `房间 ${fromV1Refno(roomRefno)} 不在册`);
           const unavailable = roomsUnavailableDetail(error);
           if (unavailable) {

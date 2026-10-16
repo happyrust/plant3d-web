@@ -936,10 +936,39 @@ type ApplyExternalWorkflowChangeResult = {
   error?: string;
 };
 
+async function resolveTaskForExternalWorkflow(formId: string): Promise<ReviewTask | null> {
+  if (currentTask.value) {
+    return currentTask.value;
+  }
+  const targetFormId = formId.trim();
+  if (!targetFormId) {
+    return null;
+  }
+  const userStore = useUserStore() as ReturnType<typeof useUserStore> & {
+    loadReviewTaskByFormId?: (formId: string) => Promise<ReviewTask | null>;
+  };
+  const taskList = userStore?.reviewTasks?.value;
+  if (Array.isArray(taskList)) {
+    const matched = taskList.find((t: ReviewTask) => t.formId?.trim() === targetFormId);
+    if (matched) {
+      currentTask.value = matched;
+      return matched;
+    }
+  }
+  if (typeof userStore?.loadReviewTaskByFormId === 'function') {
+    const loaded = await userStore.loadReviewTaskByFormId(targetFormId);
+    if (loaded) {
+      currentTask.value = loaded;
+      return loaded;
+    }
+  }
+  return null;
+}
+
 async function flushPendingConfirmForExternalAction(
   formId: string,
 ): Promise<FlushPendingConfirmResult> {
-  const task = currentTask.value;
+  const task = await resolveTaskForExternalWorkflow(formId);
   if (!task) return { ok: false, error: 'no_current_task' };
   const taskFormId = task.formId?.trim();
   const targetFormId = formId.trim();
@@ -1185,7 +1214,7 @@ async function prepareExternalWorkflowAction(
 async function applyExternalWorkflowChange(
   payload: ApplyExternalWorkflowChangePayload,
 ): Promise<ApplyExternalWorkflowChangeResult> {
-  const task = currentTask.value;
+  const task = await resolveTaskForExternalWorkflow(payload.formId);
   if (!task) return { ok: false, error: 'no_current_task' };
   const taskFormId = task.formId?.trim();
   const targetFormId = payload.formId.trim();
@@ -1266,7 +1295,8 @@ const totalConfirmedAnnotations = computed(() => {
       sum +
       r.annotations.length +
       r.cloudAnnotations.length +
-      r.rectAnnotations.length
+      r.rectAnnotations.length +
+      (r.obbAnnotations?.length || 0)
     );
   }, 0);
 });

@@ -95,6 +95,14 @@ export type UpdateExecuteReceipt = {
   unselected?: number[];
   /** 服务端告警原文（典型：`dbnum=N: 在执行范围内，但本次扫描没有找到它的候选文件` = watch_dbnums 收窄） */
   warnings?: string[];
+  /**
+   * 读透 / kv-mem 形态（没有摄入批次可排）时回执改走另一套形状：`status` 例如
+   * `model_refresh_queued`（模型刷新已排队，无 task_id）/ `up_to_date`。
+   */
+  status?: string;
+  data_face?: string;
+  applied_sesno_changed?: boolean;
+  [key: string]: unknown;
 };
 
 /**

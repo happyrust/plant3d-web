@@ -26,9 +26,12 @@ vi.mock('@/components/review/embedRoleLanding', () => ({
   resolveTrustedEmbedIdentity: (...args: unknown[]) => resolveTrustedEmbedIdentityMock(...args),
 }));
 
+const reviewTaskArray = { value: [] as unknown[] };
+
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
     currentUser: { value: { id: 'checker-1' } },
+    reviewTasks: reviewTaskArray,
   }),
 }));
 
@@ -455,5 +458,33 @@ describe('useReviewStore', () => {
         summary: expect.objectContaining({ open: 1 }),
       }),
     }));
+  });
+
+  it('resolves currentTask from userStore.reviewTasks when currentTask is null on external actions', async () => {
+    readPersistedEmbedModeParamsMock.mockReturnValue({
+      formId: 'FORM-NEW',
+      userId: 'SJ',
+      workflowRole: 'sj',
+      userToken: 'tok-new',
+    });
+    resolveTrustedEmbedIdentityMock.mockReturnValue({
+      formId: 'FORM-NEW',
+      userId: 'SJ',
+      workflowRole: 'sj',
+    });
+    reviewVerifyWorkflowMock.mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { passed: true, action: 'active', recommendedAction: 'proceed', reason: 'ok' },
+    });
+    reviewTaskArray.value = [
+      { id: 'task-new', formId: 'FORM-NEW', currentNode: 'sj', checkerId: 'JH', components: [] },
+    ];
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+    await store.setCurrentTask(null);
+    const pre = await store.prepareExternalWorkflowAction({ formId: 'FORM-NEW', action: 'active' });
+    expect(pre.ok).toBe(true);
+    expect(store.currentTask.value?.id).toBe('task-new');
   });
 });

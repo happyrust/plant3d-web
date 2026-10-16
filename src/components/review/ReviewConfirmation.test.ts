@@ -81,6 +81,7 @@ describe('ReviewConfirmation', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+    sessionStorage.clear();
   });
 
   async function mountComponent(props: Record<string, unknown> = {}) {
@@ -308,5 +309,22 @@ describe('ReviewConfirmation', () => {
     await vi.waitFor(() => {
       expect(emitToastMock).toHaveBeenCalledWith({ message: '新增证据已保存', level: 'success' });
     });
+  });
+
+  it('外部流程 SJ 入口聚焦单据时隐藏待保存证据浮窗，不允许新增确认证据', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-001',
+      userId: 'designer-1',
+      workflowRole: 'sj',
+      workflowMode: 'external',
+      isEmbedMode: true,
+    }));
+    toolStoreMock.annotations.value = [{ id: 'anno-sj', title: '批注' }];
+    toolStoreMock.annotationCount.value = 1;
+
+    await mountComponent();
+
+    expect(document.querySelector('[data-testid="review-confirmation"]')).toBeNull();
   });
 });

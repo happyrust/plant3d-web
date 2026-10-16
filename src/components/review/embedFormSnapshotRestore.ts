@@ -12,6 +12,7 @@ import {
   type WorkflowSyncQueryRequest,
   type WorkflowSyncResponse,
 } from '@/api/reviewApi';
+import { applyAnnotationReviewStatesToToolStore } from '@/composables/useAnnotationReviewStateSync';
 import { buildSnapshotFromWorkflowSync } from '@/review/adapters/workflowSyncAdapter';
 import {
   getReviewCommentEventLog,
@@ -49,12 +50,27 @@ function mergeSnapshotModelRefnosIntoTask(
 ): ReviewTask {
   if (!modelRefnos.length) return task;
 
-  const mergedComponents = modelRefnos.map((refno, index) => ({
-    id: `form-model-${index + 1}-${refno}`,
-    name: refno,
-    refNo: refno,
-    type: 'BRAN',
-  }));
+  const normalizeRefno = (value: string) => value.trim().replace(/\//g, '_');
+  const existingByRefno = new Map<string, ReviewTask['components'][number]>();
+  for (const comp of task.components || []) {
+    const key = comp?.refNo ? normalizeRefno(comp.refNo) : '';
+    if (key && !existingByRefno.has(key)) {
+      existingByRefno.set(key, comp);
+    }
+  }
+
+  const mergedComponents = modelRefnos.map((refno, index) => {
+    const existing = existingByRefno.get(normalizeRefno(refno));
+    if (existing) {
+      return existing;
+    }
+    return {
+      id: `form-model-${index + 1}-${refno}`,
+      name: refno,
+      refNo: refno,
+      type: 'BRAN',
+    };
+  });
 
   return {
     ...task,
@@ -68,15 +84,26 @@ export function mergeSnapshotAttachmentsIntoTask(
 ): ReviewTask {
   if (!attachments.length) return task;
   const merged = new Map<string, ReviewAttachment>();
+  const resolveKey = (att: ReviewAttachment | null | undefined) =>
+    String(att?.id || att?.url || '').trim();
   for (const attachment of task.attachments || []) {
-    if (attachment?.id) {
-      merged.set(String(attachment.id), attachment);
+    const key = resolveKey(attachment);
+    if (key) {
+      merged.set(key, attachment);
     }
   }
   for (const attachment of attachments) {
-    if (attachment?.id) {
-      merged.set(String(attachment.id), attachment);
-    }
+    const key = resolveKey(attachment);
+    if (!key) continue;
+    const existing = merged.get(key);
+    merged.set(key, existing ? {
+      ...existing,
+      ...attachment,
+      type: attachment.type || existing.type,
+      size: attachment.size || existing.size,
+      mimeType: attachment.mimeType || existing.mimeType,
+      uploadedAt: attachment.uploadedAt ?? existing.uploadedAt,
+    } : attachment);
   }
   return {
     ...task,
@@ -127,6 +154,9 @@ export async function restoreEmbedFormSnapshot(
     }
 
     options.importTools(legacyPayload);
+    if (Array.isArray(data?.annotationStates) && data.annotationStates.length > 0) {
+      applyAnnotationReviewStatesToToolStore(data.annotationStates);
+    }
     options.syncTools?.();
   }
 

@@ -13,10 +13,10 @@
  *   node scripts/test-annotation-workflow.mjs --api-only  # 只测试API层（跳过UI）
  */
 
+import { spawn, execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
-import { spawn, execSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -364,8 +364,8 @@ async function tc1(tokens) {
   ).length || 0;
   step('批注状态更新为 fixed/pending（最新轮次3条fixed）', 
     fixedCount >= 3 && latestFixedCount === 3, {
-    fixedCount, latestRound, latestFixedCount, total: states2.raw?.length, lines: states2.lines,
-  });
+      fixedCount, latestRound, latestFixedCount, total: states2.raw?.length, lines: states2.lines,
+    });
   
   // 9. SJ 重新提交（修复后应直接通过，无需创建新记录）
   const v3 = await verify(activeFormId, tokens.SJ, ROLES.SJ, 'active', ROLES.JH);
@@ -421,7 +421,7 @@ async function tc1(tokens) {
     count: h.lines?.length, lines: h.lines 
   });
   
-  log('TC-1 完成:', `3种批注类型全流程通过，最终 approved`);
+  log('TC-1 完成:', '3种批注类型全流程通过，最终 approved');
   return { task, activeFormId, createdAnnotations };
 }
 
@@ -550,10 +550,10 @@ async function tc2(tokens) {
   ).length || 0;
   step('批注状态更新为 fixed/pending（最新轮次2条fixed）', 
     fixedCount >= 2 && latestFixedCount === 2, {
-    fixedCount, latestRound, latestFixedCount,
-    total: states3.raw?.length,
-    lines: states3.lines,
-  });
+      fixedCount, latestRound, latestFixedCount,
+      total: states3.raw?.length,
+      lines: states3.lines,
+    });
   
   // 11. SJ 重新提交（修复后应直接通过，无需创建新记录）
   const v3 = await verify(activeFormId, tokens.SJ, ROLES.SJ, 'active', ROLES.JH);
@@ -617,7 +617,7 @@ async function tc2(tokens) {
       lines: h.lines 
     });
   
-  log('TC-2 完成:', `驳回流程全链路通过，最终 approved`);
+  log('TC-2 完成:', '驳回流程全链路通过，最终 approved');
   return { task, activeFormId, createdAnnotations };
 }
 

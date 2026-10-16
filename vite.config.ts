@@ -109,6 +109,10 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 3101,
       strictPort: true,
+      watch: {
+        // tmp/ 是本地验收产物目录（gitignored），里面跑着后端的 .gen-model.instance.lock 会让 watcher EBUSY 崩掉
+        ignored: ['**/tmp/**'],
+      },
       proxy: {
         '/api': {
           target: backendTarget,

@@ -41,6 +41,7 @@
 - E2E：Playwright，测试文件放在 `e2e/**/*.spec.ts`  
 - 默认优先使用 CLI + 真实命令 + 真实/样例数据做验证，尤其是跨仓联调、接口契约和 dashboard/workbench 这类功能；验证结果应记录具体命令、输入数据与返回结果
 - 非必要不要为一次性联调验证新增独立 `*.test.ts` / `*.spec.ts` / Rust `#[cfg(test)]` 测试；只有当 CLI 验证无法覆盖关键逻辑，且已先沟通确认时，才补最小测试
+- **联调验证的后端一律 rocksdb 档，默认不要开 mem 档**：mem 没有持久数据（房间归属边、生成记录全空，联调现象失真），且实测出现过生成后空闲 OOM 崩溃。做法：先起 SurrealDB（`gen-model/scripts/Start-Surreal8009.ps1`，库在 `gen-model/.surreal/ams-8009`，2.1.x fork 二进制），再 `AIOS_STORE_MODE=rocksdb` 起 `aios-database.exe`（部署包 `Start-AMS.ps1 -StoreMode rocksdb`，8022）。不想动真实库时把 `.surreal/ams-8009` 整目录拷一份再指过去。大生成场景建议加 `AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS=1`、`AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES=60000` 控内存。
 
 ## 提交与 Pull Request 规范
 

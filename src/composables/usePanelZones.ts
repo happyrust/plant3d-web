@@ -18,7 +18,7 @@ export const ZONE_PANELS: Record<ZoneName, string[]> = {
     'initiateReview', 'reviewerTasks', 'myTasks', 'designerCommentHandling',
     'modelVersionCompare', 'hydraulic', 'spatialCompute',
   ],
-  bottom: ['console'],
+  bottom: ['console', 'incrementRecords'],
 };
 
 /** Reverse lookup: panelId -> zone name */

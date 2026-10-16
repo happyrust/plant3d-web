@@ -4,11 +4,13 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { authVerifyToken } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DockLayout from '@/components/DockLayout.vue';
+import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
 import ReleaseNotesDialog from '@/components/ReleaseNotesDialog.vue';
 import HierarchicalMenuBar from '@/components/ribbon/HierarchicalMenuBar.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
+import RoomInfoDialog from '@/components/room/RoomInfoDialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
@@ -100,6 +102,7 @@ onMounted(() => {
     <ConfirmDialog />
     <OnboardingOverlay />
     <ReviewGuideCenter />
+    <RoomInfoDialog />
     
     <div v-if="projectPending" class="h-screen w-full" data-testid="project-bootstrap-loading" />
     <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
@@ -145,8 +148,14 @@ onMounted(() => {
       </v-app-bar>
 
       <v-main class="flex-1 min-h-0 d-flex flex-row" style="flex: 1 1 auto;">
-        <div class="flex-1 min-h-0">
-          <DockLayout />
+        <div class="flex-1 min-h-0 flex flex-col">
+          <div class="min-h-0 flex-1">
+            <DockLayout />
+          </div>
+          <div class="flex h-7 shrink-0 items-center border-t border-border bg-background px-2"
+            data-testid="app-status-bar">
+            <GenModelV1HealthBadge />
+          </div>
         </div>
       </v-main>
     </template>

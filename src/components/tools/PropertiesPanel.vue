@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { Search, ChevronDown, ChevronRight, History } from 'lucide-vue-next';
+import { Search, ChevronDown, ChevronRight, DoorOpen, History } from 'lucide-vue-next';
 
 import Badge from '@/components/ui/Badge.vue';
 import Input from '@/components/ui/Input.vue';
 import ScrollArea from '@/components/ui/ScrollArea.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,12 @@ function inspectSelectedHistory(): void {
   if (!refno) return;
   requestModelVersionInspect(refno);
   ensurePanelAndActivate('modelVersionCompare');
+}
+
+/** 「房间」钮（plant-ui 属性面板房号芯片的对应物）：开「关联房间」浮窗看当前选中的全部归属。 */
+function inspectSelectedRooms(): void {
+  const refno = sel.selectedRefno.value;
+  if (refno) openRoomInfo(refno);
 }
 
 // useQuery 会在 selectedRefno.value 变化时自动触发，
@@ -259,6 +266,13 @@ function isGroupCollapsed(groupId: string): boolean {
             :title="sel.fullName.value ? `${sel.fullName.value}\n${sel.selectedRefno.value}` : sel.selectedRefno.value">
             {{ sel.fullName.value || sel.selectedRefno.value }}
           </Badge>
+          <button type="button"
+            class="inline-flex shrink-0 items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground hover:bg-muted/60"
+            :title="`查看 ${sel.selectedRefno.value} 归属的全部房间`"
+            data-testid="properties-rooms"
+            @click="inspectSelectedRooms">
+            <DoorOpen class="h-3 w-3" />房间
+          </button>
           <button type="button"
             class="inline-flex shrink-0 items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground hover:bg-muted/60"
             :title="`查看 ${sel.selectedRefno.value} 的版本历史（属性变化时间线 + 模型对比）`"

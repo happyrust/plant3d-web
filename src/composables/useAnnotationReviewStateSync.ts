@@ -206,6 +206,18 @@ export async function syncAnnotationReviewStates(
     return { ok: true, appliedCount: 0, totalCount: views.length, skipped: true };
   }
 
+  const appliedCount = applyAnnotationReviewStatesToToolStore(views);
+
+  return {
+    ok: true,
+    appliedCount,
+    totalCount: views.length,
+  };
+}
+
+export function applyAnnotationReviewStatesToToolStore(
+  views: (AnnotationReviewStateView | null | undefined)[],
+): number {
   const store = useToolStore();
   let appliedCount = 0;
 
@@ -216,9 +228,5 @@ export async function syncAnnotationReviewStates(
     if (ok) appliedCount += 1;
   }
 
-  return {
-    ok: true,
-    appliedCount,
-    totalCount: views.length,
-  };
+  return appliedCount;
 }

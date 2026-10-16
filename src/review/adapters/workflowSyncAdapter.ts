@@ -109,7 +109,6 @@ export function buildSnapshotFromWorkflowSync(
       : undefined,
   });
 
-  copyLatestDimensionDocument(snapshot, records);
   if (!data) return snapshot;
 
   copyLatestDimensionDocument(snapshot, records);

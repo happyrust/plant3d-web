@@ -596,6 +596,8 @@ type RawWorkflowSyncData = {
   records?: RawWorkflowRecordData[];
   annotation_comments?: RawWorkflowAnnotationCommentData[];
   annotationComments?: RawWorkflowAnnotationCommentData[];
+  annotation_states?: AnnotationReviewStateView[];
+  annotationStates?: AnnotationReviewStateView[];
   attachments?: (Partial<ReviewAttachment> & Record<string, unknown>)[];
   form_exists?: boolean;
   formExists?: boolean;
@@ -931,6 +933,11 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
       attachments: Array.isArray(data.attachments)
         ? data.attachments.map((attachment) => normalizeWorkflowAttachment(attachment))
         : [],
+      annotationStates: Array.isArray(data.annotationStates)
+        ? data.annotationStates
+        : Array.isArray(data.annotation_states)
+          ? data.annotation_states
+          : undefined,
       formExists: data.formExists ?? data.form_exists,
       formStatus: data.formStatus || data.form_status,
       taskCreated: data.taskCreated ?? data.task_created,

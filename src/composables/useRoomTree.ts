@@ -5,7 +5,9 @@
  * 第一次展开或动作前再按 `unit=` / `other_noun=` 补一次。一间房的树取一次缓存在这里，各层从缓存切。
  *
  * 显隐 / 选中 / 定位 / 隔离只作用于该节点下**已知**的构件 refno（场景对象键 `a_b`），未加载几何的构件靠 `useSceneGraphOps` 把状态
- * 写进 compat scene、实例加载时回放；勾选状态由子构件推导（分组节点是合成 id，没有场景对象）。退役前的 `useRoomTree`（走旧后端
+ * 写进 compat scene、实例加载时回放；勾选状态由子构件推导（分组节点是合成 id，没有场景对象）。眼睛点「显示」同时把节点下的模型
+ * 经 `showModels`（缺省 `showModelByRefnosWithAck` 事件链）真正装进场景——实例到位后回放刚写入的可见态；「隐藏」不触发加载
+ * （2026-10-15 用户拍板：房间树里「显示就是加载对应的模型」）。退役前的 `useRoomTree`（走旧后端
  * `/api/room-tree/*`）已随 legacy 删除，本文件是按新端口重写的精简版：没有 `room-group` / `comp-group` 那两层，也没有类型筛选。
  *
  * 管件要带直段（2026-09-21，`deliveryUnitScene.ts`）：直管挂在 BRAN 自己的 refno 上、树上不列，所以单元级及以上的显隐 / 隔离
@@ -37,7 +39,9 @@ import { mergeTreeLeaves, tubeKey } from '@/composables/spatialTree';
 import { isDtxTubeSegmentHidden, isDtxTubeSegmentLoadedAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
 import { useSceneGraphOps } from '@/composables/useSceneGraph';
 import { resolveSceneWorldTransform } from '@/composables/useSpatialQuery';
+import { showModelByRefnosWithAck, type ShowModelByRefnosResult } from '@/composables/useViewerContext';
 import { getModelSource } from '@/model-source';
+import { emitToast } from '@/ribbon/toastBus';
 
 type Aabb6 = [number, number, number, number, number, number];
 
@@ -60,6 +64,8 @@ export type RoomTreeOptions = {
   /** 逐段眼睛（T4）：这一段直管是否被单独藏起来了 / 对象是否已在场景里。缺省读 DTX 加载链的运行时索引；测试注桩。 */
   tubeSegmentHidden?: (key: string) => boolean;
   tubeSegmentLoaded?: (key: string) => boolean;
+  /** 眼睛点「显示」时装模型的加载器：收节点下的构件 refno。缺省 `showModelByRefnosWithAck` 事件链（不飞不高亮）；测试注桩。 */
+  showModels?: (refnos: string[]) => Promise<ShowModelByRefnosResult>;
 };
 
 /** 逐段眼睛点在没装进场景的直段上时 `setVisible` 的回答（调用方据此提示先加载所属 BRAN）。 */
@@ -77,6 +83,8 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
   const sceneCompanions = options.sceneCompanions ?? sceneCompanionsOf;
   const tubeSegmentHidden = options.tubeSegmentHidden ?? isDtxTubeSegmentHidden;
   const tubeSegmentLoaded = options.tubeSegmentLoaded ?? isDtxTubeSegmentLoadedAcrossAllDbnos;
+  const showModels = options.showModels
+    ?? ((refnos: string[]) => showModelByRefnosWithAck({ refnos, flyTo: false, timeoutMs: 120_000, ensureViewerReady: true }));
   const sceneGraph = useSceneGraphOps(viewerRef);
 
   const roots = ref<SpatialRoomOption[]>([]);
@@ -171,35 +179,50 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
       || room.refno.replace('_', '/').includes(q));
   });
 
-  /** 一间房的整树；取过就不再取。 */
+  /** 正在取的房间树（refno → in-flight promise）：展开与「显示＝加载」共用同一次取数，第二个调用者等同一个结果。 */
+  const roomTreeInflight = new Map<string, Promise<boolean>>();
+
+  /** 一间房的整树；取过就不再取，正在取就等同一个 promise。 */
   async function ensureRoomTree(roomRefno: string): Promise<boolean> {
     const rootId = roomNodeId(roomRefno);
     if (roomTreeLoaded.has(roomRefno)) return true;
-    if (loadingIds.value.has(rootId)) return false;
+    // `panel_count === 0` 的在册房：启动时清单已定它没有边界面板（源模型里是空房壳），成员按面板归属恒空——
+    // 不发 `rooms/{refno}/tree`（去了只会撞 404），根节点在 `roomRootNode` 已标成「0 个构件」的叶子。
+    if (roots.value.find((room) => room.refno === roomRefno)?.panel_count === 0) {
+      roomTreeLoaded.add(roomRefno);
+      return true;
+    }
+    const inflight = roomTreeInflight.get(roomRefno);
+    if (inflight) return inflight;
     setLoading(rootId, true);
     setError(rootId, null);
-    try {
-      const tree = await source().roomTree(roomRefno);
-      if (!tree.success) {
-        setError(rootId, tree.error || '房间层级树取数失败');
+    const run = (async () => {
+      try {
+        const tree = await source().roomTree(roomRefno);
+        if (!tree.success) {
+          setError(rootId, tree.error || '房间层级树取数失败');
+          return false;
+        }
+        const root = roots.value.find((room) => room.refno === roomRefno) ?? null;
+        const flattened = flattenRoomTree(roomRefno, tree, root);
+        if (!flattened) {
+          setError(rootId, '响应里没有这间房');
+          return false;
+        }
+        treesByRoom.set(roomRefno, tree);
+        roomTreeLoaded.add(roomRefno);
+        replaceRoomNodes(roomRefno, flattened);
+        return true;
+      } catch (error) {
+        setError(rootId, error instanceof Error ? error.message : String(error));
         return false;
+      } finally {
+        setLoading(rootId, false);
+        roomTreeInflight.delete(roomRefno);
       }
-      const root = roots.value.find((room) => room.refno === roomRefno) ?? null;
-      const flattened = flattenRoomTree(roomRefno, tree, root);
-      if (!flattened) {
-        setError(rootId, '响应里没有这间房');
-        return false;
-      }
-      treesByRoom.set(roomRefno, tree);
-      roomTreeLoaded.add(roomRefno);
-      replaceRoomNodes(roomRefno, flattened);
-      return true;
-    } catch (error) {
-      setError(rootId, error instanceof Error ? error.message : String(error));
-      return false;
-    } finally {
-      setLoading(rootId, false);
-    }
+    })();
+    roomTreeInflight.set(roomRefno, run);
+    return run;
   }
 
   /** 用新展开的节点表替换这间房的全部节点，勾选状态照父节点继承（父 unchecked 子也 unchecked，其余 checked）。 */
@@ -265,12 +288,8 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     return refnosUnder(nodeId, nodesById.value);
   }
 
-  /**
-   * 显隐 / 隔离作用的场景 refno：节点下的构件 + 它们所属 BRAN 的整体（直管挂在 BRAN 自己的 refno 上，`deliveryUnitScene.ts`）。
-   * 构件行不扩（一个管件就是一个管件，E3D 口径）；「加载模型」不用它——加载链本来就按生成根把整条 BRAN 装进来。
-   */
-  async function collectSceneRefnos(nodeId: string): Promise<string[]> {
-    const refnos = await collectRefnos(nodeId);
+  /** 构件 refno → 显隐 / 隔离作用的场景 refno：+ 所属 BRAN 的整体（见 `collectSceneRefnos`）；构件行不扩。不再取数。 */
+  function sceneRefnosFor(nodeId: string, refnos: string[]): string[] {
     const node = nodesById.value[nodeId];
     if (!node || node.kind === 'element') return refnos;
     const companions = sceneCompanions(refnos, branUnitRefnosUnder(nodeId, nodesById.value));
@@ -283,6 +302,14 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
       out.push(refno);
     }
     return out;
+  }
+
+  /**
+   * 显隐 / 隔离作用的场景 refno：节点下的构件 + 它们所属 BRAN 的整体（直管挂在 BRAN 自己的 refno 上，`deliveryUnitScene.ts`）。
+   * 构件行不扩（一个管件就是一个管件，E3D 口径）；「加载模型」不用它——加载链本来就按生成根把整条 BRAN 装进来。
+   */
+  async function collectSceneRefnos(nodeId: string): Promise<string[]> {
+    return sceneRefnosFor(nodeId, await collectRefnos(nodeId));
   }
 
   function hasChildren(node: RoomTreeNode): boolean {
@@ -379,7 +406,26 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
   }
 
   /**
-   * 眼睛：节点下全部构件显 / 隐（未内联的先补；单元级及以上连所属 BRAN 的直段一起），勾选状态整枝改、父链重算。
+   * 「显示」＝加载对应模型（2026-10-15）：eye 点亮时把节点下的构件模型经 `showModels`（ViewerPanel 加载链，按生成根走、
+   * BRAN 的直管跟整条 BRAN 一起进）真正装进场景；可见态先写进 compat scene，实例到位由 `__dtxAfterInstancesLoaded` 回放。
+   * 后台跑、失败弹 toast，不阻塞 eye 点亮；「隐藏」不触发加载。
+   */
+  async function loadModelsOnShow(refnos: string[]) {
+    try {
+      const result = await showModels(refnos);
+      if (result.error) {
+        emitToast({ message: result.error, level: 'error' });
+      } else if (result.fail.length > 0) {
+        emitToast({ message: `${result.ok.length} 个已加载，${result.fail.length} 个失败：${result.fail[0]?.error ?? ''}`, level: 'warning' });
+      }
+    } catch (error) {
+      console.warn('[room-tree] eye 显示加载模型失败:', error);
+    }
+  }
+
+  /**
+   * 眼睛：节点下全部构件显 / 隐（房间根没展开过先取它的树才知道动谁；未内联的先补；单元级及以上连所属 BRAN 的直段一起），
+   * 勾选状态整枝改、父链重算；点「显示」再后台把节点下的模型装进场景（`loadModelsOnShow`）。
    * 直段行（逐段眼睛，方案 B T4）：只动场景里**那一段**直管对象（`DtxCompatScene.setTubeSegmentsVisible`，对象级、不进 refno
    * 状态表），所属 BRAN 的 refno 级动作一来整条覆盖；对象还没装进场景就什么都不做、回 `'tube-not-loaded'`（调用方提示先加载）。
    */
@@ -394,10 +440,13 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
       recomputeParents(id);
       return 'applied';
     }
-    const refnos = await collectSceneRefnos(id);
-    if (refnos.length > 0) sceneGraph.setVisible(refnos, visible);
+    if (node?.kind === 'room') await ensureRoomTree(node.roomRefno);
+    const refnos = await collectRefnos(id);
+    const sceneRefnos = sceneRefnosFor(id, refnos);
+    if (sceneRefnos.length > 0) sceneGraph.setVisible(sceneRefnos, visible);
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
     recomputeParents(id);
+    if (visible && refnos.length > 0) void loadModelsOnShow(refnos);
     return 'applied';
   }
 
@@ -527,6 +576,28 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     return { id: hit.id, index };
   }
 
+  /**
+   * 「在『房间』页签中查看全部」（关联房间浮窗 → 这间房，2026-10-16）：定位到一间房根——没在册清单里
+   * 取过就先取、被过滤词挡住就清过滤、取它的层级树并展开到第一级（成员全量就在树里）、单选它，
+   * 回它在 `flatRows` 里的下标供滚动。取树失败回 null（原因已按 `setError` 挂在房间根上）。
+   */
+  async function revealRoom(roomRefno: string): Promise<{ id: string; index: number } | null> {
+    const key = roomRefno.replace('/', '_');
+    if (rootsStatus.value.status !== 'ready') await loadRoots();
+    if (!roots.value.some((room) => room.refno === key)) return null;
+    // 过滤词把这间房挡掉时 flatRows 里根本没有行：定位前清掉，比暗中放宽过滤好懂
+    if (filterText.value && !filteredRoots.value.some((room) => room.refno === key)) filterText.value = '';
+    const ok = await ensureRoomTree(key);
+    const id = roomNodeId(key);
+    const expanded = new Set(expandedIds.value);
+    expanded.add(id);
+    expandedIds.value = expanded;
+    selectedIds.value = new Set([id]);
+    const index = flatRows.value.findIndex((row) => row.id === id);
+    lastAnchorIndex.value = index >= 0 ? index : null;
+    return ok ? { id, index } : null;
+  }
+
   /** 某构件 refno 所在的房间根 id（同一构件可能在多间房下——按节点表里出现的全部房间）。 */
   function roomIdsOfRefno(refno: string): string[] {
     const out: string[] = [];
@@ -546,6 +617,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     nodesById.value = {};
     treesByRoom.clear();
     roomTreeLoaded.clear();
+    roomTreeInflight.clear();
     loadingIds.value = new Set();
     errorById.value = new Map();
     expandedIds.value = new Set();
@@ -581,6 +653,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     isolateXray,
     clearXray,
     revealRefno,
+    revealRoom,
     roomIdsOfRefno,
     isRoomNodeId,
     reset,

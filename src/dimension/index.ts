@@ -1,5 +1,7 @@
 export * from './adapters/archivedV5Source';
 export * from './adapters/branExternalDimensions';
+export * from './adapters/mbdV2Contract';
+export * from './adapters/mbdV2ExternalAnnotations';
 export * from './adapters/pipeInformation';
 export * from './adapters/dtxDimensionAnchorResolver';
 export * from './adapters/dtxDimensionViewerAdapter';

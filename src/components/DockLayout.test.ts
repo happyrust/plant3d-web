@@ -199,7 +199,7 @@ vi.mock('@/composables/usePanelZones', () => ({
       'initiateReview', 'reviewerTasks', 'myTasks', 'designerCommentHandling',
       'modelVersionCompare', 'hydraulic', 'spatialCompute',
     ],
-    bottom: ['console'],
+    bottom: ['console', 'incrementRecords'],
   },
 }));
 
