@@ -63,7 +63,7 @@
 
 ## 后端发布主线
 
-- `gen-model` 后端的默认主线是 `refactor`；正式发布从该分支构建，记录提交 SHA 并核对二进制 `version --json`。功能分支与未提交改动的构建仅用于验证。
+- `gen-model` 后端的默认主线是 `refactor`；收口后合入常驻发布分支 `publish`——推送 `publish` 即触发 `linux-binary.yml` 构建并部署到 Ubuntu 服务器，记录提交 SHA 并核对二进制 `version --json`。功能分支与未提交改动的构建仅用于验证。
 - 后端工作区有未提交改动时，用独立 worktree 处理 `refactor`，保留原工作区现场。
 - 范围查询默认以「房间 → 专业 → 最小交付单元」展示；`rooms=` 只负责显式收窄范围，未选房间时保留全部命中，未归属构件进入「未归属房间」。
 
