@@ -52,7 +52,7 @@
 | TREE-10 | 无页面错误 | 全程无 pageerror/console error | 同上 | 通过 |
 | TREE-11 | 树页签 v1 链路 | 房间页签在 gen-model-v1 源下的完整链路 | `e2e/model-tree-room-tab-gen-model-v1.spec.ts` | 可执行 |
 | TREE-12 | 整库房间重建 | `POST /rooms/rebuild` 202 → 并发第二发 409 → edge-recompute 29/29 → ready；房/面板/成员守恒 | `tmp/room-compute-online-retest.mjs` | 通过（机械面） |
-| TREE-13 | 对齐账收敛 | 重建后 `room_updated_at` 盖章 + 含房库 `library_alignment_current=true` | 同上（C4/C5） | **失败**（issue gen-model#56：账本不盖章、含房库欠账常驻，基线即欠，非本轮引入） |
+| TREE-13 | 对齐账收敛 | 重建后 `room_updated_at` 盖章 + 含房库 `library_alignment_current=true` | 同上（C4/C5） | **线上仍失败**；根因已定位（issue gen-model#56：boole 构件引用的 `e3d_baked_v2_*.mesh` 不在部署网格目录 → 逐库 failed → 不盖章），本地副本库补全网格后全链收敛已验证 |
 
 ## 4. 空间查询与净距（SPT）
 
@@ -180,4 +180,15 @@
   逐库 29/29、房/面板/成员集守恒全过；**但收尾账本不盖章（room_updated_at 恒 null）
   且两个含房库（7997/8000）library_alignment_current 恒 false**——重建前基线即欠账，
   系统性失败，已立案 `gen-model#56`。
+- **gen-model#56 根因定位**（2026-10-17，本地副本库 `:8011` + 真工程文件 + release
+  `g919344208` 复现闭环）：`inst_relate` 里 `booled=true` 构件的 `booled_id`
+  指向 `e3d_baked_v2_<sha256>.mesh` 烘焙网格文件；房间归属重算按文件读顶点，**任一
+  文件缺失 → 整根进 `report.failed`** → 该库 `model_room_generation` 不盖、全局
+  `room_update_record` 不写。本地量化：全库 25,014 个被引用 baked id，
+  `gen-model/assets/meshes` 缺 2,183、部署包 `backend/assets/meshes` 缺 5，跨机并集
+  + 历史运行目录捞回后 **110,830 文件 100% 覆盖 → 29/29 全过、盖章收敛、
+  `library_alignment_current` 恢复 true**。服务器部署包不含 `assets/meshes`
+  （`PLANT_ASSET_ROOT=/var/lib/aios-database/assets` 恒空），故所有 boole 根必败。
+  修复 = 把网格清单同步到服务器后重建；结构后续见 issue（网格入持久层 /
+  部署打包网格 / health 透出逐库失败摘要）。
 - **部署健康**：DEP-01..06 全部通过（run 38917741165 / 38919003556 两次 success）。
