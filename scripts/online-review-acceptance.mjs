@@ -176,14 +176,18 @@ async function openRole(formId, token, tag) {
     if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 200)}`);
   });
   const apiCalls = [];
+  const apiBodies = [];
   page.on('response', (resp) => {
     const u = resp.url();
     if (/\/api\/review\/(records|annotation-states|tasks|workflow)/.test(u)) {
       apiCalls.push(`${resp.request().method()} ${u.replace(BASE, '')} → ${resp.status()}`);
+      if (/\/api\/review\/records$/.test(u) && resp.request().method() === 'POST') {
+        resp.text().then((t) => apiBodies.push(t.slice(0, 800))).catch(() => {});
+      }
     }
   });
   await page.goto(embed(formId, token), { waitUntil: 'domcontentloaded', timeout: 90_000 });
-  return { context, page, errors, apiCalls, tag };
+  return { context, page, errors, apiCalls, apiBodies, tag };
 }
 
 async function shot(page, name) {
@@ -360,8 +364,13 @@ async function uiJhAnnotate(formId, jhToken, title, { withAnnotation = true } = 
       { annotationId, measureId, pendingAnnotationCount: pending },
     );
     await shot(page, `${current.id}-03-jh-draft`);
-    await page.evaluate(async () => {
-      await window.__plant3dReviewerE2E.confirmData('线上验收：确认当前数据');
+    const confirmResult = await page.evaluate(async () => {
+      try {
+        await window.__plant3dReviewerE2E.confirmData('线上验收：确认当前数据');
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: String(e?.message ?? e) };
+      }
     });
     let confirmed = 0;
     for (let i = 0; i < 40 && !confirmed; i += 1) {
@@ -370,10 +379,15 @@ async function uiJhAnnotate(formId, jhToken, title, { withAnnotation = true } = 
     }
     const posted = s.apiCalls.filter((c) => /POST \/api\/review\/records/.test(c));
     const toastSaved = /确认数据已保存|已确认到修订|审核记录 1/.test(await bodyText(page));
+    const confirmError = (await page.locator('.text-danger').allTextContents().catch(() => []))
+      .map((t) => t.trim()).filter(Boolean).slice(0, 3);
     step('JH「确认当前数据」→ POST /api/review/records 200，确认记录 1', confirmed >= 1 && posted.some((c) => /→ 200/.test(c)), {
       confirmedRecordCount: confirmed,
       posted,
       toastSaved,
+      confirmResult,
+      confirmError,
+      postBody: s.apiBodies.at(-1) ?? null,
     });
     await page.waitForTimeout(1500);
     await shot(page, `${current.id}-04-jh-confirmed`);
@@ -386,16 +400,26 @@ async function uiJhAnnotate(formId, jhToken, title, { withAnnotation = true } = 
 // ---------------------------------------------------------------------------
 // UI：期望某决定按钮不可用（设计未处理前 JH 不能「同意」）
 // ---------------------------------------------------------------------------
+// 行内详情卡片的稳定打开入口：行操作列的「详情」图标。直接点行会被可编辑标题单元格
+// 的 @click.stop 吞掉（标题是 button 而非普通文本），行不展开。
+async function openAnnotationDetail(page) {
+  const row = page.locator('[data-testid^="annotation-table-row-"]').first();
+  await row.waitFor({ state: 'visible', timeout: 30_000 });
+  const rowText = (await row.innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
+  const detailBtn = row.locator('[data-testid^="annotation-table-comment-"]').first();
+  await detailBtn.click({ timeout: 10_000 });
+  await page.locator('[data-testid="annotation-inline-detail-card"]').first()
+    .waitFor({ state: 'visible', timeout: 15_000 });
+  return rowText;
+}
+
 async function uiExpectDecisionDisabled(formId, token, who, label, tag) {
   const s = await openRole(formId, token, tag);
   const { page } = s;
   try {
     await waitAny(page, ['[data-testid="reviewer-landing-workspace"]', '[data-testid="annotation-table-view"]'], 90_000);
     await waitStable(page, who.id);
-    const row = page.locator('[data-testid^="annotation-table-row-"]').first();
-    await row.waitFor({ state: 'visible', timeout: 30_000 });
-    const rowText = (await row.innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 120);
-    await row.click({ timeout: 10_000 });
+    const rowText = await openAnnotationDetail(page);
     const btn = page.getByRole('button', { name: label, exact: true }).first();
     const visible = await btn.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false);
     const disabled = visible ? await btn.isDisabled().catch(() => null) : null;
@@ -435,11 +459,10 @@ async function uiHandleAnnotation(formId, token, who, action, note, tag) {
     const returnReason = (await bodyText(page)).match(/(打回原因|退回原因|驳回原因)[：:]?\s*[^\n]{0,60}/)?.[0] ?? null;
     if (returnReason) log(`页面显示 ${returnReason}`);
     await shot(page, `${current.id}-${tag}-a-table`);
-    const row = page.locator('[data-testid^="annotation-table-row-"]').first();
-    await row.waitFor({ state: 'visible', timeout: 60_000 });
-    const rowText = (await row.innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
+    const rowText = await openAnnotationDetail(page);
     log(`批注行：${rowText}`);
-    await row.click({ timeout: 10_000 });
+    // SJ 处理被打回单据时落进 ReviewPanel(dock 档)：行内卡片不挂独立 AnnotationDecisionForm，
+    // 动作按钮在时间线 composer 里（真 <button>，review-action-note / review-action-submit）。
     const actionBtn = page.getByRole('button', { name: label, exact: true }).first();
     const btnVisible = await actionBtn.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false);
     if (!btnVisible) {
