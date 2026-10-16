@@ -37,6 +37,54 @@ $hostName = $backend.Host
 if ($hostName -eq '0.0.0.0') { $hostName = '127.0.0.1' }
 if ($hostName -eq '[::]' -or $hostName -eq '::') { $hostName = '[::1]' }
 $upstream = $hostName + ':' + $backend.Port
+
+# ---------------------------------------------------------------------------
+# plant-ui 项目接入点：浏览器端的后端访问地址唯一来源是
+# assets\config\e3d.project.ron 的 api_host（plant-ui 的 index.html/startup 都只认它）。
+# 本文件视为 DbOption.toml 的投影，每次启动重建；唯一例外是 api_host——文件头有
+# generated_api_host 标记时，只有 api_host 仍等于上次生成值才允许跟随 DbOption 端口更新，
+# 现场把 api_host 改成对外可达地址后会被保留。远端浏览器访问时 api_host 必须写成
+# 客户端能直连的地址（例如服务器 IP），127.0.0.1 只对服务器本机有效。
+# ---------------------------------------------------------------------------
+if (-not $ExternalBackend) {
+    $derivedApiHost = 'http://' + $upstream + '/'
+    $apiHost = $derivedApiHost
+    $ronDir = Join-Path $PSScriptRoot 'backend\assets\config'
+    $ronPath = Join-Path $ronDir 'e3d.project.ron'
+    if (Test-Path -LiteralPath $ronPath) {
+        $existing = [System.IO.File]::ReadAllText($ronPath)
+        $mApi = [regex]::Match($existing, '(?m)api_host\s*:\s*"([^"]*)"')
+        $mGen = [regex]::Match($existing, '(?m)^//\s*generated_api_host=(\S+)')
+        if ($mApi.Success -and $mApi.Groups[1].Value.Trim() -ne '' -and
+            -not ($mGen.Success -and $mApi.Groups[1].Value -eq $mGen.Groups[1].Value)) {
+            $apiHost = $mApi.Groups[1].Value
+        }
+    }
+    $vIp = Read-Setting $text 'v_ip' '127.0.0.1'
+    $vIp = $vIp -replace '^wss?://', ''
+    $dbHost = 'ws://' + $vIp + ':' + (Read-Setting $text 'v_port' '8009')
+    $mdbName = Read-Setting $text 'mdb_name' 'ALL'
+    $projectName = Read-Setting $text 'project_name' 'AvevaMarineSample'
+    $projectCode = Read-Setting $text 'surreal_ns' '1516'
+    $ronBody = @"
+// 由 Sync-OfflineConfig.ps1 从 DbOption.toml 生成（generated_api_host=$derivedApiHost）。
+// plant-ui 后端访问地址唯一来源是本文件的 api_host；api_host 手改后不再被覆盖，
+// 其余字段每次启动随 DbOption.toml 重建。
+(
+    api_host: "$apiHost",
+    db_host: "$dbHost",
+    mdb_name: "$mdbName",
+    project_name: "$projectName",
+    project_code: "$projectCode",
+    module: "DESI",
+    auto_gen_mesh: false,
+)
+"@
+    if (-not (Test-Path -LiteralPath $ronDir)) { New-Item -ItemType Directory -Force -Path $ronDir | Out-Null }
+    $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText($ronPath, $ronBody + "`n", $utf8NoBom)
+}
+
 $rendered = [System.IO.File]::ReadAllText($template)
 $rendered = $rendered.Replace('server 127.0.0.1:8022;', ('server ' + $upstream + ';'))
 $rendered = $rendered.Replace('listen       80;', ('listen       ' + $FrontendPort + ';'))

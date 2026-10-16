@@ -294,6 +294,30 @@ function prepareBackend(packagePath) {
   }
 
   copyDir(packageRoot, BACKEND_DIR);
+  // plant-ui Web 层叠加：后端真正服务的永远是 backend/web 磁盘副本（handler 磁盘优先，
+  // exe 内嵌只是兜底），所以这里把当前 ../plant-ui/web/public 盖进包内 web/——
+  // plant-ui 的修复不需要重编冻结的后端 exe 就能进包。assets/config 与 assets/meshes
+  // 是现场项目数据不是 Web 构建产物，跳过（ron 由 Sync-OfflineConfig 在现场生成）。
+  const plantUiWebDir = resolve(PROJECT_DIR, '..', 'plant-ui', 'web', 'public');
+  if (existsSync(plantUiWebDir)) {
+    const webTarget = join(BACKEND_DIR, 'web');
+    const skipDirs = new Set(['config', 'meshes']);
+    const overlay = (srcDir, relDir) => {
+      for (const name of readdirSync(srcDir)) {
+        const srcPath = join(srcDir, name);
+        if (statSync(srcPath).isDirectory()) {
+          if (relDir === 'assets' && skipDirs.has(name.toLowerCase())) continue;
+          overlay(srcPath, relDir ? join(relDir, name) : name);
+        } else {
+          const destPath = join(webTarget, relDir, name);
+          mkdirSync(dirname(destPath), { recursive: true });
+          copyFileSync(srcPath, destPath);
+        }
+      }
+    };
+    overlay(plantUiWebDir, '');
+    log('已用 ../plant-ui/web/public 覆盖 backend/web（assets/config、assets/meshes 除外）');
+  }
   if (!includeSurreal) {
     // 默认不带 SurrealDB 二进制：包内 Start-BundledStore.ps1 只对目标服务做版本检查；
     // 需要打包时用 --with-surreal 加回。
@@ -339,8 +363,13 @@ function prepareBackend(packagePath) {
     // 与上面剔除文件保持一致，避免按清单验签时报缺文件
     manifest.files = manifest.files.filter((entry) => !/^bin[\\/]surreal\.exe$/i.test(entry.path));
   }
+  if (manifest.web_source) {
+    manifest.web_source = `${manifest.web_source}+plant-ui-web-public-overlay`;
+  }
   for (const entry of manifest.files ?? []) {
-    if (entry.path !== 'DbOption.toml' && !/\.(ps1|bat|cmd)$/i.test(entry.path)) continue;
+    // plant-ui 层叠加可能改写过 web/ 下的文件，连同脚本与 DbOption 一并重算哈希
+    const isOverhauled = /^web[\\/]/i.test(entry.path) && existsSync(join(BACKEND_DIR, entry.path));
+    if (entry.path !== 'DbOption.toml' && !/\.(ps1|bat|cmd)$/i.test(entry.path) && !isOverhauled) continue;
     const content = readFileSync(join(BACKEND_DIR, entry.path));
     entry.sha256 = createHash('sha256').update(content).digest('hex');
     entry.bytes = content.length;
