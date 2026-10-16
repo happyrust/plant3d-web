@@ -51,6 +51,8 @@
 | TREE-09 | 页签切换状态保持 | PDMS ↔ 房间切换后展开态保留 | 同上 | 通过 |
 | TREE-10 | 无页面错误 | 全程无 pageerror/console error | 同上 | 通过 |
 | TREE-11 | 树页签 v1 链路 | 房间页签在 gen-model-v1 源下的完整链路 | `e2e/model-tree-room-tab-gen-model-v1.spec.ts` | 可执行 |
+| TREE-12 | 整库房间重建 | `POST /rooms/rebuild` 202 → 并发第二发 409 → edge-recompute 29/29 → ready；房/面板/成员守恒 | `tmp/room-compute-online-retest.mjs` | 通过（机械面） |
+| TREE-13 | 对齐账收敛 | 重建后 `room_updated_at` 盖章 + 含房库 `library_alignment_current=true` | 同上（C4/C5） | **失败**（issue gen-model#56：账本不盖章、含房库欠账常驻，基线即欠，非本轮引入） |
 
 ## 4. 空间查询与净距（SPT）
 
@@ -173,4 +175,9 @@
   加可见性检查；末节点（PZ）同意后若无 WorkNodeSelect、审批窗直接关闭同样判成功。
   **遗留**：`PMS_MOCK_PACKAGE_NAME` 下 extended 仍要求 `PMS_CDP_WORKFLOW_MODE`、
   `PMS_INITIATE_CHECKER_SUBSTRING`（仅 mock 路径需要）。
+- **房间计算复测**（2026-10-17）：`tmp/room-compute-online-retest.mjs` 对
+  `POST /api/v1/rooms/rebuild` 连跑两轮——202 受理、第二发 409、edge-recompute
+  逐库 29/29、房/面板/成员集守恒全过；**但收尾账本不盖章（room_updated_at 恒 null）
+  且两个含房库（7997/8000）library_alignment_current 恒 false**——重建前基线即欠账，
+  系统性失败，已立案 `gen-model#56`。
 - **部署健康**：DEP-01..06 全部通过（run 38917741165 / 38919003556 两次 success）。
