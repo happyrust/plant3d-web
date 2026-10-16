@@ -71,6 +71,8 @@ export type GenerateThenCollectOptions = CollectRecordsOptions & {
   maxContainerDepth?: number;
   /** 一次右键最多 generate 多少个根（默认 128）；超出的记进 `truncatedRoots` */
   maxRoots?: number;
+  /** 每对一个节点发出 `model/generate` 前回调一次（进度：正在生成哪个根） */
+  onRootStart?: (progress: { done: number; total: number; root: string }) => void;
 };
 
 /**
@@ -278,7 +280,7 @@ export async function generateThenCollect(
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<CollectRecordsResult> {
   const {
-    force = true, maxContainerDepth = 3, maxRoots = 128, pageSize, concurrency, onRootDone, onRequestFailure,
+    force = true, maxContainerDepth = 3, maxRoots = 128, pageSize, concurrency, onRootDone, onRootStart, onRequestFailure,
     ...requestOptions
   } = options;
   const start = fromV1Refno(refno);
@@ -308,6 +310,7 @@ export async function generateThenCollect(
     }
     throwIfAborted(requestOptions.signal);
     generateCalls++;
+    onRootStart?.({ done: result.pending.length + generatedRoots + result.empty.length, total: seen.size + queue.length, root: current });
 
     let generated: ModelGenerateResponse;
     try {

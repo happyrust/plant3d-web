@@ -17,6 +17,7 @@ import type { DbnumRow } from '@/api/genModelV1Api';
 import Dialog from '@/components/ui/Dialog.vue';
 import {
   DBNUM_STATUS_LABEL,
+  PIPELINE_STAGES,
   PIPELINE_STAGE_LABEL,
   dbnumLagReason,
   dbnumPanelStatus,
@@ -196,6 +197,45 @@ function taskProgressPercent(task: AdminTaskView): number {
   if (task.unitsDone == null || task.totalUnits == null || task.totalUnits <= 0) return 0;
   return Math.min(100, Math.round((task.unitsDone / task.totalUnits) * 100));
 }
+
+/** 任务进度行左文：WS 数据批次提示优先，其次阶段名（五段中文 · 服务端原名兜底）。 */
+function taskStageText(task: AdminTaskView): string {
+  if (task.stageHint) return task.stageHint;
+  if (!task.currentStage) return '—';
+  const stage = task.stageIndex >= 0 ? PIPELINE_STAGES[task.stageIndex] : undefined;
+  const label = stage ? PIPELINE_STAGE_LABEL[stage] : undefined;
+  return label ? `${label} · ${task.currentStage}` : task.currentStage;
+}
+
+function unitLabel(unit: { refno: string; noun: string }): string {
+  return unit.noun ? `${unit.noun} ${unit.refno}` : unit.refno;
+}
+
+/** WS 实时事件流状态（ADR-0005：断线要画出来，明细以 REST 轮询为准）。 */
+const taskFeedLabel = computed(() => {
+  switch (admin.taskFeedStatus.value) {
+    case 'live':
+      return admin.taskFeedMissed.value > 0 ? `实时（漏 ${admin.taskFeedMissed.value} 已对齐）` : '实时';
+    case 'connecting':
+      return '连接中';
+    case 'down':
+      return '轮询兜底';
+    default:
+      return '未连接';
+  }
+});
+const taskFeedDotClass = computed(() => {
+  switch (admin.taskFeedStatus.value) {
+    case 'live':
+      return 'bg-emerald-500';
+    case 'connecting':
+      return 'bg-blue-400 animate-pulse';
+    case 'down':
+      return 'bg-amber-400';
+    default:
+      return 'bg-gray-300';
+  }
+});
 
 watch(
   () => props.open,
@@ -545,6 +585,12 @@ watch(
               任务 {{ admin.taskList.value.length }}
               <Loader2 v-if="admin.taskPollBusy.value" class="ml-1 inline h-3 w-3 animate-spin text-gray-400" />
             </div>
+            <span class="inline-flex items-center gap-1 text-[10px] font-normal text-gray-400"
+              title="WS 事件流：实时=逐单元进度即时推送；其余状态由 2s REST 轮询兜底"
+              data-testid="model-generation-feed-status">
+              <span class="h-1.5 w-1.5 rounded-full" :class="taskFeedDotClass" />
+              {{ taskFeedLabel }}
+            </span>
           </div>
           <div v-for="task in admin.taskList.value" :key="task.taskId"
             class="rounded-lg border border-gray-100 bg-white p-2.5"
@@ -572,12 +618,23 @@ watch(
                 <div class="h-full rounded bg-blue-500 transition-[width]" :style="{ width: `${taskProgressPercent(task)}%` }" />
               </div>
               <div class="mt-0.5 flex justify-between font-mono text-[10px] text-gray-400">
-                <span>{{ task.currentStage ?? '—' }}</span>
+                <span>{{ taskStageText(task) }}</span>
                 <span>{{ task.unitsDone ?? 0 }}/{{ task.totalUnits }}</span>
               </div>
             </div>
             <div v-else class="mt-1 font-mono text-[10px] text-gray-400">
-              {{ task.currentStage ?? task.taskId }}
+              {{ task.stageHint ?? task.currentStage ?? task.taskId }}
+            </div>
+            <div v-if="task.activeUnits.length > 0"
+              class="mt-0.5 truncate font-mono text-[10px] text-blue-600"
+              :title="task.activeUnits.map(unitLabel).join('、')"
+              :data-testid="`model-generation-task-${task.taskId}-generating`">
+              正在生成 {{ unitLabel(task.activeUnits[0]!) }}<template v-if="task.activeUnits.length > 1"> 等 {{ task.activeUnits.length }} 个</template>
+            </div>
+            <div v-if="task.failedUnits > 0"
+              class="mt-0.5 truncate text-[10px] text-red-600"
+              :title="task.lastUnitFailure ?? undefined">
+              {{ task.failedUnits }} 个单元生成失败{{ task.lastUnitFailure ? `：${task.lastUnitFailure}` : '' }}
             </div>
           </div>
         </section>

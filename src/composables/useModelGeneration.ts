@@ -510,11 +510,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
     // gen-model-v1：范围查询里那次按祖先查 records 的进度只能从记录源听。
     // 多个祖先时把进度弹窗挂出来，单根不弹。
-    const unsubscribeProgress = subscribeModelSourceProgress(({ done, total, root }) => {
+    const unsubscribeProgress = subscribeModelSourceProgress(({ done, total, root, stage }) => {
       totalCount.value = total;
       currentIndex.value = Math.min(total, done + 1);
       currentRefno.value = root;
-      statusMessage.value = `gen-model 查询记录：${done}/${total} 个生成根`;
+      statusMessage.value = stage === 'generate-start'
+        ? `正在生成构件 ${root}（${done + 1}/${total}）`
+        : stage === 'generate'
+          ? `已生成 ${done}/${total} 个生成根`
+          : `gen-model 查询记录：${done}/${total} 个生成根`;
       progress.value = 10 + Math.floor((done / Math.max(1, total)) * 20);
       if (total > 1) showProgressModal.value = true;
       syncGlobalLoadStatus();

@@ -8,10 +8,11 @@
  *
  * 单例：抽屉关了再开，库列表 / 目标 / 在飞任务不丢（与 useSelectionStore 同一模式）。
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 import { genModelV1UpdateExecute, type UpdateExecuteReceipt } from '@/api/genModelV1AdminApi';
 import {
+  fromV1Refno,
   genModelV1ElementAttributes,
   genModelV1Dbnums,
   genModelV1ModelBounds,
@@ -27,6 +28,13 @@ import {
   noteDbnumModelGenerated,
   scheduleDbnumModelReprobe,
 } from '@/composables/useGenModelV1DbnumStatus';
+import {
+  connectGenModelV1TaskFeed,
+  subscribeGenModelV1TaskEvents,
+  useGenModelV1TaskFeed,
+  type GenModelV1TaskEnvelope,
+  type GenModelV1TaskProgress,
+} from '@/composables/useGenModelV1TaskFeed';
 import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import { getGenModelV1ModelSource } from '@/model-source';
 import { listSitesOfDbnum, type CollectDbnumSite } from '@/model-source/genModelV1/collectDbnum';
@@ -111,6 +119,14 @@ export type AdminTaskView = {
   stages: string[];
   /** 当前阶段在五段里的下标（0..4）；-1 = 映射不出 */
   stageIndex: number;
+  /** 在飞的模型交付单元（WS `model_unit_started − finished` 差集，REST 拿不到的明细；`a_b`） */
+  activeUnits: { refno: string; noun: string }[];
+  /** 本任务内已确认失败的单元数（WS `model_unit_finished` 实时累计） */
+  failedUnits: number;
+  /** 最近一次单元失败的服务端 message */
+  lastUnitFailure: string | null;
+  /** 数据批次提示（WS `data_batch_started/finished`）；终态清空 */
+  stageHint: string | null;
 };
 
 const TASK_TERMINAL = new Set(['succeeded', 'partial', 'yielded', 'failed']);
@@ -157,6 +173,10 @@ function taskViewFromDto(taskId: string, dbnum: number | null, intent: string | 
     totalUnits: dto.total_units ?? null,
     stages,
     stageIndex: pipelineStageIndex(dto.current_stage),
+    activeUnits: [],
+    failedUnits: 0,
+    lastUnitFailure: null,
+    stageHint: null,
   };
 }
 
@@ -194,6 +214,18 @@ const sitePickerCache = new Map<number, CollectDbnumSite[]>();
 const tasks = ref<Map<string, AdminTaskView>>(new Map());
 const taskPollBusy = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// WS 任务事件（`/api/v1/ws`，tasks 主题）：逐单元进度是 REST 拿不到的明细，只在有订阅者时在飞。
+const { feedStatus: taskFeedStatus, missedEvents: taskFeedMissed } = useGenModelV1TaskFeed();
+let taskFeedStarted = false;
+
+// seq 空洞 = 有信封没送到；漏掉的若是 model_unit_finished，在飞清单会永远挂着一根已完的单元。
+// 不知道漏的是哪个任务，索性清空全部在飞项——后续 model_unit_started 会重建它（ADR-0005：断线不编造状态）。
+watch(taskFeedMissed, () => {
+  for (const t of tasks.value.values()) {
+    if (t.activeUnits.length > 0) t.activeUnits = [];
+  }
+});
 
 // ---------------------------------------------------------------------------
 // 模型刷新水位跟踪 + pending 目标复查（模型最近更新时间的对比判据）
@@ -307,6 +339,22 @@ function clearDbSelection(): void {
 // 库执行 + 任务轮询
 // ---------------------------------------------------------------------------
 
+/** 拉一次单个任务的 REST 快照覆盖视图；非终态时保留 WS 在飞明细。 */
+async function refreshTaskSnapshot(t: AdminTaskView): Promise<void> {
+  const dto = await genModelV1TaskGet(t.taskId, { identity: requestIdentity() });
+  const view = taskViewFromDto(t.taskId, t.dbnum, t.intent, dto);
+  if (!TASK_TERMINAL.has(view.state)) {
+    // WS 明细（在飞单元/失败计数）REST 拿不到，轮询覆盖其它字段时保留
+    view.activeUnits = t.activeUnits;
+    view.failedUnits = t.failedUnits;
+    view.lastUnitFailure = t.lastUnitFailure;
+    view.stageHint = t.stageHint;
+  }
+  const next = new Map(tasks.value);
+  next.set(t.taskId, view);
+  tasks.value = next;
+}
+
 async function pollTasksOnce(): Promise<void> {
   const active = [...tasks.value.values()].filter((t) => !TASK_TERMINAL.has(t.state));
   if (active.length === 0) {
@@ -314,18 +362,8 @@ async function pollTasksOnce(): Promise<void> {
     return;
   }
   taskPollBusy.value = true;
-  await Promise.allSettled(
-    active.map(async (t) => {
-      try {
-        const dto = await genModelV1TaskGet(t.taskId, { identity: requestIdentity() });
-        const next = new Map(tasks.value);
-        next.set(t.taskId, taskViewFromDto(t.taskId, t.dbnum, t.intent, dto));
-        tasks.value = next;
-      } catch {
-        // 单拍失败不摘卡——下一轮再试（任务在服务端活得比前端久）
-      }
-    }),
-  );
+  // 单拍失败不摘卡——下一轮再试（任务在服务端活得比前端久）
+  await Promise.allSettled(active.map((t) => refreshTaskSnapshot(t)));
   taskPollBusy.value = false;
 }
 
@@ -498,6 +536,92 @@ function dropPendingProbe(refno: string): void {
   pendingProbes.delete(refno);
 }
 
+// ---------------------------------------------------------------------------
+// WS 任务事件（ADR-0005：明细走 WS，REST 轮询兜底对齐终态）
+// ---------------------------------------------------------------------------
+
+/**
+ * 处理一条 `tasks` 主题信封。只关心本会话登记过的 task_id（d-195）；别的客户端发起的
+ * 任务、malformed 信封都静默忽略。丢帧由 `task_finished`/2s 轮询的 REST 对齐兜底。
+ */
+function applyTaskEnvelope(envelope: GenModelV1TaskEnvelope): void {
+  const taskId = typeof envelope.task_id === 'string' && envelope.task_id ? envelope.task_id : null;
+  const task = taskId ? tasks.value.get(taskId) : undefined;
+  if (!task) return;
+  switch (envelope.type) {
+    case 'task_started': {
+      task.state = 'running';
+      const payload = envelope.payload as { total_units?: unknown } | undefined;
+      if (typeof payload?.total_units === 'number' && payload.total_units >= 0) {
+        task.totalUnits = payload.total_units;
+        if (task.unitsDone == null) task.unitsDone = 0;
+      }
+      ensurePolling();
+      break;
+    }
+    case 'task_progress': {
+      const payload = envelope.payload as GenModelV1TaskProgress | undefined;
+      if (!payload || typeof payload !== 'object' || typeof (payload as { kind?: unknown }).kind !== 'string') return;
+      switch (payload.kind) {
+        case 'data_batch_started':
+          task.stageHint = `应用数据 sesno ${payload.start_sesno}→${payload.end_sesno}`;
+          break;
+        case 'data_batch_finished':
+          task.stageHint = null;
+          void pollTasksOnce(); // 数据段收口多半翻过阶段，拉一拍对齐 currentStage/总数
+          break;
+        case 'model_unit_started': {
+          const refno = fromV1Refno(String(payload.root_refno ?? ''));
+          if (refno && !task.activeUnits.some((unit) => unit.refno === refno)) {
+            task.activeUnits = [...task.activeUnits, { refno, noun: String(payload.noun ?? '') }];
+          }
+          break;
+        }
+        case 'model_unit_finished': {
+          const refno = fromV1Refno(String(payload.root_refno ?? ''));
+          task.activeUnits = task.activeUnits.filter((unit) => unit.refno !== refno);
+          // 下一拍 REST 把 units_done 对齐成权威值；这里先即时反映
+          task.unitsDone = task.totalUnits != null
+            ? Math.min(task.totalUnits, (task.unitsDone ?? 0) + 1)
+            : (task.unitsDone ?? 0) + 1;
+          if (payload.success === false) {
+            task.failedUnits += 1;
+            task.lastUnitFailure = typeof payload.message === 'string' ? payload.message : null;
+          }
+          break;
+        }
+      }
+      break;
+    }
+    case 'task_finished': {
+      const payload = envelope.payload as { state?: unknown } | undefined;
+      if (typeof payload?.state === 'string' && payload.state) task.state = payload.state;
+      task.activeUnits = [];
+      task.stageHint = null;
+      // 终态明细（result.units / 告警）以 REST 快照为准——pollTasksOnce 只轮非终态，这里单独拉；
+      // 顺手刷库水位行
+      void (async () => {
+        try {
+          await refreshTaskSnapshot(task);
+        } catch {
+          // 拉不动就停在 WS 给的终态；「刷新」按钮可手动补
+        }
+        void refreshDbnums();
+      })();
+      break;
+    }
+  }
+}
+
+/** WS 实时事件在第一次登记任务时拉起；连不上停在 `down`，2s REST 轮询本来就在兜底。 */
+function ensureTaskFeed(): void {
+  if (!taskFeedStarted) {
+    taskFeedStarted = true;
+    subscribeGenModelV1TaskEvents(applyTaskEnvelope); // 会话级常驻，不退订
+  }
+  connectGenModelV1TaskFeed(); // 已连上是 no-op；失败封顶后借新任务重试一次
+}
+
 function registerTask(taskId: string, dbnum: number | null, intent: string | null): void {
   if (!taskId) return;
   const next = new Map(tasks.value);
@@ -512,9 +636,14 @@ function registerTask(taskId: string, dbnum: number | null, intent: string | nul
       totalUnits: null,
       stages: [...PIPELINE_STAGES],
       stageIndex: -1,
+      activeUnits: [],
+      failedUnits: 0,
+      lastUnitFailure: null,
+      stageHint: null,
     });
     tasks.value = next;
   }
+  ensureTaskFeed();
 }
 
 /** `update/execute`：勾选库 → 摄入管线。回执里的 enqueued+merged task_id 全部登记轮询。 */
@@ -642,9 +771,13 @@ async function generateTargets(): Promise<void> {
       target.instanceCount = null;
       try {
         const result = await source.records.generateThenCollect(target.refno, {
-          onRootDone: ({ done, total }) => {
+          onRootStart: ({ done, total, root }) => {
+            target.detail = `正在生成 ${root}（${done + 1}/${total}）…`;
+          },
+          onRootDone: ({ done, total, root }) => {
             target.rootsDone = done;
             target.rootsTotal = Math.max(total, done);
+            target.detail = `已生成 ${root}（${done}/${Math.max(total, done)}）`;
           },
         });
         target.instanceCount = result.items.length;
@@ -769,6 +902,9 @@ export function useModelGenerationAdmin() {
     taskPollBusy,
     stopPolling,
     refreshWatchList,
+    // WS 任务事件状态（`live` 实时；其余为 REST 轮询兜底）
+    taskFeedStatus,
+    taskFeedMissed,
     // 节点
     nodeInput,
     nodeError,

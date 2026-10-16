@@ -33,8 +33,13 @@ import { createGenModelV1GenerationGuard, type GenModelV1GenerationGuard } from 
 export type GenModelV1RecordsProgress = {
   /** 这次请求的节点（`a_b`） */
   refno: string;
-  /** 刚处理完的祖先 / 生成根（`a_b`） */
+  /** 刚处理完 / 正在处理的祖先或生成根（`a_b`） */
   root: string;
+  /**
+   * 阶段：`generate-start` = 对这一根的 `model/generate` 刚发出（在飞）；`generate` = 一根生成收口；
+   * `collect` = 一个祖先的记录查完。缺省（旧 mock / 手写事件）按 `collect` 理解。
+   */
+  stage?: 'generate-start' | 'generate' | 'collect';
   /** 已处理 / 目前已知总数（容器还在展开时总数会长） */
   done: number;
   total: number;
@@ -96,9 +101,19 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     return () => { progressListeners.delete(listener); };
   }
 
-  function emitProgress(requested: string, progress: { done: number; total: number; root: string }): void {
+  function emitProgress(
+    requested: string,
+    progress: { done: number; total: number; root: string },
+    stage: NonNullable<GenModelV1RecordsProgress['stage']>,
+  ): void {
     if (progressListeners.size === 0) return;
-    const event: GenModelV1RecordsProgress = { refno: requested, root: progress.root, done: progress.done, total: progress.total };
+    const event: GenModelV1RecordsProgress = {
+      refno: requested,
+      root: progress.root,
+      stage,
+      done: progress.done,
+      total: progress.total,
+    };
     for (const listener of progressListeners) {
       try { listener(event); } catch { /* 监听方的异常不影响取数 */ }
     }
@@ -142,21 +157,32 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     resultsByRequested.set(requested, result);
   }
 
-  function withLifecycleHooks<T extends CollectRecordsOptions>(requested: string, extra: T, guard: GenModelV1GenerationGuard): T {
+  function withLifecycleHooks<T extends CollectRecordsOptions>(
+    requested: string,
+    extra: T,
+    guard: GenModelV1GenerationGuard,
+    stage: 'generate' | 'collect',
+  ): T {
     const externalRootDone = extra.onRootDone;
+    const externalRootStart = (extra as GenerateThenCollectOptions).onRootStart;
     const externalRequestFailure = extra.onRequestFailure;
     return {
       ...extra,
       signal: guard.signal,
+      // `collect*` 没有 onRootStart 概念，多给的键无人调用，带上只为让 generate 路径把「正在生成」广播出去
+      onRootStart: (progress: { done: number; total: number; root: string }) => {
+        externalRootStart?.(progress);
+        emitProgress(requested, progress, 'generate-start');
+      },
       onRootDone: (progress: { done: number; total: number; root: string }) => {
         externalRootDone?.(progress);
-        emitProgress(requested, progress);
+        emitProgress(requested, progress, stage);
       },
       onRequestFailure: (error: unknown) => {
         noteRequestFailure(error);
         externalRequestFailure?.(error);
       },
-    };
+    } as T;
   }
 
   async function collectByAncestor(refno: string, extra: CollectRecordsOptions = {}): Promise<CollectRecordsResult> {
@@ -168,7 +194,11 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
       guard.assertCurrent();
       const remembered = resultsByRequested.get(requested);
       if (remembered) return remembered;
-      const result = await collectRecordsByAncestor(requested, withLifecycleHooks(requested, { ...options.recordsOptions, ...extra }, guard), api);
+      const result = await collectRecordsByAncestor(
+        requested,
+        withLifecycleHooks(requested, { ...options.recordsOptions, ...extra }, guard, 'collect'),
+        api,
+      );
       guard.assertCurrent();
       absorbRecords(result);
       rememberResolved(requested, result);
@@ -195,7 +225,7 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
       invalidateRoot(requested);
       const result = await generateThenCollectRecords(
         requested,
-        withLifecycleHooks(requested, { ...options.recordsOptions, ...options.generateOptions, ...extra }, guard),
+        withLifecycleHooks(requested, { ...options.recordsOptions, ...options.generateOptions, ...extra }, guard, 'generate'),
         api,
       );
       guard.assertCurrent();
