@@ -133,12 +133,12 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     return result.pending.length === 0 && result.truncatedRoots.length === 0 && Object.keys(result.errors).length === 0;
   }
 
-  /** 干净的结果：请求的节点自己与它名下的根都记一笔（没有记录的记空数组），下一次把「根 + 构件」一起交来时不再为它们重查。 */
+  /** 干净的结果：只把请求的节点记一笔（没有记录的记空数组）。generationRoots 只是「这批 item 属于哪些根」，
+   * 不代表那些根被查过——祖先=构件时只回了构件自己，给根记 [] 会让 instanceEntriesByRefnos 把根当成查过、
+   * 整条根的 records（含 TUBI）永远不再取。 */
   function rememberResolved(requested: string, result: CollectRecordsResult): void {
     if (!isResolved(result)) return;
-    for (const key of [requested, ...result.generationRoots]) {
-      if (key && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
-    }
+    if (!entriesByRefno.has(requested)) entriesByRefno.set(requested, []);
     resultsByRequested.set(requested, result);
   }
 
@@ -226,7 +226,8 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
       const out = new Map<string, InstanceEntry[]>();
       for (const key of keys) {
         if (!entriesByRefno.has(key)) {
-          // 以这个构件为祖先查：服务端回它头上那根的整根记录，同根的其它构件一起进缓存，后面的 key 多半就命中了。只查，不生成。
+          // 以这个 refno 为祖先查（ADR-086：generation_root 参数语义=祖先子树）。key 是生成根时整根记录一次进缓存，
+          // 同根的其它构件多半就命中了；key 是构件时只回它自己。只查，不生成。
           const collected = await collectByAncestor(key);
           guard.assertCurrent();
           // 只有完整收口后才能把「记录里没有该构件」负缓存为 []。pending（库被整库任务占用）或临时错误

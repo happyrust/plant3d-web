@@ -98,13 +98,34 @@ describe('resolveActualModelLoadScope', () => {
     vi.resetModules();
   });
 
-  it('非 BRAN/HANG root 时，保持 componentRefnos 不变', async () => {
+  it('属主是 BRAN 的构件：注入 BRAN 生成根（TUBI 直管挂在根上，方案 A）', async () => {
     pdmsGetTypeInfoMock.mockResolvedValue({
       success: true,
       refno: '24381_145035',
       noun: 'VALV',
       owner_noun: 'BRAN',
       owner_refno: '24381_145018',
+    });
+
+    const { resolveActualModelLoadScope } = await import('@/composables/useModelGeneration');
+    const result = await resolveActualModelLoadScope('24381_145035', ['24381_145035']);
+
+    expect(result).toEqual({
+      componentRefnos: ['24381_145035'],
+      actualLoadRefnos: ['24381_145018', '24381_145035'],
+      rootNoun: 'VALV',
+      branHangRootInjected: true,
+      typeInfoError: null,
+    });
+  });
+
+  it('属主不是 BRAN 的构件：不扩，保持 componentRefnos 不变', async () => {
+    pdmsGetTypeInfoMock.mockResolvedValue({
+      success: true,
+      refno: '24381_145035',
+      noun: 'VALV',
+      owner_noun: 'PANE',
+      owner_refno: '24381_34869',
     });
 
     const { resolveActualModelLoadScope } = await import('@/composables/useModelGeneration');

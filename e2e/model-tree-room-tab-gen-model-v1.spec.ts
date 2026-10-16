@@ -277,7 +277,7 @@ test('页签记忆 + 选中联动：切到「房间」后刷新页面仍停在�
   expect(pageErrors).toEqual([]);
 });
 
-test('右键单元「加载模型（N 个构件）」：ensure + records 后单元的构件几何都进场景；构件行眼睛切显隐落到 scene.objects[refno].visible；切到 PDMS 再切回房间展开态与已加载行都还在', async ({ page }) => {
+test('右键单元「加载模型（N 个构件）」：records 后单元的构件几何都进场景；构件行眼睛切显隐落到 scene.objects[refno].visible；切到 PDMS 再切回房间展开态与已加载行都还在', async ({ page }) => {
   const rooms = await fetchRooms();
   const fixture = await pickFixtureRoom(rooms.rooms);
   test.skip(fixture === null, '清单里前几间房都没有 rooms/{refno}/tree');
@@ -300,7 +300,7 @@ test('右键单元「加载模型（N 个构件）」：ensure + records 后单�
   await rowById(page, unit.refno).click({ button: 'right' });
   const menu = page.locator('[data-room-tree-context-menu="true"]');
   await expect(menu).toBeVisible();
-  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '隔离（XRAY 其它）', '取消隔离', '显示', '隐藏', `加载模型（${unit.count} 个构件）`, '查看属性']);
+  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '隔离（XRAY 其它）', '取消隔离', '显示', '隐藏', `加载模型（${unit.count} 个构件）`, '查看关联房间', '查看属性']);
 
   const loadRequests: string[] = [];
   page.on('request', (request) => {
@@ -313,8 +313,9 @@ test('右键单元「加载模型（N 个构件）」：ensure + records 后单�
     const overview = await sceneOverview(page);
     return refnos.filter((refno) => overview.loadedRefnos.includes(refno)).length;
   }, { timeout: 240_000, intervals: [1000, 2000, 5000] }).toBe(refnos.length);
-  expect(loadRequests.some((url) => url.endsWith('/model/ensure')), '加载走 ensure').toBe(true);
+  // ADR-086：显示路径只查 model/records；model/ensure 是 model/generate 的旧名，只有「重新生成模型」/ 兜底才发。
   expect(loadRequests.some((url) => url.endsWith('/model/records')), '加载走 records').toBe(true);
+  expect(loadRequests.some((url) => url.endsWith('/model/ensure')), '显示路径不发 model/ensure').toBe(false);
   await expect(menu).toBeHidden();
 
   // 眼睛：先隐再显，落到场景对象的 visible
@@ -416,7 +417,7 @@ test('直段行（方案 B）：页签的 rooms/{refno}/tree 恒带 tubes=1；�
   await firstRow.click({ button: 'right' });
   const menu = page.locator('[data-room-tree-context-menu="true"]');
   await expect(menu).toBeVisible();
-  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '显示', '隐藏', '查看属性']);
+  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '显示', '隐藏', '查看关联房间', '查看属性']);
   await expect(page.getByTestId('room-tree-load-models')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.mouse.click(5, 5);

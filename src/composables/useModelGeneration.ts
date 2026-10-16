@@ -231,15 +231,22 @@ export async function resolveActualModelLoadScope(
     const resp = await getModelSource().attributes.typeInfo(normalizedRoot);
     const noun = resp.success ? String(resp.noun || '').trim().toUpperCase() : '';
     const isBranHang = noun === 'BRAN' || noun === 'HANG';
+    // 叶子构件的直接属主是 BRAN：TUBI 直管挂在生成根自己的 refno 上（`deliveryUnitScene.ts`），
+    // 根不进加载集直管永远进不了层 —— 「管件要带直段」（方案 A），按生成根把整条 BRAN 装进来。
+    const ownerNoun = resp.success ? String(resp.owner_noun || '').trim().toUpperCase() : '';
+    const ownerRefno = normalizeRefnoString(String(resp.owner_refno ?? ''));
+    const underBran = !isBranHang && ownerNoun === 'BRAN' && !!ownerRefno && ownerRefno !== normalizedRoot;
     const actualLoadRefnos = isBranHang
       ? uniqStrings([normalizedRoot, ...normalizedComponents])
-      : (normalizedComponents.length > 0 ? normalizedComponents : [normalizedRoot]);
+      : underBran
+        ? uniqStrings([ownerRefno, ...normalizedComponents])
+        : (normalizedComponents.length > 0 ? normalizedComponents : [normalizedRoot]);
 
     return {
       componentRefnos: normalizedComponents,
       actualLoadRefnos,
       rootNoun: noun || null,
-      branHangRootInjected: isBranHang || normalizedComponents.length === 0,
+      branHangRootInjected: isBranHang || underBran || normalizedComponents.length === 0,
       typeInfoError: resp.success ? null : (resp.error_message || 'pdms type-info 查询失败'),
     };
   } catch (e) {
