@@ -1005,7 +1005,8 @@ export type GenModelV1DbnumModelRootsOptions = GenModelV1RequestOptions & {
 
 /**
  * 该库的全部生成根（只读，不生成）。每行的 `ready` 说这根的 `records` 现在读得到；`ready: true` 只回就绪的那些。
- * 显示路径不再需要它（按 SITE 为祖先查 `records` 即可，ADR 0069）；留给整库生成任务的进度 / 对账。
+ * 两个用途：显示路径的库级预检查（`ready_total === 0` → 视为该库没有模型，默认重新生成，见
+ * `useModelGeneration.probeDbnumHasModel`）；整库生成任务的进度 / 对账。
  */
 export function genModelV1DbnumModelRoots(
   dbnum: number,

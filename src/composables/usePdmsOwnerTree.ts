@@ -251,7 +251,11 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         depth,
         hasChildren: hasChildren(id, node),
       };
-      if (node.dbnum !== undefined) row.dbnum = node.dbnum;
+      if (node.dbnum !== undefined) {
+        row.dbnum = node.dbnum;
+        const parentDbnum = node.parentId ? nodes[node.parentId]?.dbnum : undefined;
+        if (parentDbnum !== node.dbnum) row.dbBoundary = true;
+      }
       if (node.shortName !== undefined) row.shortName = node.shortName;
       out.push(row);
 

@@ -3,12 +3,15 @@ import type { Ref } from 'vue';
 
 import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
 
+import { genModelV1DbnumModelRoots } from '@/api/genModelV1Api';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
+import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
+import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 import { emitToast } from '@/ribbon/toastBus';
 
 /**
@@ -274,10 +277,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   const loadedRoots = new Set<string>();
 
-  /** 有几何的交付单元类型（records 为空时自动生成的白名单，来自 gen-model `delivery_unit_types`） */
-  const GEOMETRY_UNIT_TYPES = new Set(['BRAN', 'HANG', 'SUPPO', 'EQUI']);
-  /** 已尝试自动生成的 refno（防重复触发） */
+  /** 已尝试自动生成的 refno（防重复触发）：库无模型 / 节点查空时每个 refno 每会话只自动一发 generateThenCollect */
   const autoGenerateAttempted = new Set<string>();
+  /**
+   * dbnum 级「现在有没有读得到的模型」的会话内结论：`true` = `model/roots` 有就绪根，或本实例刚生成 / 查到过记录；
+   * `false` = 就绪根为零。`true` 随时盖，`false` 只写第一次——别让过期的空结论压住刚产出的模型。
+   */
+  const dbnumModelKnown = new Map<number, boolean>();
 
   function syncGlobalLoadStatus() {
     modelLoadStatus.update({
@@ -290,6 +296,37 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * `dbnums/{dbnum}/model/roots`（诊断快照）的库级预检查：`ready_total > 0`（旧构建逐根看 `ready`）才算
+   * 「这个库有模型」——它与「records 现在读得到」同一条判据（投影回执 / 落库 ACK）。`model_sesno` 只在
+   * 整库任务收口时盖、按需生成不动它；`/dbnums` 骨架形态压根不带模型字段，所以库级只能问这里。
+   *
+   * 枚举整库生成根要几秒：每库每实例只问一次（`dbnumModelKnown`）；查不出来回 `null`（按「不知道」
+   * 放行正常查询，不挡显示，也不写缓存——下次再问）。
+   */
+  async function probeDbnumHasModel(dbno: number): Promise<boolean | null> {
+    const known = dbnumModelKnown.get(dbno);
+    if (known !== undefined) return known;
+    const generation = getGenModelV1ServiceSnapshot().generation;
+    try {
+      const view = await genModelV1DbnumModelRoots(dbno);
+      if (getGenModelV1ServiceSnapshot().generation !== generation) return null;
+      const ready = typeof view.ready_total === 'number'
+        ? view.ready_total
+        : (view.roots ?? []).filter((root) => root.ready === true).length;
+      const has = ready > 0;
+      if (has || !dbnumModelKnown.get(dbno)) dbnumModelKnown.set(dbno, has);
+      consoleStore.addLog('info', `[model-load] dbnum=${dbno} 模型预检查：就绪根 ${ready}/${view.total ?? (view.roots ?? []).length}`);
+      return has;
+    } catch (probeError) {
+      consoleStore.addLog(
+        'info',
+        `[model-load] dbnum=${dbno} 模型预检查失败（按不知道处理，交给节点查询）：${probeError instanceof Error ? probeError.message : String(probeError)}`
+      );
+      return null;
+    }
   }
 
   type GenModelV1LoadTotals = {
@@ -490,6 +527,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
 
       const regenerate = loadOptions?.regenerate === true;
+      // 库级预检查与下面的范围查询并行：`model/roots` 要枚举整库生成根（大库几秒），不能挡住常规显示。
+      // 结论在查询分支里才取。显式「重新生成」不问——它本来就不查库。
+      const dbnumProbe: Promise<boolean | null> = regenerate
+        ? Promise.resolve(true)
+        : probeDbnumHasModel(dbno);
       if (regenerate) {
         statusMessage.value = `正在重新生成 ${normalizedRoot}...`;
         progress.value = 5;
@@ -497,6 +539,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot);
         if (generated.items.length === 0) {
           const timedOut = generated.pending.length > 0;
+          if (timedOut) scheduleDbnumModelReprobe(dbno);
           const failed = Object.entries(generated.errors).map(([root, message]) => `${root}: ${message}`).join('; ');
           const hint = timedOut
             ? '服务端后台继续生成，完成后再点眼睛'
@@ -508,6 +551,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           emitToast({ message: `[提示] ${normalizedRoot}：${hint}`, level: 'info' });
           return false;
         }
+        noteDbnumModelGenerated(dbno);
       }
 
       statusMessage.value = '查询可见实例范围...';
@@ -547,74 +591,93 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (scopeIncomplete ? ` incomplete=${incompleteTail}` : '') +
           (visibleErr ? ` err=${visibleErr}` : '')
       );
+      // 「重新生成」统一收口：库级预检查确认无模型（hasModel===false）或节点名下一条 records 都没查到，
+      // 都默认重新生成当前节点——不再按类型白名单过滤，显示逻辑本身就是「没有模型就默认重新生成」。
+      // 每个 refno 每会话只自动一发：真产不出（NoRenderableGeometry / 容器展开不到交付根）时重复点不再
+      // 连环 generate，照旧给提示；右键「重新生成模型」走显式 regenerate，不受这一次的限制。
+      const tryAutoGenerate = async (why: string): Promise<boolean> => {
+        if (autoGenerateAttempted.has(normalizedRoot)) return false;
+        autoGenerateAttempted.add(normalizedRoot);
+        statusMessage.value = `正在自动生成 ${normalizedRoot} 模型...`;
+        progress.value = 5;
+        syncGlobalLoadStatus();
+        consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} ${why}，默认重新生成模型`);
+        emitToast({ message: `[提示] ${normalizedRoot} 尚未生成模型，正在自动生成...`, level: 'info' });
+        try {
+          const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot);
+          if (generated.items.length > 0) {
+            dbnumModelKnown.set(dbno, true);
+            noteDbnumModelGenerated(dbno);
+            // 生成成功，重新查询 records（generateThenCollect 清了这条请求名下的备忘并重查进缓存）
+            const retry = await queryLoadScopeRefnos(normalizedRoot);
+            visibleRefnos = uniqStrings(retry.refnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
+            visibleSource = retry.source;
+            scopeIncomplete = retry.incomplete;
+            visibleOk = true;
+            visibleErr = null;
+            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成成功，取得 ${visibleRefnos.length} 个构件`);
+            if (visibleRefnos.length > 0) {
+              emitToast({ message: `[成功] ${normalizedRoot} 模型已自动生成并加载`, level: 'success' });
+              return true;
+            }
+            return false;
+          }
+          const timedOut = generated.pending.length > 0;
+          if (timedOut) scheduleDbnumModelReprobe(dbno);
+          const failed = Object.entries(generated.errors).map(([root, msg]) => `${root}: ${msg}`).join('; ');
+          const hint = timedOut ? '服务端后台继续生成，完成后再点眼睛' : (failed || '生成未产出可显示模型');
+          consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成未产出：${hint}`);
+          emitToast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
+          return false;
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e);
+          consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 自动生成异常：${em}`);
+          emitToast({ message: `[警告] ${normalizedRoot} 自动生成失败：${em}`, level: 'warning' });
+          return false;
+        }
+      };
+
       if (!visibleOk && visibleErr) {
         consoleStore.addLog('warning', `[model-load] 查询加载范围失败：${visibleErr}`);
         emitToast({
           message: `[警告] 查询加载范围失败：${visibleErr}`,
           level: 'warning',
         });
-      } else if (visibleOk && visibleRefnos.length === 0) {
-        // records 为空：有几何类型的节点（BRAN/HANG/SUPPO/EQUI）自动生成模型，免去手动右键
-        let autoGenerated = false;
-        const shouldTryAutoGenerate = !autoGenerateAttempted.has(normalizedRoot);
-
-        if (shouldTryAutoGenerate) {
-          const typeInfo = await getModelSource().attributes.typeInfo(normalizedRoot);
-          const noun = typeInfo.success ? String(typeInfo.noun || '').trim().toUpperCase() : '';
-          const isGeometryUnit = GEOMETRY_UNIT_TYPES.has(noun);
-
-          if (isGeometryUnit) {
-            autoGenerateAttempted.add(normalizedRoot);
-            statusMessage.value = `正在自动生成 ${normalizedRoot}（${noun}）模型...`;
-            progress.value = 5;
-            syncGlobalLoadStatus();
-            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot}（${noun}）records 为空，自动生成模型`);
-            emitToast({ message: `[提示] ${normalizedRoot}（${noun}）尚未生成模型，正在自动生成...`, level: 'info' });
-
-            try {
-              const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot);
-              if (generated.items.length > 0) {
-                // 生成成功，重新查询 records（缓存已更新，会命中）
-                const retry = await queryLoadScopeRefnos(normalizedRoot);
-                visibleRefnos = uniqStrings(retry.refnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-                visibleSource = retry.source;
-                scopeIncomplete = retry.incomplete;
-                autoGenerated = visibleRefnos.length > 0;
-                consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成成功，取得 ${visibleRefnos.length} 个构件`);
-                if (autoGenerated) {
-                  emitToast({ message: `[成功] ${normalizedRoot} 模型已自动生成并加载`, level: 'success' });
-                }
-              } else {
-                const timedOut = generated.pending.length > 0;
-                const failed = Object.entries(generated.errors).map(([root, msg]) => `${root}: ${msg}`).join('; ');
-                const hint = timedOut ? '服务端后台继续生成，完成后再点眼睛' : (failed || '生成未产出可显示模型');
-                consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成未产出：${hint}`);
-                emitToast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
-              }
-            } catch (e) {
-              const em = e instanceof Error ? e.message : String(e);
-              consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 自动生成异常：${em}`);
-              emitToast({ message: `[警告] ${normalizedRoot} 自动生成失败：${em}`, level: 'warning' });
-            }
-          } else {
-            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} records 为空但非几何单元类型（noun=${noun || 'unknown'}），不自动生成`);
-          }
+        // 库级确认无模型：查询失败不改这个结论——照样默认重新生成一次；生成出了记录就落回正常装载
+        if ((await dbnumProbe) === false && !(await tryAutoGenerate(`dbnum=${dbno} 无就绪模型`))) {
+          statusMessage.value = `refno=${normalizedRoot} 未加载`;
+          progress.value = 100;
+          syncGlobalLoadStatus();
+          return false;
         }
-
+      } else if (visibleOk && visibleRefnos.length === 0) {
+        const hasModel = await dbnumProbe;
+        // pending（409，库正被整库任务占用）时不发：generate 同样撞锁，「稍后再显示」才是对的
+        const pendingBusy = (scopeIncomplete?.pending.length ?? 0) > 0;
+        const autoGenerated = !pendingBusy && await tryAutoGenerate(
+          hasModel === false ? `dbnum=${dbno} 无就绪模型` : 'records 查空'
+        );
         if (!autoGenerated) {
+          const tail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
           const emptyHint = scopeIncomplete
-            ? `${normalizedRoot} 尚未取得可见实例（${incompleteTail}）`
+            ? `${normalizedRoot} 尚未取得可见实例（${tail}）`
             : `${normalizedRoot}：范围内没有已生成的模型；右键「重新生成模型」可生成`;
           consoleStore.addLog('info', `[model-load] ${emptyHint}`);
           emitToast({ message: `[提示] ${emptyHint}`, level: 'info' });
           statusMessage.value = scopeIncomplete
-            ? `refno=${normalizedRoot} 模型尚未就绪（${incompleteTail}）`
+            ? `refno=${normalizedRoot} 模型尚未就绪（${tail}）`
             : `refno=${normalizedRoot} 未加载`;
           progress.value = 100;
           syncGlobalLoadStatus();
           return false;
         }
         // autoGenerated = true，继续往下走装载流程
+      }
+      // 查询真拿到了记录 → 这个库就是有模型（与预检查同记正结论；探针回得晚也压不掉）
+      if (visibleOk && visibleRefnos.length > 0) {
+        dbnumModelKnown.set(dbno, true);
+        // 行尾库状态圆点若还停在「无模型 / 未知」，records 证据推翻它 → 丢结论重探对齐
+        reconcileDbnumModelStatus(dbno);
       }
 
       const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos);
@@ -659,8 +722,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
 
       // ========== gen-model-v1（ADR 0069）==========
-      // 显式显示 = 按祖先查 records，已在 visibleInsts 里做过一遍并进了记录缓存，这里只是把缓存里的实例装进 DTX。
-      // 右键重新生成已经在上面 generateThenCollect 过；这里替换场景里的旧对象，不再 generate。
+      // 显示 = 按祖先查 records，已在 visibleInsts 里做过一遍并进了记录缓存，这里只是把缓存里的实例装进 DTX。
+      // 生成在上面已经收口：右键是显式重新生成；库无模型 / 节点查空走 tryAutoGenerate（各一发）。
+      // 这里替换或新装场景里的对象，不再 generate。
       const loadRefnos = loadScope.actualLoadRefnos;
       statusMessage.value = regenerate
         ? `正在重新生成 ${normalizedRoot}（gen-model）...`
@@ -929,6 +993,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message, level: 'info' });
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
     }
+
+    // 整库真收到了记录 → 库级结论与行尾圆点同记「有模型」
+    dbnumModelKnown.set(dbno, true);
+    reconcileDbnumModelStatus(dbno);
 
     // 对账：还没进视口的构件在这里补装（逐 SITE 老路 = 全部；实时那一路正常为 0）
     const remaining = collected.refnos.filter((refno) => !loadedRefnos.has(refno));

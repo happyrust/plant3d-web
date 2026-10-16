@@ -23,6 +23,8 @@ export type FlatRow = {
   hasChildren: boolean
   /** 见 `TreeNode.dbnum`；行尾小徽标只在有值时画 */
   dbnum?: number
+  /** 该行是不是一个库段的首行（父节点 dbnum 与本行不同 / 没有）；模型生成状态圆点只在库边界行画 */
+  dbBoundary?: boolean
   /** 见 `TreeNode.shortName` */
   shortName?: string
 }

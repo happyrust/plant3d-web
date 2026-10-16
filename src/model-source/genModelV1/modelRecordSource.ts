@@ -6,8 +6,9 @@
  * 第一个构件的查询把它所在根的整根记录拉回来并写进缓存，同根的其它构件直接命中，一根只查一次。缓存在进程内、按 refno 键；
  * `forceRefresh` 清掉请求到的 refno 再问一次。
  *
- * **显示只查、不生成**：`collectByAncestor` / `instanceEntriesByRefnos` 不会调 `model/generate`（源码钉 `display_never_generates`）。
- * 生成只有右键的 `generateThenCollect`：先把这条请求名下已缓存的根清掉，generate 完再按祖先查、进缓存。
+ * **查询只查、不生成**：`collectByAncestor` / `instanceEntriesByRefnos` 不会调 `model/generate`（源码钉 `display_never_generates`）。
+ * 生成统一走 `generateThenCollect`：先把这条请求名下已缓存的根清掉，generate 完再按祖先查、进缓存。
+ * 调用方除了右键「重新生成模型」，还有显示路径的「库无模型 / 节点查空 → 默认重新生成」（useModelGeneration）。
  *
  * `dbno` 只是调用方的分桶键（服务端自己解库归属），这里不用它选数据。
  */

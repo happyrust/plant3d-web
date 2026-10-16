@@ -19,6 +19,11 @@ import {
   type DbnumRow,
   type TaskEntryDto,
 } from '@/api/genModelV1Api';
+import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
+import {
+  noteDbnumModelGenerated,
+  scheduleDbnumModelReprobe,
+} from '@/composables/useGenModelV1DbnumStatus';
 import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import { getGenModelV1ModelSource } from '@/model-source';
 
@@ -400,6 +405,12 @@ async function generateTargets(): Promise<void> {
         });
         target.instanceCount = result.items.length;
         const failedMessages = Object.entries(result.errors).map(([root, msg]) => `${root}: ${msg}`);
+        // 行尾库状态圆点：生成出了记录记绿；还在后台生成排延迟补探
+        const dbnum = tryGetDbnumByRefno(target.refno);
+        if (dbnum !== null) {
+          if (result.items.length > 0) noteDbnumModelGenerated(dbnum);
+          else if (result.pending.length > 0) scheduleDbnumModelReprobe(dbnum);
+        }
         if (result.items.length > 0) {
           target.status = 'done';
           const tails: string[] = [];

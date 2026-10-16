@@ -2,7 +2,8 @@
  * `gen-model-v1` 数据源适配器的组装点。
  *
  * - `tree`：`treeSource.ts`（P2，含 D5-A 的 `visibleInsts`）；
- * - `records`：`modelRecordSource.ts`（按祖先查 records → `InstanceEntry`，按根收、按构件缓存；生成只在右键）；
+ * - `records`：`modelRecordSource.ts`（按祖先查 records → `InstanceEntry`，按根收、按构件缓存；生成走 `generateThenCollect`——
+ *   右键显式重新生成，或显示路径「库无模型 / 节点查空 → 默认重新生成」）；
  * - `meshes`：`/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，`parseMeshGeometry` 解；
  *   2026-09-09 拍板替代 P0-1 的服务端转 GLB，`.glb` 口径留一个发布周期）；
  * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）；

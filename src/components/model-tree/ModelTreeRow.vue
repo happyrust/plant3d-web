@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
-import { ChevronDown, ChevronRight, CircleMinus, Eye, EyeOff, LoaderCircle } from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, Circle, CircleDashed, CircleMinus, Eye, EyeOff, LoaderCircle } from 'lucide-vue-next';
 
 import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 
+import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { type CheckState, type FlatRow } from '@/composables/useModelTree';
 import { getPdmsTypeIconUrl } from '@/lib/pdmsTypeIcon';
 import { cn } from '@/lib/utils';
@@ -163,11 +164,35 @@ function onContext(ev: MouseEvent) {
   emit('context', props.row.id, ev);
 }
 
-// 组件卸载时清理定时器
+// ---------------------------------------------------------------------------
+// 行尾库状态圆点：只在库边界行（`row.dbBoundary`，通常是 SITE）画；虚拟滚动复用组件实例，
+// dbnum 变了要把旧库的「在看」计数放掉再挂新库。
+// ---------------------------------------------------------------------------
+const dbStatusStore = useGenModelV1DbnumStatus();
+const statusDbnum = computed(() =>
+  !props.ghost && props.row.dbBoundary === true && typeof props.row.dbnum === 'number'
+    ? props.row.dbnum
+    : null
+);
+let releaseDbStatus: (() => void) | null = null;
+watch(statusDbnum, (dbnum) => {
+  releaseDbStatus?.();
+  releaseDbStatus = dbnum === null ? null : dbStatusStore.acquire(dbnum);
+}, { immediate: true });
+const dbStatus = computed(() => (statusDbnum.value === null ? null : dbStatusStore.view(statusDbnum.value)));
+function onDbStatusClick(ev: MouseEvent) {
+  ev.stopPropagation();
+  if (statusDbnum.value !== null) dbStatusStore.refresh(statusDbnum.value);
+}
+
+// 组件卸载时清理定时器与库状态引用计数
 onUnmounted(() => {
   if (hoverTimer !== null) {
     clearTimeout(hoverTimer);
+    hoverTimer = null;
   }
+  releaseDbStatus?.();
+  releaseDbStatus = null;
 });
 </script>
 
@@ -223,6 +248,20 @@ onUnmounted(() => {
         data-testid="model-tree-diff-count">
         {{ diffCount }}
       </span>
+
+      <button v-if="dbStatus" type="button"
+        class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+        :title="`${dbStatus.title}（点击重查）`"
+        data-testid="model-tree-db-status"
+        :data-db-status="dbStatus.kind"
+        @mousedown.stop
+        @click="onDbStatusClick">
+        <LoaderCircle v-if="dbStatus.kind === 'probing'" class="h-3 w-3 animate-spin text-muted-foreground" />
+        <Circle v-else-if="dbStatus.kind === 'current'" class="h-3 w-3 fill-success text-success" />
+        <Circle v-else-if="dbStatus.kind === 'stale'" class="h-3 w-3 fill-warning text-warning" />
+        <Circle v-else-if="dbStatus.kind === 'empty'" class="h-3 w-3 text-muted-foreground/60" />
+        <CircleDashed v-else class="h-3 w-3 text-muted-foreground/40" />
+      </button>
 
       <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
         <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />
