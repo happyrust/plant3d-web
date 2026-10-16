@@ -31,6 +31,7 @@ import {
 } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask, isSavedDesignerDraftTask } from '@/components/review/reviewTaskFilters';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
+import { DISPLAY_THEME_PRESETS, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { dockPanelExists, ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
@@ -43,6 +44,7 @@ import {
   ZONE_PANELS,
   type ZoneName,
 } from '@/composables/usePanelZones';
+import { RENDER_STYLE_PRESETS, useRenderStyleStore, type RenderStyle } from '@/composables/useRenderStyleStore';
 import { clearReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
@@ -50,6 +52,7 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
+import { emitToast } from '@/ribbon/toastBus';
 import { shouldOpenModelUnitVersionCompareFromUrl } from '@/utils/modelUnitVersionCompare';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
@@ -102,6 +105,8 @@ const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
 const viewerContext = useViewerContext();
+const displayThemeStore = useDisplayThemeStore();
+const renderStyleStore = useRenderStyleStore();
 
 let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
@@ -609,6 +614,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'modelVersionCompare');
   closePanelIfExists(dockApi, 'reviewAttachmentPreview');
   closePanelIfExists(dockApi, 'spatialCompute');
+  closePanelIfExists(dockApi, 'incrementRecords');
 
   const collapsedZones = getCollapsedZones();
 
@@ -690,6 +696,7 @@ function createEmbedFocusedLayout(
     'reviewAttachmentPreview',
     'materialConfig',
     'spatialCompute',
+    'incrementRecords',
   ].forEach((panelId) => {
     closePanelIfExists(dockApi, panelId);
   });
@@ -929,6 +936,16 @@ function ensurePanel(panelId: string) {
       component: 'SpatialComputePanel',
       title: '中心线净距',
       ...rightZoneExtras(),
+    });
+  }
+  if (normalizedPanelId === 'incrementRecords') {
+    return addPanelSafely(dockApi, {
+      id: 'incrementRecords',
+      component: 'IncrementRecordsPanel',
+      title: '增量记录',
+      position: viewerPanel
+        ? { referencePanel: viewerPanel, direction: 'below' }
+        : undefined,
     });
   }
 }
@@ -1201,6 +1218,28 @@ function handleRibbonCommand(commandId: string) {
     case 'annotation.settings':
       togglePanel('annotationStyle');
       return;
+    case 'displayTheme.e3d':
+    case 'displayTheme.default':
+    case 'displayTheme.design3d': {
+      // 持久化在这里做（DockLayout 常驻）：ViewerPanel 通过 watch currentTheme 落到已装载场景
+      const theme = commandId.slice('displayTheme.'.length) as DisplayTheme;
+      displayThemeStore.setDisplayTheme(theme);
+      const label = DISPLAY_THEME_PRESETS.find((preset) => preset.mode === theme)?.label ?? theme;
+      emitToast({ message: `显示主题已切换为「${label}」`, level: 'success' });
+      return;
+    }
+    case 'renderStyle.e3d':
+    case 'renderStyle.engineering':
+    case 'renderStyle.pbr':
+    case 'renderStyle.wireframe':
+    case 'renderStyle.xray': {
+      // 同 displayTheme：持久化在这里做，ViewerPanel watch currentStyle 后整套应用
+      const style = commandId.slice('renderStyle.'.length) as RenderStyle;
+      renderStyleStore.setRenderStyle(style);
+      const label = RENDER_STYLE_PRESETS.find((preset) => preset.mode === style)?.label ?? style;
+      emitToast({ message: `绘制样式已切换为「${label}」`, level: 'success' });
+      return;
+    }
     case 'panel.review':
       togglePanel('review');
       return;
@@ -1260,6 +1299,9 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.modelVersionCompare':
       togglePanel('modelVersionCompare');
       return;
+    case 'panel.incrementRecords':
+      togglePanel('incrementRecords');
+      return;
     case 'panel.reviewAttachmentPreview':
       openReviewAttachmentPreviewPanel();
       return;
@@ -1302,16 +1344,22 @@ function handleRibbonCommand(commandId: string) {
         toolStore.obbAnnotationCount.value > 0 ||
         toolStore.measurementCount.value > 0
       ) {
-        reviewStore.addConfirmedRecord({
-          type: 'batch',
-          annotations: [...toolStore.annotations.value],
-          cloudAnnotations: [...toolStore.cloudAnnotations.value],
-          rectAnnotations: [...toolStore.rectAnnotations.value],
-          obbAnnotations: [...toolStore.obbAnnotations.value],
-          measurements: [...toolStore.measurements.value],
-          note: '',
-        });
-        toolStore.clearAll();
+        void (async () => {
+          try {
+            await reviewStore.addConfirmedRecord({
+              type: 'batch',
+              annotations: [...toolStore.annotations.value],
+              cloudAnnotations: [...toolStore.cloudAnnotations.value],
+              rectAnnotations: [...toolStore.rectAnnotations.value],
+              obbAnnotations: [...toolStore.obbAnnotations.value],
+              measurements: [...toolStore.measurements.value],
+              note: '',
+            });
+            toolStore.clearAll();
+          } catch (error) {
+            console.error('[DockLayout] review.confirm failed:', error);
+          }
+        })();
       }
       return;
     case 'review.export': {

@@ -2,10 +2,22 @@ import type { RibbonTabConfig } from '@/ribbon/ribbonTypes';
 
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
+import { DISPLAY_THEME_PRESETS, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
+import { RENDER_STYLE_PRESETS, useRenderStyleStore } from '@/composables/useRenderStyleStore';
 import { UserRole } from '@/types/auth';
 
 const showDebugUi = isReviewDebugUiEnabled();
 const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
+
+const displayThemeStore = useDisplayThemeStore();
+const renderStyleStore = useRenderStyleStore();
+
+/** ribbon「设置 → 模型显示」按钮图标（与 ViewerPanel 弹层共用 DISPLAY_THEME_PRESETS 的 mode/label） */
+const DISPLAY_THEME_RIBBON_ICONS: Record<DisplayTheme, string> = {
+  e3d: 'palette',
+  default: 'cube',
+  design3d: 'component',
+};
 
 const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   {
@@ -211,8 +223,9 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '模型',
         items: [
           // 旧后端的任务创建 / 监控 / 导出 / 增量更新 / Parquet SQL 调试 2026-09-20 随 legacy 退役（D1）：
-          // gen-model 自己监听 E3D 库变化做增量，模型「变了什么」看版本对比。
+          // gen-model 自己监听 E3D 库变化做增量，模型「变了什么」看版本对比，每一轮的账看增量记录。
           { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
+          { kind: 'button', id: 'task.incrementRecords', label: '增量记录', icon: 'history', commandId: 'panel.incrementRecords' },
         ],
       },
     ],
@@ -226,6 +239,42 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '样式',
         items: [
           { kind: 'button', id: 'settings.annotationStyle', label: '批注样式', icon: 'settings', commandId: 'annotation.settings' },
+        ],
+      },
+      {
+        id: 'settings.display',
+        label: '模型显示',
+        items: [
+          {
+            kind: 'stack',
+            id: 'settings.display.theme',
+            items: DISPLAY_THEME_PRESETS.map((preset) => ({
+              kind: 'button' as const,
+              id: `settings.displayTheme.${preset.mode}`,
+              label: preset.label,
+              icon: DISPLAY_THEME_RIBBON_ICONS[preset.mode],
+              commandId: `displayTheme.${preset.mode}`,
+              active: () => displayThemeStore.currentTheme.value === preset.mode,
+            })),
+          },
+        ],
+      },
+      {
+        id: 'settings.render',
+        label: '绘制样式',
+        items: [
+          {
+            kind: 'stack',
+            id: 'settings.render.style',
+            items: RENDER_STYLE_PRESETS.map((preset) => ({
+              kind: 'button' as const,
+              id: `settings.renderStyle.${preset.mode}`,
+              label: preset.label,
+              icon: preset.icon,
+              commandId: `renderStyle.${preset.mode}`,
+              active: () => renderStyleStore.currentStyle.value === preset.mode,
+            })),
+          },
         ],
       },
     ],

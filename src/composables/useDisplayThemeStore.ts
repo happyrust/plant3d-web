@@ -2,6 +2,16 @@ import { computed, ref } from 'vue';
 
 export type DisplayTheme = 'default' | 'design3d' | 'e3d';
 
+/**
+ * 显示主题预设（单一数据源）：ViewerPanel「查看工具设置」的色点按钮
+ * 与 ribbon「设置 → 模型显示」的切换项共用同一份定义。
+ */
+export const DISPLAY_THEME_PRESETS: { mode: DisplayTheme; label: string; colorHint: string }[] = [
+  { mode: 'e3d', label: 'E3D', colorHint: '#4682B4' },
+  { mode: 'default', label: '默认', colorHint: '#90a4ae' },
+  { mode: 'design3d', label: '三维设计', colorHint: '#4CAF50' },
+];
+
 // v2：引入 e3d 主题并作为默认值。旧键（viewer_display_theme）曾在读取时被强制
 // 归一化为 design3d，无法代表用户的真实选择，因此换键让所有会话迁移到 e3d。
 const STORAGE_KEY = 'viewer_display_theme_v2';

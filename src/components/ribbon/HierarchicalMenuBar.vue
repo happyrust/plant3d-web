@@ -165,11 +165,15 @@ function onClickCommand(commandId: string) {
                 :key="command.id"
                 type="button"
                 class="hierarchical-menu-item"
+                :class="{ 'hierarchical-menu-item--current': command.active?.() === true }"
                 :data-command="command.commandId"
                 :disabled="command.disabled"
                 @click="onClickCommand(command.commandId)">
                 <component :is="resolveIcon(command.icon)" v-if="command.icon" class="hierarchical-menu-item__icon" />
                 <span class="hierarchical-menu-item__text">{{ command.label }}</span>
+                <component :is="ribbonIcons.check"
+                  v-if="command.active?.() === true"
+                  class="hierarchical-menu-item__check" />
               </button>
             </section>
           </div>
@@ -341,6 +345,19 @@ function onClickCommand(commandId: string) {
 .hierarchical-menu-item__text {
   font-size: 12px;
   line-height: 1.2;
+}
+
+/* 当前态（如显示主题指示当前主题） */
+.hierarchical-menu-item--current {
+  color: rgb(37 99 235);
+  font-weight: 600;
+}
+
+.hierarchical-menu-item__check {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .hierarchical-menu-actions {

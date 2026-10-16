@@ -1265,6 +1265,8 @@ export class DTXLayer {
     this._transparentMesh.name = 'DTXLayerTransparent';
     this._transparentMesh.renderOrder = 1;
 
+    // 重建材质后保持已应用的绘制样式参数
+    this._applyRenderStyleToMaterials();
     this._syncRenderPassVisibility();
 
     // 创建 GPU Picking 材质与网格
@@ -1287,13 +1289,62 @@ export class DTXLayer {
   }
 
   private _syncRenderPassVisibility(): void {
+    const scale = this._styleOpacityScale;
     if (this._mesh) {
-      this._mesh.visible = this._objectsArray.some((obj) => obj.opacity >= 0.999);
+      this._mesh.visible =
+        scale > 0.001 && this._objectsArray.some((obj) => obj.opacity * scale >= 0.999);
     }
     if (this._transparentMesh) {
-      this._transparentMesh.visible = this._objectsArray.some(
-        (obj) => obj.opacity > 0.001 && obj.opacity < 0.999,
-      );
+      this._transparentMesh.visible =
+        scale > 0.001
+        && this._objectsArray.some(
+          (obj) => obj.opacity * scale > 0.001 && obj.opacity * scale < 0.999,
+        );
+    }
+  }
+
+  /** 绘制样式参数（哑光/平涂/透明度缩放）；opacityScale<1 全走透明通道，=0 填充全隐（线框） */
+  private _styleSpecularScale = 1;
+  private _styleFlatness = 0;
+  private _styleOpacityScale = 1;
+
+  setRenderStyleParams(params: {
+    specularScale?: number;
+    flatness?: number;
+    opacityScale?: number;
+  }): void {
+    if (typeof params.specularScale === 'number' && Number.isFinite(params.specularScale)) {
+      this._styleSpecularScale = Math.max(0, params.specularScale);
+    }
+    if (typeof params.flatness === 'number' && Number.isFinite(params.flatness)) {
+      this._styleFlatness = Math.min(1, Math.max(0, params.flatness));
+    }
+    if (typeof params.opacityScale === 'number' && Number.isFinite(params.opacityScale)) {
+      this._styleOpacityScale = Math.min(1, Math.max(0, params.opacityScale));
+    }
+    this._applyRenderStyleToMaterials();
+    this._syncRenderPassVisibility();
+  }
+
+  getRenderStyleParams(): { specularScale: number; flatness: number; opacityScale: number } {
+    return {
+      specularScale: this._styleSpecularScale,
+      flatness: this._styleFlatness,
+      opacityScale: this._styleOpacityScale,
+    };
+  }
+
+  private _applyRenderStyleToMaterials(): void {
+    for (const material of [this._material, this._transparentMaterial]) {
+      if (!material) continue;
+      const uniforms = material.uniforms as {
+        specularScale?: { value: number };
+        flatness?: { value: number };
+        opacityScale?: { value: number };
+      };
+      if (uniforms.specularScale) uniforms.specularScale.value = this._styleSpecularScale;
+      if (uniforms.flatness) uniforms.flatness.value = this._styleFlatness;
+      if (uniforms.opacityScale) uniforms.opacityScale.value = this._styleOpacityScale;
     }
   }
 

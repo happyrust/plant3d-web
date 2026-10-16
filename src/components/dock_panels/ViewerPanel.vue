@@ -26,6 +26,7 @@ import {
 
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
+import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
 import {
   reviewRecordCreate,
   reviewRecordGetByTaskId,
@@ -37,7 +38,7 @@ import { useComponentToWallClearance } from '@/clearance/composables/useComponen
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
-import ModelGenerationDrawer from '@/components/model-generation/ModelGenerationDrawer.vue';
+import ModelGenerationDialog from '@/components/model-generation/ModelGenerationDialog.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
@@ -51,7 +52,7 @@ import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue'
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
-import { useBackgroundStore } from '@/composables/useBackgroundStore';
+import { hasPersistedBackgroundMode, useBackgroundStore } from '@/composables/useBackgroundStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
@@ -62,9 +63,11 @@ import {
   resolveDtxObjectIdsByUnitRefno,
   resolveDtxRefnoByObjectId,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
+import { DISPLAY_THEME_PRESETS, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
+import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
+import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
@@ -72,7 +75,14 @@ import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
+import {
+  getRenderStylePreset,
+  RENDER_STYLE_PRESETS,
+  useRenderStyleStore,
+  type RenderStyle,
+} from '@/composables/useRenderStyleStore';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
@@ -166,11 +176,20 @@ const spatialComputeStore = useSpatialCompute();
 const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
+const renderStyleStore = useRenderStyleStore();
 const clearanceStore = useClearanceStore();
 const pipeDistanceStore = usePipeDistanceStore();
 const pipeInformationStore = usePipeInformationStore();
+const mbdDiagnosticsStore = useMbdDiagnosticsStore();
 
 const initError = ref<string | null>(null);
+
+// 渲染循环状态必须早于一切可能同步回调到 requestRender/renderFrame 的 watch 声明（含 dockview 布局恢复路径）
+//（如下方 persistence 的 immediate+sync watcher）：组件重挂载（dockview 布局恢复等）时
+// 共享模块态还在，回调会在 setup 早期同步执行，声明在后面就是 TDZ ReferenceError。
+let rafId: number | null = null;
+let needsRender = true;
+let isRendering = false;
 
 watch(
   initError,
@@ -285,7 +304,7 @@ function applyGlobalEdgeStyle(): void {
 
   overlay.setStyle({
     showFill: false,
-    edgeColor: 0x4b5563,
+    edgeColor: globalEdgeColor.value,
     edgeOpacity: 1,
     edgeLineWidth: 1,
     edgeThresholdAngle: clampGlobalEdgeThresholdAngle(globalEdgeThresholdAngle.value),
@@ -838,6 +857,7 @@ function sceneDirectionToDesign(
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
 const globalEdgeThresholdAngle = ref(20);
+const globalEdgeColor = ref(0x4b5563);
 const focusTransparencyEnabled = ref(false);
 const focusDimOpacityPercent = ref(20);
 
@@ -849,7 +869,11 @@ let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
 
-let rafId: number | null = null;
+const tmpCameraPos = new Vector3();
+const tmpCameraTarget = new Vector3();
+const tmpProjMatrix = new Matrix4();
+let hasLastProjMatrix = false;
+const CAMERA_EPS_SQ = 1e-12;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
@@ -1335,21 +1359,47 @@ function onBackgroundChange(mode: BackgroundMode): void {
   applyBackground(mode);
 }
 
-const displayThemePresets: { mode: DisplayTheme; label: string; colorHint: string }[] = [
-  { mode: 'e3d', label: 'E3D', colorHint: '#4682B4' },
-  { mode: 'default', label: '默认', colorHint: '#90a4ae' },
-  { mode: 'design3d', label: '三维设计', colorHint: '#4CAF50' },
-];
-
-async function onDisplayThemeChange(theme: DisplayTheme): Promise<void> {
+function onDisplayThemeChange(theme: DisplayTheme): void {
   displayThemeStore.setDisplayTheme(theme);
+}
+
+/** 应用整套绘制样式：着色参数 + 灯光 + 边线 + 背景（边线/背景沿用各自的持久化通道） */
+function applyRenderStyle(mode: RenderStyle): void {
+  const preset = getRenderStylePreset(mode);
+  dtxLayerRef.value?.setRenderStyleParams({
+    specularScale: preset.specularScale,
+    flatness: preset.flatness,
+    opacityScale: preset.opacityScale,
+  });
+  dtxViewerRef.value?.setDefaultLightLevels(preset.lighting);
+  globalEdgeColor.value = preset.edges.color;
+  onGlobalEdgeEnabledChange(preset.edges.enabled);
+  onGlobalEdgeThresholdInput(preset.edges.thresholdAngle);
+  if (preset.background) {
+    onBackgroundChange(preset.background);
+  }
+  requestRender();
+}
+
+function onRenderStyleChange(mode: RenderStyle): void {
+  renderStyleStore.setRenderStyle(mode);
+}
+
+// 绘制样式唯一应用路径：弹层按钮与 ribbon「设置 → 绘制样式」（DockLayout 持久化）都只改 store
+watch(renderStyleStore.currentStyle, (mode) => {
+  applyRenderStyle(mode);
+});
+
+// 显示主题落到已装载模型的唯一路径：弹层按钮与 ribbon「设置 → 模型显示」（DockLayout 持久化）
+// 都只改 store，这里 watch 后统一重算材质
+watch(displayThemeStore.currentTheme, async (theme) => {
   const layer = dtxLayerRef.value;
   if (!layer || activeDbno === null) return;
   const config = await loadModelDisplayConfig();
   applyMaterialConfigToLoadedDtx(layer, activeDbno, config, theme);
   compatViewerRef.value?.scene.reapplyFocusTransparency();
   requestRender();
-}
+});
 
 function toastNeedSelection(): void {
   emitToast({ message: '请先选择对象' });
@@ -2085,6 +2135,8 @@ function attachPicking() {
   };
 
   const onDown = (e: PointerEvent) => {
+    // 右键按下记下起点：右键拖拽（平移/旋转）后 contextmenu 照样派发，构件右键菜单按位移阈值忽略
+    if (e.button === 2) rightButtonDownPos = { x: e.clientX, y: e.clientY };
     // 工具模式开启时，交由 tools（版本对比分屏进入时已把工具模式收成 none，分屏里的点击同样走这里记起点）
     if (store.toolMode.value && store.toolMode.value !== 'none') return;
     if (e.button !== 0) return;
@@ -2449,6 +2501,28 @@ function bindLocalDimensionAutosave(system: DimensionSystem): void {
   offLocalDimensionAutosave = system.document.subscribe(() => schedule());
 }
 
+const mbdExternalSync = createMbdExternalSync({
+  fetchPipeData: fetchMbdV2PipeData,
+  diagnostics: mbdDiagnosticsStore,
+  getSearch: () => window.location.search,
+  emitToast,
+});
+
+function syncMbdExternalDimensions(
+  system: DimensionSystem,
+  options: Readonly<{ forceRefresh?: boolean }> = {},
+): Promise<void> {
+  return mbdExternalSync.sync(system, {
+    ...options,
+    isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
+  });
+}
+
+function handleMbdLocationChange(): void {
+  if (!dimensionSystem) return;
+  void syncMbdExternalDimensions(dimensionSystem, { forceRefresh: true });
+}
+
 async function initializeDimensionViewport(): Promise<void> {
   const initializationVersion = ++dimensionInitializationVersion;
   const inputCanvas = mainCanvas.value;
@@ -2538,6 +2612,7 @@ async function initializeDimensionViewport(): Promise<void> {
   }
 
   dimensionSystem = result.system;
+  void syncMbdExternalDimensions(result.system);
   result.system.pointer.setEditSessionFactory((target) => {
     if (!['label', 'dimension', 'arc', 'leader'].includes(target.part)) {
       return null;
@@ -2605,13 +2680,62 @@ function closeMeasurementContextMenu(): void {
   measurementContextMenu.value = null;
 }
 
-/** 右键测量尺寸图形（canvas contextmenu + dimension hitTest）打开菜单。 */
+/** 构件右键菜单（plant-ui 视口右键「查看所属房间」对应入口）：GPU 拾取命中构件才弹。 */
+const objectContextMenu = ref<{ x: number; y: number; refno: string } | null>(null);
+let rightButtonDownPos: { x: number; y: number } | null = null;
+
+function closeObjectContextMenu(): void {
+  objectContextMenu.value = null;
+}
+
+function openSceneObjectContextMenu(ev: MouseEvent, canvas: HTMLCanvasElement, container: HTMLElement): void {
+  // 右键拖拽（平移/旋转）后 contextmenu 也照发：位移超阈值就不弹菜单
+  if (rightButtonDownPos
+    && Math.hypot(ev.clientX - rightButtonDownPos.x, ev.clientY - rightButtonDownPos.y) > 6) return;
+  const sel = selectionControllerRef.value;
+  if (!sel) return;
+  const rect = canvas.getBoundingClientRect();
+  const hit = sel.pick(new Vector2(ev.clientX - rect.left, ev.clientY - rect.top));
+  const refno = hit ? parseRefnoFromObjectId(hit.objectId) : null;
+  // 没命中构件：不拦事件，让批注等其它 contextmenu 订阅者照常处理
+  if (!refno) return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  const containerRect = container.getBoundingClientRect();
+  objectContextMenu.value = {
+    x: Math.min(ev.clientX - containerRect.left, Math.max(0, containerRect.width - 180)),
+    y: Math.min(ev.clientY - containerRect.top, Math.max(0, containerRect.height - 120)),
+    refno,
+  };
+}
+
+function onObjectMenuViewRooms(): void {
+  const refno = objectContextMenu.value?.refno ?? null;
+  closeObjectContextMenu();
+  if (!refno) return;
+  selectionStore.setSelectedRefno(refno);
+  openRoomInfo(refno);
+}
+
+function onObjectMenuViewProperties(): void {
+  const refno = objectContextMenu.value?.refno ?? null;
+  closeObjectContextMenu();
+  if (!refno) return;
+  selectionStore.setSelectedRefno(refno);
+  ensurePanelAndActivate('properties');
+}
+
+/** 右键测量尺寸图形（canvas contextmenu + dimension hitTest）打开菜单；否则构件右键弹「关联房间 / 属性」。 */
 function onViewerContextMenu(ev: MouseEvent): void {
   const system = viewerContext.dimensionSystem.value;
   const canvas = mainCanvas.value;
   const container = containerRef.value;
-  if (!system || !canvas || !container) return;
+  if (!canvas || !container) return;
   if (isModelUnitSplitCompareReady()) return;
+  if (!system) {
+    openSceneObjectContextMenu(ev, canvas, container);
+    return;
+  }
 
   const rect = canvas.getBoundingClientRect();
   system.viewport.flushProjection();
@@ -2620,7 +2744,10 @@ function onViewerContextMenu(ev: MouseEvent): void {
     8,
   );
   const dimensionId = hit?.dimensionId ?? null;
-  if (!dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)) return;
+  if (!dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)) {
+    openSceneObjectContextMenu(ev, canvas, container);
+    return;
+  }
   const measurementId = xeokitMeasurementToolsRef.value
     ?.resolveMeasurementIdFromDimensionId(dimensionId) ?? null;
   if (!measurementId) return;
@@ -2802,14 +2929,6 @@ function renderFrameImmediate() {
     annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
   }
 }
-
-let needsRender = true;
-let isRendering = false;
-const tmpCameraPos = new Vector3();
-const tmpCameraTarget = new Vector3();
-const tmpProjMatrix = new Matrix4();
-let hasLastProjMatrix = false;
-const CAMERA_EPS_SQ = 1e-12;
 
 function scheduleFrame() {
   if (rafId !== null) return;
@@ -2999,6 +3118,7 @@ onMounted(async () => {
   globalEdgeThresholdAngle.value = 20;
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
+  let globalEdgeUserSet = false;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
     continuousRender =
@@ -3039,6 +3159,7 @@ onMounted(async () => {
             q.get('dtx_global_edges') || localStorage.getItem('dtx_global_edges');
     if (globalEdgesRaw !== null && globalEdgesRaw !== undefined) {
       globalEdgeEnabled.value = String(globalEdgesRaw).trim() !== '0';
+      globalEdgeUserSet = true;
     }
 
     const edgeAngleRaw =
@@ -3047,6 +3168,7 @@ onMounted(async () => {
       globalEdgeThresholdAngle.value = clampGlobalEdgeThresholdAngle(
         Number(edgeAngleRaw),
       );
+      globalEdgeUserSet = true;
     }
 
     const focusTransparencyRaw =
@@ -3127,7 +3249,25 @@ onMounted(async () => {
   );
   globalEdgeOverlayRef.value = globalEdgeOverlay;
   lastGlobalEdgeRevision = -1;
+
+  // 绘制样式：着色/灯光始终按样式应用；边线开关/阈值与背景仅在用户没有持久化选择时
+  // 套样式预设（用户之后仍可单独调，走各自的持久化键）
+  const renderStylePreset = getRenderStylePreset(renderStyleStore.currentStyle.value);
+  dtxLayer.setRenderStyleParams({
+    specularScale: renderStylePreset.specularScale,
+    flatness: renderStylePreset.flatness,
+    opacityScale: renderStylePreset.opacityScale,
+  });
+  dtxViewer.setDefaultLightLevels(renderStylePreset.lighting);
+  if (!globalEdgeUserSet) {
+    globalEdgeEnabled.value = renderStylePreset.edges.enabled;
+    globalEdgeThresholdAngle.value = clampGlobalEdgeThresholdAngle(renderStylePreset.edges.thresholdAngle);
+  }
+  globalEdgeColor.value = renderStylePreset.edges.color;
   applyGlobalEdgeStyle();
+  if (!hasPersistedBackgroundMode() && renderStylePreset.background) {
+    applyBackground(renderStylePreset.background);
+  }
 
   // 显示加速：View Frustum Culling（按对象 AABB）
   viewCullControllerRef.value = new DTXViewCullController({ dtxLayer });
@@ -3880,7 +4020,26 @@ onMounted(async () => {
       `[vis][event] showModelByRefnos raw_refno_count=${refnos.length} unique_refno_count=${unique.length} regenModel=${(detail as any)?.regenModel ? 1 : 0} flyTo=${flyTo ? 1 : 0} highlight=${highlight ? 1 : 0}`,
     );
     const mg = modelGenerationRef.value;
-    if (!mg) return;
+    if (!mg) {
+      // 模型加载器没就绪也回执：否则 showModelByRefnosWithAck 的等待方会空等到超时，
+      // 且控制台只有一行事件日志、看不出丢弃原因。
+      consoleStore.addLog('warning', '[vis][event] showModelByRefnos 丢弃：模型加载器尚未就绪');
+      if (hasRequestId) {
+        window.dispatchEvent(
+          new CustomEvent('showModelByRefnosDone', {
+            detail: {
+              requestId,
+              requested: unique,
+              ok: [],
+              fail: unique.map((r) => ({ refno: r, error: '模型加载器尚未就绪' })),
+              error: '模型加载器尚未就绪',
+              suppressed: false,
+            },
+          }),
+        );
+      }
+      return;
+    }
     const dtxLayer = dtxLayerRef.value;
 
     const debugState: {
@@ -3952,7 +4111,9 @@ onMounted(async () => {
           });
         }
 
-        if (singleFlyTo && shouldApply && debugState.ok.length > 0) {
+        // flyTo 对批量同样成立（房间「加载模型」一次几十个 refno）：单构件不带守卫的已经在加载里飞过，
+        // 其余情况（多构件批次、或带 U0 守卫的单构件）统一按成功集合的并集 AABB 在这里飞。
+        if (!highlight && flyTo && debugState.ok.length > 0 && !(singleFlyTo && !shouldApply)) {
           const compat = compatViewerRef.value;
           if (!applyAllowed()) {
             suppressed = true;
@@ -4235,6 +4396,7 @@ onMounted(async () => {
 
   attachPicking();
   attachToolsInput();
+  window.addEventListener('popstate', handleMbdLocationChange);
   await initializeDimensionViewport();
   requestRender();
 });
@@ -4242,6 +4404,8 @@ onMounted(async () => {
 onUnmounted(() => {
   viewerContext.viewerError.value = null;
   dimensionMountDisposed = true;
+  window.removeEventListener('popstate', handleMbdLocationChange);
+  mbdExternalSync.invalidate();
   dimensionInitializationVersion += 1;
   dimensionSystem?.dispose();
   dimensionSystem = null;
@@ -4790,13 +4954,31 @@ onUnmounted(() => {
             <div class="space-y-1">
               <label class="text-xs text-muted-foreground">显示主题</label>
               <div class="flex flex-wrap gap-1.5">
-                <button v-for="preset in displayThemePresets"
+                <button v-for="preset in DISPLAY_THEME_PRESETS"
                   :key="preset.mode"
                   type="button"
                   class="flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
                   :class="displayThemeStore.currentTheme.value === preset.mode ? 'border-ring bg-muted font-medium' : 'border-border'"
                   :title="preset.label"
                   @click.stop="onDisplayThemeChange(preset.mode)">
+                  <span class="inline-block h-4 w-4 shrink-0 rounded-full border border-border"
+                    :style="{ background: preset.colorHint }" />
+                  <span>{{ preset.label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 绘制样式 -->
+            <div class="space-y-1">
+              <label class="text-xs text-muted-foreground">绘制样式</label>
+              <div class="flex flex-wrap gap-1.5">
+                <button v-for="preset in RENDER_STYLE_PRESETS"
+                  :key="preset.mode"
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                  :class="renderStyleStore.currentStyle.value === preset.mode ? 'border-ring bg-muted font-medium' : 'border-border'"
+                  :title="preset.label"
+                  @click.stop="onRenderStyleChange(preset.mode)">
                   <span class="inline-block h-4 w-4 shrink-0 rounded-full border border-border"
                     :style="{ background: preset.colorHint }" />
                   <span>{{ preset.label }}</span>
@@ -4898,8 +5080,8 @@ onUnmounted(() => {
     <!-- 管道间距离标注控制面板 -->
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />
 
-    <!-- 模型生成 / 库初始化面板 -->
-    <ModelGenerationDrawer v-model:open="modelGenerationOpen" />
+    <!-- 模型生成 / 库初始化弹窗 -->
+    <ModelGenerationDialog v-model:open="modelGenerationOpen" />
 
     <div v-if="initError"
       class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur"
@@ -4960,6 +5142,33 @@ onUnmounted(() => {
       @locate="onMeasurementMenuLocate"
       @toggle-visible="onMeasurementMenuToggleVisible"
       @remove="onMeasurementMenuRemove" />
+
+    <!-- 构件右键菜单（plant-ui 视口右键「查看所属房间」对应入口）：整幅蒙层负责点外面/再右键关菜单 -->
+    <div v-if="objectContextMenu" class="absolute inset-0" style="z-index: 950" data-testid="object-context-menu-root">
+      <div class="absolute inset-0"
+        data-testid="object-context-menu-backdrop"
+        @pointerdown.stop="closeObjectContextMenu"
+        @contextmenu.prevent.stop="closeObjectContextMenu" />
+      <div class="absolute min-w-40 rounded-xl border border-border bg-background/95 py-1 text-sm shadow-xl backdrop-blur"
+        data-testid="object-context-menu"
+        :style="{ left: `${objectContextMenu.x}px`, top: `${objectContextMenu.y}px` }"
+        @pointerdown.stop
+        @contextmenu.prevent.stop>
+        <div class="px-3 py-1.5 text-xs text-muted-foreground">{{ objectContextMenu.refno }}</div>
+        <button type="button"
+          class="flex w-full items-center px-3 py-1.5 text-left hover:bg-muted"
+          data-testid="object-menu-view-rooms"
+          @click="onObjectMenuViewRooms">
+          查看关联房间
+        </button>
+        <button type="button"
+          class="flex w-full items-center px-3 py-1.5 text-left hover:bg-muted"
+          data-testid="object-menu-view-properties"
+          @click="onObjectMenuViewProperties">
+          查看属性
+        </button>
+      </div>
+    </div>
 
     <ReviewConfirmation v-if="!store.annotationOverlayVisible.value" />
   </div>

@@ -185,6 +185,29 @@ export class DtxViewer {
     dir1.position.set(-0.9, -0.55, 0.5);
     dir1.name = 'DtxDirectionalLight1';
     this.scene.add(dir1);
+
+    this._defaultLights = { ambient, dir0, dir1 };
+  }
+
+  private _defaultLights: {
+    ambient: AmbientLight;
+    dir0: DirectionalLight;
+    dir1: DirectionalLight;
+  } | null = null;
+
+  /** 调整默认三灯强度（绘制样式预设用）；DTXLayer 每帧把场景灯同步进 shader */
+  setDefaultLightLevels(levels: { ambient?: number; dir0?: number; dir1?: number }): void {
+    const lights = this._defaultLights;
+    if (!lights) return;
+    if (typeof levels.ambient === 'number' && Number.isFinite(levels.ambient)) {
+      lights.ambient.intensity = Math.max(0, levels.ambient);
+    }
+    if (typeof levels.dir0 === 'number' && Number.isFinite(levels.dir0)) {
+      lights.dir0.intensity = Math.max(0, levels.dir0);
+    }
+    if (typeof levels.dir1 === 'number' && Number.isFinite(levels.dir1)) {
+      lights.dir1.intensity = Math.max(0, levels.dir1);
+    }
   }
 
   setSize(cssWidth: number, cssHeight: number): void {

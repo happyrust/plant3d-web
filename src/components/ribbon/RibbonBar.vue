@@ -77,6 +77,11 @@ function resolveIcon(name?: string) {
   if (!name) return null;
   return ribbonIcons[name as RibbonIconName] ?? null;
 }
+
+/** 按钮当前态（如「显示主题」指示当前主题）；谓词在渲染期求值，读响应式 ref 可联动 */
+function isItemActive(item: { active?: () => boolean }): boolean {
+  return item.active?.() === true;
+}
 function onTabClick(tabId: string) {
   if (activeTabId.value === tabId) {
     // 点击当前选中的标签，切换折叠状态
@@ -124,6 +129,7 @@ function onTabClick(tabId: string) {
             <button v-if="item.kind === 'button'"
               type="button"
               class="ribbon-btn ribbon-btn--large"
+              :class="{ 'ribbon-btn--current': isItemActive(item) }"
               :disabled="item.disabled"
               :data-command="item.commandId"
               @click="onClickCommand(item.commandId)">
@@ -137,6 +143,7 @@ function onTabClick(tabId: string) {
                 :key="sub.id"
                 type="button"
                 class="ribbon-btn ribbon-btn--small"
+                :class="{ 'ribbon-btn--current': isItemActive(sub) }"
                 :disabled="sub.disabled"
                 :data-command="sub.commandId"
                 @click="onClickCommand(sub.commandId)">
@@ -318,6 +325,18 @@ function onTabClick(tabId: string) {
 
 .ribbon-btn--large:active {
   background-color: hsl(var(--accent));
+}
+
+/* 当前态（如显示主题指示当前主题） */
+.ribbon-btn--current {
+  background-color: hsl(var(--muted));
+  box-shadow: inset 0 0 0 1px hsl(var(--ring));
+}
+
+.ribbon-btn--current .ribbon-btn__text--large,
+.ribbon-btn--current .ribbon-btn__text--small {
+  color: hsl(var(--primary));
+  font-weight: 600;
 }
 
 .ribbon-btn--large:disabled {

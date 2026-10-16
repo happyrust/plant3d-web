@@ -213,6 +213,10 @@ uniform vec3 lightColor1;
 // 0=all, 1=opaque, 2=transparent
 uniform int renderPass;
 uniform float alphaCutoff;
+// === 绘制样式 ===
+uniform float specularScale; // PBR 高光缩放：越小越哑光
+uniform float flatness;      // 平涂度：0=正常光照，1=纯色
+uniform float opacityScale;  // 全局不透明度缩放：<1 走透明通道，0=填充全隐
 
 // === 对数深度缓冲 + per-object depth bias ===
 #ifdef USE_LOGDEPTHBUF
@@ -250,7 +254,7 @@ vec3 calculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metalness, float ro
   float G1_L = NdotL / (NdotL * (1.0 - k) + k);
   float G = G1_V * G1_L;
 
-  vec3 specular = (D * G * F) / (4.0 * NdotV * NdotL + 0.001);
+  vec3 specular = (D * G * F) / (4.0 * NdotV * NdotL + 0.001) * specularScale;
   vec3 diffuse = (1.0 - F) * (1.0 - metalness) * albedo / 3.14159;
 
   return (diffuse + specular) * lightColor * NdotL;
@@ -260,7 +264,8 @@ void main() {
   if (vFlags == 0u) {
     discard;
   }
-  bool isOpaque = vColor.a >= alphaCutoff;
+  float alpha = vColor.a * opacityScale;
+  bool isOpaque = alpha >= alphaCutoff;
   if (renderPass == 1 && !isOpaque) {
     discard;
   }
@@ -271,7 +276,7 @@ void main() {
   if (renderPass == 2 && !gl_FrontFacing) {
     discard;
   }
-  if (vColor.a <= 0.001) {
+  if (alpha <= 0.001) {
     discard;
   }
 
@@ -289,9 +294,12 @@ void main() {
   vec3 directLight1 = calculatePBR(N, V, normalize(lightDirection1), albedo, vMetalness, vRoughness, lightColor1);
 
   // 输出保持线性空间，由 renderer 的 toneMapping/outputColorSpace 统一处理（与地形一致）
-  vec3 finalColor = ambient + directLight0 + directLight1;
+  vec3 lit = ambient + directLight0 + directLight1;
+  // 平涂（E3D 哑光观感）：向「环境光补偿过的反照率」混入，flatness=1 即纯色无光照
+  vec3 flatLit = albedo * (ambientLight + vec3(0.55, 0.55, 0.55));
+  vec3 finalColor = mix(lit, flatLit, clamp(flatness, 0.0, 1.0));
 
-  fragColor = vec4(finalColor, vColor.a);
+  fragColor = vec4(finalColor, alpha);
 
   #ifdef USE_LOGDEPTHBUF
     // z-fighting 抑制：DoubleSide 下背面再退后 5e-7 深度，破除同 object 自身闪烁。
@@ -323,6 +331,12 @@ export type DTXMaterialOptions = {
   primitiveToObjectTextureWidth?: number;
   renderPass?: 0 | 1 | 2;
   alphaCutoff?: number;
+  /** 绘制样式：PBR 高光缩放（越小越哑光），默认 1 */
+  specularScale?: number;
+  /** 绘制样式：平涂度 0~1（纯色无光照=1），默认 0 */
+  flatness?: number;
+  /** 绘制样式：全局不透明度缩放（X-ray<1 / 线框=0），默认 1 */
+  opacityScale?: number;
   transparent?: boolean;
   depthWrite?: boolean;
   depthTest?: boolean;
@@ -366,7 +380,10 @@ export class DTXMaterial extends ShaderMaterial {
         lightDirection1: { value: new Vector3(-1, 0.4, -1).normalize() },
         lightColor1: { value: new Vector3(0, 0, 0) },
         renderPass: { value: options.renderPass ?? 0 },
-        alphaCutoff: { value: options.alphaCutoff ?? 0.999 }
+        alphaCutoff: { value: options.alphaCutoff ?? 0.999 },
+        specularScale: { value: options.specularScale ?? 1 },
+        flatness: { value: options.flatness ?? 0 },
+        opacityScale: { value: options.opacityScale ?? 1 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
       glslVersion: GLSL3
@@ -401,7 +418,8 @@ export class DTXMaterial extends ShaderMaterial {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
     // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
-    return 'DTXMaterial_v11';
+    // v12: 绘制样式 uniforms（specularScale / flatness / opacityScale）
+    return 'DTXMaterial_v12';
   }
 
   /**

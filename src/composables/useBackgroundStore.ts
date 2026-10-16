@@ -34,6 +34,15 @@ export function getPreset(mode: BackgroundMode): BackgroundPreset {
   return BACKGROUND_PRESETS.find((p) => p.mode === mode) ?? BACKGROUND_PRESETS[0];
 }
 
+/** 用户是否曾显式选过背景（有持久化值）；绘制样式预设据此决定是否套用默认背景 */
+export function hasPersistedBackgroundMode(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function useBackgroundStore() {
   function setMode(mode: BackgroundMode): void {
     currentMode.value = mode;
