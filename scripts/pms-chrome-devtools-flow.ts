@@ -5,6 +5,10 @@
  * →（可选）plant3d 内注入构件 + 填数据包名 + 点击「创建编校审数据」→ 等待成功提示
  * →（默认）回到三维校审单，嗅探 PMS 域名下 JSON 接口响应体是否含包名/测试 BRAN（`PMS_CDP_VERIFY_PMS_API=0` 可关）。
  * →（可选，`PMS_CDP_SEND_FOR_REVIEW=1`）SJ 在 PMS 把本次发起的单据送审到「三维编校审」（校核 / 审核 / 批准按 `PMS_SEND_REVIEW_USERS`）。
+ * →（可选，`PMS_CDP_EXTENDED_FLOW=1`）逐站重登校核人员，走顶栏「待审批事项」打开单据 → 嵌入 plant3d →
+ *   外部流程模式下经 PMS 审批窗提交：「同意」→ WorkNodeSelect；有未决批注被拦时自动改走「驳回」→ WorkReturnSelect。
+ *   `PMS_CDP_FULL_CHAIN=1` 时把 `PMS_SEND_REVIEW_USERS` 后续节点（SH、PZ）逐级跑完至办结；
+ *   链式流转要求无未决批注，此时 JH 批注默认关闭（`PMS_CDP_JH_ANNOTATION=1` 可强制开）。
  *
  * 通过 Playwright 驱动 Chromium，底层使用 **Chrome DevTools Protocol (CDP)**。
  *
@@ -686,14 +690,38 @@ async function submitCheckerAgreeInPms(
     throw new Error(`PMS 同意：${timeoutMs}ms 内没等到${what}${shot ? `（截图 ${shot}）` : ''}`);
   };
 
-  const validFrame = await findFrame(
-    async (f) =>
-      (await frameLocationHref(f)).includes('/Form/ValidForm/')
-      && (await f.getByText('同意', { exact: true }).count()) > 0,
-    '审批窗里的「同意」',
-    60_000,
-  );
-  await validFrame.getByText('同意', { exact: true }).first().click({ timeout: 10_000 });
+  const visibleAgree = async (f: import('playwright').Frame) => {
+    if (!(await frameLocationHref(f)).includes('/Form/ValidForm/')) return null;
+    const all = f.getByText('同意', { exact: true });
+    const n = await all.count();
+    for (let i = 0; i < n; i++) {
+      const el = all.nth(i);
+      if (await el.isVisible().catch(() => false)) return el;
+    }
+    return null;
+  };
+  let validFrame: import('playwright').Frame | null = null;
+  let agreeBtn: import('playwright').Locator | null = null;
+  {
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline && !agreeBtn) {
+      for (const p of context.pages()) {
+        if (p.isClosed()) continue;
+        for (const f of p.frames()) {
+          if (f.isDetached()) continue;
+          const btn = await visibleAgree(f);
+          if (btn) { validFrame = f; agreeBtn = btn; break; }
+        }
+        if (agreeBtn) break;
+      }
+      if (!agreeBtn) await page.waitForTimeout(500);
+    }
+  }
+  if (!validFrame || !agreeBtn) {
+    const shot = await capturePmsPageScreenshot(page, 'pms-checker-agree-failed');
+    throw new Error(`PMS 同意：60s 内没找到可见的「同意」（审批窗/只读视图？）${shot ? `（截图 ${shot}）` : ''}`);
+  }
+  await agreeBtn.click({ timeout: 10_000 });
 
   // 「同意」后两种结局之一：审批处理弹窗（WorkNodeSelect），或批注未完成的拦截提示
   // （「检测到批注未完成处理或确认」——有未决批注时正确语义是驳回，不是硬通过）。
@@ -721,6 +749,8 @@ async function submitCheckerAgreeInPms(
   const waitEither = async (timeoutMs: number) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
+      // 末节点（批准）同意后可能没有下一节点可选：PMS 直接办结并关掉审批窗
+      if (validFrame.isDetached()) return { kind: 'done' as const, frame: validFrame };
       const node = await scanFor('WorkNodeSelect.html');
       if (node) return { kind: 'node' as const, frame: node };
       const blocked = await findBlockingTip();
@@ -728,10 +758,14 @@ async function submitCheckerAgreeInPms(
       await page.waitForTimeout(500);
     }
     const shot = await capturePmsPageScreenshot(page, 'pms-checker-agree-failed');
-    throw new Error(`PMS 同意：${timeoutMs}ms 内既没出「审批处理」弹窗也没见批注拦截提示${shot ? `（截图 ${shot}）` : ''}`);
+    throw new Error(`PMS 同意：${timeoutMs}ms 内既没出「审批处理」弹窗也没见批注拦截提示，审批窗也未关闭${shot ? `（截图 ${shot}）` : ''}`);
   };
 
   const outcome = await waitEither(40_000);
+  if (outcome.kind === 'done') {
+    console.error('[cdp] PMS 同意：审批窗已关闭（末节点直接办结）');
+    return;
+  }
   if (outcome.kind === 'blocked') {
     console.error('[cdp] PMS 同意被「批注未完成」拦截（语义正确：有未决批注应走驳回），改走驳回路径…');
     const okBtn = outcome.frame.locator('a.mini-button', { hasText: /确\s*定/ }).first();
@@ -741,7 +775,20 @@ async function submitCheckerAgreeInPms(
       await outcome.frame.getByText('确定', { exact: true }).first().click({ timeout: 5_000 }).catch(() => undefined);
     }
     await page.waitForTimeout(800);
-    await validFrame.getByText('驳回', { exact: true }).first().click({ timeout: 10_000 });
+    const rejectAll = validFrame.getByText('驳回', { exact: true });
+    const rejectCount = await rejectAll.count();
+    let rejectClicked = false;
+    for (let i = 0; i < rejectCount; i++) {
+      const el = rejectAll.nth(i);
+      if (await el.isVisible().catch(() => false)) {
+        await el.click({ timeout: 10_000 });
+        rejectClicked = true;
+        break;
+      }
+    }
+    if (!rejectClicked) {
+      await rejectAll.first().click({ timeout: 10_000 });
+    }
     const retFrame = await findFrame(
       async (f) => (await frameLocationHref(f)).includes('WorkReturnSelect.html'),
       '「选择退回节点」弹窗',
@@ -1258,7 +1305,32 @@ async function main(): Promise<void> {
           );
         }
 
-        console.error(`[cdp] 清除会话并以校核用户 ${checkerUsername} 重新登录…`);
+        // 审批链阶段队列：首站永远是 checkerUsername（默认 JH）；
+        // PMS_CDP_FULL_CHAIN=1 时把送审定义的后续节点（SH、PZ）依次排入，逐级重登 → 待办 → 审批窗同意。
+        // 链式审批要求单据持续向后流转——JH 站点加了批注会被「批注未完成」拦到驳回，单据回 SJ，
+        // 后续节点待办里根本没有它。所以 fullChain 下默认关掉 JH 批注（可用 PMS_CDP_JH_ANNOTATION=1 强制开）。
+        const fullChain =
+          process.env.PMS_CDP_FULL_CHAIN === '1' || process.env.PMS_CDP_FULL_CHAIN === 'true';
+        const jhAnnotationEnv = process.env.PMS_CDP_JH_ANNOTATION?.trim();
+        const jhAnnotate = jhAnnotationEnv !== undefined
+          ? jhAnnotationEnv !== '0' && jhAnnotationEnv !== 'false'
+          : !fullChain;
+        const extraApprovers = fullChain
+          ? sendReviewUsers.filter((u) => u.toUpperCase() !== checkerUsername.toUpperCase())
+          : [];
+        const checkerStages = [
+          { user: checkerUsername, annotate: jhAnnotate },
+          ...extraApprovers.map((u) => ({ user: u, annotate: false })),
+        ];
+        if (fullChain) {
+          console.error(
+            `[cdp] PMS_CDP_FULL_CHAIN：审批链 ${checkerStages.map((s) => s.user).join(' → ')}` +
+            `${jhAnnotate ? '（警告：JH 批注仍开启，单据会被驳回回 SJ，后续节点将找不到待办）' : '（JH 不加批注，走纯同意链）'}`,
+          );
+        }
+
+        for (const stage of checkerStages) {
+        console.error(`[cdp] 清除会话并以校核用户 ${stage.user} 重新登录…`);
         await context.clearCookies();
         await page.evaluate(() => {
           try { localStorage.clear(); } catch { /* ignore */ }
@@ -1269,7 +1341,7 @@ async function main(): Promise<void> {
         if (submitReview) {
           await registerPlant3dAutomationReviewInitScript(context);
         }
-        await login(page, checkerUsername, password);
+        await login(page, stage.user, password);
 
         console.error('[cdp] 设计交付 → 三维校审单…');
         let listOpened = false;
@@ -1281,36 +1353,39 @@ async function main(): Promise<void> {
             break;
           } catch (listErr) {
             lastListErr = listErr;
-            console.error(`[cdp] JH 打开三维校审单列表失败（第 ${attempt} 次）：${listErr instanceof Error ? listErr.message : String(listErr)}`);
+            console.error(`[cdp] ${stage.user} 打开三维校审单列表失败（第 ${attempt} 次）：${listErr instanceof Error ? listErr.message : String(listErr)}`);
             await page.waitForTimeout(2000).catch(() => undefined);
           }
         }
         if (!listOpened) {
-          const shot = await capturePmsPageScreenshot(page, 'pms-jh-open-list-failed');
+          const shot = await capturePmsPageScreenshot(page, `pms-${stage.user.toLowerCase()}-open-list-failed`);
           if (shot) {
-            console.error(`[cdp] JH 列表失败截图：${shot}`);
+            console.error(`[cdp] ${stage.user} 列表失败截图：${shot}`);
           }
-          throw lastListErr instanceof Error ? lastListErr : new Error('JH 无法打开三维校审单列表');
+          throw lastListErr instanceof Error ? lastListErr : new Error(`${stage.user} 无法打开三维校审单列表`);
         }
 
-        console.error(`[cdp] 尝试按已有单据匹配键打开记录：${reviewLookupNeedles.join(' | ') || '(空)'}`);
-        let openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
-        if (!openResult.opened) {
-          console.error('[cdp] JH 列表首轮未命中，刷新后再按 form_id / 记录号重试一次…');
-          await page.keyboard.press('F5').catch(() => undefined);
-          await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => undefined);
-          await openReviewFormList(page);
-          openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
-        }
-        if (!openResult.opened && createdFormId) {
-          // 真机上 JH 的三维校审单列表只显示「设计|日期」、不含 FORM id，匹配键永远落空；
-          // 正确入口是顶栏「待审批事项」待办（送审后才有），见 pms 文档 §1/§6.2。
-          console.error('[cdp] 列表匹配键落空，改走 JH 顶栏「待审批事项」待办路径…');
+        // 校核人员的权威入口是顶栏「待审批事项」待办（流转到本人节点才有）——列表路径即使
+        // 命中打开的也可能是只读视图（同意按钮不可见，SH 站实测踩过）。先待办，列表兜底。
+        let openResult: { opened: boolean; matchedNeedle: string | null } = { opened: false, matchedNeedle: null };
+        if (createdFormId) {
+          console.error(`[cdp] ${stage.user} 走顶栏「待审批事项」待办路径打开单据…`);
           openResult = await tryOpenReviewEntryViaCheckerTodo(page, context, createdFormId);
         }
         if (!openResult.opened) {
+          console.error(`[cdp] 待办路径${createdFormId ? '未命中' : '不可用（无 form_id）'}，尝试按已有单据匹配键打开记录：${reviewLookupNeedles.join(' | ') || '(空)'}`);
+          openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+          if (!openResult.opened) {
+            console.error(`[cdp] ${stage.user} 列表首轮未命中，刷新后再按 form_id / 记录号重试一次…`);
+            await page.keyboard.press('F5').catch(() => undefined);
+            await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => undefined);
+            await openReviewFormList(page);
+            openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+          }
+        }
+        if (!openResult.opened) {
           throw new Error(
-            `JH 未能在 PMS 列表中打开已有单据。匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}。`
+            `${stage.user} 未能在 PMS 列表中打开已有单据。匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}。`
             + (reviewEntryCandidates.length
               ? ` 候选记录：${reviewEntryCandidates.map((x) => formatReviewEntryCandidate(x)).join(' || ')}`
               : ' 当前未提取到结构化候选记录。'),
@@ -1321,16 +1396,17 @@ async function main(): Promise<void> {
         if (!viewerOpened) {
           const diag = await describeContextRoots(context).catch(() => '');
           if (diag) {
-            console.error(`[cdp] JH 打开 plant3d 失败诊断：\n${diag}`);
+            console.error(`[cdp] ${stage.user} 打开 plant3d 失败诊断：\n${diag}`);
           }
-          const shot = await capturePmsPageScreenshot(page, 'pms-jh-open-viewer-failed');
+          const shot = await capturePmsPageScreenshot(page, `pms-${stage.user.toLowerCase()}-open-viewer-failed`);
           if (shot) {
-            console.error(`[cdp] JH 打开 plant3d 失败截图：${shot}`);
+            console.error(`[cdp] ${stage.user} 打开 plant3d 失败截图：${shot}`);
           }
-          throw new Error(`JH 已选中单据 ${openResult.matchedNeedle}，但 PMS 未真正打开 plant3d 工作区`);
+          throw new Error(`${stage.user} 已选中单据 ${openResult.matchedNeedle}，但 PMS 未真正打开 plant3d 工作区`);
         }
-        console.error('[cdp] JH 已从 PMS 记录进入 plant3d 工作区');
+        console.error(`[cdp] ${stage.user} 已从 PMS 记录进入 plant3d 工作区`);
 
+        if (stage.annotate) {
         console.error('[cdp] 扫描 iframe 内校审面板，自动添加批注…');
         try {
           const annotResult = await runReviewerAnnotationAcrossContext(context);
@@ -1341,10 +1417,11 @@ async function main(): Promise<void> {
           if (diag) {
             console.error(`[cdp] 校核批注诊断：\n${diag}`);
           }
-          const shot = await capturePmsPageScreenshot(page, 'pms-jh-annotation-missing-hook');
+          const shot = await capturePmsPageScreenshot(page, `pms-${stage.user.toLowerCase()}-annotation-missing-hook`);
           if (shot) {
             console.error(`[cdp] 校核批注诊断截图：${shot}`);
           }
+        }
         }
 
         const reviewerRefreshRestoreEnabled =
@@ -1359,7 +1436,7 @@ async function main(): Promise<void> {
             if (diag) {
               console.error(`[cdp] 校核刷新恢复失败诊断：\n${diag}`);
             }
-            const shot = await capturePmsPageScreenshot(page, 'pms-jh-refresh-restore-failed');
+            const shot = await capturePmsPageScreenshot(page, `pms-${stage.user.toLowerCase()}-refresh-restore-failed`);
             if (shot) {
               console.error(`[cdp] 校核刷新恢复失败截图：${shot}`);
             }
@@ -1390,11 +1467,12 @@ async function main(): Promise<void> {
         }
         if (internalSubmitVisible) {
           await runCheckerWorkflowAcrossContext(context);
-          console.error('[cdp] 校核流程：已在 plant3d 内点击流程区提交按钮');
+          console.error(`[cdp] 校核流程：${stage.user} 已在 plant3d 内点击流程区提交按钮`);
         } else {
-          console.error('[cdp] 校核工作区为外部流程模式（无内部提交按钮），改走 PMS 审批窗「同意」…');
-          await submitCheckerAgreeInPms(page, context, 'E2E 自动化校核同意');
-          console.error('[cdp] 校核流程：已在 PMS 审批窗完成校核提交（同意，或批注拦截后的驳回）');
+          console.error(`[cdp] ${stage.user} 校核工作区为外部流程模式（无内部提交按钮），改走 PMS 审批窗「同意」…`);
+          await submitCheckerAgreeInPms(page, context, `E2E 自动化校核同意（${stage.user}）`);
+          console.error(`[cdp] 校核流程：${stage.user} 已在 PMS 审批窗完成校核提交（同意，或批注拦截后的驳回）`);
+        }
         }
       }
     }

@@ -128,6 +128,7 @@
 | PMS-04 | SJ PMS 送审 | 单据送审「三维编校审」→ JH 待办（JH/SH/PZ 逐级指派） | 同上（SEND_FOR_REVIEW） | 通过 |
 | PMS-05 | JH 打开嵌入页 | JH 登录 → 待办「待审批事项」命中 form_id → plant3d 嵌入页打开（列表兜底已实现） | 同上（EXTENDED） | 通过 |
 | PMS-06 | JH 校核提交 | 外部流程模式（无内部按钮）→ PMS 审批窗「同意」；有未决批注时按 PMS 语义改走「驳回」→ 退回设计节点 | 同上（EXTENDED） | 通过（驳回路径，见附录） |
+| PMS-06b | 全链逐级审批 | `PMS_CDP_FULL_CHAIN=1`：JH→SH→PZ 逐人重登 → 待办命中 → 嵌入页 → 审批窗同意 → 单据逐级流转至办结 | 同上（FULL_CHAIN，JH 不加批注） | 通过（FORM-87C972506BED） |
 | PMS-07 | 新单入口 spec | PMS 新建单据页交互 | `e2e/pms-powerpms-review-new.spec.ts` | 可执行 |
 | PMS-08 | 模拟器-嵌入 | 模拟器内嵌项目链路 | `e2e/pms-review-simulator-embed-project.spec.ts` | 可执行 |
 | PMS-09 | 模拟器-mock | mock 数据模拟器链路 | `e2e/pms-review-simulator-mocked.spec.ts` | 可执行 |
@@ -164,7 +165,12 @@
   PMS 拒绝同意，语义正确）→ 确定后走「驳回」→ WorkReturnSelect 填意见提交，
   单据退回设计节点。本轮脚本两处加固：待办候选按索引跳过已试条目（原死循环）、
   校核提交支持「同意→审批处理」与「批注拦截→驳回」双结局。
-  **遗留**：SH/PZ 两级流转本脚本不覆盖（单据已退回 SJ）；`PMS_MOCK_PACKAGE_NAME`
-  下 extended 仍要求 `PMS_CDP_WORKFLOW_MODE`、`PMS_INITIATE_CHECKER_SUBSTRING`（仅
-  mock 路径需要）。
+- **PMS 全链审批**（2026-10-17，第二轮）：追加 `PMS_CDP_FULL_CHAIN=1`（隐式关 JH 批注），
+  **JH→SH→PZ 逐级同意全部通过**（FORM-87C972506BED）：每站清会话重登 → 待办命中 form_id
+  → 嵌入 plant3d 外部流程模式 → PMS 审批窗「同意」→ WorkNodeSelect 提交 → 单据流转下一节点。
+  两处实测教训已固化进脚本：校核阶段一律优先走「待审批事项」待办（列表路径即使命中
+  打开的也可能是只读视图，「同意」存在但不可见——SH 站实测踩过）；「同意/驳回」谓词
+  加可见性检查；末节点（PZ）同意后若无 WorkNodeSelect、审批窗直接关闭同样判成功。
+  **遗留**：`PMS_MOCK_PACKAGE_NAME` 下 extended 仍要求 `PMS_CDP_WORKFLOW_MODE`、
+  `PMS_INITIATE_CHECKER_SUBSTRING`（仅 mock 路径需要）。
 - **部署健康**：DEP-01..06 全部通过（run 38917741165 / 38919003556 两次 success）。
