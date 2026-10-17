@@ -84,3 +84,14 @@
 修复：改走 `handleInstancesLoaded()`——先按原语义重置（手动模式行为不变），自动模式开着且当前选中仍解出 BRAN 时经同一条 350ms 防抖路径补一次重查（多库分批加载合并为一次）。
 实测修复后：范围显示加载完成 → 自动补发 1 次 `nearest-clearance` → 10 类 facet / 26 行 / 10 条标注自动恢复。
 回归：useSpatialCompute 34/34 含新用例「新批次实例加载使结果失效：自动模式补一次重查，手动模式只清不查」。
+
+## 五、标注呈现改为 pill 引线标签 + 净距段（`40c4d0ac` 之后）
+
+每条候选由一条 external 线性尺寸改为两条记录：
+
+- `bran-clearance:<noun>:<refno>:<i>`：**pill 引线标签**（explicit + tag）——锚点 `b`（目标表面点）画圆点 + 引线 + 白底药丸「NOUN ≈587mm」；tag 走 billboard 求解（多角 × 多环候选位，避让其他标签），密集场景不再互相压字。
+- `…:seg`：**净距段**（annotation 类）——`a`（管表面点）→`b` 细直线 + `a` 端圆点，`formattedLabel` 为空，只画几何。
+
+实测（:8022，BRAN `24384/22726`，自动模式重选后）：registry `bran-clearance` = 20 条记录（10 候选 × 2），
+pill 文字实测为「PANE ≈0mm / WALL ≈0mm / STWALL ≈388mm / STRT ≈660mm / SCTN ≈661mm / FLOOR ≈1188mm / FITT ≈1378mm / BEND ≈2685mm / TAPE ≈2817mm / BOX ≈4105mm」——全部可读无叠字。
+截图见 `shots/01-auto-follow-annotations.png`（三维 pill+引线+周边范围构件）、`02-result-rows.png`（结果行 标注/跳转/精算）、`03-auto-follow-switch-and-range.png`（自动计算开关 + 范围显示控件）。
