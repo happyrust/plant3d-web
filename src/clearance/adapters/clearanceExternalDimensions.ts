@@ -2,6 +2,7 @@
 import type { ClearanceFaceKind, ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import type { ExternalDimensionMappingResult, ExternalDimensionRecord, Vec3 } from '@/dimension';
 
+import { computationMethodLabel } from '@/composables/measurementMethodLabel';
 import { toLegacyApproximate } from '@/measurement/domain/computationProvenance';
 
 /**
@@ -47,10 +48,10 @@ export function clearanceDimensionText(record: ClearanceRecord): string {
   return `${stale}${approximate}${formatMillimetres(snapshot.distanceM)}${perpendicular}`;
 }
 
-/** 来源标签：`外表面净距: 24384_22582 → 17496_105912（墙面外侧）`。 */
+/** 来源标签：`外表面净距: 24384_22582 → 17496_105912（墙面外侧）`。方法按记录 provenance 说真话。 */
 export function clearanceSourceLabel(record: ClearanceRecord): string {
   const face = clearanceFaceLabel(record.snapshot?.targetFace?.kind);
-  const method = record.provenance.method === 'surface-to-surface' ? '外表面净距' : '净距';
+  const method = computationMethodLabel(record.provenance.method);
   return `${method}: ${record.inputs.sourceRefno} → ${record.inputs.targetRefno}${face ? `（${face}）` : ''}`;
 }
 

@@ -31,7 +31,7 @@ describe('clearanceExternalDimensions', () => {
     expect(dimension!.id).toBe(`${CLEARANCE_EXTERNAL_SOURCE}:${record.id}`);
     expect(dimension!.source).toBe('clearance');
     expect(dimension!.role).toBe('external');
-    expect(dimension!.sourceLabel).toBe('外表面净距: 24384_22582 → 17496_105912（墙面外侧）');
+    expect(dimension!.sourceLabel).toBe('实体外表面净距: 24384_22582 → 17496_105912（墙面外侧）');
     const layout = normalizeExternalDimension(dimension!);
     expect(layout).toMatchObject({
       kind: 'linear',
@@ -47,7 +47,7 @@ describe('clearanceExternalDimensions', () => {
   it('formats text by status and geometry: stale prefix, no ⊥ without a perpendicular, sub-10mm keeps a decimal', () => {
     const straight = surfaceClearanceToRecord(boxToStraightWallResponse(), { sourceRefno: '24384_24830', targetRefno: '17496_105812' }, AT);
     expect(clearanceDimensionText(straight)).toBe('885mm');
-    expect(clearanceSourceLabel(straight)).toBe('外表面净距: 24384_24830 → 17496_105812（墙面）');
+    expect(clearanceSourceLabel(straight)).toBe('实体外表面净距: 24384_24830 → 17496_105812（墙面）');
     expect(clearanceDimensionText(withClearanceStatus(straight, 'stale'))).toBe('（过期）885mm');
     expect(clearanceDimensionText(withClearanceStatus(straight, 'failed'))).toBe('（重算失败，旧值）885mm');
 
@@ -62,7 +62,7 @@ describe('clearanceExternalDimensions', () => {
   it('labels a hit on a wall opening as 洞口 and keeps its ⊥ (opening is a main face)', () => {
     const inHole = surfaceClearanceToRecord(pipeInWallOpeningResponse(), { sourceRefno: '24384_30001', targetRefno: '17496_105812' }, AT);
     expect(inHole.snapshot?.targetFace?.kind).toBe('opening');
-    expect(clearanceSourceLabel(inHole)).toBe('外表面净距: 24384_30001 → 17496_105812（洞口）');
+    expect(clearanceSourceLabel(inHole)).toBe('实体外表面净距: 24384_30001 → 17496_105812（洞口）');
     expect(clearanceDimensionText(inHole)).toBe('50mm ⊥');
   });
 

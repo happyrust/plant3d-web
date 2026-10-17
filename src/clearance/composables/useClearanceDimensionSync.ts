@@ -15,7 +15,7 @@ export type ClearanceDimensionSink = Readonly<{
 
 /**
  * store 里可见的 Clearance 记录 → 外部尺寸源 `clearance`（09-11 PR1.1 第 4 条：外部尺寸源只负责画）。
- * 与 `usePipeDistanceAnnotationThree` 同一形状：watch 记录 / 开关 / 尺寸系统三者，任一变化整源替换。
+ * watch 记录 / 开关 / 尺寸系统三者，任一变化整源替换。
  */
 export function useClearanceDimensionSync(
   dimensionSystemRef: Ref<ClearanceDimensionSink | null>,

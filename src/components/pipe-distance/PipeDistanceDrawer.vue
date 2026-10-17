@@ -14,13 +14,14 @@ import {
 } from 'lucide-vue-next';
 import { Vector3, type Matrix4 } from 'three';
 
+import type { ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import type { Vec3 } from '@/types/vec3';
 
+import { computationMethodLabel } from '@/composables/measurementMethodLabel';
 import {
   findNounByRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { usePipeDistanceAnnotationThree } from '@/composables/usePipeDistanceAnnotationThree';
 import { usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -49,17 +50,10 @@ const isPicking = computed(() => toolStore.toolMode.value === 'pick_refno');
 const isBoxPicking = computed(() => toolStore.toolMode.value === 'pick_refno_box');
 const isAnyPicking = computed(() => isPicking.value || isBoxPicking.value);
 
-// 3D 标注渲染（仅渲染当前可见的结果：跳过被 hide 的 + 不满足距离阈值的）
-const annotationVis = usePipeDistanceAnnotationThree(
-  computed(() => ctx.viewerRef.value),
-  store.visibleResults,
-  store.showAnnotations,
-  computed(() => ctx.annotationSystem.value),
-  computed(() => ctx.dimensionSystem.value)
-);
+// #64：结果真相是 ClearanceRecord，渲染统一走 `useClearanceDimensionSync` 的 `clearance`
+// 外部源（ViewerPanel 全局挂着）——本抽屉不再持有 `pipe-distance` 外部源，也不复制记录。
 
 onUnmounted(() => {
-  annotationVis.clearAnnotations();
   if (import.meta.env.DEV && typeof window !== 'undefined') {
     delete (window as typeof window & { __plant3dPipeDistanceE2E?: unknown }).__plant3dPipeDistanceE2E;
   }
@@ -112,29 +106,26 @@ function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDi
   if (fallbackResults.length === 0) return false;
   const matrix = (ctx.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer?.getGlobalModelMatrix?.();
   const inverse = matrix && matrix.elements.every(Number.isFinite) && matrix.determinant() !== 0 ? matrix.clone().invert() : null;
+  // 没有逆矩阵就解不出 design-world 坐标——记录拿不到可靠坐标不落库（旧模型硬写场景坐标，保存时才炸）。
+  if (!inverse) return false;
   const toDesign = (point: Vec3): Vec3 => {
-    const p = new Vector3(...point).applyMatrix4(inverse!);
+    const p = new Vector3(...point).applyMatrix4(inverse);
     return [p.x, p.y, p.z];
   };
   store.setBranRefnos(refnos);
   store.showAnnotations.value = true;
-  store.results.value = fallbackResults.map(result => ({ ...result, measurementKind: 'axis-estimate', status: 'current',
-    ...(inverse ? { designPoints: { start: toDesign(result.start), end: toDesign(result.end),
-      ...(result.pipeAStart ? { pipeAStart: toDesign(result.pipeAStart) } : {}), ...(result.pipeAEnd ? { pipeAEnd: toDesign(result.pipeAEnd) } : {}),
-      ...(result.pipeBStart ? { pipeBStart: toDesign(result.pipeBStart) } : {}), ...(result.pipeBEnd ? { pipeBEnd: toDesign(result.pipeBEnd) } : {}) } } : {}),
-  }));
-  store.activeResultIndex.value = 0;
+  store.commitPipeDistanceResults(fallbackResults.map(result => ({ ...result, measurementKind: 'axis-estimate', status: 'current',
+    designPoints: { start: toDesign(result.start), end: toDesign(result.end) } })));
   store.detectError.value = '外表面净距未算出，当前显示模型拟合中心距估算；不能用作净距验收。';
   return true;
 }
 
 async function detectBransWithDtxFallback(refnos: string[]) {
   const applied = await store.autoDetectBrans(refnos, {
-    transformPoint: createSceneTransformPoint(),
     pairMode: 'all-pairs',
   });
   if (!applied) return;
-  if (store.results.value.length > 0) return;
+  if (store.lastRunSettledCount.value > 0) return;
 
   const fallbackResults = createDtxAxisDistanceFallback(refnos);
   applyDetectionFallbackResults(refnos, fallbackResults);
@@ -147,7 +138,7 @@ async function handleDetect() {
 async function handleDetectNearby() {
   const source = store.selectedBranRefnos.value[0];
   if (source && store.selectedBranRefnos.value.length === 1)
-    await store.detectNearbyBrans(source, { transformPoint: createSceneTransformPoint() });
+    await store.detectNearbyBrans(source);
 }
 
 function getCurrentSelectedBrans(): string[] {
@@ -187,8 +178,8 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
       getSnapshot: () => {
         selectedBranRefnos: string[];
         detectError: string | null;
-        visibleResults: PipeDistanceResult[];
-        results: PipeDistanceResult[];
+        visibleResults: ClearanceRecord[];
+        results: ClearanceRecord[];
       };
     };
   }).__plant3dPipeDistanceE2E = {
@@ -200,41 +191,51 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
         store.maxDistance.value = Math.max(store.maxDistance.value, Math.ceil(maxInjectedDistance));
       }
       store.showAnnotations.value = true;
-      store.results.value = [...results];
-      store.activeResultIndex.value = results.length > 0 ? 0 : null;
+      store.commitPipeDistanceResults(results);
       store.detectError.value = null;
     },
     getSnapshot: () => ({
       selectedBranRefnos: [...store.selectedBranRefnos.value],
       detectError: store.detectError.value,
       visibleResults: [...store.visibleResults.value],
-      results: [...store.results.value],
+      results: [...store.pipeResults.value],
     }),
   };
 }
 
 // --- result click ---
-function onResultClick(index: number, result: PipeDistanceResult) {
-  store.setActiveResult(index);
+/** 行点击 / 定位：选中两侧构件（优先 provenance 实体 refno——平行直段记录的 inputs 是直段锚），飞到净距两端点的包围盒。 */
+function onResultClick(record: ClearanceRecord) {
+  store.setActiveResult(record.id);
   const viewer = ctx.viewerRef.value;
   if (!viewer) return;
   try {
+    const refnos = [record.provenance.source.refno || record.inputs.sourceRefno,
+      record.provenance.target.refno || record.inputs.targetRefno];
     // 取消之前的选中
     const prev = viewer.scene.selectedObjectIds;
     if (prev.length > 0) viewer.scene.setObjectsSelected(prev, false);
     // 高亮选中的管道对
-    viewer.scene.ensureRefnos([result.pipeA, result.pipeB]);
-    viewer.scene.setObjectsSelected([result.pipeA, result.pipeB], true);
-    // 飞行定位到管道对
+    viewer.scene.ensureRefnos(refnos);
+    viewer.scene.setObjectsSelected(refnos, true);
+    // 飞行定位：优先飞到净距快照的两端点（design 米 → mm → 场景），没有快照退回构件包围盒
     const transform = createSceneTransformPoint();
-    const [s, e] = result.designPoints && transform
-      ? [transform(result.designPoints.start), transform(result.designPoints.end)]
-      : [result.start, result.end];
-    const aabb: [number, number, number, number, number, number] = [
-      Math.min(s[0], e[0]), Math.min(s[1], e[1]), Math.min(s[2], e[2]),
-      Math.max(s[0], e[0]), Math.max(s[1], e[1]), Math.max(s[2], e[2]),
-    ];
-    viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+    const [s, e] = record.snapshot
+      ? [record.snapshot.sourcePoint, record.snapshot.targetPoint]
+      : [null, null];
+    const aabb = transform && s && e
+      ? (() => {
+        const sp = transform([s[0] * 1000, s[1] * 1000, s[2] * 1000] as Vec3);
+        const ep = transform([e[0] * 1000, e[1] * 1000, e[2] * 1000] as Vec3);
+        return [
+          Math.min(sp[0], ep[0]), Math.min(sp[1], ep[1]), Math.min(sp[2], ep[2]),
+          Math.max(sp[0], ep[0]), Math.max(sp[1], ep[1]), Math.max(sp[2], ep[2]),
+        ] as [number, number, number, number, number, number];
+      })()
+      : viewer.scene.getAABB(refnos);
+    if (aabb) {
+      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+    }
   } catch {
     // ignore
   }
@@ -251,7 +252,7 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    if (store.selectedBranRefnos.value.length > 0 || store.results.value.length > 0) return;
+    if (store.selectedBranRefnos.value.length > 0 || store.pipeResults.value.length > 0) return;
     void detectCurrentSelectedBrans({ quiet: true });
   },
 );
@@ -279,7 +280,13 @@ const resultMinDistanceInput = computed({
   },
 });
 
-const hiddenCount = computed(() => store.results.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
+const hiddenCount = computed(() => store.pipeResults.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
+
+/** 记录行显示的距离（mm）：无快照的记录给 null——行显示「—」，阈值筛选跳过它（与旧 `results` 恒有距离的行为一致）。 */
+function recordDistanceMm(record: ClearanceRecord): number | null {
+  const distanceM = record.snapshot?.distanceM;
+  return Number.isFinite(distanceM) ? distanceM! * 1000 : null;
+}
 
 function isResultHidden(id: string): boolean {
   return store.hiddenResultIds.value.has(id);
@@ -443,9 +450,9 @@ function isResultHidden(id: string): boolean {
             <div class="mb-2 flex items-center justify-between">
               <span class="text-xs font-semibold text-foreground">
                 检测结果 ({{ store.visibleResults.value.length }}
-                <span v-if="store.visibleResults.value.length !== store.results.value.length" class="text-muted-foreground">/ {{ store.results.value.length }}</span>)
+                <span v-if="store.visibleResults.value.length !== store.pipeResults.value.length" class="text-muted-foreground">/ {{ store.pipeResults.value.length }}</span>)
               </span>
-              <button v-if="store.results.value.length > 0" type="button"
+              <button v-if="store.pipeResults.value.length > 0" type="button"
                 class="inline-flex items-center gap-1 text-xs text-destructive hover:underline"
                 @click="store.clearResults()">
                 <Trash2 class="h-3 w-3" />
@@ -454,7 +461,7 @@ function isResultHidden(id: string): boolean {
             </div>
 
             <!-- 距离阈值筛选 -->
-            <div v-if="store.results.value.length > 0" class="mb-2 flex items-center gap-2">
+            <div v-if="store.pipeResults.value.length > 0" class="mb-2 flex items-center gap-2">
               <label class="text-[11px] text-muted-foreground whitespace-nowrap">仅看 ≥</label>
               <input v-model.number="resultMinDistanceInput"
                 type="number"
@@ -474,7 +481,7 @@ function isResultHidden(id: string): boolean {
               已隐藏 {{ hiddenCount }} 条
             </div>
 
-            <div v-if="store.results.value.length === 0"
+            <div v-if="store.pipeResults.value.length === 0"
               class="py-4 text-center text-xs text-muted-foreground">
               暂无检测结果
             </div>
@@ -486,34 +493,34 @@ function isResultHidden(id: string): boolean {
             </div>
             <div v-else
               class="max-h-[200px] overflow-auto rounded-md border border-border">
-              <div v-for="(result, idx) in store.results.value"
-                v-show="!isResultHidden(result.id) && (store.resultMinDistance.value === null || result.distance >= store.resultMinDistance.value)"
-                :key="result.id"
+              <div v-for="record in store.pipeResults.value"
+                v-show="!isResultHidden(record.id) && (store.resultMinDistance.value === null || recordDistanceMm(record) === null || recordDistanceMm(record)! >= store.resultMinDistance.value)"
+                :key="record.id"
                 class="group flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"
-                :class="store.activeResultIndex.value === idx
+                :class="store.activeResultId.value === record.id
                   ? 'bg-brand-subtle border-l-2 border-l-brand'
                   : 'hover:bg-muted'"
-                @click="onResultClick(idx, result)">
+                @click="onResultClick(record)">
                 <span class="font-mono text-sm font-semibold"
-                  :class="store.activeResultIndex.value === idx ? 'text-brand' : 'text-foreground'">
-                  {{ result.distance }}
+                  :class="store.activeResultId.value === record.id ? 'text-brand' : 'text-foreground'">
+                  {{ recordDistanceMm(record) === null ? '—' : Math.round(recordDistanceMm(record)!) }}
                 </span>
                 <span class="text-xs text-muted-foreground">mm</span>
-                <span class="text-[11px] text-muted-foreground">{{ result.status === 'stale' ? '过期，待重算 · ' : '' }}{{ result.measurementKind === 'axis-estimate' ? '中心距估算' : '外表面净距' }}</span>
+                <span class="text-[11px] text-muted-foreground">{{ record.status === 'stale' ? '过期，待重算 · ' : '' }}{{ computationMethodLabel(record.provenance.method) }}</span>
                 <span class="flex-1 truncate text-xs text-muted-foreground">
-                  {{ result.pipeA }} ↔ {{ result.pipeB }}
+                  {{ record.provenance.source.refno || record.inputs.sourceRefno }} ↔ {{ record.provenance.target.refno || record.inputs.targetRefno }}
                 </span>
                 <button type="button"
                   class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-colors hover:bg-muted-foreground/20 hover:text-foreground group-hover:opacity-100"
-                  :title="isResultHidden(result.id) ? '显示该条标注' : '隐藏该条标注'"
-                  @click.stop="store.toggleResultHidden(result.id)">
-                  <EyeOff v-if="isResultHidden(result.id)" class="h-3 w-3" />
+                  :title="isResultHidden(record.id) ? '显示该条标注' : '隐藏该条标注'"
+                  @click.stop="store.toggleResultHidden(record.id)">
+                  <EyeOff v-if="isResultHidden(record.id)" class="h-3 w-3" />
                   <Eye v-else class="h-3 w-3" />
                 </button>
                 <button type="button"
                   class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-0 hover:bg-muted-foreground/20 group-hover:opacity-100"
                   title="定位"
-                  @click.stop="onResultClick(idx, result)">
+                  @click.stop="onResultClick(record)">
                   <Locate class="h-3 w-3" />
                 </button>
               </div>
