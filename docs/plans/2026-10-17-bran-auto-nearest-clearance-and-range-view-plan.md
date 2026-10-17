@@ -5,7 +5,11 @@
 > 上位：#91（`surface-clearance` 精算 → `ClearanceStore`）、#63/#64（ClearanceStore 统一）、
 > gen-model 计划 `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md`（`/nearest-clearance` 口径）。
 > 基线：plant3d-web `main@c935540a`；gen-model `/api/v1/spatial/nearest-clearance`、`/nearby/refnos`、`/surface-clearance` 均已在 `:8024` 实例可用。
-> 状态：**进行中**。plannotator 评审已通过（2026-10-17，`{"decision":"approved"}`，无批注）；**T1、T2 已在工作区落地（未提交）**，T3–T6 待做；D1–D4 已拍板，D5–D7 待拍板（推荐值见 §3，评审未提出异议）。
+> 状态：**T1–T5 全部落地**（T1+T2 `6d41269f`、T3 `bfb1fad5`、T4 `ac9e4568`、T5 `d64da99f`）；D5–D7 按推荐执行
+> （D5 不自动精算 / D6 发 `surface=1` / D7 随 scope 持久化）。
+> **T6 API 级已验证**：`docs/verification/bran-auto-clearance-2026-10-17/README.md`——`surface=1` 差值恒 = OD/2=12.5mm、
+> FLOOR 估算与精算同值 587.5、WALL 估算「相交」被精算纠正为 232.964mm、范围 r3000=265 项/4 库；
+> UI 侧两条交互（跟随选中画标注、全部精算面板流）留作带界面手测清单。教程 §10 已加（`SPATIAL_QUERY_TUTORIAL.md`）。
 
 ## 0. 一句话
 
