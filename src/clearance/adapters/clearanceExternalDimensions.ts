@@ -27,8 +27,28 @@ const FACE_LABEL: Readonly<Record<ClearanceFaceKind, string>> = Object.freeze({
   unknown: '',
 });
 
-export function clearanceFaceLabel(kind: ClearanceFaceKind | null | undefined): string {
-  return kind ? FACE_LABEL[kind] : '';
+/** 非墙族目标（`any` 口径的柱 / 楼板等）的中性措辞——柱子的底面不是「墙底」。 */
+const FACE_LABEL_GENERIC: Readonly<Record<ClearanceFaceKind, string>> = Object.freeze({
+  inner: '内侧',
+  outer: '外侧',
+  side: '表面',
+  opening: '洞口',
+  top: '顶部',
+  bottom: '底部',
+  end: '端部',
+  unknown: '',
+});
+
+/** 与 gen-model `surface_clearance::WALL_NOUNS` 逐字相同；拾取过滤与措辞判定共用这一份。 */
+export const CLEARANCE_WALL_NOUNS: readonly string[] = Object.freeze(['CWALL', 'WALL', 'STWALL', 'GWALL', 'PANE']);
+
+export function isWallClearanceNoun(noun: string | null | undefined): boolean {
+  return !!noun && CLEARANCE_WALL_NOUNS.includes(noun.trim().toUpperCase());
+}
+
+export function clearanceFaceLabel(kind: ClearanceFaceKind | null | undefined, targetNoun?: string): string {
+  if (!kind) return '';
+  return (targetNoun !== undefined && !isWallClearanceNoun(targetNoun) ? FACE_LABEL_GENERIC : FACE_LABEL)[kind];
 }
 
 function formatMillimetres(distanceM: number): string {
@@ -50,7 +70,7 @@ export function clearanceDimensionText(record: ClearanceRecord): string {
 
 /** 来源标签：`外表面净距: 24384_22582 → 17496_105912（墙面外侧）`。方法按记录 provenance 说真话。 */
 export function clearanceSourceLabel(record: ClearanceRecord): string {
-  const face = clearanceFaceLabel(record.snapshot?.targetFace?.kind);
+  const face = clearanceFaceLabel(record.snapshot?.targetFace?.kind, record.targetNoun);
   const method = computationMethodLabel(record.provenance.method);
   return `${method}: ${record.inputs.sourceRefno} → ${record.inputs.targetRefno}${face ? `（${face}）` : ''}`;
 }

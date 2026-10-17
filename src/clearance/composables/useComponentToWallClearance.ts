@@ -4,7 +4,7 @@ import type { ClearanceService } from '@/clearance/services/clearanceService';
 import type { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import type { ToastPayload } from '@/ribbon/toastBus';
 
-import { clearanceFaceLabel } from '@/clearance/adapters/clearanceExternalDimensions';
+import { clearanceFaceLabel, CLEARANCE_WALL_NOUNS, isWallClearanceNoun } from '@/clearance/adapters/clearanceExternalDimensions';
 import { normalizeClearanceRefno, type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 
 /**
@@ -14,8 +14,8 @@ import { normalizeClearanceRefno, type ClearanceRecord } from '@/clearance/domai
  * 三维交互本身（点选、Enter / Esc）沿用 `useDtxTools` 对 `pick_refno` 的既有处理，这里只定义边界。
  */
 
-/** 与 gen-model `surface_clearance::WALL_NOUNS` 逐字相同：CWALL 是 owner，其余四个是 `/nearest-clearance` 的 `wall` 预置组。 */
-export const CLEARANCE_WALL_PICK_NOUNS: readonly string[] = Object.freeze(['CWALL', 'WALL', 'STWALL', 'GWALL', 'PANE']);
+/** CWALL 是 owner，其余四个是 `/nearest-clearance` 的 `wall` 预置组；字面清单在 adapter 的 `CLEARANCE_WALL_NOUNS`（措辞判定共用）。 */
+export const CLEARANCE_WALL_PICK_NOUNS: readonly string[] = CLEARANCE_WALL_NOUNS;
 
 export type ComponentToWallToolStore = Readonly<{
   toolMode: Ref<string>;
@@ -43,15 +43,17 @@ export type ComponentToWallClearanceDeps = Readonly<{
  * `contact` 贴合——垂距就是净距本身（0 mm 坐在板上的型钢那类）；`edge` 最近点在墙的棱 / 角上、射线落空，
  * 两点连线偏面法向不到 1%，取连线当垂距——「近似垂直」，把来历说出来免得用户当成正对墙面打出来的。
  */
-function perpendicularClause(snapshot: NonNullable<ClearanceRecord['snapshot']>): string {
-  const perpendicular = snapshot.perpendicular;
+function perpendicularClause(record: ClearanceRecord): string {
+  const perpendicular = record.snapshot?.perpendicular;
   if (!perpendicular) return '';
-  const surface = snapshot.targetFace?.kind === 'opening' ? '洞壁' : '墙面';
+  // 「墙」只是目标族之一：`any` 口径下柱 / 楼板也带垂距，措辞跟着目标走，别管柱子叫墙。
+  const isWall = isWallClearanceNoun(record.targetNoun);
+  const surface = record.snapshot!.targetFace?.kind === 'opening' ? '洞壁' : isWall ? '墙面' : '构件表面';
   switch (perpendicular.method) {
     case 'contact':
       return `，与${surface}贴合，垂距即净距`;
     case 'edge':
-      return `，近似垂直于${surface}（最近点在墙的棱上，取连线为垂距）`;
+      return `，近似垂直于${surface}（最近点在${isWall ? '墙' : '构件'}的棱上，取连线为垂距）`;
     default:
       return `，垂直于${surface}`;
   }
@@ -63,8 +65,8 @@ export function formatClearanceToast(record: ClearanceRecord): string {
   if (snapshot.intersects) return `${record.inputs.sourceRefno} 与 ${record.inputs.targetRefno} 相交（净距 0）`;
   const mm = snapshot.distanceM * 1000;
   const distance = mm < 10 ? mm.toFixed(2) : mm.toFixed(1);
-  const face = clearanceFaceLabel(snapshot.targetFace?.kind);
-  return `外表面净距 ${distance} mm${face ? `（${face}）` : ''}${perpendicularClause(snapshot)}`;
+  const face = clearanceFaceLabel(snapshot.targetFace?.kind, record.targetNoun);
+  return `外表面净距 ${distance} mm${face ? `（${face}）` : ''}${perpendicularClause(record)}`;
 }
 
 export function useComponentToWallClearance(deps: ComponentToWallClearanceDeps) {

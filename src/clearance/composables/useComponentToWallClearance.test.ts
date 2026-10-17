@@ -183,4 +183,18 @@ describe('useComponentToWallClearance', () => {
     expect(legacyRecord.snapshot?.perpendicular?.method).toBe('ray');
     expect(formatClearanceToast(legacyRecord)).toBe('外表面净距 64.4 mm（墙面外侧），垂直于墙面');
   });
+
+  it('formatClearanceToast 对非墙族目标（柱 / 楼板走 any 口径）用构件措辞，不管柱子叫墙', () => {
+    const column = surfaceClearanceToRecord(
+      {
+        ...tubePastPaneCornerResponse(),
+        target: { ...tubePastPaneCornerResponse().target, noun: 'SCTN' },
+      },
+      { sourceRefno: '24384_22726', targetRefno: '24381_2306', targetKind: 'any' },
+      AT,
+    );
+    expect(column.targetNoun).toBe('SCTN');
+    expect(column.snapshot?.perpendicular?.method).toBe('edge');
+    expect(formatClearanceToast(column)).toBe('外表面净距 46.6 mm（表面），近似垂直于构件表面（最近点在构件的棱上，取连线为垂距）');
+  });
 });
