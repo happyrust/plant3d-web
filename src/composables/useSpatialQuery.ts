@@ -2482,10 +2482,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  function isolateResults() {
+  /**
+   * 「隔离结果」：命中集合实体显示、其余 X-Ray。`keepRefnos` 额外保实体——「BRAN 中心线范围显示」把源 BRAN
+   * 自己留在实体侧（它不是命中：`include_self=false`），不然参考管被半透明化看不见。
+   */
+  function isolateResults(keepRefnos: string[] = []) {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
-    const keep = withCompanions(resolveBatchRefnos(), 'all');
+    const keep = uniqStrings([...withCompanions(resolveBatchRefnos(), 'all'), ...keepRefnos]);
     if (!viewer || keep.length === 0) return;
     snapshotVisibility(viewer, keep);
     const all = viewer.scene.objectIds.slice();

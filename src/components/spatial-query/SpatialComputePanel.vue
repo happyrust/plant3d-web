@@ -181,6 +181,54 @@
             </label>
           </div>
 
+          <!-- 自动模式：开着时选中 BRAN / 其管件即自动提交本场景；关掉回到手动「从场景读取 + 执行计算」 -->
+          <label v-if="isBranScenario"
+            class="mt-3 flex cursor-pointer items-center gap-2 rounded-[10px] border px-3 py-2 transition-colors"
+            :class="autoFollowSelection ? 'border-brand bg-brand-subtle' : 'border-gray-200 bg-white'"
+            data-testid="bran-auto-follow">
+            <input type="checkbox"
+              :checked="autoFollowSelection"
+              class="h-3.5 w-3.5 accent-brand"
+              @change="onAutoFollowChange" />
+            <span class="text-xs font-semibold" :class="autoFollowSelection ? 'text-brand' : 'text-foreground'">选中 BRAN / 管件自动计算</span>
+            <span class="ml-auto text-[11px] text-muted-foreground">半径内每类默认标注最近 1 条（包围盒估算）</span>
+          </label>
+
+          <!-- 范围显示：沿当前 BRAN 中心线按半径圈周边构件 → 加载未加载的 → 命中实体、其余半透明（空间查询抽屉同一管线） -->
+          <div v-if="isBranScenario" class="mt-3" data-testid="bran-range-block">
+            <div class="flex items-center gap-2">
+              <span class="shrink-0 text-xs font-semibold text-muted-foreground">范围显示</span>
+              <div class="flex h-9 w-24 items-center rounded-[10px] border border-gray-200 bg-white px-2">
+                <input v-model="rangeDistance"
+                  type="number"
+                  min="1"
+                  max="100000"
+                  data-testid="bran-range-distance"
+                  class="w-full bg-transparent font-mono text-[12px] outline-none" />
+                <span class="text-[11px] text-muted-foreground">mm</span>
+              </div>
+              <button type="button"
+                :disabled="rangeBusy"
+                class="h-9 flex-1 rounded-[10px] bg-primary text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="bran-range-show"
+                @click="showBranRange">
+                <Loader2 v-if="rangeBusy" class="mr-1 inline h-3.5 w-3.5 animate-spin" />
+                {{ rangeBusy ? '查询并加载…' : '显示范围内模型' }}
+              </button>
+              <button type="button"
+                class="h-9 shrink-0 rounded-[10px] border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                title="清掉隔离的半透明效果，恢复被显隐动过的构件"
+                data-testid="bran-range-restore"
+                @click="restoreBranRange">
+                恢复
+              </button>
+            </div>
+            <p class="mt-1 text-[11px] leading-relaxed text-gray-400">
+              沿当前 BRAN 中心线按半径圈出全部构件：未加载的自动加载，命中实体显示、其余半透明；源 BRAN 保持实体。结果同时进空间查询抽屉，可继续按库/专业操作。
+            </p>
+            <p v-if="rangeError" class="mt-1 text-[11px] font-medium text-danger" data-testid="bran-range-error">{{ rangeError }}</p>
+          </div>
+
           <!-- Action Row -->
           <div class="mt-3 flex gap-2">
             <button type="button"
@@ -326,13 +374,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import { Check, ChevronDown, Loader2, MousePointerClick, Ruler } from 'lucide-vue-next';
 
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
-import { useSpatialCompute } from '@/composables/useSpatialCompute';
+import { normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
 
 defineEmits<{
   'select-refno': [refno: string];
@@ -350,6 +398,8 @@ const {
   setPanelMode,
   setActiveScenario,
   applyCurrentSelection: applyComputeSelection,
+  autoFollowSelection,
+  setAutoFollowSelection,
   submitScenario,
   refineBranCandidate,
   toggleScenarioExpanded,
@@ -365,6 +415,72 @@ const branFacetTotal = computed(() => computeState.value.nounFacets.reduce((sum,
 
 function runComputeScenario() {
   void submitScenario();
+}
+
+function onAutoFollowChange(event: Event) {
+  setAutoFollowSelection((event.target as HTMLInputElement).checked);
+}
+
+const rangeDistance = ref('5000');
+const rangeBusy = ref(false);
+const rangeError = ref('');
+
+/**
+ * 「范围显示」：把这条 BRAN 交给空间查询同一套管线（距离查询 · 沿 BRAN 中心线 + 半径）查出全部周边构件，
+ * 只加载未加载的并飞到结果包围盒，再隔离成「命中实体、其余半透明」。源 BRAN 经 keepRefnos 留在实体侧
+ * （`include_self=false`，它不是命中）。结果同时落在空间查询抽屉的结果区，可继续分组操作或在那里恢复场景。
+ */
+async function showBranRange() {
+  if (rangeBusy.value) return;
+  rangeError.value = '';
+  const state = spatialCompute.currentScenarioState.value;
+  const bran = normalizeBranComputeRefno(state.queriedSourceRefno || state.suppoRefno);
+  if (!bran) {
+    rangeError.value = '先选中一个 BRAN（或开上面的「自动计算」）再显示范围';
+    return;
+  }
+  const radius = Number(rangeDistance.value);
+  if (!Number.isFinite(radius) || radius <= 0 || radius > 100000) {
+    rangeError.value = '范围距离需是 1–100000 mm 的数字';
+    return;
+  }
+  rangeBusy.value = true;
+  try {
+    const { useSpatialQuery } = await import('@/composables/useSpatialQuery');
+    const spatialQuery = useSpatialQuery();
+    spatialQuery.setMode('distance');
+    spatialQuery.draft.distanceCenterSource = 'bran_centerline';
+    spatialQuery.draft.refno = bran;
+    spatialQuery.draft.radius = radius;
+    // draft 与空间查询抽屉共享——上次在抽屉里设的过滤不能漏进这次「范围内全部构件」
+    spatialQuery.draft.nounText = '';
+    spatialQuery.draft.keyword = '';
+    spatialQuery.draft.rooms = [];
+    spatialQuery.draft.specValues = [];
+    spatialQuery.draft.includeNegative = false;
+    spatialQuery.draft.onlyLoaded = false;
+    spatialQuery.draft.onlyVisible = false;
+    await spatialQuery.submitQuery();
+    if (spatialQuery.error.value || (spatialQuery.resultSet.value?.items.length ?? 0) === 0) {
+      rangeError.value = spatialQuery.error.value || '范围内没有构件';
+      return;
+    }
+    await spatialQuery.loadResults({ onlyUnloaded: true, flyTo: true });
+    spatialQuery.isolateResults([bran]);
+    if (spatialQuery.error.value) {
+      rangeError.value = spatialQuery.error.value;
+    }
+  } catch (err) {
+    rangeError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    rangeBusy.value = false;
+  }
+}
+
+function restoreBranRange() {
+  void import('@/composables/useSpatialQuery')
+    .then(({ useSpatialQuery }) => useSpatialQuery().restoreScene())
+    .catch((err: unknown) => { console.warn('[bran-range] restoreScene failed', err); });
 }
 
 function hasField(field: SpatialComputeScenarioField) {

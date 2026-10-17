@@ -12,11 +12,15 @@ vi.mock('@/composables/useViewerContext', () => ({
   }),
 }));
 
-vi.mock('@/composables/useSelectionStore', () => ({
-  useSelectionStore: () => ({
-    selectedRefno: { value: '' },
-  }),
-}));
+vi.mock('@/composables/useSelectionStore', async () => {
+  const { ref } = await import('vue');
+  // 「跟随选中」的 watch 要真 ref 才触发；探针导出给用例直接改选中。
+  const selectedRefno = ref<string | null>(null);
+  return {
+    useSelectionStore: () => ({ selectedRefno }),
+    __selectedRefno: selectedRefno,
+  };
+});
 
 describe('useSpatialCompute BRAN nearest clearance', () => {
   beforeEach(() => {
@@ -563,6 +567,148 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(normalizeBranComputeRefno('24381/145018')).toBe('24381_145018');
     expect(normalizeBranComputeRefno('<24381/145018>')).toBe('24381_145018');
     expect(normalizeBranComputeRefno('=24381,145018')).toBe('24381_145018');
+  });
+});
+
+describe('useSpatialCompute 跟随选中自动计算（autoFollowSelection）', () => {
+  /** createSpatialComputeStore 直连出来的 store 不走单例 reset，逐一 dispose 才不串用例。 */
+  const createdStores: ReturnType<typeof createSpatialComputeStore>[] = [];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetSpatialComputeStore();
+    createdStores.length = 0;
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    for (const store of createdStores.splice(0)) store.dispose();
+    (await selectedRefnoProbe()).value = null;
+    resetSpatialComputeStore();
+  });
+
+  function makeStore(options: Parameters<typeof createSpatialComputeStore>[0]) {
+    const store = createSpatialComputeStore(options);
+    createdStores.push(store);
+    return store;
+  }
+
+  async function selectedRefnoProbe(): Promise<{ value: string | null }> {
+    const module = await import('@/composables/useSelectionStore');
+    return (module as unknown as { __selectedRefno: { value: string | null } }).__selectedRefno;
+  }
+
+  /** 每次调用新建 Response——同一个 body 只能消费一次。 */
+  function stubAutoFetch() {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(autoResponse), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  function autoCandidate(refno: string, noun: string, distance: number) {
+    return {
+      refno,
+      noun,
+      distance_mm: distance,
+      intersects: false,
+      nearest: {
+        source_segment_refno: '24381_145001',
+        source_segment_order: 1,
+        source_point: { x: 0, y: 0, z: 0 },
+        target_point: { x: 1, y: 0, z: 0 },
+        vector: { dx: 1, dy: 0, dz: 0 },
+      },
+      annotation: { start_point: { x: 0, y: 0, z: 0 }, end_point: { x: 1, y: 0, z: 0 }, label_mm: distance },
+    };
+  }
+
+  const autoResponse = {
+    success: true,
+    nearest_by_group: [
+      { group: 'WALL', nouns: ['WALL'], candidates: [autoCandidate('24381_1', 'WALL', 1200)] },
+      { group: 'SCTN', nouns: ['SCTN'], candidates: [autoCandidate('24381_3', 'SCTN', 830)] },
+    ],
+    noun_counts: { WALL: 1, SCTN: 1 },
+    excluded_self_members: 0,
+  };
+
+  it('打开开关且当前选中是管件：解到所属 BRAN 立即查询，默认标注每类最近一条', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    selected.value = '24381_777';
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno === '24381_777' ? '24381_145018' : null),
+      autoFollowDebounceMs: 0,
+    });
+
+    store.setAutoFollowSelection(true);
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const url = new URL(String(fetchMock.mock.calls[0]?.[0]), 'http://localhost');
+    expect(url.pathname).toBe('/api/v1/spatial/nearest-clearance');
+    expect(url.searchParams.get('source_refno')).toBe('24381/145018');
+    const state = store.scenarios.branNearestClearance;
+    expect(state.suppoRefno).toBe('24381_145018');
+    expect(state.queriedSourceRefno).toBe('24381_145018');
+    // 每类默认画最近 1 条 → annotationCandidates 各桶 1 条
+    expect(state.drawnCandidateKeys).toEqual(['WALL:24381_1', 'SCTN:24381_3']);
+    expect(state.annotationCandidates).toHaveLength(2);
+  });
+
+  it('开着开关时：同一根 BRAN 的构件不重复查，非 BRAN 不清结果，换 BRAN 才重查', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const branOf: Record<string, string | null> = {
+      pipe_a: '24381_145018',
+      pipe_a2: '24381_145018',
+      pipe_b: '24381_999999',
+      wall_1: null,
+    };
+    const store = makeStore({
+      resolveOwnerBran: (refno) => branOf[refno] ?? null,
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(store.scenarios.branNearestClearance.queriedSourceRefno).toBe('24381_145018');
+
+    selected.value = 'pipe_a2';
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    selected.value = 'wall_1';
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0);
+
+    selected.value = 'pipe_b';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const url = new URL(String(fetchMock.mock.calls[1]?.[0]), 'http://localhost');
+    expect(url.searchParams.get('source_refno')).toBe('24381/999999');
+    await vi.waitFor(() => expect(store.scenarios.branNearestClearance.queriedSourceRefno).toBe('24381_999999'));
+  });
+
+  it('关掉开关后选中 BRAN 不再自动查询', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno.startsWith('pipe') ? '24381_145018' : null),
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    store.setAutoFollowSelection(false);
+    selected.value = 'pipe_b';
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

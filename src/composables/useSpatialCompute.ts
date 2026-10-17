@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 import type {
   BranNearestClearanceCandidate,
@@ -399,9 +399,25 @@ function parseOptionalNumber(raw: string | number | null | undefined, fieldLabel
   return value;
 }
 
-export function createSpatialComputeStore() {
+export type SpatialComputeStoreOptions = Readonly<{
+  /**
+   * 选中构件 → 所属 BRAN（点中管件也算「选中 BRAN」，与 `measure_pipe_to_structure` 同口径）。
+   * 缺省用 DTX 实例缓存的 `findOwnerBranRefnoAcrossAllDbnos`（动态引入：该模块牵 three.js 加载链）。
+   */
+  resolveOwnerBran?: (refno: string) => string | null;
+  /** 「跟随选中」防抖窗口（连点一串构件只发一次查询）；默认 350ms，测试给 0 */
+  autoFollowDebounceMs?: number;
+}>;
+
+export function createSpatialComputeStore(options: SpatialComputeStoreOptions = {}) {
   const viewerContext = useViewerContext();
   const selection = useSelectionStore();
+  const autoFollowDebounceMs = options.autoFollowDebounceMs ?? 350;
+  /** 「跟随选中」开关：开着时选中 BRAN / 管件自动提交本场景；结果照常走 facet + 每类最近 1 条标注。 */
+  const autoFollowSelection = ref(false);
+  let autoFollowTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 自动模式最近一次触发查询的 BRAN：重选同一根不重复请求。 */
+  let autoQueriedBranRefno = '';
   const panelMode = ref<'query' | 'compute'>('compute');
   const activeScenario = ref<SpatialComputeScenarioKey>('branNearestClearance');
   const scenarioExpanded = ref(false);
@@ -510,6 +526,7 @@ export function createSpatialComputeStore() {
   function resetScenario(key: SpatialComputeScenarioKey = activeScenario.value) {
     requestTokens[key] = ++nextRequestToken;
     Object.assign(scenarios[key], createScenarioState(key));
+    autoQueriedBranRefno = '';
   }
 
   function applyCurrentSelection() {
@@ -648,7 +665,54 @@ export function createSpatialComputeStore() {
     applyBranSelection(state);
   }
 
+  async function resolveOwnerBranRefno(refno: string): Promise<string | null> {
+    const resolver = options.resolveOwnerBran
+      ?? (await import('@/composables/useDbnoInstancesDtxLoader')).findOwnerBranRefnoAcrossAllDbnos;
+    return resolver(refno);
+  }
+
+  function clearAutoFollowTimer() {
+    if (autoFollowTimer !== null) {
+      clearTimeout(autoFollowTimer);
+      autoFollowTimer = null;
+    }
+  }
+
+  /** 自动模式核心：选中（或其所属）BRAN 变了才重查；同一根重选、选中非 BRAN 都不动现有结果。 */
+  async function autoSubmitForSelection(rawRefno: string | null): Promise<void> {
+    const refno = rawRefno ? normalizeBranComputeRefno(rawRefno) : '';
+    const branRefno = refno ? await resolveOwnerBranRefno(refno) : null;
+    if (!autoFollowSelection.value || !branRefno || branRefno === autoQueriedBranRefno) return;
+    autoQueriedBranRefno = branRefno;
+    const state = scenarios.branNearestClearance;
+    state.suppoRefno = branRefno;
+    await submitScenario('branNearestClearance');
+  }
+
+  const stopAutoFollowWatch = watch(
+    () => selection.selectedRefno.value,
+    (refno) => {
+      if (!autoFollowSelection.value) return;
+      clearAutoFollowTimer();
+      autoFollowTimer = setTimeout(() => {
+        autoFollowTimer = null;
+        // 版本对比（calculationsAllowed=false）下静默跳过：对比里点 A/B 隔离图层也写选中，不能连发查询。
+        if (calculationsAllowed) void autoSubmitForSelection(refno);
+      }, autoFollowDebounceMs);
+    },
+  );
+
+  /** 开 / 关「跟随选中」。打开时对当前选中立即评估一次（已是 BRAN 选中状态不用重新点）。 */
+  function setAutoFollowSelection(enabled: boolean) {
+    autoFollowSelection.value = enabled;
+    clearAutoFollowTimer();
+    if (!enabled) return;
+    autoQueriedBranRefno = '';
+    void autoSubmitForSelection(selection.selectedRefno.value);
+  }
+
   const onProjectChanged = () => {
+    autoQueriedBranRefno = '';
     if (persistence.hasPersistenceContext.value) return;
     for (const k of Object.keys(scenarios) as SpatialComputeScenarioKey[]) {
       requestTokens[k] = ++nextRequestToken;
@@ -664,7 +728,7 @@ export function createSpatialComputeStore() {
       const apply = prepareSnapshotRestore(value);
       return () => persistence.applyPreparedRestore(apply);
     },
-    dispose: () => { persistence.dispose(); if (typeof window !== 'undefined') window.removeEventListener('modelProjectChanged', onProjectChanged); },
+    dispose: () => { persistence.dispose(); stopAutoFollowWatch(); clearAutoFollowTimer(); if (typeof window !== 'undefined') window.removeEventListener('modelProjectChanged', onProjectChanged); },
     panelMode,
     activeScenario,
     scenarioList,
@@ -678,6 +742,8 @@ export function createSpatialComputeStore() {
     setActiveScenario,
     resetScenario,
     applyCurrentSelection,
+    autoFollowSelection,
+    setAutoFollowSelection,
     submitScenario,
     refineBranCandidate,
     toggleScenarioExpanded,

@@ -13,6 +13,37 @@ vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => ({ selectedRefno: { value: '' } }),
 }));
 
+/** 「范围显示」驱动的空间查询 store 桩：draft 真可变，四个动作记调用；结果集/错误可控。 */
+const spatialQueryStub = vi.hoisted(() => {
+  const draft = {
+    mode: '',
+    distanceCenterSource: '',
+    refno: '',
+    radius: 0,
+    nounText: 'stale-noun',
+    keyword: 'stale-kw',
+    rooms: ['stale-room'],
+    specValues: [7],
+    includeNegative: true,
+    onlyLoaded: true,
+    onlyVisible: true,
+  };
+  return {
+    draft,
+    resultSet: { value: { items: [{ refno: '24381_9' }] } },
+    error: { value: '' },
+    setMode: vi.fn((mode: string) => { draft.mode = mode; }),
+    submitQuery: vi.fn(async () => {}),
+    loadResults: vi.fn(async () => {}),
+    isolateResults: vi.fn(),
+    restoreScene: vi.fn(),
+  };
+});
+
+vi.mock('@/composables/useSpatialQuery', () => ({
+  useSpatialQuery: () => spatialQueryStub,
+}));
+
 function candidate(refno: string, noun: string, distance: number) {
   return {
     refno,
@@ -151,5 +182,91 @@ describe('SpatialComputePanel · BRAN 净距的类型 facet', () => {
     expect(rowStates(host)).toEqual(['24381_1|true', '24381_11|true', '24381_3|true']);
     expect(store.scenarios.branNearestClearance.annotationCandidates.map((item) => item.candidate.refno)).toEqual(['24381_1', '24381_11', '24381_3']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SpatialComputePanel · BRAN 中心线范围显示', () => {
+  let mounted: ReturnType<typeof mountPanel> | null = null;
+
+  beforeEach(() => {
+    resetSpatialComputeStore();
+    vi.clearAllMocks();
+    spatialQueryStub.error.value = '';
+    spatialQueryStub.resultSet.value = { items: [{ refno: '24381_9' }] };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 })));
+  });
+
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+    vi.unstubAllGlobals();
+    resetSpatialComputeStore();
+  });
+
+  it('填范围点「显示范围内模型」：沿 BRAN 中心线查、清掉抽屉残留过滤、加载未加载并隔离（源 BRAN 保实体）', async () => {
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+    store.scenarios.branNearestClearance.queriedSourceRefno = '24381_145018';
+
+    const distance = host.querySelector<HTMLInputElement>('[data-testid="bran-range-distance"]')!;
+    distance.value = '3200';
+    distance.dispatchEvent(new Event('input'));
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-range-show"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateResults).toHaveBeenCalledTimes(1));
+
+    expect(spatialQueryStub.setMode).toHaveBeenCalledWith('distance');
+    expect(spatialQueryStub.draft.distanceCenterSource).toBe('bran_centerline');
+    expect(spatialQueryStub.draft.refno).toBe('24381_145018');
+    expect(spatialQueryStub.draft.radius).toBe(3200);
+    // 抽屉里残留的过滤不能漏进来
+    expect(spatialQueryStub.draft.nounText).toBe('');
+    expect(spatialQueryStub.draft.rooms).toEqual([]);
+    expect(spatialQueryStub.draft.specValues).toEqual([]);
+    expect(spatialQueryStub.draft.onlyLoaded).toBe(false);
+    expect(spatialQueryStub.submitQuery).toHaveBeenCalledTimes(1);
+    expect(spatialQueryStub.loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(spatialQueryStub.isolateResults).toHaveBeenCalledWith(['24381_145018']);
+  });
+
+  it('没有 BRAN / 非法范围：内联报错且不发查询', async () => {
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.scenarios.branNearestClearance.suppoRefno = '';
+    store.scenarios.branNearestClearance.queriedSourceRefno = '';
+
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-range-show"]')!.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="bran-range-error"]')?.textContent).toContain('先选中一个 BRAN');
+    expect(spatialQueryStub.submitQuery).not.toHaveBeenCalled();
+
+    store.scenarios.branNearestClearance.suppoRefno = '24381_145018';
+    const distance = host.querySelector<HTMLInputElement>('[data-testid="bran-range-distance"]')!;
+    distance.value = '0';
+    distance.dispatchEvent(new Event('input'));
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-range-show"]')!.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="bran-range-error"]')?.textContent).toContain('1–100000');
+    expect(spatialQueryStub.submitQuery).not.toHaveBeenCalled();
+  });
+
+  it('查询报错 / 范围内无构件：显示错误且不加载不隔离；「恢复」调 restoreScene', async () => {
+    spatialQueryStub.error.value = '';
+    spatialQueryStub.resultSet.value = { items: [] };
+    mounted = mountPanel();
+    const { host } = mounted;
+    useSpatialCompute().scenarios.branNearestClearance.suppoRefno = '24381_145018';
+
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-range-show"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.submitQuery).toHaveBeenCalledTimes(1));
+    await nextTick();
+    expect(host.querySelector('[data-testid="bran-range-error"]')?.textContent).toContain('范围内没有构件');
+    expect(spatialQueryStub.loadResults).not.toHaveBeenCalled();
+    expect(spatialQueryStub.isolateResults).not.toHaveBeenCalled();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-range-restore"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
   });
 });
