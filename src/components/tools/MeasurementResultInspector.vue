@@ -2,6 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue';
 
 import {
+  computationWarningsText,
+  measurementMethodBadge,
+} from '@/composables/measurementMethodLabel';
+import {
   formatMeasurementSnapLabel,
   getCachedNounForRefno,
   requestNounForRefno,
@@ -62,6 +66,39 @@ const latestAngleMeasurement = computed(() => {
   if (list.length === 0) return null;
   return list.reduce((latest, item) => (item.createdAt >= latest.createdAt ? item : latest));
 });
+
+/**
+ * 结果表上的精度字样必须说实话（#59）：落地记录有 provenance 就按 method
+ * 显示（估算最近距离 / 估算轴线距离 / 中心线至包围盒距离 / 外表面净距…），
+ * 没有 provenance 的旧记录才落回笼统「近似」。warnings 单独成行跟在数值后，
+ * 不替换数值本身。
+ */
+const draftPersistedRecord = computed(() => {
+  const draft = result.value;
+  if (!draft?.persistedMeasurementId) return null;
+  return (
+    store.xeokitDistanceMeasurements.value.find(item => item.id === draft.persistedMeasurementId)
+    ?? null
+  );
+});
+const distanceBadgeText = computed(() => {
+  const record = draftPersistedRecord.value;
+  if (record) {
+    return measurementMethodBadge(record.provenance) || (record.approximate ? '近似' : '');
+  }
+  return result.value?.approximate ? '近似' : '';
+});
+const distanceWarningsText = computed(() =>
+  computationWarningsText(draftPersistedRecord.value?.provenance?.warnings),
+);
+const angleBadgeText = computed(() => {
+  const record = latestAngleMeasurement.value;
+  if (!record) return '';
+  return measurementMethodBadge(record.provenance) || (record.approximate ? '近似' : '');
+});
+const angleWarningsText = computed(() =>
+  computationWarningsText(latestAngleMeasurement.value?.provenance?.warnings),
+);
 const angleUnits = computed(() => measurementStyle.state.measurementAngleUnits);
 const angleRows = computed(() => {
   const record = latestAngleMeasurement.value;
@@ -454,8 +491,15 @@ onMounted(() => {
           <dt class="w-24 shrink-0 text-muted-foreground">{{ row.label }}</dt>
           <dd class="tabular-nums">
             {{ row.valueText }}
-            <span v-if="row.key === 'angle' && latestAngleMeasurement?.approximate"
-              class="ml-1 text-xs font-normal text-muted-foreground">近似</span>
+            <span v-if="row.key === 'angle' && angleBadgeText"
+              data-testid="measurement-angle-accuracy-badge"
+              class="ml-1 text-xs font-normal text-amber-700">{{ angleBadgeText }}</span>
+          </dd>
+        </div>
+        <div v-if="angleWarningsText" class="flex items-start gap-2">
+          <dt class="w-24 shrink-0 text-muted-foreground">提示</dt>
+          <dd data-testid="measurement-angle-warnings" class="min-w-0 break-all text-amber-700">
+            {{ angleWarningsText }}
           </dd>
         </div>
         <div v-if="lineAngleInfo" class="flex items-start gap-2">
@@ -487,8 +531,15 @@ onMounted(() => {
           <dt class="w-24 shrink-0 text-muted-foreground">{{ row.label }}</dt>
           <dd class="tabular-nums">
             {{ row.valueText }}
-            <span v-if="row.key === 'distance' && result.approximate"
-              class="ml-1 text-xs font-normal text-muted-foreground">近似</span>
+            <span v-if="row.key === 'distance' && distanceBadgeText"
+              data-testid="measurement-distance-accuracy-badge"
+              class="ml-1 text-xs font-normal text-amber-700">{{ distanceBadgeText }}</span>
+          </dd>
+        </div>
+        <div v-if="distanceWarningsText" class="flex items-start gap-2">
+          <dt class="w-24 shrink-0 text-muted-foreground">提示</dt>
+          <dd data-testid="measurement-distance-warnings" class="min-w-0 break-all text-amber-700">
+            {{ distanceWarningsText }}
           </dd>
         </div>
         <div class="flex items-start gap-2">

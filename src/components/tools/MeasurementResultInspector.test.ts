@@ -342,16 +342,18 @@ describe('MeasurementResultInspector', () => {
     await nextTick();
 
     const rows = Array.from(host.querySelectorAll('[data-testid^="measurement-result-row-"]'));
-    // 经 store 落库的记录没有 provenance → legacy-unknown → 角度值后面带「近似」角标（既有行为，与本条无关）。
+    // 经 store 落库的记录没有 provenance → legacy-unknown → 角度值后面带「近似（口径未知）」角标（#59 诚实措辞）。
     expect(rows.map(row => [
       row.querySelector('dt')?.textContent?.trim(),
-      row.querySelector('dd')?.textContent?.replace(/\s+/g, ' ').replace(/\s*近似$/, '').trim(),
+      row.querySelector('dd')?.textContent?.replace(/\s+/g, ' ').replace(/\s*近似（口径未知）$/, '').trim(),
     ])).toEqual([
       ['Decimal Angle', '60 Degrees'],
       ['DMS', '60° 0\' 0\'\''],
       ['Direction1', 'E'],
       ['Direction2', 'N 30.00 E'],
     ]);
+    expect(host.querySelector('[data-testid="measurement-angle-accuracy-badge"]')?.textContent?.trim())
+      .toBe('近似（口径未知）');
     const info = host.querySelector('[data-testid="measurement-angle-line-info"]')?.textContent?.replace(/\s+/g, ' ').trim();
     expect(info).toBe('线 × 线 · Graphics 边 · BOX 24381/1 × Graphics 边 · BOX 24381/2 · 异面：弧心取第一条线上离第二条最近的点');
     expect(host.querySelector('[data-testid="measurement-angle-points"]')).toBeNull();

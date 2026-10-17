@@ -3,6 +3,10 @@ import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
 import MeasurementAidPanel from '@/components/tools/MeasurementAidPanel.vue';
 import MeasurementResultInspector from '@/components/tools/MeasurementResultInspector.vue';
+import {
+  computationWarningsText,
+  measurementMethodBadge,
+} from '@/composables/measurementMethodLabel';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import {
   MEASUREMENT_PICK_SOURCE_LABELS,
@@ -175,6 +179,19 @@ const pipeDistanceStatusText = computed(() => {
 
 function isApproximateMeasurement(record: MeasurementRecord | XeokitMeasurementRecord): boolean {
   return 'approximate' in record && Boolean(record.approximate);
+}
+
+/**
+ * 近似徽章的说实话版（#59）：有 provenance 按 method 显示「估算最近距离 / 估算轴线距离 /
+ * 中心线至包围盒距离 / 外表面净距」等真话；没有 provenance 的旧记录落回笼统「近似」。
+ * 返回 '' 表示不挂徽章（精确方法不需要警示标）。
+ */
+function methodBadgeText(record: MeasurementRecord | XeokitMeasurementRecord): string {
+  return measurementMethodBadge(record.provenance) || (isApproximateMeasurement(record) ? '近似' : '');
+}
+
+function measurementWarningsText(record: MeasurementRecord | XeokitMeasurementRecord): string {
+  return computationWarningsText(record.provenance?.warnings);
 }
 
 function getMeasurementSummary(record: MeasurementRecord | XeokitMeasurementRecord): string {
@@ -754,10 +771,10 @@ watch(
                 <span class="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
                   {{ formatMeasurementKindLabel(m.kind) }}
                 </span>
-                <span v-if="isApproximateMeasurement(m)"
+                <span v-if="methodBadgeText(m)"
                   :data-testid="`measurement-approximate-badge-${m.id}`"
                   class="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  近似
+                  {{ methodBadgeText(m) }}
                 </span>
                 <span v-if="selectedMeasurementId === m.id"
                   :data-testid="`measurement-selected-badge-${m.id}`"
@@ -776,6 +793,12 @@ watch(
               <div :data-testid="`measurement-summary-${m.id}`"
                 class="mt-1 truncate text-xs text-muted-foreground">
                 {{ getMeasurementSummary(m) }}
+              </div>
+              <div v-if="measurementWarningsText(m)"
+                :data-testid="`measurement-warnings-${m.id}`"
+                class="mt-0.5 truncate text-xs text-amber-700"
+                :title="measurementWarningsText(m)">
+                {{ measurementWarningsText(m) }}
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">ID: {{ m.id }}</div>
             </div>

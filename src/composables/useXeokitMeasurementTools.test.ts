@@ -101,6 +101,9 @@ describe('useXeokitMeasurementTools', () => {
     localStorage.clear();
     vi.resetModules();
     resetKeypointPortMocks();
+    // #59：每个用例都默认装上 model-source 桩端口（tree/keypoints/attributes 全部假应答），
+    // 不点名的用例也不许把请求打到真后端——此前悬停设计点路径会真实 GET /api/v1/tree/*。
+    mockKeypointPort({});
   });
 
   /**
