@@ -1632,7 +1632,20 @@ const persisted = loadPersisted(storageScope.value);
  *
  * V7 直接持久化这个统一数组；下面五个旧字段只服务兼容调用者。
  */
-const unifiedMeasurementRecords = ref<UnifiedMeasurementRecord[]>(persisted.measurements);
+/**
+ * 测量图形默认不上屏：从本机容器 / JSON 导入水合回来的测量记录一律按「已隐藏」进内存，
+ * 刷新后场景不自动出现历史尺寸；要显示须在测量面板手动「恢复显示 / 全部显示」。
+ * `visible` 仍会写盘（exportJSON / V7 容器里是真实快照），只在进水合这一步剥掉。
+ */
+function hideRestoredMeasurements(
+  records: readonly UnifiedMeasurementRecord[],
+): UnifiedMeasurementRecord[] {
+  return records.map((rec) => (rec.visible ? { ...rec, visible: false } : rec));
+}
+
+const unifiedMeasurementRecords = ref<UnifiedMeasurementRecord[]>(
+  hideRestoredMeasurements(persisted.measurements),
+);
 const legacyMeasurementPayloads = ref<unknown[]>(persisted.legacyMeasurements);
 
 function projectClassic(): MeasurementRecord[] {
@@ -1667,8 +1680,8 @@ const xeokitElevationDeltaMeasurements = computed<XeokitElevationDeltaMeasuremen
 );
 
 function setAllMeasurementsFrom(state: PersistedStateV7) {
-  unifiedMeasurementRecords.value = state.measurements.map(
-    normalizeUnifiedMeasurementRecord,
+  unifiedMeasurementRecords.value = hideRestoredMeasurements(
+    state.measurements.map(normalizeUnifiedMeasurementRecord),
   );
   legacyMeasurementPayloads.value = [...state.legacyMeasurements];
 }
