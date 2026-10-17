@@ -105,6 +105,8 @@ export type ClearanceRecord = Readonly<{
   snapshot: ClearanceSnapshot | null;
   modelVersion: ClearanceModelVersion;
   status: ClearanceStatus;
+  /** 净距转尺寸后生出的那条尺寸 id（`clearanceRecordToDimensionInput` 产物的回链），未转过为 `null`。 */
+  derivedDimensionId: string | null;
   createdAt: string;
   computedAt: string;
 }>;
@@ -127,6 +129,7 @@ export type ClearanceRecordInput = Readonly<{
   snapshot: ClearanceSnapshotInput | null;
   modelVersion: ClearanceModelVersion;
   status?: ClearanceStatus;
+  derivedDimensionId?: string | null;
   createdAt?: string;
   computedAt: string;
 }>;
@@ -295,6 +298,9 @@ export function createClearanceRecord(input: ClearanceRecordInput): ClearanceRec
     snapshot: normalizeSnapshot(input.snapshot),
     modelVersion: normalizeModelVersion(input.modelVersion),
     status: status as ClearanceStatus,
+    derivedDimensionId: input.derivedDimensionId === undefined || input.derivedDimensionId === null
+      ? null
+      : requiredText(input.derivedDimensionId, 'derivedDimensionId'),
     createdAt,
     computedAt,
   });
@@ -314,6 +320,13 @@ export function isClearanceRecord(value: unknown): value is ClearanceRecord {
 export function withClearanceStatus(record: ClearanceRecord, status: ClearanceStatus): ClearanceRecord {
   if (record.status === status) return record;
   return Object.freeze({ ...record, status });
+}
+
+/** 尺寸真建出来后把回链写进记录；传 `null` 解除（比如尺寸被删）。 */
+export function withDerivedDimension(record: ClearanceRecord, dimensionId: string | null): ClearanceRecord {
+  const next = dimensionId === null ? null : requiredText(dimensionId, 'derivedDimensionId');
+  if (record.derivedDimensionId === next) return record;
+  return Object.freeze({ ...record, derivedDimensionId: next });
 }
 
 /**

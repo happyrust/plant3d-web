@@ -5,6 +5,7 @@ import {
   clearanceRecordId,
   createClearanceRecord,
   withClearanceStatus,
+  withDerivedDimension,
   type ClearanceRecord,
 } from '@/clearance/domain/clearanceRecord';
 import {
@@ -243,6 +244,16 @@ export function useClearanceStore() {
     toggleHidden(id);
   }
 
+  /**
+   * 尺寸经 `clearanceRecordToDimensionInput` 真建出来后回链：`dimensionId` 写进记录；
+   * 传 `null` 解除（尺寸被删时）。转换本身纯命令不改记录，这里是唯一写回链的口子。
+   */
+  function setDerivedDimensionId(id: string, dimensionId: string | null) {
+    records.value = records.value.map(record => (
+      record.id === id ? withDerivedDimension(record, dimensionId) : record
+    ));
+  }
+
   /** 按 id 标 stale（D4：模型换版不静默沿用）。 */
   function markStale(ids: readonly string[]) {
     const wanted = new Set(ids);
@@ -346,6 +357,7 @@ export function useClearanceStore() {
     setHidden,
     markStale,
     markStaleByModelSesno,
+    setDerivedDimensionId,
     compute,
     recompute,
   };
