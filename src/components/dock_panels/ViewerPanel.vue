@@ -3656,7 +3656,7 @@ onMounted(async () => {
   ) => {
     activeDbno = _dbno;
     clearBranClearanceAnnotations();
-    spatialComputeStore.resetScenario('branNearestClearance');
+    spatialComputeStore.handleInstancesLoaded();
     // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
     (compat as any).__dtxLastLoadedDbno = _dbno;
     (compat as any).__dtxLastLoadedRefnos = loadedRefnos;

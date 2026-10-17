@@ -774,6 +774,22 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     void autoSubmitForSelection(selection.selectedRefno.value);
   }
 
+  /**
+   * 新一批实例加载完成（范围显示、树按需加载、show_refno 等都会走 `__dtxAfterInstancesLoaded`）后的失效处理：
+   * 结果与三维标注随模型集变化而作废，先重置场景。自动模式开着且当前选中仍解析出 BRAN 时，
+   * 走同一条防抖路径立即补一次重查——「范围显示加载命中件 → 结果被清」就变成「清了自动重算」；
+   * 手动模式保持原语义：只失效不代算，用户自行重算。
+   */
+  function handleInstancesLoaded() {
+    resetScenario('branNearestClearance');
+    if (!autoFollowSelection.value || !calculationsAllowed) return;
+    clearAutoFollowTimer();
+    autoFollowTimer = setTimeout(() => {
+      autoFollowTimer = null;
+      if (calculationsAllowed) void autoSubmitForSelection(selection.selectedRefno.value);
+    }, autoFollowDebounceMs);
+  }
+
   const onProjectChanged = () => {
     autoQueriedBranRefno = '';
     if (persistence.hasPersistenceContext.value) return;
@@ -807,6 +823,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     applyCurrentSelection,
     autoFollowSelection,
     setAutoFollowSelection,
+    handleInstancesLoaded,
     branRangeDistance,
     submitScenario,
     refineBranCandidate,

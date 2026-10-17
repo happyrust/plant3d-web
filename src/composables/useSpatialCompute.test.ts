@@ -823,6 +823,32 @@ describe('useSpatialCompute 跟随选中自动计算（autoFollowSelection）', 
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('新批次实例加载使结果失效：自动模式补一次重查，手动模式只清不查', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno.startsWith('pipe') ? '24381_145018' : null),
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
+
+    // 范围显示 / 按需加载新实例 → 结果作废；自动模式下选中仍是 BRAN → 防抖后重查
+    store.handleInstancesLoaded();
+    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(0);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
+
+    // 关掉自动：失效后不再代算
+    store.setAutoFollowSelection(false);
+    store.handleInstancesLoaded();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(0);
+  });
 });
 
 /**
