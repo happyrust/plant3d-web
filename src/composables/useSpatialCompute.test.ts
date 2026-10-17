@@ -188,6 +188,43 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     store.dispose();
   });
 
+  it('persists auto-follow toggle and range distance with the snapshot; old snapshots read defaults', async () => {
+    const values = new Map<string, string>();
+    const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const fetchMock = vi.fn().mockImplementation(freshNounGroupedResponse);
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore({ resolveOwnerBran: () => null });
+    store.bindPersistence('A', local);
+    await store.submitScenario();
+    store.setAutoFollowSelection(true);
+    store.branRangeDistance.value = '3000';
+
+    const snapshot = store.captureSnapshot();
+    expect(snapshot.autoFollowSelection).toBe(true);
+    expect(snapshot.rangeDistanceMm).toBe(3000);
+
+    // 旧快照缺两格：不抛错、按缺省读（false / '5000'）
+    const legacy = { ...snapshot } as Record<string, unknown>;
+    delete legacy.autoFollowSelection;
+    delete legacy.rangeDistanceMm;
+    store.prepareSnapshotRestore(legacy)();
+    expect(store.autoFollowSelection.value).toBe(false);
+    expect(store.branRangeDistance.value).toBe('5000');
+
+    store.setAutoFollowSelection(true);
+    store.branRangeDistance.value = '3000';
+    store.prepareSnapshotRestore(snapshot)();
+    expect(store.autoFollowSelection.value).toBe(true);
+    expect(store.branRangeDistance.value).toBe('3000');
+    // 恢复不触发查询：fetch 仍只有 submit 那一次
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // 型不对的两格照样打回
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, autoFollowSelection: 'yes' })).toThrow('格式无效');
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, rangeDistanceMm: 0 })).toThrow('格式无效');
+    store.dispose();
+  });
+
   it('rejects missing precision metadata and keeps the original snapshot intact', async () => {
     const values = new Map<string, string>();
     const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };

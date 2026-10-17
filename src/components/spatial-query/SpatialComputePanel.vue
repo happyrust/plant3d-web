@@ -413,6 +413,7 @@ const {
   applyCurrentSelection: applyComputeSelection,
   autoFollowSelection,
   setAutoFollowSelection,
+  branRangeDistance,
   submitScenario,
   refineBranCandidate,
   refiningAll,
@@ -443,7 +444,7 @@ function onAutoFollowChange(event: Event) {
   setAutoFollowSelection((event.target as HTMLInputElement).checked);
 }
 
-const rangeDistance = ref('5000');
+const rangeDistance = branRangeDistance;
 const rangeBusy = ref(false);
 const rangeError = ref('');
 

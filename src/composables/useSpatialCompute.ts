@@ -428,6 +428,9 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
   const scenarios = reactive<Record<SpatialComputeScenarioKey, SpatialComputeScenarioState>>({
     branNearestClearance: createScenarioState('branNearestClearance'),
   });
+  /** 「范围显示」半径输入（mm 字符串，与面板输入框同形）；随快照持久化（D7 随 scope）。 */
+  const branRangeDistance = ref('5000');
+
   function captureSnapshot() {
     const state = scenarios.branNearestClearance;
     return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
@@ -435,11 +438,17 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
         searchRadius: state.searchRadius, excludeNouns: state.excludeNouns },
       queriedSourceRefno: state.queriedSourceRefno, branGroups: state.branGroups, nounFacets: state.nounFacets,
       drawnCandidateKeys: state.drawnCandidateKeys, candidateProvenance: state.candidateProvenance,
-      excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings });
+      excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings,
+      autoFollowSelection: autoFollowSelection.value,
+      rangeDistanceMm: Number(branRangeDistance.value) || 5000 });
   }
   function prepareSnapshotRestore(value: unknown): () => void {
     const state = createScenarioState('branNearestClearance');
-    if (value === null) return () => { Object.assign(scenarios.branNearestClearance, state); };
+    if (value === null) return () => {
+      Object.assign(scenarios.branNearestClearance, state);
+      autoFollowSelection.value = false;
+      branRangeDistance.value = '5000';
+    };
     value = cloneResultSnapshot(value);
     const data = value as Record<string, unknown>;
     const inputs = data?.inputs as Record<string, unknown>;
@@ -449,6 +458,9 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
         || !Array.isArray(data.drawnCandidateKeys) || !data.drawnCandidateKeys.every(key => typeof key === 'string')
         || !Array.isArray(data.warnings) || !data.warnings.every(warning => typeof warning === 'string')
         || typeof data.excludedSelfMembers !== 'number' || !Number.isInteger(data.excludedSelfMembers) || data.excludedSelfMembers < 0) throw new Error('BRAN净距保存格式无效');
+    // 2026-10-17 新增两格：旧快照没有按缺省读，有就必须合型（开关布尔 / 半径 1–100000 mm）
+    if (data.autoFollowSelection !== undefined && typeof data.autoFollowSelection !== 'boolean') throw new Error('BRAN净距保存格式无效');
+    if (data.rangeDistanceMm !== undefined && (!Number.isFinite(data.rangeDistanceMm) || (data.rangeDistanceMm as number) < 1 || (data.rangeDistanceMm as number) > 100000)) throw new Error('BRAN净距保存格式无效');
     const groups = normalizeBranNearestGroups(data.branGroups as BranNearestClearanceGroupResult[]);
     const pointValid = (point: unknown) => {
       const p = point as { x?: unknown; y?: unknown; z?: unknown } | null;
@@ -490,7 +502,14 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     state.warnings = [...data.warnings as string[], '已恢复本机结果，模型版本未核实；请重新查询或精算后验收。'];
     state.responseText = '已恢复本机结果，待重算';
     applyBranSelection(state);
-    return () => { Object.assign(scenarios.branNearestClearance, state); };
+    const restoredAutoFollow = data.autoFollowSelection === true;
+    const restoredRange = typeof data.rangeDistanceMm === 'number' ? data.rangeDistanceMm : 5000;
+    return () => {
+      Object.assign(scenarios.branNearestClearance, state);
+      // 直接置开关不走 setAutoFollowSelection：恢复的结果已全标 stale，不该立刻对当前选中发一次查询。
+      autoFollowSelection.value = restoredAutoFollow;
+      branRangeDistance.value = String(restoredRange);
+    };
   }
   const persistence = createScopedResultPersistence({
     prefix: 'plant3d-bran-clearance-v1',
@@ -788,6 +807,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     applyCurrentSelection,
     autoFollowSelection,
     setAutoFollowSelection,
+    branRangeDistance,
     submitScenario,
     refineBranCandidate,
     refiningAll,
