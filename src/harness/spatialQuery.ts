@@ -17,6 +17,8 @@ import '@/assets/tailwind.css';
 
 import type { SpatialQueryResultItem, SpatialQueryResultSet } from '@/types/spatialQuery';
 
+import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import SpatialComputePanel from '@/components/spatial-query/SpatialComputePanel.vue';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
@@ -120,11 +122,81 @@ const resultSet: SpatialQueryResultSet = {
 // 放进 Bootstrap 组件 setup（幂等，仅首个实例执行）。
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 净距记录种子：按 2026-10-17 副本库实测的 5 组真实 surface-clearance 响应复刻
+// （证据存 docs/verification/pipe-to-structure-clearance-2026-10-17/api-*.json），
+// 让「已保存的构件净距」区带上墙 / 柱 / 楼板的真实 noun 与距离、面与垂距口径。
+// ---------------------------------------------------------------------------
+
+type RawResp = Parameters<typeof surfaceClearanceToRecord>[0];
+
+function clearanceResp(target: { refno: string; noun: string }, result: RawResp['result'], targetKind: 'wall' | 'any', targetSesno = 357): RawResp {
+  return {
+    success: true,
+    unit: 'mm',
+    method: 'surface_to_surface',
+    accuracy_class: 'exact-surface',
+    error_bound_mm: 0.5,
+    target_kind: targetKind,
+    source: { refno: '24384/22726', noun: 'BRAN', leaf_count: 8, triangle_count: 1056 },
+    target: { ...target, leaf_count: 24, triangle_count: 3316 },
+    result,
+    model: { source_sesno: 650, target_sesno: targetSesno },
+    timing_ms: { load: 4, query: 0, total: 30 },
+    warnings: [],
+  } as unknown as RawResp;
+}
+
+const SEEDED_CLEARANCE_INPUTS = {
+  sourceRefno: '24384_22726',
+} as const;
+
 let storesSeeded = false;
+
+function seedClearanceRecords() {
+  const clearance = useClearanceStore();
+  const pt = (x: number, y: number, z: number) => ({ x, y, z });
+  const base = { intersects: false, source_leaf_refno: '24384/22726', witness: 'closest-points' } as const;
+  const seeds: { target: { refno: string; noun: string }; targetKind: 'wall' | 'any'; result: NonNullable<RawResp['result']> }[] = [
+    // 实测：BRAN 24384/22726 → WALL 24381/1776 = 607.03mm（outer + ray 垂距）
+    {
+      target: { refno: '24381/1776', noun: 'WALL' }, targetKind: 'wall',
+      result: { ...base, distance_mm: 607.0304, source_point: pt(-15591.471, 8225.277, 2200), target_point: pt(-15026.684, 8002.788, 2200), vector: { dx: 564.787, dy: -222.489, dz: 0 }, target_leaf_refno: '24381/1776', target_leaf_noun: 'WALL', target_face: { kind: 'outer', normal: { x: -0.9304102, y: 0.36651996, z: 0 }, confidence: 'geometric' }, perpendicular: { distance_mm: 607.03064, from: pt(-15591.471, 8225.277, 2200), to: pt(-15026.684, 8002.7886, 2200), method: 'ray' } },
+    },
+    // → STWALL 24381/1774 = 392.09mm（bottom 面，无垂距）
+    {
+      target: { refno: '24381/1774', noun: 'STWALL' }, targetKind: 'wall',
+      result: { ...base, distance_mm: 392.08508, source_point: pt(-15596.2, 8195.5, 2200), target_point: pt(-15596.2, 8195.5, 2592.09), vector: { dx: 0, dy: 0, dz: 392.09 }, target_leaf_refno: '24381/1774', target_leaf_noun: 'STWALL', target_face: { kind: 'bottom', normal: { x: 0, y: 0, z: -1 }, confidence: 'normal-only' }, perpendicular: null },
+    },
+    // → PANE 24381/3014 = 169.66mm（end 面）
+    {
+      target: { refno: '24381/3014', noun: 'PANE' }, targetKind: 'wall',
+      result: { ...base, distance_mm: 169.66101, source_point: pt(-15590.5, 8201.3, 2200), target_point: pt(-15590.5, 8370.96, 2200), vector: { dx: 0, dy: 169.66, dz: 0 }, target_leaf_refno: '24381/3014', target_leaf_noun: 'PANE', target_face: { kind: 'end', normal: { x: 0, y: -1, z: 0 }, confidence: 'normal-only' }, perpendicular: null },
+    },
+    // → FLOOR 17496/72729 = 587.5mm（bottom 面，target_kind=any）
+    {
+      target: { refno: '17496/72729', noun: 'FLOOR' }, targetKind: 'any',
+      result: { ...base, distance_mm: 587.5, source_point: pt(-15611.46, 8211.995, 2212.5), target_point: pt(-15611.461, 8211.995, 2800), vector: { dx: -0.001, dy: 0, dz: 587.5 }, target_leaf_refno: '17496/72729', target_leaf_noun: 'FLOOR', target_face: { kind: 'bottom', normal: { x: 0, y: 0, z: -1 }, confidence: 'normal-only' }, perpendicular: null },
+    },
+    // → SCTN 24381/2306 = 5935.3mm（outer + edge 垂距：最近点在柱棱上）
+    {
+      target: { refno: '24381/2306', noun: 'SCTN' }, targetKind: 'any',
+      result: { ...base, distance_mm: 5935.2974, source_point: pt(-15634.951, 8191.212, 2200), target_point: pt(-21547.23, 8713.424, 2199.26), vector: { dx: -5912.28, dy: 522.21, dz: -0.74 }, target_leaf_refno: '24381/2306', target_leaf_noun: 'SCTN', target_face: { kind: 'outer', normal: { x: 0.9988047, y: -0.04887981, z: 0.0001 }, confidence: 'geometric' }, perpendicular: { distance_mm: 5935.2974, from: pt(-15634.951, 8191.212, 2200), to: pt(-21547.23, 8713.424, 2199.2598), method: 'edge' } },
+    },
+  ];
+  const now = new Date('2026-10-17T23:00:00+08:00');
+  seeds.forEach(({ target, targetKind, result }) => {
+    const inputs = { ...SEEDED_CLEARANCE_INPUTS, targetRefno: target.refno.replace('/', '_'), targetKind } as Parameters<typeof surfaceClearanceToRecord>[1];
+    clearance.upsertRecord(surfaceClearanceToRecord(clearanceResp(target, result, targetKind), inputs, now));
+  });
+  clearance.showAnnotations.value = true;
+}
 
 function seedStoresOnce() {
   if (storesSeeded) return;
   storesSeeded = true;
+
+  seedClearanceRecords();
 
   const sq = useSpatialQuery();
   sq.draft.mode = 'range';

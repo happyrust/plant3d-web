@@ -39,4 +39,13 @@ export async function run({ page, shot }) {
 
   await shot('03-query-drawer-mini', '#host-sq-mini');
   await shot('04-compute-panel', '#host-compute');
+
+  // Saved clearance records section — seeded with real surface-clearance
+  // responses (pipe → wall / stwall / pane / floor / column).
+  try {
+    await page.waitForSelector('#host-sq-full [data-testid="saved-clearance-records"]', { timeout: 5000 });
+    await shot('05-saved-clearance-records', '#host-sq-full [data-testid="saved-clearance-records"]');
+  } catch (e) {
+    console.log('clearance records section missing:', String(e).slice(0, 160));
+  }
 }
