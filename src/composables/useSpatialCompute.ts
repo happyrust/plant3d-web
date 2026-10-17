@@ -636,6 +636,49 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     }
   }
 
+  const refiningAll = ref(false);
+  /** 「全部精算」进度：done = 已处理（含失败）条数，total = 本次队列条数。 */
+  const refineAllProgress = reactive({ done: 0, total: 0 });
+  let refineAllCancelRequested = false;
+
+  /**
+   * 「全部精算」：把当前画在三维里的候选（`annotationCandidates`，即勾选类型 × 开了「标注」的那批）里
+   * 还不是网格精算的逐条升级为 `surface-clearance`。并发受控（默认 3：单次精算 100–500ms、后端网格读有锁，
+   * 并发太高收益递减还拖慢交互）；任一条失败只记 `state.error` 不阻塞其余；用 `requestTokens` 作 epoch，
+   * 切 BRAN / reset / 进版本对比时队列自动作废；`cancelRefineAllDrawn` 让用户随时停。
+   */
+  async function refineAllDrawnCandidates(concurrency = 3) {
+    const state = scenarios.branNearestClearance;
+    if (refiningAll.value || !calculationsAllowed || !state.queriedSourceRefno) return;
+    const keys = [...new Set(state.annotationCandidates
+      .filter(item => !item.candidate.parallel)
+      .map(item => branCandidateKey(item.targetGroup, item.candidate))
+      .filter(key => (state.candidateProvenance[key] ?? SERVER_BRAN_CLEARANCE_PROVENANCE).method !== 'surface-to-surface'))];
+    if (keys.length === 0) return;
+    const token = requestTokens.branNearestClearance;
+    refiningAll.value = true;
+    refineAllCancelRequested = false;
+    refineAllProgress.done = 0;
+    refineAllProgress.total = keys.length;
+    const queue = [...keys];
+    const worker = async () => {
+      for (let key = queue.shift(); key !== undefined; key = queue.shift()) {
+        if (refineAllCancelRequested || requestTokens.branNearestClearance !== token) return;
+        await refineBranCandidate(key);
+        refineAllProgress.done += 1;
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), keys.length) }, () => worker()));
+    } finally {
+      refiningAll.value = false;
+    }
+  }
+
+  function cancelRefineAllDrawn() {
+    refineAllCancelRequested = true;
+  }
+
   function toggleScenarioExpanded() {
     scenarioExpanded.value = !scenarioExpanded.value;
   }
@@ -746,6 +789,10 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     setAutoFollowSelection,
     submitScenario,
     refineBranCandidate,
+    refiningAll,
+    refineAllProgress,
+    refineAllDrawnCandidates,
+    cancelRefineAllDrawn,
     toggleScenarioExpanded,
     toggleBranNounFacet,
     setAllBranNounFacets,

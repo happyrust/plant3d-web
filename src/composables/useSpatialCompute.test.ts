@@ -281,6 +281,80 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.currentScenarioState.value.warnings).toEqual([]);
   });
 
+  it('refine-all upgrades every drawn candidate, honoring the concurrency cap', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const refineCalls: string[] = [];
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/nearest-clearance')) return freshNounGroupedResponse();
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      refineCalls.push(new URL(url, 'http://localhost').searchParams.get('target_refno') ?? '');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      inFlight -= 1;
+      return new Response(JSON.stringify(surfaceResponse()), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+
+    await store.refineAllDrawnCandidates(2);
+
+    expect(maxInFlight).toBeLessThanOrEqual(2);
+    expect(refineCalls.sort()).toEqual(['24381/1', '24381/2', '24381/3'].sort());
+    expect(store.refineAllProgress).toEqual({ done: 3, total: 3 });
+    expect(store.refiningAll.value).toBe(false);
+    for (const item of store.currentScenarioState.value.annotationCandidates) {
+      expect(item.provenance?.method).toBe('surface-to-surface');
+    }
+  });
+
+  it('refine-all skips already-refined candidates and a second run is a no-op', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) =>
+      String(input).includes('/nearest-clearance')
+        ? freshNounGroupedResponse()
+        : new Response(JSON.stringify(surfaceResponse()), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+    await store.refineBranCandidate('WALL:24381_1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await store.refineAllDrawnCandidates();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(store.refineAllProgress).toEqual({ done: 2, total: 2 });
+
+    await store.refineAllDrawnCandidates();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('refine-all stops the queue on cancel and on reset', async () => {
+    for (const stop of ['cancel', 'reset'] as const) {
+      const resolvers: (() => void)[] = [];
+      const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) =>
+        String(input).includes('/nearest-clearance')
+          ? freshNounGroupedResponse()
+          : new Promise<Response>((done) => { resolvers.push(() => done(new Response(JSON.stringify(surfaceResponse()), { status: 200 }))); }));
+      vi.stubGlobal('fetch', fetchMock);
+      const store = createSpatialComputeStore();
+      await store.submitScenario();
+
+      const pending = store.refineAllDrawnCandidates(1);
+      while (resolvers.length === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+      resolvers[0]!();
+      if (stop === 'cancel') store.cancelRefineAllDrawn();
+      else store.resetScenario();
+      await pending;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(store.refineAllProgress.done).toBe(1);
+      expect(store.refineAllProgress.total).toBe(3);
+      expect(store.refiningAll.value).toBe(false);
+      store.dispose();
+    }
+  });
+
   it('typed exclude_nouns are trimmed and sent; empty field sends none', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => freshNounGroupedResponse());
     vi.stubGlobal('fetch', fetchMock);

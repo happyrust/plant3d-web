@@ -254,6 +254,19 @@
               <div class="flex items-center gap-2 text-[11px] font-semibold">
                 <button type="button" class="text-brand hover:underline" data-testid="bran-noun-facet-all" @click="setAllBranNounFacets(true)">全选</button>
                 <button type="button" class="text-muted-foreground hover:underline" data-testid="bran-noun-facet-none" @click="setAllBranNounFacets(false)">清空</button>
+                <template v-if="refiningAll">
+                  <span class="tabular-nums text-brand" data-testid="bran-refine-all-progress">精算中 {{ refineAllProgress.done }}/{{ refineAllProgress.total }}</span>
+                  <button type="button" class="text-muted-foreground hover:underline" data-testid="bran-refine-all-cancel" @click="cancelRefineAllDrawn">停止</button>
+                </template>
+                <button v-else
+                  type="button"
+                  :disabled="refinableDrawnCount === 0 || computeState.loading"
+                  class="text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
+                  title="把当前画出标注的候选全部升级为网格外表面精算（surface-clearance），并发 3、可停止"
+                  data-testid="bran-refine-all"
+                  @click="refineAllDrawnCandidates()">
+                  全部精算 ({{ refinableDrawnCount }})
+                </button>
               </div>
             </div>
             <div class="flex flex-wrap gap-1.5">
@@ -402,6 +415,10 @@ const {
   setAutoFollowSelection,
   submitScenario,
   refineBranCandidate,
+  refiningAll,
+  refineAllProgress,
+  refineAllDrawnCandidates,
+  cancelRefineAllDrawn,
   toggleScenarioExpanded,
   toggleBranNounFacet,
   setAllBranNounFacets,
@@ -412,6 +429,11 @@ const computeState = currentScenarioState;
 const isBranScenario = computed(() => activeScenario.value === 'branNearestClearance');
 /** facet 上的候选总数（`noun_counts` 之和，截断前口径）。 */
 const branFacetTotal = computed(() => computeState.value.nounFacets.reduce((sum, facet) => sum + facet.count, 0));
+/** 「全部精算」按钮上的条数：当前画出标注、还不是网格精算的非平行候选（provenance 缺省 = 服务端估算）。 */
+const refinableDrawnCount = computed(() => isBranScenario.value
+  ? computeState.value.annotationCandidates.filter(item =>
+    !item.candidate.parallel && (item.provenance?.method ?? 'centerline-to-aabb') !== 'surface-to-surface').length
+  : 0);
 
 function runComputeScenario() {
   void submitScenario();
