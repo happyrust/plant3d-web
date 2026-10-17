@@ -29,6 +29,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { genModelV1SpatialCenterline, genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
 import { reviewAttachmentDelete } from '@/api/reviewApi';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
@@ -71,6 +72,10 @@ import { buildCloudBindings, getCloudMemberRefnos, useToolStore, type Annotation
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { SOLVESPACE_DIMENSION_THEME, isWorldSegmentBlocked } from '@/dimension';
+import {
+  commitDtxObjectToObjectClearance,
+  commitDtxPointToObjectMeasurement,
+} from '@/measurement/adapters/dtxDistanceRecords';
 import {
   DEFAULT_CLOUD_REGION_RENDER_STYLE,
   liftScreenPolylineToBillboard,
@@ -2404,6 +2409,7 @@ export function useDtxTools(options: {
   const draftSession = useAnnotationDraftSession();
   const userStore = useUserStore();
   const unitSettings = useUnitSettingsStore();
+  const clearanceStore = useClearanceStore();
   const annotationStyleStore = useAnnotationStyleStore();
   // ADR-0050：批注关联的失效解析表（只读）；missing / stale 的记录在视口降级为灰虚线 + 左上角小徽标
   const bindingResolve = useAnnotationBindingResolve();
@@ -3211,18 +3217,27 @@ export function useDtxTools(options: {
         return false;
       }
 
-      const sourceAnnotation = store.activeAnnotationContext.value;
-      const rec: DistanceMeasurementRecord = {
-        id: nowId('o2o'),
-        kind: 'distance',
-        origin: { entityId: source.objectId, worldPos: approx.sourcePoint },
-        target: { entityId: target.objectId, worldPos: approx.targetPoint },
-        visible: true,
-        createdAt: Date.now(),
-        sourceAnnotationId: sourceAnnotation?.id,
-        sourceAnnotationType: sourceAnnotation?.type,
-      };
-      store.addMeasurement(rec);
+      // #58：构件最近点归 ClearanceStore（sampled-object / approximate-sampled，
+      // 种子点采样的估算，永不标精确或外表面净距）；端点/距离换算成 design-world 米。
+      // 无效输入 → TypeError（类型化失败），不落半成品记录，状态如实报失败。
+      try {
+        commitDtxObjectToObjectClearance({
+          sourceRefno: source.refno,
+          targetRefno: target.refno,
+          sourcePointScene: approx.sourcePoint,
+          targetPointScene: approx.targetPoint,
+          dtxLayerRef,
+          sourceAnnotation: store.activeAnnotationContext.value,
+          computedAt: new Date(),
+          upsertRecord: clearanceStore.upsertRecord,
+        });
+      } catch (error) {
+        objectToObjectTargetCandidate.value = null;
+        setObjectMeasureStatus(
+          `构件最近点记录失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+        return false;
+      }
       lastAppliedObjectMeasurePairKey.value = buildObjectMeasurePairKey(source.refno, target.refno);
       clearObjectMeasureCandidates();
       setObjectMeasureStatus(
@@ -6712,17 +6727,17 @@ export function useDtxTools(options: {
       const closest = layer.closestPointToObject(hit.objectId, start);
       if (!closest) return;
 
-      const rec: DistanceMeasurementRecord = {
+      // #58：点到面仍是 Measurement，但端点补 designWorldPos、provenance 写全，
+      // 经适配器走统一写入命令——流程里不再有裸 store.addMeasurement。
+      commitDtxPointToObjectMeasurement({
         id: nowId('pto'),
-        kind: 'distance',
         origin: pointToObjectStart.value,
         target: { entityId: hit.entityId, worldPos: vec3ToTuple(closest.point) },
-        visible: true,
+        dtxLayerRef,
+        sourceAnnotation: store.activeAnnotationContext.value,
         createdAt: Date.now(),
-        sourceAnnotationId: store.activeAnnotationContext.value?.id,
-        sourceAnnotationType: store.activeAnnotationContext.value?.type,
-      };
-      store.addMeasurement(rec);
+        addMeasurement: (record) => store.addMeasurement(record),
+      });
       pointToObjectStart.value = null;
       return;
     }

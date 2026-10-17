@@ -94,6 +94,9 @@ export type ClearanceInputs = Readonly<{
   targetKind: ClearanceTargetKind;
 }>;
 
+/** 这条净距是在哪个标注/校审上下文里建的（Measurement 的 sourceAnnotation* 对位字段），无上下文为 `null`。 */
+export type ClearanceSourceAnnotation = Readonly<{ id: string; type: string }>;
+
 export type ClearanceRecord = Readonly<{
   id: string;
   kind: ClearanceKind;
@@ -107,6 +110,7 @@ export type ClearanceRecord = Readonly<{
   status: ClearanceStatus;
   /** 净距转尺寸后生出的那条尺寸 id（`clearanceRecordToDimensionInput` 产物的回链），未转过为 `null`。 */
   derivedDimensionId: string | null;
+  sourceAnnotation: ClearanceSourceAnnotation | null;
   createdAt: string;
   computedAt: string;
 }>;
@@ -130,6 +134,7 @@ export type ClearanceRecordInput = Readonly<{
   modelVersion: ClearanceModelVersion;
   status?: ClearanceStatus;
   derivedDimensionId?: string | null;
+  sourceAnnotation?: ClearanceSourceAnnotation | null;
   createdAt?: string;
   computedAt: string;
 }>;
@@ -264,6 +269,15 @@ function normalizeInputs(value: unknown): ClearanceInputs {
   return Object.freeze({ sourceRefno, targetRefno, targetKind: targetKind as ClearanceTargetKind });
 }
 
+function normalizeSourceAnnotation(value: unknown): ClearanceSourceAnnotation | null {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) throw new TypeError('sourceAnnotation must be an object');
+  return Object.freeze({
+    id: requiredText(value.id, 'sourceAnnotation.id'),
+    type: requiredText(value.type, 'sourceAnnotation.type'),
+  });
+}
+
 function normalizeIsoTime(value: unknown, field: string): string {
   const text = requiredText(value, field);
   if (Number.isNaN(Date.parse(text))) throw new TypeError(`${field} must be an ISO-8601 timestamp`);
@@ -301,6 +315,7 @@ export function createClearanceRecord(input: ClearanceRecordInput): ClearanceRec
     derivedDimensionId: input.derivedDimensionId === undefined || input.derivedDimensionId === null
       ? null
       : requiredText(input.derivedDimensionId, 'derivedDimensionId'),
+    sourceAnnotation: normalizeSourceAnnotation(input.sourceAnnotation),
     createdAt,
     computedAt,
   });

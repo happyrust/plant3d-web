@@ -80,6 +80,7 @@ import { useToolStore } from './useToolStore';
 
 import type { BranParallelSpacingInput } from '@/composables/useSpatialCompute';
 
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { DTXLayer } from '@/utils/three/dtx';
 
 function createLayerWithBoxes(distance = 3): DTXLayer {
@@ -149,6 +150,7 @@ describe('useDtxTools object measure helpers', () => {
     const store = useToolStore();
     store.clearAll();
     store.setToolMode('none');
+    useClearanceStore().clearRecords();
   });
 
   it('应对两个盒体返回稳定的最近点与距离', () => {
@@ -199,6 +201,7 @@ describe('useDtxTools object measure tree flow', () => {
     const store = useToolStore();
     store.clearAll();
     store.setToolMode('none');
+    useClearanceStore().clearRecords();
   });
 
   it('树双选后应自动生成一次测量，并对同一对 refno 去重；reset 后允许再次生成', async () => {
@@ -221,14 +224,23 @@ describe('useDtxTools object measure tree flow', () => {
     selectionStoreMock.setSelectedRefnos(['24381_1001', '24381_1002'], '24381_1002');
     await nextTick();
 
-    expect(store.measurements.value).toHaveLength(1);
-    expect(store.measurements.value[0]?.kind).toBe('distance');
-    expect(store.measurements.value[0]?.origin.entityId).toBe('o:24381_1001:0');
-    expect(store.measurements.value[0]?.target.entityId).toBe('o:24381_1002:0');
+    // #58：构件最近点归 ClearanceStore（component-to-component / sampled-object），
+    // 不再写 classic measurement。
+    const clearanceStore = useClearanceStore();
+    expect(store.measurements.value).toHaveLength(0);
+    expect(clearanceStore.records.value).toHaveLength(1);
+    const rec = clearanceStore.records.value[0]!;
+    expect(rec.kind).toBe('component-to-component');
+    expect(rec.inputs.sourceRefno).toBe('24381_1001');
+    expect(rec.inputs.targetRefno).toBe('24381_1002');
+    expect(rec.provenance.method).toBe('sampled-object');
+    expect(rec.provenance.accuracyClass).toBe('approximate-sampled');
+    expect(rec.snapshot?.distanceM).toBeCloseTo(2, 6);
+    expect(rec.snapshot?.witness).toBe('closest-points');
 
     selectionStoreMock.setSelectedRefnos(['24381_1001', '24381_1002'], '24381_1002');
     await nextTick();
-    expect(store.measurements.value).toHaveLength(1);
+    expect(clearanceStore.records.value).toHaveLength(1);
 
     tools.cancelMeasurementInteraction();
     selectionStoreMock.setSelectedRefnos([], null);
@@ -236,7 +248,8 @@ describe('useDtxTools object measure tree flow', () => {
     selectionStoreMock.setSelectedRefnos(['24381_1001', '24381_1002'], '24381_1002');
     await nextTick();
 
-    expect(store.measurements.value).toHaveLength(2);
+    // 同一对 refno → 同一 clearanceRecordId：重测是重算（upsert），不是再加一条。
+    expect(clearanceStore.records.value).toHaveLength(1);
   });
 
   it('超过两个构件或目标未加载时不生成测量，并给出状态提示', async () => {
@@ -258,12 +271,12 @@ describe('useDtxTools object measure tree flow', () => {
 
     selectionStoreMock.setSelectedRefnos(['24381_1001', '24381_1002', '24381_1003'], '24381_1003');
     await nextTick();
-    expect(store.measurements.value).toHaveLength(0);
+    expect(useClearanceStore().records.value).toHaveLength(0);
     expect(tools.statusText.value).toBe('该模式仅支持两个构件');
 
     selectionStoreMock.setSelectedRefnos(['24381_1001', '24381_9999'], '24381_9999');
     await nextTick();
-    expect(store.measurements.value).toHaveLength(0);
+    expect(useClearanceStore().records.value).toHaveLength(0);
     expect(tools.statusText.value).toBe('请先显示这两个构件后再测量');
   });
 

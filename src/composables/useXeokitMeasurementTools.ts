@@ -15,6 +15,12 @@ import {
   type Object3D,
 } from 'three';
 
+import {
+  designLengthToScene as dtxDesignLengthToScene,
+  designMetersToSceneWorld as dtxDesignMetersToSceneWorld,
+  sceneDirectionToDesign as dtxSceneDirectionToDesign,
+  sceneWorldToDesignMeters as dtxSceneWorldToDesignMeters,
+} from './dtxDesignCoordinates';
 import { getCachedElementArcRadius, requestElementArcRadius } from './elementArcRadiusCache';
 import {
   formatMeasurementSnapLabel,
@@ -259,46 +265,28 @@ function tupleToVector(v: Vec3 | PickVec3): Vector3 {
   return new Vector3(v[0], v[1], v[2]);
 }
 
+/**
+ * 场景↔设计坐标换算已抽到 `@/composables/dtxDesignCoordinates`（#58：DTX 测量/净距
+ * 迁移共用同一套矩阵数学）。这里保留同名薄封装，调用点不用跟着改签名。
+ */
 function sceneWorldToDesignMeters(world: Vector3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
-  const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.();
-  if (!globalModelMatrix) return world.clone();
-
-  const inverse = globalModelMatrix.clone();
-  if (Math.abs(inverse.determinant()) <= 1e-12) return world.clone();
-
-  const raw = world.clone().applyMatrix4(inverse.invert());
-  return raw.multiply(new Vector3().setFromMatrixScale(globalModelMatrix));
+  return dtxSceneWorldToDesignMeters(world, dtxLayerRef);
 }
 
-/** `sceneWorldToDesignMeters` 的逆：设计 World（米）→ 场景坐标。 */
 function designMetersToSceneWorld(design: Vector3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
-  const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.();
-  if (!globalModelMatrix) return design.clone();
-  if (Math.abs(globalModelMatrix.determinant()) <= 1e-12) return design.clone();
-  const scale = new Vector3().setFromMatrixScale(globalModelMatrix);
-  const raw = new Vector3(design.x / scale.x, design.y / scale.y, design.z / scale.z);
-  return raw.applyMatrix4(globalModelMatrix);
+  return dtxDesignMetersToSceneWorld(design, dtxLayerRef);
 }
 
-/** 把场景坐标下的方向换到设计 World（米）：两点变换后相减，对任意仿射变换成立。 */
 function sceneDirectionToDesign(
   origin: Vector3,
   direction: Vector3,
   dtxLayerRef: Ref<DTXLayer | null>,
 ): Vector3 {
-  const from = sceneWorldToDesignMeters(origin, dtxLayerRef);
-  const to = sceneWorldToDesignMeters(origin.clone().add(direction), dtxLayerRef);
-  return to.sub(from);
+  return dtxSceneDirectionToDesign(origin, direction, dtxLayerRef);
 }
 
-/**
- * 设计 World 的长度（米）→ 场景坐标下的同一段长度。属性给的是设计尺寸（`RADI` / 目录 `PARA`，mm），
- * 而弧的点都在场景系里算，两点变换后取距离对任意仿射变换成立（同 `sceneDirectionToDesign` 的做法）。
- */
 function designLengthToScene(meters: number, dtxLayerRef: Ref<DTXLayer | null>): number {
-  const origin = designMetersToSceneWorld(new Vector3(0, 0, 0), dtxLayerRef);
-  const along = designMetersToSceneWorld(new Vector3(meters, 0, 0), dtxLayerRef);
-  return origin.distanceTo(along);
+  return dtxDesignLengthToScene(meters, dtxLayerRef);
 }
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent): Vector2 {
