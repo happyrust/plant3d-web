@@ -297,6 +297,46 @@ function treeNodeRefno(id: string): string {
   return isRefnoLike(id) ? normalizeRefnoKeyLike(id) : '';
 }
 
+/**
+ * 选中即装：点到的构件还没有几何对象时（眼睛没开过 / records 还没收进来），场景侧只拿到 refno
+ * 占位、`_getDtxObjectIds` 解出空集——行高亮、场景无高亮，看起来跟「高亮坏了」一模一样。
+ * 这里自动走眼睛的 `showModelByRefno` 加载路（records 缺失时内部同样会默认重新生成），装完把
+ * 选中态回放一遍补上高亮。只兜单选的主 refno：多选不碰，`WORL/SITE/ZONE/PIPE` 这类大容器一选
+ * 就拖整棵子树也太重。按 refno 每会话去重，防止对无几何节点（ATTA 之类）反复发加载。
+ */
+const selectAutoLoadAttempted = new Set<string>();
+const SELECT_AUTOLOAD_SKIP_NOUNS = new Set(['WORL', 'SITE', 'ZONE', 'PIPE']);
+
+function autoLoadModelForSelection(refno: string) {
+  const modelState = modelGenerationState.value;
+  if (!modelState || DEBUG_SKIP_EYE_AUTO_GENERATE) return;
+  if (modelState.isModelActuallyLoaded(refno)) {
+    // 几何在层里但 refno 级可见态是 false（眼睛关掉过）：同样属于「选了看不见」，把可见态补回来
+    const sceneObj = props.viewer?.scene?.objects?.[refno];
+    if (sceneObj && sceneObj.visible === false) void pdmsTree.setVisible(refno, true);
+    return;
+  }
+  if (selectAutoLoadAttempted.has(refno)) return;
+  const row = pdmsTree.flatRows.value.find((r) => treeNodeRefno(r.id) === refno);
+  const noun = String(row?.type ?? '').trim().toUpperCase();
+  if (noun && SELECT_AUTOLOAD_SKIP_NOUNS.has(noun)) return;
+  selectAutoLoadAttempted.add(refno);
+  void (async () => {
+    try {
+      const success = await modelState.showModelByRefno(refno, { flyTo: false });
+      if (!success) return;
+      // 装完后可见态跟上（眼睛的语义一致：点开就是要看见），否则选中了隐藏对象一样看不见。
+      await pdmsTree.setVisible(refno, true);
+      // 选中发生在几何进层之前时 `_getDtxObjectIds` 解的是空集，对象到位后把选中态回放一遍。
+      if (selection.selectedRefno.value === refno) {
+        props.viewer?.scene?.setObjectsSelected?.([refno], true);
+      }
+    } catch {
+      // showModelByRefno 内部已经落了错误提示（toast / console），这里不重复
+    }
+  })();
+}
+
 function handleSelectionChanged(selected: Set<string>) {
   internalTreeSelection = true;
   const normalized = Array.from(selected)
@@ -318,6 +358,7 @@ function handleSelectionChanged(selected: Set<string>) {
     return;
   }
   selection.setSelectedRefno(normalized[0] ?? null);
+  if (normalized[0]) autoLoadModelForSelection(normalized[0]);
 }
 
 function flyTo(id: string) {
