@@ -169,6 +169,7 @@ import {
 } from '@/measurement/units/measurementUnits';
 import { getModelSource } from '@/model-source';
 import { emitToast, type ToastLevel } from '@/ribbon/toastBus';
+import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
 import {
   computeDistanceMeasurementResult,
@@ -620,6 +621,11 @@ export function useXeokitMeasurementTools(options: {
   ptsetHoverViz.setLabelsVisible(false);
   ptsetHoverViz.setArrowsVisible(false);
 
+  /** P-Point 十字按屏幕像素定尺寸：渲染循环每帧调用（相机动了就重算）。 */
+  function updateMarkerScales(): void {
+    ptsetHoverViz.updateMarkerScales();
+  }
+
   const requestedPtsetRefnos = new Set<string>();
   const ptsetResponseByRefno = new Map<string, PtsetResponse>();
   const ptsetErrorByRefno = new Map<string, string>();
@@ -768,16 +774,33 @@ export function useXeokitMeasurementTools(options: {
     return line;
   }
 
-  function createCandidateCross(pos: Vector3, source: MeasurementPickSourceId): LineSegments {
-    const size = source === 'mesh_pick_point' ? 0.18 : 0.38;
+  /**
+   * 候选点标记：面向相机的屏幕 "+"（两笔），臂长固定像素——世界定尺寸的旧画法
+   * 近景下会铺满视图（臂长 0.38 m）。每 pointermove 随候选重建，相机移动期间的
+   * 尺寸 / 朝向在下一次移动时刷新。
+   */
+  function createCandidateCross(pos: Vector3, source: MeasurementPickSourceId): LineSegments | null {
+    const viewer = dtxViewerRef.value;
+    const camera = viewer?.camera;
+    const canvas = viewer?.canvas;
+    const w = canvas?.clientWidth ?? 0;
+    const h = canvas?.clientHeight ?? 0;
+    if (!camera || w <= 0 || h <= 0) return null;
+    const wpp = worldPerPixelAt(camera, pos, w, h);
+    if (!Number.isFinite(wpp) || wpp <= 0) return null;
+    const armPx = source === 'mesh_pick_point' ? 6 : 10;
+    const arm = armPx * wpp;
+    const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const up = new Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
     const positions = [
-      pos.x - size, pos.y, pos.z, pos.x + size, pos.y, pos.z,
-      pos.x, pos.y - size, pos.z, pos.x, pos.y + size, pos.z,
-      pos.x, pos.y, pos.z - size, pos.x, pos.y, pos.z + size,
+      pos.x - right.x * arm, pos.y - right.y * arm, pos.z - right.z * arm,
+      pos.x + right.x * arm, pos.y + right.y * arm, pos.z + right.z * arm,
+      pos.x - up.x * arm, pos.y - up.y * arm, pos.z - up.z * arm,
+      pos.x + up.x * arm, pos.y + up.y * arm, pos.z + up.z * arm,
     ];
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
-    geometry.setIndex(new BufferAttribute(new Uint16Array([0, 1, 2, 3, 4, 5]), 1));
+    geometry.setIndex(new BufferAttribute(new Uint16Array([0, 1, 2, 3]), 1));
     const material = new LineBasicMaterial({ color: sourceCandidateColor(source) });
     (material as any).depthTest = false;
     const line = new LineSegments(geometry, material);
@@ -795,7 +818,8 @@ export function useXeokitMeasurementTools(options: {
     if (!hoverPickCandidateGroup.parent) return;
     for (const candidate of candidates) {
       if (candidate.source === 'ptset') continue;
-      hoverPickCandidateGroup.add(createCandidateCross(candidate.worldPos, candidate.source));
+      const cross = createCandidateCross(candidate.worldPos, candidate.source);
+      if (cross) hoverPickCandidateGroup.add(cross);
     }
     if (hit?.source === 'mesh_graphics' || hit?.source === 'tubing_axis' || hit?.source === 'design_aid') {
       const detail = createGraphicsDetailHighlight(hit);
@@ -4428,6 +4452,7 @@ export function useXeokitMeasurementTools(options: {
     onCanvasPointerCancel,
     queryDimensionSnapCandidates,
     loadDimensionAnchorCandidates,
+    updateMarkerScales,
     dispose,
   };
 }

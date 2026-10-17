@@ -3153,6 +3153,7 @@ function renderFrameImmediate() {
 
   if (!splitCompareReady) {
     ptsetVisRef.value?.updateLabelPositions();
+    xeokitMeasurementToolsRef.value?.updateMarkerScales?.();
     annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
   }
 }
@@ -3246,6 +3247,7 @@ function renderFrame() {
 
     if (!splitCompareReady) {
       ptsetVisRef.value?.updateLabelPositions();
+      xeokitMeasurementToolsRef.value?.updateMarkerScales?.();
 
       // 三维标注系统更新
       annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);

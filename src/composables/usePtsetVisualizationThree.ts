@@ -8,6 +8,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 import { pickPtsetWorldTransform, transformPtsetPoint } from '@/utils/three/ptsetTransform';
 import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat';
 
@@ -43,6 +44,7 @@ export type UsePtsetVisualizationThreeReturn = {
   setArrowsVisible: (visible: boolean) => void
   flyToPtset: () => void
   updateLabelPositions: () => void
+  updateMarkerScales: () => void
 }
 
 type RenderedPtsetEntry = {
@@ -54,13 +56,20 @@ function formatCoord(pt: [number, number, number]): string {
   return `(${pt[0].toFixed(1)}, ${pt[1].toFixed(1)}, ${pt[2].toFixed(1)})`;
 }
 
-function generateCrossLines(origin: Vec3, size: number) {
-  const [x, y, z] = origin;
+/** 十字臂长的屏幕像素尺寸：与测量吸附光圈 / DOM 命中点同一量级。 */
+const PTSET_CROSS_ARM_PX = 8;
+
+/**
+ * 单位臂长三轴十字（原点居中、臂长 1），挂在点的局部位置上；
+ * 实际尺寸由 updateMarkerScales 按相机把臂长换算成固定屏幕像素后写入 scale，
+ * 任何缩放级别下屏幕上大小恒定。
+ */
+function generateCrossLines() {
   return {
     positions: [
-      x - size, y, z, x + size, y, z,
-      x, y - size, z, x, y + size, z,
-      x, y, z - size, x, y, z + size,
+      -1, 0, 0, 1, 0, 0,
+      0, -1, 0, 0, 1, 0,
+      0, 0, -1, 0, 0, 1,
     ],
     indices: [0, 1, 2, 3, 4, 5],
   };
@@ -127,10 +136,13 @@ export function usePtsetVisualizationThree(
     requestRender?: (() => void) | null
     /** 与 DTXLayer.globalModelMatrix 对齐（mm->m + recenter 等），用于 ptset 与模型同坐标系显示 */
     getGlobalModelMatrix?: (() => Matrix4 | null) | null
+    /** 十字臂长的屏幕像素（默认 8px，全幅 16px）；十字为点标记，不随缩放变。 */
+    crossArmPx?: number
   } = {}
 ): UsePtsetVisualizationThreeReturn {
   const requestRender = options.requestRender ?? null;
   const getGlobalModelMatrix = options.getGlobalModelMatrix ?? null;
+  const crossArmPx = options.crossArmPx ?? PTSET_CROSS_ARM_PX;
   const unitSettings = useUnitSettingsStore();
   const visualObjects = ref<Map<string, PtsetVisualObject>>(new Map());
   const isVisible = ref(false);
@@ -201,7 +213,32 @@ export function usePtsetVisualizationThree(
     }
   }
 
+  const markerScaleTmp = new Vector3();
+
+  /**
+   * 十字按屏幕像素定尺寸：臂长 = crossArmPx × worldPerPixelAt(点) / gmScale
+   * （几何在点集局部空间，随 group.matrix = gm 缩进场景）。每帧由渲染循环调用。
+   */
+  function updateMarkerScales() {
+    const viewer = dtxViewerRef.value;
+    if (!viewer?.camera || !isVisible.value) return;
+    const canvas = viewer.canvas;
+    const w = canvas?.clientWidth ?? 0;
+    const h = canvas?.clientHeight ?? 0;
+    if (w <= 0 || h <= 0) return;
+    const gmScale = new Vector3().setFromMatrixColumn(group.matrix, 0).length() || 1;
+    for (const obj of visualObjects.value.values()) {
+      const line = obj.cross;
+      if (!line) continue;
+      markerScaleTmp.set(obj.worldPos[0], obj.worldPos[1], obj.worldPos[2]);
+      const wpp = worldPerPixelAt(viewer.camera, markerScaleTmp, w, h);
+      if (!Number.isFinite(wpp) || wpp <= 0) continue;
+      line.scale.setScalar((crossArmPx * wpp) / gmScale);
+    }
+  }
+
   function updateLabelPositions() {
+    updateMarkerScales();
     const viewer = dtxViewerRef.value;
     const overlay = labelContainerRef.value;
     if (!viewer || !overlay) return;
@@ -254,19 +291,19 @@ export function usePtsetVisualizationThree(
         globalModelMatrix: gm,
       });
 
-      // 标记几何构建在点集原始空间（worldPt，可能是 mm），再由 group.matrix
-      // (gm) 缩放进场景米制；期望的视觉尺寸按场景单位定，再除以 gm 缩放回
-      // 点空间，保证 parquet（米）与后端 API（mm）两种数据源大小一致。
+      // 十字几何是原点居中的单位臂长线段，对象位置放点的点集局部坐标
+      // （worldPt，可能是 mm），group.matrix (gm) 带进场景米制；臂长按屏幕
+      // 像素由 updateMarkerScales 每帧写入 scale，任何缩放下大小恒定。
       const gmScale = new Vector3().setFromMatrixColumn(gm, 0).length() || 1;
       const pboreSceneSize = point.pbore * unitFactor * gmScale;
-      const crossSize = Math.max(0.2, pboreSceneSize * 0.15 || 0.6) / gmScale;
-      const cross = generateCrossLines(transformed.worldPt, crossSize);
+      const cross = generateCrossLines();
       const crossGeo = new BufferGeometry();
       crossGeo.setAttribute('position', new BufferAttribute(new Float32Array(cross.positions), 3));
       crossGeo.setIndex(new BufferAttribute(new Uint16Array(cross.indices), 1));
       const crossMat = new LineBasicMaterial({ color: 0x22c55e });
       (crossMat as any).depthTest = false;
       const crossLine = new LineSegments(crossGeo, crossMat);
+      crossLine.position.set(transformed.worldPt[0], transformed.worldPt[1], transformed.worldPt[2]);
       crossLine.renderOrder = 980;
       group.add(crossLine);
 
@@ -495,5 +532,6 @@ export function usePtsetVisualizationThree(
     setArrowsVisible,
     flyToPtset,
     updateLabelPositions,
+    updateMarkerScales,
   };
 }
