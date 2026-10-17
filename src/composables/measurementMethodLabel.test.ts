@@ -22,6 +22,7 @@ describe('computationMethodLabel（#59 诚实措辞）', () => {
     expect(computationMethodLabel('surface-to-surface')).toBe('实体外表面净距');
     expect(computationMethodLabel('semantic-point-pair')).toBe('语义点精确距离');
     expect(computationMethodLabel('point-to-triangle-mesh')).toBe('点至表面距离');
+    expect(computationMethodLabel('parallel-centerline')).toBe('平行直段中心距');
   });
 });
 

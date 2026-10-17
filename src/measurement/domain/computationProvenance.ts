@@ -1,6 +1,7 @@
 export const ACCURACY_CLASSES = Object.freeze([
   'exact-semantic',
   'exact-surface',
+  'exact-centerline',
   'approximate-bounds',
   'approximate-sampled',
   'approximate-axis',
@@ -18,6 +19,7 @@ export const COMPUTATION_METHODS = Object.freeze([
   'aabb-to-aabb',
   'sampled-object',
   'pca-axis',
+  'parallel-centerline',
   'legacy-unknown',
 ] as const);
 
@@ -117,6 +119,8 @@ export function accuracyClassForMethod(
       return 'approximate-sampled';
     case 'pca-axis':
       return 'approximate-axis';
+    case 'parallel-centerline':
+      return 'exact-centerline';
     case 'legacy-unknown':
       return 'legacy-unknown';
     default:
@@ -133,6 +137,7 @@ export function toLegacyApproximate(accuracyClass: AccuracyClass): boolean {
   switch (accuracyClass) {
     case 'exact-semantic':
     case 'exact-surface':
+    case 'exact-centerline':
       return false;
     case 'approximate-bounds':
     case 'approximate-sampled':

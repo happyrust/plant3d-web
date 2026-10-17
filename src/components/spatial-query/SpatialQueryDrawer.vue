@@ -478,6 +478,7 @@
               <div class="truncate font-mono" :title="`${record.inputs.sourceRefno} → ${record.inputs.targetRefno}`">{{ record.inputs.sourceRefno }} → {{ record.inputs.targetRefno }}</div>
               <div>{{ record.snapshot ? `${Math.round(record.snapshot.distanceM * 1000)} mm` : '无距离结果' }} · {{ record.status === 'current' ? '当前计算' : record.status === 'stale' ? '模型未核实，待重算' : '重算失败，保留旧值' }}</div>
             </div>
+            <button type="button" class="rounded border px-2 py-1" data-testid="locate-clearance-record" title="加载两侧构件并飞过去" @click="locateClearanceRecord(record)">定位</button>
             <button type="button" :disabled="clearanceStore.isComputing.value" class="rounded border px-2 py-1 disabled:opacity-50" @click="clearanceStore.recompute(record.id)">重算</button>
             <button type="button" class="rounded border px-2 py-1" @click="clearanceStore.toggleHidden(record.id)">{{ clearanceStore.hiddenIds.value.has(record.id) ? '显示' : '隐藏' }}</button>
             <button type="button" class="rounded border px-2 py-1" @click="clearanceStore.removeRecord(record.id)">移除</button>
@@ -797,6 +798,7 @@ import { ArrowUpRight, Copy, Download, Eraser, Eye, EyeOff, Focus, Info, Loader2
 import SpatialResultTree from './SpatialResultTree.vue';
 
 import type { SpatialTreeTubeNode, SpatialTreeUnitNode } from '@/api/genModelSpatialApi';
+import type { ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import type {
   SpatialQueryGroupDimension,
   SpatialQueryMode,
@@ -1639,6 +1641,37 @@ async function annotatePipeDistance(item: SpatialQueryResultItem) {
     return;
   }
   emitToast({ message: formatClearanceToast(record), level: record.snapshot ? 'success' : 'warning' });
+}
+
+/**
+ * 净距记录「定位」（#63 验收）：两侧构件一起加载高亮并飞到整组包围盒（与房间行「显示」同一条加载路）。
+ * 平行直段记录的 `inputs` 是直段锚 refno（`A~B` 形式，场景解不出构件），可加载的实体 refno
+ * 在 `provenance` 的 operand 里；构件级记录两侧 operand 与 inputs 本来就是同一个 refno。
+ */
+function locateClearanceRecord(record: ClearanceRecord) {
+  void (async () => {
+    const refnos = [...new Set([
+      record.provenance.source.refno || record.inputs.sourceRefno,
+      record.provenance.target.refno || record.inputs.targetRefno,
+    ])].filter(Boolean);
+    if (refnos.length === 0) {
+      emitToast({ level: 'warning', message: '这条净距记录没有可定位的构件引用' });
+      return;
+    }
+    clearanceStore.showAnnotations.value = true;
+    clearanceStore.setActive(record.id);
+    setGlobalSelectedRefno(refnos[0]!);
+    const result = await showModelByRefnosWithAck({
+      refnos,
+      flyTo: true,
+      highlight: true,
+      timeoutMs: 20_000,
+      ensureViewerReady: true,
+    });
+    if (result.error || result.fail.length === refnos.length) {
+      emitToast({ message: result.error || result.fail[0]?.error || '净距记录定位失败', level: 'error' });
+    }
+  })();
 }
 
 function showAll() {

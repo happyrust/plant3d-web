@@ -18,7 +18,6 @@ import {
   Vector3,
 } from 'three';
 
-import type { BranParallelSpacingInput, InteractiveBranClearanceInput } from '@/composables/useSpatialCompute';
 import type { WorldCell } from '@/review/domain/annotationProjection/clip4';
 import type { PhasePrevious } from '@/review/domain/annotationProjection/wave';
 import type { AnnotationDegrade } from '@/review/domain/bindingResolve';
@@ -29,6 +28,8 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { genModelV1SpatialCenterline, genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
 import { reviewAttachmentDelete } from '@/api/reviewApi';
+import { commitBranParallelSpacing } from '@/clearance/adapters/branSpacingRecords';
+import { parseServerWarning } from '@/clearance/services/clearanceService';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
@@ -2385,22 +2386,10 @@ export function useDtxTools(options: {
   compatViewerRef: Ref<DtxCompatViewer | null>
   requestRender?: (() => void) | null
   suppressStoreOverlays?: boolean
-  /**
-   * 「管-墙/柱净距」交互测量的结果落点：写进 Dock「BRAN 中心线最近清距」那一份结果
-   * （`useSpatialCompute.recordInteractiveBranClearance`），由 `bran-clearance` external source 画成尺寸。不给就只报状态（测试夹具）。
-   */
-  recordBranClearance?: ((input: InteractiveBranClearanceInput) => void) | null
-  /**
-   * 「管-管间距」（两条 BRAN 平行直段的中心距）的结果落点：同一份结果，一对平行直段一条
-   * （`useSpatialCompute.recordBranParallelSpacing`）。不给就只报状态（测试夹具）。
-   */
-  recordBranParallelSpacing?: ((input: BranParallelSpacingInput) => void) | null
 }) {
   const { dtxViewerRef, dtxLayerRef, selectionRef, overlayContainerRef, store, compatViewerRef } = options;
   const requestRender = options.requestRender ?? null;
   const suppressStoreOverlays = options.suppressStoreOverlays === true;
-  const recordBranClearance = options.recordBranClearance ?? null;
-  const recordBranParallelSpacing = options.recordBranParallelSpacing ?? null;
 
   const selectionStore = useSelectionStore();
   const reviewStore = useReviewStore();
@@ -3472,10 +3461,11 @@ export function useDtxTools(options: {
   }
 
   /**
-   * 「管-管间距」的后半程（plan 2026-09-16 §3.3 ④）：两条 BRAN 的真实中心线（`GET /api/v1/spatial/centerline`）→ 连续共线的段合成直段
-   * （ELBO / BEND 不算）→ 直段两两配平行对（夹角 ≤ 0.5°、沿轴投影有重叠）→ 每对一条中心距，写进 Dock「BRAN 中心线最近清距」
-   * 同一份结果（`recordBranParallelSpacing`，同一对再测整组替换）并画出尺寸。中心线接口只有 gen-model-v1 有。
-   * 没有平行直段也要写（把上一次同一对的清掉），只是状态栏直说。没接落点（测试夹具）就只报状态。
+   * 「管-管间距」的后半程（plan 2026-09-16 §3.3 ④，#63 改落 ClearanceStore）：两条 BRAN 的真实中心线
+   * （`GET /api/v1/spatial/centerline`）→ 连续共线的段合成直段（ELBO / BEND 不算）→ 直段两两配平行对
+   * （夹角 ≤ 0.5°、沿轴投影有重叠）→ 每对一条 `ClearanceRecord`（`parallel-centerline` / `exact-centerline`，
+   * inputs 是直段首段 refno，BRAN refno 在 provenance operand），同一对 BRAN 再测整组替换。
+   * 没有平行直段也要走一遍（把上一次同一对的记录清掉），只是状态栏直说。尺寸只经显式转换，不在这条路径建。
    */
   async function completePipeToPipeSpacing(
     source: PipeToPipeBranCandidate,
@@ -3495,30 +3485,41 @@ export function useDtxTools(options: {
     const distances = pairs.map((item) => formatMillimetres(item.axisDistanceMm));
     const distanceText = distances.length > 4 ? `${distances.slice(0, 4).join(' / ')} …` : distances.join(' / ');
     const runsText = `${sourceRuns.length} / ${targetRuns.length} 条直段`;
-    if (!recordBranParallelSpacing) {
-      setPipeMeasureStatus(pairs.length > 0
-        ? `管-管间距：${pair} 找到 ${pairs.length} 对平行直段（${runsText}），中心距 ${distanceText}（未接结果落点，未写入）`
-        : `管-管间距：${pair} 没有平行的直段（${runsText}，夹角容差 ${DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG}°）`);
-      return pairs.length > 0;
+
+    try {
+      commitBranParallelSpacing({
+        sourceBranRefno: source.branRefno,
+        targetBranRefno: target.branRefno,
+        pairs,
+        sourceSesno: sourceLine.source_version?.sesno ?? null,
+        targetSesno: targetLine.source_version?.sesno ?? null,
+        warnings: [...(sourceLine.warnings ?? []), ...(targetLine.warnings ?? [])].map(parseServerWarning),
+        sourceAnnotation: store.activeAnnotationContext.value,
+        computedAt: new Date(),
+        records: clearanceStore.records.value,
+        upsertRecord: clearanceStore.upsertRecord,
+        removeRecord: clearanceStore.removeRecord,
+      });
+    } catch (error) {
+      setPipeMeasureStatus(`管-管间距：${pair} 净距记录生成失败：${error instanceof Error ? error.message : String(error)}`);
+      return false;
     }
 
-    recordBranParallelSpacing({ sourceBranRefno: source.branRefno, targetBranRefno: target.branRefno, pairs });
     setPipeMeasureStatus(pairs.length > 0
-      ? `管-管间距：${pair} 找到 ${pairs.length} 对平行直段（${runsText}），中心距 ${distanceText}，已写入 Dock「BRAN 中心线最近清距」结果并画出尺寸`
-      : `管-管间距：${pair} 没有平行的直段（${runsText}，夹角容差 ${DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG}°），上一次这一对的结果已清掉`);
+      ? `管-管间距：${pair} 找到 ${pairs.length} 对平行直段（${runsText}），中心距 ${distanceText}，已生成 ${pairs.length} 条净距记录`
+      : `管-管间距：${pair} 没有平行的直段（${runsText}，夹角容差 ${DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG}°），上一次这一对的净距记录已清掉`);
     requestRender?.();
     return pairs.length > 0;
   }
 
   /**
-   * 三维里点选管件算出的一条管-墙/柱估算净距（scene 世界坐标的最近点对）→ 写进 Dock「BRAN 中心线最近清距」那一份结果，
-   * 由 `bran-clearance` external source 画成尺寸（plan 2026-09-16 §3.3 ③，沿 2026-09-11 收敛计划 §6 M1）。
-   * 最近点对是全局矩阵之后的 scene 坐标（已缩放到米、可能已重定心），那一份结果里的候选是 E3D 世界 mm，这里用全局矩阵的逆换回去，
-   * 进了同一份结果就跟服务端候选走同一条画尺寸的路。没接落点（测试夹具）就只报状态。
+   * 三维里点选管件算出的一条管-墙/柱估算净距（scene 世界坐标的最近点对）→ `ClearanceRecord`（#63）：
+   * `sampled-object` / `approximate-sampled`，端点经全局矩阵逆换算成 design-world 米，
+   * 与构件最近点（#58）走同一个适配器。尺寸只经显式转换，不在这条路径建；
+   * 失败抛 TypeError（类型化失败），不落半成品记录。
    */
   function commitInteractiveClearance(params: {
     kindLabel: string
-    layer: DTXLayer
     sourceRefno: string
     targetRefno: string
     targetNoun: string
@@ -3528,25 +3529,30 @@ export function useDtxTools(options: {
     const distance = params.sourcePoint.distanceTo(params.targetPoint);
     const distanceText = formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value);
     const pair = `${params.sourceRefno} ↔ ${params.targetRefno}${params.targetNoun ? `（${params.targetNoun}）` : ''}`;
-    if (!recordBranClearance) {
-      setPipeMeasureStatus(`${params.kindLabel}：${pair} 估算最近距离 ${distanceText}（网格采样；未接结果落点，未写入）`);
+
+    try {
+      commitDtxObjectToObjectClearance({
+        sourceRefno: params.sourceRefno,
+        targetRefno: params.targetRefno,
+        sourcePointScene: [params.sourcePoint.x, params.sourcePoint.y, params.sourcePoint.z],
+        targetPointScene: [params.targetPoint.x, params.targetPoint.y, params.targetPoint.z],
+        dtxLayerRef,
+        targetNoun: params.targetNoun,
+        warnings: [{
+          code: 'mesh_sampling',
+          message: '源侧参考点/网格采样 + 目标表面最近点，估算距离非外表面净距',
+        }],
+        sourceAnnotation: store.activeAnnotationContext.value,
+        computedAt: new Date(),
+        upsertRecord: clearanceStore.upsertRecord,
+      });
+    } catch (error) {
+      setPipeMeasureStatus(`${params.kindLabel}：${pair} 净距记录生成失败：${error instanceof Error ? error.message : String(error)}`);
       return;
     }
 
-    const sceneToMillimetres = params.layer.getGlobalModelMatrix().invert();
-    const toMillimetres = (point: Vector3) => {
-      const mm = point.clone().applyMatrix4(sceneToMillimetres);
-      return { x: mm.x, y: mm.y, z: mm.z };
-    };
-    recordBranClearance({
-      sourceRefno: params.sourceRefno,
-      targetRefno: params.targetRefno,
-      targetNoun: params.targetNoun,
-      sourcePointMm: toMillimetres(params.sourcePoint),
-      targetPointMm: toMillimetres(params.targetPoint),
-    });
     setPipeMeasureStatus(
-      `${params.kindLabel}：${pair} 估算最近距离 ${distanceText}（网格采样），已写入 Dock「BRAN 中心线最近清距」结果并画出尺寸`,
+      `${params.kindLabel}：${pair} 估算最近距离 ${distanceText}（网格采样），已生成净距记录`,
     );
     requestRender?.();
   }
@@ -3697,7 +3703,6 @@ export function useDtxTools(options: {
       const bestTargetRefno = best.targetRefno;
       commitInteractiveClearance({
         kindLabel: '管-墙/柱净距',
-        layer,
         sourceRefno,
         targetRefno: bestTargetRefno,
         targetNoun: candidates.find((candidate) => normalizeRefnoKey(candidate.refno) === bestTargetRefno)?.noun ?? '',
@@ -3738,9 +3743,8 @@ export function useDtxTools(options: {
       if (pipeMeasureBusy.value) {
         return pipeMeasureStatus.value || '管-墙/柱净距测量：正在计算…';
       }
-      return pipeMeasureStatus.value || (recordBranClearance
-        ? '管-墙/柱净距测量：点击管道，估算到最近墙/柱的距离，结果写入 Dock「BRAN 中心线最近清距」并画出尺寸'
-        : '管-墙/柱净距测量：点击管道，估算到最近墙/柱的距离');
+      return pipeMeasureStatus.value
+        || '管-墙/柱净距测量：点击管道，估算到最近墙/柱的距离，生成净距记录（网格采样）';
     }
     if (mode === 'measure_pipe_to_pipe') {
       if (pipeMeasureBusy.value) {
@@ -3751,7 +3755,7 @@ export function useDtxTools(options: {
       }
       return pipeToPipeSourceCandidate.value
         ? pipeToPipeSourceStatus(pipeToPipeSourceCandidate.value)
-        : '管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，结果写入 Dock「BRAN 中心线最近清距」并画出尺寸）';
+        : '管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，一对平行直段一条净距记录）';
     }
     if (mode === 'pick_query_center') {
       return '请点击模型拾取查询中心点';

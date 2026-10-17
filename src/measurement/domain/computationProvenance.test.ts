@@ -27,6 +27,7 @@ const METHOD_ACCURACY_CASES = [
   ['aabb-to-aabb', 'approximate-bounds'],
   ['sampled-object', 'approximate-sampled'],
   ['pca-axis', 'approximate-axis'],
+  ['parallel-centerline', 'exact-centerline'],
   ['legacy-unknown', 'legacy-unknown'],
 ] as const;
 
@@ -48,6 +49,7 @@ describe('computation provenance contract', () => {
     expect(ACCURACY_CLASSES).toEqual([
       'exact-semantic',
       'exact-surface',
+      'exact-centerline',
       'approximate-bounds',
       'approximate-sampled',
       'approximate-axis',
@@ -76,6 +78,7 @@ describe('computation provenance contract', () => {
   it.each([
     ['exact-semantic', false],
     ['exact-surface', false],
+    ['exact-centerline', false],
     ['approximate-bounds', true],
     ['approximate-sampled', true],
     ['approximate-axis', true],

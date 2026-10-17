@@ -26,6 +26,7 @@ import {
   createComputationProvenance,
   type ComputationOperandRef,
   type ComputationProvenance,
+  type ComputationWarning,
 } from '@/measurement/domain/computationProvenance';
 
 /**
@@ -119,6 +120,10 @@ export type BuildDtxObjectToObjectClearanceInput = Readonly<{
   sourcePointScene: Vec3;
   targetPointScene: Vec3;
   dtxLayerRef: Ref<DTXLayer | null>;
+  /** 目标构件的 noun（管-墙/柱流给候选名词，如 `WALL` / `COLUMN`）。 */
+  targetNoun?: string;
+  /** 采样口径的补充说明（交互式管-墙/柱：参考点 + 网格采样，非外表面净距）。 */
+  warnings?: readonly ComputationWarning[];
   sourceAnnotation?: DtxSourceAnnotationContext;
   computedAt: Date;
 }>;
@@ -126,6 +131,7 @@ export type BuildDtxObjectToObjectClearanceInput = Readonly<{
 /**
  * 构件最近点 → ClearanceRecord：`sampled-object` / `approximate-sampled`。
  * 距离取两点设计向量长度（场景距离经同一矩阵换算，尺度任意仿射成立）。
+ * 交互式管-墙/柱净距（#63）也走这里——同一计算类（源侧采样点 + 目标表面最近点）。
  */
 export function buildDtxObjectToObjectClearanceRecord(
   input: BuildDtxObjectToObjectClearanceInput,
@@ -153,11 +159,13 @@ export function buildDtxObjectToObjectClearanceRecord(
     coordinateSpace: 'design-world',
     source: operandOf(input.sourceRefno),
     target: operandOf(input.targetRefno),
+    warnings: input.warnings ?? [],
   });
   return createClearanceRecord({
     id: clearanceRecordId(inputs),
     kind: 'component-to-component',
     inputs,
+    targetNoun: input.targetNoun ?? '',
     provenance,
     snapshot: {
       distanceM,
@@ -167,7 +175,7 @@ export function buildDtxObjectToObjectClearanceRecord(
       vector: [designVector.x, designVector.y, designVector.z],
       sourceLeafRefno: input.sourceRefno,
       targetLeafRefno: input.targetRefno,
-      targetLeafNoun: '',
+      targetLeafNoun: input.targetNoun ?? '',
       targetFace: null,
       perpendicular: null,
       witness: 'closest-points',

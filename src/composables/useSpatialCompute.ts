@@ -10,7 +10,6 @@ import type {
 import { genModelV1SpatialNearestClearance, genModelV1SurfaceClearance } from '@/api/genModelV1Api';
 import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
-import { type BranParallelRunPair, describeStraightRun } from '@/composables/branParallelSpacing';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 
@@ -53,47 +52,12 @@ export const SERVER_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
   accuracyClass: 'approximate-bounds',
 };
 
-export const INTERACTIVE_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
-  method: 'sampled-object',
-  accuracyClass: 'approximate-sampled',
-};
-
-export const PARALLEL_BRAN_SPACING_PROVENANCE: BranClearanceProvenance = {
-  method: 'parallel-centerline',
-  accuracyClass: 'exact-centerline',
-};
-
 export type BranNearestClearanceAnnotationCandidate = {
   targetGroup: string;
   candidate: BranNearestClearanceCandidate;
   index: number;
   /** 缺省 = 服务端候选（`SERVER_BRAN_CLEARANCE_PROVENANCE`）；三维点选写进来的那几条带 `sampled-object` */
   provenance?: BranClearanceProvenance;
-};
-
-/**
- * 三维里点选管件算出的一条管-墙/柱估算净距（`useDtxTools.measure_pipe_to_structure`），写进 BRAN 净距结果用。
- * 两个点都要是 **E3D 世界 mm**（与服务端候选同一坐标系；scene → mm 的换算在 viewer 侧做完再交进来）。
- */
-export type InteractiveBranClearanceInput = {
-  /** 点选的管件 refno，进 `nearest.source_segment_refno` */
-  sourceRefno: string;
-  targetRefno: string;
-  targetNoun: string;
-  sourcePointMm: { x: number; y: number; z: number };
-  targetPointMm: { x: number; y: number; z: number };
-};
-
-/**
- * 三维里点选两根管算出的「两条 BRAN 平行直段的间距」（`useDtxTools.measure_pipe_to_pipe`，plan 2026-09-16 §3.3 ④），
- * 一对平行直段一条候选，写进 BRAN 净距结果用。`pairs` 里的点都是 **E3D 世界 mm**（中心线接口给的就是）。
- */
-export type BranParallelSpacingInput = {
-  /** 先点的那一根所属 BRAN（`a_b` / `a/b` 都收） */
-  sourceBranRefno: string;
-  /** 后点的那一根所属 BRAN */
-  targetBranRefno: string;
-  pairs: readonly BranParallelRunPair[];
 };
 
 /**
@@ -384,76 +348,6 @@ function applyBranSelection(state: SpatialComputeScenarioState): void {
       })
       .filter((item) => drawn.has(branCandidateKey(group.group, item.candidate))),
   );
-}
-
-/** 两条 BRAN 之间平行直段候选的 `variant` 前缀：同一对（不分先后）再测一次就整组替换。 */
-function parallelVariantPrefix(branA: string, branB: string): string {
-  return `parallel:${[branA, branB].sort().join('~')}:`;
-}
-
-/**
- * 一对平行直段 → 与服务端同形的候选：`distance_mm` / `annotation.label_mm` 是中心距，两端点都在轴线上（重叠区中点），
- * `nearest.source_segment_refno/order` 是源直段的首段；明细进 `parallel`，`variant` 区分同一目标 BRAN 的多条。
- */
-export function parallelSpacingCandidate(
-  sourceBranRefno: string,
-  targetBranRefno: string,
-  pair: BranParallelRunPair,
-  index: number,
-): BranNearestClearanceCandidate {
-  const source = pair.sourcePointMm;
-  const target = pair.targetPointMm;
-  const head = pair.source.segments[0];
-  return {
-    refno: targetBranRefno,
-    noun: 'BRAN',
-    distance_mm: pair.axisDistanceMm,
-    intersects: pair.axisDistanceMm <= 1e-6,
-    nearest: {
-      source_segment_refno: head?.refno ?? sourceBranRefno,
-      source_segment_order: head?.order ?? null,
-      source_point: { ...source },
-      target_point: { ...target },
-      vector: { dx: target.x - source.x, dy: target.y - source.y, dz: target.z - source.z },
-    },
-    annotation: { start_point: { ...source }, end_point: { ...target }, label_mm: pair.axisDistanceMm },
-    variant: `${parallelVariantPrefix(sourceBranRefno, targetBranRefno)}${index}`,
-    parallel: {
-      source_bran_refno: sourceBranRefno,
-      source_run_refno: describeStraightRun(pair.source),
-      target_run_refno: describeStraightRun(pair.target),
-      overlap_mm: pair.overlapMm,
-      angle_deg: pair.angleDeg,
-      clearance_mm: pair.clearanceMm,
-      source_outside_diameter_mm: pair.source.outsideDiameterMm,
-      target_outside_diameter_mm: pair.target.outsideDiameterMm,
-    },
-  };
-}
-
-/**
- * 三维点选的一条管-墙/柱估算净距 → 与服务端同形的候选（`nearest` + `annotation` 两个端点齐全，尺寸系统直接画）。
- * refno 归一成 `a_b`；`source_segment_order` 为 null（点选的是一个管件，不是成员序里的哪一段）；距离由两点算，mm。
- */
-export function interactiveBranClearanceCandidate(input: InteractiveBranClearanceInput): BranNearestClearanceCandidate {
-  const source = input.sourcePointMm;
-  const target = input.targetPointMm;
-  const vector = { dx: target.x - source.x, dy: target.y - source.y, dz: target.z - source.z };
-  const distance = Math.hypot(vector.dx, vector.dy, vector.dz);
-  return {
-    refno: normalizeBranComputeRefno(input.targetRefno),
-    noun: String(input.targetNoun || '').trim().toUpperCase() || 'UNKNOWN',
-    distance_mm: distance,
-    intersects: distance <= 1e-6,
-    nearest: {
-      source_segment_refno: normalizeBranComputeRefno(input.sourceRefno),
-      source_segment_order: null,
-      source_point: { ...source },
-      target_point: { ...target },
-      vector,
-    },
-    annotation: { start_point: { ...source }, end_point: { ...target }, label_mm: distance },
-  };
 }
 
 type BranNearestClearanceQuery = {
@@ -754,118 +648,6 @@ export function createSpatialComputeStore() {
     applyBranSelection(state);
   }
 
-  /**
-   * 三维里点选管件算出的管-墙/柱估算净距，写进**同一份** BRAN 净距结果（同一张表、同一组 facet、同一个 `bran-clearance`
-   * external source），不再只 Toast（plan 2026-09-16 §3.3 ③，沿 2026-09-11 收敛计划 §6 M1）。
-   * 落到目标类型那一桶的末尾（不重排，别的候选的桶内位置 / 尺寸 id 不变），同一目标再点一次就地替换；
-   * 类型 chip 没有就加、有就计数 +1 并勾上；这一条默认开「标注」；来源登记为 `sampled-object`。
-   * 下一次跑服务端查询（`submitScenario`）会连它一起清掉——它就是这一份结果的一部分。
-   * 返回候选键（`branCandidateKey`）。
-   */
-  function recordInteractiveBranClearance(input: InteractiveBranClearanceInput): string {
-    const state = scenarios.branNearestClearance;
-    if (!calculationsAllowed) { state.error = '历史对比上下文不可使用当前模型计算，请返回当前模型后重算。'; return ''; }
-    const candidate = interactiveBranClearanceCandidate(input);
-    const key = branCandidateKey(candidate.noun, candidate);
-
-    let group = state.branGroups.find((item) => item.group === candidate.noun);
-    if (!group) {
-      group = { group: candidate.noun, nouns: [candidate.noun], candidates: [] };
-      state.branGroups.push(group);
-    }
-    // 只替换同目标的「单条」候选（服务端的或上一次点选的）；平行直段那些带 variant 的多条不在此列。
-    const existingIndex = group.candidates.findIndex((item) => item.refno === candidate.refno && !item.variant);
-    if (existingIndex >= 0) {
-      group.candidates.splice(existingIndex, 1, candidate);
-    } else {
-      group.candidates.push(candidate);
-    }
-
-    const facet = state.nounFacets.find((item) => item.noun === candidate.noun);
-    if (facet) {
-      if (existingIndex < 0) facet.count += 1;
-      facet.selected = true;
-    } else {
-      state.nounFacets.push({ noun: candidate.noun, count: 1, selected: true });
-    }
-
-    state.candidateProvenance = { ...state.candidateProvenance, [key]: INTERACTIVE_BRAN_CLEARANCE_PROVENANCE };
-    if (!state.drawnCandidateKeys.includes(key)) {
-      state.drawnCandidateKeys = [...state.drawnCandidateKeys, key];
-    }
-    // 上一次服务端查询的报错不该拦住这条画出来（`ViewerPanel` 见 error 就清空 `bran-clearance`）。
-    state.error = '';
-    applyBranSelection(state);
-    activeScenario.value = 'branNearestClearance';
-    return key;
-  }
-
-  /**
-   * 三维里点选两根管算出的「两条 BRAN 平行直段的间距」写进**同一份** BRAN 净距结果（plan 2026-09-16 §3.3 ④）：
-   * 一对平行直段一条候选，落进 `BRAN` 那一桶末尾、全部默认开「标注」，来源登记 `parallel-centerline / exact-centerline`。
-   * 同一对 BRAN（不分先后）再测一次先把上一次那组整体摘掉再写（结果变了就换、没有平行直段了就清）；
-   * 别的候选（服务端的、点选估算的、别的 BRAN 对）原位不动。下一次服务端查询连它们一起清。
-   * 返回这次写进去的候选键。
-   */
-  function recordBranParallelSpacing(input: BranParallelSpacingInput): string[] {
-    const state = scenarios.branNearestClearance;
-    if (!calculationsAllowed) { state.error = '历史对比上下文不可使用当前模型计算，请返回当前模型后重算。'; return []; }
-    const sourceBran = normalizeBranComputeRefno(input.sourceBranRefno);
-    const targetBran = normalizeBranComputeRefno(input.targetBranRefno);
-    const prefix = parallelVariantPrefix(sourceBran, targetBran);
-    const isSamePair = (candidate: BranNearestClearanceCandidate) => !!candidate.variant && candidate.variant.startsWith(prefix);
-
-    // 摘掉上一次同一对的那组（哪一桶都看：反着点时目标是另一条 BRAN，也在 BRAN 桶，但别赌）。
-    const removedKeys = new Set<string>();
-    for (const group of state.branGroups) {
-      const kept = group.candidates.filter((candidate) => {
-        if (!isSamePair(candidate)) return true;
-        removedKeys.add(branCandidateKey(group.group, candidate));
-        return false;
-      });
-      const removed = group.candidates.length - kept.length;
-      if (removed > 0) {
-        group.candidates = kept;
-        const facet = state.nounFacets.find((item) => item.noun === group.group);
-        if (facet) facet.count = Math.max(kept.length, facet.count - removed);
-      }
-    }
-    state.branGroups = state.branGroups.filter((group) => group.candidates.length > 0);
-    state.nounFacets = state.nounFacets.filter((facet) => state.branGroups.some((group) => group.group === facet.noun));
-
-    const candidates = input.pairs.map((pair, index) => parallelSpacingCandidate(sourceBran, targetBran, pair, index));
-    const keys: string[] = [];
-    if (candidates.length > 0) {
-      let group = state.branGroups.find((item) => item.group === 'BRAN');
-      if (!group) {
-        group = { group: 'BRAN', nouns: ['BRAN'], candidates: [] };
-        state.branGroups.push(group);
-      }
-      group.candidates.push(...candidates);
-      const facet = state.nounFacets.find((item) => item.noun === 'BRAN');
-      if (facet) {
-        facet.count += candidates.length;
-        facet.selected = true;
-      } else {
-        state.nounFacets.push({ noun: 'BRAN', count: candidates.length, selected: true });
-      }
-      for (const candidate of candidates) keys.push(branCandidateKey('BRAN', candidate));
-    }
-
-    const provenance = { ...state.candidateProvenance };
-    for (const key of removedKeys) delete provenance[key];
-    for (const key of keys) provenance[key] = PARALLEL_BRAN_SPACING_PROVENANCE;
-    state.candidateProvenance = provenance;
-    state.drawnCandidateKeys = [
-      ...state.drawnCandidateKeys.filter((key) => !removedKeys.has(key)),
-      ...keys,
-    ];
-    state.error = '';
-    applyBranSelection(state);
-    activeScenario.value = 'branNearestClearance';
-    return keys;
-  }
-
   const onProjectChanged = () => {
     if (persistence.hasPersistenceContext.value) return;
     for (const k of Object.keys(scenarios) as SpatialComputeScenarioKey[]) {
@@ -902,8 +684,6 @@ export function createSpatialComputeStore() {
     toggleBranNounFacet,
     setAllBranNounFacets,
     toggleBranCandidateDrawn,
-    recordInteractiveBranClearance,
-    recordBranParallelSpacing,
   };
 }
 

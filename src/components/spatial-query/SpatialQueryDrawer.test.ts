@@ -4,6 +4,7 @@ import { createApp, h, nextTick, reactive, ref, type Ref } from 'vue';
 import SpatialQueryDrawer from './SpatialQueryDrawer.vue';
 
 import type { SpatialTreeResult } from '@/api/genModelSpatialApi';
+import type { BranParallelRunPair } from '@/composables/branParallelSpacing';
 import type {
   SpatialQueryCapabilities,
   SpatialQueryDraft,
@@ -14,6 +15,9 @@ import type {
   SpatialQueryRoomsStatus,
   SpatialQueryStatus,
 } from '@/types/spatialQuery';
+
+import { buildBranParallelSpacingRecord } from '@/clearance/adapters/branSpacingRecords';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 
 type DraftState = SpatialQueryDraft;
 
@@ -34,6 +38,8 @@ const toggleResultVisible = vi.fn();
 const setAllResultsVisible = vi.fn();
 const isolateResults = vi.fn();
 const restoreScene = vi.fn();
+/** 净距记录「定位」走的加载回执（`@/composables/useViewerContext.showModelByRefnosWithAck`） */
+const showModelByRefnosMock = vi.fn(async (_options?: unknown) => ({ ok: [] as string[], fail: [] as { refno: string; error: string | null }[], error: null as string | null }));
 const setMode = vi.fn((mode: SpatialQueryDraft['mode']) => {
   stubState.draft.mode = mode;
 });
@@ -126,6 +132,11 @@ vi.mock('@/composables/useSpatialQuery', () => ({
     restoreScene,
   }),
 }));
+
+vi.mock('@/composables/useViewerContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/composables/useViewerContext')>();
+  return { ...actual, showModelByRefnosWithAck: (options: unknown) => showModelByRefnosMock(options) };
+});
 
 vi.mock('@/composables/useConfirmDialogStore', () => ({
   useConfirmDialogStore: () => ({
@@ -292,6 +303,9 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     isolateResults.mockReset();
     restoreScene.mockReset();
     setMode.mockClear();
+    showModelByRefnosMock.mockClear();
+    showModelByRefnosMock.mockResolvedValue({ ok: [], fail: [], error: null });
+    useClearanceStore().clearRecords();
     vi.unstubAllGlobals();
     resetDraft();
   });
@@ -1473,6 +1487,69 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.querySelector('[data-testid="spatial-result-page-prev"]')).toBeNull();
     expect(host.querySelector('[data-testid="spatial-room-row"]')).toBeNull();
     expect(host.textContent).not.toContain('房间列表');
+
+    unmount();
+  });
+
+  it('净距记录行「定位」：用 provenance 里的实体 refno（平行直段 → BRAN）加载高亮并飞过去，同时把记录置为当前', async () => {
+    const store = useClearanceStore();
+    const run = (segments: { refno: string; noun: string }[]): BranParallelRunPair['source'] => ({
+      branRefno: '',
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 2000, y: 0, z: 0 },
+      direction: { x: 1, y: 0, z: 0 },
+      lengthMm: 2000,
+      segments: segments.map((segment, order) => ({
+        refno: segment.refno,
+        order,
+        noun: segment.noun,
+        implicit: true,
+        start: { x: 0, y: 0, z: 0 },
+        end: { x: 2000, y: 0, z: 0 },
+        length_mm: 2000,
+        outside_diameter_mm: null,
+      })),
+      outsideDiameterMm: 114.3,
+    });
+    const pair: BranParallelRunPair = {
+      source: { ...run([{ refno: '24381_145019', noun: 'TUBI' }]), branRefno: '24381_145018' },
+      target: { ...run([{ refno: '24381_144931', noun: 'TUBI' }]), branRefno: '24381_144924' },
+      angleDeg: 0,
+      overlapStartMm: 0,
+      overlapEndMm: 2000,
+      overlapMm: 2000,
+      axisDistanceMm: 1584,
+      sourcePointMm: { x: 1000, y: 0, z: 0 },
+      targetPointMm: { x: 1000, y: 1584, z: 0 },
+      clearanceMm: 1584 - 114.3,
+    };
+    const record = buildBranParallelSpacingRecord({
+      sourceBranRefno: '24381/145018',
+      targetBranRefno: '24381/144924',
+      pair,
+      computedAt: new Date('2026-10-20T00:00:00Z'),
+    });
+    // 断言前提：平行直段记录的 inputs 是直段锚 refno（场景解不出），实体 refno 在 provenance
+    expect(record.inputs.sourceRefno).toBe('24381_145019');
+    expect(record.provenance.source.refno).toBe('24381_145018');
+    store.upsertRecord(record);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const locate = host.querySelector('[data-testid="locate-clearance-record"]') as HTMLButtonElement | null;
+    expect(locate).toBeTruthy();
+    locate?.click();
+    await flushMicrotasks();
+
+    expect(showModelByRefnosMock).toHaveBeenCalledTimes(1);
+    expect(showModelByRefnosMock).toHaveBeenCalledWith(expect.objectContaining({
+      refnos: ['24381_145018', '24381_144924'],
+      flyTo: true,
+      highlight: true,
+    }));
+    expect(store.activeId.value).toBe(record.id);
+    expect(store.showAnnotations.value).toBe(true);
 
     unmount();
   });

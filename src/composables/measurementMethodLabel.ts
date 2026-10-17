@@ -29,6 +29,8 @@ export function computationMethodLabel(method: ComputationMethod): string {
       return '估算最近距离';
     case 'pca-axis':
       return '估算轴线距离';
+    case 'parallel-centerline':
+      return '平行直段中心距';
     case 'legacy-unknown':
       return '近似（口径未知）';
     default: {
