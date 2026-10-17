@@ -191,7 +191,7 @@
               class="h-3.5 w-3.5 accent-brand"
               @change="onAutoFollowChange" />
             <span class="text-xs font-semibold" :class="autoFollowSelection ? 'text-brand' : 'text-foreground'">选中 BRAN / 管件自动计算</span>
-            <span class="ml-auto text-[11px] text-muted-foreground">半径内每类默认标注最近 1 条（包围盒估算）</span>
+            <span class="ml-auto text-[11px] text-muted-foreground">半径内每类默认标注最近 1 条（管表面到包围盒估算）</span>
           </label>
 
           <!-- 范围显示：沿当前 BRAN 中心线按半径圈周边构件 → 加载未加载的 → 命中实体、其余半透明（空间查询抽屉同一管线） -->

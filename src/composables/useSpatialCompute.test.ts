@@ -108,6 +108,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       radius: '5000',
       scope: 'all_loaded',
       max_per_group: '3',
+      surface: 'true',
     });
     expect(state.error).toBe('');
 
@@ -133,9 +134,9 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       sourceSegmentRefno: '24381_14503',
       sourceSegmentOrder: 3,
       candidateKey: 'WALL:24381_1',
-      label: '包围盒估算 · segment 24381_14503#3',
+      label: '管表面到包围盒估算 · segment 24381_14503#3',
     }));
-    expect(state.resultRows[2]?.label).toBe('相交 · 包围盒估算 · segment 24381_14504#4');
+    expect(state.resultRows[2]?.label).toBe('相交 · 管表面到包围盒估算 · segment 24381_14504#4');
 
     // 三维标注候选 = 每类最近 1 条，index 是桶内位置
     expect(state.annotationCandidates.map((item) => [item.targetGroup, item.candidate.refno, item.index])).toEqual([
@@ -585,6 +586,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
         radius: '1500',
         scope: 'all_loaded',
         max_per_group: '3',
+        surface: 'true',
       });
       expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET');
 

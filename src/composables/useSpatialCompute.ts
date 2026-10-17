@@ -129,7 +129,7 @@ const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
     key: 'branNearestClearance',
     title: 'BRAN 中心线最近清距',
-    description: '按墙、柱、梁、板或全部类型查找候选；先显示包围盒估算，可逐条精算实体外表面净距。',
+    description: '按墙、柱、梁、板或全部类型查找候选；先显示管表面到包围盒估算，可逐条精算实体外表面净距。',
     endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT,
     exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
@@ -269,7 +269,7 @@ function provenanceMethodLabel(provenance: BranClearanceProvenance | undefined):
     case 'surface-to-surface':
       return '实体外表面净距（网格精算）';
     default:
-      return '包围盒估算';
+      return '管表面到包围盒估算';
   }
 }
 
@@ -365,8 +365,8 @@ type BranNearestClearanceQuery = {
  * （plan §3.2「两边同形」），v1 的返回值赋给它就是这条契约的编译期检查。
  *
  * 请求口径：`source_mode=bran_centerline` 显式发（不吃服务端缺省）、`group_by=noun` 且不给任何目标 = 半径内全部类型
- * （负几何服务端默认剔）、`max_per_group` 每类多取几条供列表勾选、`scope=all_loaded`。`surface` 等格留给服务端缺省
- * （D4 未拍板：净距是否缺省扣外径）。
+ * （负几何服务端默认剔）、`max_per_group` 每类多取几条供列表勾选、`scope=all_loaded`、`surface=1`（2026-10-17 拍板：
+ * 距离从管外表面起算、标注起点推到管表面——比中心线起算少报一个管半径；BRAN 无外径时服务端出 warning 退回中心线起算）。
  */
 async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Promise<BranNearestClearanceResponse> {
   return await genModelV1SpatialNearestClearance({
@@ -379,6 +379,7 @@ async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Prom
     radius: query.radius,
     maxPerGroup: BRAN_CLEARANCE_MAX_PER_NOUN,
     scope: 'all_loaded',
+    surface: true,
   });
 }
 

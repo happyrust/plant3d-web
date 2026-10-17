@@ -33,7 +33,7 @@ function sourceLabelSuffix(item: BranNearestClearanceAnnotationCandidate): strin
     case 'surface-to-surface':
       return '（实体外表面净距）';
     default:
-      return '（包围盒估算）';
+      return '（管表面到包围盒估算）';
   }
 }
 
