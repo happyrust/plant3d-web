@@ -52,7 +52,7 @@
 | TREE-10 | 无页面错误 | 全程无 pageerror/console error | 同上 | 通过 |
 | TREE-11 | 树页签 v1 链路 | 房间页签在 gen-model-v1 源下的完整链路 | `e2e/model-tree-room-tab-gen-model-v1.spec.ts` | 可执行 |
 | TREE-12 | 整库房间重建 | `POST /rooms/rebuild` 202 → 并发第二发 409 → edge-recompute 29/29 → ready；房/面板/成员守恒 | `tmp/room-compute-online-retest.mjs` | 通过（机械面） |
-| TREE-13 | 对齐账收敛 | 重建后 `room_updated_at` 盖章 + 含房库 `library_alignment_current=true` | 同上（C4/C5） | **线上仍失败**；根因已定位（issue gen-model#56：boole 构件引用的 `e3d_baked_v2_*.mesh` 不在部署网格目录 → 逐库 failed → 不盖章），本地副本库补全网格后全链收敛已验证 |
+| TREE-13 | 对齐账收敛 | 重建后 `room_updated_at` 盖章 + 含房库 `library_alignment_current=true` | 同上（C4/C5） | **通过**（线上实测：`24381_5062/tree` → `library_alignment_current=true`、`matched=56`；issue gen-model#56 已闭环） |
 
 ## 4. 空间查询与净距（SPT）
 
@@ -191,4 +191,10 @@
   （`PLANT_ASSET_ROOT=/var/lib/aios-database/assets` 恒空），故所有 boole 根必败。
   修复 = 把网格清单同步到服务器后重建；结构后续见 issue（网格入持久层 /
   部署打包网格 / health 透出逐库失败摘要）。
+- **gen-model#56 线上闭环**（2026-10-17）：服务器补齐 111,650 网格文件后整库重建
+  29/29 零失败、`room_updated_at` 落章、`model_room_generation` 盖到常驻代；
+  剩余 `library_alignment_current=false` 定位为**对齐谓词误叠加 `model_sesno>0`**
+  （部署节点不跑模型管线，该格恒 0）——`2a691737` 改按 `model_room_generation`
+  自证判读（清 NONE→全过才回盖，存在即证据）。部署后实测 `24381_5062/tree`
+  `library_alignment_current=true`、`matched=56`、`unresolved=0`，issue 已关闭。
 - **部署健康**：DEP-01..06 全部通过（run 38917741165 / 38919003556 两次 success）。
