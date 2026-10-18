@@ -122,3 +122,14 @@
 | 全选 26 条标注 + X 光 | 27 实体 / 211 X-Ray，交错位文字可读（截图留存） |
 
 控制台全程无 `branXrayOn` 残留告警、无新增错误。
+
+### 净距标注点选 → 选中目标构件（真机）
+
+- 链路：尺寸 overlay 捕获阶段 `pointerdown` → `hitTest` 命中 → `viewport.setSelection(dimId)` → `ViewerPanel` 订阅回调用 `branClearanceTargetRefno(id)` 反解目标 refno → 走与点模型同一套 `selectionStore.setSelectedRefno` + `ensureRefnos` + `setObjectsSelected`。
+- 修复的遮挡缺陷：`pointerdown` 被尺寸层 `stopImmediatePropagation` 消费后主画布 `onDown` 不跑（`clickState.down=null`），而 `pointerup` 无活动会话返回 NOT_CONSUMED，`onUp` 照常 GPU 拾取落空→清空选中。现在 `onUp` 在 `down==null` 时跳过场景拾取。
+- 实测（`:3101`，BRAN `24384_22726`，10 条已标注）：
+  - 点 SCTN 尺寸线（`extension` 段）→ `scene.selectedObjectIds = ['24381_2306']`，up 后保持；
+  - 点 FITT 标签（`label` 段）→ `sceneSel = ['24381_71806']`；
+  - 点空白处 → `['24381_71806'] → []`，清空行为不回归；
+  - 直接点目标模型本体 → `24381_1774` 选中（GPU 拾取原生链路，此前已验证）。
+- 测试：adapter 8/8（新增 `branClearanceTargetRefno` 正反例）；type-check 0 新增；ESLint 干净。

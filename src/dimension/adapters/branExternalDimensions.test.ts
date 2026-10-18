@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { branClearanceToExternalDimensions } from './branExternalDimensions';
+import { branClearanceTargetRefno, branClearanceToExternalDimensions } from './branExternalDimensions';
 
 import type { Vec3 } from '../domain/types';
 
@@ -138,5 +138,20 @@ describe('branClearanceToExternalDimensions', () => {
     expect(result.skipped).toEqual([
       expect.objectContaining({ id: 'bran-clearance:column:bad:1' }),
     ]);
+  });
+});
+
+describe('branClearanceTargetRefno', () => {
+  it('unwraps the target refno from a bran-clearance dimension id', () => {
+    expect(branClearanceTargetRefno('bran-clearance:wall:24381_1776:0')).toBe('24381_1776');
+    expect(branClearanceTargetRefno('bran-clearance:bran:24384_22726:7')).toBe('24384_22726');
+  });
+
+  it('returns null for non-bran ids and malformed payloads', () => {
+    expect(branClearanceTargetRefno('measurement:abc')).toBeNull();
+    expect(branClearanceTargetRefno('bran-clearance:wall')).toBeNull();
+    expect(branClearanceTargetRefno('bran-clearance:wall:unknown:0')).toBeNull();
+    expect(branClearanceTargetRefno(null)).toBeNull();
+    expect(branClearanceTargetRefno('')).toBeNull();
   });
 });

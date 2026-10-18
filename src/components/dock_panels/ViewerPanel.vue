@@ -101,6 +101,7 @@ import {
 } from '@/composables/useXeokitMeasurementTools';
 import { pipeInformationToExternalDimensions } from '@/dimension';
 import {
+  branClearanceTargetRefno,
   branClearanceToExternalDimensions,
   canEditUserDimension,
   createAngularEditSession,
@@ -2399,8 +2400,11 @@ function attachPicking() {
     clickState.moved = false;
     clickState.pointerId = null;
     if (moved) return;
-    // 分屏只认从本画布按下的左键单击
-    if (splitReady && (!down || e.button !== 0)) return;
+    // pointerdown 被尺寸 overlay 捕获阶段消费（点中了尺寸图形）：本次点击不做场景拾取——
+    // 否则 up 落在尺寸/空白上，GPU 拾取未命中，会把尺寸绑定刚选中的目标构件又清掉。
+    if (!down) return;
+    // 分屏只认左键单击（down 为 null 已在上面拦掉）
+    if (splitReady && e.button !== 0) return;
 
     const rect = canvas.getBoundingClientRect();
     const pos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
@@ -2887,8 +2891,23 @@ async function initializeDimensionViewport(): Promise<void> {
   result.system.pointer.setInteractionGate(
     () => !xeokitMeasurementToolsRef.value?.currentMeasurement.value,
   );
-  // 反向选择绑定：场景中点选尺寸图形 → 选中对应 xeokit 测量记录。
+  // 反向选择绑定：场景中点选尺寸图形 → 选中对应 xeokit 测量记录；
+  // BRAN 净距标注（external，不挂测量记录）点中 = 拾取目标构件，跟点模型本体同一套选中路径。
   offDimensionSelectionBinding = result.system.viewport.subscribeSelection((id) => {
+    const branTargetRefno = branClearanceTargetRefno(id);
+    if (branTargetRefno) {
+      const compat = compatViewerRef.value;
+      if (compat) {
+        const prev = compat.scene.selectedObjectIds;
+        if (prev.length > 0) {
+          compat.scene.setObjectsSelected(prev, false);
+        }
+        selectionStore.setSelectedRefno(branTargetRefno);
+        compat.scene.ensureRefnos([branTargetRefno]);
+        compat.scene.setObjectsSelected([branTargetRefno], true);
+        requestRender();
+      }
+    }
     xeokitMeasurementToolsRef.value?.handleDimensionSelectionChange(id);
   });
   viewerContext.dimensionSystem.value = result.system;

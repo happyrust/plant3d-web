@@ -22,6 +22,17 @@ export function branClearanceDimensionId(targetGroup: string, refno: string, ind
 }
 
 /**
+ * 反解净距尺寸 id 里的目标 refno（`bran-clearance:<group>:<refno>:<index>`）——
+ * 三维里点中净距标注时选中目标构件用；不是这个来源的 id 返回 null。
+ */
+export function branClearanceTargetRefno(dimensionId: string | null | undefined): string | null {
+  if (!dimensionId) return null;
+  const parts = dimensionId.split(':');
+  if (parts.length !== 4 || parts[0] !== 'bran-clearance') return null;
+  return parts[2] && parts[2] !== 'unknown' ? parts[2] : null;
+}
+
+/**
  * 同屏多条净距尺寸若全用同一偏移位会互相压字（密集 BRAN 下一批目标的净距方向本来就差不多）——
  * 按候选序号交错 side/offsetM/labelT 把标签错开，每 8 条一轮。
  */
