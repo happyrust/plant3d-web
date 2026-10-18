@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Vec3 } from '../domain/types';
 import { branClearanceToExternalDimensions } from './branExternalDimensions';
 
-const mmToM = (point: number[]) => [point[0] * 0.001, point[1] * 0.001, point[2] * 0.001];
+const mmToM = (point: Vec3): Vec3 => [point[0] * 0.001, point[1] * 0.001, point[2] * 0.001];
 
 describe('branClearanceToExternalDimensions', () => {
   it('maps valid backend points to a pill tag on the target point plus a gap-segment record', () => {

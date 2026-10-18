@@ -228,6 +228,16 @@ export function isDtxRefnoKnownAcrossAllDbnos(refno: string): boolean {
   return false;
 }
 
+/**
+ * DTXLayer 已 dispose、场景对象随之消失时调用：清掉按 dbno 记的全部运行时缓存与逐段隐藏覆盖。
+ * 否则新层上的装载会把每个 refno 判成「已加载」整批跳过，画布空白（ViewerPanel 重挂复现，2026-10-17）。
+ */
+export function invalidateDtxLoaderCaches(): void {
+  cachesByDbno.clear();
+  hiddenTubeKeys.value = new Set();
+  bumpDtxLoaderRevision();
+}
+
 function createRuntimeCache(): DbnoRuntimeCache {
   return {
     loadedRefnos: new Set(),

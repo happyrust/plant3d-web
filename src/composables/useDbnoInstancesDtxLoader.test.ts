@@ -210,6 +210,36 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
   });
 
+  it('图层释放后 invalidateDtxLoaderCaches：新层装载不再把已释放 refno 判成已加载而整批跳过', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99041;
+    const refno = '24381_900041';
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[refno, [makeInstanceEntry(refno)]]]));
+
+    const layer1 = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+    const first = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer1, dbno, [refno], { dataSource: 'gen-model-v1' });
+    expect(first.loadedObjects).toBeGreaterThan(0);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos(refno)).toBe(true);
+
+    // 复现 bug 现场：缓存命中 → 同层重载整批跳过
+    const again = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer1, dbno, [refno], { dataSource: 'gen-model-v1' });
+    expect(again.loadedObjects).toBe(0);
+    expect(again.skippedRefnos).toBe(1);
+
+    // 层释放后失效：新层应重新装载而不是跳过
+    layer1.dispose();
+    const revisionBefore = mod.dtxLoaderRevision.value;
+    mod.invalidateDtxLoaderCaches();
+    expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos(refno)).toBe(false);
+
+    const layer2 = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+    const reloaded = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer2, dbno, [refno], { dataSource: 'gen-model-v1' });
+    expect(reloaded.loadedObjects).toBeGreaterThan(0);
+    expect(reloaded.skippedRefnos).toBe(0);
+  });
+
   it('ELBO 自身已有几何时，不应把 owner 关系带出的 TUBI 也映射到 ELBO', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');

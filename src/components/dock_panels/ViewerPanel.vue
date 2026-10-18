@@ -59,6 +59,7 @@ import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMeta
 import {
   loadDbnoInstancesForVisibleRefnosDtx,
   applyMaterialConfigToLoadedDtx,
+  invalidateDtxLoaderCaches,
   resolveDtxNounByRefno,
   resolveDtxObjectIdsByRefno,
   resolveDtxObjectIdsByUnitRefno,
@@ -4840,6 +4841,8 @@ onUnmounted(() => {
       // ignore
     }
   }
+  // 实例缓存里登记的「已加载」refno 指向刚释放的层；留着会让新层装载整批跳过、画布空白
+  invalidateDtxLoaderCaches();
 
   try {
     sglPipelineRef.value?.dispose();
