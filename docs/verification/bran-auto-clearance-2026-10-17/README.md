@@ -109,3 +109,16 @@
   - 修复：`useSelectionStore()` 原在点击处理器内调用，其内部 `useQuery` 离开 setup 上下文抛 `vue-query hooks can only be used inside setup()`——改为 setup 期取一次复用（同 `useSpatialCompute` 既有用法）。
 - 「相交？」徽标：估算相交的行在距离格内加 amber 警示徽标（`row.intersects` 进 `BranNearestClearanceRow`），26 行中 6 行带徽标，与「全部精算」前 0mm 行一致。
 - 回归：SpatialComputePanel 12/12（新增悬停联动、跳转、交错布局断言）；adapter 6/6；useSpatialCompute 34/34；useSpatialQuery 63/63；type-check 0 新增；ESLint 干净。
+
+### 查看模式回归矩阵（`ee0a779b` 后真机复测，235 场景对象）
+
+| 操作 | 实测 |
+|---|---|
+| 范围显示 r3000 后「恢复」 | 234/234 实体、0 X-Ray、0 隐藏 |
+| 开 X 光（10 条已标注） | 11 实体 / 224 X-Ray / 0 隐藏，按钮 `aria-pressed=true` |
+| X 光开着取消一条标注 | 自动重放：10 实体 / 225 X-Ray，模式保持 |
+| X 光开着点「仅显示」 | 互斥切换：10 可见 / 0 X-Ray / 225 隐藏，X 光按钮归位 |
+| 仅显示开着清空全部 9 条标注 | 自动 `restoreScene`：235/235 实体，开关随空集消失 |
+| 全选 26 条标注 + X 光 | 27 实体 / 211 X-Ray，交错位文字可读（截图留存） |
+
+控制台全程无 `branXrayOn` 残留告警、无新增错误。
