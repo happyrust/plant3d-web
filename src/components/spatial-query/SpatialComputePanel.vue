@@ -297,7 +297,21 @@
           <div v-if="computeState.resultRows.length > 0 || computeState.error || computeState.responseText" class="mt-3">
             <div class="flex items-center justify-between pb-2">
               <div class="text-[13px] font-bold text-foreground">查询结果表</div>
-              <div class="text-xs font-bold text-brand">{{ isBranScenario ? '高亮行已画进三维尺寸' : '可点击行自动选中并跳转' }}</div>
+              <div class="flex items-center gap-2">
+                <button v-if="isBranScenario && computeState.annotationCandidates.length > 0"
+                  type="button"
+                  data-testid="bran-xray-toggle"
+                  :aria-pressed="branXrayOn"
+                  class="rounded-md px-2 py-1 text-[11px] font-semibold transition-colors"
+                  :class="branXrayOn
+                    ? 'bg-brand-subtle text-brand hover:bg-brand/15'
+                    : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
+                  title="源 BRAN 与每类最近目标保持实体，其余构件全部半透明；再点一次退出"
+                  @click="toggleBranXray">
+                  {{ branXrayOn ? '退出 X 光' : 'X 光查看' }}
+                </button>
+                <div class="text-xs font-bold text-brand">{{ isBranScenario ? '高亮行已画进三维尺寸' : '可点击行自动选中并跳转' }}</div>
+              </div>
             </div>
 
             <div v-if="computeState.error" class="rounded-[10px] border border-danger/25 bg-danger-subtle px-3 py-2 text-sm text-danger">
@@ -387,7 +401,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { Check, ChevronDown, Loader2, MousePointerClick, Ruler } from 'lucide-vue-next';
 
@@ -490,6 +504,8 @@ async function showBranRange() {
     }
     await spatialQuery.loadResults({ onlyUnloaded: true, flyTo: true });
     spatialQuery.isolateResults([bran]);
+    // 范围显示按它自己的命中集隔离了——「X 光查看」的保实体集已失效，按钮归位
+    branXrayOn.value = false;
     if (spatialQuery.error.value) {
       rangeError.value = spatialQuery.error.value;
     }
@@ -504,7 +520,50 @@ function restoreBranRange() {
   void import('@/composables/useSpatialQuery')
     .then(({ useSpatialQuery }) => useSpatialQuery().restoreScene())
     .catch((err: unknown) => { console.warn('[bran-range] restoreScene failed', err); });
+  branXrayOn.value = false;
 }
+
+/**
+ * 「X 光查看」：源 BRAN + 当前画出标注的每类最近目标保持实体，其余构件全部半透明（与空间查询抽屉
+ * 「隔离」同一套显隐快照，「恢复」也能退）。X 光开着时标注集合变了（重算 / facet 勾选 / 逐条标注开关 /
+ * 精算换 provenance）就按新集合重隔离；集合清空了直接恢复场景。
+ */
+const branXrayOn = ref(false);
+
+function branXrayKeepRefnos(): string[] {
+  const state = currentScenarioState.value;
+  const bran = normalizeBranComputeRefno(state.queriedSourceRefno || state.suppoRefno);
+  const targets = state.annotationCandidates.map(item => item.candidate.refno);
+  return bran ? [bran, ...targets] : targets;
+}
+
+async function toggleBranXray() {
+  const { useSpatialQuery } = await import('@/composables/useSpatialQuery');
+  const spatialQuery = useSpatialQuery();
+  if (branXrayOn.value) {
+    spatialQuery.restoreScene();
+    branXrayOn.value = false;
+    return;
+  }
+  const keep = branXrayKeepRefnos();
+  if (keep.length === 0) return;
+  spatialQuery.isolateRefnos(keep);
+  branXrayOn.value = true;
+}
+
+watch(() => currentScenarioState.value.annotationCandidates, candidates => {
+  if (!branXrayOn.value) return;
+  const keep = candidates.length > 0 ? branXrayKeepRefnos() : [];
+  void import('@/composables/useSpatialQuery').then(({ useSpatialQuery }) => {
+    const spatialQuery = useSpatialQuery();
+    if (keep.length === 0) {
+      spatialQuery.restoreScene();
+      branXrayOn.value = false;
+    } else {
+      spatialQuery.isolateRefnos(keep);
+    }
+  });
+});
 
 function hasField(field: SpatialComputeScenarioField) {
   return currentScenarioMeta.value.fields.includes(field);

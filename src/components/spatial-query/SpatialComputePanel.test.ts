@@ -36,6 +36,7 @@ const spatialQueryStub = vi.hoisted(() => {
     submitQuery: vi.fn(async () => {}),
     loadResults: vi.fn(async () => {}),
     isolateResults: vi.fn(),
+    isolateRefnos: vi.fn(),
     restoreScene: vi.fn(),
   };
 });
@@ -268,5 +269,76 @@ describe('SpatialComputePanel · BRAN 中心线范围显示', () => {
 
     host.querySelector<HTMLButtonElement>('[data-testid="bran-range-restore"]')!.click();
     await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
+  let mounted: ReturnType<typeof mountPanel> | null = null;
+
+  beforeEach(() => {
+    resetSpatialComputeStore();
+    vi.clearAllMocks();
+    spatialQueryStub.error.value = '';
+    spatialQueryStub.resultSet.value = { items: [{ refno: '24381_9' }] };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 })));
+  });
+
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+    vi.unstubAllGlobals();
+    resetSpatialComputeStore();
+  });
+
+  it('开 X 光：源 BRAN + 已标注目标保实体；标注集变化自动重隔离；再点退出恢复场景', async () => {
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    await store.submitScenario('branNearestClearance');
+    await nextTick();
+
+    // 默认每类标注最近 1 条：24381_1(WALL) + 24381_3(SCTN)
+    const toggle = host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!;
+    expect(toggle.textContent?.trim()).toBe('X 光查看');
+    toggle.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
+    expect(spatialQueryStub.isolateRefnos).toHaveBeenLastCalledWith(['24381_145018', '24381_1', '24381_3']);
+    await nextTick();
+    expect(toggle.textContent?.trim()).toBe('退出 X 光');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    // 取消 SCTN chip → 标注集变小 → 自动按新集重隔离
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-noun-chip-SCTN"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(2));
+    expect(spatialQueryStub.isolateRefnos).toHaveBeenLastCalledWith(['24381_145018', '24381_1']);
+
+    // 再点退出 → 恢复场景
+    toggle.click();
+    await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
+    await nextTick();
+    expect(toggle.textContent?.trim()).toBe('X 光查看');
+  });
+
+  it('X 光开着时标注集清空 → 恢复场景并归位；无标注候选时不出现按钮', async () => {
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+
+    // 没算过 → 无按钮
+    expect(host.querySelector('[data-testid="bran-xray-toggle"]')).toBeNull();
+
+    await store.submitScenario('branNearestClearance');
+    await nextTick();
+    const toggle = host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!;
+    toggle.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
+
+    // 清空全部 facet → 标注集为 0 → 自动 restoreScene、按钮隐藏
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-noun-facet-none"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
+    await nextTick();
+    expect(host.querySelector('[data-testid="bran-xray-toggle"]')).toBeNull();
   });
 });

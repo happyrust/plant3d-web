@@ -1793,9 +1793,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
   /** 批量操作的作用域：缺省整个命中集合、取不到时回退当前页，`pages: 'current'` 只取当前页；可按专业（legacy）或按库（gen-model-v1）取一组。 */
   function resolveBatchRefnos(options: BatchScope & { pages?: BatchPages } = {}): string[] {
+    // 显式给的 refno 不依赖结果集——BRAN 净距的「X 光查看」等入口没有经过空间查询也要能隔离
+    if (options.refnos) return uniqStrings(options.refnos.map(normalizeRefno));
     const current = resultSet.value;
     if (!current) return [];
-    if (options.refnos) return uniqStrings(options.refnos.map(normalizeRefno));
 
     const full = options.pages === 'current' ? null : current.fullMatches;
     if (full) {

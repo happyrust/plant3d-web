@@ -85,13 +85,18 @@
 实测修复后：范围显示加载完成 → 自动补发 1 次 `nearest-clearance` → 10 类 facet / 26 行 / 10 条标注自动恢复。
 回归：useSpatialCompute 34/34 含新用例「新批次实例加载使结果失效：自动模式补一次重查，手动模式只清不查」。
 
-## 五、标注呈现改为 pill 引线标签 + 净距段（`40c4d0ac` 之后）
+## 五、标注呈现回退为测量式线性尺寸 + 新增「X 光查看」（2026-10-18）
 
-每条候选由一条 external 线性尺寸改为两条记录：
+`40c4d0ac` 的 pill 引线标签 + 净距段方案经真机评审认为观感杂乱，按用户要求回退为**与测量工具同形态**的单条 external 线性尺寸（`kind: 'linear'`，`a`→`b` 尺寸线 + 线上值字），尺寸文字带目标 noun（`WALL ≈465mm`）——「距离哪些类型最近」的类型信息必须在线上直接可读。估算/精算/平行中心距/过期的文字约定不变。
 
-- `bran-clearance:<noun>:<refno>:<i>`：**pill 引线标签**（explicit + tag）——锚点 `b`（目标表面点）画圆点 + 引线 + 白底药丸「NOUN ≈587mm」；tag 走 billboard 求解（多角 × 多环候选位，避让其他标签），密集场景不再互相压字。
-- `…:seg`：**净距段**（annotation 类）——`a`（管表面点）→`b` 细直线 + `a` 端圆点，`formattedLabel` 为空，只画几何。
+新增结果表头部「X 光查看」开关（`bran-xray-toggle`）：
 
-实测（:8022，BRAN `24384/22726`，自动模式重选后）：registry `bran-clearance` = 20 条记录（10 候选 × 2），
-pill 文字实测为「PANE ≈0mm / WALL ≈0mm / STWALL ≈388mm / STRT ≈660mm / SCTN ≈661mm / FLOOR ≈1188mm / FITT ≈1378mm / BEND ≈2685mm / TAPE ≈2817mm / BOX ≈4105mm」——全部可读无叠字。
-截图见 `shots/01-auto-follow-annotations.png`（三维 pill+引线+周边范围构件）、`02-result-rows.png`（结果行 标注/跳转/精算）、`03-auto-follow-switch-and-range.png`（自动计算开关 + 范围显示控件）。
+- 开启：`useSpatialQuery.isolateRefnos([源BRAN, ...已标注目标refno])`——保实体集含源 BRAN（`withCompanions` 顺带保住成员直段），其余构件全部 X-Ray 半透明；`resolveBatchRefnos` 的显式 refno 分支提前到结果集判空之前，不经空间查询也能隔离。
+- 开着时标注集变化（重算 / facet 勾选 / 逐条标注 / 精算）自动按新集重隔离；集合清空自动 `restoreScene` 归位；「范围显示」与自己的「恢复」都会把开关归位。
+- 再点一次（或「恢复」）退出，恢复隔离前显隐快照。
+
+实测（:8022，BRAN `24384/22726`，自动模式 10 条已标注）：
+
+- 开 X 光：场景 140 对象 → 11 实体（`24384_22726` + 10 目标）/ 129 X-Ray / 0 隐藏；
+- 退出：140 实体 / 0 X-Ray，按钮回「X 光查看」；
+- registry `bran-clearance` = 10 条 `linear` 记录，`authoritativeText` 如 `PANE ≈0mm`、`TAPE ≈2817mm`、`FLOOR ≈1188mm`，三维内呈红色尺寸线+线上文字。
