@@ -194,6 +194,35 @@
             <span class="ml-auto text-[11px] text-muted-foreground">半径内每类默认标注最近 1 条（管表面到包围盒估算）</span>
           </label>
 
+          <!-- 查看方式：算出候选后可用——只留源 BRAN 与最近目标可看，其余 X 光半透明或隐藏；随标注集自动重放 -->
+          <div v-if="isBranScenario" class="mt-2 flex items-center gap-2" data-testid="bran-inspect-block">
+            <span class="shrink-0 text-xs font-semibold text-muted-foreground">查看方式</span>
+            <button type="button"
+              :disabled="computeState.annotationCandidates.length === 0"
+              data-testid="bran-xray-toggle"
+              :aria-pressed="branInspectMode === 'xray'"
+              class="flex-1 rounded-[10px] border px-2 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              :class="branInspectMode === 'xray'
+                ? 'border-brand bg-brand-subtle text-brand'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'"
+              title="源 BRAN 与每类最近目标保持实体，其余构件全部半透明；再点一次退出"
+              @click="toggleBranInspect('xray')">
+              {{ branInspectMode === 'xray' ? '退出 X 光' : 'X 光查看' }}
+            </button>
+            <button type="button"
+              :disabled="computeState.annotationCandidates.length === 0"
+              data-testid="bran-only-toggle"
+              :aria-pressed="branInspectMode === 'only'"
+              class="flex-1 rounded-[10px] border px-2 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              :class="branInspectMode === 'only'
+                ? 'border-brand bg-brand-subtle text-brand'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'"
+              title="只显示源 BRAN 与每类最近目标，其余构件全部隐藏；再点一次退出"
+              @click="toggleBranInspect('only')">
+              {{ branInspectMode === 'only' ? '退出仅显示' : '仅显示' }}
+            </button>
+          </div>
+
           <!-- 范围显示：沿当前 BRAN 中心线按半径圈周边构件 → 加载未加载的 → 命中实体、其余半透明（空间查询抽屉同一管线） -->
           <div v-if="isBranScenario" class="mt-3" data-testid="bran-range-block">
             <div class="flex items-center gap-2">
@@ -298,30 +327,6 @@
             <div class="flex items-center justify-between pb-2">
               <div class="text-[13px] font-bold text-foreground">查询结果表</div>
               <div class="flex items-center gap-2">
-                <button v-if="isBranScenario && computeState.annotationCandidates.length > 0"
-                  type="button"
-                  data-testid="bran-xray-toggle"
-                  :aria-pressed="branInspectMode === 'xray'"
-                  class="rounded-md px-2 py-1 text-[11px] font-semibold transition-colors"
-                  :class="branInspectMode === 'xray'
-                    ? 'bg-brand-subtle text-brand hover:bg-brand/15'
-                    : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
-                  title="源 BRAN 与每类最近目标保持实体，其余构件全部半透明；再点一次退出"
-                  @click="toggleBranInspect('xray')">
-                  {{ branInspectMode === 'xray' ? '退出 X 光' : 'X 光查看' }}
-                </button>
-                <button v-if="isBranScenario && computeState.annotationCandidates.length > 0"
-                  type="button"
-                  data-testid="bran-only-toggle"
-                  :aria-pressed="branInspectMode === 'only'"
-                  class="rounded-md px-2 py-1 text-[11px] font-semibold transition-colors"
-                  :class="branInspectMode === 'only'
-                    ? 'bg-brand-subtle text-brand hover:bg-brand/15'
-                    : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
-                  title="只显示源 BRAN 与每类最近目标，其余构件全部隐藏；再点一次退出"
-                  @click="toggleBranInspect('only')">
-                  {{ branInspectMode === 'only' ? '退出仅显示' : '仅显示' }}
-                </button>
                 <div class="text-xs font-bold text-brand">{{ isBranScenario ? '高亮行已画进三维尺寸' : '可点击行自动选中并跳转' }}</div>
               </div>
             </div>

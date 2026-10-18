@@ -334,28 +334,29 @@ describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
     expect(toggle.textContent?.trim()).toBe('X 光查看');
   });
 
-  it('X 光开着时标注集清空 → 恢复场景并归位；无标注候选时不出现按钮', async () => {
+  it('X 光开着时标注集清空 → 恢复场景并归位；无标注候选时按钮禁用', async () => {
     mounted = mountPanel();
     const { host } = mounted;
     const store = useSpatialCompute();
     store.setActiveScenario('branNearestClearance');
 
-    // 没算过 → 无按钮
-    expect(host.querySelector('[data-testid="bran-xray-toggle"]')).toBeNull();
-    expect(host.querySelector('[data-testid="bran-only-toggle"]')).toBeNull();
+    // 没算过 → 按钮常驻但禁用（显眼位置可发现）
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="bran-only-toggle"]')!.disabled).toBe(true);
 
     await store.submitScenario('branNearestClearance');
     await nextTick();
     const toggle = host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!;
+    expect(toggle.disabled).toBe(false);
     toggle.click();
     await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
 
-    // 清空全部 facet → 标注集为 0 → 自动 restoreScene、按钮隐藏
+    // 清空全部 facet → 标注集为 0 → 自动 restoreScene、按钮回禁用态
     host.querySelector<HTMLButtonElement>('[data-testid="bran-noun-facet-none"]')!.click();
     await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
     await nextTick();
-    expect(host.querySelector('[data-testid="bran-xray-toggle"]')).toBeNull();
-    expect(host.querySelector('[data-testid="bran-only-toggle"]')).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="bran-only-toggle"]')!.disabled).toBe(true);
   });
 
   it('仅显示：同集隐藏其余；从 X 光切过来先恢复再仅显示；再点退出', async () => {
