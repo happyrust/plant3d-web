@@ -50,6 +50,7 @@ const spatialQueryStub = vi.hoisted(() => {
     isolateRefnos: vi.fn(),
     showOnlySceneObjects: vi.fn(),
     restoreScene: vi.fn(),
+    ensureRefnosLoaded: vi.fn(async () => ({ ok: [], fail: [] })),
   };
 });
 
@@ -334,7 +335,7 @@ describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
     expect(toggle.textContent?.trim()).toBe('X 光查看');
   });
 
-  it('X 光开着时标注集清空 → 恢复场景并归位；无标注候选时按钮禁用', async () => {
+  it('X 光开着时标注集清空 → 恢复场景但保留模式；候选回填自动重放；无候选且无模式时按钮禁用', async () => {
     mounted = mountPanel();
     const { host } = mounted;
     const store = useSpatialCompute();
@@ -351,12 +352,17 @@ describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
     toggle.click();
     await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
 
-    // 清空全部 facet → 标注集为 0 → 自动 restoreScene、按钮回禁用态
+    // 清空全部 facet → 标注集为 0 → 恢复场景，但模式保留（补装几何触发的自动重查会先清再回填）
     host.querySelector<HTMLButtonElement>('[data-testid="bran-noun-facet-none"]')!.click();
     await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
     await nextTick();
-    expect(host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!.disabled).toBe(true);
-    expect(host.querySelector<HTMLButtonElement>('[data-testid="bran-only-toggle"]')!.disabled).toBe(true);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.disabled).toBe(false);
+
+    // 勾回一类 → 候选回填 → 按当前模式自动重放（SCTN 桶的画出候选是 24381_3）
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-noun-chip-SCTN"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(2));
+    expect(spatialQueryStub.isolateRefnos).toHaveBeenLastCalledWith(['24381_145018', '24381_3']);
   });
 
   it('仅显示：同集隐藏其余；从 X 光切过来先恢复再仅显示；再点退出', async () => {

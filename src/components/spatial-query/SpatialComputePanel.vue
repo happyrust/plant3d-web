@@ -198,7 +198,7 @@
           <div v-if="isBranScenario" class="mt-2 flex items-center gap-2" data-testid="bran-inspect-block">
             <span class="shrink-0 text-xs font-semibold text-muted-foreground">查看方式</span>
             <button type="button"
-              :disabled="computeState.annotationCandidates.length === 0"
+              :disabled="computeState.annotationCandidates.length === 0 && !branInspectMode"
               data-testid="bran-xray-toggle"
               :aria-pressed="branInspectMode === 'xray'"
               class="flex-1 rounded-[10px] border px-2 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
@@ -210,7 +210,7 @@
               {{ branInspectMode === 'xray' ? '退出 X 光' : 'X 光查看' }}
             </button>
             <button type="button"
-              :disabled="computeState.annotationCandidates.length === 0"
+              :disabled="computeState.annotationCandidates.length === 0 && !branInspectMode"
               data-testid="bran-only-toggle"
               :aria-pressed="branInspectMode === 'only'"
               class="flex-1 rounded-[10px] border px-2 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
@@ -556,6 +556,8 @@ function restoreBranRange() {
  */
 type BranInspectMode = 'xray' | 'only';
 const branInspectMode = ref<BranInspectMode | ''>('');
+/** 查看模式应用的序号：补装几何是异步的，期间用户退出/切模式/集合变化就作废本次应用。 */
+let branInspectSeq = 0;
 
 function branInspectKeepRefnos(): string[] {
   const state = currentScenarioState.value;
@@ -564,7 +566,11 @@ function branInspectKeepRefnos(): string[] {
   return bran ? [bran, ...targets] : targets;
 }
 
-function applyBranInspect(spatialQuery: ReturnType<typeof import('@/composables/useSpatialQuery').useSpatialQuery>, mode: BranInspectMode, keep: string[]) {
+async function applyBranInspect(spatialQuery: ReturnType<typeof import('@/composables/useSpatialQuery').useSpatialQuery>, mode: BranInspectMode, keep: string[]) {
+  const seq = ++branInspectSeq;
+  // 目标 refno 光有「可见」标记但几何没装是画不出来的（柱子/墙/楼板常见这种情况）——先补装再隔离
+  await spatialQuery.ensureRefnosLoaded(keep).catch(() => null);
+  if (seq !== branInspectSeq || branInspectMode.value !== mode) return;
   if (mode === 'xray') {
     spatialQuery.isolateRefnos(keep);
   } else {
@@ -580,6 +586,7 @@ async function toggleBranInspect(mode: BranInspectMode) {
     spatialQuery.restoreScene();
   }
   if (branInspectMode.value === mode) {
+    branInspectSeq += 1;
     branInspectMode.value = '';
     return;
   }
@@ -588,8 +595,8 @@ async function toggleBranInspect(mode: BranInspectMode) {
     branInspectMode.value = '';
     return;
   }
-  applyBranInspect(spatialQuery, mode, keep);
   branInspectMode.value = mode;
+  await applyBranInspect(spatialQuery, mode, keep);
 }
 
 watch(() => currentScenarioState.value.annotationCandidates, candidates => {
@@ -598,11 +605,14 @@ watch(() => currentScenarioState.value.annotationCandidates, candidates => {
   const keep = candidates.length > 0 ? branInspectKeepRefnos() : [];
   void import('@/composables/useSpatialQuery').then(({ useSpatialQuery }) => {
     const spatialQuery = useSpatialQuery();
+    // 集合暂时为空（补装几何触发的自动重查会先清再回填）：只恢复场景、保留模式，
+    // 候选回填后下一次触发会按当前模式自动重放；用户想退出随时点按钮即可（模式开着时按钮不禁用）。
+    // 顺手作废在途应用——watcher 的动态 import 会让本次回调比在途的应用晚到，不靠序号就会把它盖掉。
     if (keep.length === 0) {
+      branInspectSeq += 1;
       spatialQuery.restoreScene();
-      branInspectMode.value = '';
     } else {
-      applyBranInspect(spatialQuery, mode, keep);
+      void applyBranInspect(spatialQuery, mode, keep);
     }
   });
 });

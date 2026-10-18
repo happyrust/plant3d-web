@@ -2447,6 +2447,28 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   }
 
   /**
+   * 确保这些 refno 的几何已装进查看器（「X 光查看 / 仅显示」的保实体集用：
+   * 只给没加载的对象标可见是画不出来的）。全部已在场景里时直接返回——不碰加载链，
+   * 也就不会触发 `__dtxAfterInstancesLoaded` 的重置+重查（那会把调用方的查看模式带进
+   * 「清空 → 回填」的循环里）。
+   */
+  async function ensureRefnosLoaded(refnos: string[]): Promise<BatchLoadResult> {
+    const wanted = withCompanions(uniqStrings(refnos), 'given', []);
+    const viewer = viewerRef.value;
+    if (!viewer || wanted.length === 0) return { ok: wanted, fail: [] };
+    const loaded = new Set(resolveLoadedRefnos(viewer).map((item) => normalizeRefno(item)));
+    const missing = wanted.filter((refno) => !loaded.has(refno));
+    if (missing.length === 0) return { ok: wanted, fail: [] };
+    const result = await batchLoadRefnos(missing, { flyTo: false });
+    const okSet = new Set(result.ok.map((item) => normalizeRefno(item)));
+    const failSet = new Set(result.fail.map((item) => normalizeRefno(item.refno)));
+    return {
+      ok: [...okSet, ...wanted.filter((refno) => !failSet.has(refno) && loaded.has(refno))],
+      fail: result.fail,
+    };
+  }
+
+  /**
    * 结果区显隐 / 隔离动过的构件在**第一次**被动之前的可见性：「恢复场景」按它把「全部隐藏 / 仅显示本库」隐掉的构件放回来，
    * 不只清 X-Ray（教程 §7 写的是「恢复所有构件原始显示状态」）。连着做几步也只记最初那一份；恢复后清空。
    */
@@ -2700,6 +2722,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     activateResult,
     countLoadTargets,
     loadResults,
+    ensureRefnosLoaded,
     showOnlySpecGroup,
     showOnlyDbnumGroup,
     showOnlyRefnos,
