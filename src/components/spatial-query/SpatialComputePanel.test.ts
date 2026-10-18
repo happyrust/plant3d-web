@@ -37,6 +37,7 @@ const spatialQueryStub = vi.hoisted(() => {
     loadResults: vi.fn(async () => {}),
     isolateResults: vi.fn(),
     isolateRefnos: vi.fn(),
+    showOnlySceneObjects: vi.fn(),
     restoreScene: vi.fn(),
   };
 });
@@ -328,6 +329,7 @@ describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
 
     // 没算过 → 无按钮
     expect(host.querySelector('[data-testid="bran-xray-toggle"]')).toBeNull();
+    expect(host.querySelector('[data-testid="bran-only-toggle"]')).toBeNull();
 
     await store.submitScenario('branNearestClearance');
     await nextTick();
@@ -340,5 +342,42 @@ describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
     await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1));
     await nextTick();
     expect(host.querySelector('[data-testid="bran-xray-toggle"]')).toBeNull();
+    expect(host.querySelector('[data-testid="bran-only-toggle"]')).toBeNull();
+  });
+
+  it('仅显示：同集隐藏其余；从 X 光切过来先恢复再仅显示；再点退出', async () => {
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    await store.submitScenario('branNearestClearance');
+    await nextTick();
+
+    const xrayBtn = host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!;
+    const onlyBtn = host.querySelector<HTMLButtonElement>('[data-testid="bran-only-toggle"]')!;
+
+    // 先开 X 光，再点「仅显示」→ 先 restoreScene 再按同集仅显示
+    xrayBtn.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
+    onlyBtn.click();
+    await vi.waitFor(() => expect(spatialQueryStub.showOnlySceneObjects).toHaveBeenCalledTimes(1));
+    expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(1);
+    expect(spatialQueryStub.showOnlySceneObjects).toHaveBeenLastCalledWith(['24381_145018', '24381_1', '24381_3']);
+    await nextTick();
+    expect(onlyBtn.textContent?.trim()).toBe('退出仅显示');
+    expect(onlyBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(xrayBtn.getAttribute('aria-pressed')).toBe('false');
+
+    // 标注集变化 → 按仅显示模式重放（不是 isolateRefnos）
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-noun-chip-SCTN"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.showOnlySceneObjects).toHaveBeenCalledTimes(2));
+    expect(spatialQueryStub.showOnlySceneObjects).toHaveBeenLastCalledWith(['24381_145018', '24381_1']);
+    expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1);
+
+    // 再点「退出仅显示」→ 恢复场景
+    onlyBtn.click();
+    await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(2));
+    await nextTick();
+    expect(onlyBtn.textContent?.trim()).toBe('仅显示');
   });
 });

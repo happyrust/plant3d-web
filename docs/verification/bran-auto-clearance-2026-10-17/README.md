@@ -89,14 +89,14 @@
 
 `40c4d0ac` 的 pill 引线标签 + 净距段方案经真机评审认为观感杂乱，按用户要求回退为**与测量工具同形态**的单条 external 线性尺寸（`kind: 'linear'`，`a`→`b` 尺寸线 + 线上值字），尺寸文字带目标 noun（`WALL ≈465mm`）——「距离哪些类型最近」的类型信息必须在线上直接可读。估算/精算/平行中心距/过期的文字约定不变。
 
-新增结果表头部「X 光查看」开关（`bran-xray-toggle`）：
+新增结果表头部两个查看开关（`bran-xray-toggle` / `bran-only-toggle`，同一互斥模式 `branInspectMode`）：
 
-- 开启：`useSpatialQuery.isolateRefnos([源BRAN, ...已标注目标refno])`——保实体集含源 BRAN（`withCompanions` 顺带保住成员直段），其余构件全部 X-Ray 半透明；`resolveBatchRefnos` 的显式 refno 分支提前到结果集判空之前，不经空间查询也能隔离。
-- 开着时标注集变化（重算 / facet 勾选 / 逐条标注 / 精算）自动按新集重隔离；集合清空自动 `restoreScene` 归位；「范围显示」与自己的「恢复」都会把开关归位。
-- 再点一次（或「恢复」）退出，恢复隔离前显隐快照。
+- 「X 光查看」：`useSpatialQuery.isolateRefnos(keep)`——keep = 源 BRAN + 已标注目标（`withCompanions` 顺带保住成员直段），其余构件全部 X-Ray 半透明；`resolveBatchRefnos` 的显式 refno 分支提前到结果集判空之前，不经空间查询也能隔离。
+- 「仅显示」：新增 `useSpatialQuery.showOnlySceneObjects(keep)`——场景级版本，keep 可见实体、其余全部隐藏，清掉残留 X-Ray；同样不要求结果集。
+- 两种模式互斥：切换前先 `restoreScene` 再按新模式重放；查看开着时标注集变化（重算 / facet 勾选 / 逐条标注 / 精算）自动按当前模式与新集重放；集合清空自动 `restoreScene` 归位；「范围显示」与「恢复」都会把开关归位。
 
-实测（:8022，BRAN `24384/22726`，自动模式 10 条已标注）：
+实测（:8022，BRAN `24384/22726`，自动模式 10 条已标注，场景 140 对象）：
 
-- 开 X 光：场景 140 对象 → 11 实体（`24384_22726` + 10 目标）/ 129 X-Ray / 0 隐藏；
-- 退出：140 实体 / 0 X-Ray，按钮回「X 光查看」；
+- 开 X 光：11 实体（`24384_22726` + 10 目标）/ 129 X-Ray / 0 隐藏；退出全恢复；
+- 开仅显示：11 可见实体 / 0 X-Ray / 129 隐藏；退出全恢复；
 - registry `bran-clearance` = 10 条 `linear` 记录，`authoritativeText` 如 `PANE ≈0mm`、`TAPE ≈2817mm`、`FLOOR ≈1188mm`，三维内呈红色尺寸线+线上文字。

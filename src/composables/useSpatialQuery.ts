@@ -2613,6 +2613,35 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
+  /**
+   * 场景级「仅显示」：只留这些构件可见（实体、不 X-Ray），场景其余全部隐藏——与 `isolateRefnos` 的
+   * 「其余半透明」相对，也不要求有结果集（BRAN 净距的「仅显示最近目标」等入口直接给 refno）。
+   * 管件连所属 BRAN 的直段一起留可见；先清 X-Ray 是为了从半透明状态切过来时可见的都是实体。
+   */
+  function showOnlySceneObjects(refnos: string[]) {
+    const viewer = viewerRef.value;
+    const items = resultSet.value?.items ?? [];
+    const keep = withCompanions(resolveBatchRefnos({ refnos }));
+    if (!viewer || keep.length === 0) return;
+    const keepSet = new Set(keep);
+    const all = viewer.scene.objectIds.slice();
+    const hide = all.filter((id) => !keepSet.has(id));
+    snapshotVisibility(viewer, all);
+    if (all.length > 0) {
+      viewer.scene.setObjectsXRayed(all, false);
+    }
+    viewer.scene.setObjectsVisible(keep, true);
+    if (hide.length > 0) {
+      viewer.scene.setObjectsVisible(hide, false);
+    }
+    items.forEach((item) => {
+      item.visible = keepSet.has(item.refno);
+    });
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
+    }
+  }
+
   /** `showOnlySpecGroup` 的按库版：gen-model-v1 源下结果按 dbnum 分组，「仅显示本库」走这里。 */
   function showOnlyDbnumGroup(dbnum: number) {
     const viewer = viewerRef.value;
@@ -2674,6 +2703,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     showOnlySpecGroup,
     showOnlyDbnumGroup,
     showOnlyRefnos,
+    showOnlySceneObjects,
     isolateRefnos,
     expandTreeLeaves,
     focusTreeTube,
