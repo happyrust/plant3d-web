@@ -5,12 +5,23 @@ import SpatialComputePanel from './SpatialComputePanel.vue';
 
 import { resetSpatialComputeStore, useSpatialCompute } from '@/composables/useSpatialCompute';
 
+/** viewerContext 桩：行悬停/跳转测试往里塞 viewport 与场景间谍。 */
+const viewerContextStub = vi.hoisted(() => ({
+  viewerRef: { value: null as unknown },
+  dimensionSystem: { value: null as { viewport: { setHover: (id: string | null) => void } } | null },
+}));
+
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => viewerContextStub,
+}));
+
+const selectionStub = vi.hoisted(() => ({
+  selectedRefno: { value: '' },
+  setSelectedRefno: vi.fn(),
 }));
 
 vi.mock('@/composables/useSelectionStore', () => ({
-  useSelectionStore: () => ({ selectedRefno: { value: '' } }),
+  useSelectionStore: () => selectionStub,
 }));
 
 /** 「范围显示」驱动的空间查询 store 桩：draft 真可变，四个动作记调用；结果集/错误可控。 */
@@ -44,6 +55,8 @@ const spatialQueryStub = vi.hoisted(() => {
 
 vi.mock('@/composables/useSpatialQuery', () => ({
   useSpatialQuery: () => spatialQueryStub,
+  // 恒等场景变换：跳转测试里 mm 端点原样进 aabb
+  resolveSceneWorldTransform: () => ({ identity: true, aabbToScene: (aabb: number[]) => aabb }),
 }));
 
 function candidate(refno: string, noun: string, distance: number) {
@@ -379,5 +392,97 @@ describe('SpatialComputePanel · BRAN 净距 X 光查看', () => {
     await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalledTimes(2));
     await nextTick();
     expect(onlyBtn.textContent?.trim()).toBe('仅显示');
+  });
+});
+
+describe('SpatialComputePanel · 行与三维标注联动', () => {
+  let mounted: ReturnType<typeof mountPanel> | null = null;
+
+  beforeEach(() => {
+    resetSpatialComputeStore();
+    vi.clearAllMocks();
+    viewerContextStub.viewerRef.value = null;
+    viewerContextStub.dimensionSystem.value = null;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 })));
+  });
+
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+    vi.unstubAllGlobals();
+    resetSpatialComputeStore();
+  });
+
+  it('悬停已标注行高亮对应净距尺寸，移开清 hover；未标注行不动 viewport', async () => {
+    const setHover = vi.fn();
+    viewerContextStub.dimensionSystem.value = { viewport: { setHover } };
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    await store.submitScenario('branNearestClearance');
+    await nextTick();
+
+    const rows = host.querySelectorAll<HTMLElement>('[data-testid="bran-result-row"]');
+    // 第一行 24381_1 已标注（WALL 桶 index 0）→ 悬停高亮它的尺寸
+    rows[0]!.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(setHover).toHaveBeenLastCalledWith('bran-clearance:wall:24381_1:0');
+    rows[0]!.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(setHover).toHaveBeenLastCalledWith(null);
+
+    // 第二行 24381_11 未标注 → hover 没有任何调用
+    setHover.mockClear();
+    rows[1]!.dispatchEvent(new MouseEvent('mouseenter'));
+    rows[1]!.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(setHover).toHaveBeenCalledTimes(2);
+    expect(setHover).toHaveBeenNthCalledWith(1, null);
+    expect(setHover).toHaveBeenNthCalledWith(2, null);
+  });
+
+  it('「跳转」选中目标并飞到整条净距段（两端留 500mm）而不是构件包围盒', async () => {
+    const flyTo = vi.fn();
+    const scene = {
+      ensureRefnos: vi.fn(),
+      setObjectsVisible: vi.fn(),
+      setObjectsSelected: vi.fn(),
+      getAABB: vi.fn(() => [0, 0, 0, 1, 1, 1]),
+    };
+    viewerContextStub.viewerRef.value = { scene, cameraFlight: { flyTo } };
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    await store.submitScenario('branNearestClearance');
+    await nextTick();
+
+    host.querySelector<HTMLElement>('[data-testid="bran-result-row"]')!
+      .querySelectorAll('button')[2]!.click();  // 第三颗按钮 = 跳转
+    await vi.waitFor(() => expect(flyTo).toHaveBeenCalledTimes(1));
+
+    // 候选段 (1,2,3)→(4,5,6) mm + 500 裕度，恒等场景变换原样进 aabb
+    expect(flyTo).toHaveBeenCalledWith({ aabb: [-499, -498, -497, 504, 505, 506], fit: true, duration: 0.8 });
+    expect(selectionStub.setSelectedRefno).toHaveBeenCalledWith('24381_1');
+    expect(scene.setObjectsSelected).toHaveBeenCalledWith(['24381_1'], true);
+  });
+
+  it('包围盒相交的候选给「相交?」徽标和琥珀色距离，行数据带 intersects', async () => {
+    const response = {
+      ...nounGroupedResponse,
+      nearest_by_group: [
+        { group: 'WALL', nouns: ['WALL'], candidates: [{ ...candidate('24381_1', 'WALL', 0), intersects: true }] },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(response), { status: 200 })));
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    await store.submitScenario('branNearestClearance');
+    await nextTick();
+
+    expect(store.currentScenarioState.value.resultRows[0]?.intersects).toBe(true);
+    const row = host.querySelector<HTMLElement>('[data-testid="bran-result-row"]')!;
+    expect(row.textContent).toContain('相交?');
+    expect(row.querySelector('.text-amber-600')).not.toBeNull();
   });
 });

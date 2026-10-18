@@ -32,6 +32,8 @@ export type SpatialComputeResultRow = {
   candidateKey?: string;
   /** BRAN 净距：这一行此刻画在三维里 */
   drawn?: boolean;
+  /** BRAN 净距：包围盒估算相交（可能只是盒比实体大，建议精算纠正） */
+  intersects?: boolean;
 };
 
 /**
@@ -313,6 +315,7 @@ function toBranResultRow(
     sourceSegmentOrder: candidate.nearest?.source_segment_order ?? null,
     candidateKey: branCandidateKey(group, candidate),
     drawn,
+    intersects: candidate.intersects === true,
     label: [
       candidate.intersects ? '相交' : '',
       provenanceLabel(provenance),

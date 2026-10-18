@@ -100,3 +100,12 @@
 - 开 X 光：11 实体（`24384_22726` + 10 目标）/ 129 X-Ray / 0 隐藏；退出全恢复；
 - 开仅显示：11 可见实体 / 0 X-Ray / 129 隐藏；退出全恢复；
 - registry `bran-clearance` = 10 条 `linear` 记录，`authoritativeText` 如 `PANE ≈0mm`、`TAPE ≈2817mm`、`FLOOR ≈1188mm`，三维内呈红色尺寸线+线上文字。
+
+## 六、结果行 ↔ 三维标注联动（2026-10-18）
+
+- 尺寸布局按候选序**交错排布**（`side` 交替、`offsetM` 0.5/0.9/1.3/1.7 轮转、`labelT` 错开），实测 registry 中 10 条记录 placement 两两不同，缓解线上文字叠字。
+- 行悬停：`mouseenter` → `dimensionSystem.viewport.setHover(branClearanceDimensionId(row))`（同一 id 规则导出 `branClearanceDimensionId`），`mouseleave` 清除；实测悬停 STWALL 行 → `hoverId = bran-clearance:wall:24381_1776:0`。
+- 「跳转」：选中目标 refno + `flyTo` 净距段场景包围盒（两端点并集 + 500mm 余量，`fit:true`）；实测 STWALL 行 → `sel=[24381_1774]`、aabb 覆盖该段。
+  - 修复：`useSelectionStore()` 原在点击处理器内调用，其内部 `useQuery` 离开 setup 上下文抛 `vue-query hooks can only be used inside setup()`——改为 setup 期取一次复用（同 `useSpatialCompute` 既有用法）。
+- 「相交？」徽标：估算相交的行在距离格内加 amber 警示徽标（`row.intersects` 进 `BranNearestClearanceRow`），26 行中 6 行带徽标，与「全部精算」前 0mm 行一致。
+- 回归：SpatialComputePanel 12/12（新增悬停联动、跳转、交错布局断言）；adapter 6/6；useSpatialCompute 34/34；useSpatialQuery 63/63；type-check 0 新增；ESLint 干净。

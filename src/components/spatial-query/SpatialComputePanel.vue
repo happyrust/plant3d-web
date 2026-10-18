@@ -344,14 +344,20 @@
                 class="flex items-center border-t text-xs"
                 :data-testid="isBranScenario ? 'bran-result-row' : undefined"
                 :data-drawn="isBranScenario ? String(Boolean(row.drawn)) : undefined"
-                :class="isRowEmphasized(row, idx) ? 'border-brand/25 bg-brand-subtle' : 'border-gray-200'">
+                :class="isRowEmphasized(row, idx) ? 'border-brand/25 bg-brand-subtle' : 'border-gray-200'"
+                @mouseenter="hoverBranRowDimension(row, true)"
+                @mouseleave="hoverBranRowDimension(row, false)">
                 <div class="w-[130px] truncate px-3 py-2.5 font-mono text-xs font-medium text-foreground">{{ row.refno }}</div>
                 <div class="w-[70px] px-2 py-2.5 font-medium text-gray-700">{{ row.noun }}</div>
                 <div class="w-[56px] px-2 py-2.5"
-                  :class="isRowEmphasized(row, idx) ? 'font-semibold text-brand' : 'text-muted-foreground'">
+                  :title="row.intersects ? '包围盒估算相交——盒比实体大可能是假相交，点「精算」拿真实净距' : undefined"
+                  :class="row.intersects
+                    ? 'font-semibold text-amber-600'
+                    : isRowEmphasized(row, idx) ? 'font-semibold text-brand' : 'text-muted-foreground'">
                   {{ formatDistanceMm(row.distanceMm) }}
                 </div>
                 <div v-if="isBranScenario" :title="row.label" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
+                  <span v-if="row.intersects" class="mr-1 inline-flex shrink-0 rounded bg-amber-100 px-1 py-0.5 align-middle text-[10px] font-bold text-amber-700">相交?</span>
                   {{ row.label || '-' }}
                 </div>
                 <div class="flex flex-wrap items-center justify-end gap-1 px-2.5 py-2" :class="isBranScenario ? 'w-[150px]' : 'flex-1'">
@@ -378,7 +384,7 @@
                     :class="isRowEmphasized(row, idx)
                       ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                       : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
-                    @click="$emit('select-refno', row.refno)">
+                    @click="jumpToRow(row); $emit('select-refno', row.refno)">
                     {{ isBranScenario ? '跳转' : '选中并跳转' }}
                     <MousePointerClick class="h-3 w-3" />
                   </button>
@@ -419,7 +425,10 @@ import { Check, ChevronDown, Loader2, MousePointerClick, Ruler } from 'lucide-vu
 
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
-import { normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
+import { useSelectionStore } from '@/composables/useSelectionStore';
+import { branCandidateKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
+import { useViewerContext } from '@/composables/useViewerContext';
+import { branClearanceDimensionId } from '@/dimension';
 
 defineEmits<{
   'select-refno': [refno: string];
@@ -592,6 +601,52 @@ watch(() => currentScenarioState.value.annotationCandidates, candidates => {
     }
   });
 });
+
+const viewerContext = useViewerContext();
+// vue-query hooks живут только в setup-контексте — store берём здесь, не внутри хендлеров
+const selectionStore = useSelectionStore();
+
+/** 结果行 ↔ 三维标注联动：行对应的那条净距尺寸的 external 记录 id（只有画出去的候选才有）。 */
+function branRowDimensionId(row: SpatialComputeResultRow): string | null {
+  if (!isBranScenario.value || !row.candidateKey || !row.drawn) return null;
+  const match = computeState.value.annotationCandidates.find(
+    item => branCandidateKey(item.targetGroup, item.candidate) === row.candidateKey,
+  );
+  return match ? branClearanceDimensionId(match.targetGroup, match.candidate.refno, match.index) : null;
+}
+
+/** 悬停结果行 → 三维里那条净距尺寸进 hovered 样式（viewport.setHover 对外部记录同样生效）。 */
+function hoverBranRowDimension(row: SpatialComputeResultRow, on: boolean) {
+  const viewport = viewerContext.dimensionSystem?.value?.viewport;
+  viewport?.setHover(on ? branRowDimensionId(row) : null);
+}
+
+/** 行「跳转」：选中目标并飞过去——BRAN 净距行框住整条净距段（管表面点 + 目标点，周围留 500mm），其余行退回构件包围盒。 */
+async function jumpToRow(row: SpatialComputeResultRow) {
+  const { resolveSceneWorldTransform } = await import('@/composables/useSpatialQuery');
+  const viewer = viewerContext.viewerRef.value;
+  if (!viewer?.scene) return;
+  selectionStore.setSelectedRefno?.(row.refno);
+  viewer.scene.ensureRefnos([row.refno]);
+  viewer.scene.setObjectsVisible([row.refno], true);
+  viewer.scene.setObjectsSelected([row.refno], true);
+  let aabb: number[] | null = null;
+  const match = isBranScenario.value && row.candidateKey
+    ? computeState.value.annotationCandidates.find(item => branCandidateKey(item.targetGroup, item.candidate) === row.candidateKey)
+    : undefined;
+  const start = match?.candidate.annotation?.start_point;
+  const end = match?.candidate.annotation?.end_point;
+  const nums = [start?.x, start?.y, start?.z, end?.x, end?.y, end?.z].map(Number);
+  if (nums.every(Number.isFinite)) {
+    const m = 500;
+    aabb = resolveSceneWorldTransform(viewer).aabbToScene([
+      Math.min(nums[0]!, nums[3]!) - m, Math.min(nums[1]!, nums[4]!) - m, Math.min(nums[2]!, nums[5]!) - m,
+      Math.max(nums[0]!, nums[3]!) + m, Math.max(nums[1]!, nums[4]!) + m, Math.max(nums[2]!, nums[5]!) + m,
+    ]);
+  }
+  aabb ??= viewer.scene.getAABB([row.refno]) ?? null;
+  if (aabb) viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+}
 
 function hasField(field: SpatialComputeScenarioField) {
   return currentScenarioMeta.value.fields.includes(field);

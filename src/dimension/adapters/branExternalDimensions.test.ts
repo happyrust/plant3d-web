@@ -91,6 +91,8 @@ describe('branClearanceToExternalDimensions', () => {
       ['bran-clearance:bran:24381_144924:0', 'BRAN: 24381_144924（平行直段中心距）', 'BRAN 1584mm'],
       ['bran-clearance:bran:24381_144924:1', 'BRAN: 24381_144924（平行直段中心距）', 'BRAN 1920mm'],
     ]);
+    // 同屏多条候选的标签按序号交错 side/offsetM，不压字
+    expect(result.records.map(record => (record.layout as { placement: { side: number } }).placement.side)).toEqual([1, -1]);
   });
 
   it('marks refined mesh measurements as surface clearance and keeps exact text', () => {

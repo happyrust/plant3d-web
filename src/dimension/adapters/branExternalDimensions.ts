@@ -13,6 +13,29 @@ function idPart(value: unknown): string {
     .replace(/^_+|_+$/g, '') || 'unknown';
 }
 
+/**
+ * 一条 BRAN 净距候选画出来的 external 尺寸 id——面板行 ↔ 三维标注联动要拿同一个 id
+ * （行悬停高亮尺寸、点击行飞向净距段），规则必须只此一处。
+ */
+export function branClearanceDimensionId(targetGroup: string, refno: string, index: number): string {
+  return `bran-clearance:${idPart(targetGroup)}:${idPart(refno)}:${Math.max(0, index)}`;
+}
+
+/**
+ * 同屏多条净距尺寸若全用同一偏移位会互相压字（密集 BRAN 下一批目标的净距方向本来就差不多）——
+ * 按候选序号交错 side/offsetM/labelT 把标签错开，每 8 条一轮。
+ */
+const STAGGERED_PLACEMENTS: readonly Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }>[] = [
+  { side: 1, offsetM: 0.5, labelT: 0.5 },
+  { side: -1, offsetM: 0.5, labelT: 0.5 },
+  { side: 1, offsetM: 0.9, labelT: 0.35 },
+  { side: -1, offsetM: 0.9, labelT: 0.65 },
+  { side: 1, offsetM: 1.3, labelT: 0.65 },
+  { side: -1, offsetM: 1.3, labelT: 0.35 },
+  { side: 1, offsetM: 1.7, labelT: 0.5 },
+  { side: -1, offsetM: 1.7, labelT: 0.5 },
+];
+
 function point(value: unknown): Vec3 | null {
   const candidate = value as { x?: unknown; y?: unknown; z?: unknown } | null;
   const values = [
@@ -53,7 +76,7 @@ export function branClearanceToExternalDimensions(
   const records: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
   for (const item of candidates) {
-    const id = `bran-clearance:${idPart(item.targetGroup)}:${idPart(item.candidate.refno)}:${Math.max(0, item.index)}`;
+    const id = branClearanceDimensionId(item.targetGroup, item.candidate.refno, item.index);
     const start = point(item.candidate.annotation?.start_point);
     const end = point(item.candidate.annotation?.end_point);
     if (!start || !end) {
@@ -77,7 +100,7 @@ export function branClearanceToExternalDimensions(
           : {}),
         a: millimetresToDesignMetres(start),
         b: millimetresToDesignMetres(end),
-        placement: { offsetM: 0.5, labelT: 0.5, side: 1 },
+        placement: STAGGERED_PLACEMENTS[records.length % STAGGERED_PLACEMENTS.length]!,
       },
     });
   }
