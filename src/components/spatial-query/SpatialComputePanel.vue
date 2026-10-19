@@ -164,6 +164,16 @@
               <span class="mt-0.5 block text-[11px] font-medium text-gray-400">仅「指定类型集合」类别下生效；默认墙/柱/梁/楼板，管件邻居（FTUB/BEND/ELBO/FITT…）不标注。</span>
             </label>
 
+            <label v-if="hasField('verticalNouns')" class="block">
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">垂直距 vertical_nouns（逗号分隔；留空 = 全按三维最近距）</span>
+              <input v-model="computeState.verticalNouns"
+                type="text"
+                data-testid="bran-vertical-nouns"
+                placeholder="FLOOR"
+                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-brand" />
+              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">命中的类型按 Z 向高差量（楼板类：管在板上方量管底→板顶、下方量管顶→板底；XY 不相交也照标高差），精算同口径。</span>
+            </label>
+
             <label v-if="hasField('excludeNouns')" class="block">
               <span class="mb-1 block text-xs font-semibold text-muted-foreground">exclude_nouns（可空，先剔掉的噪声类型）</span>
               <input v-model="computeState.excludeNouns"
@@ -526,7 +536,7 @@ function focusSourceBran(): void {
   // 空间换算：DTX 全局变换（mm→m + 原点重定位）是**模型进场景之后**才套的。
   // 变换没套上时模型还停在毫米坐标里，端点原样用就是相机的空间；套上之后才换算到设计空间（米）。
   const annotationAabb = (): Aabb | null => {
-    const points: Array<[number, number, number]> = [];
+    const points: [number, number, number][] = [];
     for (const item of state.annotationCandidates) {
       const start = item.candidate.annotation?.start_point;
       const end = item.candidate.annotation?.end_point;
@@ -539,7 +549,7 @@ function focusSourceBran(): void {
     const xs = points.map((p) => p[0]);
     const ys = points.map((p) => p[1]);
     const zs = points.map((p) => p[2]);
-    const raw = [
+    const raw: [number, number, number, number, number, number] = [
       Math.min(...xs) - margin, Math.min(...ys) - margin, Math.min(...zs) - margin,
       Math.max(...xs) + margin, Math.max(...ys) + margin, Math.max(...zs) + margin,
     ];

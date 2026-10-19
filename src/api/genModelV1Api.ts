@@ -2076,6 +2076,11 @@ export type GenModelV1SpatialNearestClearanceRequest = {
   structuralAngleDeg?: number;
   /** 直接点名的 NOUN 白名单，与 `targetGroups` 可并用。`target_groups` 分桶下两者都不给 → 400（与 legacy 同，默认值由调用方补） */
   targetNouns?: string[];
+  /**
+   * 垂直距口径的 NOUN 白名单（如 `FLOOR`）：命中的候选不量三维最近距，按 Z 向高差量——
+   * 管在板上方量管底到板顶、在板下方量管顶到板底；XY 不相交也照标高差（响应里 `candidate.vertical=true`）。
+   */
+  verticalNouns?: string[];
   groupBy?: SpatialClearanceGroupBy;
   /** 目标过滤之后再剔掉的噪声类型（`WELD,ATTA`），两种分桶方式都生效 */
   excludeNouns?: string[];
@@ -2123,6 +2128,8 @@ export type SpatialClearanceCandidate = {
   distance_mm: number;
   /** 源与目标盒相交（距离 0） */
   intersects: boolean;
+  /** `true` = 这条按 `vertical_nouns` 口径量的 Z 向高差（楼板类），标注两端点同 XY、纯 Z 向 */
+  vertical?: boolean;
   aabb: SpatialClearanceAabb;
   nearest: SpatialClearanceNearest;
   annotation: SpatialClearanceAnnotation;
@@ -2156,6 +2163,8 @@ export type SpatialClearanceResolvedFilters = {
   target_groups: { name: string; nouns: string[] }[];
   group_by: SpatialClearanceGroupBy | (string & {});
   exclude_nouns: string[];
+  /** 生效的垂直距 NOUN 白名单；旧服务端没有这一格 */
+  vertical_nouns?: string[];
   scope: SpatialClearanceScope | 'explicit_dbnums' | (string & {});
   dbnums: number[] | null;
   radius: number;
@@ -2222,6 +2231,7 @@ function spatialNearestClearanceQuery(req: GenModelV1SpatialNearestClearanceRequ
     target_groups: joinCsv(req.targetGroups),
     structural_angle_deg: req.structuralAngleDeg,
     target_nouns: joinCsv(req.targetNouns),
+    vertical_nouns: joinCsv(req.verticalNouns),
     group_by: req.groupBy,
     exclude_nouns: joinCsv(req.excludeNouns),
     radius: req.radius,
@@ -2331,6 +2341,12 @@ export type GenModelV1SurfaceClearanceRequest = {
   perpendicular?: boolean;
   /** mm；缺省 50000，上限 1e6；超出即 `result: null` + warning `beyond_max_distance` */
   maxDistanceMm?: number;
+  /**
+   * `true` = 垂直距口径（楼板类）：同一 XY 处两侧网格的 Z 区间净距，两端点同 XY、纯 Z 向；
+   * 目标在该 XY 射线落空时按目标合盒面标高兜底。响应 `result.vertical=true`，`witness` 为
+   * `vertical-ray` / `vertical-ray-miss` / `vertical-aabb`。
+   */
+  vertical?: boolean;
   debug?: boolean;
 };
 
@@ -2385,8 +2401,11 @@ export type SurfaceClearanceResult = {
   target_leaf_noun: string;
   target_face: SurfaceClearanceFace | null;
   perpendicular: SurfaceClearancePerpendicular | null;
-  /** `closest-points`：精确最近点对；`aabb-overlap-center`：相交时 parry 不给点，取两叶子 AABB 交集中心占位 */
+  /** `closest-points`：精确最近点对；`aabb-overlap-center`：相交时 parry 不给点，取两叶子 AABB 交集中心占位；
+   *  `vertical=1` 时是 `vertical-ray` / `vertical-ray-miss` / `vertical-aabb` */
   witness: 'closest-points' | 'aabb-overlap-center' | (string & {});
+  /** `true` = 垂直距口径的结果（两端点同 XY、Z 区间净距）；旧服务端没有这一格 */
+  vertical?: boolean;
 };
 
 export type SurfaceClearanceResponse = {
@@ -2417,6 +2436,7 @@ function surfaceClearanceQuery(req: GenModelV1SurfaceClearanceRequest): Record<s
     target_kind: req.targetKind,
     perpendicular: req.perpendicular,
     max_distance_mm: req.maxDistanceMm,
+    vertical: req.vertical,
     debug: req.debug,
   };
 }

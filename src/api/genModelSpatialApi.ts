@@ -423,6 +423,8 @@ export type BranNearestClearanceCandidate = {
   spec_value?: number | null;
   distance_mm: number;
   intersects?: boolean;
+  /** `true` = 这条按 `vertical_nouns` 口径量的 Z 向高差（楼板类），`annotation` 两端点同 XY、纯 Z 向 */
+  vertical?: boolean;
   aabb?: BranNearestClearanceAabb;
   nearest?: BranNearestClearanceNearest | null;
   annotation?: BranNearestClearanceAnnotation | null;
@@ -456,6 +458,8 @@ export type BranNearestClearanceResolvedFilters = {
   target_groups?: { name: string; nouns: string[] }[];
   group_by?: BranNearestClearanceGroupBy | string;
   exclude_nouns?: string[];
+  /** 生效的垂直距 NOUN 白名单（命中的候选按 Z 向高差量） */
+  vertical_nouns?: string[];
   scope?: string;
   dbnums?: number[] | null;
   radius?: number;

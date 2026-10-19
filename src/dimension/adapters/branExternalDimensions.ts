@@ -105,6 +105,8 @@ export function branClearanceToExternalDimensions(
     }
     const approximate = !item.provenance || item.provenance.accuracyClass.startsWith('approximate-');
     const labelMm = Number(item.candidate.annotation?.label_mm);
+    // 垂直距口径（楼板类）：线上标「垂直」与三维最近距区分开。
+    const verticalMark = item.candidate.vertical === true ? '垂直' : '';
     records.push({
       id,
       source: 'bran-clearance',
@@ -116,7 +118,7 @@ export function branClearanceToExternalDimensions(
         role: 'external',
         labelPinned: false,
         ...(Number.isFinite(labelMm)
-          ? { authoritativeText: `${item.targetGroup} ${item.provenance?.status === 'stale' ? '（过期）' : ''}${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
+          ? { authoritativeText: `${item.targetGroup} ${verticalMark}${item.provenance?.status === 'stale' ? '（过期）' : ''}${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
           : {}),
         a: millimetresToDesignMetres(start),
         b: millimetresToDesignMetres(end),

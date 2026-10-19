@@ -72,7 +72,7 @@ export type BranNounFacet = {
   selected: boolean;
 };
 
-export type SpatialComputeScenarioField = 'tolerance' | 'suppoType' | 'searchRadius' | 'targetNouns' | 'excludeNouns' | 'neighborWindow';
+export type SpatialComputeScenarioField = 'tolerance' | 'suppoType' | 'searchRadius' | 'targetNouns' | 'verticalNouns' | 'excludeNouns' | 'neighborWindow';
 
 type SpatialComputeScenarioState = {
   structureCategory: 'all' | 'wall' | 'column' | 'beam' | 'slab';
@@ -85,6 +85,8 @@ type SpatialComputeScenarioState = {
   suppoType: string;
   searchRadius: string;
   targetNouns: string;
+  /** 垂直距口径的 NOUN 白名单（`vertical_nouns`）：命中的候选按 Z 向高差量（楼板类），精算同口径 */
+  verticalNouns: string;
   excludeNouns: string;
   neighborWindow: string;
   loading: boolean;
@@ -132,6 +134,12 @@ export const BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS = 'WELD,ATTA';
  * 障碍类型，全标出来只剩一团线。面板 target_nouns 可改；留空回到半径内全类型。
  */
 export const BRAN_CLEARANCE_DEFAULT_TARGET_NOUNS = 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC';
+/**
+ * 垂直距口径的默认 NOUN：楼板板面是水平的，三维最近距会量到板边侧棱而不是设计要的
+ * 「管底到板面净高」——命中的候选按 Z 向高差量（`vertical_nouns`），精算也走竖直射线网格测距。
+ * 面板可改成逗号分隔清单；留空 = 不启用垂直口径。
+ */
+export const BRAN_CLEARANCE_DEFAULT_VERTICAL_NOUNS = 'FLOOR';
 
 const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
@@ -142,7 +150,7 @@ const SCENARIO_META: SpatialComputeScenarioMeta[] = [
     exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
     sourceHelp: 'BRAN 格式示例：24381_145018 或 24381/145018',
-    fields: ['searchRadius', 'targetNouns', 'excludeNouns'],
+    fields: ['searchRadius', 'targetNouns', 'verticalNouns', 'excludeNouns'],
   },
 ];
 
@@ -173,6 +181,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: '',
     searchRadius: '5000',
     targetNouns: BRAN_CLEARANCE_DEFAULT_TARGET_NOUNS,
+    verticalNouns: BRAN_CLEARANCE_DEFAULT_VERTICAL_NOUNS,
     excludeNouns: BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS,
     neighborWindow: '',
   },
@@ -336,6 +345,7 @@ function toBranResultRow(
     intersects: candidate.intersects === true,
     label: [
       candidate.intersects ? '相交' : '',
+      candidate.vertical === true ? '垂直高差' : '',
       provenanceLabel(provenance),
       ...(candidate.parallel ? parallelDetailLabel(candidate.parallel) : []),
       segment,
@@ -378,6 +388,8 @@ type BranNearestClearanceQuery = {
   sourceRefno: string;
   /** 「全部构件类型」下的目标 NOUN 白名单；空数组 = 半径内全部类型（单组分类时忽略） */
   targetNouns: string[];
+  /** 垂直距口径的 NOUN 白名单（楼板类按 Z 向高差量）；空数组 = 全按三维最近距 */
+  verticalNouns: string[];
   /** 目标过滤之后再剔掉的噪声类型；空数组 = 不剔 */
   excludeNouns: string[];
   radius: number;
@@ -399,6 +411,8 @@ async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Prom
     targetGroups: query.structureCategory === 'all' ? undefined : [query.structureCategory],
     // 白名单只在「全部构件类型」（group_by=noun）下生效；选了具体结构类别时它就是目标本身
     targetNouns: query.structureCategory === 'all' ? query.targetNouns : undefined,
+    // 垂直口径与目标过滤无关：任何分桶下命中名单内的 noun 都按 Z 向高差量
+    verticalNouns: query.verticalNouns,
     structuralAngleDeg: query.structuralAngleDeg,
     excludeNouns: query.excludeNouns,
     radius: query.radius,
@@ -460,7 +474,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     const state = scenarios.branNearestClearance;
     return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
       inputs: { suppoRefno: state.suppoRefno, structureCategory: state.structureCategory, structuralAngleDeg: state.structuralAngleDeg,
-        searchRadius: state.searchRadius, targetNouns: state.targetNouns, excludeNouns: state.excludeNouns },
+        searchRadius: state.searchRadius, targetNouns: state.targetNouns, verticalNouns: state.verticalNouns, excludeNouns: state.excludeNouns },
       queriedSourceRefno: state.queriedSourceRefno, branGroups: state.branGroups, nounFacets: state.nounFacets,
       drawnCandidateKeys: state.drawnCandidateKeys, candidateProvenance: state.candidateProvenance,
       excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings,
@@ -480,6 +494,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     if (!data || data.coordinateSpace !== 'e3d-world-mm' || !inputs || !['all', 'wall', 'column', 'beam', 'slab'].includes(String(inputs.structureCategory))
         || !['suppoRefno', 'structuralAngleDeg', 'searchRadius', 'excludeNouns'].every(key => typeof inputs[key] === 'string')
         || (inputs.targetNouns !== undefined && typeof inputs.targetNouns !== 'string')
+        || (inputs.verticalNouns !== undefined && typeof inputs.verticalNouns !== 'string')
         || typeof data.queriedSourceRefno !== 'string' || !Array.isArray(data.branGroups) || !Array.isArray(data.nounFacets)
         || !Array.isArray(data.drawnCandidateKeys) || !data.drawnCandidateKeys.every(key => typeof key === 'string')
         || !Array.isArray(data.warnings) || !data.warnings.every(warning => typeof warning === 'string')
@@ -500,7 +515,8 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
             || !Number.isFinite(candidate.distance_mm) || candidate.distance_mm < 0 || typeof candidate.intersects !== 'boolean'
             || !candidate.annotation || candidate.annotation.label_mm !== candidate.distance_mm
             || !pointValid(candidate.annotation.start_point) || !pointValid(candidate.annotation.end_point)
-            || (candidate.variant !== undefined && typeof candidate.variant !== 'string')) throw new Error('BRAN净距结果或世界坐标无效');
+            || (candidate.variant !== undefined && typeof candidate.variant !== 'string')
+            || (candidate.vertical !== undefined && typeof candidate.vertical !== 'boolean')) throw new Error('BRAN净距结果或世界坐标无效');
         const key = branCandidateKey(group.group, candidate);
         if (keys.has(key)) throw new Error('BRAN净距标识重复');
         keys.add(key);
@@ -613,6 +629,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
         structuralAngleDeg,
         sourceRefno: refno,
         targetNouns: splitCsv(state.targetNouns),
+        verticalNouns: splitCsv(state.verticalNouns),
         excludeNouns: splitCsv(state.excludeNouns),
         radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
       });
@@ -654,11 +671,20 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     state.refiningKeys.push(candidateKey);
     state.error = '';
     try {
-      const response = await genModelV1SurfaceClearance({ sourceRefno, targetRefno: candidate.refno, targetKind: 'any' });
+      // 垂直距候选（楼板类）的精算也走垂直口径：竖直射线网格测距，不是三维最近点。
+      const response = await genModelV1SurfaceClearance({
+        sourceRefno,
+        targetRefno: candidate.refno,
+        targetKind: 'any',
+        vertical: candidate.vertical === true ? true : undefined,
+      });
       if (requestTokens.branNearestClearance !== token) return;
       const result = response.result;
-      const validWitness = result?.witness === 'closest-points'
-        || (result?.witness === 'aabb-overlap-center' && result.intersects === true && result.distance_mm === 0);
+      const VERTICAL_WITNESSES = new Set(['vertical-ray', 'vertical-ray-miss', 'vertical-aabb']);
+      const validWitness = candidate.vertical === true
+        ? result?.vertical === true && VERTICAL_WITNESSES.has(result.witness ?? '')
+        : result?.witness === 'closest-points'
+          || (result?.witness === 'aabb-overlap-center' && result.intersects === true && result.distance_mm === 0);
       if (!response.success || response.unit !== 'mm' || response.accuracy_class !== 'exact-surface'
         || !Number.isFinite(response.error_bound_mm) || response.error_bound_mm < 0 || response.error_bound_mm > 10
         || !result || !Number.isFinite(result.distance_mm) || result.distance_mm < 0

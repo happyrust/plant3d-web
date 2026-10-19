@@ -44,8 +44,10 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.currentScenarioState.value.suppoRefno).toBe('24381_145018');
     expect(store.currentScenarioState.value.searchRadius).toBe('5000');
     // 目标类型白名单默认结构类（墙/柱/梁/楼板），可编辑；facet 仍由 noun_counts 生成；输入侧另有噪声类型排除。
-    expect(store.currentScenarioMeta.value.fields).toEqual(['searchRadius', 'targetNouns', 'excludeNouns']);
+    expect(store.currentScenarioMeta.value.fields).toEqual(['searchRadius', 'targetNouns', 'verticalNouns', 'excludeNouns']);
     expect(store.currentScenarioState.value.targetNouns).toBe('WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC');
+    // 垂直距口径默认楼板：Z 向高差而非三维最近距；面板可改，留空全按最近距。
+    expect(store.currentScenarioState.value.verticalNouns).toBe('FLOOR');
     expect(store.currentScenarioState.value.excludeNouns).toBe('WELD,ATTA');
     expect(store.currentScenarioState.value.nounFacets).toEqual([]);
     expect(store.currentScenarioMeta.value.endpoint).toBe('/api/v1/spatial/nearest-clearance');
@@ -105,6 +107,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       source_refno: '24381/145018',
       group_by: 'noun',
       target_nouns: 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC',
+      vertical_nouns: 'FLOOR',
       structural_angle_deg: '5',
       exclude_nouns: 'WELD,ATTA',
       radius: '5000',
@@ -314,6 +317,67 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       candidate: { annotation: { label_mm: 600, start_point: { x: 100, y: 0, z: 0 }, end_point: { x: 100, y: 600, z: 0 } } },
     });
     expect(store.currentScenarioState.value.refiningKeys).toEqual([]);
+  });
+
+  it('垂直口径候选（楼板类）行标签带「垂直高差」，精算发 vertical=1 并验收垂直 witness', async () => {
+    const verticalResponse = {
+      ...nounGroupedResponse,
+      nearest_by_group: [
+        {
+          group: 'FLOOR', nouns: ['FLOOR'],
+          candidates: [{
+            ...nounCandidate('24381_40', 'FLOOR', 1188, 2),
+            vertical: true,
+            annotation: { start_point: { x: 5, y: 5, z: 100 }, end_point: { x: 5, y: 5, z: 1288 }, label_mm: 1188 },
+          }],
+        },
+        { group: 'WALL', nouns: ['WALL'], candidates: [nounCandidate('24381_1', 'WALL', 1200.4, 3)] },
+      ],
+      noun_counts: { FLOOR: 2, WALL: 3 },
+    };
+    const verticalSurface = () => ({
+      ...surfaceResponse(),
+      result: { ...surfaceResponse().result, vertical: true, witness: 'vertical-ray', distance_mm: 607 },
+    });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => new Response(JSON.stringify(verticalResponse), { status: 200 }))
+      .mockImplementation(async () => new Response(JSON.stringify(verticalSurface()), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+
+    const floorRow = store.currentScenarioState.value.resultRows.find(row => row.noun === 'FLOOR');
+    expect(floorRow?.label).toContain('垂直高差');
+    const wallRow = store.currentScenarioState.value.resultRows.find(row => row.noun === 'WALL');
+    expect(wallRow?.label).not.toContain('垂直高差');
+
+    // 楼板精算带 vertical=1，「vertical-ray」witness 正常采纳
+    await store.refineBranCandidate('FLOOR:24381_40');
+    const floorQuery = new URL(String(fetchMock.mock.calls[1]?.[0]), 'http://localhost').searchParams;
+    expect(floorQuery.get('vertical')).toBe('true');
+    expect(store.currentScenarioState.value.error).toBe('');
+    expect(store.currentScenarioState.value.candidateProvenance['FLOOR:24381_40']?.method).toBe('surface-to-surface');
+
+    // 墙候选的精算不带 vertical
+    await store.refineBranCandidate('WALL:24381_1');
+    const wallQuery = new URL(String(fetchMock.mock.calls[2]?.[0]), 'http://localhost').searchParams;
+    expect(wallQuery.get('vertical')).toBeNull();
+  });
+
+  it('非垂直候选收到垂直 witness 时拒绝采纳（口径不一致保留估算）', async () => {
+    const sneaky = {
+      ...surfaceResponse(),
+      result: { ...surfaceResponse().result, vertical: true, witness: 'vertical-ray' },
+    };
+    vi.stubGlobal('fetch', vi.fn()
+      .mockImplementationOnce(async () => freshNounGroupedResponse())
+      .mockImplementationOnce(async () => new Response(JSON.stringify(sneaky), { status: 200 })));
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+    await store.refineBranCandidate('WALL:24381_1');
+    expect(store.currentScenarioState.value.resultRows[0]?.distanceMm).toBe(1200.4);
+    expect(store.currentScenarioState.value.candidateProvenance['WALL:24381_1']).toBeUndefined();
+    expect(store.currentScenarioState.value.error).toContain('保留包围盒估算');
   });
 
   it('accepts true mesh intersection (witness=aabb-overlap-center with intersects=true, distance_mm=0) and re-sorts group candidates by refined distance (D2a)', async () => {
@@ -696,6 +760,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
         source_mode: 'bran_centerline',
         group_by: 'noun',
         target_nouns: 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC',
+        vertical_nouns: 'FLOOR',
         structural_angle_deg: '5',
         exclude_nouns: 'WELD,ATTA',
         radius: '1500',
