@@ -133,3 +133,39 @@
   - 点空白处 → `['24381_71806'] → []`，清空行为不回归；
   - 直接点目标模型本体 → `24381_1774` 选中（GPU 拾取原生链路，此前已验证）。
 - 测试：adapter 8/8（新增 `branClearanceTargetRefno` 正反例）；type-check 0 新增；ESLint 干净。
+
+## 七、T1–T6 缺陷修复与窄幅 Dock 排版收敛真机验证（2026-10-19）
+
+关联计划：`docs/plans/2026-10-19-bran-nearest-clearance-fix-plan.md`（Plannotator 评审通过，D1–D3 均按推荐项 `(a)` 落地）。
+
+| 编号 | 验证项 | `:3101` + `:8022` 真机实测（源 BRAN `24384_22726`） |
+|---|---|---|
+| **T1（F1）** | 源 BRAN 整根管件在「X 光 / 仅显示 / 范围显示」下保持实体可见 | `deliveryUnitSceneRefnos('24384_22726')` 展开 9 个成员（`24384_22726` + `24384_22727..24384_22735`）。开启「X 光查看」后（场景 140 对象）：**19 实体**（源 BRAN 全套 9 成员 + 10 条已标注目标）/ **121 X-Ray**，`sourceLeavesInXray = []`；开启「仅显示」后：**19 可见实体 / 121 隐藏**，源 BRAN 弯头与管件不再消失或半透明 |
+| **T2（F2）** | 按需补装几何（`runWithPreservedResults`）保留净距结果与已精算状态 | 执行「全部精算 (10)」后切换「X 光查看 / 仅显示」及行「跳转」补装目标几何，10 条 `surface-to-surface` 精算记录与 26 行结果完整保留，不被 `handleInstancesLoaded` 重置 |
+| **T3（F3）** | 单条精算报错不清空全屏 3D 净距标注 | `ViewerPanel.vue` `offBranClearanceWatch` 仅在 `loading || candidates.length === 0` 时清屏；单条精算报错保留其余候选的 3D 尺寸线 |
+| **T4（F4/D1a）** | 点击邻管管件行「跳转」或点选 3D 净距标注不误切源 BRAN，未标注行同样飞入净距段 AABB | 点击第 2 条未标注 `FITT` 行（`24381_71800`，`drawn=false`）的「跳转」：`selectedRefno` 切至 `24381_71800` 并补装几何飞入净距段包围盒，`suppressAutoFollowOnce` 抑制单次自动重查，源 BRAN 保持 `24384_22726`、10 条已精算状态不丢失 |
+| **T5（F5/D2a）** | 真实网格相交（`witness='aabb-overlap-center'`，`intersects=true`）精算放行，且精算后桶内按 `distance_mm` 升序重排 | 精算后同桶候选按更新后的真实距离升序重排，已标注项 `drawnCandidateKeys` 与 3D 尺寸 ID 同步更新 |
+| **T6（F6/D3a）** | 窄幅 Dock（274px 行宽）双行紧凑卡片排版 | 行高由 93px 收敛至 **59px**（首行左 `Refno + Noun`、右 `精算 / 已标注 / 跳转` 全部单行 26px 高无竖排折行；次行展示 `距离 + 相交? + 来源段说明`），`shots/01,02,03-*.png` 已同步更新 |
+
+- 回归测试：`deliveryUnitScene.test.ts` (4/4)、`useSpatialQuery.test.ts` (63/63)、`useSpatialCompute.test.ts` (36/36)、`SpatialComputePanel.test.ts` (12/12)、`branExternalDimensions.test.ts` (8/8)，合计 **5 文件 123/123 通过**；`npm run type-check` **0 新增错误**；ESLint **0 告警/错误**。
+
+### T2 复审加固：实例加载守卫三分支 + 标注清屏与重置解耦（2026-10-19）
+
+代码评审发现 `runWithPreservedResults` 只盖住面板主动触发的补装，无关增量加载（树按需加载、其他库批次）仍会无条件重置；且 `__dtxAfterInstancesLoaded` 在状态被保留时仍无条件清三维标注。加固后 `handleInstancesLoaded()` 返回「结果是否保住」，分三支：
+
+| 场景 | 行为 |
+|---|---|
+| `runWithPreservedResults` 进行中（X 光 / 仅显示 / 跳转 / 范围显示补装） | 保留结果，三维标注不动 |
+| `queriedSourceRefno` 有效 + 有精算记录 或 手动模式 | 保留结果与标注；重置只发生在切 BRAN / 点「执行计算」/ 切项目 |
+| 自动模式 + 全为估算 | 重置后**锚定 `queriedSourceRefno`**（产生结果的那根 BRAN）防抖重刷——不再依赖当前选中（选中目标构件时按 `selectedRefno` 解析会静默放弃、结果永久丢失）；`ViewerPanel` 只在返回「已重置」时清标注，重查回画 |
+
+附带修复：`suppressAutoFollowOnce` 现在连同已排队的 350ms 防抖提交一并取消（否则武装前那次选中的提交仍在防抖窗内把 BRAN 切走）。
+
+`:3101` + `:8022` 真机复测（硬刷新加载新模块，排除 HMR 旧单例）：
+
+- 开「X 光查看」补装 26 个目标几何：净距尺寸全程 `10→10→10→10→10`，19 实体 / 121 X-Ray，无重查；「仅显示」19 可见 / 163 隐藏同样不丢标注，退出 182/182 全恢复；
+- 精算 1 行（`实体外表面净距（网格精算）`）后模拟无关 `__dtxAfterInstancesLoaded`：**dims 10→10、行 26→26、精算 1→1、零请求**（旧行为：全清且因选中是目标构件而静默无法自愈）；
+- 行「跳转」选中目标 `24381_34871`（非 BRAN）后模拟无关加载：dims `10→0→10`——重置→锚定 `24384/22726` 重查→回画（旧行为：`req=0` 永久丢失）；
+- 回归：`useSpatialCompute.test.ts` 38/38（新增精算守卫、锚定重查、防抖取消三用例）；五文件 **139/139**；type-check 0 新增；ESLint 干净。
+
+注意：`externalRegistry.recordsBySource.get('bran-clearance')` 是 **Array**（非 Map），页面探针统计尺寸要用 `Array.isArray(rec) ? rec.length : rec.size`，误用会读出假的 0。

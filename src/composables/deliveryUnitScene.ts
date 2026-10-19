@@ -72,7 +72,28 @@ export function deliveryUnitSceneRefnos(unitRefno: string): string[] {
 }
 
 /**
- * 一批构件（按记录缓存认属主）+ 一批 BRAN 单元 refno → 场景里还该跟着一起动的 refno（去重，不含 `refnos` 里已有的）。
+ * 判断入参 refno 自身是否就是已加载记录缓存中的 BRAN 生成根（直管挂在自己名下，或缓存已登记其子构件）。
+ */
+function isLoadedBranRoot(refno: string): boolean {
+  const key = normalizeSceneRefno(refno);
+  if (!key) return false;
+  const cache = recordCache();
+  if (!cache) return false;
+  try {
+    if ((cache.leavesOfRoot?.(key) ?? []).length > 0) return true;
+  } catch {
+    // 忽略缓存读取异常，退回 peek 检查
+  }
+  const first = cache.peek?.(key)?.[0];
+  if (!first) return false;
+  const uniforms = (first.uniforms ?? {}) as Record<string, unknown>;
+  const ownerNoun = String(uniforms.owner_noun ?? '').trim().toUpperCase();
+  const owner = normalizeSceneRefno(String(uniforms.owner_refno ?? ''));
+  return ownerNoun === 'BRAN' && owner === key;
+}
+
+/**
+ * 一批构件（按记录缓存认属主，或入参自身就是已加载的 BRAN 根）+ 一批 BRAN 单元 refno → 场景里还该跟着一起动的 refno（去重，不含 `refnos` 里已有的）。
  * 单元 refno 单独给一份：单元下在范围里的构件可能全都没几何记录（如只剩 ATTA），靠属主认不出来，但单元行本身就是那条 BRAN。
  */
 export function sceneCompanionsOf(refnos: Iterable<string>, unitRefnos: Iterable<string> = []): string[] {
@@ -84,6 +105,7 @@ export function sceneCompanionsOf(refnos: Iterable<string>, unitRefnos: Iterable
     given.add(key);
     const owner = branOwnerOfLoaded(key);
     if (owner) owners.add(owner);
+    else if (isLoadedBranRoot(key)) owners.add(key);
   }
   for (const unit of unitRefnos) {
     const key = normalizeSceneRefno(unit);

@@ -469,7 +469,16 @@ describe('SpatialComputePanel · 行与三维标注联动', () => {
     // 候选段 (1,2,3)→(4,5,6) mm + 500 裕度，恒等场景变换原样进 aabb
     expect(flyTo).toHaveBeenCalledWith({ aabb: [-499, -498, -497, 504, 505, 506], fit: true, duration: 0.8 });
     expect(selectionStub.setSelectedRefno).toHaveBeenCalledWith('24381_1');
+    expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenCalledWith(['24381_1']);
     expect(scene.setObjectsSelected).toHaveBeenCalledWith(['24381_1'], true);
+
+    // 未画出的候选行（第二行 24381_11，drawn=false）点「跳转」同样从 branGroups 取净距段 AABB 并补装几何
+    flyTo.mockClear();
+    host.querySelectorAll<HTMLElement>('[data-testid="bran-result-row"]')[1]!
+      .querySelectorAll('button')[2]!.click();
+    await vi.waitFor(() => expect(flyTo).toHaveBeenCalledTimes(1));
+    expect(flyTo).toHaveBeenCalledWith({ aabb: [-499, -498, -497, 504, 505, 506], fit: true, duration: 0.8 });
+    expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenLastCalledWith(['24381_11']);
   });
 
   it('包围盒相交的候选给「相交?」徽标和琥珀色距离，行数据带 intersects', async () => {

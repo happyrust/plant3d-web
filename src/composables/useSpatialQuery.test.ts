@@ -3201,6 +3201,10 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     viewer.scene.setObjectsXRayed.mockClear();
     store.isolateResults();
     expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['pane_1', 'loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9'], false);
+    recordCacheMocks.leaves.set('bran_source', ['bran_source', 'source_elbo']);
+    viewer.scene.setObjectsXRayed.mockClear();
+    store.isolateResults(['bran_source']);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['pane_1', 'loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9', 'bran_source', 'source_elbo'], false);
 
     // 叶子行的眼睛：一个管件就是一个管件，不带直段
     viewer.scene.setObjectsVisible.mockClear();

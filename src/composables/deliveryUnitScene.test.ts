@@ -59,8 +59,9 @@ describe('deliveryUnitScene（管件带直段）', () => {
     expect(deliveryUnitSceneRefnos('')).toEqual([]);
   });
 
-  it('sceneCompanionsOf：按构件认属主 + 直接给的单元，整根展开后去掉入参里已有的；同根只展一次', () => {
+  it('sceneCompanionsOf：按构件认属主 + 直接给的 BRAN 根或单元，整根展开后去掉入参里已有的；同根只展一次', () => {
     expect(sceneCompanionsOf(['24381_105031', '24381_105033', '24381_9001'])).toEqual([BRAN, '24381_105032']);
+    expect(sceneCompanionsOf([BRAN]), '直接传 BRAN 根 refno 也展开整根管件').toEqual(['24381_105031', '24381_105032', '24381_105033']);
     expect(sceneCompanionsOf([], ['24381/105030'])).toEqual([BRAN, '24381_105031', '24381_105032', '24381_105033']);
     expect(sceneCompanionsOf(['24381_105031'], [BRAN]), '构件与单元指向同一根不重复').toEqual([BRAN, '24381_105032', '24381_105033']);
     expect(sceneCompanionsOf(['24381_9001', '24381_8888'])).toEqual([]);

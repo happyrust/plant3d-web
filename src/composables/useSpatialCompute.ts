@@ -621,10 +621,12 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
   async function refineBranCandidate(candidateKey: string) {
     const state = scenarios.branNearestClearance;
     if (!calculationsAllowed) { state.error = '历史版本对比中不能使用当前模型精算净距，请退出对比后重算。'; return; }
-    const candidate = state.branGroups.flatMap((group) =>
-      group.candidates.map((item) => ({ item, key: branCandidateKey(group.group, item) })),
-    ).find((item) => item.key === candidateKey)?.item;
-    if (!candidate || candidate.parallel || !state.queriedSourceRefno || state.refiningKeys.includes(candidateKey)) return;
+    const matched = state.branGroups.flatMap((group) =>
+      group.candidates.map((item) => ({ group, item, key: branCandidateKey(group.group, item) })),
+    ).find((entry) => entry.key === candidateKey);
+    const candidate = matched?.item;
+    const ownerGroup = matched?.group;
+    if (!candidate || !ownerGroup || candidate.parallel || !state.queriedSourceRefno || state.refiningKeys.includes(candidateKey)) return;
     const token = requestTokens.branNearestClearance;
     const sourceRefno = state.queriedSourceRefno;
     state.refiningKeys.push(candidateKey);
@@ -633,13 +635,24 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
       const response = await genModelV1SurfaceClearance({ sourceRefno, targetRefno: candidate.refno, targetKind: 'any' });
       if (requestTokens.branNearestClearance !== token) return;
       const result = response.result;
+      const validWitness = result?.witness === 'closest-points'
+        || (result?.witness === 'aabb-overlap-center' && result.intersects === true && result.distance_mm === 0);
       if (!response.success || response.unit !== 'mm' || response.accuracy_class !== 'exact-surface'
         || !Number.isFinite(response.error_bound_mm) || response.error_bound_mm < 0 || response.error_bound_mm > 10
         || !result || !Number.isFinite(result.distance_mm) || result.distance_mm < 0
-        || result.witness !== 'closest-points'
+        || !validWitness
         || [result.source_point, result.target_point].some((point) => !point || ![point.x, point.y, point.z].every(Number.isFinite))) {
         throw new Error('未取得可靠的外表面最近点，保留包围盒估算；请检查网格或相交状态。');
       }
+      const samePoint = result.source_point.x === result.target_point.x
+        && result.source_point.y === result.target_point.y
+        && result.source_point.z === result.target_point.z;
+      const startPoint = (samePoint && candidate.annotation?.start_point)
+        ? { ...candidate.annotation.start_point }
+        : { ...result.source_point };
+      const endPoint = (samePoint && candidate.annotation?.end_point)
+        ? { ...candidate.annotation.end_point }
+        : { ...result.target_point };
       candidate.distance_mm = result.distance_mm;
       candidate.intersects = result.intersects;
       candidate.nearest = {
@@ -647,7 +660,8 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
         source_point: { ...result.source_point }, target_point: { ...result.target_point },
         vector: { dx: result.target_point.x - result.source_point.x, dy: result.target_point.y - result.source_point.y, dz: result.target_point.z - result.source_point.z },
       };
-      candidate.annotation = { start_point: { ...result.source_point }, end_point: { ...result.target_point }, label_mm: result.distance_mm };
+      candidate.annotation = { start_point: startPoint, end_point: endPoint, label_mm: result.distance_mm };
+      ownerGroup.candidates.sort((a, b) => a.distance_mm - b.distance_mm);
       state.candidateProvenance[candidateKey] = { method: 'surface-to-surface', accuracyClass: 'exact-surface', status: 'current',
         modelVersion: { sourceSesno: response.model?.source_sesno ?? null, targetSesno: response.model?.target_sesno ?? null } };
       state.warnings = [...new Set([...state.warnings, ...(response.warnings ?? []), '精算采用当前实体网格外表面；保温层/包络口径及专业 10 mm 对照验收待确认。'])];
@@ -755,9 +769,41 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     await submitScenario('branNearestClearance');
   }
 
+  let suppressedAutoFollowRefno = '';
+  let preservingResultsDepth = 0;
+
+  /**
+   * 结果行「跳转」选中目标构件时抑制单次跟随选中重查（D1a）：
+   * 避免点击相邻管件目标行时把源 BRAN 切走并冲掉当前结果表。
+   */
+  function suppressAutoFollowOnce(refno: string) {
+    suppressedAutoFollowRefno = normalizeBranComputeRefno(refno);
+    // 已排队的防抖提交也要取消——否则武装 suppress 前那次选中的提交仍会在防抖窗内把 BRAN 切走
+    clearAutoFollowTimer();
+  }
+
+  /**
+   * 在按需补装几何（如「X 光查看 / 仅显示 / 跳转 / 范围显示」）期间保持现有净距结果与精算状态（F2）：
+   * 回调执行期间触发的 `__dtxAfterInstancesLoaded -> handleInstancesLoaded()` 不重置当前结果。
+   */
+  async function runWithPreservedResults<T>(fn: () => Promise<T> | T): Promise<T> {
+    preservingResultsDepth += 1;
+    try {
+      return await fn();
+    } finally {
+      preservingResultsDepth = Math.max(0, preservingResultsDepth - 1);
+    }
+  }
+
   const stopAutoFollowWatch = watch(
     () => selection.selectedRefno.value,
     (refno) => {
+      const normalized = refno ? normalizeBranComputeRefno(refno) : '';
+      if (suppressedAutoFollowRefno && normalized === suppressedAutoFollowRefno) {
+        suppressedAutoFollowRefno = '';
+        return;
+      }
+      suppressedAutoFollowRefno = '';
       if (!autoFollowSelection.value) return;
       clearAutoFollowTimer();
       autoFollowTimer = setTimeout(() => {
@@ -778,19 +824,37 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
   }
 
   /**
-   * 新一批实例加载完成（范围显示、树按需加载、show_refno 等都会走 `__dtxAfterInstancesLoaded`）后的失效处理：
-   * 结果与三维标注随模型集变化而作废，先重置场景。自动模式开着且当前选中仍解析出 BRAN 时，
-   * 走同一条防抖路径立即补一次重查——「范围显示加载命中件 → 结果被清」就变成「清了自动重算」；
-   * 手动模式保持原语义：只失效不代算，用户自行重算。
+   * 新一批实例加载完成（范围显示、树按需加载、show_refno 等都会走 `__dtxAfterInstancesLoaded`）后的失效处理。
+   * 返回 true = 结果保住（调用方据此跳过三维标注清屏），false = 已按失效语义重置。
+   *
+   * 已有生效结果（`queriedSourceRefno` 非空）时不再无条件清空（spec T2/F2）：
+   * - 手动模式 或 已有用户精算记录 → 直接保留，重置只发生在用户切 BRAN / 点「执行计算」/ 切项目；
+   * - 自动模式且全为初始估算 → 重置后静默重刷，重查锚定**产生结果的那根 BRAN**（`queriedSourceRefno`）——
+   *   dim 点选 / 行跳转之后 `selectedRefno` 往往是目标构件而非 BRAN，按当前选中解析会静默放弃、结果永久丢失；
+   *   拿不到锚点才退回按当前选中解析。
    */
-  function handleInstancesLoaded() {
+  function handleInstancesLoaded(): boolean {
+    if (preservingResultsDepth > 0) return true;
+    const state = scenarios.branNearestClearance;
+    const hasResults = Boolean(state.queriedSourceRefno);
+    const hasRefined = Object.keys(state.candidateProvenance).length > 0;
+    if (hasResults && (hasRefined || !autoFollowSelection.value)) return true;
+    const anchorRefno = state.queriedSourceRefno;
     resetScenario('branNearestClearance');
-    if (!autoFollowSelection.value || !calculationsAllowed) return;
+    if (!autoFollowSelection.value || !calculationsAllowed) return false;
     clearAutoFollowTimer();
     autoFollowTimer = setTimeout(() => {
       autoFollowTimer = null;
-      if (calculationsAllowed) void autoSubmitForSelection(selection.selectedRefno.value);
+      if (!calculationsAllowed) return;
+      if (anchorRefno) {
+        scenarios.branNearestClearance.suppoRefno = anchorRefno;
+        autoQueriedBranRefno = normalizeBranComputeRefno(anchorRefno);
+        void submitScenario('branNearestClearance');
+      } else {
+        void autoSubmitForSelection(selection.selectedRefno.value);
+      }
     }, autoFollowDebounceMs);
+    return false;
   }
 
   const onProjectChanged = () => {
@@ -826,6 +890,8 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     applyCurrentSelection,
     autoFollowSelection,
     setAutoFollowSelection,
+    suppressAutoFollowOnce,
+    runWithPreservedResults,
     handleInstancesLoaded,
     branRangeDistance,
     submitScenario,

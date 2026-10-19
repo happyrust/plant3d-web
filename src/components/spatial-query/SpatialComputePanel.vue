@@ -92,14 +92,14 @@
 
         <!-- Detail Card -->
         <div class="rounded-2xl border border-gray-200 bg-white p-4">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1">
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-1.5">
               <div class="text-[15px] font-bold text-foreground">{{ currentScenarioMeta.title }}</div>
-              <div class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ currentScenarioMeta.description }}</div>
+              <span class="rounded-full bg-brand-subtle px-2 py-0.5 font-mono text-[11px] font-semibold text-brand">
+                默认样例：{{ currentScenarioMeta.exampleRefno }}
+              </span>
             </div>
-            <span class="shrink-0 rounded-full bg-brand-subtle px-2.5 py-1.5 font-mono text-[11px] font-semibold text-brand">
-              默认样例：{{ currentScenarioMeta.exampleRefno }}
-            </span>
+            <div class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ currentScenarioMeta.description }}</div>
           </div>
 
           <!-- Form -->
@@ -183,15 +183,17 @@
 
           <!-- 自动模式：开着时选中 BRAN / 其管件即自动提交本场景；关掉回到手动「从场景读取 + 执行计算」 -->
           <label v-if="isBranScenario"
-            class="mt-3 flex cursor-pointer items-center gap-2 rounded-[10px] border px-3 py-2 transition-colors"
+            class="mt-3 flex cursor-pointer items-start gap-2.5 rounded-[10px] border px-3 py-2 transition-colors"
             :class="autoFollowSelection ? 'border-brand bg-brand-subtle' : 'border-gray-200 bg-white'"
             data-testid="bran-auto-follow">
             <input type="checkbox"
               :checked="autoFollowSelection"
-              class="h-3.5 w-3.5 accent-brand"
+              class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-brand"
               @change="onAutoFollowChange" />
-            <span class="text-xs font-semibold" :class="autoFollowSelection ? 'text-brand' : 'text-foreground'">选中 BRAN / 管件自动计算</span>
-            <span class="ml-auto text-[11px] text-muted-foreground">半径内每类默认标注最近 1 条（管表面到包围盒估算）</span>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold leading-snug" :class="autoFollowSelection ? 'text-brand' : 'text-foreground'">选中 BRAN / 管件自动计算</div>
+              <div class="mt-0.5 text-[11px] leading-snug text-muted-foreground">半径内每类默认标注最近 1 条（管表面到包围盒估算）</div>
+            </div>
           </label>
 
           <!-- 查看方式：算出候选后可用——只留源 BRAN 与最近目标可看，其余 X 光半透明或隐藏；随标注集自动重放 -->
@@ -225,9 +227,9 @@
 
           <!-- 范围显示：沿当前 BRAN 中心线按半径圈周边构件 → 加载未加载的 → 命中实体、其余半透明（空间查询抽屉同一管线） -->
           <div v-if="isBranScenario" class="mt-3" data-testid="bran-range-block">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
               <span class="shrink-0 text-xs font-semibold text-muted-foreground">范围显示</span>
-              <div class="flex h-9 w-24 items-center rounded-[10px] border border-gray-200 bg-white px-2">
+              <div class="flex h-9 w-24 shrink-0 items-center rounded-[10px] border border-gray-200 bg-white px-2">
                 <input v-model="rangeDistance"
                   type="number"
                   min="1"
@@ -238,14 +240,14 @@
               </div>
               <button type="button"
                 :disabled="rangeBusy"
-                class="h-9 flex-1 rounded-[10px] bg-primary text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                class="h-9 min-w-[116px] flex-1 whitespace-nowrap rounded-[10px] bg-primary px-2.5 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="bran-range-show"
                 @click="showBranRange">
                 <Loader2 v-if="rangeBusy" class="mr-1 inline h-3.5 w-3.5 animate-spin" />
                 {{ rangeBusy ? '查询并加载…' : '显示范围内模型' }}
               </button>
               <button type="button"
-                class="h-9 shrink-0 rounded-[10px] border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                class="h-9 shrink-0 whitespace-nowrap rounded-[10px] border border-gray-200 px-2.5 text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                 title="清掉隔离的半透明效果，恢复被显隐动过的构件"
                 data-testid="bran-range-restore"
                 @click="restoreBranRange">
@@ -276,7 +278,7 @@
 
           <!-- BRAN 净距：由 noun_counts 驱动的类型 facet（计算后才出现；勾选只在前端过滤，不重新请求） -->
           <div v-if="isBranScenario && computeState.nounFacets.length > 0" class="mt-3" data-testid="bran-noun-facet">
-            <div class="flex items-center justify-between pb-1.5">
+            <div class="flex flex-wrap items-center justify-between gap-y-1 pb-1.5">
               <div class="text-xs font-semibold text-muted-foreground">
                 目标类型 · {{ computeState.structureCategory === 'all' ? '半径内' : '返回' }} {{ computeState.nounFacets.length }} 类 / {{ branFacetTotal }} 个候选
               </div>
@@ -337,62 +339,64 @@
 
             <div v-if="computeState.resultRows.length > 0" class="overflow-hidden rounded-[10px] border border-gray-200">
               <!-- Table Header -->
-              <div class="flex h-9 items-center bg-gray-50 text-[11px] font-semibold text-muted-foreground">
-                <div class="w-[130px] px-3">构件 Refno</div>
-                <div class="w-[70px] px-2">类型</div>
-                <div class="w-[56px] px-2">距离</div>
-                <div v-if="isBranScenario" class="flex-1 px-2">BRAN 段</div>
-                <div class="flex-1 px-2.5 text-right">操作</div>
+              <div class="flex h-8 items-center justify-between bg-gray-50 px-2.5 text-[11px] font-semibold text-muted-foreground">
+                <div>构件 Refno · 类型 · 距离</div>
+                <div>操作</div>
               </div>
-              <!-- Rows -->
+              <!-- Rows: 双行紧凑卡片布局（D3a），窄 Dock 下完整展示 Refno、距离与操作按钮 -->
               <div v-for="(row, idx) in computeState.resultRows" :key="row.candidateKey ?? idx"
-                class="flex items-center border-t text-xs"
+                class="border-t px-2 py-1.5 text-xs"
                 :data-testid="isBranScenario ? 'bran-result-row' : undefined"
                 :data-drawn="isBranScenario ? String(Boolean(row.drawn)) : undefined"
                 :class="isRowEmphasized(row, idx) ? 'border-brand/25 bg-brand-subtle' : 'border-gray-200'"
                 @mouseenter="hoverBranRowDimension(row, true)"
                 @mouseleave="hoverBranRowDimension(row, false)">
-                <div class="w-[130px] truncate px-3 py-2.5 font-mono text-xs font-medium text-foreground">{{ row.refno }}</div>
-                <div class="w-[70px] px-2 py-2.5 font-medium text-gray-700">{{ row.noun }}</div>
-                <div class="w-[56px] px-2 py-2.5"
-                  :title="row.intersects ? '包围盒估算相交——盒比实体大可能是假相交，点「精算」拿真实净距' : undefined"
-                  :class="row.intersects
-                    ? 'font-semibold text-amber-600'
-                    : isRowEmphasized(row, idx) ? 'font-semibold text-brand' : 'text-muted-foreground'">
-                  {{ formatDistanceMm(row.distanceMm) }}
+                <div class="flex items-center justify-between gap-1">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <div class="font-mono text-[11px] font-semibold text-foreground">{{ row.refno }}</div>
+                    <div class="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[10px] font-semibold text-gray-700">{{ row.noun }}</div>
+                    <div v-if="!isBranScenario" class="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {{ formatDistanceMm(row.distanceMm) }}
+                    </div>
+                  </div>
+                  <div class="ml-auto flex shrink-0 items-center gap-1">
+                    <button v-if="row.candidateKey" type="button" :data-testid="`bran-refine-${row.candidateKey}`"
+                      :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading"
+                      class="whitespace-nowrap rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] disabled:opacity-50"
+                      @click="refineBranCandidate(row.candidateKey)">
+                      {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}
+                    </button>
+                    <button v-if="isBranScenario && row.candidateKey"
+                      type="button"
+                      :data-testid="`bran-draw-toggle-${row.candidateKey}`"
+                      :aria-pressed="Boolean(row.drawn)"
+                      class="inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold transition-colors"
+                      :class="row.drawn
+                        ? 'bg-brand-subtle text-brand hover:bg-brand/15'
+                        : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'"
+                      @click="toggleBranCandidateDrawn(row.candidateKey)">
+                      {{ row.drawn ? '已标注' : '标注' }}
+                    </button>
+                    <button type="button"
+                      class="inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold transition-colors"
+                      :class="isRowEmphasized(row, idx)
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'"
+                      @click="jumpToRow(row); $emit('select-refno', row.refno)">
+                      {{ isBranScenario ? '跳转' : '选中并跳转' }}
+                    </button>
+                  </div>
                 </div>
-                <div v-if="isBranScenario" :title="row.label" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
-                  <span v-if="row.intersects" class="mr-1 inline-flex shrink-0 rounded bg-amber-100 px-1 py-0.5 align-middle text-[10px] font-bold text-amber-700">相交?</span>
-                  {{ row.label || '-' }}
-                </div>
-                <div class="flex flex-wrap items-center justify-end gap-1 px-2.5 py-2" :class="isBranScenario ? 'w-[150px]' : 'flex-1'">
-                  <button v-if="row.candidateKey" type="button" :data-testid="`bran-refine-${row.candidateKey}`"
-                    :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading"
-                    class="rounded-md border border-gray-200 px-2 py-1.5 text-[11px] disabled:opacity-50"
-                    @click="refineBranCandidate(row.candidateKey)">
-                    {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}
-                  </button>
-                  <button v-if="isBranScenario && row.candidateKey"
-                    type="button"
-                    :data-testid="`bran-draw-toggle-${row.candidateKey}`"
-                    :aria-pressed="Boolean(row.drawn)"
-                    class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors"
-                    :class="row.drawn
-                      ? 'bg-brand-subtle text-brand hover:bg-brand/15'
-                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
-                    @click="toggleBranCandidateDrawn(row.candidateKey)">
-                    <Ruler class="h-3 w-3" />
-                    {{ row.drawn ? '已标注' : '标注' }}
-                  </button>
-                  <button type="button"
-                    class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors"
-                    :class="isRowEmphasized(row, idx)
-                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
-                    @click="jumpToRow(row); $emit('select-refno', row.refno)">
-                    {{ isBranScenario ? '跳转' : '选中并跳转' }}
-                    <MousePointerClick class="h-3 w-3" />
-                  </button>
+                <div v-if="isBranScenario" :title="row.label" class="mt-1 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+                  <span class="shrink-0 font-mono text-[11px] tabular-nums"
+                    :title="row.intersects ? '包围盒估算相交——盒比实体大可能是假相交，点「精算」拿真实净距' : undefined"
+                    :class="row.intersects
+                      ? 'font-semibold text-amber-600'
+                      : isRowEmphasized(row, idx) ? 'font-semibold text-brand' : 'font-semibold text-foreground'">
+                    {{ formatDistanceMm(row.distanceMm) }}
+                  </span>
+                  <span v-if="row.intersects" class="inline-flex shrink-0 rounded bg-amber-100 px-1 py-0.5 align-middle text-[10px] font-bold text-amber-700">相交?</span>
+                  <span class="truncate">{{ row.label || '-' }}</span>
                 </div>
               </div>
             </div>
@@ -426,7 +430,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { Check, ChevronDown, Loader2, MousePointerClick, Ruler } from 'lucide-vue-next';
+import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
@@ -453,6 +457,8 @@ const {
   applyCurrentSelection: applyComputeSelection,
   autoFollowSelection,
   setAutoFollowSelection,
+  suppressAutoFollowOnce,
+  runWithPreservedResults,
   branRangeDistance,
   submitScenario,
   refineBranCandidate,
@@ -528,7 +534,7 @@ async function showBranRange() {
       rangeError.value = spatialQuery.error.value || '范围内没有构件';
       return;
     }
-    await spatialQuery.loadResults({ onlyUnloaded: true, flyTo: true });
+    await runWithPreservedResults(() => spatialQuery.loadResults({ onlyUnloaded: true, flyTo: true }));
     spatialQuery.isolateResults([bran]);
     // 范围显示按它自己的命中集隔离了——「X 光 / 仅显示」的保实体集已失效，按钮归位
     branInspectMode.value = '';
@@ -568,8 +574,8 @@ function branInspectKeepRefnos(): string[] {
 
 async function applyBranInspect(spatialQuery: ReturnType<typeof import('@/composables/useSpatialQuery').useSpatialQuery>, mode: BranInspectMode, keep: string[]) {
   const seq = ++branInspectSeq;
-  // 目标 refno 光有「可见」标记但几何没装是画不出来的（柱子/墙/楼板常见这种情况）——先补装再隔离
-  await spatialQuery.ensureRefnosLoaded(keep).catch(() => null);
+  // 目标 refno 光有「可见」标记但几何没装是画不出来的（柱子/墙/楼板常见这种情况）——先补装再隔离，且补装期间保留当前净距结果
+  await runWithPreservedResults(() => spatialQuery.ensureRefnosLoaded(keep)).catch(() => null);
   if (seq !== branInspectSeq || branInspectMode.value !== mode) return;
   if (mode === 'xray') {
     spatialQuery.isolateRefnos(keep);
@@ -638,19 +644,23 @@ function hoverBranRowDimension(row: SpatialComputeResultRow, on: boolean) {
 
 /** 行「跳转」：选中目标并飞过去——BRAN 净距行框住整条净距段（管表面点 + 目标点，周围留 500mm），其余行退回构件包围盒。 */
 async function jumpToRow(row: SpatialComputeResultRow) {
-  const { resolveSceneWorldTransform } = await import('@/composables/useSpatialQuery');
+  const { resolveSceneWorldTransform, useSpatialQuery } = await import('@/composables/useSpatialQuery');
   const viewer = viewerContext.viewerRef.value;
   if (!viewer?.scene) return;
-  selectionStore.setSelectedRefno?.(row.refno);
+  suppressAutoFollowOnce(row.refno);
+  selectionStore.setSelectedRefno(row.refno);
+  await runWithPreservedResults(() => useSpatialQuery().ensureRefnosLoaded([row.refno])).catch(() => null);
   viewer.scene.ensureRefnos([row.refno]);
   viewer.scene.setObjectsVisible([row.refno], true);
   viewer.scene.setObjectsSelected([row.refno], true);
   let aabb: number[] | null = null;
-  const match = isBranScenario.value && row.candidateKey
-    ? computeState.value.annotationCandidates.find(item => branCandidateKey(item.targetGroup, item.candidate) === row.candidateKey)
+  const candidate = isBranScenario.value && row.candidateKey
+    ? (computeState.value.annotationCandidates.find(item => branCandidateKey(item.targetGroup, item.candidate) === row.candidateKey)?.candidate
+      ?? computeState.value.branGroups.flatMap(group => group.candidates.map(item => ({ item, key: branCandidateKey(group.group, item) })))
+        .find(entry => entry.key === row.candidateKey)?.item)
     : undefined;
-  const start = match?.candidate.annotation?.start_point;
-  const end = match?.candidate.annotation?.end_point;
+  const start = candidate?.annotation?.start_point;
+  const end = candidate?.annotation?.end_point;
   const nums = [start?.x, start?.y, start?.z, end?.x, end?.y, end?.z].map(Number);
   if (nums.every(Number.isFinite)) {
     const m = 500;

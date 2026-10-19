@@ -2902,6 +2902,7 @@ async function initializeDimensionViewport(): Promise<void> {
         if (prev.length > 0) {
           compat.scene.setObjectsSelected(prev, false);
         }
+        spatialComputeStore.suppressAutoFollowOnce(branTargetRefno);
         selectionStore.setSelectedRefno(branTargetRefno);
         compat.scene.ensureRefnos([branTargetRefno]);
         compat.scene.setObjectsSelected([branTargetRefno], true);
@@ -3675,8 +3676,10 @@ onMounted(async () => {
     loadedRefnos: string[],
   ) => {
     activeDbno = _dbno;
-    clearBranClearanceAnnotations();
-    spatialComputeStore.handleInstancesLoaded();
+    // 结果保得住就不清三维标注：补装几何（runWithPreservedResults）或有精算记录/手动模式的
+    // 增量加载只是场景多了构件，源 BRAN 的净距结果与标注都没失效——清了会出现「行已标注、屏上没线」。
+    const branResultsPreserved = spatialComputeStore.handleInstancesLoaded();
+    if (!branResultsPreserved) clearBranClearanceAnnotations();
     // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
     (compat as any).__dtxLastLoadedDbno = _dbno;
     (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
@@ -3803,12 +3806,11 @@ onMounted(async () => {
   offBranClearanceWatch = watch(
     () => ({
       loading: spatialComputeStore.scenarios.branNearestClearance.loading,
-      error: spatialComputeStore.scenarios.branNearestClearance.error,
       responseText: spatialComputeStore.scenarios.branNearestClearance.responseText,
       candidates: spatialComputeStore.scenarios.branNearestClearance.annotationCandidates.slice(),
     }),
-    ({ loading, error, candidates }) => {
-      if (loading || error || candidates.length === 0) {
+    ({ loading, candidates }) => {
+      if (loading || candidates.length === 0) {
         clearBranClearanceAnnotations();
         return;
       }

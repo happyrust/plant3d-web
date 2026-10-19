@@ -285,6 +285,52 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.currentScenarioState.value.refiningKeys).toEqual([]);
   });
 
+  it('accepts true mesh intersection (witness=aabb-overlap-center with intersects=true, distance_mm=0) and re-sorts group candidates by refined distance (D2a)', async () => {
+    const intersectResponse = {
+      ...surfaceResponse(),
+      result: {
+        distance_mm: 0,
+        intersects: true,
+        witness: 'aabb-overlap-center',
+        source_leaf_refno: '24381/145020',
+        source_point: { x: 50, y: 50, z: 50 },
+        target_point: { x: 50, y: 50, z: 50 },
+      },
+    };
+    const farSurfaceResponse = {
+      ...surfaceResponse(),
+      result: {
+        distance_mm: 2950,
+        intersects: false,
+        witness: 'closest-points',
+        source_leaf_refno: '24381/145019',
+        source_point: { x: 0, y: 0, z: 0 },
+        target_point: { x: 0, y: 2950, z: 0 },
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => freshNounGroupedResponse())
+      .mockImplementationOnce(async () => new Response(JSON.stringify(intersectResponse), { status: 200 }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify(farSurfaceResponse), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    await store.submitScenario();
+
+    // COLU:24381_2 精算证实真网格相交：接受 aabb-overlap-center 并保留原线段方向
+    await store.refineBranCandidate('COLU:24381_2');
+    expect(store.currentScenarioState.value.error).toBe('');
+    expect(store.currentScenarioState.value.candidateProvenance['COLU:24381_2']?.method).toBe('surface-to-surface');
+
+    // WALL:24381_1 精算距离变为 2950mm（大于同桶 WALL:24381_11 的 2600mm）→ 桶内按升序重排，24381_11 排到 24381_1 前面
+    await store.refineBranCandidate('WALL:24381_1');
+    const wallRows = store.currentScenarioState.value.resultRows.filter(row => row.targetGroup === 'WALL');
+    expect(wallRows.map(row => [row.refno, row.distanceMm])).toEqual([
+      ['24381_11', 2600],
+      ['24381_1', 2950],
+    ]);
+    expect(store.currentScenarioState.value.annotationCandidates.find(item => item.targetGroup === 'WALL')?.index).toBe(1);
+  });
+
   it.each(['placeholder', 'invalid-distance', 'invalid-point', 'too-large-error', 'no-result'])('retains estimates when refinement returns %s', async (reason) => {
     const response = surfaceResponse();
     if (reason === 'placeholder') response.result.witness = 'aabb-overlap-center';
@@ -824,7 +870,7 @@ describe('useSpatialCompute 跟随选中自动计算（autoFollowSelection）', 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('新批次实例加载使结果失效：自动模式补一次重查，手动模式只清不查', async () => {
+  it('新批次实例加载使结果失效：自动模式静默重刷（锚定 queriedSourceRefno），手动模式/有精算记录保留', async () => {
     const fetchMock = stubAutoFetch();
     const selected = await selectedRefnoProbe();
     const store = makeStore({
@@ -836,18 +882,92 @@ describe('useSpatialCompute 跟随选中自动计算（autoFollowSelection）', 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
 
-    // 范围显示 / 按需加载新实例 → 结果作废；自动模式下选中仍是 BRAN → 防抖后重查
-    store.handleInstancesLoaded();
+    // 无关增量加载：自动 + 全估算 → 重置后按「产生结果的 BRAN」重刷——
+    // 当前选中是目标构件（非 BRAN）时按 selectedRefno 解析会静默放弃、结果永久丢失
+    selected.value = 'wall_1';
+    await new Promise(resolve => setTimeout(resolve, 10)); // 等选中 watcher 冲刷完再触发加载回调
+    expect(store.handleInstancesLoaded()).toBe(false);
     expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(0);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('source_refno=24381%2F145018');
     await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
 
-    // 关掉自动：失效后不再代算
+    // 手动模式 + 已有结果：增量加载保留成果（spec T2：切 BRAN / 执行计算 / 切项目才重置）
     store.setAutoFollowSelection(false);
-    store.handleInstancesLoaded();
+    expect(store.handleInstancesLoaded()).toBe(true);
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(0);
+    expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0);
+  });
+
+  it('自动模式 + 已有精算记录：增量加载不主动清空（T2 spec）', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno.startsWith('pipe') ? '24381_145018' : null),
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
+
+    const state = store.scenarios.branNearestClearance;
+    state.candidateProvenance['WALL:24381_1'] = {
+      method: 'surface-to-surface',
+      accuracyClass: 'exact-surface',
+      status: 'current',
+    };
+    expect(store.handleInstancesLoaded()).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(state.resultRows.length).toBeGreaterThan(0);
+    expect(state.candidateProvenance['WALL:24381_1']).toBeDefined();
+  });
+
+  it('suppressAutoFollowOnce 连已排队的防抖提交一并取消', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno.startsWith('pipe') ? '24381_145018' : null),
+      autoFollowDebounceMs: 30,
+    });
+    store.setAutoFollowSelection(true);
+
+    // 选中 pipe_a 已排队防抖提交 → 武装 suppress 再选目标：排队提交被取消、suppress 消费本次
+    selected.value = 'pipe_a';
+    store.suppressAutoFollowOnce('wall_1');
+    selected.value = 'wall_1';
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('runWithPreservedResults 期间触发 handleInstancesLoaded 不清空当前结果（F2），suppressAutoFollowOnce 抑制单次跳转选中重查（D1a）', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno === 'pipe_neighbor' ? '24381_999999' : '24381_145018'),
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0);
+
+    // 按需补装几何期间触发 handleInstancesLoaded：结果保留、不重发请求
+    await store.runWithPreservedResults(async () => {
+      store.handleInstancesLoaded();
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0);
+
+    // 结果行跳转到邻管管件 pipe_neighbor：suppressAutoFollowOnce 抑制本次切换，源 BRAN 保持 24381_145018
+    store.suppressAutoFollowOnce('pipe_neighbor');
+    selected.value = 'pipe_neighbor';
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(store.scenarios.branNearestClearance.queriedSourceRefno).toBe('24381_145018');
   });
 });
 

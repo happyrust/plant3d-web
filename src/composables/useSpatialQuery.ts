@@ -2512,7 +2512,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   function isolateResults(keepRefnos: string[] = []) {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
-    const keep = uniqStrings([...withCompanions(resolveBatchRefnos(), 'all'), ...keepRefnos]);
+    const extraKeep = keepRefnos.length > 0 ? withCompanions(uniqStrings(keepRefnos), 'given', []) : [];
+    const keep = uniqStrings([...withCompanions(resolveBatchRefnos(), 'all'), ...extraKeep]);
     if (!viewer || keep.length === 0) return;
     snapshotVisibility(viewer, keep);
     const all = viewer.scene.objectIds.slice();
