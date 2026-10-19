@@ -222,3 +222,29 @@
 | 单测 | 面板 14/14（新增 2 条：算完必飞 / 失败不飞，断言 flyTo 的 aabb 与 refnos 集合）；五文件 **131/131**；编辑器诊断 0 错 0 警 |
 
 本地环境缺口（非前端缺陷，与 §8 同源）：源 BRAN 的实例几何本地装不出来（`ensureRefnosLoaded` 挂住；`model/records` 抽查有 refno `total=0`），本地视口里只有「显示范围内模型」装进来的目标几何，源管本身与三维标注线看不到；后端正常时源管与标注在同一视野内。`:8022` 也会瞬时 refused（浏览器侧报 `Failed to fetch`），本地复测前先确认端口可用。
+
+### 十一、上面那条「装不出源管几何」的根因（2026-10-19 补）
+
+**不是前端，是本地后端 AMS 自己崩**：`plant3d-web-deploy-0.2.2-20261015/backend/aios-database.exe serve` 在启动后的目录闭包计算阶段内存分配失败直接 abort——
+
+- 崩溃现场 `backend/logs/20261019-123638.stderr.log`：`memory allocation of 1909248 bytes failed`（Rust 默认分配器遇 OOM 直接 abort），前一行正是 `[cata_closure] 闭包缺失明细`；
+- 另一次启动失败是 `Error: SurrealDB 连接失败（ws://localhost:8009）… 目标计算机积极拒绝`（存储服务没起来）；
+- 后果：8022 反复起停（12:29→12:35→12:36→12:42→12:48→12:51 每次新 stamp），页面侧就表现为 `gen-model 请求失败 … Failed to fetch`、实例几何装不进来、源管看不见；
+- 机器不是内存不够：总 63.1GB、空闲 15.4GB；崩的是发布版 0.1.40 启动时闭包计算的峰值。
+
+排除前端嫌疑（服务健康时的实测）：
+
+| 探针 | 结果 |
+|---|---|
+| `POST /api/v1/model/records`（源 BRAN `24384_22726` 作祖先） | **9 条 / 61ms** |
+| `GET /api/v1/meshes/{hash}.mesh` × 8 | 全部 **200**，0–3ms |
+| 页面内 `spatialQuery.ensureRefnosLoaded([bran])` | **122ms resolved**（先前 15s 超时只是撞上服务掉线） |
+| 另一实例 `:8024`（`D:\Rust\target\release\aios-database.exe`，10-17 起一直活着，388MB） | 同样 9 条 records / 10ms；nearest-clearance 76ms / 6 组 |
+
+服务活着时的 T1 端到端复测（`:3101` + `:8022`，真 Chrome）：
+
+- 点「执行计算并定位」→ `GET /api/v1/spatial/nearest-clearance?source_refno=24384%2F22726&…` **200**；面板 **21 行 / 7 标注 / error 空**；
+- 相机 target 由默认 `[-22,1,29]` 移到 **`[-17128,8911,2300]`**——正落在净距区包围盒（x −20982…−15000、y 6593…9273、z 2200）之内，即「源管道 + 最近目标」；
+- 画面：源管黄色高亮（选中）、红色净距线与标签齐全（SCTN 1206mm / STWALL 388mm / FLOOR 588mm / GENSEC 1532mm / WALL 3661mm）——验收口径「看到我的目标管道 + 周边最近物项 + 尺寸测量标注」达成。
+
+本地复测建议：先 `netstat` 确认 8022 在监听（掉了就等自启或手起 `plant3d-web-deploy-0.2.2-20261015/backend/Start-AMS.ps1`）；要稳的档位可用 `:8024`（把 dev 的 `VITE_GEN_MODEL_V1_BASE_URL` 指过去），注意它与 8022 档位数据略有差异（nearest-clearance 6 组 vs 7 组）。
