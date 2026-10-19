@@ -227,7 +227,7 @@
 
           <!-- 范围显示：沿当前 BRAN 中心线按半径圈周边构件 → 加载未加载的 → 命中实体、其余半透明（空间查询抽屉同一管线） -->
           <div v-if="isBranScenario" class="mt-3" data-testid="bran-range-block">
-            <div class="flex flex-wrap items-center gap-1.5">
+            <div class="mt-1.5 flex items-center gap-1.5">
               <span class="shrink-0 text-xs font-semibold text-muted-foreground">范围显示</span>
               <div class="flex h-9 w-24 shrink-0 items-center rounded-[10px] border border-gray-200 bg-white px-2">
                 <input v-model="rangeDistance"
@@ -238,6 +238,8 @@
                   class="w-full bg-transparent font-mono text-[12px] outline-none" />
                 <span class="text-[11px] text-muted-foreground">mm</span>
               </div>
+            </div>
+            <div class="mt-1.5 flex gap-1.5">
               <button type="button"
                 :disabled="rangeBusy"
                 class="h-9 min-w-[116px] flex-1 whitespace-nowrap rounded-[10px] bg-primary px-2.5 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
