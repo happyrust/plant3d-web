@@ -169,3 +169,18 @@
 - 回归：`useSpatialCompute.test.ts` 38/38（新增精算守卫、锚定重查、防抖取消三用例）；五文件 **139/139**；type-check 0 新增；ESLint 干净。
 
 注意：`externalRegistry.recordsBySource.get('bran-clearance')` 是 **Array**（非 Map），页面探针统计尺寸要用 `Array.isArray(rec) ? rec.length : rec.size`，误用会读出假的 0。
+
+## 八、本地 0.1.40 栈复测「范围显示」（2026-10-19，release 0.2.7 之后）
+
+本地栈 `3100/3101/8022` 全为 `0.1.40`（发布的是 0.1.41 在远端服务器），源 BRAN `24384_22726`。硬刷新后自动链路恢复 **39 行 / 15 条标注**（本地数据与 :8024 档不同，行数/标注数随行）。
+
+| 步骤 | 实测 |
+|---|---|
+| 「显示范围内模型」r3000 | `GET /api/v1/spatial/nearby?refno=24384/22726&radius=3000&source_mode=bran_centerline&limit=500` 回 **265 项**（15 类 noun：UNSET 44 / PANE 54 / FTUB 81 / BEND 26 / SCTN 13 / STRT 11 / FITT 11 / WALL 7 / ATTA 7 / FLOOR 4 / ELBO 2 / WELD 2 / STWALL 1 / BOX 1 / TAPE 1），跨 1112/7997/7999/8000 四库 |
+| 补装几何 | 场景 `130 → 418` 对象（新增 288）；`loadResults onlyUnloaded + flyTo` 生效 |
+| 隔离 | **297 实体 / 121 X-Ray**——范围内命中+源 BRAN 同伴实体，其余半透明 |
+| 结果保全 | 净距标注 `15→15`、结果行 `39→39` 全程不丢（`runWithPreservedResults` + D1/D2 守卫生效） |
+| 「恢复」 | `418/418` 全实体、0 X-Ray、0 隐藏；标注与结果行保持 |
+| 错误透出 | 「有 35 个模型加载失败」——`model/records` 抽查证实 UNSET `17496_105912` 等 refno 在本地档 `total=0` 未生成，属**本地数据缺口**而非前端缺陷；所有 265 个查询目标都在场景中有可见对象（真实几何或 AABB 代理） |
+
+插曲：本次开页时 8022 瞬时 refused（服务尚在启动），页面拿到空数据；服务就绪后刷新即恢复——本地测试前先确认三端口都 OK。

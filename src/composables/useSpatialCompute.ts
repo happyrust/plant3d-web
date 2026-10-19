@@ -787,7 +787,12 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
    * 避免点击相邻管件目标行时把源 BRAN 切走并冲掉当前结果表。
    */
   function suppressAutoFollowOnce(refno: string) {
-    suppressedAutoFollowRefno = normalizeBranComputeRefno(refno);
+    const normalized = normalizeBranComputeRefno(refno);
+    // 已经是当前选中 → 这次「跳转」不会触发选中 watcher，这枚武装会悬空：之后用户再手动选中
+    // 同一构件时会被悬空武装吞掉一次跟随。此时不武装（本来也不会触发 watcher）。
+    if (normalizeBranComputeRefno(selection.selectedRefno.value ?? '') !== normalized) {
+      suppressedAutoFollowRefno = normalized;
+    }
     // 已排队的防抖提交也要取消——否则武装 suppress 前那次选中的提交仍会在防抖窗内把 BRAN 切走
     clearAutoFollowTimer();
   }
@@ -867,6 +872,16 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     return false;
   }
 
+  /**
+   * 换模型（dbno 变了）：旧 BRAN 净距结果、标注候选与三维标注都属于另一个模型，必须一并作废。
+   * 与 `handleInstancesLoaded()` 的区别：后者是**同一模型内**的增量补装（结果仍然有效、可静默重刷）；
+   * 换模型时旧 BRAN 在新模型里未必存在——只作废、不自动重查。
+   */
+  function handleModelChanged(): boolean {
+    resetScenario('branNearestClearance');
+    return false;
+  }
+
   const onProjectChanged = () => {
     autoQueriedBranRefno = '';
     if (persistence.hasPersistenceContext.value) return;
@@ -903,6 +918,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     suppressAutoFollowOnce,
     runWithPreservedResults,
     handleInstancesLoaded,
+    handleModelChanged,
     branRangeDistance,
     submitScenario,
     refineBranCandidate,

@@ -969,6 +969,39 @@ describe('useSpatialCompute 跟随选中自动计算（autoFollowSelection）', 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(store.scenarios.branNearestClearance.queriedSourceRefno).toBe('24381_145018');
   });
+
+  it('换模型：旧 BRAN 净距结果与标注候选一并作废、不按旧 BRAN 自动重查（P1）', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno.startsWith('pipe') ? '24381_145018' : null),
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
+
+    const state = store.scenarios.branNearestClearance;
+    state.candidateProvenance['WALL:24381_1'] = {
+      method: 'surface-to-surface',
+      accuracyClass: 'exact-surface',
+      status: 'current',
+    };
+
+    // 换模型（dbno 变了）：旧结果属于另一个模型 → 硬作废，不按旧 BRAN 自动重查
+    expect(store.handleModelChanged()).toBe(false);
+    expect(state.resultRows).toEqual([]);
+    expect(state.annotationCandidates).toEqual([]);
+    expect(state.branGroups).toEqual([]);
+    expect(state.drawnCandidateKeys).toEqual([]);
+    expect(state.candidateProvenance).toEqual({});
+    expect(state.queriedSourceRefno).toBe('');
+
+    // 不重发请求：旧 BRAN 在新模型里未必存在
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 /**

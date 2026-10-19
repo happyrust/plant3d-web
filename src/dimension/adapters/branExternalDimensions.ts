@@ -94,6 +94,15 @@ export function branClearanceToExternalDimensions(
       skipped.push({ id, reason: 'Missing finite annotation start/end point' });
       continue;
     }
+    // 精算确认的真相交（surface-to-surface + intersects）：两点重合、没有可画的净距线。
+    // 画出来的是包围盒那一段、线上写 0，会被读成「净距 0mm」而不是「相交」——
+    // 按 legacy clearance 口径（clearanceExternalDimensions.ts）进 skipped，由列表 UI 的
+    // 「相交?」徽标用文字表达。
+    // 未精算的包围盒假相交仍照旧画估算线（0mm + 徽标提示可能假相交），口径不变。
+    if (item.candidate.intersects === true && item.provenance?.method === 'surface-to-surface') {
+      skipped.push({ id, reason: 'Confirmed intersecting pair has no drawable clearance line' });
+      continue;
+    }
     const approximate = !item.provenance || item.provenance.accuracyClass.startsWith('approximate-');
     const labelMm = Number(item.candidate.annotation?.label_mm);
     records.push({

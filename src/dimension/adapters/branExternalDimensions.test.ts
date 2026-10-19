@@ -139,6 +139,32 @@ describe('branClearanceToExternalDimensions', () => {
       expect.objectContaining({ id: 'bran-clearance:column:bad:1' }),
     ]);
   });
+
+  it('精算确认的真相交不画净距线（进 skipped，由列表的「相交?」徽标表达）', () => {
+    const result = branClearanceToExternalDimensions([{
+      targetGroup: 'WALL', index: 0,
+      provenance: { method: 'surface-to-surface', accuracyClass: 'exact-surface' },
+      candidate: { refno: '24381_903', noun: 'WALL', distance_mm: 0, intersects: true,
+        annotation: { start_point: { x: 0, y: 0, z: 0 }, end_point: { x: 0, y: 0, z: 0 }, label_mm: 0 } },
+    }], point => point);
+
+    // 线上写 0 会被读成「净距 0mm」而不是「相交」→ 不出三维尺寸线
+    expect(result.records).toEqual([]);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ id: 'bran-clearance:wall:24381_903:0' }),
+    ]);
+  });
+
+  it('未精算的包围盒假相交仍照旧画估算线（0mm + 「相交?」徽标提示）', () => {
+    const result = branClearanceToExternalDimensions([{
+      targetGroup: 'WALL', index: 0,
+      candidate: { refno: '24381_904', noun: 'WALL', distance_mm: 0, intersects: true,
+        annotation: { start_point: { x: 0, y: 0, z: 0 }, end_point: { x: 0, y: 0, z: 0 }, label_mm: 0 } },
+    }], point => point);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.skipped).toEqual([]);
+  });
 });
 
 describe('branClearanceTargetRefno', () => {

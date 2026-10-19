@@ -2034,7 +2034,7 @@ function syncBranClearanceDimensions(): void {
   system.replaceExternalSource('bran-clearance', result.records);
   if (result.skipped.length > 0) {
     console.warn(
-      '[bran-clearance] skipped incomplete dimension candidates',
+      '[bran-clearance] skipped dimension candidates（缺端点 / 精算确认相交，无可画净距线）',
       result.skipped,
     );
   }
@@ -3675,11 +3675,19 @@ onMounted(async () => {
     _dbno: number,
     loadedRefnos: string[],
   ) => {
+    // 换模型 = dbno 变了：旧 BRAN 净距结果与三维标注指向另一个模型，必须一并作废
+    // （只作废、不自动重查——旧 BRAN 在新模型里未必存在；同模型内的增量补装走下面的分支）
+    const dbnoChanged = activeDbno !== null && activeDbno !== _dbno;
     activeDbno = _dbno;
-    // 结果保得住就不清三维标注：补装几何（runWithPreservedResults）或有精算记录/手动模式的
-    // 增量加载只是场景多了构件，源 BRAN 的净距结果与标注都没失效——清了会出现「行已标注、屏上没线」。
-    const branResultsPreserved = spatialComputeStore.handleInstancesLoaded();
-    if (!branResultsPreserved) clearBranClearanceAnnotations();
+    if (dbnoChanged) {
+      spatialComputeStore.handleModelChanged();
+      clearBranClearanceAnnotations();
+    } else {
+      // 结果保得住就不清三维标注：补装几何（runWithPreservedResults）或有精算记录/手动模式的
+      // 增量加载只是场景多了构件，源 BRAN 的净距结果与标注都没失效——清了会出现「行已标注、屏上没线」。
+      const branResultsPreserved = spatialComputeStore.handleInstancesLoaded();
+      if (!branResultsPreserved) clearBranClearanceAnnotations();
+    }
     // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
     (compat as any).__dtxLastLoadedDbno = _dbno;
     (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
