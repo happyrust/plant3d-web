@@ -199,6 +199,14 @@
 
 测试：`useSpatialCompute.test.ts` 40/40（新增：类别分组不发 `target_nouns`、留空回全类型、自定义白名单原样发出；参数断言加 `target_nouns`）；type-check 0 新增；ESLint 干净。
 
+### 白名单边界复测（同环境，fetch 钩子直抓请求行）
+
+- 默认白名单实发：`target_nouns=WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC`（`scope=all_loaded` 按当前已加载 130 对象计）→ 5 facet（PANE77/WALL8/STWALL2/SCTN28/FLOOR4）、14 行 / 5 标注——GWALL/GENSEC/COLU 在已加载范围内无命中不出桶；
+- 改 `WALL,FLOOR` → 请求 `target_nouns=WALL,FLOOR`，facet 恰为 2（6 行 / 2 标注）；
+- 清空白名单 → 请求不带 `target_nouns`，15 facet 全类型回归（UNSET/FTUB/BEND/… 全部回来，显式 opt-out 口径成立）；
+- 快照持久化：`inputs.targetNouns='WALL,FLOOR'` 落 localStorage，硬刷新后输入框恢复该值；
+- 自动跟随与手动共用 `submitScenario`，参数一致（同 BRAN 去重不重发属既有口径）。
+
 ## 十、T1 算完定位（源管道 + 最近目标）（2026-10-19）
 
 起因：算完只有表格，相机不动——用户看不到「我的目标管道 + 周边最近物项 + 尺寸标注」。
