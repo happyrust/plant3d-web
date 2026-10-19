@@ -897,7 +897,10 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
   const onProjectChanged = () => {
     autoQueriedBranRefno = '';
     if (persistence.hasPersistenceContext.value) return;
+    // 换模型（工程路径变了，含 dbnum 目录）：BRAN 净距结果属于旧模型 → 硬作废、不自动重查
+    handleModelChanged();
     for (const k of Object.keys(scenarios) as SpatialComputeScenarioKey[]) {
+      if (k === 'branNearestClearance') continue; // 上面已作废
       requestTokens[k] = ++nextRequestToken;
       Object.assign(scenarios[k], createScenarioState(k));
     }

@@ -248,3 +248,51 @@
 - 画面：源管黄色高亮（选中）、红色净距线与标签齐全（SCTN 1206mm / STWALL 388mm / FLOOR 588mm / GENSEC 1532mm / WALL 3661mm）——验收口径「看到我的目标管道 + 周边最近物项 + 尺寸测量标注」达成。
 
 本地复测建议：先 `netstat` 确认 8022 在监听（掉了就等自启或手起 `plant3d-web-deploy-0.2.2-20261015/backend/Start-AMS.ps1`）；要稳的档位可用 `:8024`（把 dev 的 `VITE_GEN_MODEL_V1_BASE_URL` 指过去），注意它与 8022 档位数据略有差异（nearest-clearance 6 组 vs 7 组）。
+
+### 十二、T2「算完自动隔离」+ 定位/结果两处真缺陷的定位与修复（2026-10-19）
+
+#### 12.1 T2：算完自动隔离（源管 + 最近目标实体，其余半透明）
+
+- `SpatialComputePanel.vue`：`runComputeScenario()` 在查询成功后调用 `void autoIsolateAfterCompute()`（后台、不阻塞定位）；
+  保留集 = 源 BRAN + 本次画出的最近目标（`branInspectKeepRefnos()`），隔离复用既有管线 `spatialQuery.isolateRefnos(keep)`
+  （`useSpatialQuery.ts` L2618，BRAN 直管经 `withCompanions` 一并留在实体侧）；可逆——面板既有「退出 X 光」按钮复原；
+  候选集合变化时按当前模式重放。
+- 单测：面板 15/15（新增「算完自动隔离」与「查询失败不隔离」两条）。
+
+#### 12.2 缺陷①：dbno 变了就作废结果 → 刚算完的结果被**静默丢掉**（P1 引入）
+
+- 现象：查询 200、相机也动了，但面板 `rows=0 / candidates=0 / error=''`——结果没了且**不报错**。
+- 根因：`submitScenario()` 有 `if (requestTokens[key] !== token) return;`（响应被顶掉就丢弃）。P1 让「dbno 变了」走 `handleModelChanged()` → `resetScenario()` → 顶掉 token。
+  而回调里的 `_dbno` 是**这批实例属于哪个库**，不是「用户换模型」的信号：一个工程多个库（MDB /ALL）时，
+  按需补装别的库的构件同样带另一个 dbno 过来 → 误判成换模型 → 把刚算完的结果丢掉。
+- 修复：`ViewerPanel.vue` 的 `__dtxAfterInstancesLoaded` 不再按 dbno 作废，统一走「增量补装」分支（`handleInstancesLoaded()` → 结果保留、标注静默重刷）；
+  真正的「换模型」= 工程路径变了（含 dbnum 目录）→ `modelProjectChanged` → `useSpatialCompute.onProjectChanged` → `handleModelChanged()` 硬作废。
+- 复测：查询 200 / 1 次请求 → 面板 **14 行 / 5 标注 / 5 facet（119 候选）/ error 空**；DOM 行 14 ✓（此前 0）。
+
+#### 12.3 缺陷②：T1 定位用 E3D 毫米坐标当相机空间 → 算完眼前一片空白
+
+- 现象：算完后视口纯灰（截图 17,922 字节），但模型其实在渲染。
+- 实机量到的三件事：
+  1. 相机被飞到 `[-740,21019,19644]`——**E3D 毫米**坐标；而相机在 DTX **设计空间（米）**，`near/far = 0.1/1000` → 内容全被远平面裁掉；
+  2. DTX 全局变换（mm→m + 原点重定位）是**模型进场景之后**才套的：定位那一刻矩阵还是单位阵（随后变成 `0.001` + 平移 `(6.4742,-6.5346,-2.37)`），
+     模型随后被搬进设计空间，相机就差 1000 倍 + 平移 → 失效；
+  3. `viewer.scene.getAABB([多个 refno])` 只回**其中一个**对象的盒；还没装进场景的对象回的是原点附近几十毫米的小盒（不是 null）；
+     找不到对象时回的是**当前已加载几何的整体包围盒**。
+- 修复（`SpatialComputePanel.vue` `focusSourceBran()`）：定位框只用**本次算出的净距段端点**（管表面点 + 目标点，E3D mm，±1500mm 余量）——
+  这正是「我那根管道被量的那一截 + 紧邻的目标」；世界变换没套上时端点原样用（模型还在毫米坐标里），
+  变换套上后换算到设计空间并**补一次定位**（最多等 ~6s）。
+- 复测：`flyTo` 两次——先 `[-23045,5237,-500, -14123,10035,4100]`（毫米，此时对），变换套上后 `[-7.43,-2.97,-2.7, 1.49,1.83,1.9]`（设计空间）；
+  相机 `[-37,13,58] → [15,13,17]`，target `[-3,-1,0]`；截图 **171,265 字节**（模型 + 源管实体 + 红色净距线 + 标签 SCTN Φ661mm / STWALL Φ388mm / FLOOR Φ1188mm）。
+
+#### 12.4 本地环境修复（这次卡了两轮的真正拦路虎）
+
+- **SurrealDB（:8009）自己 OOM 崩了**（`memory allocation of 1572864 bytes failed`）→ AMS（:8022）挂死（CLOSE_WAIT 堆积、健康检查超时）→ 页面侧表现为「装不出源管几何」「Failed to fetch」。
+- 修复顺序：先 `gen-model\scripts\Start-Surreal8009.ps1`（SurrealDB 2.1.4，rocksdb 目录 `.surreal/ams-8009`，:8009 起监听），再重启 AMS
+  （`taskkill /PID <ams> /T /F` → `Start-AMS.ps1 -StoreMode rocksdb -NoBrowser -TimeoutSeconds 240`）。注意 `taskkill /T` 子进程（WerFault）杀不掉时返回 255，
+  别用 `&&` 串后续命令。
+- 修好后：:3101 200、:8022 health 200、约 30GB 空闲、0 个 chrome.exe。
+
+#### 12.5 本轮测试与提交
+
+- 五文件回归 **140/140 通过**（`useSpatialCompute` / `SpatialComputePanel` / `useSpatialQuery` / `branExternalDimensions` / `useDtxTools.objectMeasure`）；编辑器诊断 0 错 0 警。
+- 改动文件：`SpatialComputePanel.vue`、`SpatialComputePanel.test.ts`、`useSpatialCompute.ts`、`useSpatialCompute.test.ts`、`ViewerPanel.vue`、本 README。

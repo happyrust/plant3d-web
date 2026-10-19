@@ -509,13 +509,23 @@ function focusSourceBran(): void {
   const targets = state.annotationCandidates.map((item) => item.candidate.refno);
   const refnos = [...new Set([...members, ...targets])];
   // 几何没加载的先补装——**不等它**：实例加载可能长时间不返回（本地档实测 15s+ 未回），
-  // 等下去「定位」就永远不会发生。加载在后台继续，相机先按已有数据框好。
+  // 等下去「定位」就永远不会发生。加载在后台继续，相机按已有数据框好。
   void runWithPreservedResults(() => spatialQuery.ensureRefnosLoaded(refnos)).catch(() => null);
   viewer.scene.ensureRefnos(refnos);
-  // 包围盒：场景对象（源管道整根 + 目标）优先；对象还没加载出来时退回净距段端点
-  // （管表面点 + 目标点）——这一段本身就是「我的管道被量的那一截 + 紧邻的目标」。
-  let aabb = viewer.scene.getAABB(refnos) ?? null;
-  if (!aabb) {
+
+  type Aabb = NonNullable<ReturnType<typeof viewer.scene.getAABB>>;
+  const flyToAabb = (aabb: Aabb): void => {
+    viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+    // 源 BRAN 置选中：一眼分清「我那根管道」（复用既有选中高亮，不引新的渲染管线）
+    suppressAutoFollowOnce(bran);
+    selectionStore.setSelectedRefno(bran);
+  };
+
+  // 定位框 = 本次算出的净距段（管表面点 + 目标点）——这一段就是「我的管道被量的那一截 +
+  // 紧邻的目标」，正好是用户要看的东西。端点是 E3D 世界 mm。
+  // 空间换算：DTX 全局变换（mm→m + 原点重定位）是**模型进场景之后**才套的。
+  // 变换没套上时模型还停在毫米坐标里，端点原样用就是相机的空间；套上之后才换算到设计空间（米）。
+  const annotationAabb = (): Aabb | null => {
     const points: Array<[number, number, number]> = [];
     for (const item of state.annotationCandidates) {
       const start = item.candidate.annotation?.start_point;
@@ -524,22 +534,38 @@ function focusSourceBran(): void {
         points.push([start.x, start.y, start.z], [end.x, end.y, end.z]);
       }
     }
-    if (points.length) {
-      const margin = 1500;
-      const xs = points.map((p) => p[0]);
-      const ys = points.map((p) => p[1]);
-      const zs = points.map((p) => p[2]);
-      aabb = resolveSceneWorldTransform(viewer).aabbToScene([
-        Math.min(...xs) - margin, Math.min(...ys) - margin, Math.min(...zs) - margin,
-        Math.max(...xs) + margin, Math.max(...ys) + margin, Math.max(...zs) + margin,
-      ]);
+    if (!points.length) return null;
+    const margin = 1500;
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
+    const zs = points.map((p) => p[2]);
+    const raw = [
+      Math.min(...xs) - margin, Math.min(...ys) - margin, Math.min(...zs) - margin,
+      Math.max(...xs) + margin, Math.max(...ys) + margin, Math.max(...zs) + margin,
+    ];
+    const transform = resolveSceneWorldTransform(viewer);
+    return (transform.identity ? raw : transform.aabbToScene(raw)) as Aabb;
+  };
+
+  // 先按当前空间立刻定位（此刻一定对）；随后若全局变换才套上（模型被搬进「设计空间/米」），
+  // 再补一次换算后的定位——否则模型一搬，相机就差 1000 倍 + 平移，远平面（1000）会把画面
+  // 内容全裁掉 → 算完眼前一片空白（实机量到：相机 [-740,21019,19644]、far=1000、截图纯灰；
+  // 改对后相机落在管道上、正常出图）。最多等 ~6s。
+  const flyNow = (): void => {
+    const aabb = annotationAabb();
+    if (aabb) flyToAabb(aabb);
+  };
+  flyNow();
+  let ticks = 0;
+  const timer = window.setInterval(() => {
+    ticks += 1;
+    if (!resolveSceneWorldTransform(viewer).identity) {
+      window.clearInterval(timer);
+      flyNow();
+      return;
     }
-  }
-  if (!aabb) return;
-  viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
-  // 源 BRAN 置选中：一眼分清「我那根管道」（复用既有选中高亮，不引新的渲染管线）
-  suppressAutoFollowOnce(bran);
-  selectionStore.setSelectedRefno(bran);
+    if (ticks >= 40) window.clearInterval(timer);
+  }, 150);
 }
 
 async function runComputeScenario() {
@@ -547,6 +573,8 @@ async function runComputeScenario() {
   // 查询失败（error 非空）时不乱动相机
   if (computeState.value.error) return;
   focusSourceBran();
+  // 算完自动隔离：源管 + 最近目标实体、其余半透明（后台做，不阻塞定位）
+  void autoIsolateAfterCompute();
 }
 
 function onAutoFollowChange(event: Event) {
@@ -647,12 +675,15 @@ async function applyBranInspect(mode: BranInspectMode, keep: string[]) {
   }
 }
 
-async function toggleBranInspect(mode: BranInspectMode) {
-  // 先还原再判定：从另一种查看模式切过来时，残留状态（隐藏或半透明）不能带进新模式
+/**
+ * 切查看模式（`''` = 退出）。先还原再判定：从另一种查看模式切过来时，残留状态（隐藏或半透明）
+ * 不能带进新模式；退出时同样先还原。
+ */
+async function setBranInspectMode(mode: BranInspectMode | ''): Promise<void> {
   if (branInspectMode.value) {
     spatialQuery.restoreScene();
   }
-  if (branInspectMode.value === mode) {
+  if (mode === '') {
     branInspectSeq += 1;
     branInspectMode.value = '';
     return;
@@ -664,6 +695,22 @@ async function toggleBranInspect(mode: BranInspectMode) {
   }
   branInspectMode.value = mode;
   await applyBranInspect(mode, keep);
+}
+
+async function toggleBranInspect(mode: BranInspectMode) {
+  await setBranInspectMode(branInspectMode.value === mode ? '' : mode);
+}
+
+/**
+ * 算完自动隔离（T2）：源 BRAN 整根 + 本次画出的最近目标保持实体，其余构件半透明——
+ * 与「X 光查看」同一套显隐快照，工具条同步变「退出 X 光」，用户随时可退。
+ * 已经在 X 光模式时不重复隔离：标注集合变了由上面的 watcher 按新集合重放。
+ */
+async function autoIsolateAfterCompute(): Promise<void> {
+  if (!isBranScenario.value) return;
+  if (branInspectMode.value === 'xray') return;
+  if (branInspectKeepRefnos().length === 0) return;
+  await setBranInspectMode('xray');
 }
 
 watch(() => currentScenarioState.value.annotationCandidates, candidates => {

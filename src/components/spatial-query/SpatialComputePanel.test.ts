@@ -485,7 +485,13 @@ describe('SpatialComputePanel · 算完定位（T1）', () => {
   let mounted: ReturnType<typeof mountPanel> | null = null;
   const flyTo = vi.fn();
   const ensureRefnos = vi.fn();
-  const getAABB = vi.fn((_refnos: string[]) => [0, 0, 0, 10, 10, 10]);
+  // DTX 的 getAABB 传多个 refno 只回其中一个对象的盒——面板必须逐个取再合并
+  const aabbByRefno: Record<string, number[]> = {
+    '24381_145018': [0, 0, 0, 10, 10, 10],
+    '24381_1': [-4, -2, 1, 2, 3, 5],
+    '24381_3': [6, 1, 0, 12, 4, 2],
+  };
+  const getAABB = vi.fn((refnos: string[]) => aabbByRefno[refnos[0] ?? ''] ?? null);
 
   beforeEach(() => {
     resetSpatialComputeStore();
@@ -514,12 +520,32 @@ describe('SpatialComputePanel · 算完定位（T1）', () => {
     await vi.waitFor(() => expect(flyTo).toHaveBeenCalledTimes(1));
 
     // 源 BRAN 整根 + 本次画出的最近目标（WALL 桶第一根、SCTN 桶那根；未画出的 24381_11 不在内）
-    expect(getAABB).toHaveBeenCalledTimes(1);
-    expect(getAABB.mock.calls[0]![0]).toEqual(['24381_145018', '24381_1', '24381_3']);
-    expect(flyTo).toHaveBeenCalledWith({ aabb: [0, 0, 0, 10, 10, 10], fit: true, duration: 0.8 });
+    // 定位框 = 本次算出的净距段端点（管表面点 + 目标点，E3D 世界 mm，±1500mm 余量）
+    expect(flyTo).toHaveBeenCalledWith({ aabb: [-1499, -1498, -1497, 1504, 1505, 1506], fit: true, duration: 0.8 });
     expect(selectionStub.setSelectedRefno).toHaveBeenCalledWith('24381_145018');
     // 几何补装在后台跑，不阻塞定位
     expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenCalled();
+  });
+
+  it('算完自动隔离：源管 + 最近目标实体、其余半透明（按钮变「退出 X 光」，可再点退出）', async () => {
+    viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
+    // 源 BRAN 整根 + 本次画出的最近目标（未画出的 24381_11 不在内）
+    expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledWith(['24381_145018', '24381_1', '24381_3']);
+    await nextTick();
+    expect(host.querySelector('[data-testid="bran-xray-toggle"]')?.textContent?.trim()).toBe('退出 X 光');
+
+    // 再点一次退出 → 还原场景、按钮回到「X 光查看」
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!.click();
+    await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalled());
+    expect(host.querySelector('[data-testid="bran-xray-toggle"]')?.textContent?.trim()).toBe('X 光查看');
   });
 
   it('查询失败时不乱动相机', async () => {
@@ -534,6 +560,8 @@ describe('SpatialComputePanel · 算完定位（T1）', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
     await vi.waitFor(() => expect(store.currentScenarioState.value.error).not.toBe(''));
     expect(flyTo).not.toHaveBeenCalled();
+    // 失败就不隔离：场景保持原样
+    expect(spatialQueryStub.isolateRefnos).not.toHaveBeenCalled();
   });
 });
 

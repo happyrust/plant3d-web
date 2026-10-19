@@ -3675,19 +3675,17 @@ onMounted(async () => {
     _dbno: number,
     loadedRefnos: string[],
   ) => {
-    // 换模型 = dbno 变了：旧 BRAN 净距结果与三维标注指向另一个模型，必须一并作废
-    // （只作废、不自动重查——旧 BRAN 在新模型里未必存在；同模型内的增量补装走下面的分支）
-    const dbnoChanged = activeDbno !== null && activeDbno !== _dbno;
+    // 回调里的 _dbno 是**这批实例属于哪个库**，不是「用户换模型」的信号：一个工程有多个库
+    //（MDB /ALL），按需补装别的库的构件同样会带另一个 _dbno 过来——那属于增量补装，
+    // 源 BRAN 的净距结果并未失效，误判成换模型会把刚算完的结果静默丢掉（提交在途时
+    // request token 被顶掉，响应直接丢弃且不报错）。
+    // 真正的「换模型」= 工程路径变了（工程路径里就带 dbnum 目录），那条路由 store 的
+    // modelProjectChanged 负责重置场景与结果（useSpatialCompute.onProjectChanged → handleModelChanged）。
     activeDbno = _dbno;
-    if (dbnoChanged) {
-      spatialComputeStore.handleModelChanged();
-      clearBranClearanceAnnotations();
-    } else {
-      // 结果保得住就不清三维标注：补装几何（runWithPreservedResults）或有精算记录/手动模式的
-      // 增量加载只是场景多了构件，源 BRAN 的净距结果与标注都没失效——清了会出现「行已标注、屏上没线」。
-      const branResultsPreserved = spatialComputeStore.handleInstancesLoaded();
-      if (!branResultsPreserved) clearBranClearanceAnnotations();
-    }
+    // 结果保得住就不清三维标注：补装几何（runWithPreservedResults）或有精算记录/手动模式的
+    // 增量加载只是场景多了构件，源 BRAN 的净距结果与标注都没失效——清了会出现「行已标注、屏上没线」。
+    const branResultsPreserved = spatialComputeStore.handleInstancesLoaded();
+    if (!branResultsPreserved) clearBranClearanceAnnotations();
     // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
     (compat as any).__dtxLastLoadedDbno = _dbno;
     (compat as any).__dtxLastLoadedRefnos = loadedRefnos;

@@ -1034,6 +1034,32 @@ describe('useSpatialCompute 跟随选中自动计算（autoFollowSelection）', 
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('换工程（modelProjectChanged）才作废结果；补装别的库的实例按增量处理、结果保留', async () => {
+    const fetchMock = stubAutoFetch();
+    const selected = await selectedRefnoProbe();
+    const store = makeStore({
+      resolveOwnerBran: (refno) => (refno.startsWith('pipe') ? '24381_145018' : null),
+      autoFollowDebounceMs: 0,
+    });
+    store.setAutoFollowSelection(true);
+    selected.value = 'pipe_a';
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(store.scenarios.branNearestClearance.resultRows.length).toBeGreaterThan(0));
+    const state = store.scenarios.branNearestClearance;
+
+    // 按需补装几何 / 另一个库（dbno）的实例被装进来：净距结果仍有效，不作废
+    // （手动模式下增量补装只刷新标注、不动结果行——spec T2）
+    store.setAutoFollowSelection(false);
+    expect(store.handleInstancesLoaded()).toBe(true);
+    expect(state.resultRows.length).toBeGreaterThan(0);
+
+    // 换工程（工程路径变了，含 dbnum 目录）→ modelProjectChanged → 硬作废
+    window.dispatchEvent(new CustomEvent('modelProjectChanged', { detail: {} }));
+    expect(state.resultRows).toEqual([]);
+    expect(state.annotationCandidates).toEqual([]);
+    expect(state.queriedSourceRefno).toBe('');
+  });
 });
 
 /**
