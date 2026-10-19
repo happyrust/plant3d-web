@@ -92,8 +92,9 @@
 2. **「选中 BRAN / 管件自动计算」开关框（L185–195）**：改为上下两行结构——第一行左放 Checkbox + `选中 BRAN / 管件自动计算`（`font-semibold` 不换行），第二行小字说明 `半径内每类默认标注最近 1 条（管表面到包围盒估算）`。
 3. **「范围显示」区块（L227–256）**：拆分为紧凑两行——第一行 `范围显示` + 距离输入框（`mm`）；第二行并排两个按钮 `显示范围内模型`（`flex-1 whitespace-nowrap`）与 `恢复`（`shrink-0 whitespace-nowrap`），按钮文字永不折行。
 4. **结果列表（L339–395）**：由超宽 5 列窄表格改为 **紧凑双行行卡片（Two-line Row Layout）**：
-   - **第一行（主信息 + 距离）**：左侧完整显示 `row.refno`（`font-mono font-semibold`）+ 类型徽标 `row.noun` + 相交警示徽标 `相交?`；右侧醒目显示距离 `formatDistanceMm(row.distanceMm)`。
-   - **第二行（来源明细 + 操作按钮组）**：左侧单行截断显示 `row.label`（悬停 `title` 看全量明细）；右侧水平排列 `精算`、`标注/已标注`、`跳转` 三个紧凑按钮（`shrink-0 whitespace-nowrap`），保证在 300px 宽度下 Refno 完整可读、按钮不竖排折字。
+   - **第一行（主信息 + 操作按钮组）**：左侧完整显示 `row.refno`（`font-mono font-semibold`）+ 类型徽标 `row.noun`；右侧水平排列 `精算`、`标注/已标注`、`跳转` 三个紧凑按钮（`shrink-0 whitespace-nowrap`），保证在 300px 宽度下 Refno 完整可读、按钮不竖排折字。
+   - **第二行（距离 + 来源明细）**：左侧醒目显示距离 `formatDistanceMm(row.distanceMm)` + 相交警示徽标 `相交?`；右侧单行截断显示 `row.label`（悬停 `title` 看全量明细）。
+   - **实施备注（偏差决定）**：初稿将「距离」放首行、「按钮」放次行；实测 274px 窄幅 Dock 下按钮独占首行才是单行不折字的稳定排布，距离与来源同属「读」信息聚在次行更顺。落地行序以本节修订为准（实测见 `docs/verification/bran-auto-clearance-2026-10-17/README.md` §七 T6：行高 93px→59px）。
    - 保持所有既有 `data-testid`（`bran-result-row`、`bran-refine-*`、`bran-draw-toggle-*` 等）100% 兼容，不破现有单测与 E2E 选择器。
 
 ---
@@ -104,7 +105,7 @@
 | :--- | :--- | :--- | :--- |
 | **D1** | **结果行点「跳转」选中邻居管件时的自动跟随行为（T4）** | **(a) 推荐：抑制本次自动重查**——点结果行的「跳转」是为了巡检当前源 BRAN 与该目标的净距，高亮目标构件但不把源 BRAN 切换过去；用户在三维视口或模型树直接点选其他 BRAN/管件时照常自动跟随。 | (b) 不选中目标构件（只飞相机），避免触发 selection watcher。 |
 | **D2** | **精算更新距离后同桶候选排序策略（T5）** | **(a) 推荐：桶内按最新 `distance_mm` 升序重排**——避免假相交（0mm）精算成 2500mm 后仍排在桶内第 1 行误导用户；已勾选的 `drawnCandidateKeys` 按 `branCandidateKey` 保持不变。 | (b) 保持初始包围盒顺序不动，只改距离数字。 |
-| **D3** | **结果表窄幅适配形态（T6）** | **(a) 推荐：紧凑双行卡片行（保持 `data-testid="bran-result-row"`）**——第一行完整展示 `Refno + 类型 + 距离`，第二行展示 `段/来源标签 + 精算/标注/跳转按钮`，彻底解决 300px Dock 下 `Refno` 变 `2...` 和按钮竖排问题。 | (b) 维持单行表格但支持横向滚动条（`overflow-x-auto`）。 |
+| **D3** | **结果表窄幅适配形态（T6）** | **(a) 推荐：紧凑双行卡片行（保持 `data-testid="bran-result-row"`）**——第一行 `Refno + 类型 + 精算/标注/跳转按钮`，第二行 `距离 + 相交? + 段/来源标签`（行序较初稿对调，见 T6 实施备注），彻底解决 300px Dock 下 `Refno` 变 `2...` 和按钮竖排问题。 | (b) 维持单行表格但支持横向滚动条（`overflow-x-auto`）。 |
 
 ---
 

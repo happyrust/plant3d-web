@@ -435,7 +435,8 @@ import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { branCandidateKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
+import { branCandidateKey, findBranCandidateByKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
+import { resolveSceneWorldTransform, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { branClearanceDimensionId } from '@/dimension';
 
@@ -471,6 +472,10 @@ const {
   setAllBranNounFacets,
   toggleBranCandidateDrawn,
 } = spatialCompute;
+
+// useSpatialQuery 是单例 store，但其工厂内部会建 selection/viewer 依赖（首建需 setup 注入上下文）——
+// 与 useSelectionStore 同理必须在 setup 期取一次复用，事件处理器里再 import+调会在单例未建时抛注入错。
+const spatialQuery = useSpatialQuery();
 
 const computeState = currentScenarioState;
 const isBranScenario = computed(() => activeScenario.value === 'branNearestClearance');
@@ -515,8 +520,6 @@ async function showBranRange() {
   }
   rangeBusy.value = true;
   try {
-    const { useSpatialQuery } = await import('@/composables/useSpatialQuery');
-    const spatialQuery = useSpatialQuery();
     spatialQuery.setMode('distance');
     spatialQuery.draft.distanceCenterSource = 'bran_centerline';
     spatialQuery.draft.refno = bran;
@@ -549,9 +552,11 @@ async function showBranRange() {
 }
 
 function restoreBranRange() {
-  void import('@/composables/useSpatialQuery')
-    .then(({ useSpatialQuery }) => useSpatialQuery().restoreScene())
-    .catch((err: unknown) => { console.warn('[bran-range] restoreScene failed', err); });
+  try {
+    spatialQuery.restoreScene();
+  } catch (err) {
+    console.warn('[bran-range] restoreScene failed', err);
+  }
   branInspectMode.value = '';
 }
 
@@ -572,7 +577,7 @@ function branInspectKeepRefnos(): string[] {
   return bran ? [bran, ...targets] : targets;
 }
 
-async function applyBranInspect(spatialQuery: ReturnType<typeof import('@/composables/useSpatialQuery').useSpatialQuery>, mode: BranInspectMode, keep: string[]) {
+async function applyBranInspect(mode: BranInspectMode, keep: string[]) {
   const seq = ++branInspectSeq;
   // 目标 refno 光有「可见」标记但几何没装是画不出来的（柱子/墙/楼板常见这种情况）——先补装再隔离，且补装期间保留当前净距结果
   await runWithPreservedResults(() => spatialQuery.ensureRefnosLoaded(keep)).catch(() => null);
@@ -585,8 +590,6 @@ async function applyBranInspect(spatialQuery: ReturnType<typeof import('@/compos
 }
 
 async function toggleBranInspect(mode: BranInspectMode) {
-  const { useSpatialQuery } = await import('@/composables/useSpatialQuery');
-  const spatialQuery = useSpatialQuery();
   // 先还原再判定：从另一种查看模式切过来时，残留状态（隐藏或半透明）不能带进新模式
   if (branInspectMode.value) {
     spatialQuery.restoreScene();
@@ -602,25 +605,22 @@ async function toggleBranInspect(mode: BranInspectMode) {
     return;
   }
   branInspectMode.value = mode;
-  await applyBranInspect(spatialQuery, mode, keep);
+  await applyBranInspect(mode, keep);
 }
 
 watch(() => currentScenarioState.value.annotationCandidates, candidates => {
   const mode = branInspectMode.value;
   if (!mode) return;
   const keep = candidates.length > 0 ? branInspectKeepRefnos() : [];
-  void import('@/composables/useSpatialQuery').then(({ useSpatialQuery }) => {
-    const spatialQuery = useSpatialQuery();
-    // 集合暂时为空（补装几何触发的自动重查会先清再回填）：只恢复场景、保留模式，
-    // 候选回填后下一次触发会按当前模式自动重放；用户想退出随时点按钮即可（模式开着时按钮不禁用）。
-    // 顺手作废在途应用——watcher 的动态 import 会让本次回调比在途的应用晚到，不靠序号就会把它盖掉。
-    if (keep.length === 0) {
-      branInspectSeq += 1;
-      spatialQuery.restoreScene();
-    } else {
-      void applyBranInspect(spatialQuery, mode, keep);
-    }
-  });
+  // 集合暂时为空（补装几何触发的自动重查会先清再回填）：只恢复场景、保留模式，
+  // 候选回填后下一次触发会按当前模式自动重放；用户想退出随时点按钮即可（模式开着时按钮不禁用）。
+  if (keep.length === 0) {
+    // 作废在途应用——本次空集恢复必须盖过异步补装中的上一帧应用
+    branInspectSeq += 1;
+    spatialQuery.restoreScene();
+  } else {
+    void applyBranInspect(mode, keep);
+  }
 });
 
 const viewerContext = useViewerContext();
@@ -644,20 +644,18 @@ function hoverBranRowDimension(row: SpatialComputeResultRow, on: boolean) {
 
 /** 行「跳转」：选中目标并飞过去——BRAN 净距行框住整条净距段（管表面点 + 目标点，周围留 500mm），其余行退回构件包围盒。 */
 async function jumpToRow(row: SpatialComputeResultRow) {
-  const { resolveSceneWorldTransform, useSpatialQuery } = await import('@/composables/useSpatialQuery');
   const viewer = viewerContext.viewerRef.value;
   if (!viewer?.scene) return;
   suppressAutoFollowOnce(row.refno);
   selectionStore.setSelectedRefno(row.refno);
-  await runWithPreservedResults(() => useSpatialQuery().ensureRefnosLoaded([row.refno])).catch(() => null);
+  await runWithPreservedResults(() => spatialQuery.ensureRefnosLoaded([row.refno])).catch(() => null);
   viewer.scene.ensureRefnos([row.refno]);
   viewer.scene.setObjectsVisible([row.refno], true);
   viewer.scene.setObjectsSelected([row.refno], true);
   let aabb: number[] | null = null;
   const candidate = isBranScenario.value && row.candidateKey
     ? (computeState.value.annotationCandidates.find(item => branCandidateKey(item.targetGroup, item.candidate) === row.candidateKey)?.candidate
-      ?? computeState.value.branGroups.flatMap(group => group.candidates.map(item => ({ item, key: branCandidateKey(group.group, item) })))
-        .find(entry => entry.key === row.candidateKey)?.item)
+      ?? findBranCandidateByKey(computeState.value.branGroups, row.candidateKey)?.item)
     : undefined;
   const start = candidate?.annotation?.start_point;
   const end = candidate?.annotation?.end_point;

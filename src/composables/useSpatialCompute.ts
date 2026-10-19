@@ -222,6 +222,18 @@ export function branCandidateKey(group: string, candidate: Pick<BranNearestClear
   return candidate.variant ? `${group}:${candidate.refno}#${candidate.variant}` : `${group}:${candidate.refno}`;
 }
 
+/** 按 candidateKey 在分桶结果里反查候选——`annotationCandidates` 只含已画出的，反查要扫全部桶（如未标注行「跳转」）。 */
+export function findBranCandidateByKey(
+  groups: BranNearestClearanceGroupResult[],
+  candidateKey: string,
+): { group: BranNearestClearanceGroupResult; item: BranNearestClearanceCandidate } | undefined {
+  for (const group of groups) {
+    const item = group.candidates.find((entry) => branCandidateKey(group.group, entry) === candidateKey);
+    if (item) return { group, item };
+  }
+  return undefined;
+}
+
 /** 两种响应形态都收：新的数组分桶（`group_by=noun` 一桶一类）与老的对象形态 `{ wall: [...] }`。 */
 export function normalizeBranNearestGroups(
   nearestByGroup: BranNearestClearanceResponse['nearest_by_group'],
@@ -621,9 +633,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
   async function refineBranCandidate(candidateKey: string) {
     const state = scenarios.branNearestClearance;
     if (!calculationsAllowed) { state.error = '历史版本对比中不能使用当前模型精算净距，请退出对比后重算。'; return; }
-    const matched = state.branGroups.flatMap((group) =>
-      group.candidates.map((item) => ({ group, item, key: branCandidateKey(group.group, item) })),
-    ).find((entry) => entry.key === candidateKey);
+    const matched = findBranCandidateByKey(state.branGroups, candidateKey);
     const candidate = matched?.item;
     const ownerGroup = matched?.group;
     if (!candidate || !ownerGroup || candidate.parallel || !state.queriedSourceRefno || state.refiningKeys.includes(candidateKey)) return;
