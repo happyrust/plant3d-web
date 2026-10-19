@@ -313,3 +313,32 @@
 
 - 五文件回归 **140/140 通过**（`useSpatialCompute` / `SpatialComputePanel` / `useSpatialQuery` / `branExternalDimensions` / `useDtxTools.objectMeasure`）；编辑器诊断 0 错 0 警。
 - 改动文件：`SpatialComputePanel.vue`、`SpatialComputePanel.test.ts`、`useSpatialCompute.ts`、`useSpatialCompute.test.ts`、`ViewerPanel.vue`、本 README。
+
+## 十三、楼板垂直距口径（`vertical_nouns`）（2026-10-20）
+
+楼板板面是水平的：三维最近距会量到板边侧棱，而设计要的是「管底到板面净高」。新增 `vertical_nouns` 白名单
+（默认 `FLOOR`），命中的候选改按 **Z 区间净距** 量，精算同口径。
+
+- **后端**（gen-model `350853c0`，`feat/issues-36-50-34`）：`nearest-clearance` 解析 `vertical_nouns`；候选标
+  `vertical: true`；`measure_vertical` 用 ±∞ Z 拉伸目标盒取最近 XY，再对 `[管z-r, 管z+r] × [板底, 板顶]` 算 Z 高差
+  （双向：管上→管底到板顶，管下→管顶到板底；XY 不相交照标高差；Z 区间相交→0 且 intersects 需 XY 也内包）。
+  `surface-clearance` 加 `vertical=1`：同一 XY 对两侧叶子网格打竖直射线取 Z 区间净距，射线落空退合盒面标高兜底
+  +warning；witness `vertical-ray` / `vertical-ray-miss` / `vertical-aabb`，face `top|bottom`，`max_distance` 照常执行。
+  单测 +12，`fast_model` 788 过 0 失败。
+- **前端**（`286db79c`）：面板 `vertical_nouns` 输入（默认 FLOOR、可改、留空=全最近距）、请求/快照/校验接线；
+  行标签「垂直高差」、三维尺寸文字「垂直」前缀；精算对 vertical 候选发 `vertical=1` 并只验收 `result.vertical` +
+  垂直 witness（口径不一致双向拒绝）。测试 43/43、三文件 68/68、type-check 0 新增、eslint 触及文件 0 错误。
+
+### 真机实测（`:3101` dev + 8022 debug 二进制 rocksdb，BRAN `24384/22726`）
+
+- 直查 `nearest-clearance?vertical_nouns=FLOOR`：`resolved_filters.vertical_nouns=["FLOOR"]` 回显；
+  FLOOR 三候选全 `vertical:true`、端点同 XY 纯 Z（如 `(-20982,8166,2212)→(-20982,8166,2800)`，588=管顶→板底；
+  `(-15922,7546,2188)→(-15922,7546,1000)`，1188=管底→板顶——**双向都覆盖**）；WALL/SCTN `vertical:false`、向量非纯 Z。
+- 直查 `surface-clearance?vertical=1`（`24381/39652`）：`distance 1187.5`、`vector (0,0,-1187.5)`、face `top`、
+  `confidence vertical`、`perpendicular.method ray`；`witness vertical-ray-miss` + warning「管在板边旁…按目标整体
+  面标高照标高差」——射线落空兜底路径也走了。
+- UI 链路：结果行 FLOOR 三条「垂直高差 · 管表面到包围盒估算」588/1188/1248mm；尺寸 `FLOOR 垂直≈588mm`
+  （a/b 同 XY）；点 FLOOR 行「精算」实发 `surface-clearance?…&vertical=true` → 行升「垂直高差 · 实体外表面净距
+  （网格精算）」、尺寸 `FLOOR 垂直588mm`（≈ 去掉）；STWALL 精算请求**不带** vertical，388→392mm 正常采纳。
+- 留空 `vertical_nouns` 重跑：请求不带该参数，FLOOR 行回「管表面到包围盒估算」无垂直字样（XY 内包时三维
+  最近距与标高差数值相同，属合理重合）。
