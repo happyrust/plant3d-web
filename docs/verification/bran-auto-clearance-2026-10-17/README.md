@@ -198,3 +198,27 @@
 - 服务端直查 `target_nouns=WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC` → `resolved_filters.target_nouns` 回显一致、`nearest_by_group` 恰为 7 桶
 
 测试：`useSpatialCompute.test.ts` 40/40（新增：类别分组不发 `target_nouns`、留空回全类型、自定义白名单原样发出；参数断言加 `target_nouns`）；type-check 0 新增；ESLint 干净。
+
+## 十、T1 算完定位（源管道 + 最近目标）（2026-10-19）
+
+起因：算完只有表格，相机不动——用户看不到「我的目标管道 + 周边最近物项 + 尺寸标注」。
+
+改动（`src/components/spatial-query/SpatialComputePanel.vue`）：
+
+- 新增 `focusSourceBran()`：源 BRAN 整根（`deliveryUnitSceneRefnos` 展开直段成员）+ 本次画出的最近目标 refnos → `viewer.scene.ensureRefnos` → `viewer.scene.getAABB` 联合包围盒 → `cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 })`；场景对象还没装进来时退回净距段端点（管表面点 + 目标点，E3D mm→场景变换，裕度 1500mm）。随后 `suppressAutoFollowOnce` + `setSelectedRefno(源 BRAN)`，一眼分清「我那根管道」。
+- `runComputeScenario()` 改 async：`await submitScenario()` → 有 `error` 就不动相机 → 否则 `focusSourceBran()`。
+- 几何补装**不阻塞**定位：`ensureRefnosLoaded` 放后台跑（实测本地档可挂 15s+ 不返回；等下去「定位」永远不会发生）。
+- 「执行计算并定位」按钮加 `data-testid="bran-compute-run"`。
+
+真机实测（`:3101` + `:8022`，BRAN `24384_22726`，真 Chrome + Playwright 驱动）：
+
+| 步骤 | 实测 |
+|---|---|
+| 点「执行计算并定位」 | `GET /api/v1/spatial/nearest-clearance?source_refno=24384%2F22726&…` **200 / 99ms** |
+| 相机 | 由默认 `[-37,13,58]` 跳到 `[-740,21019,19644]`——量级与净距区在场景坐标（E3D mm 减原点再归一到 m）一致，框的是源管道 + 最近目标 |
+| 画面哈希 | `8bc0437e6c65 → 8038ba7c8184`（画面确实变了，不是原地） |
+| 查询次数 | 恰好 1 次（选中原 BRAN 不触发重查） |
+| 查询失败 | 面板报 `gen-model 请求失败 … Failed to fetch`，**相机不动**（错误守卫生效） |
+| 单测 | 面板 14/14（新增 2 条：算完必飞 / 失败不飞，断言 flyTo 的 aabb 与 refnos 集合）；五文件 **131/131**；编辑器诊断 0 错 0 警 |
+
+本地环境缺口（非前端缺陷，与 §8 同源）：源 BRAN 的实例几何本地装不出来（`ensureRefnosLoaded` 挂住；`model/records` 抽查有 refno `total=0`），本地视口里只有「显示范围内模型」装进来的目标几何，源管本身与三维标注线看不到；后端正常时源管与标注在同一视野内。`:8022` 也会瞬时 refused（浏览器侧报 `Failed to fetch`），本地复测前先确认端口可用。

@@ -481,6 +481,62 @@ describe('SpatialComputePanel · 行与三维标注联动', () => {
     expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenLastCalledWith(['24381_11']);
   });
 
+describe('SpatialComputePanel · 算完定位（T1）', () => {
+  let mounted: ReturnType<typeof mountPanel> | null = null;
+  const flyTo = vi.fn();
+  const ensureRefnos = vi.fn();
+  const getAABB = vi.fn((_refnos: string[]) => [0, 0, 0, 10, 10, 10]);
+
+  beforeEach(() => {
+    resetSpatialComputeStore();
+    vi.clearAllMocks();
+    viewerContextStub.viewerRef.value = null;
+    viewerContextStub.dimensionSystem.value = null;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 })));
+  });
+
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+    vi.unstubAllGlobals();
+    resetSpatialComputeStore();
+  });
+
+  it('算完把相机框到「源管道 + 最近目标」的联合包围盒，并选中原管道', async () => {
+    viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
+    await vi.waitFor(() => expect(flyTo).toHaveBeenCalledTimes(1));
+
+    // 源 BRAN 整根 + 本次画出的最近目标（WALL 桶第一根、SCTN 桶那根；未画出的 24381_11 不在内）
+    expect(getAABB).toHaveBeenCalledTimes(1);
+    expect(getAABB.mock.calls[0]![0]).toEqual(['24381_145018', '24381_1', '24381_3']);
+    expect(flyTo).toHaveBeenCalledWith({ aabb: [0, 0, 0, 10, 10, 10], fit: true, duration: 0.8 });
+    expect(selectionStub.setSelectedRefno).toHaveBeenCalledWith('24381_145018');
+    // 几何补装在后台跑，不阻塞定位
+    expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenCalled();
+  });
+
+  it('查询失败时不乱动相机', async () => {
+    viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response('{"error":"boom"}', { status: 500 })));
+    mounted = mountPanel();
+    const { host } = mounted;
+    const store = useSpatialCompute();
+    store.setActiveScenario('branNearestClearance');
+    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+
+    host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
+    await vi.waitFor(() => expect(store.currentScenarioState.value.error).not.toBe(''));
+    expect(flyTo).not.toHaveBeenCalled();
+  });
+});
+
   it('包围盒相交的候选给「相交?」徽标和琥珀色距离，行数据带 intersects', async () => {
     const response = {
       ...nounGroupedResponse,

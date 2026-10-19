@@ -273,6 +273,7 @@
             </button>
             <button type="button"
               :disabled="computeState.loading || isComputeBusy"
+              data-testid="bran-compute-run"
               class="flex-1 rounded-[10px] bg-primary py-2.5 text-center text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               @click="runComputeScenario()">
               <Loader2 v-if="computeState.loading" class="mr-1 inline h-3.5 w-3.5 animate-spin" />
@@ -438,6 +439,7 @@ import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
+import { deliveryUnitSceneRefnos } from '@/composables/deliveryUnitScene';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { branCandidateKey, findBranCandidateByKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
 import { resolveSceneWorldTransform, useSpatialQuery } from '@/composables/useSpatialQuery';
@@ -491,8 +493,60 @@ const refinableDrawnCount = computed(() => isBranScenario.value
     !item.candidate.parallel && (item.provenance?.method ?? 'centerline-to-aabb') !== 'surface-to-surface').length
   : 0);
 
-function runComputeScenario() {
-  void submitScenario();
+/**
+ * 「执行计算并定位」：算完把相机框到「源 BRAN 整根管道 + 本次画出的最近目标」。
+ * 之前这个按钮只发查询、根本不动相机（面板的 flyTo 能力只在行「跳转」里用过）——
+ * 算完眼前还是原来那一屏，看不到自己那根管道，也看不出尺寸线量的是谁。
+ */
+function focusSourceBran(): void {
+  const viewer = viewerContext.viewerRef.value;
+  if (!viewer?.scene) return;
+  const state = computeState.value;
+  const bran = normalizeBranComputeRefno(state.queriedSourceRefno || state.suppoRefno);
+  if (!bran) return;
+  // 源 BRAN 的全部直段成员（整根管道；记录没取过时只有它自己）+ 本次画出的最近目标
+  const members = deliveryUnitSceneRefnos(bran);
+  const targets = state.annotationCandidates.map((item) => item.candidate.refno);
+  const refnos = [...new Set([...members, ...targets])];
+  // 几何没加载的先补装——**不等它**：实例加载可能长时间不返回（本地档实测 15s+ 未回），
+  // 等下去「定位」就永远不会发生。加载在后台继续，相机先按已有数据框好。
+  void runWithPreservedResults(() => spatialQuery.ensureRefnosLoaded(refnos)).catch(() => null);
+  viewer.scene.ensureRefnos(refnos);
+  // 包围盒：场景对象（源管道整根 + 目标）优先；对象还没加载出来时退回净距段端点
+  // （管表面点 + 目标点）——这一段本身就是「我的管道被量的那一截 + 紧邻的目标」。
+  let aabb = viewer.scene.getAABB(refnos) ?? null;
+  if (!aabb) {
+    const points: Array<[number, number, number]> = [];
+    for (const item of state.annotationCandidates) {
+      const start = item.candidate.annotation?.start_point;
+      const end = item.candidate.annotation?.end_point;
+      if (start && end && [start.x, start.y, start.z, end.x, end.y, end.z].every(Number.isFinite)) {
+        points.push([start.x, start.y, start.z], [end.x, end.y, end.z]);
+      }
+    }
+    if (points.length) {
+      const margin = 1500;
+      const xs = points.map((p) => p[0]);
+      const ys = points.map((p) => p[1]);
+      const zs = points.map((p) => p[2]);
+      aabb = resolveSceneWorldTransform(viewer).aabbToScene([
+        Math.min(...xs) - margin, Math.min(...ys) - margin, Math.min(...zs) - margin,
+        Math.max(...xs) + margin, Math.max(...ys) + margin, Math.max(...zs) + margin,
+      ]);
+    }
+  }
+  if (!aabb) return;
+  viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+  // 源 BRAN 置选中：一眼分清「我那根管道」（复用既有选中高亮，不引新的渲染管线）
+  suppressAutoFollowOnce(bran);
+  selectionStore.setSelectedRefno(bran);
+}
+
+async function runComputeScenario() {
+  await submitScenario();
+  // 查询失败（error 非空）时不乱动相机
+  if (computeState.value.error) return;
+  focusSourceBran();
 }
 
 function onAutoFollowChange(event: Event) {
