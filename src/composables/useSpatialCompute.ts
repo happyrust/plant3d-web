@@ -126,17 +126,23 @@ const BRAN_NEAREST_CLEARANCE_ENDPOINT = '/api/v1/spatial/nearest-clearance';
 export const BRAN_CLEARANCE_MAX_PER_NOUN = 3;
 /** 默认剔掉的噪声类型：焊点与附着件几乎贴着每根管子，只会把 facet 刷满。面板里可改。 */
 export const BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS = 'WELD,ATTA';
+/**
+ * 「全部构件类型」下的默认目标类型白名单：墙族（与服务端 `wall` 预置组同口径）+ 柱/梁截面（`column` 预置组，
+ * SCTN/GENSEC 按世界轴线分管梁柱两侧）+ 楼板。管件邻居（FTUB/BEND/ELBO/FITT/COUP/TAPE…）本就不是「净距」要看的
+ * 障碍类型，全标出来只剩一团线。面板 target_nouns 可改；留空回到半径内全类型。
+ */
+export const BRAN_CLEARANCE_DEFAULT_TARGET_NOUNS = 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC';
 
 const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
     key: 'branNearestClearance',
     title: 'BRAN 中心线最近清距',
-    description: '按墙、柱、梁、板或全部类型查找候选；先显示管表面到包围盒估算，可逐条精算实体外表面净距。',
+    description: '按墙、柱、梁、板或指定类型集合（target_nouns，默认结构类）查找候选；先显示管表面到包围盒估算，可逐条精算实体外表面净距。',
     endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT,
     exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
     sourceHelp: 'BRAN 格式示例：24381_145018 或 24381/145018',
-    fields: ['searchRadius', 'excludeNouns'],
+    fields: ['searchRadius', 'targetNouns', 'excludeNouns'],
   },
 ];
 
@@ -166,7 +172,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     tolerance: '',
     suppoType: '',
     searchRadius: '5000',
-    targetNouns: '',
+    targetNouns: BRAN_CLEARANCE_DEFAULT_TARGET_NOUNS,
     excludeNouns: BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS,
     neighborWindow: '',
   },
@@ -370,6 +376,8 @@ type BranNearestClearanceQuery = {
   structuralAngleDeg: number;
   /** 已归一成 `a_b` */
   sourceRefno: string;
+  /** 「全部构件类型」下的目标 NOUN 白名单；空数组 = 半径内全部类型（单组分类时忽略） */
+  targetNouns: string[];
   /** 目标过滤之后再剔掉的噪声类型；空数组 = 不剔 */
   excludeNouns: string[];
   radius: number;
@@ -389,6 +397,8 @@ async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Prom
     sourceMode: 'bran_centerline',
     groupBy: query.structureCategory === 'all' ? 'noun' : 'target_groups',
     targetGroups: query.structureCategory === 'all' ? undefined : [query.structureCategory],
+    // 白名单只在「全部构件类型」（group_by=noun）下生效；选了具体结构类别时它就是目标本身
+    targetNouns: query.structureCategory === 'all' ? query.targetNouns : undefined,
     structuralAngleDeg: query.structuralAngleDeg,
     excludeNouns: query.excludeNouns,
     radius: query.radius,
@@ -450,7 +460,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     const state = scenarios.branNearestClearance;
     return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
       inputs: { suppoRefno: state.suppoRefno, structureCategory: state.structureCategory, structuralAngleDeg: state.structuralAngleDeg,
-        searchRadius: state.searchRadius, excludeNouns: state.excludeNouns },
+        searchRadius: state.searchRadius, targetNouns: state.targetNouns, excludeNouns: state.excludeNouns },
       queriedSourceRefno: state.queriedSourceRefno, branGroups: state.branGroups, nounFacets: state.nounFacets,
       drawnCandidateKeys: state.drawnCandidateKeys, candidateProvenance: state.candidateProvenance,
       excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings,
@@ -469,6 +479,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     const inputs = data?.inputs as Record<string, unknown>;
     if (!data || data.coordinateSpace !== 'e3d-world-mm' || !inputs || !['all', 'wall', 'column', 'beam', 'slab'].includes(String(inputs.structureCategory))
         || !['suppoRefno', 'structuralAngleDeg', 'searchRadius', 'excludeNouns'].every(key => typeof inputs[key] === 'string')
+        || (inputs.targetNouns !== undefined && typeof inputs.targetNouns !== 'string')
         || typeof data.queriedSourceRefno !== 'string' || !Array.isArray(data.branGroups) || !Array.isArray(data.nounFacets)
         || !Array.isArray(data.drawnCandidateKeys) || !data.drawnCandidateKeys.every(key => typeof key === 'string')
         || !Array.isArray(data.warnings) || !data.warnings.every(warning => typeof warning === 'string')
@@ -601,6 +612,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
         structureCategory: state.structureCategory,
         structuralAngleDeg,
         sourceRefno: refno,
+        targetNouns: splitCsv(state.targetNouns),
         excludeNouns: splitCsv(state.excludeNouns),
         radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
       });

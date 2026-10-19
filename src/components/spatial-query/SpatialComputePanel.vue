@@ -107,7 +107,7 @@
             <label class="block">
               <span class="mb-1 block text-xs font-semibold text-muted-foreground">目标结构类别</span>
               <select v-model="computeState.structureCategory" data-testid="structure-category" class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px]">
-                <option value="all">全部构件类型</option>
+                <option value="all">指定类型集合（默认结构类）</option>
                 <option value="wall">墙</option>
                 <option value="column">柱</option>
                 <option value="beam">梁</option>
@@ -155,11 +155,13 @@
             </div>
 
             <label v-if="hasField('targetNouns')" class="block">
-              <span class="mb-1 block text-xs font-semibold text-muted-foreground">target_nouns</span>
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">目标类型 target_nouns（逗号分隔；留空 = 半径内全部类型）</span>
               <input v-model="computeState.targetNouns"
                 type="text"
-                placeholder="WALL,COLUMN,FIXING"
-                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-brand" />
+                data-testid="bran-target-nouns"
+                placeholder="WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC"
+                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-brand" />
+              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">仅「指定类型集合」类别下生效；默认墙/柱/梁/楼板，管件邻居（FTUB/BEND/ELBO/FITT…）不标注。</span>
             </label>
 
             <label v-if="hasField('excludeNouns')" class="block">
@@ -169,7 +171,7 @@
                 data-testid="bran-exclude-nouns"
                 placeholder="WELD,ATTA"
                 class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-brand" />
-              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">目标类型不用先选：计算后按半径内出现的类型逐个勾选。</span>
+              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">白名单内命中的类型出现在下方 facet，可再逐个勾选/取消标注。</span>
             </label>
 
             <label v-if="hasField('neighborWindow')" class="block">

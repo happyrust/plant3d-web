@@ -184,3 +184,17 @@
 | 错误透出 | 「有 35 个模型加载失败」——`model/records` 抽查证实 UNSET `17496_105912` 等 refno 在本地档 `total=0` 未生成，属**本地数据缺口**而非前端缺陷；所有 265 个查询目标都在场景中有可见对象（真实几何或 AABB 代理） |
 
 插曲：本次开页时 8022 瞬时 refused（服务尚在启动），页面拿到空数据；服务就绪后刷新即恢复——本地测试前先确认三端口都 OK。
+
+## 九、目标类型白名单（`target_nouns`，默认结构类）（2026-10-19）
+
+起因：「全部构件类型」按半径内全部 noun 各取最近——FTUB/BEND/ELBO/FITT/COUP/TAPE 等管件邻居把视图刷成一团，真正要看的柱/墙/楼板被淹没（用户评审原话「应该显示距离我们指定的类型，比如柱子、墙、楼板」）。
+
+改动：`structureCategory='all'`（改名「指定类型集合（默认结构类）」）下 `group_by=noun` 附带 `target_nouns` 白名单，默认 `WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC`（服务端 `wall`/`column` 预置组同口径 + 楼板 FLOOR）；面板 `target_nouns` 输入框可编辑，留空回到半径内全类型；单组类别（wall/column/beam/slab）不发该参数。快照 `inputs` 增 `targetNouns` 一格（旧快照按新默认读）。
+
+真机实测（`:3101` + `:8022`，BRAN `24384_22726`，硬刷新后点「执行计算并定位」）：
+
+- **改前**（全类型）：16 facet — PANE/WALL/FTUB/STWALL/ELBO/FLOOR/STRT/SCTN/BEND/FITT/BOX/TAPE/GWALL/REDU/SBFI/COUP，42 行 / 16 标注
+- **改后**（白名单）：**7 facet — PANE/WALL/STWALL/FLOOR/SCTN/GENSEC/GWALL**，21 行 / 7 标注，管件邻居全消失（COLU 半径内没有故缺席）
+- 服务端直查 `target_nouns=WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC` → `resolved_filters.target_nouns` 回显一致、`nearest_by_group` 恰为 7 桶
+
+测试：`useSpatialCompute.test.ts` 40/40（新增：类别分组不发 `target_nouns`、留空回全类型、自定义白名单原样发出；参数断言加 `target_nouns`）；type-check 0 新增；ESLint 干净。

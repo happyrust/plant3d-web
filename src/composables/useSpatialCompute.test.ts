@@ -43,8 +43,9 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.currentScenarioMeta.value.sourceHelp).not.toContain('SUPPO');
     expect(store.currentScenarioState.value.suppoRefno).toBe('24381_145018');
     expect(store.currentScenarioState.value.searchRadius).toBe('5000');
-    // 目标类型不再是输入框：计算后由 noun_counts 生成 facet；输入侧只剩噪声类型排除。
-    expect(store.currentScenarioMeta.value.fields).toEqual(['searchRadius', 'excludeNouns']);
+    // 目标类型白名单默认结构类（墙/柱/梁/楼板），可编辑；facet 仍由 noun_counts 生成；输入侧另有噪声类型排除。
+    expect(store.currentScenarioMeta.value.fields).toEqual(['searchRadius', 'targetNouns', 'excludeNouns']);
+    expect(store.currentScenarioState.value.targetNouns).toBe('WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC');
     expect(store.currentScenarioState.value.excludeNouns).toBe('WELD,ATTA');
     expect(store.currentScenarioState.value.nounFacets).toEqual([]);
     expect(store.currentScenarioMeta.value.endpoint).toBe('/api/v1/spatial/nearest-clearance');
@@ -88,7 +89,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     excluded_self_members: 37,
   };
 
-  it('submits group_by=noun (no target filter, exclude_nouns, max_per_group) and builds the noun facet from noun_counts', async () => {
+  it('submits group_by=noun (default structural target_nouns whitelist, exclude_nouns, max_per_group) and builds the noun facet from noun_counts', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(nounGroupedResponse), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const store = createSpatialComputeStore();
@@ -103,6 +104,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       source_mode: 'bran_centerline',
       source_refno: '24381/145018',
       group_by: 'noun',
+      target_nouns: 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC',
       structural_angle_deg: '5',
       exclude_nouns: 'WELD,ATTA',
       radius: '5000',
@@ -257,6 +259,35 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(query.get('target_groups')).toBe(category);
     expect(query.get('structural_angle_deg')).toBe('3');
     expect(store.currentScenarioState.value.warnings).toEqual(['unclassified sections']);
+  });
+
+  it('指定结构类别时不发 target_nouns（类别本身就是目标），留空白名单回到半径内全类型', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => freshNounGroupedResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    const state = store.scenarios.branNearestClearance;
+
+    state.structureCategory = 'wall';
+    await store.submitScenario();
+    let query = new URL(String(fetchMock.mock.calls[0]?.[0]), 'http://localhost').searchParams;
+    expect(query.get('group_by')).toBe('target_groups');
+    expect(query.get('target_groups')).toBe('wall');
+    expect(query.get('target_nouns')).toBeNull();
+
+    // 回到「指定类型集合」但清空白名单：不再带 target_nouns → 半径内全类型
+    state.structureCategory = 'all';
+    state.targetNouns = '  ';
+    await store.submitScenario();
+    query = new URL(String(fetchMock.mock.calls[1]?.[0]), 'http://localhost').searchParams;
+    expect(query.get('group_by')).toBe('noun');
+    expect(query.get('target_nouns')).toBeNull();
+
+    // 自定义白名单原样发出（逗号分隔、去空白）
+    state.targetNouns = 'WALL, SCTN,, FLOOR';
+    await store.submitScenario();
+    query = new URL(String(fetchMock.mock.calls[2]?.[0]), 'http://localhost').searchParams;
+    expect(query.get('target_nouns')).toBe('WALL,SCTN,FLOOR');
+    store.dispose();
   });
 
   const surfaceResponse = () => ({
@@ -664,6 +695,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
         source_refno: '24381/145018',
         source_mode: 'bran_centerline',
         group_by: 'noun',
+        target_nouns: 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC',
         structural_angle_deg: '5',
         exclude_nouns: 'WELD,ATTA',
         radius: '1500',
