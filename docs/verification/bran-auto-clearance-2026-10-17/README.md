@@ -342,3 +342,27 @@
   （网格精算）」、尺寸 `FLOOR 垂直588mm`（≈ 去掉）；STWALL 精算请求**不带** vertical，388→392mm 正常采纳。
 - 留空 `vertical_nouns` 重跑：请求不带该参数，FLOOR 行回「管表面到包围盒估算」无垂直字样（XY 内包时三维
   最近距与标高差数值相同，属合理重合）。
+
+## 十四、垂直距 z 区间套叠的「0mm 假长线」缺陷与修复（2026-10-20）
+
+**缺陷**：`vertical_nouns=FLOOR,STWALL` 下 STWALL `17496_105701`（墙 z 区间 `[−20,3600]` 罩住管底
+`2187.5`）→ 估算与 `vertical-aabb` 兜底都回 `distance 0`，但两端点取**两对脸面**
+（`z 2187.5 → 3600`），画出 1412mm 长线标注 `垂直0mm`——值与图形自相矛盾。
+根因在 `vertical_z_gap` 重叠分支：返回的是区间语义的对脸面，不能当标注端点。
+
+**修复**（`gen-model@9e7ff709`，只动 `spatial_clearance.rs`）：重叠分支两端点压到
+**源的对脸面标高**（重叠时必也落在目标区间内）→ 零长度「同标高」点位；`measure_vertical`、
+`vertical-ray-miss`、`vertical-aabb` 三个取点分支共用此函数一并生效。非重叠分支不动。
+
+**回归断言**：`annotation.start_point == end_point`（套叠+XY 罩住、套叠+XY 落空两条路径）
++ `vertical_z_gap` 直测三方向；`fast_model` 全套 791 过 0 失败。
+
+**真机复测**（重启 debug 二进制后）：
+
+| 用例 | 修前 | 修后 |
+|---|---|---|
+| `surface-clearance` STWALL `17496_105701` `vertical=1` | `d=0` 但端点 z 2187.5→3600 | `d=0`、两端点同为 `(-15591,8208,2187.5)`、vector (0,0,0)、face `bottom` |
+| `nearest-clearance` 估算同对 | 同上假长线 | `annotation` start==end z=2187.5 |
+| FLOOR `24381/39652` `vertical=1` | `vertical-ray-miss` 1187.5 | **不变**——1187.5、vector (0,0,−1187.5)、face `top` |
+| UI 尺寸记录 | `STWALL 垂直0mm` 跨 1.4m | `STWALL 垂直≈0mm`，`a==b==(-15.00,9.27,2.19)` 点位 |
+| 行/混合口径 | — | 行 `17496_105701 0mm 垂直高差`；PANE/WALL 仍 `0mm 相交?` 普通口径互不染 |
