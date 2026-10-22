@@ -267,7 +267,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.detectError.value).toBeNull();
   });
 
-  it('某一对 result 为 null 时其余照常出结果，并把 warning 透出给用户', async () => {
+  it('某一对 result 为 null 时其余照常出结果，没靠近的只汇总成一句提示', async () => {
     v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(async ({ targetRefno }: { targetRefno: string }) =>
       targetRefno === '24381_1003'
         ? surfaceClearanceResponse({ result: null, warnings: ['beyond_max_distance'] })
@@ -279,8 +279,9 @@ describe('usePipeDistanceStore · 净距检测', () => {
 
     expect(store.pipeResults.value).toHaveLength(1);
     expect(store.pipeResults.value[0]!.inputs.targetRefno).toBe('24381_1002');
-    expect(store.detectError.value).toContain('24381_1003');
-    expect(store.detectError.value).toContain('beyond_max_distance');
+    expect(store.detectError.value).toBeNull();
+    expect(store.detectNotice.value).toBe('另有 1 对在服务端最大距离内没有靠近，未出结果');
+    expect(store.lastRunOutcome.value).toEqual({ total: 2, settled: 1, beyond: 1, failed: 0 });
   });
 
   it('某一对服务端报错（如 404 no_model_mesh）不拖垮整批，现存记录标 failed', async () => {
@@ -295,7 +296,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
     await store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003']);
 
     expect(store.pipeResults.value).toHaveLength(1);
-    expect(store.detectError.value).toContain('24381_1003：not_found: no_model_mesh');
+    expect(store.detectError.value).toBe('24381_1001 ↔ 24381_1003：not_found: no_model_mesh');
 
     // 下一轮同一对报错：那条记录不消失，标 failed 留住旧快照
     v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(async ({ targetRefno }: { targetRefno: string }) => {
@@ -307,7 +308,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.pipeResults.value[0]?.snapshot?.distanceM).toBeCloseTo(0.32);
   });
 
-  it('全部目标都没结果时给出可读的失败原因', async () => {
+  it('全部管对都没靠近时只给提示，不算失败', async () => {
     v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(
       surfaceClearanceResponse({ result: null, warnings: [] }),
     );
@@ -317,7 +318,8 @@ describe('usePipeDistanceStore · 净距检测', () => {
 
     expect(store.lastRunSettledCount.value).toBe(0);
     expect(store.activeResultId.value).toBeNull();
-    expect(store.detectError.value).toContain('两侧网格在最大距离内没有靠近');
+    expect(store.detectError.value).toBeNull();
+    expect(store.detectNotice.value).toBe('所选 1 对管道在服务端最大距离内都没有靠近，未出结果');
   });
 
   it('连排模式：三根平行管出两对相邻，每对各两条记录；中间管取不到中心线时整批不出结果，两端不成相邻（R13）', async () => {
@@ -672,6 +674,17 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.pipeResults.value).toHaveLength(1);
     expect(store.pipeResults.value[0]!.snapshot?.distanceM).toBe(0);
     expect(store.detectError.value).toContain('最近点无效');
+    expect(store.detectNotice.value).toBe(`另有 1 对在 ${store.maxDistance.value} mm 内没有靠近，未出结果`);
+  });
+
+  it('失败超过 5 对时红字只列前 5 对，全部写进明细', async () => {
+    v1ApiMocks.genModelV1SurfaceClearance.mockRejectedValue(new Error('HTTP 503'));
+    const store = usePipeDistanceStore();
+    await store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003', '24381_1004'], { pairMode: 'all-pairs' });
+    expect(store.detectError.value).toMatch(/^6 对计算失败：.*；其余见明细$/);
+    expect(store.detectDiagnostics.value).toHaveLength(6);
+    expect(store.detectDiagnostics.value).toContain('计算失败：24381_1001 ↔ 24381_1002：HTTP 503');
+    expect(store.lastRunOutcome.value).toEqual({ total: 6, settled: 0, beyond: 0, failed: 6 });
   });
 
   it('清空或新批次使旧查询失效，且最多同时发出4个查询', async () => {

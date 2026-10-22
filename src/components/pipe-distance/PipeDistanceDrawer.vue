@@ -134,6 +134,12 @@ async function detectPipeRowsSelected(refnos: string[]) {
 
 const isRowMode = computed(() => store.detectionMode.value === 'pipe-row');
 
+/** 明细的折叠标题：连排是归排诊断，所有管对是计算失败的管对。 */
+const diagnosticsSummary = computed(() => {
+  const count = store.detectDiagnostics.value.length;
+  return isRowMode.value ? `诊断信息 ${count} 条（穿过件、没有共同区段的管向组等）` : `明细 ${count} 条（计算失败的管对）`;
+});
+
 // 换检测模式 / 归排方式后，上一次检测的提示与错误说的是另一套结果，不留在当前模式下误导。
 watch([() => store.detectionMode.value, () => store.pipeRowAlignMode.value], () => {
   store.detectNotice.value = null;
@@ -860,7 +866,7 @@ function isResultHidden(id: string): boolean {
             <details v-if="store.detectDiagnostics.value.length > 0"
               class="rounded-md border border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground"
               data-testid="pipe-distance-diagnostics">
-              <summary class="cursor-pointer select-none">诊断信息 {{ store.detectDiagnostics.value.length }} 条（穿过件、没有共同区段的管向组等）</summary>
+              <summary class="cursor-pointer select-none">{{ diagnosticsSummary }}</summary>
               <ul class="mt-1 space-y-0.5">
                 <li v-for="(line, index) in store.detectDiagnostics.value" :key="index">{{ line }}</li>
               </ul>

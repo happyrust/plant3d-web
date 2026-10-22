@@ -94,6 +94,11 @@ const detectError = ref<string | null>(null);
 const resultMinDistance = ref<number | null>(null);
 /** 最近一次 `runDetection` 实际落库的记录数（0 = 本轮一条没算出来，兜底层据此决定要不要补估算）。 */
 const lastRunSettledCount = ref(0);
+/** 一轮所有管对 / 周边检测里各管对的去向：抽屉据此给汇总提示，并判断要不要兜底。 */
+export type PipeDetectionOutcome = Readonly<{ total: number; settled: number; beyond: number; failed: number }>;
+const lastRunOutcome = ref<PipeDetectionOutcome | null>(null);
+/** 计算失败的管对多于这么多条时，红字只列前几条，全部收进可展开的明细。 */
+const FAILURE_LINES_SHOWN = 5;
 /** 检测模式：`all-pairs` 外表面净距全对；`pipe-row` 连排相邻（真实中心线归排，见 plan §7）。 */
 const detectionMode = ref<'all-pairs' | 'pipe-row'>('all-pairs');
 /** 连排归排方式：`center` 管中心成排；`bottom` 管底对齐（缺省世界向上作支承法向）。 */
@@ -525,6 +530,7 @@ export function usePipeDistanceStore() {
     if (branRefnos.length < 2) {
       isDetecting.value = false;
       lastRunSettledCount.value = 0;
+      lastRunOutcome.value = null;
       detectError.value = '请至少选择 2 个构件';
       return false;
     }
@@ -532,6 +538,7 @@ export function usePipeDistanceStore() {
     isDetecting.value = true;
     detectError.value = null;
     detectNotice.value = null;
+    lastRunOutcome.value = null;
 
     // 工作台批量检测所有唯一管对（按 refno 定方向）；保留源→目标模式供周边检测与既有调用使用。
     const allPairs = options.pairMode === 'all-pairs';
@@ -541,9 +548,12 @@ export function usePipeDistanceStore() {
       for (let j = i + 1; j < branRefnos.length; j += 1) pairs.push(orderedPair(branRefnos[i]!, branRefnos[j]!, allPairs));
     }
     const distanceLimit = Number.isFinite(maxDistance.value) && maxDistance.value > 0 ? maxDistance.value : 500;
+    const limited = allPairs || options.withinMaxDistance === true;
 
     try {
-      const warnings: string[] = [];
+      // 超限（没靠近）是服务端给的结论，不是失败：只计数，收尾时汇总成一句提示；红字只留真正算失败的管对
+      const failures: string[] = [];
+      let beyond = 0;
       const settled: (ClearanceRecord | null)[] = Array(pairs.length).fill(null);
       // 现存记录要改的状态先记下，等回包到齐、本轮仍有效时再改：迟到的回包不许把已清空、已换上下文的记录写回去
       const invalidated = new Map<number, 'stale' | 'failed'>();
@@ -560,29 +570,25 @@ export function usePipeDistanceStore() {
               targetRefno,
               targetKind: 'any',
               perpendicular: false,
-              ...((options.pairMode === 'all-pairs' || options.withinMaxDistance) ? { maxDistanceMm: distanceLimit } : {}),
+              ...(limited ? { maxDistanceMm: distanceLimit } : {}),
             });
             if (sequence !== detectionSequence) return;
             if (!resp.success || resp.unit !== 'mm' || resp.method !== 'surface_to_surface' || resp.accuracy_class !== 'exact-surface'
               || !Number.isFinite(resp.error_bound_mm) || resp.error_bound_mm < 0 || resp.error_bound_mm > 10) {
-              warnings.push(`${sourceRefno} ↔ ${targetRefno}：净距口径或误差界无效`);
+              failures.push(`${sourceRefno} ↔ ${targetRefno}：净距口径或误差界无效`);
               invalidated.set(index, 'stale');
               continue;
             }
-            if (!resp.result) {
-              warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
+            if (!resp.result || (limited && resp.result.distance_mm > distanceLimit)) {
+              beyond += 1;
               // 重算说「没有靠近」：现存记录口径已不成立，标 stale 而不是装没看见。
-              invalidated.set(index, 'stale');
-              continue;
-            }
-            if ((options.pairMode === 'all-pairs' || options.withinMaxDistance) && resp.result.distance_mm > distanceLimit) {
               invalidated.set(index, 'stale');
               continue;
             }
             if (!Number.isFinite(resp.result.distance_mm) || resp.result.distance_mm < 0
             || ![resp.result.source_point, resp.result.target_point].every(point =>
               [point.x, point.y, point.z].every(Number.isFinite))) {
-              warnings.push(`${sourceRefno} ↔ ${targetRefno}：距离或最近点无效`);
+              failures.push(`${sourceRefno} ↔ ${targetRefno}：距离或最近点无效`);
               invalidated.set(index, 'stale');
               continue;
             }
@@ -591,7 +597,7 @@ export function usePipeDistanceStore() {
           } catch (error) {
             if (sequence !== detectionSequence) return;
             const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
-            warnings.push(`${targetRefno}：${message}`);
+            failures.push(`${sourceRefno} ↔ ${targetRefno}：${message}`);
             // 计算出错：已有记录标 failed 留住旧快照（与 store.compute 的语义一致）。
             invalidated.set(index, 'failed');
           }
@@ -625,12 +631,19 @@ export function usePipeDistanceStore() {
         first ??= saved;
       }
       clearanceStore.setActive(first?.id ?? null);
+      lastRunOutcome.value = { total: pairs.length, settled: lastRunSettledCount.value, beyond, failed: failures.length };
 
-      if (settled.every(record => record === null)) {
-        detectError.value = warnings.length > 0 ? warnings.join('；') : '未找到可标注的净距结果';
-      } else if (warnings.length > 0) {
-        // 有几对没算出来就如实列出，别让「N 条结果」盖住缺的那几对
-        detectError.value = warnings.join('；');
+      const limitText = limited ? `在 ${distanceLimit} mm 内` : '在服务端最大距离内';
+      let notice: string | null = null;
+      if (beyond === pairs.length) notice = `所选 ${pairs.length} 对管道${limitText}都没有靠近，未出结果`;
+      else if (beyond > 0) notice = `另有 ${beyond} 对${limitText}没有靠近，未出结果`;
+      // 有几对没算出来就如实列出（两侧都写），别让「N 条结果」盖住缺的那几对；太多时红字只列前几条，全部进明细
+      const folded = failures.length > FAILURE_LINES_SHOWN;
+      detectReport.value = { notice, diagnostics: folded ? failures.map(line => `计算失败：${line}`) : [] };
+      if (failures.length > 0) {
+        detectError.value = folded
+          ? `${failures.length} 对计算失败：${failures.slice(0, FAILURE_LINES_SHOWN).join('；')}；其余见明细`
+          : failures.join('；');
       }
     } catch (e) {
       if (sequence !== detectionSequence) return false;
@@ -964,6 +977,7 @@ export function usePipeDistanceStore() {
     activeResultId: clearanceStore.activeId,
     isDetecting,
     lastRunSettledCount,
+    lastRunOutcome,
     detectError,
     hiddenResultIds,
     resultMinDistance,
