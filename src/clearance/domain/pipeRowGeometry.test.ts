@@ -378,6 +378,21 @@ describe('detectPipeRows：管中心成排', () => {
     expect(detection.groups.flatMap(g => g.pairs.map(p => p.pairKey)).sort()).toEqual(['q~1|w~1', 'q~2|w~1']);
   });
 
+  it('三根管不在一条线上 → 多解进确认并说明原因；设了相邻上限时远处的那根不再把近处两根拖成多解', () => {
+    const near = [...straightBran('n0', 0, 0), ...straightBran('n1', 151, 0)];
+    const triangle = detectPipeRows([...near, ...straightBran('n2', 0, 300)], { alignMode: 'center', maxAdjacentCenterDistanceMm: 1000 });
+    expect(triangle.groups.some(isFormalPipeRowGroup)).toBe(false);
+    expect(triangle.groups[0]!.diagnostics.some(d => d.includes('同样合理的成排分法'))).toBe(true);
+
+    const farAbove = [...near, ...straightBran('n2', 0, 3000)];
+    expect(detectPipeRows(farAbove, { alignMode: 'center' }).groups.some(isFormalPipeRowGroup)).toBe(false);
+    const limited = detectPipeRows(farAbove, { alignMode: 'center', maxAdjacentCenterDistanceMm: 1000 });
+    expect(limited.groups).toHaveLength(1);
+    expect(isFormalPipeRowGroup(limited.groups[0]!)).toBe(true);
+    expect(limited.groups[0]!.pairs.map(p => Math.round(p.centerDistanceMm))).toEqual([151]);
+    expect(limited.sections[0]!.unplacedAnchors).toEqual(['n2~b']);
+  });
+
   it('设了排内相邻上限：两组管廊之间的空档不量，在此断开成两排', () => {
     const rackA = [0, 300, 600].flatMap((y, i) => straightBran(`a${i}`, y, 0));
     const rackB = [5400, 5700].flatMap((y, i) => straightBran(`b${i}`, y, 0));

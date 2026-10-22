@@ -351,8 +351,11 @@ type ClusteredRow = { members: number[]; dir: Point2; ambiguous: boolean; diagno
  * 歧义逐排判定：
  * - 并列最优覆盖不同但相交的成员集合（网格 / 多解，§3.2）→ 这一排及之后剥离的排都标歧义（剩下的怎么分取决于这次选择）；
  * - 剥离后剩下的两根必然共线——只有与同截面已成排（≥3 根）的排向平行（相对高差 ≤ 容差）才认作并列的另一排，否则进确认。
+ *
+ * 设了排内相邻上限时，相距超过上限的两点不当候选排向：上限之外它俩成不了邻管，不该和近处的排争——否则远处一根孤管
+ * 就能把近处两根拖成「多解」。真成排的内点里总有相距在上限内的一对给出同一条线，不会漏排。
  */
-function clusterRowsCenter(points: readonly Point2[], rowTol: number): ClusteredRow[] {
+function clusterRowsCenter(points: readonly Point2[], rowTol: number, maxAdjacent: number | null): ClusteredRow[] {
   const remaining = new Set(points.map((_, i) => i));
   const rows: ClusteredRow[] = [];
   let contested = false;
@@ -364,6 +367,7 @@ function clusterRowsCenter(points: readonly Point2[], rowTol: number): Clustered
       for (let jj = ii + 1; jj < idx.length; jj += 1) {
         const a = points[idx[ii]!]!;
         const b = points[idx[jj]!]!;
+        if (maxAdjacent !== null && Math.hypot(b.x - a.x, b.y - a.y) > maxAdjacent) continue;
         const dir = canonicalDir2(b.x - a.x, b.y - a.y);
         if (!dir) continue; // 两点重合不产生排向
         const inliers: number[] = [];
@@ -401,6 +405,7 @@ function clusterRowsCenter(points: readonly Point2[], rowTol: number): Clustered
     }
     const diagnostics: string[] = [];
     let ambiguous = contested;
+    if (contested) diagnostics.push('截面里有几种同样合理的成排分法（几根管不在一条线上），按哪几根成一排需确认');
     if (best.inliers.length === 2 && rows.length > 0) {
       const p = points[best.inliers[0]!]!;
       const q = points[best.inliers[1]!]!;
@@ -626,7 +631,7 @@ export function detectPipeRows(
         const dir = canonicalDir2(points[1]!.x - points[0]!.x, points[1]!.y - points[0]!.y) ?? { x: 1, y: 0 };
         clustered = [{ members: [0, 1], dir, ambiguous: false, diagnostics: [] }];
       } else if (placed.length > 2) {
-        clustered = clusterRowsCenter(points, rowTol);
+        clustered = clusterRowsCenter(points, rowTol, maxAdjacent);
         const inRows = new Set(clustered.flatMap(row => row.members));
         placed.forEach((member, index) => {
           if (!inRows.has(index)) unplaced.push(member.anchorRefno);
