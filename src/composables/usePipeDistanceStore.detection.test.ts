@@ -14,6 +14,7 @@ const v1ApiMocks = vi.hoisted(() => ({
   genModelV1SurfaceClearance: vi.fn(),
   genModelV1SpatialNearbyBranches: vi.fn(),
   genModelV1SpatialCenterline: vi.fn(),
+  genModelV1ModelBounds: vi.fn(),
 }));
 
 vi.mock('@/api/genModelV1Api', async (importOriginal) => {
@@ -23,6 +24,7 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => {
     genModelV1SurfaceClearance: v1ApiMocks.genModelV1SurfaceClearance,
     genModelV1SpatialNearbyBranches: v1ApiMocks.genModelV1SpatialNearbyBranches,
     genModelV1SpatialCenterline: v1ApiMocks.genModelV1SpatialCenterline,
+    genModelV1ModelBounds: v1ApiMocks.genModelV1ModelBounds,
   };
 });
 
@@ -112,6 +114,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
   beforeEach(() => {
     v1ApiMocks.genModelV1SurfaceClearance.mockReset();
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockReset();
+    v1ApiMocks.genModelV1ModelBounds.mockReset();
     v1ApiMocks.genModelV1SpatialCenterline.mockReset();
     // 缺省每根管一条互不相干的直线（相距 1 m 以上），所有管对都不判相连；连排与相连的用例各自覆盖
     v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => centerlineResponse(refno, 1000 * Number(refno.replace(/^.*_/, ''))));
@@ -897,5 +900,38 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
     expect(store.detectError.value).toBe('当前服务端版本不支持周边检测（需要更新 gen-model 后端），原有结果已保留');
     expect(store.nearbySupported.value).toBe(false);
+  });
+
+  it('管对比管道多时先按模型包围盒预筛，盒距超过上限的管对不发净距请求', async () => {
+    const xByRefno: Record<string, number> = { '24381_1001': 0, '24381_1002': 300, '24381_1003': 5000, '24381_1004': 9000 };
+    v1ApiMocks.genModelV1ModelBounds.mockImplementation(async (refno: string) => ({
+      refno, scope: 'subtree', min_mm: [xByRefno[refno]!, 0, 0], max_mm: [xByRefno[refno]! + 100, 100, 100],
+      model_count: 1, source: 'test', stale: false, publication_status: 'published',
+    }));
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(surfaceClearanceResponse());
+    const store = usePipeDistanceStore();
+    await store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003', '24381_1004'], { pairMode: 'all-pairs' });
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(1);
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledWith(expect.objectContaining({ sourceRefno: '24381_1001', targetRefno: '24381_1002' }));
+    expect(store.lastRunOutcome.value).toEqual({ total: 6, settled: 1, beyond: 5, connected: 0, failed: 0 });
+    expect(store.detectNotice.value).toBe('另有 5 对在 500 mm 内没有靠近，未出结果');
+  });
+
+  it('取消检测：已有结论的管对按管对序落库，之后到的回包丢掉', async () => {
+    const resolvers: ((value: unknown) => void)[] = [];
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(() => new Promise((resolve) => { resolvers.push(resolve); }));
+    const store = usePipeDistanceStore();
+    const pending = store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003'], { pairMode: 'all-pairs' });
+    await vi.waitFor(() => expect(resolvers).toHaveLength(3));
+    resolvers[1]!(surfaceClearanceResponse());
+    await vi.waitFor(() => expect(store.detectProgress.value).toEqual({ done: 1, total: 3 }));
+    store.cancelDetection();
+    resolvers[0]!(surfaceClearanceResponse());
+    resolvers[2]!(surfaceClearanceResponse());
+    expect(await pending).toBe(false);
+    expect(store.pipeResults.value.map(record => [record.inputs.sourceRefno, record.inputs.targetRefno])).toEqual([['24381_1001', '24381_1003']]);
+    expect(store.isDetecting.value).toBe(false);
+    expect(store.detectProgress.value).toBeNull();
+    expect(store.detectNotice.value).toBe('已取消：1 / 3 对已有结论，算出的结果已保留');
   });
 });

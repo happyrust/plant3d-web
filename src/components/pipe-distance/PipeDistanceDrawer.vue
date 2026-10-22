@@ -229,7 +229,10 @@ function getCurrentSelectedBrans(): string[] {
   return out;
 }
 
-async function detectCurrentSelectedBrans(options: { quiet?: boolean } = {}) {
+/** 打开抽屉时自动检测所有管对的上限：管对数随管道数平方增长，选得多时只带入选择，等用户点「重新检测」。 */
+const AUTO_DETECT_MAX_BRANS = 10;
+
+async function detectCurrentSelectedBrans(options: { quiet?: boolean; auto?: boolean } = {}) {
   const refnos = getCurrentSelectedBrans();
   if (refnos.length < 2) {
     if (!options.quiet) {
@@ -241,6 +244,11 @@ async function detectCurrentSelectedBrans(options: { quiet?: boolean } = {}) {
   store.clearTubeKeys();
   if (isRowMode.value) {
     await detectPipeRowsSelected(refnos);
+    return;
+  }
+  if (options.auto && refnos.length > AUTO_DETECT_MAX_BRANS) {
+    store.setBranRefnos(refnos);
+    store.detectNotice.value = `已带入当前选中的 ${refnos.length} 根管道；超过 ${AUTO_DETECT_MAX_BRANS} 根不自动检测，确认后点「重新检测」`;
     return;
   }
   await detectBransWithDtxFallback(refnos);
@@ -389,7 +397,7 @@ watch(
   (open) => {
     if (!open) return;
     if (store.selectedBranRefnos.value.length > 0 || store.pipeResults.value.length > 0) return;
-    void detectCurrentSelectedBrans({ quiet: true });
+    void detectCurrentSelectedBrans({ quiet: true, auto: true });
   },
 );
 
@@ -828,6 +836,12 @@ function isResultHidden(id: string): boolean {
               <RefreshCw class="h-4 w-4" :class="store.isDetecting.value ? 'animate-spin' : ''" />
               <span>{{ store.isDetecting.value ? '检测中...' : '重新检测' }}</span>
             </button>
+            <div v-if="!isRowMode && store.isDetecting.value && store.detectProgress.value"
+              class="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"
+              data-testid="pipe-distance-progress">
+              <span>已算 {{ store.detectProgress.value.done }} / {{ store.detectProgress.value.total }} 对</span>
+              <button type="button" class="text-brand hover:underline" @click="store.cancelDetection()">取消</button>
+            </div>
             <!-- 连排识别预览：每排成员、区段、状态；存疑的排在这里确认后才生成结果 -->
             <div v-if="rowPreview && rowPreview.groups.length > 0" class="space-y-1.5" data-testid="pipe-row-preview">
               <div class="flex items-center justify-between gap-2 text-[11px] text-muted-foreground" data-testid="pipe-row-summary">
