@@ -417,6 +417,78 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(sameBran?.provenance.target.refno).toBe('24381_1001');
   });
 
+  it('连排模式按直段测量：只在所选直段上归排；重量的整条直段上的旧结果被替换，别的直段上的结果不动', async () => {
+    const od = { outside_diameter_mm: 114.3, diameter_evidence: { source: 'catalogue', catalogue_od_mm: 114.3, arrive_bore_mm: null } };
+    /** 一根 L 形管（E3D 世界 mm）：x 向一截被法兰隔成两段直管，弯头后 y 向一截；`base` 是法兰的 refno 号，弯头接着编。 */
+    const lShape = (refno: string, base: number, z: number) => {
+      const flan = `24381_${base}`;
+      const elbo = `24381_${base + 1}`;
+      return {
+        refno, dbnum: 100, segment_count: 5, outside_diameter_mm: 114.3,
+        source_version: { dbnum: 100, sesno: 7, databases: [] }, centerline_bbox: null, warnings: [],
+        segments: [
+          { refno: `Head~${flan}`, order: 0, noun: 'TUBI', implicit: true, start: { x: 0, y: 0, z }, end: { x: 2000, y: 0, z }, length_mm: 2000, ...od },
+          { refno: flan, order: 1, noun: 'FLAN', implicit: false, start: { x: 2000, y: 0, z }, end: { x: 2100, y: 0, z }, length_mm: 100, ...od },
+          { refno: `${flan}~${elbo}`, order: 2, noun: 'TUBI', implicit: true, start: { x: 2100, y: 0, z }, end: { x: 5000, y: 0, z }, length_mm: 2900, ...od },
+          { refno: elbo, order: 3, noun: 'ELBO', implicit: false, start: { x: 5000, y: 0, z }, end: { x: 5100, y: 100, z }, length_mm: 141, ...od },
+          { refno: `${elbo}~Tail`, order: 4, noun: 'TUBI', implicit: true, start: { x: 5100, y: 100, z }, end: { x: 5100, y: 3000, z }, length_mm: 2900, ...od },
+        ],
+      };
+    };
+    const lines: Record<string, ReturnType<typeof lShape>> = {
+      '24381_1001': lShape('24381_1001', 2, 0),
+      '24381_1002': lShape('24381_1002', 12, 300),
+    };
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => lines[refno]);
+    const store = usePipeDistanceStore();
+    const measuredPairs = () => new Set(store.pipeResults.value.map(r => pairKey(r.inputs.sourceRefno, r.inputs.targetRefno)));
+    const legB = pairKey('24381_3~Tail', '24381_13~Tail');
+
+    // 整根量：x 向、y 向两截各一对
+    store.setBranRefnos(['24381_1001', '24381_1002']);
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    expect(measuredPairs()).toEqual(new Set([pairKey('Head~24381_2', 'Head~24381_12'), legB]));
+
+    // 只选法兰后那两段直管：x 向那截换成子直段的结果，截面在子直段共同区段的中点；y 向那截的旧结果不动
+    store.setTubeKeys(['24381_1001#24381_2-24381_3#0', '24381/1002#24381/12-24381/13#0']);
+    expect(store.selectedBranRefnos.value).toEqual(['24381_1001', '24381_1002']);
+    expect(store.selectedTubeKeys.value).toEqual(['24381_1001#24381_2-24381_3#0', '24381_1002#24381_12-24381_13#0']);
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    expect(measuredPairs()).toEqual(new Set([pairKey('24381_2~24381_3', '24381_12~24381_13'), legB]));
+    const afterFlange = store.pipeResults.value.find(r => r.inputs.sourceRefno !== '24381_3~Tail' && r.inputs.sourceRefno !== '24381_13~Tail');
+    expect(afterFlange?.pipeRow?.section.point[0]).toBeCloseTo(3.55, 6);
+    expect(store.lastRowDetection.value?.groups).toHaveLength(1);
+    expect(store.detectNotice.value ?? '').not.toContain('所选直段');
+
+    // 换成头上那两段（直段一端是 BRAN 自己 → 中心线的 Head~）：同一截上一次的直段结果也被换掉
+    store.setTubeKeys(['24381_1001#24381_1001-24381_2#0', '24381_1002#24381_1002-24381_12#0']);
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    expect(measuredPairs()).toEqual(new Set([pairKey('Head~24381_2', 'Head~24381_12'), legB]));
+    const head = store.pipeResults.value.find(r => r.inputs.sourceRefno.startsWith('Head~'));
+    expect(head?.pipeRow?.section.point[0]).toBeCloseTo(1, 6);
+
+    // 选到中心线里没有的直段：如实提示，不参与
+    store.addTubeKey('24381_1001#24381_8-24381_9#0');
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    expect(store.detectNotice.value).toContain('24381_1001：1 段所选直段不在可归排的直段上');
+
+    // 选择口径：整根选回就丢它的直段；某根的直段去光，它跟着移出选择
+    store.addBranRefno('24381_1001');
+    expect(store.selectedTubeKeys.value).toEqual(['24381_1002#24381_1002-24381_12#0']);
+    store.removeTubeKey('24381_1002#24381_1002-24381_12#0');
+    expect(store.selectedBranRefnos.value).toEqual(['24381_1001']);
+    expect(store.selectedTubeKeys.value).toEqual([]);
+
+    // 直段随抽屉设置存取；格式不对的直段键整份拒收
+    store.setTubeKeys(['24381_1001#24381_2-24381_3#0', '24381_1002#24381_12-24381_13#0']);
+    const snapshot = store.captureSnapshot();
+    store.clearBranRefnos();
+    store.prepareSnapshotRestore(snapshot)();
+    expect(store.selectedBranRefnos.value).toEqual(['24381_1001', '24381_1002']);
+    expect(store.selectedTubeKeys.value).toEqual(['24381_1001#24381_2-24381_3#0', '24381_1002#24381_12-24381_13#0']);
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, selectedTubeKeys: ['24381_1001'] })).toThrow();
+  });
+
   it('连排模式：检测途中清空结果，迟到的归排不写库', async () => {
     let resolveFirst!: (value: unknown) => void;
     v1ApiMocks.genModelV1SpatialCenterline

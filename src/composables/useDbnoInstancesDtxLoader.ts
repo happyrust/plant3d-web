@@ -178,6 +178,25 @@ export function isDtxTubeSegmentLoadedAcrossAllDbnos(key: string): boolean {
   }
   return false;
 }
+
+/** 场景对象 → 它的直段身份键（跨库）；不是直管、或服务端没给 `tube` 回 null。按直段拾取用。 */
+export function resolveDtxTubeKeyByObjectId(objectId: string): string | null {
+  if (!objectId) return null;
+  for (const cache of cachesByDbno.values()) {
+    const key = cache.objectIdToTubeKey?.get(objectId);
+    if (key) return key;
+  }
+  return null;
+}
+
+/** 场景里全部带直段身份的直管对象（跨库）。按直段框选用。 */
+export function listDtxTubeObjects(): { key: string; objectId: string }[] {
+  const out: { key: string; objectId: string }[] = [];
+  for (const cache of cachesByDbno.values()) {
+    for (const [key, objectId] of cache.tubeObjectIdByKey ?? []) out.push({ key, objectId });
+  }
+  return out;
+}
 const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 
 /**

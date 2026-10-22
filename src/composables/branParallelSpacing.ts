@@ -326,6 +326,53 @@ export function buildStraightRuns(
 }
 
 /**
+ * 直段身份（`spatialTree.tubeKey` 的 from / to）对应的中心线隐式管段 refno `<from>~<to>`：服务端在容器头 / 尾那一端给的是
+ * BRAN 自己，中心线那一端写 `Head` / `Tail`（gen-model `branch_query` 合成管身的命名）。
+ */
+export function centerlineTubeSegmentRefno(branRefno: string, tube: Readonly<{ from: string; to: string }>): string {
+  return `${tube.from === branRefno ? 'Head' : tube.from}~${tube.to === branRefno ? 'Tail' : tube.to}`;
+}
+
+/**
+ * 直段收窄到选中的段（连排按直段测量）：成员序连续的选中段并成一条子直段，两端取它们端点沿直段轴向投影的最小 / 最大；
+ * 方向、外径与来源证据沿用原直段（同一直段内外径相同）。一段都没选中的直段不出子直段。
+ */
+export function splitRunBySegments(
+  run: BranStraightRun,
+  keep: (segment: SpatialCenterlineSegment) => boolean,
+): BranStraightRun[] {
+  const out: BranStraightRun[] = [];
+  let group: SpatialCenterlineSegment[] = [];
+  const flush = () => {
+    let minT = Number.POSITIVE_INFINITY;
+    let maxT = Number.NEGATIVE_INFINITY;
+    for (const segment of group) {
+      for (const point of [segment.start, segment.end]) {
+        const t = dot(sub(point, run.start), run.direction);
+        minT = Math.min(minT, t);
+        maxT = Math.max(maxT, t);
+      }
+    }
+    if (group.length > 0 && maxT - minT > 0) {
+      out.push({
+        ...run,
+        start: add(clonePoint(run.start), scale(run.direction, minT)),
+        end: add(clonePoint(run.start), scale(run.direction, maxT)),
+        lengthMm: maxT - minT,
+        segments: group,
+      });
+    }
+    group = [];
+  };
+  for (const segment of run.segments) {
+    if (keep(segment)) group.push(segment);
+    else flush();
+  }
+  flush();
+  return out;
+}
+
+/**
  * 两条 BRAN 的直段两两配平行对。平行 = 夹角 ≤ `angleToleranceDeg`（反向也算）；并排 = 目标直段沿源直段轴线的投影区间
  * 与源直段自身区间 `[0, length]` 的重叠 ≥ `minOverlapMm`。中心距在重叠区中点量：源轴线上的点与它在目标轴线上的垂足。
  * 结果按源直段序、再目标直段序。

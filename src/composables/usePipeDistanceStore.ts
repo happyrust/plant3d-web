@@ -41,7 +41,13 @@ import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService'
 import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
-import { buildStraightRuns, type Vec3Mm } from '@/composables/branParallelSpacing';
+import {
+  buildStraightRuns,
+  centerlineTubeSegmentRefno,
+  splitRunBySegments,
+  type Vec3Mm,
+} from '@/composables/branParallelSpacing';
+import { parseTubeKey, tubeKey } from '@/composables/spatialTree';
 
 /**
  * 旧结果模型的输入形状——检测兜底（`detectDtxBranchAxisDistances` 的输出经抽屉补上 designPoints）、
@@ -77,6 +83,11 @@ const clearanceStore = useClearanceStore();
 const maxDistance = ref(500); // mm，检测上限（range: 50-2000，见文件头口径）
 const maxAngle = ref(5); // degree，本地轴线估算的平行容差（range: 1-15）
 const selectedBranRefnos = ref<string[]>([]);
+/**
+ * 连排按直段测量时选中的直段（`tubeKey` 身份键）：有直段的 BRAN 只在这些直段上归排，其余照整根量；所有管对模式不看它
+ * （外表面净距按整根 BRAN 算）。直段所属的 BRAN 一定也在 `selectedBranRefnos` 里。
+ */
+const selectedTubeKeys = ref<string[]>([]);
 const isDetecting = ref(false);
 const detectError = ref<string | null>(null);
 
@@ -154,6 +165,7 @@ function preparePipeSnapshot(value: unknown): () => void {
 
 function resetPipeSnapshot() {
   selectedBranRefnos.value = [];
+  selectedTubeKeys.value = [];
   resultMinDistance.value = null;
   showAnnotations.value = true;
   maxDistance.value = 500;
@@ -185,6 +197,8 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     || (data.pipeRowFallbackNormal !== undefined && !PIPE_ROW_FALLBACK_NORMAL_KEYS.includes(data.pipeRowFallbackNormal as string))
     || (data.pipeRowMaxAdjacentMm !== undefined && data.pipeRowMaxAdjacentMm !== null
       && (typeof data.pipeRowMaxAdjacentMm !== 'number' || !Number.isFinite(data.pipeRowMaxAdjacentMm) || data.pipeRowMaxAdjacentMm <= 0))
+    || (data.selectedTubeKeys !== undefined && (!Array.isArray(data.selectedTubeKeys)
+      || !data.selectedTubeKeys.every(item => typeof item === 'string' && parseTubeKey(item) !== null)))
     || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
   const legacyResults = (data.results as PipeDistanceResult[]).map(result => {
     if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
@@ -208,6 +222,9 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   const angleLimit = data.maxAngle;
   const fallbackNormal = (data.pipeRowFallbackNormal ?? 'none') as PipeRowFallbackNormal;
   const adjacentLimit = typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : null;
+  const branRefnos = data.selectedBranRefnos as string[];
+  // 直段是后加的（可选）；所属 BRAN 不在选择里的直段丢掉，不让它把 BRAN 悄悄带回来
+  const tubeKeys = ((data.selectedTubeKeys ?? []) as string[]).filter(key => branRefnos.includes(parseTubeKey(key)!.unitRefno));
   return () => {
     // 旧快照的结果先进 ClearanceStore（顺序在 component apply 之后，同 id 的记录按快照口径覆盖）
     const migratedIds: string[] = [];
@@ -219,7 +236,8 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     if (activeIndex !== null && activeIndex >= 0 && activeIndex < migratedIds.length) {
       clearanceStore.setActive(migratedIds[activeIndex]!);
     }
-    selectedBranRefnos.value = data.selectedBranRefnos as string[];
+    selectedBranRefnos.value = branRefnos;
+    selectedTubeKeys.value = tubeKeys;
     resultMinDistance.value = minDistance;
     showAnnotations.value = annotations;
     maxDistance.value = distanceLimit;
@@ -240,7 +258,7 @@ function capturePipeSnapshot() {
   return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
     // 结果真相在 component 段；保留字段形状让旧校验 / `hasReviewClearanceResults` 不破。
     results: [],
-    selectedBranRefnos: selectedBranRefnos.value, hiddenIds: [],
+    selectedBranRefnos: selectedBranRefnos.value, selectedTubeKeys: selectedTubeKeys.value, hiddenIds: [],
     activeIndex: null, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
     maxDistance: maxDistance.value, maxAngle: maxAngle.value,
     detectionMode: detectionMode.value, pipeRowAlignMode: pipeRowAlignMode.value,
@@ -249,7 +267,7 @@ function capturePipeSnapshot() {
 
 const persistence = createScopedResultPersistence({
   prefix: 'plant3d-pipe-distance-v1',
-  sources: [selectedBranRefnos, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode, pipeRowFallbackNormal, pipeRowMaxAdjacentMm],
+  sources: [selectedBranRefnos, selectedTubeKeys, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode, pipeRowFallbackNormal, pipeRowMaxAdjacentMm],
   capture: capturePipeSnapshot,
   restore: restorePipeSnapshot,
   invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
@@ -264,17 +282,54 @@ function pipePairKey(a: string, b: string): string {
   return [normalizeBranRefno(a), normalizeBranRefno(b)].sort().join('|');
 }
 
+/** 直段身份键规范化（所属 BRAN 与两端都换成 `a_b`）；不是直段键回空串。 */
+function normalizeTubeKey(key: string): string {
+  const tube = parseTubeKey(key);
+  return tube
+    ? tubeKey(normalizeBranRefno(tube.unitRefno), { from: normalizeBranRefno(tube.from), to: normalizeBranRefno(tube.to), ordinal: tube.ordinal })
+    : '';
+}
+
+function tubeOwner(key: string): string {
+  return parseTubeKey(key)?.unitRefno ?? '';
+}
+
+/** 按直段量的 BRAN → 所选直段对应的中心线管段 refno（只收 `branRefnos` 里的 BRAN）。 */
+function tubeSegmentsByBran(tubeKeys: readonly string[], branRefnos: readonly string[]): Map<string, Set<string>> {
+  const segments = new Map<string, Set<string>>();
+  for (const key of tubeKeys) {
+    const tube = parseTubeKey(key);
+    if (!tube || !branRefnos.includes(tube.unitRefno)) continue;
+    const set = segments.get(tube.unitRefno) ?? new Set<string>();
+    set.add(centerlineTubeSegmentRefno(tube.unitRefno, tube));
+    segments.set(tube.unitRefno, set);
+  }
+  return segments;
+}
+
 function optionalVec3(value: unknown): Vec3 | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
   return value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [...value] as Vec3 : undefined;
 }
 
 export function usePipeDistanceStore() {
-  function addBranRefno(refno: string) {
-    const normalized = normalizeBranRefno(refno);
+  function includeBran(normalized: string) {
     if (normalized && !selectedBranRefnos.value.includes(normalized)) {
       selectedBranRefnos.value.push(normalized);
     }
+  }
+
+  function dropTubesOf(isDropped: (branRefno: string) => boolean) {
+    if (selectedTubeKeys.value.some(key => isDropped(tubeOwner(key)))) {
+      selectedTubeKeys.value = selectedTubeKeys.value.filter(key => !isDropped(tubeOwner(key)));
+    }
+  }
+
+  /** 整根选一根 BRAN：它先前若只选了直段，改回整根量。 */
+  function addBranRefno(refno: string) {
+    const normalized = normalizeBranRefno(refno);
+    includeBran(normalized);
+    dropTubesOf(owner => owner === normalized);
   }
 
   function setBranRefnos(refnos: string[]) {
@@ -286,15 +341,47 @@ export function usePipeDistanceStore() {
         seen.add(refno);
         return true;
       });
+    dropTubesOf(owner => !seen.has(owner));
   }
 
   function removeBranRefno(refno: string) {
-    const idx = selectedBranRefnos.value.indexOf(normalizeBranRefno(refno));
+    const normalized = normalizeBranRefno(refno);
+    const idx = selectedBranRefnos.value.indexOf(normalized);
     if (idx >= 0) selectedBranRefnos.value.splice(idx, 1);
+    dropTubesOf(owner => owner === normalized);
   }
 
   function clearBranRefnos() {
     selectedBranRefnos.value = [];
+    selectedTubeKeys.value = [];
+  }
+
+  /** 选一段直段（`tubeKey`）：所属 BRAN 一并进选择，此后这根 BRAN 只在所选直段上归排。 */
+  function addTubeKey(key: string) {
+    const normalized = normalizeTubeKey(key);
+    if (!normalized) return;
+    includeBran(tubeOwner(normalized));
+    if (!selectedTubeKeys.value.includes(normalized)) selectedTubeKeys.value = [...selectedTubeKeys.value, normalized];
+  }
+
+  /** 去掉一段直段；那根 BRAN 的直段去光了它也移出选择——它是跟着直段进来的，不悄悄改成整根量。 */
+  function removeTubeKey(key: string) {
+    const normalized = normalizeTubeKey(key);
+    const owner = tubeOwner(normalized);
+    selectedTubeKeys.value = selectedTubeKeys.value.filter(item => item !== normalized);
+    if (owner && !selectedTubeKeys.value.some(item => tubeOwner(item) === owner)) removeBranRefno(owner);
+  }
+
+  /** 整组换成这些直段，选择即它们所属的 BRAN。 */
+  function setTubeKeys(keys: string[]) {
+    const normalized = [...new Set(keys.map(normalizeTubeKey).filter(Boolean))];
+    selectedTubeKeys.value = normalized;
+    selectedBranRefnos.value = [...new Set(normalized.map(tubeOwner))];
+  }
+
+  /** 全部 BRAN 改回整根量（选择不变）。 */
+  function clearTubeKeys() {
+    selectedTubeKeys.value = [];
   }
 
   function setActiveResult(id: string | null) {
@@ -476,6 +563,8 @@ export function usePipeDistanceStore() {
    *   不挂 `detectDtxBranchAxisDistances` 的网格拟合兜底——拟合轴线的归排没有意义（§1 决策）。
    * - 摘除范围 = 本次全部 BRAN 的直段锚点 ∪ 旧记录里两侧都属本次 BRAN 的锚点
    *   （同一 BRAN 重算后锚点漂移的旧记录也能被收走）。多解 / 分组不完整的排不出正式记录，见 `commitPipeRowDetection`。
+   * - 选了直段的 BRAN 只在所选直段上归排（`selectedTubeKeys`；成员序连续的选中段合成子直段）。摘除范围对它只含这次
+   *   重量的整条直段上的段，别的直段上已有的连排结果不动。
    * - `sequence` 防护与 `runDetection` 同口径：新检测 / 清空 / 换上下文后迟到的结果不写库。
    */
   async function runPipeRowDetection(options: {
@@ -487,6 +576,7 @@ export function usePipeDistanceStore() {
     if (!calculationsAllowed) { detectError.value = '历史版本对比中不能使用当前模型检测管道连排，请退出对比后重算。'; return false; }
     const alignMode = options.alignMode ?? pipeRowAlignMode.value;
     const branRefnos = [...selectedBranRefnos.value];
+    const tubeSegments = tubeSegmentsByBran(selectedTubeKeys.value, branRefnos);
     if (branRefnos.length < 2) {
       isDetecting.value = false;
       lastRunSettledCount.value = 0;
@@ -525,6 +615,8 @@ export function usePipeDistanceStore() {
       const inputs: PipeRowRunInput[] = [];
       const sesnoByBran: Record<string, number | null> = {};
       const legacyOdBrans: string[] = [];
+      /** 按直段量的 BRAN 上这次重量的整条直段的全部段：之前锚在这些段上的结果（整段量的或别的直段选择）由这次替换。 */
+      const remeasuredAnchors = new Set<string>();
       for (const refno of branRefnos) {
         const line = lines.get(refno);
         sesnoByBran[refno] = line?.source_version?.sesno ?? null;
@@ -532,7 +624,7 @@ export function usePipeDistanceStore() {
         for (const text of line.warnings ?? []) warnings.push(`${refno}：${text}`);
         // 缺口不许跨接（§5.6）：中心线断档两侧的段哪怕共线也分成两条直段，缺口如实上报。
         // 旧服务端不给逐段外径来源：按服务端同一规则取成员外径、记估算档（推导间隔带 ≈，管底归排待确认）。
-        const runs = buildStraightRuns(line, {
+        const fullRuns = buildStraightRuns(line, {
           maxJointGapMm: 1,
           inferLegacyMemberOd: true,
           onDiagnostic: (diagnostic) => {
@@ -541,6 +633,17 @@ export function usePipeDistanceStore() {
             }
           },
         });
+        const keep = tubeSegments.get(refno);
+        const runs = keep ? fullRuns.flatMap(run => splitRunBySegments(run, segment => keep.has(segment.refno))) : fullRuns;
+        if (keep) {
+          for (const run of fullRuns) {
+            if (!run.segments.some(segment => keep.has(segment.refno))) continue;
+            for (const segment of run.segments) remeasuredAnchors.add(segment.refno);
+          }
+          const placed = new Set(runs.flatMap(run => run.segments.map(segment => segment.refno)));
+          const missing = [...keep].filter(segmentRefno => !placed.has(segmentRefno)).length;
+          if (missing > 0) warnings.push(`${refno}：${missing} 段所选直段不在可归排的直段上（中心线里没有这一段，或它太短），不参与`);
+        }
         for (const run of runs) {
           inputs.push({ branRefno: refno, run });
         }
@@ -568,11 +671,12 @@ export function usePipeDistanceStore() {
       const fetched = new Set(lines.keys());
       // 摘除范围：本次 BRAN 的新直段锚点 ∪ 旧记录两侧都属本次 BRAN 的锚点——
       // 重算后锚点 refno 漂移（管身段重排）的旧记录也进范围，不会留下孤儿。
-      const anchorScope = new Set<string>(inputs.map(input => runAnchorRefno(input.run)));
+      // 按直段量的 BRAN 只换这次重量的那几条直段：它别的直段这次没量，旧结果不动。
+      const anchorScope = new Set<string>([...inputs.map(input => runAnchorRefno(input.run)), ...remeasuredAnchors]);
       for (const record of pipeResults.value) {
         if (!isPipeRowRecord(record) || record.pipeRow?.alignMode !== alignMode) continue;
         const brans = operandBrans(record);
-        if (brans.length === 2 && brans.every(bran => fetched.has(bran))) {
+        if (brans.length === 2 && brans.every(bran => fetched.has(bran) && !tubeSegments.has(bran))) {
           anchorScope.add(record.inputs.sourceRefno);
           anchorScope.add(record.inputs.targetRefno);
         }
@@ -772,10 +876,15 @@ export function usePipeDistanceStore() {
     pipeRowMaxAdjacentMm,
     lastRowDetection,
     confirmedRowKeys,
+    selectedTubeKeys,
     addBranRefno,
     setBranRefnos,
     removeBranRefno,
     clearBranRefnos,
+    addTubeKey,
+    removeTubeKey,
+    setTubeKeys,
+    clearTubeKeys,
     setActiveResult,
     runDetection,
     runPipeRowDetection,

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildStraightRuns,
+  centerlineTubeSegmentRefno,
   describeStraightRun,
   findParallelRunPairs,
+  splitRunBySegments,
   type BranCenterlineInput,
 } from './branParallelSpacing';
 
@@ -131,6 +133,36 @@ describe('buildStraightRuns：连续共线的段合成直段', () => {
       ? { ...segment, diameter_evidence: { source: 'catalogue' as const, catalogue_od_mm: 168.3, arrive_bore_mm: null } }
       : segment)), 114.3);
     expect(buildStraightRuns(enriched, { inferLegacyMemberOd: true })[0]!.odEvidence).toBe('unverified');
+  });
+});
+
+describe('按直段收窄：直段身份对中心线管段、直段切成选中的子直段', () => {
+  it('直段两端是 BRAN 自己时对中心线的 Head / Tail，其余照 from~to', () => {
+    expect(centerlineTubeSegmentRefno('24381_10', { from: '24381_10', to: '24381_11' })).toBe('Head~24381_11');
+    expect(centerlineTubeSegmentRefno('24381_10', { from: '24381_11', to: '24381_12' })).toBe('24381_11~24381_12');
+    expect(centerlineTubeSegmentRefno('24381_10', { from: '24381_19', to: '24381_10' })).toBe('24381_19~Tail');
+  });
+
+  it('连续选中的段并成一条子直段，两端按直段轴向取；隔开的选中段各成一条；一段都没选中的直段不出', () => {
+    const [run, leg] = buildStraightRuns(lShapedBran('1'));
+    const only = (...refnos: string[]) => (segment: SpatialCenterlineSegment) => refnos.includes(segment.refno);
+
+    const [first] = splitRunBySegments(run!, only('1_2~1_3'));
+    expect(first!.segments.map((s) => s.refno)).toEqual(['1_2~1_3']);
+    expect(first!.start).toEqual({ x: 1000, y: 0, z: 0 });
+    expect(first!.end).toEqual({ x: 2000, y: 0, z: 0 });
+    expect(first!.lengthMm).toBeCloseTo(1000, 9);
+    expect(first!.direction).toEqual(run!.direction);
+    expect(first!.outsideDiameterMm).toBe(run!.outsideDiameterMm);
+    expect(first!.odEvidence).toBe(run!.odEvidence);
+
+    const joined = splitRunBySegments(run!, only('1_1~1_2', '1_2'));
+    expect(joined.map((r) => [r.segments.map((s) => s.refno), r.start.x, r.end.x])).toEqual([[['1_1~1_2', '1_2'], 0, 1000]]);
+
+    const apart = splitRunBySegments(run!, only('1_1~1_2', '1_2~1_3'));
+    expect(apart.map((r) => [r.segments[0]!.refno, r.lengthMm])).toEqual([['1_1~1_2', 800], ['1_2~1_3', 1000]]);
+
+    expect(splitRunBySegments(leg!, only('1_2~1_3'))).toEqual([]);
   });
 });
 

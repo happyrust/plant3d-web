@@ -226,4 +226,26 @@ describe('DtxCompatScene', () => {
     scene.applyStateToRefnos(['100_1']);
     expect(clearDtxTubeSegmentOverridesMock).toHaveBeenLastCalledWith([]);
   });
+
+  it('按直段拾取的高亮：setTubeSegmentsSelected 只选中那一段直管对象、不进 refno 状态表，没装进来的键不动；getTubeSegmentAABB 给那一段的世界盒', () => {
+    const layer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 8 });
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+    layer.addObject('o:100_1:1', 'box', new Matrix4().makeTranslation(2, 0, 0));
+    const index = new Map([['100_1#100_5-100_6#0', 'o:100_1:1'], ['100_1#100_6-100_7#0', 'o:100_1:0']]);
+    resolveDtxTubeObjectIdsByKeysMock.mockImplementation((keys: string[]) => keys.map((key) => index.get(key)).filter((id): id is string => !!id));
+    const selection = { select: vi.fn(), deselect: vi.fn() };
+    const scene = new DtxCompatScene({ dtxLayer: layer, selection: selection as never });
+
+    // 几段一次选中（同一批都是当前元素色），没装进来的键不作用
+    expect(scene.setTubeSegmentsSelected(['100_1#100_5-100_6#0', '100_1#nope-x#0', '100_1#100_6-100_7#0'], true))
+      .toEqual(['100_1#100_5-100_6#0', '100_1#100_6-100_7#0']);
+    expect(selection.select).toHaveBeenCalledTimes(1);
+    expect(selection.select).toHaveBeenCalledWith(['o:100_1:1', 'o:100_1:0'], true);
+    expect(scene.selectedObjectIds).toEqual([]);
+    expect(scene.setTubeSegmentsSelected(['100_1#100_5-100_6#0'], false)).toEqual(['100_1#100_5-100_6#0']);
+    expect(selection.deselect).toHaveBeenCalledWith(['o:100_1:1']);
+    expect(scene.getTubeSegmentAABB('100_1#100_5-100_6#0')).toEqual([1.5, -0.5, -0.5, 2.5, 0.5, 0.5]);
+    expect(scene.getTubeSegmentAABB('100_1#nope-x#0')).toBeNull();
+  });
 });

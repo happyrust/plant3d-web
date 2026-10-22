@@ -5,12 +5,14 @@ import { Vector3 } from 'three';
 
 import {
   buildPickRefnoCandidates,
+  buildPickTubeCandidates,
   computeCloudLayout,
   createRectAnnotationRecordFromObb,
   buildCloudBillboardPolyline,
   isDtxInteractionReady,
   isSamePickAnchor,
   isSamePickCandidateSequence,
+  isTubePickFilter,
   nextPickCandidateIndex,
   resolveBoxPickRefnos,
   resolvePickedRefnoForFilter,
@@ -156,6 +158,28 @@ describe('buildPickRefnoCandidates', () => {
     );
 
     expect(candidates[0]).toEqual({ refno: 'BRAN-9', hitRefno: 'TUBI-9', distance: 4 });
+  });
+});
+
+describe('buildPickTubeCandidates', () => {
+  it('按场景对象认直段身份键：一个键只留最靠前的命中，没有直段身份的命中（管件）不进候选', () => {
+    const keys: Record<string, string> = { 'o:B1:3': 'B1#F1-E1#0', 'o:B1:4': 'B1#E1-B1#0' };
+    const candidates = buildPickTubeCandidates(
+      [
+        { entityId: 'B1', objectId: 'o:B1:4', distance: 30 },
+        { entityId: 'F1', objectId: 'o:F1:0', distance: 2 },
+        { entityId: 'B1', objectId: 'o:B1:3', distance: 12 },
+        { entityId: 'B1', objectId: 'o:B1:3', distance: 9 },
+      ],
+      (objectId) => keys[objectId] ?? null,
+    );
+
+    expect(candidates).toEqual([
+      { refno: 'B1#F1-E1#0', hitRefno: 'B1', distance: 9 },
+      { refno: 'B1#E1-B1#0', hitRefno: 'B1', distance: 30 },
+    ]);
+    expect(isTubePickFilter(['TUBI'])).toBe(true);
+    expect(isTubePickFilter(['BRAN'])).toBe(false);
   });
 });
 

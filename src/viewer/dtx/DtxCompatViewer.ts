@@ -236,6 +236,35 @@ export class DtxCompatScene {
     return this._dtxLayer.isObjectVisible(objectId);
   }
 
+  /**
+   * 按直段身份键选中 / 取消选中**单个直管对象**（按直段拾取的高亮）。与逐段眼睛一样是对象级、不进 `objects` 的 refno
+   * 状态表——`selectedObjectIds` 里没有它，refno 级选中动作照旧作用于整条 BRAN。回真正作用到了的键。
+   */
+  setTubeSegmentsSelected(keys: string[], selected: boolean): string[] {
+    const applied: string[] = [];
+    const objectIds: string[] = [];
+    if (!this._selection) return applied;
+    for (const key of keys) {
+      const [objectId] = key ? resolveDtxTubeObjectIdsByKeys([key]) : [];
+      if (!objectId) continue;
+      objectIds.push(objectId);
+      applied.push(key);
+    }
+    if (objectIds.length === 0) return applied;
+    // 一次一批：选中集把最近一批记作「当前元素」，逐段选会只剩最后一段是当前元素色
+    if (selected) this._selection.select(objectIds, true);
+    else this._selection.deselect(objectIds);
+    this._onDirty?.();
+    return applied;
+  }
+
+  /** 这一段直管对象的世界包围盒；没装进来回 `null`。 */
+  getTubeSegmentAABB(key: string): Aabb6 | null {
+    const [objectId] = key ? resolveDtxTubeObjectIdsByKeys([key]) : [];
+    const box = objectId ? this._dtxLayer.getObjectBoundingBoxInto(objectId, new Box3()) : null;
+    return box && !box.isEmpty() ? aabbFromBox3(box) : null;
+  }
+
   setObjectsSelected(refnos: string[], selected: boolean): void {
     this.ensureRefnos(refnos, { computeAabb: false });
     let changed = false;

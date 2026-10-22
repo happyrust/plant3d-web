@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 import {
   BoxSelect,
@@ -22,8 +22,10 @@ import type { Vec3 } from '@/types/vec3';
 import { pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
 import { isFormalPipeRowGroup, type PipeRowGroup } from '@/clearance/domain/pipeRowGeometry';
 import { computationMethodLabel, computationWarningsText } from '@/composables/measurementMethodLabel';
+import { parseTubeKey } from '@/composables/spatialTree';
 import {
   findNounByRefnoAcrossAllDbnos,
+  findOwnerBranRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
@@ -62,23 +64,6 @@ onUnmounted(() => {
     delete (window as typeof window & { __plant3dPipeDistanceE2E?: unknown }).__plant3dPipeDistanceE2E;
   }
 });
-
-// --- pick BRAN pipe ---
-function startPickBran() {
-  toolStore.startPickRefno(['BRAN'], (refnos) => {
-    for (const refno of refnos) {
-      store.addBranRefno(refno);
-    }
-  });
-}
-
-function startBoxPickBran() {
-  toolStore.startBoxPickRefno(['BRAN'], (refnos) => {
-    for (const refno of refnos) {
-      store.addBranRefno(refno);
-    }
-  });
-}
 
 // --- detection ---
 function createSceneTransformPoint(): ((point: Vec3) => Vec3) | undefined {
@@ -149,6 +134,46 @@ watch([() => store.detectionMode.value, () => store.pipeRowAlignMode.value], () 
   store.detectError.value = null;
 });
 
+// --- pick BRAN pipe / TUBI segment ---
+/** 拾取粒度：整根 BRAN，或（连排模式）直段 TUBI——选了直段的管道只在所选直段上归排。 */
+const pickLevel = ref<'bran' | 'tube'>('bran');
+const tubePicking = computed(() => isRowMode.value && pickLevel.value === 'tube');
+
+/** 拾取确认后收进选择；连排模式下选够 2 根管道就直接检测（多选即出结果，不用再点「重新检测」）。 */
+function acceptPicked(picked: string[], level: 'bran' | 'tube') {
+  if (picked.length === 0) return;
+  for (const item of picked) {
+    if (level === 'tube') store.addTubeKey(item);
+    else store.addBranRefno(item);
+  }
+  if (isRowMode.value && store.selectedBranRefnos.value.length >= 2) {
+    void detectPipeRowsSelected(store.selectedBranRefnos.value);
+  }
+}
+
+function startPickBran() {
+  const level = tubePicking.value ? 'tube' : 'bran';
+  toolStore.startPickRefno([level === 'tube' ? 'TUBI' : 'BRAN'], picked => acceptPicked(picked, level));
+}
+
+function startBoxPickBran() {
+  const level = tubePicking.value ? 'tube' : 'bran';
+  toolStore.startBoxPickRefno([level === 'tube' ? 'TUBI' : 'BRAN'], picked => acceptPicked(picked, level));
+}
+
+/** 直段标签：`所属 BRAN · 两端类型`，容器头 / 尾那一端写「头」/「尾」。 */
+function tubeChipText(key: string): string {
+  const tube = parseTubeKey(key);
+  if (!tube) return key;
+  const end = (refno: string, atContainer: string) =>
+    refno === tube.unitRefno ? atContainer : (findNounByRefnoAcrossAllDbnos(refno) || refno);
+  return `${tube.unitRefno} · ${end(tube.from, '头')}→${end(tube.to, '尾')}`;
+}
+
+function isTubeRestricted(refno: string): boolean {
+  return store.selectedTubeKeys.value.some(key => parseTubeKey(key)?.unitRefno === refno);
+}
+
 async function handleDetect() {
   if (isRowMode.value) {
     await detectPipeRowsSelected(store.selectedBranRefnos.value);
@@ -173,10 +198,12 @@ function getCurrentSelectedBrans(): string[] {
   for (const refno of candidates) {
     const normalized = refno.trim().replace(/\//g, '_');
     if (!normalized || seen.has(normalized)) continue;
+    // 选中的是管件 / 直管时按所属 BRAN 算：在三维里点管道，点到的多半是它的构件
     const noun = (findNounByRefnoAcrossAllDbnos(normalized) || '').toUpperCase();
-    if (noun !== 'BRAN') continue;
-    seen.add(normalized);
-    out.push(normalized);
+    const bran = noun === 'BRAN' ? normalized : findOwnerBranRefnoAcrossAllDbnos(normalized);
+    if (!bran || seen.has(bran)) continue;
+    seen.add(bran);
+    out.push(bran);
   }
   return out;
 }
@@ -185,10 +212,12 @@ async function detectCurrentSelectedBrans(options: { quiet?: boolean } = {}) {
   const refnos = getCurrentSelectedBrans();
   if (refnos.length < 2) {
     if (!options.quiet) {
-      store.detectError.value = '当前选中不足 2 根 BRAN 管道';
+      store.detectError.value = '当前选中不足 2 根管道（选中的管件按所属 BRAN 算）';
     }
     return;
   }
+  // 导入的是整根管道：先前按直段选的改回整根量
+  store.clearTubeKeys();
   if (isRowMode.value) {
     await detectPipeRowsSelected(refnos);
     return;
@@ -201,9 +230,11 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     __plant3dPipeDistanceE2E?: {
       detectBrans: (refnos: string[]) => Promise<void>;
       detectPipeRows: (refnos: string[], alignMode?: 'center' | 'bottom') => Promise<boolean>;
+      detectPipeRowTubes: (tubeKeys: string[], alignMode?: 'center' | 'bottom') => Promise<boolean>;
       setDebugResults: (results: PipeDistanceResult[]) => void;
       getSnapshot: () => {
         selectedBranRefnos: string[];
+        selectedTubeKeys: string[];
         detectError: string | null;
         visibleResults: ClearanceRecord[];
         results: ClearanceRecord[];
@@ -213,6 +244,14 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     detectBrans: detectBransWithDtxFallback,
     detectPipeRows: async (refnos: string[], alignMode?: 'center' | 'bottom') => {
       store.setBranRefnos(refnos);
+      store.clearTubeKeys();
+      return store.runPipeRowDetection({
+        alignMode,
+        sourceAnnotation: toolStore.activeAnnotationContext.value,
+      });
+    },
+    detectPipeRowTubes: async (tubeKeys: string[], alignMode?: 'center' | 'bottom') => {
+      store.setTubeKeys(tubeKeys);
       return store.runPipeRowDetection({
         alignMode,
         sourceAnnotation: toolStore.activeAnnotationContext.value,
@@ -230,6 +269,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     },
     getSnapshot: () => ({
       selectedBranRefnos: [...store.selectedBranRefnos.value],
+      selectedTubeKeys: [...store.selectedTubeKeys.value],
       detectError: store.detectError.value,
       visibleResults: [...store.visibleResults.value],
       results: [...store.pipeResults.value],
@@ -520,13 +560,25 @@ function isResultHidden(id: string): boolean {
             </label>
           </div>
 
-          <!-- 2. 选择 BRAN 管道（点击 + 拖框 两种模式） -->
+          <!-- 2. 选择 BRAN 管道（点击 + 拖框 两种模式）；连排模式可细到直段 TUBI -->
           <div class="space-y-2 border-b border-border/60 px-4 py-3">
+            <div v-if="isRowMode" class="grid grid-cols-2 gap-2" data-testid="pipe-row-pick-level">
+              <button v-for="level in ([['bran', '整根管道'], ['tube', '直段 TUBI']] as const)" :key="level[0]"
+                type="button"
+                class="rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+                :class="pickLevel === level[0]
+                  ? 'border-brand bg-brand/10 text-brand'
+                  : 'border-input text-muted-foreground hover:bg-muted'"
+                :disabled="isAnyPicking"
+                @click="pickLevel = level[0]">
+                {{ level[1] }}
+              </button>
+            </div>
             <div class="grid grid-cols-2 gap-2">
               <button type="button"
                 class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-brand px-2 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand/10"
                 :class="isPicking ? 'bg-brand/10' : ''"
-                :title="isPicking ? '逐根点击 (Enter 确认 / ESC 取消)' : '逐根点击 BRAN'"
+                :title="isPicking ? '逐个点击 (Enter 确认 / ESC 取消)' : tubePicking ? '逐段点击直管 TUBI' : '逐根点击 BRAN'"
                 @click="startPickBran">
                 <MousePointerClick class="h-3.5 w-3.5" />
                 <span>{{ isPicking ? '点击中...' : '点击选' }}</span>
@@ -534,7 +586,7 @@ function isResultHidden(id: string): boolean {
               <button type="button"
                 class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-brand px-2 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand/10"
                 :class="isBoxPicking ? 'bg-brand/10' : ''"
-                :title="isBoxPicking ? '在 3D 视图里拖框选择多根 BRAN' : '拖框选择多根 BRAN'"
+                :title="tubePicking ? '在 3D 视图里拖框选择多段直管 TUBI' : '在 3D 视图里拖框选择多根 BRAN'"
                 @click="startBoxPickBran">
                 <BoxSelect class="h-3.5 w-3.5" />
                 <span>{{ isBoxPicking ? '拖框中...' : '拖框选' }}</span>
@@ -543,20 +595,21 @@ function isResultHidden(id: string): boolean {
             <button type="button"
               class="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
               :disabled="store.isDetecting.value"
-              title="导入当前选中的 BRAN 并立即检测"
+              title="导入当前选中的管道（选中管件按所属 BRAN）并立即检测，按整根量"
               @click="detectCurrentSelectedBrans()">
               <Check class="h-3.5 w-3.5" />
               当前选中并检测
             </button>
             <div v-if="isAnyPicking" class="text-[11px] text-muted-foreground">
-              <template v-if="isPicking">逐根点击 BRAN，按 Enter 确认 / ESC 取消</template>
-              <template v-else>在 3D 视图里按住左键拖出选择框（向左拖：完全包含；向右拖：相交即选）</template>
+              <template v-if="isPicking">{{ tubePicking ? '逐段点击直管 TUBI' : '逐根点击 BRAN' }}，按 Enter 确认 / ESC 取消{{ isRowMode ? '；确认后自动检测' : '' }}</template>
+              <template v-else>在 3D 视图里按住左键拖出选择框（向左拖：完全包含；向右拖：相交即选）{{ isRowMode ? '；松开后自动检测' : '' }}</template>
             </div>
+            <p v-else-if="tubePicking" class="text-[11px] text-muted-foreground">选了直段的管道只在所选直段上归排和测量，其余管道照整根量。</p>
 
             <!-- 已选管道列表 -->
             <div v-if="store.selectedBranRefnos.value.length > 0" class="space-y-1">
               <div class="flex items-center justify-between">
-                <span class="text-xs text-muted-foreground">已选 {{ store.selectedBranRefnos.value.length }} 根管道</span>
+                <span class="text-xs text-muted-foreground">已选 {{ store.selectedBranRefnos.value.length }} 根管道{{ store.selectedTubeKeys.value.length > 0 ? `，其中直段 ${store.selectedTubeKeys.value.length} 段` : '' }}</span>
                 <button type="button"
                   class="text-xs text-destructive hover:underline"
                   @click="store.clearBranRefnos()">
@@ -565,8 +618,9 @@ function isResultHidden(id: string): boolean {
               </div>
               <div class="flex flex-wrap gap-1">
                 <span v-for="refno in store.selectedBranRefnos.value" :key="refno"
-                  class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
-                  {{ refno }}
+                  class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]"
+                  :title="isTubeRestricted(refno) ? '只量下面所选的直段' : undefined">
+                  {{ refno }}{{ isTubeRestricted(refno) ? '（直段）' : '' }}
                   <button type="button"
                     class="hover:text-destructive"
                     @click="store.removeBranRefno(refno)">
@@ -574,6 +628,19 @@ function isResultHidden(id: string): boolean {
                   </button>
                 </span>
               </div>
+              <div v-if="store.selectedTubeKeys.value.length > 0" class="flex flex-wrap gap-1" data-testid="pipe-row-selected-tubes">
+                <span v-for="key in store.selectedTubeKeys.value" :key="key"
+                  class="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[11px] text-brand"
+                  :title="key">
+                  {{ tubeChipText(key) }}
+                  <button type="button"
+                    class="hover:text-destructive"
+                    @click="store.removeTubeKey(key)">
+                    <X class="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+              <p v-if="store.selectedTubeKeys.value.length > 0 && !isRowMode" class="text-[11px] text-muted-foreground">所有管对按整根管道检测，直段只用于连排相邻。</p>
             </div>
           </div>
 

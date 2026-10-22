@@ -31,6 +31,12 @@ export function tubeKey(unitRefno: string, tube: Pick<SpatialTreeTubeNode, 'from
   return `${unitRefno}#${tube.from}-${tube.to}#${tube.ordinal}`;
 }
 
+/** `tubeKey` 反解回四元组；不是这个形状回 null（refno 是 `a_b`，不含 `#` / `-`）。 */
+export function parseTubeKey(key: string): { unitRefno: string; from: string; to: string; ordinal: number } | null {
+  const match = /^([^#-]+)#([^#-]+)-([^#-]+)#(\d+)$/.exec(String(key ?? '').trim());
+  return match ? { unitRefno: match[1]!, from: match[2]!, to: match[3]!, ordinal: Number(match[4]) } : null;
+}
+
 /** 直段行的主标识：两端 noun「REDU → BEND」；读不出的一端画 `?`（容器头 / 尾那一端服务端给 `BRAN`）。 */
 export function tubeLabel(tube: Pick<SpatialTreeTubeNode, 'from_noun' | 'to_noun'>): string {
   return `${tube.from_noun || '?'} → ${tube.to_noun || '?'}`;

@@ -52,6 +52,7 @@ import {
   DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG,
   findParallelRunPairs,
 } from '@/composables/branParallelSpacing';
+import { parseTubeKey } from '@/composables/spatialTree';
 import { buildRecordDegradeKey, useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
@@ -63,7 +64,9 @@ import {
   findOwnerRefnoByTubi,
   getDtxRefnoLoadSourceAcrossAllDbnos,
   getDtxRefnoTransform,
+  listDtxTubeObjects,
   resolveDtxObjectIdsByRefno,
+  resolveDtxTubeKeyByObjectId,
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -1074,7 +1077,7 @@ export function resolveBoxPickRefnos(
 
 /** 光标射线上的一个可关联候选；`distance` 越小越靠近相机。 */
 export type PickRefnoCandidate = {
-  /** 过滤/上溯之后的目标 refno，例如 TUBI 上溯得到的 BRAN */
+  /** 过滤/上溯之后的目标 refno，例如 TUBI 上溯得到的 BRAN；按直段拾取时是直段身份键（`tubeKey`） */
   refno: string
   /** 射线实际命中的元素 refno；目标本身没有几何时用它兜底高亮 */
   hitRefno: string
@@ -1107,6 +1110,35 @@ export function buildPickRefnoCandidates(
   }
 
   return Array.from(byRefno.values()).sort((a, b) => a.distance - b.distance);
+}
+
+/** 拾取过滤含 `TUBI` = 按直段拾取：拾取结果是直段身份键（`tubeKey`），不是 refno。 */
+export function isTubePickFilter(filter: readonly string[]): boolean {
+  return filter.includes('TUBI');
+}
+
+/** 拾取结果里的直段身份键——高亮与包围盒都按那一段直管对象取，不走 refno。 */
+function isTubeKeyLike(id: string): boolean {
+  return parseTubeKey(id) !== null;
+}
+
+/**
+ * 按直段拾取的候选：命中按场景对象认直段身份键，一个键只留最靠前的一次；没有直段身份的命中（管件、老服务端不给
+ * `tube` 的直管）不进候选。`hitRefno` 是对象挂的 refno（直管挂在所属 BRAN 上）。
+ */
+export function buildPickTubeCandidates(
+  hits: PickRefnoRayHit[],
+  resolveTubeKey: (objectId: string) => string | null = resolveDtxTubeKeyByObjectId,
+): PickRefnoCandidate[] {
+  const byKey = new Map<string, PickRefnoCandidate>();
+  for (const hit of hits) {
+    const key = resolveTubeKey(hit.objectId);
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (existing && existing.distance <= hit.distance) continue;
+    byKey.set(key, { refno: key, hitRefno: hit.entityId, distance: hit.distance });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.distance - b.distance);
 }
 
 /** 候选轮换下标，`step` 支持负数（Shift+Tab 反向）。 */
@@ -2439,6 +2471,8 @@ export function useDtxTools(options: {
   const pickedHighlightByBran = new Map<string, string>();
   const pickedHighlightPinned = new Set<string>(); // 已在外部选中的对象，不应被拾取会话取消选中
   let lastAppliedPickHighlights: string[] = [];
+  /** 按直段拾取的高亮（直段身份键，对象级选中） */
+  let lastAppliedPickTubeHighlights: string[] = [];
 
   // pick_refno 候选轮换：一次点击命中的全部重叠构件 + 当前预览下标
   const pickCandidates = ref<PickRefnoCandidate[]>([]);
@@ -2997,11 +3031,23 @@ export function useDtxTools(options: {
     }
   }
 
+  /** 直段高亮只落在那一段直管对象上（对象级），不走 refno 级选中。 */
+  function applyPickTubeHighlights(keys: string[]): void {
+    const viewer = compatViewerRef.value;
+    if (!viewer) return;
+    const stale = lastAppliedPickTubeHighlights.filter((key) => !keys.includes(key));
+    if (stale.length > 0) viewer.scene.setTubeSegmentsSelected(stale, false);
+    if (keys.length > 0) viewer.scene.setTubeSegmentsSelected(keys, true);
+    lastAppliedPickTubeHighlights = keys;
+  }
+
   function applyPickHighlights(): void {
     const viewer = compatViewerRef.value;
     if (!viewer) return;
 
-    const next = Array.from(new Set(pickedHighlightByBran.values())).filter(Boolean);
+    const highlights = Array.from(new Set(pickedHighlightByBran.values())).filter(Boolean);
+    applyPickTubeHighlights(highlights.filter(isTubeKeyLike));
+    const next = highlights.filter((id) => !isTubeKeyLike(id));
 
     if (lastAppliedPickHighlights.length > 0) {
       const toDeselect = lastAppliedPickHighlights.filter((id) => !pickedHighlightPinned.has(id));
@@ -3030,6 +3076,7 @@ export function useDtxTools(options: {
         viewer.scene.setObjectsSelected(toDeselect, false);
       }
     }
+    applyPickTubeHighlights([]);
     pickedHighlightByBran.clear();
     pickedHighlightPinned.clear();
     lastAppliedPickHighlights = [];
@@ -3063,7 +3110,9 @@ export function useDtxTools(options: {
     const viewer = compatViewerRef.value;
     if (!candidate || !viewer) return;
 
-    const aabb = viewer.scene.getAABB([candidate.refno]);
+    const aabb = isTubeKeyLike(candidate.refno)
+      ? viewer.scene.getTubeSegmentAABB(candidate.refno)
+      : viewer.scene.getAABB([candidate.refno]);
     if (!aabb) return;
 
     const geometry = buildWireBoxGeometryFromBox3(
@@ -3091,8 +3140,8 @@ export function useDtxTools(options: {
 
     const viewer = compatViewerRef.value;
     if (viewer) {
-      // 优先高亮 refno 本体；BRAN 之类无自身几何的元素回退到命中的子构件。
-      const highlightId = viewer.scene.getAABB([candidate.refno]) ? candidate.refno : candidate.hitRefno;
+      // 优先高亮 refno 本体；BRAN 之类无自身几何的元素回退到命中的子构件；直段键只高亮那一段直管。
+      const highlightId = isTubeKeyLike(candidate.refno) || viewer.scene.getAABB([candidate.refno]) ? candidate.refno : candidate.hitRefno;
       pickedHighlightByBran.set(candidate.refno, highlightId);
       applyPickHighlights();
     }
@@ -3766,15 +3815,19 @@ export function useDtxTools(options: {
       const filterText = filter.length > 0 ? ` (类型: ${filter.join(', ')})` : '';
       const total = pickCandidates.value.length;
       const cycleText = total > 1
-        ? ` — 光标处 ${pickCandidateIndex.value + 1}/${total} 个重叠构件，Tab 切换`
+        ? ` — 光标处 ${pickCandidateIndex.value + 1}/${total} 个重叠${isTubePickFilter(filter) ? '直段' : '构件'}，Tab 切换`
         : '';
-      return `拾取模式${filterText}：点击选择构件 [已选 ${count}]${cycleText} — Enter 确认 / ESC 取消`;
+      return isTubePickFilter(filter)
+        ? `直段拾取：点击直管选择直段 [已选 ${count}]${cycleText} — Enter 确认 / ESC 取消`
+        : `拾取模式${filterText}：点击选择构件 [已选 ${count}]${cycleText} — Enter 确认 / ESC 取消`;
     }
     if (mode === 'pick_refno_box') {
       const filter = store.pickRefnoFilter.value;
       const count = store.pickedRefnos.value.length;
       const filterText = filter.length > 0 ? ` (类型: ${filter.join(', ')})` : '';
-      return `框选模式${filterText}：拖拽矩形框选构件 [已选 ${count}] — 松开鼠标即确认 / ESC 取消`;
+      return isTubePickFilter(filter)
+        ? `直段框选：拖拽矩形框选直管 [已选 ${count}] — 松开鼠标即确认 / ESC 取消`
+        : `框选模式${filterText}：拖拽矩形框选构件 [已选 ${count}] — 松开鼠标即确认 / ESC 取消`;
     }
     if (mode === 'annotation_cloud') {
       const targetCount = store.cloudTargetRefnos.value.length;
@@ -6197,18 +6250,22 @@ export function useDtxTools(options: {
   }
 
   /**
-   * 框选命中计算。逐 refno 投影八个角点，规模等于已加载构件数，因此这里对热点很敏感：
+   * 框选命中计算。逐条目投影八个角点，规模等于已加载构件数，因此这里对热点很敏感：
    * - 视口矩形只读一次，`worldToOverlay` 每次调用都会 getBoundingClientRect，
    *   放在角点循环里就是每个构件 16 次强制重排；
-   * - 先用视锥剔除掉屏幕外的构件，绝大多数 refno 连投影都不用做。
+   * - 先用视锥剔除掉屏幕外的构件，绝大多数条目连投影都不用做。
+   * `fillBox` 把条目的世界盒写进 `box`，没有盒回 false。
    */
-  function collectRefnosInScreenRect(canvas: HTMLCanvasElement, rect: { x1: number; y1: number; x2: number; y2: number }, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box', dx: number): string[] {
-    const viewer = compatViewerRef.value;
+  function collectInScreenRect<T>(
+    canvas: HTMLCanvasElement,
+    rect: { x1: number; y1: number; x2: number; y2: number },
+    containMode: boolean,
+    items: readonly T[],
+    fillBox: (item: T, box: Box3) => boolean,
+  ): T[] {
     const overlay = overlayContainerRef.value;
     const dtxViewer = dtxViewerRef.value;
-    if (!viewer || !overlay || !dtxViewer) return [];
-    const refnos = viewer.scene.getLoadedRefnos();
-    if (!refnos || refnos.length === 0) return [];
+    if (!overlay || !dtxViewer || items.length === 0) return [];
 
     const camera = dtxViewer.camera;
     camera.updateMatrixWorld();
@@ -6222,14 +6279,10 @@ export function useDtxTools(options: {
 
     const box = new Box3();
     const corner = new Vector3();
-    const sel: string[] = [];
-    const containMode = (mode === 'annotation_obb' || mode === 'pick_refno_box') && dx < 0;
+    const sel: T[] = [];
 
-    for (const refno of refnos) {
-      const aabb = viewer.scene.getAABB([refno]);
-      if (!aabb) continue;
-      box.min.set(aabb[0], aabb[1], aabb[2]);
-      box.max.set(aabb[3], aabb[4], aabb[5]);
+    for (const item of items) {
+      if (!fillBox(item, box)) continue;
       if (!frustum.intersectsBox(box)) continue;
 
       let minX = Infinity;
@@ -6258,11 +6311,35 @@ export function useDtxTools(options: {
       const contained = minX >= rect.x1 && maxX <= rect.x2 && minY >= rect.y1 && maxY <= rect.y2;
 
       if (containMode ? contained : intersects) {
-        sel.push(refno);
+        sel.push(item);
       }
     }
 
     return sel;
+  }
+
+  function collectRefnosInScreenRect(canvas: HTMLCanvasElement, rect: { x1: number; y1: number; x2: number; y2: number }, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box', dx: number): string[] {
+    const viewer = compatViewerRef.value;
+    if (!viewer) return [];
+    const containMode = (mode === 'annotation_obb' || mode === 'pick_refno_box') && dx < 0;
+    return collectInScreenRect(canvas, rect, containMode, viewer.scene.getLoadedRefnos(), (refno, box) => {
+      const aabb = viewer.scene.getAABB([refno]);
+      if (!aabb) return false;
+      box.min.set(aabb[0], aabb[1], aabb[2]);
+      box.max.set(aabb[3], aabb[4], aabb[5]);
+      return true;
+    });
+  }
+
+  /** 按直段框选：框里可见的直管对象 → 直段身份键（向左拖完全包含、向右拖相交即选，与构件框选同一口径）。 */
+  function collectTubeKeysInScreenRect(canvas: HTMLCanvasElement, rect: { x1: number; y1: number; x2: number; y2: number }, dx: number): string[] {
+    const layer = dtxLayerRef.value;
+    if (!layer) return [];
+    const tubes = listDtxTubeObjects().filter(({ objectId }) => layer.hasObject(objectId) && layer.isObjectVisible(objectId));
+    return collectInScreenRect(canvas, rect, dx < 0, tubes, ({ objectId }, box) => {
+      const bounds = layer.getObjectBoundingBoxInto(objectId, box);
+      return !!bounds && !bounds.isEmpty();
+    }).map(({ key }) => key);
   }
 
   function beginMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box') {
@@ -6349,10 +6426,13 @@ export function useDtxTools(options: {
 
     // 云线的关联来自目标元素集合，框内构件与它无关；而这个函数要遍历全部已加载构件
     // 逐个取 AABB 再投影 8 个角，大模型上白算一遍就是松手时一次可感的卡顿。
+    const tubeBoxPick = mode === 'pick_refno_box' && isTubePickFilter(store.pickRefnoFilter.value);
     let selectedRefnos: string[] = [];
     if (mode !== 'annotation_cloud') {
       try {
-        selectedRefnos = collectRefnosInScreenRect(canvas, rect, mode, dx);
+        selectedRefnos = tubeBoxPick
+          ? collectTubeKeysInScreenRect(canvas, rect, dx)
+          : collectRefnosInScreenRect(canvas, rect, mode, dx);
       } catch (err) {
         // 抛出会跳过下面的 hideMarquee，把选择框永久留在屏幕上，
         // 且拾取会话卡在 pick_refno_box 无法退出。
@@ -6365,6 +6445,14 @@ export function useDtxTools(options: {
     }
     hideMarquee();
 
+    if (tubeBoxPick) {
+      if (selectedRefnos.length === 0) {
+        emitToast({ message: '框选范围内没有可选的直段（直管 TUBI），请扩大框选范围或先加载模型。', level: 'warning' });
+      }
+      for (const key of selectedRefnos) store.addPickedRefno(key);
+      store.confirmPickRefno();
+      return;
+    }
     if (mode === 'pick_refno_box') {
       const filterUpper = store.pickRefnoFilter.value;
       const resolution = resolveBoxPickRefnos(selectedRefnos, filterUpper, findNounByRefnoAcrossAllDbnos);
@@ -6683,7 +6771,11 @@ export function useDtxTools(options: {
     if (mode === 'pick_refno') {
       const pos = getCanvasPos(canvas, e);
       const filter = store.pickRefnoFilter.value;
-      const candidates = buildPickRefnoCandidates(pickSurfaceRayHits(canvas, e), filter);
+      const hits = pickSurfaceRayHits(canvas, e);
+      const candidates = isTubePickFilter(filter) ? buildPickTubeCandidates(hits) : buildPickRefnoCandidates(hits, filter);
+      if (isTubePickFilter(filter) && hits.length > 0 && candidates.length === 0) {
+        emitToast({ message: '这里没有可选的直段：请点直管（TUBI）。服务端没给直段身份时只能按整根管道选。', level: 'warning' });
+      }
 
       // 原地再点一次 = 在光标下的重叠构件之间轮换，而不是重新拾取同一个。
       if (
@@ -6910,8 +7002,10 @@ export function useDtxTools(options: {
         return;
       }
 
-      // 退出拾取模式：确认场景保持当前高亮；仅清理会话内状态，避免后续误同步
+      // 退出拾取模式：确认场景保持当前高亮；仅清理会话内状态，避免后续误同步。
+      // 直段高亮是对象级选中、不进 refno 状态表，留下来就没有入口能清，退出时一并撤掉。
       if (prev?.mode === 'pick_refno') {
+        applyPickTubeHighlights([]);
         pickedHighlightByBran.clear();
         lastAppliedPickHighlights = [];
         resetPickCandidateSession();

@@ -13,6 +13,7 @@ import {
   treeNodeRefnos,
   treeNodeTubes,
   treeToNearbyResult,
+  parseTubeKey,
   tubeKey,
   tubeLabel,
 } from './spatialTree';
@@ -257,6 +258,10 @@ describe('spatialTree（ADR 0068 纯函数）', () => {
 
   it('tubeKey / tubeLabel / formatTubeLength / countPhrase：身份键与服务端四元组同形，长度 < 1 m 整 mm、≥ 1 m 两位小数去尾零，计数句只在有 tube_count 时带直段', () => {
     expect(tubeKey('b1', tube('t1', 'x1', 2))).toBe('b1#t1-x1#2');
+    expect(parseTubeKey('24381_1#24381_1-24381_2#3')).toEqual({ unitRefno: '24381_1', from: '24381_1', to: '24381_2', ordinal: 3 });
+    expect(parseTubeKey(tubeKey('b1', tube('t1', 'x1', 2)))).toEqual({ unitRefno: 'b1', from: 't1', to: 'x1', ordinal: 2 });
+    expect(parseTubeKey('24381_1'), '整根 BRAN 不是直段键').toBeNull();
+    expect(parseTubeKey('b1#t1-x1#-1')).toBeNull();
     expect(tubeLabel(tube('b1', 't1'))).toBe('BRAN → REDU');
     expect(tubeLabel(tube('t1', 'b1'))).toBe('ELBO → BRAN');
     expect(tubeLabel({ from_noun: '', to_noun: 'REDU' })).toBe('? → REDU');
