@@ -325,6 +325,29 @@ function pipePairKey(a: string, b: string): string {
   return [normalizeBranRefno(a), normalizeBranRefno(b)].sort().join('|');
 }
 
+/** 有序管对：所有管对按 refno 定方向（小的作源），反序重选还是同一条记录；周边检测保持「选中的管 → 周边的管」。 */
+function orderedPair(first: string, second: string, canonical: boolean): [string, string] {
+  return canonical && second < first ? [second, first] : [first, second];
+}
+
+/** 同一对 BRAN 两个方向各有一条记录（旧版反序重选留下的）：只留较新的一条，任一条隐藏过就继续隐藏。 */
+function dedupeReversePipeRecords() {
+  const kept = new Map<string, ClearanceRecord>();
+  for (const record of pipeResults.value) {
+    if (record.pipeRow) continue;
+    const key = pipePairKey(record.inputs.sourceRefno, record.inputs.targetRefno);
+    const other = kept.get(key);
+    if (!other) {
+      kept.set(key, record);
+      continue;
+    }
+    const [newer, older] = record.computedAt > other.computedAt ? [record, other] : [other, record];
+    if (hiddenResultIds.value.has(older.id)) clearanceStore.setHidden(newer.id, true);
+    clearanceStore.removeRecord(older.id);
+    kept.set(key, newer);
+  }
+}
+
 /** 直段身份键规范化（所属 BRAN 与两端都换成 `a_b`）；不是直段键回空串。 */
 function normalizeTubeKey(key: string): string {
   const tube = parseTubeKey(key);
@@ -468,6 +491,13 @@ export function usePipeDistanceStore() {
     for (const record of pipeRowGroupRecords(rowKey)) clearanceStore.setHidden(record.id, hidden);
   }
 
+  /** 一对 BRAN 现存的净距记录，两个方向都查（反序选过留下的旧记录也是同一对）。 */
+  function pairRecords(sourceRefno: string, targetRefno: string): ClearanceRecord[] {
+    return [pipeDistanceInputs(sourceRefno, targetRefno), pipeDistanceInputs(targetRefno, sourceRefno)]
+      .map(inputs => clearanceStore.findRecord(clearanceRecordId(inputs)))
+      .filter((record): record is ClearanceRecord => record !== null);
+  }
+
   /**
    * `PipeDistanceResult` 形状的一批结果（轴线估算兜底、开发 / E2E 注入、legacy 数据）整组落 ClearanceStore：
    * 只替换这批覆盖到的管对的既有记录，其他记录的真相不动；返回落库后的记录。
@@ -503,11 +533,12 @@ export function usePipeDistanceStore() {
     detectError.value = null;
     detectNotice.value = null;
 
-    // 工作台批量检测所有唯一管对；保留源→目标模式供既有调用使用。
+    // 工作台批量检测所有唯一管对（按 refno 定方向）；保留源→目标模式供周边检测与既有调用使用。
+    const allPairs = options.pairMode === 'all-pairs';
     const pairs: [string, string][] = [];
     for (let i = 0; i < branRefnos.length - 1; i += 1) {
-      if (i > 0 && options.pairMode !== 'all-pairs') break;
-      for (let j = i + 1; j < branRefnos.length; j += 1) pairs.push([branRefnos[i]!, branRefnos[j]!]);
+      if (i > 0 && !allPairs) break;
+      for (let j = i + 1; j < branRefnos.length; j += 1) pairs.push(orderedPair(branRefnos[i]!, branRefnos[j]!, allPairs));
     }
     const distanceLimit = Number.isFinite(maxDistance.value) && maxDistance.value > 0 ? maxDistance.value : 500;
 
@@ -515,7 +546,7 @@ export function usePipeDistanceStore() {
       const warnings: string[] = [];
       const settled: (ClearanceRecord | null)[] = Array(pairs.length).fill(null);
       // 现存记录要改的状态先记下，等回包到齐、本轮仍有效时再改：迟到的回包不许把已清空、已换上下文的记录写回去
-      const invalidated = new Map<string, 'stale' | 'failed'>();
+      const invalidated = new Map<number, 'stale' | 'failed'>();
       let cursor = 0;
       // ponytail: O(n²) pairs; at most four mesh queries in flight, spatial candidate filtering can reduce large selections later.
       const worker = async () => {
@@ -523,7 +554,6 @@ export function usePipeDistanceStore() {
           const index = cursor++;
           const [sourceRefno, targetRefno] = pairs[index]!;
           const inputs = { ...pipeDistanceInputs(sourceRefno, targetRefno), maxDistanceMm: distanceLimit };
-          const id = clearanceRecordId(pipeDistanceInputs(sourceRefno, targetRefno));
           try {
             const resp = await genModelV1SurfaceClearance({
               sourceRefno,
@@ -536,24 +566,24 @@ export function usePipeDistanceStore() {
             if (!resp.success || resp.unit !== 'mm' || resp.method !== 'surface_to_surface' || resp.accuracy_class !== 'exact-surface'
               || !Number.isFinite(resp.error_bound_mm) || resp.error_bound_mm < 0 || resp.error_bound_mm > 10) {
               warnings.push(`${sourceRefno} ↔ ${targetRefno}：净距口径或误差界无效`);
-              invalidated.set(id, 'stale');
+              invalidated.set(index, 'stale');
               continue;
             }
             if (!resp.result) {
               warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
               // 重算说「没有靠近」：现存记录口径已不成立，标 stale 而不是装没看见。
-              invalidated.set(id, 'stale');
+              invalidated.set(index, 'stale');
               continue;
             }
             if ((options.pairMode === 'all-pairs' || options.withinMaxDistance) && resp.result.distance_mm > distanceLimit) {
-              invalidated.set(id, 'stale');
+              invalidated.set(index, 'stale');
               continue;
             }
             if (!Number.isFinite(resp.result.distance_mm) || resp.result.distance_mm < 0
             || ![resp.result.source_point, resp.result.target_point].every(point =>
               [point.x, point.y, point.z].every(Number.isFinite))) {
               warnings.push(`${sourceRefno} ↔ ${targetRefno}：距离或最近点无效`);
-              invalidated.set(id, 'stale');
+              invalidated.set(index, 'stale');
               continue;
             }
             // 先收进按管对序的 settled，worker 全部结束后统一 upsert——记录顺序不随请求完成先后漂。
@@ -563,26 +593,36 @@ export function usePipeDistanceStore() {
             const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
             warnings.push(`${targetRefno}：${message}`);
             // 计算出错：已有记录标 failed 留住旧快照（与 store.compute 的语义一致）。
-            invalidated.set(id, 'failed');
+            invalidated.set(index, 'failed');
           }
         }
       };
       await Promise.all(Array.from({ length: Math.min(4, pairs.length) }, worker));
       if (sequence !== detectionSequence) return false;
 
-      for (const [id, status] of invalidated) {
-        const record = clearanceStore.findRecord(id);
-        if (record && (status === 'failed' ? record.status !== 'failed' : record.status === 'current')) {
-          clearanceStore.upsertRecord(withClearanceStatus(record, status));
+      for (const [index, status] of invalidated) {
+        const [sourceRefno, targetRefno] = pairs[index]!;
+        for (const record of pairRecords(sourceRefno, targetRefno)) {
+          if (status === 'failed' ? record.status !== 'failed' : record.status === 'current') {
+            clearanceStore.upsertRecord(withClearanceStatus(record, status));
+          }
         }
       }
       lastRunSettledCount.value = 0;
       let first: ClearanceRecord | null = null;
-      for (const record of settled) {
+      for (const [index, record] of settled.entries()) {
         if (!record) continue;
-        clearanceStore.upsertRecord(record);
+        // 反序选过留下的另一方向旧记录由这一条接替，隐藏状态跟过来
+        const [sourceRefno, targetRefno] = pairs[index]!;
+        const previous = pairRecords(sourceRefno, targetRefno);
+        const hidden = previous.some(old => hiddenResultIds.value.has(old.id));
+        for (const old of previous) {
+          if (old.id !== record.id) clearanceStore.removeRecord(old.id);
+        }
+        const saved = clearanceStore.upsertRecord(record);
+        if (hidden) clearanceStore.setHidden(saved.id, true);
         lastRunSettledCount.value += 1;
-        first ??= clearanceStore.findRecord(record.id) ?? record;
+        first ??= saved;
       }
       clearanceStore.setActive(first?.id ?? null);
 
@@ -901,10 +941,18 @@ export function usePipeDistanceStore() {
 
   return {
     ...persistence,
+    // ClearanceStore 先绑好、记录已载入（ViewerPanel 先绑它再绑本 store），再收拾旧版反序重选留下的双向重复记录
+    bindPersistence: (...args: Parameters<typeof persistence.bindPersistence>) => {
+      persistence.bindPersistence(...args);
+      dedupeReversePipeRecords();
+    },
     captureSnapshot: capturePipeSnapshot,
     prepareSnapshotRestore: (value: unknown) => {
       const apply = preparePipeSnapshot(value);
-      return () => persistence.applyPreparedRestore(apply);
+      return () => {
+        persistence.applyPreparedRestore(apply);
+        dedupeReversePipeRecords();
+      };
     },
     showAnnotations,
     maxDistance,

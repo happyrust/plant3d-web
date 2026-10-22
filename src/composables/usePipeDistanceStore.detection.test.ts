@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePipeDistanceStore } from './usePipeDistanceStore';
 
+import type { SurfaceClearanceResponse } from '@/api/genModelV1Api';
+
+import { pipeDistanceInputs } from '@/clearance/adapters/pipeDistanceRecords';
 import { pipeRowGapEstimated } from '@/clearance/domain/pipeRowTypes';
+import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 
 const v1ApiMocks = vi.hoisted(() => ({
@@ -647,11 +651,10 @@ describe('usePipeDistanceStore · 净距检测', () => {
     const pairs = store.pipeResults.value.map(record => pairKey(record.inputs.sourceRefno, record.inputs.targetRefno)).sort();
     expect(pairs).toEqual([pairKey('24381_1001', '24381_1002'), pairKey('24381_1001', '24381_1003'), pairKey('24381_1002', '24381_1003')].sort());
     await store.autoDetectBrans(['24381_1003', '24381_1002', '24381_1001'], { pairMode: 'all-pairs' });
-    // 反序重跑：`clearanceRecordId` 有向——同一对又写出 B→A 方向的新记录；
-    // 无序管对仍就是这三对（交互式点选同一语义的记录身份），两条方向记录并存是如实呈现。
-    const pairKeysAgain = store.pipeResults.value.map(record => pairKey(record.inputs.sourceRefno, record.inputs.targetRefno));
-    expect(new Set(pairKeysAgain)).toEqual(new Set(pairs));
-    expect(store.pipeResults.value).toHaveLength(6);
+    // 反序重跑：所有管对按 refno 定方向，同一对还是同一条记录
+    expect(store.pipeResults.value.map(record => [record.inputs.sourceRefno, record.inputs.targetRefno])).toEqual([
+      ['24381_1001', '24381_1002'], ['24381_1001', '24381_1003'], ['24381_1002', '24381_1003'],
+    ]);
     expect(store.pipeResults.value.every(record => record.provenance.method === 'surface-to-surface')).toBe(true);
   });
 
@@ -745,6 +748,39 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(await pending).toBe(false);
     expect(store.pipeResults.value).toEqual([]);
     expect(storage.get('plant3d-clearance-v1:project-B') ?? '').not.toContain('24381_1001');
+    store.detachPersistence();
+    clearance.detachPersistence();
+  });
+
+  it('所有管对接替周边检测留下的反向记录，隐藏状态跟过来', async () => {
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(surfaceClearanceResponse());
+    const store = usePipeDistanceStore();
+    await store.autoDetectBrans(['24381_1002', '24381_1001']);
+    const reverse = store.pipeResults.value[0]!;
+    expect(reverse.inputs).toMatchObject({ sourceRefno: '24381_1002', targetRefno: '24381_1001' });
+    store.toggleResultHidden(reverse.id);
+    await store.autoDetectBrans(['24381_1002', '24381_1001'], { pairMode: 'all-pairs' });
+    expect(store.pipeResults.value.map(record => [record.inputs.sourceRefno, record.inputs.targetRefno])).toEqual([['24381_1001', '24381_1002']]);
+    expect(store.hiddenResultIds.value.has(store.pipeResults.value[0]!.id)).toBe(true);
+  });
+
+  it('恢复本机记录时，同一对管道两个方向的旧记录只留较新的一条', () => {
+    const storage = new Map<string, string>();
+    const local = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value); } };
+    const clearance = useClearanceStore();
+    const store = usePipeDistanceStore();
+    clearance.bindPersistence('legacy', local);
+    store.bindPersistence('legacy', local);
+    const response = surfaceClearanceResponse() as unknown as SurfaceClearanceResponse;
+    const older = clearance.upsertRecord(surfaceClearanceToRecord(response, pipeDistanceInputs('24381_1001', '24381_1002'), new Date('2026-10-01T00:00:00Z')));
+    const newer = clearance.upsertRecord(surfaceClearanceToRecord(response, pipeDistanceInputs('24381_1002', '24381_1001'), new Date('2026-10-02T00:00:00Z')));
+    clearance.setHidden(older.id, true);
+    clearance.bindPersistence('other', local);
+    store.bindPersistence('other', local);
+    clearance.bindPersistence('legacy', local);
+    store.bindPersistence('legacy', local);
+    expect(store.pipeResults.value.map(record => record.id)).toEqual([newer.id]);
+    expect(store.hiddenResultIds.value.has(newer.id)).toBe(true);
     store.detachPersistence();
     clearance.detachPersistence();
   });
