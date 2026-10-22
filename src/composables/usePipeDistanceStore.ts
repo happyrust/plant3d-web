@@ -110,6 +110,8 @@ export function needsAxisEstimateFallback(outcome: PipeDetectionOutcome | null):
 }
 /** 计算失败的管对多于这么多条时，红字只列前几条，全部收进可展开的明细。 */
 const FAILURE_LINES_SHOWN = 5;
+/** 服务端支不支持周边检测（`nearby/branches`）；遇到这条路由不存在的 404 就置 false，本次会话收起入口。 */
+const nearbySupported = ref(true);
 /** 检测模式：`all-pairs` 外表面净距全对；`pipe-row` 连排相邻（真实中心线归排，见 plan §7）。 */
 const detectionMode = ref<'all-pairs' | 'pipe-row'>('all-pairs');
 /** 连排归排方式：`center` 管中心成排；`bottom` 管底对齐（缺省世界向上作支承法向）。 */
@@ -976,6 +978,12 @@ export function usePipeDistanceStore() {
       return applied;
     } catch (error) {
       if (sequence !== detectionSequence) return false;
+      // 路由不存在的 404 没有错误信封（消息就是「HTTP 404 …」）；查无此管的 404 带信封消息，照常报错
+      if (isGenModelV1ApiError(error) && error.status === 404 && error.message.startsWith('HTTP 404')) {
+        nearbySupported.value = false;
+        detectError.value = '当前服务端版本不支持周边检测（需要更新 gen-model 后端），原有结果已保留';
+        return false;
+      }
       detectError.value = `周边检测失败，原有结果已保留：${error instanceof Error ? error.message : String(error)}`;
       return false;
     } finally {
@@ -1035,6 +1043,7 @@ export function usePipeDistanceStore() {
     isDetecting,
     lastRunSettledCount,
     lastRunOutcome,
+    nearbySupported,
     detectError,
     hiddenResultIds,
     resultMinDistance,

@@ -4,6 +4,7 @@ import { needsAxisEstimateFallback, usePipeDistanceStore, type PipeDetectionOutc
 
 import type { SurfaceClearanceResponse } from '@/api/genModelV1Api';
 
+import { GenModelV1ApiError } from '@/api/genModelV1Api';
 import { pipeDistanceInputs } from '@/clearance/adapters/pipeDistanceRecords';
 import { pipeRowGapEstimated } from '@/clearance/domain/pipeRowTypes';
 import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService';
@@ -883,5 +884,18 @@ describe('usePipeDistanceStore · 净距检测', () => {
     await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
     expect(store.pipeResults.value.map(record => Math.round(record.snapshot!.distanceM * 1000))).toEqual([40]);
     expect(store.detectNotice.value).toBeNull();
+  });
+
+  it('服务端没有周边检测这条路由时提示版本不支持并收起入口；查无此管的 404 照常报错', async () => {
+    const store = usePipeDistanceStore();
+    const notFound = (message: string) => new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/spatial/nearby/branches', message });
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockRejectedValueOnce(notFound('构件 24381/1001 不存在'));
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
+    expect(store.detectError.value).toBe('周边检测失败，原有结果已保留：构件 24381/1001 不存在');
+    expect(store.nearbySupported.value).toBe(true);
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockRejectedValueOnce(notFound('HTTP 404 Not Found'));
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
+    expect(store.detectError.value).toBe('当前服务端版本不支持周边检测（需要更新 gen-model 后端），原有结果已保留');
+    expect(store.nearbySupported.value).toBe(false);
   });
 });

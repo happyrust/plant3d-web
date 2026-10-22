@@ -815,7 +815,7 @@ function isResultHidden(id: string): boolean {
             <p class="text-[11px] text-muted-foreground">{{ isRowMode ? '连排相邻按真实中心线归排，不用网格拟合兜底；每对相邻管出「截面中心距 + 外径推导间隔」两条记录，存疑的排进下方预览，确认后才生成。' : '批量检测所有管对的模型外表面净距，包含交叉和斜交；中心距估算会单独注明。' }}</p>
 
             <!-- 重新检测 -->
-            <button v-if="!isRowMode && store.selectedBranRefnos.value.length === 1" type="button"
+            <button v-if="!isRowMode && store.selectedBranRefnos.value.length === 1 && store.nearbySupported.value" type="button"
               :disabled="store.isDetecting.value"
               class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-primary px-3 text-xs text-primary disabled:opacity-50"
               @click="handleDetectNearby">
@@ -858,7 +858,8 @@ function isResultHidden(id: string): boolean {
 
             <div v-if="store.selectedBranRefnos.value.length < 2 && !store.isDetecting.value"
               class="text-xs text-muted-foreground">
-              {{ isRowMode ? '选 2 根及以上可检测连排相邻管道' : '选 1 根可检测周边管道；选 2 根及以上可检测所有已选管对' }}
+              {{ isRowMode ? '选 2 根及以上可检测连排相邻管道'
+                : store.nearbySupported.value ? '选 1 根可检测周边管道；选 2 根及以上可检测所有已选管对' : '选 2 根及以上可检测所有已选管对' }}
             </div>
 
             <!-- 错误提示 -->
