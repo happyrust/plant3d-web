@@ -16,6 +16,16 @@ import type { SpatialCenterlineSegment } from '@/api/genModelV1Api';
 
 export type Vec3Mm = { x: number; y: number; z: number };
 
+/**
+ * 直段外径的来源证据（连排归排用，比裸数值多一档「有值但来源无法证明」）：
+ * - `catalogue` / `bore-estimate`：逐段 `diameter_evidence.source` 原样；
+ * - `legacy-member`：旧服务端的成员外径（只在 `inferLegacyMemberOd` 时出现）——服务端按 CGETOD 取槽位管子目录外径、
+ *   取不到用到达通径估算，但不说是哪一档，只能当估算用；
+ * - `unverified`：外径有值但来源无法证明（证据声明为 `missing` 的矛盾数据，或只有 BRAN 顶层兼容值），值可展示、不可当推导依据；
+ * - `missing`：这一段根本没有外径（连兼容顶层值都没有）。
+ */
+export type OutsideDiameterEvidence = 'catalogue' | 'bore-estimate' | 'legacy-member' | 'unverified' | 'missing';
+
 /** `buildStraightRuns` 只用到线段表的这几格；`SpatialCenterlineResponse` 直接就是它的实参。 */
 export type BranCenterlineInput = {
   /** BRAN 的 refno（`a_b`） */
@@ -36,6 +46,8 @@ export type BranStraightRun = {
   segments: SpatialCenterlineSegment[];
   /** 这条直段的外径（mm）：同径段才合并；明确缺失时不取顶层值。 */
   outsideDiameterMm: number | null;
+  /** `outsideDiameterMm` 的来源证据（取自首段，即外径实际取值处；同径合并的其余段可能有各自证据，v1 以首段为准）。 */
+  odEvidence: OutsideDiameterEvidence;
 };
 
 /** 两条 BRAN 之间的一对平行直段。 */
@@ -57,6 +69,11 @@ export type BranParallelRunPair = {
   clearanceMm: number | null;
 };
 
+/** `buildStraightRuns` 的诊断项：跳过的成员与断链原因，调用方可选收（不设 `onDiagnostic` 时行为与以前完全一致）。 */
+export type StraightRunDiagnostic =
+  | Readonly<{ kind: 'segment-skipped'; refno: string; order: number; noun: string; reason: 'non-finite-endpoint' | 'too-short' }>
+  | Readonly<{ kind: 'chain-break'; refno: string; order: number; noun: string; reason: 'non-straight-member' | 'joint-gap' | 'not-collinear' | 'diameter-change'; gapMm?: number }>;
+
 export type BuildStraightRunsOptions = {
   /** 段要并进直段，它的两个端点到直段轴线的横向偏差都得 ≤ 它（mm） */
   collinearToleranceMm?: number;
@@ -64,6 +81,19 @@ export type BuildStraightRunsOptions = {
   minSegmentLengthMm?: number;
   /** 这些类型的到达→离开是弦不是轴，断链且不成直段 */
   nonStraightNouns?: ReadonlySet<string>;
+  /**
+   * 端点连接容差（mm）：设置后，成员到达点与上一直段成员离开点的间距超过它就断链——
+   * 中心线缺口（缺成员 / 隐式段未生成）不许被静默跨过合并成假直段。不设 = 不做连接检查（旧行为）。
+   */
+  maxJointGapMm?: number;
+  /** 诊断回调：每个被跳过的成员、每次断链都报一条；不依赖调用方顺序。 */
+  onDiagnostic?: (diagnostic: StraightRunDiagnostic) => void;
+  /**
+   * 旧服务端兼容（连排用）：整条中心线一段 `diameter_evidence` 都没有时，按服务端同一规则补外径并记 `legacy-member`——
+   * 成员段用自己的外径；隐式管身 `X~m` 缺外径时复用它到达的成员 `m`（两者由同一槽位目录外径、同一到达通径算出），
+   * `m` 零长未成段时退到离开的成员 `X`（异径管两侧外径不同，不退）。不设 = 旧行为（顶层值兜底、记 `unverified`）。
+   */
+  inferLegacyMemberOd?: boolean;
 };
 
 export type FindParallelRunPairsOptions = {
@@ -126,7 +156,7 @@ function positiveDiameter(value: number | null | undefined): number | null {
 function finishRun(
   branRefno: string,
   segments: SpatialCenterlineSegment[],
-  fallbackDiameter: number | null,
+  diameters: DiameterResolver,
 ): BranStraightRun | null {
   const first = segments[0];
   const last = segments[segments.length - 1];
@@ -149,7 +179,6 @@ function finishRun(
   }
   const lengthMm = maxT - minT;
   if (!(lengthMm > 0)) return null;
-  const memberDiameter = segmentDiameter(first, fallbackDiameter);
   return {
     branRefno,
     start: add(clonePoint(first.start), scale(direction, minT)),
@@ -157,12 +186,63 @@ function finishRun(
     direction,
     lengthMm,
     segments,
-    outsideDiameterMm: memberDiameter,
+    outsideDiameterMm: diameters.diameter(first),
+    odEvidence: diameters.evidence(first),
   };
 }
 
 function segmentDiameter(segment: SpatialCenterlineSegment, fallback: number | null): number | null {
   return positiveDiameter(segment.outside_diameter_mm) ?? (segment.diameter_evidence ? null : fallback);
+}
+
+/** 与 `segmentDiameter` 同一判定的证据侧：外径实际取值是哪一档来源（含兼容顶层回退 → `unverified`）。 */
+function segmentOdEvidence(segment: SpatialCenterlineSegment, fallback: number | null): OutsideDiameterEvidence {
+  if (positiveDiameter(segment.outside_diameter_mm) != null) {
+    const source = segment.diameter_evidence?.source;
+    return source === 'catalogue' || source === 'bore-estimate' ? source : 'unverified';
+  }
+  if (segment.diameter_evidence) return 'missing';
+  return fallback != null ? 'unverified' : 'missing';
+}
+
+type DiameterResolver = Readonly<{
+  diameter: (segment: SpatialCenterlineSegment) => number | null;
+  evidence: (segment: SpatialCenterlineSegment) => OutsideDiameterEvidence;
+}>;
+
+/** 两侧外径不同的成员：隐式管身不能从它的离开侧借外径。 */
+const REDUCER_NOUNS: ReadonlySet<string> = new Set(['REDU']);
+
+/** 旧服务端成员外径表（规则见 `BuildStraightRunsOptions.inferLegacyMemberOd`）：段 refno → 外径。 */
+function legacyMemberDiameters(segments: readonly SpatialCenterlineSegment[]): Map<string, number> {
+  const diameters = new Map<string, number>();
+  const members = new Map<string, { od: number; noun: string }>();
+  for (const segment of segments) {
+    const od = positiveDiameter(segment.outside_diameter_mm);
+    if (od === null) continue;
+    diameters.set(segment.refno, od);
+    if (!segment.implicit) members.set(segment.refno, { od, noun: String(segment.noun || '').trim().toUpperCase() });
+  }
+  for (const segment of segments) {
+    const cut = segment.refno.indexOf('~');
+    if (!segment.implicit || cut < 0 || diameters.has(segment.refno)) continue;
+    const arrive = members.get(segment.refno.slice(cut + 1));
+    const leave = members.get(segment.refno.slice(0, cut));
+    const od = arrive?.od ?? (leave && !REDUCER_NOUNS.has(leave.noun) ? leave.od : undefined);
+    if (od !== undefined) diameters.set(segment.refno, od);
+  }
+  return diameters;
+}
+
+function diameterResolver(centerline: BranCenterlineInput, inferLegacyMemberOd: boolean): DiameterResolver {
+  const fallback = positiveDiameter(centerline.outside_diameter_mm);
+  const legacy = inferLegacyMemberOd && centerline.segments.every(segment => segment.diameter_evidence == null)
+    ? legacyMemberDiameters(centerline.segments)
+    : null;
+  return {
+    diameter: segment => legacy?.get(segment.refno) ?? segmentDiameter(segment, fallback),
+    evidence: segment => (legacy?.has(segment.refno) ? 'legacy-member' : segmentOdEvidence(segment, fallback)),
+  };
 }
 
 /**
@@ -177,37 +257,67 @@ export function buildStraightRuns(
   const collinearTol = options.collinearToleranceMm ?? DEFAULT_COLLINEAR_TOLERANCE_MM;
   const minLength = options.minSegmentLengthMm ?? DEFAULT_MIN_SEGMENT_LENGTH_MM;
   const nonStraight = options.nonStraightNouns ?? NON_STRAIGHT_NOUNS;
-  const fallbackDiameter = positiveDiameter(centerline.outside_diameter_mm);
+  const maxJointGap = options.maxJointGapMm;
+  const report = options.onDiagnostic;
+  const diameters = diameterResolver(centerline, options.inferLegacyMemberOd === true);
   const branRefno = String(centerline.refno || '').trim();
 
   const runs: BranStraightRun[] = [];
   let current: SpatialCenterlineSegment[] = [];
   const flush = () => {
-    const run = finishRun(branRefno, current, fallbackDiameter);
+    const run = finishRun(branRefno, current, diameters);
     if (run) runs.push(run);
     current = [];
   };
+  const noun = (segment: SpatialCenterlineSegment) => String(segment.noun || '').trim().toUpperCase();
 
   const ordered = [...centerline.segments].sort((a, b) => a.order - b.order);
   for (const segment of ordered) {
-    if (!isFinitePoint(segment.start) || !isFinitePoint(segment.end)) continue;
-    if (length(sub(segment.end, segment.start)) < minLength) continue;
-    if (nonStraight.has(String(segment.noun || '').trim().toUpperCase())) {
+    if (!isFinitePoint(segment.start) || !isFinitePoint(segment.end)) {
+      report?.({ kind: 'segment-skipped', refno: segment.refno, order: segment.order, noun: noun(segment), reason: 'non-finite-endpoint' });
+      continue;
+    }
+    if (length(sub(segment.end, segment.start)) < minLength) {
+      report?.({ kind: 'segment-skipped', refno: segment.refno, order: segment.order, noun: noun(segment), reason: 'too-short' });
+      continue;
+    }
+    if (nonStraight.has(noun(segment))) {
+      report?.({ kind: 'chain-break', refno: segment.refno, order: segment.order, noun: noun(segment), reason: 'non-straight-member' });
       flush();
       continue;
     }
     if (current.length > 0) {
-      // 以当前直段首段的轴线为准（首段一定非零长），后来的段两端都得贴在这条线上。
-      const head = current[0]!;
-      const axis = sub(head.end, head.start);
-      const direction = scale(axis, 1 / length(axis));
-      const collinear = distanceToLine(segment.start, head.start, direction) <= collinearTol
-        && distanceToLine(segment.end, head.start, direction) <= collinearTol;
-      const headDiameter = segmentDiameter(head, fallbackDiameter);
-      const nextDiameter = segmentDiameter(segment, fallbackDiameter);
-      const sameDiameter = headDiameter === null || nextDiameter === null ? headDiameter === nextDiameter
-        : Math.abs(headDiameter - nextDiameter) <= 0.001;
-      if (!collinear || !sameDiameter) flush();
+      // 连接检查先于共线判断：缺口两侧的段哪怕共线也不许跨档合并。
+      const tail = current[current.length - 1]!;
+      if (maxJointGap != null) {
+        const jointGap = length(sub(segment.start, tail.end));
+        if (jointGap > maxJointGap) {
+          report?.({ kind: 'chain-break', refno: segment.refno, order: segment.order, noun: noun(segment), reason: 'joint-gap', gapMm: jointGap });
+          flush();
+        }
+      }
+      if (current.length > 0) {
+        // 以当前直段首段的轴线为准（首段一定非零长），后来的段两端都得贴在这条线上。
+        const head = current[0]!;
+        const axis = sub(head.end, head.start);
+        const direction = scale(axis, 1 / length(axis));
+        const collinear = distanceToLine(segment.start, head.start, direction) <= collinearTol
+          && distanceToLine(segment.end, head.start, direction) <= collinearTol;
+        const headDiameter = diameters.diameter(head);
+        const nextDiameter = diameters.diameter(segment);
+        const sameDiameter = headDiameter === null || nextDiameter === null ? headDiameter === nextDiameter
+          : Math.abs(headDiameter - nextDiameter) <= 0.001;
+        if (!collinear || !sameDiameter) {
+          report?.({
+            kind: 'chain-break',
+            refno: segment.refno,
+            order: segment.order,
+            noun: noun(segment),
+            reason: !collinear ? 'not-collinear' : 'diameter-change',
+          });
+          flush();
+        }
+      }
     }
     current.push(segment);
   }

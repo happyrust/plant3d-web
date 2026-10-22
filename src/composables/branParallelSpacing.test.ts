@@ -107,6 +107,31 @@ describe('buildStraightRuns：连续共线的段合成直段', () => {
     const other = buildStraightRuns(centerline('7', [seg('7_1~7_2', 0, [0, 300, 0], [300, 300, 0], { outside_diameter_mm: 100 })]));
     expect(findParallelRunPairs(variedRuns, other).map(pair => pair.clearanceMm)).toEqual([300 - (114.3 + 100) / 2, 300 - (60.3 + 100) / 2, null]);
   });
+
+  it('旧服务端兼容（inferLegacyMemberOd）：隐式管身复用到达成员的外径，到达成员不成段时退到离开成员（异径管不退），记 legacy-member', () => {
+    const legacy = centerline('8', [
+      seg('Head~8_1', 0, [0, 0, 0], [1000, 0, 0]),
+      seg('8_1', 1, [1000, 0, 0], [1200, 0, 0], { noun: 'FLAN', outside_diameter_mm: 168.3 }),
+      // 8_2 是零长穿过件（焊缝），服务端不出段：退到离开的成员 8_1
+      seg('8_1~8_2', 2, [1200, 0, 0], [2000, 0, 0]),
+      seg('8_2~8_3', 4, [2000, 0, 0], [3000, 0, 0]),
+      seg('8_3', 5, [3000, 0, 0], [3200, 0, 0], { noun: 'REDU', outside_diameter_mm: 168.3 }),
+      // 尾管离开的是异径管：两侧外径不同，不借，退回顶层兼容值（unverified）
+      seg('8_3~Tail', 6, [3200, 0, 0], [4000, 0, 0]),
+    ], 114.3);
+    const runs = buildStraightRuns(legacy, { inferLegacyMemberOd: true });
+    expect(runs.map(run => [run.segments.map(s => s.refno), run.outsideDiameterMm, run.odEvidence])).toEqual([
+      [['Head~8_1', '8_1', '8_1~8_2', '8_2~8_3', '8_3'], 168.3, 'legacy-member'],
+      [['8_3~Tail'], 114.3, 'unverified'],
+    ]);
+    // 不开兼容：旧行为，顶层值兜底、成员外径都记 unverified
+    expect(buildStraightRuns(legacy).every(run => run.odEvidence === 'unverified')).toBe(true);
+    // 新服务端（任一段带证据）不走兼容推断
+    const enriched = centerline('9', legacy.segments.map((segment, index) => (index === 1
+      ? { ...segment, diameter_evidence: { source: 'catalogue' as const, catalogue_od_mm: 168.3, arrive_bore_mm: null } }
+      : segment)), 114.3);
+    expect(buildStraightRuns(enriched, { inferLegacyMemberOd: true })[0]!.odEvidence).toBe('unverified');
+  });
 });
 
 describe('findParallelRunPairs：两条 BRAN 的直段配平行对', () => {

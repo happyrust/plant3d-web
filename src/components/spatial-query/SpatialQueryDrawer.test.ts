@@ -1510,6 +1510,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
         outside_diameter_mm: null,
       })),
       outsideDiameterMm: 114.3,
+      odEvidence: 'catalogue',
     });
     const pair: BranParallelRunPair = {
       source: { ...run([{ refno: '24381_145019', noun: 'TUBI' }]), branRefno: '24381_145018' },

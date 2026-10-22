@@ -31,6 +31,7 @@ function run(branRefno: string, firstSegRefno: string, extraNoun = 'TUBI'): Bran
     lengthMm: 1000,
     segments: [segment(firstSegRefno, extraNoun)],
     outsideDiameterMm: 114.3,
+    odEvidence: 'catalogue',
   };
 }
 
