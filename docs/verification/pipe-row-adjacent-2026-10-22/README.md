@@ -5,7 +5,7 @@
 ## 环境
 
 - 后端：`aios-database`（gen-model `refactor` 线）`:8022`，库 7997（AvevaMarineSample）。这一版中心线接口**不给逐段外径来源**（`diameter_evidence`）和 `source_version`，前端按「旧服务端成员外径」估算（见 §3.1）。
-- 前端提交：`28d739ab`（直段与外径证据）、`4088676a`（记录契约与推导精度档）、`095084df`（连排几何）、`a26e7e1b`（抽屉连排模式）、`3514b70c`（空间查询 / 校审口径）、`930afc26`（三维文字 ≈ 字形）。
+- 前端提交：`d688c20b`（直段与外径证据）、`9dd120ef`（记录契约与推导精度档）、`860ebf7c`（连排几何）、`e17ff360`（抽屉连排模式）、`a33c57ae`（空间查询 / 校审口径）、`aa2c5997`（三维文字 ≈ 字形）、`c67f2bb8`（功能区打开抽屉的报错）。
 - 检查：相关单测全过；`npm run type-check` 473 条 = 基线、新增 0；改动文件 ESLint 干净。
 
 ## 一、操作教程
@@ -118,4 +118,3 @@ headless Chrome + 抽屉 harness（`harness/pipe-distance.html`），接本机�
 
 - 后端 `a1e3210cd`（逐段外径证据）、`f993816c7`（`source_version`）还没进 `refactor` / `publish`：外径只能按估算处理（推导间隔带 ≈、管底对齐要确认），记录也没有模型版本号。
 - 三维效果图里没有管道实体（本机后端未生成模型几何）。
-- 从功能区打开抽屉时，控制台有一条 `ReferenceError: rangeDrawerOpen is not defined`（`ViewerPanel.vue` 既有问题，抽屉照常打开）。
