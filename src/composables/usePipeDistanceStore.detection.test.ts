@@ -696,4 +696,65 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(await old).toBe(false);
     expect(store.pipeResults.value[0]).toMatchObject({ inputs: { sourceRefno: '24381_1003', targetRefno: '24381_1004' } });
   });
+
+  it('清空后迟到的「没靠近」回包不把清掉的记录写回来', async () => {
+    const store = usePipeDistanceStore();
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse());
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    expect(store.pipeResults.value).toHaveLength(1);
+    let resolve: ((value: unknown) => void) | undefined;
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    await vi.waitFor(() => expect(resolve).toBeDefined());
+    store.clearResults();
+    resolve!(surfaceClearanceResponse({ result: null, warnings: ['beyond_max_distance: 500 mm 内两侧网格没有靠近到一起'] }));
+    expect(await pending).toBe(false);
+    expect(store.pipeResults.value).toEqual([]);
+  });
+
+  it('清空后迟到的失败回包不把清掉的记录写回来', async () => {
+    const store = usePipeDistanceStore();
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse());
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    let reject: ((error: unknown) => void) | undefined;
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    await vi.waitFor(() => expect(reject).toBeDefined());
+    store.clearResults();
+    reject!(new Error('HTTP 503'));
+    expect(await pending).toBe(false);
+    expect(store.pipeResults.value).toEqual([]);
+  });
+
+  it('换上下文后迟到的「没靠近」回包不把旧上下文的记录写进新上下文', async () => {
+    const storage = new Map<string, string>();
+    const local = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value); } };
+    const clearance = useClearanceStore();
+    const store = usePipeDistanceStore();
+    clearance.bindPersistence('project-A', local);
+    store.bindPersistence('project-A', local);
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse());
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    let resolve: ((value: unknown) => void) | undefined;
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    await vi.waitFor(() => expect(resolve).toBeDefined());
+    clearance.bindPersistence('project-B', local);
+    store.bindPersistence('project-B', local);
+    resolve!(surfaceClearanceResponse({ result: null, warnings: ['beyond_max_distance: 500 mm 内两侧网格没有靠近到一起'] }));
+    expect(await pending).toBe(false);
+    expect(store.pipeResults.value).toEqual([]);
+    expect(storage.get('plant3d-clearance-v1:project-B') ?? '').not.toContain('24381_1001');
+    store.detachPersistence();
+    clearance.detachPersistence();
+  });
+
+  it('口径无效的回包把现存记录标过期', async () => {
+    const store = usePipeDistanceStore();
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse());
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse({ accuracy_class: 'approximate' }));
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    expect(store.pipeResults.value.map(record => record.status)).toEqual(['stale']);
+  });
 });

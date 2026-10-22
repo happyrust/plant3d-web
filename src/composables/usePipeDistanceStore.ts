@@ -468,11 +468,6 @@ export function usePipeDistanceStore() {
     for (const record of pipeRowGroupRecords(rowKey)) clearanceStore.setHidden(record.id, hidden);
   }
 
-  /** 某一对 BRAN 现存的记录（重算覆盖 / 失败标 stale 都先查它）。 */
-  function existingRecord(sourceRefno: string, targetRefno: string): ClearanceRecord | null {
-    return clearanceStore.findRecord(clearanceRecordId(pipeDistanceInputs(sourceRefno, targetRefno)));
-  }
-
   /**
    * `PipeDistanceResult` 形状的一批结果（轴线估算兜底、开发 / E2E 注入、legacy 数据）整组落 ClearanceStore：
    * 只替换这批覆盖到的管对的既有记录，其他记录的真相不动；返回落库后的记录。
@@ -519,6 +514,8 @@ export function usePipeDistanceStore() {
     try {
       const warnings: string[] = [];
       const settled: (ClearanceRecord | null)[] = Array(pairs.length).fill(null);
+      // 现存记录要改的状态先记下，等回包到齐、本轮仍有效时再改：迟到的回包不许把已清空、已换上下文的记录写回去
+      const invalidated = new Map<string, 'stale' | 'failed'>();
       let cursor = 0;
       // ponytail: O(n²) pairs; at most four mesh queries in flight, spatial candidate filtering can reduce large selections later.
       const worker = async () => {
@@ -526,7 +523,7 @@ export function usePipeDistanceStore() {
           const index = cursor++;
           const [sourceRefno, targetRefno] = pairs[index]!;
           const inputs = { ...pipeDistanceInputs(sourceRefno, targetRefno), maxDistanceMm: distanceLimit };
-          const previous = existingRecord(sourceRefno, targetRefno);
+          const id = clearanceRecordId(pipeDistanceInputs(sourceRefno, targetRefno));
           try {
             const resp = await genModelV1SurfaceClearance({
               sourceRefno,
@@ -535,41 +532,50 @@ export function usePipeDistanceStore() {
               perpendicular: false,
               ...((options.pairMode === 'all-pairs' || options.withinMaxDistance) ? { maxDistanceMm: distanceLimit } : {}),
             });
+            if (sequence !== detectionSequence) return;
             if (!resp.success || resp.unit !== 'mm' || resp.method !== 'surface_to_surface' || resp.accuracy_class !== 'exact-surface'
               || !Number.isFinite(resp.error_bound_mm) || resp.error_bound_mm < 0 || resp.error_bound_mm > 10) {
               warnings.push(`${sourceRefno} ↔ ${targetRefno}：净距口径或误差界无效`);
+              invalidated.set(id, 'stale');
               continue;
             }
             if (!resp.result) {
               warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
               // 重算说「没有靠近」：现存记录口径已不成立，标 stale 而不是装没看见。
-              if (previous && previous.status === 'current') {
-                clearanceStore.upsertRecord(withClearanceStatus(previous, 'stale'));
-              }
+              invalidated.set(id, 'stale');
               continue;
             }
-            if ((options.pairMode === 'all-pairs' || options.withinMaxDistance) && resp.result.distance_mm > distanceLimit) continue;
+            if ((options.pairMode === 'all-pairs' || options.withinMaxDistance) && resp.result.distance_mm > distanceLimit) {
+              invalidated.set(id, 'stale');
+              continue;
+            }
             if (!Number.isFinite(resp.result.distance_mm) || resp.result.distance_mm < 0
             || ![resp.result.source_point, resp.result.target_point].every(point =>
               [point.x, point.y, point.z].every(Number.isFinite))) {
               warnings.push(`${sourceRefno} ↔ ${targetRefno}：距离或最近点无效`);
+              invalidated.set(id, 'stale');
               continue;
             }
             // 先收进按管对序的 settled，worker 全部结束后统一 upsert——记录顺序不随请求完成先后漂。
-            settled[index] = surfaceClearanceToRecord(resp, inputs, new Date(), previous);
+            settled[index] = surfaceClearanceToRecord(resp, inputs, new Date());
           } catch (error) {
+            if (sequence !== detectionSequence) return;
             const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
             warnings.push(`${targetRefno}：${message}`);
             // 计算出错：已有记录标 failed 留住旧快照（与 store.compute 的语义一致）。
-            if (previous && previous.status !== 'failed') {
-              clearanceStore.upsertRecord(withClearanceStatus(previous, 'failed'));
-            }
+            invalidated.set(id, 'failed');
           }
         }
       };
       await Promise.all(Array.from({ length: Math.min(4, pairs.length) }, worker));
       if (sequence !== detectionSequence) return false;
 
+      for (const [id, status] of invalidated) {
+        const record = clearanceStore.findRecord(id);
+        if (record && (status === 'failed' ? record.status !== 'failed' : record.status === 'current')) {
+          clearanceStore.upsertRecord(withClearanceStatus(record, status));
+        }
+      }
       lastRunSettledCount.value = 0;
       let first: ClearanceRecord | null = null;
       for (const record of settled) {
