@@ -123,7 +123,7 @@ describe('clearanceExternalDimensions', () => {
     expect(clearanceDimensionText(inHole)).toBe('50mm ⊥');
   });
 
-  it('连排双度量：缺省每对只画名义间隔、中心距并进它的来源说明；两种都画时推导间隔画到连线另一侧；尺寸文字自带口径前缀', () => {
+  it('连排双度量：缺省只画名义间隔、中心距并进它的来源说明；勾了两种都画时推导间隔画到连线另一侧；尺寸文字自带口径前缀', () => {
     const center = pipeRowRecord('center-distance', 300);
     const gap = pipeRowRecord('derived-gap', 50);
     expect(clearanceDimensionText(center)).toBe('中心距 300mm');
@@ -132,7 +132,7 @@ describe('clearanceExternalDimensions', () => {
     const folded = clearanceRecordsToExternalDimensions([center, gap]);
     expect(folded.records.map(d => d.id)).toEqual([`clearance:${gap.id}`]);
     expect(folded.records[0]!.sourceLabel).toBe('连排外径推导间隔: a~0_1 → b~0_1；中心距 300mm');
-    expect(folded.skipped).toEqual([{ id: `clearance:${center.id}`, reason: 'Pipe-row pair is drawn as its nominal gap' }]);
+    expect(folded.skipped).toEqual([{ id: `clearance:${center.id}`, reason: 'Pipe-row center distance is drawn only when both metrics are shown' }]);
 
     const both = clearanceRecordsToExternalDimensions([center, gap], { pipeRowBothMetrics: true });
     expect(both.skipped).toEqual([]);
@@ -142,10 +142,11 @@ describe('clearanceExternalDimensions', () => {
       '连排外径推导间隔: a~0_1 → b~0_1',
     ]);
 
-    // 推导间隔画不出（名义接触 / 重叠 / 缺外径时没有快照）或被隐藏：这一对画中心距
+    // 推导间隔画不出（名义接触 / 重叠 / 缺外径时没有快照）或被隐藏：缺省这一对不画尺寸线，勾了两种都画才有中心距
     const contact = { ...gap, snapshot: null } as ClearanceRecord;
-    expect(clearanceRecordsToExternalDimensions([center, contact]).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
-    expect(clearanceRecordsToExternalDimensions([center]).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
+    expect(clearanceRecordsToExternalDimensions([center, contact]).records).toEqual([]);
+    expect(clearanceRecordsToExternalDimensions([center]).records).toEqual([]);
+    expect(clearanceRecordsToExternalDimensions([center, contact], { pipeRowBothMetrics: true }).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
   });
 
   it('连排关键点：每对一组标注——两管中心画 ×、推导间隔两端的外表面点画 ○；管底对齐再加管底点与虚线支承线；不开不画', () => {

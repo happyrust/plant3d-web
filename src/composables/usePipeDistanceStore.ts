@@ -121,10 +121,10 @@ export const PIPE_ROW_DEFAULT_MIN_COMMON_MM = 300;
 const pipeRowMaxAdjacentMm = ref(PIPE_ROW_DEFAULT_MAX_ADJACENT_MM);
 /** 连排最短共同区段（mm）：两根管共同的直段短于它就不归排；选了直段时不限（所选直段就是要量的地方）。 */
 const pipeRowMinCommonMm = ref(PIPE_ROW_DEFAULT_MIN_COMMON_MM);
-/** 三维里连排同一对两种口径都画；缺省只画一条（名义间隔可画就画它，否则中心距），另一个值进列表与悬停说明。 */
+/** 连排同时显示中心距（列表与三维）；缺省只显示名义间隔（推导间隔），中心距在它的悬停说明里。 */
 const pipeRowBothMetrics = ref(false);
-/** 三维画连排关键点：截面上的两管中心、推导间隔两端的外表面点、管底对齐的管底点与支承线。 */
-const pipeRowKeyPoints = ref(true);
+/** 三维画连排关键点：截面上的两管中心、推导间隔两端的外表面点、管底对齐的管底点与支承线。缺省不画。 */
+const pipeRowKeyPoints = ref(false);
 /** 连排检测成功时的提示与诊断明细：提示要用户留意（待确认、缺口、旧服务端外径估算），诊断（穿过件、没有共同区段的管向组）收进详情。 */
 const detectReport = ref<Readonly<{ notice: string | null; diagnostics: readonly string[] }>>({ notice: null, diagnostics: [] });
 /** 不是失败，不写进 `detectError`；清掉提示连诊断一起清。 */
@@ -160,14 +160,22 @@ const modeResults = computed(() => pipeResults.value.filter(record => (detection
   ? record.pipeRow?.alignMode === pipeRowAlignMode.value
   : !record.pipeRow)));
 
+/** 连排记录缺省只显示名义间隔（推导间隔），勾了「同时显示中心距」才把中心距也列出、画出。 */
+function isMetricShown(record: ClearanceRecord): boolean {
+  return !record.pipeRow || pipeRowBothMetrics.value || record.pipeRow.metric === 'derived-gap';
+}
+
+/** 列表列出的记录：当前模式里按口径显示的那些（清空、重置筛选等动作仍对整个模式）。 */
+const listedResults = computed(() => modeResults.value.filter(isMetricShown));
+
 /** 其他模式留下、不在当前列表里却仍按全局开关画在三维里的记录数（抽屉据此提示，可一键隐藏）。 */
 const otherModeVisibleCount = computed(() => {
   const inMode = new Set(modeResults.value.map(record => record.id));
-  return pipeResults.value.filter(record => !inMode.has(record.id) && !hiddenResultIds.value.has(record.id)).length;
+  return pipeResults.value.filter(record => !inMode.has(record.id) && !hiddenResultIds.value.has(record.id) && isMetricShown(record)).length;
 });
 
-/** 列表可见集：当前模式里没隐藏 + 过距离阈值（无快照的记录没有距离可比，阈值不滤它，行显示「—」）。 */
-const visibleResults = computed(() => modeResults.value.filter(record => {
+/** 列表可见集：列出的记录里没隐藏 + 过距离阈值（无快照的记录没有距离可比，阈值不滤它，行显示「—」）。 */
+const visibleResults = computed(() => listedResults.value.filter(record => {
   if (hiddenResultIds.value.has(record.id)) return false;
   const distanceMm = recordDistanceMm(record);
   return distanceMm === null || resultMinDistance.value === null || distanceMm >= resultMinDistance.value;
@@ -195,7 +203,7 @@ function resetPipeSnapshot() {
   pipeRowMaxAdjacentMm.value = PIPE_ROW_DEFAULT_MAX_ADJACENT_MM;
   pipeRowMinCommonMm.value = PIPE_ROW_DEFAULT_MIN_COMMON_MM;
   pipeRowBothMetrics.value = false;
-  pipeRowKeyPoints.value = true;
+  pipeRowKeyPoints.value = false;
   lastRowDetection.value = null;
   confirmedRowKeys.value = new Set();
   lastRowContext = null;
@@ -224,7 +232,7 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     || (data.pipeRowMinCommonMm !== undefined
       && (typeof data.pipeRowMinCommonMm !== 'number' || !Number.isFinite(data.pipeRowMinCommonMm) || data.pipeRowMinCommonMm <= 0))
     || (data.pipeRowBothMetrics !== undefined && typeof data.pipeRowBothMetrics !== 'boolean')
-    || (data.pipeRowKeyPoints !== undefined && typeof data.pipeRowKeyPoints !== 'boolean')
+    || (data.pipeRowShowKeyPoints !== undefined && typeof data.pipeRowShowKeyPoints !== 'boolean')
     || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
   const legacyResults = (data.results as PipeDistanceResult[]).map(result => {
     if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
@@ -251,7 +259,7 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   const adjacentLimit = typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : PIPE_ROW_DEFAULT_MAX_ADJACENT_MM;
   const minCommon = typeof data.pipeRowMinCommonMm === 'number' ? data.pipeRowMinCommonMm : PIPE_ROW_DEFAULT_MIN_COMMON_MM;
   const bothMetrics = data.pipeRowBothMetrics === true;
-  const keyPoints = data.pipeRowKeyPoints !== false;
+  const keyPoints = data.pipeRowShowKeyPoints === true;
   const branRefnos = data.selectedBranRefnos as string[];
   // 直段是后加的（可选）；所属 BRAN 不在选择里的直段丢掉，不让它把 BRAN 悄悄带回来
   const tubeKeys = ((data.selectedTubeKeys ?? []) as string[]).filter(key => branRefnos.includes(parseTubeKey(key)!.unitRefno));
@@ -296,7 +304,7 @@ function capturePipeSnapshot() {
     maxDistance: maxDistance.value, maxAngle: maxAngle.value,
     detectionMode: detectionMode.value, pipeRowAlignMode: pipeRowAlignMode.value,
     pipeRowFallbackNormal: pipeRowFallbackNormal.value, pipeRowMaxAdjacentMm: pipeRowMaxAdjacentMm.value,
-    pipeRowMinCommonMm: pipeRowMinCommonMm.value, pipeRowBothMetrics: pipeRowBothMetrics.value, pipeRowKeyPoints: pipeRowKeyPoints.value });
+    pipeRowMinCommonMm: pipeRowMinCommonMm.value, pipeRowBothMetrics: pipeRowBothMetrics.value, pipeRowShowKeyPoints: pipeRowKeyPoints.value });
 }
 
 const persistence = createScopedResultPersistence({
@@ -745,7 +753,7 @@ export function usePipeDistanceStore() {
       });
       lastRunSettledCount.value = created.length;
       lastRowContext = { sequence, sesnoByBran, sourceAnnotation: options.sourceAnnotation ?? null };
-      clearanceStore.setActive(created[0]?.id ?? null);
+      clearanceStore.setActive((created.find(isMetricShown) ?? created[0])?.id ?? null);
       if (detection.groups.length === 0) warnings.push('没有检测到成排的相邻管道');
       detectReport.value = { notice: warnings.length > 0 ? warnings.join('；') : null, diagnostics };
       return true;
@@ -906,6 +914,7 @@ export function usePipeDistanceStore() {
     hiddenResultIds,
     resultMinDistance,
     visibleResults,
+    listedResults,
     detectNotice,
     detectDiagnostics,
     modeResults,

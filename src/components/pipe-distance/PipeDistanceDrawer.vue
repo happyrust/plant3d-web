@@ -400,7 +400,7 @@ const resultMinDistanceInput = computed({
   },
 });
 
-const hiddenCount = computed(() => store.modeResults.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
+const hiddenCount = computed(() => store.listedResults.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
 
 /** 记录行显示的距离（mm）：无快照的记录给 null——行显示「—」，阈值筛选跳过它（与旧 `results` 恒有距离的行为一致）。 */
 function recordDistanceMm(record: ClearanceRecord): number | null {
@@ -755,13 +755,13 @@ function isResultHidden(id: string): boolean {
             <!-- 三维标注口径 -->
             <label v-if="isRowMode" class="flex cursor-pointer items-start gap-2" data-testid="pipe-row-both-metrics">
               <input v-model="store.pipeRowBothMetrics.value" type="checkbox" class="mt-0.5 h-3.5 w-3.5" />
-              <span class="text-[11px] text-muted-foreground">三维里中心距和名义间隔都画。不勾时每对只画一条：名义间隔；接触、重叠或缺外径时画中心距。另一个值在列表和悬停说明里。</span>
+              <span class="text-[11px] text-muted-foreground">同时显示中心距：列表多列「连排截面中心距」，三维每对再画一条中心距。不勾时只显示名义间隔，中心距在名义间隔的悬停说明里。</span>
             </label>
 
             <!-- 三维关键点 -->
             <label v-if="isRowMode" class="flex cursor-pointer items-start gap-2" data-testid="pipe-row-key-points">
               <input v-model="store.pipeRowKeyPoints.value" type="checkbox" class="mt-0.5 h-3.5 w-3.5" />
-              <span class="text-[11px] text-muted-foreground">三维显示关键点：截面上的管中心（×）、名义间隔两端的外表面点（○）；管底对齐时还有管底点（○）和支承线（虚线）。坐标在列表悬停说明里。</span>
+              <span class="text-[11px] text-muted-foreground">三维显示关键点（缺省不画）：截面上的管中心（×）、名义间隔两端的外表面点（○）；管底对齐时还有管底点（○）和支承线（虚线）。坐标在列表悬停说明里。</span>
             </label>
 
             <!-- 最大距离 -->
@@ -867,7 +867,7 @@ function isResultHidden(id: string): boolean {
             <div class="mb-2 flex items-center justify-between">
               <span class="text-xs font-semibold text-foreground">
                 检测结果 ({{ store.visibleResults.value.length }}
-                <span v-if="store.visibleResults.value.length !== store.modeResults.value.length" class="text-muted-foreground">/ {{ store.modeResults.value.length }}</span>)
+                <span v-if="store.visibleResults.value.length !== store.listedResults.value.length" class="text-muted-foreground">/ {{ store.listedResults.value.length }}</span>)
               </span>
               <button v-if="store.modeResults.value.length > 0" type="button"
                 class="inline-flex items-center gap-1 text-xs text-destructive hover:underline"
@@ -903,7 +903,7 @@ function isResultHidden(id: string): boolean {
               <button type="button" class="text-brand hover:underline" @click="store.hideOtherModeResults()">隐藏它们</button>
             </div>
 
-            <div v-if="store.modeResults.value.length === 0"
+            <div v-if="store.listedResults.value.length === 0"
               class="py-4 text-center text-xs text-muted-foreground">
               暂无检测结果
             </div>
@@ -915,7 +915,7 @@ function isResultHidden(id: string): boolean {
             </div>
             <div v-else
               class="max-h-[200px] overflow-auto rounded-md border border-border">
-              <div v-for="record in store.modeResults.value"
+              <div v-for="record in store.listedResults.value"
                 v-show="!isResultHidden(record.id) && (store.resultMinDistance.value === null || recordDistanceMm(record) === null || recordDistanceMm(record)! >= store.resultMinDistance.value)"
                 :key="record.id"
                 class="group flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"

@@ -528,15 +528,15 @@ describe('usePipeDistanceStore · 净距检测', () => {
 
     // 快照：这几格随抽屉设置存取；早先没有相邻上限、或存的是当时「不限」（null）的快照都按缺省 1000——超过一定距离的不是排管
     const snapshot = store.captureSnapshot() as Record<string, unknown>;
-    expect(snapshot).toMatchObject({ pipeRowMaxAdjacentMm: 1000, pipeRowMinCommonMm: 300, pipeRowBothMetrics: false, pipeRowKeyPoints: true });
+    expect(snapshot).toMatchObject({ pipeRowMaxAdjacentMm: 1000, pipeRowMinCommonMm: 300, pipeRowBothMetrics: false, pipeRowShowKeyPoints: false });
     const older = { ...snapshot };
     delete older.pipeRowMaxAdjacentMm;
     store.pipeRowMaxAdjacentMm.value = 2000;
     store.prepareSnapshotRestore(older)();
     expect(store.pipeRowMaxAdjacentMm.value).toBe(1000);
-    store.prepareSnapshotRestore({ ...snapshot, pipeRowMaxAdjacentMm: null, pipeRowMinCommonMm: 500, pipeRowBothMetrics: true, pipeRowKeyPoints: false })();
+    store.prepareSnapshotRestore({ ...snapshot, pipeRowMaxAdjacentMm: null, pipeRowMinCommonMm: 500, pipeRowBothMetrics: true, pipeRowShowKeyPoints: true })();
     expect([store.pipeRowMaxAdjacentMm.value, store.pipeRowMinCommonMm.value, store.pipeRowBothMetrics.value, store.pipeRowKeyPoints.value])
-      .toEqual([1000, 500, true, false]);
+      .toEqual([1000, 500, true, true]);
     expect(() => store.prepareSnapshotRestore({ ...snapshot, pipeRowMinCommonMm: 0 })).toThrow();
     store.prepareSnapshotRestore(snapshot)();
   });
@@ -604,18 +604,22 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(bottom.every(r => r.provenance.warnings.some(w => w.code === 'pipe_row_estimated_grouping'))).toBe(true);
     expect(store.confirmPipeRowGroups([held[0]!.key])).toBe(0);
 
-    // 列表按模式隔离：中心与管底两套结果各在各的列表里，另一套可一键隐藏（与三维同一隐藏集）
+    // 列表按模式隔离：中心与管底两套结果各在各的列表里，另一套可一键隐藏（与三维同一隐藏集）；
+    // 缺省只列名义间隔，勾了「同时显示中心距」中心距才进列表
     store.detectionMode.value = 'pipe-row';
     store.pipeRowAlignMode.value = 'center';
+    expect(store.visibleResults.value).toHaveLength(2);
+    expect(store.visibleResults.value.every(r => r.pipeRow?.alignMode === 'center' && r.pipeRow.metric === 'derived-gap')).toBe(true);
+    store.pipeRowBothMetrics.value = true;
     expect(store.visibleResults.value).toHaveLength(4);
-    expect(store.visibleResults.value.every(r => r.pipeRow?.alignMode === 'center')).toBe(true);
-    expect(store.otherModeVisibleCount.value).toBe(4);
+    store.pipeRowBothMetrics.value = false;
+    expect(store.otherModeVisibleCount.value).toBe(2);
     store.hideOtherModeResults();
     expect(store.otherModeVisibleCount.value).toBe(0);
     store.pipeRowAlignMode.value = 'bottom';
     expect(store.visibleResults.value).toHaveLength(0);
     store.resetResultFilters();
-    expect(store.visibleResults.value).toHaveLength(4);
+    expect(store.visibleResults.value).toHaveLength(2);
     store.detectionMode.value = 'all-pairs';
     expect(store.visibleResults.value).toHaveLength(0);
     store.pipeRowAlignMode.value = 'center';
