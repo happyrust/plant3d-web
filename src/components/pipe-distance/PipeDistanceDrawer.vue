@@ -15,9 +15,13 @@ import {
 import { Vector3, type Matrix4 } from 'three';
 
 import type { ClearanceRecord } from '@/clearance/domain/clearanceRecord';
+import type { PipeRowSideOd } from '@/clearance/domain/pipeRowTypes';
+import type { OutsideDiameterEvidence } from '@/composables/branParallelSpacing';
 import type { Vec3 } from '@/types/vec3';
 
-import { computationMethodLabel } from '@/composables/measurementMethodLabel';
+import { pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
+import { isFormalPipeRowGroup, type PipeRowGroup } from '@/clearance/domain/pipeRowGeometry';
+import { computationMethodLabel, computationWarningsText } from '@/composables/measurementMethodLabel';
 import {
   findNounByRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
@@ -131,7 +135,25 @@ async function detectBransWithDtxFallback(refnos: string[]) {
   applyDetectionFallbackResults(refnos, fallbackResults);
 }
 
+/** 连排模式：真实中心线归排，不走 PCA 网格拟合兜底（拟合轴线的归排没有意义）。 */
+async function detectPipeRowsSelected(refnos: string[]) {
+  store.setBranRefnos(refnos);
+  await store.runPipeRowDetection({ sourceAnnotation: toolStore.activeAnnotationContext.value });
+}
+
+const isRowMode = computed(() => store.detectionMode.value === 'pipe-row');
+
+// 换检测模式 / 归排方式后，上一次检测的提示与错误说的是另一套结果，不留在当前模式下误导。
+watch([() => store.detectionMode.value, () => store.pipeRowAlignMode.value], () => {
+  store.detectNotice.value = null;
+  store.detectError.value = null;
+});
+
 async function handleDetect() {
+  if (isRowMode.value) {
+    await detectPipeRowsSelected(store.selectedBranRefnos.value);
+    return;
+  }
   await detectBransWithDtxFallback(store.selectedBranRefnos.value);
 }
 
@@ -167,6 +189,10 @@ async function detectCurrentSelectedBrans(options: { quiet?: boolean } = {}) {
     }
     return;
   }
+  if (isRowMode.value) {
+    await detectPipeRowsSelected(refnos);
+    return;
+  }
   await detectBransWithDtxFallback(refnos);
 }
 
@@ -174,6 +200,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as typeof window & {
     __plant3dPipeDistanceE2E?: {
       detectBrans: (refnos: string[]) => Promise<void>;
+      detectPipeRows: (refnos: string[], alignMode?: 'center' | 'bottom') => Promise<boolean>;
       setDebugResults: (results: PipeDistanceResult[]) => void;
       getSnapshot: () => {
         selectedBranRefnos: string[];
@@ -184,6 +211,13 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     };
   }).__plant3dPipeDistanceE2E = {
     detectBrans: detectBransWithDtxFallback,
+    detectPipeRows: async (refnos: string[], alignMode?: 'center' | 'bottom') => {
+      store.setBranRefnos(refnos);
+      return store.runPipeRowDetection({
+        alignMode,
+        sourceAnnotation: toolStore.activeAnnotationContext.value,
+      });
+    },
     setDebugResults: (results: PipeDistanceResult[]) => {
       store.setBranRefnos([...new Set(results.flatMap((result) => [result.pipeA, result.pipeB]))]);
       const maxInjectedDistance = Math.max(0, ...results.map((result) => result.distance));
@@ -204,9 +238,50 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
 }
 
 // --- result click ---
+/** 定位外扩余量（design mm）：两点连线或单点的包围盒是扁的甚至零体积，四周各放出一截再飞。 */
+const FOCUS_MARGIN_MM = 500;
+
+/** 一组 design 世界 mm 点外扩后的场景包围盒（8 个角点逐一换到场景系，场景矩阵带旋转也不失真）。 */
+function paddedSceneAabb(points: readonly Vec3[], transform: (point: Vec3) => Vec3): [number, number, number, number, number, number] {
+  const lo = [0, 1, 2].map(axis => Math.min(...points.map(point => point[axis]!)) - FOCUS_MARGIN_MM);
+  const hi = [0, 1, 2].map(axis => Math.max(...points.map(point => point[axis]!)) + FOCUS_MARGIN_MM);
+  const corners = [lo[0]!, hi[0]!].flatMap(x => [lo[1]!, hi[1]!].flatMap(y => [lo[2]!, hi[2]!].map(z => transform([x, y, z]))));
+  const bound = (axis: 0 | 1 | 2, pick: (...values: number[]) => number) => pick(...corners.map(corner => corner[axis]));
+  return [bound(0, Math.min), bound(1, Math.min), bound(2, Math.min), bound(0, Math.max), bound(1, Math.max), bound(2, Math.max)];
+}
+
+/** 高亮这些 BRAN 并飞到测量截面上的点（design 世界 mm）外扩后的包围盒；没有场景矩阵时退回构件包围盒。 */
+function focusDesignPoints(points: readonly Vec3[], refnos: readonly string[]) {
+  const viewer = ctx.viewerRef.value;
+  if (!viewer) return;
+  try {
+    const unique = [...new Set(refnos.filter(Boolean))];
+    const prev = viewer.scene.selectedObjectIds;
+    if (prev.length > 0) viewer.scene.setObjectsSelected(prev, false);
+    viewer.scene.ensureRefnos(unique);
+    viewer.scene.setObjectsSelected(unique, true);
+    const transform = createSceneTransformPoint();
+    const aabb = transform && points.length > 0 ? paddedSceneAabb(points, transform) : viewer.scene.getAABB(unique);
+    if (aabb) {
+      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+    }
+  } catch {
+    // ignore
+  }
+}
+
 /** 行点击 / 定位：选中两侧构件（优先 provenance 实体 refno——平行直段记录的 inputs 是直段锚），飞到净距两端点的包围盒。 */
 function onResultClick(record: ClearanceRecord) {
   store.setActiveResult(record.id);
+  if (record.pipeRow) {
+    // 连排记录定位到测量截面：两中心点（无快照时取截面点），不飞整条 BRAN 包围盒（§8）
+    const points = record.snapshot ? [record.snapshot.sourcePoint, record.snapshot.targetPoint] : [record.pipeRow.section.point];
+    focusDesignPoints(
+      points.map(point => [point[0] * 1000, point[1] * 1000, point[2] * 1000] as Vec3),
+      [record.provenance.source.refno || record.inputs.sourceRefno, record.provenance.target.refno || record.inputs.targetRefno],
+    );
+    return;
+  }
   const viewer = ctx.viewerRef.value;
   if (!viewer) return;
   try {
@@ -280,13 +355,129 @@ const resultMinDistanceInput = computed({
   },
 });
 
-const hiddenCount = computed(() => store.pipeResults.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
+const hiddenCount = computed(() => store.modeResults.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
 
 /** 记录行显示的距离（mm）：无快照的记录给 null——行显示「—」，阈值筛选跳过它（与旧 `results` 恒有距离的行为一致）。 */
 function recordDistanceMm(record: ClearanceRecord): number | null {
   const distanceM = record.snapshot?.distanceM;
   return Number.isFinite(distanceM) ? distanceM! * 1000 : null;
 }
+
+/** 行内数值：连排记录自带口径与单位（名义接触 / 名义重叠 / 缺外径 / 估算 ≈），其余记录给整数毫米、单位另起一格。 */
+function recordDistanceText(record: ClearanceRecord): string {
+  if (record.pipeRow) return pipeRowValueText(record);
+  const mm = recordDistanceMm(record);
+  return mm === null ? '—' : `${Math.round(mm)}`;
+}
+
+function recordStatusPrefix(record: ClearanceRecord): string {
+  return record.status === 'stale' ? '过期，待重算 · ' : record.status === 'failed' ? '重算失败，旧值 · ' : '';
+}
+
+const OD_EVIDENCE_LABELS: Readonly<Record<OutsideDiameterEvidence, string>> = Object.freeze({
+  catalogue: '目录外径',
+  'bore-estimate': '通径估算',
+  'legacy-member': '旧服务端成员外径，估算',
+  unverified: '来源不可证',
+  missing: '缺失',
+});
+
+/** 行悬停说明：连排记录给归排方式、截面位置、两侧外径与来源；所有记录附计算警告。 */
+function recordDetailTitle(record: ClearanceRecord): string | undefined {
+  const pipeRow = record.pipeRow;
+  const warnings = computationWarningsText(record.provenance.warnings);
+  if (!pipeRow) return warnings || undefined;
+  const [x, y, z] = pipeRow.section.point;
+  const od = (side: PipeRowSideOd) => `${side.odM === null ? '—' : `${Math.round(side.odM * 10000) / 10} mm`}（${OD_EVIDENCE_LABELS[side.evidence]}）`;
+  return [
+    `${pipeRow.alignMode === 'center' ? '管中心成排' : '管底对齐'} · 截面点 (${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)}) m · 沿管向 ${pipeRow.section.axialStartM.toFixed(3)}–${pipeRow.section.axialEndM.toFixed(3)} m`,
+    `外径：${od(pipeRow.sourceOd)} / ${od(pipeRow.targetOd)}`,
+    warnings,
+  ].filter(Boolean).join('\n');
+}
+
+function pipeRowSectionText(record: ClearanceRecord): string {
+  const section = record.pipeRow?.section;
+  return section ? `区段 ${(section.axialEndM - section.axialStartM).toFixed(2)} m` : '';
+}
+
+/** 识别预览：只展示与当前归排方式一致的最近一次连排检测（§8 第 3、4 点）。 */
+const rowPreview = computed(() => {
+  const detection = store.lastRowDetection.value;
+  if (!detection || !isRowMode.value || detection.alignMode !== store.pipeRowAlignMode.value) return null;
+  const generated = detection.groups.filter(group => isFormalPipeRowGroup(group) || store.confirmedRowKeys.value.has(group.key));
+  const grouped = new Set(detection.groups.flatMap(group => group.members.map(member => member.anchorRefno)));
+  return {
+    groups: detection.groups,
+    generatedRows: generated.length,
+    generatedPairs: generated.reduce((n, group) => n + group.pairs.length, 0),
+    held: detection.groups.filter(group => !isFormalPipeRowGroup(group) && !store.confirmedRowKeys.value.has(group.key)),
+    unplaced: [...new Set(detection.sections.flatMap(section => section.unplacedAnchors))].filter(anchor => !grouped.has(anchor)),
+    supportNormalDegenerate: detection.supportNormalDegenerate,
+  };
+});
+
+function rowStatus(group: PipeRowGroup): Readonly<{ text: string; held: boolean }> {
+  if (isFormalPipeRowGroup(group)) return { text: '已生成', held: false };
+  if (store.confirmedRowKeys.value.has(group.key)) return { text: '已确认生成', held: false };
+  const reasons = [
+    group.ambiguous ? '多解' : '',
+    group.incomplete ? '分组不完整' : '',
+    group.estimatedGrouping ? '估算外径' : '',
+  ].filter(Boolean);
+  return { text: `待确认（${reasons.join('、')}）`, held: true };
+}
+
+function rowMembersText(group: PipeRowGroup): string {
+  return group.members.map(member => member.branRefno).join(' · ');
+}
+
+/** 悬停看每对相邻：直段锚点与该对截面中心距。 */
+function rowPairsTitle(group: PipeRowGroup): string {
+  return group.pairs
+    .map(pair => `${pair.source.anchorRefno} ↔ ${pair.target.anchorRefno}：中心距 ${Math.round(pair.centerDistanceMm)} mm`)
+    .join('\n');
+}
+
+function rowLengthText(group: PipeRowGroup): string {
+  return `${((group.section.axialEndMm - group.section.axialStartMm) / 1000).toFixed(2)} m`;
+}
+
+function isRowHidden(group: PipeRowGroup): boolean {
+  const records = store.pipeRowGroupRecords(group.key);
+  return records.length > 0 && records.every(record => store.hiddenResultIds.value.has(record.id));
+}
+
+function toggleRowHidden(group: PipeRowGroup) {
+  store.setPipeRowGroupHidden(group.key, !isRowHidden(group));
+}
+
+function confirmRows(groups: readonly PipeRowGroup[]) {
+  store.confirmPipeRowGroups(groups.map(group => group.key));
+}
+
+function locateRow(group: PipeRowGroup) {
+  focusDesignPoints(
+    group.members.map(member => [member.centerMm.x, member.centerMm.y, member.centerMm.z] as Vec3),
+    group.members.map(member => member.branRefno),
+  );
+}
+
+const PIPE_ROW_FALLBACK_NORMAL_OPTIONS = [
+  ['none', '未指定'],
+  ['+x', '+X'],
+  ['-x', '−X'],
+  ['+y', '+Y'],
+  ['-y', '−Y'],
+] as const;
+
+const maxAdjacentInput = computed({
+  get: () => store.pipeRowMaxAdjacentMm.value ?? '',
+  set: (value: number | string) => {
+    const n = Number(value);
+    store.pipeRowMaxAdjacentMm.value = value !== '' && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  },
+});
 
 function isResultHidden(id: string): boolean {
   return store.hiddenResultIds.value.has(id);
@@ -388,8 +579,71 @@ function isResultHidden(id: string): boolean {
 
           <!-- 3. 参数设置 -->
           <div class="space-y-3 border-b border-border/60 px-4 py-3">
-            <!-- 最大距离 -->
+            <!-- 检测模式 -->
             <div class="space-y-1">
+              <label class="text-xs font-medium text-foreground">检测模式</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button v-for="mode in ([['all-pairs', '所有管对'], ['pipe-row', '连排相邻']] as const)" :key="mode[0]"
+                  type="button"
+                  class="rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"
+                  :class="store.detectionMode.value === mode[0]
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-input text-muted-foreground hover:bg-muted'"
+                  @click="store.detectionMode.value = mode[0]">
+                  {{ mode[1] }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 连排归排方式 -->
+            <div v-if="isRowMode" class="space-y-1">
+              <label class="text-xs font-medium text-foreground">归排方式</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button v-for="align in ([['center', '管中心成排'], ['bottom', '管底对齐']] as const)" :key="align[0]"
+                  type="button"
+                  class="rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"
+                  :class="store.pipeRowAlignMode.value === align[0]
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-input text-muted-foreground hover:bg-muted'"
+                  @click="store.pipeRowAlignMode.value = align[0]">
+                  {{ align[1] }}
+                </button>
+              </div>
+              <p class="text-[11px] text-muted-foreground">按真实中心线在共同区段内归排，只量排内相邻管；管底对齐以世界向上为支承法向，竖管组用下面指定的竖管支承法向。</p>
+            </div>
+
+            <!-- 竖管支承法向（管底对齐、主管向近铅直的组） -->
+            <div v-if="isRowMode && store.pipeRowAlignMode.value === 'bottom'" class="space-y-1">
+              <label class="text-xs font-medium text-foreground" for="pipe-row-fallback-normal">竖管支承法向</label>
+              <select id="pipe-row-fallback-normal" v-model="store.pipeRowFallbackNormal.value"
+                data-testid="pipe-row-fallback-normal"
+                class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <option v-for="option in PIPE_ROW_FALLBACK_NORMAL_OPTIONS" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
+              </select>
+              <p class="text-[11px]" :class="rowPreview?.supportNormalDegenerate ? 'text-amber-700' : 'text-muted-foreground'">
+                {{ rowPreview?.supportNormalDegenerate
+                  ? '有主管向近铅直的管组没法用世界向上归排：请指定管底贴靠的方向（如靠墙一侧）后重新检测。'
+                  : '只用于主管向近铅直的管组；水平管组始终以世界向上为支承法向。' }}
+              </p>
+            </div>
+
+            <!-- 排内相邻上限 -->
+            <div v-if="isRowMode" class="space-y-1">
+              <label class="text-xs font-medium text-foreground" for="pipe-row-max-adjacent">排内相邻上限</label>
+              <div class="flex items-center gap-2">
+                <input id="pipe-row-max-adjacent" v-model.number="maxAdjacentInput"
+                  type="number"
+                  min="0"
+                  placeholder="不限"
+                  data-testid="pipe-row-max-adjacent"
+                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                <span class="text-xs text-muted-foreground">mm</span>
+              </div>
+              <p class="text-[11px] text-muted-foreground">相邻中心距超过它就断开成两排，不量两组管廊之间的空档；留空不限。</p>
+            </div>
+
+            <!-- 最大距离 -->
+            <div v-if="!isRowMode" class="space-y-1">
               <label class="text-xs font-medium text-foreground">最大距离</label>
               <div class="flex items-center gap-2">
                 <input v-model.number="clampedMaxDistance"
@@ -401,7 +655,7 @@ function isResultHidden(id: string): boolean {
             </div>
 
             <!-- 最大夹角 -->
-            <div class="space-y-1">
+            <div v-if="!isRowMode" class="space-y-1">
               <label class="text-xs font-medium text-foreground">中心距估算的最大夹角</label>
               <div class="flex items-center gap-2">
                 <input v-model.number="clampedMaxAngle"
@@ -412,10 +666,10 @@ function isResultHidden(id: string): boolean {
               </div>
             </div>
 
-            <p class="text-[11px] text-muted-foreground">批量检测所有管对的模型外表面净距，包含交叉和斜交；中心距估算会单独注明。</p>
+            <p class="text-[11px] text-muted-foreground">{{ isRowMode ? '连排相邻按真实中心线归排，不用网格拟合兜底；每对相邻管出「截面中心距 + 外径推导间隔」两条记录，存疑的排进下方预览，确认后才生成。' : '批量检测所有管对的模型外表面净距，包含交叉和斜交；中心距估算会单独注明。' }}</p>
 
             <!-- 重新检测 -->
-            <button v-if="store.selectedBranRefnos.value.length === 1" type="button"
+            <button v-if="!isRowMode && store.selectedBranRefnos.value.length === 1" type="button"
               :disabled="store.isDetecting.value"
               class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-primary px-3 text-xs text-primary disabled:opacity-50"
               @click="handleDetectNearby">
@@ -428,9 +682,37 @@ function isResultHidden(id: string): boolean {
               <RefreshCw class="h-4 w-4" :class="store.isDetecting.value ? 'animate-spin' : ''" />
               <span>{{ store.isDetecting.value ? '检测中...' : '重新检测' }}</span>
             </button>
+            <!-- 连排识别预览：每排成员、区段、状态；存疑的排在这里确认后才生成结果 -->
+            <div v-if="rowPreview && rowPreview.groups.length > 0" class="space-y-1.5" data-testid="pipe-row-preview">
+              <div class="flex items-center justify-between gap-2 text-[11px] text-muted-foreground" data-testid="pipe-row-summary">
+                <span>识别 {{ rowPreview.groups.length }} 排：{{ rowPreview.generatedRows }} 排 / {{ rowPreview.generatedPairs }} 对已生成{{ rowPreview.held.length > 0 ? `，${rowPreview.held.length} 排待确认` : '' }}</span>
+                <button v-if="rowPreview.held.length > 1" type="button" class="shrink-0 text-brand hover:underline" @click="confirmRows(rowPreview.held)">全部确认</button>
+              </div>
+              <div v-for="(group, index) in rowPreview.groups" :key="group.key"
+                class="rounded-md border px-2 py-1.5 text-[11px]"
+                :class="rowStatus(group).held ? 'border-amber-400/60 bg-amber-50/60' : 'border-border/60 bg-muted/30'"
+                data-testid="pipe-row-preview-row">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-foreground">排 {{ index + 1 }}</span>
+                  <span class="text-muted-foreground">{{ group.members.length }} 根 · {{ group.pairs.length }} 对 · 区段 {{ rowLengthText(group) }}</span>
+                  <span class="ml-auto shrink-0" :class="rowStatus(group).held ? 'text-amber-700' : 'text-muted-foreground'">{{ rowStatus(group).text }}</span>
+                </div>
+                <div class="truncate font-mono text-muted-foreground" :title="rowPairsTitle(group)">{{ rowMembersText(group) }}</div>
+                <div v-for="line in group.diagnostics" :key="line" class="text-amber-700">{{ line }}</div>
+                <div class="mt-1 flex items-center gap-3">
+                  <button v-if="rowStatus(group).held" type="button" class="font-medium text-brand hover:underline" @click="confirmRows([group])">确认生成</button>
+                  <button v-if="store.pipeRowGroupRecords(group.key).length > 0" type="button" class="text-muted-foreground hover:text-foreground" @click="toggleRowHidden(group)">{{ isRowHidden(group) ? '显示本排' : '隐藏本排' }}</button>
+                  <button type="button" class="text-muted-foreground hover:text-foreground" @click="locateRow(group)">定位</button>
+                </div>
+              </div>
+              <div v-if="rowPreview.unplaced.length > 0" class="text-[11px] text-muted-foreground">
+                未归排：<span class="font-mono">{{ rowPreview.unplaced.join('、') }}</span>
+              </div>
+            </div>
+
             <div v-if="store.selectedBranRefnos.value.length < 2 && !store.isDetecting.value"
               class="text-xs text-muted-foreground">
-              选 1 根可检测周边管道；选 2 根及以上可检测所有已选管对
+              {{ isRowMode ? '选 2 根及以上可检测连排相邻管道' : '选 1 根可检测周边管道；选 2 根及以上可检测所有已选管对' }}
             </div>
 
             <!-- 错误提示 -->
@@ -443,6 +725,11 @@ function isResultHidden(id: string): boolean {
               class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {{ store.detectError.value }}
             </div>
+            <div v-if="store.detectNotice.value"
+              class="rounded-md border border-amber-400/50 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+              data-testid="pipe-distance-notice">
+              {{ store.detectNotice.value }}
+            </div>
           </div>
 
           <!-- 4. 检测结果 -->
@@ -450,18 +737,18 @@ function isResultHidden(id: string): boolean {
             <div class="mb-2 flex items-center justify-between">
               <span class="text-xs font-semibold text-foreground">
                 检测结果 ({{ store.visibleResults.value.length }}
-                <span v-if="store.visibleResults.value.length !== store.pipeResults.value.length" class="text-muted-foreground">/ {{ store.pipeResults.value.length }}</span>)
+                <span v-if="store.visibleResults.value.length !== store.modeResults.value.length" class="text-muted-foreground">/ {{ store.modeResults.value.length }}</span>)
               </span>
-              <button v-if="store.pipeResults.value.length > 0" type="button"
+              <button v-if="store.modeResults.value.length > 0" type="button"
                 class="inline-flex items-center gap-1 text-xs text-destructive hover:underline"
-                @click="store.clearResults()">
+                @click="store.clearModeResults()">
                 <Trash2 class="h-3 w-3" />
                 清空
               </button>
             </div>
 
             <!-- 距离阈值筛选 -->
-            <div v-if="store.pipeResults.value.length > 0" class="mb-2 flex items-center gap-2">
+            <div v-if="store.modeResults.value.length > 0" class="mb-2 flex items-center gap-2">
               <label class="text-[11px] text-muted-foreground whitespace-nowrap">仅看 ≥</label>
               <input v-model.number="resultMinDistanceInput"
                 type="number"
@@ -481,7 +768,12 @@ function isResultHidden(id: string): boolean {
               已隐藏 {{ hiddenCount }} 条
             </div>
 
-            <div v-if="store.pipeResults.value.length === 0"
+            <div v-if="store.otherModeVisibleCount.value > 0" class="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground" data-testid="pipe-distance-other-mode">
+              <span>另有 {{ store.otherModeVisibleCount.value }} 条其他模式的结果仍显示在三维中</span>
+              <button type="button" class="text-brand hover:underline" @click="store.hideOtherModeResults()">隐藏它们</button>
+            </div>
+
+            <div v-if="store.modeResults.value.length === 0"
               class="py-4 text-center text-xs text-muted-foreground">
               暂无检测结果
             </div>
@@ -493,7 +785,7 @@ function isResultHidden(id: string): boolean {
             </div>
             <div v-else
               class="max-h-[200px] overflow-auto rounded-md border border-border">
-              <div v-for="record in store.pipeResults.value"
+              <div v-for="record in store.modeResults.value"
                 v-show="!isResultHidden(record.id) && (store.resultMinDistance.value === null || recordDistanceMm(record) === null || recordDistanceMm(record)! >= store.resultMinDistance.value)"
                 :key="record.id"
                 class="group flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"
@@ -501,14 +793,16 @@ function isResultHidden(id: string): boolean {
                   ? 'bg-brand-subtle border-l-2 border-l-brand'
                   : 'hover:bg-muted'"
                 @click="onResultClick(record)">
-                <span class="font-mono text-sm font-semibold"
+                <span class="shrink-0 whitespace-nowrap font-mono text-sm font-semibold"
                   :class="store.activeResultId.value === record.id ? 'text-brand' : 'text-foreground'">
-                  {{ recordDistanceMm(record) === null ? '—' : Math.round(recordDistanceMm(record)!) }}
+                  {{ recordDistanceText(record) }}
                 </span>
-                <span class="text-xs text-muted-foreground">mm</span>
-                <span class="text-[11px] text-muted-foreground">{{ record.status === 'stale' ? '过期，待重算 · ' : '' }}{{ computationMethodLabel(record.provenance.method) }}</span>
-                <span class="flex-1 truncate text-xs text-muted-foreground">
-                  {{ record.provenance.source.refno || record.inputs.sourceRefno }} ↔ {{ record.provenance.target.refno || record.inputs.targetRefno }}
+                <span v-if="!record.pipeRow && recordDistanceMm(record) !== null" class="text-xs text-muted-foreground">mm</span>
+                <span class="flex min-w-0 flex-1 flex-col" :title="recordDetailTitle(record)">
+                  <span class="truncate text-[11px] text-muted-foreground">{{ recordStatusPrefix(record) }}{{ computationMethodLabel(record.provenance.method) }}{{ record.pipeRow ? ` · ${pipeRowSectionText(record)}` : '' }}</span>
+                  <span class="truncate text-xs text-muted-foreground">
+                    {{ record.provenance.source.refno || record.inputs.sourceRefno }} ↔ {{ record.provenance.target.refno || record.inputs.targetRefno }}
+                  </span>
                 </span>
                 <button type="button"
                   class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-colors hover:bg-muted-foreground/20 hover:text-foreground group-hover:opacity-100"

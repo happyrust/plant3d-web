@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePipeDistanceStore } from './usePipeDistanceStore';
 
+import { pipeRowGapEstimated } from '@/clearance/domain/pipeRowTypes';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 
 const v1ApiMocks = vi.hoisted(() => ({
   genModelV1SurfaceClearance: vi.fn(),
   genModelV1SpatialNearbyBranches: vi.fn(),
+  genModelV1SpatialCenterline: vi.fn(),
 }));
 
 vi.mock('@/api/genModelV1Api', async (importOriginal) => {
@@ -15,6 +17,7 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => {
     ...actual,
     genModelV1SurfaceClearance: v1ApiMocks.genModelV1SurfaceClearance,
     genModelV1SpatialNearbyBranches: v1ApiMocks.genModelV1SpatialNearbyBranches,
+    genModelV1SpatialCenterline: v1ApiMocks.genModelV1SpatialCenterline,
   };
 });
 
@@ -54,10 +57,37 @@ function pairKey(sourceRefno: string, targetRefno: string): string {
   return [sourceRefno, targetRefno].sort().join('|');
 }
 
+/** gen-model `/api/v1/spatial/centerline` 一根沿 X 方向的平行直管（E3D 世界 mm）。 */
+function centerlineResponse(refno: string, yMm: number, odMm = 114.3) {
+  return {
+    refno,
+    dbnum: 100,
+    segment_count: 1,
+    outside_diameter_mm: odMm,
+    source_version: { dbnum: 100, sesno: 7, databases: [] },
+    centerline_bbox: null,
+    segments: [
+      {
+        refno: `${refno}~0_1`,
+        order: 0,
+        noun: 'TUBI',
+        implicit: true,
+        start: { x: 0, y: yMm, z: 0 },
+        end: { x: 5000, y: yMm, z: 0 },
+        length_mm: 5000,
+        outside_diameter_mm: odMm,
+        diameter_evidence: { source: 'catalogue', catalogue_od_mm: odMm, arrive_bore_mm: null },
+      },
+    ],
+    warnings: [],
+  };
+}
+
 describe('usePipeDistanceStore · 净距检测', () => {
   beforeEach(() => {
     v1ApiMocks.genModelV1SurfaceClearance.mockReset();
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockReset();
+    v1ApiMocks.genModelV1SpatialCenterline.mockReset();
     useClearanceStore().clearRecords();
     const store = usePipeDistanceStore();
     store.detachPersistence();
@@ -284,6 +314,192 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.lastRunSettledCount.value).toBe(0);
     expect(store.activeResultId.value).toBeNull();
     expect(store.detectError.value).toContain('两侧网格在最大距离内没有靠近');
+  });
+
+  it('连排模式：三根平行管出两对相邻，每对各两条记录；中间管取不到中心线时整批不出结果，两端不成相邻（R13）', async () => {
+    const yByRefno: Record<string, number> = { '24381_1001': 0, '24381_1002': 300, '24381_1003': 600 };
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => centerlineResponse(refno, yByRefno[refno]!));
+    const store = usePipeDistanceStore();
+    store.setBranRefnos(['24381_1001', '24381_1002', '24381_1003']);
+
+    expect(await store.runPipeRowDetection()).toBe(true);
+
+    const records = store.pipeResults.value;
+    // 只量相邻：3 管 → 2 对（1001↔1002、1002↔1003），不出 1001↔1003；每对中心距 + 推导间隔
+    expect(records).toHaveLength(4);
+    expect(records.every(r => r.id.startsWith('piperow:center:'))).toBe(true);
+    expect(records.filter(r => r.pipeRow?.metric === 'center-distance')).toHaveLength(2);
+    expect(records.filter(r => r.pipeRow?.metric === 'derived-gap')).toHaveLength(2);
+    const pairKeys = new Set(records.map(r => pairKey(r.inputs.sourceRefno, r.inputs.targetRefno)));
+    expect(pairKeys).toEqual(new Set([
+      pairKey('24381_1001~0_1', '24381_1002~0_1'),
+      pairKey('24381_1002~0_1', '24381_1003~0_1'),
+    ]));
+    const gap = records.find(r => r.pipeRow?.metric === 'derived-gap');
+    expect(gap?.snapshot?.distanceM).toBeCloseTo(0.1857, 6);
+    expect(gap?.pipeRow?.signedGapM).toBeCloseTo(0.1857, 6);
+    expect(store.detectError.value).toBeNull();
+
+    // 中间管取不到中心线：整批不归排，不能把剩下的 1001、1003 当成相邻；它参与的旧记录标 failed 留快照
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => {
+      if (refno === '24381_1002') throw new Error('centerline 404');
+      return centerlineResponse(refno, yByRefno[refno]!);
+    });
+    expect(await store.runPipeRowDetection()).toBe(false);
+
+    expect(store.pipeResults.value).toHaveLength(4);
+    const failedRecords = store.pipeResults.value.filter(r => r.status === 'failed');
+    expect(failedRecords).toHaveLength(4);
+    expect(failedRecords.every(r =>
+      r.provenance.source.refno === '24381_1002' || r.provenance.target.refno === '24381_1002')).toBe(true);
+    expect(failedRecords[0]?.snapshot).not.toBeNull();
+    const acrossMissing = pairKey('24381_1001~0_1', '24381_1003~0_1');
+    expect(store.pipeResults.value.some(r => pairKey(r.inputs.sourceRefno, r.inputs.targetRefno) === acrossMissing)).toBe(false);
+    expect(store.lastRowDetection.value).toBeNull();
+    expect(store.lastRunSettledCount.value).toBe(0);
+    expect(store.detectError.value).toContain('24381_1002');
+    expect(store.detectError.value).toContain('本次不生成连排结果');
+
+    // 用户把 1002 移出选择后重检：剩下两根相邻，是这次选择下的结论
+    store.setBranRefnos(['24381_1001', '24381_1003']);
+    expect(await store.runPipeRowDetection()).toBe(true);
+    const current = store.pipeResults.value.filter(r => r.status === 'current');
+    expect(current).toHaveLength(2);
+    expect(new Set(current.map(r => pairKey(r.inputs.sourceRefno, r.inputs.targetRefno)))).toEqual(new Set([acrossMissing]));
+    expect(current.find(r => r.pipeRow?.metric === 'center-distance')?.snapshot?.distanceM).toBeCloseTo(0.6, 6);
+  });
+
+  it('连排模式：同一 BRAN 的 U 形回折两条腿可以作为相邻成员成对', async () => {
+    const uTurn = {
+      refno: '24381_1001',
+      dbnum: 100,
+      segment_count: 3,
+      outside_diameter_mm: 114.3,
+      source_version: { dbnum: 100, sesno: 7, databases: [] },
+      centerline_bbox: null,
+      segments: [
+        { refno: '24381_1001~0_1', order: 0, noun: 'TUBI', implicit: true,
+          start: { x: 0, y: 0, z: 0 }, end: { x: 5000, y: 0, z: 0 },
+          length_mm: 5000, outside_diameter_mm: 114.3,
+          diameter_evidence: { source: 'catalogue', catalogue_od_mm: 114.3, arrive_bore_mm: null } },
+        { refno: '24381_1001_2', order: 1, noun: 'ELBO', implicit: false,
+          start: { x: 5000, y: 0, z: 0 }, end: { x: 5000, y: 300, z: 0 },
+          length_mm: 300, outside_diameter_mm: 114.3,
+          diameter_evidence: { source: 'catalogue', catalogue_od_mm: 114.3, arrive_bore_mm: null } },
+        { refno: '24381_1001~3_4', order: 2, noun: 'TUBI', implicit: true,
+          start: { x: 5000, y: 300, z: 0 }, end: { x: 0, y: 300, z: 0 },
+          length_mm: 5000, outside_diameter_mm: 114.3,
+          diameter_evidence: { source: 'catalogue', catalogue_od_mm: 114.3, arrive_bore_mm: null } },
+      ],
+      warnings: [],
+    };
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) =>
+      refno === '24381_1001' ? uTurn : centerlineResponse(refno, 600));
+    const store = usePipeDistanceStore();
+    store.setBranRefnos(['24381_1001', '24381_1002']);
+
+    expect(await store.runPipeRowDetection()).toBe(true);
+
+    const records = store.pipeResults.value;
+    // 三条直段一排：腿1(y=0)↔腿2(y=300) 同 BRAN 相邻 + 腿2↔外管(y=600) → 2 对 × 2 条
+    expect(records).toHaveLength(4);
+    const pairKeys = new Set(records.map(r => pairKey(r.inputs.sourceRefno, r.inputs.targetRefno)));
+    expect(pairKeys).toEqual(new Set([
+      pairKey('24381_1001~0_1', '24381_1001~3_4'),
+      pairKey('24381_1001~3_4', '24381_1002~0_1'),
+    ]));
+    const sameBranKey = pairKey('24381_1001~0_1', '24381_1001~3_4');
+    const sameBran = records.find(r =>
+      pairKey(r.inputs.sourceRefno, r.inputs.targetRefno) === sameBranKey
+      && r.pipeRow?.metric === 'center-distance');
+    expect(sameBran?.snapshot?.distanceM).toBeCloseTo(0.3, 6);
+    expect(sameBran?.provenance.source.refno).toBe('24381_1001');
+    expect(sameBran?.provenance.target.refno).toBe('24381_1001');
+  });
+
+  it('连排模式：检测途中清空结果，迟到的归排不写库', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    v1ApiMocks.genModelV1SpatialCenterline
+      .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
+      .mockImplementation(async (refno: string) => centerlineResponse(refno, 300));
+    const store = usePipeDistanceStore();
+    store.setBranRefnos(['24381_1001', '24381_1002']);
+
+    const pending = store.runPipeRowDetection();
+    store.clearResults();
+    resolveFirst(centerlineResponse('24381_1001', 0));
+
+    expect(await pending).toBe(false);
+    expect(store.pipeResults.value).toEqual([]);
+    expect(store.isDetecting.value).toBe(false);
+  });
+
+  it('连排模式：旧服务端中心线按成员外径估算；管底对齐的排进预览确认后才生成；列表按模式隔离', async () => {
+    const yByRefno: Record<string, number> = { '24381_1001': 0, '24381_1002': 300, '24381_1003': 600 };
+    // gen-model refactor 的响应形状：没有逐段 diameter_evidence、没有 source_version，隐式管身外径为 null
+    const legacyLine = (refno: string) => ({
+      refno,
+      dbnum: 100,
+      segment_count: 2,
+      outside_diameter_mm: 114.3,
+      centerline_bbox: null,
+      warnings: [],
+      segments: [
+        { refno: `${refno}~${refno}_2`, order: 0, noun: 'TUBI', implicit: true,
+          start: { x: 0, y: yByRefno[refno]!, z: 0 }, end: { x: 5000, y: yByRefno[refno]!, z: 0 },
+          length_mm: 5000, outside_diameter_mm: null },
+        { refno: `${refno}_2`, order: 1, noun: 'ELBO', implicit: false,
+          start: { x: 5000, y: yByRefno[refno]!, z: 0 }, end: { x: 5100, y: yByRefno[refno]! + 100, z: 0 },
+          length_mm: 141.4, outside_diameter_mm: 114.3 },
+      ],
+    });
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => legacyLine(refno));
+    const store = usePipeDistanceStore();
+    store.setBranRefnos(Object.keys(yByRefno));
+
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    const gaps = store.pipeResults.value.filter(r => r.pipeRow?.metric === 'derived-gap');
+    expect(gaps).toHaveLength(2);
+    for (const gap of gaps) {
+      expect(gap.pipeRow?.signedGapM).toBeCloseTo(0.1857, 6);
+      expect(gap.pipeRow?.sourceOd.evidence).toBe('legacy-member');
+      expect(pipeRowGapEstimated(gap.pipeRow)).toBe(true);
+    }
+    expect(store.detectError.value).toBeNull();
+    expect(store.detectNotice.value).toContain('旧服务端');
+
+    // 管底对齐：底点建立在估算外径上 → 排待确认，不直接出结果
+    expect(await store.runPipeRowDetection({ alignMode: 'bottom' })).toBe(true);
+    const held = store.lastRowDetection.value!.groups;
+    expect(held).toHaveLength(1);
+    expect(held[0]!.estimatedGrouping).toBe(true);
+    expect(store.pipeResults.value.filter(r => r.pipeRow?.alignMode === 'bottom')).toHaveLength(0);
+    expect(store.confirmPipeRowGroups([held[0]!.key])).toBe(4);
+    const bottom = store.pipeResults.value.filter(r => r.pipeRow?.alignMode === 'bottom');
+    expect(bottom).toHaveLength(4);
+    expect(bottom.every(r => r.provenance.warnings.some(w => w.code === 'pipe_row_estimated_grouping'))).toBe(true);
+    expect(store.confirmPipeRowGroups([held[0]!.key])).toBe(0);
+
+    // 列表按模式隔离：中心与管底两套结果各在各的列表里，另一套可一键隐藏（与三维同一隐藏集）
+    store.detectionMode.value = 'pipe-row';
+    store.pipeRowAlignMode.value = 'center';
+    expect(store.visibleResults.value).toHaveLength(4);
+    expect(store.visibleResults.value.every(r => r.pipeRow?.alignMode === 'center')).toBe(true);
+    expect(store.otherModeVisibleCount.value).toBe(4);
+    store.hideOtherModeResults();
+    expect(store.otherModeVisibleCount.value).toBe(0);
+    store.pipeRowAlignMode.value = 'bottom';
+    expect(store.visibleResults.value).toHaveLength(0);
+    store.resetResultFilters();
+    expect(store.visibleResults.value).toHaveLength(4);
+    store.detectionMode.value = 'all-pairs';
+    expect(store.visibleResults.value).toHaveLength(0);
+    store.pipeRowAlignMode.value = 'center';
+
+    // 清空之后旧预览作废：不能再拿它确认
+    store.clearResults();
+    expect(store.confirmPipeRowGroups([held[0]!.key])).toBe(0);
+    expect(store.detectError.value).toContain('预览已过期');
   });
 
   it('少于 2 个构件时不发请求', async () => {

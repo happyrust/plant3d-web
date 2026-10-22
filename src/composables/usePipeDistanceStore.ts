@@ -15,17 +15,33 @@ import { computed, ref } from 'vue';
 
 import type { Vec3 } from '@/types/vec3';
 
-import { genModelV1SpatialNearbyBranches, genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModelV1Api';
+import {
+  genModelV1SpatialCenterline,
+  genModelV1SpatialNearbyBranches,
+  genModelV1SurfaceClearance,
+  isGenModelV1ApiError,
+  type SpatialCenterlineResponse,
+} from '@/api/genModelV1Api';
 import {
   isPipeClearanceRecord,
   pipeDistanceInputs,
   pipeDistanceResultToClearanceRecord,
 } from '@/clearance/adapters/pipeDistanceRecords';
+import { commitPipeRowDetection, confirmPipeRowGroup, isPipeRowRecord } from '@/clearance/adapters/pipeRowRecords';
 import { clearanceRecordId, withClearanceStatus, type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
+import {
+  detectPipeRows,
+  isFormalPipeRowGroup,
+  runAnchorRefno,
+  type PipeRowDetection,
+  type PipeRowRunInput,
+} from '@/clearance/domain/pipeRowGeometry';
+import { PIPE_ROW_ALIGN_MODES, type PipeRowAlignMode } from '@/clearance/domain/pipeRowTypes';
 import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService';
 import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import { buildStraightRuns, type Vec3Mm } from '@/composables/branParallelSpacing';
 
 /**
  * 旧结果模型的输入形状——检测兜底（`detectDtxBranchAxisDistances` 的输出经抽屉补上 designPoints）、
@@ -67,6 +83,34 @@ const detectError = ref<string | null>(null);
 const resultMinDistance = ref<number | null>(null);
 /** 最近一次 `runDetection` 实际落库的记录数（0 = 本轮一条没算出来，兜底层据此决定要不要补估算）。 */
 const lastRunSettledCount = ref(0);
+/** 检测模式：`all-pairs` 外表面净距全对；`pipe-row` 连排相邻（真实中心线归排，见 plan §7）。 */
+const detectionMode = ref<'all-pairs' | 'pipe-row'>('all-pairs');
+/** 连排归排方式：`center` 管中心成排；`bottom` 管底对齐（缺省世界向上作支承法向）。 */
+const pipeRowAlignMode = ref<PipeRowAlignMode>('center');
+/** 最近一次连排检测的原始几何结果（逐截面扫描明细 + 排），供抽屉如实展示分组与诊断。 */
+const lastRowDetection = ref<PipeRowDetection | null>(null);
+/** 管底对齐时竖管组（世界向上在截面内退化）的支承法向：须人工指定，不按视图猜（§3.3 / R11）。 */
+const PIPE_ROW_FALLBACK_NORMALS = Object.freeze({
+  '+x': { x: 1, y: 0, z: 0 },
+  '-x': { x: -1, y: 0, z: 0 },
+  '+y': { x: 0, y: 1, z: 0 },
+  '-y': { x: 0, y: -1, z: 0 },
+});
+export type PipeRowFallbackNormal = 'none' | keyof typeof PIPE_ROW_FALLBACK_NORMALS;
+const PIPE_ROW_FALLBACK_NORMAL_KEYS: readonly string[] = ['none', ...Object.keys(PIPE_ROW_FALLBACK_NORMALS)];
+const pipeRowFallbackNormal = ref<PipeRowFallbackNormal>('none');
+/** 连排排内相邻中心距上限（mm，null = 不限）：归排规则，不是结果筛选。 */
+const pipeRowMaxAdjacentMm = ref<number | null>(null);
+/** 连排检测成功时的提示（诊断、待确认、旧服务端外径估算）——不是失败，不写进 `detectError`。 */
+const detectNotice = ref<string | null>(null);
+/** 预览里已人工确认的排键（只对 `lastRowDetection` 有意义）。 */
+const confirmedRowKeys = ref<ReadonlySet<string>>(new Set());
+/** 最近一次连排检测的提交上下文；`sequence` 与当前不符 = 之后有新检测 / 清空 / 换上下文，预览确认作废。 */
+let lastRowContext: Readonly<{
+  sequence: number;
+  sesnoByBran: Readonly<Record<string, number | null>>;
+  sourceAnnotation: Readonly<{ id: string; type: string }> | null;
+}> | null = null;
 let detectionSequence = 0;
 let calculationsAllowed = true;
 
@@ -81,8 +125,19 @@ function recordDistanceMm(record: ClearanceRecord): number | null {
   return Number.isFinite(distanceM) ? distanceM! * 1000 : null;
 }
 
-/** 列表可见集：没隐藏 + 过距离阈值（无快照的记录没有距离可比，阈值不滤它，行显示「—」）。 */
-const visibleResults = computed(() => pipeResults.value.filter(record => {
+/** 当前抽屉模式的结果：所有管对 = 非连排记录；连排 = 当前归排方式的连排记录（三套结果不混在一个列表里）。 */
+const modeResults = computed(() => pipeResults.value.filter(record => (detectionMode.value === 'pipe-row'
+  ? record.pipeRow?.alignMode === pipeRowAlignMode.value
+  : !record.pipeRow)));
+
+/** 其他模式留下、不在当前列表里却仍按全局开关画在三维里的记录数（抽屉据此提示，可一键隐藏）。 */
+const otherModeVisibleCount = computed(() => {
+  const inMode = new Set(modeResults.value.map(record => record.id));
+  return pipeResults.value.filter(record => !inMode.has(record.id) && !hiddenResultIds.value.has(record.id)).length;
+});
+
+/** 列表可见集：当前模式里没隐藏 + 过距离阈值（无快照的记录没有距离可比，阈值不滤它，行显示「—」）。 */
+const visibleResults = computed(() => modeResults.value.filter(record => {
   if (hiddenResultIds.value.has(record.id)) return false;
   const distanceMm = recordDistanceMm(record);
   return distanceMm === null || resultMinDistance.value === null || distanceMm >= resultMinDistance.value;
@@ -103,7 +158,15 @@ function resetPipeSnapshot() {
   showAnnotations.value = true;
   maxDistance.value = 500;
   maxAngle.value = 5;
+  detectionMode.value = 'all-pairs';
+  pipeRowAlignMode.value = 'center';
+  pipeRowFallbackNormal.value = 'none';
+  pipeRowMaxAdjacentMm.value = null;
+  lastRowDetection.value = null;
+  confirmedRowKeys.value = new Set();
+  lastRowContext = null;
   detectError.value = null;
+  detectNotice.value = null;
 }
 
 /**
@@ -117,6 +180,11 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     || !data.hiddenIds.every(item => typeof item === 'string') || typeof data.showAnnotations !== 'boolean'
     || typeof data.maxDistance !== 'number' || !Number.isFinite(data.maxDistance) || data.maxDistance <= 0
     || typeof data.maxAngle !== 'number' || !Number.isFinite(data.maxAngle) || data.maxAngle < 0 || data.maxAngle > 90
+    || (data.detectionMode !== undefined && !['all-pairs', 'pipe-row'].includes(data.detectionMode as string))
+    || (data.pipeRowAlignMode !== undefined && !PIPE_ROW_ALIGN_MODES.includes(data.pipeRowAlignMode as PipeRowAlignMode))
+    || (data.pipeRowFallbackNormal !== undefined && !PIPE_ROW_FALLBACK_NORMAL_KEYS.includes(data.pipeRowFallbackNormal as string))
+    || (data.pipeRowMaxAdjacentMm !== undefined && data.pipeRowMaxAdjacentMm !== null
+      && (typeof data.pipeRowMaxAdjacentMm !== 'number' || !Number.isFinite(data.pipeRowMaxAdjacentMm) || data.pipeRowMaxAdjacentMm <= 0))
     || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
   const legacyResults = (data.results as PipeDistanceResult[]).map(result => {
     if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
@@ -138,6 +206,8 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   const annotations = data.showAnnotations;
   const distanceLimit = data.maxDistance;
   const angleLimit = data.maxAngle;
+  const fallbackNormal = (data.pipeRowFallbackNormal ?? 'none') as PipeRowFallbackNormal;
+  const adjacentLimit = typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : null;
   return () => {
     // 旧快照的结果先进 ClearanceStore（顺序在 component apply 之后，同 id 的记录按快照口径覆盖）
     const migratedIds: string[] = [];
@@ -154,6 +224,13 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     showAnnotations.value = annotations;
     maxDistance.value = distanceLimit;
     maxAngle.value = angleLimit;
+    // 连排字段是后加的（可选）：旧快照没这两格就退回默认模式，不拿缺省值当格式错误。
+    detectionMode.value = data.detectionMode === 'pipe-row' ? 'pipe-row' : 'all-pairs';
+    pipeRowAlignMode.value = PIPE_ROW_ALIGN_MODES.includes(data.pipeRowAlignMode as PipeRowAlignMode)
+      ? data.pipeRowAlignMode as PipeRowAlignMode
+      : 'center';
+    pipeRowFallbackNormal.value = fallbackNormal;
+    pipeRowMaxAdjacentMm.value = adjacentLimit;
   };
 }
 
@@ -165,12 +242,14 @@ function capturePipeSnapshot() {
     results: [],
     selectedBranRefnos: selectedBranRefnos.value, hiddenIds: [],
     activeIndex: null, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
-    maxDistance: maxDistance.value, maxAngle: maxAngle.value });
+    maxDistance: maxDistance.value, maxAngle: maxAngle.value,
+    detectionMode: detectionMode.value, pipeRowAlignMode: pipeRowAlignMode.value,
+    pipeRowFallbackNormal: pipeRowFallbackNormal.value, pipeRowMaxAdjacentMm: pipeRowMaxAdjacentMm.value });
 }
 
 const persistence = createScopedResultPersistence({
   prefix: 'plant3d-pipe-distance-v1',
-  sources: [selectedBranRefnos, resultMinDistance, showAnnotations, maxDistance, maxAngle],
+  sources: [selectedBranRefnos, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode, pipeRowFallbackNormal, pipeRowMaxAdjacentMm],
   capture: capturePipeSnapshot,
   restore: restorePipeSnapshot,
   invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
@@ -234,11 +313,29 @@ export function usePipeDistanceStore() {
     resultMinDistance.value = min;
   }
 
+  /** 重置当前列表的筛选：只放出当前模式里隐藏的记录（其他模式被一键隐藏的结果不在这个列表里）。 */
   function resetResultFilters() {
-    for (const record of pipeResults.value) {
+    for (const record of modeResults.value) {
       if (hiddenResultIds.value.has(record.id)) clearanceStore.setHidden(record.id, false);
     }
     resultMinDistance.value = null;
+  }
+
+  function hideOtherModeResults() {
+    const inMode = new Set(modeResults.value.map(record => record.id));
+    for (const record of pipeResults.value) {
+      if (!inMode.has(record.id) && !hiddenResultIds.value.has(record.id)) clearanceStore.setHidden(record.id, true);
+    }
+  }
+
+  /** 某一排（`pipeRow.rowGroupId`）现存的连排记录。 */
+  function pipeRowGroupRecords(rowKey: string): ClearanceRecord[] {
+    return pipeResults.value.filter(record => record.pipeRow?.rowGroupId === rowKey);
+  }
+
+  /** 单排开关（R15）：只动这一排的记录；列表与三维用同一隐藏集，不碰其他排与其他来源的净距。 */
+  function setPipeRowGroupHidden(rowKey: string, hidden: boolean) {
+    for (const record of pipeRowGroupRecords(rowKey)) clearanceStore.setHidden(record.id, hidden);
   }
 
   /** 某一对 BRAN 现存的记录（重算覆盖 / 失败标 stale 都先查它）。 */
@@ -279,6 +376,7 @@ export function usePipeDistanceStore() {
 
     isDetecting.value = true;
     detectError.value = null;
+    detectNotice.value = null;
 
     // 工作台批量检测所有唯一管对；保留源→目标模式供既有调用使用。
     const pairs: [string, string][] = [];
@@ -369,6 +467,188 @@ export function usePipeDistanceStore() {
     return true;
   }
 
+  /**
+   * 连排相邻检测（plan §7）：已选 BRAN 的真实中心线 → 直段 → `detectPipeRows` 归排 →
+   * 每对相邻管两条记录（`piperow` 命名空间：截面中心距 + 外径推导间隔）。
+   *
+   * - 只认真实中心线：任一已选 BRAN 拉不到中心线，本次就不归排、不写新结果（R13 / §5.7：缺了它，
+   *   隔着它的两根管会被当成相邻）；它参与过的旧连排记录标 `failed` 留旧快照，其余记录不动。
+   *   不挂 `detectDtxBranchAxisDistances` 的网格拟合兜底——拟合轴线的归排没有意义（§1 决策）。
+   * - 摘除范围 = 本次全部 BRAN 的直段锚点 ∪ 旧记录里两侧都属本次 BRAN 的锚点
+   *   （同一 BRAN 重算后锚点漂移的旧记录也能被收走）。多解 / 分组不完整的排不出正式记录，见 `commitPipeRowDetection`。
+   * - `sequence` 防护与 `runDetection` 同口径：新检测 / 清空 / 换上下文后迟到的结果不写库。
+   */
+  async function runPipeRowDetection(options: {
+    alignMode?: PipeRowAlignMode;
+    supportNormal?: Vec3Mm;
+    sourceAnnotation?: Readonly<{ id: string; type: string }> | null;
+  } = {}): Promise<boolean> {
+    const sequence = ++detectionSequence;
+    if (!calculationsAllowed) { detectError.value = '历史版本对比中不能使用当前模型检测管道连排，请退出对比后重算。'; return false; }
+    const alignMode = options.alignMode ?? pipeRowAlignMode.value;
+    const branRefnos = [...selectedBranRefnos.value];
+    if (branRefnos.length < 2) {
+      isDetecting.value = false;
+      lastRunSettledCount.value = 0;
+      detectError.value = '连排相邻检测请至少选择 2 根管道';
+      return false;
+    }
+    isDetecting.value = true;
+    detectError.value = null;
+    detectNotice.value = null;
+    confirmedRowKeys.value = new Set();
+    lastRowContext = null;
+    try {
+      const warnings: string[] = [];
+      const lines = new Map<string, SpatialCenterlineResponse>();
+      const failed = new Map<string, string>();
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < branRefnos.length && sequence === detectionSequence) {
+          const refno = branRefnos[cursor]!; cursor += 1;
+          try {
+            const resp = await genModelV1SpatialCenterline(refno);
+            if (!resp || !Array.isArray(resp.segments)
+              || resp.segments.some(s => !s || typeof s.refno !== 'string'
+                || ![s.start?.x, s.start?.y, s.start?.z, s.end?.x, s.end?.y, s.end?.z].every(Number.isFinite))) {
+              throw new Error('中心线响应无效');
+            }
+            lines.set(refno, resp);
+          } catch (error) {
+            failed.set(refno, isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error));
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, branRefnos.length) }, worker));
+      if (sequence !== detectionSequence) return false;
+
+      const inputs: PipeRowRunInput[] = [];
+      const sesnoByBran: Record<string, number | null> = {};
+      const legacyOdBrans: string[] = [];
+      for (const refno of branRefnos) {
+        const line = lines.get(refno);
+        sesnoByBran[refno] = line?.source_version?.sesno ?? null;
+        if (!line) continue;
+        for (const text of line.warnings ?? []) warnings.push(`${refno}：${text}`);
+        // 缺口不许跨接（§5.6）：中心线断档两侧的段哪怕共线也分成两条直段，缺口如实上报。
+        // 旧服务端不给逐段外径来源：按服务端同一规则取成员外径、记估算档（推导间隔带 ≈，管底归排待确认）。
+        const runs = buildStraightRuns(line, {
+          maxJointGapMm: 1,
+          inferLegacyMemberOd: true,
+          onDiagnostic: (diagnostic) => {
+            if (diagnostic.kind === 'chain-break' && diagnostic.reason === 'joint-gap') {
+              warnings.push(`${refno}：${diagnostic.refno} 前有约 ${Math.round(diagnostic.gapMm ?? 0)}mm 中心线缺口，缺口两侧分开成排`);
+            }
+          },
+        });
+        for (const run of runs) {
+          inputs.push({ branRefno: refno, run });
+        }
+        if (runs.some(run => run.odEvidence === 'legacy-member')) legacyOdBrans.push(refno);
+      }
+      for (const [refno, message] of failed) warnings.push(`${refno}：中心线获取失败：${message}`);
+
+      const operandBrans = (record: ClearanceRecord) =>
+        [record.provenance.source.refno, record.provenance.target.refno]
+          .filter((refno): refno is string => typeof refno === 'string' && refno.length > 0);
+      if (failed.size > 0) {
+        for (const record of pipeResults.value) {
+          if (!isPipeRowRecord(record) || record.pipeRow?.alignMode !== alignMode || record.status === 'failed') continue;
+          if (operandBrans(record).some(bran => failed.has(bran))) {
+            clearanceStore.upsertRecord(withClearanceStatus(record, 'failed'));
+          }
+        }
+        lastRowDetection.value = null;
+        lastRunSettledCount.value = 0;
+        warnings.push(`${failed.size} 根管道中心线获取失败，本次不生成连排结果（缺了它们，隔着它们的两根管会被误当成相邻）；可稍后重试，或确认不需要它们后从选择中移除再检测`);
+        detectError.value = warnings.join('；');
+        return false;
+      }
+
+      const fetched = new Set(lines.keys());
+      // 摘除范围：本次 BRAN 的新直段锚点 ∪ 旧记录两侧都属本次 BRAN 的锚点——
+      // 重算后锚点 refno 漂移（管身段重排）的旧记录也进范围，不会留下孤儿。
+      const anchorScope = new Set<string>(inputs.map(input => runAnchorRefno(input.run)));
+      for (const record of pipeResults.value) {
+        if (!isPipeRowRecord(record) || record.pipeRow?.alignMode !== alignMode) continue;
+        const brans = operandBrans(record);
+        if (brans.length === 2 && brans.every(bran => fetched.has(bran))) {
+          anchorScope.add(record.inputs.sourceRefno);
+          anchorScope.add(record.inputs.targetRefno);
+        }
+      }
+
+      const fallbackNormal = pipeRowFallbackNormal.value;
+      const detection = detectPipeRows(inputs, {
+        alignMode,
+        supportNormal: options.supportNormal,
+        fallbackSupportNormal: fallbackNormal === 'none' ? undefined : PIPE_ROW_FALLBACK_NORMALS[fallbackNormal],
+        maxAdjacentCenterDistanceMm: pipeRowMaxAdjacentMm.value,
+      });
+      lastRowDetection.value = detection;
+      if (legacyOdBrans.length > 0) {
+        warnings.push(`中心线接口未提供逐段外径来源（旧服务端），${legacyOdBrans.length} 根管道按成员外径估算：推导间隔带 ≈，管底对齐的排需确认后生成`);
+      }
+      warnings.push(...detection.diagnostics);
+
+      const created = commitPipeRowDetection({
+        groups: detection.groups,
+        anchorScope: [...anchorScope],
+        alignMode,
+        records: clearanceStore.records.value,
+        upsertRecord: clearanceStore.upsertRecord,
+        removeRecord: clearanceStore.removeRecord,
+        options: { sesnoByBran, sourceAnnotation: options.sourceAnnotation ?? null, computedAt: new Date() },
+      });
+      lastRunSettledCount.value = created.length;
+      lastRowContext = { sequence, sesnoByBran, sourceAnnotation: options.sourceAnnotation ?? null };
+      clearanceStore.setActive(created[0]?.id ?? null);
+      if (detection.groups.length === 0) warnings.push('没有检测到成排的相邻管道');
+      detectNotice.value = warnings.length > 0 ? warnings.join('；') : null;
+      return true;
+    } catch (e) {
+      if (sequence !== detectionSequence) return false;
+      detectError.value = `连排检测失败: ${e instanceof Error ? e.message : String(e)}`;
+      console.error('[PipeDistance] runPipeRowDetection failed:', e);
+      return false;
+    } finally {
+      if (sequence === detectionSequence) isDetecting.value = false;
+    }
+  }
+
+  /**
+   * 预览里人工确认待定的排（§8 第 4 点）：只认最近一次连排检测，且之后没有新检测 / 清空 / 换上下文；
+   * 记录按检测时的同一构造与版本证据生成，保留识别时的判定警告。返回新生成的记录数。
+   */
+  function confirmPipeRowGroups(rowKeys: readonly string[]): number {
+    if (!calculationsAllowed) {
+      detectError.value = '历史版本对比中不能使用当前模型生成连排结果，请退出对比后重算。';
+      return 0;
+    }
+    const detection = lastRowDetection.value;
+    const context = lastRowContext;
+    if (!detection || !context || context.sequence !== detectionSequence) {
+      detectError.value = '识别预览已过期（之后有新的检测、清空或上下文切换），请重新检测后再确认';
+      return 0;
+    }
+    const confirmed = new Set(confirmedRowKeys.value);
+    let created = 0;
+    for (const key of rowKeys) {
+      const group = detection.groups.find(candidate => candidate.key === key);
+      if (!group || isFormalPipeRowGroup(group) || confirmed.has(key)) continue;
+      created += confirmPipeRowGroup({
+        group,
+        records: clearanceStore.records.value,
+        upsertRecord: clearanceStore.upsertRecord,
+        removeRecord: clearanceStore.removeRecord,
+        options: { sesnoByBran: context.sesnoByBran, sourceAnnotation: context.sourceAnnotation, computedAt: new Date() },
+      }).length;
+      confirmed.add(key);
+    }
+    confirmedRowKeys.value = confirmed;
+    return created;
+  }
+
   async function autoDetectBrans(refnos: string[], options: Omit<PipeDistanceDetectionOptions, 'refnos'> = {}) {
     return runDetection({
       ...options,
@@ -384,6 +664,7 @@ export function usePipeDistanceStore() {
     if (!source) { detectError.value = '请先选择一根 BRAN 管道'; return false; }
     isDetecting.value = true;
     detectError.value = null;
+    detectNotice.value = null;
     const radius = Number.isFinite(maxDistance.value) && maxDistance.value > 0 ? maxDistance.value : 500;
     const originalLimit = maxDistance.value;
     try {
@@ -443,7 +724,22 @@ export function usePipeDistanceStore() {
       clearanceStore.removeRecord(record.id);
     }
     detectError.value = null;
+    detectNotice.value = null;
+    lastRowDetection.value = null;
     resetResultFilters();
+  }
+
+  /** 列表上的「清空」：只清当前模式的记录——其他模式的结果不在这个列表里，不该被看不见的按钮清掉。 */
+  function clearModeResults() {
+    detectionSequence += 1;
+    isDetecting.value = false;
+    for (const record of modeResults.value) {
+      clearanceStore.removeRecord(record.id);
+    }
+    detectError.value = null;
+    detectNotice.value = null;
+    lastRowDetection.value = null;
+    resultMinDistance.value = null;
   }
 
   return {
@@ -467,18 +763,33 @@ export function usePipeDistanceStore() {
     hiddenResultIds,
     resultMinDistance,
     visibleResults,
+    detectNotice,
+    modeResults,
+    otherModeVisibleCount,
+    detectionMode,
+    pipeRowAlignMode,
+    pipeRowFallbackNormal,
+    pipeRowMaxAdjacentMm,
+    lastRowDetection,
+    confirmedRowKeys,
     addBranRefno,
     setBranRefnos,
     removeBranRefno,
     clearBranRefnos,
     setActiveResult,
     runDetection,
+    runPipeRowDetection,
     autoDetectBrans,
     detectNearbyBrans,
     commitPipeDistanceResults,
+    confirmPipeRowGroups,
     clearResults,
+    clearModeResults,
     toggleResultHidden,
     setResultMinDistance,
     resetResultFilters,
+    hideOtherModeResults,
+    pipeRowGroupRecords,
+    setPipeRowGroupHidden,
   };
 }
