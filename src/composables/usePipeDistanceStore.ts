@@ -110,16 +110,21 @@ const PIPE_ROW_FALLBACK_NORMALS = Object.freeze({
 export type PipeRowFallbackNormal = 'none' | keyof typeof PIPE_ROW_FALLBACK_NORMALS;
 const PIPE_ROW_FALLBACK_NORMAL_KEYS: readonly string[] = ['none', ...Object.keys(PIPE_ROW_FALLBACK_NORMALS)];
 const pipeRowFallbackNormal = ref<PipeRowFallbackNormal>('none');
-/** 连排排内相邻中心距上限的缺省（mm）：超过就不算排内邻管——两组管廊之间、上下层之间的空档不量。 */
+/** 连排排内相邻中心距上限的缺省（mm）。 */
 export const PIPE_ROW_DEFAULT_MAX_ADJACENT_MM = 1000;
 /** 连排最短共同区段的缺省（mm）：拐角处两根管只并排一小截，不出尺寸。 */
 export const PIPE_ROW_DEFAULT_MIN_COMMON_MM = 300;
-/** 连排排内相邻中心距上限（mm，null = 不限）：归排规则，不是结果筛选。 */
-const pipeRowMaxAdjacentMm = ref<number | null>(PIPE_ROW_DEFAULT_MAX_ADJACENT_MM);
+/**
+ * 连排排内相邻中心距上限（mm）：相距超过它的两根管不算排管——两组管廊之间、上下层之间的空档不量。
+ * 归排规则，不是结果筛选；没有「不限」。
+ */
+const pipeRowMaxAdjacentMm = ref(PIPE_ROW_DEFAULT_MAX_ADJACENT_MM);
 /** 连排最短共同区段（mm）：两根管共同的直段短于它就不归排；选了直段时不限（所选直段就是要量的地方）。 */
 const pipeRowMinCommonMm = ref(PIPE_ROW_DEFAULT_MIN_COMMON_MM);
 /** 三维里连排同一对两种口径都画；缺省只画一条（名义间隔可画就画它，否则中心距），另一个值进列表与悬停说明。 */
 const pipeRowBothMetrics = ref(false);
+/** 三维画连排关键点：截面上的两管中心、推导间隔两端的外表面点、管底对齐的管底点与支承线。 */
+const pipeRowKeyPoints = ref(true);
 /** 连排检测成功时的提示与诊断明细：提示要用户留意（待确认、缺口、旧服务端外径估算），诊断（穿过件、没有共同区段的管向组）收进详情。 */
 const detectReport = ref<Readonly<{ notice: string | null; diagnostics: readonly string[] }>>({ notice: null, diagnostics: [] });
 /** 不是失败，不写进 `detectError`；清掉提示连诊断一起清。 */
@@ -190,6 +195,7 @@ function resetPipeSnapshot() {
   pipeRowMaxAdjacentMm.value = PIPE_ROW_DEFAULT_MAX_ADJACENT_MM;
   pipeRowMinCommonMm.value = PIPE_ROW_DEFAULT_MIN_COMMON_MM;
   pipeRowBothMetrics.value = false;
+  pipeRowKeyPoints.value = true;
   lastRowDetection.value = null;
   confirmedRowKeys.value = new Set();
   lastRowContext = null;
@@ -218,6 +224,7 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     || (data.pipeRowMinCommonMm !== undefined
       && (typeof data.pipeRowMinCommonMm !== 'number' || !Number.isFinite(data.pipeRowMinCommonMm) || data.pipeRowMinCommonMm <= 0))
     || (data.pipeRowBothMetrics !== undefined && typeof data.pipeRowBothMetrics !== 'boolean')
+    || (data.pipeRowKeyPoints !== undefined && typeof data.pipeRowKeyPoints !== 'boolean')
     || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
   const legacyResults = (data.results as PipeDistanceResult[]).map(result => {
     if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
@@ -240,12 +247,11 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   const distanceLimit = data.maxDistance;
   const angleLimit = data.maxAngle;
   const fallbackNormal = (data.pipeRowFallbackNormal ?? 'none') as PipeRowFallbackNormal;
-  // 缺这一格（它出现之前的快照）用缺省上限；存的是 null 才是用户清空成了不限
-  const adjacentLimit = data.pipeRowMaxAdjacentMm === undefined
-    ? PIPE_ROW_DEFAULT_MAX_ADJACENT_MM
-    : typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : null;
+  // 早先的快照可能没有这一格，或存的是当时的「不限」（null）：都按缺省上限——超过一定距离的就不是排管
+  const adjacentLimit = typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : PIPE_ROW_DEFAULT_MAX_ADJACENT_MM;
   const minCommon = typeof data.pipeRowMinCommonMm === 'number' ? data.pipeRowMinCommonMm : PIPE_ROW_DEFAULT_MIN_COMMON_MM;
   const bothMetrics = data.pipeRowBothMetrics === true;
+  const keyPoints = data.pipeRowKeyPoints !== false;
   const branRefnos = data.selectedBranRefnos as string[];
   // 直段是后加的（可选）；所属 BRAN 不在选择里的直段丢掉，不让它把 BRAN 悄悄带回来
   const tubeKeys = ((data.selectedTubeKeys ?? []) as string[]).filter(key => branRefnos.includes(parseTubeKey(key)!.unitRefno));
@@ -275,6 +281,7 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     pipeRowMaxAdjacentMm.value = adjacentLimit;
     pipeRowMinCommonMm.value = minCommon;
     pipeRowBothMetrics.value = bothMetrics;
+    pipeRowKeyPoints.value = keyPoints;
   };
 }
 
@@ -289,13 +296,13 @@ function capturePipeSnapshot() {
     maxDistance: maxDistance.value, maxAngle: maxAngle.value,
     detectionMode: detectionMode.value, pipeRowAlignMode: pipeRowAlignMode.value,
     pipeRowFallbackNormal: pipeRowFallbackNormal.value, pipeRowMaxAdjacentMm: pipeRowMaxAdjacentMm.value,
-    pipeRowMinCommonMm: pipeRowMinCommonMm.value, pipeRowBothMetrics: pipeRowBothMetrics.value });
+    pipeRowMinCommonMm: pipeRowMinCommonMm.value, pipeRowBothMetrics: pipeRowBothMetrics.value, pipeRowKeyPoints: pipeRowKeyPoints.value });
 }
 
 const persistence = createScopedResultPersistence({
   prefix: 'plant3d-pipe-distance-v1',
   sources: [selectedBranRefnos, selectedTubeKeys, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode,
-    pipeRowFallbackNormal, pipeRowMaxAdjacentMm, pipeRowMinCommonMm, pipeRowBothMetrics],
+    pipeRowFallbackNormal, pipeRowMaxAdjacentMm, pipeRowMinCommonMm, pipeRowBothMetrics, pipeRowKeyPoints],
   capture: capturePipeSnapshot,
   restore: restorePipeSnapshot,
   invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
@@ -909,6 +916,7 @@ export function usePipeDistanceStore() {
     pipeRowMaxAdjacentMm,
     pipeRowMinCommonMm,
     pipeRowBothMetrics,
+    pipeRowKeyPoints,
     lastRowDetection,
     confirmedRowKeys,
     selectedTubeKeys,

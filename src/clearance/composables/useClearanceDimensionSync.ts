@@ -21,7 +21,7 @@ export function useClearanceDimensionSync(
   dimensionSystemRef: Ref<ClearanceDimensionSink | null>,
   clearanceStore: Pick<ReturnType<typeof useClearanceStore>, 'visibleRecords' | 'showAnnotations'>,
   requestRender?: () => void,
-  display: Readonly<{ pipeRowBothMetrics?: Ref<boolean> }> = {},
+  display: Readonly<{ pipeRowBothMetrics?: Ref<boolean>; pipeRowKeyPoints?: Ref<boolean> }> = {},
 ) {
   let lastSkipped = 0;
 
@@ -35,6 +35,7 @@ export function useClearanceDimensionSync(
     }
     const result = clearanceRecordsToExternalDimensions(clearanceStore.visibleRecords.value, {
       pipeRowBothMetrics: display.pipeRowBothMetrics?.value ?? false,
+      pipeRowKeyPoints: display.pipeRowKeyPoints?.value ?? false,
     });
     system.replaceExternalSource(CLEARANCE_EXTERNAL_SOURCE, result.records);
     if (result.skipped.length !== lastSkipped) {
@@ -52,7 +53,8 @@ export function useClearanceDimensionSync(
   }
 
   const stop: WatchStopHandle = watch(
-    [dimensionSystemRef, clearanceStore.visibleRecords, clearanceStore.showAnnotations, () => display.pipeRowBothMetrics?.value],
+    [dimensionSystemRef, clearanceStore.visibleRecords, clearanceStore.showAnnotations,
+      () => display.pipeRowBothMetrics?.value, () => display.pipeRowKeyPoints?.value],
     sync,
     { deep: true, immediate: true },
   );

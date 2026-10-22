@@ -47,6 +47,11 @@ export type ClearanceRecordPipeRow = Readonly<{
   rowGroupId: string;
   sourceOd: PipeRowSideOd;
   targetOd: PipeRowSideOd;
+  /**
+   * 管底对齐：两管归排用的管底点 B = C − r·n（design-world 米，source / target 同序），三维关键点画它和支承线。
+   * 管中心成排没有这一格——那里的归排点就是中心。
+   */
+  bottomPoints?: readonly [ComputationPoint, ComputationPoint];
 }>;
 
 const ALIGN_MODE_SET: ReadonlySet<string> = new Set(PIPE_ROW_ALIGN_MODES);
@@ -121,6 +126,17 @@ export function normalizePipeRowExtension(value: unknown): ClearanceRecordPipeRo
   const normal = normalizePoint(value.section.normal, 'pipeRow.section.normal');
   const norm = Math.hypot(normal[0], normal[1], normal[2]);
   if (!(Math.abs(norm - 1) <= 1e-3)) throw new TypeError('pipeRow.section.normal must be a unit vector');
+  let bottomPoints: readonly [ComputationPoint, ComputationPoint] | null = null;
+  if (value.bottomPoints !== undefined && value.bottomPoints !== null) {
+    if (alignMode !== 'bottom') throw new TypeError('pipeRow.bottomPoints only belongs to bottom-aligned rows');
+    if (!Array.isArray(value.bottomPoints) || value.bottomPoints.length !== 2) {
+      throw new TypeError('pipeRow.bottomPoints must be two points');
+    }
+    bottomPoints = Object.freeze([
+      normalizePoint(value.bottomPoints[0], 'pipeRow.bottomPoints[0]'),
+      normalizePoint(value.bottomPoints[1], 'pipeRow.bottomPoints[1]'),
+    ]) as readonly [ComputationPoint, ComputationPoint];
+  }
   return Object.freeze({
     alignMode,
     metric,
@@ -134,6 +150,7 @@ export function normalizePipeRowExtension(value: unknown): ClearanceRecordPipeRo
     rowGroupId: requiredTextIn(value.rowGroupId, 'pipeRow.rowGroupId'),
     sourceOd: normalizeSideOd(value.sourceOd, 'pipeRow.sourceOd'),
     targetOd: normalizeSideOd(value.targetOd, 'pipeRow.targetOd'),
+    ...(bottomPoints ? { bottomPoints } : {}),
   });
 }
 

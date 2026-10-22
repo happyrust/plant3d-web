@@ -28,7 +28,12 @@ import {
   findOwnerBranRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { PIPE_ROW_DEFAULT_MIN_COMMON_MM, usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
+import {
+  PIPE_ROW_DEFAULT_MAX_ADJACENT_MM,
+  PIPE_ROW_DEFAULT_MIN_COMMON_MM,
+  usePipeDistanceStore,
+  type PipeDistanceResult,
+} from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -422,7 +427,11 @@ const OD_EVIDENCE_LABELS: Readonly<Record<OutsideDiameterEvidence, string>> = Ob
   missing: '缺失',
 });
 
-/** 行悬停说明：连排记录给归排方式、截面位置、两侧外径与来源；所有记录附计算警告。 */
+function pointText(point: readonly number[]): string {
+  return `(${point.map(v => v.toFixed(3)).join(', ')})`;
+}
+
+/** 行悬停说明：连排记录给归排方式、截面位置、两侧外径与来源、关键点坐标；所有记录附计算警告。 */
 function recordDetailTitle(record: ClearanceRecord): string | undefined {
   const pipeRow = record.pipeRow;
   const warnings = computationWarningsText(record.provenance.warnings);
@@ -431,10 +440,17 @@ function recordDetailTitle(record: ClearanceRecord): string | undefined {
   const od = (side: PipeRowSideOd) => `${side.odM === null ? '—' : `${Math.round(side.odM * 10000) / 10} mm`}（${OD_EVIDENCE_LABELS[side.evidence]}）`;
   const pairKey = pipeRowPairKey(record);
   const sibling = store.pipeResults.value.find(other => other.id !== record.id && pipeRowPairKey(other) === pairKey);
+  const pair = sibling ? [record, sibling] : [record];
+  const centers = pair.find(item => item.pipeRow?.metric === 'center-distance')?.snapshot;
+  const surface = pair.find(item => item.pipeRow?.metric === 'derived-gap')?.snapshot;
+  const bottom = pipeRow.bottomPoints;
   return [
     `${pipeRow.alignMode === 'center' ? '管中心成排' : '管底对齐'} · 截面点 (${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)}) m · 沿管向 ${pipeRow.section.axialStartM.toFixed(3)}–${pipeRow.section.axialEndM.toFixed(3)} m`,
     `外径：${od(pipeRow.sourceOd)} / ${od(pipeRow.targetOd)}`,
     sibling?.pipeRow ? `同一对的${sibling.pipeRow.metric === 'center-distance' ? '中心距' : '名义间隔'}：${pipeRowValueText(sibling)}` : '',
+    centers ? `中心点：${pointText(centers.sourcePoint)} / ${pointText(centers.targetPoint)} m` : '',
+    surface ? `外表面点：${pointText(surface.sourcePoint)} / ${pointText(surface.targetPoint)} m` : '',
+    bottom ? `管底点：${pointText(bottom[0])} / ${pointText(bottom[1])} m` : '',
     warnings,
   ].filter(Boolean).join('\n');
 }
@@ -514,21 +530,22 @@ const PIPE_ROW_FALLBACK_NORMAL_OPTIONS = [
   ['-y', '−Y'],
 ] as const;
 
-const maxAdjacentInput = computed({
-  get: () => store.pipeRowMaxAdjacentMm.value ?? '',
-  set: (value: number | string) => {
-    const n = Number(value);
-    store.pipeRowMaxAdjacentMm.value = value !== '' && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-  },
-});
+/** 正整数毫米输入提交：不合法或留空回到缺省，并回写输入框——值没变时 Vue 不重画，留空的框会一直空着。 */
+function commitPositiveMm(event: Event, fallback: number): number {
+  const input = event.target as HTMLInputElement;
+  const n = Number(input.value);
+  const value = input.value !== '' && Number.isFinite(n) && n > 0 ? Math.max(1, Math.round(n)) : fallback;
+  input.value = String(value);
+  return value;
+}
 
-const minCommonInput = computed({
-  get: () => store.pipeRowMinCommonMm.value,
-  set: (value: number | string) => {
-    const n = Number(value);
-    store.pipeRowMinCommonMm.value = value !== '' && Number.isFinite(n) && n > 0 ? Math.max(1, Math.round(n)) : PIPE_ROW_DEFAULT_MIN_COMMON_MM;
-  },
-});
+function onMaxAdjacentChange(event: Event) {
+  store.pipeRowMaxAdjacentMm.value = commitPositiveMm(event, PIPE_ROW_DEFAULT_MAX_ADJACENT_MM);
+}
+
+function onMinCommonChange(event: Event) {
+  store.pipeRowMinCommonMm.value = commitPositiveMm(event, PIPE_ROW_DEFAULT_MIN_COMMON_MM);
+}
 
 function isResultHidden(id: string): boolean {
   return store.hiddenResultIds.value.has(id);
@@ -709,26 +726,27 @@ function isResultHidden(id: string): boolean {
             <div v-if="isRowMode" class="space-y-1">
               <label class="text-xs font-medium text-foreground" for="pipe-row-max-adjacent">排内相邻上限</label>
               <div class="flex items-center gap-2">
-                <input id="pipe-row-max-adjacent" v-model.number="maxAdjacentInput"
+                <input id="pipe-row-max-adjacent" :value="store.pipeRowMaxAdjacentMm.value"
                   type="number"
-                  min="0"
-                  placeholder="不限"
+                  min="1"
                   data-testid="pipe-row-max-adjacent"
-                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  @change="onMaxAdjacentChange" />
                 <span class="text-xs text-muted-foreground">mm</span>
               </div>
-              <p class="text-[11px] text-muted-foreground">相邻中心距超过它就断开成两排，不量两组管廊之间、上下层之间的空档；缺省 1000 mm，留空不限。</p>
+              <p class="text-[11px] text-muted-foreground">相邻中心距超过它的两根管不算排管，在此断开，不量两组管廊之间、上下层之间的空档；缺省 1000 mm。</p>
             </div>
 
             <!-- 最短共同区段 -->
             <div v-if="isRowMode" class="space-y-1">
               <label class="text-xs font-medium text-foreground" for="pipe-row-min-common">最短共同区段</label>
               <div class="flex items-center gap-2">
-                <input id="pipe-row-min-common" v-model.number="minCommonInput"
+                <input id="pipe-row-min-common" :value="store.pipeRowMinCommonMm.value"
                   type="number"
                   min="1"
                   data-testid="pipe-row-min-common"
-                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  @change="onMinCommonChange" />
                 <span class="text-xs text-muted-foreground">mm</span>
               </div>
               <p class="text-[11px] text-muted-foreground">两根管共同的直段短于它就不量，拐角处只并排一小截的不出尺寸；缺省 300 mm。选了直段时不限。</p>
@@ -738,6 +756,12 @@ function isResultHidden(id: string): boolean {
             <label v-if="isRowMode" class="flex cursor-pointer items-start gap-2" data-testid="pipe-row-both-metrics">
               <input v-model="store.pipeRowBothMetrics.value" type="checkbox" class="mt-0.5 h-3.5 w-3.5" />
               <span class="text-[11px] text-muted-foreground">三维里中心距和名义间隔都画。不勾时每对只画一条：名义间隔；接触、重叠或缺外径时画中心距。另一个值在列表和悬停说明里。</span>
+            </label>
+
+            <!-- 三维关键点 -->
+            <label v-if="isRowMode" class="flex cursor-pointer items-start gap-2" data-testid="pipe-row-key-points">
+              <input v-model="store.pipeRowKeyPoints.value" type="checkbox" class="mt-0.5 h-3.5 w-3.5" />
+              <span class="text-[11px] text-muted-foreground">三维显示关键点：截面上的管中心（×）、名义间隔两端的外表面点（○）；管底对齐时还有管底点（○）和支承线（虚线）。坐标在列表悬停说明里。</span>
             </label>
 
             <!-- 最大距离 -->

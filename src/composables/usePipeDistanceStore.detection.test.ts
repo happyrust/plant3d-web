@@ -526,16 +526,17 @@ describe('usePipeDistanceStore · 净距检测', () => {
     store.detectNotice.value = null;
     expect(store.detectDiagnostics.value).toEqual([]);
 
-    // 快照：新三格随抽屉设置存取；没有相邻上限这一格的旧快照用缺省 1000，存的是 null 才是不限
+    // 快照：这几格随抽屉设置存取；早先没有相邻上限、或存的是当时「不限」（null）的快照都按缺省 1000——超过一定距离的不是排管
     const snapshot = store.captureSnapshot() as Record<string, unknown>;
-    expect(snapshot).toMatchObject({ pipeRowMaxAdjacentMm: 1000, pipeRowMinCommonMm: 300, pipeRowBothMetrics: false });
+    expect(snapshot).toMatchObject({ pipeRowMaxAdjacentMm: 1000, pipeRowMinCommonMm: 300, pipeRowBothMetrics: false, pipeRowKeyPoints: true });
     const older = { ...snapshot };
     delete older.pipeRowMaxAdjacentMm;
-    store.pipeRowMaxAdjacentMm.value = null;
+    store.pipeRowMaxAdjacentMm.value = 2000;
     store.prepareSnapshotRestore(older)();
     expect(store.pipeRowMaxAdjacentMm.value).toBe(1000);
-    store.prepareSnapshotRestore({ ...snapshot, pipeRowMaxAdjacentMm: null, pipeRowMinCommonMm: 500, pipeRowBothMetrics: true })();
-    expect([store.pipeRowMaxAdjacentMm.value, store.pipeRowMinCommonMm.value, store.pipeRowBothMetrics.value]).toEqual([null, 500, true]);
+    store.prepareSnapshotRestore({ ...snapshot, pipeRowMaxAdjacentMm: null, pipeRowMinCommonMm: 500, pipeRowBothMetrics: true, pipeRowKeyPoints: false })();
+    expect([store.pipeRowMaxAdjacentMm.value, store.pipeRowMinCommonMm.value, store.pipeRowBothMetrics.value, store.pipeRowKeyPoints.value])
+      .toEqual([1000, 500, true, false]);
     expect(() => store.prepareSnapshotRestore({ ...snapshot, pipeRowMinCommonMm: 0 })).toThrow();
     store.prepareSnapshotRestore(snapshot)();
   });

@@ -2077,7 +2077,10 @@ const componentToWallClearance = useComponentToWallClearance({
   toast: emitToast,
   onRecord: flyToClearanceRecord,
 });
-useClearanceDimensionSync(viewerContext.dimensionSystem, clearanceStore, requestRender, { pipeRowBothMetrics: pipeDistanceStore.pipeRowBothMetrics });
+useClearanceDimensionSync(viewerContext.dimensionSystem, clearanceStore, requestRender, {
+  pipeRowBothMetrics: pipeDistanceStore.pipeRowBothMetrics,
+  pipeRowKeyPoints: pipeDistanceStore.pipeRowKeyPoints,
+});
 watch(selectionStore.selectedRefno, value => { pipeInformationStore.suggestedRefno.value = value ?? ''; });
 watch([viewerContext.dimensionSystem, pipeInformationStore.visibleRecords], ([system, records]) => {
   if (!system) return;

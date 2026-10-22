@@ -137,6 +137,9 @@ function pipeRowExtension(
     rowGroupId: group.key,
     sourceOd: sideOd(pair.source),
     targetOd: sideOd(pair.target),
+    ...(group.alignMode === 'bottom'
+      ? { bottomPoints: [mmPointToM(pair.source.rowPointMm), mmPointToM(pair.target.rowPointMm)] as const }
+      : {}),
   };
 }
 

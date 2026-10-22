@@ -8,6 +8,7 @@ import {
 } from './clearanceExternalDimensions';
 
 import type { PipeRowMetric } from '@/clearance/domain/pipeRowTypes';
+import type { ExternalDimensionRecord } from '@/dimension';
 
 import { createClearanceRecord, withClearanceStatus, type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService';
@@ -20,6 +21,8 @@ import {
 } from '@/clearance/testing/surfaceClearanceFixtures';
 import { normalizeExternalDimension } from '@/dimension';
 import { accuracyClassForMethod, createComputationProvenance } from '@/measurement/domain/computationProvenance';
+
+type ExplicitLayout = Extract<ExternalDimensionRecord['layout'], { arrowLines: unknown }>;
 
 const AT = new Date('2026-09-17T12:00:00.000Z');
 const INPUT = { sourceRefno: '24384_22582', targetRefno: '17496_105912' } as const;
@@ -143,6 +146,30 @@ describe('clearanceExternalDimensions', () => {
     const contact = { ...gap, snapshot: null } as ClearanceRecord;
     expect(clearanceRecordsToExternalDimensions([center, contact]).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
     expect(clearanceRecordsToExternalDimensions([center]).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
+  });
+
+  it('连排关键点：每对一组标注——两管中心画 ×、推导间隔两端的外表面点画 ○；管底对齐再加管底点与虚线支承线；不开不画', () => {
+    const center = pipeRowRecord('center-distance', 300);
+    const gap = pipeRowRecord('derived-gap', 50);
+    expect(clearanceRecordsToExternalDimensions([center, gap]).records.some(d => d.category === 'annotation')).toBe(false);
+
+    const keyPoints = clearanceRecordsToExternalDimensions([center, gap], { pipeRowKeyPoints: true }).records.filter(d => d.category === 'annotation');
+    expect(keyPoints).toHaveLength(1);
+    expect(keyPoints[0]!.id).toBe('clearance:piperow:center:a~0_1:b~0_1@0-5000:key-points');
+    expect(keyPoints[0]!.sourceLabel).toBe('连排关键点（m）: 中心 (0.000, 0.000, 0.000) / (0.000, 0.300, 0.000)；外表面点 (0.000, 0.000, 0.000) / (0.000, 0.050, 0.000)');
+    const layout = keyPoints[0]!.layout as ExplicitLayout;
+    expect(layout.markers!.map(m => [m.shape, m.at])).toEqual([
+      ['cross', [0, 0, 0]], ['cross', [0, 0.3, 0]],
+      ['circle', [0, 0, 0]], ['circle', [0, 0.05, 0]],
+    ]);
+    expect(layout.lines).toEqual([]);
+
+    const bottomPoints = [[0, 0, -0.05], [0, 0.3, -0.05]] as const;
+    const onBottom = (record: ClearanceRecord) => ({ ...record, pipeRow: { ...record.pipeRow!, alignMode: 'bottom' as const, bottomPoints } }) as ClearanceRecord;
+    const bottomLayout = clearanceRecordsToExternalDimensions([onBottom(center), onBottom(gap)], { pipeRowKeyPoints: true })
+      .records.find(d => d.category === 'annotation')!.layout as ExplicitLayout;
+    expect(bottomLayout.markers!.filter(m => m.shape === 'circle')).toHaveLength(4);
+    expect(bottomLayout.lines).toEqual([{ from: bottomPoints[0], to: bottomPoints[1], part: 'extension', style: 'dashed' }]);
   });
 
   it('连排推导间隔：精度档 derived-nominal 不让每条都带 ≈，只有外径为估算时带；中心距不带', () => {

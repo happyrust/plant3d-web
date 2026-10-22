@@ -91,7 +91,67 @@ export type ClearanceExternalDimensionOptions = Readonly<{
    * 名义接触 / 重叠 / 缺外径（推导间隔没有快照）或它被隐藏时画中心距。
    */
   pipeRowBothMetrics?: boolean;
+  /** 连排每对加一组关键点标注：截面上两管中心（×）、推导间隔两端的外表面点（○）、管底对齐的管底点（○）与虚线支承线。 */
+  pipeRowKeyPoints?: boolean;
 }>;
+
+/** 显式布局（标注图元）与其中的点标记：`@/dimension` 门面不导出内核类型，从外部尺寸记录的 layout 里取。 */
+type ExplicitLayout = Extract<ExternalDimensionRecord['layout'], { arrowLines: unknown }>;
+type ExplicitMarker = NonNullable<ExplicitLayout['markers']>[number];
+
+const KEY_POINT_RADIUS_PX = 3;
+
+function formatPointM(point: Vec3): string {
+  return `(${point.map(v => v.toFixed(3)).join(', ')})`;
+}
+
+/**
+ * 连排每一对的关键点（外部标注图元）：点取自这对的记录本身——中心距快照的两端是截面上的两管中心，推导间隔快照的两端是
+ * 外表面点，管底对齐另有 `pipeRow.bottomPoints`——和尺寸线同一组数。
+ */
+function pipeRowKeyPointRecords(records: readonly ClearanceRecord[]): ExternalDimensionRecord[] {
+  const pairs = new Map<string, { center?: ClearanceRecord; gap?: ClearanceRecord }>();
+  for (const record of records) {
+    const pairKey = pipeRowPairKey(record);
+    if (!pairKey) continue;
+    const entry = pairs.get(pairKey) ?? {};
+    if (record.pipeRow!.metric === 'center-distance') entry.center = record;
+    else entry.gap = record;
+    pairs.set(pairKey, entry);
+  }
+  const drawable = (record?: ClearanceRecord) => (record?.snapshot && !record.snapshot.intersects ? record.snapshot : null);
+  const out: ExternalDimensionRecord[] = [];
+  for (const [pairKey, { center, gap }] of pairs) {
+    const centers = drawable(center);
+    const surface = drawable(gap);
+    const pipeRow = (center ?? gap)!.pipeRow!;
+    const bottom = pipeRow.bottomPoints ?? null;
+    const markers: ExplicitMarker[] = [
+      ...(centers ? [centers.sourcePoint, centers.targetPoint].map(at => ({ at, shape: 'cross' as const })) : []),
+      ...(surface ? [surface.sourcePoint, surface.targetPoint].map(at => ({ at, shape: 'circle' as const, radiusPx: KEY_POINT_RADIUS_PX })) : []),
+      ...(bottom ?? []).map(at => ({ at, shape: 'circle' as const, radiusPx: KEY_POINT_RADIUS_PX })),
+    ];
+    if (markers.length === 0) continue;
+    const id = `${CLEARANCE_EXTERNAL_SOURCE}:${pairKey}:key-points`;
+    const layout: ExplicitLayout = {
+      id,
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: '',
+      lines: bottom ? [{ from: bottom[0], to: bottom[1], part: 'extension', style: 'dashed' }] : [],
+      labelAnchor: pipeRow.section.point,
+      arrowLines: [],
+      markers,
+    };
+    const label = [
+      centers ? `中心 ${formatPointM(centers.sourcePoint)} / ${formatPointM(centers.targetPoint)}` : '',
+      surface ? `外表面点 ${formatPointM(surface.sourcePoint)} / ${formatPointM(surface.targetPoint)}` : '',
+      bottom ? `管底点 ${formatPointM(bottom[0])} / ${formatPointM(bottom[1])}` : '',
+    ].filter(Boolean).join('；');
+    out.push({ id, source: CLEARANCE_EXTERNAL_SOURCE, sourceLabel: `连排关键点（m）: ${label}`, role: 'external', category: 'annotation', layout });
+  }
+  return out;
+}
 
 /**
  * 只画有快照的记录；`failed` 但留着旧快照的也画（文字照记录状态来）。
@@ -158,5 +218,6 @@ export function clearanceRecordsToExternalDimensions(
       },
     });
   }
+  if (options.pipeRowKeyPoints) out.push(...pipeRowKeyPointRecords(records));
   return { records: out, skipped };
 }

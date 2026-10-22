@@ -122,6 +122,21 @@ describe('buildPipeRowGroupRecords', () => {
     }
   });
 
+  it('管底对齐的记录带两管的管底点（B = C − r·n，三维关键点用）；管中心成排没有这一格', () => {
+    const inputs = [
+      fakeRun('a', 'a~1', { x: 0, y: 0, z: 100 }, { x: 3000, y: 0, z: 100 }),
+      fakeRun('b', 'b~1', { x: 0, y: 500, z: 150 }, { x: 3000, y: 500, z: 150 }, 300),
+    ];
+    const bottom = buildPipeRowGroupRecords(detectionOf(inputs, 'bottom').groups[0]!, OPTIONS);
+    expect(bottom).toHaveLength(2);
+    for (const record of bottom) {
+      const points = record.pipeRow!.bottomPoints!.map(p => p.map(v => Math.round(v * 1000) / 1000 + 0));
+      expect([...points].sort((p, q) => p[1]! - q[1]!)).toEqual([[1.5, 0, 0], [1.5, 0.5, 0]]);
+    }
+    const center = buildPipeRowGroupRecords(detectionOf(inputs, 'center').groups[0]!, OPTIONS);
+    expect(center.some(record => record.pipeRow?.bottomPoints)).toBe(false);
+  });
+
   it('缺可靠外径 → 推导间隔 snapshot null + signedGapM null + 缺证据警告；中心距不受影响', () => {
     const detection = detectionOf([
       fakeRun('a', 'a~1', { x: 0, y: 0, z: 0 }, { x: 3000, y: 0, z: 0 }, 200, 'catalogue'),
