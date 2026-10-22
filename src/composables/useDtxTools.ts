@@ -3550,13 +3550,13 @@ export function useDtxTools(options: {
         removeRecord: clearanceStore.removeRecord,
       });
     } catch (error) {
-      setPipeMeasureStatus(`管-管间距：${pair} 净距记录生成失败：${error instanceof Error ? error.message : String(error)}`);
+      setPipeMeasureStatus(`管-管间距：${pair} 中心距记录生成失败：${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
 
     setPipeMeasureStatus(pairs.length > 0
-      ? `管-管间距：${pair} 找到 ${pairs.length} 对平行直段（${runsText}），中心距 ${distanceText}，已生成 ${pairs.length} 条净距记录`
-      : `管-管间距：${pair} 没有平行的直段（${runsText}，夹角容差 ${DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG}°），上一次这一对的净距记录已清掉`);
+      ? `管-管间距：${pair} 找到 ${pairs.length} 对平行直段（${runsText}），中心距 ${distanceText}，已生成 ${pairs.length} 条中心距记录`
+      : `管-管间距：${pair} 没有平行的直段（${runsText}，夹角容差 ${DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG}°），上一次这一对的中心距记录已清掉`);
     requestRender?.();
     return pairs.length > 0;
   }
@@ -3804,7 +3804,7 @@ export function useDtxTools(options: {
       }
       return pipeToPipeSourceCandidate.value
         ? pipeToPipeSourceStatus(pipeToPipeSourceCandidate.value)
-        : '管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，一对平行直段一条净距记录）';
+        : '管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，一对平行直段一条中心距记录）';
     }
     if (mode === 'pick_query_center') {
       return '请点击模型拾取查询中心点';

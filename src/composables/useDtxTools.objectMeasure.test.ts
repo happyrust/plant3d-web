@@ -396,7 +396,7 @@ describe('useDtxTools object measure tree flow', () => {
     expect(record.snapshot?.witness).toBe('closest-points');
     expect(record.derivedDimensionId).toBeNull();
     // 全局默认显示单位为 mm + 0 位小数（E3D 惯例，V2 迁移）；中心线上的中心距是精确值，不标「估算」
-    expect(tools.statusText.value).toBe('管-管间距：24381_1000 ↔ 24381_2000 找到 1 对平行直段（1 / 2 条直段），中心距 600mm，已生成 1 条净距记录');
+    expect(tools.statusText.value).toBe('管-管间距：24381_1000 ↔ 24381_2000 找到 1 对平行直段（1 / 2 条直段），中心距 600mm，已生成 1 条中心距记录');
     expect(tools.statusText.value).not.toContain('估算');
     expect(tools.statusText.value).not.toContain('尺寸');
   });
@@ -415,7 +415,7 @@ describe('useDtxTools object measure tree flow', () => {
       { objectId: 'o:24381_1002:0', point: new Vector3(3, 0, 0) },
     ]);
     await nextTick();
-    expect(tools.statusText.value).toBe('管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，一对平行直段一条净距记录）');
+    expect(tools.statusText.value).toBe('管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，一对平行直段一条中心距记录）');
 
     await clickOnce(tools);
     expect(tools.statusText.value).toBe('管-管间距：24381_9999 不属于任何 BRAN——只能量两条 BRAN 之间的平行直段，请点管件或直管');
@@ -427,7 +427,7 @@ describe('useDtxTools object measure tree flow', () => {
 
     await clickOnce(tools);
     expect(genModelV1SpatialCenterline).toHaveBeenCalledTimes(2);
-    expect(tools.statusText.value).toBe('管-管间距：24381_1000 ↔ 24381_2000 没有平行的直段（1 / 1 条直段，夹角容差 0.5°），上一次这一对的净距记录已清掉');
+    expect(tools.statusText.value).toBe('管-管间距：24381_1000 ↔ 24381_2000 没有平行的直段（1 / 1 条直段，夹角容差 0.5°），上一次这一对的中心距记录已清掉');
     expect(tools.statusText.value).not.toContain('暂不创建尺寸');
     expect(useClearanceStore().records.value).toHaveLength(0);
   });
