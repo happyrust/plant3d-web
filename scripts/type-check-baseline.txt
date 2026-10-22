@@ -34,8 +34,6 @@ src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefin
 src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefined'.
 src/components/dock_panels/ViewerPanel.vue|TS18048|'first' is possibly 'undefined'.
 src/components/dock_panels/ViewerPanel.vue|TS18048|'first' is possibly 'undefined'.
-src/components/dock_panels/ViewerPanel.vue|TS2304|Cannot find name 'rangeDrawerOpen'.
-src/components/dock_panels/ViewerPanel.vue|TS2304|Cannot find name 'rangeDrawerOpen'.
 src/components/dock_panels/ViewerPanel.vue|TS2322|Type '{ ready: ComputedRef<boolean>; statusText: ComputedRef<string>; objectToObjectUiState: ComputedRef<{ sourceRefno: string | null; targetRefno: string | null; busy: boolean; canReset: boolean; statusText: string; }>; ... N more ...; selectionStore: { ...; }; }' is not assignable to type 'ToolsApi'.
 src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'hoverText' does not exist on type '{ ready: ComputedRef<boolean>; statusText: ComputedRef<string>; objectToObjectUiState: ComputedRef<{ sourceRefno: string | null; targetRefno: string | null; busy: boolean; canReset: boolean; statusText: string; }>; ... N more ...; selectionStore: { ...; }; }'.
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.

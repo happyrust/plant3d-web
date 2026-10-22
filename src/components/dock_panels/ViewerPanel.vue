@@ -2243,11 +2243,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.pipeDistance.open':
       pipeDistDrawerOpen.value = true;
-      rangeDrawerOpen.value = false;
       return;
     case 'panel.pipeDistance':
       pipeDistDrawerOpen.value = !pipeDistDrawerOpen.value;
-      if (pipeDistDrawerOpen.value) rangeDrawerOpen.value = false;
       return;
     case 'clearance.componentToWall':
       componentToWallClearance.start();
