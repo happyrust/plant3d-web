@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { usePipeDistanceStore } from './usePipeDistanceStore';
+import { needsAxisEstimateFallback, usePipeDistanceStore, type PipeDetectionOutcome } from './usePipeDistanceStore';
 
 import type { SurfaceClearanceResponse } from '@/api/genModelV1Api';
 
@@ -820,6 +820,15 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.hiddenResultIds.value.has(newer.id)).toBe(true);
     store.detachPersistence();
     clearance.detachPersistence();
+  });
+
+  it('只有每一对都算失败时才用网格拟合兜底：超限、相连都是服务端的结论', () => {
+    const outcome = (counts: Partial<PipeDetectionOutcome>): PipeDetectionOutcome => ({ total: 3, settled: 0, beyond: 0, connected: 0, failed: 0, ...counts });
+    expect(needsAxisEstimateFallback(outcome({ failed: 3 }))).toBe(true);
+    expect(needsAxisEstimateFallback(outcome({ failed: 2, beyond: 1 }))).toBe(false);
+    expect(needsAxisEstimateFallback(outcome({ beyond: 3 }))).toBe(false);
+    expect(needsAxisEstimateFallback(outcome({ connected: 1, failed: 2 }))).toBe(false);
+    expect(needsAxisEstimateFallback(null)).toBe(false);
   });
 
   it('口径无效的回包把现存记录标过期', async () => {

@@ -98,11 +98,16 @@ const isDetecting = ref(false);
 const detectError = ref<string | null>(null);
 
 const resultMinDistance = ref<number | null>(null);
-/** 最近一次 `runDetection` 实际落库的记录数（0 = 本轮一条没算出来，兜底层据此决定要不要补估算）。 */
+/** 最近一次检测实际落库的记录数（0 = 本轮一条没算出来）。 */
 const lastRunSettledCount = ref(0);
 /** 一轮所有管对 / 周边检测里各管对的去向：抽屉据此给汇总提示，并判断要不要兜底。 */
 export type PipeDetectionOutcome = Readonly<{ total: number; settled: number; beyond: number; connected: number; failed: number }>;
 const lastRunOutcome = ref<PipeDetectionOutcome | null>(null);
+
+/** 只在服务端把每一对都算失败时才用网格拟合兜底：超限、相连都是服务端给出的结论，不拿估算顶替。 */
+export function needsAxisEstimateFallback(outcome: PipeDetectionOutcome | null): boolean {
+  return !!outcome && outcome.failed > 0 && outcome.failed === outcome.total;
+}
 /** 计算失败的管对多于这么多条时，红字只列前几条，全部收进可展开的明细。 */
 const FAILURE_LINES_SHOWN = 5;
 /** 检测模式：`all-pairs` 外表面净距全对；`pipe-row` 连排相邻（真实中心线归排，见 plan §7）。 */

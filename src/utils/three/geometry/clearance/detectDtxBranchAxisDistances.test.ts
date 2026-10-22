@@ -93,4 +93,33 @@ describe('detectDtxBranchAxisDistances', () => {
 
     expect(results).toEqual([]);
   });
+
+  it('带弯头的管（L 形）拟合不出直轴，哪怕另一根恰好沿着它的主轴也不出估算', () => {
+    // 竖直一段 (0,0,0)→(0,0,4) 接水平一段 (0,0,4)→(4,0,4)：主轴是对角线 (1,0,1)/√2，过质心 (1,0,3)
+    const positions: number[] = [];
+    for (let i = 0; i <= 24; i++) {
+      const t = (4 * i) / 24;
+      for (const [du, dv] of [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]) {
+        positions.push(du!, dv!, t, t, dv!, 4 + du!);
+      }
+    }
+    const elbow = new BufferGeometry();
+    elbow.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    const layer = createLayer({
+      'o:24381_1001:0': { geometry: elbow, matrix: new Matrix4(), visible: true },
+      'o:24381_1002:0': {
+        geometry: createPipePointCloud(new Vector3(0, 0, 0)),
+        matrix: new Matrix4().makeRotationY(Math.PI / 4).setPosition(1, 0.5, 3),
+        visible: true,
+      },
+    });
+
+    const results = detectDtxBranchAxisDistances(layer, {
+      refnos: ['24381_1001', '24381_1002'],
+      maxDistanceMm: 5000,
+      resolveObjectIdsByRefno: (refno) => [`o:${refno}:0`],
+    });
+
+    expect(results).toEqual([]);
+  });
 });

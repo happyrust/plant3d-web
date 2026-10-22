@@ -51,6 +51,8 @@ type BranchAxisFit = {
 type PositionAttribute = BufferAttribute | InterleavedBufferAttribute;
 
 const SCENE_UNITS_TO_MM = 1000;
+/** 主轴解释的方差占比不到它就不算直管：带弯头的整根 BRAN 拟合出来的轴没有几何意义，不出估算。 */
+const MIN_STRAIGHT_VARIANCE_RATIO = 0.99;
 
 function normalizeRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
@@ -167,6 +169,9 @@ function fitBranchAxis(refno: string, points: Vector3[]): BranchAxisFit | null {
     axis = next.normalize();
   }
   if (axis.lengthSq() < 1e-12) return null;
+  const alongAxis = multiplyCovariance(covariance, axis).dot(axis);
+  const total = covariance[0]! + covariance[3]! + covariance[5]!;
+  if (!(total > 0) || alongAxis / total < MIN_STRAIGHT_VARIANCE_RATIO) return null;
 
   let minProjection = Infinity;
   let maxProjection = -Infinity;

@@ -31,6 +31,7 @@ import {
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
 import {
+  needsAxisEstimateFallback,
   PIPE_ROW_DEFAULT_MAX_ADJACENT_MM,
   PIPE_ROW_DEFAULT_MIN_COMMON_MM,
   usePipeDistanceStore,
@@ -90,7 +91,6 @@ function createDtxAxisDistanceFallback(refnos: string[]): PipeDistanceResult[] {
     refnos,
     maxAngleDeg: store.maxAngle.value,
     maxDistanceMm: store.maxDistance.value,
-    includeBeyondMaxDistanceForSinglePair: true,
     resolveObjectIdsByRefno: (refno) => {
       const dbnum = resolveDtxAxisDistanceDbnum(refno);
       return dbnum ? resolveDtxObjectIdsByRefno(dbnum, refno) : [];
@@ -98,8 +98,18 @@ function createDtxAxisDistanceFallback(refnos: string[]): PipeDistanceResult[] {
   });
 }
 
+/** 无序管对键（兜底结果与记录各自的方向不一定相同）。 */
+function unorderedPairKey(a: string, b: string): string {
+  return [a, b].sort().join('|');
+}
+
 function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDistanceResult[]): boolean {
-  if (fallbackResults.length === 0) return false;
+  // 已有外表面精算记录（哪怕过期或重算失败）的管对不拿估算顶替
+  const exactPairs = new Set(store.pipeResults.value
+    .filter(record => !record.pipeRow && record.provenance.method === 'surface-to-surface')
+    .map(record => unorderedPairKey(record.inputs.sourceRefno, record.inputs.targetRefno)));
+  const usable = fallbackResults.filter(result => !exactPairs.has(unorderedPairKey(result.pipeA, result.pipeB)));
+  if (usable.length === 0) return false;
   const matrix = (ctx.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer?.getGlobalModelMatrix?.();
   const inverse = matrix && matrix.elements.every(Number.isFinite) && matrix.determinant() !== 0 ? matrix.clone().invert() : null;
   // 没有逆矩阵就解不出 design-world 坐标——记录拿不到可靠坐标不落库（旧模型硬写场景坐标，保存时才炸）。
@@ -110,9 +120,10 @@ function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDi
   };
   store.setBranRefnos(refnos);
   store.showAnnotations.value = true;
-  store.commitPipeDistanceResults(fallbackResults.map(result => ({ ...result, measurementKind: 'axis-estimate', status: 'current',
+  store.commitPipeDistanceResults(usable.map(result => ({ ...result, measurementKind: 'axis-estimate', status: 'current',
     designPoints: { start: toDesign(result.start), end: toDesign(result.end) } })));
-  store.detectError.value = '外表面净距未算出，当前显示模型拟合中心距估算；不能用作净距验收。';
+  store.detectError.value = ['服务端净距计算失败，下面是模型拟合的中心距估算，不能用作净距验收', store.detectError.value]
+    .filter(Boolean).join('；');
   return true;
 }
 
@@ -120,11 +131,8 @@ async function detectBransWithDtxFallback(refnos: string[]) {
   const applied = await store.autoDetectBrans(refnos, {
     pairMode: 'all-pairs',
   });
-  if (!applied) return;
-  if (store.lastRunSettledCount.value > 0) return;
-
-  const fallbackResults = createDtxAxisDistanceFallback(refnos);
-  applyDetectionFallbackResults(refnos, fallbackResults);
+  if (!applied || !needsAxisEstimateFallback(store.lastRunOutcome.value)) return;
+  applyDetectionFallbackResults(refnos, createDtxAxisDistanceFallback(refnos));
 }
 
 /** 连排模式：真实中心线归排，不走 PCA 网格拟合兜底（拟合轴线的归排没有意义）。 */
