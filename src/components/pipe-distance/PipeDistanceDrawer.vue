@@ -39,7 +39,7 @@ import {
 } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
-import { useViewerContext } from '@/composables/useViewerContext';
+import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
 import {
   detectDtxBranchAxisDistances,
   resolveDtxAxisDistanceDbnum,
@@ -127,7 +127,25 @@ function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDi
   return true;
 }
 
+/** 后台补装尚未进场景的 BRAN 模型（已在场景里的由 showModelByRefno 直接短路；未生成的自动走 generateThenCollect）。 */
+function ensureBransLoadedInScene(refnos: readonly string[], onLoaded?: () => void) {
+  const unique = [...new Set(refnos.map(refno => refno.trim().replace(/\//g, '_')).filter(Boolean))];
+  if (unique.length === 0) return;
+  void showModelByRefnosWithAck({
+    refnos: unique,
+    flyTo: false,
+    highlight: false,
+    timeoutMs: 120_000,
+    ensureViewerReady: true,
+  }).then((result) => {
+    if (result.ok.length > 0) onLoaded?.();
+  }).catch(() => {
+    // ignore background model load errors; centerline-based measurement still works
+  });
+}
+
 async function detectBransWithDtxFallback(refnos: string[]) {
+  ensureBransLoadedInScene(refnos);
   const applied = await store.autoDetectBrans(refnos, {
     pairMode: 'all-pairs',
   });
@@ -138,6 +156,7 @@ async function detectBransWithDtxFallback(refnos: string[]) {
 /** 连排模式：真实中心线归排，不走 PCA 网格拟合兜底（拟合轴线的归排没有意义）。 */
 async function detectPipeRowsSelected(refnos: string[]) {
   store.setBranRefnos(refnos);
+  ensureBransLoadedInScene(refnos);
   await store.runPipeRowDetection({ sourceAnnotation: toolStore.activeAnnotationContext.value });
 }
 
@@ -274,6 +293,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     detectPipeRows: async (refnos: string[], alignMode?: 'center' | 'bottom') => {
       store.setBranRefnos(refnos);
       store.clearTubeKeys();
+      ensureBransLoadedInScene(refnos);
       return store.runPipeRowDetection({
         alignMode,
         sourceAnnotation: toolStore.activeAnnotationContext.value,
@@ -281,6 +301,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     },
     detectPipeRowTubes: async (tubeKeys: string[], alignMode?: 'center' | 'bottom') => {
       store.setTubeKeys(tubeKeys);
+      ensureBransLoadedInScene(store.selectedBranRefnos.value);
       return store.runPipeRowDetection({
         alignMode,
         sourceAnnotation: toolStore.activeAnnotationContext.value,
@@ -325,15 +346,19 @@ function focusDesignPoints(points: readonly Vec3[], refnos: readonly string[]) {
   if (!viewer) return;
   try {
     const unique = [...new Set(refnos.filter(Boolean))];
-    const prev = viewer.scene.selectedObjectIds;
-    if (prev.length > 0) viewer.scene.setObjectsSelected(prev, false);
-    viewer.scene.ensureRefnos(unique);
-    viewer.scene.setObjectsSelected(unique, true);
-    const transform = createSceneTransformPoint();
-    const aabb = transform && points.length > 0 ? paddedSceneAabb(points, transform) : viewer.scene.getAABB(unique);
-    if (aabb) {
-      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
-    }
+    const applyFocus = () => {
+      const prev = viewer.scene.selectedObjectIds;
+      if (prev.length > 0) viewer.scene.setObjectsSelected(prev, false);
+      viewer.scene.ensureRefnos(unique);
+      viewer.scene.setObjectsSelected(unique, true);
+      const transform = createSceneTransformPoint();
+      const aabb = transform && points.length > 0 ? paddedSceneAabb(points, transform) : viewer.scene.getAABB(unique);
+      if (aabb) {
+        viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+      }
+    };
+    applyFocus();
+    ensureBransLoadedInScene(unique, applyFocus);
   } catch {
     // ignore
   }
@@ -356,30 +381,34 @@ function onResultClick(record: ClearanceRecord) {
   try {
     const refnos = [record.provenance.source.refno || record.inputs.sourceRefno,
       record.provenance.target.refno || record.inputs.targetRefno];
-    // 取消之前的选中
-    const prev = viewer.scene.selectedObjectIds;
-    if (prev.length > 0) viewer.scene.setObjectsSelected(prev, false);
-    // 高亮选中的管道对
-    viewer.scene.ensureRefnos(refnos);
-    viewer.scene.setObjectsSelected(refnos, true);
-    // 飞行定位：优先飞到净距快照的两端点（design 米 → mm → 场景），没有快照退回构件包围盒
-    const transform = createSceneTransformPoint();
-    const [s, e] = record.snapshot
-      ? [record.snapshot.sourcePoint, record.snapshot.targetPoint]
-      : [null, null];
-    const aabb = transform && s && e
-      ? (() => {
-        const sp = transform([s[0] * 1000, s[1] * 1000, s[2] * 1000] as Vec3);
-        const ep = transform([e[0] * 1000, e[1] * 1000, e[2] * 1000] as Vec3);
-        return [
-          Math.min(sp[0], ep[0]), Math.min(sp[1], ep[1]), Math.min(sp[2], ep[2]),
-          Math.max(sp[0], ep[0]), Math.max(sp[1], ep[1]), Math.max(sp[2], ep[2]),
-        ] as [number, number, number, number, number, number];
-      })()
-      : viewer.scene.getAABB(refnos);
-    if (aabb) {
-      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
-    }
+    const applyFocus = () => {
+      // 取消之前的选中
+      const prev = viewer.scene.selectedObjectIds;
+      if (prev.length > 0) viewer.scene.setObjectsSelected(prev, false);
+      // 高亮选中的管道对
+      viewer.scene.ensureRefnos(refnos);
+      viewer.scene.setObjectsSelected(refnos, true);
+      // 飞行定位：优先飞到净距快照的两端点（design 米 → mm → 场景），没有快照退回构件包围盒
+      const transform = createSceneTransformPoint();
+      const [s, e] = record.snapshot
+        ? [record.snapshot.sourcePoint, record.snapshot.targetPoint]
+        : [null, null];
+      const aabb = transform && s && e
+        ? (() => {
+          const sp = transform([s[0] * 1000, s[1] * 1000, s[2] * 1000] as Vec3);
+          const ep = transform([e[0] * 1000, e[1] * 1000, e[2] * 1000] as Vec3);
+          return [
+            Math.min(sp[0], ep[0]), Math.min(sp[1], ep[1]), Math.min(sp[2], ep[2]),
+            Math.max(sp[0], ep[0]), Math.max(sp[1], ep[1]), Math.max(sp[2], ep[2]),
+          ] as [number, number, number, number, number, number];
+        })()
+        : viewer.scene.getAABB(refnos);
+      if (aabb) {
+        viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+      }
+    };
+    applyFocus();
+    ensureBransLoadedInScene(refnos, applyFocus);
   } catch {
     // ignore
   }
@@ -449,7 +478,13 @@ function pointText(point: readonly number[]): string {
 function recordDetailTitle(record: ClearanceRecord): string | undefined {
   const pipeRow = record.pipeRow;
   const warnings = computationWarningsText(record.provenance.warnings);
-  if (!pipeRow) return [pipeClearanceLeavesText(record, findNounByRefnoAcrossAllDbnos), warnings].filter(Boolean).join('\n') || undefined;
+  if (!pipeRow) {
+    return [
+      computationMethodLabel(record.provenance.method),
+      pipeClearanceLeavesText(record, findNounByRefnoAcrossAllDbnos),
+      warnings,
+    ].filter(Boolean).join('\n') || undefined;
+  }
   const [x, y, z] = pipeRow.section.point;
   const od = (side: PipeRowSideOd) => `${side.odM === null ? '—' : `${Math.round(side.odM * 10000) / 10} mm`}（${OD_EVIDENCE_LABELS[side.evidence]}）`;
   const pairKey = pipeRowPairKey(record);
@@ -458,10 +493,11 @@ function recordDetailTitle(record: ClearanceRecord): string | undefined {
   const centers = pair.find(item => item.pipeRow?.metric === 'center-distance')?.snapshot;
   const surface = pair.find(item => item.pipeRow?.metric === 'derived-gap')?.snapshot;
   const bottom = pipeRow.bottomPoints;
+  const currentMetricLabel = pipeRow.metric === 'center-distance' ? '中心距离（连排截面中心距）' : '名义距离（连排外径推导间隔）';
   return [
+    `${currentMetricLabel}：${pipeRowValueText(record)}${sibling?.pipeRow ? ` · ${sibling.pipeRow.metric === 'center-distance' ? '中心距离' : '名义距离'}：${pipeRowValueText(sibling)}` : ''}`,
     `${pipeRow.alignMode === 'center' ? '管中心成排' : '管底对齐'} · 截面点 (${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)}) m · 沿管向 ${pipeRow.section.axialStartM.toFixed(3)}–${pipeRow.section.axialEndM.toFixed(3)} m`,
     `外径：${od(pipeRow.sourceOd)} / ${od(pipeRow.targetOd)}`,
-    sibling?.pipeRow ? `同一对的${sibling.pipeRow.metric === 'center-distance' ? '中心距' : '名义间隔'}：${pipeRowValueText(sibling)}` : '',
     centers ? `中心点：${pointText(centers.sourcePoint)} / ${pointText(centers.targetPoint)} m` : '',
     surface ? `外表面点：${pointText(surface.sourcePoint)} / ${pointText(surface.targetPoint)} m` : '',
     bottom ? `管底点：${pointText(bottom[0])} / ${pointText(bottom[1])} m` : '',
@@ -577,6 +613,10 @@ function onMaxAngleChange(event: Event) {
 
 function isResultHidden(id: string): boolean {
   return store.hiddenResultIds.value.has(id);
+}
+
+function onResultRowHover(id: string | null) {
+  ctx.dimensionSystem.value?.viewport.setHover(id ? `clearance:${id}` : null);
 }
 </script>
 
@@ -961,16 +1001,21 @@ function isResultHidden(id: string): boolean {
                 :class="store.activeResultId.value === record.id
                   ? 'bg-brand-subtle border-l-2 border-l-brand'
                   : 'hover:bg-muted'"
+                :title="recordDetailTitle(record)"
+                @mouseenter="onResultRowHover(record.id)"
+                @mouseleave="onResultRowHover(null)"
                 @click="onResultClick(record)">
                 <span class="shrink-0 whitespace-nowrap font-mono text-sm font-semibold"
                   :class="store.activeResultId.value === record.id ? 'text-brand' : 'text-foreground'">
                   {{ recordDistanceText(record) }}
                 </span>
                 <span v-if="!record.pipeRow && !record.snapshot?.intersects && recordDistanceMm(record) !== null" class="text-xs text-muted-foreground">mm</span>
-                <span class="flex min-w-0 flex-1 flex-col" :title="recordDetailTitle(record)">
-                  <span class="truncate text-[11px] text-muted-foreground">{{ recordStatusPrefix(record) }}{{ computationMethodLabel(record.provenance.method) }}{{ record.pipeRow ? ` · ${pipeRowSectionText(record)}` : '' }}</span>
+                <span class="flex min-w-0 flex-1 flex-col">
                   <span class="truncate text-xs text-muted-foreground">
                     {{ record.provenance.source.refno || record.inputs.sourceRefno }} ↔ {{ record.provenance.target.refno || record.inputs.targetRefno }}
+                  </span>
+                  <span v-if="recordStatusPrefix(record) || record.pipeRow" class="truncate text-[11px] text-muted-foreground">
+                    {{ recordStatusPrefix(record) }}{{ record.pipeRow ? pipeRowSectionText(record) : '' }}
                   </span>
                 </span>
                 <button type="button"

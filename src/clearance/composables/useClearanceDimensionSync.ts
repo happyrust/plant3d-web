@@ -11,6 +11,9 @@ import {
 /** 只用到尺寸系统的这一格，便于测试用假对象。 */
 export type ClearanceDimensionSink = Readonly<{
   replaceExternalSource(source: 'clearance', records: readonly ExternalDimensionRecord[]): void;
+  viewport?: Readonly<{
+    setSelection(id: string | null): void;
+  }>;
 }>;
 
 /**
@@ -19,7 +22,9 @@ export type ClearanceDimensionSink = Readonly<{
  */
 export function useClearanceDimensionSync(
   dimensionSystemRef: Ref<ClearanceDimensionSink | null>,
-  clearanceStore: Pick<ReturnType<typeof useClearanceStore>, 'visibleRecords' | 'showAnnotations'>,
+  clearanceStore: Pick<ReturnType<typeof useClearanceStore>, 'visibleRecords' | 'showAnnotations'> & {
+    activeId?: Ref<string | null>;
+  },
   requestRender?: () => void,
   display: Readonly<{ pipeRowBothMetrics?: Ref<boolean>; pipeRowKeyPoints?: Ref<boolean> }> = {},
 ) {
@@ -59,5 +64,23 @@ export function useClearanceDimensionSync(
     { deep: true, immediate: true },
   );
 
-  return { sync, clear, stop };
+  const stopActiveSync = clearanceStore.activeId
+    ? watch(
+      [dimensionSystemRef, clearanceStore.activeId],
+      ([system, activeId]) => {
+        if (!system?.viewport) return;
+        system.viewport.setSelection(activeId ? `${CLEARANCE_EXTERNAL_SOURCE}:${activeId}` : null);
+      },
+      { immediate: true },
+    )
+    : null;
+
+  return {
+    sync,
+    clear,
+    stop: () => {
+      stop();
+      stopActiveSync?.();
+    },
+  };
 }

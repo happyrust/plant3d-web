@@ -130,6 +130,9 @@ export class DimensionViewport {
   private readonly selectionListeners = new Set<
     (dimensionId: string | null) => void
   >();
+  private readonly hoverListeners = new Set<
+    (dimensionId: string | null) => void
+  >();
   private readonly layoutListeners = new Set<
     (layouts: readonly LayoutResult[]) => void
   >();
@@ -290,7 +293,19 @@ export class DimensionViewport {
     if (this.hoverId) this.pendingStyleIds.add(this.hoverId);
     if (id) this.pendingStyleIds.add(id);
     this.hoverId = id;
+    this.hoverListeners.forEach(listener => listener(id));
     this.invalidate('interaction');
+  }
+
+  getHover(): string | null {
+    return this.hoverId;
+  }
+
+  subscribeHover(
+    listener: (dimensionId: string | null) => void,
+  ): () => void {
+    this.hoverListeners.add(listener);
+    return () => this.hoverListeners.delete(listener);
   }
 
   setPreview(input: NormalizedDimensionInput | null): void {
@@ -431,6 +446,7 @@ export class DimensionViewport {
     this.normalizedUsers = [];
     this.normalizedExternal = [];
     this.selectionListeners.clear();
+    this.hoverListeners.clear();
     this.layoutListeners.clear();
     this.projector = null;
     this.preview = null;

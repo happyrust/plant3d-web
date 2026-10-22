@@ -979,7 +979,78 @@ const modelGenerationRef = shallowRef<ReturnType<
 let dimensionSystem: DimensionSystem | null = null;
 let offDimensionReviewBinding: (() => void) | null = null;
 let offDimensionSelectionBinding: (() => void) | null = null;
+let offDimensionHoverBinding: (() => void) | null = null;
 let offLocalDimensionAutosave: (() => void) | null = null;
+const dimensionHoverTooltip = ref<Readonly<{
+  x: number;
+  y: number;
+  label: string;
+  valueText: string;
+}> | null>(null);
+let lastDimensionPointerCss: { x: number; y: number } = { x: 24, y: 24 };
+
+function updateDimensionHoverTooltip(dimensionId: string | null): void {
+  if (!dimensionId || !dimensionSystem) {
+    dimensionHoverTooltip.value = null;
+    return;
+  }
+  const external = dimensionSystem.externalRegistry.snapshot.visibleRecords.find(
+    record => record.id === dimensionId,
+  );
+  const layout = dimensionSystem.viewport.getLayouts().find(
+    item => item.dimensionId === dimensionId,
+  );
+  const valueText = layout?.derived.formattedLabel ?? '';
+  const container = containerRef.value;
+  const rect = container?.getBoundingClientRect();
+  const labelBounds = layout?.labelBounds;
+  const anchorX = labelBounds && labelBounds.width > 0 && rect
+    ? Math.min(Math.max(12, labelBounds.x + labelBounds.width + 10), Math.max(12, rect.width - 280))
+    : lastDimensionPointerCss.x;
+  const anchorY = labelBounds && labelBounds.height > 0 && rect
+    ? Math.min(Math.max(12, labelBounds.y - 6), Math.max(12, rect.height - 64))
+    : lastDimensionPointerCss.y;
+  if (external) {
+    dimensionHoverTooltip.value = {
+      x: anchorX,
+      y: anchorY,
+      label: external.sourceLabel,
+      valueText,
+    };
+    return;
+  }
+  if (valueText) {
+    dimensionHoverTooltip.value = {
+      x: anchorX,
+      y: anchorY,
+      label: '用户尺寸',
+      valueText,
+    };
+    return;
+  }
+  dimensionHoverTooltip.value = null;
+}
+
+function onDimensionHoverPointerMove(ev: PointerEvent): void {
+  const container = containerRef.value;
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  lastDimensionPointerCss = {
+    x: Math.min(Math.max(12, ev.clientX - rect.left + 14), Math.max(12, rect.width - 280)),
+    y: Math.min(Math.max(12, ev.clientY - rect.top + 16), Math.max(12, rect.height - 64)),
+  };
+  if (dimensionHoverTooltip.value) {
+    dimensionHoverTooltip.value = {
+      ...dimensionHoverTooltip.value,
+      x: lastDimensionPointerCss.x,
+      y: lastDimensionPointerCss.y,
+    };
+  }
+}
+
+function onDimensionHoverPointerLeave(): void {
+  dimensionHoverTooltip.value = null;
+}
 let localDimensionAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let localDimensionAutosaveRunning = false;
 let dimensionMountDisposed = false;
@@ -2768,6 +2839,9 @@ async function initializeDimensionViewport(): Promise<void> {
   offDimensionReviewBinding = null;
   offDimensionSelectionBinding?.();
   offDimensionSelectionBinding = null;
+  offDimensionHoverBinding?.();
+  offDimensionHoverBinding = null;
+  dimensionHoverTooltip.value = null;
   viewerContext.dimensionSystem.value = null;
 
   const context = getDimensionDocumentContext();
@@ -2895,6 +2969,9 @@ async function initializeDimensionViewport(): Promise<void> {
   // 反向选择绑定：场景中点选尺寸图形 → 选中对应 xeokit 测量记录；
   // BRAN 净距标注（external，不挂测量记录）点中 = 拾取目标构件，跟点模型本体同一套选中路径。
   offDimensionSelectionBinding = result.system.viewport.subscribeSelection((id) => {
+    if (id && id.startsWith('clearance:')) {
+      clearanceStore.setActive(id.slice('clearance:'.length));
+    }
     const branTargetRefno = branClearanceTargetRefno(id);
     if (branTargetRefno) {
       const compat = compatViewerRef.value;
@@ -2911,6 +2988,9 @@ async function initializeDimensionViewport(): Promise<void> {
       }
     }
     xeokitMeasurementToolsRef.value?.handleDimensionSelectionChange(id);
+  });
+  offDimensionHoverBinding = result.system.viewport.subscribeHover((id) => {
+    updateDimensionHoverTooltip(id);
   });
   viewerContext.dimensionSystem.value = result.system;
   result.system.notifyViewerChanged();
@@ -4715,6 +4795,8 @@ onMounted(async () => {
 
   attachPicking();
   attachToolsInput();
+  canvas.addEventListener('pointermove', onDimensionHoverPointerMove, true);
+  canvas.addEventListener('pointerleave', onDimensionHoverPointerLeave, true);
   window.addEventListener('popstate', handleMbdLocationChange);
   await initializeDimensionViewport();
   requestRender();
@@ -4733,6 +4815,11 @@ onUnmounted(() => {
   offDimensionReviewBinding = null;
   offDimensionSelectionBinding?.();
   offDimensionSelectionBinding = null;
+  offDimensionHoverBinding?.();
+  offDimensionHoverBinding = null;
+  dimensionHoverTooltip.value = null;
+  mainCanvas.value?.removeEventListener('pointermove', onDimensionHoverPointerMove, true);
+  mainCanvas.value?.removeEventListener('pointerleave', onDimensionHoverPointerLeave, true);
   mainCanvas.value?.removeEventListener('contextmenu', onViewerContextMenu, true);
   closeMeasurementContextMenu();
   if (rafId !== null) {
@@ -5062,6 +5149,18 @@ onUnmounted(() => {
               class="h-8 rounded border border-input bg-background px-2" />
           </label>
         </div>
+      </div>
+    </div>
+
+    <div v-if="dimensionHoverTooltip && modelUnitCompareState?.viewMode !== 'split'"
+      class="pointer-events-none absolute max-w-[26rem] rounded-md border border-border bg-background/95 px-2.5 py-1.5 text-xs text-foreground shadow-md backdrop-blur"
+      :style="{ left: `${dimensionHoverTooltip.x}px`, top: `${dimensionHoverTooltip.y}px`, zIndex: 945 }"
+      data-testid="dimension-hover-tooltip">
+      <div v-if="dimensionHoverTooltip.valueText" class="font-mono font-semibold text-brand">
+        {{ dimensionHoverTooltip.valueText }}
+      </div>
+      <div class="text-[11px] text-muted-foreground">
+        {{ dimensionHoverTooltip.label }}
       </div>
     </div>
 

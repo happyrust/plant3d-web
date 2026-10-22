@@ -60,20 +60,19 @@ function formatMillimetres(distanceM: number): string {
 }
 
 /** 尺寸文字：`（过期）` 前缀 + `≈`（近似档；连排推导间隔只在外径为估算时带）+ 距离 + `⊥`（垂距成立）；相交时是 `相交`。
- *  连排记录带度量前缀——「中心距 312mm」与「名义间隔 50mm」是同一条连线上的两种口径，
- *  推导间隔是平行圆柱模型的名义值，不是网格精算净距，文字必须自带口径。 */
+ *  连排记录在三维里只写简洁数值（如 `187mm` / `≈187mm`），避免「名义间隔 / 中心距」前缀压线重叠；
+ *  度量口径（「名义间隔」或「中心距」）与同对另一口径值统一放在 `sourceLabel`（悬停提示与尺寸列表）中展示。 */
 export function clearanceDimensionText(record: ClearanceRecord): string {
   const snapshot = record.snapshot;
   if (!snapshot) return '';
   const stale = record.status === 'stale' ? '（过期）' : record.status === 'failed' ? '（重算失败，旧值）' : '';
   if (snapshot.intersects) return `${stale}相交`;
-  // 推导间隔的「推导」由口径前缀与方法标签表达；`≈` 只留给外径本身是估算的情形（plan §4.2）。
+  // 推导间隔的「推导」由来源标签与方法标签表达；`≈` 只留给外径本身是估算的情形（plan §4.2）。
   const approximate = (record.pipeRow?.metric === 'derived-gap'
     ? pipeRowGapEstimated(record.pipeRow)
     : toLegacyApproximate(record.provenance.accuracyClass)) ? '≈' : '';
-  const rowMetric = record.pipeRow ? (record.pipeRow.metric === 'center-distance' ? '中心距 ' : '名义间隔 ') : '';
   const perpendicular = snapshot.perpendicular ? ' ⊥' : '';
-  return `${stale}${approximate}${rowMetric}${formatMillimetres(snapshot.distanceM)}${perpendicular}`;
+  return `${stale}${approximate}${formatMillimetres(snapshot.distanceM)}${perpendicular}`;
 }
 
 /** 来源标签：`外表面净距: 24384_22582 → 17496_105912（墙面外侧）`。方法按记录 provenance 说真话。 */
@@ -153,23 +152,47 @@ function pipeRowKeyPointRecords(records: readonly ClearanceRecord[]): ExternalDi
   return out;
 }
 
-/**
- * 只画有快照的记录；`failed` 但留着旧快照的也画（文字照记录状态来）。
- * 相交（两点重合、`witness = aabb-overlap-center`）没有可画的线，进 `skipped`，由列表 UI 用文字表达。
- */
+/** 同一排内相邻对交错偏移与文字站位：并排的多条尺寸线错开高度和文字位置，避免相邻对压字。 */
+const PIPE_ROW_OFFSET_TIERS_M: readonly number[] = [0.22, 0.36];
+const PIPE_ROW_LABEL_TS: readonly number[] = [0.5, 0.36, 0.64];
+
+function resolvePipeRowPlacement(
+  record: ClearanceRecord,
+  rowIndex: number,
+  defaultOffsetM: number,
+  explicitOffset: boolean,
+): Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }> {
+  const side: 1 | -1 = record.pipeRow?.metric === 'derived-gap' ? -1 : 1;
+  if (!record.pipeRow || explicitOffset) {
+    return { offsetM: defaultOffsetM, labelT: 0.5, side };
+  }
+  const tierOffset = PIPE_ROW_OFFSET_TIERS_M[rowIndex % PIPE_ROW_OFFSET_TIERS_M.length]!;
+  const labelT = PIPE_ROW_LABEL_TS[rowIndex % PIPE_ROW_LABEL_TS.length]!;
+  return { offsetM: tierOffset, labelT, side };
+}
 export function clearanceRecordsToExternalDimensions(
   records: readonly ClearanceRecord[],
   options: ClearanceExternalDimensionOptions = {},
 ): ExternalDimensionMappingResult {
   const out: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
+  const explicitOffset = options.offsetM !== undefined;
   const offsetM = options.offsetM ?? 0.5;
   const centerByPair = new Map<string, ClearanceRecord>();
-  if (!options.pipeRowBothMetrics) {
-    for (const record of records) {
-      const pairKey = pipeRowPairKey(record);
-      if (pairKey && record.pipeRow!.metric === 'center-distance') centerByPair.set(pairKey, record);
+  const gapByPair = new Map<string, ClearanceRecord>();
+  const pairIndexByRow = new Map<string, Map<string, number>>();
+  for (const record of records) {
+    const pairKey = pipeRowPairKey(record);
+    if (!pairKey) continue;
+    if (record.pipeRow!.metric === 'center-distance') centerByPair.set(pairKey, record);
+    else gapByPair.set(pairKey, record);
+    const rowGroupId = record.pipeRow!.rowGroupId;
+    let rowPairs = pairIndexByRow.get(rowGroupId);
+    if (!rowPairs) {
+      rowPairs = new Map<string, number>();
+      pairIndexByRow.set(rowGroupId, rowPairs);
     }
+    if (!rowPairs.has(pairKey)) rowPairs.set(pairKey, rowPairs.size);
   }
   for (const record of records) {
     const id = `${CLEARANCE_EXTERNAL_SOURCE}:${record.id}`;
@@ -194,13 +217,25 @@ export function clearanceRecordsToExternalDimensions(
     }
     const a: Vec3 = snapshot.sourcePoint;
     const b: Vec3 = snapshot.targetPoint;
-    const foldedCenter = pairKey && record.pipeRow!.metric === 'derived-gap' ? centerByPair.get(pairKey)?.snapshot : null;
+    const siblingSummary = (() => {
+      if (!pairKey) return '';
+      if (record.pipeRow!.metric === 'derived-gap') {
+        const centerSnap = centerByPair.get(pairKey)?.snapshot;
+        return centerSnap ? `；中心距 ${formatMillimetres(centerSnap.distanceM)}` : '';
+      }
+      const gapRecord = gapByPair.get(pairKey);
+      const gapSnap = gapRecord?.snapshot;
+      return gapSnap && !gapSnap.intersects
+        ? `；名义间隔 ${clearanceDimensionText(gapRecord)}`
+        : '';
+    })();
+    const rowPairIndex = pairKey && record.pipeRow
+      ? (pairIndexByRow.get(record.pipeRow.rowGroupId)?.get(pairKey) ?? 0)
+      : 0;
     out.push({
       id,
       source: CLEARANCE_EXTERNAL_SOURCE,
-      sourceLabel: foldedCenter
-        ? `${clearanceSourceLabel(record)}；中心距 ${formatMillimetres(foldedCenter.distanceM)}`
-        : clearanceSourceLabel(record),
+      sourceLabel: `${clearanceSourceLabel(record)}${siblingSummary}`,
       role: 'external',
       layout: {
         id,
@@ -210,8 +245,8 @@ export function clearanceRecordsToExternalDimensions(
         authoritativeText: clearanceDimensionText(record),
         a,
         b,
-        // 连排双度量同连线：推导间隔画到另一侧，不与中心距的尺寸线互相叠。
-        placement: { offsetM, labelT: 0.5, side: record.pipeRow?.metric === 'derived-gap' ? -1 : 1 },
+        // 连排双度量同连线：推导间隔画到另一侧，同一排内相邻对交错偏移，不互相叠字。
+        placement: resolvePipeRowPlacement(record, rowPairIndex, offsetM, explicitOffset),
       },
     });
   }

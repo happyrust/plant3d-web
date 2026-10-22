@@ -123,11 +123,11 @@ describe('clearanceExternalDimensions', () => {
     expect(clearanceDimensionText(inHole)).toBe('50mm ⊥');
   });
 
-  it('连排双度量：缺省只画名义间隔、中心距并进它的来源说明；勾了两种都画时推导间隔画到连线另一侧；尺寸文字自带口径前缀', () => {
+  it('连排双度量：缺省只画名义间隔、中心距并进它的来源说明；勾了两种都画时推导间隔画到连线另一侧；尺寸文字保持简洁不带口径前缀（口径在悬停 sourceLabel 中展示）', () => {
     const center = pipeRowRecord('center-distance', 300);
     const gap = pipeRowRecord('derived-gap', 50);
-    expect(clearanceDimensionText(center)).toBe('中心距 300mm');
-    expect(clearanceDimensionText(gap)).toBe('名义间隔 50mm');
+    expect(clearanceDimensionText(center)).toBe('300mm');
+    expect(clearanceDimensionText(gap)).toBe('50mm');
 
     const folded = clearanceRecordsToExternalDimensions([center, gap]);
     expect(folded.records.map(d => d.id)).toEqual([`clearance:${gap.id}`]);
@@ -138,8 +138,8 @@ describe('clearanceExternalDimensions', () => {
     expect(both.skipped).toEqual([]);
     expect(both.records.map(d => ('placement' in d.layout && 'side' in d.layout.placement ? d.layout.placement.side : null))).toEqual([1, -1]);
     expect(both.records.map(d => d.sourceLabel)).toEqual([
-      '连排截面中心距: a~0_1 → b~0_1',
-      '连排外径推导间隔: a~0_1 → b~0_1',
+      '连排截面中心距: a~0_1 → b~0_1；名义间隔 50mm',
+      '连排外径推导间隔: a~0_1 → b~0_1；中心距 300mm',
     ]);
 
     // 推导间隔画不出（名义接触 / 重叠 / 缺外径时没有快照）或被隐藏：缺省这一对不画尺寸线，勾了两种都画才有中心距
@@ -147,6 +147,18 @@ describe('clearanceExternalDimensions', () => {
     expect(clearanceRecordsToExternalDimensions([center, contact]).records).toEqual([]);
     expect(clearanceRecordsToExternalDimensions([center]).records).toEqual([]);
     expect(clearanceRecordsToExternalDimensions([center, contact], { pipeRowBothMetrics: true }).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
+
+    // 同一排内多对相邻管交错 offsetM 与 labelT，避免并排尺寸线和文字互相叠压
+    const secondGap = {
+      ...gap,
+      id: 'piperow:center:derived-gap:b~0_1:c~0_1@0-5000',
+      inputs: { sourceRefno: 'b~0_1', targetRefno: 'c~0_1', targetKind: 'any' as const },
+    } as ClearanceRecord;
+    const staggered = clearanceRecordsToExternalDimensions([gap, secondGap]);
+    expect(staggered.records.map(d => ('placement' in d.layout ? d.layout.placement : null))).toEqual([
+      { offsetM: 0.22, labelT: 0.5, side: -1 },
+      { offsetM: 0.36, labelT: 0.36, side: -1 },
+    ]);
   });
 
   it('连排关键点：每对一组标注——两管中心画 ×、推导间隔两端的外表面点画 ○；管底对齐再加管底点与虚线支承线；不开不画', () => {
@@ -175,11 +187,11 @@ describe('clearanceExternalDimensions', () => {
 
   it('连排推导间隔：精度档 derived-nominal 不让每条都带 ≈，只有外径为估算时带；中心距不带', () => {
     expect(pipeRowRecord('derived-gap', 50).provenance.accuracyClass).toBe('derived-nominal');
-    expect(clearanceDimensionText(pipeRowRecord('derived-gap', 50))).toBe('名义间隔 50mm');
+    expect(clearanceDimensionText(pipeRowRecord('derived-gap', 50))).toBe('50mm');
     const gap = pipeRowRecord('derived-gap', 50, 'bore-estimate');
-    expect(clearanceDimensionText(gap)).toBe('≈名义间隔 50mm');
-    expect(clearanceDimensionText(withClearanceStatus(gap, 'stale'))).toBe('（过期）≈名义间隔 50mm');
-    expect(clearanceDimensionText(pipeRowRecord('center-distance', 300, 'bore-estimate'))).toBe('中心距 300mm');
+    expect(clearanceDimensionText(gap)).toBe('≈50mm');
+    expect(clearanceDimensionText(withClearanceStatus(gap, 'stale'))).toBe('（过期）≈50mm');
+    expect(clearanceDimensionText(pipeRowRecord('center-distance', 300, 'bore-estimate'))).toBe('300mm');
   });
 
   it('skips records without a drawable line (no snapshot, intersecting) and says why', () => {
