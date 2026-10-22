@@ -21,6 +21,7 @@ import type { Vec3 } from '@/types/vec3';
 
 import { pipeRowPairKey, pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
 import { isFormalPipeRowGroup, type PipeRowGroup } from '@/clearance/domain/pipeRowGeometry';
+import { clampedNumberInput, positiveMmInput } from '@/components/pipe-distance/numberInput';
 import { computationMethodLabel, computationWarningsText } from '@/composables/measurementMethodLabel';
 import { parseTubeKey } from '@/composables/spatialTree';
 import {
@@ -378,20 +379,6 @@ watch(
 );
 
 // --- validation helpers ---
-const clampedMaxDistance = computed({
-  get: () => store.maxDistance.value,
-  set: (v: number) => {
-    store.maxDistance.value = Math.max(50, Math.min(2000, Number(v) || 500));
-  },
-});
-
-const clampedMaxAngle = computed({
-  get: () => store.maxAngle.value,
-  set: (v: number) => {
-    store.maxAngle.value = Math.max(1, Math.min(15, Number(v) || 5));
-  },
-});
-
 const resultMinDistanceInput = computed({
   get: () => store.resultMinDistance.value ?? 0,
   set: (v: number) => {
@@ -530,21 +517,35 @@ const PIPE_ROW_FALLBACK_NORMAL_OPTIONS = [
   ['-y', '−Y'],
 ] as const;
 
-/** 正整数毫米输入提交：不合法或留空回到缺省，并回写输入框——值没变时 Vue 不重画，留空的框会一直空着。 */
-function commitPositiveMm(event: Event, fallback: number): number {
+/**
+ * 数值输入框在失焦或回车时才提交（边打边夹会把 1500 的「1」先夹成 50）；换算后回写输入框——
+ * 值没变时 Vue 不重画，留空或超界的框会一直那样留着。
+ */
+function commitNumberInput(event: Event, parse: (raw: string) => number): number {
   const input = event.target as HTMLInputElement;
-  const n = Number(input.value);
-  const value = input.value !== '' && Number.isFinite(n) && n > 0 ? Math.max(1, Math.round(n)) : fallback;
+  const value = parse(input.value);
   input.value = String(value);
   return value;
 }
 
+/** 「最大距离」（mm）与「中心距估算的最大夹角」（°）的取值范围和缺省。 */
+const MAX_DISTANCE_INPUT = Object.freeze({ min: 50, max: 2000, fallback: 500 });
+const MAX_ANGLE_INPUT = Object.freeze({ min: 1, max: 15, fallback: 5 });
+
 function onMaxAdjacentChange(event: Event) {
-  store.pipeRowMaxAdjacentMm.value = commitPositiveMm(event, PIPE_ROW_DEFAULT_MAX_ADJACENT_MM);
+  store.pipeRowMaxAdjacentMm.value = commitNumberInput(event, raw => positiveMmInput(raw, PIPE_ROW_DEFAULT_MAX_ADJACENT_MM));
 }
 
 function onMinCommonChange(event: Event) {
-  store.pipeRowMinCommonMm.value = commitPositiveMm(event, PIPE_ROW_DEFAULT_MIN_COMMON_MM);
+  store.pipeRowMinCommonMm.value = commitNumberInput(event, raw => positiveMmInput(raw, PIPE_ROW_DEFAULT_MIN_COMMON_MM));
+}
+
+function onMaxDistanceChange(event: Event) {
+  store.maxDistance.value = commitNumberInput(event, raw => clampedNumberInput(raw, MAX_DISTANCE_INPUT));
+}
+
+function onMaxAngleChange(event: Event) {
+  store.maxAngle.value = commitNumberInput(event, raw => clampedNumberInput(raw, MAX_ANGLE_INPUT));
 }
 
 function isResultHidden(id: string): boolean {
@@ -766,24 +767,28 @@ function isResultHidden(id: string): boolean {
 
             <!-- 最大距离 -->
             <div v-if="!isRowMode" class="space-y-1">
-              <label class="text-xs font-medium text-foreground">最大距离</label>
+              <label class="text-xs font-medium text-foreground" for="pipe-distance-max-distance">最大距离</label>
               <div class="flex items-center gap-2">
-                <input v-model.number="clampedMaxDistance"
+                <input id="pipe-distance-max-distance" :value="store.maxDistance.value"
                   type="number"
                   min="50" max="2000"
-                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                  data-testid="pipe-distance-max-distance"
+                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  @change="onMaxDistanceChange" />
                 <span class="text-xs text-muted-foreground">mm</span>
               </div>
             </div>
 
             <!-- 最大夹角 -->
             <div v-if="!isRowMode" class="space-y-1">
-              <label class="text-xs font-medium text-foreground">中心距估算的最大夹角</label>
+              <label class="text-xs font-medium text-foreground" for="pipe-distance-max-angle">中心距估算的最大夹角</label>
               <div class="flex items-center gap-2">
-                <input v-model.number="clampedMaxAngle"
+                <input id="pipe-distance-max-angle" :value="store.maxAngle.value"
                   type="number"
                   min="1" max="15"
-                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                  data-testid="pipe-distance-max-angle"
+                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  @change="onMaxAngleChange" />
                 <span class="text-xs text-muted-foreground">°</span>
               </div>
             </div>
