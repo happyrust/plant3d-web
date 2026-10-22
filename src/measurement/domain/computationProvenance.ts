@@ -2,6 +2,8 @@ export const ACCURACY_CLASSES = Object.freeze([
   'exact-semantic',
   'exact-surface',
   'exact-centerline',
+  // 平行圆柱模型的名义推导值：中心线是真的，外径是名义值，不是实体外表面精算。
+  'derived-nominal',
   'approximate-bounds',
   'approximate-sampled',
   'approximate-axis',
@@ -20,6 +22,8 @@ export const COMPUTATION_METHODS = Object.freeze([
   'sampled-object',
   'pca-axis',
   'parallel-centerline',
+  'pipe-row-center-distance',
+  'pipe-row-derived-gap',
   'legacy-unknown',
 ] as const);
 
@@ -120,7 +124,10 @@ export function accuracyClassForMethod(
     case 'pca-axis':
       return 'approximate-axis';
     case 'parallel-centerline':
+    case 'pipe-row-center-distance':
       return 'exact-centerline';
+    case 'pipe-row-derived-gap':
+      return 'derived-nominal';
     case 'legacy-unknown':
       return 'legacy-unknown';
     default:
@@ -139,6 +146,7 @@ export function toLegacyApproximate(accuracyClass: AccuracyClass): boolean {
     case 'exact-surface':
     case 'exact-centerline':
       return false;
+    case 'derived-nominal':
     case 'approximate-bounds':
     case 'approximate-sampled':
     case 'approximate-axis':

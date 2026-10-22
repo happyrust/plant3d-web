@@ -31,6 +31,10 @@ export function computationMethodLabel(method: ComputationMethod): string {
       return '估算轴线距离';
     case 'parallel-centerline':
       return '平行直段中心距';
+    case 'pipe-row-center-distance':
+      return '连排截面中心距';
+    case 'pipe-row-derived-gap':
+      return '连排外径推导间隔';
     case 'legacy-unknown':
       return '近似（口径未知）';
     default: {

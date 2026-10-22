@@ -32,7 +32,8 @@ const DEFAULT_PLACEMENT: LinearPlacementIntent = Object.freeze({
 /**
  * 把一条净距记录铸成 linear `UserDimensionRecord`：两个锚点直接取快照两端的命中点
  * （`sourcePoint`/`targetPoint` 是服务端真正算净距的位置，不是 refno 原点），精度标签
- * 经 `toLegacyApproximate` 投影到尺寸域的 exact/approximate 两档，语义锚挂到两侧叶子 refno。
+ * 经 `toLegacyApproximate` 投影到尺寸域的 exact/approximate 两档（连排推导间隔的 `derived-nominal`
+ * 是名义推导值，一律投影为 approximate），语义锚挂到两侧叶子 refno。
  *
  * 返回 `null` 的情形：没有快照（本次没算出距离，比如超 maxDistance）或相交记录
  * （distanceM=0 的相交没有净距线可画）。`stale`/`failed` 记录照转——快照保留的就是旧值，
@@ -44,9 +45,7 @@ export function clearanceRecordToDimensionInput(
 ): LinearDimensionRecord | null {
   const snapshot = record.snapshot;
   if (!snapshot || snapshot.intersects) return null;
-  const accuracy: DimensionAccuracy = toLegacyApproximate(record.provenance.accuracyClass)
-    ? 'approximate'
-    : 'exact';
+  const accuracy: DimensionAccuracy = toLegacyApproximate(record.provenance.accuracyClass) ? 'approximate' : 'exact';
   const createdAt = options.createdAt ?? Date.now();
   const input: LinearDimensionRecord = {
     id: options.id,

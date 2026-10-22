@@ -1,6 +1,10 @@
 import type { ComputationPoint } from '@/measurement/domain/measurementResult';
 
 import {
+  normalizePipeRowExtension,
+  type ClearanceRecordPipeRow,
+} from '@/clearance/domain/pipeRowTypes';
+import {
   isComputationProvenance,
   type ComputationProvenance,
 } from '@/measurement/domain/computationProvenance';
@@ -106,6 +110,8 @@ export type ClearanceRecord = Readonly<{
   provenance: ComputationProvenance;
   /** `null` = 本次没算出距离（超 maxDistance）；旧快照在 `stale` 时仍保留 */
   snapshot: ClearanceSnapshot | null;
+  /** 连排相邻测量扩展（`piperow:*` id 的记录）：对齐模式、度量口径、有符号间隔、截面与外径证据。 */
+  pipeRow: ClearanceRecordPipeRow | null;
   modelVersion: ClearanceModelVersion;
   status: ClearanceStatus;
   /** 净距转尺寸后生出的那条尺寸 id（`clearanceRecordToDimensionInput` 产物的回链），未转过为 `null`。 */
@@ -131,6 +137,7 @@ export type ClearanceRecordInput = Readonly<{
   targetNoun?: string;
   provenance: ComputationProvenance;
   snapshot: ClearanceSnapshotInput | null;
+  pipeRow?: ClearanceRecordPipeRow | null;
   modelVersion: ClearanceModelVersion;
   status?: ClearanceStatus;
   derivedDimensionId?: string | null;
@@ -310,6 +317,7 @@ export function createClearanceRecord(input: ClearanceRecordInput): ClearanceRec
     targetNoun: typeof input.targetNoun === 'string' ? input.targetNoun.trim().toUpperCase() : '',
     provenance: input.provenance,
     snapshot: normalizeSnapshot(input.snapshot),
+    pipeRow: normalizePipeRowExtension(input.pipeRow),
     modelVersion: normalizeModelVersion(input.modelVersion),
     status: status as ClearanceStatus,
     derivedDimensionId: input.derivedDimensionId === undefined || input.derivedDimensionId === null

@@ -2,6 +2,7 @@
 import type { ClearanceFaceKind, ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import type { ExternalDimensionMappingResult, ExternalDimensionRecord, Vec3 } from '@/dimension';
 
+import { pipeRowGapEstimated } from '@/clearance/domain/pipeRowTypes';
 import { computationMethodLabel } from '@/composables/measurementMethodLabel';
 import { toLegacyApproximate } from '@/measurement/domain/computationProvenance';
 
@@ -57,15 +58,21 @@ function formatMillimetres(distanceM: number): string {
   return mm < 10 ? `${mm.toFixed(1)}mm` : `${Math.round(mm)}mm`;
 }
 
-/** 尺寸文字：`（过期）` 前缀 + `≈`（近似档）+ 距离 + `⊥`（垂距成立）；相交时是 `相交`。 */
+/** 尺寸文字：`（过期）` 前缀 + `≈`（近似档；连排推导间隔只在外径为估算时带）+ 距离 + `⊥`（垂距成立）；相交时是 `相交`。
+ *  连排记录带度量前缀——「中心距 312mm」与「名义间隔 50mm」是同一条连线上的两种口径，
+ *  推导间隔是平行圆柱模型的名义值，不是网格精算净距，文字必须自带口径。 */
 export function clearanceDimensionText(record: ClearanceRecord): string {
   const snapshot = record.snapshot;
   if (!snapshot) return '';
   const stale = record.status === 'stale' ? '（过期）' : record.status === 'failed' ? '（重算失败，旧值）' : '';
   if (snapshot.intersects) return `${stale}相交`;
-  const approximate = toLegacyApproximate(record.provenance.accuracyClass) ? '≈' : '';
+  // 推导间隔的「推导」由口径前缀与方法标签表达；`≈` 只留给外径本身是估算的情形（plan §4.2）。
+  const approximate = (record.pipeRow?.metric === 'derived-gap'
+    ? pipeRowGapEstimated(record.pipeRow)
+    : toLegacyApproximate(record.provenance.accuracyClass)) ? '≈' : '';
+  const rowMetric = record.pipeRow ? (record.pipeRow.metric === 'center-distance' ? '中心距 ' : '名义间隔 ') : '';
   const perpendicular = snapshot.perpendicular ? ' ⊥' : '';
-  return `${stale}${approximate}${formatMillimetres(snapshot.distanceM)}${perpendicular}`;
+  return `${stale}${approximate}${rowMetric}${formatMillimetres(snapshot.distanceM)}${perpendicular}`;
 }
 
 /** 来源标签：`外表面净距: 24384_22582 → 17496_105912（墙面外侧）`。方法按记录 provenance 说真话。 */
@@ -95,7 +102,12 @@ export function clearanceRecordsToExternalDimensions(
     const id = `${CLEARANCE_EXTERNAL_SOURCE}:${record.id}`;
     const snapshot = record.snapshot;
     if (!snapshot) {
-      skipped.push({ id, reason: 'No snapshot (beyond max distance or never computed)' });
+      skipped.push({
+        id,
+        reason: record.pipeRow?.metric === 'derived-gap'
+          ? 'Derived nominal gap not drawable (missing OD evidence or nominal overlap)'
+          : 'No snapshot (beyond max distance or never computed)',
+      });
       continue;
     }
     if (snapshot.intersects) {
@@ -117,7 +129,8 @@ export function clearanceRecordsToExternalDimensions(
         authoritativeText: clearanceDimensionText(record),
         a,
         b,
-        placement: { offsetM, labelT: 0.5, side: 1 },
+        // 连排双度量同连线：推导间隔画到另一侧，不与中心距的尺寸线互相叠。
+        placement: { offsetM, labelT: 0.5, side: record.pipeRow?.metric === 'derived-gap' ? -1 : 1 },
       },
     });
   }

@@ -4,11 +4,13 @@ import { useClearanceStore } from './useClearanceStore';
 
 import type { SurfaceClearanceResponse } from '@/api/genModelV1Api';
 
+import { createClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { createClearanceService, type ClearanceService } from '@/clearance/services/clearanceService';
 import {
   boxToStraightWallResponse,
   elboToCurvedWallResponse,
 } from '@/clearance/testing/surfaceClearanceFixtures';
+import { accuracyClassForMethod, createComputationProvenance } from '@/measurement/domain/computationProvenance';
 
 const AT = new Date('2026-09-17T12:00:00.000Z');
 
@@ -242,6 +244,96 @@ describe('useClearanceStore', () => {
     expect(store.findRecord(a!.id)?.status).toBe('stale');
     expect(store.findRecord(b!.id)?.status).toBe('current');
     expect(store.markStaleByModelSesno({ '17496_105912': 731 })).toEqual([]);
+  });
+
+  it('markStaleByModelSesno falls back to provenance operand refno for anchor-input records', () => {
+    const store = useClearanceStore();
+    // 连排 / 交互式平行直段记录：inputs 是直段锚点（`a_b~c_d`），实体级 refno 在 provenance operand
+    const record = createClearanceRecord({
+      id: 'piperow:center:center-distance:24381_1001~0_1:24381_1002~0_1@0-5000',
+      kind: 'component-to-component',
+      inputs: { sourceRefno: '24381_1001~0_1', targetRefno: '24381_1002~0_1', targetKind: 'any' },
+      sourceNoun: 'BRAN',
+      targetNoun: 'BRAN',
+      provenance: createComputationProvenance({
+        method: 'pipe-row-center-distance',
+        accuracyClass: accuracyClassForMethod('pipe-row-center-distance'),
+        coordinateSpace: 'design-world',
+        sourceModelVersion: 'sesno:10',
+        source: { entityId: '24381_1001', refno: '24381_1001', segmentRefno: '24381_1001~0_1' },
+        target: { entityId: '24381_1002', refno: '24381_1002', segmentRefno: '24381_1002~0_1' },
+        warnings: [],
+      }),
+      snapshot: {
+        distanceM: 0.3,
+        intersects: false,
+        sourcePoint: [0, 0, 0],
+        targetPoint: [0, 0.3, 0],
+        vector: [0, 0.3, 0],
+        sourceLeafRefno: '24381_1001~0_1',
+        targetLeafRefno: '24381_1002~0_1',
+        targetLeafNoun: 'BRAN',
+        targetFace: null,
+        perpendicular: null,
+        witness: 'closest-points',
+      },
+      pipeRow: {
+        alignMode: 'center',
+        metric: 'center-distance',
+        signedGapM: null,
+        section: { point: [0, 0, 0], normal: [1, 0, 0], axialStartM: 0, axialEndM: 5 },
+        rowGroupId: 'row:24381_1001~0_1|24381_1002~0_1@0-5000:center',
+        sourceOd: { odM: 0.1, evidence: 'catalogue' },
+        targetOd: { odM: 0.1, evidence: 'catalogue' },
+      },
+      modelVersion: { sourceSesno: 10, targetSesno: 20 },
+      status: 'current',
+      sourceAnnotation: null,
+      computedAt: AT.toISOString(),
+    });
+    store.upsertRecord(record);
+
+    // 锚点键查不到（调用方按实体 refno 给 sesno）；BRAN 键能查到并命中 stale
+    expect(store.markStaleByModelSesno({ '24381_1001': 10 })).toEqual([]);
+    expect(store.markStaleByModelSesno({ '24381_1002': 21 })).toEqual([record.id]);
+    expect(store.findRecord(record.id)?.status).toBe('stale');
+  });
+
+  it('连排记录不走整构件净距重算：recompute 拒绝并指明去处，不调服务、记录不动', async () => {
+    const store = useClearanceStore();
+    const record = createClearanceRecord({
+      id: 'piperow:center:derived-gap:24381_1001~0_1:24381_1002~0_1@0.0-5000.0',
+      kind: 'component-to-component',
+      inputs: { sourceRefno: '24381_1001~0_1', targetRefno: '24381_1002~0_1', targetKind: 'any' },
+      sourceNoun: 'BRAN',
+      targetNoun: 'BRAN',
+      provenance: createComputationProvenance({
+        method: 'pipe-row-derived-gap',
+        accuracyClass: accuracyClassForMethod('pipe-row-derived-gap'),
+        coordinateSpace: 'design-world',
+        source: { entityId: '24381_1001', refno: '24381_1001', segmentRefno: '24381_1001~0_1' },
+        target: { entityId: '24381_1002', refno: '24381_1002', segmentRefno: '24381_1002~0_1' },
+      }),
+      snapshot: null,
+      pipeRow: {
+        alignMode: 'center',
+        metric: 'derived-gap',
+        signedGapM: -0.002,
+        section: { point: [2.5, 0.15, 0], normal: [1, 0, 0], axialStartM: 0, axialEndM: 5 },
+        rowGroupId: 'row:24381_1001~0_1|24381_1002~0_1@0.0-5000.0:center',
+        sourceOd: { odM: 0.1143, evidence: 'catalogue' },
+        targetOd: { odM: 0.1897, evidence: 'catalogue' },
+      },
+      modelVersion: { sourceSesno: null, targetSesno: null },
+      computedAt: AT.toISOString(),
+    });
+    store.upsertRecord(record);
+    const fetchSurfaceClearance = vi.fn();
+    expect(await store.recompute(record.id, { service: createClearanceService({ fetchSurfaceClearance }) })).toBeNull();
+    expect(fetchSurfaceClearance).not.toHaveBeenCalled();
+    expect(store.lastError.value).toContain('连排相邻');
+    expect(store.records.value).toHaveLength(1);
+    expect(store.findRecord(record.id)?.status).toBe('current');
   });
 
   it('removeRecord drops active / hidden bookkeeping and clearRecords resets everything', async () => {

@@ -265,14 +265,18 @@ export function useClearanceStore() {
   /**
    * 拿到某些 refno 的「现在」模型会话号后，把对应侧换了版的记录标 stale。
    * 键是本仓内部 refno（`a_b`）；没给的 refno 视为不知道，不动。返回被标掉的 id。
+   * 「侧」的查询键：优先 `inputs.*Refno`，其次 provenance operand refno——交互式平行直段与
+   * 连排记录的 inputs 是直段锚点（`a_b~c_d`），实体级 refno 只在 provenance 里。
    */
   function markStaleByModelSesno(sesnoByRefno: Readonly<Record<string, number | null>>): string[] {
+    const sideSesno = (record: ClearanceRecord, side: 'source' | 'target') =>
+      sesnoByRefno[record.inputs[`${side}Refno`]] ?? sesnoByRefno[record.provenance[side].refno ?? ''];
     const changed: string[] = [];
     records.value = records.value.map(record => {
       if (record.status !== 'current') return record;
       const current = {
-        sourceSesno: sesnoByRefno[record.inputs.sourceRefno],
-        targetSesno: sesnoByRefno[record.inputs.targetRefno],
+        sourceSesno: sideSesno(record, 'source'),
+        targetSesno: sideSesno(record, 'target'),
       };
       if (!clearanceModelChanged(record, current)) return record;
       changed.push(record.id);
@@ -322,6 +326,11 @@ export function useClearanceStore() {
   async function recompute(id: string, options: ClearanceComputeOptions = {}): Promise<ClearanceRecord | null> {
     const record = findRecord(id);
     if (!record) return null;
+    // 连排记录是截面中心距 / 名义推导间隔，按 inputs 走整构件外表面净距只会另起一条口径不同的记录。
+    if (record.pipeRow) {
+      lastError.value = '连排测量记录请在「管道距离 · 连排相邻」里重新检测，不能按整构件净距重算';
+      return null;
+    }
     return compute(
       {
         sourceRefno: record.inputs.sourceRefno,

@@ -7,7 +7,7 @@ import {
   withDerivedDimension,
   type ClearanceRecordInput,
 } from '@/clearance/domain/clearanceRecord';
-import { createComputationProvenance } from '@/measurement/domain/computationProvenance';
+import { accuracyClassForMethod, createComputationProvenance } from '@/measurement/domain/computationProvenance';
 
 function provenance(method: 'surface-to-surface' | 'aabb-to-aabb' = 'surface-to-surface') {
   return createComputationProvenance({
@@ -73,6 +73,35 @@ describe('clearanceRecordToDimensionInput', () => {
     const dim = clearanceRecordToDimensionInput(record, options);
     expect(dim!.a.accuracy).toBe('approximate');
     expect(dim!.b.accuracy).toBe('approximate');
+  });
+
+  it('projects every pipe-row derived gap to approximate: a nominal cylinder-model value is never an exact dimension', () => {
+    const pipeRowGap = (targetEvidence: 'catalogue' | 'bore-estimate') => createClearanceRecord(input({
+      kind: 'component-to-component',
+      inputs: { sourceRefno: 'a~0_1', targetRefno: 'b~0_1', targetKind: 'any' },
+      provenance: createComputationProvenance({
+        method: 'pipe-row-derived-gap',
+        accuracyClass: accuracyClassForMethod('pipe-row-derived-gap'),
+        coordinateSpace: 'design-world',
+        source: { entityId: 'a', refno: 'a', segmentRefno: 'a~0_1' },
+        target: { entityId: 'b', refno: 'b', segmentRefno: 'b~0_1' },
+      }),
+      snapshot: { ...input().snapshot!, targetFace: null, perpendicular: null },
+      pipeRow: {
+        alignMode: 'center',
+        metric: 'derived-gap',
+        signedGapM: 0.06443,
+        section: { point: [0, 0, 0], normal: [1, 0, 0], axialStartM: 0, axialEndM: 5 },
+        rowGroupId: 'row:a~0_1|b~0_1@0.0-5000.0:center',
+        sourceOd: { odM: 0.1143, evidence: 'catalogue' },
+        targetOd: { odM: 0.0603, evidence: targetEvidence },
+      },
+    }));
+    for (const evidence of ['catalogue', 'bore-estimate'] as const) {
+      const dimension = clearanceRecordToDimensionInput(pipeRowGap(evidence), options);
+      expect(dimension!.a.accuracy).toBe('approximate');
+      expect(dimension!.b.accuracy).toBe('approximate');
+    }
   });
 
   it('does not mutate the clearance record — linking is a separate explicit step', () => {

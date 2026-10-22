@@ -28,6 +28,8 @@ const METHOD_ACCURACY_CASES = [
   ['sampled-object', 'approximate-sampled'],
   ['pca-axis', 'approximate-axis'],
   ['parallel-centerline', 'exact-centerline'],
+  ['pipe-row-center-distance', 'exact-centerline'],
+  ['pipe-row-derived-gap', 'derived-nominal'],
   ['legacy-unknown', 'legacy-unknown'],
 ] as const;
 
@@ -50,6 +52,7 @@ describe('computation provenance contract', () => {
       'exact-semantic',
       'exact-surface',
       'exact-centerline',
+      'derived-nominal',
       'approximate-bounds',
       'approximate-sampled',
       'approximate-axis',
@@ -79,6 +82,7 @@ describe('computation provenance contract', () => {
     ['exact-semantic', false],
     ['exact-surface', false],
     ['exact-centerline', false],
+    ['derived-nominal', true],
     ['approximate-bounds', true],
     ['approximate-sampled', true],
     ['approximate-axis', true],
