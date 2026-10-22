@@ -32,6 +32,9 @@ const INLINE_LFF = [
   '[0070] p',
   '0,-3;0,7;2,7',
   '',
+  '[007e] tilde',
+  '0,5;1,6;2,5',
+  '',
   '[00b0] degree',
   '0,8;1,9;2,8',
   '',
@@ -65,6 +68,13 @@ describe('LffFont', () => {
       advanceWidth: 3,
     });
     expect(font.getGlyph('x'.codePointAt(0)!)).toBe(font.getGlyph(0xfffd));
+  });
+
+  it('draws a missing approximate mark ≈ with the tilde instead of the replacement box', () => {
+    const font = LffFont.fromText(INLINE_LFF);
+
+    expect(font.getGlyph(0x2248)).toBe(font.getGlyph(0x7e));
+    expect(font.getWidth(20, '≈1')).toBe(font.getWidth(20, '~1'));
   });
 
   it('expands each bulge into eight deterministic line subdivisions', () => {

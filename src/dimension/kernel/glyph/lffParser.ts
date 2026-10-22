@@ -147,6 +147,12 @@ function getGlyphBounds(glyph: Glyph): Readonly<{
   return { minX, maxX, minY, maxY };
 }
 
+/**
+ * Readable stand-ins for code points the bundled font lacks. Falling back to U+FFFD would draw
+ * the approximate mark ≈ as a box, so the label would no longer say it is an estimate.
+ */
+const MISSING_GLYPH_STAND_INS: ReadonlyMap<number, number> = new Map([[0x2248, 0x7e]]);
+
 export class LffFont {
   readonly letterSpacing: number;
   readonly wordSpacing: number;
@@ -201,6 +207,8 @@ export class LffFont {
 
     const source = this.glyphSources.get(codePoint);
     if (!source) {
+      const standIn = MISSING_GLYPH_STAND_INS.get(codePoint);
+      if (standIn !== undefined && this.glyphSources.has(standIn)) return this.getGlyph(standIn);
       if (codePoint === 0xfffd) throw new RangeError('LFF font has no replacement glyph');
       return this.getGlyph(0xfffd);
     }
