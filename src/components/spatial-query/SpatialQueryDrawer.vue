@@ -476,10 +476,10 @@
           <div v-for="record in clearanceStore.records.value" :key="record.id" class="flex items-center gap-2 border-t border-gray-100 py-2 text-[11px]">
             <div class="min-w-0 flex-1">
               <div class="truncate font-mono" :title="`${record.inputs.sourceRefno} → ${record.inputs.targetRefno}`">{{ record.inputs.sourceRefno }} → {{ record.inputs.targetRefno }}</div>
-              <div>{{ record.snapshot ? `${Math.round(record.snapshot.distanceM * 1000)} mm` : '无距离结果' }} · {{ record.status === 'current' ? '当前计算' : record.status === 'stale' ? '模型未核实，待重算' : '重算失败，保留旧值' }}</div>
+              <div>{{ record.pipeRow ? `${computationMethodLabel(record.provenance.method)} ${pipeRowValueText(record)}` : record.snapshot ? `${Math.round(record.snapshot.distanceM * 1000)} mm` : '无距离结果' }} · {{ record.status === 'current' ? '当前计算' : record.status === 'stale' ? '模型未核实，待重算' : '重算失败，保留旧值' }}</div>
             </div>
             <button type="button" class="rounded border px-2 py-1" data-testid="locate-clearance-record" title="加载两侧构件并飞过去" @click="locateClearanceRecord(record)">定位</button>
-            <button type="button" :disabled="clearanceStore.isComputing.value" class="rounded border px-2 py-1 disabled:opacity-50" @click="clearanceStore.recompute(record.id)">重算</button>
+            <button type="button" :disabled="clearanceStore.isComputing.value || !!record.pipeRow" :title="record.pipeRow ? '连排测量请在「管道距离 · 连排相邻」里重新检测' : undefined" class="rounded border px-2 py-1 disabled:opacity-50" @click="clearanceStore.recompute(record.id)">重算</button>
             <button type="button" class="rounded border px-2 py-1" @click="clearanceStore.toggleHidden(record.id)">{{ clearanceStore.hiddenIds.value.has(record.id) ? '显示' : '隐藏' }}</button>
             <button type="button" class="rounded border px-2 py-1" @click="clearanceStore.removeRecord(record.id)">移除</button>
           </div>
@@ -807,8 +807,10 @@ import type {
   SpatialQuerySortBy,
 } from '@/types/spatialQuery';
 
+import { pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
 import { formatClearanceToast } from '@/clearance/composables/useComponentToWallClearance';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import { computationMethodLabel } from '@/composables/measurementMethodLabel';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';

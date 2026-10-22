@@ -6,11 +6,12 @@ import type { ReviewClearanceConflict, ReviewClearanceResolution, ReviewClearanc
 const props = defineProps<{ conflict?: ReviewClearanceConflict | null; backup?: ReviewClearanceConflict | null; keptLocal?: ReviewClearanceConflict | null; busy?: boolean }>();
 const emit = defineEmits<{ resolve: [action: ReviewClearanceResolution['action']]; undo: []; recompare: [] }>();
 function summarize(snapshot: ReviewClearanceSnapshot) {
-  const component = snapshot.component as { records?: { snapshot?: { distanceM?: number } | null }[] };
+  const component = snapshot.component as { records?: { snapshot?: { distanceM?: number } | null; pipeRow?: { metric?: string } | null }[] };
   const pipe = snapshot.pipe as { results?: { distance?: number }[] };
   const bran = snapshot.bran as { branGroups?: { candidates?: { distance_mm?: number }[] }[] };
   const groups = [component.records ?? [], pipe.results ?? [], (bran.branGroups ?? []).flatMap(group => group.candidates ?? [])];
-  const distances = [(component.records ?? []).map(record => record.snapshot?.distanceM === undefined ? undefined : record.snapshot.distanceM * 1000),
+  // 连排截面中心距量的是两条中心线，不是净距，不参与「最近距离」
+  const distances = [(component.records ?? []).map(record => (record.snapshot?.distanceM === undefined || record.pipeRow?.metric === 'center-distance' ? undefined : record.snapshot.distanceM * 1000)),
     (pipe.results ?? []).map(record => record.distance), (bran.branGroups ?? []).flatMap(group => (group.candidates ?? []).map(record => record.distance_mm))];
   return groups.map((group, index) => {
     const finite = distances[index]!.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
