@@ -19,6 +19,7 @@ import type { PipeRowSideOd } from '@/clearance/domain/pipeRowTypes';
 import type { OutsideDiameterEvidence } from '@/composables/branParallelSpacing';
 import type { Vec3 } from '@/types/vec3';
 
+import { pipeClearanceLeavesText } from '@/clearance/adapters/pipeDistanceRecords';
 import { pipeRowPairKey, pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
 import { isFormalPipeRowGroup, type PipeRowGroup } from '@/clearance/domain/pipeRowGeometry';
 import { clampedNumberInput, positiveMmInput } from '@/components/pipe-distance/numberInput';
@@ -137,7 +138,7 @@ const isRowMode = computed(() => store.detectionMode.value === 'pipe-row');
 /** 明细的折叠标题：连排是归排诊断，所有管对是计算失败的管对。 */
 const diagnosticsSummary = computed(() => {
   const count = store.detectDiagnostics.value.length;
-  return isRowMode.value ? `诊断信息 ${count} 条（穿过件、没有共同区段的管向组等）` : `明细 ${count} 条（计算失败的管对）`;
+  return isRowMode.value ? `诊断信息 ${count} 条（穿过件、没有共同区段的管向组等）` : `明细 ${count} 条（相连的管对、计算失败的管对等）`;
 });
 
 // 换检测模式 / 归排方式后，上一次检测的提示与错误说的是另一套结果，不留在当前模式下误导。
@@ -401,9 +402,10 @@ function recordDistanceMm(record: ClearanceRecord): number | null {
   return Number.isFinite(distanceM) ? distanceM! * 1000 : null;
 }
 
-/** 行内数值：连排记录自带口径与单位（名义接触 / 名义重叠 / 缺外径 / 估算 ≈），其余记录给整数毫米、单位另起一格。 */
+/** 行内数值：连排记录自带口径与单位（名义接触 / 名义重叠 / 缺外径 / 估算 ≈），其余记录给整数毫米、单位另起一格，相交写「相交」。 */
 function recordDistanceText(record: ClearanceRecord): string {
   if (record.pipeRow) return pipeRowValueText(record);
+  if (record.snapshot?.intersects) return '相交';
   const mm = recordDistanceMm(record);
   return mm === null ? '—' : `${Math.round(mm)}`;
 }
@@ -424,11 +426,14 @@ function pointText(point: readonly number[]): string {
   return `(${point.map(v => v.toFixed(3)).join(', ')})`;
 }
 
-/** 行悬停说明：连排记录给归排方式、截面位置、两侧外径与来源、关键点坐标；所有记录附计算警告。 */
+/**
+ * 行悬停说明：连排记录给归排方式、截面位置、两侧外径与来源、关键点坐标；外表面净距记录给最近处（相交处）落在哪两个构件上；
+ * 所有记录附计算警告。
+ */
 function recordDetailTitle(record: ClearanceRecord): string | undefined {
   const pipeRow = record.pipeRow;
   const warnings = computationWarningsText(record.provenance.warnings);
-  if (!pipeRow) return warnings || undefined;
+  if (!pipeRow) return [pipeClearanceLeavesText(record, findNounByRefnoAcrossAllDbnos), warnings].filter(Boolean).join('\n') || undefined;
   const [x, y, z] = pipeRow.section.point;
   const od = (side: PipeRowSideOd) => `${side.odM === null ? '—' : `${Math.round(side.odM * 10000) / 10} mm`}（${OD_EVIDENCE_LABELS[side.evidence]}）`;
   const pairKey = pipeRowPairKey(record);
@@ -938,7 +943,7 @@ function isResultHidden(id: string): boolean {
                   :class="store.activeResultId.value === record.id ? 'text-brand' : 'text-foreground'">
                   {{ recordDistanceText(record) }}
                 </span>
-                <span v-if="!record.pipeRow && recordDistanceMm(record) !== null" class="text-xs text-muted-foreground">mm</span>
+                <span v-if="!record.pipeRow && !record.snapshot?.intersects && recordDistanceMm(record) !== null" class="text-xs text-muted-foreground">mm</span>
                 <span class="flex min-w-0 flex-1 flex-col" :title="recordDetailTitle(record)">
                   <span class="truncate text-[11px] text-muted-foreground">{{ recordStatusPrefix(record) }}{{ computationMethodLabel(record.provenance.method) }}{{ record.pipeRow ? ` · ${pipeRowSectionText(record)}` : '' }}</span>
                   <span class="truncate text-xs text-muted-foreground">

@@ -4,11 +4,17 @@ import {
   AXIS_ESTIMATE_WARNING,
   isPipeClearanceRecord,
   mmPointToM,
+  pipeClearanceLeavesText,
   pipeDistanceInputs,
   pipeDistanceResultToClearanceRecord,
 } from './pipeDistanceRecords';
 
+import type { SurfaceClearanceResponse } from '@/api/genModelV1Api';
+import type { ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import type { PipeDistanceResult } from '@/composables/usePipeDistanceStore';
+
+import { surfaceClearanceToRecord } from '@/clearance/services/clearanceService';
+import { elboToCurvedWallResponse } from '@/clearance/testing/surfaceClearanceFixtures';
 
 function surfaceResult(overrides: Partial<PipeDistanceResult> = {}): PipeDistanceResult {
   return {
@@ -84,5 +90,40 @@ describe('pipeDistanceRecords · PipeDistanceResult → ClearanceRecord', () => 
 
   it('mmPointToM 单次换算', () => {
     expect(mmPointToM([1000, -2500, 0])).toEqual([1, -2.5, 0]);
+  });
+});
+
+/** 146830 × 145018 的一条外表面精算记录；叶子按用例覆盖。 */
+function branPairRecord(result: Partial<NonNullable<SurfaceClearanceResponse['result']>>): ClearanceRecord {
+  const base = elboToCurvedWallResponse().result!;
+  return surfaceClearanceToRecord(elboToCurvedWallResponse({
+    target_kind: 'any',
+    source: { refno: '24381/146830', noun: 'BRAN', leaf_count: 15, triangle_count: 1884 },
+    target: { refno: '24381/145018', noun: 'BRAN', leaf_count: 22, triangle_count: 2364 },
+    result: { ...base, target_face: null, perpendicular: null, ...result },
+  }), pipeDistanceInputs('24381_146830', '24381_145018'), new Date(0));
+}
+
+describe('pipeClearanceLeavesText · 最近处落在哪两个构件上', () => {
+  it('直管叶子就是 BRAN 本身，写「直管」；目标侧用服务端给的类型', () => {
+    const record = branPairRecord({ source_leaf_refno: '24381/146830', target_leaf_refno: '24381/145011', target_leaf_noun: 'ELBO' });
+    expect(pipeClearanceLeavesText(record, () => null)).toBe('最近处：直管 ↔ 弯头 24381_145011');
+  });
+
+  it('源侧类型按 refno 查；相交时写「相交处」', () => {
+    const nounOf = (refno: string) => (refno === '24381_146832' ? 'VALV' : null);
+    const record = branPairRecord({
+      intersects: true, distance_mm: 0, witness: 'aabb-overlap-center',
+      source_leaf_refno: '24381/146832', target_leaf_refno: '24381/145013', target_leaf_noun: 'WELD',
+    });
+    expect(pipeClearanceLeavesText(record, nounOf)).toBe('相交处：阀门 24381_146832 ↔ 焊缝 24381_145013');
+  });
+
+  it('没有服务端叶子的记录（网格拟合估算、旧快照迁来的）不写', () => {
+    expect(pipeClearanceLeavesText(pipeDistanceResultToClearanceRecord(surfaceResult(), new Date(0)), () => 'TUBI')).toBe('');
+    expect(pipeClearanceLeavesText(
+      pipeDistanceResultToClearanceRecord(surfaceResult({ measurementKind: 'axis-estimate' }), new Date(0)),
+      () => 'TUBI',
+    )).toBe('');
   });
 });

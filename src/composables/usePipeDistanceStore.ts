@@ -30,6 +30,12 @@ import {
 import { commitPipeRowDetection, confirmPipeRowGroup, isPipeRowRecord } from '@/clearance/adapters/pipeRowRecords';
 import { clearanceRecordId, withClearanceStatus, type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import {
+  PIPE_CONNECTED_CLEARANCE_MM,
+  pipeConnection,
+  pipeConnectivityLine,
+  type PipeConnectionKind,
+} from '@/clearance/domain/pipeConnectivity';
+import {
   detectPipeRows,
   isFormalPipeRowGroup,
   runAnchorRefno,
@@ -95,7 +101,7 @@ const resultMinDistance = ref<number | null>(null);
 /** 最近一次 `runDetection` 实际落库的记录数（0 = 本轮一条没算出来，兜底层据此决定要不要补估算）。 */
 const lastRunSettledCount = ref(0);
 /** 一轮所有管对 / 周边检测里各管对的去向：抽屉据此给汇总提示，并判断要不要兜底。 */
-export type PipeDetectionOutcome = Readonly<{ total: number; settled: number; beyond: number; failed: number }>;
+export type PipeDetectionOutcome = Readonly<{ total: number; settled: number; beyond: number; connected: number; failed: number }>;
 const lastRunOutcome = ref<PipeDetectionOutcome | null>(null);
 /** 计算失败的管对多于这么多条时，红字只列前几条，全部收进可展开的明细。 */
 const FAILURE_LINES_SHOWN = 5;
@@ -353,6 +359,21 @@ function dedupeReversePipeRecords() {
   }
 }
 
+/** 每根 BRAN 发一个请求（最多 4 个同时在飞）；取不到的不进结果，调用方照常发净距请求。新检测 / 清空 / 换上下文后不再发。 */
+async function fetchPerBran<T>(refnos: readonly string[], sequence: number, fetchOne: (refno: string) => Promise<T | null>): Promise<Map<string, T>> {
+  const found = new Map<string, T>();
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < refnos.length && sequence === detectionSequence) {
+      const refno = refnos[cursor++]!;
+      const value = await fetchOne(refno).catch(() => null);
+      if (value !== null) found.set(refno, value);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, refnos.length) }, worker));
+  return found;
+}
+
 /** 直段身份键规范化（所属 BRAN 与两端都换成 `a_b`）；不是直段键回空串。 */
 function normalizeTubeKey(key: string): string {
   const tube = parseTubeKey(key);
@@ -554,14 +575,26 @@ export function usePipeDistanceStore() {
       // 超限（没靠近）是服务端给的结论，不是失败：只计数，收尾时汇总成一句提示；红字只留真正算失败的管对
       const failures: string[] = [];
       let beyond = 0;
+      // 相连的管（首尾或支管相接）外表面本来就贴着，不计净距：确定相连的不发请求，疑似的回来不超过 1 mm 才算相连
+      const connected: { pair: [string, string]; kind: PipeConnectionKind }[] = [];
       const settled: (ClearanceRecord | null)[] = Array(pairs.length).fill(null);
       // 现存记录要改的状态先记下，等回包到齐、本轮仍有效时再改：迟到的回包不许把已清空、已换上下文的记录写回去
       const invalidated = new Map<number, 'stale' | 'failed'>();
+      const lines = await fetchPerBran(branRefnos, sequence, async refno => pipeConnectivityLine(refno, await genModelV1SpatialCenterline(refno)));
+      if (sequence !== detectionSequence) return false;
+      const jobs: { index: number; suspected: boolean }[] = [];
+      for (const [index, [sourceRefno, targetRefno]] of pairs.entries()) {
+        const sourceLine = lines.get(sourceRefno);
+        const targetLine = lines.get(targetRefno);
+        const connection = sourceLine && targetLine ? pipeConnection(sourceLine, targetLine) : null;
+        if (connection === 'ends') connected.push({ pair: [sourceRefno, targetRefno], kind: 'ends' });
+        else jobs.push({ index, suspected: connection === 'branch' });
+      }
       let cursor = 0;
       // ponytail: O(n²) pairs; at most four mesh queries in flight, spatial candidate filtering can reduce large selections later.
       const worker = async () => {
-        while (cursor < pairs.length && sequence === detectionSequence) {
-          const index = cursor++;
+        while (cursor < jobs.length && sequence === detectionSequence) {
+          const { index, suspected } = jobs[cursor++]!;
           const [sourceRefno, targetRefno] = pairs[index]!;
           const inputs = { ...pipeDistanceInputs(sourceRefno, targetRefno), maxDistanceMm: distanceLimit };
           try {
@@ -592,6 +625,10 @@ export function usePipeDistanceStore() {
               invalidated.set(index, 'stale');
               continue;
             }
+            if (suspected && resp.result.distance_mm <= PIPE_CONNECTED_CLEARANCE_MM) {
+              connected.push({ pair: [sourceRefno, targetRefno], kind: 'branch' });
+              continue;
+            }
             // 先收进按管对序的 settled，worker 全部结束后统一 upsert——记录顺序不随请求完成先后漂。
             settled[index] = surfaceClearanceToRecord(resp, inputs, new Date());
           } catch (error) {
@@ -603,7 +640,7 @@ export function usePipeDistanceStore() {
           }
         }
       };
-      await Promise.all(Array.from({ length: Math.min(4, pairs.length) }, worker));
+      await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, worker));
       if (sequence !== detectionSequence) return false;
 
       for (const [index, status] of invalidated) {
@@ -613,6 +650,10 @@ export function usePipeDistanceStore() {
             clearanceStore.upsertRecord(withClearanceStatus(record, status));
           }
         }
+      }
+      // 相连不计净距：之前按净距存下的（0 mm、相交）一并撤掉
+      for (const { pair: [sourceRefno, targetRefno] } of connected) {
+        for (const record of pairRecords(sourceRefno, targetRefno)) clearanceStore.removeRecord(record.id);
       }
       lastRunSettledCount.value = 0;
       let first: ClearanceRecord | null = null;
@@ -631,15 +672,26 @@ export function usePipeDistanceStore() {
         first ??= saved;
       }
       clearanceStore.setActive(first?.id ?? null);
-      lastRunOutcome.value = { total: pairs.length, settled: lastRunSettledCount.value, beyond, failed: failures.length };
+      lastRunOutcome.value = {
+        total: pairs.length, settled: lastRunSettledCount.value, beyond, connected: connected.length, failed: failures.length,
+      };
 
       const limitText = limited ? `在 ${distanceLimit} mm 内` : '在服务端最大距离内';
-      let notice: string | null = null;
-      if (beyond === pairs.length) notice = `所选 ${pairs.length} 对管道${limitText}都没有靠近，未出结果`;
-      else if (beyond > 0) notice = `另有 ${beyond} 对${limitText}没有靠近，未出结果`;
+      const notes: string[] = [];
+      if (beyond === pairs.length) notes.push(`所选 ${pairs.length} 对管道${limitText}都没有靠近，未出结果`);
+      else if (beyond > 0) notes.push(`另有 ${beyond} 对${limitText}没有靠近，未出结果`);
+      if (connected.length > 0) notes.push(`${connected.length} 对相连（首尾或支管相接），不计净距`);
+      const unlined = branRefnos.filter(refno => !lines.has(refno));
       // 有几对没算出来就如实列出（两侧都写），别让「N 条结果」盖住缺的那几对；太多时红字只列前几条，全部进明细
       const folded = failures.length > FAILURE_LINES_SHOWN;
-      detectReport.value = { notice, diagnostics: folded ? failures.map(line => `计算失败：${line}`) : [] };
+      detectReport.value = {
+        notice: notes.length > 0 ? notes.join('；') : null,
+        diagnostics: [
+          ...connected.map(({ pair: [sourceRefno, targetRefno], kind }) => `相连：${sourceRefno} ↔ ${targetRefno}（${kind === 'ends' ? '首尾相接' : '支管相接'}）`),
+          ...(unlined.length > 0 ? [`${unlined.length} 根管道取不到中心线，没判断它们与别的管道是否相连：${unlined.join('、')}`] : []),
+          ...(folded ? failures.map(line => `计算失败：${line}`) : []),
+        ],
+      };
       if (failures.length > 0) {
         detectError.value = folded
           ? `${failures.length} 对计算失败：${failures.slice(0, FAILURE_LINES_SHOWN).join('；')}；其余见明细`

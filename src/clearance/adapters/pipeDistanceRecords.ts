@@ -110,3 +110,26 @@ export function pipeDistanceResultToClearanceRecord(
     computedAt: computedAt.toISOString(),
   });
 }
+
+/** 叶子构件类型的叫法（列表悬停「最近处」用）；没列到的照写类型码。 */
+const LEAF_NOUN_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  TUBI: '直管', BEND: '弯管', ELBO: '弯头', TEE: '三通', OLET: '支管台', CROS: '四通', REDU: '异径管', VALV: '阀门',
+  FLAN: '法兰', GASK: '垫片', WELD: '焊缝', CAP: '管帽', COUP: '管箍', FBLI: '盲板', INST: '仪表',
+});
+
+/**
+ * 外表面净距的最近处（相交时是相交处）落在两侧哪个构件上：服务端给了两侧命中的叶子，隐式直管的叶子就是 BRAN 本身。
+ * 源侧只有 refno，类型由 `nounOf` 查。没有服务端叶子可说的记录（网格拟合估算、旧版快照迁来的）给空串。
+ */
+export function pipeClearanceLeavesText(record: ClearanceRecord, nounOf: (refno: string) => string | null | undefined): string {
+  const snapshot = record.snapshot;
+  if (!snapshot || record.provenance.method !== 'surface-to-surface' || snapshot.targetLeafNoun === 'BRAN') return '';
+  const leaf = (refno: string, owner: string, noun: string | null) => {
+    if (normalizeClearanceRefno(refno) === normalizeClearanceRefno(owner)) return '直管';
+    const code = String(noun || nounOf(refno) || '').toUpperCase();
+    return code ? `${LEAF_NOUN_LABELS[code] ?? code} ${refno}` : refno;
+  };
+  const source = leaf(snapshot.sourceLeafRefno, record.inputs.sourceRefno, null);
+  const target = leaf(snapshot.targetLeafRefno, record.inputs.targetRefno, snapshot.targetLeafNoun);
+  return `${snapshot.intersects ? '相交处' : '最近处'}：${source} ↔ ${target}`;
+}

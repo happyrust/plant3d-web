@@ -87,11 +87,33 @@ function centerlineResponse(refno: string, yMm: number, odMm = 114.3) {
   };
 }
 
+/** 一根管的真实中心线（E3D 世界 mm）：依次给出各段的名词与起止点。 */
+function polylineResponse(refno: string, segments: [noun: string, start: [number, number, number], end: [number, number, number]][], odMm = 114.3) {
+  const point = ([x, y, z]: [number, number, number]) => ({ x, y, z });
+  return {
+    ...centerlineResponse(refno, 0, odMm),
+    segment_count: segments.length,
+    segments: segments.map(([noun, start, end], order) => ({
+      refno: `${refno}~${order}`,
+      order,
+      noun,
+      implicit: noun === 'TUBI',
+      start: point(start),
+      end: point(end),
+      length_mm: Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]),
+      outside_diameter_mm: odMm,
+      diameter_evidence: { source: 'catalogue', catalogue_od_mm: odMm, arrive_bore_mm: null },
+    })),
+  };
+}
+
 describe('usePipeDistanceStore · 净距检测', () => {
   beforeEach(() => {
     v1ApiMocks.genModelV1SurfaceClearance.mockReset();
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockReset();
     v1ApiMocks.genModelV1SpatialCenterline.mockReset();
+    // 缺省每根管一条互不相干的直线（相距 1 m 以上），所有管对都不判相连；连排与相连的用例各自覆盖
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => centerlineResponse(refno, 1000 * Number(refno.replace(/^.*_/, ''))));
     useClearanceStore().clearRecords();
     const store = usePipeDistanceStore();
     store.detachPersistence();
@@ -178,12 +200,13 @@ describe('usePipeDistanceStore · 净距检测', () => {
       snapshot: { sourcePoint: [0.001, 0.002, 0.003], targetPoint: [0.001, 0.002, 0.323] },
       modelVersion: { sourceSesno: 1, targetSesno: 1 },
     });
-    let resolve!: (value: unknown) => void;
+    let resolve: ((value: unknown) => void) | undefined;
     v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(() => new Promise(done => { resolve = done; }));
     const pending = store.autoDetectBrans(['24381_1001', '24381_1002']);
+    await vi.waitFor(() => expect(resolve).toBeDefined());
     clearance.bindPersistence('project-B', local, false);
     store.bindPersistence('project-B', local, false);
-    resolve(surfaceClearanceResponse());
+    resolve!(surfaceClearanceResponse());
     expect(await pending).toBe(false);
     expect(store.pipeResults.value).toEqual([]);
     v1ApiMocks.genModelV1SurfaceClearance.mockClear();
@@ -281,7 +304,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.pipeResults.value[0]!.inputs.targetRefno).toBe('24381_1002');
     expect(store.detectError.value).toBeNull();
     expect(store.detectNotice.value).toBe('另有 1 对在服务端最大距离内没有靠近，未出结果');
-    expect(store.lastRunOutcome.value).toEqual({ total: 2, settled: 1, beyond: 1, failed: 0 });
+    expect(store.lastRunOutcome.value).toEqual({ total: 2, settled: 1, beyond: 1, connected: 0, failed: 0 });
   });
 
   it('某一对服务端报错（如 404 no_model_mesh）不拖垮整批，现存记录标 failed', async () => {
@@ -684,7 +707,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.detectError.value).toMatch(/^6 对计算失败：.*；其余见明细$/);
     expect(store.detectDiagnostics.value).toHaveLength(6);
     expect(store.detectDiagnostics.value).toContain('计算失败：24381_1001 ↔ 24381_1002：HTTP 503');
-    expect(store.lastRunOutcome.value).toEqual({ total: 6, settled: 0, beyond: 0, failed: 6 });
+    expect(store.lastRunOutcome.value).toEqual({ total: 6, settled: 0, beyond: 0, connected: 0, failed: 6 });
   });
 
   it('清空或新批次使旧查询失效，且最多同时发出4个查询', async () => {
@@ -694,7 +717,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
     }));
     const store = usePipeDistanceStore();
     const pending = store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003', '24381_1004'], { pairMode: 'all-pairs' });
-    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(4);
+    await vi.waitFor(() => expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(4));
     store.clearResults();
     resolvers.forEach(resolve => resolve());
     expect(await pending).toBe(false);
@@ -707,6 +730,7 @@ describe('usePipeDistanceStore · 净距检测', () => {
       finishOld = () => resolve(surfaceClearanceResponse());
     })).mockResolvedValue(surfaceClearanceResponse());
     const old = store.autoDetectBrans(['24381_1001', '24381_1002']);
+    await vi.waitFor(() => expect(finishOld).toBeDefined());
     await store.autoDetectBrans(['24381_1003', '24381_1004']);
     finishOld();
     expect(await old).toBe(false);
@@ -805,5 +829,50 @@ describe('usePipeDistanceStore · 净距检测', () => {
     v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse({ accuracy_class: 'approximate' }));
     await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
     expect(store.pipeResults.value.map(record => record.status)).toEqual(['stale']);
+  });
+
+  it('首尾相接的管对不发净距请求，汇总成「相连，不计净距」，之前存下的 0 mm 记录撤掉', async () => {
+    const store = usePipeDistanceStore();
+    // 取不到中心线时无从判相连，相接处的相交照常出一条 0 mm 记录
+    v1ApiMocks.genModelV1SpatialCenterline.mockRejectedValue(new Error('offline'));
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(surfaceClearanceResponse({
+      result: { ...surfaceClearanceResponse().result, distance_mm: 0, intersects: true },
+    }));
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    expect(store.pipeResults.value).toHaveLength(1);
+    expect(store.detectDiagnostics.value).toEqual(['2 根管道取不到中心线，没判断它们与别的管道是否相连：24381_1001、24381_1002']);
+
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => (refno === '24381_1001'
+      ? polylineResponse(refno, [['TUBI', [0, 0, 0], [5000, 0, 0]]])
+      : polylineResponse(refno, [['TUBI', [5000, 0, 0], [9000, 0, 0]]])));
+    v1ApiMocks.genModelV1SurfaceClearance.mockClear();
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    expect(v1ApiMocks.genModelV1SurfaceClearance).not.toHaveBeenCalled();
+    expect(store.pipeResults.value).toEqual([]);
+    expect(store.detectError.value).toBeNull();
+    expect(store.detectNotice.value).toBe('1 对相连（首尾或支管相接），不计净距');
+    expect(store.detectDiagnostics.value).toEqual(['相连：24381_1001 ↔ 24381_1002（首尾相接）']);
+    expect(store.lastRunOutcome.value).toEqual({ total: 1, settled: 0, beyond: 0, connected: 1, failed: 0 });
+  });
+
+  it('支管接在三通上是疑似相连：净距不超过 1 mm 按相连，否则照常出净距', async () => {
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => (refno === '24381_1001'
+      ? polylineResponse(refno, [['TUBI', [-1000, 0, 0], [0, 0, 0]], ['TEE', [0, 0, 0], [286, 0, 0]], ['TUBI', [286, 0, 0], [1286, 0, 0]]], 168.3)
+      : polylineResponse(refno, [['TUBI', [143, 117, 0], [143, 1117, 0]]], 60.3)));
+    const store = usePipeDistanceStore();
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse({
+      result: { ...surfaceClearanceResponse().result, distance_mm: 0, intersects: true },
+    }));
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(1);
+    expect(store.pipeResults.value).toEqual([]);
+    expect(store.detectDiagnostics.value).toEqual(['相连：24381_1001 ↔ 24381_1002（支管相接）']);
+
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse({
+      result: { ...surfaceClearanceResponse().result, distance_mm: 40 },
+    }));
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { pairMode: 'all-pairs' });
+    expect(store.pipeResults.value.map(record => Math.round(record.snapshot!.distanceM * 1000))).toEqual([40]);
+    expect(store.detectNotice.value).toBeNull();
   });
 });
