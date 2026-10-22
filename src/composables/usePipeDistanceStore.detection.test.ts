@@ -489,6 +489,57 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(() => store.prepareSnapshotRestore({ ...snapshot, selectedTubeKeys: ['24381_1001'] })).toThrow();
   });
 
+  it('连排缺省：相邻上限 1000 mm、最短共同区段 300 mm（选了直段时不限）；穿过件等诊断收进可展开的详情', async () => {
+    const store = usePipeDistanceStore();
+    expect(store.pipeRowMaxAdjacentMm.value).toBe(1000);
+    expect(store.pipeRowMinCommonMm.value).toBe(300);
+    /** 一根沿 x 的直管：y 定位置，[x0, x1] 定直段范围；唯一一段是头上的隐式管身 `Head~<refno>0`。 */
+    const line = (refno: string, y: number, x0: number, x1: number, warnings: string[] = []) => {
+      const base = centerlineResponse(refno, y);
+      return { ...base, warnings, segments: [{ ...base.segments[0]!, refno: `Head~${refno}0`, start: { x: x0, y, z: 0 }, end: { x: x1, y, z: 0 }, length_mm: x1 - x0 }] };
+    };
+    const lines: Record<string, ReturnType<typeof line>> = {
+      '24381_1001': line('24381_1001', 0, 0, 5000, ['3 个成员没有长度（穿过件），不参与走廊']),
+      '24381_1002': line('24381_1002', 300, 0, 5000),
+      '24381_1003': line('24381_1003', 1600, 0, 5000),
+      '24381_1004': line('24381_1004', -300, 4800, 6000),
+    };
+    v1ApiMocks.genModelV1SpatialCenterline.mockImplementation(async (refno: string) => lines[refno]);
+    const measuredPairs = () => new Set(store.pipeResults.value.map(r => pairKey(r.inputs.sourceRefno, r.inputs.targetRefno)));
+
+    // 1003 离 1002 有 1300 mm，超过相邻上限不算邻管；1004 只和另外两根并排 200 mm（拐角那种），不出尺寸
+    store.setBranRefnos(Object.keys(lines));
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    expect(measuredPairs()).toEqual(new Set([pairKey('Head~24381_10010', 'Head~24381_10020')]));
+    expect(store.detectNotice.value).toBeNull();
+    expect(store.detectDiagnostics.value).toContain('24381_1001：3 个成员没有长度（穿过件），不参与走廊');
+
+    // 手选的直段就是要量的地方：只并排 200 mm 也量
+    store.setTubeKeys(['24381_1001#24381_1001-24381_10010#0', '24381_1004#24381_1004-24381_10040#0']);
+    expect(await store.runPipeRowDetection({ alignMode: 'center' })).toBe(true);
+    expect(measuredPairs()).toEqual(new Set([
+      pairKey('Head~24381_10010', 'Head~24381_10020'),
+      pairKey('Head~24381_10010', 'Head~24381_10040'),
+    ]));
+
+    // 清掉提示连诊断一起清
+    store.detectNotice.value = null;
+    expect(store.detectDiagnostics.value).toEqual([]);
+
+    // 快照：新三格随抽屉设置存取；没有相邻上限这一格的旧快照用缺省 1000，存的是 null 才是不限
+    const snapshot = store.captureSnapshot() as Record<string, unknown>;
+    expect(snapshot).toMatchObject({ pipeRowMaxAdjacentMm: 1000, pipeRowMinCommonMm: 300, pipeRowBothMetrics: false });
+    const older = { ...snapshot };
+    delete older.pipeRowMaxAdjacentMm;
+    store.pipeRowMaxAdjacentMm.value = null;
+    store.prepareSnapshotRestore(older)();
+    expect(store.pipeRowMaxAdjacentMm.value).toBe(1000);
+    store.prepareSnapshotRestore({ ...snapshot, pipeRowMaxAdjacentMm: null, pipeRowMinCommonMm: 500, pipeRowBothMetrics: true })();
+    expect([store.pipeRowMaxAdjacentMm.value, store.pipeRowMinCommonMm.value, store.pipeRowBothMetrics.value]).toEqual([null, 500, true]);
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, pipeRowMinCommonMm: 0 })).toThrow();
+    store.prepareSnapshotRestore(snapshot)();
+  });
+
   it('连排模式：检测途中清空结果，迟到的归排不写库', async () => {
     let resolveFirst!: (value: unknown) => void;
     v1ApiMocks.genModelV1SpatialCenterline

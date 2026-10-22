@@ -54,6 +54,11 @@ export function pipeRowRecordId(
   return `piperow:${alignMode}:${metric}:${a}:${b}@${formatAxialMm(section.axialStartMm)}-${formatAxialMm(section.axialEndMm)}`;
 }
 
+/** 同一对相邻管的两条连排记录（中心距 / 推导间隔）共用的键：记录 id 去掉度量段；不是连排记录回 null。 */
+export function pipeRowPairKey(record: Pick<ClearanceRecord, 'id' | 'pipeRow'>): string | null {
+  return record.pipeRow ? record.id.replace(`:${record.pipeRow.metric}:`, ':') : null;
+}
+
 // 下面三条只出现在人工确认后生成的记录上：检测时带这些判定的排不出正式记录（§4.2 / §5.5 / §5.7）。
 export const PIPE_ROW_AMBIGUOUS_WARNING: ComputationWarning = Object.freeze({
   code: 'pipe_row_ambiguous',

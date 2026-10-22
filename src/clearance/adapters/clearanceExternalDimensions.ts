@@ -2,6 +2,7 @@
 import type { ClearanceFaceKind, ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import type { ExternalDimensionMappingResult, ExternalDimensionRecord, Vec3 } from '@/dimension';
 
+import { pipeRowPairKey } from '@/clearance/adapters/pipeRowRecords';
 import { pipeRowGapEstimated } from '@/clearance/domain/pipeRowTypes';
 import { computationMethodLabel } from '@/composables/measurementMethodLabel';
 import { toLegacyApproximate } from '@/measurement/domain/computationProvenance';
@@ -85,6 +86,11 @@ export function clearanceSourceLabel(record: ClearanceRecord): string {
 export type ClearanceExternalDimensionOptions = Readonly<{
   /** 尺寸线离两点连线的偏移（米），缺省 0.5 */
   offsetM?: number;
+  /**
+   * 连排同一对的中心距与推导间隔都画。缺省只画一条：推导间隔画得出就画它（中心距写进它的来源说明），
+   * 名义接触 / 重叠 / 缺外径（推导间隔没有快照）或它被隐藏时画中心距。
+   */
+  pipeRowBothMetrics?: boolean;
 }>;
 
 /**
@@ -98,9 +104,24 @@ export function clearanceRecordsToExternalDimensions(
   const out: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
   const offsetM = options.offsetM ?? 0.5;
+  const gapDrawnPairs = new Set<string>();
+  const centerByPair = new Map<string, ClearanceRecord>();
+  if (!options.pipeRowBothMetrics) {
+    for (const record of records) {
+      const pairKey = pipeRowPairKey(record);
+      if (!pairKey) continue;
+      if (record.pipeRow!.metric === 'center-distance') centerByPair.set(pairKey, record);
+      else if (record.snapshot && !record.snapshot.intersects) gapDrawnPairs.add(pairKey);
+    }
+  }
   for (const record of records) {
     const id = `${CLEARANCE_EXTERNAL_SOURCE}:${record.id}`;
     const snapshot = record.snapshot;
+    const pairKey = pipeRowPairKey(record);
+    if (pairKey && record.pipeRow!.metric === 'center-distance' && gapDrawnPairs.has(pairKey)) {
+      skipped.push({ id, reason: 'Pipe-row pair is drawn as its nominal gap' });
+      continue;
+    }
     if (!snapshot) {
       skipped.push({
         id,
@@ -116,10 +137,13 @@ export function clearanceRecordsToExternalDimensions(
     }
     const a: Vec3 = snapshot.sourcePoint;
     const b: Vec3 = snapshot.targetPoint;
+    const foldedCenter = pairKey && record.pipeRow!.metric === 'derived-gap' ? centerByPair.get(pairKey)?.snapshot : null;
     out.push({
       id,
       source: CLEARANCE_EXTERNAL_SOURCE,
-      sourceLabel: clearanceSourceLabel(record),
+      sourceLabel: foldedCenter
+        ? `${clearanceSourceLabel(record)}；中心距 ${formatMillimetres(foldedCenter.distanceM)}`
+        : clearanceSourceLabel(record),
       role: 'external',
       layout: {
         id,

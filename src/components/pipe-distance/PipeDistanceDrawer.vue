@@ -19,7 +19,7 @@ import type { PipeRowSideOd } from '@/clearance/domain/pipeRowTypes';
 import type { OutsideDiameterEvidence } from '@/composables/branParallelSpacing';
 import type { Vec3 } from '@/types/vec3';
 
-import { pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
+import { pipeRowPairKey, pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
 import { isFormalPipeRowGroup, type PipeRowGroup } from '@/clearance/domain/pipeRowGeometry';
 import { computationMethodLabel, computationWarningsText } from '@/composables/measurementMethodLabel';
 import { parseTubeKey } from '@/composables/spatialTree';
@@ -28,7 +28,7 @@ import {
   findOwnerBranRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
+import { PIPE_ROW_DEFAULT_MIN_COMMON_MM, usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -429,9 +429,12 @@ function recordDetailTitle(record: ClearanceRecord): string | undefined {
   if (!pipeRow) return warnings || undefined;
   const [x, y, z] = pipeRow.section.point;
   const od = (side: PipeRowSideOd) => `${side.odM === null ? '—' : `${Math.round(side.odM * 10000) / 10} mm`}（${OD_EVIDENCE_LABELS[side.evidence]}）`;
+  const pairKey = pipeRowPairKey(record);
+  const sibling = store.pipeResults.value.find(other => other.id !== record.id && pipeRowPairKey(other) === pairKey);
   return [
     `${pipeRow.alignMode === 'center' ? '管中心成排' : '管底对齐'} · 截面点 (${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)}) m · 沿管向 ${pipeRow.section.axialStartM.toFixed(3)}–${pipeRow.section.axialEndM.toFixed(3)} m`,
     `外径：${od(pipeRow.sourceOd)} / ${od(pipeRow.targetOd)}`,
+    sibling?.pipeRow ? `同一对的${sibling.pipeRow.metric === 'center-distance' ? '中心距' : '名义间隔'}：${pipeRowValueText(sibling)}` : '',
     warnings,
   ].filter(Boolean).join('\n');
 }
@@ -516,6 +519,14 @@ const maxAdjacentInput = computed({
   set: (value: number | string) => {
     const n = Number(value);
     store.pipeRowMaxAdjacentMm.value = value !== '' && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  },
+});
+
+const minCommonInput = computed({
+  get: () => store.pipeRowMinCommonMm.value,
+  set: (value: number | string) => {
+    const n = Number(value);
+    store.pipeRowMinCommonMm.value = value !== '' && Number.isFinite(n) && n > 0 ? Math.max(1, Math.round(n)) : PIPE_ROW_DEFAULT_MIN_COMMON_MM;
   },
 });
 
@@ -706,8 +717,28 @@ function isResultHidden(id: string): boolean {
                   class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
                 <span class="text-xs text-muted-foreground">mm</span>
               </div>
-              <p class="text-[11px] text-muted-foreground">相邻中心距超过它就断开成两排，不量两组管廊之间的空档；留空不限。</p>
+              <p class="text-[11px] text-muted-foreground">相邻中心距超过它就断开成两排，不量两组管廊之间、上下层之间的空档；缺省 1000 mm，留空不限。</p>
             </div>
+
+            <!-- 最短共同区段 -->
+            <div v-if="isRowMode" class="space-y-1">
+              <label class="text-xs font-medium text-foreground" for="pipe-row-min-common">最短共同区段</label>
+              <div class="flex items-center gap-2">
+                <input id="pipe-row-min-common" v-model.number="minCommonInput"
+                  type="number"
+                  min="1"
+                  data-testid="pipe-row-min-common"
+                  class="flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                <span class="text-xs text-muted-foreground">mm</span>
+              </div>
+              <p class="text-[11px] text-muted-foreground">两根管共同的直段短于它就不量，拐角处只并排一小截的不出尺寸；缺省 300 mm。选了直段时不限。</p>
+            </div>
+
+            <!-- 三维标注口径 -->
+            <label v-if="isRowMode" class="flex cursor-pointer items-start gap-2" data-testid="pipe-row-both-metrics">
+              <input v-model="store.pipeRowBothMetrics.value" type="checkbox" class="mt-0.5 h-3.5 w-3.5" />
+              <span class="text-[11px] text-muted-foreground">三维里中心距和名义间隔都画。不勾时每对只画一条：名义间隔；接触、重叠或缺外径时画中心距。另一个值在列表和悬停说明里。</span>
+            </label>
 
             <!-- 最大距离 -->
             <div v-if="!isRowMode" class="space-y-1">
@@ -797,6 +828,14 @@ function isResultHidden(id: string): boolean {
               data-testid="pipe-distance-notice">
               {{ store.detectNotice.value }}
             </div>
+            <details v-if="store.detectDiagnostics.value.length > 0"
+              class="rounded-md border border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground"
+              data-testid="pipe-distance-diagnostics">
+              <summary class="cursor-pointer select-none">诊断信息 {{ store.detectDiagnostics.value.length }} 条（穿过件、没有共同区段的管向组等）</summary>
+              <ul class="mt-1 space-y-0.5">
+                <li v-for="(line, index) in store.detectDiagnostics.value" :key="index">{{ line }}</li>
+              </ul>
+            </details>
           </div>
 
           <!-- 4. 检测结果 -->

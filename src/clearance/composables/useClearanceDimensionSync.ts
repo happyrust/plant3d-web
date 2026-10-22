@@ -15,12 +15,13 @@ export type ClearanceDimensionSink = Readonly<{
 
 /**
  * store 里可见的 Clearance 记录 → 外部尺寸源 `clearance`（09-11 PR1.1 第 4 条：外部尺寸源只负责画）。
- * watch 记录 / 开关 / 尺寸系统三者，任一变化整源替换。
+ * watch 记录 / 开关 / 尺寸系统 / 连排口径显示，任一变化整源替换。
  */
 export function useClearanceDimensionSync(
   dimensionSystemRef: Ref<ClearanceDimensionSink | null>,
   clearanceStore: Pick<ReturnType<typeof useClearanceStore>, 'visibleRecords' | 'showAnnotations'>,
   requestRender?: () => void,
+  display: Readonly<{ pipeRowBothMetrics?: Ref<boolean> }> = {},
 ) {
   let lastSkipped = 0;
 
@@ -32,7 +33,9 @@ export function useClearanceDimensionSync(
       requestRender?.();
       return;
     }
-    const result = clearanceRecordsToExternalDimensions(clearanceStore.visibleRecords.value);
+    const result = clearanceRecordsToExternalDimensions(clearanceStore.visibleRecords.value, {
+      pipeRowBothMetrics: display.pipeRowBothMetrics?.value ?? false,
+    });
     system.replaceExternalSource(CLEARANCE_EXTERNAL_SOURCE, result.records);
     if (result.skipped.length !== lastSkipped) {
       lastSkipped = result.skipped.length;
@@ -49,7 +52,7 @@ export function useClearanceDimensionSync(
   }
 
   const stop: WatchStopHandle = watch(
-    [dimensionSystemRef, clearanceStore.visibleRecords, clearanceStore.showAnnotations],
+    [dimensionSystemRef, clearanceStore.visibleRecords, clearanceStore.showAnnotations, () => display.pipeRowBothMetrics?.value],
     sync,
     { deep: true, immediate: true },
   );

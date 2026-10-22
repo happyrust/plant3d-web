@@ -110,10 +110,24 @@ const PIPE_ROW_FALLBACK_NORMALS = Object.freeze({
 export type PipeRowFallbackNormal = 'none' | keyof typeof PIPE_ROW_FALLBACK_NORMALS;
 const PIPE_ROW_FALLBACK_NORMAL_KEYS: readonly string[] = ['none', ...Object.keys(PIPE_ROW_FALLBACK_NORMALS)];
 const pipeRowFallbackNormal = ref<PipeRowFallbackNormal>('none');
+/** 连排排内相邻中心距上限的缺省（mm）：超过就不算排内邻管——两组管廊之间、上下层之间的空档不量。 */
+export const PIPE_ROW_DEFAULT_MAX_ADJACENT_MM = 1000;
+/** 连排最短共同区段的缺省（mm）：拐角处两根管只并排一小截，不出尺寸。 */
+export const PIPE_ROW_DEFAULT_MIN_COMMON_MM = 300;
 /** 连排排内相邻中心距上限（mm，null = 不限）：归排规则，不是结果筛选。 */
-const pipeRowMaxAdjacentMm = ref<number | null>(null);
-/** 连排检测成功时的提示（诊断、待确认、旧服务端外径估算）——不是失败，不写进 `detectError`。 */
-const detectNotice = ref<string | null>(null);
+const pipeRowMaxAdjacentMm = ref<number | null>(PIPE_ROW_DEFAULT_MAX_ADJACENT_MM);
+/** 连排最短共同区段（mm）：两根管共同的直段短于它就不归排；选了直段时不限（所选直段就是要量的地方）。 */
+const pipeRowMinCommonMm = ref(PIPE_ROW_DEFAULT_MIN_COMMON_MM);
+/** 三维里连排同一对两种口径都画；缺省只画一条（名义间隔可画就画它，否则中心距），另一个值进列表与悬停说明。 */
+const pipeRowBothMetrics = ref(false);
+/** 连排检测成功时的提示与诊断明细：提示要用户留意（待确认、缺口、旧服务端外径估算），诊断（穿过件、没有共同区段的管向组）收进详情。 */
+const detectReport = ref<Readonly<{ notice: string | null; diagnostics: readonly string[] }>>({ notice: null, diagnostics: [] });
+/** 不是失败，不写进 `detectError`；清掉提示连诊断一起清。 */
+const detectNotice = computed<string | null>({
+  get: () => detectReport.value.notice,
+  set: notice => { detectReport.value = { notice, diagnostics: notice === null ? [] : detectReport.value.diagnostics }; },
+});
+const detectDiagnostics = computed(() => detectReport.value.diagnostics);
 /** 预览里已人工确认的排键（只对 `lastRowDetection` 有意义）。 */
 const confirmedRowKeys = ref<ReadonlySet<string>>(new Set());
 /** 最近一次连排检测的提交上下文；`sequence` 与当前不符 = 之后有新检测 / 清空 / 换上下文，预览确认作废。 */
@@ -173,7 +187,9 @@ function resetPipeSnapshot() {
   detectionMode.value = 'all-pairs';
   pipeRowAlignMode.value = 'center';
   pipeRowFallbackNormal.value = 'none';
-  pipeRowMaxAdjacentMm.value = null;
+  pipeRowMaxAdjacentMm.value = PIPE_ROW_DEFAULT_MAX_ADJACENT_MM;
+  pipeRowMinCommonMm.value = PIPE_ROW_DEFAULT_MIN_COMMON_MM;
+  pipeRowBothMetrics.value = false;
   lastRowDetection.value = null;
   confirmedRowKeys.value = new Set();
   lastRowContext = null;
@@ -199,6 +215,9 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
       && (typeof data.pipeRowMaxAdjacentMm !== 'number' || !Number.isFinite(data.pipeRowMaxAdjacentMm) || data.pipeRowMaxAdjacentMm <= 0))
     || (data.selectedTubeKeys !== undefined && (!Array.isArray(data.selectedTubeKeys)
       || !data.selectedTubeKeys.every(item => typeof item === 'string' && parseTubeKey(item) !== null)))
+    || (data.pipeRowMinCommonMm !== undefined
+      && (typeof data.pipeRowMinCommonMm !== 'number' || !Number.isFinite(data.pipeRowMinCommonMm) || data.pipeRowMinCommonMm <= 0))
+    || (data.pipeRowBothMetrics !== undefined && typeof data.pipeRowBothMetrics !== 'boolean')
     || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
   const legacyResults = (data.results as PipeDistanceResult[]).map(result => {
     if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
@@ -221,7 +240,12 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   const distanceLimit = data.maxDistance;
   const angleLimit = data.maxAngle;
   const fallbackNormal = (data.pipeRowFallbackNormal ?? 'none') as PipeRowFallbackNormal;
-  const adjacentLimit = typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : null;
+  // 缺这一格（它出现之前的快照）用缺省上限；存的是 null 才是用户清空成了不限
+  const adjacentLimit = data.pipeRowMaxAdjacentMm === undefined
+    ? PIPE_ROW_DEFAULT_MAX_ADJACENT_MM
+    : typeof data.pipeRowMaxAdjacentMm === 'number' ? data.pipeRowMaxAdjacentMm : null;
+  const minCommon = typeof data.pipeRowMinCommonMm === 'number' ? data.pipeRowMinCommonMm : PIPE_ROW_DEFAULT_MIN_COMMON_MM;
+  const bothMetrics = data.pipeRowBothMetrics === true;
   const branRefnos = data.selectedBranRefnos as string[];
   // 直段是后加的（可选）；所属 BRAN 不在选择里的直段丢掉，不让它把 BRAN 悄悄带回来
   const tubeKeys = ((data.selectedTubeKeys ?? []) as string[]).filter(key => branRefnos.includes(parseTubeKey(key)!.unitRefno));
@@ -249,6 +273,8 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
       : 'center';
     pipeRowFallbackNormal.value = fallbackNormal;
     pipeRowMaxAdjacentMm.value = adjacentLimit;
+    pipeRowMinCommonMm.value = minCommon;
+    pipeRowBothMetrics.value = bothMetrics;
   };
 }
 
@@ -262,12 +288,14 @@ function capturePipeSnapshot() {
     activeIndex: null, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
     maxDistance: maxDistance.value, maxAngle: maxAngle.value,
     detectionMode: detectionMode.value, pipeRowAlignMode: pipeRowAlignMode.value,
-    pipeRowFallbackNormal: pipeRowFallbackNormal.value, pipeRowMaxAdjacentMm: pipeRowMaxAdjacentMm.value });
+    pipeRowFallbackNormal: pipeRowFallbackNormal.value, pipeRowMaxAdjacentMm: pipeRowMaxAdjacentMm.value,
+    pipeRowMinCommonMm: pipeRowMinCommonMm.value, pipeRowBothMetrics: pipeRowBothMetrics.value });
 }
 
 const persistence = createScopedResultPersistence({
   prefix: 'plant3d-pipe-distance-v1',
-  sources: [selectedBranRefnos, selectedTubeKeys, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode, pipeRowFallbackNormal, pipeRowMaxAdjacentMm],
+  sources: [selectedBranRefnos, selectedTubeKeys, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode,
+    pipeRowFallbackNormal, pipeRowMaxAdjacentMm, pipeRowMinCommonMm, pipeRowBothMetrics],
   capture: capturePipeSnapshot,
   restore: restorePipeSnapshot,
   invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
@@ -615,13 +643,14 @@ export function usePipeDistanceStore() {
       const inputs: PipeRowRunInput[] = [];
       const sesnoByBran: Record<string, number | null> = {};
       const legacyOdBrans: string[] = [];
+      const diagnostics: string[] = [];
       /** 按直段量的 BRAN 上这次重量的整条直段的全部段：之前锚在这些段上的结果（整段量的或别的直段选择）由这次替换。 */
       const remeasuredAnchors = new Set<string>();
       for (const refno of branRefnos) {
         const line = lines.get(refno);
         sesnoByBran[refno] = line?.source_version?.sesno ?? null;
         if (!line) continue;
-        for (const text of line.warnings ?? []) warnings.push(`${refno}：${text}`);
+        for (const text of line.warnings ?? []) diagnostics.push(`${refno}：${text}`);
         // 缺口不许跨接（§5.6）：中心线断档两侧的段哪怕共线也分成两条直段，缺口如实上报。
         // 旧服务端不给逐段外径来源：按服务端同一规则取成员外径、记估算档（推导间隔带 ≈，管底归排待确认）。
         const fullRuns = buildStraightRuns(line, {
@@ -688,12 +717,15 @@ export function usePipeDistanceStore() {
         supportNormal: options.supportNormal,
         fallbackSupportNormal: fallbackNormal === 'none' ? undefined : PIPE_ROW_FALLBACK_NORMALS[fallbackNormal],
         maxAdjacentCenterDistanceMm: pipeRowMaxAdjacentMm.value,
+        // 选了直段就不限最短共同区段：用户亲手选的直段哪怕只并排一小截也要量
+        minCommonLengthMm: tubeSegments.size > 0 ? undefined : pipeRowMinCommonMm.value,
       });
       lastRowDetection.value = detection;
       if (legacyOdBrans.length > 0) {
         warnings.push(`中心线接口未提供逐段外径来源（旧服务端），${legacyOdBrans.length} 根管道按成员外径估算：推导间隔带 ≈，管底对齐的排需确认后生成`);
       }
-      warnings.push(...detection.diagnostics);
+      if (detection.supportNormalDegenerate) warnings.push('有主管向近铅直的管组没法按世界向上找管底，请指定竖管支承法向后重新检测');
+      diagnostics.push(...detection.diagnostics);
 
       const created = commitPipeRowDetection({
         groups: detection.groups,
@@ -708,7 +740,7 @@ export function usePipeDistanceStore() {
       lastRowContext = { sequence, sesnoByBran, sourceAnnotation: options.sourceAnnotation ?? null };
       clearanceStore.setActive(created[0]?.id ?? null);
       if (detection.groups.length === 0) warnings.push('没有检测到成排的相邻管道');
-      detectNotice.value = warnings.length > 0 ? warnings.join('；') : null;
+      detectReport.value = { notice: warnings.length > 0 ? warnings.join('；') : null, diagnostics };
       return true;
     } catch (e) {
       if (sequence !== detectionSequence) return false;
@@ -868,12 +900,15 @@ export function usePipeDistanceStore() {
     resultMinDistance,
     visibleResults,
     detectNotice,
+    detectDiagnostics,
     modeResults,
     otherModeVisibleCount,
     detectionMode,
     pipeRowAlignMode,
     pipeRowFallbackNormal,
     pipeRowMaxAdjacentMm,
+    pipeRowMinCommonMm,
+    pipeRowBothMetrics,
     lastRowDetection,
     confirmedRowKeys,
     selectedTubeKeys,

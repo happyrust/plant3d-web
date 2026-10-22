@@ -120,18 +120,29 @@ describe('clearanceExternalDimensions', () => {
     expect(clearanceDimensionText(inHole)).toBe('50mm ⊥');
   });
 
-  it('连排双度量：推导间隔画到连线另一侧，尺寸文字自带口径前缀', () => {
+  it('连排双度量：缺省每对只画名义间隔、中心距并进它的来源说明；两种都画时推导间隔画到连线另一侧；尺寸文字自带口径前缀', () => {
     const center = pipeRowRecord('center-distance', 300);
     const gap = pipeRowRecord('derived-gap', 50);
     expect(clearanceDimensionText(center)).toBe('中心距 300mm');
     expect(clearanceDimensionText(gap)).toBe('名义间隔 50mm');
-    const result = clearanceRecordsToExternalDimensions([center, gap]);
-    expect(result.skipped).toEqual([]);
-    expect(result.records.map(d => ('placement' in d.layout && 'side' in d.layout.placement ? d.layout.placement.side : null))).toEqual([1, -1]);
-    expect(result.records.map(d => d.sourceLabel)).toEqual([
+
+    const folded = clearanceRecordsToExternalDimensions([center, gap]);
+    expect(folded.records.map(d => d.id)).toEqual([`clearance:${gap.id}`]);
+    expect(folded.records[0]!.sourceLabel).toBe('连排外径推导间隔: a~0_1 → b~0_1；中心距 300mm');
+    expect(folded.skipped).toEqual([{ id: `clearance:${center.id}`, reason: 'Pipe-row pair is drawn as its nominal gap' }]);
+
+    const both = clearanceRecordsToExternalDimensions([center, gap], { pipeRowBothMetrics: true });
+    expect(both.skipped).toEqual([]);
+    expect(both.records.map(d => ('placement' in d.layout && 'side' in d.layout.placement ? d.layout.placement.side : null))).toEqual([1, -1]);
+    expect(both.records.map(d => d.sourceLabel)).toEqual([
       '连排截面中心距: a~0_1 → b~0_1',
       '连排外径推导间隔: a~0_1 → b~0_1',
     ]);
+
+    // 推导间隔画不出（名义接触 / 重叠 / 缺外径时没有快照）或被隐藏：这一对画中心距
+    const contact = { ...gap, snapshot: null } as ClearanceRecord;
+    expect(clearanceRecordsToExternalDimensions([center, contact]).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
+    expect(clearanceRecordsToExternalDimensions([center]).records.map(d => d.id)).toEqual([`clearance:${center.id}`]);
   });
 
   it('连排推导间隔：精度档 derived-nominal 不让每条都带 ≈，只有外径为估算时带；中心距不带', () => {
