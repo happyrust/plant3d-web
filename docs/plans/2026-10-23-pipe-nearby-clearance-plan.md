@@ -3,7 +3,7 @@
 > 日期：2026-10-23
 > 基线：`plant3d-web` `main@0d7a1138`（线上前端 `614ecd87`）；`gen-model` `refactor@d3145d26a`（线上后端 0.1.43）
 > 关联：`docs/plans/2026-10-22-pipe-surface-clearance-fix-plan.md`（T8 上线了周边检测接口）、`docs/plans/2026-10-17-bran-auto-nearest-clearance-and-range-view-plan.md`（空间计算面板的按类型最近净距）
-> 状态：**已批准（2026-10-23，Plannotator 无批注），实施中**：后端 N1 + N2 已提交到分支，待并入与发版，见 §7
+> 状态：**已完成并上线验收（2026-10-23）**：后端 N1 + N2 + N3（`gen-model` `publish@384e67151`）与前端 N5 + N6 + N7（`plant3d-web` `main@f76042a2`）均已部署 `123.57.182.243` 并通过冷启动验收，见 §7
 
 ---
 
@@ -122,7 +122,7 @@
 
 - [x] **后端单测**：`cargo test --lib -- spatial_branches spatial_query spatial_tube_index spatial_tree_tubes surface_clearance`，含「未加载邻管只靠直管段靠近」「源管未加载」「索引未建好」「L 形源管按叶子盒与粗筛」的新用例（61 passed）。
 - [x] **例程**：`cargo run --example pipe_clearance_probe` 全部成立。
-- [ ] **线上冷启动验收**：发版重启后不加载任何模型，对 146830 / 145018 / 144947 / 144872 做周边检测：全部 200；同区逐根精算比对 0 漏；146830 找到 144960 / 145892 / 146146。
+- [x] **线上冷启动验收**：发版重启后不加载任何模型（`overlayRoots = 0`），对 146830 / 145018 / 144947 / 144872 做周边检测：全部 200；同区 165 根逐根精算比对 0 漏；146830 找到 144960 / 145892 / 146146，候选数 24 → 18（精度 72.2%）；145018 候选数 33 → 10。
 - [x] **前端**：单测、`npm run type-check`（基线 471，不新增）、lint；浏览器实测周边检测后选择不变、结果按净距排、提示分级。
 
 ---
@@ -137,4 +137,4 @@
 - **前端 N5 + N6 + 审核修复**：`plant3d-web` `main` `bf3abfbf` / `00b446b0` / `19b0ae67`（已部署 `123.57.182.243`）。`preserveSelection` 保留选集、周边分组卡（`nearbyGroup`）+「重新检测周边」+「只看周边 / 恢复场景」隔离、列表按净距升序排序（相交置顶）、0 命中与截断/告警归入 `detectNotice`、源管未加载 404 友好提示、`parallel-centerline` 隔离与禁重算、零长度三通分支 `endReaches` 修正；14 个测试文件 152 条单测全过，`type-check` 0 新增，线上浏览器实测通过。
 - **后端 N3**：`gen-model` 分支 `fix/nearby-coverage`。`Center` 收集源管各条有效几何的 `leaf_boxes`，`scan_tree_for_branches` 按叶子盒逐个探针取空间树候选并按叶子盒求最小距离；`ModelMemoryStore` 新增 `root_bounds` 按回执缓存每根整根并集盒，`spatial_branches::assemble` 先用整根并集盒粗筛投影根与直管段索引，粗筛命中（或含坏盒）才判归属、读逐条记录并按叶子盒量距；归属不明仅统计粗筛范围内的候选。
 - **验收脚本 N7**：新增 `scripts/verify-pipe-nearby-candidates.mjs`（周边候选 × 同区 `24381_144870` 逐根精算比对，覆盖冷启动 200 状态、密集管廊 `146830` 直管段邻管 `144960/145892/146146`、长折管 `145018/144947/144872` 候选精度与耗时）。
-- **待办**：跑后端 N3 单测与例程验证后提交 `fix/nearby-coverage`；确认并入 `refactor` 与发版；发版后运行 `node scripts/verify-pipe-nearby-candidates.mjs` 完成线上冷启动验收。
+- **并入、发布与线上冷启动验收（2026-10-23）**：`gen-model` `refactor` & `publish@384e67151`（GitHub Actions `Linux binary` run `39928011740` 自动部署 `123.57.182.243`）。服务重启后 `overlayRoots = 0`（零投影冷启动）运行 `node scripts/verify-pipe-nearby-candidates.mjs --base-url http://123.57.182.243`：`passed = true`，`coverage = global-tree-bran-tube-index-and-current-projection`，`truncatedCandidates = false`；`24381_146830`（200，94.4 ms，候选 24 → 18，真值 13，0 漏，`144960/145892/146146` 全命中，精度 72.2%）、`24381_145018`（200，78.2 ms，候选 33 → 10，真值 1，0 漏）、`24381_144947`（404 → 200，76.3 ms，候选 7，真值 2，0 漏）、`24381_144872`（404 → 200，85.9 ms，候选 14，真值 0，0 漏）。
