@@ -290,6 +290,15 @@
               {{ computeState.loading ? '计算中...' : '执行计算并定位' }}
             </button>
           </div>
+          <div v-if="isBranScenario" class="mt-2 flex items-center justify-between rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <span>管道与周边 BRAN 管道的外表面精确净距在「管道距离」抽屉检测</span>
+            <button type="button"
+              class="shrink-0 font-semibold text-brand hover:underline"
+              data-testid="bran-jump-pipe-nearby"
+              @click="jumpToPipeNearbyClearance">
+              去查周边管道净距 →
+            </button>
+          </div>
 
           <!-- BRAN 净距：由 noun_counts 驱动的类型 facet（计算后才出现；勾选只在前端过滤，不重新请求） -->
           <div v-if="isBranScenario && computeState.nounFacets.length > 0" class="mt-3" data-testid="bran-noun-facet">
@@ -450,7 +459,9 @@ import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
 import { deliveryUnitSceneRefnos } from '@/composables/deliveryUnitScene';
+import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
+import { emitCommand } from '@/ribbon/commandBus';
 import { branCandidateKey, findBranCandidateByKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
 import { resolveSceneWorldTransform, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -793,6 +804,18 @@ function hasField(field: SpatialComputeScenarioField) {
 /** BRAN 净距按「画进三维了没」高亮；其余场景沿用「首行 = 最近 / 主结果」。 */
 function isRowEmphasized(row: SpatialComputeResultRow, idx: number): boolean {
   return isBranScenario.value ? Boolean(row.drawn) : idx === 0;
+}
+
+const pipeDistanceStore = usePipeDistanceStore();
+
+function jumpToPipeNearbyClearance() {
+  const state = computeState.value;
+  const bran = normalizeBranComputeRefno(state.queriedSourceRefno || state.suppoRefno);
+  pipeDistanceStore.detectionMode.value = 'all-pairs';
+  if (bran) {
+    pipeDistanceStore.setBranRefnos([bran]);
+  }
+  emitCommand('panel.pipeDistance.open');
 }
 
 function formatDistanceMm(mm: number | null): string {

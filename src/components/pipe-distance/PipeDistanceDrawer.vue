@@ -40,7 +40,9 @@ import {
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
+import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { useToolStore } from '@/composables/useToolStore';
+import { emitCommand } from '@/ribbon/commandBus';
 import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
 import {
   detectDtxBranchAxisDistances,
@@ -61,6 +63,7 @@ const store = usePipeDistanceStore();
 const toolStore = useToolStore();
 const selectionStore = useSelectionStore();
 const spatialQuery = useSpatialQuery();
+const spatialCompute = useSpatialCompute();
 const ctx = useViewerContext();
 const nearbyIsolated = ref(false);
 
@@ -275,6 +278,16 @@ async function handleRedetectNearby() {
   if (source) {
     await runNearbyForSource(source);
   }
+}
+
+function jumpToStructureClearance() {
+  const source = store.nearbyGroup.value?.sourceRefno ?? store.selectedBranRefnos.value[0];
+  spatialCompute.setPanelMode('compute');
+  spatialCompute.setActiveScenario('branNearestClearance');
+  if (source) {
+    spatialCompute.scenarios.branNearestClearance.suppoRefno = source;
+  }
+  emitCommand('panel.spatialCompute');
 }
 
 async function toggleIsolateNearby() {
@@ -1132,6 +1145,13 @@ function onResultRowHover(id: string | null) {
                   data-testid="pipe-distance-nearby-isolate"
                   @click="toggleIsolateNearby">
                   {{ nearbyIsolated ? '恢复场景' : '只看周边' }}
+                </button>
+                <button type="button"
+                  class="ml-auto text-muted-foreground hover:text-brand"
+                  title="切换到「中心线净距」面板查看该管道与周边墙、柱、楼板、设备的最近净距（D5）"
+                  data-testid="pipe-distance-jump-structure"
+                  @click="jumpToStructureClearance">
+                  查墙/柱/结构净距 →
                 </button>
               </div>
             </div>

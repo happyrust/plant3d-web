@@ -481,40 +481,40 @@ describe('SpatialComputePanel · 行与三维标注联动', () => {
     expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenLastCalledWith(['24381_11']);
   });
 
-describe('SpatialComputePanel · 算完定位（T1）', () => {
-  let mounted: ReturnType<typeof mountPanel> | null = null;
-  const flyTo = vi.fn();
-  const ensureRefnos = vi.fn();
-  // DTX 的 getAABB 传多个 refno 只回其中一个对象的盒——面板必须逐个取再合并
-  const aabbByRefno: Record<string, number[]> = {
-    '24381_145018': [0, 0, 0, 10, 10, 10],
-    '24381_1': [-4, -2, 1, 2, 3, 5],
-    '24381_3': [6, 1, 0, 12, 4, 2],
-  };
-  const getAABB = vi.fn((refnos: string[]) => aabbByRefno[refnos[0] ?? ''] ?? null);
+  describe('SpatialComputePanel · 算完定位（T1）', () => {
+    let mounted: ReturnType<typeof mountPanel> | null = null;
+    const flyTo = vi.fn();
+    const ensureRefnos = vi.fn();
+    // DTX 的 getAABB 传多个 refno 只回其中一个对象的盒——面板必须逐个取再合并
+    const aabbByRefno: Record<string, number[]> = {
+      '24381_145018': [0, 0, 0, 10, 10, 10],
+      '24381_1': [-4, -2, 1, 2, 3, 5],
+      '24381_3': [6, 1, 0, 12, 4, 2],
+    };
+    const getAABB = vi.fn((refnos: string[]) => aabbByRefno[refnos[0] ?? ''] ?? null);
 
-  beforeEach(() => {
-    resetSpatialComputeStore();
-    vi.clearAllMocks();
-    viewerContextStub.viewerRef.value = null;
-    viewerContextStub.dimensionSystem.value = null;
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 })));
-  });
+    beforeEach(() => {
+      resetSpatialComputeStore();
+      vi.clearAllMocks();
+      viewerContextStub.viewerRef.value = null;
+      viewerContextStub.dimensionSystem.value = null;
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 })));
+    });
 
-  afterEach(() => {
-    mounted?.unmount();
-    mounted = null;
-    vi.unstubAllGlobals();
-    resetSpatialComputeStore();
-  });
+    afterEach(() => {
+      mounted?.unmount();
+      mounted = null;
+      vi.unstubAllGlobals();
+      resetSpatialComputeStore();
+    });
 
-  it('算完把相机框到「源管道 + 最近目标」的联合包围盒，并选中原管道', async () => {
-    viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
-    mounted = mountPanel();
-    const { host } = mounted;
-    const store = useSpatialCompute();
-    store.setActiveScenario('branNearestClearance');
-    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+    it('算完把相机框到「源管道 + 最近目标」的联合包围盒，并选中原管道', async () => {
+      viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
+      mounted = mountPanel();
+      const { host } = mounted;
+      const store = useSpatialCompute();
+      store.setActiveScenario('branNearestClearance');
+      store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
 
     host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
     await vi.waitFor(() => expect(flyTo).toHaveBeenCalledTimes(1));
@@ -525,15 +525,15 @@ describe('SpatialComputePanel · 算完定位（T1）', () => {
     expect(selectionStub.setSelectedRefno).toHaveBeenCalledWith('24381_145018');
     // 几何补装在后台跑，不阻塞定位
     expect(spatialQueryStub.ensureRefnosLoaded).toHaveBeenCalled();
-  });
+    });
 
-  it('算完自动隔离：源管 + 最近目标实体、其余半透明（按钮变「退出 X 光」，可再点退出）', async () => {
-    viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
-    mounted = mountPanel();
-    const { host } = mounted;
-    const store = useSpatialCompute();
-    store.setActiveScenario('branNearestClearance');
-    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+    it('算完自动隔离：源管 + 最近目标实体、其余半透明（按钮变「退出 X 光」，可再点退出）', async () => {
+      viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
+      mounted = mountPanel();
+      const { host } = mounted;
+      const store = useSpatialCompute();
+      store.setActiveScenario('branNearestClearance');
+      store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
 
     host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
     await vi.waitFor(() => expect(spatialQueryStub.isolateRefnos).toHaveBeenCalledTimes(1));
@@ -546,24 +546,24 @@ describe('SpatialComputePanel · 算完定位（T1）', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="bran-xray-toggle"]')!.click();
     await vi.waitFor(() => expect(spatialQueryStub.restoreScene).toHaveBeenCalled());
     expect(host.querySelector('[data-testid="bran-xray-toggle"]')?.textContent?.trim()).toBe('X 光查看');
-  });
+    });
 
-  it('查询失败时不乱动相机', async () => {
-    viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response('{"error":"boom"}', { status: 500 })));
-    mounted = mountPanel();
-    const { host } = mounted;
-    const store = useSpatialCompute();
-    store.setActiveScenario('branNearestClearance');
-    store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
+    it('查询失败时不乱动相机', async () => {
+      viewerContextStub.viewerRef.value = { scene: { ensureRefnos, getAABB }, cameraFlight: { flyTo } };
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response('{"error":"boom"}', { status: 500 })));
+      mounted = mountPanel();
+      const { host } = mounted;
+      const store = useSpatialCompute();
+      store.setActiveScenario('branNearestClearance');
+      store.scenarios.branNearestClearance.suppoRefno = '24381/145018';
 
     host.querySelector<HTMLButtonElement>('[data-testid="bran-compute-run"]')!.click();
     await vi.waitFor(() => expect(store.currentScenarioState.value.error).not.toBe(''));
     expect(flyTo).not.toHaveBeenCalled();
     // 失败就不隔离：场景保持原样
     expect(spatialQueryStub.isolateRefnos).not.toHaveBeenCalled();
+    });
   });
-});
 
   it('包围盒相交的候选给「相交?」徽标和琥珀色距离，行数据带 intersects', async () => {
     const response = {
@@ -584,5 +584,31 @@ describe('SpatialComputePanel · 算完定位（T1）', () => {
     const row = host.querySelector<HTMLElement>('[data-testid="bran-result-row"]')!;
     expect(row.textContent).toContain('相交?');
     expect(row.querySelector('.text-amber-600')).not.toBeNull();
+  });
+
+  it('D5 双向跳转：点击「去查周边管道净距 →」把当前 BRAN 带入 usePipeDistanceStore 并触发 panel.pipeDistance.open', async () => {
+    const { usePipeDistanceStore } = await import('@/composables/usePipeDistanceStore');
+    const { onCommand } = await import('@/ribbon/commandBus');
+    const commands: string[] = [];
+    const off = onCommand((id) => commands.push(id));
+    try {
+      mounted = mountPanel();
+      const { host } = mounted;
+      const store = useSpatialCompute();
+      store.setActiveScenario('branNearestClearance');
+      store.scenarios.branNearestClearance.suppoRefno = '24381/146830';
+      await nextTick();
+
+      const jumpBtn = host.querySelector<HTMLButtonElement>('[data-testid="bran-jump-pipe-nearby"]');
+      expect(jumpBtn).not.toBeNull();
+      jumpBtn!.click();
+
+      const pipeStore = usePipeDistanceStore();
+      expect(pipeStore.detectionMode.value).toBe('all-pairs');
+      expect(pipeStore.selectedBranRefnos.value).toEqual(['24381_146830']);
+      expect(commands).toContain('panel.pipeDistance.open');
+    } finally {
+      off();
+    }
   });
 });
