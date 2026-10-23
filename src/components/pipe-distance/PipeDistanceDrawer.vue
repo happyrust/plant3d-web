@@ -37,6 +37,7 @@ import {
   usePipeDistanceStore,
   type PipeDistanceResult,
 } from '@/composables/usePipeDistanceStore';
+import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore } from '@/composables/useToolStore';
@@ -71,7 +72,7 @@ const isAnyPicking = computed(() => isPicking.value || isBoxPicking.value);
 // 外部源（ViewerPanel 全局挂着）——本抽屉不再持有 `pipe-distance` 外部源，也不复制记录。
 
 onUnmounted(() => {
-  if (import.meta.env.DEV && typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') {
     delete (window as typeof window & { __plant3dPipeDistanceE2E?: unknown }).__plant3dPipeDistanceE2E;
   }
 });
@@ -298,10 +299,27 @@ async function toggleIsolateNearby() {
   spatialQuery.isolateRefnos(keep);
 }
 
+function resolveBranFromModelTree(normalizedRefno: string): string | null {
+  const tree = getModelTreeInstance();
+  if (!tree) return null;
+  const nodes = tree.nodesById.value;
+  let cur = nodes[normalizedRefno];
+  let guard = 0;
+  while (cur && guard < 16) {
+    const noun = String(cur.type || '').toUpperCase();
+    if (noun === 'BRAN') return cur.id;
+    cur = cur.parentId ? nodes[cur.parentId] : undefined;
+    guard += 1;
+  }
+  return null;
+}
+
 function getCurrentSelectedBrans(): string[] {
+  const treeSelected = getModelTreeInstance()?.selectedIds.value;
   const candidates = [
     ...selectionStore.selectedRefnos.value,
     selectionStore.selectedRefno.value,
+    ...(treeSelected ? [...treeSelected] : []),
   ].filter((refno): refno is string => !!refno);
   const seen = new Set<string>();
   const out: string[] = [];
@@ -310,7 +328,9 @@ function getCurrentSelectedBrans(): string[] {
     if (!normalized || seen.has(normalized)) continue;
     // 选中的是管件 / 直管时按所属 BRAN 算：在三维里点管道，点到的多半是它的构件
     const noun = (findNounByRefnoAcrossAllDbnos(normalized) || '').toUpperCase();
-    const bran = noun === 'BRAN' ? normalized : findOwnerBranRefnoAcrossAllDbnos(normalized);
+    const bran = noun === 'BRAN'
+      ? normalized
+      : (findOwnerBranRefnoAcrossAllDbnos(normalized) ?? resolveBranFromModelTree(normalized));
     if (!bran || seen.has(bran)) continue;
     seen.add(bran);
     out.push(bran);
@@ -323,14 +343,29 @@ const AUTO_DETECT_MAX_BRANS = 10;
 
 async function detectCurrentSelectedBrans(options: { quiet?: boolean; auto?: boolean } = {}) {
   const refnos = getCurrentSelectedBrans();
-  if (refnos.length < 2) {
+  if (refnos.length === 0) {
     if (!options.quiet) {
-      store.detectError.value = '当前选中不足 2 根管道（选中的管件按所属 BRAN 算）';
+      store.detectError.value = isRowMode.value || !store.nearbySupported.value
+        ? '当前选中不足 2 根管道（选中的管件按所属 BRAN 算）'
+        : '当前未选中管道（选 1 根可检测周边管道，选 2 根及以上可检测所有已选管对）';
     }
     return;
   }
   // 导入的是整根管道：先前按直段选的改回整根量
   store.clearTubeKeys();
+  if (refnos.length === 1) {
+    store.setBranRefnos(refnos);
+    if (isRowMode.value || !store.nearbySupported.value) {
+      if (!options.quiet) {
+        store.detectError.value = '当前选中不足 2 根管道（选中的管件按所属 BRAN 算）';
+      }
+      return;
+    }
+    if (!options.auto) {
+      await runNearbyForSource(refnos[0]!);
+    }
+    return;
+  }
   if (isRowMode.value) {
     await detectPipeRowsSelected(refnos);
     return;
@@ -343,10 +378,11 @@ async function detectCurrentSelectedBrans(options: { quiet?: boolean; auto?: boo
   await detectBransWithDtxFallback(refnos);
 }
 
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+if (typeof window !== 'undefined') {
   (window as typeof window & {
     __plant3dPipeDistanceE2E?: {
       detectBrans: (refnos: string[]) => Promise<void>;
+      detectNearbyBrans: (sourceRefno: string) => Promise<void>;
       detectPipeRows: (refnos: string[], alignMode?: 'center' | 'bottom') => Promise<boolean>;
       detectPipeRowTubes: (tubeKeys: string[], alignMode?: 'center' | 'bottom') => Promise<boolean>;
       setDebugResults: (results: PipeDistanceResult[]) => void;
@@ -354,12 +390,15 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
         selectedBranRefnos: string[];
         selectedTubeKeys: string[];
         detectError: string | null;
+        detectNotice: string | null;
+        nearbyGroup: typeof store.nearbyGroup.value;
         visibleResults: ClearanceRecord[];
         results: ClearanceRecord[];
       };
     };
   }).__plant3dPipeDistanceE2E = {
     detectBrans: detectBransWithDtxFallback,
+    detectNearbyBrans: runNearbyForSource,
     detectPipeRows: async (refnos: string[], alignMode?: 'center' | 'bottom') => {
       store.setBranRefnos(refnos);
       store.clearTubeKeys();
@@ -391,6 +430,8 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
       selectedBranRefnos: [...store.selectedBranRefnos.value],
       selectedTubeKeys: [...store.selectedTubeKeys.value],
       detectError: store.detectError.value,
+      detectNotice: store.detectNotice.value,
+      nearbyGroup: store.nearbyGroup.value,
       visibleResults: [...store.visibleResults.value],
       results: [...store.pipeResults.value],
     }),
