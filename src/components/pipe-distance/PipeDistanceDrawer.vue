@@ -127,20 +127,36 @@ function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDi
   return true;
 }
 
+/** 正在后台加载的 BRAN refno -> 共享 Promise，避免「检测 + 定位」连续触发时将同一根 BRAN 重复排进加载队列。 */
+const inFlightBranLoads = new Map<string, Promise<boolean>>();
+let focusRequestSeq = 0;
+
 /** 后台补装尚未进场景的 BRAN 模型（已在场景里的由 showModelByRefno 直接短路；未生成的自动走 generateThenCollect）。 */
 function ensureBransLoadedInScene(refnos: readonly string[], onLoaded?: () => void) {
   const unique = [...new Set(refnos.map(refno => refno.trim().replace(/\//g, '_')).filter(Boolean))];
   if (unique.length === 0) return;
-  void showModelByRefnosWithAck({
-    refnos: unique,
-    flyTo: false,
-    highlight: false,
-    timeoutMs: 120_000,
-    ensureViewerReady: true,
-  }).then((result) => {
-    if (result.ok.length > 0) onLoaded?.();
-  }).catch(() => {
-    // ignore background model load errors; centerline-based measurement still works
+  const fresh = unique.filter(refno => !inFlightBranLoads.has(refno));
+  if (fresh.length > 0) {
+    const batchPromise = showModelByRefnosWithAck({
+      refnos: fresh,
+      flyTo: false,
+      highlight: false,
+      timeoutMs: 120_000,
+      ensureViewerReady: true,
+    }).catch(() => ({ ok: [] as string[], fail: [], error: 'load failed' }));
+    for (const refno of fresh) {
+      const itemPromise = batchPromise.then(res => res.ok.includes(refno)).finally(() => {
+        if (inFlightBranLoads.get(refno) === itemPromise) {
+          inFlightBranLoads.delete(refno);
+        }
+      });
+      inFlightBranLoads.set(refno, itemPromise);
+    }
+  }
+  if (!onLoaded) return;
+  const waits = unique.map(refno => inFlightBranLoads.get(refno) ?? Promise.resolve(true));
+  void Promise.all(waits).then((outcomes) => {
+    if (outcomes.some(Boolean)) onLoaded();
   });
 }
 
@@ -341,10 +357,11 @@ function paddedSceneAabb(points: readonly Vec3[], transform: (point: Vec3) => Ve
 }
 
 /** 高亮这些 BRAN 并飞到测量截面上的点（design 世界 mm）外扩后的包围盒；没有场景矩阵时退回构件包围盒。 */
-function focusDesignPoints(points: readonly Vec3[], refnos: readonly string[]) {
+function focusDesignPoints(points: readonly Vec3[], refnos: readonly string[], expectedActiveId?: string | null) {
   const viewer = ctx.viewerRef.value;
   if (!viewer) return;
   try {
+    const seq = ++focusRequestSeq;
     const unique = [...new Set(refnos.filter(Boolean))];
     const applyFocus = () => {
       const prev = viewer.scene.selectedObjectIds;
@@ -358,7 +375,11 @@ function focusDesignPoints(points: readonly Vec3[], refnos: readonly string[]) {
       }
     };
     applyFocus();
-    ensureBransLoadedInScene(unique, applyFocus);
+    ensureBransLoadedInScene(unique, () => {
+      if (!props.open || seq !== focusRequestSeq) return;
+      if (expectedActiveId !== undefined && store.activeResultId.value !== expectedActiveId) return;
+      applyFocus();
+    });
   } catch {
     // ignore
   }
@@ -373,12 +394,14 @@ function onResultClick(record: ClearanceRecord) {
     focusDesignPoints(
       points.map(point => [point[0] * 1000, point[1] * 1000, point[2] * 1000] as Vec3),
       [record.provenance.source.refno || record.inputs.sourceRefno, record.provenance.target.refno || record.inputs.targetRefno],
+      record.id,
     );
     return;
   }
   const viewer = ctx.viewerRef.value;
   if (!viewer) return;
   try {
+    const seq = ++focusRequestSeq;
     const refnos = [record.provenance.source.refno || record.inputs.sourceRefno,
       record.provenance.target.refno || record.inputs.targetRefno];
     const applyFocus = () => {
@@ -408,13 +431,18 @@ function onResultClick(record: ClearanceRecord) {
       }
     };
     applyFocus();
-    ensureBransLoadedInScene(refnos, applyFocus);
+    ensureBransLoadedInScene(refnos, () => {
+      if (!props.open || seq !== focusRequestSeq || store.activeResultId.value !== record.id) return;
+      applyFocus();
+    });
   } catch {
     // ignore
   }
 }
 
 function close() {
+  focusRequestSeq += 1;
+  onResultRowHover(null);
   if (isAnyPicking.value) {
     toolStore.cancelPickRefno();
   }

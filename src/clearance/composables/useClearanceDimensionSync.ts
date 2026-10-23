@@ -12,6 +12,7 @@ import {
 export type ClearanceDimensionSink = Readonly<{
   replaceExternalSource(source: 'clearance', records: readonly ExternalDimensionRecord[]): void;
   viewport?: Readonly<{
+    getSelection?: () => string | null;
     setSelection(id: string | null): void;
   }>;
 }>;
@@ -69,7 +70,14 @@ export function useClearanceDimensionSync(
       [dimensionSystemRef, clearanceStore.activeId],
       ([system, activeId]) => {
         if (!system?.viewport) return;
-        system.viewport.setSelection(activeId ? `${CLEARANCE_EXTERNAL_SOURCE}:${activeId}` : null);
+        if (activeId) {
+          system.viewport.setSelection(`${CLEARANCE_EXTERNAL_SOURCE}:${activeId}`);
+          return;
+        }
+        const current = system.viewport.getSelection?.();
+        if (current === undefined || (current !== null && current.startsWith(`${CLEARANCE_EXTERNAL_SOURCE}:`))) {
+          system.viewport.setSelection(null);
+        }
       },
       { immediate: true },
     )

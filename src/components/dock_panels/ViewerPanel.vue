@@ -986,8 +986,10 @@ const dimensionHoverTooltip = ref<Readonly<{
   y: number;
   label: string;
   valueText: string;
+  followPointer: boolean;
 }> | null>(null);
-let lastDimensionPointerCss: { x: number; y: number } = { x: 24, y: 24 };
+let lastDimensionPointerCss: { x: number; y: number } | null = null;
+let pointerInsideDimensionCanvas = false;
 
 function updateDimensionHoverTooltip(dimensionId: string | null): void {
   if (!dimensionId || !dimensionSystem) {
@@ -1004,18 +1006,25 @@ function updateDimensionHoverTooltip(dimensionId: string | null): void {
   const container = containerRef.value;
   const rect = container?.getBoundingClientRect();
   const labelBounds = layout?.labelBounds;
-  const anchorX = labelBounds && labelBounds.width > 0 && rect
-    ? Math.min(Math.max(12, labelBounds.x + labelBounds.width + 10), Math.max(12, rect.width - 280))
-    : lastDimensionPointerCss.x;
-  const anchorY = labelBounds && labelBounds.height > 0 && rect
-    ? Math.min(Math.max(12, labelBounds.y - 6), Math.max(12, rect.height - 64))
-    : lastDimensionPointerCss.y;
+  const hasVisibleBounds = !!labelBounds && labelBounds.width > 0 && labelBounds.height > 0 && !!rect;
+  const followPointer = pointerInsideDimensionCanvas && lastDimensionPointerCss !== null;
+  if (!hasVisibleBounds && !followPointer) {
+    dimensionHoverTooltip.value = null;
+    return;
+  }
+  const anchorX = followPointer
+    ? lastDimensionPointerCss!.x
+    : Math.min(Math.max(12, labelBounds!.x + labelBounds!.width + 10), Math.max(12, rect!.width - 280));
+  const anchorY = followPointer
+    ? lastDimensionPointerCss!.y
+    : Math.min(Math.max(12, labelBounds!.y - 6), Math.max(12, rect!.height - 64));
   if (external) {
     dimensionHoverTooltip.value = {
       x: anchorX,
       y: anchorY,
       label: external.sourceLabel,
       valueText,
+      followPointer,
     };
     return;
   }
@@ -1025,6 +1034,7 @@ function updateDimensionHoverTooltip(dimensionId: string | null): void {
       y: anchorY,
       label: '用户尺寸',
       valueText,
+      followPointer,
     };
     return;
   }
@@ -1034,12 +1044,13 @@ function updateDimensionHoverTooltip(dimensionId: string | null): void {
 function onDimensionHoverPointerMove(ev: PointerEvent): void {
   const container = containerRef.value;
   if (!container) return;
+  pointerInsideDimensionCanvas = true;
   const rect = container.getBoundingClientRect();
   lastDimensionPointerCss = {
     x: Math.min(Math.max(12, ev.clientX - rect.left + 14), Math.max(12, rect.width - 280)),
     y: Math.min(Math.max(12, ev.clientY - rect.top + 16), Math.max(12, rect.height - 64)),
   };
-  if (dimensionHoverTooltip.value) {
+  if (dimensionHoverTooltip.value?.followPointer) {
     dimensionHoverTooltip.value = {
       ...dimensionHoverTooltip.value,
       x: lastDimensionPointerCss.x,
@@ -1049,7 +1060,10 @@ function onDimensionHoverPointerMove(ev: PointerEvent): void {
 }
 
 function onDimensionHoverPointerLeave(): void {
-  dimensionHoverTooltip.value = null;
+  pointerInsideDimensionCanvas = false;
+  if (dimensionHoverTooltip.value?.followPointer) {
+    dimensionHoverTooltip.value = null;
+  }
 }
 let localDimensionAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let localDimensionAutosaveRunning = false;
