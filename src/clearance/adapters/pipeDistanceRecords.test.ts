@@ -82,10 +82,14 @@ describe('pipeDistanceRecords · PipeDistanceResult → ClearanceRecord', () => 
     });
   });
 
-  it('isPipeClearanceRecord 只认 BRAN↔BRAN/any 的 component 记录', () => {
+  it('isPipeClearanceRecord 只认 BRAN↔BRAN/any 的 component 记录，排除交互式 parallel-centerline', () => {
     const record = pipeDistanceResultToClearanceRecord(surfaceResult(), new Date(0));
     expect(isPipeClearanceRecord({ ...record, sourceNoun: 'EQUI' })).toBe(false);
     expect(isPipeClearanceRecord({ ...record, inputs: { ...record.inputs, targetKind: 'wall' } })).toBe(false);
+    expect(isPipeClearanceRecord({
+      ...record,
+      provenance: { ...record.provenance, method: 'parallel-centerline' },
+    })).toBe(false);
   });
 
   it('mmPointToM 单次换算', () => {

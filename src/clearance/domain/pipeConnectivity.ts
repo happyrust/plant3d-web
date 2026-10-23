@@ -89,9 +89,11 @@ export function pipeConnectivityLine(refno: string, centerline: CenterlineLike |
 function endReaches(from: PipeConnectivityLine, onto: PipeConnectivityLine): boolean {
   return [from.head, from.tail].some(point => onto.segments.some((segment) => {
     const od = segment.outsideDiameterMm ?? 0;
+    // 零长度穿过件三通在中心线里不单独成段（并进两侧隐式管身 TUBI），支管首尾点离主管轴线可达 1.5~2 倍外径；
+    // 这里只给 suspected='branch' 候选，最终仍须精算外表面净距 <= 1 mm 才算相连，不会误杀不相干的管。
     const reach = BRANCH_FITTING_NOUNS.has(segment.noun)
       ? Math.max(distance(segment.start, segment.end), 2 * od) + BRANCH_MARGIN_MM
-      : od / 2 + BRANCH_MARGIN_MM;
+      : Math.max(od / 2, 2 * od) + BRANCH_MARGIN_MM;
     return pointToSegment(point, segment.start, segment.end) <= reach;
   }));
 }

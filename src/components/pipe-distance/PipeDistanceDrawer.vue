@@ -38,6 +38,7 @@ import {
   type PipeDistanceResult,
 } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
+import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore } from '@/composables/useToolStore';
 import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
 import {
@@ -58,7 +59,9 @@ const emit = defineEmits<{ 'update:open': [value: boolean] }>();
 const store = usePipeDistanceStore();
 const toolStore = useToolStore();
 const selectionStore = useSelectionStore();
+const spatialQuery = useSpatialQuery();
 const ctx = useViewerContext();
+const nearbyIsolated = ref(false);
 
 const isPicking = computed(() => toolStore.toolMode.value === 'pick_refno');
 const isBoxPicking = computed(() => toolStore.toolMode.value === 'pick_refno_box');
@@ -190,6 +193,13 @@ watch([() => store.detectionMode.value, () => store.pipeRowAlignMode.value], () 
   store.detectError.value = null;
 });
 
+watch(() => store.nearbyGroup.value, (group) => {
+  if (!group && nearbyIsolated.value) {
+    spatialQuery.restoreScene();
+    nearbyIsolated.value = false;
+  }
+});
+
 // --- pick BRAN pipe / TUBI segment ---
 /** 拾取粒度：整根 BRAN，或（连排模式）直段 TUBI——选了直段的管道只在所选直段上归排。 */
 const pickLevel = ref<'bran' | 'tube'>('bran');
@@ -238,10 +248,54 @@ async function handleDetect() {
   await detectBransWithDtxFallback(store.selectedBranRefnos.value);
 }
 
+async function runNearbyForSource(source: string) {
+  if (!source) return;
+  ensureBransLoadedInScene([source]);
+  const ok = await store.detectNearbyBrans(source);
+  const group = store.nearbyGroup.value;
+  if (ok && group && group.records.length > 0) {
+    const neighborRefnos = group.records.flatMap(record => [
+      record.provenance.source.refno || record.inputs.sourceRefno,
+      record.provenance.target.refno || record.inputs.targetRefno,
+    ]);
+    ensureBransLoadedInScene([source, ...neighborRefnos]);
+  }
+}
+
 async function handleDetectNearby() {
   const source = store.selectedBranRefnos.value[0];
-  if (source && store.selectedBranRefnos.value.length === 1)
-    await store.detectNearbyBrans(source);
+  if (source && store.selectedBranRefnos.value.length === 1) {
+    await runNearbyForSource(source);
+  }
+}
+
+async function handleRedetectNearby() {
+  const source = store.nearbyGroup.value?.sourceRefno ?? store.selectedBranRefnos.value[0];
+  if (source) {
+    await runNearbyForSource(source);
+  }
+}
+
+async function toggleIsolateNearby() {
+  if (nearbyIsolated.value) {
+    spatialQuery.restoreScene();
+    nearbyIsolated.value = false;
+    return;
+  }
+  const group = store.nearbyGroup.value;
+  if (!group) return;
+  const keep = [...new Set([
+    group.sourceRefno,
+    ...group.records.flatMap(record => [
+      record.provenance.source.refno || record.inputs.sourceRefno,
+      record.provenance.target.refno || record.inputs.targetRefno,
+    ]),
+  ].filter(Boolean))];
+  if (keep.length === 0) return;
+  nearbyIsolated.value = true;
+  await spatialQuery.ensureRefnosLoaded(keep).catch(() => null);
+  if (!nearbyIsolated.value) return;
+  spatialQuery.isolateRefnos(keep);
 }
 
 function getCurrentSelectedBrans(): string[] {
@@ -443,6 +497,10 @@ function onResultClick(record: ClearanceRecord) {
 function close() {
   focusRequestSeq += 1;
   onResultRowHover(null);
+  if (nearbyIsolated.value) {
+    spatialQuery.restoreScene();
+    nearbyIsolated.value = false;
+  }
   if (isAnyPicking.value) {
     toolStore.cancelPickRefno();
   }
@@ -1008,6 +1066,33 @@ function onResultRowHover(id: string | null) {
             <div v-if="store.otherModeVisibleCount.value > 0" class="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground" data-testid="pipe-distance-other-mode">
               <span>另有 {{ store.otherModeVisibleCount.value }} 条其他模式的结果仍显示在三维中</span>
               <button type="button" class="text-brand hover:underline" @click="store.hideOtherModeResults()">隐藏它们</button>
+            </div>
+
+            <!-- 周边检测单独成组卡片（N5）：显示源管、半径内命中数，提供「重新检测周边」与「只看周边」 -->
+            <div v-if="!isRowMode && store.nearbyGroup.value"
+              class="mb-2 rounded-md border border-border/70 bg-muted/30 px-2.5 py-2 text-[11px]"
+              data-testid="pipe-distance-nearby-group">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-medium text-foreground">
+                  <span class="font-mono">{{ store.nearbyGroup.value.sourceRefno }}</span> 的周边：{{ store.nearbyGroup.value.records.length }} 根在 {{ store.nearbyGroup.value.radiusMm }} mm 内
+                </span>
+              </div>
+              <div class="mt-1.5 flex items-center gap-3">
+                <button type="button"
+                  class="font-medium text-brand hover:underline disabled:opacity-50"
+                  :disabled="store.isDetecting.value"
+                  data-testid="pipe-distance-nearby-redetect"
+                  @click="handleRedetectNearby">
+                  重新检测周边
+                </button>
+                <button v-if="store.nearbyGroup.value.records.length > 0"
+                  type="button"
+                  class="text-muted-foreground hover:text-foreground"
+                  data-testid="pipe-distance-nearby-isolate"
+                  @click="toggleIsolateNearby">
+                  {{ nearbyIsolated ? '恢复场景' : '只看周边' }}
+                </button>
+              </div>
             </div>
 
             <div v-if="store.listedResults.value.length === 0"

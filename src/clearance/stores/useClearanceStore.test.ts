@@ -334,6 +334,28 @@ describe('useClearanceStore', () => {
     expect(store.lastError.value).toContain('连排相邻');
     expect(store.records.value).toHaveLength(1);
     expect(store.findRecord(record.id)?.status).toBe('current');
+
+    const parallelRecord = createClearanceRecord({
+      id: 'clearance:24381_1001~0_1:24381_1002~0_1:any:free',
+      kind: 'component-to-component',
+      inputs: { sourceRefno: '24381_1001~0_1', targetRefno: '24381_1002~0_1', targetKind: 'any' },
+      sourceNoun: 'BRAN',
+      targetNoun: 'BRAN',
+      provenance: createComputationProvenance({
+        method: 'parallel-centerline',
+        accuracyClass: accuracyClassForMethod('parallel-centerline'),
+        coordinateSpace: 'design-world',
+        source: { entityId: '24381_1001', refno: '24381_1001', segmentRefno: '24381_1001~0_1' },
+        target: { entityId: '24381_1002', refno: '24381_1002', segmentRefno: '24381_1002~0_1' },
+      }),
+      snapshot: null,
+      modelVersion: { sourceSesno: null, targetSesno: null },
+      computedAt: AT.toISOString(),
+    });
+    store.upsertRecord(parallelRecord);
+    expect(await store.recompute(parallelRecord.id, { service: createClearanceService({ fetchSurfaceClearance }) })).toBeNull();
+    expect(fetchSurfaceClearance).not.toHaveBeenCalled();
+    expect(store.lastError.value).toContain('管-管');
   });
 
   it('removeRecord drops active / hidden bookkeeping and clearRecords resets everything', async () => {

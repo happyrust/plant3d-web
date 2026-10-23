@@ -32,12 +32,13 @@ export function mmPointToM(point: Vec3): ComputationPoint {
   return Object.freeze([point[0] / MM_PER_M, point[1] / MM_PER_M, point[2] / MM_PER_M]) as ComputationPoint;
 }
 
-/** 批量管间净距的记录域：BRAN↔BRAN 的 component-to-component 记录（墙/柱与点选构件净距不在此列）。 */
+/** 批量管间净距的记录域：BRAN↔BRAN 的 component-to-component 记录（墙/柱、点选构件净距与交互式管-管平行中心距不在此列）。 */
 export function isPipeClearanceRecord(record: ClearanceRecord): boolean {
   return record.kind === 'component-to-component'
     && record.sourceNoun === 'BRAN'
     && record.targetNoun === 'BRAN'
-    && record.inputs.targetKind === 'any';
+    && record.inputs.targetKind === 'any'
+    && record.provenance.method !== 'parallel-centerline';
 }
 
 export function pipeDistanceInputs(sourceRefno: string, targetRefno: string): ClearanceInputs {

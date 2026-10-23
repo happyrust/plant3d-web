@@ -43,6 +43,13 @@ describe('pipeConnection', () => {
     expect(pipeConnection(stub, header)).toBe('branch');
   });
 
+  it('零长度三通被后端折叠进直管段时，支管首端距主管中心线 ~124 mm 仍判疑似相连（24381/145018 ↔ 24381/145060）', () => {
+    const header = line('24381_145018', [{ noun: 'TUBI', start: [0, 0, 0], end: [2000, 0, 0], od: 60.3 }]);
+    const branch = line('24381_145060', [{ noun: 'TUBI', start: [900, 124, 0], end: [900, 800, 0], od: 60.3 }]);
+    expect(pipeConnection(header, branch)).toBe('branch');
+    expect(pipeConnection(branch, header)).toBe('branch');
+  });
+
   it('平行并排、端点离对方管身和三通都远的两根管不相连', () => {
     const a = line('A', [
       { noun: 'TUBI', start: [0, 0, 0], end: [2000, 0, 0] },

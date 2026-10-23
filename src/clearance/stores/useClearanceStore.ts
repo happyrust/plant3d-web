@@ -331,6 +331,10 @@ export function useClearanceStore() {
       lastError.value = '连排测量记录请在「管道距离 · 连排相邻」里重新检测，不能按整构件净距重算';
       return null;
     }
+    if (record.provenance.method === 'parallel-centerline') {
+      lastError.value = '平行直段中心距记录请用「测量 → 管-管」工具重新测量，不能按整构件净距重算';
+      return null;
+    }
     return compute(
       {
         sourceRefno: record.inputs.sourceRefno,

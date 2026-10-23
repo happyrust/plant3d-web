@@ -83,7 +83,16 @@ export type PipeDistanceDetectionOptions = {
   refnos?: string[];
   pairMode?: 'source-to-targets' | 'all-pairs';
   withinMaxDistance?: boolean;
+  /** 周边检测用：只把 refnos 当本轮计算输入，不覆盖用户的已选管道列表 selectedBranRefnos */
+  preserveSelection?: boolean;
 };
+
+export type NearbyDetectionGroup = Readonly<{
+  sourceRefno: string;
+  radiusMm: number;
+  candidateRefnos: readonly string[];
+  records: readonly ClearanceRecord[];
+}>;
 
 const clearanceStore = useClearanceStore();
 
@@ -115,6 +124,12 @@ export function needsAxisEstimateFallback(outcome: PipeDetectionOutcome | null):
 const FAILURE_LINES_SHOWN = 5;
 /** 服务端支不支持周边检测（`nearby/branches`）；遇到这条路由不存在的 404 就置 false，本次会话收起入口。 */
 const nearbySupported = ref(true);
+/** 最近一次单管周边检测的源管、搜索半径与候选管道（N5：周边检测不替换已选管道，结果单独成组并支持只看周边）。 */
+const lastNearbyContext = ref<Readonly<{
+  sourceRefno: string;
+  radiusMm: number;
+  candidateRefnos: readonly string[];
+}> | null>(null);
 /** 检测模式：`all-pairs` 外表面净距全对；`pipe-row` 连排相邻（真实中心线归排，见 plan §7）。 */
 const detectionMode = ref<'all-pairs' | 'pipe-row'>('all-pairs');
 /** 连排归排方式：`center` 管中心成排；`bottom` 管底对齐（缺省世界向上作支承法向）。 */
@@ -178,6 +193,17 @@ function recordDistanceMm(record: ClearanceRecord): number | null {
   return Number.isFinite(distanceM) ? distanceM! * 1000 : null;
 }
 
+/** 外表面净距按从近到远排序（N5/G7）：相交排最前，其次按净距升序，无快照排最后，同距按 id 稳定排序。 */
+function compareSurfaceClearanceRecords(a: ClearanceRecord, b: ClearanceRecord): number {
+  const aIntersects = a.snapshot?.intersects === true;
+  const bIntersects = b.snapshot?.intersects === true;
+  if (aIntersects !== bIntersects) return aIntersects ? -1 : 1;
+  const aDist = a.snapshot?.distanceM ?? Number.POSITIVE_INFINITY;
+  const bDist = b.snapshot?.distanceM ?? Number.POSITIVE_INFINITY;
+  if (aDist !== bDist) return aDist - bDist;
+  return a.id.localeCompare(b.id);
+}
+
 /** 当前抽屉模式的结果：所有管对 = 非连排记录；连排 = 当前归排方式的连排记录（三套结果不混在一个列表里）。 */
 const modeResults = computed(() => pipeResults.value.filter(record => (detectionMode.value === 'pipe-row'
   ? record.pipeRow?.alignMode === pipeRowAlignMode.value
@@ -188,8 +214,30 @@ function isMetricShown(record: ClearanceRecord): boolean {
   return !record.pipeRow || pipeRowBothMetrics.value || record.pipeRow.metric === 'derived-gap';
 }
 
-/** 列表列出的记录：当前模式里按口径显示的那些（清空、重置筛选等动作仍对整个模式）。 */
-const listedResults = computed(() => modeResults.value.filter(isMetricShown));
+/** 列表列出的记录：当前模式里按口径显示的那些（所有管对 / 周边检测按净距从近到远排，连排保持按排与区段顺序）。 */
+const listedResults = computed(() => {
+  const filtered = modeResults.value.filter(isMetricShown);
+  return detectionMode.value === 'pipe-row' ? filtered : [...filtered].sort(compareSurfaceClearanceRecords);
+});
+
+/** 周边检测专属分组（N5）：源管及其半径内算出的周边净距记录（按净距从近到远排）。 */
+const nearbyGroup = computed<NearbyDetectionGroup | null>(() => {
+  const ctx = lastNearbyContext.value;
+  if (!ctx || detectionMode.value !== 'all-pairs') return null;
+  const candidateSet = new Set(ctx.candidateRefnos);
+  const records = listedResults.value.filter((record) => {
+    if (record.pipeRow) return false;
+    const s = normalizeBranRefno(record.inputs.sourceRefno);
+    const t = normalizeBranRefno(record.inputs.targetRefno);
+    return (s === ctx.sourceRefno && candidateSet.has(t)) || (t === ctx.sourceRefno && candidateSet.has(s));
+  });
+  return {
+    sourceRefno: ctx.sourceRefno,
+    radiusMm: ctx.radiusMm,
+    candidateRefnos: ctx.candidateRefnos,
+    records,
+  };
+});
 
 /** 其他模式留下、不在当前列表里却仍按全局开关画在三维里的记录数（抽屉据此提示，可一键隐藏）。 */
 const otherModeVisibleCount = computed(() => {
@@ -228,6 +276,7 @@ function resetPipeSnapshot() {
   pipeRowBothMetrics.value = false;
   pipeRowKeyPoints.value = false;
   lastRowDetection.value = null;
+  lastNearbyContext.value = null;
   confirmedRowKeys.value = new Set();
   lastRowContext = null;
   detectError.value = null;
@@ -478,6 +527,7 @@ export function usePipeDistanceStore() {
   function clearBranRefnos() {
     selectedBranRefnos.value = [];
     selectedTubeKeys.value = [];
+    lastNearbyContext.value = null;
   }
 
   /** 选一段直段（`tubeKey`）：所属 BRAN 一并进选择，此后这根 BRAN 只在所选直段上归排。 */
@@ -577,11 +627,16 @@ export function usePipeDistanceStore() {
     detectProgress.value = null;
     activeRun = null;
     if (!calculationsAllowed) { detectError.value = '历史版本对比中不能使用当前模型检测管间净距，请退出对比后重算。'; return false; }
-    if (options.refnos) {
+    if (!options.preserveSelection) {
+      lastNearbyContext.value = null;
+    }
+    if (options.refnos && !options.preserveSelection) {
       setBranRefnos(options.refnos);
     }
 
-    const branRefnos = [...selectedBranRefnos.value];
+    const branRefnos = options.refnos && options.preserveSelection
+      ? [...new Set(options.refnos.map(normalizeBranRefno).filter(Boolean))]
+      : [...selectedBranRefnos.value];
     if (branRefnos.length < 2) {
       isDetecting.value = false;
       lastRunSettledCount.value = 0;
@@ -1042,14 +1097,32 @@ export function usePipeDistanceStore() {
       }
       const targets = [...targetSet];
       const incomplete = truncated || total !== targets.length;
-      const coverage = incomplete ? '周边候选未全部计算（空间索引候选被截断或集合不完整），请缩小最大距离后重算。' : '';
+      const warningList = [...warnings];
+      const coverage = incomplete
+        ? (warningList.length > 0
+          ? `周边候选未全部计算（${warningList.join('；')}）`
+          : '周边候选未全部计算（空间索引候选被截断或集合不完整）')
+        : '';
+      const extraWarnings = incomplete ? [] : warningList;
       if (!targets.length) {
-        detectError.value = [coverage, '已加载模型范围内没有找到周边 BRAN 管道；原有结果已保留。'].filter(Boolean).join('；');
+        lastNearbyContext.value = { sourceRefno: source, radiusMm: radius, candidateRefnos: [] };
+        detectNotice.value = [coverage, ...extraWarnings, `在 ${radius} mm 范围内没有找到周边 BRAN 管道；原有结果已保留。`]
+          .filter(Boolean).join('；');
         return true;
       }
-      const applied = await runDetection({ refnos: [source, ...targets], pairMode: 'source-to-targets', withinMaxDistance: true });
+      const applied = await runDetection({
+        refnos: [source, ...targets],
+        pairMode: 'source-to-targets',
+        withinMaxDistance: true,
+        preserveSelection: true,
+      });
       if (applied && sequence + 1 === detectionSequence) {
-        detectError.value = [coverage, ...warnings, detectError.value].filter(Boolean).join('；') || null;
+        lastNearbyContext.value = { sourceRefno: source, radiusMm: radius, candidateRefnos: targets };
+        const notices = [coverage, ...extraWarnings, detectNotice.value].filter(Boolean);
+        detectReport.value = {
+          notice: notices.length > 0 ? notices.join('；') : null,
+          diagnostics: detectDiagnostics.value,
+        };
       }
       return applied;
     } catch (error) {
@@ -1058,6 +1131,10 @@ export function usePipeDistanceStore() {
       if (isGenModelV1ApiError(error) && error.status === 404 && error.message.startsWith('HTTP 404')) {
         nearbySupported.value = false;
         detectError.value = '当前服务端版本不支持周边检测（需要更新 gen-model 后端），原有结果已保留';
+        return false;
+      }
+      if (isGenModelV1ApiError(error) && error.status === 404 && error.message.includes('没有包围盒')) {
+        detectError.value = `服务端尚未加载管道 ${source} 的模型包围盒，正在自动加载该管道模型，请稍后重试周边检测`;
         return false;
       }
       detectError.value = `周边检测失败，原有结果已保留：${error instanceof Error ? error.message : String(error)}`;
@@ -1079,6 +1156,7 @@ export function usePipeDistanceStore() {
     detectError.value = null;
     detectNotice.value = null;
     lastRowDetection.value = null;
+    lastNearbyContext.value = null;
     resetResultFilters();
   }
 
@@ -1094,6 +1172,7 @@ export function usePipeDistanceStore() {
     detectError.value = null;
     detectNotice.value = null;
     lastRowDetection.value = null;
+    lastNearbyContext.value = null;
     resultMinDistance.value = null;
   }
 
@@ -1142,6 +1221,7 @@ export function usePipeDistanceStore() {
     pipeRowBothMetrics,
     pipeRowKeyPoints,
     lastRowDetection,
+    nearbyGroup,
     confirmedRowKeys,
     selectedTubeKeys,
     addBranRefno,

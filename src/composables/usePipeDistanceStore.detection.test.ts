@@ -146,10 +146,13 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.detectError.value).toContain('原有结果已保留');
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({ ...nearby, truncated_candidates: true });
     expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
-    expect(store.detectError.value).toContain('候选未全部计算');
+    expect(store.detectError.value).toBeNull();
+    expect(store.detectNotice.value).toContain('候选未全部计算');
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({ ...nearby, results: [], total_count: 0 });
     const last = JSON.parse(JSON.stringify(store.pipeResults.value));
     expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
+    expect(store.detectError.value).toBeNull();
+    expect(store.detectNotice.value).toContain('没有找到周边 BRAN 管道');
     expect(store.pipeResults.value).toEqual(last);
     let done!: (value: unknown) => void;
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockImplementation(() => new Promise(resolve => { done = resolve; }));
@@ -174,7 +177,10 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
     expect(v1ApiMocks.genModelV1SpatialNearbyBranches.mock.calls.map(([request]) => request.page)).toEqual([1, 2]);
     expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(3);
-    expect(store.selectedBranRefnos.value).toEqual(['24381_1001', '24381_1002', '24381_1003', '24381_1004']);
+    // N5：周边检测不替换用户的已选管道列表，候选另存于 nearbyGroup
+    expect(store.selectedBranRefnos.value).toEqual(['24381_1001']);
+    expect(store.nearbyGroup.value?.sourceRefno).toBe('24381_1001');
+    expect(store.nearbyGroup.value?.candidateRefnos).toEqual(['24381_1002', '24381_1003', '24381_1004']);
     expect(store.detectError.value).toBeNull();
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({ ...nearby, total_count: 3, has_more: true });
     const unchanged = JSON.parse(JSON.stringify(store.pipeResults.value));
@@ -889,17 +895,62 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(store.detectNotice.value).toBeNull();
   });
 
-  it('服务端没有周边检测这条路由时提示版本不支持并收起入口；查无此管的 404 照常报错', async () => {
+  it('服务端没有周边检测这条路由时提示版本不支持并收起入口；源管未加载 404 给出友好提示；查无此管的 404 照常报错', async () => {
     const store = usePipeDistanceStore();
     const notFound = (message: string) => new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/spatial/nearby/branches', message });
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockRejectedValueOnce(notFound('构件 24381/1001 不存在'));
     expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
     expect(store.detectError.value).toBe('周边检测失败，原有结果已保留：构件 24381/1001 不存在');
     expect(store.nearbySupported.value).toBe(true);
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockRejectedValueOnce(notFound('构件 24381/1001 在模型投影与空间树里都没有包围盒（还没生成过模型）'));
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
+    expect(store.detectError.value).toContain('尚未加载管道 24381_1001 的模型包围盒');
+    expect(store.nearbySupported.value).toBe(true);
     v1ApiMocks.genModelV1SpatialNearbyBranches.mockRejectedValueOnce(notFound('HTTP 404 Not Found'));
     expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
     expect(store.detectError.value).toBe('当前服务端版本不支持周边检测（需要更新 gen-model 后端），原有结果已保留');
     expect(store.nearbySupported.value).toBe(false);
+  });
+
+  it('列表结果按净距从近到远排序（相交置顶），周边分组同步按净距排序', async () => {
+    const store = usePipeDistanceStore();
+    store.maxDistance.value = 500;
+    store.setBranRefnos(['24381_1001']);
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({
+      results: [
+        { refno: '24381/1002', noun: 'BRAN', distance: 10 },
+        { refno: '24381/1003', noun: 'BRAN', distance: 20 },
+        { refno: '24381/1004', noun: 'BRAN', distance: 30 },
+      ],
+      total_count: 3,
+      has_more: false,
+      truncated_candidates: false,
+      radius: 500,
+      center: { source: 'refno_aabb_center' },
+      warnings: [],
+    });
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(async ({ targetRefno }: { targetRefno: string }) => {
+      if (targetRefno === '24381_1002') {
+        return surfaceClearanceResponse({ result: { ...surfaceClearanceResponse().result, distance_mm: 350, intersects: false } });
+      }
+      if (targetRefno === '24381_1003') {
+        return surfaceClearanceResponse({ result: { ...surfaceClearanceResponse().result, distance_mm: 120, intersects: false } });
+      }
+      return surfaceClearanceResponse({ result: { ...surfaceClearanceResponse().result, distance_mm: 0, intersects: true } });
+    });
+
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
+    expect(store.selectedBranRefnos.value).toEqual(['24381_1001']);
+    expect(store.listedResults.value.map(r => [r.inputs.targetRefno, Math.round(r.snapshot!.distanceM * 1000), r.snapshot!.intersects])).toEqual([
+      ['24381_1004', 0, true],
+      ['24381_1003', 120, false],
+      ['24381_1002', 350, false],
+    ]);
+    expect(store.nearbyGroup.value?.records.map(r => r.inputs.targetRefno)).toEqual([
+      '24381_1004',
+      '24381_1003',
+      '24381_1002',
+    ]);
   });
 
   it('管对比管道多时先按模型包围盒预筛，盒距超过上限的管对不发净距请求', async () => {
