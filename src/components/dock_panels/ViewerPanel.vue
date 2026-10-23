@@ -85,6 +85,8 @@ import {
   type RenderStyle,
 } from '@/composables/useRenderStyleStore';
 import { useReviewStore } from '@/composables/useReviewStore';
+import RoomViewHudBar from '@/components/room/RoomViewHudBar.vue';
+import { notifyRoomClipInstancesLoaded } from '@/composables/useRoomClip';
 import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
@@ -1580,6 +1582,11 @@ watch(
 
     try {
       tileLodControllerRef.value?.onGlobalModelMatrixChanged();
+    } catch {
+      // ignore
+    }
+    try {
+      notifyRoomClipInstancesLoaded(loadedRefnos);
     } catch {
       // ignore
     }
@@ -3828,6 +3835,11 @@ onMounted(async () => {
     } catch {
       // ignore
     }
+    try {
+      notifyRoomClipInstancesLoaded(loadedRefnos);
+    } catch {
+      // ignore
+    }
 
     // Tile LOD：仅在首次切换到该 dbno 时初始化（Parquet 模式下不再读取 instances_*.json）
     if (tileLodInitializedDbno !== _dbno) {
@@ -5027,6 +5039,7 @@ onUnmounted(() => {
   <div ref="containerRef" class="viewer-panel-container">
     <canvas ref="mainCanvas" class="viewer" />
     <div v-show="modelUnitCompareState?.viewMode !== 'split'" ref="overlayContainer" class="xeokitOverlay" />
+    <RoomViewHudBar v-if="modelUnitCompareState?.viewMode !== 'split'" />
 
     <!-- 版本对比的视口角标：分屏两枚 A / B、单视口一枚跟着 activeSide；下面一行是「模型几何差异」四态图例 + 「只看差异」 -->
     <div v-if="modelUnitCompareState?.status === 'ready'"

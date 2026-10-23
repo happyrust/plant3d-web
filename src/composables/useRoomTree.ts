@@ -37,6 +37,7 @@ import {
 } from '@/composables/roomTreeNodes';
 import { mergeTreeLeaves, tubeKey } from '@/composables/spatialTree';
 import { isDtxTubeSegmentHidden, isDtxTubeSegmentLoadedAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
+import { enterRoomView, exitRoomView, resolveRoomPanelRefnosWithFallback } from '@/composables/useRoomClip';
 import { useSceneGraphOps } from '@/composables/useSceneGraph';
 import { resolveSceneWorldTransform } from '@/composables/useSpatialQuery';
 import { showModelByRefnosWithAck, type ShowModelByRefnosResult } from '@/composables/useViewerContext';
@@ -542,13 +543,41 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     return true;
   }
 
-  /** 隔离（其余 XRAY）：单元级及以上连所属 BRAN 的直段一起留实体，管件不会孤零零悬着。 */
+  /**
+   * 隔离（其余 XRAY）：
+   * - 房间根节点且在册清单带 `panel_refnos` 时，进入完整「房间视图」（半透明房间体 + 穿墙直段截断 + 洋红断口 + HUD 横幅）；
+   * - 其余层级节点或旧清单无 `panel_refnos` 时，沿用 `collectSceneRefnos` 隔离，单元级及以上连所属 BRAN 的直段一起留实体。
+   */
   async function isolateXray(id: string): Promise<void> {
+    const node = nodesById.value[id];
+    if (node?.kind === 'room') {
+      await ensureRoomTree(node.roomRefno);
+      const roomOption = roots.value.find((r) => r.refno === node.roomRefno);
+      const panelRefnos = await resolveRoomPanelRefnosWithFallback(node.roomRefno, roomOption);
+      if (panelRefnos.length > 0) {
+        const memberRefnos = await collectRefnos(id);
+        const tubeCarriers = branUnitRefnosUnder(id, nodesById.value);
+        await enterRoomView({
+          roomRefno: node.roomRefno,
+          roomNum: roomOption?.room_num || node.name,
+          roomName: roomOption?.name ?? null,
+          panelRefnos,
+          memberRefnos,
+          tubeCarriers,
+          viewer: viewerRef.value,
+          loadModels: showModels,
+          companionsOf: (members, units) => sceneCompanions([...members], [...units]),
+        });
+        return;
+      }
+    }
+    exitRoomView({ keepIsolation: true });
     const keep = await collectSceneRefnos(id);
     sceneGraph.isolate(keep);
   }
 
   function clearXray() {
+    exitRoomView({ keepIsolation: true });
     sceneGraph.clearIsolation();
   }
 

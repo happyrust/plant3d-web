@@ -12,10 +12,12 @@ import { computed, ref } from 'vue';
 
 import { DoorOpen, ListTree, LoaderCircle, X } from 'lucide-vue-next';
 
+import { useRoomClip } from '@/composables/useRoomClip';
 import { MEMBER_PREVIEW_LIMIT, useRoomInfo } from '@/composables/useRoomInfo';
 import { cn } from '@/lib/utils';
 
 const roomInfo = useRoomInfo();
+const roomClip = useRoomClip();
 
 /** `center_dist` / 成员 `distance` 都是 mm；米级以上换米报一位小数（plant-ui `format_dist` 同款）。 */
 function formatDist(mm: number | null): string {
@@ -189,6 +191,18 @@ function onHeaderPointerDown(e: PointerEvent) {
                   data-testid="room-info-isolate"
                   @click="roomInfo.isolateRoom">
                   隔离成员
+                </button>
+                <button type="button"
+                  :class="cn(
+                    'rounded border px-2 py-0.5 text-[11px] transition-colors',
+                    roomClip.truncateEnabled.value
+                      ? 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-700 hover:bg-fuchsia-500/20 dark:text-fuchsia-300'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                  )"
+                  data-testid="room-info-truncate-toggle"
+                  title="切换房间视图穿墙直段截断（开启时穿墙直段在墙面截断并贴洋红断口）"
+                  @click="roomClip.toggleRoomTubeTruncation()">
+                  截断直段：{{ roomClip.truncateEnabled.value ? '开' : '关' }}
                 </button>
                 <button type="button"
                   class="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"

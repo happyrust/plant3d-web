@@ -24,6 +24,7 @@ import type { AttributeSource } from '@/model-source/ports';
 
 import { isGenModelV1ApiError } from '@/api/genModelV1Api';
 import { sceneCompanionsOf } from '@/composables/deliveryUnitScene';
+import { enterRoomView, exitRoomView } from '@/composables/useRoomClip';
 import {
   branUnitRefnosCoveredBy,
   branUnitRefnosOfTree,
@@ -666,6 +667,9 @@ function toRoomOption(room: ApiSpatialRoomsResult['rooms'][number]): SpatialQuer
     name: room.name ?? null,
     dbnum: typeof room.dbnum === 'number' ? room.dbnum : null,
     panelCount: room.panel_count,
+    ...(Array.isArray(room.panel_refnos)
+      ? { panelRefnos: room.panel_refnos.map((refno) => normalizeRefno(refno)) }
+      : {}),
   };
 }
 
@@ -2532,6 +2536,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
   /** 「恢复场景」：清掉隔离的 X-Ray，并把结果区显隐 / 隔离动过的构件放回动之前的可见性。 */
   function restoreScene() {
+    exitRoomView({ keepIsolation: true });
     const viewer = viewerRef.value;
     if (!viewer) return;
     const all = viewer.scene.objectIds.slice();
@@ -2614,10 +2619,31 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  /** 树节点的「隔离」（ADR 0068）：场景里其余全部 X-Ray，只有这些构件实体显示——管件连所属 BRAN 的直段一起留实体。 */
+  /** 树节点的「隔离」（ADR 0068）：场景里其余全部 X-Ray，只有这些构件实体显示——管件连所属 BRAN 的直段一起留实体；单间在册房间且有 `panelRefnos` 时进入房间直段截断视图。 */
   function isolateRefnos(refnos: string[]) {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
+    const tree = resultSet.value?.tree ?? null;
+    if (viewer && tree && tree.rooms.length === 1) {
+      const roomNode = tree.rooms[0]!;
+      const roomOpt = roomOptions.value.find((opt) => opt.refno === normalizeRefno(roomNode.refno));
+      if (Array.isArray(roomOpt?.panelRefnos) && roomOpt.panelRefnos.length > 0) {
+        const coveredUnits = branUnitRefnosCoveredBy(tree, refnos);
+        snapshotVisibility(viewer, withCompanions(resolveBatchRefnos({ refnos })));
+        void enterRoomView({
+          roomRefno: roomNode.refno,
+          roomNum: roomNode.room_num || roomOpt.roomNum,
+          roomName: roomNode.name ?? roomOpt.name ?? null,
+          panelRefnos: roomOpt.panelRefnos,
+          memberRefnos: resolveBatchRefnos({ refnos }),
+          tubeCarriers: coveredUnits,
+          viewer,
+          companionsOf: (members, units) => sceneCompanions([...members], [...units]),
+        });
+        return;
+      }
+    }
+    exitRoomView({ keepIsolation: true });
     const keep = withCompanions(resolveBatchRefnos({ refnos }));
     if (!viewer || keep.length === 0) return;
     snapshotVisibility(viewer, keep);

@@ -117,6 +117,8 @@ export type SpatialRoomOption = {
   name: string | null;
   dbnum: number | null;
   panel_count: number;
+  /** 在册边界面板的 `a_b` 列表；旧服务端可能未下发 */
+  panel_refnos?: string[];
 };
 
 export type SpatialRoomsResult = {

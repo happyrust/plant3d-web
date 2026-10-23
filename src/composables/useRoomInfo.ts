@@ -20,6 +20,7 @@ import type { SpatialSource } from '@/model-source/ports';
 import { genModelV1RoomLookup, type RoomLookupResult } from '@/api/genModelV1RoomApi';
 import { branUnitRefnosCoveredBy, forEachTreeLeaf, mergeTreeLeaves, treeNodeLeavesInline } from '@/composables/spatialTree';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
+import { enterRoomView, resolveRoomPanelRefnosWithFallback } from '@/composables/useRoomClip';
 import { useSceneGraphOps } from '@/composables/useSceneGraph';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
@@ -304,7 +305,11 @@ function flyToRoom(): void {
   if (aabb) viewer.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
 }
 
-/** 「隔离成员」：其余 XRAY；BRAN 单元整体被成员盖住时把它的直管（挂在 BRAN refno 上）一起留下。 */
+/**
+ * 「隔离成员」：
+ * - 若在册房间清单带有 `panel_refnos`，进入完整「房间视图」（半透明房间体 + 穿墙直段截断 + 洋红断口 + 视口 HUD）；
+ * - 否则回退到按 `refnos + covered BRAN` 隔离。
+ */
 async function isolateRoom(): Promise<void> {
   const viewer = useViewerContext().viewerRef.value;
   if (!viewer) return;
@@ -313,11 +318,28 @@ async function isolateRoom(): Promise<void> {
     emitToast({ message: '这间房还没有成员（或成员树取数失败）', level: 'info' });
     return;
   }
+  const room = focusedRoom.value;
   const tree = roomTree.value;
   const node = focusedRoomNode.value;
   const covered = tree && node
     ? branUnitRefnosCoveredBy({ ...tree, rooms: [node] }, refnos)
     : [];
+  const option = roomOptionOf(room);
+  if (room) {
+    const panelRefnos = await resolveRoomPanelRefnosWithFallback(room, option);
+    if (panelRefnos.length > 0) {
+      await enterRoomView({
+        roomRefno: room,
+        roomNum: node?.room_num || option?.room_num || room,
+        roomName: node?.name ?? option?.name ?? null,
+        panelRefnos,
+        memberRefnos: refnos,
+        tubeCarriers: covered,
+        viewer,
+      });
+      return;
+    }
+  }
   const keep = [...new Set([...refnos, ...covered])];
   useSceneGraphOps(useViewerContext().viewerRef).isolate(keep);
 }

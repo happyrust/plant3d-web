@@ -1942,20 +1942,65 @@ export class DTXLayer {
   }
 
   /**
-   * 设置对象矩阵
+   * 设置对象矩阵（PDMS 世界毫米系，不含 `_globalModelMatrix`）：
+   * 同步更新 CPU `_matricesBuffer`、GPU `_matricesTexture.image.data`（4 行像素）、对象世界包围盒与可见性修订号。
    */
   setObjectMatrix(objectId: string, matrix: Matrix4): void {
     const obj = this._objects.get(objectId);
     if (!obj) return;
 
-    matrix.toArray(this._matricesBuffer, obj.objectIndex * 16);
+    const srcOffset = obj.objectIndex * 16;
+    matrix.toArray(this._matricesBuffer, srcOffset);
 
-    // 需要重建矩阵纹理的对应区域
-    // 简化实现：标记整个纹理需要更新
+    const geoHandle = this._geometries.get(obj.geoHash);
+    if (geoHandle) {
+      obj.boundingBox.copy(this._computeDynamicObjectBoundingBox(geoHandle, matrix));
+    }
+
     if (this._matricesTexture) {
-      // TODO: 实现局部更新
+      const data = this._matricesTexture.image?.data as Float32Array | undefined;
+      if (data) {
+        const width = OBJECTS_TEXTURE_WIDTH;
+        const objX = obj.objectIndex % width;
+        const objY = Math.floor(obj.objectIndex / width) * 4;
+        for (let row = 0; row < 4; row++) {
+          const dstOffset = ((objY + row) * width + objX) * 4;
+          if (dstOffset + 3 < data.length) {
+            data[dstOffset] = this._matricesBuffer[srcOffset + row * 4]!;
+            data[dstOffset + 1] = this._matricesBuffer[srcOffset + row * 4 + 1]!;
+            data[dstOffset + 2] = this._matricesBuffer[srcOffset + row * 4 + 2]!;
+            data[dstOffset + 3] = this._matricesBuffer[srcOffset + row * 4 + 3]!;
+          }
+        }
+      }
       this._matricesTexture.needsUpdate = true;
     }
+    this._visibilityRevision++;
+  }
+
+  /**
+   * 读取对象在 `_matricesBuffer` 中的原始变换矩阵（PDMS 世界毫米系，不含 `_globalModelMatrix`）。
+   */
+  getObjectMatrix(objectId: string, target: Matrix4 = new Matrix4()): Matrix4 | null {
+    const obj = this._objects.get(objectId);
+    if (!obj) return null;
+    return target.fromArray(this._matricesBuffer, obj.objectIndex * 16);
+  }
+
+  /**
+   * 零拷贝读取已注册几何体的局部顶点与局部索引切片（供房间体 `panelTriMesh` 与直段 `detectPrism` 使用）。
+   */
+  getGeometryRawSlice(geoHash: string): { positions: Float32Array; indices: Uint32Array } | null {
+    const handle = this._geometries.get(geoHash);
+    if (!handle) return null;
+    const vStart = handle.vertexBase * 3;
+    const vEnd = (handle.vertexBase + handle.vertexCount) * 3;
+    const iStart = handle.indexBase;
+    const iEnd = handle.indexBase + handle.indexCount;
+    return {
+      positions: this._positionsBuffer.subarray(vStart, vEnd),
+      indices: this._indicesBuffer.subarray(iStart, iEnd),
+    };
   }
 
   // ========== 对象查询 ==========

@@ -70,6 +70,8 @@ export type SpatialQueryRoomOption = {
   name: string | null;
   dbnum: number | null;
   panelCount: number;
+  /** 在册边界面板的 `a_b` 列表；旧服务端可能未下发 */
+  panelRefnos?: string[];
 };
 
 /** 房间体制此刻的状态（`SpatialSource.rooms()`）：不是 `ready` / `degraded` 就整块收起，`reason` 写为什么。 */

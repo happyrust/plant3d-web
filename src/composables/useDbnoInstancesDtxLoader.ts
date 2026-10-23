@@ -197,6 +197,62 @@ export function listDtxTubeObjects(): { key: string; objectId: string }[] {
   }
   return out;
 }
+
+/**
+ * 给定一批直管载体（`BRAN` / `HANG`）refno，返回已装入场景的全部直管（`TUBI`）对象及其所属载体与直段身份键。
+ * 供房间视图直段截断（`useRoomClip`）按分支扫描候选直管。
+ */
+export function resolveDtxTubiObjectsForCarriers(
+  carrierRefnos: Iterable<string>,
+): Array<{ objectId: string; carrierRefno: string; tubeKey: string | null }> {
+  const out: Array<{ objectId: string; carrierRefno: string; tubeKey: string | null }> = [];
+  const seenObjects = new Set<string>();
+  for (const rawRefno of carrierRefnos) {
+    const candidates = refnoKeyCandidates(rawRefno);
+    const normalizedCarrier = normalizeRefnoKey(rawRefno);
+    for (const cache of cachesByDbno.values()) {
+      for (const candidate of candidates) {
+        const objectIds = cache.refnoToObjectIds.get(candidate);
+        if (!objectIds || objectIds.length === 0) continue;
+        for (const objectId of objectIds) {
+          if (seenObjects.has(objectId)) continue;
+          if (!cache.tubiObjectIds.has(objectId)) continue;
+          seenObjects.add(objectId);
+          out.push({
+            objectId,
+            carrierRefno: normalizedCarrier || candidate,
+            tubeKey: cache.objectIdToTubeKey?.get(objectId) ?? null,
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 给定一批构件 / 面板 `refno`，返回每个 `refno`（归一化 `a_b`）在场景中对应的全部 `DTXLayer` `objectId`。
+ */
+export function resolveDtxObjectIdsByRefnos(refnos: Iterable<string>): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  for (const rawRefno of refnos) {
+    const normalized = normalizeRefnoKey(rawRefno);
+    if (!normalized) continue;
+    const candidates = refnoKeyCandidates(rawRefno);
+    const matched = new Set<string>();
+    for (const cache of cachesByDbno.values()) {
+      for (const candidate of candidates) {
+        const objectIds = cache.refnoToObjectIds.get(candidate);
+        if (!objectIds) continue;
+        for (const id of objectIds) matched.add(id);
+      }
+    }
+    if (matched.size > 0) {
+      result.set(normalized, Array.from(matched));
+    }
+  }
+  return result;
+}
 const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 
 /**

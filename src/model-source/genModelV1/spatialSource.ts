@@ -253,6 +253,9 @@ export function spatialRoomsToLegacyResult(resp: SpatialRoomsResponse): SpatialR
       name: room.name ?? null,
       dbnum: typeof room.dbnum === 'number' ? room.dbnum : null,
       panel_count: room.panel_count,
+      ...(Array.isArray(room.panel_refnos)
+        ? { panel_refnos: room.panel_refnos.map((refno) => fromV1Refno(refno)) }
+        : {}),
     })),
   };
 }

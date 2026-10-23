@@ -1,0 +1,28 @@
+{
+  "verifiedAt": "2026-10-23T18:15:53.110Z",
+  "backendTarget": "http://123.57.182.243",
+  "room": "R134",
+  "truncateOnStats": {
+    "hudText": "房间视图·R134·成员 131截断直段 开 · 截断 8 段退出",
+    "chipText": "截断直段 开 · 截断 8 段",
+    "chipTitle": "截断 8 段 · 房间外 38 段不画 · 整段在内 13 段（点击显示整根分支）",
+    "chipState": "ready-on",
+    "totalDtxObjects": 148
+  },
+  "truncateOffStats": {
+    "chipText": "截断直段 关",
+    "chipTitle": "直段按整根分支显示；点击只保留房间体内的那一截",
+    "chipState": "off"
+  },
+  "truncateReOnStats": {
+    "chipText": "截断直段 开 · 截断 8 段",
+    "chipTitle": "截断 8 段 · 房间外 38 段不画 · 整段在内 13 段（点击显示整根分支）",
+    "chipState": "ready-on"
+  },
+  "screenshots": [
+    "01-room-view-truncate-on.png",
+    "02-room-view-truncate-off.png",
+    "03-room-view-truncate-reon.png",
+    "04-room-view-exited.png"
+  ]
+}
