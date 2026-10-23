@@ -120,10 +120,10 @@
 
 ## 6. 验证与回归清单
 
-- [ ] **后端单测**：`cargo test --lib -- spatial_branches spatial_query spatial_tree_tubes surface_clearance`，含「未加载邻管只靠直管段靠近」「源管未加载」「索引未建好」的新用例。
-- [ ] **例程**：`cargo run --example pipe_clearance_probe` 全部成立。
+- [x] **后端单测**：`cargo test --lib -- spatial_branches spatial_query spatial_tube_index spatial_tree_tubes surface_clearance`，含「未加载邻管只靠直管段靠近」「源管未加载」「索引未建好」「L 形源管按叶子盒与粗筛」的新用例（61 passed）。
+- [x] **例程**：`cargo run --example pipe_clearance_probe` 全部成立。
 - [ ] **线上冷启动验收**：发版重启后不加载任何模型，对 146830 / 145018 / 144947 / 144872 做周边检测：全部 200；同区逐根精算比对 0 漏；146830 找到 144960 / 145892 / 146146。
-- [ ] **前端**：单测、`npm run type-check`（基线 471，不新增）、lint；浏览器实测周边检测后选择不变、结果按净距排、提示分级。
+- [x] **前端**：单测、`npm run type-check`（基线 471，不新增）、lint；浏览器实测周边检测后选择不变、结果按净距排、提示分级。
 
 ---
 
@@ -134,4 +134,7 @@
 - **后端 N2**：`gen-model` 分支 `fix/nearby-coverage` `69e7d2d4e`。源管不在投影里时用 `model_record_reader::records_of_root` 读整根记录取盒（有回执仍以投影为准）；库里也没有才 404。树的读锁仍只在一处拿（`with_global_tree`）。
 - **后端 N1**：同分支 `114e108c5`。新增 `spatial_tube_index`：服务就绪后后台读 `tubi_relate` 世界盒（跳过 invalid），按 BRAN 求并集，10 分钟重读；候选合并树上管件、索引和投影（有回执以投影为准）；索引没读成时回包置 `truncated_candidates` 并写明原因。`coverage` 改为 `global-tree-bran-tube-index-and-current-projection`。
 - **验证**：`cargo test --lib -- spatial_branches spatial_query spatial_tube_index spatial_tree_tubes surface_clearance` 60 过、1 忽略（两个提交各自单独跑过）；`cargo run --example pipe_clearance_probe` 全部成立。本地库按 N1 + N2 口径重算 146830：源盒来自库里 7 条管件 + 8 段直管，144960 / 145892 / 146146 都进了候选（盒距 0 / 116.5 / 457.4 mm）。
-- **待办**：并入 refactor 与发版（待确认）；发版后做 §6 的线上冷启动验收；N3；前端 N5 / N6（先确认工作区里未提交的 `PipeDistanceDrawer.vue` 等改动）。
+- **前端 N5 + N6 + 审核修复**：`plant3d-web` `main` `bf3abfbf` / `00b446b0` / `19b0ae67`（已部署 `123.57.182.243`）。`preserveSelection` 保留选集、周边分组卡（`nearbyGroup`）+「重新检测周边」+「只看周边 / 恢复场景」隔离、列表按净距升序排序（相交置顶）、0 命中与截断/告警归入 `detectNotice`、源管未加载 404 友好提示、`parallel-centerline` 隔离与禁重算、零长度三通分支 `endReaches` 修正；14 个测试文件 152 条单测全过，`type-check` 0 新增，线上浏览器实测通过。
+- **后端 N3**：`gen-model` 分支 `fix/nearby-coverage`。`Center` 收集源管各条有效几何的 `leaf_boxes`，`scan_tree_for_branches` 按叶子盒逐个探针取空间树候选并按叶子盒求最小距离；`ModelMemoryStore` 新增 `root_bounds` 按回执缓存每根整根并集盒，`spatial_branches::assemble` 先用整根并集盒粗筛投影根与直管段索引，粗筛命中（或含坏盒）才判归属、读逐条记录并按叶子盒量距；归属不明仅统计粗筛范围内的候选。
+- **验收脚本 N7**：新增 `scripts/verify-pipe-nearby-candidates.mjs`（周边候选 × 同区 `24381_144870` 逐根精算比对，覆盖冷启动 200 状态、密集管廊 `146830` 直管段邻管 `144960/145892/146146`、长折管 `145018/144947/144872` 候选精度与耗时）。
+- **待办**：跑后端 N3 单测与例程验证后提交 `fix/nearby-coverage`；确认并入 `refactor` 与发版；发版后运行 `node scripts/verify-pipe-nearby-candidates.mjs` 完成线上冷启动验收。
