@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 
 import { AppWindow, Download, ExternalLink, FileSearch, Loader2, RefreshCw } from 'lucide-vue-next';
 
@@ -61,13 +61,24 @@ function downloadAttachment(): void {
   link.click();
 }
 
-function openInNewWindow(): void {
+/** Word 文档（.docx / .doc）浏览器无法原生在新标签页内联渲染，window.open 只会重复触发下载；仅对 PDF / 图片显示新窗口打开 */
+const canOpenInNewWindow = computed(() => {
+  const kind = activeReviewAttachmentPreview.value?.kind;
+  return kind === 'pdf' || kind === 'image';
+});
+
+const inlinePreviewUrl = computed(() => {
   const preview = activeReviewAttachmentPreview.value;
-  if (!preview) return;
-  const href = buildReviewAttachmentInlineUrl({
+  if (!preview) return '';
+  return buildReviewAttachmentInlineUrl({
     name: preview.attachment.name,
     url: preview.url,
   });
+});
+
+function openInNewWindow(): void {
+  const href = inlinePreviewUrl.value;
+  if (!href) return;
   window.open(href, '_blank', 'noopener,noreferrer');
 }
 
@@ -122,10 +133,12 @@ function describeAttachment(): string {
         @click="popoutPreview">
         <AppWindow class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button"
+      <button v-if="canOpenInNewWindow"
+        type="button"
         class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60"
         aria-label="在新窗口打开附件"
         title="在新窗口打开"
+        data-testid="review-attachment-preview-open-new-tab"
         @click="openInNewWindow">
         <ExternalLink class="h-4 w-4" aria-hidden="true" />
       </button>
@@ -160,7 +173,8 @@ function describeAttachment(): string {
             <Download class="h-3.5 w-3.5" aria-hidden="true" />
             下载
           </button>
-          <button type="button"
+          <button v-if="canOpenInNewWindow"
+            type="button"
             class="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-700 px-3 text-xs text-slate-200 transition-colors hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60"
             data-testid="review-attachment-preview-open-window"
             @click="openInNewWindow">
@@ -178,7 +192,7 @@ function describeAttachment(): string {
       <div v-else-if="activeReviewAttachmentPreview?.kind === 'pdf' && reviewAttachmentPreviewStatus === 'ready'"
         class="flex h-full min-h-0 flex-col">
         <object data-testid="review-attachment-pdf"
-          :data="activeReviewAttachmentPreview.url"
+          :data="inlinePreviewUrl"
           type="application/pdf"
           :aria-label="activeReviewAttachmentPreview.attachment.name"
           class="min-h-0 flex-1 border-0 bg-white">

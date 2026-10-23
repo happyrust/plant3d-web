@@ -11,6 +11,7 @@ import {
   clearAuthToken,
   getAuthToken,
   login,
+  reviewAttachmentUpload,
   reviewTaskCancel,
   reviewTaskDelete,
   reviewTaskGetById,
@@ -21,7 +22,13 @@ import {
   type ReviewTask,
   type WorkflowVerifyNextStep,
 } from '@/api/reviewApi';
+import { formatAttachmentSize } from '@/components/review/reviewAttachmentFlow';
 import { resolvePassiveWorkflowMode, resolveWorkflowMode } from '@/components/review/workflowMode';
+import {
+  buildReviewAttachmentDownloadUrl,
+  getReviewAttachmentPreviewKind,
+} from '@/composables/useReviewAttachmentPreview';
+import type { ReviewAttachment } from '@/types/auth';
 import {
   applyTokenPrimaryPmsLaunchUrl,
   buildTokenPrimaryPmsLaunchSearch,
@@ -750,6 +757,8 @@ let refs: {
   panelCreatedText: HTMLDivElement;
   panelComponentList: HTMLUListElement;
   panelAttachmentList: HTMLUListElement;
+  panelUploadAttachmentBtn: HTMLButtonElement | null;
+  panelUploadAttachmentInput: HTMLInputElement | null;
   panelInitiateSection: HTMLElement;
   panelWorkflowSection: HTMLElement;
   panelReadonlySection: HTMLElement;
@@ -930,6 +939,7 @@ function exposeSimulatorTestApi(): void {
     },
     getSnapshot: () => buildSimulatorTestSnapshot(),
     ensureSidePanelExpanded: () => {
+      setModalFullscreen(false);
       setSidePanelCollapsed(false);
     },
     emitPmsWorkflowPreAction: (payload) => {
@@ -1027,6 +1037,8 @@ function initRefs(): void {
     panelCreatedText: getEl<HTMLDivElement>('panel-created-text'),
     panelComponentList: getEl<HTMLUListElement>('panel-component-list'),
     panelAttachmentList: getEl<HTMLUListElement>('panel-attachment-list'),
+    panelUploadAttachmentBtn: document.getElementById('panel-upload-attachment-btn') as HTMLButtonElement | null,
+    panelUploadAttachmentInput: document.getElementById('panel-upload-attachment-input') as HTMLInputElement | null,
     panelInitiateSection: getEl<HTMLElement>('panel-initiate-section'),
     panelWorkflowSection: getEl<HTMLElement>('panel-workflow-section'),
     panelReadonlySection: getEl<HTMLElement>('panel-readonly-section'),
@@ -1624,21 +1636,169 @@ function collectComponentRefs(): string[] {
     .filter(Boolean);
 }
 
-function collectAttachmentLabels(): string[] {
-  const attachments = state.diagnostics.workflowSnapshot?.data?.attachments;
-  if (!Array.isArray(attachments) || attachments.length === 0) {
-    return ['附件占位：沿用 workflow/sync 返回，当前无额外后端字段'];
-  }
-  return attachments.slice(0, 10).map((item, index) => {
-    if (typeof item === 'string') {
-      return item.trim() || `附件 ${index + 1}`;
-    }
-    try {
-      return JSON.stringify(item);
-    } catch {
-      return `附件 ${index + 1}`;
-    }
+function normalizeSimulatorAttachment(raw: unknown, index: number): ReviewAttachment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const id = String(obj.id || obj.file_id || obj.fileId || `att-${index + 1}`).trim();
+  const name = String(obj.name || obj.file_name || obj.fileName || obj.description || '').trim();
+  const url = String(obj.url || obj.download_url || obj.downloadUrl || '').trim();
+  if (!name && !url) return null;
+  const rawSize = Number(obj.size ?? obj.file_size ?? obj.fileSize ?? 0);
+  const size = Number.isFinite(rawSize) && rawSize > 0 ? rawSize : 0;
+  const mimeType = String(obj.mimeType || obj.mime_type || obj.type || '').trim() || undefined;
+  const rawUploadedAt = Number(obj.uploadedAt ?? obj.uploaded_at ?? 0);
+  const uploadedAt = Number.isFinite(rawUploadedAt) && rawUploadedAt > 0 ? rawUploadedAt : Date.now();
+  return {
+    id,
+    name: name || url.split('/').pop() || `附件 ${index + 1}`,
+    url,
+    size,
+    mimeType,
+    uploadedAt,
+  };
+}
+
+function collectSimulatorAttachments(): ReviewAttachment[] {
+  const detailAtts = state.diagnostics.taskDetail?.attachments;
+  const selectedAtts = getSelectedRow()?.task?.attachments;
+  const wfAtts = state.diagnostics.workflowSnapshot?.data?.attachments;
+  const candidates: unknown[] = [
+    ...(Array.isArray(detailAtts) ? detailAtts : []),
+    ...(Array.isArray(selectedAtts) ? selectedAtts : []),
+    ...(Array.isArray(wfAtts) ? wfAtts : []),
+  ];
+  const seen = new Set<string>();
+  const out: ReviewAttachment[] = [];
+  candidates.forEach((item, idx) => {
+    const normalized = normalizeSimulatorAttachment(item, idx);
+    if (!normalized) return;
+    const key = normalized.id || normalized.url || normalized.name;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(normalized);
   });
+  return out;
+}
+
+function previewAttachmentInIframe(attachment: ReviewAttachment): void {
+  const iframeWindow = refs.iframeEl?.contentWindow;
+  const context = resolveWorkflowContext();
+  if (!iframeWindow) return;
+  iframeWindow.postMessage({
+    type: 'plant3d.preview_attachment',
+    taskId: context.taskId || undefined,
+    formId: context.formId || undefined,
+    attachment,
+  }, '*');
+}
+
+function renderSimulatorAttachmentList(target: HTMLElement, attachments: ReviewAttachment[]): void {
+  target.innerHTML = '';
+  if (attachments.length === 0) {
+    const li = document.createElement('li');
+    li.textContent = '当前任务暂无附件（可在嵌入页或点击「+ 上传文档」上传 PDF / Word）';
+    target.appendChild(li);
+    return;
+  }
+  attachments.forEach((att) => {
+    const li = document.createElement('li');
+    li.style.display = 'flex';
+    li.style.alignItems = 'center';
+    li.style.justifyContent = 'space-between';
+    li.style.gap = '6px';
+    li.dataset.testid = `sim-attachment-item-${att.id}`;
+
+    const info = document.createElement('span');
+    info.style.overflow = 'hidden';
+    info.style.textOverflow = 'ellipsis';
+    info.style.whiteSpace = 'nowrap';
+    info.style.flex = '1';
+    const sizeText = att.size ? ` (${formatAttachmentSize(att.size)})` : '';
+    info.textContent = `${att.name}${sizeText}`;
+    info.title = `${att.name}${sizeText}`;
+    li.appendChild(info);
+
+    const actions = document.createElement('span');
+    actions.style.display = 'inline-flex';
+    actions.style.gap = '4px';
+    actions.style.flexShrink = '0';
+
+    if (getReviewAttachmentPreviewKind(att) !== null && att.url) {
+      const previewBtn = document.createElement('button');
+      previewBtn.type = 'button';
+      previewBtn.className = 'panel-btn primary';
+      previewBtn.style.padding = '1px 6px';
+      previewBtn.style.fontSize = '11px';
+      previewBtn.textContent = '查看';
+      previewBtn.dataset.testid = `sim-attachment-preview-${att.id}`;
+      previewBtn.dataset.attachmentName = att.name;
+      previewBtn.addEventListener('click', () => {
+        previewAttachmentInIframe(att);
+        if (isModalFullscreen() && isDrawerOpen()) {
+          setDrawerOpen(false);
+        }
+      });
+      actions.appendChild(previewBtn);
+    }
+
+    if (att.url) {
+      const downloadLink = document.createElement('a');
+      downloadLink.href = buildReviewAttachmentDownloadUrl(att);
+      downloadLink.download = att.name;
+      downloadLink.textContent = '下载';
+      downloadLink.style.fontSize = '11px';
+      downloadLink.style.color = 'var(--primary)';
+      downloadLink.style.textDecoration = 'none';
+      downloadLink.style.padding = '1px 4px';
+      downloadLink.dataset.testid = `sim-attachment-download-${att.id}`;
+      actions.appendChild(downloadLink);
+    }
+
+    li.appendChild(actions);
+    target.appendChild(li);
+  });
+}
+
+async function handleSimulatorAttachmentUpload(files: FileList | null): Promise<void> {
+  if (!files || files.length === 0) return;
+  const context = resolveWorkflowContext();
+  if (!context.formId && !context.taskId) {
+    refs.panelFeedback.textContent = '请先打开或保存单据，拿到 form_id / taskId 后再上传附件。';
+    refs.panelFeedback.classList.add('fail');
+    return;
+  }
+  const btn = refs.panelUploadAttachmentBtn;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+  }
+  try {
+    let lastUploaded: ReviewAttachment | null = null;
+    for (const file of Array.from(files)) {
+      const res = await reviewAttachmentUpload(context.taskId || '', file, {
+        ...(context.formId ? { formId: context.formId } : {}),
+      });
+      if (res.success && res.attachment) {
+        lastUploaded = res.attachment;
+      }
+    }
+    await refreshDiagnosticsSnapshot({
+      taskId: context.taskId,
+      formId: context.formId,
+    });
+    renderSidePanelState();
+    if (lastUploaded && getReviewAttachmentPreviewKind(lastUploaded) !== null) {
+      previewAttachmentInIframe(lastUploaded);
+    }
+  } catch (err) {
+    refs.panelFeedback.textContent = `上传附件失败：${err instanceof Error ? err.message : String(err)}`;
+    refs.panelFeedback.classList.add('fail');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '+ 上传文档';
+    }
+  }
 }
 
 function setSelectedTask(taskId: string | null): void {
@@ -1979,7 +2139,7 @@ function renderSidePanelState(): void {
     detail?.currentNode || selected?.task.currentNode || state.workflowNodeRaw,
   );
   const components = collectComponentRefs();
-  const attachments = collectAttachmentLabels();
+  const attachments = collectSimulatorAttachments();
   const latestPayload = state.workflowAction.lastSubmittedWorkflowComment || '--';
   const latestResult = state.workflowAction.lastOk === null
     ? '--'
@@ -2029,7 +2189,12 @@ function renderSidePanelState(): void {
   refs.panelCreatedText.textContent = toYmd(createdAt);
 
   renderListContent(refs.panelComponentList, components, '当前任务暂无构件清单');
-  renderListContent(refs.panelAttachmentList, attachments, '当前流程快照未返回附件');
+  renderSimulatorAttachmentList(refs.panelAttachmentList, attachments);
+  if (refs.panelUploadAttachmentBtn) {
+    const canUpload = Boolean(context.formId || context.taskId) && state.currentPmsUser === 'SJ';
+    refs.panelUploadAttachmentBtn.disabled = !canUpload;
+    refs.panelUploadAttachmentBtn.title = canUpload ? '上传 PDF / Word / 图片等附件并自动预览' : '仅设计人员 (SJ) 在打开单据后可上传附件';
+  }
 
   refs.panelInitiateSection.hidden = state.sidePanelMode !== 'initiate';
   refs.panelWorkflowSection.hidden = state.sidePanelMode !== 'workflow';
@@ -3794,6 +3959,16 @@ function bindEvents(): void {
 
   refs.createBtn.addEventListener('click', async () => {
     await openIframe({ source: 'new' });
+  });
+
+  refs.panelUploadAttachmentBtn?.addEventListener('click', () => {
+    refs.panelUploadAttachmentInput?.click();
+  });
+
+  refs.panelUploadAttachmentInput?.addEventListener('change', (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    void handleSimulatorAttachmentUpload(input.files);
+    input.value = '';
   });
 
   refs.deleteBtn.addEventListener('click', async () => {

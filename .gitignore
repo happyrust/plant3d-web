@@ -115,6 +115,8 @@ scripts/*
 !scripts/acceptance-api-test.mjs
 !scripts/test-document-upload-preview.mjs
 !scripts/verify-pipe-nearby-candidates.mjs
+!scripts/verify-review-word-preview.mjs
+!scripts/verify-pms-simulator-doc-preview.mjs
 
 # Local live-gate evidence (contains generated macros, logs, and root snapshots).
 output/gen-model-v1-frozen-source-live/

@@ -102,7 +102,8 @@ describe('ReviewAttachmentPreviewPanelDock', () => {
     await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
     await nextTick();
     const frame = mounted.host.querySelector('[data-testid="review-attachment-pdf"]') as HTMLObjectElement | null;
-    expect(frame?.data).toBe(new URL('/files/review_attachments/drawing.pdf', window.location.href).href);
+    expect(frame?.data).toBe(new URL('/files/review_attachments/drawing.pdf?name=drawing.pdf', window.location.href).href);
+    expect(mounted.host.querySelector('[data-testid="review-attachment-preview-open-new-tab"]')).not.toBeNull();
     expect(mounted.host.textContent).toContain('drawing.pdf');
 
     openReviewAttachmentPreview('task-1', attachment({
@@ -157,6 +158,31 @@ describe('ReviewAttachmentPreviewPanelDock', () => {
     expect(addPopoutGroup).toHaveBeenCalledWith(documentPanel);
     expect(addPopoutGroup).not.toHaveBeenCalledWith(measurementPanel);
 
+    mounted.unmount();
+  });
+
+  it('hides the open-in-new-tab button for Word attachments so it does not trigger a duplicate download', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        },
+      },
+    )));
+    openReviewAttachmentPreview('task-1', attachment({
+      id: 'att-word',
+      name: 'spec.docx',
+      url: '/files/review_attachments/spec.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }));
+    const mounted = mountPanel();
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).not.toBe('loading'));
+    await nextTick();
+
+    expect(mounted.host.querySelector('[data-testid="review-attachment-preview-open-new-tab"]')).toBeNull();
+    expect(mounted.host.querySelector('[data-testid="review-attachment-preview-open-window"]')).toBeNull();
     mounted.unmount();
   });
 });

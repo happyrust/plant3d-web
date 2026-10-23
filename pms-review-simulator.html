@@ -1338,8 +1338,12 @@
                       <ul id="panel-component-list" class="component-list"></ul>
                     </div>
                     <div class="panel-field">
-                      <label>附件占位</label>
-                      <ul id="panel-attachment-list" class="attachment-list"></ul>
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                        <label style="margin: 0;">模型附件</label>
+                        <button id="panel-upload-attachment-btn" class="panel-btn" type="button" data-testid="sim-upload-attachment-btn" style="padding: 2px 8px; font-size: 12px; height: 24px;">+ 上传文档</button>
+                        <input id="panel-upload-attachment-input" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.dwg,.dxf,.xlsx,.xls,.csv" data-testid="sim-upload-attachment-input" hidden />
+                      </div>
+                      <ul id="panel-attachment-list" class="attachment-list" data-testid="sim-attachment-list"></ul>
                     </div>
                   </div>
                 </section>

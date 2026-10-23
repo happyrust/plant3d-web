@@ -1,9 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Popout Window</title>
+  <title>文档预览 - Plant3D Web</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #020617;
+    }
+  </style>
+  <script>
+    (function syncOpenerStyles() {
+      try {
+        var openerDoc = window.opener && window.opener.document;
+        if (!openerDoc) return;
+        document.documentElement.className = openerDoc.documentElement.className;
+        var nodes = openerDoc.head.querySelectorAll('link[rel="stylesheet"], style');
+        for (var i = 0; i < nodes.length; i++) {
+          document.head.appendChild(nodes[i].cloneNode(true));
+        }
+      } catch (e) {
+        console.warn('[popout] style sync skipped:', e);
+      }
+    })();
+  </script>
 </head>
 <body>
 </body>

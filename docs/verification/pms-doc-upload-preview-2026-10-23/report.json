@@ -1,0 +1,19 @@
+{
+  "verifiedAt": "2026-10-23T16:37:36.911Z",
+  "backendTarget": "http://123.57.182.243",
+  "projectId": "AvevaMarineSample",
+  "formId": "FORM-8B951252BE1F",
+  "taskId": "task-e17b02ae-1ae9-43cb-8111-dac73341686a",
+  "packageName": "PMS-DOC-PREVIEW-1792773429561",
+  "finalStatus": "approved",
+  "finalNode": "pz",
+  "screenshots": [
+    "01-sj-initiate-upload-word-pdf.png",
+    "02-sj-initiate-preview-word-split.png",
+    "03-sj-initiate-preview-pdf-split.png",
+    "04-sj-saved-card-and-sim-panel-attachments.png",
+    "05-jh-review-panel-preview-word.png",
+    "06-jh-review-panel-preview-pdf.png",
+    "07-pz-approved-complete.png"
+  ]
+}

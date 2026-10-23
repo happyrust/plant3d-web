@@ -405,14 +405,14 @@ function isLegacyWordAttachment(target: ReviewAttachmentPreviewTarget): boolean 
 }
 
 function validateLegacyWordBytes(bytes: Uint8Array, source: string): void {
-  const ole = LEGACY_WORD_OLE.every((byte, index) => bytes[index] === byte);
-  const rtf = bytes.length >= 5 && String.fromCharCode(...bytes.subarray(0, 5)) === '{\\rtf';
-  if (ole || rtf) return;
+  const ole = bytes.length >= LEGACY_WORD_OLE.length
+    && LEGACY_WORD_OLE.every((byte, index) => bytes[index] === byte);
+  if (ole) return;
   failFileValidation({
     source,
     format: 'docx',
-    reason: '文件签名与声明类型不一致',
-    expected: 'd0 cf 11 e0 a1 b1 1a e1 或 {\\rtf',
-    actual: Array.from(bytes.subarray(0, 8)).map(byte => byte.toString(16).padStart(2, '0')).join(' '),
+    reason: '文件签名与声明类型不一致（仅支持标准 OLE 二进制 .doc）',
+    expected: 'd0 cf 11 e0 a1 b1 1a e1',
+    actual: Array.from(bytes.subarray(0, 8)).map(byte => byte.toString(16).padStart(2, '0')).join(' ') || '空响应',
   });
 }

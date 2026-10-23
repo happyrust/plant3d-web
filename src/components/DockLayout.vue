@@ -45,7 +45,7 @@ import {
   type ZoneName,
 } from '@/composables/usePanelZones';
 import { RENDER_STYLE_PRESETS, useRenderStyleStore, type RenderStyle } from '@/composables/useRenderStyleStore';
-import { clearReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
+import { clearReviewAttachmentPreview, openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -434,6 +434,25 @@ function tryRegisterEmbedPostMessageBridge() {
         type: 'plant3d.response',
         requestId,
         ok: true,
+      };
+      (source as WindowProxy).postMessage(resp, '*');
+      return;
+    }
+
+    if ((data as { type?: string }).type === 'plant3d.preview_attachment') {
+      const previewReq = data as {
+        requestId?: string;
+        taskId?: string;
+        formId?: string;
+        attachment?: import('@/types/auth').ReviewAttachment;
+      };
+      const scope = String(previewReq.taskId || previewReq.formId || 'sim-preview').trim();
+      const ok = !!(previewReq.attachment && openReviewAttachmentPreview(scope, previewReq.attachment));
+      const resp: Plant3dResponse = {
+        type: 'plant3d.response',
+        requestId: typeof previewReq.requestId === 'string' ? previewReq.requestId : undefined,
+        ok,
+        ...(ok ? {} : { error: 'unable to open attachment preview' }),
       };
       (source as WindowProxy).postMessage(resp, '*');
       return;

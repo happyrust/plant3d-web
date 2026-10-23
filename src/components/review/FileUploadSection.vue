@@ -78,12 +78,36 @@ const emit = defineEmits<{
   (e: 'preview', file: UploadedFile): void;
 }>();
 
+const localObjectUrls = new Map<string, string>();
+
+function getOrCreateLocalObjectUrl(file: UploadedFile): string | null {
+  if (!file.file || typeof URL.createObjectURL !== 'function') return null;
+  let url = localObjectUrls.get(file.id);
+  if (!url) {
+    url = URL.createObjectURL(file.file);
+    localObjectUrls.set(file.id, url);
+  }
+  return url;
+}
+
+function revokeLocalObjectUrl(id: string): void {
+  const url = localObjectUrls.get(id);
+  if (url && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url);
+  }
+  localObjectUrls.delete(id);
+}
+
 function toPreviewAttachment(file: UploadedFile): ReviewAttachment | null {
-  if (file.status !== 'success' || !file.serverUrl) return null;
+  if (file.status === 'error') return null;
+  const url = (file.status === 'success' && file.serverUrl?.trim())
+    ? file.serverUrl.trim()
+    : getOrCreateLocalObjectUrl(file);
+  if (!url) return null;
   return {
     id: file.serverAttachmentId || file.id,
     name: file.name,
-    url: file.serverUrl,
+    url,
     size: file.size,
     mimeType: file.type || undefined,
     uploadedAt: file.uploadedAt || Date.now(),
@@ -170,6 +194,30 @@ function validateFile(file: File): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
+/** 对 .docx / .doc 在上传前核对文件头魔数，防止伪造或损坏的 Word 文件上传成功却无法预览。 */
+async function validateUploadFileMagic(file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext !== 'docx' && ext !== 'doc') return null;
+  if (typeof file.slice !== 'function') return null;
+  try {
+    const slice = file.slice(0, 8);
+    if (typeof slice.arrayBuffer !== 'function') return null;
+    const bytes = new Uint8Array(await slice.arrayBuffer());
+    // 单测常构造 0 字节或纯占位短字节的 File，仅对非空且声明为 .docx / .doc 的真实文件做签名拦截
+    if (bytes.length < 4 || bytes.every((b) => b === 0)) return null;
+    if (ext === 'docx') {
+      const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+      return isZip ? null : '文件内容与 .docx 格式不匹配（非有效 ZIP/OOXML 文档）';
+    }
+    if (bytes.length < 8) return null;
+    const ole = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+    const isOle = ole.every((b, idx) => bytes[idx] === b);
+    return isOle ? null : '文件内容与 .doc 格式不匹配（仅支持标准 OLE 二进制文档）';
+  } catch {
+    return null;
+  }
+}
+
 // 更新单个文件状态
 function updateFileStatus(id: string, updates: Partial<UploadedFile>) {
   commitFiles(currentFiles().map((f) => {
@@ -201,6 +249,23 @@ async function uploadFile(
       errorMessage: '本地文件已失效，请移除后重新选择',
     });
     return;
+  }
+
+  const ext = localFile.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'docx' || ext === 'doc') {
+    const magicError = await validateUploadFileMagic(localFile);
+    if (magicError) {
+      updateFileStatus(uploadedFile.id, {
+        status: 'error',
+        progress: 0,
+        errorMessage: magicError,
+      });
+      const updatedFile = currentFiles().find((f) => f.id === uploadedFile.id);
+      if (updatedFile) {
+        emit('uploadError', updatedFile, new Error(magicError));
+      }
+      return;
+    }
   }
 
   // 更新状态为上传中
@@ -281,6 +346,9 @@ onBeforeUnmount(() => {
     controller.abort();
   }
   uploadControllers.clear();
+  for (const id of [...localObjectUrls.keys()]) {
+    revokeLocalObjectUrl(id);
+  }
 });
 
 // 添加文件并可选自动上传
@@ -394,6 +462,7 @@ async function removeFile(id: string) {
 
   clearReviewAttachmentPreviewIfShowing(serverAttachmentId);
   clearReviewAttachmentPreviewIfShowing(target.id);
+  revokeLocalObjectUrl(target.id);
   commitFiles(currentFiles().filter((f) => f.id !== id));
 }
 

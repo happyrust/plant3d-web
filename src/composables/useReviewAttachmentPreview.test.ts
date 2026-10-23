@@ -251,6 +251,14 @@ describe('useReviewAttachmentPreview', () => {
     expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/word-preview'), expect.anything());
     expect(reviewAttachmentWordFile.value?.fileName).toBe('legacy.doc');
     expect(activeReviewAttachmentPreview.value?.url).toBe(new URL(original.url, window.location.href).href);
+
+    // 伪装成 .doc 的 RTF 文件在预检阶段即被拒绝（@zrimo/viewer 只支持标准 OLE .doc）
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(new TextEncoder().encode('{\\rtf1\\ansi fake}'), {
+      headers: { 'Content-Type': 'application/msword' },
+    }));
+    retryReviewAttachmentPreview();
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('error'));
+    expect(reviewAttachmentPreviewError.value).toContain('OLE');
   });
 
   it('discards a stale Word response after switching documents', async () => {

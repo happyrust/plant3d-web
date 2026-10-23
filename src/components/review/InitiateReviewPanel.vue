@@ -11,6 +11,7 @@ import {
   EMBED_MODE_PARAMS_STORAGE_KEY,
   type EmbedLandingState,
 } from './embedRoleLanding';
+import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
 import { buildReviewAttachments, restoreUploadedFilesFromAttachments } from './reviewAttachmentFlow';
@@ -413,7 +414,7 @@ const createdTaskFormId = ref<string | null>(null);
 
 const isSubmitting = ref(false);
 const submitted = ref(false);
-const lastCreatedTask = ref<{ id: string; title: string; checkerName: string; approverName: string; componentCount: number } | null>(null);
+const lastCreatedTask = ref<{ id: string; formId: string | null; title: string; checkerName: string; approverName: string; componentCount: number; attachments: ReviewAttachment[] } | null>(null);
 const automationCreateResult = ref<InitiateReviewAutomationCreateResult | null>(null);
 const notification = ref<{ type: 'success' | 'error' | null; message: string; details?: string }>({
   type: null,
@@ -588,9 +589,10 @@ const activeUploadFormId = computed(() => formId.value || createdTaskFormId.valu
 const canAutoUploadAttachments = computed(() => !!(activeUploadTaskId.value || activeUploadFormId.value));
 
 function previewUploadedFile(file: UploadedFile): void {
-  const url = file.serverUrl?.trim() ?? '';
-  const scope = (activeUploadTaskId.value || activeUploadFormId.value || '').trim();
-  if (file.status !== 'success' || !url || !scope) {
+  const serverUrl = file.serverUrl?.trim() ?? '';
+  const url = serverUrl || (file.file && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file.file) : '');
+  const scope = (activeUploadTaskId.value || activeUploadFormId.value || lastCreatedTask.value?.id || lastCreatedTask.value?.formId || 'draft-initiate').trim();
+  if (file.status === 'error' || !url || !scope) {
     emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
     return;
   }
@@ -603,6 +605,13 @@ function previewUploadedFile(file: UploadedFile): void {
     uploadedAt: file.uploadedAt || Date.now(),
   };
   if (!openReviewAttachmentPreview(scope, attachment)) {
+    emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
+  }
+}
+
+function previewSubmittedAttachment(attachment: ReviewAttachment): void {
+  const scope = (lastCreatedTask.value?.id || lastCreatedTask.value?.formId || activeUploadTaskId.value || activeUploadFormId.value || 'draft-initiate').trim();
+  if (!scope || !openReviewAttachmentPreview(scope, attachment)) {
     emitToast({ message: '附件地址无效，无法预览', level: 'warning' });
   }
 }
@@ -914,12 +923,15 @@ async function handleSubmit() {
     const checker = checkerIdToSubmit ? reviewerOptions.value.find((r) => r.id === checkerIdToSubmit) : null;
     const approver = approverIdToSubmit ? reviewerOptions.value.find((r) => r.id === approverIdToSubmit) : null;
 
+    const finalAttachments = getUploadedAttachments();
     lastCreatedTask.value = {
       id: task.id,
+      formId: task.formId ?? requestFormId ?? null,
       title: task.title,
       checkerName: checker?.name ?? (isExternal ? '由外部系统指定' : ''),
       approverName: approver?.name ?? (isExternal ? '由外部系统指定' : ''),
       componentCount: selectedComponents.value.length,
+      attachments: finalAttachments.length > 0 ? finalAttachments : (task.attachments ?? []),
     };
     submitted.value = true;
     emit('created', task.id);
@@ -1030,9 +1042,17 @@ function closePanel() {
             <p>校核人：{{ lastCreatedTask.checkerName }}</p>
             <p>审核人：{{ lastCreatedTask.approverName }}</p>
             <p>构件数：{{ lastCreatedTask.componentCount }} 个</p>
+            <p v-if="lastCreatedTask.attachments.length > 0">附件数：{{ lastCreatedTask.attachments.length }} 个</p>
           </div>
         </div>
       </div>
+
+      <AssociatedFilesList v-if="lastCreatedTask.attachments.length > 0"
+        :attachments="lastCreatedTask.attachments"
+        title="已上传附件"
+        description="点击「查看」可在右侧分屏预览 PDF、Word 或图片文档"
+        :previewable="true"
+        @preview="previewSubmittedAttachment" />
 
       <div v-if="externalWorkflowMode" class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
         <p class="text-xs font-medium text-blue-700">流程提示</p>
