@@ -120,7 +120,7 @@ async function listZoneBrans(zoneRefno) {
   if (!childrenRes.ok) {
     throw new Error(`Failed to fetch zone children (${zoneRefno}): HTTP ${childrenRes.status}`);
   }
-  const items = childrenRes.body?.items ?? childrenRes.body?.children ?? [];
+  const items = childrenRes.body?.nodes ?? childrenRes.body?.items ?? childrenRes.body?.children ?? [];
   const brans = [];
   for (const item of items) {
     const noun = String(item.noun || '').toUpperCase();
@@ -129,7 +129,7 @@ async function listZoneBrans(zoneRefno) {
       brans.push(refno);
     } else if (noun === 'PIPE') {
       const sub = await apiGet('/api/v1/tree/children', { refno });
-      for (const child of sub.body?.items ?? sub.body?.children ?? []) {
+      for (const child of sub.body?.nodes ?? sub.body?.items ?? sub.body?.children ?? []) {
         if (String(child.noun || '').toUpperCase() === 'BRAN') {
           brans.push(normRefno(child.refno));
         }
@@ -192,11 +192,12 @@ async function main() {
     const exactChecks = await mapConcurrent(peerBrans, 6, async (target) => {
       const conn = pipeConnection(sourceLine, centerlines.get(target) ?? null);
       if (conn === 'ends') return null;
-      const res = await apiPost('/api/v1/spatial/clearance/surface-to-surface', {
+      const res = await apiGet('/api/v1/spatial/surface-clearance', {
         source_refno: source,
-        target_kind: 'any',
         target_refno: target,
-        max_distance: RADIUS_MM,
+        target_kind: 'any',
+        perpendicular: 'false',
+        max_distance_mm: RADIUS_MM,
       });
       const hit = res.body?.result;
       if (!res.ok || !hit || typeof hit.distance_mm !== 'number' || hit.distance_mm > RADIUS_MM) {
