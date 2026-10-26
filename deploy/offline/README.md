@@ -54,7 +54,9 @@ npm run build:offline:frontend-only
 npm run build:offline -- --no-gen-model
 ```
 
-输出位置：`../gen-model/releases/plant3d-web-offline-v<前端版本>-backend-v<后端版本>-<date>.zip`。默认拒绝覆盖同名发布物，确需覆盖时添加 `--force`。
+默认拒绝 dirty 后端出包：联动构建时先查 `../gen-model` 工作区是否干净（只看已跟踪文件），复用现成包 / `--backend-package` 时在整合前看包内 `release.json` 的 `backend_git_dirty`；联调确需如此时加 `--allow-dirty`，产物会在 `release.json` 里保留 dirty 标记。前端已跟踪文件有未提交改动时不会阻断，但会在 `release.json` 的 `frontend.dirty` 记录（未跟踪文件不计）。
+
+输出位置：`../gen-model/releases/plant3d-web-offline-v<前端版本>-backend-v<后端版本>-<date>.zip`。默认拒绝覆盖同名发布物，确需覆盖时添加 `--force`。打包时同步生成同名 `.sha256` 校验文件；整合后的 `backend/release.json` 会按最终磁盘内容重建并自检，打 zip 前还会检查最终包布局与前后端版本一致性，清单里出现缺失文件或哈希不符会直接中止出包。
 
 ## 可执行升级补丁
 

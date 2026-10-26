@@ -109,6 +109,8 @@ scripts/*
 !scripts/build-offline-patch.ps1
 !scripts/build-offline-patch-maker.ps1
 !scripts/OfflinePatch.cs
+!scripts/offline-release-manifest.mjs
+!scripts/pipe-row-browser-verify.mjs
 !scripts/OfflinePatchRules.cs
 !scripts/OfflinePatchMaker.cs
 !scripts/test-offline-deploy.ps1
@@ -135,6 +137,9 @@ state/
 # KC-Chat 运行时产物（插件自动生成，请勿入库）
 .cursor/mcp.json
 .cursor/kc-mcp/
+# Cursor 工作区规则 / MCP 配置是个人环境，公开仓不入库
+.cursor/
+
 .cursor/kc-mcp-messages/
 .cursor/kc-chat-exports/
 # Added by code-review-graph

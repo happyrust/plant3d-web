@@ -7,8 +7,8 @@
  *   2. 下载 nginx Windows 稳定版
  *   3. 可选调用 ../gen-model/scripts/New-LocalRelease.ps1 打包 gen-model + plant-ui（默认开启）并整合到 backend/
  *   4. 整合前端构建产物 + nginx + bat 脚本
- *   5. 生成前后端（含 plant-ui）版本清单
- *   6. 打包成 zip 放到 ../gen-model/releases/
+ *   5. 生成前后端（含 plant-ui）版本清单，并校验后端清单与最终包布局
+ *   6. 打包成 zip（含 .sha256）放到 ../gen-model/releases/
  *
  * 使用：
  *   node scripts/build-offline-release.mjs                     # 默认：构建 plant3d-web + 执行 ../gen-model 打包发布（含 plant-ui）并合包
@@ -22,12 +22,14 @@
  *   node scripts/build-offline-release.mjs --skip-nginx        # 跳过下载 nginx（已有的话）
  *   node scripts/build-offline-release.mjs --with-surreal      # 在 backend/bin 下附带 surreal.exe（默认不带：rocks 库由现场自己提供，启动时只查服务版本）
  *   node scripts/build-offline-release.mjs --force             # 允许覆盖同名输出
+ *   node scripts/build-offline-release.mjs --allow-dirty       # 允许 dirty 后端出包（默认拒绝，仅联调用）
  */
 
 import { execFileSync, execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
+  createReadStream,
   createWriteStream,
   existsSync,
   mkdirSync,
@@ -40,6 +42,8 @@ import {
 import https from 'node:https';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { assertBackendNotDirty, rebuildBackendManifest, validateOfflinePackage } from './offline-release-manifest.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = resolve(__dirname, '..');
@@ -67,6 +71,7 @@ const args = process.argv.slice(2);
 const skipBuild = args.includes('--skip-build');
 const skipNginx = args.includes('--skip-nginx');
 const force = args.includes('--force');
+const allowDirty = args.includes('--allow-dirty');
 const releaseSuffixIndex = args.indexOf('--release-suffix');
 const releaseSuffix = releaseSuffixIndex >= 0 ? args[releaseSuffixIndex + 1] : '';
 if (releaseSuffixIndex >= 0 && (!releaseSuffix || !/^[a-zA-Z0-9_-]+$/.test(releaseSuffix))) {
@@ -222,6 +227,17 @@ function createZip(srcDir, zipPath) {
   execFileSync('tar.exe', ['-a', '-cf', zipPath, '-C', srcDir, '.'], { stdio: 'inherit' });
 }
 
+/** 流式算文件 sha256：发布 zip 一百多 MB，不整读进内存。 */
+function sha256File(path) {
+  return new Promise((resolvePromise, reject) => {
+    const hash = createHash('sha256');
+    createReadStream(path)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('error', reject)
+      .on('end', () => resolvePromise(hash.digest('hex')));
+  });
+}
+
 function findLatestBackendPackage() {
   if (!existsSync(RELEASES_DIR)) return null;
   const candidates = readdirSync(RELEASES_DIR)
@@ -236,6 +252,24 @@ function buildGenModelRelease() {
   const releaseScript = join(GEN_MODEL_DIR, 'scripts', 'New-LocalRelease.ps1');
   if (!existsSync(releaseScript)) {
     throw new Error(`找不到 gen-model 发布脚本: ${releaseScript}`);
+  }
+  if (!allowDirty) {
+    // gen-model 工作区 dirty 时 New-LocalRelease.ps1 会把包标成 dirty，整合完才被拒就白跑十几分钟；
+    // 这里提前到构建之前就拒（同一口径：只看已跟踪文件）。读不到 git 状态就交给后面按清单再判。
+    let genModelStatus = null;
+    try {
+      genModelStatus = execSync('git status --porcelain --untracked-files=no', {
+        cwd: GEN_MODEL_DIR,
+        encoding: 'utf-8',
+      }).trim();
+    } catch {
+      // ignore
+    }
+    if (genModelStatus) {
+      throw new Error(
+        `../gen-model 工作区有未提交改动，构建出来的后端包会是 dirty，拒绝出包；先提交/清理，或显式加 --allow-dirty:\n${genModelStatus}`,
+      );
+    }
   }
   log('正在执行 ../gen-model 打包发布（含 plant-ui Web/WASM 构建）...');
   const psArgs = [
@@ -292,6 +326,16 @@ function prepareBackend(packagePath) {
       throw new Error(`后端发布包缺少 ${required}: ${packagePath}`);
     }
   }
+  // dirty 后端在整合之前就拒（复用现成包 / --backend-package 也走这里），别等覆盖、重建清单都做完才说不要。
+  const sourceManifest = JSON.parse(readFileSync(join(packageRoot, 'release.json'), 'utf-8'));
+  assertBackendNotDirty(
+    {
+      dirty: sourceManifest.backend_git_dirty ?? null,
+      buildId: sourceManifest.backend_build_id ?? null,
+      commit: sourceManifest.backend_git_commit ?? null,
+    },
+    allowDirty,
+  );
 
   copyDir(packageRoot, BACKEND_DIR);
   // plant-ui Web 层叠加：后端真正服务的永远是 backend/web 磁盘副本（handler 磁盘优先，
@@ -299,6 +343,7 @@ function prepareBackend(packagePath) {
   // plant-ui 的修复不需要重编冻结的后端 exe 就能进包。assets/config 与 assets/meshes
   // 是现场项目数据不是 Web 构建产物，跳过（ron 由 Sync-OfflineConfig 在现场生成）。
   const plantUiWebDir = resolve(PROJECT_DIR, '..', 'plant-ui', 'web', 'public');
+  let plantUiOverlayApplied = false;
   if (existsSync(plantUiWebDir)) {
     const webTarget = join(BACKEND_DIR, 'web');
     const skipDirs = new Set(['config', 'meshes']);
@@ -316,6 +361,7 @@ function prepareBackend(packagePath) {
       }
     };
     overlay(plantUiWebDir, '');
+    plantUiOverlayApplied = true;
     log('已用 ../plant-ui/web/public 覆盖 backend/web（assets/config、assets/meshes 除外）');
   }
   // web/assets/config 里的 ron 是现场项目数据不是构建产物：它到不了浏览器（/assets/*
@@ -365,24 +411,21 @@ function prepareBackend(packagePath) {
   }
 
   normalizeWindowsScripts(BACKEND_DIR);
-  const manifestPath = join(BACKEND_DIR, 'release.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  if (!includeSurreal && Array.isArray(manifest.files)) {
-    // 与上面剔除文件保持一致，避免按清单验签时报缺文件
-    manifest.files = manifest.files.filter((entry) => !/^bin[\\/]surreal\.exe$/i.test(entry.path));
+  // 整合阶段删了 web/assets/config、可能删了 bin/surreal.exe，也覆盖过 web/ 与脚本；
+  // 清单必须按最终磁盘内容重建并自检，否则现场按 release.json 验包会报缺文件。
+  const manifestResult = rebuildBackendManifest(BACKEND_DIR, {
+    plantUiOverlayApplied,
+    includeSurreal,
+  });
+  if (manifestResult.removed.length) {
+    log(
+      `release.json 清单已剔除 ${manifestResult.removed.length} 个不存在/已替换的文件: ${manifestResult.removed.join(', ')}`,
+    );
   }
-  if (manifest.web_source) {
-    manifest.web_source = `${manifest.web_source}+plant-ui-web-public-overlay`;
+  if (manifestResult.added.length) {
+    log(`release.json 清单已补入 ${manifestResult.added.length} 个新增 web 文件`);
   }
-  for (const entry of manifest.files ?? []) {
-    // plant-ui 层叠加可能改写过 web/ 下的文件，连同脚本与 DbOption 一并重算哈希
-    const isOverhauled = /^web[\\/]/i.test(entry.path) && existsSync(join(BACKEND_DIR, entry.path));
-    if (entry.path !== 'DbOption.toml' && !/\.(ps1|bat|cmd)$/i.test(entry.path) && !isOverhauled) continue;
-    const content = readFileSync(join(BACKEND_DIR, entry.path));
-    entry.sha256 = createHash('sha256').update(content).digest('hex');
-    entry.bytes = content.length;
-  }
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+  log(`release.json 清单自检通过: ${manifestResult.fileCount} 个文件`);
 
   removeDir(tmpDir);
   logSuccess(`后端发布包（含 gen-model + plant-ui）已整合: ${packagePath}`);
@@ -397,6 +440,7 @@ function readBackendVersion() {
     version: manifest.backend_version ?? null,
     buildId: manifest.backend_build_id ?? null,
     commit: manifest.backend_git_commit ?? null,
+    dirty: manifest.backend_git_dirty ?? null,
     plantUiVersion: manifest.plant_ui_version ?? null,
     webSource: manifest.web_source ?? null,
   };
@@ -411,11 +455,19 @@ function getVersionInfo() {
   } catch {
     // ignore
   }
+  // 与 gen-model New-LocalRelease.ps1 同口径：只看已跟踪文件，根目录的未跟踪杂物不算 dirty。
+  let dirty = null;
+  try {
+    dirty = execSync('git status --porcelain --untracked-files=no', { cwd: PROJECT_DIR, encoding: 'utf-8' }).trim().length > 0;
+  } catch {
+    // ignore
+  }
   const now = new Date();
   const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   return {
     version: pkg.version,
     commit,
+    dirty,
     buildDate: beijingTime.toISOString(),
   };
 }
@@ -425,6 +477,7 @@ function writeVersionJson(versionInfo) {
   const versionJson = {
     version: versionInfo.version,
     commit: versionInfo.commit,
+    dirty: versionInfo.dirty,
     buildDate: versionInfo.buildDate,
   };
   // 写入 www 目录
@@ -465,6 +518,9 @@ async function main() {
   const versionInfo = getVersionInfo();
   log(`版本: v${versionInfo.version}`);
   log(`Commit: ${versionInfo.commit.slice(0, 7)}`);
+  if (versionInfo.dirty) {
+    log('警告: 前端工作区有未提交改动，release.json 会记录 frontend.dirty=true');
+  }
   log(`合包 ../gen-model（含 plant-ui）: ${includeGenModel ? '开启（默认）' : '关闭'}`);
   if (includeGenModel) {
     log(`联动构建 ../gen-model 发布包: ${shouldBuildGenModel ? '开启（默认）' : '复用现有发布包'}`);
@@ -570,6 +626,7 @@ async function main() {
 
   // Step 3: 准备后端（含 gen-model + plant-ui）
   log('Step 3/6: 准备 ../gen-model 发布包（含 plant-ui）...');
+  let backendVersion = null;
   if (frontendOnly) {
     removeDir(BACKEND_DIR);
     log('已跳过 ../gen-model 打包整合 (--no-gen-model / --frontend-only)');
@@ -581,6 +638,7 @@ async function main() {
       throw new Error(`未找到后端发布包。请去掉 --reuse-gen-model 自动打包，或使用 --backend-package <zip> 指定 ${RELEASES_DIR} 下的 ams-local-*.zip`);
     }
     prepareBackend(selectedBackendPackage);
+    backendVersion = readBackendVersion();
   }
   console.log('');
 
@@ -594,7 +652,6 @@ async function main() {
   // Step 5: 生成 version.json
   log('Step 5/6: 生成版本信息...');
   writeVersionJson(versionInfo);
-  const backendVersion = frontendOnly ? null : readBackendVersion();
   const plantUiInfo = backendVersion?.plantUiVersion
     ? {
       version: backendVersion.plantUiVersion,
@@ -611,6 +668,16 @@ async function main() {
   }, null, 2) + '\n');
   console.log('');
 
+  log('Step 5.5/6: 校验最终包布局与版本一致性...');
+  const packageProblems = validateOfflinePackage(OFFLINE_DIR, {
+    includeGenModel,
+    includeSurreal,
+  });
+  if (packageProblems.length) {
+    throw new Error(`最终包布局自检失败: ${packageProblems.join('; ')}`);
+  }
+  logSuccess('最终包布局自检通过');
+
   // Step 6: 打包成 zip
   log('Step 6/6: 打包成 zip...');
   const dateStr = versionInfo.buildDate.slice(0, 10).replace(/-/g, '');
@@ -620,7 +687,10 @@ async function main() {
   
   normalizeWindowsScripts(OFFLINE_DIR);
   createZip(OFFLINE_DIR, zipPath);
-  
+  // GNU `sha256sum -c` 格式（两个空格、LF 结尾），Windows 上 `Get-FileHash` 比对也不在乎换行。
+  const zipSha256 = await sha256File(zipPath);
+  writeFileSync(`${zipPath}.sha256`, `${zipSha256}  ${zipName}\n`, 'ascii');
+
   // 计算文件大小
   const stat = statSync(zipPath);
   const sizeMB = (stat.size / 1024 / 1024).toFixed(2);
@@ -640,6 +710,7 @@ async function main() {
   console.log(`  构建时间: ${versionInfo.buildDate}`);
   console.log(`  输出文件: ${zipPath}`);
   console.log(`  文件大小: ${sizeMB} MB`);
+  console.log(`  sha256:   ${zipSha256}`);
   console.log('');
   console.log('  发包位置: ../gen-model/releases/');
   console.log('');
