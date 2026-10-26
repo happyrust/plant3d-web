@@ -16,6 +16,7 @@ import type { useToolStore } from '@/composables/useToolStore';
 import type { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import type { useUserStore } from '@/composables/useUserStore';
 import type { PinCluster } from '@/review/domain/annotationProjection/cluster';
+import type { ArrayVersionTracker, ValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
 import type { CloudInspectionMode } from '@/review/domain/annotationProjection/inspection';
 import type { CloudLodLevel } from '@/review/domain/annotationProjection/lod';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
@@ -66,6 +67,18 @@ export type CloudLodState = {
   clusterPopover: ClusterPopover | null;
 };
 
+/** 云线渲染分阶段脏标记的帧级版本戳（所有云线共用）：相机 / 投影 / 视口 / overlay / DPR / 全局矩阵 / 样式。所有者：overlaySync；cloudInspection 读版本号 */
+export type CloudFrameTrackers = {
+  cameraWorld: ArrayVersionTracker;
+  projection: ArrayVersionTracker;
+  viewportCss: ArrayVersionTracker;
+  overlayTransform: ArrayVersionTracker;
+  dpr: ArrayVersionTracker;
+  globalModelMatrix: ArrayVersionTracker;
+  shapeStyle: ValueVersionTracker<string>;
+  paintStyle: ValueVersionTracker<string>;
+};
+
 export type DtxToolsContext = {
   dtxViewerRef: Ref<DtxViewer | null>;
   dtxLayerRef: Ref<DTXLayer | null>;
@@ -95,6 +108,7 @@ export type DtxToolsContext = {
   toolsGroup: Group;
   overlays: DtxToolsOverlays;
   /** 云线渲染计数（静止零重建验收）。所有者：overlaySync；panelActions 读 / 清零 */
+  cloudFrameTrackers: CloudFrameTrackers;
   cloudRenderStats: CloudRenderStats;
   cloudLod: CloudLodState;
   /** 拖框交互态（起点 / 当前点 / 指针）。所有者：cloudCreationFlow；overlayHost.hideMarquee 复位，pointerDispatcher 读 */

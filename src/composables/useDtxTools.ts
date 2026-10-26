@@ -5,16 +5,18 @@ import { Box3, Group, Line, LineDashedMaterial, Matrix4, Vector3 } from 'three';
 
 import { computeAabbObbFromBox3, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed } from './dtxTools/annotationRecords';
 import { CLOUD_FIT_PADDING_PX, CLOUD_TARGET_BBOX_TTL_MS, boxCornersFromMinMaxVec, buildCloudBillboardPolyline, buildWavySelectionBboxLinePositions, cloudWavesPerEdgeForSizePx, computeFittedCloudRectFromCorners, dashSizeFromLineSegments, updateCloudBboxLineSegmentsGeometry } from './dtxTools/cloudGeometry';
-import { type CloudInspectionDebugSnapshot, type CloudOverlayEl, type CloudRenderStats, collectWorldCellEdgePositions, createCloudRenderCache, createDefaultCloudLabelLayoutV1, isRegionPresentationRecord, labelPreferenceFromRecord, regionRenderStyleFromRecord, resolveRegionObjectIdsForRefno } from './dtxTools/cloudRegion';
+import { type CloudOverlayEl, type CloudRenderStats, collectWorldCellEdgePositions, createCloudRenderCache, createDefaultCloudLabelLayoutV1, isRegionPresentationRecord, labelPreferenceFromRecord, regionRenderStyleFromRecord } from './dtxTools/cloudRegion';
 import { createAnnotationInteraction } from './dtxTools/controllers/annotationInteraction';
 import { createCloudCreationFlow } from './dtxTools/controllers/cloudCreationFlow';
+import { createCloudInspection } from './dtxTools/controllers/cloudInspection';
+import { createCloudLodController } from './dtxTools/controllers/cloudLod';
 import { createMeasureController } from './dtxTools/controllers/measureController';
 import { createOverlayHost } from './dtxTools/controllers/overlayHost';
 import { createPanelActions } from './dtxTools/controllers/panelActions';
 import { createPickCandidateController } from './dtxTools/controllers/pickCandidateController';
-import { EMPTY_BOUNDS, IDENTITY_MATRIX_ELEMENTS, aabbFromPoints, clamp, getCanvasPos, measureLabelSize, nowId, overlayToWorld, parseRefnoFromDtxObjectId, vec3ToTuple, worldToOverlay, worldToOverlayPoint, escapeAnnotationLabelText } from './dtxTools/geometry';
+import { EMPTY_BOUNDS, IDENTITY_MATRIX_ELEMENTS, clamp, getCanvasPos, measureLabelSize, nowId, overlayToWorld, parseRefnoFromDtxObjectId, vec3ToTuple, worldToOverlay, worldToOverlayPoint } from './dtxTools/geometry';
 import { buildAnnotationLeaderStyle, createTextAnnotationLeader, setAnnotationLeaderResolution, updateLeaderGeometry } from './dtxTools/leaderVisual';
-import { ensureDiv, makeInlineAnnotationCardEl, makeTextAnnotationCardEl, makeTextAnnotationMarkerEl, repaintMarkerDegrade } from './dtxTools/overlayDom';
+import { makeInlineAnnotationCardEl, makeTextAnnotationCardEl, makeTextAnnotationMarkerEl, repaintMarkerDegrade } from './dtxTools/overlayDom';
 import { type PickRefnoCandidate, type PickRefnoRayHit } from './dtxTools/pickCandidates';
 import { asVec3 } from './dtxTools/pipeMeasureMath';
 import { applyBoxOverlayDegrade, clearGroup, createCloudAnnotationVisual, createObbAnnotationVisual, createRectAnnotationVisual, getCanvasResolution, resolveObbAnnotationAnchorWorldPos } from './dtxTools/visuals';
@@ -34,16 +36,15 @@ import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
 import { dtxLoaderRevision } from '@/composables/useDbnoInstancesDtxLoader';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { type AnnotationRecord, type CloudAnnotationRecord, type Vec3, getCloudMemberRefnos, useToolStore } from '@/composables/useToolStore';
+import { type AnnotationRecord, type Vec3, getCloudMemberRefnos, useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { SOLVESPACE_DIMENSION_THEME, isWorldSegmentBlocked } from '@/dimension';
 import { liftScreenPolylineToBillboard, matricesEqual, regionToWorldCells, renderCloudRegion } from '@/review/domain/annotationProjection/annotationProjection';
-import { DEFAULT_PIN_CLUSTER_OPTIONS, type PinCluster, type PinClusterItem, clusterPins } from '@/review/domain/annotationProjection/cluster';
+import { type PinClusterItem } from '@/review/domain/annotationProjection/cluster';
 import { ALL_CLOUD_DIRTY, type CloudRenderStamp, computeCloudDirty, createArrayVersionTracker, createValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
-import { type CloudInspectionMode, type OcclusionProbe, chooseInspectionProbeMembers, inspectionFactor, inspectionModeFromSearch } from '@/review/domain/annotationProjection/inspection';
+import { inspectionFactor } from '@/review/domain/annotationProjection/inspection';
 import { type LabelPreference, labelOffsetFromTopLeft, layoutCloudLabel, rectToCloudFrame } from '@/review/domain/annotationProjection/labelLayout';
-import { type CloudLodCandidate, type CloudLodLevel, DEFAULT_CLOUD_LOD_OPTIONS, cloudLodPriority, planCloudLod } from '@/review/domain/annotationProjection/lod';
+import { type CloudLodLevel, DEFAULT_CLOUD_LOD_OPTIONS } from '@/review/domain/annotationProjection/lod';
 import { regionCoversMembers } from '@/review/domain/cloudRegion';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 
@@ -154,10 +155,6 @@ export function useDtxTools(options: {
     clusterHiddenMarkerIds: new Set<string>(),
     clusterPopover: null,
   };
-  const CLOUD_INSPECTION_SETTLE_MS = 120;
-  const CLOUD_INSPECTION_MAX_PROBES = 3;
-  const inspectionScratch = { origin: new Vector3(), point: new Vector3(), direction: new Vector3(), hit: new Vector3() };
-  const lodProjectScratch = new Vector3();
 
   const marqueeState = ref<DragRect>({ active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null });
   const marqueeDiv = ref<HTMLDivElement | null>(null);
@@ -197,6 +194,7 @@ export function useDtxTools(options: {
     pendingCloudAnchor,
     toolsGroup,
     overlays: { labels, markers, cloudShapes, rectShapes, obbShapes, textLeaders },
+    cloudFrameTrackers,
     cloudRenderStats,
     cloudLod,
     marqueeState,
@@ -205,8 +203,10 @@ export function useDtxTools(options: {
     rectPreviewLine,
   };
 
-  const host = createOverlayHost(ctx, { clearPinClusterDom });
   const annotation = createAnnotationInteraction(ctx, { updateOverlayPositions });
+  const lod = createCloudLodController(ctx, { updateOverlayPositions, activateAnnotation: annotation.activateAnnotation });
+  const inspection = createCloudInspection(ctx, { updateOverlayPositions, resolveCloudTargetBbox });
+  const host = createOverlayHost(ctx, { clearPinClusterDom: lod.clearPinClusterDom });
   const cloudFlow = createCloudCreationFlow(ctx, {
     pickSurfacePoint,
     hideMarquee: host.hideMarquee,
@@ -319,474 +319,6 @@ export function useDtxTools(options: {
     try { entry.el.remove(); } catch { /* ignore */ }
     labels.delete(cloud.id);
     cloud.render.labelLayout = null;
-  }
-
-  function setHoveredCloudAnnotation(id: string | null): void {
-    if (cloudLod.hoveredId === id) return;
-    cloudLod.hoveredId = id;
-    // 只有 LOD 真在生效（上次计划超预算）时悬停才改变呈现；否则不为一次 hover 白跑一帧
-    if (cloudLod.planSummary.overBudget) {
-      updateOverlayPositions();
-      requestRender?.();
-    }
-  }
-
-  /**
-   * P4 LOD 计划（方案 §9.3）：云线 > 预算时，按锚点到视口中心的距离排优先级，激活 / 拖动 / 悬停 / 待编辑固定高档，
-   * 交给纯函数 `planCloudLod`（预算 64、滞回 16）。输入指纹没变就不重算；≤ 预算或开关关 → 全部 `full`。
-   * 结果写在每条 `cloud.render.lodLevel`，由渲染循环按「计划 ≠ 已应用」切档。返回 true = 本帧重算了计划。
-   */
-  function planCloudLodForFrame(camera: any, frameKey: string): boolean {
-    const lodOn = isCloudRenderFlagEnabled('cloudAdaptiveLod');
-    if (!lodOn || cloudShapes.size <= DEFAULT_CLOUD_LOD_OPTIONS.budget) {
-      if (cloudLod.planKey !== 'all-full') {
-        cloudLod.planKey = 'all-full';
-        cloudLod.planSummary = { overBudget: false, fullCount: cloudShapes.size, pinCount: 0 };
-        for (const cloud of cloudShapes.values()) {
-          cloud.render.lodLevel = 'full';
-          cloud.render.lodPinnedHigh = false;
-        }
-        cloudLod.levels.clear();
-        return true;
-      }
-      return false;
-    }
-    const drag = inlineOverlayAnnotationDrag.value;
-    const dragId = drag.annotationKind === 'cloud' ? drag.annotationId : null;
-    const activeId = store.activeCloudAnnotationId.value;
-    const pendingEditId = store.pendingCloudAnnotationEditId.value;
-    const key = `${frameKey}|${cloudLod.setVersion}|${activeId ?? ''}|${dragId ?? ''}|${cloudLod.hoveredId ?? ''}|${pendingEditId ?? ''}`;
-    if (key === cloudLod.planKey) return false;
-    cloudLod.planKey = key;
-    cloudRenderStats.lodPlans += 1;
-
-    const candidates: CloudLodCandidate[] = [];
-    for (const cloud of cloudShapes.values()) {
-      const recordId = cloud.record.id;
-      const v = lodProjectScratch.copy(cloud.worldPos).applyMatrix4(camera.matrixWorldInverse);
-      // three 相机看向视空间 -z：z ≥ 0 = 锚点在相机背后，投影坐标会翻转，不能拿它当屏内
-      const behind = v.z >= 0;
-      v.applyMatrix4(camera.projectionMatrix);
-      const priority = cloudLodPriority(v.x, v.y, behind);
-      const pinnedHigh = recordId === activeId
-        || recordId === dragId
-        || recordId === cloudLod.hoveredId
-        || recordId === pendingEditId
-        || cloud.render.labelDragTopLeft !== null;
-      cloud.render.lodPriority = priority;
-      cloud.render.lodPinnedHigh = pinnedHigh;
-      candidates.push({ id: cloud.id, priority, pinnedHigh, previous: cloudLod.levels.get(cloud.id) ?? null });
-    }
-    const plan = planCloudLod(candidates, DEFAULT_CLOUD_LOD_OPTIONS);
-    cloudLod.planSummary = { overBudget: plan.overBudget, fullCount: plan.fullCount, pinCount: plan.pinCount };
-    // 记忆只留还在场的条目，删掉的记录不占着旧等级
-    for (const id of cloudLod.levels.keys()) if (!cloudShapes.has(id)) cloudLod.levels.delete(id);
-    for (const cloud of cloudShapes.values()) {
-      const level = plan.levels.get(cloud.id) ?? 'full';
-      cloud.render.lodLevel = level;
-      cloudLod.levels.set(cloud.id, level);
-    }
-    return true;
-  }
-
-  // ---------------- P4 LOD 第二步：pin 档图钉的屏幕聚合 ----------------
-
-  function cloudTitleForList(record: CloudAnnotationRecord): string {
-    const title = (record.title ?? '').trim();
-    return title || `云线批注 ${record.id}`;
-  }
-
-  /** 聚合徽标（带计数的圆标），一簇一枚，按种子 id 复用 */
-  function ensureClusterBadgeEl(seedId: string): HTMLDivElement {
-    const existing = cloudLod.clusterBadges.get(seedId);
-    if (existing) return existing;
-    const overlay = overlayContainerRef.value!;
-    const el = ensureDiv(
-      overlay,
-      'dtx-anno-cluster',
-      [
-        'position:absolute',
-        'left:0',
-        'top:0',
-        'transform:translate(-50%,-50%)',
-        'min-width:26px',
-        'height:26px',
-        'padding:0 7px',
-        'box-sizing:border-box',
-        'border-radius:13px',
-        'background:#1f2937',
-        'color:#fff',
-        'border:2px solid #fff',
-        'box-shadow:0 2px 6px rgba(15,23,42,0.35)',
-        'font-family:\'Roboto Mono\',\'Consolas\',monospace',
-        'font-size:12px',
-        'font-weight:700',
-        'line-height:22px',
-        'text-align:center',
-        'pointer-events:auto',
-        'user-select:none',
-        'cursor:pointer',
-        'z-index:921',
-      ].join(';'),
-    );
-    el.dataset.clusterSeed = seedId;
-    el.setAttribute('role', 'button');
-    el.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      if (cloudLod.clusterPopover?.seedId === seedId) closeClusterPopover();
-      else openClusterPopover(seedId);
-    });
-    el.addEventListener('dblclick', (ev) => {
-      ev.stopPropagation();
-      const cluster = cloudLod.clusterCurrent.find((c) => c.seedId === seedId);
-      if (cluster) flyToCloudAnnotations(cluster.memberIds.map((id) => id.replace(/^cloud:/, '')));
-    });
-    cloudLod.clusterBadges.set(seedId, el);
-    return el;
-  }
-
-  /** 相机飞到这些云线记录的合并范围（锚点 ∪ 创建时目标快照 AABB） */
-  function flyToCloudAnnotations(recordIds: readonly string[]): boolean {
-    const viewer = compatViewerRef.value;
-    if (!viewer) return false;
-    const points: Vec3[] = [];
-    for (const id of recordIds) {
-      const rec = store.cloudAnnotations.value.find((c) => c.id === id);
-      if (!rec) continue;
-      points.push(rec.anchorWorldPos);
-      if (rec.selectionBbox) {
-        points.push(rec.selectionBbox.min, rec.selectionBbox.max);
-      }
-    }
-    const aabb = aabbFromPoints(points);
-    if (!aabb) return false;
-    viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
-    return true;
-  }
-
-  function closeClusterPopover(): void {
-    const popover = cloudLod.clusterPopover;
-    if (!popover) return;
-    cloudLod.clusterPopover = null;
-    const doc = popover.el.ownerDocument;
-    doc.removeEventListener('pointerdown', popover.onDocPointerDown, true);
-    doc.removeEventListener('keydown', popover.onKeyDown, true);
-    try { popover.el.remove(); } catch { /* ignore */ }
-  }
-
-  /** 弹出成员列表：点一行 = 选中那条（激活即升 full 档）；「放大」= 相机飞到全部成员 */
-  function openClusterPopover(seedId: string): void {
-    const overlay = overlayContainerRef.value;
-    const cluster = cloudLod.clusterCurrent.find((c) => c.seedId === seedId);
-    if (!overlay || !cluster) return;
-    closeClusterPopover();
-    const el = ensureDiv(
-      overlay,
-      'dtx-anno-cluster-popover',
-      [
-        'position:absolute',
-        'left:0',
-        'top:0',
-        'min-width:200px',
-        'max-width:280px',
-        'max-height:260px',
-        'overflow:auto',
-        'box-sizing:border-box',
-        'padding:8px',
-        'border-radius:8px',
-        'background:#fff',
-        'color:#111827',
-        'border:1px solid #cbd5e1',
-        'box-shadow:0 8px 24px rgba(15,23,42,0.22)',
-        'font-family:system-ui,-apple-system,\'Segoe UI\',sans-serif',
-        'font-size:12px',
-        'line-height:18px',
-        'pointer-events:auto',
-        'user-select:none',
-        'z-index:922',
-      ].join(';'),
-    );
-    el.dataset.clusterSeed = seedId;
-    const onDocPointerDown = (ev: PointerEvent) => {
-      const target = ev.target as Node | null;
-      if (target && (el.contains(target) || cloudLod.clusterBadges.get(seedId)?.contains(target))) return;
-      closeClusterPopover();
-    };
-    const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') closeClusterPopover();
-    };
-    el.ownerDocument.addEventListener('pointerdown', onDocPointerDown, true);
-    el.ownerDocument.addEventListener('keydown', onKeyDown, true);
-    cloudLod.clusterPopover = { seedId, el, onDocPointerDown, onKeyDown };
-    renderClusterPopover(cluster);
-  }
-
-  function renderClusterPopover(cluster: PinCluster): void {
-    const popover = cloudLod.clusterPopover;
-    const overlay = overlayContainerRef.value;
-    if (!popover || !overlay || popover.seedId !== cluster.seedId) return;
-    const recordIds = cluster.memberIds.map((id) => id.replace(/^cloud:/, ''));
-    const records = recordIds
-      .map((id) => store.cloudAnnotations.value.find((c) => c.id === id))
-      .filter((rec): rec is CloudAnnotationRecord => !!rec);
-    const rows = records
-      .map((rec) => `<div data-role="cluster-member" data-annotation-id="${escapeAnnotationLabelText(rec.id)}" style="padding:4px 6px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="单击选中这条云线批注">${escapeAnnotationLabelText(cloudTitleForList(rec))}</div>`)
-      .join('');
-    popover.el.innerHTML = [
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">',
-      `<span style="font-weight:600">${records.length} 条云线批注</span>`,
-      '<button type="button" data-role="cluster-zoom" style="border:1px solid #94a3b8;border-radius:4px;background:#f8fafc;color:#111827;font-size:12px;line-height:18px;padding:0 8px;cursor:pointer">放大到这些</button>',
-      '</div>',
-      `<div data-role="cluster-members">${rows}</div>`,
-    ].join('');
-    popover.el.querySelector('[data-role="cluster-zoom"]')?.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      flyToCloudAnnotations(recordIds);
-      closeClusterPopover();
-    });
-    for (const row of popover.el.querySelectorAll<HTMLElement>('[data-role="cluster-member"]')) {
-      row.addEventListener('pointerenter', () => { row.style.background = '#e2e8f0'; });
-      row.addEventListener('pointerleave', () => { row.style.background = ''; });
-      row.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const id = row.dataset.annotationId;
-        if (!id) return;
-        closeClusterPopover();
-        // 选中即「当前问题」：LOD 固定高档，轮廓 + 文字框补回来（store 变化经 watch 重建）
-        annotation.activateAnnotation('cloud', id);
-      });
-    }
-    positionClusterPopover(cluster);
-  }
-
-  function positionClusterPopover(cluster: PinCluster): void {
-    const popover = cloudLod.clusterPopover;
-    const overlay = overlayContainerRef.value;
-    if (!popover || !overlay || popover.seedId !== cluster.seedId) return;
-    const overlayRect = overlay.getBoundingClientRect();
-    const width = popover.el.offsetWidth || 220;
-    const height = popover.el.offsetHeight || 120;
-    // 徽标右下方；越界就贴到视口内
-    const x = clamp(cluster.x + 16, 4, Math.max(4, overlayRect.width - width - 4));
-    const y = clamp(cluster.y + 16, 4, Math.max(4, overlayRect.height - height - 4));
-    popover.el.style.left = `${x}px`;
-    popover.el.style.top = `${y}px`;
-  }
-
-  /** 只拆 DOM（overlay 重建 / LOD 退出超预算时）；成员 → 种子的记忆留着，簇身份跨重建稳定 */
-  function clearPinClusterDom(): void {
-    closeClusterPopover();
-    for (const el of cloudLod.clusterBadges.values()) {
-      try { el.remove(); } catch { /* ignore */ }
-    }
-    cloudLod.clusterBadges.clear();
-    for (const id of cloudLod.clusterHiddenMarkerIds) {
-      const marker = markers.get(id);
-      if (marker) marker.el.style.display = '';
-    }
-    cloudLod.clusterHiddenMarkerIds.clear();
-    cloudLod.clusterCurrent = [];
-  }
-
-  /**
-   * 按本帧 pin 档图钉的屏幕位置重算聚合并落到 DOM：合进徽标的图钉藏起、徽标定位 + 计数 + 成员标题提示；
-   * 弹出列表若还对着一个在场的簇就刷新，否则关掉。只在 LOD 计划重算的那一帧调（相机 / 集合 / 交互态变了）。
-   */
-  function applyPinClusters(items: readonly PinClusterItem[]): void {
-    const result = clusterPins(items, cloudLod.clusterSeedOf, DEFAULT_PIN_CLUSTER_OPTIONS);
-    cloudLod.clusterSeedOf = result.seedOf;
-    cloudLod.clusterCurrent = result.clusters;
-
-    // 图钉显隐：新合进来的藏、散出去的放回
-    const nextHidden = new Set(result.seedOf.keys());
-    for (const id of cloudLod.clusterHiddenMarkerIds) {
-      if (!nextHidden.has(id)) markers.get(id)?.el.style.setProperty('display', '');
-    }
-    for (const id of nextHidden) {
-      if (!cloudLod.clusterHiddenMarkerIds.has(id)) markers.get(id)?.el.style.setProperty('display', 'none');
-    }
-    cloudLod.clusterHiddenMarkerIds.clear();
-    for (const id of nextHidden) cloudLod.clusterHiddenMarkerIds.add(id);
-
-    // 徽标：一簇一枚，按种子复用；不在场的拆掉
-    const liveSeeds = new Set<string>();
-    for (const cluster of result.clusters) {
-      liveSeeds.add(cluster.seedId);
-      const el = ensureClusterBadgeEl(cluster.seedId);
-      el.textContent = String(cluster.memberIds.length);
-      el.dataset.count = String(cluster.memberIds.length);
-      el.style.left = `${cluster.x}px`;
-      el.style.top = `${cluster.y}px`;
-      const titles: string[] = [];
-      for (const id of cluster.memberIds) {
-        const rec = cloudShapes.get(id)?.record;
-        if (rec) titles.push(cloudTitleForList(rec));
-        if (titles.length >= 8) break;
-      }
-      const more = cluster.memberIds.length - titles.length;
-      el.title = `${cluster.memberIds.length} 条云线批注（单击列出成员，双击放大）\n${titles.join('\n')}${more > 0 ? `\n…还有 ${more} 条` : ''}`;
-    }
-    for (const [seedId, el] of cloudLod.clusterBadges.entries()) {
-      if (liveSeeds.has(seedId)) continue;
-      try { el.remove(); } catch { /* ignore */ }
-      cloudLod.clusterBadges.delete(seedId);
-    }
-
-    if (cloudLod.clusterPopover) {
-      const cluster = result.clusters.find((c) => c.seedId === cloudLod.clusterPopover!.seedId);
-      if (cluster) renderClusterPopover(cluster);
-      else closeClusterPopover();
-    }
-  }
-
-  // ---------------- P4 inspection：遮挡淡化（方案 §10） ----------------
-
-  /** 当前模式：开关关 → 置顶；否则测试 / 外部覆盖优先，再看 URL `mbd_mode`（与尺寸面板同一口径，按 search 字串缓存） */
-  function currentCloudInspectionMode(): CloudInspectionMode {
-    if (!isCloudRenderFlagEnabled('cloudInspectionFade')) return 'always-on-top';
-    if (cloudLod.inspectionModeOverride) return cloudLod.inspectionModeOverride;
-    const search = typeof window !== 'undefined' ? (window.location?.search ?? '') : '';
-    if (search !== cloudLod.inspectionSearchCache.search) {
-      cloudLod.inspectionSearchCache = { search, mode: inspectionModeFromSearch(search) };
-    }
-    return cloudLod.inspectionSearchCache.mode;
-  }
-
-  /** 覆盖检视模式（null = 跟随 URL）；立刻重排一帧让因子回位 / 触发探测 */
-  function setCloudInspectionMode(mode: CloudInspectionMode | null): void {
-    if (cloudLod.inspectionModeOverride === mode) return;
-    cloudLod.inspectionModeOverride = mode;
-    updateOverlayPositions();
-    requestRender?.();
-  }
-
-  /** 强调 = 激活 / 悬停 / 拖动中 / 待编辑：inspection 不淡它，LOD 也固定高档 */
-  function isCloudEmphasized(cloud: CloudOverlayEl): boolean {
-    const id = cloud.record.id;
-    const drag = inlineOverlayAnnotationDrag.value;
-    return store.activeCloudAnnotationId.value === id
-      || cloudLod.hoveredId === id
-      || (drag.annotationKind === 'cloud' && drag.annotationId === id)
-      || store.pendingCloudAnnotationEditId.value === id
-      || cloud.render.labelDragTopLeft !== null;
-  }
-
-  /**
-   * 探一条云线：≤ 3 个代表性成员，每个先从相机向它的放置盒中心打射线、要**命中成员自己的表面**（否则 `unknown`），
-   * 再问 ADR-0061 的缝：相机 → 命中点之间有没有别的可见几何（成员 refno 作 `subject`，排除它自己的各片）。
-   * 容差 = max(尺寸系统 toleranceMm × 全局矩阵缩放, tolerancePx × 命中点处每像素世界长度)。
-   */
-  function probeCloudOcclusion(cloud: CloudOverlayEl, camera: any, canvas: HTMLCanvasElement): OcclusionProbe[] {
-    const layer = dtxLayerRef.value;
-    if (!layer) return [];
-    const members = getCloudMemberRefnos(cloud.record);
-    let fallback: readonly [number, number, number] | null = null;
-    if (!cloud.render.regionCells) {
-      const sb = resolveCloudTargetBbox(cloud);
-      if (sb) fallback = [(sb.min[0] + sb.max[0]) / 2, (sb.min[1] + sb.max[1]) / 2, (sb.min[2] + sb.max[2]) / 2];
-    }
-    const samples = chooseInspectionProbeMembers(cloud.render.regionCells ? cloud.record.regionV1 : null, members, fallback, CLOUD_INSPECTION_MAX_PROBES);
-    if (samples.length === 0) return [];
-    const origin = camera.getWorldPosition(inspectionScratch.origin);
-    const mmToWorld = layer.getGlobalModelMatrix().getMaxScaleOnAxis();
-    const toleranceFromMm = SOLVESPACE_DIMENSION_THEME.inspection.toleranceMm * (Number.isFinite(mmToWorld) && mmToWorld > 0 ? mmToWorld : 0);
-    const out: OcclusionProbe[] = [];
-    for (const sample of samples) {
-      const point = inspectionScratch.point.set(sample.point[0], sample.point[1], sample.point[2]);
-      const direction = inspectionScratch.direction.subVectors(point, origin);
-      const length = direction.length();
-      if (!(length > 0)) {
-        out.push('unknown');
-        continue;
-      }
-      direction.divideScalar(length);
-      let nearest: { point: Vector3; distance: number } | null = null;
-      for (const objectId of resolveRegionObjectIdsForRefno(layer, sample.refno)) {
-        cloudRenderStats.inspectionRays += 1;
-        const hit = layer.raycastObject(objectId, origin, direction);
-        if (hit && (!nearest || hit.distance < nearest.distance)) nearest = hit;
-      }
-      if (!nearest) {
-        out.push('unknown');
-        continue;
-      }
-      const hitPoint = inspectionScratch.hit.copy(nearest.point);
-      const perPixel = worldPerPixelAt(camera, hitPoint, Math.max(1, canvas.clientWidth), Math.max(1, canvas.clientHeight));
-      const tolerance = Math.max(toleranceFromMm, Number.isFinite(perPixel) ? SOLVESPACE_DIMENSION_THEME.inspection.tolerancePx * perPixel : 0);
-      cloudRenderStats.inspectionRays += 1;
-      out.push(isWorldSegmentBlocked(layer, origin, hitPoint, tolerance, { subject: sample.refno }) ? 'blocked' : 'clear');
-    }
-    return out;
-  }
-
-  function cloudInspectionKey(cloud: CloudOverlayEl, frame: { cameraWorld: number; modelEpoch: number; globalModelMatrix: number }): string {
-    return `${frame.cameraWorld}|${frame.modelEpoch}|${frame.globalModelMatrix}|${cloud.render.recordTracker.version}`;
-  }
-
-  /** 相机停下之后跑：给所有该探而没探过（key 变了）的 full 档云线打射线；因子变了就请一帧，paint 阶段按新因子刷材质 */
-  function runCloudInspection(): void {
-    if (cloudLod.inspectionTimer !== null) {
-      clearTimeout(cloudLod.inspectionTimer);
-      cloudLod.inspectionTimer = null;
-    }
-    cloudLod.inspectionPending = false;
-    const viewer = dtxViewerRef.value;
-    const canvas = viewer?.canvas;
-    if (!viewer || !canvas || currentCloudInspectionMode() !== 'inspection') return;
-    const frame = {
-      cameraWorld: cloudFrameTrackers.cameraWorld.version,
-      modelEpoch: dtxLoaderRevision.value,
-      globalModelMatrix: cloudFrameTrackers.globalModelMatrix.version,
-    };
-    const occludedAlpha = SOLVESPACE_DIMENSION_THEME.inspection.occludedAlpha;
-    let changed = false;
-    for (const cloud of cloudShapes.values()) {
-      if (cloud.render.lodLevel !== 'full' || cloud.degrade || isCloudEmphasized(cloud)) continue;
-      const key = cloudInspectionKey(cloud, frame);
-      if (cloud.render.inspectionKey === key) continue;
-      const probes = probeCloudOcclusion(cloud, viewer.camera, canvas);
-      const factor = inspectionFactor('inspection', probes, false, false, occludedAlpha);
-      cloud.render.inspectionKey = key;
-      cloud.render.inspectionProbes = probes;
-      if (cloud.render.inspectionFactor !== factor) {
-        cloud.render.inspectionFactor = factor;
-        changed = true;
-      }
-    }
-    if (changed) requestRender?.();
-  }
-
-  function scheduleCloudInspection(): void {
-    if (cloudLod.inspectionTimer !== null) clearTimeout(cloudLod.inspectionTimer);
-    cloudLod.inspectionTimer = setTimeout(runCloudInspection, CLOUD_INSPECTION_SETTLE_MS);
-  }
-
-  /** 测试 / 调试：不等相机停下，立刻探一遍并把因子刷进材质（先跑一帧让版本戳对上当前相机） */
-  function runCloudInspectionNow(): void {
-    updateOverlayPositions();
-    runCloudInspection();
-    updateOverlayPositions();
-  }
-
-  /** e2e / 单测：inspection 当前模式、是否有待探、每条云线的因子 / 样本 / 探测键 */
-  function debugCloudInspection(): CloudInspectionDebugSnapshot {
-    const items: CloudInspectionDebugSnapshot['items'] = [];
-    for (const [id, cloud] of cloudShapes.entries()) {
-      items.push({
-        id,
-        factor: cloud.render.inspectionFactor,
-        probes: [...cloud.render.inspectionProbes],
-        key: cloud.render.inspectionKey,
-        outlineOpacity: (cloud.outline.material as MeshLineMaterial).opacity,
-        leaderOpacity: cloud.leader.coreMaterial.opacity,
-      });
-    }
-    return {
-      mode: currentCloudInspectionMode(),
-      pending: cloudLod.inspectionPending || cloudLod.inspectionTimer !== null,
-      occludedAlpha: SOLVESPACE_DIMENSION_THEME.inspection.occludedAlpha,
-      items,
-    };
   }
 
   function syncFromStore() {
@@ -985,9 +517,9 @@ export function useDtxTools(options: {
         annotation.activateAnnotation('cloud', c.id);
       });
       // P4 LOD「悬停临时展示」：图钉上悬停即固定高档（补回轮廓 + 文字框），移开后按预算回落
-      cloudMarker.addEventListener('pointerenter', () => setHoveredCloudAnnotation(c.id));
+      cloudMarker.addEventListener('pointerenter', () => lod.setHoveredCloudAnnotation(c.id));
       cloudMarker.addEventListener('pointerleave', () => {
-        if (cloudLod.hoveredId === c.id) setHoveredCloudAnnotation(null);
+        if (cloudLod.hoveredId === c.id) lod.setHoveredCloudAnnotation(null);
       });
 
       if (shouldRenderTextAnnotationCard(c.collapsed) && !deferCloudLabels) {
@@ -1331,9 +863,9 @@ export function useDtxTools(options: {
     cloudRenderStats.frames += 1;
 
     // ---- P4 LOD（方案 §9.3）：超预算时先定本帧谁算全轮廓、谁只留图钉；相机 / 视口 / 集合 / 交互态没变就复用上次计划 ----
-    const lodReplanned = planCloudLodForFrame(viewer.camera, `${frameStamp.cameraWorld}|${frameStamp.projection}|${frameStamp.viewportCss}`);
+    const lodReplanned = lod.planCloudLodForFrame(viewer.camera, `${frameStamp.cameraWorld}|${frameStamp.projection}|${frameStamp.viewportCss}`);
     // ---- P4 inspection（方案 §10）：本帧的显示模式，一帧读一次 ----
-    const inspectionMode = currentCloudInspectionMode();
+    const inspectionMode = inspection.currentCloudInspectionMode();
     cloudLod.inspectionPending = false;
 
     for (const cloud of cloudShapes.values()) {
@@ -1415,8 +947,8 @@ export function useDtxTools(options: {
 
       // ---- P4 inspection（方案 §10）：检视模式下、非强调、非失效的云线，相机 / 模型 / 记录变了就记一笔「待探」，
       // 射线在相机停下（settle）后由 runCloudInspection 打；置顶模式 / 强调 / 失效一律因子 1（STALE 提示要可读）----
-      if (inspectionMode === 'inspection' && !cloud.degrade && !isCloudEmphasized(cloud)) {
-        if (cloud.render.inspectionKey !== cloudInspectionKey(cloud, frameStamp)) cloudLod.inspectionPending = true;
+      if (inspectionMode === 'inspection' && !cloud.degrade && !inspection.isCloudEmphasized(cloud)) {
+        if (cloud.render.inspectionKey !== inspection.cloudInspectionKey(cloud, frameStamp)) cloudLod.inspectionPending = true;
       } else if (cloud.render.inspectionFactor !== 1 || cloud.render.inspectionKey !== '') {
         cloud.render.inspectionFactor = 1;
         cloud.render.inspectionKey = '';
@@ -1752,7 +1284,7 @@ export function useDtxTools(options: {
     // 退出超预算（或开关关）那一帧拆掉徽标、放回图钉
     const clusterItems: PinClusterItem[] | null = lodReplanned && cloudLod.planSummary.overBudget ? [] : null;
     if (lodReplanned && !cloudLod.planSummary.overBudget && (cloudLod.clusterBadges.size > 0 || cloudLod.clusterHiddenMarkerIds.size > 0)) {
-      clearPinClusterDom();
+      lod.clearPinClusterDom();
     }
     for (const it of markers.values()) {
       const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
@@ -1763,10 +1295,10 @@ export function useDtxTools(options: {
         clusterItems.push({ id: it.id, x: p.x, y: p.y });
       }
     }
-    if (clusterItems) applyPinClusters(clusterItems);
+    if (clusterItems) lod.applyPinClusters(clusterItems);
 
     // 检视模式下有云线待探：等相机停下（settle）再打射线；置顶模式下不会有待探，也就一条射线都不打
-    if (cloudLod.inspectionPending) scheduleCloudInspection();
+    if (cloudLod.inspectionPending) inspection.scheduleCloudInspection();
     else if (cloudLod.inspectionTimer !== null && inspectionMode !== 'inspection') {
       clearTimeout(cloudLod.inspectionTimer);
       cloudLod.inspectionTimer = null;
@@ -2238,16 +1770,16 @@ export function useDtxTools(options: {
     debugCloudRegionRender: panelActions.debugCloudRegionRender,
     // P4 LOD：本帧计划快照；悬停临时升档（图钉的 pointerenter / leave 已绑定，这里给测试与外部调用）
     debugCloudLod: panelActions.debugCloudLod,
-    setHoveredCloudAnnotation,
+    setHoveredCloudAnnotation: lod.setHoveredCloudAnnotation,
     // P4 LOD 聚合：pin 档图钉的屏幕聚合快照；打开 / 关闭某簇的成员列表；相机飞到一组云线
     debugCloudClusters: panelActions.debugCloudClusters,
-    openClusterPopover,
-    closeClusterPopover,
-    flyToCloudAnnotations,
+    openClusterPopover: lod.openClusterPopover,
+    closeClusterPopover: lod.closeClusterPopover,
+    flyToCloudAnnotations: lod.flyToCloudAnnotations,
     // P4 inspection：遮挡淡化快照；覆盖显示模式（null = 跟随 URL mbd_mode）；不等相机停下立刻探一遍
-    debugCloudInspection,
-    setCloudInspectionMode,
-    runCloudInspectionNow,
+    debugCloudInspection: inspection.debugCloudInspection,
+    setCloudInspectionMode: inspection.setCloudInspectionMode,
+    runCloudInspectionNow: inspection.runCloudInspectionNow,
     // ADR-0050 视口降级：解析表变化后就地换外观（watch 已接；这里给测试直接调）与当前外观快照
     applyBindingDegrade,
     debugAnnotationDegrades: panelActions.debugAnnotationDegrades,
