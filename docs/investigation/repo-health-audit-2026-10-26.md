@@ -126,5 +126,5 @@
 - P1-7：`ce14372e` + `5aad47f8` engines / playwright → devDependencies / 删 bun.lock；`@types/three` 0.182 → 0.162 已对齐（`697f062d`：22 条真新增全修——DTXLayer 13 处 `image.data` 断言收进 `textureData()`、ptsetTransform 9 处 `elements[i]` 兼容 `number[]`；22 条换了措辞的旧错里修掉 14 条，基线 471 → 457；剩 Leader / Slope / Weld 三个标注把 LineBasicMaterial 赋给 Line2 的 12 条随后一并修掉——Line2 必须配 LineMaterial，改用材质集里现成的 fatLine；这三个类目前没有活的调用方（`createLeaderAnnotation` 只被测试 mock），基线再收到 445）；pnpm-lock.yaml 已删（自 09-07 基线后从未更新，CI / 部署都走 `npm ci`），AGENTS.md / CLAUDE.md / specs quickstart 不再提 pnpm。
 - P2-8 / P2-9：`8b8f775d` 根目录截图与报告归档到 `docs/verification/legacy-root-2026-10-26/`；`2e5fdb00` 删一次性脚本与杂物；`fed72035` history.txt / output / outputs 改为不跟踪；`a1e96627` 删 xeokit bundle 与 Word 锁文件。交付 docx 与 `docs/guides/*.docx` 未动。
 - P2-10：README 去掉 `llmdoc` 链接，CLAUDE.md 技术栈说明改回实际；CHANGELOG 0.2.5–0.2.7 仍缺；`wiki/` / `doc/` / `开发文档/` 并行未动。
-- P2-11：未动。
+- P2-11：`useDtxTools.ts`（已 7169 行）的拆分方案见 `docs/plans/2026-10-26-usedtxtools-split-plan.md`（10 步、API 不变、每步三门绿），待拍板；代码未动。其余大文件（`ViewerPanel.vue` 5699、`useXeokitMeasurementTools.ts` 4446、`useToolStore.ts` 3672）未动。
 - 审核清单外顺手修的：`dfa0f1e0` vite.config.ts 的 `__FRONTEND_BUILD_ISO__` 和离线包 version.json 的 buildDate 都是「北京墙钟 + Z」，前端 versionInfo.ts 按 UTC 解析后再加 8 小时，「关于」里的编译日期晚 8 小时；改记真实 UTC，zip 文件名的北京日期单独算。
