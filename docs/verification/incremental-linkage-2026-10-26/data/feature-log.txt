@@ -3,7 +3,7 @@
 [2026-10-26T15:01:44.131Z] console.error Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 [2026-10-26T15:01:44.194Z] console.error Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 [2026-10-26T15:01:45.811Z] refno loaded after 1.6s
-[2026-10-26T15:01:49.842Z] before {"box":{"ids":1,"total":1,"visibleIds":["o:24384_24777:0"],"zmin":1.125,"zmax":1.675},"pos":"POS -2821.27001953125, 8003.9599609375, 1400","row":"A=725 M=725 F=725","notice":null,"wsUrls":["ws://127.0.0.1:3111/?token=14oztUauaTDu","ws://localhost:9199/api/v1/ws"]}
+[2026-10-26T15:01:49.842Z] before {"box":{"ids":1,"total":1,"visibleIds":["o:24384_24777:0"],"zmin":1.125,"zmax":1.675},"pos":"POS -2821.27001953125, 8003.9599609375, 1400","row":"A=725 M=725 F=725","notice":null,"wsUrls":["ws://127.0.0.1:3111/?token=<vite-hmr>","ws://localhost:9199/api/v1/ws"]}
 [2026-10-26T15:01:49.938Z] screenshot 01-before.png
 [2026-10-26T15:01:50.132Z] replay-step 727 {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":725,"to_sesno":727,"header_sesno_after":727,"bytes_before":36904960,"bytes_after":36968448,"half":null,"rollback":false,"patched_bytes":4}
 [2026-10-26T15:02:06.767Z] notice shown after 16.6s

@@ -14,7 +14,7 @@
     "row": "A=725 M=725 F=725",
     "notice": null,
     "wsUrls": [
-      "ws://127.0.0.1:3111/?token=14oztUauaTDu",
+      "ws://127.0.0.1:3111/?token=<vite-hmr>",
       "ws://localhost:9199/api/v1/ws"
     ]
   },
@@ -69,7 +69,7 @@
   "noticeAfter730": "库 8000 已更新到会话 728→730（改 2 项，场景内 1 根受影响） 重载 ×",
   "wsTaskFrames": 2,
   "wsUrls": [
-    "ws://127.0.0.1:3111/?token=14oztUauaTDu",
+    "ws://127.0.0.1:3111/?token=<vite-hmr>",
     "ws://localhost:9199/api/v1/ws"
   ]
 }
