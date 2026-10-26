@@ -69,6 +69,7 @@ import {
 import { DISPLAY_THEME_PRESETS, isDisplayTheme, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
+import { setGenModelV1LoadedProbe, startGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNotice';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
@@ -3868,6 +3869,12 @@ onMounted(async () => {
   };
   compatViewerRef.value = compat;
   modelGenerationRef.value = useModelGeneration({ viewer: compat });
+  // 轻量联动：后端自己跑完的增量批次落在当前装入的库 / 根上时，状态栏给提示，不自动换场景。
+  setGenModelV1LoadedProbe({
+    dbnums: () => (activeDbno !== null ? [activeDbno] : []),
+    isRootLoaded: (refno) => modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false,
+  });
+  startGenModelV1UpdateNotice();
 
   const tools = useDtxTools({
     dtxViewerRef,
@@ -4408,7 +4415,7 @@ onMounted(async () => {
       return;
     }
     const detail = (
-            ev as CustomEvent<{ refnos?: unknown; regenModel?: boolean; dbnum?: number; sesno?: number }>
+            ev as CustomEvent<{ refnos?: unknown; regenModel?: boolean; refreshModel?: boolean; dbnum?: number; sesno?: number }>
     ).detail;
     const raw = (detail as any)?.refnos;
     const refnos = Array.isArray(raw)
@@ -4513,6 +4520,7 @@ onMounted(async () => {
           const ok = await mg.showModelByRefno(r, {
             flyTo: singleFlyTo && !shouldApply,
             regenerate: !!(detail as any)?.regenModel,
+            refresh: !!(detail as any)?.refreshModel,
           });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =
@@ -5013,6 +5021,7 @@ onUnmounted(() => {
     // ignore
   }
   compatViewerRef.value = null;
+  setGenModelV1LoadedProbe(null);
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;

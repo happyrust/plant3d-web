@@ -263,7 +263,7 @@ export async function resolveActualModelLoadScope(
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
-  showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
+  showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
 } {
@@ -421,13 +421,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     loadOptions?: {
       flyTo?: boolean
       regenerate?: boolean
+      /** 轻量联动的「重载」：后端增量批次已把记录换掉，清本地缓存重查并替换场景里的实例；不重新生成 */
+      refresh?: boolean
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
+    const refresh = loadOptions?.refresh === true;
 
     const genuinelyLoaded = loadedRoots.has(normalizedRoot);
-    if (!loadOptions?.regenerate && checkRefnoExists(normalizedRoot)) {
+    if (!loadOptions?.regenerate && !refresh && checkRefnoExists(normalizedRoot)) {
       if (loadOptions?.flyTo) {
         try {
           const anyViewer = viewer as any;
@@ -578,6 +581,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         noteDbnumModelGenerated(dbno);
       }
 
+      if (refresh) {
+        // 记录缓存里这一根连同构件先清掉：下面按祖先重新查到的才是新会话的实例；装载走 replace，不再 generate。
+        getGenModelV1ModelSource().records.invalidateRoot(normalizedRoot);
+      }
       statusMessage.value = '查询可见实例范围...';
       progress.value = 10;
       syncGlobalLoadStatus();
@@ -765,7 +772,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno,
         loadRefnos,
         anyViewer,
-        { replace: regenerate },
+        { replace: regenerate || refresh },
         [30, 95],
         `从 gen-model 加载 ${normalizedRoot}`,
       );

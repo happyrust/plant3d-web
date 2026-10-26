@@ -218,6 +218,9 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 // WS 任务事件（`/api/v1/ws`，tasks 主题）：逐单元进度是 REST 拿不到的明细，只在有订阅者时在飞。
 const { feedStatus: taskFeedStatus, missedEvents: taskFeedMissed } = useGenModelV1TaskFeed();
 let taskFeedStarted = false;
+// 对话框请求过 /dbnums 之后，别的客户端 / 后端自己跑完的任务也要让水位行跟着变（2026-10-26 轻量联动）
+let dbnumsRequestedOnce = false;
+let foreignRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 // seq 空洞 = 有信封没送到；漏掉的若是 model_unit_finished，在飞清单会永远挂着一根已完的单元。
 // 不知道漏的是哪个任务，索性清空全部在飞项——后续 model_unit_started 会重建它（ADR-0005：断线不编造状态）。
@@ -305,6 +308,8 @@ function requestIdentity(): { project: string } | undefined {
 }
 
 async function refreshDbnums(): Promise<void> {
+  dbnumsRequestedOnce = true;
+  ensureTaskFeed(); // 水位表打开就听任务流，不等本会话登记第一个任务
   dbLoading.value = true;
   dbError.value = null;
   try {
@@ -541,13 +546,17 @@ function dropPendingProbe(refno: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * 处理一条 `tasks` 主题信封。只关心本会话登记过的 task_id（d-195）；别的客户端发起的
- * 任务、malformed 信封都静默忽略。丢帧由 `task_finished`/2s 轮询的 REST 对齐兜底。
+ * 处理一条 `tasks` 主题信封。逐单元明细只关心本会话登记过的 task_id（d-195）；别的客户端 / 后端自己
+ * 发起的任务只在 `task_finished` 时刷一拍库水位行（对话框请求过 /dbnums 才刷，800 ms 内连发合并），malformed 信封静默忽略。
+ * 丢帧由 `task_finished`/2s 轮询的 REST 对齐兜底。
  */
 function applyTaskEnvelope(envelope: GenModelV1TaskEnvelope): void {
   const taskId = typeof envelope.task_id === 'string' && envelope.task_id ? envelope.task_id : null;
   const task = taskId ? tasks.value.get(taskId) : undefined;
-  if (!task) return;
+  if (!task) {
+    if (envelope.type === 'task_finished' && dbnumsRequestedOnce) scheduleForeignDbnumsRefresh();
+    return;
+  }
   switch (envelope.type) {
     case 'task_started': {
       task.state = 'running';
@@ -613,7 +622,15 @@ function applyTaskEnvelope(envelope: GenModelV1TaskEnvelope): void {
   }
 }
 
-/** WS 实时事件在第一次登记任务时拉起；连不上停在 `down`，2s REST 轮询本来就在兜底。 */
+function scheduleForeignDbnumsRefresh(): void {
+  if (foreignRefreshTimer) return;
+  foreignRefreshTimer = setTimeout(() => {
+    foreignRefreshTimer = null;
+    void refreshDbnums();
+  }, 800);
+}
+
+/** WS 实时事件在水位表第一次打开或第一次登记任务时拉起；连不上停在 `down`，2s REST 轮询本来就在兜底。 */
 function ensureTaskFeed(): void {
   if (!taskFeedStarted) {
     taskFeedStarted = true;
