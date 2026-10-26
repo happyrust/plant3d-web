@@ -10,6 +10,7 @@ import type { CloudOverlayEl, CloudRenderStats } from './cloudRegion';
 import type { PickRefnoCandidate } from './pickCandidates';
 import type { AnnotationLeaderVisual, DragRect, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './types';
 import type { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import type { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import type { useReviewStore } from '@/composables/useReviewStore';
 import type { useToolStore } from '@/composables/useToolStore';
 import type { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
@@ -78,6 +79,8 @@ export type DtxToolsContext = {
   /** 审查任务 / 当前用户（批注处理页路由、自动截图回执用）。只读 */
   reviewStore: ReturnType<typeof useReviewStore>;
   userStore: ReturnType<typeof useUserStore>;
+  /** 批注样式（云线画法 bbox3d / screen2d、云线外观等）。只读 */
+  annotationStyleStore: ReturnType<typeof useAnnotationStyleStore>;
   /** 交互就绪（图层 + 选择器 + overlay 容器都在）。所有者：组装器 */
   ready: ComputedRef<boolean>;
   /** pick_refno 候选轮换。所有者：pickCandidateController；测量只读 */
