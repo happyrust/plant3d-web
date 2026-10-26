@@ -518,7 +518,7 @@ function startTubeClippingPass(ctx: ActiveRoomContext, viewer: DtxCompatViewer):
           const bufferGeo = getOrCreateBufferGeometry(dtxLayer, obj.geoHash);
           if (bufferGeo && !manuallyHidden) {
             // 凹房间 / L 形房间二次进房的附加管段（pieces[1..]）
-            const colorHex = (obj.hasColorOverride ? obj.colorOverride : obj.color)?.getHex?.() ?? 0x94a3b8;
+            const colorHex = dtxLayer.getObjectColor(objectId)?.getHex() ?? 0x94a3b8;
             for (let pIdx = 1; pIdx < plan.pieces.length; pIdx++) {
               const extraMat = buildPieceMatrix(origMatrix, prism, plan.pieces[pIdx]!);
               overlay.addExtraPiece(bufferGeo, extraMat, colorHex, carrierRefno);

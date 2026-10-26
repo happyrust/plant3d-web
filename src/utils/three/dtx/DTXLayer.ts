@@ -2018,6 +2018,21 @@ export class DTXLayer {
   }
 
   /**
+   * 对象当前生效的颜色：有独立覆盖取覆盖值，否则取材质调色板里的基色（与着色器同一份数据）；对象不存在回 null。
+   */
+  getObjectColor(objectId: string, target: Color = new Color()): Color | null {
+    const obj = this._objects.get(objectId);
+    if (!obj) return null;
+    if (obj.hasColorOverride) return target.copy(obj.colorOverride);
+    const offset = obj.materialIndex * 8;
+    return target.setRGB(
+      this._materialPaletteBuffer[offset + 0] ?? 0,
+      this._materialPaletteBuffer[offset + 1] ?? 0,
+      this._materialPaletteBuffer[offset + 2] ?? 0,
+    );
+  }
+
+  /**
    * 获取所有对象 ID
    */
   getAllObjectIds(): string[] {

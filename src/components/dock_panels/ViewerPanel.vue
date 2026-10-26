@@ -46,6 +46,7 @@ import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import { reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { loadReviewModelComparison, type LoadedReviewModelComparison } from '@/components/review/reviewModelContextRestore';
 import { buildReviewConfirmSnapshotPayload } from '@/components/review/reviewPanelActions';
+import RoomViewHudBar from '@/components/room/RoomViewHudBar.vue';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
 import MeasurementContextMenu from '@/components/tools/MeasurementContextMenu.vue';
@@ -85,7 +86,6 @@ import {
   type RenderStyle,
 } from '@/composables/useRenderStyleStore';
 import { useReviewStore } from '@/composables/useReviewStore';
-import RoomViewHudBar from '@/components/room/RoomViewHudBar.vue';
 import { notifyRoomClipInstancesLoaded } from '@/composables/useRoomClip';
 import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -1586,7 +1586,8 @@ watch(
       // ignore
     }
     try {
-      notifyRoomClipInstancesLoaded(loadedRefnos);
+      // 单位 / 重定位 / 裁剪变了只是全局矩阵变了，没有新实例：不带 refno 列表，只让房间视图同步矩阵、重隐面板。
+      notifyRoomClipInstancesLoaded();
     } catch {
       // ignore
     }

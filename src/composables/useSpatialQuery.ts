@@ -21,10 +21,10 @@ import type {
   SpatialTreeUnitNode,
 } from '@/api/genModelSpatialApi';
 import type { AttributeSource } from '@/model-source/ports';
+import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import { isGenModelV1ApiError } from '@/api/genModelV1Api';
 import { sceneCompanionsOf } from '@/composables/deliveryUnitScene';
-import { enterRoomView, exitRoomView } from '@/composables/useRoomClip';
 import {
   branUnitRefnosCoveredBy,
   branUnitRefnosOfTree,
@@ -43,6 +43,7 @@ import {
   loadDtxAabbProxyRefnos,
   loadDbnoInstancesForVisibleRefnosDtx,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { enterRoomView, exitRoomView } from '@/composables/useRoomClip';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
@@ -2637,7 +2638,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           panelRefnos: roomOpt.panelRefnos,
           memberRefnos: resolveBatchRefnos({ refnos }),
           tubeCarriers: coveredUnits,
-          viewer,
+          // 这里的 viewer 在测试里可能是 ViewerLike 桩；enterRoomView 只用到两者共有的 scene 接口，运行时就是 DtxCompatViewer。
+          viewer: viewer as DtxCompatViewer,
           companionsOf: (members, units) => sceneCompanions([...members], [...units]),
         });
         return;
