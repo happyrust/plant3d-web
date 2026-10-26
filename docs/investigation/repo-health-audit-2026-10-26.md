@@ -127,3 +127,4 @@
 - P2-8 / P2-9：`8b8f775d` 根目录截图与报告归档到 `docs/verification/legacy-root-2026-10-26/`；`2e5fdb00` 删一次性脚本与杂物；`fed72035` history.txt / output / outputs 改为不跟踪；`a1e96627` 删 xeokit bundle 与 Word 锁文件。交付 docx 与 `docs/guides/*.docx` 未动。
 - P2-10：README 去掉 `llmdoc` 链接，CLAUDE.md 技术栈说明改回实际；CHANGELOG 0.2.5–0.2.7 仍缺；`wiki/` / `doc/` / `开发文档/` 并行未动。
 - P2-11：未动。
+- 审核清单外顺手修的：`dfa0f1e0` vite.config.ts 的 `__FRONTEND_BUILD_ISO__` 和离线包 version.json 的 buildDate 都是「北京墙钟 + Z」，前端 versionInfo.ts 按 UTC 解析后再加 8 小时，「关于」里的编译日期晚 8 小时；改记真实 UTC，zip 文件名的北京日期单独算。
