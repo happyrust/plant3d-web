@@ -1,0 +1,1786 @@
+{
+  "checkedAt": "2026-10-22T17:49:22.741Z",
+  "script": "scripts/pipe-row-browser-verify.mjs",
+  "frontend": {
+    "baseSha": "0d7a1138",
+    "vitePort": 3191,
+    "note": "working tree = HEAD + 工作区未提交改动（含 PipeDistanceDrawer.vue 自动加载 WIP）"
+  },
+  "backend": {
+    "url": "http://123.57.182.243:3100",
+    "health": {
+      "status": "ok",
+      "core": {
+        "status": "ready",
+        "route_count": 71,
+        "snapshot_epoch": 0,
+        "session_vector": [],
+        "stale_dbnums": [],
+        "failed_dbnums": [],
+        "problems": [],
+        "last_targeted_refresh": null,
+        "open_db_count": 29,
+        "open_dbnums": [
+          1112,
+          6003,
+          7009,
+          7011,
+          7015,
+          7022,
+          7027,
+          7048,
+          7321,
+          7324,
+          7326,
+          7327,
+          7329,
+          7330,
+          7331,
+          7332,
+          7333,
+          7334,
+          7350,
+          7352,
+          7353,
+          7354,
+          7356,
+          7741,
+          7997,
+          7998,
+          7999,
+          8000,
+          250705
+        ],
+        "cached_elements": 1073,
+        "source_reads": {
+          "database_opens": 10507,
+          "scan_calls": 210,
+          "scanned_elements": 10060519,
+          "index_point_lookups": 9722317
+        }
+      },
+      "mirror": {
+        "status": "ready",
+        "endpoint": "127.0.0.1:8009",
+        "watermark_mirror_enabled": true,
+        "watermark_mirrored_dbnums": 42,
+        "spool_depth": 0,
+        "spool_bytes": 0,
+        "spool_oldest_age_ms": null,
+        "last_error": null,
+        "last_success": "2026-10-22T17:49:22.196637277+00:00"
+      },
+      "features": {
+        "room": {
+          "status": "available",
+          "generation": "1d2ebc80419af2d4270b5f3dd0caa0e2c60c83f6bcf6711e1691a7ac442f5e4c",
+          "executor": "durable"
+        },
+        "history": {
+          "status": "available"
+        },
+        "operations": {
+          "status": "available"
+        }
+      },
+      "degraded_sections": [],
+      "blocking_conditions": [],
+      "project": "AvevaMarineSample",
+      "mdb": "/ALL",
+      "namespace": "1516",
+      "mdb_closure": {
+        "status": "ok",
+        "project": "AvevaMarineSample",
+        "mdb": "/ALL",
+        "roots": [
+          {
+            "path": "/var/lib/aios-database/e3d",
+            "reachable": true,
+            "codes_seen": [
+              "acp",
+              "acw",
+              "ams",
+              "aps",
+              "scb",
+              "zdj"
+            ],
+            "problem": null,
+            "scan_ms": 0
+          }
+        ],
+        "projects": [
+          {
+            "name": "AvevaMarineSample",
+            "codes": [
+              "AMS"
+            ],
+            "is_main": true,
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/AvevaMarineSample",
+            "db_dirs": [
+              "/var/lib/aios-database/e3d/AvevaMarineSample/ams000"
+            ],
+            "dbnums": [
+              1112,
+              7997,
+              7998,
+              7999,
+              8000,
+              7000,
+              6890,
+              5052,
+              5100,
+              5053,
+              5200,
+              7332,
+              7330,
+              7331,
+              7329,
+              7353,
+              7324,
+              7352,
+              7350,
+              7354,
+              7327,
+              7356,
+              7333,
+              7326,
+              7322,
+              7351,
+              7334,
+              7741,
+              7742,
+              5054,
+              5101
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "ZDJ",
+            "codes": [
+              "ZDJ"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/ZDJ",
+            "db_dirs": [
+              "/var/lib/aios-database/e3d/ZDJ/zdj000"
+            ],
+            "dbnums": [
+              7600
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "SCB",
+            "codes": [
+              "SCB"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/SCB",
+            "db_dirs": [
+              "/var/lib/aios-database/e3d/SCB/scb000"
+            ],
+            "dbnums": [
+              6000,
+              6001,
+              6002,
+              6003
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "AvevaCatalogue",
+            "codes": [
+              "ACP"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/AvevaCatalogue",
+            "db_dirs": [
+              "/var/lib/aios-database/e3d/AvevaCatalogue/acp000"
+            ],
+            "dbnums": [
+              7043,
+              7044,
+              7010,
+              7027,
+              7021,
+              7026,
+              7022,
+              7046,
+              7006,
+              7014,
+              7015,
+              7002,
+              7029,
+              7323,
+              7007,
+              7004,
+              7008,
+              7034,
+              7047,
+              7048,
+              250702,
+              250705,
+              250700,
+              250701,
+              7001,
+              7003,
+              7009,
+              7045,
+              7011,
+              7320,
+              7321,
+              7325,
+              7328,
+              7360
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "AvevaPlantSample",
+            "codes": [
+              "APS"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/AvevaPlantSample",
+            "db_dirs": [
+              "/var/lib/aios-database/e3d/AvevaPlantSample/aps000"
+            ],
+            "dbnums": [
+              7355
+            ],
+            "shadowed": []
+          }
+        ],
+        "seen_projects": [
+          {
+            "name": "AvevaCatalogue",
+            "codes": [
+              "ACP"
+            ],
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/AvevaCatalogue"
+          },
+          {
+            "name": "AvevaMarineSample",
+            "codes": [
+              "AMS"
+            ],
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/AvevaMarineSample"
+          },
+          {
+            "name": "AvevaPlantSample",
+            "codes": [
+              "APS"
+            ],
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/AvevaPlantSample"
+          },
+          {
+            "name": "SCB",
+            "codes": [
+              "SCB"
+            ],
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/SCB"
+          },
+          {
+            "name": "YCYK-E3D",
+            "codes": [
+              "ACW"
+            ],
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/YCYK-E3D"
+          },
+          {
+            "name": "ZDJ",
+            "codes": [
+              "ZDJ"
+            ],
+            "root_index": 0,
+            "project_dir": "/var/lib/aios-database/e3d/ZDJ"
+          }
+        ],
+        "unresolved": [],
+        "problems": [],
+        "declaration_error": null,
+        "sys": "/var/lib/aios-database/e3d/AvevaMarineSample/ams000/amssys"
+      },
+      "dabacon_tags": {
+        "status": "ready",
+        "scope": "startup",
+        "refreshing": false,
+        "project_root": "/var/lib/aios-database/e3d",
+        "sample_duration_ms": 729,
+        "sample_age_ms": 7463511,
+        "discovered_databases": 100,
+        "readable_databases": 100,
+        "issue_count": 0,
+        "issues": [],
+        "issues_truncated": 0,
+        "latest": {
+          "tag_database_counts": {
+            "2_19_d0_": 1,
+            "2_27_12o": 3,
+            "2_27_2_n": 48,
+            "2_28_18_": 45,
+            "2_28_19_": 1
+          },
+          "untagged_databases": 2
+        },
+        "history": {
+          "tag_session_counts": {
+            "2_19_d0_": 1,
+            "2_27_12o": 23,
+            "2_27_2_n": 324,
+            "2_28_18_": 313,
+            "2_28_19_": 10
+          },
+          "tag_database_counts": {
+            "2_19_d0_": 1,
+            "2_27_12o": 5,
+            "2_27_2_n": 51,
+            "2_28_18_": 45,
+            "2_28_19_": 1
+          },
+          "tagged_sessions": 671,
+          "untagged_databases": 3,
+          "untagged_sessions": 7
+        },
+        "release_selection": "diagnostic_only"
+      },
+      "http": {
+        "bind_addr": "0.0.0.0:8022",
+        "public_addr": "127.0.0.1:8022"
+      },
+      "data_read_mode": "direct",
+      "data_face": "ingest",
+      "read_through": {
+        "queue_depth": 0,
+        "queued": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "degraded_reason": null,
+        "last_success_unix_ms": null,
+        "spool_depth": 0,
+        "spool_bytes": 0,
+        "spool_oldest_age_ms": null,
+        "spool_capacity_bytes": 2147483648
+      },
+      "version": "0.1.43",
+      "build_id": "0.1.43+gd3145d26a71a.1792683148.dirty",
+      "started_at": "2026-10-22T23:44:58.724268558+08:00",
+      "capabilities": {
+        "dbnum_model_ensure": true,
+        "dbnum_model_ready_roots": true,
+        "model_records_batch_max_roots": 64,
+        "mesh_formats": [
+          "mesh",
+          "glb"
+        ],
+        "room_complete_publication_ack": true,
+        "room_rebuild_executor": "durable"
+      },
+      "queue_paused": false,
+      "startup_autorun": false,
+      "auto_initialize_new_dbnums": false,
+      "awaiting_manual_initialization": [
+        5100,
+        5101,
+        6002,
+        7006,
+        7032,
+        7043,
+        7049,
+        7323,
+        7998,
+        8000,
+        8189,
+        8190,
+        8191,
+        250704,
+        251047
+      ],
+      "data_incremental": true,
+      "model_incremental": true,
+      "room_membership": true,
+      "model_cache": {
+        "resident_records": 123,
+        "resident_roots": 9,
+        "overlay": {
+          "records": 123,
+          "roots": 9,
+          "acks": 9,
+          "approx_bytes": 202234,
+          "receipt_room_bytes": 0,
+          "max_roots": 50000,
+          "evicted_total": 0
+        },
+        "element_cache": {
+          "enabled": true,
+          "max_entries": 200000,
+          "parsed_entries": 557,
+          "approx_bytes": 3720265,
+          "max_dbnums": 0,
+          "resident_dbnums": 1,
+          "evicted_dbnums_total": 0,
+          "databases": [
+            {
+              "dbnum": 7997,
+              "source_sesno": 359,
+              "parsed_entries": 557,
+              "extraction_entries": 515,
+              "approx_bytes": 3720265,
+              "max_entries": 200000,
+              "last_used_tick": 14
+            }
+          ]
+        },
+        "historical": {
+          "snapshots": 0,
+          "max_snapshots": 16,
+          "evicted_total": 0,
+          "scopes": 0,
+          "records": 0,
+          "approx_bytes": 0,
+          "snapshots_detail": []
+        },
+        "write_behind": {
+          "accepting": true,
+          "worker_alive": true,
+          "worker_restarts": 0,
+          "persist_attempts": 9,
+          "persist_retries": 0,
+          "blocked_transitions": 0,
+          "ack_mismatches": 0,
+          "last_attempt_at": "2026-10-22T17:15:49.286805982+00:00",
+          "pending_unique_roots": 0,
+          "in_flight_roots": 0,
+          "retrying_roots": 0,
+          "blocked_roots": 0,
+          "superseded_submissions": 0,
+          "stale_jobs_dropped": 0,
+          "oldest_pending_ms": null,
+          "last_success_at": "2026-10-22T17:15:49.309888985+00:00",
+          "last_error": null,
+          "blocked_samples": [],
+          "overlay_root_limit": 50000,
+          "overlay_evicted_total": 0,
+          "element_cache_max_entries": 200000,
+          "rows_upserted": 123,
+          "rows_removed": 0,
+          "receipts_written": 9,
+          "commits": 9,
+          "room_edges_written": 62,
+          "max_transaction_bytes": 31959
+        },
+        "store_reachable": true,
+        "degraded_read_only": false
+      },
+      "delivery_unit_types": [
+        "BRAN",
+        "HANG",
+        "SUPPO",
+        "EQUI"
+      ],
+      "auto_work_armed": true,
+      "initialization": {
+        "epoch_id": 25,
+        "status": "data_ready",
+        "current_phase": null,
+        "data_ready": true,
+        "model_ready": false,
+        "model_in_flight": false,
+        "model_phase_open": true,
+        "startup_reconcile_pending": false,
+        "startup_rooms_pending": false,
+        "room_bootstrap": {
+          "status": "idle",
+          "dbnums_total": 0,
+          "dbnums_done": 0,
+          "dbnums_failed": 0,
+          "roots_total": 0,
+          "roots_ready": 0,
+          "roots_failed": 0,
+          "current_dbnum": null,
+          "stage": null,
+          "room_edges_written": 0,
+          "max_transaction_bytes": 0,
+          "elapsed_ms": 0,
+          "rss_mib": null,
+          "failure_samples": []
+        },
+        "startup": {
+          "scope": "watch",
+          "in_scope": 2,
+          "candidates": 29,
+          "no_credential_dbnums": [
+            7998,
+            8000
+          ],
+          "reconcile": {
+            "result": "ok",
+            "unreadable": 0,
+            "not_in_mdb": 0,
+            "retired_from_mdb": [],
+            "window_failed": 0,
+            "lagging": 0,
+            "windows_opened": 0,
+            "catalogue_cascade_degraded": false,
+            "stale_catalogue_dbnums": [],
+            "unreadable_catalogue_dbnums": 0,
+            "catalogue_windows": [],
+            "catalogue_dependency_refresh": {
+              "candidates": 0,
+              "elapsed_ms": 0
+            }
+          }
+        },
+        "startup_data_wait_degraded": null,
+        "phases": {
+          "design": {
+            "total": 2,
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "blocked": 0
+          },
+          "meta": {
+            "total": 13,
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "blocked": 0
+          }
+        },
+        "blockers": [],
+        "blocked_by": [],
+        "shadowed": [
+          "CATA:7000:AvevaCatalogue:/var/lib/aios-database/e3d/AvevaCatalogue/acp000/acp7000_0001",
+          "CATA:7355:AvevaPlantSample:/var/lib/aios-database/e3d/AvevaPlantSample/aps000/aps7355_0001",
+          "CATA:7355:AvevaMarineSample:/var/lib/aios-database/e3d/AvevaMarineSample/ams000/ams7355"
+        ]
+      },
+      "worker_alive": true,
+      "worker_idle_secs": 15,
+      "active_dependency": null,
+      "parse_errors": {
+        "total": 3,
+        "by_kind": {
+          "dir": 3
+        },
+        "occurrences": 6,
+        "last_kind": "dir",
+        "last_target": "ZDJ",
+        "last_error": "MDB /ALL 声明的 1 个库（7600）属于它，搜索根里没有 zdj000 库目录：在 1 个可达的搜索根里都没有（找过：/var/lib/aios-database/e3d）",
+        "last_seen_at": "2026-09-20T16:31:30.920365335Z"
+      },
+      "geom_errors": null,
+      "idle_round_panic": null,
+      "batch_failures": null,
+      "catalogue_reconcile": {
+        "origin": "reconcile",
+        "trigger": "periodic",
+        "advanced_catalogue_dbnums": [],
+        "at": "2026-10-23T01:45:05.812105390+08:00",
+        "elapsed_ms": 5,
+        "stale_catalogue_dbnums": [],
+        "unreadable_catalogue_dbnums": 0,
+        "catalogue_cascade_degraded": false,
+        "catalogue_windows": [],
+        "catalogue_dependency_refresh": {
+          "candidates": 0,
+          "elapsed_ms": 1
+        }
+      },
+      "model_concurrency": {
+        "mode": "adaptive",
+        "execution_group_size": 16,
+        "effective_root_inflight": 1,
+        "root_inflight_max": 2,
+        "completed_total": 0,
+        "failed_total": 0,
+        "shape_queue_depth": 0,
+        "shape_producer_blocked_micros": 0,
+        "shape_sql_bytes": 0,
+        "shape_instances_written": 0,
+        "surreal_read_p50_micros": 1630,
+        "surreal_read_p95_micros": 2639,
+        "surreal_read_p99_micros": 3000,
+        "surreal_write_p50_micros": null,
+        "surreal_write_p95_micros": null,
+        "surreal_write_p99_micros": null,
+        "surreal_retries": 0,
+        "process_cpu_percent": 0.15568697452545166,
+        "process_rss_bytes": 830390272
+      },
+      "geometry_concurrency": {
+        "quota": 4,
+        "active": 0,
+        "waiting": 0,
+        "permit_wait_micros": 76,
+        "active_permit_micros": 1646599,
+        "observed_micros": 7481187037
+      },
+      "runtime_lag": {
+        "sampling": true,
+        "sample_period_ms": 100,
+        "samples": 512,
+        "observed_total": 73972,
+        "p50_micros": 1275,
+        "p95_micros": 1488,
+        "p99_micros": 1623,
+        "max_micros": 88787
+      },
+      "spatial_serial": {
+        "waiting": 0,
+        "wait_micros": 25,
+        "held_micros": 314775
+      },
+      "sul_db": {
+        "connected": true,
+        "ping_ms": 0,
+        "disconnects_total": 0,
+        "last_disconnect_at": null,
+        "last_disconnect_error": null,
+        "endpoint": "127.0.0.1:8009",
+        "medium": "rocksdb",
+        "durable": true
+      },
+      "dbnum_consistency": {
+        "judged": 0,
+        "in_sync": 0,
+        "lagging": 0,
+        "not_judged": 2,
+        "chasing_roots": 0,
+        "dead_roots": 0,
+        "lazy_roots": 0,
+        "lagging_samples": []
+      },
+      "dbnum_consistency_observation": {
+        "sample_age_ms": 15,
+        "refresh_interval_ms": 30000,
+        "refreshing": false,
+        "last_error": null
+      },
+      "model_scope_regen": {
+        "pending": 0,
+        "resume": "finished",
+        "samples": []
+      },
+      "spatial_tree": {
+        "state": "ready",
+        "ready": true,
+        "startup_verdict": "reused",
+        "format_version": 4,
+        "entries": 61866,
+        "usable_pointer_rows": null,
+        "invalid_pointer_rows": null,
+        "file_epoch": 4936,
+        "db_epoch": 4936,
+        "drift": false,
+        "snapshot_watermarks": {},
+        "db_watermarks": {},
+        "snapshot_sha256": "630c1290dcd6656af283c8313601a8300e2983ce7e01a5b4f7a88cefdbe485a2",
+        "last_verified_at": 1792683881,
+        "last_rebuild_attempts": 0,
+        "last_error": null
+      },
+      "room_build": {
+        "resident": {
+          "startup": {
+            "blocked": null,
+            "summary": "[房间初始化] published 文件 [] → 215 间房 / 230 块在册面板 / 230 块有几何 / 0 块无几何 / 网格 230/230 键 0.6 MB 耗时 7601ms",
+            "expected_dbnums": [
+              1112,
+              6003,
+              7009,
+              7011,
+              7015,
+              7022,
+              7027,
+              7048,
+              7321,
+              7324,
+              7326,
+              7327,
+              7329,
+              7330,
+              7331,
+              7332,
+              7333,
+              7334,
+              7350,
+              7352,
+              7353,
+              7354,
+              7356,
+              7741,
+              7997,
+              7998,
+              7999,
+              8000,
+              250705
+            ],
+            "duration_ms": 7601,
+            "rss_bytes": 396709888,
+            "at": "2026-10-22T23:45:05.553151898+08:00"
+          },
+          "last_swap": null,
+          "models": [
+            {
+              "form": "published",
+              "key": "8ce44ee23990ccb7df16e2e131c072b7024dedf80c341e911139dfc41294df97",
+              "digest": "5e94adb20a94409947ec2b395af94e06670281f146b7ef572d11a1d6fa4500ec",
+              "rooms": 215,
+              "registered_panels": 230,
+              "panels_with_geometry": 230,
+              "missing_panels": 0,
+              "missing_geometry": [],
+              "unusable_panels": 0,
+              "missing_dbnums": [],
+              "problems": 0,
+              "meshes_cached": 230,
+              "mesh_keys_expected": 230,
+              "mesh_keys_warmed": 230,
+              "mesh_warm_failed": 0,
+              "mesh_bytes": 626028
+            }
+          ],
+          "unwatched_missing_geometry_notice": null,
+          "status": "ready",
+          "generation": "1d2ebc80419af2d4270b5f3dd0caa0e2c60c83f6bcf6711e1691a7ac442f5e4c",
+          "completed_at": "2026-10-22T23:45:05.553484707+08:00",
+          "enabled": true,
+          "mdb_dbnums_expected": [
+            1112,
+            6003,
+            7009,
+            7011,
+            7015,
+            7022,
+            7027,
+            7048,
+            7321,
+            7324,
+            7326,
+            7327,
+            7329,
+            7330,
+            7331,
+            7332,
+            7333,
+            7334,
+            7350,
+            7352,
+            7353,
+            7354,
+            7356,
+            7741,
+            7997,
+            7998,
+            7999,
+            8000,
+            250705
+          ],
+          "mdb_dbnums_loaded": [
+            1112,
+            6003,
+            7009,
+            7011,
+            7015,
+            7022,
+            7027,
+            7048,
+            7321,
+            7324,
+            7326,
+            7327,
+            7329,
+            7330,
+            7331,
+            7332,
+            7333,
+            7334,
+            7350,
+            7352,
+            7353,
+            7354,
+            7356,
+            7741,
+            7997,
+            7998,
+            7999,
+            8000,
+            250705
+          ],
+          "mdb_dbnums_missing": [],
+          "startup_duration_ms": 7601,
+          "last_failure": null,
+          "rebuild_backoff": null,
+          "swap_ledger": {
+            "entries": 0,
+            "capacity": 64,
+            "oldest_age_ms": null,
+            "segments": []
+          },
+          "progress": {
+            "phase": "mesh-warm",
+            "started_at": "2026-10-22T23:45:05.533737749+08:00",
+            "files_done": 0,
+            "files_total": 0,
+            "meshes_done": 230,
+            "meshes_total": 230,
+            "meshes_failed": 0,
+            "dbnums_done": 0,
+            "dbnums_total": 0,
+            "edge_recompute_in_flight": false
+          },
+          "room_updated_at": "2026-10-17T16:38:22.796806834+08:00",
+          "room_update_record": {
+            "room_updated_at": "2026-10-17T16:38:22.796806834+08:00",
+            "room_dbnum_sesnos": {
+              "7997": 339,
+              "8000": 640
+            },
+            "generation": "1d2ebc80419af2d4270b5f3dd0caa0e2c60c83f6bcf6711e1691a7ac442f5e4c"
+          },
+          "rooms": 215,
+          "registered_panels": 230,
+          "panels_ready": 230,
+          "missing_panels": 0,
+          "missing_dbnums": [],
+          "mesh_keys_expected": 230,
+          "mesh_keys_warmed": 230,
+          "mesh_warm_failed": 0,
+          "mesh_bytes": 626028,
+          "topology_digest": "5e94adb20a94409947ec2b395af94e06670281f146b7ef572d11a1d6fa4500ec",
+          "geometry_digest": "b7212e99561b950daf334de031253c7cc6081d854d31f849857c1f0c00009ab5",
+          "source_sessions": {
+            "1112": 738,
+            "6003": 4,
+            "7009": 479,
+            "7011": 641,
+            "7015": 511,
+            "7022": 254,
+            "7027": 445,
+            "7048": 54,
+            "7321": 77,
+            "7324": 1363,
+            "7326": 639,
+            "7327": 1470,
+            "7329": 223,
+            "7330": 41,
+            "7331": 23,
+            "7332": 22,
+            "7333": 1724,
+            "7334": 312,
+            "7350": 207,
+            "7352": 50,
+            "7353": 97,
+            "7354": 266,
+            "7356": 14,
+            "7741": 90,
+            "7997": 359,
+            "7998": 540,
+            "7999": 205,
+            "8000": 651,
+            "250705": 9
+          }
+        },
+        "bootstrap": {
+          "status": "idle",
+          "dbnums_total": 0,
+          "dbnums_done": 0,
+          "dbnums_failed": 0,
+          "roots_total": 0,
+          "roots_ready": 0,
+          "roots_failed": 0,
+          "current_dbnum": null,
+          "stage": null,
+          "room_edges_written": 0,
+          "max_transaction_bytes": 0,
+          "elapsed_ms": 0,
+          "rss_mib": null,
+          "failure_samples": []
+        },
+        "parked": {},
+        "alignment_debt": {
+          "resident_generation": "1d2ebc80419af2d4270b5f3dd0caa0e2c60c83f6bcf6711e1691a7ac442f5e4c",
+          "expected_dbnums": [
+            1112,
+            6003,
+            7009,
+            7011,
+            7015,
+            7022,
+            7027,
+            7048,
+            7321,
+            7324,
+            7326,
+            7327,
+            7329,
+            7330,
+            7331,
+            7332,
+            7333,
+            7334,
+            7350,
+            7352,
+            7353,
+            7354,
+            7356,
+            7741,
+            7997,
+            7998,
+            7999,
+            8000,
+            250705
+          ],
+          "owed_dbnums": [],
+          "owed_outside_scope": [
+            {
+              "dbnum": 5100,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 5101,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 6002,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 7006,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 7032,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 7043,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 7049,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 7323,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 8189,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 8190,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 8191,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 250704,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            },
+            {
+              "dbnum": 251047,
+              "library_generation": null,
+              "stray_generations": [],
+              "owed": "库上没有整库房间对齐代号（从没整库对齐过 / 关着开关生成的），此刻常驻代号 1d2ebc80419a（欠一次整库重算，D14）",
+              "last_attempt": null
+            }
+          ]
+        }
+      },
+      "static_assets": true,
+      "debug_dbnums": [],
+      "watch_dbnums": [
+        7998,
+        8000
+      ],
+      "watch_dbnums_origin": "DbOption.toml 的 watch_dbnums",
+      "model_incremental_types": [],
+      "model_incremental_types_origin": null,
+      "in_memory_db": false
+    },
+    "version": "0.1.43"
+  },
+  "expectationTier": "modern",
+  "steps": [
+    {
+      "id": "S0",
+      "title": "环境探测：后端 health + Vite + 系统 Chrome",
+      "ok": true,
+      "assertions": [],
+      "observations": {
+        "backend.version": "0.1.43",
+        "expectationTier": "modern"
+      },
+      "screenshots": []
+    },
+    {
+      "id": "S1",
+      "title": "页面就绪 + 抽屉钩子",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "DEV 钩子 __plant3dPipeDistanceE2E 可用",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "modelLoaded(show_refno)": true,
+        "scene": {
+          "objectIds": 100,
+          "loadedRefnos": [
+            "24381_145018",
+            "24381_145019",
+            "24381_145021",
+            "24381_145023",
+            "24381_145025",
+            "24381_145026",
+            "24381_145028",
+            "24381_145029",
+            "24381_145031",
+            "24381_145032",
+            "24381_145033",
+            "24381_145035"
+          ],
+          "selectedIds": [
+            "24381_145018"
+          ]
+        }
+      },
+      "screenshots": []
+    },
+    {
+      "id": "R1",
+      "title": "打开抽屉与连排相邻缺省设置",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "检测模式切到连排相邻",
+          "ok": true,
+          "detail": "pipe-row"
+        },
+        {
+          "desc": "归排方式缺省管中心成排",
+          "ok": true,
+          "detail": "center"
+        },
+        {
+          "desc": "排内相邻上限缺省 1000",
+          "ok": true,
+          "detail": "1000"
+        },
+        {
+          "desc": "最短共同区段缺省 300",
+          "ok": true,
+          "detail": "300"
+        },
+        {
+          "desc": "「同时显示中心距」缺省关",
+          "ok": true,
+          "detail": "false"
+        },
+        {
+          "desc": "「三维显示关键点」缺省关",
+          "ok": true,
+          "detail": "false"
+        },
+        {
+          "desc": "排内相邻上限输入框显示 1000",
+          "ok": true,
+          "detail": "1000"
+        },
+        {
+          "desc": "最短共同区段输入框显示 300",
+          "ok": true,
+          "detail": "300"
+        },
+        {
+          "desc": "清空排内相邻上限回到 1000（store）",
+          "ok": true,
+          "detail": "1000"
+        },
+        {
+          "desc": "清空排内相邻上限输入框显示 1000",
+          "ok": true,
+          "detail": "1000"
+        }
+      ],
+      "observations": {
+        "drawerOpen": "ribbon 测量 → 管道距离"
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/01-r1-drawer-defaults.png"
+      ]
+    },
+    {
+      "id": "R2",
+      "title": "管中心成排：3 根管检测 → 识别预览 → 结果口径",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "detectPipeRows 返回 true",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "检测无错误",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "desc": "识别预览有排",
+          "ok": true,
+          "detail": "3"
+        },
+        {
+          "desc": "0.1.42 期望全部排直接生成（无待确认）",
+          "ok": true,
+          "detail": "0 排待确认"
+        },
+        {
+          "desc": "预览排数 UI == store",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "连排记录数 = 对数 × 2",
+          "ok": true,
+          "detail": "6 vs 6"
+        },
+        {
+          "desc": "缺省列表行数 = 对数（只列名义间隔）",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "缺省只列名义间隔（derived-gap）",
+          "ok": true,
+          "detail": "derived-gap,derived-gap,derived-gap"
+        },
+        {
+          "desc": "列表头「检测结果 (N)」== visibleResults",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=208.3 OD=21.3/21.3 G=187.0 期望≈187.0"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=187 mm ev=catalogue/catalogue"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=207.1 OD=21.3/21.3 G=185.8 期望≈185.8"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=186 mm ev=catalogue/catalogue"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=205.8 OD=21.3/21.3 G=184.5 期望≈184.5"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=184 mm ev=catalogue/catalogue"
+        },
+        {
+          "desc": "0.1.42 推导间隔不带 ≈（目录外径）",
+          "ok": true,
+          "detail": "0 条带 ≈"
+        },
+        {
+          "desc": "勾选「同时显示中心距」",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "store.bothMetrics on",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "勾选后列表行数 = 对数 × 2",
+          "ok": true,
+          "detail": "6 vs 6"
+        },
+        {
+          "desc": "勾选后两种度量都列出",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "取消勾选回到只列名义间隔",
+          "ok": true,
+          "detail": "3 vs 3"
+        }
+      ],
+      "observations": {
+        "detectError": null,
+        "detectNotice": null,
+        "diagnostics": [
+          "24381_146830：3 个成员没有长度（穿过件），不参与走廊",
+          "24381_146810：1 个成员没有长度（穿过件），不参与走廊",
+          "24381_145018：7 个成员没有长度（穿过件），不参与走廊",
+          "管向组 24381_145021~24381_145023,Head~24381_145019 内没有 ≥ 最小共同长度且 ≥2 根参与的共同区段",
+          "管向组 24381_145031~24381_145032,24381_146816~24381_146817 内没有 ≥ 最小共同长度且 ≥2 根参与的共同区段",
+          "管向组 24381_146811~24381_146812,Head~24381_146831 内没有 ≥ 最小共同长度且 ≥2 根参与的共同区段"
+        ],
+        "preview.groups": [
+          {
+            "members": [
+              "24381_146810",
+              "24381_146830"
+            ],
+            "pairs": 1,
+            "D": [
+              208.34
+            ],
+            "sectionM": [
+              -4.383058802747204,
+              -4.06134645252788
+            ],
+            "formal": true
+          },
+          {
+            "members": [
+              "24381_146810",
+              "24381_146830"
+            ],
+            "pairs": 1,
+            "D": [
+              207.12
+            ],
+            "sectionM": [
+              6.466747768165462,
+              7.613685364642817
+            ],
+            "formal": true
+          },
+          {
+            "members": [
+              "24381_146830",
+              "24381_146810"
+            ],
+            "pairs": 1,
+            "D": [
+              205.79
+            ],
+            "sectionM": [
+              9.205393787644837,
+              10.859227340683058
+            ],
+            "formal": true
+          }
+        ],
+        "preview.groupCount": 3,
+        "preview.totalPairs": 3,
+        "preview.held": [],
+        "pipe-row-summary": "识别 3 排：3 排 / 3 对已生成",
+        "values.centerDistancesMm": [
+          208,
+          207,
+          206
+        ],
+        "values.gaps": [
+          "187 mm",
+          "186 mm",
+          "184 mm"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/02-r2-center-preview-list.png",
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/03-r2-both-metrics.png"
+      ]
+    },
+    {
+      "id": "R3",
+      "title": "三维标注：关键点 + 行定位",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "勾选「三维显示关键点」",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "store.keyPoints on",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "点行后激活记录",
+          "ok": true,
+          "detail": "piperow:center:derived-gap:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3"
+        }
+      ],
+      "observations": {
+        "sceneAfterKeyPoints": {
+          "objectIds": 256,
+          "loadedRefnos": [
+            "24381_145018",
+            "24381_145019",
+            "24381_145021",
+            "24381_145023",
+            "24381_145025",
+            "24381_145026",
+            "24381_145028",
+            "24381_145029",
+            "24381_145031",
+            "24381_145032",
+            "24381_145033",
+            "24381_145035",
+            "24381_146830",
+            "24381_146831",
+            "24381_146832",
+            "24381_146833",
+            "24381_146836",
+            "24381_146838",
+            "24381_146839",
+            "24381_146840",
+            "24381_146810",
+            "24381_146811",
+            "24381_146812",
+            "24381_146813",
+            "24381_146814",
+            "24381_146816",
+            "24381_146817",
+            "24381_146818"
+          ],
+          "selectedIds": [
+            "24381_145018"
+          ]
+        },
+        "sceneAfterRowClick": {
+          "objectIds": 256,
+          "loadedRefnos": [
+            "24381_145018",
+            "24381_145019",
+            "24381_145021",
+            "24381_145023",
+            "24381_145025",
+            "24381_145026",
+            "24381_145028",
+            "24381_145029",
+            "24381_145031",
+            "24381_145032",
+            "24381_145033",
+            "24381_145035",
+            "24381_146830",
+            "24381_146831",
+            "24381_146832",
+            "24381_146833",
+            "24381_146836",
+            "24381_146838",
+            "24381_146839",
+            "24381_146840",
+            "24381_146810",
+            "24381_146811",
+            "24381_146812",
+            "24381_146813",
+            "24381_146814",
+            "24381_146816",
+            "24381_146817",
+            "24381_146818"
+          ],
+          "selectedIds": [
+            "24381_146830",
+            "24381_146810"
+          ]
+        }
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/04-r3-keypoints-3d.png",
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/05-r3-row-locate.png"
+      ]
+    },
+    {
+      "id": "R4",
+      "title": "隐藏/显示、模式隔离与「另有 N 条」提示",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "预览行有「隐藏本排」按钮",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "隐藏本排：该排全部记录进隐藏集",
+          "ok": true,
+          "detail": "2 条"
+        },
+        {
+          "desc": "隐藏本排：列表可见数 -对数",
+          "ok": true,
+          "detail": "3 → 2"
+        },
+        {
+          "desc": "显示本排恢复",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "所有管对检测不动连排结果",
+          "ok": true,
+          "detail": "6 vs 6"
+        },
+        {
+          "desc": "「另有 N 条其他模式的结果」提示出现",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "提示文案带条数",
+          "ok": true,
+          "detail": "另有 1 条其他模式的结果仍显示在三维中隐藏它们"
+        },
+        {
+          "desc": "切到所有管对模式",
+          "ok": true,
+          "detail": "all-pairs"
+        },
+        {
+          "desc": "所有管对列表只列非连排记录",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "「清空」清掉所有管对记录",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "「清空」不动连排记录",
+          "ok": true,
+          "detail": "6 vs 6"
+        }
+      ],
+      "observations": {
+        "allPairs.records": 1,
+        "pipeRow.records": 6,
+        "otherModeVisibleCount": 1
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/06-r4-row-hidden.png",
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/07-r4-other-mode-notice.png",
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/08-r4-mode-isolation.png"
+      ]
+    },
+    {
+      "id": "R5",
+      "title": "管底对齐（阀组 3 根）",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "detectPipeRows(bottom) 返回 true",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "管底对齐检测无错误",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "desc": "有管底对齐预览",
+          "ok": true,
+          "detail": "1"
+        },
+        {
+          "desc": "0.1.42 管底对齐直接生成（不待确认）",
+          "ok": true,
+          "detail": "0 排待确认"
+        },
+        {
+          "desc": "管底对齐生成记录",
+          "ok": true,
+          "detail": "2 条（pairs=1）"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=208.3 OD=21.3/21.3 G=187.0 期望≈187.0"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=187 mm ev=catalogue/catalogue"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=207.1 OD=21.3/21.3 G=185.8 期望≈185.8"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=186 mm ev=catalogue/catalogue"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=205.8 OD=21.3/21.3 G=184.5 期望≈184.5"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=184 mm ev=catalogue/catalogue"
+        },
+        {
+          "desc": "管对 piperow:bottom:24381_146230~24381_146232:24381_146241~24381_146242@9871.1-11128.5 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:bottom:24381_146230~24381_146232:24381_146241~24381_146242@9871.1-11128.5 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=511.0 OD=33.4/33.4 G=477.6 期望≈477.6"
+        },
+        {
+          "desc": "管对 piperow:bottom:24381_146230~24381_146232:24381_146241~24381_146242@9871.1-11128.5 目录外径推导间隔不带 ≈",
+          "ok": true,
+          "detail": "text=478 mm ev=catalogue/catalogue"
+        }
+      ],
+      "observations": {
+        "bottom.preview": [
+          {
+            "members": [
+              "24381_146228",
+              "24381_146240"
+            ],
+            "pairs": 1,
+            "D": [
+              510.95
+            ],
+            "formal": true,
+            "estimated": false
+          }
+        ],
+        "bottom.detectNotice": null,
+        "bottom.gapTexts": [
+          "478 mm"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/09-r5-bottom-align.png"
+      ]
+    },
+    {
+      "id": "R6",
+      "title": "参数边界：相邻上限 / 最短共同区段",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "相邻上限改小 → 排/对减少或断开",
+          "ok": true,
+          "detail": "上限 204 mm：0 对（基线 3）"
+        },
+        {
+          "desc": "最短共同区段 100 m → 不成对",
+          "ok": true,
+          "detail": "0 对"
+        },
+        {
+          "desc": "回缺省重测与 R2 一致",
+          "ok": true,
+          "detail": "3 排 3 对（基线 3 排 3 对）"
+        }
+      ],
+      "observations": {
+        "breakLimitMm": 204,
+        "limited.pairs": 0,
+        "minCommon100m.pairs": 0,
+        "restored.values": [
+          "187 mm",
+          "186 mm",
+          "184 mm"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/10-r6-max-adjacent-break.png",
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/11-r6-min-common-break.png",
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/12-r6-restored.png"
+      ]
+    },
+    {
+      "id": "O1",
+      "title": "可选：直段 TUBI 选择（best-effort）",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "detectPipeRowTubes 返回 true",
+          "ok": true,
+          "detail": "true"
+        }
+      ],
+      "observations": {
+        "tubePair": {
+          "a": "24381_146830#24381_146832-24381_146833#3",
+          "b": "24381_146810#24381_146813-24381_146814#4",
+          "midDistMm": 207
+        },
+        "tube.result": {
+          "ok": true,
+          "groups": 1,
+          "pairs": 1,
+          "selectedTubeKeys": [
+            "24381_146830#24381_146832-24381_146833#3",
+            "24381_146810#24381_146813-24381_146814#4"
+          ],
+          "gaps": [
+            "478 mm",
+            "187 mm",
+            "184 mm",
+            "186 mm"
+          ]
+        }
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/13-o1-tube-detect.png"
+      ]
+    },
+    {
+      "id": "Z",
+      "title": "页面健康检查",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "无未捕获页面错误",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "consoleErrors.count": 4,
+        "consoleErrors.sample": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/14-final-state.png"
+      ]
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "pageErrors": [],
+  "differences": [],
+  "defects": [],
+  "screenshots": [
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/01-r1-drawer-defaults.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/02-r2-center-preview-list.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/03-r2-both-metrics.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/04-r3-keypoints-3d.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/05-r3-row-locate.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/06-r4-row-hidden.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/07-r4-other-mode-notice.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/08-r4-mode-isolation.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/09-r5-bottom-align.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/10-r6-max-adjacent-break.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/11-r6-min-common-break.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/12-r6-restored.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/13-o1-tube-detect.png",
+    "docs/verification/pipe-row-browser-2026-10-22/online-0.1.42/14-final-state.png"
+  ],
+  "finishedAt": "2026-10-22T17:49:44.622Z",
+  "failures": [],
+  "result": "PASS"
+}

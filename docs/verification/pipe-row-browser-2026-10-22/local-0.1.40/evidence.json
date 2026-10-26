@@ -1,0 +1,1330 @@
+{
+  "checkedAt": "2026-10-22T17:41:48.273Z",
+  "script": "scripts/pipe-row-browser-verify.mjs",
+  "frontend": {
+    "baseSha": "0d7a1138",
+    "vitePort": 3191,
+    "note": "working tree = HEAD + 工作区未提交改动（含 PipeDistanceDrawer.vue 自动加载 WIP）"
+  },
+  "backend": {
+    "url": "http://localhost:8022",
+    "health": {
+      "status": "ok",
+      "core": {
+        "status": "ready",
+        "route_count": 71,
+        "snapshot_epoch": 0,
+        "session_vector": [],
+        "stale_dbnums": [],
+        "failed_dbnums": [],
+        "problems": [],
+        "last_targeted_refresh": null,
+        "open_db_count": 29,
+        "open_dbnums": [
+          1112,
+          6003,
+          7009,
+          7011,
+          7015,
+          7022,
+          7027,
+          7048,
+          7321,
+          7324,
+          7326,
+          7327,
+          7329,
+          7330,
+          7331,
+          7332,
+          7333,
+          7334,
+          7350,
+          7352,
+          7353,
+          7354,
+          7356,
+          7741,
+          7997,
+          7998,
+          7999,
+          8000,
+          250705
+        ],
+        "cached_elements": 590,
+        "source_reads": {
+          "database_opens": 563358,
+          "scan_calls": 1856,
+          "scanned_elements": 49990882,
+          "index_point_lookups": 49651096
+        }
+      },
+      "mirror": {
+        "status": "degraded",
+        "endpoint": "localhost:8009",
+        "watermark_mirror_enabled": true,
+        "watermark_mirrored_dbnums": 37,
+        "spool_depth": 0,
+        "spool_bytes": 0,
+        "spool_oldest_age_ms": null,
+        "last_error": "/health 探活 transport failed: 超过 2 秒未响应"
+      },
+      "features": {
+        "room": {
+          "status": "degraded",
+          "reason": "process store unavailable"
+        },
+        "history": {
+          "status": "degraded",
+          "reason": "mirror unavailable"
+        },
+        "operations": {
+          "status": "degraded",
+          "reason": "mirror unavailable"
+        }
+      },
+      "degraded_sections": [
+        "mirror",
+        "room",
+        "history",
+        "operations"
+      ],
+      "blocking_conditions": [],
+      "project": "AvevaMarineSample",
+      "mdb": "/ALL",
+      "namespace": "1516",
+      "mdb_closure": {
+        "status": "ok",
+        "project": "AvevaMarineSample",
+        "mdb": "/ALL",
+        "roots": [
+          {
+            "path": "D:\\AVEVA\\Projects\\E3D3.1",
+            "reachable": true,
+            "codes_seen": [
+              "acp",
+              "acw",
+              "ams",
+              "aps",
+              "scb",
+              "tes",
+              "zdj"
+            ],
+            "problem": null,
+            "scan_ms": 0
+          }
+        ],
+        "projects": [
+          {
+            "name": "AvevaMarineSample",
+            "codes": [
+              "AMS"
+            ],
+            "is_main": true,
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample",
+            "db_dirs": [
+              "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000"
+            ],
+            "dbnums": [
+              1112,
+              7997,
+              7998,
+              7999,
+              8000,
+              7000,
+              6890,
+              5052,
+              5100,
+              5053,
+              5200,
+              7332,
+              7330,
+              7331,
+              7329,
+              7353,
+              7324,
+              7352,
+              7350,
+              7354,
+              7327,
+              7356,
+              7333,
+              7326,
+              7322,
+              7351,
+              7334,
+              7741,
+              7742,
+              5054,
+              5101
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "ZDJ",
+            "codes": [
+              "ZDJ"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ",
+            "db_dirs": [
+              "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ\\ZDJ000"
+            ],
+            "dbnums": [
+              7600
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "SCB",
+            "codes": [
+              "SCB"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB",
+            "db_dirs": [
+              "D:\\AVEVA\\Projects\\E3D3.1\\SCB\\scb000"
+            ],
+            "dbnums": [
+              6000,
+              6001,
+              6002,
+              6003
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "AvevaCatalogue",
+            "codes": [
+              "ACP"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue",
+            "db_dirs": [
+              "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue\\acp000"
+            ],
+            "dbnums": [
+              7043,
+              7044,
+              7010,
+              7027,
+              7021,
+              7026,
+              7022,
+              7046,
+              7006,
+              7014,
+              7015,
+              7002,
+              7029,
+              7323,
+              7007,
+              7004,
+              7008,
+              7034,
+              7047,
+              7048,
+              250702,
+              250705,
+              250700,
+              250701,
+              7001,
+              7003,
+              7009,
+              7045,
+              7011,
+              7320,
+              7321,
+              7325,
+              7328,
+              7360
+            ],
+            "shadowed": []
+          },
+          {
+            "name": "AvevaPlantSample",
+            "codes": [
+              "APS"
+            ],
+            "is_main": false,
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample",
+            "db_dirs": [
+              "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000"
+            ],
+            "dbnums": [
+              7355
+            ],
+            "shadowed": []
+          }
+        ],
+        "seen_projects": [
+          {
+            "name": "AvevaCatalogue",
+            "codes": [
+              "ACP"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue"
+          },
+          {
+            "name": "AvevaMarineSample",
+            "codes": [
+              "AMS"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample"
+          },
+          {
+            "name": "AvevaPlantSample",
+            "codes": [
+              "APS"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample"
+          },
+          {
+            "name": "YCYK-E3D",
+            "codes": [
+              "ACW"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\E3D3.1-slyk-project\\YCYK-E3D"
+          },
+          {
+            "name": "SCB",
+            "codes": [
+              "SCB"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB"
+          },
+          {
+            "name": "TEST",
+            "codes": [
+              "TES"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\TEST"
+          },
+          {
+            "name": "YCYK-E3D",
+            "codes": [
+              "ACW"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\YCYK-E3D"
+          },
+          {
+            "name": "ZDJ",
+            "codes": [
+              "ZDJ"
+            ],
+            "root_index": 0,
+            "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ"
+          }
+        ],
+        "unresolved": [],
+        "problems": [],
+        "declaration_error": null,
+        "sys": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\amssys"
+      },
+      "dabacon_tags": {
+        "status": "ready",
+        "scope": "startup",
+        "refreshing": false,
+        "project_root": "D:/AVEVA/Projects/E3D3.1",
+        "sample_duration_ms": 4700,
+        "sample_age_ms": 198655064,
+        "discovered_databases": 1071,
+        "readable_databases": 1071,
+        "issue_count": 0,
+        "issues": [],
+        "issues_truncated": 0,
+        "latest": {
+          "tag_database_counts": {
+            "2_19_d0_": 2,
+            "2_27_12o": 3,
+            "2_27_2_n": 167,
+            "2_28_12_": 1,
+            "2_28_16_": 1,
+            "2_28_18_": 672,
+            "2_28_19_": 13,
+            "2_28_9_n": 7,
+            "2_33_33o": 4,
+            "2_35_16o": 1,
+            "2_35_22o": 24,
+            "2_35_23o": 171
+          },
+          "untagged_databases": 5
+        },
+        "history": {
+          "tag_session_counts": {
+            "2_19_d0_": 2,
+            "2_27_11o": 4,
+            "2_27_12o": 113,
+            "2_27_2_n": 1705,
+            "2_27_5_n": 20,
+            "2_27_7_n": 16,
+            "2_28_12_": 17,
+            "2_28_14_": 23,
+            "2_28_15_": 1,
+            "2_28_16_": 7,
+            "2_28_18_": 4326,
+            "2_28_19_": 1067,
+            "2_28_7_n": 20,
+            "2_28_8_n": 4,
+            "2_28_9_n": 59,
+            "2_33_33o": 358,
+            "2_35_16o": 6,
+            "2_35_22o": 131,
+            "2_35_23o": 3240
+          },
+          "tag_database_counts": {
+            "2_19_d0_": 2,
+            "2_27_11o": 2,
+            "2_27_12o": 7,
+            "2_27_2_n": 173,
+            "2_27_5_n": 1,
+            "2_27_7_n": 3,
+            "2_28_12_": 2,
+            "2_28_14_": 1,
+            "2_28_15_": 1,
+            "2_28_16_": 2,
+            "2_28_18_": 688,
+            "2_28_19_": 25,
+            "2_28_7_n": 1,
+            "2_28_8_n": 1,
+            "2_28_9_n": 21,
+            "2_33_33o": 16,
+            "2_35_16o": 2,
+            "2_35_22o": 26,
+            "2_35_23o": 171
+          },
+          "tagged_sessions": 11119,
+          "untagged_databases": 120,
+          "untagged_sessions": 33933
+        },
+        "release_selection": "diagnostic_only"
+      },
+      "http": {
+        "bind_addr": "0.0.0.0:8022",
+        "public_addr": "127.0.0.1:8022"
+      },
+      "data_read_mode": "direct",
+      "data_face": "ingest",
+      "read_through": {
+        "queue_depth": 0,
+        "queued": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "degraded_reason": "mirror spool unreadable: mirror spool checksum mismatch in D:\\work\\plant-code\\old\\gen-model\\.gen-model\\mirror-spool\\1516\\AvevaMarineSample\\ALL\\00000000000000000003-00000001788589313064-7526e897c0da3fce.mirror-job",
+        "last_success_unix_ms": null,
+        "spool_depth": 0,
+        "spool_bytes": 0,
+        "spool_oldest_age_ms": null,
+        "spool_capacity_bytes": 0
+      },
+      "dbnum_consistency": null,
+      "version": "0.1.40",
+      "build_id": "0.1.40+g36408c867612.1792490897.dirty",
+      "started_at": "2026-10-20T18:30:57.320645700+08:00",
+      "capabilities": {
+        "dbnum_model_ensure": true,
+        "dbnum_model_ready_roots": true,
+        "model_records_batch_max_roots": 64,
+        "mesh_formats": [
+          "mesh",
+          "glb"
+        ],
+        "room_complete_publication_ack": true,
+        "room_rebuild_executor": "durable"
+      },
+      "queue_paused": false,
+      "startup_autorun": true,
+      "auto_initialize_new_dbnums": false,
+      "awaiting_manual_initialization": [],
+      "data_incremental": true,
+      "model_incremental": true,
+      "room_membership": true,
+      "auto_work_armed": true,
+      "initialization": {
+        "epoch_id": 612,
+        "status": "model_ready",
+        "current_phase": null,
+        "data_ready": true,
+        "model_ready": true,
+        "model_in_flight": false,
+        "model_phase_open": true,
+        "startup_reconcile_pending": false,
+        "startup_rooms_pending": false,
+        "room_bootstrap": {
+          "status": "idle",
+          "dbnums_total": 0,
+          "dbnums_done": 0,
+          "dbnums_failed": 0,
+          "roots_total": 0,
+          "roots_ready": 0,
+          "roots_failed": 0,
+          "current_dbnum": null,
+          "stage": null,
+          "room_edges_written": 0,
+          "max_transaction_bytes": 0,
+          "elapsed_ms": 0,
+          "rss_mib": null,
+          "failure_samples": []
+        },
+        "startup": {
+          "scope": "watch",
+          "in_scope": 2,
+          "candidates": 29,
+          "no_credential_dbnums": [],
+          "reconcile": {
+            "result": "ok",
+            "unreadable": 0,
+            "not_in_mdb": 0,
+            "retired_from_mdb": [],
+            "window_failed": 0,
+            "lagging": 0,
+            "windows_opened": 0,
+            "catalogue_cascade_degraded": false,
+            "stale_catalogue_dbnums": [],
+            "unreadable_catalogue_dbnums": 0,
+            "catalogue_windows": [],
+            "catalogue_dependency_refresh": {
+              "candidates": 13,
+              "elapsed_ms": 187
+            }
+          }
+        },
+        "startup_data_wait_degraded": null,
+        "phases": {
+          "design": {
+            "total": 2,
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "blocked": 0
+          },
+          "meta": {
+            "total": 17,
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "blocked": 0
+          }
+        },
+        "blockers": [],
+        "blocked_by": [],
+        "shadowed": [
+          "DICT:7032:AvevaPlantSample:D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000\\aps7032_0001",
+          "CATA:7000:AvevaCatalogue:D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue\\acp000\\acp7000_0001",
+          "CATA:7351:AvevaPlantSample:D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000\\aps7351_0001",
+          "CATA:7355:AvevaPlantSample:D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000\\aps7355_0001",
+          "CATA:7355:AvevaMarineSample:D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams7355",
+          "CATA:7600:AvevaPlantSample:D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000\\aps7600_0001"
+        ]
+      },
+      "worker_alive": true,
+      "worker_idle_secs": 25,
+      "active_dependency": null,
+      "idle_round_panic": null,
+      "batch_failures": null,
+      "model_concurrency": {
+        "mode": "adaptive",
+        "execution_group_size": 16,
+        "effective_root_inflight": 1,
+        "root_inflight_max": 2,
+        "completed_total": 0,
+        "failed_total": 0,
+        "shape_queue_depth": 0,
+        "shape_producer_blocked_micros": 0,
+        "shape_sql_bytes": 0,
+        "shape_instances_written": 0,
+        "surreal_read_p50_micros": 2314,
+        "surreal_read_p95_micros": 3280,
+        "surreal_read_p99_micros": 4351,
+        "surreal_write_p50_micros": null,
+        "surreal_write_p95_micros": null,
+        "surreal_write_p99_micros": null,
+        "surreal_retries": 0,
+        "process_cpu_percent": 100.24144744873047,
+        "process_rss_bytes": 232116224
+      },
+      "geometry_concurrency": {
+        "quota": 16,
+        "active": 0,
+        "waiting": 0,
+        "permit_wait_micros": 730,
+        "active_permit_micros": 13662479,
+        "observed_micros": 198671231416
+      },
+      "runtime_lag": {
+        "sampling": true,
+        "sample_period_ms": 100,
+        "samples": 512,
+        "observed_total": 1819283,
+        "p50_micros": 11162,
+        "p95_micros": 16626,
+        "p99_micros": 19228,
+        "max_micros": 4363175
+      },
+      "spatial_serial": {
+        "waiting": 0,
+        "wait_micros": 40875,
+        "held_micros": 74677414
+      },
+      "sul_db": {
+        "connected": false,
+        "ping_ms": null,
+        "disconnects_total": 348,
+        "last_disconnect_at": "2026-10-23T01:41:50.327735+08:00",
+        "last_disconnect_error": "/health 探活 transport failed: 超过 2 秒未响应",
+        "endpoint": "localhost:8009",
+        "medium": "rocksdb",
+        "durable": true
+      },
+      "static_assets": true,
+      "debug_dbnums": [],
+      "watch_dbnums": [
+        7998,
+        8000
+      ],
+      "watch_dbnums_origin": "DbOption.toml 的 watch_dbnums",
+      "model_incremental_types": [],
+      "model_incremental_types_origin": null,
+      "in_memory_db": false,
+      "model_cache": {
+        "resident_records": 1272,
+        "resident_roots": 79,
+        "overlay": {
+          "records": 1272,
+          "roots": 79,
+          "acks": 79,
+          "approx_bytes": 2015888,
+          "receipt_room_bytes": 0,
+          "max_roots": 50000,
+          "evicted_total": 0
+        },
+        "element_cache": {
+          "enabled": true,
+          "max_entries": 200000,
+          "parsed_entries": 1946,
+          "approx_bytes": 21201607,
+          "max_dbnums": 0,
+          "resident_dbnums": 1,
+          "evicted_dbnums_total": 0,
+          "databases": [
+            {
+              "dbnum": 7999,
+              "source_sesno": 205,
+              "parsed_entries": 1946,
+              "extraction_entries": 1823,
+              "approx_bytes": 21201607,
+              "max_entries": 200000,
+              "last_used_tick": 82
+            }
+          ]
+        },
+        "historical": {
+          "snapshots": 0,
+          "max_snapshots": 16,
+          "evicted_total": 0,
+          "scopes": 0,
+          "records": 0,
+          "approx_bytes": 0,
+          "snapshots_detail": []
+        },
+        "write_behind": {
+          "accepting": true,
+          "worker_alive": true,
+          "worker_restarts": 0,
+          "persist_attempts": 79,
+          "persist_retries": 0,
+          "blocked_transitions": 0,
+          "ack_mismatches": 0,
+          "last_attempt_at": "2026-10-20T11:40:33.260919800+00:00",
+          "pending_unique_roots": 0,
+          "in_flight_roots": 0,
+          "retrying_roots": 0,
+          "blocked_roots": 0,
+          "superseded_submissions": 0,
+          "stale_jobs_dropped": 0,
+          "oldest_pending_ms": null,
+          "last_success_at": "2026-10-20T11:40:33.267710300+00:00",
+          "last_error": null,
+          "blocked_samples": [],
+          "overlay_root_limit": 50000,
+          "overlay_evicted_total": 0,
+          "element_cache_max_entries": 200000,
+          "rows_upserted": 1272,
+          "rows_removed": 0,
+          "receipts_written": 79,
+          "commits": 76,
+          "room_edges_written": 1411,
+          "max_transaction_bytes": 70371
+        },
+        "store_reachable": false,
+        "degraded_read_only": true
+      }
+    },
+    "version": "0.1.40"
+  },
+  "expectationTier": "legacy",
+  "steps": [
+    {
+      "id": "S0",
+      "title": "环境探测：后端 health + Vite + 系统 Chrome",
+      "ok": true,
+      "assertions": [],
+      "observations": {
+        "backend.version": "0.1.40",
+        "expectationTier": "legacy"
+      },
+      "screenshots": []
+    },
+    {
+      "id": "S1",
+      "title": "页面就绪 + 抽屉钩子",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "DEV 钩子 __plant3dPipeDistanceE2E 可用",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "modelLoaded(show_refno)": false,
+        "scene": {
+          "objectIds": 229,
+          "loadedRefnos": [],
+          "selectedIds": [
+            "24381_145018"
+          ]
+        }
+      },
+      "screenshots": []
+    },
+    {
+      "id": "R1",
+      "title": "打开抽屉与连排相邻缺省设置",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "检测模式切到连排相邻",
+          "ok": true,
+          "detail": "pipe-row"
+        },
+        {
+          "desc": "归排方式缺省管中心成排",
+          "ok": true,
+          "detail": "center"
+        },
+        {
+          "desc": "排内相邻上限缺省 1000",
+          "ok": true,
+          "detail": "1000"
+        },
+        {
+          "desc": "最短共同区段缺省 300",
+          "ok": true,
+          "detail": "300"
+        },
+        {
+          "desc": "「同时显示中心距」缺省关",
+          "ok": true,
+          "detail": "false"
+        },
+        {
+          "desc": "「三维显示关键点」缺省关",
+          "ok": true,
+          "detail": "false"
+        },
+        {
+          "desc": "排内相邻上限输入框显示 1000",
+          "ok": true,
+          "detail": "1000"
+        },
+        {
+          "desc": "最短共同区段输入框显示 300",
+          "ok": true,
+          "detail": "300"
+        },
+        {
+          "desc": "清空排内相邻上限回到 1000（store）",
+          "ok": true,
+          "detail": "1000"
+        },
+        {
+          "desc": "清空排内相邻上限输入框显示 1000",
+          "ok": true,
+          "detail": "1000"
+        }
+      ],
+      "observations": {
+        "drawerOpen": "ribbon 测量 → 管道距离"
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/01-r1-drawer-defaults.png"
+      ]
+    },
+    {
+      "id": "R2",
+      "title": "管中心成排：3 根管检测 → 识别预览 → 结果口径",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "detectPipeRows 返回 true",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "检测无错误",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "desc": "识别预览有排",
+          "ok": true,
+          "detail": "3"
+        },
+        {
+          "desc": "预览排数 UI == store",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "连排记录数 = 对数 × 2",
+          "ok": true,
+          "detail": "6 vs 6"
+        },
+        {
+          "desc": "缺省列表行数 = 对数（只列名义间隔）",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "缺省只列名义间隔（derived-gap）",
+          "ok": true,
+          "detail": "derived-gap,derived-gap,derived-gap"
+        },
+        {
+          "desc": "列表头「检测结果 (N)」== visibleResults",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=208.3 OD=21.3/21.3 G=187.0 期望≈187.0"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈187 mm"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=207.1 OD=21.3/21.3 G=185.8 期望≈185.8"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈186 mm"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=205.8 OD=21.3/21.3 G=184.5 期望≈184.5"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈184 mm"
+        },
+        {
+          "desc": "旧服务端推导间隔带 ≈（外径估算）",
+          "ok": true,
+          "detail": "3 条"
+        },
+        {
+          "desc": "勾选「同时显示中心距」",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "store.bothMetrics on",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "勾选后列表行数 = 对数 × 2",
+          "ok": true,
+          "detail": "6 vs 6"
+        },
+        {
+          "desc": "勾选后两种度量都列出",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "取消勾选回到只列名义间隔",
+          "ok": true,
+          "detail": "3 vs 3"
+        }
+      ],
+      "observations": {
+        "detectError": null,
+        "detectNotice": "中心线接口未提供逐段外径来源（旧服务端），3 根管道按成员外径估算：推导间隔带 ≈，管底对齐的排需确认后生成",
+        "diagnostics": [
+          "24381_146830：3 个成员没有长度（穿过件），不参与走廊",
+          "24381_146810：1 个成员没有长度（穿过件），不参与走廊",
+          "24381_145018：7 个成员没有长度（穿过件），不参与走廊",
+          "管向组 24381_145021~24381_145023,Head~24381_145019 内没有 ≥ 最小共同长度且 ≥2 根参与的共同区段",
+          "管向组 24381_145031~24381_145032,24381_146816~24381_146817 内没有 ≥ 最小共同长度且 ≥2 根参与的共同区段",
+          "管向组 24381_146811~24381_146812,Head~24381_146831 内没有 ≥ 最小共同长度且 ≥2 根参与的共同区段"
+        ],
+        "preview.groups": [
+          {
+            "members": [
+              "24381_146810",
+              "24381_146830"
+            ],
+            "pairs": 1,
+            "D": [
+              208.34
+            ],
+            "sectionM": [
+              -4.383058802747204,
+              -4.06134645252788
+            ],
+            "formal": true
+          },
+          {
+            "members": [
+              "24381_146810",
+              "24381_146830"
+            ],
+            "pairs": 1,
+            "D": [
+              207.12
+            ],
+            "sectionM": [
+              6.466747768165462,
+              7.613685364642817
+            ],
+            "formal": true
+          },
+          {
+            "members": [
+              "24381_146830",
+              "24381_146810"
+            ],
+            "pairs": 1,
+            "D": [
+              205.79
+            ],
+            "sectionM": [
+              9.205393787644837,
+              10.859227340683058
+            ],
+            "formal": true
+          }
+        ],
+        "preview.groupCount": 3,
+        "preview.totalPairs": 3,
+        "preview.held": [],
+        "pipe-row-summary": "识别 3 排：3 排 / 3 对已生成",
+        "values.centerDistancesMm": [
+          208,
+          207,
+          206
+        ],
+        "values.gaps": [
+          "≈187 mm",
+          "≈186 mm",
+          "≈184 mm"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/02-r2-center-preview-list.png",
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/03-r2-both-metrics.png"
+      ]
+    },
+    {
+      "id": "R3",
+      "title": "三维标注：关键点 + 行定位",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "勾选「三维显示关键点」",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "store.keyPoints on",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "点行后激活记录",
+          "ok": true,
+          "detail": "piperow:center:derived-gap:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3"
+        }
+      ],
+      "observations": {
+        "sceneAfterKeyPoints": {
+          "objectIds": 229,
+          "loadedRefnos": [],
+          "selectedIds": [
+            "24381_145018"
+          ]
+        },
+        "sceneAfterRowClick": {
+          "objectIds": 231,
+          "loadedRefnos": [],
+          "selectedIds": [
+            "24381_146810",
+            "24381_146830"
+          ]
+        }
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/04-r3-keypoints-3d.png",
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/05-r3-row-locate.png"
+      ]
+    },
+    {
+      "id": "R4",
+      "title": "隐藏/显示、模式隔离与「另有 N 条」提示",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "预览行有「隐藏本排」按钮",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "desc": "隐藏本排：该排全部记录进隐藏集",
+          "ok": true,
+          "detail": "2 条"
+        },
+        {
+          "desc": "隐藏本排：列表可见数 -对数",
+          "ok": true,
+          "detail": "3 → 2"
+        },
+        {
+          "desc": "显示本排恢复",
+          "ok": true,
+          "detail": "3 vs 3"
+        },
+        {
+          "desc": "所有管对检测不动连排结果",
+          "ok": true,
+          "detail": "6 vs 6"
+        },
+        {
+          "desc": "切到所有管对模式",
+          "ok": true,
+          "detail": "all-pairs"
+        },
+        {
+          "desc": "所有管对列表只列非连排记录",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "allPairs.records": 0,
+        "pipeRow.records": 6,
+        "clearButton": "所有管对 0 条结果，「清空」按 v-if 不显示（符合 UI）"
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/06-r4-row-hidden.png",
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/07-r4-other-mode-notice.png",
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/08-r4-mode-isolation.png"
+      ]
+    },
+    {
+      "id": "R5",
+      "title": "管底对齐（阀组 3 根）",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "detectPipeRows(bottom) 返回 true",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "desc": "管底对齐检测无错误",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "desc": "有管底对齐预览",
+          "ok": true,
+          "detail": "1"
+        },
+        {
+          "desc": "待确认原因含「估算外径」",
+          "ok": true,
+          "detail": "row:24381_146230~24381_146232|24381_146241~24381_146242@9871.1-11128.5:bottom"
+        },
+        {
+          "desc": "管底对齐生成记录",
+          "ok": true,
+          "detail": "2 条（pairs=1）"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=208.3 OD=21.3/21.3 G=187.0 期望≈187.0"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146812~24381_146813:24381_146831~24381_146832@-4383.1--4061.3 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈187 mm"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=207.1 OD=21.3/21.3 G=185.8 期望≈185.8"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146813~24381_146814:24381_146832~24381_146833@6466.7-7613.7 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈186 mm"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=205.8 OD=21.3/21.3 G=184.5 期望≈184.5"
+        },
+        {
+          "desc": "管对 piperow:center:24381_146814~24381_146816:24381_146833~24381_146836@9205.4-10859.2 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈184 mm"
+        },
+        {
+          "desc": "管对 piperow:bottom:24381_146230~24381_146232:24381_146241~24381_146242@9871.1-11128.5 两种度量记录齐全",
+          "ok": true,
+          "detail": "cd=true dg=true"
+        },
+        {
+          "desc": "管对 piperow:bottom:24381_146230~24381_146232:24381_146241~24381_146242@9871.1-11128.5 G = D − (OD1+OD2)/2 容差内",
+          "ok": true,
+          "detail": "D=511.0 OD=33.4/33.4 G=477.6 期望≈477.6"
+        },
+        {
+          "desc": "管对 piperow:bottom:24381_146230~24381_146232:24381_146241~24381_146242@9871.1-11128.5 估算外径推导间隔带 ≈",
+          "ok": true,
+          "detail": "text=≈478 mm"
+        }
+      ],
+      "observations": {
+        "bottom.preview": [
+          {
+            "members": [
+              "24381_146228",
+              "24381_146240"
+            ],
+            "pairs": 1,
+            "D": [
+              510.95
+            ],
+            "formal": false,
+            "estimated": true
+          }
+        ],
+        "bottom.detectNotice": "中心线接口未提供逐段外径来源（旧服务端），3 根管道按成员外径估算：推导间隔带 ≈，管底对齐的排需确认后生成",
+        "bottom.afterConfirm.counts": {
+          "all": 8,
+          "mode": 2,
+          "listed": 1,
+          "visible": 1,
+          "otherModeVisible": 3
+        },
+        "bottom.gapTexts": [
+          "≈478 mm"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/09-r5-bottom-align.png"
+      ]
+    },
+    {
+      "id": "R6",
+      "title": "参数边界：相邻上限 / 最短共同区段",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "相邻上限改小 → 排/对减少或断开",
+          "ok": true,
+          "detail": "上限 204 mm：0 对（基线 3）"
+        },
+        {
+          "desc": "最短共同区段 100 m → 不成对",
+          "ok": true,
+          "detail": "0 对"
+        },
+        {
+          "desc": "回缺省重测与 R2 一致",
+          "ok": true,
+          "detail": "3 排 3 对（基线 3 排 3 对）"
+        }
+      ],
+      "observations": {
+        "breakLimitMm": 204,
+        "limited.pairs": 0,
+        "minCommon100m.pairs": 0,
+        "restored.values": [
+          "≈187 mm",
+          "≈186 mm",
+          "≈184 mm"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/10-r6-max-adjacent-break.png",
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/11-r6-min-common-break.png",
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/12-r6-restored.png"
+      ]
+    },
+    {
+      "id": "O1",
+      "title": "可选：直段 TUBI 选择（best-effort）",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "detectPipeRowTubes 返回 true",
+          "ok": true,
+          "detail": "true"
+        }
+      ],
+      "observations": {
+        "tubePair": {
+          "a": "24381_146830#24381_146832-24381_146833#3",
+          "b": "24381_146810#24381_146813-24381_146814#4",
+          "midDistMm": 207
+        },
+        "tube.result": {
+          "ok": true,
+          "groups": 1,
+          "pairs": 1,
+          "selectedTubeKeys": [
+            "24381_146830#24381_146832-24381_146833#3",
+            "24381_146810#24381_146813-24381_146814#4"
+          ],
+          "gaps": [
+            "≈478 mm",
+            "≈187 mm",
+            "≈184 mm",
+            "≈186 mm"
+          ]
+        }
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/13-o1-tube-detect.png"
+      ]
+    },
+    {
+      "id": "Z",
+      "title": "页面健康检查",
+      "ok": true,
+      "assertions": [
+        {
+          "desc": "无未捕获页面错误",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "consoleErrors.count": 4,
+        "consoleErrors.sample": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "screenshots": [
+        "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/14-final-state.png"
+      ]
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "pageErrors": [],
+  "differences": [
+    {
+      "step": "S1",
+      "desc": "show_refno 模型 90s 内未就绪",
+      "detail": "三维里可能只有标注没有管道实体（与文档首轮一致）"
+    },
+    {
+      "step": "R4",
+      "desc": "所有管对检测未产出记录",
+      "detail": "detectError=24381_146810 ↔ 24381_146830：gen-model 请求失败 GET /gm/api/v1/spatial/surface-clearance?source_refno=24381%2F146810&target_refno=24381%2F146830&target_kind=any&perpendicular=false&max_distance_mm=500: gen-model 请求超时 30000 ms: /api/v1/spatial/surface-clearance；24381_145018 ↔ 24381_146830：gen-model 请求失败 GET /gm/api/v1/spatial/surface-clearance?source_refno=24381%2F145018&target_refno=24381%2F146830&target_kind=any&perpendicular=false&max_distance_mm=500: gen-model 请求超时 30000 ms: /api/v1/spatial/surface-clearance；24381_145018 ↔ 24381_146810：gen-model 请求失败 GET /gm/api/v1/spatial/surface-clearance?source_refno=24381%2F145018&target_refno=24381%2F146810&target_kind=any&perpendicular=false&max_distance_mm=500: gen-model 请求超时 30000 ms: /api/v1/spatial/surface-clearance notice=null"
+    }
+  ],
+  "defects": [],
+  "screenshots": [
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/01-r1-drawer-defaults.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/02-r2-center-preview-list.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/03-r2-both-metrics.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/04-r3-keypoints-3d.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/05-r3-row-locate.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/06-r4-row-hidden.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/07-r4-other-mode-notice.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/08-r4-mode-isolation.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/09-r5-bottom-align.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/10-r6-max-adjacent-break.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/11-r6-min-common-break.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/12-r6-restored.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/13-o1-tube-detect.png",
+    "docs/verification/pipe-row-browser-2026-10-22/local-0.1.40/14-final-state.png"
+  ],
+  "finishedAt": "2026-10-22T17:44:08.754Z",
+  "failures": [],
+  "result": "PASS"
+}
