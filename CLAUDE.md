@@ -67,7 +67,7 @@ src/
 │   ├── dashboard/         # 仪表板组件
 │   └── ...
 ├── composables/           # 组合式函数 (useXxx)
-│   ├── useDbnoInstancesParquetLoader.ts  # Parquet 数据加载
+│   ├── useDbnoInstancesDtxLoader.ts      # 按库按需装入 DTX 实例
 │   ├── useDashboardWorkbench.ts          # Dashboard/Workbench 逻辑
 │   ├── useAnnotationStyleStore.ts        # 标注样式状态
 │   ├── useDimensionAnnotation.ts         # 尺寸标注逻辑
@@ -96,7 +96,7 @@ scripts/                  # 构建和验证脚本
 
 1. **Dock 面板系统**: 使用 `dockview-vue` 实现可拖拽的面板布局，所有面板组件在 `main.ts` 中全局注册
 2. **Composables 模式**: 业务逻辑封装在 `useXxx` composables 中，支持状态共享和逻辑复用
-3. **数据加载**: 支持多种格式 (Parquet, JSON, Arrow)，通过 composables 统一管理
+3. **数据加载**: 统一走 gen-model `/api/v1`（REST + WebSocket），经 `src/api/` 与 `src/model-source/` 的 composables 管理；几何按库按需装入 DTX 层
 4. **3D 渲染**: Three.js 场景管理，支持模型加载、标注、测量、空间查询等功能
 5. **审查工作流**: 完整的设计审查流程 (发起 → 审查 → 返工 → 重新提交)
 
@@ -151,7 +151,7 @@ scripts/                  # 构建和验证脚本
 2. **不要提交敏感信息**: `.env.*` 文件不应包含真实密钥
 3. **合并前检查**: 至少运行 `npm run type-check` + `npm run lint` + `npm test`
 4. **/files 路径**: 始终代理到后端，不使用本地 `public/files`
-5. **Parquet/WASM**: `parquet-wasm` 已配置为外部依赖，需要特殊处理
+5. **plant-ui WASM**: 离线包里 `backend/web/pkg` 来自 plant-ui，由 `scripts/build-offline-release.mjs` 叠加，不在本仓构建
 
 ## 文档资源
 
