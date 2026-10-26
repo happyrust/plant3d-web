@@ -1,20 +1,21 @@
 import { type Ref, computed, nextTick, ref, watch } from 'vue';
 
 import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
-import { Box3, BufferAttribute, BufferGeometry, Frustum, Group, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Matrix4, Plane, Vector3 } from 'three';
+import { Box3, BufferAttribute, BufferGeometry, Frustum, Group, Line, LineBasicMaterial, LineDashedMaterial, Matrix4, Plane, Vector3 } from 'three';
 
 import { computeAabbObbFromBox3, createCloudAnnotationRecordFromAnchorAndMarquee, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed, topCenterFromBox3 } from './dtxTools/annotationRecords';
 import { CLOUD_FIT_PADDING_PX, CLOUD_TARGET_BBOX_TTL_MS, boxCornersFromMinMaxVec, buildCloudBillboardPolyline, buildWavySelectionBboxLinePositions, cloudWavesPerEdgeForSizePx, computeFittedCloudRectFromCorners, dashSizeFromLineSegments, updateCloudBboxLineSegmentsGeometry } from './dtxTools/cloudGeometry';
-import { type CloudClusterDebugSnapshot, type CloudInspectionDebugSnapshot, type CloudLodDebugSnapshot, type CloudOverlayEl, type CloudRenderStats, buildCloudSourceStamp, buildMembersRegionV1, captureCreationViewSnapshot, collectWorldCellEdgePositions, createCloudRenderCache, createDefaultCloudLabelLayoutV1, isRegionPresentationRecord, labelPreferenceFromRecord, regionRenderStyleFromRecord, resolveRegionObjectIdsForRefno } from './dtxTools/cloudRegion';
+import { type CloudInspectionDebugSnapshot, type CloudOverlayEl, type CloudRenderStats, buildCloudSourceStamp, buildMembersRegionV1, captureCreationViewSnapshot, collectWorldCellEdgePositions, createCloudRenderCache, createDefaultCloudLabelLayoutV1, isRegionPresentationRecord, labelPreferenceFromRecord, regionRenderStyleFromRecord, resolveRegionObjectIdsForRefno } from './dtxTools/cloudRegion';
 import { createMeasureController } from './dtxTools/controllers/measureController';
 import { createPanelActions } from './dtxTools/controllers/panelActions';
-import { EMPTY_BOUNDS, IDENTITY_MATRIX_ELEMENTS, aabbFromPoints, clamp, escapeAnnotationLabelText, getCanvasPos, measureLabelSize, nowId, overlayToWorld, parseRefnoFromDtxObjectId, vec3ToTuple, worldToOverlay, worldToOverlayPoint } from './dtxTools/geometry';
+import { createPickCandidateController } from './dtxTools/controllers/pickCandidateController';
+import { EMPTY_BOUNDS, IDENTITY_MATRIX_ELEMENTS, aabbFromPoints, clamp, getCanvasPos, measureLabelSize, nowId, overlayToWorld, parseRefnoFromDtxObjectId, vec3ToTuple, worldToOverlay, worldToOverlayPoint, escapeAnnotationLabelText } from './dtxTools/geometry';
 import { buildAnnotationLeaderStyle, createTextAnnotationLeader, setAnnotationLeaderResolution, updateLeaderGeometry } from './dtxTools/leaderVisual';
 import { ensureDiv, makeInlineAnnotationCardEl, makeTextAnnotationCardEl, makeTextAnnotationMarkerEl, repaintMarkerDegrade } from './dtxTools/overlayDom';
 import { resolveAnnotationLabelClickAction } from './dtxTools/overlayHtml';
-import { type PickRefnoCandidate, type PickRefnoRayHit, buildPickRefnoCandidates, buildPickTubeCandidates, isSamePickAnchor, isSamePickCandidateSequence, isTubeKeyLike, isTubePickFilter, nextPickCandidateIndex, resolveBoxPickRefnos } from './dtxTools/pickCandidates';
-import { type ObjectMeasureCandidate, PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES, PIPE_STRUCTURE_DEFAULT_NOUNS, PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES, PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT, type PipeMeasureResult, type PipeMeasureSeed, type PipeToPipeBranCandidate, type PipeWallDistanceCandidate, asVec3, buildObjectMeasurePairKey, choosePipeMeasureBetterSeed, collectOrderedPipeReferencePointSeeds, computeApproxNearestBetweenObjects, fromSeed, normalizeRefnoKey, parseDbnumFromRefno, resolveLoadedVisibleObjectCandidateByRefno, vec3ByMatrix } from './dtxTools/pipeMeasureMath';
-import { applyBoxOverlayDegrade, buildWireBoxGeometryFromBox3, clearGroup, createCloudAnnotationVisual, createObbAnnotationVisual, createRectAnnotationVisual, disposeObject3d, getCanvasResolution, resolveObbAnnotationAnchorWorldPos } from './dtxTools/visuals';
+import { type PickRefnoCandidate, type PickRefnoRayHit, isTubePickFilter, resolveBoxPickRefnos } from './dtxTools/pickCandidates';
+import { asVec3 } from './dtxTools/pipeMeasureMath';
+import { applyBoxOverlayDegrade, clearGroup, createCloudAnnotationVisual, createObbAnnotationVisual, createRectAnnotationVisual, getCanvasResolution, resolveObbAnnotationAnchorWorldPos } from './dtxTools/visuals';
 
 import type { CloudLodState, DtxToolsContext } from './dtxTools/context';
 import type { AnnotationLabelClickState, AnnotationLeaderVisual, AnnotationOverlayKind, DragRect, InlineOverlayAnnotationDragState, InlineTextAnnotationDraft, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState, TextAnnotationMarkerClickResult } from './dtxTools/types';
@@ -23,42 +24,36 @@ import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
-import { genModelV1SpatialCenterline, genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
 import { reviewAttachmentDelete } from '@/api/reviewApi';
-import { commitBranParallelSpacing } from '@/clearance/adapters/branSpacingRecords';
-import { parseServerWarning } from '@/clearance/services/clearanceService';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { applyDashedLineDegrade, applyLeaderDegrade, applyMeshLineDegrade, createCloudDegradeBadgeEl, positionCloudDegradeBadge, sameDegrade } from '@/composables/annotationDegradeViewport';
 import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
-import { DEFAULT_PARALLEL_ANGLE_TOLERANCE_DEG, buildStraightRuns, findParallelRunPairs } from '@/composables/branParallelSpacing';
 import { buildRecordDegradeKey, useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
-import { dtxLoaderRevision, findNounByRefnoAcrossAllDbnos, findOwnerBranRefnoAcrossAllDbnos, getDtxRefnoTransform, listDtxTubeObjects, resolveDtxObjectIdsByRefno } from '@/composables/useDbnoInstancesDtxLoader';
+import { dtxLoaderRevision, findNounByRefnoAcrossAllDbnos, listDtxTubeObjects } from '@/composables/useDbnoInstancesDtxLoader';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useScreenshot } from '@/composables/useScreenshot';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { type AnnotationRecord, type CloudAnnotationRecord, type MeasurementPoint, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, buildCloudBindings, getCloudMemberRefnos, useToolStore } from '@/composables/useToolStore';
+import { type AnnotationRecord, type CloudAnnotationRecord, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, buildCloudBindings, getCloudMemberRefnos, useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { SOLVESPACE_DIMENSION_THEME, isWorldSegmentBlocked } from '@/dimension';
-import { commitDtxObjectToObjectClearance, commitDtxPointToObjectMeasurement } from '@/measurement/adapters/dtxDistanceRecords';
-import { type CloudFitState, type SmallTargetLod, liftScreenPolylineToBillboard, matricesEqual, regionToWorldCells, renderCloudRegion } from '@/review/domain/annotationProjection/annotationProjection';
+import { liftScreenPolylineToBillboard, matricesEqual, regionToWorldCells, renderCloudRegion } from '@/review/domain/annotationProjection/annotationProjection';
 import { DEFAULT_PIN_CLUSTER_OPTIONS, type PinCluster, type PinClusterItem, clusterPins } from '@/review/domain/annotationProjection/cluster';
 import { ALL_CLOUD_DIRTY, type CloudRenderStamp, computeCloudDirty, createArrayVersionTracker, createValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
 import { type CloudInspectionMode, type OcclusionProbe, chooseInspectionProbeMembers, inspectionFactor, inspectionModeFromSearch } from '@/review/domain/annotationProjection/inspection';
-import { type CloudFrame, DEFAULT_LABEL_PREFERENCE, type LabelLayoutResult, type LabelPreference, labelOffsetFromTopLeft, layoutCloudLabel, rectToCloudFrame } from '@/review/domain/annotationProjection/labelLayout';
+import { DEFAULT_LABEL_PREFERENCE, type LabelPreference, labelOffsetFromTopLeft, layoutCloudLabel, rectToCloudFrame } from '@/review/domain/annotationProjection/labelLayout';
 import { type CloudLodCandidate, type CloudLodLevel, DEFAULT_CLOUD_LOD_OPTIONS, cloudLodPriority, planCloudLod } from '@/review/domain/annotationProjection/lod';
 import { type CloudLabelLayoutV1, type ObbSnapshot, type RegionV1, createRegionCloudPresentationV1, regionCoversMembers } from '@/review/domain/cloudRegion';
 import { emitToast } from '@/ribbon/toastBus';
 import { UserRole } from '@/types/auth';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
-import { formatLengthMeters } from '@/utils/unitFormat';
 
 export { createCloudAnnotationRecordFromAnchorAndMarquee, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, resolveTextAnnotationMarkerClickAction, resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed } from './dtxTools/annotationRecords';
 export { CLOUD_FIT_PADDING_PX, CLOUD_TARGET_BBOX_TTL_MS, buildCloudBillboardPolyline, cloudWavesPerEdgeForSizePx, computeCloudLayout, computeFittedCloudRectFromCorners } from './dtxTools/cloudGeometry';
@@ -133,17 +128,9 @@ export function useDtxTools(options: {
   let textAnnotationMarkerClickTimer: ReturnType<typeof setTimeout> | null = null;
 
   // pick_refno：仅在拾取会话内维护，不写入 store
-  const pickedHighlightByBran = new Map<string, string>();
-  const pickedHighlightPinned = new Set<string>(); // 已在外部选中的对象，不应被拾取会话取消选中
-  let lastAppliedPickHighlights: string[] = [];
-  /** 按直段拾取的高亮（直段身份键，对象级选中） */
-  let lastAppliedPickTubeHighlights: string[] = [];
-
   // pick_refno 候选轮换：一次点击命中的全部重叠构件 + 当前预览下标
   const pickCandidates = ref<PickRefnoCandidate[]>([]);
   const pickCandidateIndex = ref(0);
-  let pickCandidateAnchor: { x: number; y: number } | null = null;
-  let pickCandidatePreview: LineSegments | null = null;
 
   const ready = computed(() => {
     void readyRevision.value;
@@ -686,140 +673,6 @@ export function useDtxTools(options: {
     }
   }
 
-  /** 直段高亮只落在那一段直管对象上（对象级），不走 refno 级选中。 */
-  function applyPickTubeHighlights(keys: string[]): void {
-    const viewer = compatViewerRef.value;
-    if (!viewer) return;
-    const stale = lastAppliedPickTubeHighlights.filter((key) => !keys.includes(key));
-    if (stale.length > 0) viewer.scene.setTubeSegmentsSelected(stale, false);
-    if (keys.length > 0) viewer.scene.setTubeSegmentsSelected(keys, true);
-    lastAppliedPickTubeHighlights = keys;
-  }
-
-  function applyPickHighlights(): void {
-    const viewer = compatViewerRef.value;
-    if (!viewer) return;
-
-    const highlights = Array.from(new Set(pickedHighlightByBran.values())).filter(Boolean);
-    applyPickTubeHighlights(highlights.filter(isTubeKeyLike));
-    const next = highlights.filter((id) => !isTubeKeyLike(id));
-
-    if (lastAppliedPickHighlights.length > 0) {
-      const toDeselect = lastAppliedPickHighlights.filter((id) => !pickedHighlightPinned.has(id));
-      if (toDeselect.length > 0) {
-        viewer.scene.setObjectsSelected(toDeselect, false);
-      }
-    }
-    if (next.length > 0) {
-      // 若对象在进入/拾取前已被外部选中，则“取消拾取/删除候选”不应取消其高亮
-      const selectedNow = new Set<string>(viewer.scene.selectedObjectIds);
-      for (const id of next) {
-        if (selectedNow.has(id) && !lastAppliedPickHighlights.includes(id)) {
-          pickedHighlightPinned.add(id);
-        }
-      }
-      viewer.scene.setObjectsSelected(next, true);
-    }
-    lastAppliedPickHighlights = next;
-  }
-
-  function clearPickHighlights(): void {
-    const viewer = compatViewerRef.value;
-    if (viewer && lastAppliedPickHighlights.length > 0) {
-      const toDeselect = lastAppliedPickHighlights.filter((id) => !pickedHighlightPinned.has(id));
-      if (toDeselect.length > 0) {
-        viewer.scene.setObjectsSelected(toDeselect, false);
-      }
-    }
-    applyPickTubeHighlights([]);
-    pickedHighlightByBran.clear();
-    pickedHighlightPinned.clear();
-    lastAppliedPickHighlights = [];
-  }
-
-  function clearPickCandidatePreview(): void {
-    if (!pickCandidatePreview) return;
-    try { toolsGroup.remove(pickCandidatePreview); } catch { /* ignore */ }
-    disposeObject3d(pickCandidatePreview);
-    pickCandidatePreview = null;
-  }
-
-  function resetPickCandidateSession(): void {
-    clearPickCandidatePreview();
-    pickCandidates.value = [];
-    pickCandidateIndex.value = 0;
-    pickCandidateAnchor = null;
-  }
-
-  /**
-   * 用独立线框标出「当前轮换到的候选」。
-   *
-   * 不复用 `setObjectsSelected`：那是全局选中通道，候选与普通选中长得一样就分不出
-   * 轮换到了哪一个。只有存在重叠候选时才画，单一候选靠选中高亮已经足够。
-   */
-  function renderPickCandidatePreview(): void {
-    clearPickCandidatePreview();
-    if (pickCandidates.value.length <= 1) return;
-
-    const candidate = pickCandidates.value[pickCandidateIndex.value];
-    const viewer = compatViewerRef.value;
-    if (!candidate || !viewer) return;
-
-    const aabb = isTubeKeyLike(candidate.refno)
-      ? viewer.scene.getTubeSegmentAABB(candidate.refno)
-      : viewer.scene.getAABB([candidate.refno]);
-    if (!aabb) return;
-
-    const geometry = buildWireBoxGeometryFromBox3(
-      new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5])),
-    );
-    const line = new LineSegments(
-      geometry,
-      new LineBasicMaterial({ color: 0x22d3ee, depthTest: false, transparent: true, opacity: 0.95 }),
-    );
-    line.renderOrder = 903;
-    line.frustumCulled = false;
-
-    ensureToolsGroupAttached();
-    toolsGroup.add(line);
-    pickCandidatePreview = line;
-  }
-
-  /** 把候选写入拾取结果；`previous` 非空表示这是一次轮换，替换而不是追加。 */
-  function applyPickCandidate(candidate: PickRefnoCandidate, previous: PickRefnoCandidate | null): void {
-    if (previous && previous.refno !== candidate.refno) {
-      store.removePickedRefno(previous.refno);
-      pickedHighlightByBran.delete(previous.refno);
-    }
-    store.addPickedRefno(candidate.refno);
-
-    const viewer = compatViewerRef.value;
-    if (viewer) {
-      // 优先高亮 refno 本体；BRAN 之类无自身几何的元素回退到命中的子构件；直段键只高亮那一段直管。
-      const highlightId = isTubeKeyLike(candidate.refno) || viewer.scene.getAABB([candidate.refno]) ? candidate.refno : candidate.hitRefno;
-      pickedHighlightByBran.set(candidate.refno, highlightId);
-      applyPickHighlights();
-    }
-
-    renderPickCandidatePreview();
-  }
-
-  /** 在光标处的重叠构件之间轮换；返回是否真的换了一个候选。 */
-  function cyclePickCandidate(step = 1): boolean {
-    if (store.toolMode.value !== 'pick_refno') return false;
-    const total = pickCandidates.value.length;
-    if (total <= 1) return false;
-
-    const previous = pickCandidates.value[pickCandidateIndex.value] ?? null;
-    pickCandidateIndex.value = nextPickCandidateIndex(pickCandidateIndex.value, total, step);
-    const candidate = pickCandidates.value[pickCandidateIndex.value];
-    if (!candidate) return false;
-
-    applyPickCandidate(candidate, previous);
-    requestRender?.();
-    return true;
-  }
-
   const toolsGroup = new Group();
   toolsGroup.name = 'dtx-tools';
 
@@ -924,6 +777,9 @@ export function useDtxTools(options: {
     rectDrag,
     rectPreviewLine,
   };
+
+  const pick = createPickCandidateController(ctx, { pickSurfaceRayHits, ensureToolsGroupAttached });
+  pick.installWatchers();
 
   const measure = createMeasureController(ctx, { pickSurfacePoint, clearPendingCloudAnchor, hideMarquee });
 
@@ -1784,8 +1640,7 @@ export function useDtxTools(options: {
     pruneInlineTextAnnotationDrafts();
 
     // clearGroup 连同候选预览一起销毁了，重建以免轮换线框在批注同步时凭空消失。
-    pickCandidatePreview = null;
-    renderPickCandidatePreview();
+    pick.rebuildCandidatePreview();
 
     if (suppressStoreOverlays) return;
 
@@ -3419,35 +3274,7 @@ export function useDtxTools(options: {
       return;
     }
 
-    if (mode === 'pick_refno') {
-      const pos = getCanvasPos(canvas, e);
-      const filter = store.pickRefnoFilter.value;
-      const hits = pickSurfaceRayHits(canvas, e);
-      const candidates = isTubePickFilter(filter) ? buildPickTubeCandidates(hits) : buildPickRefnoCandidates(hits, filter);
-      if (isTubePickFilter(filter) && hits.length > 0 && candidates.length === 0) {
-        emitToast({ message: '这里没有可选的直段：请点直管（TUBI）。服务端没给直段身份时只能按整根管道选。', level: 'warning' });
-      }
-
-      // 原地再点一次 = 在光标下的重叠构件之间轮换，而不是重新拾取同一个。
-      if (
-        isSamePickAnchor(pickCandidateAnchor, pos) &&
-        isSamePickCandidateSequence(pickCandidates.value, candidates)
-      ) {
-        if (cyclePickCandidate(1)) return;
-      }
-
-      pickCandidateAnchor = { x: pos.x, y: pos.y };
-      pickCandidates.value = candidates;
-      pickCandidateIndex.value = 0;
-
-      const nearest = candidates[0];
-      if (!nearest) {
-        clearPickCandidatePreview();
-        return;
-      }
-      applyPickCandidate(nearest, null);
-      return;
-    }
+    if (pick.handlePointerUp(canvas, e, mode)) return;
 
     if (measure.handlePointerUp(canvas, e, mode)) return;
 
@@ -3542,52 +3369,6 @@ export function useDtxTools(options: {
   });
 
   // pick_refno：候选变化与取消拾取时同步高亮
-  watch(
-    () => ({
-      mode: store.toolMode.value,
-      picked: store.pickedRefnos.value,
-    }),
-    (next, prev) => {
-      const mode = next.mode;
-      const picked = next.picked ?? [];
-
-      if (mode === 'pick_refno') {
-        // 进入拾取模式：重置会话状态（不清除外部高亮）
-        if (prev?.mode !== 'pick_refno') {
-          pickedHighlightByBran.clear();
-          pickedHighlightPinned.clear();
-          lastAppliedPickHighlights = [];
-        }
-
-        // pickedRefnos 为空：视为取消/重置，撤销本会话高亮
-        if (!picked || picked.length === 0) {
-          clearPickHighlights();
-          resetPickCandidateSession();
-          return;
-        }
-
-        // 同步删除的候选
-        const pickedSet = new Set<string>(picked);
-        for (const k of Array.from(pickedHighlightByBran.keys())) {
-          if (!pickedSet.has(k)) {
-            pickedHighlightByBran.delete(k);
-          }
-        }
-        applyPickHighlights();
-        return;
-      }
-
-      // 退出拾取模式：确认场景保持当前高亮；仅清理会话内状态，避免后续误同步。
-      // 直段高亮是对象级选中、不进 refno 状态表，留下来就没有入口能清，退出时一并撤掉。
-      if (prev?.mode === 'pick_refno') {
-        applyPickTubeHighlights([]);
-        pickedHighlightByBran.clear();
-        lastAppliedPickHighlights = [];
-        resetPickCandidateSession();
-      }
-    },
-    { deep: true }
-  );
 
   // 显示单位变化：刷新测量标签等 overlay 文本
   watch(
@@ -3664,7 +3445,7 @@ export function useDtxTools(options: {
   const panelActions = createPanelActions(ctx, {
     resolveCloudTargetBbox,
     clearTextAnnotationMarkerClickTimer,
-    resetPickCandidateSession,
+    resetPickCandidateSession: pick.resetPickCandidateSession,
     clearOverlayEls,
     hideMarquee,
     resetProgress: measure.resetProgress,
@@ -3708,7 +3489,7 @@ export function useDtxTools(options: {
     // pick_refno 候选轮换（重叠构件）
     pickCandidates,
     pickCandidateIndex,
-    cyclePickCandidate,
+    cyclePickCandidate: pick.cyclePickCandidate,
 
     // e2e/调试：读取云线轮廓当前渲染几何（世界坐标），用于验证「贴合包住」性质
     debugCloudOutlines: panelActions.debugCloudOutlines,
