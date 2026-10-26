@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick } from 'vue';
+import { computed, createApp, h, nextTick, ref } from 'vue';
 
 const createTaskMock = vi.fn();
+const setCurrentTaskMock = vi.fn(async () => undefined);
 const updateTaskAttachmentsMock = vi.fn();
 const submitTaskToNextNodeSpy = vi.fn();
 const uploadStartMock = vi.fn(async () => undefined);
@@ -134,9 +135,20 @@ vi.mock('@/composables/useUserStore', () => ({
   }),
 }));
 
+// 外部流程模式保存后会 await reviewStore.setCurrentTask(task)；真 store 会去拉任务详情 / 确认记录 / 连 WebSocket，
+// 单测里没有后端，网络失败要等宏任务才回来，面板就停在「正在保存...」。按 DesignerCommentHandlingPanel.test 的样子打桩。
+vi.mock('@/composables/useReviewStore', () => ({
+  useReviewStore: () => ({
+    currentTask: ref(null),
+    sortedConfirmedRecords: computed(() => []),
+    setCurrentTask: setCurrentTaskMock,
+  }),
+}));
+
 describe('InitiateReviewPanel form binding', () => {
   beforeEach(() => {
     createTaskMock.mockReset();
+    setCurrentTaskMock.mockClear();
     updateTaskAttachmentsMock.mockReset();
     submitTaskToNextNodeSpy.mockReset();
     uploadStartMock.mockClear();
@@ -305,6 +317,7 @@ describe('InitiateReviewPanel form binding', () => {
       ],
     }));
     expect(submitTaskToNextNodeSpy).not.toHaveBeenCalled();
+    expect(setCurrentTaskMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'task-1' }));
     expect(host.textContent).toContain('编校审单保存成功');
     expect(host.textContent).toContain('流程提示');
     expect(host.textContent).not.toContain('新建编校审单');
