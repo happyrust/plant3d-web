@@ -8,10 +8,12 @@ import type { ComputedRef, Ref } from 'vue';
 
 import type { CloudOverlayEl, CloudRenderStats } from './cloudRegion';
 import type { PickRefnoCandidate } from './pickCandidates';
-import type { AnnotationLeaderVisual, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag } from './types';
+import type { AnnotationLeaderVisual, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './types';
 import type { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import type { useReviewStore } from '@/composables/useReviewStore';
 import type { useToolStore } from '@/composables/useToolStore';
 import type { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import type { useUserStore } from '@/composables/useUserStore';
 import type { PinCluster } from '@/review/domain/annotationProjection/cluster';
 import type { CloudInspectionMode } from '@/review/domain/annotationProjection/inspection';
 import type { CloudLodLevel } from '@/review/domain/annotationProjection/lod';
@@ -73,11 +75,17 @@ export type DtxToolsContext = {
   requestRender: (() => void) | null;
   unitSettings: ReturnType<typeof useUnitSettingsStore>;
   clearanceStore: ReturnType<typeof useClearanceStore>;
+  /** 审查任务 / 当前用户（批注处理页路由、自动截图回执用）。只读 */
+  reviewStore: ReturnType<typeof useReviewStore>;
+  userStore: ReturnType<typeof useUserStore>;
   /** 交互就绪（图层 + 选择器 + overlay 容器都在）。所有者：组装器 */
   ready: ComputedRef<boolean>;
   /** pick_refno 候选轮换。所有者：pickCandidateController；测量只读 */
   pickCandidates: Ref<PickRefnoCandidate[]>;
   pickCandidateIndex: Ref<number>;
+  /** 文字框拖动态（文字批注 / 云线·矩形·OBB 的内联文字框）。所有者：annotationInteraction；overlaySync 和 cloudLod 只读 */
+  textAnnotationDrag: Ref<TextAnnotationDragState>;
+  inlineOverlayAnnotationDrag: Ref<InlineOverlayAnnotationDragState>;
   /** 云线创建「目标先行」的锚点。所有者：cloudCreationFlow；测量取消时清 */
   pendingCloudAnchor: Ref<PendingCloudAnchor | null>;
   /** 工具层的三维父节点，挂在 dtxViewer.scene 下。所有者：overlayHost */

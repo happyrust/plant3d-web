@@ -3,22 +3,22 @@ import { type Ref, computed, nextTick, ref, watch } from 'vue';
 import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
 import { Box3, BufferAttribute, BufferGeometry, Frustum, Group, Line, LineBasicMaterial, LineDashedMaterial, Matrix4, Plane, Vector3 } from 'three';
 
-import { computeAabbObbFromBox3, createCloudAnnotationRecordFromAnchorAndMarquee, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed, topCenterFromBox3 } from './dtxTools/annotationRecords';
+import { computeAabbObbFromBox3, createCloudAnnotationRecordFromAnchorAndMarquee, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed, topCenterFromBox3 } from './dtxTools/annotationRecords';
 import { CLOUD_FIT_PADDING_PX, CLOUD_TARGET_BBOX_TTL_MS, boxCornersFromMinMaxVec, buildCloudBillboardPolyline, buildWavySelectionBboxLinePositions, cloudWavesPerEdgeForSizePx, computeFittedCloudRectFromCorners, dashSizeFromLineSegments, updateCloudBboxLineSegmentsGeometry } from './dtxTools/cloudGeometry';
 import { type CloudInspectionDebugSnapshot, type CloudOverlayEl, type CloudRenderStats, buildCloudSourceStamp, buildMembersRegionV1, captureCreationViewSnapshot, collectWorldCellEdgePositions, createCloudRenderCache, createDefaultCloudLabelLayoutV1, isRegionPresentationRecord, labelPreferenceFromRecord, regionRenderStyleFromRecord, resolveRegionObjectIdsForRefno } from './dtxTools/cloudRegion';
+import { createAnnotationInteraction } from './dtxTools/controllers/annotationInteraction';
 import { createMeasureController } from './dtxTools/controllers/measureController';
 import { createPanelActions } from './dtxTools/controllers/panelActions';
 import { createPickCandidateController } from './dtxTools/controllers/pickCandidateController';
 import { EMPTY_BOUNDS, IDENTITY_MATRIX_ELEMENTS, aabbFromPoints, clamp, getCanvasPos, measureLabelSize, nowId, overlayToWorld, parseRefnoFromDtxObjectId, vec3ToTuple, worldToOverlay, worldToOverlayPoint, escapeAnnotationLabelText } from './dtxTools/geometry';
 import { buildAnnotationLeaderStyle, createTextAnnotationLeader, setAnnotationLeaderResolution, updateLeaderGeometry } from './dtxTools/leaderVisual';
 import { ensureDiv, makeInlineAnnotationCardEl, makeTextAnnotationCardEl, makeTextAnnotationMarkerEl, repaintMarkerDegrade } from './dtxTools/overlayDom';
-import { resolveAnnotationLabelClickAction } from './dtxTools/overlayHtml';
 import { type PickRefnoCandidate, type PickRefnoRayHit, isTubePickFilter, resolveBoxPickRefnos } from './dtxTools/pickCandidates';
 import { asVec3 } from './dtxTools/pipeMeasureMath';
 import { applyBoxOverlayDegrade, clearGroup, createCloudAnnotationVisual, createObbAnnotationVisual, createRectAnnotationVisual, getCanvasResolution, resolveObbAnnotationAnchorWorldPos } from './dtxTools/visuals';
 
 import type { CloudLodState, DtxToolsContext } from './dtxTools/context';
-import type { AnnotationLabelClickState, AnnotationLeaderVisual, AnnotationOverlayKind, DragRect, InlineOverlayAnnotationDragState, InlineTextAnnotationDraft, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState, TextAnnotationMarkerClickResult } from './dtxTools/types';
+import type { AnnotationLeaderVisual, AnnotationOverlayKind, DragRect, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './dtxTools/types';
 import type { AnnotationDegrade } from '@/review/domain/bindingResolve';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
@@ -26,9 +26,6 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { reviewAttachmentDelete } from '@/api/reviewApi';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
-import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
-import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
-import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { applyDashedLineDegrade, applyLeaderDegrade, applyMeshLineDegrade, createCloudDegradeBadgeEl, positionCloudDegradeBadge, sameDegrade } from '@/composables/annotationDegradeViewport';
 import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
 import { buildRecordDegradeKey, useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
@@ -36,11 +33,10 @@ import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSessi
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
 import { dtxLoaderRevision, findNounByRefnoAcrossAllDbnos, listDtxTubeObjects } from '@/composables/useDbnoInstancesDtxLoader';
-import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useScreenshot } from '@/composables/useScreenshot';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { type AnnotationRecord, type CloudAnnotationRecord, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, buildCloudBindings, getCloudMemberRefnos, useToolStore } from '@/composables/useToolStore';
+import { type AnnotationRecord, type CloudAnnotationRecord, type ObbAnnotationRecord, type Vec3, buildCloudBindings, getCloudMemberRefnos, useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { SOLVESPACE_DIMENSION_THEME, isWorldSegmentBlocked } from '@/dimension';
@@ -48,11 +44,10 @@ import { liftScreenPolylineToBillboard, matricesEqual, regionToWorldCells, rende
 import { DEFAULT_PIN_CLUSTER_OPTIONS, type PinCluster, type PinClusterItem, clusterPins } from '@/review/domain/annotationProjection/cluster';
 import { ALL_CLOUD_DIRTY, type CloudRenderStamp, computeCloudDirty, createArrayVersionTracker, createValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
 import { type CloudInspectionMode, type OcclusionProbe, chooseInspectionProbeMembers, inspectionFactor, inspectionModeFromSearch } from '@/review/domain/annotationProjection/inspection';
-import { DEFAULT_LABEL_PREFERENCE, type LabelPreference, labelOffsetFromTopLeft, layoutCloudLabel, rectToCloudFrame } from '@/review/domain/annotationProjection/labelLayout';
+import { type LabelPreference, labelOffsetFromTopLeft, layoutCloudLabel, rectToCloudFrame } from '@/review/domain/annotationProjection/labelLayout';
 import { type CloudLodCandidate, type CloudLodLevel, DEFAULT_CLOUD_LOD_OPTIONS, cloudLodPriority, planCloudLod } from '@/review/domain/annotationProjection/lod';
-import { type CloudLabelLayoutV1, type ObbSnapshot, type RegionV1, createRegionCloudPresentationV1, regionCoversMembers } from '@/review/domain/cloudRegion';
+import { type ObbSnapshot, type RegionV1, createRegionCloudPresentationV1, regionCoversMembers } from '@/review/domain/cloudRegion';
 import { emitToast } from '@/ribbon/toastBus';
-import { UserRole } from '@/types/auth';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 
 export { createCloudAnnotationRecordFromAnchorAndMarquee, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, resolveTextAnnotationMarkerClickAction, resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed } from './dtxTools/annotationRecords';
@@ -124,9 +119,6 @@ export function useDtxTools(options: {
     });
   }
 
-  let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
-  let textAnnotationMarkerClickTimer: ReturnType<typeof setTimeout> | null = null;
-
   // pick_refno：仅在拾取会话内维护，不写入 store
   // pick_refno 候选轮换：一次点击命中的全部重叠构件 + 当前预览下标
   const pickCandidates = ref<PickRefnoCandidate[]>([]);
@@ -137,542 +129,6 @@ export function useDtxTools(options: {
     return isDtxInteractionReady(dtxLayerRef.value);
   });
 
-  function activateAnnotation(kind: AnnotationOverlayKind, id: string) {
-    store.activeAnnotationId.value = kind === 'text' ? id : null;
-    store.activeCloudAnnotationId.value = kind === 'cloud' ? id : null;
-    store.activeRectAnnotationId.value = kind === 'rect' ? id : null;
-    store.activeObbAnnotationId.value = kind === 'obb' ? id : null;
-  }
-
-  function getAnnotationRecordByKind(
-    kind: 'text' | 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-  ): AnnotationRecord | CloudAnnotationRecord | RectAnnotationRecord | ObbAnnotationRecord | null {
-    if (kind === 'text') {
-      return store.annotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    if (kind === 'cloud') {
-      return store.cloudAnnotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    if (kind === 'rect') {
-      return store.rectAnnotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    return store.obbAnnotations.value.find((item) => item.id === annotationId) ?? null;
-  }
-
-  function resolveCurrentFormId(): string | undefined {
-    return normalizeOptionalString(store.activeAnnotationContext.value?.record.formId)
-      ?? normalizeOptionalString(reviewStore.currentTask.value?.formId);
-  }
-
-  function openAnnotationProcessingPage(kind: AnnotationOverlayKind, id: string) {
-    commitInlineAnnotationDraft(kind, id);
-    const currentTask = reviewStore.currentTask.value;
-    const currentUser = userStore.currentUser.value;
-    // SJ 经 PMS 外部流程打开带 form_id 的单据时，统一在 review 面板里处理批注，
-    // 不再路由到设计侧 DCH。详见 .plannotator/plan-sj-reject-ui.md §5。
-    const externalSjFormFocused = isExternalSjFormFocusedMode(readPersistedEmbedModeParams());
-    const shouldUseDesignerPanel = !externalSjFormFocused && (
-      currentUser?.role === UserRole.DESIGNER
-      || (currentTask ? isCanonicalReturnedTask(currentTask) : false)
-    );
-    const formId = normalizeOptionalString(getAnnotationRecordByKind(kind, id)?.formId) ?? resolveCurrentFormId();
-    activateAnnotation(kind, id);
-    setAnnotationProcessingEntryTarget({
-      annotationId: id,
-      annotationType: kind,
-      formId: formId ?? null,
-    });
-    ensurePanelAndActivate(shouldUseDesignerPanel ? 'designerCommentHandling' : 'review');
-  }
-
-  function openAnnotationEditor(kind: AnnotationOverlayKind, id: string) {
-    if (kind === 'text') {
-      focusInlineAnnotationEditor('text', id);
-      return;
-    }
-    if (kind === 'cloud') {
-      focusInlineAnnotationEditor('cloud', id);
-      return;
-    }
-    if (kind === 'rect') {
-      focusInlineAnnotationEditor('rect', id);
-      return;
-    }
-    focusInlineAnnotationEditor('obb', id);
-  }
-
-  function getInlineAnnotationLabelKey(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string): string {
-    if (kind === 'text') return `anno:${annotationId}`;
-    if (kind === 'cloud') return `cloud:${annotationId}`;
-    if (kind === 'rect') return `rect:${annotationId}`;
-    return `obb:${annotationId}`;
-  }
-
-  function getInlineAnnotationDraftKey(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string): string {
-    return `${kind}:${annotationId}`;
-  }
-
-  function setInlineAnnotationDraft(
-    kind: 'text' | 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-    draft: InlineTextAnnotationDraft,
-  ) {
-    inlineTextAnnotationDrafts.set(getInlineAnnotationDraftKey(kind, annotationId), draft);
-  }
-
-  function getInlineTextAnnotationDraft(
-    kind: 'text' | 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-    fallback: Pick<AnnotationRecord, 'title' | 'description'>,
-  ): InlineTextAnnotationDraft {
-    return inlineTextAnnotationDrafts.get(getInlineAnnotationDraftKey(kind, annotationId)) ?? {
-      title: fallback.title || '批注',
-      description: fallback.description || '',
-    };
-  }
-
-  function pruneInlineTextAnnotationDrafts() {
-    const existingKeys = new Set<string>([
-      ...store.annotations.value.map((annotation) => getInlineAnnotationDraftKey('text', annotation.id)),
-      ...store.cloudAnnotations.value.map((annotation) => getInlineAnnotationDraftKey('cloud', annotation.id)),
-      ...store.rectAnnotations.value.map((annotation) => getInlineAnnotationDraftKey('rect', annotation.id)),
-      ...store.obbAnnotations.value.map((annotation) => getInlineAnnotationDraftKey('obb', annotation.id)),
-    ]);
-    for (const draftKey of inlineTextAnnotationDrafts.keys()) {
-      if (!existingKeys.has(draftKey)) {
-        inlineTextAnnotationDrafts.delete(draftKey);
-      }
-    }
-  }
-
-  function clearPendingInlineAnnotationEdit(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string) {
-    if (kind === 'text' && store.pendingTextAnnotationEditId.value === annotationId) {
-      store.pendingTextAnnotationEditId.value = null;
-    }
-    if (kind === 'cloud' && store.pendingCloudAnnotationEditId.value === annotationId) {
-      store.pendingCloudAnnotationEditId.value = null;
-    }
-    if (kind === 'rect' && store.pendingRectAnnotationEditId.value === annotationId) {
-      store.pendingRectAnnotationEditId.value = null;
-    }
-    if (kind === 'obb' && store.pendingObbEditId.value === annotationId) {
-      store.pendingObbEditId.value = null;
-    }
-  }
-
-  function focusInlineAnnotationEditor(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string) {
-    const label = labels.get(getInlineAnnotationLabelKey(kind, annotationId))?.el;
-    if (!label) {
-      if (kind === 'text') store.pendingTextAnnotationEditId.value = annotationId;
-      if (kind === 'cloud') store.pendingCloudAnnotationEditId.value = annotationId;
-      if (kind === 'rect') store.pendingRectAnnotationEditId.value = annotationId;
-      if (kind === 'obb') store.pendingObbEditId.value = annotationId;
-      return;
-    }
-    const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
-    if (titleInput) {
-      titleInput.focus();
-      titleInput.select();
-    }
-    clearPendingInlineAnnotationEdit(kind, annotationId);
-  }
-
-  function handleAnnotationOverlayClick(kind: AnnotationOverlayKind, id: string) {
-    const result = resolveAnnotationLabelClickAction(lastAnnotationLabelClick, kind, id, Date.now());
-    lastAnnotationLabelClick = result.nextState;
-    if (result.action === 'edit') {
-      openAnnotationEditor(kind, id);
-      return;
-    }
-    activateAnnotation(kind, id);
-  }
-
-  function clearTextAnnotationMarkerClickTimer() {
-    if (!textAnnotationMarkerClickTimer) return;
-    clearTimeout(textAnnotationMarkerClickTimer);
-    textAnnotationMarkerClickTimer = null;
-  }
-
-  function applyTextAnnotationMarkerAction(id: string, result: TextAnnotationMarkerClickResult) {
-    if (result.nextCollapsed !== null) {
-      store.updateAnnotation(id, { collapsed: result.nextCollapsed });
-    }
-
-    if (result.activate) {
-      activateAnnotation('text', id);
-    }
-  }
-
-  function handleTextAnnotationMarkerSingleClick(id: string) {
-    commitInlineAnnotationDraft('text', id);
-    const rec = store.annotations.value.find((item) => item.id === id);
-    if (!rec) return;
-    applyTextAnnotationMarkerAction(id, resolveTextAnnotationMarkerSingleClickAction(rec.collapsed));
-  }
-
-  function handleTextAnnotationMarkerDoubleClick(id: string) {
-    clearTextAnnotationMarkerClickTimer();
-    commitInlineAnnotationDraft('text', id);
-    const rec = store.annotations.value.find((item) => item.id === id);
-    if (!rec) return;
-    applyTextAnnotationMarkerAction(id, resolveTextAnnotationMarkerDoubleClickAction(rec.collapsed));
-  }
-
-  function scheduleTextAnnotationMarkerSingleClick(id: string) {
-    clearTextAnnotationMarkerClickTimer();
-    textAnnotationMarkerClickTimer = setTimeout(() => {
-      textAnnotationMarkerClickTimer = null;
-      handleTextAnnotationMarkerSingleClick(id);
-    }, 220);
-  }
-
-  function commitDraggedTextAnnotation(annotationId: string, labelWorldPos: Vector3) {
-    store.updateAnnotation(annotationId, { labelWorldPos: vec3ToTuple(labelWorldPos) });
-  }
-
-  function commitDraggedOverlayAnnotation(
-    kind: 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-    labelWorldPos: Vector3,
-  ) {
-    const patch = { leaderEndWorldPos: vec3ToTuple(labelWorldPos) };
-    if (kind === 'cloud') {
-      store.updateCloudAnnotation(annotationId, patch);
-      return;
-    }
-    if (kind === 'rect') {
-      store.updateRectAnnotation(annotationId, patch);
-      return;
-    }
-    store.updateObbAnnotation(annotationId, { labelWorldPos: vec3ToTuple(labelWorldPos) });
-  }
-
-  function getInlineAnnotationRecord(
-    kind: 'text' | 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-  ): Pick<AnnotationRecord, 'title' | 'description'> | null {
-    if (kind === 'text') {
-      return store.annotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    if (kind === 'cloud') {
-      return store.cloudAnnotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    if (kind === 'rect') {
-      return store.rectAnnotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    return store.obbAnnotations.value.find((item) => item.id === annotationId) ?? null;
-  }
-
-  function updateInlineAnnotationRecord(
-    kind: 'text' | 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-    patch: { title?: string; description?: string },
-  ) {
-    if (kind === 'text') {
-      store.updateAnnotation(annotationId, patch);
-      return;
-    }
-    if (kind === 'cloud') {
-      store.updateCloudAnnotation(annotationId, patch);
-      return;
-    }
-    if (kind === 'rect') {
-      store.updateRectAnnotation(annotationId, patch);
-      return;
-    }
-    store.updateObbAnnotation(annotationId, patch);
-  }
-
-  function commitInlineAnnotationDraft(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string) {
-    const rec = getInlineAnnotationRecord(kind, annotationId);
-    if (!rec) return;
-    const label = labels.get(getInlineAnnotationLabelKey(kind, annotationId))?.el;
-    const titleInput = label?.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
-    const descriptionInput = label?.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
-    const draft = inlineTextAnnotationDrafts.get(getInlineAnnotationDraftKey(kind, annotationId));
-    const nextTitle = titleInput
-      ? (titleInput.value.trim() || '批注')
-      : (draft ? (draft.title.trim() || '批注') : rec.title);
-    const nextDescription = descriptionInput
-      ? descriptionInput.value
-      : (draft ? draft.description : rec.description);
-    const patch: Partial<AnnotationRecord> = {};
-    if (nextTitle !== rec.title) {
-      patch.title = nextTitle;
-    }
-    if (nextDescription !== rec.description) {
-      patch.description = nextDescription;
-    }
-    if (Object.keys(patch).length > 0) {
-      updateInlineAnnotationRecord(kind, annotationId, patch);
-    }
-    inlineTextAnnotationDrafts.delete(getInlineAnnotationDraftKey(kind, annotationId));
-  }
-
-  function resetTextAnnotationDrag() {
-    textAnnotationDrag.value = {
-      annotationId: null,
-      pointerId: null,
-      anchorWorldPos: null,
-      anchorNdcZ: 0,
-      moved: false,
-    };
-  }
-
-  function updateDraggedTextAnnotation(annotationId: string, nextLabelWorldPos: Vector3) {
-    const labelEntry = labels.get(`anno:${annotationId}`);
-    if (labelEntry) {
-      labelEntry.worldPos = nextLabelWorldPos.clone();
-    }
-    const leader = textLeaders.get(`anno:${annotationId}`);
-    const dragAnchor = textAnnotationDrag.value.anchorWorldPos;
-    if (leader && dragAnchor) {
-      updateLeaderGeometry(leader, dragAnchor, nextLabelWorldPos);
-    }
-    updateOverlayPositions();
-    requestRender?.();
-  }
-
-  function beginTextAnnotationDrag(
-    annotationId: string,
-    event: PointerEvent,
-    labelWorldPos: Vector3,
-    anchorWorldPos: Vector3,
-  ) {
-    const viewer = dtxViewerRef.value;
-    const overlay = overlayContainerRef.value;
-    const canvas = viewer?.canvas;
-    if (!viewer || !overlay || !canvas) return;
-    const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchorWorldPos);
-    const labelEntry = labels.get(`anno:${annotationId}`);
-    if (labelEntry) {
-      labelEntry.worldPos = labelWorldPos.clone();
-    }
-    textAnnotationDrag.value = {
-      annotationId,
-      pointerId: event.pointerId,
-      anchorWorldPos: anchorWorldPos.clone(),
-      anchorNdcZ: anchorScreen.ndcZ,
-      moved: false,
-    };
-  }
-
-  function continueTextAnnotationDrag(event: PointerEvent) {
-    const dragState = textAnnotationDrag.value;
-    if (!dragState.annotationId || dragState.pointerId !== event.pointerId || !dragState.anchorWorldPos) return;
-    const viewer = dtxViewerRef.value;
-    const overlay = overlayContainerRef.value;
-    const canvas = viewer?.canvas;
-    if (!viewer || !overlay || !canvas) return;
-    const overlayRect = overlay.getBoundingClientRect();
-    const nextLabelWorldPos = overlayToWorld(
-      viewer.camera,
-      canvas,
-      overlay,
-      event.clientX - overlayRect.left,
-      event.clientY - overlayRect.top,
-      dragState.anchorNdcZ,
-    );
-    dragState.moved = true;
-    updateDraggedTextAnnotation(dragState.annotationId, nextLabelWorldPos);
-  }
-
-  function endTextAnnotationDrag(event: PointerEvent) {
-    const dragState = textAnnotationDrag.value;
-    if (!dragState.annotationId || dragState.pointerId !== event.pointerId) return;
-    const labelEntry = labels.get(`anno:${dragState.annotationId}`);
-    const finalLabelWorldPos = labelEntry?.worldPos?.clone() ?? null;
-    const annotationId = dragState.annotationId;
-    const shouldCommit = dragState.moved && finalLabelWorldPos;
-    resetTextAnnotationDrag();
-    if (shouldCommit && finalLabelWorldPos) {
-      commitDraggedTextAnnotation(annotationId, finalLabelWorldPos);
-    } else {
-      updateOverlayPositions();
-      requestRender?.();
-    }
-  }
-
-  function resetInlineOverlayAnnotationDrag() {
-    inlineOverlayAnnotationDrag.value = {
-      annotationId: null,
-      annotationKind: null,
-      pointerId: null,
-      anchorWorldPos: null,
-      anchorNdcZ: 0,
-      moved: false,
-      labelGrabOffsetPx: null,
-    };
-  }
-
-  function updateDraggedOverlayAnnotation(
-    kind: 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-    nextLabelWorldPos: Vector3,
-  ) {
-    const labelEntry = labels.get(getInlineAnnotationLabelKey(kind, annotationId));
-    if (labelEntry) {
-      labelEntry.worldPos = nextLabelWorldPos.clone();
-    }
-    if (kind === 'cloud') {
-      const cloud = cloudShapes.get(`cloud:${annotationId}`);
-      if (cloud) {
-        cloud.labelWorldPos = nextLabelWorldPos.clone();
-        updateLeaderGeometry(cloud.leader, cloud.worldPos, nextLabelWorldPos);
-      }
-    } else if (kind === 'rect') {
-      const rect = rectShapes.get(`rect:${annotationId}`);
-      if (rect) {
-        rect.labelWorldPos = nextLabelWorldPos.clone();
-        updateLeaderGeometry(rect.leader, rect.worldPos, nextLabelWorldPos);
-      }
-    } else {
-      const obb = obbShapes.get(`obb:${annotationId}`);
-      if (obb) {
-        obb.labelWorldPos = nextLabelWorldPos.clone();
-        updateLeaderGeometry(obb.leader, obb.worldPos, nextLabelWorldPos);
-      }
-    }
-    updateOverlayPositions();
-    requestRender?.();
-  }
-
-  function beginInlineOverlayAnnotationDrag(
-    kind: 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-    event: PointerEvent,
-    labelWorldPos: Vector3,
-    anchorWorldPos: Vector3,
-  ) {
-    const viewer = dtxViewerRef.value;
-    const overlay = overlayContainerRef.value;
-    const canvas = viewer?.canvas;
-    if (!viewer || !overlay || !canvas) return;
-    const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchorWorldPos);
-    const labelEntry = labels.get(getInlineAnnotationLabelKey(kind, annotationId));
-    if (labelEntry) {
-      labelEntry.worldPos = labelWorldPos.clone();
-    }
-    // 云线 + 开关开：按屏幕像素拖（松手提交 labelLayoutV1 意图偏移）；记住按住点相对文字框左上角的偏移，
-    // 拖动时文字框跟手而不是跳到指针下。旧记录（无 labelLayoutV1）第一次拖动即升级为 V1 布局（方案 §5）。
-    let labelGrabOffsetPx: { x: number; y: number } | null = null;
-    const cloud = kind === 'cloud' ? cloudShapes.get(`cloud:${annotationId}`) : undefined;
-    if (cloud && labelEntry && isCloudRenderFlagEnabled('cloudLabelLayoutV1')) {
-      const overlayRect = overlay.getBoundingClientRect();
-      const pointerX = event.clientX - overlayRect.left;
-      const pointerY = event.clientY - overlayRect.top;
-      const currentRect = cloud.render.labelLayout?.rect ?? (() => {
-        const elRect = labelEntry.el.getBoundingClientRect();
-        return { x: elRect.left - overlayRect.left, y: elRect.top - overlayRect.top, width: elRect.width, height: elRect.height };
-      })();
-      labelGrabOffsetPx = { x: pointerX - currentRect.x, y: pointerY - currentRect.y };
-    }
-    inlineOverlayAnnotationDrag.value = {
-      annotationId,
-      annotationKind: kind,
-      pointerId: event.pointerId,
-      anchorWorldPos: anchorWorldPos.clone(),
-      anchorNdcZ: anchorScreen.ndcZ,
-      moved: false,
-      labelGrabOffsetPx,
-    };
-  }
-
-  function continueInlineOverlayAnnotationDrag(event: PointerEvent) {
-    const dragState = inlineOverlayAnnotationDrag.value;
-    if (!dragState.annotationId || !dragState.annotationKind || dragState.pointerId !== event.pointerId || !dragState.anchorWorldPos) return;
-    const viewer = dtxViewerRef.value;
-    const overlay = overlayContainerRef.value;
-    const canvas = viewer?.canvas;
-    if (!viewer || !overlay || !canvas) return;
-    const overlayRect = overlay.getBoundingClientRect();
-    if (dragState.labelGrabOffsetPx && dragState.annotationKind === 'cloud') {
-      const cloud = cloudShapes.get(`cloud:${dragState.annotationId}`);
-      if (cloud) {
-        cloud.render.labelDragTopLeft = {
-          x: event.clientX - overlayRect.left - dragState.labelGrabOffsetPx.x,
-          y: event.clientY - overlayRect.top - dragState.labelGrabOffsetPx.y,
-        };
-        dragState.moved = true;
-        updateOverlayPositions();
-        requestRender?.();
-        return;
-      }
-    }
-    const nextLabelWorldPos = overlayToWorld(
-      viewer.camera,
-      canvas,
-      overlay,
-      event.clientX - overlayRect.left,
-      event.clientY - overlayRect.top,
-      dragState.anchorNdcZ,
-    );
-    dragState.moved = true;
-    updateDraggedOverlayAnnotation(dragState.annotationKind, dragState.annotationId, nextLabelWorldPos);
-  }
-
-  /**
-   * V1 标签拖动松手：把最终文字框（已夹紧到安全区）反算成相对参考包围框锚点的意图偏移写进 `labelLayoutV1`，
-   * 并按旧含义双写一次 `leaderEndWorldPos`（文字框中心在 billboard 深度上的世界点），旧端仍能按世界点布局。
-   * 没有可用轮廓（frame 为空）时不提交，保持原记录。
-   */
-  function commitDraggedCloudLabelLayoutV1(annotationId: string): boolean {
-    const cloud = cloudShapes.get(`cloud:${annotationId}`);
-    const viewer = dtxViewerRef.value;
-    const overlay = overlayContainerRef.value;
-    const canvas = viewer?.canvas;
-    if (!cloud || !viewer || !overlay || !canvas) return false;
-    const frame = cloud.render.frame;
-    const layout = cloud.render.labelLayout;
-    if (!frame || !layout) return false;
-    const uv = cloud.record.labelLayoutV1?.anchor.uv ?? DEFAULT_LABEL_PREFERENCE.uv;
-    const offsetPx = labelOffsetFromTopLeft(frame.referenceBounds, uv, { x: layout.rect.x, y: layout.rect.y });
-    const labelLayoutV1: CloudLabelLayoutV1 = {
-      version: 1,
-      anchor: { kind: 'contour-bounds', uv: [uv[0], uv[1]], labelPoint: 'top-left' },
-      offsetPx: { x: Math.round(offsetPx.x * 100) / 100, y: Math.round(offsetPx.y * 100) / 100 },
-    };
-    const centerWorld = overlayToWorld(
-      viewer.camera,
-      canvas,
-      overlay,
-      layout.rect.x + layout.rect.width / 2,
-      layout.rect.y + layout.rect.height / 2,
-      cloud.render.frameNdcZ,
-    );
-    store.updateCloudAnnotation(annotationId, { labelLayoutV1, leaderEndWorldPos: vec3ToTuple(centerWorld) });
-    return true;
-  }
-
-  function endInlineOverlayAnnotationDrag(event: PointerEvent) {
-    const dragState = inlineOverlayAnnotationDrag.value;
-    if (!dragState.annotationId || !dragState.annotationKind || dragState.pointerId !== event.pointerId) return;
-    const labelEntry = labels.get(getInlineAnnotationLabelKey(dragState.annotationKind, dragState.annotationId));
-    const finalLabelWorldPos = labelEntry?.worldPos?.clone() ?? null;
-    const annotationId = dragState.annotationId;
-    const annotationKind = dragState.annotationKind;
-    const v1Drag = dragState.labelGrabOffsetPx !== null && annotationKind === 'cloud';
-    const shouldCommit = dragState.moved && (v1Drag || finalLabelWorldPos);
-    resetInlineOverlayAnnotationDrag();
-    if (v1Drag) {
-      const committed = shouldCommit && commitDraggedCloudLabelLayoutV1(annotationId);
-      const cloud = cloudShapes.get(`cloud:${annotationId}`);
-      if (cloud) cloud.render.labelDragTopLeft = null;
-      if (!committed) {
-        updateOverlayPositions();
-        requestRender?.();
-      }
-      return;
-    }
-    if (shouldCommit && finalLabelWorldPos) {
-      commitDraggedOverlayAnnotation(annotationKind, annotationId, finalLabelWorldPos);
-    } else {
-      updateOverlayPositions();
-      requestRender?.();
-    }
-  }
-
   const toolsGroup = new Group();
   toolsGroup.name = 'dtx-tools';
 
@@ -682,7 +138,6 @@ export function useDtxTools(options: {
   const rectShapes = new Map<string, RectOverlayEl>();
   const obbShapes = new Map<string, ObbOverlayEl>();
   const textLeaders = new Map<string, AnnotationLeaderVisual>();
-  const inlineTextAnnotationDrafts = new Map<string, InlineTextAnnotationDraft>();
   const textAnnotationDrag = ref<TextAnnotationDragState>({
     annotationId: null,
     pointerId: null,
@@ -765,9 +220,13 @@ export function useDtxTools(options: {
     requestRender,
     unitSettings,
     clearanceStore,
+    reviewStore,
+    userStore,
     ready,
     pickCandidates,
     pickCandidateIndex,
+    textAnnotationDrag,
+    inlineOverlayAnnotationDrag,
     pendingCloudAnchor,
     toolsGroup,
     overlays: { labels, markers, cloudShapes, rectShapes, obbShapes, textLeaders },
@@ -782,6 +241,8 @@ export function useDtxTools(options: {
   pick.installWatchers();
 
   const measure = createMeasureController(ctx, { pickSurfacePoint, clearPendingCloudAnchor, hideMarquee });
+
+  const annotation = createAnnotationInteraction(ctx, { updateOverlayPositions });
 
   function clearPendingCloudAnchor() {
     pendingCloudAnchor.value = null;
@@ -1072,7 +533,7 @@ export function useDtxTools(options: {
     const c = cloud.record;
     const anchor = cloud.worldPos;
     const labelWorldPos = cloud.labelWorldPos;
-    const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
+    const draft = annotation.getInlineTextAnnotationDraft('cloud', c.id, c);
     const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
     label.style.transform = 'translate(-50%,-50%)';
     if (c.severity) label.dataset.severity = c.severity;
@@ -1083,26 +544,26 @@ export function useDtxTools(options: {
 
     label.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      activateAnnotation('cloud', c.id);
+      annotation.activateAnnotation('cloud', c.id);
     });
     label.addEventListener('dblclick', (ev) => {
       ev.stopPropagation();
-      focusInlineAnnotationEditor('cloud', c.id);
+      annotation.focusInlineAnnotationEditor('cloud', c.id);
     });
     label.addEventListener('focusout', () => {
       queueMicrotask(() => {
         const activeElement = label.ownerDocument?.activeElement;
         if (activeElement && label.contains(activeElement)) return;
-        commitInlineAnnotationDraft('cloud', c.id);
+        annotation.commitInlineAnnotationDraft('cloud', c.id);
       });
     });
 
     dragHandle?.addEventListener('pointerdown', (ev) => {
       ev.stopPropagation();
       ev.preventDefault();
-      commitInlineAnnotationDraft('cloud', c.id);
+      annotation.commitInlineAnnotationDraft('cloud', c.id);
       dragHandle.style.cursor = 'grabbing';
-      beginInlineOverlayAnnotationDrag('cloud', c.id, ev, labelWorldPos, anchor);
+      annotation.beginInlineOverlayAnnotationDrag('cloud', c.id, ev, labelWorldPos, anchor);
       try {
         dragHandle.setPointerCapture(ev.pointerId);
       } catch {
@@ -1111,42 +572,42 @@ export function useDtxTools(options: {
     });
     dragHandle?.addEventListener('pointermove', (ev) => {
       if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-      continueInlineOverlayAnnotationDrag(ev);
+      annotation.continueInlineOverlayAnnotationDrag(ev);
     });
     dragHandle?.addEventListener('pointerup', (ev) => {
       if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
       dragHandle.style.cursor = 'grab';
-      endInlineOverlayAnnotationDrag(ev);
+      annotation.endInlineOverlayAnnotationDrag(ev);
     });
     dragHandle?.addEventListener('pointercancel', (ev) => {
       if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
       dragHandle.style.cursor = 'grab';
-      endInlineOverlayAnnotationDrag(ev);
+      annotation.endInlineOverlayAnnotationDrag(ev);
     });
 
     titleInput?.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      activateAnnotation('cloud', c.id);
+      annotation.activateAnnotation('cloud', c.id);
     });
     titleInput?.addEventListener('input', () => {
-      setInlineAnnotationDraft('cloud', c.id, {
+      annotation.setInlineAnnotationDraft('cloud', c.id, {
         title: titleInput.value,
         description: descriptionInput?.value ?? draft.description,
       });
     });
     descriptionInput?.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      activateAnnotation('cloud', c.id);
+      annotation.activateAnnotation('cloud', c.id);
     });
     descriptionInput?.addEventListener('input', () => {
-      setInlineAnnotationDraft('cloud', c.id, {
+      annotation.setInlineAnnotationDraft('cloud', c.id, {
         title: titleInput?.value ?? draft.title,
         description: descriptionInput.value,
       });
     });
 
     if (store.pendingCloudAnnotationEditId.value === c.id) {
-      queueMicrotask(() => focusInlineAnnotationEditor('cloud', c.id));
+      queueMicrotask(() => annotation.focusInlineAnnotationEditor('cloud', c.id));
     }
   }
 
@@ -1391,7 +852,7 @@ export function useDtxTools(options: {
         if (!id) return;
         closeClusterPopover();
         // 选中即「当前问题」：LOD 固定高档，轮廓 + 文字框补回来（store 变化经 watch 重建）
-        activateAnnotation('cloud', id);
+        annotation.activateAnnotation('cloud', id);
       });
     }
     positionClusterPopover(cluster);
@@ -1637,7 +1098,7 @@ export function useDtxTools(options: {
     clearGroup(toolsGroup);
     clearOverlayEls();
     textLeaders.clear();
-    pruneInlineTextAnnotationDrafts();
+    annotation.pruneInlineTextAnnotationDrafts();
 
     // clearGroup 连同候选预览一起销毁了，重建以免轮换线框在批注同步时凭空消失。
     pick.rebuildCandidatePreview();
@@ -1671,11 +1132,11 @@ export function useDtxTools(options: {
       marker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
-        scheduleTextAnnotationMarkerSingleClick(a.id);
+        annotation.scheduleTextAnnotationMarkerSingleClick(a.id);
       });
       marker.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
-        handleTextAnnotationMarkerDoubleClick(a.id);
+        annotation.handleTextAnnotationMarkerDoubleClick(a.id);
       });
 
       if (shouldRenderTextAnnotationCard(a.collapsed)) {
@@ -1684,7 +1145,7 @@ export function useDtxTools(options: {
         toolsGroup.add(leader.root);
         textLeaders.set(`anno:${a.id}`, leader);
 
-        const draft = getInlineTextAnnotationDraft('text', a.id, a);
+        const draft = annotation.getInlineTextAnnotationDraft('text', a.id, a);
         const label = makeTextAnnotationCardEl(overlay, draft.title, draft.description);
         if (a.severity) label.dataset.severity = a.severity;
         labels.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: labelWorldPos, el: label });
@@ -1695,22 +1156,22 @@ export function useDtxTools(options: {
 
         label.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('text', a.id);
+          annotation.activateAnnotation('text', a.id);
         });
         label.addEventListener('focusout', () => {
           queueMicrotask(() => {
             const activeElement = label.ownerDocument?.activeElement;
             if (activeElement && label.contains(activeElement)) return;
-            commitInlineAnnotationDraft('text', a.id);
+            annotation.commitInlineAnnotationDraft('text', a.id);
           });
         });
 
         dragHandle?.addEventListener('pointerdown', (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
-          commitInlineAnnotationDraft('text', a.id);
+          annotation.commitInlineAnnotationDraft('text', a.id);
           dragHandle.style.cursor = 'grabbing';
-          beginTextAnnotationDrag(a.id, ev, labelWorldPos, wp);
+          annotation.beginTextAnnotationDrag(a.id, ev, labelWorldPos, wp);
           try {
             dragHandle.setPointerCapture(ev.pointerId);
           } catch {
@@ -1719,25 +1180,25 @@ export function useDtxTools(options: {
         });
         dragHandle?.addEventListener('pointermove', (ev) => {
           if (textAnnotationDrag.value.annotationId !== a.id) return;
-          continueTextAnnotationDrag(ev);
+          annotation.continueTextAnnotationDrag(ev);
         });
         dragHandle?.addEventListener('pointerup', (ev) => {
           if (textAnnotationDrag.value.annotationId !== a.id) return;
           dragHandle.style.cursor = 'grab';
-          endTextAnnotationDrag(ev);
+          annotation.endTextAnnotationDrag(ev);
         });
         dragHandle?.addEventListener('pointercancel', (ev) => {
           if (textAnnotationDrag.value.annotationId !== a.id) return;
           dragHandle.style.cursor = 'grab';
-          endTextAnnotationDrag(ev);
+          annotation.endTextAnnotationDrag(ev);
         });
 
         titleInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('text', a.id);
+          annotation.activateAnnotation('text', a.id);
         });
         titleInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('text', a.id, {
+          annotation.setInlineAnnotationDraft('text', a.id, {
             title: titleInput.value,
             description: descriptionInput?.value ?? draft.description,
           });
@@ -1745,17 +1206,17 @@ export function useDtxTools(options: {
 
         descriptionInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('text', a.id);
+          annotation.activateAnnotation('text', a.id);
         });
         descriptionInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('text', a.id, {
+          annotation.setInlineAnnotationDraft('text', a.id, {
             title: titleInput?.value ?? draft.title,
             description: descriptionInput.value,
           });
         });
 
         if (store.pendingTextAnnotationEditId.value === a.id) {
-          queueMicrotask(() => focusInlineAnnotationEditor('text', a.id));
+          queueMicrotask(() => annotation.focusInlineAnnotationEditor('text', a.id));
         }
       }
     }
@@ -1813,14 +1274,14 @@ export function useDtxTools(options: {
       cloudMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
-        activateAnnotation('cloud', c.id);
+        annotation.activateAnnotation('cloud', c.id);
       });
       // 与文字批注 marker 一致：双击图钉切换 collapsed，
       // 收起时只渲染图钉，展开后再补回文字框 / 引线。
       cloudMarker.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         store.setCloudAnnotationsCollapsed([c.id], toggleTextAnnotationCollapsed(c.collapsed));
-        activateAnnotation('cloud', c.id);
+        annotation.activateAnnotation('cloud', c.id);
       });
       // P4 LOD「悬停临时展示」：图钉上悬停即固定高档（补回轮廓 + 文字框），移开后按预算回落
       cloudMarker.addEventListener('pointerenter', () => setHoveredCloudAnnotation(c.id));
@@ -1874,16 +1335,16 @@ export function useDtxTools(options: {
       rectMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
-        activateAnnotation('rect', r.id);
+        annotation.activateAnnotation('rect', r.id);
       });
       rectMarker.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         store.setRectAnnotationsCollapsed([r.id], toggleTextAnnotationCollapsed(r.collapsed));
-        activateAnnotation('rect', r.id);
+        annotation.activateAnnotation('rect', r.id);
       });
 
       if (shouldRenderTextAnnotationCard(r.collapsed)) {
-        const draft = getInlineTextAnnotationDraft('rect', r.id, r);
+        const draft = annotation.getInlineTextAnnotationDraft('rect', r.id, r);
         const label = makeInlineAnnotationCardEl(overlay, '矩形批注', draft.title, draft.description);
         if (r.severity) label.dataset.severity = r.severity;
         const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
@@ -1893,25 +1354,25 @@ export function useDtxTools(options: {
         const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
         label.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('rect', r.id);
+          annotation.activateAnnotation('rect', r.id);
         });
         label.addEventListener('dblclick', (ev) => {
           ev.stopPropagation();
-          focusInlineAnnotationEditor('rect', r.id);
+          annotation.focusInlineAnnotationEditor('rect', r.id);
         });
         label.addEventListener('focusout', () => {
           queueMicrotask(() => {
             const activeElement = label.ownerDocument?.activeElement;
             if (activeElement && label.contains(activeElement)) return;
-            commitInlineAnnotationDraft('rect', r.id);
+            annotation.commitInlineAnnotationDraft('rect', r.id);
           });
         });
         dragHandle?.addEventListener('pointerdown', (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
-          commitInlineAnnotationDraft('rect', r.id);
+          annotation.commitInlineAnnotationDraft('rect', r.id);
           dragHandle.style.cursor = 'grabbing';
-          beginInlineOverlayAnnotationDrag('rect', r.id, ev, labelWorldPos, rectAnchor);
+          annotation.beginInlineOverlayAnnotationDrag('rect', r.id, ev, labelWorldPos, rectAnchor);
           try {
             dragHandle.setPointerCapture(ev.pointerId);
           } catch {
@@ -1920,41 +1381,41 @@ export function useDtxTools(options: {
         });
         dragHandle?.addEventListener('pointermove', (ev) => {
           if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
-          continueInlineOverlayAnnotationDrag(ev);
+          annotation.continueInlineOverlayAnnotationDrag(ev);
         });
         dragHandle?.addEventListener('pointerup', (ev) => {
           if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
           dragHandle.style.cursor = 'grab';
-          endInlineOverlayAnnotationDrag(ev);
+          annotation.endInlineOverlayAnnotationDrag(ev);
         });
         dragHandle?.addEventListener('pointercancel', (ev) => {
           if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
           dragHandle.style.cursor = 'grab';
-          endInlineOverlayAnnotationDrag(ev);
+          annotation.endInlineOverlayAnnotationDrag(ev);
         });
         titleInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('rect', r.id);
+          annotation.activateAnnotation('rect', r.id);
         });
         titleInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('rect', r.id, {
+          annotation.setInlineAnnotationDraft('rect', r.id, {
             title: titleInput.value,
             description: descriptionInput?.value ?? draft.description,
           });
         });
         descriptionInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('rect', r.id);
+          annotation.activateAnnotation('rect', r.id);
         });
         descriptionInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('rect', r.id, {
+          annotation.setInlineAnnotationDraft('rect', r.id, {
             title: titleInput?.value ?? draft.title,
             description: descriptionInput.value,
           });
         });
 
         if (store.pendingRectAnnotationEditId.value === r.id) {
-          queueMicrotask(() => focusInlineAnnotationEditor('rect', r.id));
+          queueMicrotask(() => annotation.focusInlineAnnotationEditor('rect', r.id));
         }
       }
     }
@@ -1999,16 +1460,16 @@ export function useDtxTools(options: {
       obbMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
-        activateAnnotation('obb', o.id);
+        annotation.activateAnnotation('obb', o.id);
       });
       obbMarker.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         store.setObbAnnotationsCollapsed([o.id], toggleTextAnnotationCollapsed(o.collapsed));
-        activateAnnotation('obb', o.id);
+        annotation.activateAnnotation('obb', o.id);
       });
 
       if (shouldRenderTextAnnotationCard(o.collapsed)) {
-        const draft = getInlineTextAnnotationDraft('obb', o.id, o);
+        const draft = annotation.getInlineTextAnnotationDraft('obb', o.id, o);
         const label = makeInlineAnnotationCardEl(overlay, 'OBB 批注', draft.title, draft.description);
         if (o.severity) label.dataset.severity = o.severity;
         labels.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: visual.labelWorldPos.clone(), el: label });
@@ -2018,25 +1479,25 @@ export function useDtxTools(options: {
 
         label.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('obb', o.id);
+          annotation.activateAnnotation('obb', o.id);
         });
         label.addEventListener('dblclick', (ev) => {
           ev.stopPropagation();
-          focusInlineAnnotationEditor('obb', o.id);
+          annotation.focusInlineAnnotationEditor('obb', o.id);
         });
         label.addEventListener('focusout', () => {
           queueMicrotask(() => {
             const activeElement = label.ownerDocument?.activeElement;
             if (activeElement && label.contains(activeElement)) return;
-            commitInlineAnnotationDraft('obb', o.id);
+            annotation.commitInlineAnnotationDraft('obb', o.id);
           });
         });
         dragHandle?.addEventListener('pointerdown', (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
-          commitInlineAnnotationDraft('obb', o.id);
+          annotation.commitInlineAnnotationDraft('obb', o.id);
           dragHandle.style.cursor = 'grabbing';
-          beginInlineOverlayAnnotationDrag('obb', o.id, ev, visual.labelWorldPos.clone(), anchorWorldPos);
+          annotation.beginInlineOverlayAnnotationDrag('obb', o.id, ev, visual.labelWorldPos.clone(), anchorWorldPos);
           try {
             dragHandle.setPointerCapture(ev.pointerId);
           } catch {
@@ -2045,41 +1506,41 @@ export function useDtxTools(options: {
         });
         dragHandle?.addEventListener('pointermove', (ev) => {
           if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
-          continueInlineOverlayAnnotationDrag(ev);
+          annotation.continueInlineOverlayAnnotationDrag(ev);
         });
         dragHandle?.addEventListener('pointerup', (ev) => {
           if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
           dragHandle.style.cursor = 'grab';
-          endInlineOverlayAnnotationDrag(ev);
+          annotation.endInlineOverlayAnnotationDrag(ev);
         });
         dragHandle?.addEventListener('pointercancel', (ev) => {
           if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
           dragHandle.style.cursor = 'grab';
-          endInlineOverlayAnnotationDrag(ev);
+          annotation.endInlineOverlayAnnotationDrag(ev);
         });
         titleInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('obb', o.id);
+          annotation.activateAnnotation('obb', o.id);
         });
         titleInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('obb', o.id, {
+          annotation.setInlineAnnotationDraft('obb', o.id, {
             title: titleInput.value,
             description: descriptionInput?.value ?? draft.description,
           });
         });
         descriptionInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          activateAnnotation('obb', o.id);
+          annotation.activateAnnotation('obb', o.id);
         });
         descriptionInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('obb', o.id, {
+          annotation.setInlineAnnotationDraft('obb', o.id, {
             title: titleInput?.value ?? draft.title,
             description: descriptionInput.value,
           });
         });
 
         if (store.pendingObbEditId.value === o.id) {
-          queueMicrotask(() => focusInlineAnnotationEditor('obb', o.id));
+          queueMicrotask(() => annotation.focusInlineAnnotationEditor('obb', o.id));
         }
       }
     }
@@ -3072,7 +2533,7 @@ export function useDtxTools(options: {
       store.clearCloudTargetRefnos();
       // 画完自动选中新云线：主工具条「错误类型」立即可用、「打开批注单」能定位到这条、右侧证据卡有明确焦点，
       // 否则用户画完得不到任何“选中”反馈，容易误以为没成功而重复绘制。
-      activateAnnotation('cloud', rec.id);
+      annotation.activateAnnotation('cloud', rec.id);
       void captureCreatedCloudScreenshot(rec);
       return;
     }
@@ -3444,7 +2905,7 @@ export function useDtxTools(options: {
 
   const panelActions = createPanelActions(ctx, {
     resolveCloudTargetBbox,
-    clearTextAnnotationMarkerClickTimer,
+    clearTextAnnotationMarkerClickTimer: annotation.clearTextAnnotationMarkerClickTimer,
     resetPickCandidateSession: pick.resetPickCandidateSession,
     clearOverlayEls,
     hideMarquee,
@@ -3515,9 +2976,9 @@ export function useDtxTools(options: {
     debugAnnotationDegrades: panelActions.debugAnnotationDegrades,
 
     // 云线 V1 标签拖动（文字框拖柄的 pointer 事件由 syncFromStore 绑定；这里给测试与外部调用）
-    beginInlineOverlayAnnotationDrag,
-    continueInlineOverlayAnnotationDrag,
-    endInlineOverlayAnnotationDrag,
+    beginInlineOverlayAnnotationDrag: annotation.beginInlineOverlayAnnotationDrag,
+    continueInlineOverlayAnnotationDrag: annotation.continueInlineOverlayAnnotationDrag,
+    endInlineOverlayAnnotationDrag: annotation.endInlineOverlayAnnotationDrag,
 
     clearAllInScene: panelActions.clearAllInScene,
     dispose: panelActions.dispose,
