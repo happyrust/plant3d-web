@@ -48,7 +48,8 @@ describe('useUserStore pendingReviewTasks', () => {
     vi.resetModules();
     vi.stubGlobal('localStorage', createStorageMock());
     vi.stubGlobal('sessionStorage', createStorageMock());
-    return vi.importMock<typeof import('@/api/reviewApi')>('@/api/reviewApi').then((api) => {
+    // vitest 4.1 起 `vi.importMock` 在 resetModules 之后不再把工厂模块交回来（回空对象）；普通动态 import 拿到的就是上面 vi.mock 的那份。
+    return import('@/api/reviewApi').then((api) => {
       authGetTokenMock = api.authGetToken as ReturnType<typeof vi.fn>;
       userGetCurrentMock = api.userGetCurrent as ReturnType<typeof vi.fn>;
       authGetTokenMock.mockReset();
