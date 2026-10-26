@@ -158,3 +158,8 @@ deploy/offline/release.json
 .tmp-nginx-download/
 .tmp-backend-release/
 
+# 工具缓存 / 打包副本 / 临时脚本，以前被追踪过一次（2026-10-26 审核 P2-8 清掉）
+.sigmap-cache.json
+.brooks-lint-history.json
+dist.tar.gz
+.tmp_*
