@@ -84,10 +84,8 @@ export default defineConfig(({ mode }) => {
     env.VITE_GEN_MODEL_V1_PROXY_TARGET,
     env.VITE_GEN_MODEL_V1_BASE_URL,
   );
-  // 使用北京时间构建前端
-  const now = new Date();
-  const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  const frontendBuildIso = beijingTime.toISOString();
+  // 真实 UTC 时刻（带 Z）：src/utils/versionInfo.ts 显示时才转北京时间，这里不要预先拨快 8 小时
+  const frontendBuildIso = new Date().toISOString();
   const basePath = normalizeBasePath(env.VITE_BASE_PATH);
 
   return {

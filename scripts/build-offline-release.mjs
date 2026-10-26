@@ -462,14 +462,20 @@ function getVersionInfo() {
   } catch {
     // ignore
   }
-  const now = new Date();
-  const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   return {
     version: pkg.version,
     commit,
     dirty,
-    buildDate: beijingTime.toISOString(),
+    // 必须是真实 UTC 时刻（带 Z）：前端 versionInfo.ts 按 UTC 解析后再转北京时间显示，
+    // 把时钟先拨快 8 小时再 toISOString() 会让「关于」里的编译日期晚 8 小时。zip 文件名的北京日期见 beijingDateStamp。
+    buildDate: new Date().toISOString(),
   };
+}
+
+/** ISO 时刻对应的北京日期 YYYYMMDD（zip 文件名用），与机器时区无关 */
+function beijingDateStamp(iso) {
+  const beijing = new Date(Date.parse(iso) + 8 * 60 * 60 * 1000);
+  return beijing.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
 /** 生成 version.json */
@@ -680,7 +686,7 @@ async function main() {
 
   // Step 6: 打包成 zip
   log('Step 6/6: 打包成 zip...');
-  const dateStr = versionInfo.buildDate.slice(0, 10).replace(/-/g, '');
+  const dateStr = beijingDateStamp(versionInfo.buildDate);
   const backendSuffix = backendVersion?.version ? `-backend-v${backendVersion.version}` : '';
   const zipName = `plant3d-web-offline-v${versionInfo.version}${backendSuffix}-${dateStr}${releaseSuffix ? `-${releaseSuffix}` : ''}.zip`;
   const zipPath = join(RELEASES_DIR, zipName);
