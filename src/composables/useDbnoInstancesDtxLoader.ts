@@ -204,8 +204,8 @@ export function listDtxTubeObjects(): { key: string; objectId: string }[] {
  */
 export function resolveDtxTubiObjectsForCarriers(
   carrierRefnos: Iterable<string>,
-): Array<{ objectId: string; carrierRefno: string; tubeKey: string | null }> {
-  const out: Array<{ objectId: string; carrierRefno: string; tubeKey: string | null }> = [];
+): { objectId: string; carrierRefno: string; tubeKey: string | null }[] {
+  const out: { objectId: string; carrierRefno: string; tubeKey: string | null }[] = [];
   const seenObjects = new Set<string>();
   for (const rawRefno of carrierRefnos) {
     const candidates = refnoKeyCandidates(rawRefno);

@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from 'playwright';
 import { createServer } from 'vite';
+
+import { chromium } from 'playwright';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const sampleDocx = `${repoRoot}docs/verification/word-preview-2026-10-08/word-preview-sample.docx`;

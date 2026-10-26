@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch, type 
 
 import { Box, Calendar, CheckCircle, ChevronDown, Flag, HelpCircle, Paperclip, Plus, Send, User, X } from 'lucide-vue-next';
 
+import AssociatedFilesList from './AssociatedFilesList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import {
@@ -11,7 +12,6 @@ import {
   EMBED_MODE_PARAMS_STORAGE_KEY,
   type EmbedLandingState,
 } from './embedRoleLanding';
-import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
 import { buildReviewAttachments, restoreUploadedFilesFromAttachments } from './reviewAttachmentFlow';

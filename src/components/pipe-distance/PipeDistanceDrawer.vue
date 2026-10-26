@@ -30,6 +30,7 @@ import {
   findOwnerBranRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import {
   needsAxisEstimateFallback,
   PIPE_ROW_DEFAULT_MAX_ADJACENT_MM,
@@ -37,13 +38,12 @@ import {
   usePipeDistanceStore,
   type PipeDistanceResult,
 } from '@/composables/usePipeDistanceStore';
-import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
+import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore } from '@/composables/useToolStore';
-import { emitCommand } from '@/ribbon/commandBus';
 import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
+import { emitCommand } from '@/ribbon/commandBus';
 import {
   detectDtxBranchAxisDistances,
   resolveDtxAxisDistanceDbnum,

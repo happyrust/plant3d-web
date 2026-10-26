@@ -18,8 +18,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from 'playwright';
 import { createServer } from 'vite';
+
+import { chromium } from 'playwright';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -231,7 +232,7 @@ async function main() {
     await frame.getByPlaceholder('输入编校审数据包名称...').fill(packageName);
 
     // Upload Word (.docx) and PDF (.pdf) in FileUploadSection
-    console.log(`[3/7] Uploading Word & PDF attachments in InitiateReviewPanel...`);
+    console.log('[3/7] Uploading Word & PDF attachments in InitiateReviewPanel...');
     const fileInput = frame.locator('[data-testid="file-upload-input"]');
     await fileInput.setInputFiles([WORD_FILE, PDF_FILE]);
 
@@ -247,7 +248,7 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, '01-sj-initiate-upload-word-pdf.png') });
 
     // Step 2: SJ clicks "查看" on Word (.docx) in FileUploadSection
-    console.log(`[4/7] Previewing uploaded Word (.docx) in split view...`);
+    console.log('[4/7] Previewing uploaded Word (.docx) in split view...');
     const previewBtns = frame.locator('[data-testid^="file-upload-preview-"]');
     await previewBtns.nth(0).click();
 
@@ -269,14 +270,14 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, '02-sj-initiate-preview-word-split.png') });
 
     // SJ clicks "查看" on PDF (.pdf) in FileUploadSection
-    console.log(`[4b/7] Previewing uploaded PDF (.pdf) in split view...`);
+    console.log('[4b/7] Previewing uploaded PDF (.pdf) in split view...');
     await previewBtns.nth(1).click();
     await frame.waitForSelector('[data-testid="review-attachment-pdf"]', { timeout: 30000 });
     await new Promise(r => setTimeout(r, 1000));
     await page.screenshot({ path: path.join(OUT_DIR, '03-sj-initiate-preview-pdf-split.png') });
 
     // Step 3: SJ clicks "保存编校审数据" and verifies post-save attachment preview list + outer simulator side panel
-    console.log(`[5/7] Saving review form and verifying post-save attachment list & simulator side panel...`);
+    console.log('[5/7] Saving review form and verifying post-save attachment list & simulator side panel...');
     const submitBtn = frame.locator('[data-guide="submit-btn"]');
     await submitBtn.waitFor({ state: 'visible', timeout: 20000 });
     await waitFor(
@@ -307,7 +308,7 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, '04-sj-saved-card-and-sim-panel-attachments.png') });
 
     // Step 4: SJ submits workflow active -> JH opens task and previews Word & PDF in ReviewPanel
-    console.log(`[6/7] Running SJ active -> switching to JH proofreader and previewing attachments...`);
+    console.log('[6/7] Running SJ active -> switching to JH proofreader and previewing attachments...');
     const afterActive = await runWorkflowStep(page, 'active', 'SJ 送审：含 Word 与 PDF 校审附件');
     const taskId = afterActive.currentTaskId || afterActive.selectedTaskId;
 
@@ -360,7 +361,7 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, '06-jh-review-panel-preview-pdf.png') });
 
     // Step 5: Complete JH agree -> SH agree -> PZ agree (approved)
-    console.log(`[7/7] Completing JH agree -> SH agree -> PZ agree workflow...`);
+    console.log('[7/7] Completing JH agree -> SH agree -> PZ agree workflow...');
     await waitForRoleReady(page, 'JH', 'workflow');
     await runWorkflowStep(page, 'agree', 'JH 校核通过：Word 与 PDF 附件核对无误');
 

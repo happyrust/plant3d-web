@@ -1,5 +1,7 @@
-import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
+
+import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three';
+
 import { DTXLayer } from './DTXLayer';
 
 function makeUnitCylinderGeo(): BufferGeometry {

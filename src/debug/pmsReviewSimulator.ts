@@ -5,6 +5,8 @@ import {
   type EmbeddedWorkflowActionMessage,
 } from './pmsReviewSimulatorEmbedMessages';
 
+import type { ReviewAttachment } from '@/types/auth';
+
 import { GenModelV1ApiError, genModelV1Health } from '@/api/genModelV1Api';
 import {
   authVerifyToken,
@@ -28,7 +30,6 @@ import {
   buildReviewAttachmentDownloadUrl,
   getReviewAttachmentPreviewKind,
 } from '@/composables/useReviewAttachmentPreview';
-import type { ReviewAttachment } from '@/types/auth';
 import {
   applyTokenPrimaryPmsLaunchUrl,
   buildTokenPrimaryPmsLaunchSearch,

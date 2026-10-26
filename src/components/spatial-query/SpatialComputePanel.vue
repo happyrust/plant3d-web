@@ -461,11 +461,11 @@ import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/com
 import { deliveryUnitSceneRefnos } from '@/composables/deliveryUnitScene';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { emitCommand } from '@/ribbon/commandBus';
 import { branCandidateKey, findBranCandidateByKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
 import { resolveSceneWorldTransform, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { branClearanceDimensionId } from '@/dimension';
+import { emitCommand } from '@/ribbon/commandBus';
 
 defineEmits<{
   'select-refno': [refno: string];
