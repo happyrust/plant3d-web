@@ -2,7 +2,7 @@
 
 ## 前置条件
 
-- 本仓依赖已安装（`npm install` 或 `pnpm install`）。
+- 本仓依赖已安装（`npm install`）。
 - plant-model-gen 后端已启动并含版本数据（默认验证库：AvevaMarineSample DB1112，两个 release：`codex-ams1112-physical-791-quarantine`、`codex-ams1112-physical-897-quarantine`）。
 - 前端开发服务器：`npm run dev`（接口经 vite 代理转发到后端）。
 

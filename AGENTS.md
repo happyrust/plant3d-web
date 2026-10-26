@@ -10,10 +10,9 @@
 
 ## 构建、测试与本地开发命令
 
-建议使用 Node.js 20+；包管理器可用 `pnpm` 或 `npm`（CI 使用 `npm ci`）。
+建议使用 Node.js 20+；包管理器统一用 `npm`，锁文件只有 `package-lock.json`（CI 使用 `npm ci`）。
 
 - `npm install`：安装依赖  
-- （可选）`pnpm install`：本地更快的安装方式；尽量避免同时改动 `pnpm-lock.yaml` 与 `package-lock.json`，除非有明确原因（推荐做法）  
 - `npm run dev`：启动 Vite 开发服务器（HMR）  
 - `npm run build`：先 `type-check` 再 `vite build` 产出 `dist/`  
 - `npm run preview`：本地预览生产构建  

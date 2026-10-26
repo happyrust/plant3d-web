@@ -20,7 +20,7 @@ Plant3D-Web 是一个基于 Vue 3 + TypeScript + Vuetify + Three.js 的 3D 工�
 
 ```bash
 # 安装依赖
-npm install              # 或 pnpm install (更快)
+npm install
 
 # 开发
 npm run dev              # 启动开发服务器 (http://localhost:3101)
