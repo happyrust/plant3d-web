@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
 
-import { useQueryClient } from '@tanstack/vue-query';
+import { useQueryClient, type QueryClient } from '@tanstack/vue-query';
 
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import { useGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNotice';
@@ -16,7 +16,13 @@ import { useGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNoti
  */
 const health = useGenModelV1Health();
 const updateNotice = useGenModelV1UpdateNotice();
-const queryClient = useQueryClient();
+// 属性面板的 ui-attr 查询走 TanStack Query；单测 / 独立挂载没装 VueQueryPlugin 时没有 client，徒步省掉失效这一步即可。
+let queryClient: QueryClient | null = null;
+try {
+  queryClient = useQueryClient();
+} catch {
+  queryClient = null;
+}
 
 const noticeText = computed(() => {
   const n = updateNotice.notice.value;
@@ -38,7 +44,7 @@ const noticeTitle = computed(() => {
 function reloadFromNotice(): void {
   const refnos = updateNotice.reload();
   // 属性面板走 TanStack Query（staleTime 5 min）：选中的构件可能就在这批里，一并让它重拉
-  if (refnos.length > 0) void queryClient.invalidateQueries({ queryKey: ['pdms', 'ui-attr'] });
+  if (refnos.length > 0 && queryClient) void queryClient.invalidateQueries({ queryKey: ['pdms', 'ui-attr'] });
 }
 
 const dotClass = computed(() => {
