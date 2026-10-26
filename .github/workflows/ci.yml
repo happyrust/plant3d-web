@@ -1,7 +1,6 @@
 # 主干三门（docs/investigation/repo-health-audit-2026-10-26.md P1-4）：与 AGENTS.md「合并前本地至少跑」同一套命令。
 # - type-check 按 scripts/type-check-baseline.txt 比对，只对基线之外的新增错误报红；
-# - eslint 只扫源码范围、不带 --fix（
-pm run lint 是本地自动修复用的）；
+# - eslint 只扫源码范围、不带 --fix（npm run lint 是本地自动修复用的）；
 # - vitest 全量。E2E / PMS 联调要外网账号和浏览器，仍留在本地手动。
 name: CI
 
