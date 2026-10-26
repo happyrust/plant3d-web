@@ -12,7 +12,7 @@ This document provides a systematic manual verification process for comparing BR
 
 **Current Implementation:**
 - File: `src/utils/three/annotation/annotations/LinearDimension3D.ts`
-- Alignment Report: `LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md`
+- Alignment Report: `legacy-root-2026-10-26/LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md`
 
 ---
 
@@ -295,7 +295,7 @@ const ext = 10 * wpp;  // exactly 10 world-pixels
 this.tmpWorldF.copy(aeW).addScaledVector(outDirUnitW, ext);  // ✓ correct overshoot
 ```
 
-**Fix:** Check `LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md` section on extension line overshoot.
+**Fix:** Check `legacy-root-2026-10-26/LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md` section on extension line overshoot.
 
 ---
 
@@ -456,8 +456,8 @@ The BRAN fixture passes SolveSpace comparison if:
 ## References
 
 - **SolveSpace Source:** `/Volumes/DPC/work/plant-code/solvespace/src/drawconstraint.cpp`
-- **Implementation Report:** `LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md`
-- **Verification Report:** `BRAN_VERIFICATION_STRENGTHENING_REPORT.md`
+- **Implementation Report:** `legacy-root-2026-10-26/LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md`
+- **Verification Report:** `legacy-root-2026-10-26/BRAN_VERIFICATION_STRENGTHENING_REPORT.md`
 - **Fixture Data:** `src/fixtures/bran-test-data.json`
 - **Fixture Documentation:** `src/fixtures/README.md`
 - **Implementation Code:** `src/utils/three/annotation/annotations/LinearDimension3D.ts`

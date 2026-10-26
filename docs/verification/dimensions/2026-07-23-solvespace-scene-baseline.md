@@ -28,7 +28,7 @@ MBD v2 返回 `11` 个 `linear_dim` primitive，`geometry_space=source_mm`，
 
 版本对比现状截图：
 
-![BRAN 24381_145018 版本对比](../../../bran-24381_145018-version-compare.png)
+![BRAN 24381_145018 版本对比](../legacy-root-2026-10-26/bran-24381_145018-version-compare.png)
 
 ## 替换前性能
 

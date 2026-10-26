@@ -259,7 +259,7 @@ If any item fails:
 
 - **Full Documentation:** `docs/verification/BRAN_SOLVESPACE_COMPARISON.md`
 - **SolveSpace Source:** `/Volumes/DPC/work/plant-code/solvespace/src/drawconstraint.cpp`
-- **Alignment Report:** `LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md`
+- **Alignment Report:** `legacy-root-2026-10-26/LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md`
 - **Fixture Data:** `src/fixtures/bran-test-data.json`
 - **E2E Tests:** `e2e/mbd-bran-fixture.spec.ts`
 - **Unit Tests:** `src/fixtures/bran-test-data.test.ts`

@@ -242,7 +242,7 @@ UI 反馈：
 - 屏幕方向可读性
 
 来源：  
-<https://github.com/happyrust/plant3d-web/blob/main/LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md>
+<https://github.com/happyrust/plant3d-web/blob/main/docs/verification/legacy-root-2026-10-26/LINEARDIMENSION3D_SOLVESPACE_ALIGNMENT_REPORT.md>
 
 所以这个新 UI 不要再自创另一套标注视觉语言，应直接复用现有三维尺寸样式体系。
 

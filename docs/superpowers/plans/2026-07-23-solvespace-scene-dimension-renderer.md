@@ -82,7 +82,7 @@ flowchart LR
 
 - `src/fixtures/dimensions/scene/`：小型确定性输入与三维 golden。
 - `docs/verification/dimensions/`：真实模型步骤、截图和性能记录。
-- 现有 `bran-24381_145018-version-compare.png` 只作历史证据；新的固定相机截图在最终画家落地后生成。
+- 现有 `docs/verification/legacy-root-2026-10-26/bran-24381_145018-version-compare.png` 只作历史证据；新的固定相机截图在最终画家落地后生成。
 
 ### 检查
 
