@@ -163,3 +163,8 @@ deploy/offline/release.json
 .brooks-lint-history.json
 dist.tar.gz
 .tmp_*
+
+# 本地草稿与产物目录：不入库，本地文件保留（2026-10-26 审核 P2-9 改为不跟踪）
+history.txt
+output/
+outputs/
