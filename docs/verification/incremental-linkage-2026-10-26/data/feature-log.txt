@@ -1,0 +1,24 @@
+[2026-10-26T15:01:43.848Z] console.error Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+[2026-10-26T15:01:44.092Z] console.error Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+[2026-10-26T15:01:44.131Z] console.error Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+[2026-10-26T15:01:44.194Z] console.error Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+[2026-10-26T15:01:45.811Z] refno loaded after 1.6s
+[2026-10-26T15:01:49.842Z] before {"box":{"ids":1,"total":1,"visibleIds":["o:24384_24777:0"],"zmin":1.125,"zmax":1.675},"pos":"POS -2821.27001953125, 8003.9599609375, 1400","row":"A=725 M=725 F=725","notice":null,"wsUrls":["ws://127.0.0.1:3111/?token=14oztUauaTDu","ws://localhost:9199/api/v1/ws"]}
+[2026-10-26T15:01:49.938Z] screenshot 01-before.png
+[2026-10-26T15:01:50.132Z] replay-step 727 {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":725,"to_sesno":727,"header_sesno_after":727,"bytes_before":36904960,"bytes_after":36968448,"half":null,"rollback":false,"patched_bytes":4}
+[2026-10-26T15:02:06.767Z] notice shown after 16.6s
+[2026-10-26T15:02:06.780Z] notice 库 8000 已更新到会话 726→727（改 2 项，场景内 1 根受影响） 重载 × | dbnums A=727 M=727 F=727
+[2026-10-26T15:02:07.903Z] screenshot 02-notice.png
+[2026-10-26T15:02:07.906Z] before reload {"ids":1,"total":1,"visibleIds":["o:24384_24777:0"],"zmin":1.125,"zmax":1.675} POS -2821.27001953125, 8003.9599609375, 1400
+[2026-10-26T15:02:07.938Z] clicked 重载
+[2026-10-26T15:02:09.453Z] scene box moved after 1.5s
+[2026-10-26T15:02:09.454Z] POS changed after 0.0s
+[2026-10-26T15:02:09.457Z] showModelByRefnos debug {"status":"done","requested":["24384_24776"],"ok":["24384_24776"],"fail":[],"error":null,"items":[{"refno":"24384_24776","ok":true,"status":"加载完成 (gen-model)","error":null}]}
+[2026-10-26T15:02:09.457Z] after reload {"box":{"ids":1,"total":2,"visibleIds":["o:24384_24777:1"],"zmin":1.625,"zmax":2.1750000000000003},"pos":"POS -2821.27001953125, 8003.9599609375, 1900","notice":null,"showModelDebug":{"status":"done","requested":["24384_24776"],"ok":["24384_24776"],"fail":[],"error":null,"items":[{"refno":"24384_24776","ok":true,"status":"加载完成 (gen-model)","error":null}]}}
+[2026-10-26T15:02:11.076Z] screenshot 03-after-reload.png
+[2026-10-26T15:02:13.640Z] dialog row after 0.0s
+[2026-10-26T15:02:13.640Z] dialog row before 8000 DESI 727/727/727 已同步
+[2026-10-26T15:02:13.846Z] replay-step 730 {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":727,"to_sesno":730,"header_sesno_after":730,"bytes_before":36968448,"bytes_after":37079040,"half":null,"rollback":false,"patched_bytes":3}
+[2026-10-26T15:02:38.033Z] dialog row auto-updated to 730 after 24.2s
+[2026-10-26T15:02:38.053Z] dialog row after 730 (no click): 8000 DESI 730/730/730 已同步 | backend A=730 M=730 F=730 | notice 库 8000 已更新到会话 728→730（改 2 项，场景内 1 根受影响） 重载 ×
+[2026-10-26T15:02:38.940Z] screenshot 04-dialog-auto-refresh.png

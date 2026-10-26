@@ -1,0 +1,75 @@
+{
+  "url": "http://127.0.0.1:3111/?output_project=AvevaMarineSample&show_refno=24384_24776&gm_backend_port=9199&dtx_recenter=0",
+  "before": {
+    "box": {
+      "ids": 1,
+      "total": 1,
+      "visibleIds": [
+        "o:24384_24777:0"
+      ],
+      "zmin": 1.125,
+      "zmax": 1.675
+    },
+    "pos": "POS -2821.27001953125, 8003.9599609375, 1400",
+    "row": "A=725 M=725 F=725",
+    "notice": null,
+    "wsUrls": [
+      "ws://127.0.0.1:3111/?token=14oztUauaTDu",
+      "ws://localhost:9199/api/v1/ws"
+    ]
+  },
+  "noticeText": "库 8000 已更新到会话 726→727（改 2 项，场景内 1 根受影响） 重载 ×",
+  "rowAtNotice": "A=727 M=727 F=727",
+  "boxBeforeReload": {
+    "ids": 1,
+    "total": 1,
+    "visibleIds": [
+      "o:24384_24777:0"
+    ],
+    "zmin": 1.125,
+    "zmax": 1.675
+  },
+  "posBeforeReload": "POS -2821.27001953125, 8003.9599609375, 1400",
+  "reloadButtonCount": 1,
+  "afterReload": {
+    "box": {
+      "ids": 1,
+      "total": 2,
+      "visibleIds": [
+        "o:24384_24777:1"
+      ],
+      "zmin": 1.625,
+      "zmax": 2.1750000000000003
+    },
+    "pos": "POS -2821.27001953125, 8003.9599609375, 1900",
+    "notice": null,
+    "showModelDebug": {
+      "status": "done",
+      "requested": [
+        "24384_24776"
+      ],
+      "ok": [
+        "24384_24776"
+      ],
+      "fail": [],
+      "error": null,
+      "items": [
+        {
+          "refno": "24384_24776",
+          "ok": true,
+          "status": "加载完成 (gen-model)",
+          "error": null
+        }
+      ]
+    }
+  },
+  "dialogRowBefore": "8000 DESI 727/727/727 已同步",
+  "dialogRowAuto": "8000 DESI 730/730/730 已同步",
+  "rowAfter730": "A=730 M=730 F=730",
+  "noticeAfter730": "库 8000 已更新到会话 728→730（改 2 项，场景内 1 根受影响） 重载 ×",
+  "wsTaskFrames": 2,
+  "wsUrls": [
+    "ws://127.0.0.1:3111/?token=14oztUauaTDu",
+    "ws://localhost:9199/api/v1/ws"
+  ]
+}

@@ -3872,7 +3872,10 @@ onMounted(async () => {
   // 轻量联动：后端自己跑完的增量批次落在当前装入的库 / 根上时，状态栏给提示，不自动换场景。
   setGenModelV1LoadedProbe({
     dbnums: () => (activeDbno !== null ? [activeDbno] : []),
-    isRootLoaded: (refno) => modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false,
+    // 单元根自己多半没对象（几何在成员名下），沿属主链问装载器；`show_refno` 直装的路不进 loadedRoots，也靠这一条。
+    isRootLoaded: (refno, dbnum) =>
+      (modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false)
+      || resolveDtxObjectIdsByUnitRefno(dbnum, refno).length > 0,
   });
   startGenModelV1UpdateNotice();
 

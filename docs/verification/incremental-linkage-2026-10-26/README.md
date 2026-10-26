@@ -60,3 +60,20 @@
 - `04-dialog-dbnums-8000-732.png` / `05-dialog-after-update-execute.png` / `06-dialog-after-refresh-734.png`：模型生成对话框「按库」表。
 - `data/step{727,730,732}-summary.json`：每轮的 before / afterStep / afterReload 读数、水位时间线、包围盒差、前端请求清单；`data/*-task-*.json`：后端任务详情（含 `steps` 与单元回执）；`data/*-log.txt`：脚本时间线；`data/dialog-ws-frames.json` / `dialog-api-calls.json`：第 4 轮浏览器收到的 WS 帧与请求。
 - 驱动脚本是临时的（`%TEMP%\plantui-linkage\linkage.mjs` / `linkage-dialog.mjs`，跑完已删）；复现按 §1 的命令重建即可。影子根、rocksdb 库、服务进程跑完也已清理。
+## 5. 轻量联动落地后的复验（同日，`b394940f` 及后续）
+
+用户拍板「轻量联动：只刷水位行 + 提示『有更新，点此重载』，不自动换场景」。实现：`useGenModelV1UpdateNotice`（订阅 tasks 主题全部任务的
+`task_finished`，DESI 且有变化且库已装入 / 批次里的根在场景才提示）、`GenModelV1HealthBadge` 旁的提示条（重载 / 忽略）、
+`showModelByRefno({ refresh })`（清记录缓存重查 + replace 装载，不重新生成、不飞相机）、`useModelGenerationAdmin` 对非本会话任务的
+`task_finished` 也刷一拍 `/dbnums`。同一套隔离栈重置到 725 后复验（前端换成自己起的 Vite :3111，其余同 §1）：
+
+| 步 | 观察 | 结果 |
+|---|---|---|
+| 页面打开 | 浏览器里的 WS | `ws://localhost:9199/api/v1/ws` 在任何任务登记之前就已连上（以前只有 Vite HMR 那条） |
+| 725 → 727（BY U 500） | 状态栏 | 文件前移后 16.6 s 出现「库 8000 已更新到会话 726→727（改 2 项，场景内 1 根受影响） 重载 ×」（图 07）；场景与 POS 不动 |
+| 点「重载」 | DTX 可见对象 / POS | 1.5 s 内可见对象换成 `o:24384_24777:1`，z 1.125..1.675 → **1.625..2.175**（+0.500 m），旧对象隐藏；POS z 1400 → **1900**（ui-attr 查询失效重拉）；提示条消失；控制台 `[model-load] … loaded_refnos=1 objects=1`，相机未动（图 08） |
+| 727 → 730（对话框「按库」开着） | 8000 行 | 24.2 s 后自动变 `730/730/730 已同步`，不点任何按钮（图 09）；提示条同时换成「728→730」 |
+
+第一版的探针用 `isModelActuallyLoaded(root)` 判「根在不在场景」，EQUI 自己没对象（几何在成员 24777 名下）、`show_refno`
+直装的路也不进 `loadedRoots`，提示条出来了但没有「重载」按钮；改成沿属主链问装载器（`resolveDtxObjectIdsByUnitRefno(dbnum, root)`）后才是上表的结果。
+产物：`07-feature-notice-727.png`、`08-feature-after-reload-pos1900.png`、`09-feature-dialog-auto-refresh-730.png`、`data/feature-summary.json`、`data/feature-log.txt`。

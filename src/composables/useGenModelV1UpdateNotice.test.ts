@@ -54,7 +54,7 @@ function finished(overrides: Record<string, unknown> = {}, units: unknown[] = [{
 }
 
 function probeOf(dbnums: number[], loaded: string[]): GenModelV1LoadedProbe {
-  return { dbnums: () => dbnums, isRootLoaded: (refno) => loaded.includes(refno) };
+  return { dbnums: () => dbnums, isRootLoaded: (refno, dbnum) => dbnum === 8000 && loaded.includes(refno) };
 }
 
 beforeEach(() => {

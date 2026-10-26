@@ -32,10 +32,13 @@ export type GenModelV1UpdateNotice = GenModelV1FinishedBatch & {
   receivedAt: number;
 };
 
-/** 场景里现在装着什么：由 ViewerPanel 注入（activeDbno + useModelGeneration.isModelActuallyLoaded） */
+/**
+ * 场景里现在装着什么：由 ViewerPanel 注入。`isRootLoaded(refno, dbnum)` 要按生成根问——EQUI / BRAN 这类单元自己多半
+ * 一个对象都没有，几何在成员名下，要沿属主链查（`resolveDtxObjectIdsByUnitRefno`）。
+ */
 export type GenModelV1LoadedProbe = {
   dbnums: () => Iterable<number>;
-  isRootLoaded: (refno: string) => boolean;
+  isRootLoaded: (refno: string, dbnum: number) => boolean;
 };
 
 export type ShowModelByRefnosDetail = { refnos: string[]; refreshModel: true; flyTo: false };
@@ -92,7 +95,7 @@ export function evaluateGenModelV1UpdateNotice(
 ): GenModelV1UpdateNotice | null {
   if (batch.dbType !== 'DESI') return null;
   if (batch.changedElements <= 0 && batch.roots.length === 0) return null;
-  const loadedRoots = batch.roots.filter((root) => probe.isRootLoaded(root));
+  const loadedRoots = batch.roots.filter((root) => probe.isRootLoaded(root, batch.dbnum));
   let dbnumLoaded = false;
   for (const dbnum of probe.dbnums()) {
     if (dbnum === batch.dbnum) { dbnumLoaded = true; break; }
