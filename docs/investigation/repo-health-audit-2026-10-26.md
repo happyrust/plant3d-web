@@ -116,3 +116,14 @@
 2. P0-1 / P0-2 修到 `type-check` / `vitest` 全绿，然后 P1-4 加 CI 门，别再漏。
 3. P1-5 `npm audit fix`、P1-6 lint 忽略产物、P1-7 锁文件 / engines / @types/three。
 4. P2 卫生分两三笔 `chore(repo)` 清掉。
+
+## 处置记录（同日）
+
+- P0-1 / P0-2：`6d71d9bf` / `fca7afb0`，主干三门全绿。
+- P0-3：`3f24a268` 去掉代码默认回退与文档明文；**口令轮换仍待 PMS 侧执行**。
+- P1-4 / P1-6：`2f59b291` + `ff968f00` CI 工作流（首次绿跑 40278390752），eslint 忽略 `deploy/offline/**`；`d00979c1` 源码范围 lint 错误清零。
+- P1-5：`a2af783c` `npm audit fix`，29 → 6（剩 tailwind 4 / happy-dom 21 / chrome-devtools-mcp 1.x 三个大版本未动）；`3b769682` 适配 vitest 4.1 的 `vi.importMock` 行为变化。
+- P1-7：`ce14372e` + `5aad47f8` engines / playwright → devDependencies / 删 bun.lock；`@types/three` 对齐到 0.162 试过（+44 / −22）回退，待单独清理；pnpm-lock.yaml 仍在（本机 pnpm 损坏）。
+- P2-8 / P2-9：`8b8f775d` 根目录截图与报告归档到 `docs/verification/legacy-root-2026-10-26/`；`2e5fdb00` 删一次性脚本与杂物；`fed72035` history.txt / output / outputs 改为不跟踪；`a1e96627` 删 xeokit bundle 与 Word 锁文件。交付 docx 与 `docs/guides/*.docx` 未动。
+- P2-10：README 去掉 `llmdoc` 链接，CLAUDE.md 技术栈说明改回实际；CHANGELOG 0.2.5–0.2.7 仍缺；`wiki/` / `doc/` / `开发文档/` 并行未动。
+- P2-11：未动。

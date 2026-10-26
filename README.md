@@ -36,7 +36,6 @@ npm install
 - Notes index: `docs/notes/README.md`
   - SolveSpace 3D dimensions dataflow: `docs/notes/solvespace-dimension-dataflow.md`
 - Implementation plans (working docs): `docs/plans/`
-- LLM documentation index (if you use it): `llmdoc/index.md`
 
 ### Compile and Hot-Reload for Development
 

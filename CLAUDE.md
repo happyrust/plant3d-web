@@ -11,7 +11,7 @@ Plant3D-Web 是一个基于 Vue 3 + TypeScript + Vuetify + Three.js 的 3D 工�
 - **前端框架**: Vue 3 (Composition API) + TypeScript
 - **UI 库**: Vuetify 3 + Tailwind CSS + dockview-vue (面板布局)
 - **3D 渲染**: Three.js + troika-three-text (3D 文本)
-- **数据处理**: Apache Arrow + Parquet + DuckDB WASM
+- **数据来源**: gen-model `/api/v1` REST + WebSocket（`src/api/`、`src/model-source/`）；几何由 DTX 层（`src/utils/three/dtx/`）按需装入
 - **状态管理**: Composables (useXxx 模式) + TanStack Query
 - **测试**: Vitest (单元/集成) + Playwright (E2E)
 - **构建工具**: Vite
