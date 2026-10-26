@@ -9,6 +9,8 @@ const ignores = [
   '.vscode',
   'coverage',
   'dist',
+  // 离线出包的构建产物（www/assets 的 bundle、backend/web/pkg/rs-plant.js）：不忽略的话全仓 lint 会扫进上万条压缩代码的误报，--fix 还会改到产物
+  'deploy/offline/**',
   'wiki/**/*',
   'tmp/**/*',
   '.tmp*',

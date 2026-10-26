@@ -1,0 +1,37 @@
+# 主干三门（docs/investigation/repo-health-audit-2026-10-26.md P1-4）：与 AGENTS.md「合并前本地至少跑」同一套命令。
+# - type-check 按 scripts/type-check-baseline.txt 比对，只对基线之外的新增错误报红；
+# - eslint 只扫源码范围、不带 --fix（
+pm run lint 是本地自动修复用的）；
+# - vitest 全量。E2E / PMS 联调要外网账号和浏览器，仍留在本地手动。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: type-check / eslint / vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: type-check（基线比对）
+        run: npm run type-check
+      - name: eslint（源码范围，不带 --fix）
+        run: npx eslint src e2e scripts --ext .vue,.js,.mjs,.ts
+      - name: vitest
+        run: npx vitest run
