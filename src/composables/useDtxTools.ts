@@ -8,6 +8,7 @@ import { CLOUD_FIT_PADDING_PX, CLOUD_TARGET_BBOX_TTL_MS, boxCornersFromMinMaxVec
 import { type CloudInspectionDebugSnapshot, type CloudOverlayEl, type CloudRenderStats, buildCloudSourceStamp, buildMembersRegionV1, captureCreationViewSnapshot, collectWorldCellEdgePositions, createCloudRenderCache, createDefaultCloudLabelLayoutV1, isRegionPresentationRecord, labelPreferenceFromRecord, regionRenderStyleFromRecord, resolveRegionObjectIdsForRefno } from './dtxTools/cloudRegion';
 import { createAnnotationInteraction } from './dtxTools/controllers/annotationInteraction';
 import { createMeasureController } from './dtxTools/controllers/measureController';
+import { createOverlayHost } from './dtxTools/controllers/overlayHost';
 import { createPanelActions } from './dtxTools/controllers/panelActions';
 import { createPickCandidateController } from './dtxTools/controllers/pickCandidateController';
 import { EMPTY_BOUNDS, IDENTITY_MATRIX_ELEMENTS, aabbFromPoints, clamp, getCanvasPos, measureLabelSize, nowId, overlayToWorld, parseRefnoFromDtxObjectId, vec3ToTuple, worldToOverlay, worldToOverlayPoint, escapeAnnotationLabelText } from './dtxTools/geometry';
@@ -232,15 +233,18 @@ export function useDtxTools(options: {
     overlays: { labels, markers, cloudShapes, rectShapes, obbShapes, textLeaders },
     cloudRenderStats,
     cloudLod,
+    marqueeState,
     marqueeDiv,
     rectDrag,
     rectPreviewLine,
   };
 
-  const pick = createPickCandidateController(ctx, { pickSurfaceRayHits, ensureToolsGroupAttached });
+  const host = createOverlayHost(ctx, { clearPinClusterDom });
+
+  const pick = createPickCandidateController(ctx, { pickSurfaceRayHits, ensureToolsGroupAttached: host.ensureToolsGroupAttached });
   pick.installWatchers();
 
-  const measure = createMeasureController(ctx, { pickSurfacePoint, clearPendingCloudAnchor, hideMarquee });
+  const measure = createMeasureController(ctx, { pickSurfacePoint, clearPendingCloudAnchor, hideMarquee: host.hideMarquee });
 
   const annotation = createAnnotationInteraction(ctx, { updateOverlayPositions });
 
@@ -282,14 +286,14 @@ export function useDtxTools(options: {
   /** 云线创建的统一回退入口：清掉锚点、拖框预览与目标集合。 */
   function cancelCloudCreation() {
     clearPendingCloudAnchor();
-    hideMarquee();
+    host.hideMarquee();
     store.clearCloudTargetRefnos();
   }
 
   /** 退出云线工具但保留目标集合，再次进入可直接复用（方案 §2.1）。 */
   function suspendCloudCreation() {
     clearPendingCloudAnchor();
-    hideMarquee();
+    host.hideMarquee();
   }
 
   /** 拖框被中途打断时归还相机控制与指针捕获，否则退出后视角就转不动了。 */
@@ -314,7 +318,7 @@ export function useDtxTools(options: {
     if (store.toolMode.value !== 'annotation_cloud') return false;
     if (marqueeState.value.active) {
       releaseMarqueeCapture();
-      hideMarquee();
+      host.hideMarquee();
       return true;
     }
     if (pendingCloudAnchor.value) {
@@ -428,99 +432,6 @@ export function useDtxTools(options: {
       refno: anchor.refno,
       entityId: anchor.entityId,
     };
-  }
-
-  function ensureToolsGroupAttached() {
-    const viewer = dtxViewerRef.value;
-    if (!viewer) return;
-    if (toolsGroup.parent !== viewer.scene) {
-      try {
-        toolsGroup.parent?.remove(toolsGroup);
-      } catch {
-        // ignore
-      }
-      viewer.scene.add(toolsGroup);
-    }
-  }
-
-  function clearOverlayEls() {
-    clearPinClusterDom();
-    for (const it of labels.values()) {
-      try { it.el.remove(); } catch { /* ignore */ }
-    }
-    labels.clear();
-    for (const it of markers.values()) {
-      try { it.el.remove(); } catch { /* ignore */ }
-    }
-    markers.clear();
-    for (const it of cloudShapes.values()) {
-      try { it.badgeEl?.remove(); } catch { /* ignore */ }
-    }
-    cloudShapes.clear();
-    rectShapes.clear();
-    obbShapes.clear();
-  }
-
-  function ensureMarqueeDiv() {
-    const overlay = overlayContainerRef.value;
-    if (!overlay) return null;
-    if (marqueeDiv.value && marqueeDiv.value.parentElement === overlay) return marqueeDiv.value;
-
-    if (marqueeDiv.value) {
-      try { marqueeDiv.value.remove(); } catch { /* ignore */ }
-    }
-
-    marqueeDiv.value = ensureDiv(
-      overlay,
-      'dtx-marquee',
-      [
-        'position:absolute',
-        'display:none',
-        'left:0',
-        'top:0',
-        'width:0',
-        'height:0',
-        'pointer-events:none',
-        'z-index:930',
-      ].join(';')
-    );
-    return marqueeDiv.value;
-  }
-
-  function hideMarquee() {
-    marqueeState.value = { active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null };
-    const div = marqueeDiv.value;
-    if (div) div.style.display = 'none';
-  }
-
-  function updateMarqueeStyle(mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box', dx: number) {
-    const div = ensureMarqueeDiv();
-    if (!div) return;
-    div.style.display = 'block';
-    if (mode === 'annotation_cloud') {
-      div.style.border = '3px solid #dc2626';
-      div.style.borderRadius = '8px';
-      div.style.background = 'rgba(220, 38, 38, 0.08)';
-      div.style.boxShadow = '0 0 0 2px rgba(220, 38, 38, 0.3), inset 0 0 8px rgba(220, 38, 38, 0.1)';
-    } else {
-      div.style.border = dx >= 0 ? '2px dashed #333' : '2px solid #333';
-      div.style.borderRadius = '0';
-      div.style.background = 'rgba(0,0,0,0.06)';
-      div.style.boxShadow = 'none';
-    }
-  }
-
-  function updateMarqueeRect(start: { x: number; y: number }, end: { x: number; y: number }) {
-    const div = ensureMarqueeDiv();
-    if (!div) return;
-    const x1 = Math.min(start.x, end.x);
-    const y1 = Math.min(start.y, end.y);
-    const x2 = Math.max(start.x, end.x);
-    const y2 = Math.max(start.y, end.y);
-    div.style.left = `${x1}px`;
-    div.style.top = `${y1}px`;
-    div.style.width = `${x2 - x1}px`;
-    div.style.height = `${y2 - y1}px`;
   }
 
   /**
@@ -1094,9 +1005,9 @@ export function useDtxTools(options: {
     if (!viewer || !overlay) return;
     const resolution = getCanvasResolution(viewer.canvas);
 
-    ensureToolsGroupAttached();
+    host.ensureToolsGroupAttached();
     clearGroup(toolsGroup);
-    clearOverlayEls();
+    host.clearOverlayEls();
     textLeaders.clear();
     annotation.pruneInlineTextAnnotationDrafts();
 
@@ -2328,8 +2239,8 @@ export function useDtxTools(options: {
       startCanvas: { x: start.x, y: start.y },
       currentCanvas: { x: start.x, y: start.y },
     };
-    updateMarqueeStyle(mode, 0);
-    updateMarqueeRect(marqueeState.value.startCanvas!, marqueeState.value.currentCanvas!);
+    host.updateMarqueeStyle(mode, 0);
+    host.updateMarqueeRect(marqueeState.value.startCanvas!, marqueeState.value.currentCanvas!);
 
     const viewer = dtxViewerRef.value;
     if (viewer) viewer.controls.enabled = false;
@@ -2343,8 +2254,8 @@ export function useDtxTools(options: {
     marqueeState.value.currentCanvas = { x: cur.x, y: cur.y };
     const start = marqueeState.value.startCanvas!;
     const dx = (cur.x - start.x);
-    updateMarqueeStyle(mode, dx);
-    updateMarqueeRect(start, marqueeState.value.currentCanvas);
+    host.updateMarqueeStyle(mode, dx);
+    host.updateMarqueeRect(start, marqueeState.value.currentCanvas);
   }
 
   function endMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box') {
@@ -2354,7 +2265,7 @@ export function useDtxTools(options: {
     const start = marqueeState.value.startCanvas;
     const end = marqueeState.value.currentCanvas;
     if (!start || !end) {
-      hideMarquee();
+      host.hideMarquee();
       return;
     }
 
@@ -2369,7 +2280,7 @@ export function useDtxTools(options: {
       y2: Math.max(start.y, end.y),
     };
     if (rect.x2 - rect.x1 < 6 || rect.y2 - rect.y1 < 6) {
-      hideMarquee();
+      host.hideMarquee();
       if (mode === 'annotation_cloud') {
         const hit = pickSurfacePoint(canvas, e);
         if (hit) {
@@ -2385,7 +2296,7 @@ export function useDtxTools(options: {
     const dx = end.x - start.x;
 
     if (!compatViewerRef.value || !overlayContainerRef.value || !dtxViewerRef.value) {
-      hideMarquee();
+      host.hideMarquee();
       emitToast({ message: '三维视图尚未就绪，无法完成框选', level: 'warning' });
       if (mode === 'pick_refno_box') store.cancelPickRefno();
       return;
@@ -2404,13 +2315,13 @@ export function useDtxTools(options: {
         // 抛出会跳过下面的 hideMarquee，把选择框永久留在屏幕上，
         // 且拾取会话卡在 pick_refno_box 无法退出。
         console.error('[dtx-tools] 框选构件失败', err);
-        hideMarquee();
+        host.hideMarquee();
         emitToast({ message: '框选失败：计算框内构件时出错，请缩小范围后重试', level: 'error' });
         if (mode === 'pick_refno_box') store.cancelPickRefno();
         return;
       }
     }
-    hideMarquee();
+    host.hideMarquee();
 
     if (tubeBoxPick) {
       if (selectedRefnos.length === 0) {
@@ -2774,7 +2685,7 @@ export function useDtxTools(options: {
     }
     const viewer = dtxViewerRef.value;
     if (viewer) viewer.controls.enabled = true;
-    hideMarquee();
+    host.hideMarquee();
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
     try {
       rectPreviewLine.value?.geometry.dispose()
@@ -2858,7 +2769,7 @@ export function useDtxTools(options: {
     () => store.cloudTargetRefnos.value.join('|'),
     () => {
       clearPendingCloudAnchor();
-      hideMarquee();
+      host.hideMarquee();
     },
   );
 
@@ -2881,7 +2792,7 @@ export function useDtxTools(options: {
         else cancelCloudCreation();
       }
       if (mode === 'none' && prev !== 'none') {
-        hideMarquee();
+        host.hideMarquee();
       }
     }
   );
@@ -2893,11 +2804,11 @@ export function useDtxTools(options: {
         prev.scene.remove(toolsGroup);
       }
       if (viewer) {
-        ensureToolsGroupAttached();
+        host.ensureToolsGroupAttached();
         syncFromStore();
       } else {
         clearGroup(toolsGroup);
-        clearOverlayEls();
+        host.clearOverlayEls();
       }
     },
     { immediate: true }
@@ -2907,8 +2818,8 @@ export function useDtxTools(options: {
     resolveCloudTargetBbox,
     clearTextAnnotationMarkerClickTimer: annotation.clearTextAnnotationMarkerClickTimer,
     resetPickCandidateSession: pick.resetPickCandidateSession,
-    clearOverlayEls,
-    hideMarquee,
+    clearOverlayEls: host.clearOverlayEls,
+    hideMarquee: host.hideMarquee,
     resetProgress: measure.resetProgress,
     clearPendingCloudAnchor,
   });

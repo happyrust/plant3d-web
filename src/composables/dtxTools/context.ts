@@ -8,7 +8,7 @@ import type { ComputedRef, Ref } from 'vue';
 
 import type { CloudOverlayEl, CloudRenderStats } from './cloudRegion';
 import type { PickRefnoCandidate } from './pickCandidates';
-import type { AnnotationLeaderVisual, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './types';
+import type { AnnotationLeaderVisual, DragRect, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './types';
 import type { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import type { useReviewStore } from '@/composables/useReviewStore';
 import type { useToolStore } from '@/composables/useToolStore';
@@ -94,6 +94,8 @@ export type DtxToolsContext = {
   /** 云线渲染计数（静止零重建验收）。所有者：overlaySync；panelActions 读 / 清零 */
   cloudRenderStats: CloudRenderStats;
   cloudLod: CloudLodState;
+  /** 拖框交互态（起点 / 当前点 / 指针）。所有者：cloudCreationFlow；overlayHost.hideMarquee 复位，pointerDispatcher 读 */
+  marqueeState: Ref<DragRect>;
   /** 拖框 DOM。所有者：overlayHost；panelActions.dispose 摘掉 */
   marqueeDiv: Ref<HTMLDivElement | null>;
   /** OBB 矩形拖拽态与预览线。所有者：cloudCreationFlow（框选几何）；panelActions 清理 */
