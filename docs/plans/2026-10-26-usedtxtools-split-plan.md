@@ -25,7 +25,7 @@
 | 12 个 `useDtxTools.*.test.ts` | 9 个走 `useDtxTools({...stub})` 跑真实闭包；`cloudFit`、`pipeMeasure` 只测纯函数，`pickRefno` 大半也是 |
 | `useAnnotationStyleStore.test.ts` | 动态 import `buildAnnotationLeaderStyle` |
 
-返回对象 60 个成员（L7089–7168），分五组：状态（`ready / statusText / objectToObjectUiState / pendingCloudAnchor / cloudGateBlock / pickCandidates / pickCandidateIndex / selectionStore`）、面板动作（`flyTo* / remove* / highlight*`）、云线创建闸门、指针钩子，以及 **17 个 `debug*` / 测试钩子**（`debugCloud*`、`setHoveredCloudAnnotation`、`beginInlineOverlayAnnotationDrag` 系列等）。
+返回对象 55 个成员（L7089–7168），分五组：状态（`ready / statusText / objectToObjectUiState / pendingCloudAnchor / cloudGateBlock / pickCandidates / pickCandidateIndex / selectionStore`）、面板动作（`flyTo* / remove* / highlight*`）、云线创建闸门、指针钩子，以及 **17 个 `debug*` / 测试钩子**（`debugCloud*`、`setHoveredCloudAnnotation`、`beginInlineOverlayAnnotationDrag` 系列等）。
 
 ### 1.2 文件分段（按当前行号）
 
@@ -135,7 +135,7 @@ Vue 相关：ctx 是普通对象，里面放 `Ref`，**不要** `reactive(ctx)`�
 
 | 步 | 做什么 | 预计从主文件移出 | 兜底测试 |
 |---|---|---|---|
-| 0 | 加 `useDtxTools.apiShape.test.ts`：`Object.keys(useDtxTools(stub)).sort()` 做内联快照，锁住 60 个成员；记下基线数字（7169 行 / 145 函数） | 0 | 新测试 |
+| 0 | 加 `useDtxTools.apiShape.test.ts`：`Object.keys(useDtxTools(stub)).sort()` 做内联快照，锁住 55 个成员；记下基线数字（7169 行 / 145 函数） | 0 | 新测试 |
 | 1 | 纯函数与类型按 §2 搬进 `dtxTools/*.ts`；`useDtxTools.ts` 顶部用 `export { … } from './dtxTools/…'` 把原来 54 个 export 原样再导出，实现一行不改 | ≈ 2270 行 | `cloudFit`、`pipeMeasure`、`pickRefno`、`useAnnotationStyleStore`（它们 import 的名字和路径都不变） |
 | 2 | `panelActions.ts`：`flyTo* / remove* / highlight* / clearAllInScene / dispose` + 9 个 `debug*`，只读 ctx | ≈ 380 行 | `bindingDegrade`、`cloudLod`、`cloudRegion`（都靠 debug 快照断言） |
 | 3 | `measureController.ts`：3168–3943 整段 + `cancelMeasurementInteraction`；对外暴露 `handlePointerUp(canvas, e, mode)`、`handleTreeObjectMeasureSelection`、`cancel()`、`statusText`、`uiState` | ≈ 780 行 | `objectMeasure`（582 行，覆盖对象–对象全流程）、`pipeMeasure` |
