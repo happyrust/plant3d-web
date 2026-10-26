@@ -168,3 +168,6 @@ dist.tar.gz
 history.txt
 output/
 outputs/
+
+# Office 锁文件
+~$*
