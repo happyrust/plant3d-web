@@ -96,7 +96,7 @@
 
 /* ========================================================================== */
 /* DTX 批注严重度高亮（仅 HTML overlay 卡片，不影响 Three.js 线条材质） */
-/* 作用于 useDtxTools.ts 中 makeInlineAnnotationCardEl / makeTextAnnotationCardEl */
+/* 作用于 composables/dtxTools/overlayDom.ts 中 makeInlineAnnotationCardEl / makeTextAnnotationCardEl */
 /* 通过 label.dataset.severity。现行枚举是 principle / general / drawing； */
 /* critical / severe / normal / suggestion 仍留着，避免旧数据失去颜色。 */
 /* ========================================================================== */
