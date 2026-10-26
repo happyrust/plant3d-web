@@ -61,7 +61,8 @@ export class LeaderAnnotation extends AnnotationBase {
 
     // 创建引线
     this.lineGeometry = new LineGeometry();
-    this.leaderLine = new Line2(this.lineGeometry, this.materialSet.line);
+    // Line2 是实例化四边形，必须配 LineMaterial（fatLine）；LineBasicMaterial 的 shader 不认 instanceStart / instanceEnd。
+    this.leaderLine = new Line2(this.lineGeometry, this.materialSet.fatLine);
     this.add(this.leaderLine);
 
     // 创建箭头
@@ -158,17 +159,17 @@ export class LeaderAnnotation extends AnnotationBase {
     const state = this.interactionState;
 
     if (state === 'selected') {
-      this.leaderLine.material = this.materials.ssSelected.line;
+      this.leaderLine.material = this.materials.ssSelected.fatLine;
       this.arrowHead.material = this.materials.ssSelected.mesh;
       return;
     }
     if (state === 'hovered') {
-      this.leaderLine.material = this.materials.ssHovered.line;
+      this.leaderLine.material = this.materials.ssHovered.fatLine;
       this.arrowHead.material = this.materials.ssHovered.mesh;
       return;
     }
 
-    this.leaderLine.material = this.materialSet.line;
+    this.leaderLine.material = this.materialSet.fatLine;
     this.arrowHead.material = this.materialSet.mesh;
   }
 

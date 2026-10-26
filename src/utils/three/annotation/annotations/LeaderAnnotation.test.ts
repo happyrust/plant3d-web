@@ -65,8 +65,7 @@ describe('LeaderAnnotation', () => {
 
     it('should start in normal state with base materialSet', () => {
       leader = makeLeader();
-      // Line2 使用 fatLine，此处 LeaderAnnotation 的 leaderLine 实际绑定的是 materialSet.line（LineBasicMaterial）。
-      // 只需验证状态与 DOM 分类能正确切换。
+      // leaderLine 是 Line2，绑的是 materialSet.fatLine（LineMaterial）。
       expect(leader.interactionState).toBe('normal');
       const labelEl = (leader as unknown as { textLabel: { element: HTMLElement } }).textLabel.element;
       expect(labelEl.classList.contains('annotation-label--hovered')).toBe(false);
@@ -84,7 +83,7 @@ describe('LeaderAnnotation', () => {
         leaderLine: { material: THREE.Material };
         arrowHead: { material: THREE.Material };
       };
-      expect(leaderLine.material).toBe(materials.ssHovered.line);
+      expect(leaderLine.material).toBe(materials.ssHovered.fatLine);
       expect(arrowHead.material).toBe(materials.ssHovered.mesh);
 
       const labelEl = (leader as unknown as { textLabel: { element: HTMLElement } }).textLabel.element;
@@ -104,7 +103,7 @@ describe('LeaderAnnotation', () => {
         leaderLine: { material: THREE.Material };
         arrowHead: { material: THREE.Material };
       };
-      expect(leaderLine.material).toBe(materials.ssSelected.line);
+      expect(leaderLine.material).toBe(materials.ssSelected.fatLine);
       expect(arrowHead.material).toBe(materials.ssSelected.mesh);
 
       const labelEl = (leader as unknown as { textLabel: { element: HTMLElement } }).textLabel.element;
@@ -126,8 +125,8 @@ describe('LeaderAnnotation', () => {
         leaderLine: { material: THREE.Material };
         arrowHead: { material: THREE.Material };
       };
-      // LeaderAnnotation 构造时默认使用 materials.blue，normal 恢复到 blue.line / blue.mesh
-      expect(leaderLine.material).toBe(materials.blue.line);
+      // LeaderAnnotation 构造时默认使用 materials.blue，normal 恢复到 blue.fatLine / blue.mesh
+      expect(leaderLine.material).toBe(materials.blue.fatLine);
       expect(arrowHead.material).toBe(materials.blue.mesh);
     });
   });
@@ -147,7 +146,7 @@ describe('LeaderAnnotation', () => {
         arrowHead: { material: THREE.Material };
       };
       // setMaterialSet 直接 applyMaterials()，normal 状态下应立即切到 green
-      expect(leaderLine.material).toBe(materials.green.line);
+      expect(leaderLine.material).toBe(materials.green.fatLine);
       expect(arrowHead.material).toBe(materials.green.mesh);
     });
   });

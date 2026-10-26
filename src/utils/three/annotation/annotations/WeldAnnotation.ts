@@ -16,6 +16,7 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase';
 
 import type { AnnotationMaterials, AnnotationMaterialSet } from '../core/AnnotationMaterials';
+import type { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
 export type WeldAnnotationParams = {
   /** 焊缝位置 */
@@ -59,8 +60,9 @@ export class WeldAnnotation extends AnnotationBase {
     // 创建十字线（两条独立线段；避免 Line2 折线连线导致出现斜线）
     this.lineGeometryH = new LineGeometry();
     this.lineGeometryV = new LineGeometry();
-    this.crossLineH = new Line2(this.lineGeometryH, this.materialSet.line);
-    this.crossLineV = new Line2(this.lineGeometryV, this.materialSet.line);
+    // Line2 是实例化四边形，必须配 LineMaterial（fatLine）；LineBasicMaterial 的 shader 不认 instanceStart / instanceEnd。
+    this.crossLineH = new Line2(this.lineGeometryH, this.materialSet.fatLine);
+    this.crossLineV = new Line2(this.lineGeometryV, this.materialSet.fatLine);
     this.add(this.crossLineH, this.crossLineV);
 
     // 创建文本
@@ -130,13 +132,13 @@ export class WeldAnnotation extends AnnotationBase {
    */
   private applyMaterials(): void {
     const state = this.interactionState;
-    let mat: THREE.Material;
+    let mat: LineMaterial;
     if (state === 'selected') {
-      mat = this.materials.ssSelected.line;
+      mat = this.materials.ssSelected.fatLine;
     } else if (state === 'hovered') {
-      mat = this.materials.ssHovered.line;
+      mat = this.materials.ssHovered.fatLine;
     } else {
-      mat = this.materialSet.line;
+      mat = this.materialSet.fatLine;
     }
     this.crossLineH.material = mat;
     this.crossLineV.material = mat;

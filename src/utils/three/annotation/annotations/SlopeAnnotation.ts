@@ -54,7 +54,8 @@ export class SlopeAnnotation extends AnnotationBase {
 
     // 创建坡度线
     this.lineGeometry = new LineGeometry();
-    this.slopeLine = new Line2(this.lineGeometry, this.materialSet.line);
+    // Line2 是实例化四边形，必须配 LineMaterial（fatLine）；LineBasicMaterial 的 shader 不认 instanceStart / instanceEnd。
+    this.slopeLine = new Line2(this.lineGeometry, this.materialSet.fatLine);
     this.add(this.slopeLine);
 
     // 创建文本
@@ -125,14 +126,14 @@ export class SlopeAnnotation extends AnnotationBase {
   private applyMaterials(): void {
     const state = this.interactionState;
     if (state === 'selected') {
-      this.slopeLine.material = this.materials.ssSelected.line;
+      this.slopeLine.material = this.materials.ssSelected.fatLine;
       return;
     }
     if (state === 'hovered') {
-      this.slopeLine.material = this.materials.ssHovered.line;
+      this.slopeLine.material = this.materials.ssHovered.fatLine;
       return;
     }
-    this.slopeLine.material = this.materialSet.line;
+    this.slopeLine.material = this.materialSet.fatLine;
   }
 
   protected onHighlightChanged(highlighted: boolean): void {

@@ -433,18 +433,6 @@ src/utils/modelUnitVersionCompare.test.ts|TS18048|'renamedSnapshot' is possibly 
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
-src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2740|Type 'Material' is missing the following properties from type 'LineMaterial': color, dashed, dashScale, dashSize, and 23 more.
-src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2740|Type 'Material' is missing the following properties from type 'LineMaterial': color, dashed, dashScale, dashSize, and 23 more.
 src/utils/three/annotation/interaction/AnnotationInteractionController.ts|TS2307|Cannot find module './core/AnnotationBase' or its corresponding type declarations.
 src/utils/three/annotation/text/SolveSpaceBillboardVectorText.ts|TS2322|Type 'Promise<void | SolveSpaceVectorFont>' is not assignable to type 'Promise<SolveSpaceVectorFont>'.
 src/utils/three/annotation/text/SolveSpaceVectorFont.test.ts|TS2345|Argument of type '(input: RequestInfo | URL) => Promise<any>' is not assignable to parameter of type '(new (...args: unknown[]) => any) | ((this: any, ...args: unknown[]) => void) | ((...args: unknown[]) => any)'.
