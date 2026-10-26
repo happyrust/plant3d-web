@@ -6,7 +6,7 @@
 echo "=== PMS 弹窗轮询性能测试 ==="
 
 # 设置测试环境变量
-export PMS_E2E_PASSWORD='Admin@1234'
+export PMS_E2E_PASSWORD="${PMS_E2E_PASSWORD:?请先设置 PMS_E2E_PASSWORD（向管理员索取，不要写进仓库）}"
 export PMS_EMBEDDED_SITE_SUBSTRING='127.0.0.1'
 export CHROME_CDP_URL='http://127.0.0.1:9222'
 

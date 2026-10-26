@@ -78,9 +78,9 @@
 用于 `http://pms.powerpms.net:1801/sysin.html` 登录及 `npm run test:pms:cdp` / `test:e2e:pms`：
 
 - **用户名（大写简写）**：`SJ`、`JH`、`SH`、`PZ`（多角色可用 `PMS_E2E_ROLES=SJ,JH,SH,PZ`）
-- **密码**：`Admin@1234`（联调环境；变更后请同步团队并更新本地 `PMS_E2E_PASSWORD`）
+- **密码**：向管理员索取，只通过环境变量 `PMS_E2E_PASSWORD` 传入。**不要写进仓库任何文件**（本仓是公开的；2026-10-26 之前曾明文入库，已清除并要求轮换，见 `docs/investigation/repo-health-audit-2026-10-26.md` P0-3）。
 
-自动化示例：`export PMS_E2E_PASSWORD='Admin@1234'`；勿将含密码的命令写入公开 PR 描述。
+自动化示例：`export PMS_E2E_PASSWORD='<向管理员索取>'`；勿将含密码的命令写入公开 PR 描述或文档。
 
 发起编校审 CDP/E2E 默认注入测试 BRAN **`24381_145018`**（与 PMS 数据界面 RefNo 一致，便于核对同步）；覆盖方式：`PMS_TARGET_BRAN_REFNO=…`。
 

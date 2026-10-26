@@ -1,6 +1,5 @@
 const defaults: Record<string, string> = {
   PMS_E2E_BASE: 'http://pms.powerpms.net:1801',
-  PMS_E2E_PASSWORD: 'Admin@1234',
   PMS_E2E_USERNAME: 'SJ',
   PMS_E2E_ROLES: 'SJ,JD,JH,SH,PZ',
   PMS_CHECKER_USERNAME: 'JH',
@@ -17,6 +16,11 @@ const defaults: Record<string, string> = {
 
 for (const [key, value] of Object.entries(defaults)) {
   process.env[key] ||= value;
+}
+
+// 口令不给默认值：这是公开仓库，联调账号口令只能从环境变量来（审核 2026-10-26 P0-3）。
+if (!process.env.PMS_E2E_PASSWORD?.trim()) {
+  throw new Error('缺少 PMS_E2E_PASSWORD（PMS 联调账号口令，向管理员索取后用环境变量传入）');
 }
 
 await import('../../scripts/pms-chrome-devtools-flow');

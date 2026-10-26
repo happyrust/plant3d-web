@@ -35,7 +35,8 @@ import {
 } from '../scripts/pms-plant3d-initiate-flow';
 
 const enabled = process.env.PMS_E2E_ENABLED === '1' || process.env.PMS_E2E_ENABLED === 'true';
-const password = process.env.PMS_E2E_PASSWORD?.trim() || 'Admin@1234';
+// 不给默认口令（公开仓库）；缺了由下面的 test.skip 说明原因。
+const password = process.env.PMS_E2E_PASSWORD?.trim() ?? '';
 const fullFlowEnabled =
   process.env.PMS_E2E_FULL_FLOW === '1' || process.env.PMS_E2E_FULL_FLOW === 'true';
 const submitReviewEnabled =

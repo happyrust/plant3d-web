@@ -639,7 +639,7 @@ git commit -m "test(pms-simulator): add bug-rus-244-designer-empty-after-return 
 按 spec §真实 PMS 回归 步骤：
 
 ```powershell
-$env:PMS_E2E_PASSWORD='Admin@1234'
+$env:PMS_E2E_PASSWORD='<向管理员索取>'
 $env:PMS_EMBEDDED_SITE_SUBSTRING='powerpms.net:1801'
 ```
 

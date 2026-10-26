@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | 主链批准 | `PMS_TARGET_BRAN_REFNO=24381_145018 PMS_SIMULATOR_CASE=approved PMS_SIMULATOR_TRACE=1 PMS_SIMULATOR_OUTPUT=artifacts/rus-238-post-push-approved-rerun-report.json npm run test:pms:simulator` | 通过，最终 `status=approved` / `node=pz` | `artifacts/rus-238-post-push-approved-rerun-report.json` |
 | 刷新恢复 | `PMS_TARGET_BRAN_REFNO=24381_145018 PMS_SIMULATOR_CASE=restore PMS_SIMULATOR_TRACE=1 PMS_SIMULATOR_OUTPUT=artifacts/rus-238-post-push-restore-rerun-report.json npm run test:pms:simulator` | 通过，最终 `status=submitted` / `node=jd`，BRAN/测量/确认记录/评论正文 UI 均通过 | `artifacts/rus-238-post-push-restore-rerun-report.json` |
-| Chrome CDP full | `PMS_E2E_PASSWORD='Admin@1234' PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243' PMS_TARGET_BRAN_REFNO='24381_145018' PMS_CDP_HEADLESS=1 PMS_CDP_FULL_FLOW=1 npm run test:pms:cdp:full` | 通过，退出码 0，嵌入站点接口命中包名或 BRAN | `artifacts/.tmp/rus-238-chrome-cdp-full-20260430-153301.log` |
+| Chrome CDP full | `PMS_E2E_PASSWORD='<向管理员索取>' PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243' PMS_TARGET_BRAN_REFNO='24381_145018' PMS_CDP_HEADLESS=1 PMS_CDP_FULL_FLOW=1 npm run test:pms:cdp:full` | 通过，退出码 0，嵌入站点接口命中包名或 BRAN | `artifacts/.tmp/rus-238-chrome-cdp-full-20260430-153301.log` |
 
 ## 验收记录模板
 

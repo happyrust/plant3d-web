@@ -364,7 +364,7 @@ git commit -m "test(pms-simulator): add rus-244-design-a-ui-empty-state acceptan
 - [ ] **Step 5.1: 准备环境变量**
 
 ```powershell
-$env:PMS_E2E_PASSWORD='Admin@1234'
+$env:PMS_E2E_PASSWORD='<向管理员索取>'
 $env:PMS_EMBEDDED_SITE_SUBSTRING='powerpms.net:1801'
 ```
 
