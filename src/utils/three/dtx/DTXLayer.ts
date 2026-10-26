@@ -45,6 +45,14 @@ import { DTXPickingMaterial } from './DTXPickingMaterial';
 
 import type { SglSceneLightParams } from '@/viewer/e3dLook/sglLookMaterial';
 
+/**
+ * DataTexture 背后的类型化数组。@types/three 0.162 把 `image.data` 声明成 Uint8ClampedArray，
+ * 运行时就是构造时传进去的那个数组（Float32Array / Uint8Array / Uint32Array），调用方自己指定。
+ */
+function textureData<T>(texture: DataTexture): T {
+  return texture.image.data as unknown as T;
+}
+
 // ========== 类型定义 ==========
 
 /**
@@ -1596,7 +1604,7 @@ export class DTXLayer {
     const entry = this._getMaterialPaletteEntry(materialIndex);
     if (!entry) return;
 
-    const texData = this._materialPaletteTexture.image.data as Float32Array;
+    const texData = textureData<Float32Array>(this._materialPaletteTexture);
     const width = MAX_MATERIAL_PALETTE_SIZE;
 
     // row 0: [r, g, b, metalness]
@@ -1654,7 +1662,7 @@ export class DTXLayer {
         const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
         const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
         const dstOffset = (objY * pixelsPerRow + objX) * 4 + 0; // pixel 0, byte 0 (materialIndex)
-        const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+        const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
         texData[dstOffset] = nextMaterialIndex;
         this._colorsAndFlagsTexture.needsUpdate = true;
       }
@@ -1672,7 +1680,7 @@ export class DTXLayer {
         const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
         const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
         const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1; // pixel 0, byte 1 (hasColorOverride)
-        const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+        const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
         texData[dstOffset] = 0;
         this._colorsAndFlagsTexture.needsUpdate = true;
       }
@@ -1711,7 +1719,7 @@ export class DTXLayer {
       const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
       const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1; // pixel 0, byte 1 (hasColorOverride)
-      const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+      const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
       texData[dstOffset] = 1;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
@@ -1721,7 +1729,7 @@ export class DTXLayer {
       const width = OBJECTS_TEXTURE_WIDTH;
       const objX = obj.objectIndex % width;
       const objY = Math.floor(obj.objectIndex / width);
-      const texData = this._colorOverrideTexture.image.data as Uint8Array;
+      const texData = textureData<Uint8Array>(this._colorOverrideTexture);
       const texOffset = (objY * width + objX) * 4;
       texData[texOffset + 0] = r;
       texData[texOffset + 1] = g;
@@ -1750,7 +1758,7 @@ export class DTXLayer {
       const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
       const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1; // pixel 0, byte 1 (hasColorOverride)
-      const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+      const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
       texData[dstOffset] = 0;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
@@ -1775,7 +1783,7 @@ export class DTXLayer {
       const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
       const dstOffset = (objY * pixelsPerRow + objX) * 4 + 2; // pixel 0, byte 2
-      const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+      const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
       texData[dstOffset] = visible ? 1 : 0;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
@@ -1798,7 +1806,7 @@ export class DTXLayer {
     let texData: Uint8Array | null = null;
     if (this._colorsAndFlagsTexture) {
       pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
-      texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+      texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
     }
 
     for (const objectId of objectIds) {
@@ -1841,7 +1849,7 @@ export class DTXLayer {
     let colorsTextureChanged = false;
     if (this._colorsAndFlagsTexture) {
       pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
-      texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+      texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
     }
 
     for (const objectId of objectIds) {
@@ -1924,7 +1932,7 @@ export class DTXLayer {
     // 同步更新纹理数据
     if (this._colorsAndFlagsTexture) {
       const pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
-      const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+      const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
 
       for (const obj of this._objects.values()) {
         const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
@@ -1958,7 +1966,7 @@ export class DTXLayer {
     }
 
     if (this._matricesTexture) {
-      const data = this._matricesTexture.image?.data as Float32Array | undefined;
+      const data = this._matricesTexture.image ? textureData<Float32Array>(this._matricesTexture) : undefined;
       if (data) {
         const width = OBJECTS_TEXTURE_WIDTH;
         const objX = obj.objectIndex % width;
@@ -2287,8 +2295,8 @@ export class DTXLayer {
       return;
     }
 
-    const colorsTexData = this._colorsAndFlagsTexture.image.data as Uint8Array | undefined;
-    const primTexData = this._primitiveToObjectTexture.image.data as Uint32Array | undefined;
+    const colorsTexData = textureData<Uint8Array | undefined>(this._colorsAndFlagsTexture);
+    const primTexData = textureData<Uint32Array | undefined>(this._primitiveToObjectTexture);
     if (!colorsTexData || !primTexData) {
       console.warn('[DTX][DEBUG] DataTexture.image.data 为空，无法进行 GPU 反解诊断');
       return;

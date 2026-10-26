@@ -21,9 +21,9 @@ const fakeFont = {
 
 describe('SolveSpaceBillboardVectorText', () => {
   it('应在 solvespace/rebarviz 风格间正确切换', async () => {
-    const normal = new THREE.LineBasicMaterial({ color: 0x22c55e });
-    const hovered = new THREE.LineBasicMaterial({ color: 0xffff00 });
-    const selected = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    const normal = new LineMaterial({ color: 0x22c55e });
+    const hovered = new LineMaterial({ color: 0xffff00 });
+    const selected = new LineMaterial({ color: 0xff0000 });
 
     const label = new SolveSpaceBillboardVectorText({
       text: '1000',
@@ -67,9 +67,9 @@ describe('SolveSpaceBillboardVectorText', () => {
   });
 
   it('rebarviz 风格应完全禁用 halo 避免重复文字效果', async () => {
-    const normal = new THREE.LineBasicMaterial({ color: 0x22c55e });
-    const hovered = new THREE.LineBasicMaterial({ color: 0xffff00 });
-    const selected = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    const normal = new LineMaterial({ color: 0x22c55e });
+    const hovered = new LineMaterial({ color: 0xffff00 });
+    const selected = new LineMaterial({ color: 0xff0000 });
 
     const label = new SolveSpaceBillboardVectorText({
       text: '1000',
@@ -133,9 +133,9 @@ describe('SolveSpaceBillboardVectorText', () => {
   });
 
   it('应按传入的三维文字 frame 放置文字，而不是 billboard 跟随相机', async () => {
-    const normal = new THREE.LineBasicMaterial({ color: 0x22c55e });
-    const hovered = new THREE.LineBasicMaterial({ color: 0xffff00 });
-    const selected = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    const normal = new LineMaterial({ color: 0x22c55e });
+    const hovered = new LineMaterial({ color: 0xffff00 });
+    const selected = new LineMaterial({ color: 0xff0000 });
 
     const label = new SolveSpaceBillboardVectorText({
       text: '1000',

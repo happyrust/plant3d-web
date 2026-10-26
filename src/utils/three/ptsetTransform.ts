@@ -121,9 +121,9 @@ export function applyMatrix4ToDir(matrix: Matrix4 | null, dir: Vec3): Vec3 {
   const dy = dir[1];
   const dz = dir[2];
   return [
-    e[0] * dx + e[4] * dy + e[8] * dz,
-    e[1] * dx + e[5] * dy + e[9] * dz,
-    e[2] * dx + e[6] * dy + e[10] * dz,
+    (e[0] ?? 1) * dx + (e[4] ?? 0) * dy + (e[8] ?? 0) * dz,
+    (e[1] ?? 0) * dx + (e[5] ?? 1) * dy + (e[9] ?? 0) * dz,
+    (e[2] ?? 0) * dx + (e[6] ?? 0) * dy + (e[10] ?? 1) * dz,
   ];
 }
 

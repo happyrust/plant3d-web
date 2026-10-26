@@ -275,7 +275,8 @@ export function useAnnotationThree(
   function renderLabels(scene: THREE.Scene, camera: THREE.Camera): void {
     // 只渲染标注子树，避免同一页面多套 CSS2DRenderer 时互相 re-parent DOM 元素。
     void scene;
-    css2dRenderer?.render(annotationGroup, camera);
+    // CSS2DRenderer.render 运行时只遍历传入的 Object3D 子树；0.162 的类型声明把参数写成 Scene。
+    css2dRenderer?.render(annotationGroup as unknown as THREE.Scene, camera);
   }
 
   /** 更新分辨率 */

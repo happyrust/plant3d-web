@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick, ref } from 'vue';
+import { nextTick, ref, shallowRef } from 'vue';
 
 import { BoxGeometry, Matrix4, PerspectiveCamera } from 'three';
 
@@ -77,7 +77,7 @@ function createTools(
       camera,
       canvas,
     } as any),
-    dtxLayerRef: ref(createReadyLayer()),
+    dtxLayerRef: shallowRef<DTXLayer | null>(createReadyLayer()),
     selectionRef: ref({ pickPoint: vi.fn(() => null) } as any),
     overlayContainerRef: ref(overlay),
     store,

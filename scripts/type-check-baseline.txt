@@ -161,15 +161,10 @@ src/composables/useAnnotationReviewStateSync.ts|TS2345|Argument of type 'string'
 src/composables/useAnnotationSeveritySync.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useAnnotationSeveritySync.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useAnnotationSeveritySync.test.ts|TS2532|Object is possibly 'undefined'.
-src/composables/useAnnotationThree.ts|TS2345|Argument of type 'Group<Object3DEventMap>' is not assignable to parameter of type 'Scene<Object3DEventMap>'.
 src/composables/useBackgroundStore.ts|TS2322|Type 'BackgroundPreset | undefined' is not assignable to type 'BackgroundPreset'.
 src/composables/useContainerQuery.test.ts|TS2769|No overload matches this call.
 src/composables/useDbnoInstancesDtxLoader.test.ts|TS2322|Type 'Map<string, { geo_hash: string; matrix: number[]; uniforms: { refno: string; noun: string; owner_refno: string; owner_noun: string; }; }[]>' is not assignable to type 'Map<string, InstanceEntry[]>'.
 src/composables/useDbnoInstancesDtxLoader.test.ts|TS2345|Argument of type '(_dbno: number, refnos: string[]) => Promise<Map<string, { geo_hash: string; matrix: number[]; uniforms: { refno: string; noun: string; owner_refno: string; owner_noun: string; spec_value: number; }; }[]>>' is not assignable to parameter of type '() => Promise<Map<any, any>>'.
-src/composables/useDtxTools.cloudCreation.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
-src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
-src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
-src/composables/useDtxTools.pickCandidateCycle.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
 src/composables/useDtxTools.pickRefno.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/composables/useDtxTools.pickRefno.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/composables/useDtxTools.pickRefno.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
@@ -439,27 +434,18 @@ src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined'
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
+src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
+src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
+src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
 src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
+src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
+src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
+src/utils/three/annotation/annotations/SlopeAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': dashed, dashScale, dashSize, dashOffset, and 20 more.
 src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
 src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
-src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2740|Type 'Material' is missing the following properties from type 'LineMaterial': isLineMaterial, color, worldUnits, dashed, and 22 more.
-src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2740|Type 'Material' is missing the following properties from type 'LineMaterial': isLineMaterial, color, worldUnits, dashed, and 22 more.
+src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2740|Type 'Material' is missing the following properties from type 'LineMaterial': color, dashed, dashScale, dashSize, and 23 more.
+src/utils/three/annotation/annotations/WeldAnnotation.ts|TS2740|Type 'Material' is missing the following properties from type 'LineMaterial': color, dashed, dashScale, dashSize, and 23 more.
 src/utils/three/annotation/interaction/AnnotationInteractionController.ts|TS2307|Cannot find module './core/AnnotationBase' or its corresponding type declarations.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
-src/utils/three/annotation/text/SolveSpaceBillboardVectorText.test.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
 src/utils/three/annotation/text/SolveSpaceBillboardVectorText.ts|TS2322|Type 'Promise<void | SolveSpaceVectorFont>' is not assignable to type 'Promise<SolveSpaceVectorFont>'.
 src/utils/three/annotation/text/SolveSpaceVectorFont.test.ts|TS2345|Argument of type '(input: RequestInfo | URL) => Promise<any>' is not assignable to parameter of type '(new (...args: unknown[]) => any) | ((this: any, ...args: unknown[]) => void) | ((...args: unknown[]) => any)'.
 src/utils/three/annotation/text/SolveSpaceVectorFont.ts|TS2322|Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'BlobPart'.

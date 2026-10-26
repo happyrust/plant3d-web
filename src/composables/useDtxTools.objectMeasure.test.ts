@@ -218,7 +218,7 @@ describe('useDtxTools object measure tree flow', () => {
     const layer = createLayerWithBoxes(3);
     const tools = useDtxTools({
       dtxViewerRef: ref(createViewerStub() as any),
-      dtxLayerRef: ref(layer),
+      dtxLayerRef: shallowRef<DTXLayer | null>(layer),
       selectionRef: ref({} as any),
       overlayContainerRef: ref(null),
       store,
@@ -266,7 +266,7 @@ describe('useDtxTools object measure tree flow', () => {
     const layer = createLayerWithBoxes(3);
     const tools = useDtxTools({
       dtxViewerRef: ref(createViewerStub() as any),
-      dtxLayerRef: ref(layer),
+      dtxLayerRef: shallowRef<DTXLayer | null>(layer),
       selectionRef: ref({} as any),
       overlayContainerRef: ref(null),
       store,

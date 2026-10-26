@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick, ref } from 'vue';
+import { nextTick, ref, shallowRef } from 'vue';
 
 import { BoxGeometry, Matrix4, Vector3 } from 'three';
 
@@ -59,7 +59,7 @@ function createTools(rayHits: { current: RayHit[] }) {
       controls: { enabled: true },
       camera: null,
     } as any),
-    dtxLayerRef: ref(createLayer()),
+    dtxLayerRef: shallowRef<DTXLayer | null>(createLayer()),
     selectionRef: ref({
       pickPoints: vi.fn(() => rayHits.current.map((hit) => ({
         objectId: hit.objectId,
