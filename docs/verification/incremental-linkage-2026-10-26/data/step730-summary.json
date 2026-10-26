@@ -1,0 +1,438 @@
+{
+  "url": "http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24384_24776&gm_backend_port=9199",
+  "stepTo": 730,
+  "refno": "24384_24776",
+  "health": {
+    "version": "0.1.44",
+    "build_id": "0.1.44+g83aa3c250088.1793015921.dirty",
+    "started_at": "2026-10-26T21:13:26.081736300+08:00"
+  },
+  "before": {
+    "row": {
+      "dbnum": 8000,
+      "db_type": "DESI",
+      "file_name": "ams8000_0001",
+      "file_path": "D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_size": 36968448,
+      "file_latest_sesno": 727,
+      "not_in_project": false,
+      "ref0s": [
+        16192,
+        24384,
+        32576
+      ],
+      "applied_sesno": 727,
+      "initialized": true,
+      "model_sesno": 727,
+      "model_sesno_time": "2026-10-25T13:48:30+00:00",
+      "model_caught_up_at": "2026-10-26T13:21:28.574527400Z",
+      "model_verdict": "in_sync",
+      "model_verdict_reason": null,
+      "model_caught_up_roots": 953,
+      "model_chasing_roots": 0,
+      "model_dead_roots": 0,
+      "model_lazy_roots": 0,
+      "model_source": "database",
+      "model_source_reason": null
+    },
+    "box": {
+      "layer": true,
+      "ids": 1,
+      "boxes": 1,
+      "total": 1,
+      "sample": [
+        "o:24384_24777:0"
+      ],
+      "min": [
+        -0.18012109374999996,
+        -0.3073867187500001,
+        -0.27500000000000013
+      ],
+      "max": [
+        0.18012109374999996,
+        0.30738671874999923,
+        0.27500000000000013
+      ]
+    },
+    "records": {
+      "status": 200,
+      "source": "rocksdb+memory-overlay",
+      "count": 1,
+      "withAabb": 0,
+      "min": [
+        null,
+        null,
+        null
+      ],
+      "max": [
+        null,
+        null,
+        null
+      ],
+      "snapshot_epoch": 0,
+      "sample_keys": [
+        "refno",
+        "old_refno",
+        "owner",
+        "world_aabb",
+        "world_trans",
+        "insts",
+        "has_neg",
+        "generic",
+        "pts",
+        "date"
+      ]
+    },
+    "pos": "POS -2821.27001953125, 8003.9599609375, 1900",
+    "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+  },
+  "replayStep": "{\"work\":\"D:\\\\work\\\\plant-code\\\\old\\\\_runs\\\\plantui-linkage\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"from_sesno\":727,\"to_sesno\":730,\"header_sesno_after\":730,\"bytes_before\":36968448,\"bytes_after\":37079040,\"half\":null,\"rollback\":false,\"patched_bytes\":3}",
+  "afterStep": {
+    "inSync": true,
+    "seconds": "12.1",
+    "row": {
+      "dbnum": 8000,
+      "db_type": "DESI",
+      "file_name": "ams8000_0001",
+      "file_path": "D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_size": 37079040,
+      "file_latest_sesno": 730,
+      "not_in_project": false,
+      "ref0s": [
+        16192,
+        24384,
+        32576
+      ],
+      "applied_sesno": 730,
+      "initialized": true,
+      "model_sesno": 730,
+      "model_sesno_time": "2026-10-25T13:48:46+00:00",
+      "model_caught_up_at": "2026-10-26T13:41:58.372295100Z",
+      "model_verdict": "in_sync",
+      "model_verdict_reason": null,
+      "model_caught_up_roots": 953,
+      "model_chasing_roots": 0,
+      "model_dead_roots": 0,
+      "model_lazy_roots": 0,
+      "model_source": "database",
+      "model_source_reason": null
+    },
+    "timeline": [
+      {
+        "t": "0.0",
+        "wm": "A=727 M=727 F=730 verdict=in_sync source=database",
+        "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+      },
+      {
+        "t": "7.6",
+        "wm": "A=730 M=730 F=730 verdict=in_sync source=database",
+        "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+      }
+    ],
+    "dialogRowNoAction": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)",
+    "dialogRowAfterRefresh": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)",
+    "posNoReload": "POS -2821.27001953125, 8003.9599609375, 1900",
+    "boxNoReload": {
+      "layer": true,
+      "ids": 1,
+      "boxes": 1,
+      "total": 1,
+      "sample": [
+        "o:24384_24777:0"
+      ],
+      "min": [
+        -0.18012109374999996,
+        -0.3073867187500001,
+        -0.27500000000000013
+      ],
+      "max": [
+        0.18012109374999996,
+        0.30738671874999923,
+        0.27500000000000013
+      ]
+    },
+    "records": {
+      "status": 200,
+      "source": "rocksdb+memory-overlay",
+      "count": 1,
+      "withAabb": 0,
+      "min": [
+        null,
+        null,
+        null
+      ],
+      "max": [
+        null,
+        null,
+        null
+      ],
+      "snapshot_epoch": 0,
+      "sample_keys": [
+        "refno",
+        "old_refno",
+        "owner",
+        "world_aabb",
+        "world_trans",
+        "insts",
+        "has_neg",
+        "generic",
+        "pts",
+        "date"
+      ]
+    }
+  },
+  "afterReload": {
+    "box": {
+      "layer": true,
+      "ids": 1,
+      "boxes": 1,
+      "total": 1,
+      "sample": [
+        "o:24384_24777:0"
+      ],
+      "min": [
+        -0.18012109374999996,
+        -0.3073867187500001,
+        -0.27500000000000013
+      ],
+      "max": [
+        0.18012109374999996,
+        0.30738671874999923,
+        0.2749999999999999
+      ]
+    },
+    "pos": "POS -2821.27001953125, 8003.9599609375, 1400"
+  },
+  "shift": {
+    "noReload": {
+      "dmin": [
+        0,
+        0,
+        0
+      ],
+      "dmax": [
+        0,
+        0,
+        0
+      ]
+    },
+    "afterReload": {
+      "dmin": [
+        0,
+        0,
+        0
+      ],
+      "dmax": [
+        0,
+        0,
+        -2.220446049250313e-16
+      ]
+    },
+    "expectedDz": -500
+  },
+  "task": {
+    "task_id": "db-20261026-214157-000048",
+    "state": "succeeded",
+    "started_at": "2026-10-26T21:41:57.542504+08:00",
+    "finished_at": "2026-10-26T21:41:58.402505800+08:00",
+    "units_done": 1,
+    "total_units": 1
+  },
+  "taskHints": {
+    "kinds": [
+      "data_batch",
+      "transform"
+    ],
+    "moved": [
+      1
+    ]
+  },
+  "ws": {
+    "frames": 3,
+    "sample": [
+      {
+        "t": "2026-10-26T13:41:37.436Z",
+        "recv": "{\"type\":\"connected\"}"
+      },
+      {
+        "t": "2026-10-26T13:42:07.395Z",
+        "sent": "{\"type\":\"ping\"}"
+      },
+      {
+        "t": "2026-10-26T13:42:26.929Z",
+        "recv": "{\"type\":\"connected\"}"
+      }
+    ]
+  },
+  "apiCallsAfterStep": [
+    {
+      "t": "2026-10-26T13:42:17.911Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums?project=AvevaMarineSample",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.406Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.409Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.515Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.515Z",
+      "m": "POST",
+      "u": "/api/v1/element/attributes",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.556Z",
+      "m": "GET",
+      "u": "/api/v1/tree/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.560Z",
+      "m": "POST",
+      "u": "/api/v1/model/records",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.580Z",
+      "m": "GET",
+      "u": "/api/v1/tree/ancestors?refno=24384%2F24776",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.610Z",
+      "m": "GET",
+      "u": "/api/v1/tree/children?refno=24384%2F22399",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.615Z",
+      "m": "GET",
+      "u": "/api/v1/meshes/12296242654610097853.mesh",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.650Z",
+      "m": "GET",
+      "u": "/api/v1/tree/children?refno=24384%2F24775",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.650Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.664Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/6003/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.759Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/1112/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.800Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7009/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.853Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7332/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.894Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7999/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.919Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7330/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.962Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7331/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:27.970Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7321/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.020Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7353/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.074Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7329/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.118Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7352/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.140Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7324/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.214Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7354/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.242Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7350/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.358Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7997/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:42:28.439Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7327/model/roots",
+      "s": 200
+    }
+  ],
+  "apiCallsTotal": 56
+}

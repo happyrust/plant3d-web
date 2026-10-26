@@ -1,0 +1,232 @@
+{
+  "task_id": "db-20261026-215257-000050",
+  "kind": "data_batch",
+  "state": "succeeded",
+  "project": "AvevaMarineSample",
+  "created_at": "2026-10-26T21:52:57.517717900+08:00",
+  "started_at": "2026-10-26T21:52:57.519364+08:00",
+  "finished_at": "2026-10-26T21:52:58.363532500+08:00",
+  "dbnum": 8000,
+  "db_type": "DESI",
+  "start_sesno": 732,
+  "end_sesno": 732,
+  "start_sesno_time": "2026-10-25T21:10:50+00:00",
+  "end_sesno_time": "2026-10-25T21:10:50+00:00",
+  "units_done": 1,
+  "total_units": 1,
+  "events_seen": 6,
+  "current_stage": "task_end",
+  "stage_started_at": "2026-10-26T21:52:58.332806500+08:00",
+  "stage_last_progress_at": "2026-10-26T21:52:58.332806500+08:00",
+  "dependency_dbnum": 8000,
+  "dependency_refnos_total": 1,
+  "dependency_refnos_parsed": 1,
+  "dependency_refnos_missing": 0,
+  "detail": {
+    "intent": "apply_window",
+    "model_start_sesno": null,
+    "frozen_target_sesno": 732,
+    "stages": [
+      "data",
+      "generation",
+      "publication",
+      "spatial",
+      "rooms"
+    ]
+  },
+  "result": {
+    "project": "AvevaMarineSample",
+    "status": "success",
+    "batch": {
+      "dbnum": 8000,
+      "db_type": "DESI",
+      "file_path": "D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "start_sesno": 732,
+      "end_sesno": 732,
+      "start_sesno_time": "2026-10-25T21:10:50+00:00",
+      "end_sesno_time": "2026-10-25T21:10:50+00:00",
+      "status": "applied",
+      "message": null,
+      "merged_sesnos": [
+        732
+      ],
+      "merged_sesno_times": [
+        "2026-10-25T21:10:50+00:00"
+      ],
+      "changed_elements": 1,
+      "added_elements": 0,
+      "modified_elements": 1,
+      "deleted_elements": 0
+    },
+    "units": [
+      {
+        "dbnum": 8000,
+        "root_refno": "24384/24776",
+        "noun": "EQUI",
+        "status": "generated",
+        "attempts": 0,
+        "message": null,
+        "old_owner": null,
+        "new_owner": null,
+        "kind": "transform",
+        "transform_fallback_reason": null,
+        "unit_fallback_reason": null,
+        "rooms_before": [
+          {
+            "room_num": "R224",
+            "panel_refno": "24381_948",
+            "members": 1
+          }
+        ],
+        "rooms_after": [
+          {
+            "room_num": "R124",
+            "panel_refno": "24381_1263",
+            "members": 1
+          },
+          {
+            "room_num": "R144",
+            "panel_refno": "24381_1445",
+            "members": 1
+          },
+          {
+            "room_num": "R413",
+            "panel_refno": "24381_35457",
+            "members": 1
+          }
+        ],
+        "geometry_before": {
+          "records": 1,
+          "aabb": [
+            -3001.39111328125,
+            7696.5732421875,
+            1125,
+            -2641.14892578125,
+            8311.3466796875,
+            1675
+          ]
+        },
+        "geometry_after": {
+          "records": 1,
+          "aabb": [
+            -3001.39111328125,
+            7696.5732421875,
+            3125,
+            -2641.14892578125,
+            8311.3466796875,
+            3675
+          ]
+        },
+        "geometry_diff": {
+          "moved": 1,
+          "added": 0,
+          "removed": 0,
+          "sample": [
+            "24384_24777"
+          ]
+        }
+      }
+    ],
+    "warnings": [
+      "dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=1 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=1（ins/mod/del=0/1/0）基会话=731 读页=739 差分 28ms",
+      "dbnum=8000: dbnum=8000: window 731→732 roots_T=953 roots_S=953 touched=1 regen=1 delete=0 advance=952 lazy=0 | window 731→732: candidates=1 (+0 ~1 -0) rolled_up=1 unchanged=0 no_model=0 (metadata_only=0 unread_attribute=0 cache_stamp=0) unresolved=0 cascades=1 units regen=1 remove=0 derived=0 | regenerated=0 skipped=0 failed=0 | derived regen=0 retired=0 failed=0 tubes +0 -0",
+      "dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged",
+      "dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=178 duplicate_coverage_elements=3055; no cross-root task compression was applied",
+      "dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)",
+      "dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=1 (endpoint=1 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0; cross-db (GitHub #35) — members_queried=1 queries=2 query_failures=0 unreadable_members=[] referrers=0 handed off to their own dbnum's task: []",
+      "dbnum=8000: dbnum=8000: design-reference cascade on — sources=1 dbs_queried=24 queries=51 query_failures=0 edges=[] behavioural=[\"POSREF\"] referrer_roots=0 referrer_without_root=0",
+      "dbnum=8000: dbnum=8000: rigid-motion (model_transform_cheap_path) — transform=1 (anchors=1) rejected=0",
+      "dbnum=8000: dbnum=8000: unit-level publish (model_unit_level_publish) — no_model_only roots not classified: cascade(s) off (model_structural_connection_cascade); D10 needs model_structural_connection_cascade / model_cable_endpoint_cascade / model_design_reference_cascade all on, every empty sub-plan falls back to regen",
+      "dbnum=8000: dbnum=8000: window 731→732 规划耗时 total=56ms | sets=25ms design=3ms collect=25ms [ledger=2ms closure=0ms xgeom=0ms index_S=3ms roots_S=0ms[cached] index_T=3ms roots_T=7ms[incremental parity=0ms] nested=1ms changes=0ms rigid=0ms cascades=3ms removed=0ms cache=2ms] bind=0ms | settled=0ms impact=0ms bucket=0ms carry=0ms rigid=0ms change_list=0ms finish=0ms (GitHub #68)"
+    ],
+    "model_verdict": "in_sync",
+    "model_caught_up_at": "2026-10-26T13:52:58.333908Z"
+  },
+  "steps": [
+    {
+      "name": "data_parse",
+      "at": "2026-10-26T21:52:57.519993800+08:00",
+      "ms": 32,
+      "ok": true
+    },
+    {
+      "name": "write_marker",
+      "at": "2026-10-26T21:52:57.552903+08:00",
+      "ms": 15,
+      "ok": true
+    },
+    {
+      "name": "identity_check",
+      "at": "2026-10-26T21:52:57.568259800+08:00",
+      "ms": 31,
+      "ok": true
+    },
+    {
+      "name": "resolve_window",
+      "at": "2026-10-26T21:52:57.599499100+08:00",
+      "ms": 21,
+      "ok": true
+    },
+    {
+      "name": "collect_window",
+      "at": "2026-10-26T21:52:57.620964800+08:00",
+      "ms": 36,
+      "ok": true
+    },
+    {
+      "name": "stage_apply",
+      "at": "2026-10-26T21:52:57.657085+08:00",
+      "ms": 242,
+      "ok": true
+    },
+    {
+      "name": "room_reference",
+      "at": "2026-10-26T21:52:57.899375800+08:00",
+      "ms": 299,
+      "ok": true
+    },
+    {
+      "name": "room_calculator",
+      "at": "2026-10-26T21:52:58.199013800+08:00",
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "name": "room_alignment",
+      "at": "2026-10-26T21:52:58.199343100+08:00",
+      "ms": 11,
+      "ok": true
+    },
+    {
+      "name": "side_actions",
+      "at": "2026-10-26T21:52:58.210471400+08:00",
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "name": "units",
+      "at": "2026-10-26T21:52:58.210478900+08:00",
+      "ms": 57,
+      "ok": true
+    },
+    {
+      "name": "ref0_snapshot",
+      "at": "2026-10-26T21:52:58.267733700+08:00",
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "name": "durable_pending",
+      "at": "2026-10-26T21:52:58.268894500+08:00",
+      "ms": 63,
+      "ok": true
+    },
+    {
+      "name": "task_end",
+      "at": "2026-10-26T21:52:58.332806500+08:00",
+      "ms": 30,
+      "ok": true
+    }
+  ],
+  "changes_total": 1
+}

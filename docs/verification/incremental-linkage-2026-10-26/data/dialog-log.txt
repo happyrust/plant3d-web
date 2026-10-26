@@ -1,0 +1,26 @@
+[2026-10-26T14:03:04.353Z] ws open ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T14:03:16.942Z] tr count 85
+[2026-10-26T14:03:16.944Z] rows with 8000 ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:17.847Z] screenshot 01-dialog-dbnums-8000.png
+[2026-10-26T14:03:18.676Z] execute button text 初始化 / 更新所选（1）
+[2026-10-26T14:03:19.306Z] ws open ws://localhost:9199/api/v1/ws
+[2026-10-26T14:03:24.709Z] api calls after execute ["POST /api/v1/update/execute 202","GET /api/v1/tasks/db-20261026-220319-000051?project=AvevaMarineSample 200","GET /api/v1/tasks/db-20261026-220319-000051?project=AvevaMarineSample 200","GET /api/v1/tasks/db-20261026-220319-000051?project=AvevaMarineSample 200","GET /api/v1/tasks/db-20261026-220319-000051?project=AvevaMarineSample 200","GET /api/v1/dbnums?project=AvevaMarineSample 200","GET /api/v1/dbnums?project=AvevaMarineSample 200"]
+[2026-10-26T14:03:24.709Z] ws urls ["ws://127.0.0.1:3101/?token=<vite-hmr>","ws://localhost:9199/api/v1/ws"]
+[2026-10-26T14:03:24.805Z] screenshot 02-dialog-after-execute.png
+[2026-10-26T14:03:24.806Z] rows with 8000 after execute ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:24.808Z] receipt-ish text ["任务","目录版本核对已随本次执行另起任务（目录库不进数据批次，前移只触发模型面重算引用它的根）：结果见 /health.catalogue_reconcile","上次执行：入队 1 · 最新 17","任务 1"]
+[2026-10-26T14:03:25.024Z] replay-step 733 {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":732,"to_sesno":733,"header_sesno_after":733,"bytes_before":37148672,"bytes_after":37195776,"half":null,"rollback":false,"patched_bytes":3}
+[2026-10-26T14:03:25.062Z] +0.0s dbnums A=732 M=732 F=733 in_sync | dialog rows: ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:29.114Z] +4.1s dbnums A=733 M=732 F=733 lagging | dialog rows: ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:31.142Z] +6.1s dbnums A=733 M=733 F=733 in_sync | dialog rows: ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:37.154Z] after 733: dialog rows (no click) ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:37.233Z] screenshot 03-dialog-after-733-no-click.png
+[2026-10-26T14:03:37.234Z] ws task frames so far 7 ["{\"type\":\"task_started\",\"seq\":4,\"ts\":\"2026-10-26T22:03:27.261924+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"task_id\":\"db-20261026-220327-000052\",\"kind\":\"data_batch\",\"project\":\"AvevaMarineSample\",\"dbnum\":8000","{\"type\":\"task_progress\",\"seq\":5,\"ts\":\"2026-10-26T22:03:27.400374700+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"kind\":\"data_batch_started\",\"dbnum\":8000,\"start_sesno\":733,\"end_sesno\":733}}","{\"type\":\"task_progress\",\"seq\":6,\"ts\":\"2026-10-26T22:03:27.698426+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"kind\":\"data_batch_finished\",\"dbnum\":8000,\"success\":true,\"message\":null}}","{\"type\":\"task_finished\",\"seq\":7,\"ts\":\"2026-10-26T22:03:30.157916500+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"task_id\":\"db-20261026-220327-000052\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample"]
+[2026-10-26T14:03:37.446Z] replay-step 734 {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":733,"to_sesno":734,"header_sesno_after":734,"bytes_before":37195776,"bytes_after":37218304,"half":null,"rollback":false,"patched_bytes":3}
+[2026-10-26T14:03:37.469Z] +0.0s dbnums A=733 M=733 F=734 in_sync | dialog rows: ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:03:59.729Z] +22.3s dbnums A=734 M=734 F=734 in_sync | dialog rows: ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:04:05.736Z] after 734: dialog rows (no click) ["8000 DESI 732/732/732 已同步"]
+[2026-10-26T14:04:05.826Z] screenshot 03-dialog-after-734-no-click.png
+[2026-10-26T14:04:05.826Z] ws task frames so far 13 ["{\"type\":\"task_progress\",\"seq\":11,\"ts\":\"2026-10-26T22:03:57.909161400+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"data_batch_finished\",\"dbnum\":8000,\"success\":true,\"message\":null}}","{\"type\":\"task_progress\",\"seq\":12,\"ts\":\"2026-10-26T22:03:58.189949400+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"model_unit_started\",\"dbnum\":8000,\"root_refno\":\"24384/24776\",\"noun\":\"EQUI\"}}","{\"type\":\"task_progress\",\"seq\":13,\"ts\":\"2026-10-26T22:03:58.190028500+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"model_unit_finished\",\"dbnum\":8000,\"root_refno\":\"24384/24776\",\"success\":true,\"message\":n","{\"type\":\"task_finished\",\"seq\":14,\"ts\":\"2026-10-26T22:03:58.282715800+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"task_id\":\"db-20261026-220357-000053\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSampl"]
+[2026-10-26T14:04:08.861Z] after 刷新 click rows ["8000 DESI 734/734/734 已同步"]
+[2026-10-26T14:04:08.941Z] screenshot 04-dialog-after-refresh.png

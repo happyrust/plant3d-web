@@ -1,0 +1,68 @@
+[2026-10-26T13:52:28.432Z] url http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24384_24776&gm_backend_port=9199&dtx_recenter=0
+[2026-10-26T13:52:28.899Z] health {"version":"0.1.44","build_id":"0.1.44+g83aa3c250088.1793015921.dirty","started_at":"2026-10-26T21:13:26.081736300+08:00"}
+[2026-10-26T13:52:28.983Z] ws open ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T13:52:29.775Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:52:29.791Z] console.warning [useUserStore] Failed to load users, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetLi
+[2026-10-26T13:52:30.026Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:52:30.033Z] console.warning [useUserStore] Failed to load reviewers, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userG
+[2026-10-26T13:52:30.074Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:52:30.136Z] console.warning [useUserStore] Failed to load current user: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetCurrent (http://127.0.0.
+[2026-10-26T13:52:30.210Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:52:32.226Z] before: refno loaded {"layer":true,"ids":1,"boxes":1,"total":1,"sample":["o:24384_24777:0"],"min":[-3.00139111328125,7.6965732421875,1.125],"max":[-2.64114892578125,8.3113466796875,1.675]}
+[2026-10-26T13:52:32.234Z] before dbnums A=731 M=731 F=731 verdict=in_sync source=database
+[2026-10-26T13:52:32.234Z] before records {"status":200,"source":"rocksdb+memory-overlay","count":1,"refno":"24384_24777","world_aabb":{"mins":[-3001.39111328125,7696.5732421875,1125],"maxs":[-2641.14892578125,8311.3466796875,1675]},"translation":[-2821.27001953125,8003.9599609375,1400]}
+[2026-10-26T13:52:35.347Z] screenshot 01-before-scene.png
+[2026-10-26T13:52:39.364Z] before POS POS -2821.27001953125, 8003.9599609375, 1400
+[2026-10-26T13:52:43.925Z] before dialog row (no dialog row: locator.innerText: Timeout 3000ms exceeded.
+Call log:
+[2m  - waiting for locato)
+[2026-10-26T13:52:44.010Z] screenshot 02-before-dialog.png
+[2026-10-26T13:52:44.207Z] replay-step {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":731,"to_sesno":732,"header_sesno_after":732,"bytes_before":37126144,"bytes_after":37148672,"half":null,"rollback":false,"patched_bytes":4}
+[2026-10-26T13:52:48.761Z] +4.6s dbnums A=731 M=731 F=732 verdict=in_sync source=database
+[2026-10-26T13:53:02.398Z] +18.2s dbnums A=731 M=731 F=732 verdict=in_sync source=memory
+[2026-10-26T13:53:09.971Z] +25.8s dbnums A=732 M=732 F=732 verdict=in_sync source=database
+[2026-10-26T13:53:09.971Z] after step in_sync true in 25.8 s
+[2026-10-26T13:53:22.525Z] dialog row (no user action) (no dialog row: locator.innerText: Timeout 3000ms exceeded.
+Call log:
+[2m  - waiting for locato)
+[2026-10-26T13:53:22.611Z] screenshot 03-after-step-dialog-no-action.png
+[2026-10-26T13:53:30.203Z] dialog row (after 刷新 click) (no dialog row: locator.innerText: Timeout 3000ms exceeded.
+Call log:
+[2m  - waiting for locato)
+[2026-10-26T13:53:30.288Z] screenshot 04-after-step-dialog-refreshed.png
+[2026-10-26T13:53:30.290Z] POS without reload POS -2821.27001953125, 8003.9599609375, 1400
+[2026-10-26T13:53:30.291Z] box without reload {"layer":true,"ids":1,"boxes":1,"total":1,"sample":["o:24384_24777:0"],"min":[-3.00139111328125,7.6965732421875,1.125],"max":[-2.64114892578125,8.3113466796875,1.675]}
+[2026-10-26T13:53:30.297Z] after records {"status":200,"source":"rocksdb+memory-overlay","count":1,"refno":"24384_24777","world_aabb":{"mins":[-3001.39111328125,7696.5732421875,3125],"maxs":[-2641.14892578125,8311.3466796875,3675]},"translation":[-2821.27001953125,8003.9599609375,3400]}
+[2026-10-26T13:53:31.895Z] screenshot 05-after-step-scene-no-reload.png
+[2026-10-26T13:53:31.907Z] ws close ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T13:53:31.983Z] ws open ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T13:53:32.481Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:53:32.490Z] console.warning [useUserStore] Failed to load users, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetLi
+[2026-10-26T13:53:32.518Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:53:32.525Z] console.warning [useUserStore] Failed to load reviewers, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userG
+[2026-10-26T13:53:32.554Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:53:32.597Z] console.warning [useUserStore] Failed to load current user: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetCurrent (http://127.0.0.
+[2026-10-26T13:53:32.629Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:53:34.626Z] after-reload: refno loaded {"layer":true,"ids":1,"boxes":1,"total":1,"sample":["o:24384_24777:0"],"min":[-3.00139111328125,7.6965732421875,3.125],"max":[-2.64114892578125,8.3113466796875,3.6750000000000003]}
+[2026-10-26T13:53:37.640Z] POS after reload POS -2821.27001953125, 8003.9599609375, 3400
+[2026-10-26T13:53:40.734Z] screenshot 06-after-reload-scene.png
+[2026-10-26T13:53:40.734Z] shift {"noReload":{"dmin":[0,0,0],"dmax":[0,0,0]},"afterReload":{"dmin":[0,0,2],"dmax":[0,0,2]},"expectedDz":2000}
+[2026-10-26T13:53:40.775Z] task {"task_id":"db-20261026-215257-000050","state":"succeeded","started_at":"2026-10-26T21:52:57.519364+08:00","finished_at":"2026-10-26T21:52:58.363532500+08:00","units_done":1,"total_units":1} {"kinds":["data_batch","transform"],"moved":[1]}

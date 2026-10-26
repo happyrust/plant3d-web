@@ -1,0 +1,97 @@
+[
+  {
+    "t": "2026-10-26T14:03:04.389Z",
+    "url": "ws://127.0.0.1:3101/?token=<vite-hmr>",
+    "recv": "{\"type\":\"connected\"}"
+  },
+  {
+    "t": "2026-10-26T14:03:19.307Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "sent": "{\"type\":\"subscribe\",\"topics\":[\"tasks\"]}"
+  },
+  {
+    "t": "2026-10-26T14:03:19.456Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":1,\"ts\":\"2026-10-26T22:03:19.453895800+08:00\",\"task_id\":\"db-20261026-220319-000051\",\"payload\":{\"kind\":\"data_batch_started\",\"dbnum\":8191,\"start_sesno\":892,\"end_sesno\":893}}"
+  },
+  {
+    "t": "2026-10-26T14:03:19.600Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":2,\"ts\":\"2026-10-26T22:03:19.598215400+08:00\",\"task_id\":\"db-20261026-220319-000051\",\"payload\":{\"kind\":\"data_batch_finished\",\"dbnum\":8191,\"success\":true,\"message\":null}}"
+  },
+  {
+    "t": "2026-10-26T14:03:19.663Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_finished\",\"seq\":3,\"ts\":\"2026-10-26T22:03:19.661139500+08:00\",\"task_id\":\"db-20261026-220319-000051\",\"payload\":{\"task_id\":\"db-20261026-220319-000051\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8191,\"db_type\":\"SYST\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\_runs\\\\plantui-linkage\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\amssys\",\"start_sesno\":892,\"end_sesno\":893,\"start_sesno_time\":\"2026-10-26T14:02:11+00:00\",\"end_sesno_time\":\"2026-10-26T14:02:50+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[892,893],\"merged_sesno_times\":[\"2026-10-26T14:02:11+00:00\",\"2026-10-26T14:02:50+00:00\"],\"changed_elements\":1,\"added_elements\":0,\"modified_elements\":1,\"deleted_elements\":0},\"units\":[],\"warnings\":[\"dbnum=8191: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=1 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=1（ins/mo"
+  },
+  {
+    "t": "2026-10-26T14:03:27.262Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_started\",\"seq\":4,\"ts\":\"2026-10-26T22:03:27.261924+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"task_id\":\"db-20261026-220327-000052\",\"kind\":\"data_batch\",\"project\":\"AvevaMarineSample\",\"dbnum\":8000}}"
+  },
+  {
+    "t": "2026-10-26T14:03:27.401Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":5,\"ts\":\"2026-10-26T22:03:27.400374700+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"kind\":\"data_batch_started\",\"dbnum\":8000,\"start_sesno\":733,\"end_sesno\":733}}"
+  },
+  {
+    "t": "2026-10-26T14:03:27.699Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":6,\"ts\":\"2026-10-26T22:03:27.698426+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"kind\":\"data_batch_finished\",\"dbnum\":8000,\"success\":true,\"message\":null}}"
+  },
+  {
+    "t": "2026-10-26T14:03:30.158Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_finished\",\"seq\":7,\"ts\":\"2026-10-26T22:03:30.157916500+08:00\",\"task_id\":\"db-20261026-220327-000052\",\"payload\":{\"task_id\":\"db-20261026-220327-000052\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\_runs\\\\plantui-linkage\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":733,\"end_sesno\":733,\"start_sesno_time\":\"2026-10-25T21:10:55+00:00\",\"end_sesno_time\":\"2026-10-25T21:10:55+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[733],\"merged_sesno_times\":[\"2026-10-25T21:10:55+00:00\"],\"changed_elements\":1,\"added_elements\":0,\"modified_elements\":1,\"deleted_elements\":0},\"units\":[],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=1 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=1（ins/mod/del=0/1/0）基会话=732 读页=740"
+  },
+  {
+    "t": "2026-10-26T14:03:34.380Z",
+    "url": "ws://127.0.0.1:3101/?token=<vite-hmr>",
+    "sent": "{\"type\":\"ping\"}"
+  },
+  {
+    "t": "2026-10-26T14:03:44.320Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "sent": "{\"type\":\"ping\"}"
+  },
+  {
+    "t": "2026-10-26T14:03:44.320Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"pong\",\"seq\":8,\"ts\":\"2026-10-26T22:03:44.320462700+08:00\",\"task_id\":null,\"payload\":{}}"
+  },
+  {
+    "t": "2026-10-26T14:03:57.504Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_started\",\"seq\":9,\"ts\":\"2026-10-26T22:03:57.503599200+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"task_id\":\"db-20261026-220357-000053\",\"kind\":\"data_batch\",\"project\":\"AvevaMarineSample\",\"dbnum\":8000}}"
+  },
+  {
+    "t": "2026-10-26T14:03:57.658Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":10,\"ts\":\"2026-10-26T22:03:57.658264500+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"data_batch_started\",\"dbnum\":8000,\"start_sesno\":734,\"end_sesno\":734}}"
+  },
+  {
+    "t": "2026-10-26T14:03:57.909Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":11,\"ts\":\"2026-10-26T22:03:57.909161400+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"data_batch_finished\",\"dbnum\":8000,\"success\":true,\"message\":null}}"
+  },
+  {
+    "t": "2026-10-26T14:03:58.190Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":12,\"ts\":\"2026-10-26T22:03:58.189949400+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"model_unit_started\",\"dbnum\":8000,\"root_refno\":\"24384/24776\",\"noun\":\"EQUI\"}}"
+  },
+  {
+    "t": "2026-10-26T14:03:58.190Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_progress\",\"seq\":13,\"ts\":\"2026-10-26T22:03:58.190028500+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"kind\":\"model_unit_finished\",\"dbnum\":8000,\"root_refno\":\"24384/24776\",\"success\":true,\"message\":null}}"
+  },
+  {
+    "t": "2026-10-26T14:03:58.283Z",
+    "url": "ws://localhost:9199/api/v1/ws",
+    "recv": "{\"type\":\"task_finished\",\"seq\":14,\"ts\":\"2026-10-26T22:03:58.282715800+08:00\",\"task_id\":\"db-20261026-220357-000053\",\"payload\":{\"task_id\":\"db-20261026-220357-000053\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\_runs\\\\plantui-linkage\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":734,\"end_sesno\":734,\"start_sesno_time\":\"2026-10-25T21:10:58+00:00\",\"end_sesno_time\":\"2026-10-25T21:10:58+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[734],\"merged_sesno_times\":[\"2026-10-25T21:10:58+00:00\"],\"changed_elements\":1,\"added_elements\":0,\"modified_elements\":1,\"deleted_elements\":0},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/24776\",\"noun\":\"EQUI\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"transform\",\"transform_fallback_rea"
+  },
+  {
+    "t": "2026-10-26T14:04:04.383Z",
+    "url": "ws://127.0.0.1:3101/?token=<vite-hmr>",
+    "sent": "{\"type\":\"ping\"}"
+  }
+]

@@ -1,0 +1,63 @@
+[2026-10-26T13:17:04.205Z] url http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24384_24776&gm_backend_port=9199
+[2026-10-26T13:17:04.639Z] health {"version":"0.1.44","build_id":"0.1.44+g83aa3c250088.1793015921.dirty","started_at":"2026-10-26T21:13:26.081736300+08:00"}
+[2026-10-26T13:17:04.722Z] ws open ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T13:17:05.481Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:17:05.493Z] console.warning [useUserStore] Failed to load users, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetLi
+[2026-10-26T13:17:05.704Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:17:05.713Z] console.warning [useUserStore] Failed to load reviewers, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userG
+[2026-10-26T13:17:05.774Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:17:05.915Z] console.warning [useUserStore] Failed to load current user: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetCurrent (http://127.0.0.
+[2026-10-26T13:17:05.928Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:21:06.936Z] before: refno NOT loaded within 240000 ms {"layer":true,"ids":0,"boxes":0,"total":1,"min":[null,null,null],"max":[null,null,null]}
+[2026-10-26T13:21:06.953Z] before dbnums A=725 M=725 F=725 verdict=in_sync source=database
+[2026-10-26T13:21:06.953Z] before records {"status":200,"source":"model-database","count":1,"withAabb":0,"min":[null,null,null],"max":[null,null,null],"snapshot_epoch":0,"sample_keys":["refno","old_refno","owner","world_aabb","world_trans","insts","has_neg","generic","pts","date"]}
+[2026-10-26T13:21:10.069Z] screenshot 01-before-scene.png
+[2026-10-26T13:21:17.076Z] before dialog row (no dialog row: locator.innerText: Timeout 3000ms exceeded.
+Call log:
+[2m  - waiting for locato)
+[2026-10-26T13:21:17.171Z] screenshot 02-before-dialog.png
+[2026-10-26T13:21:17.360Z] replay-step {"work":"D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001","from_sesno":725,"to_sesno":727,"header_sesno_after":727,"bytes_before":36904960,"bytes_after":36968448,"half":null,"rollback":false,"patched_bytes":4}
+[2026-10-26T13:21:20.397Z] +3.0s dbnums A=725 M=725 F=727 verdict=in_sync source=database
+[2026-10-26T13:21:32.590Z] +15.2s dbnums A=727 M=727 F=727 verdict=in_sync source=database
+[2026-10-26T13:21:32.590Z] after step in_sync true in 15.2 s
+[2026-10-26T13:21:43.602Z] dialog row (no user action) (no dialog row: locator.innerText: Timeout 3000ms exceeded.
+Call log:
+[2m  - waiting for locato)
+[2026-10-26T13:21:43.691Z] screenshot 03-after-step-dialog-no-action.png
+[2026-10-26T13:21:46.704Z] no 刷新 button clickable: locator.click: Timeout 3000ms exceeded.
+Call log:
+[2m  - waiting for locator('[role="dialog"], .v-dialog, .v-overlay--a
+[2026-10-26T13:21:46.705Z] box without reload {"layer":true,"ids":0,"boxes":0,"total":1,"min":[null,null,null],"max":[null,null,null]}
+[2026-10-26T13:21:46.710Z] after records {"status":200,"source":"rocksdb+memory-overlay","count":1,"withAabb":0,"min":[null,null,null],"max":[null,null,null],"snapshot_epoch":0,"sample_keys":["refno","old_refno","owner","world_aabb","world_trans","insts","has_neg","generic","pts","date"]}
+[2026-10-26T13:21:48.318Z] screenshot 05-after-step-scene-no-reload.png
+[2026-10-26T13:21:48.331Z] ws close ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T13:21:48.418Z] ws open ws://127.0.0.1:3101/?token=<vite-hmr>
+[2026-10-26T13:21:48.886Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:21:48.894Z] console.warning [useUserStore] Failed to load users, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetLi
+[2026-10-26T13:21:48.932Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:21:48.972Z] console.warning [useUserStore] Failed to load reviewers, using development mock data: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userG
+[2026-10-26T13:21:48.992Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:21:49.040Z] console.warning [useUserStore] Failed to load current user: ReviewApiHttpError: Missing or invalid Authorization header
+    at buildReviewApiHttpError (http://127.0.0.1:3101/src/api/reviewApi.ts:176:10)
+    at fetchJson (http://127.0.0.1:3101/src/api/reviewApi.ts:106:15)
+    at async userGetCurrent (http://127.0.0.
+[2026-10-26T13:21:49.060Z] console.error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2026-10-26T13:25:50.057Z] after-reload: refno NOT loaded within 240000 ms {"layer":true,"ids":0,"boxes":0,"total":1,"min":[null,null,null],"max":[null,null,null]}
+[2026-10-26T13:25:53.159Z] screenshot 06-after-reload-scene.png
+[2026-10-26T13:25:53.159Z] shift {"noReload":null,"afterReload":null,"expectedDz":500}
+[2026-10-26T13:25:53.178Z] task {"task_id":"db-20261026-212127-000047","state":"succeeded","started_at":"2026-10-26T21:21:27.487738300+08:00","finished_at":"2026-10-26T21:21:28.604523300+08:00","units_done":1,"total_units":1} {"kinds":["data_batch","regen"],"moved":[1]}

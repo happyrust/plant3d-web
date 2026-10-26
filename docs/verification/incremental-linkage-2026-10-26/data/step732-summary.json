@@ -1,0 +1,445 @@
+{
+  "url": "http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24384_24776&gm_backend_port=9199&dtx_recenter=0",
+  "stepTo": 732,
+  "refno": "24384_24776",
+  "health": {
+    "version": "0.1.44",
+    "build_id": "0.1.44+g83aa3c250088.1793015921.dirty",
+    "started_at": "2026-10-26T21:13:26.081736300+08:00"
+  },
+  "before": {
+    "row": {
+      "dbnum": 8000,
+      "db_type": "DESI",
+      "file_name": "ams8000_0001",
+      "file_path": "D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_size": 37126144,
+      "file_latest_sesno": 731,
+      "not_in_project": false,
+      "ref0s": [
+        16192,
+        24384,
+        32576
+      ],
+      "applied_sesno": 731,
+      "initialized": true,
+      "model_sesno": 731,
+      "model_sesno_time": "2026-10-25T13:48:52+00:00",
+      "model_caught_up_at": "2026-10-26T13:49:58.175591500Z",
+      "model_verdict": "in_sync",
+      "model_verdict_reason": null,
+      "model_caught_up_roots": 953,
+      "model_chasing_roots": 0,
+      "model_dead_roots": 0,
+      "model_lazy_roots": 0,
+      "model_source": "database",
+      "model_source_reason": null
+    },
+    "box": {
+      "layer": true,
+      "ids": 1,
+      "boxes": 1,
+      "total": 1,
+      "sample": [
+        "o:24384_24777:0"
+      ],
+      "min": [
+        -3.00139111328125,
+        7.6965732421875,
+        1.125
+      ],
+      "max": [
+        -2.64114892578125,
+        8.3113466796875,
+        1.675
+      ]
+    },
+    "records": {
+      "status": 200,
+      "source": "rocksdb+memory-overlay",
+      "count": 1,
+      "refno": "24384_24777",
+      "world_aabb": {
+        "mins": [
+          -3001.39111328125,
+          7696.5732421875,
+          1125
+        ],
+        "maxs": [
+          -2641.14892578125,
+          8311.3466796875,
+          1675
+        ]
+      },
+      "translation": [
+        -2821.27001953125,
+        8003.9599609375,
+        1400
+      ]
+    },
+    "pos": "POS -2821.27001953125, 8003.9599609375, 1400",
+    "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+  },
+  "replayStep": "{\"work\":\"D:\\\\work\\\\plant-code\\\\old\\\\_runs\\\\plantui-linkage\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"from_sesno\":731,\"to_sesno\":732,\"header_sesno_after\":732,\"bytes_before\":37126144,\"bytes_after\":37148672,\"half\":null,\"rollback\":false,\"patched_bytes\":4}",
+  "afterStep": {
+    "inSync": true,
+    "seconds": "25.8",
+    "row": {
+      "dbnum": 8000,
+      "db_type": "DESI",
+      "file_name": "ams8000_0001",
+      "file_path": "D:\\work\\plant-code\\old\\_runs\\plantui-linkage\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_size": 37148672,
+      "file_latest_sesno": 732,
+      "not_in_project": false,
+      "ref0s": [
+        16192,
+        24384,
+        32576
+      ],
+      "applied_sesno": 732,
+      "initialized": true,
+      "model_sesno": 732,
+      "model_sesno_time": "2026-10-25T21:10:50+00:00",
+      "model_caught_up_at": "2026-10-26T13:52:58.333908Z",
+      "model_verdict": "in_sync",
+      "model_verdict_reason": null,
+      "model_caught_up_roots": 953,
+      "model_chasing_roots": 0,
+      "model_dead_roots": 0,
+      "model_lazy_roots": 0,
+      "model_source": "database",
+      "model_source_reason": null
+    },
+    "timeline": [
+      {
+        "t": "0.0",
+        "wm": "A=731 M=731 F=732 verdict=in_sync source=database",
+        "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+      },
+      {
+        "t": "13.6",
+        "wm": "A=731 M=731 F=732 verdict=in_sync source=memory",
+        "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+      },
+      {
+        "t": "21.2",
+        "wm": "A=732 M=732 F=732 verdict=in_sync source=database",
+        "dialogRow": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)"
+      }
+    ],
+    "dialogRowNoAction": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)",
+    "dialogRowAfterRefresh": "(no dialog row: locator.innerText: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locato)",
+    "posNoReload": "POS -2821.27001953125, 8003.9599609375, 1400",
+    "boxNoReload": {
+      "layer": true,
+      "ids": 1,
+      "boxes": 1,
+      "total": 1,
+      "sample": [
+        "o:24384_24777:0"
+      ],
+      "min": [
+        -3.00139111328125,
+        7.6965732421875,
+        1.125
+      ],
+      "max": [
+        -2.64114892578125,
+        8.3113466796875,
+        1.675
+      ]
+    },
+    "records": {
+      "status": 200,
+      "source": "rocksdb+memory-overlay",
+      "count": 1,
+      "refno": "24384_24777",
+      "world_aabb": {
+        "mins": [
+          -3001.39111328125,
+          7696.5732421875,
+          3125
+        ],
+        "maxs": [
+          -2641.14892578125,
+          8311.3466796875,
+          3675
+        ]
+      },
+      "translation": [
+        -2821.27001953125,
+        8003.9599609375,
+        3400
+      ]
+    }
+  },
+  "afterReload": {
+    "box": {
+      "layer": true,
+      "ids": 1,
+      "boxes": 1,
+      "total": 1,
+      "sample": [
+        "o:24384_24777:0"
+      ],
+      "min": [
+        -3.00139111328125,
+        7.6965732421875,
+        3.125
+      ],
+      "max": [
+        -2.64114892578125,
+        8.3113466796875,
+        3.6750000000000003
+      ]
+    },
+    "pos": "POS -2821.27001953125, 8003.9599609375, 3400"
+  },
+  "shift": {
+    "noReload": {
+      "dmin": [
+        0,
+        0,
+        0
+      ],
+      "dmax": [
+        0,
+        0,
+        0
+      ]
+    },
+    "afterReload": {
+      "dmin": [
+        0,
+        0,
+        2
+      ],
+      "dmax": [
+        0,
+        0,
+        2
+      ]
+    },
+    "expectedDz": 2000
+  },
+  "task": {
+    "task_id": "db-20261026-215257-000050",
+    "state": "succeeded",
+    "started_at": "2026-10-26T21:52:57.519364+08:00",
+    "finished_at": "2026-10-26T21:52:58.363532500+08:00",
+    "units_done": 1,
+    "total_units": 1
+  },
+  "taskHints": {
+    "kinds": [
+      "data_batch",
+      "transform"
+    ],
+    "moved": [
+      1
+    ]
+  },
+  "ws": {
+    "frames": 5,
+    "sample": [
+      {
+        "t": "2026-10-26T13:52:29.032Z",
+        "recv": "{\"type\":\"connected\"}"
+      },
+      {
+        "t": "2026-10-26T13:52:58.985Z",
+        "sent": "{\"type\":\"ping\"}"
+      },
+      {
+        "t": "2026-10-26T13:53:15.440Z",
+        "recv": "{\"type\":\"custom\",\"event\":\"file-changed\",\"data\":{\"file\":\"D:/work/plant-code/old/plant3d-web/.tgrep/files-extra.bin\"}}"
+      },
+      {
+        "t": "2026-10-26T13:53:28.986Z",
+        "sent": "{\"type\":\"ping\"}"
+      },
+      {
+        "t": "2026-10-26T13:53:32.001Z",
+        "recv": "{\"type\":\"connected\"}"
+      }
+    ]
+  },
+  "apiCallsAfterStep": [
+    {
+      "t": "2026-10-26T13:53:22.973Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums?project=AvevaMarineSample",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:29.562Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.484Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.484Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.523Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.554Z",
+      "m": "GET",
+      "u": "/api/v1/tree/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.554Z",
+      "m": "POST",
+      "u": "/api/v1/model/records",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.588Z",
+      "m": "POST",
+      "u": "/api/v1/element/attributes",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.629Z",
+      "m": "GET",
+      "u": "/api/v1/tree/ancestors?refno=24384%2F24776",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.653Z",
+      "m": "GET",
+      "u": "/api/v1/meshes/12296242654610097853.mesh",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.655Z",
+      "m": "GET",
+      "u": "/api/v1/tree/children?refno=24384%2F22399",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.668Z",
+      "m": "GET",
+      "u": "/api/v1/health",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.685Z",
+      "m": "GET",
+      "u": "/api/v1/tree/children?refno=24384%2F24775",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.710Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/6003/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.789Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/1112/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.832Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7009/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.883Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7332/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.937Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7999/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.941Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7330/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:32.994Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7321/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.006Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7331/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.056Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7353/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.108Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7329/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.164Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7352/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.173Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7324/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.239Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7354/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.293Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7350/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.382Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7997/model/roots",
+      "s": 200
+    },
+    {
+      "t": "2026-10-26T13:53:33.476Z",
+      "m": "GET",
+      "u": "/api/v1/dbnums/7327/model/roots",
+      "s": 200
+    }
+  ],
+  "apiCallsTotal": 57
+}
