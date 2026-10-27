@@ -10,6 +10,7 @@ import type { CloudOverlayEl, CloudRenderStats } from './cloudRegion';
 import type { PickRefnoCandidate } from './pickCandidates';
 import type { AnnotationLeaderVisual, DragRect, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './types';
 import type { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import type { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import type { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import type { useReviewStore } from '@/composables/useReviewStore';
 import type { useToolStore } from '@/composables/useToolStore';
@@ -87,6 +88,8 @@ export type DtxToolsContext = {
   compatViewerRef: Ref<DtxCompatViewer | null>;
   store: ReturnType<typeof useToolStore>;
   requestRender: (() => void) | null;
+  /** 只画测量等自己的东西、不渲染 store 里的批注 overlay（嵌入小视口用）。装配选项，只读 */
+  suppressStoreOverlays: boolean;
   unitSettings: ReturnType<typeof useUnitSettingsStore>;
   clearanceStore: ReturnType<typeof useClearanceStore>;
   /** 审查任务 / 当前用户（批注处理页路由、自动截图回执用）。只读 */
@@ -94,6 +97,8 @@ export type DtxToolsContext = {
   userStore: ReturnType<typeof useUserStore>;
   /** 批注样式（云线画法 bbox3d / screen2d、云线外观等）。只读 */
   annotationStyleStore: ReturnType<typeof useAnnotationStyleStore>;
+  /** ADR-0050 批注关联的失效解析表（missing / stale → 视口降级）。只读 */
+  bindingResolve: ReturnType<typeof useAnnotationBindingResolve>;
   /** 交互就绪（图层 + 选择器 + overlay 容器都在）。所有者：组装器 */
   ready: ComputedRef<boolean>;
   /** pick_refno 候选轮换。所有者：pickCandidateController；测量只读 */
