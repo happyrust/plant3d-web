@@ -8,27 +8,20 @@ import { Vector3 } from 'three';
 import { resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction } from '../annotationRecords';
 import { overlayToWorld, vec3ToTuple, worldToOverlayPoint } from '../geometry';
 import { updateLeaderGeometry } from '../leaderVisual';
-import { resolveAnnotationLabelClickAction } from '../overlayHtml';
 
 import type { DtxToolsContext } from '../context';
-import type { AnnotationLabelClickState, AnnotationOverlayKind, InlineTextAnnotationDraft, TextAnnotationMarkerClickResult } from '../types';
-import type { AnnotationRecord, CloudAnnotationRecord, ObbAnnotationRecord, RectAnnotationRecord } from '@/composables/useToolStore';
+import type { AnnotationOverlayKind, InlineTextAnnotationDraft, TextAnnotationMarkerClickResult } from '../types';
+import type { AnnotationRecord } from '@/composables/useToolStore';
 import type { CloudLabelLayoutV1 } from '@/review/domain/cloudRegion';
 
-import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
-import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
-import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
-import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { DEFAULT_LABEL_PREFERENCE, labelOffsetFromTopLeft } from '@/review/domain/annotationProjection/labelLayout';
-import { UserRole } from '@/types/auth';
 
 export type AnnotationInteractionHooks = {
   updateOverlayPositions: () => void;
 };
 
 export function createAnnotationInteraction(ctx: DtxToolsContext, hooks: AnnotationInteractionHooks) {
-  let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
   let textAnnotationMarkerClickTimer: ReturnType<typeof setTimeout> | null = null;
   const inlineTextAnnotationDrafts = new Map<string, InlineTextAnnotationDraft>();
 
@@ -37,64 +30,6 @@ export function createAnnotationInteraction(ctx: DtxToolsContext, hooks: Annotat
     ctx.store.activeCloudAnnotationId.value = kind === 'cloud' ? id : null;
     ctx.store.activeRectAnnotationId.value = kind === 'rect' ? id : null;
     ctx.store.activeObbAnnotationId.value = kind === 'obb' ? id : null;
-  }
-
-  function getAnnotationRecordByKind(
-    kind: 'text' | 'cloud' | 'rect' | 'obb',
-    annotationId: string,
-  ): AnnotationRecord | CloudAnnotationRecord | RectAnnotationRecord | ObbAnnotationRecord | null {
-    if (kind === 'text') {
-      return ctx.store.annotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    if (kind === 'cloud') {
-      return ctx.store.cloudAnnotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    if (kind === 'rect') {
-      return ctx.store.rectAnnotations.value.find((item) => item.id === annotationId) ?? null;
-    }
-    return ctx.store.obbAnnotations.value.find((item) => item.id === annotationId) ?? null;
-  }
-
-  function resolveCurrentFormId(): string | undefined {
-    return normalizeOptionalString(ctx.store.activeAnnotationContext.value?.record.formId)
-      ?? normalizeOptionalString(ctx.reviewStore.currentTask.value?.formId);
-  }
-
-  function openAnnotationProcessingPage(kind: AnnotationOverlayKind, id: string) {
-    commitInlineAnnotationDraft(kind, id);
-    const currentTask = ctx.reviewStore.currentTask.value;
-    const currentUser = ctx.userStore.currentUser.value;
-    // SJ 经 PMS 外部流程打开带 form_id 的单据时，统一在 review 面板里处理批注，
-    // 不再路由到设计侧 DCH。详见 .plannotator/plan-sj-reject-ui.md §5。
-    const externalSjFormFocused = isExternalSjFormFocusedMode(readPersistedEmbedModeParams());
-    const shouldUseDesignerPanel = !externalSjFormFocused && (
-      currentUser?.role === UserRole.DESIGNER
-      || (currentTask ? isCanonicalReturnedTask(currentTask) : false)
-    );
-    const formId = normalizeOptionalString(getAnnotationRecordByKind(kind, id)?.formId) ?? resolveCurrentFormId();
-    activateAnnotation(kind, id);
-    setAnnotationProcessingEntryTarget({
-      annotationId: id,
-      annotationType: kind,
-      formId: formId ?? null,
-    });
-    ensurePanelAndActivate(shouldUseDesignerPanel ? 'designerCommentHandling' : 'review');
-  }
-
-  function openAnnotationEditor(kind: AnnotationOverlayKind, id: string) {
-    if (kind === 'text') {
-      focusInlineAnnotationEditor('text', id);
-      return;
-    }
-    if (kind === 'cloud') {
-      focusInlineAnnotationEditor('cloud', id);
-      return;
-    }
-    if (kind === 'rect') {
-      focusInlineAnnotationEditor('rect', id);
-      return;
-    }
-    focusInlineAnnotationEditor('obb', id);
   }
 
   function getInlineAnnotationLabelKey(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string): string {
@@ -171,16 +106,6 @@ export function createAnnotationInteraction(ctx: DtxToolsContext, hooks: Annotat
       titleInput.select();
     }
     clearPendingInlineAnnotationEdit(kind, annotationId);
-  }
-
-  function handleAnnotationOverlayClick(kind: AnnotationOverlayKind, id: string) {
-    const result = resolveAnnotationLabelClickAction(lastAnnotationLabelClick, kind, id, Date.now());
-    lastAnnotationLabelClick = result.nextState;
-    if (result.action === 'edit') {
-      openAnnotationEditor(kind, id);
-      return;
-    }
-    activateAnnotation(kind, id);
   }
 
   function clearTextAnnotationMarkerClickTimer() {
@@ -570,9 +495,6 @@ export function createAnnotationInteraction(ctx: DtxToolsContext, hooks: Annotat
 
   return {
     activateAnnotation,
-    openAnnotationProcessingPage,
-    openAnnotationEditor,
-    handleAnnotationOverlayClick,
     setInlineAnnotationDraft,
     getInlineTextAnnotationDraft,
     pruneInlineTextAnnotationDrafts,

@@ -158,11 +158,6 @@ src/components/tools/ToolManagerPanel.import.test.ts|TS7053|Element implicitly h
 src/components/ui/Button.vue|TS2322|Type 'unknown' is not assignable to type 'string | undefined'.
 src/components/ui/Dialog.vue|TS2339|Property '__dialogScrollLockTestReset__' does not exist on type 'Window & typeof globalThis'.
 src/composables/dtxTools/cloudGeometry.ts|TS2345|Argument of type '{ x?: number | undefined; y?: number | undefined; }' is not assignable to parameter of type 'CloudPoint2D'.
-src/composables/dtxTools/controllers/annotationInteraction.ts|TS2304|Cannot find name 'normalizeOptionalString'.
-src/composables/dtxTools/controllers/annotationInteraction.ts|TS2304|Cannot find name 'normalizeOptionalString'.
-src/composables/dtxTools/controllers/annotationInteraction.ts|TS2304|Cannot find name 'normalizeOptionalString'.
-src/composables/dtxTools/controllers/annotationInteraction.ts|TS2339|Property 'formId' does not exist on type 'AnnotationRecord | ObbAnnotationRecord | CloudAnnotationRecord | RectAnnotationRecord'.
-src/composables/dtxTools/controllers/annotationInteraction.ts|TS2339|Property 'formId' does not exist on type 'AnyAnnotationRecord'.
 src/composables/dtxTools/controllers/measureController.ts|TS2322|Type 'number | undefined' is not assignable to type 'number'.
 src/composables/dtxTools/controllers/measureController.ts|TS2322|Type 'number | undefined' is not assignable to type 'number'.
 src/composables/dtxTools/controllers/measureController.ts|TS2322|Type 'number | undefined' is not assignable to type 'number'.

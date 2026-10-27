@@ -16,7 +16,6 @@ import type { useReviewStore } from '@/composables/useReviewStore';
 import type { useSelectionStore } from '@/composables/useSelectionStore';
 import type { useToolStore } from '@/composables/useToolStore';
 import type { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
-import type { useUserStore } from '@/composables/useUserStore';
 import type { PinCluster } from '@/review/domain/annotationProjection/cluster';
 import type { ArrayVersionTracker, ValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
 import type { CloudInspectionMode } from '@/review/domain/annotationProjection/inspection';
@@ -95,9 +94,8 @@ export type DtxToolsContext = {
   suppressStoreOverlays: boolean;
   unitSettings: ReturnType<typeof useUnitSettingsStore>;
   clearanceStore: ReturnType<typeof useClearanceStore>;
-  /** 审查任务 / 当前用户（批注处理页路由、自动截图回执用）。只读 */
+  /** 审查任务（云线自动截图回执按当前任务挂）。只读 */
   reviewStore: ReturnType<typeof useReviewStore>;
-  userStore: ReturnType<typeof useUserStore>;
   /** 批注样式（云线画法 bbox3d / screen2d、云线外观等）。只读 */
   annotationStyleStore: ReturnType<typeof useAnnotationStyleStore>;
   /** ADR-0050 批注关联的失效解析表（missing / stale → 视口降级）。只读 */

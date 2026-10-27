@@ -31,7 +31,6 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
-import { useUserStore } from '@/composables/useUserStore';
 import { createArrayVersionTracker, createValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
 import { type CloudLodLevel } from '@/review/domain/annotationProjection/lod';
 
@@ -51,7 +50,6 @@ export function useDtxTools(options: {
 
   const selectionStore = useSelectionStore();
   const reviewStore = useReviewStore();
-  const userStore = useUserStore();
   const unitSettings = useUnitSettingsStore();
   const clearanceStore = useClearanceStore();
   const annotationStyleStore = useAnnotationStyleStore();
@@ -159,7 +157,6 @@ export function useDtxTools(options: {
     unitSettings,
     clearanceStore,
     reviewStore,
-    userStore,
     annotationStyleStore,
     bindingResolve,
     ready,
