@@ -41,7 +41,7 @@ describe('useAnnotationStyleStore', () => {
 
   it('更新样式后应持久化，并驱动 buildAnnotationLeaderStyle 读取最新值', async () => {
     const { useAnnotationStyleStore } = await import('./useAnnotationStyleStore');
-    const { buildAnnotationLeaderStyle } = await import('./useDtxTools');
+    const { buildAnnotationLeaderStyle } = await import('./dtxTools/leaderVisual');
 
     const store = useAnnotationStyleStore();
     store.updateStyle('text', {

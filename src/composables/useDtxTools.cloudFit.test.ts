@@ -2,12 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PerspectiveCamera, Vector3 } from 'three';
 
-import {
-  CLOUD_FIT_PADDING_PX,
-  buildCloudBillboardPolyline,
-  cloudWavesPerEdgeForSizePx,
-  computeFittedCloudRectFromCorners,
-} from './useDtxTools';
+import { CLOUD_FIT_PADDING_PX, buildCloudBillboardPolyline, cloudWavesPerEdgeForSizePx, computeFittedCloudRectFromCorners } from './dtxTools/cloudGeometry';
 
 describe('computeFittedCloudRectFromCorners', () => {
   it('对角点求 2D 外接矩形并向外扩 padding', () => {

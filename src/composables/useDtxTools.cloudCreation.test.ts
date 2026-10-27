@@ -21,7 +21,8 @@ vi.mock('@/composables/useSelectionStore', () => ({
   }),
 }));
 
-import { CLOUD_TARGET_BBOX_TTL_MS, useDtxTools } from './useDtxTools';
+import { CLOUD_TARGET_BBOX_TTL_MS } from './dtxTools/cloudGeometry';
+import { useDtxTools } from './useDtxTools';
 import { useToolStore, type CloudAnnotationRecord } from './useToolStore';
 
 import { DTXLayer } from '@/utils/three/dtx';

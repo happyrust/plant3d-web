@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  choosePipeMeasureBetterSeed,
-  collectOrderedPipeReferencePointSeeds,
-} from './useDtxTools';
+import { choosePipeMeasureBetterSeed, collectOrderedPipeReferencePointSeeds } from './dtxTools/pipeMeasureMath';
 
 describe('useDtxTools pipe measure helpers', () => {
   it('参考点顺序应为 arrive/leave -> refnoPosition -> aabbCenter', () => {

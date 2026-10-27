@@ -24,7 +24,7 @@ import { DTXLayer } from '@/utils/three/dtx';
 
 /**
  * `useDtxTools()` 的返回形状与模块的运行时导出（拆分计划 docs/plans/2026-10-26-usedtxtools-split-plan.md 第 0 步）：
- * 拆分期间两份清单都必须一字不差——ViewerPanel / useViewerContext / 12 个测试文件靠它们进来。
+ * 拆分完成后（第 10 步）本模块只导出 useDtxTools：纯函数和类型由测试直接从 dtxTools/* 导入，不再经这里转导；返回形状仍是 ViewerPanel / useViewerContext 与各测试的契约。
  * 故意改 API 时连同调用方一起改这里。
  */
 const RETURN_KEYS = [
@@ -42,19 +42,7 @@ const RETURN_KEYS = [
   'updateOverlayPositions',
 ];
 
-const MODULE_EXPORTS = [
-  'CLOUD_FIT_PADDING_PX', 'CLOUD_REGION_MAX_BOXES', 'CLOUD_TARGET_BBOX_TTL_MS', 'buildAnnotationLabelHtml',
-  'buildAnnotationLabelStyleText', 'buildAnnotationLeaderStyle', 'buildCloudBillboardPolyline', 'buildInlineAnnotationCardHtml',
-  'buildMembersRegionV1', 'buildPickRefnoCandidates', 'buildPickTubeCandidates', 'buildTextAnnotationCardHtml',
-  'buildTextAnnotationMarkerHtml', 'buildTextAnnotationMarkerStyleText', 'choosePipeMeasureBetterSeed', 'cloudWavesPerEdgeForSizePx',
-  'collectOrderedPipeReferencePointSeeds', 'computeApproxNearestBetweenObjects', 'computeCloudLayout',
-  'computeFittedCloudRectFromCorners', 'createCloudAnnotationRecordFromAnchorAndMarquee', 'createDefaultCloudLabelLayoutV1',
-  'createRectAnnotationRecordFromObb', 'getDefaultTextAnnotationLabelWorldPos', 'isDtxInteractionReady', 'isSamePickAnchor',
-  'isSamePickCandidateSequence', 'isTubePickFilter', 'nextPickCandidateIndex', 'resolveAnnotationLabelClickAction',
-  'resolveBoxPickRefnos', 'resolvePickedRefnoForFilter', 'resolveTextAnnotationMarkerClickAction',
-  'resolveTextAnnotationMarkerDoubleClickAction', 'resolveTextAnnotationMarkerSingleClickAction', 'shouldRenderTextAnnotationCard',
-  'toggleTextAnnotationCollapsed', 'useDtxTools',
-];
+const MODULE_EXPORTS = ['useDtxTools'];
 
 describe('useDtxTools API 形状', () => {
   it('返回对象的成员清单不变', () => {

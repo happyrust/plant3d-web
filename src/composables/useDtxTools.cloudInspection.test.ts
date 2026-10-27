@@ -21,9 +21,11 @@ vi.mock('@/composables/useSelectionStore', () => ({
   }),
 }));
 
+import { createDefaultCloudLabelLayoutV1 } from './dtxTools/cloudRegion';
+import { buildAnnotationLeaderStyle } from './dtxTools/leaderVisual';
 import { useAnnotationStyleStore } from './useAnnotationStyleStore';
 import { resetCloudRenderFlagCache, setCloudRenderFlag } from './useCloudRenderFlags';
-import { buildAnnotationLeaderStyle, createDefaultCloudLabelLayoutV1, useDtxTools } from './useDtxTools';
+import { useDtxTools } from './useDtxTools';
 import { useToolStore, type CloudAnnotationRecord } from './useToolStore';
 
 import { SOLVESPACE_DIMENSION_THEME } from '@/dimension';

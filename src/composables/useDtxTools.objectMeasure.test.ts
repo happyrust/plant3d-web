@@ -83,10 +83,8 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
   genModelV1SpatialNearestClearance: (...args: unknown[]) => genModelV1SpatialNearestClearance(...args),
 }));
 
-import {
-  computeApproxNearestBetweenObjects,
-  useDtxTools,
-} from './useDtxTools';
+import { computeApproxNearestBetweenObjects } from './dtxTools/pipeMeasureMath';
+import { useDtxTools } from './useDtxTools';
 import { useToolStore } from './useToolStore';
 
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';

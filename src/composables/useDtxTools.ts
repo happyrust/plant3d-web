@@ -35,20 +35,6 @@ import { useUserStore } from '@/composables/useUserStore';
 import { createArrayVersionTracker, createValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
 import { type CloudLodLevel } from '@/review/domain/annotationProjection/lod';
 
-export { createCloudAnnotationRecordFromAnchorAndMarquee, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady, resolveTextAnnotationMarkerClickAction, resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction, shouldRenderTextAnnotationCard, toggleTextAnnotationCollapsed } from './dtxTools/annotationRecords';
-export { CLOUD_FIT_PADDING_PX, CLOUD_TARGET_BBOX_TTL_MS, buildCloudBillboardPolyline, cloudWavesPerEdgeForSizePx, computeCloudLayout, computeFittedCloudRectFromCorners } from './dtxTools/cloudGeometry';
-export type { FittedCloudRect } from './dtxTools/cloudGeometry';
-export { CLOUD_REGION_MAX_BOXES, buildMembersRegionV1, createDefaultCloudLabelLayoutV1 } from './dtxTools/cloudRegion';
-export type { CloudClusterDebugSnapshot, CloudInspectionDebugSnapshot, CloudLodDebugSnapshot, CloudRenderStats } from './dtxTools/cloudRegion';
-export { buildAnnotationLeaderStyle } from './dtxTools/leaderVisual';
-export { buildAnnotationLabelHtml, buildAnnotationLabelStyleText, buildInlineAnnotationCardHtml, buildTextAnnotationCardHtml, buildTextAnnotationMarkerHtml, buildTextAnnotationMarkerStyleText, resolveAnnotationLabelClickAction } from './dtxTools/overlayHtml';
-export type { MarkerDegradeOptions } from './dtxTools/overlayHtml';
-export { buildPickRefnoCandidates, buildPickTubeCandidates, isSamePickAnchor, isSamePickCandidateSequence, isTubePickFilter, nextPickCandidateIndex, resolveBoxPickRefnos, resolvePickedRefnoForFilter } from './dtxTools/pickCandidates';
-export type { BoxPickResolution, PickRefnoCandidate, PickRefnoRayHit } from './dtxTools/pickCandidates';
-export { choosePipeMeasureBetterSeed, collectOrderedPipeReferencePointSeeds, computeApproxNearestBetweenObjects } from './dtxTools/pipeMeasureMath';
-export type { ApproxNearestBetweenObjectsInput, ApproxNearestBetweenObjectsResult } from './dtxTools/pipeMeasureMath';
-export type { AnnotationLabelClickResult, AnnotationLabelClickState, AnnotationLeaderKind, AnnotationOverlayKind, TextAnnotationMarkerClickResult, TextAnnotationMarkerClickState } from './dtxTools/types';
-
 export function useDtxTools(options: {
   dtxViewerRef: Ref<DtxViewer | null>
   dtxLayerRef: Ref<DTXLayer | null>

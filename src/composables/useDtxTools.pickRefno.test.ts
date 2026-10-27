@@ -3,24 +3,10 @@ import { nextTick, ref } from 'vue';
 
 import { Vector3 } from 'three';
 
-import {
-  buildPickRefnoCandidates,
-  buildPickTubeCandidates,
-  computeCloudLayout,
-  createRectAnnotationRecordFromObb,
-  buildCloudBillboardPolyline,
-  isDtxInteractionReady,
-  isSamePickAnchor,
-  isSamePickCandidateSequence,
-  isTubePickFilter,
-  nextPickCandidateIndex,
-  resolveBoxPickRefnos,
-  resolvePickedRefnoForFilter,
-  resolveTextAnnotationMarkerClickAction,
-  resolveTextAnnotationMarkerDoubleClickAction,
-  resolveTextAnnotationMarkerSingleClickAction,
-  useDtxTools,
-} from './useDtxTools';
+import { createRectAnnotationRecordFromObb, isDtxInteractionReady, resolveTextAnnotationMarkerClickAction, resolveTextAnnotationMarkerDoubleClickAction, resolveTextAnnotationMarkerSingleClickAction } from './dtxTools/annotationRecords';
+import { computeCloudLayout, buildCloudBillboardPolyline } from './dtxTools/cloudGeometry';
+import { buildPickRefnoCandidates, buildPickTubeCandidates, isSamePickAnchor, isSamePickCandidateSequence, isTubePickFilter, nextPickCandidateIndex, resolveBoxPickRefnos, resolvePickedRefnoForFilter } from './dtxTools/pickCandidates';
+import { useDtxTools } from './useDtxTools';
 import { useToolStore } from './useToolStore';
 
 import type { Obb } from './useToolStore';
