@@ -21,6 +21,16 @@
 - `npm test` / `npm run test:watch`：运行 Vitest（一次性/监听）  
 - `npm run test:e2e`：运行 Playwright（默认使用 `http://127.0.0.1:3101` 的 `webServer` 配置）
 
+## 代码搜索（默认 tgrep）
+
+本仓库默认用 `tgrep`（[microsoft/tgrep](https://github.com/microsoft/tgrep)）做代码搜索，优先于 `rg`、`grep` 和编辑器内置的文本搜索工具。
+
+- 基本用法：`tgrep -n "pattern" src/`（ripgrep 兼容参数；递归是默认行为，不需要 `-r`）
+- 常用过滤：`-i` 忽略大小写、`-g '*.ts'`、`-t ts`、`-l` 只列文件名、`-C 3` 上下文、`--json`
+- 索引：`.tgrep/` 是本机索引（已忽略，不入库）。常驻服务用 `tgrep serve .` 保持索引实时更新，`tgrep status` 查看状态
+- 服务未运行、或需要搜索刚新增/改名的文件时，先 `tgrep index`，或直接 `tgrep --no-index "pattern" src/`
+- 默认跳过隐藏文件/目录（`.` 开头的路径）；需要时加 `-.`（含隐藏）或 `-uu`
+
 ## 关键配置文件
 
 - `vite.config.ts`：开发代理、构建与别名等配置  

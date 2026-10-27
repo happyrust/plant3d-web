@@ -77,3 +77,11 @@
 第一版的探针用 `isModelActuallyLoaded(root)` 判「根在不在场景」，EQUI 自己没对象（几何在成员 24777 名下）、`show_refno`
 直装的路也不进 `loadedRoots`，提示条出来了但没有「重载」按钮；改成沿属主链问装载器（`resolveDtxObjectIdsByUnitRefno(dbnum, root)`）后才是上表的结果。
 产物：`07-feature-notice-727.png`、`08-feature-after-reload-pos1900.png`、`09-feature-dialog-auto-refresh-730.png`、`data/feature-summary.json`、`data/feature-log.txt`。
+
+## 6. 后续：固化成自动化案例（2026-10-27）
+
+这两轮手工验证已收进 gen-model 增量更新案例集合的 **K 组**（gen-model `docs/plans/2026-10-27-plant3d-web-incremental-linkage-test-cases.md`）：
+L0 单测在本仓（`useGenModelV1UpdateNotice` / `useGenModelV1TaskFeed` / `useModelGenerationAdmin` / `useModelGeneration` 重载路径 /
+`GenModelV1HealthBadge`），端到端在 `e2e/incremental-linkage-gen-model-v1.spec.ts`（后端由 gen-model `scripts/replay/Start-LinkageReplayStack.ps1`
+拉起，几何以 E3D TTY 导出的 RVM 为真值）。本文 §3 的「实时联动」建议已按轻量联动落地；那一轮又补了四处缺口
+（重载不生成、删掉的根 / 构件从场景撤下、提示跨批累积、partial 也提示），断线补救仍是 todo。

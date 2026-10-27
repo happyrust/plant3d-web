@@ -50,6 +50,19 @@ npm run perf:frustum-culling:ui     # 可视化性能测试
 npm run verify:dashboard            # 验证 dashboard/workbench 功能
 ```
 
+## 代码搜索（默认 tgrep）
+
+默认用 `tgrep` 代替 `rg` / `grep` / 内置 Grep 工具：
+
+```bash
+tgrep -n "pattern" src/          # 递归搜索（默认行为，无需 -r）
+tgrep -i -g '*.ts' "pattern"     # 忽略大小写 + 文件过滤
+tgrep --no-index "pattern" .     # 不查索引，直接扫描（搜索刚新增/改名的文件）
+```
+
+- `tgrep serve .` 保持索引常驻更新，`tgrep status` 查看状态；大批改动后可 `tgrep index` 增量重建。
+- 索引目录 `.tgrep/` 不入库；默认跳过隐藏文件，需要时加 `-.`。
+
 ## 项目架构
 
 ### 目录结构

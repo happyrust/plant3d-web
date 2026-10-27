@@ -358,8 +358,20 @@ gen-model 的几何记录（`model/records`）按生成根组织：记录上的 
 _Avoid_: 直接属主、显示时 ensure、按 refno 单条查询
 
 **即时生成数据 (On-Demand Data)**:
-gen-model-v1 源下前端拿到的树与三维模型全部是 API 即时给出的：树读 `/tree/*`，显示走 `model/records`，网格走 `/meshes/{hash}.mesh`。生成只在右键 `model/generate`。前端不订阅 `model_drain` / WS 任务事件、不做被动重载。SAVEWORK 之后三维不会自己追新，要人右键。
+gen-model-v1 源下前端拿到的树与三维模型全部是 API 即时给出的：树读 `/tree/*`，显示走 `model/records`，网格走 `/meshes/{hash}.mesh`。生成只在右键 `model/generate`。前端不做被动重载：SAVEWORK 之后的数据批次不会让三维自己追新，只出一条更新提示，人点「重载」才换。WS 任务事件只用来出更新提示、刷新按库水位行，不据此换场景（2026-10-26 起；此前连提示都没有，要人右键）。
 _Avoid_: 模型变更同步、被动重载、显示时 ensure
+
+**数据批次 (Data Batch)**:
+gen-model 对一个库一段新会话（`start_sesno`–`end_sesno`）做的一次数据 + 模型同步，一个批次就是一条 `data_batch` 任务，与 gen-model 词汇表同名。E3D 里 SAVEWORK 之后由后端监听自己发起，或由模型生成对话框「初始化 / 更新所选」发起；终态 `partial` 是数据已应用、部分模型工作单元生成失败。只登录不改的会话也成批，但没有变化、没有模型工作单元。「模型增量更新」泛指从数据批次到重载的整条链。
+_Avoid_: 增量批次、增量更新（当指一次批次时）、drain、`incr_applied`、增量记录（那是批次的账本页）
+
+**更新提示 (Update Notice)**:
+数据批次落在当前已装入的库、或批次里的生成根已在场景里时，底部状态栏给出的一条可忽略的提示；之后的批次（不论哪个库）并进同一条，直到重载或忽略。它只说「数据变了」，不替用户换场景。
+_Avoid_: 自动刷新、被动重载、模型变更同步
+
+**重载 (Reload)**:
+更新提示上的动作：把受影响、已在场景里、且这一轮生成成功的生成根按最新记录替换；批次里已删掉的根与构件从场景里撤下。不重新生成、不动相机。
+_Avoid_: 重新生成（那会改模型库）、刷新（泛指时）、整库重载
 
 **整库显示 (Whole-Dbnum Display)**:
 `show_dbnum` 是该库 `tree/roots` 下的 SITE 逐个按祖先查 records，再分批装进视口。不发起 `dbnums/{n}/model/ensure`，不轮询任务。查空就是空。构件预算缺省 50 000；`?show_dbnum_full=1` 不设这个上限。

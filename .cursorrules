@@ -36,3 +36,11 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes_tool` for code review.
 3. Use `get_affected_flows_tool` to understand impact.
 4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+
+## 代码搜索：默认 tgrep
+
+图表工具覆盖不到、需要文本搜索时，默认用 `tgrep`，不要用 `rg` / `grep`：
+
+- `tgrep -n "pattern" src/`（递归是默认行为，无需 `-r`）
+- 索引由 `tgrep serve .` 常驻更新（`tgrep status` 查看）；需要搜索刚新增/改名的文件时用 `tgrep --no-index "pattern" .` 或先 `tgrep index`
+- 索引目录 `.tgrep/` 不入库；默认跳过隐藏文件，需要时加 `-.`
