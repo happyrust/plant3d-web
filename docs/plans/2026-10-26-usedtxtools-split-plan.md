@@ -2,7 +2,7 @@
 
 > 日期：2026-10-26
 > 对象：`src/composables/useDtxTools.ts`（审核报告 `docs/investigation/repo-health-audit-2026-10-26.md` P2-11）
-> 状态：方案，待拍板；本文不动代码
+> 状态：**已执行完**（2026-10-27，第 0–10 步，执行记录见 §9）；下文 §1–§8 是拍板前的方案原文，行号按拆分前的文件
 > 兜底测试：`src/composables/useDtxTools.*.test.ts` 12 个文件 / 4264 行
 
 ---
@@ -194,3 +194,37 @@ Vue 相关：ctx 是普通对象，里面放 `Ref`，**不要** `reactive(ctx)`�
 1. 目录名 `src/composables/dtxTools/`（还是 `src/viewer/dtxTools/`？本文按前者，和 `useDtxTools.ts` 挨着）。
 2. 步骤 1 一次性搬 2270 行是否接受为单个提交（纯移动，`git diff --color-moved` 能看出全是搬运），还是按 §2 的 11 个文件拆成 11 个提交。
 3. 步骤 10（测试改 import、删再导出层）做不做。
+
+---
+
+## 9. 执行记录（2026-10-26 → 27）
+
+拍板：目录 `src/composables/dtxTools/`；第 1 步一个提交；第 10 步做。每步一个提交，全部在 `main`：
+
+| 步 | 提交 | 落点 | `useDtxTools.ts` 行数 |
+|---|---|---|---|
+| 0 | `21f42d7f` | `useDtxTools.apiShape.test.ts`：55 个返回键 + 38 个模块导出 | 7169 |
+| 1 | `8397118e` | 11 个纯函数 / 类型模块（`annotationRecords` `cloudGeometry` `cloudRegion` `geometry` `leaderVisual` `overlayDom` `overlayHtml` `pickCandidates` `pipeMeasureMath` `types` `visuals`） | 4899 |
+| 2 | `f0b02fd2` | `context.ts`（`DtxToolsContext` / `CloudLodState`）+ `controllers/panelActions.ts` | 4546 |
+| 3 | `37bace0d` | `controllers/measureController.ts` | 3754 |
+| 4 | `cfbde4a7` | `controllers/pickCandidateController.ts` | 3535 |
+| 5 | `3879dd58` | `controllers/annotationInteraction.ts`；ctx + `reviewStore` `userStore` `textAnnotationDrag` `inlineOverlayAnnotationDrag` | 2996 |
+| 6a | `8a72f45a` | `controllers/overlayHost.ts`；ctx + `marqueeState` | 2908 |
+| 6b | `079c7de5` | `controllers/cloudCreationFlow.ts`；ctx + `annotationStyleStore` | 2274 |
+| 7 | `6f1bde82` | `controllers/cloudLod.ts` + `controllers/cloudInspection.ts`；ctx + `cloudFrameTrackers` | 1806 |
+| 8a | `ce751c64` | `controllers/overlaySync.ts`（整块原样）；ctx + `suppressStoreOverlays` `bindingResolve` | 653 |
+| 8b | `a593f4af` | `controllers/overlay/{frame,textOverlay,cloudOverlay,boxOverlay}.ts`，`overlaySync.ts` 只剩编排（174 行） | 653 |
+| 9 | `dd0b1ead` | `controllers/surfacePicking.ts` + `pointerDispatcher.ts` + `watchers.ts`；ctx + `selectionStore` | 313 |
+| 10 | `c7003331` | 测试直接从 `dtxTools/*` 导入，删掉再导出层；模块导出只剩 `useDtxTools` | 300 |
+
+与方案的出入：
+
+- 第 8b 步没有按 §4.1 把 `updateOverlayPositions` 的每段改成 `(frame, ctx)` 入参。实际切法：文字 / 矩形 / OBB 在 `updateOverlayPositions` 里只有引线分辨率与图钉 / 文字框定位，留在编排层；云线的帧戳 → LOD 计划 → inspection 模式 → 逐条分阶段渲染整段进 `cloudOverlay.renderFrame(viewer, overlay, canvas, resolution)`，回传 `{ lodReplanned, inspectionMode }` 给编排层做图钉聚合与探测排程。`syncFromStore` 按种类拆成 `sync*Annotations(frame)`，`frame = { overlay, resolution, degradeOf }`。语句未改，执行顺序与拆分前一致。
+- 第 9 步的 watch 没有按所有者分散到各控制器，而是集中在 `watchers.ts` 按原顺序注册：同一次 flush 里 watch 回调的执行顺序跟注册顺序走，分散注册会改变它。只有 pick_refno 的 watch（第 4 步）在 `pickCandidateController.installWatchers`，它本来就排在最前。
+- 装配顺序（hooks 按依赖方向流）：`picker → annotation → lod → inspection → host → cloudFlow → pick → measure → overlay → pointer → watchers → panelActions`。`annotation / lod / inspection` 对 `overlay.updateOverlayPositions / resolveCloudTargetBbox` 的引用是延迟转发（只在事件 / watch 里调）。
+- 顺手清掉的：各步搬走后不再用的 import（共 200 余个名字）、一条孤儿注释、没有读者的 `boxSelectState`（随指针分发搬走，未删）。
+- 未动：`annotationInteraction.ts` 里 `openAnnotationProcessingPage / openAnnotationEditor / handleAnnotationOverlayClick / resolveCurrentFormId / getAnnotationRecordByKind` 全仓没有调用方，基线里 5 条既有类型错误（3× `normalizeOptionalString` 未导入、2× `formId`）都在这支里，只随代码换了基线路径。它对应 `.plannotator/plan-sj-reject-ui.md` §5 的「批注处理页」路由，删不删单独拍板。
+
+门禁（每步都跑）：`npm run type-check` 445 条 = 基线、新增 0（第 5 步基线只换路径）；`eslint` 干净；`vitest` 370 文件 / 3515 用例全绿；apiShape 的 55 个返回键到最后一步一字不差。第 10 步后 `npm run build` 通过，无循环依赖告警（仅有拆分前就在的 `useDbnoInstancesDtxLoader` / `useDockApi` 动态 + 静态导入提示），主 chunk `index-*.js` 3,781 KB。§5 的手工项（ViewerPanel 里点选 / 测量 / 云线三步 / LOD 聚合 / 拖文字框 / 降级）未做，靠 12 个测试文件兑底。
+
+结果：`useDtxTools.ts` 7169 → 300 行（只剩选项解构、共享状态声明、`ctx`、控制器装配、return）；`dtxTools/` 12 个纯模块 + `controllers/` 12 个控制器 + `controllers/overlay/` 4 个，最大的单文件是 `measureController.ts` 829 行、`overlay/cloudOverlay.ts` 724 行。
