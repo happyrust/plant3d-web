@@ -7,7 +7,12 @@ import { genModelV1DbnumModelRoots } from '@/api/genModelV1Api';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
+import {
+  evictDtxRefnos,
+  isDtxRefnoLoaded,
+  loadDbnoInstancesForVisibleRefnosDtx,
+  resolveDtxRefnosByUnitRefno,
+} from '@/composables/useDbnoInstancesDtxLoader';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
@@ -416,6 +421,68 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     return !!dtxLayer?.hasObject?.(normalizedRoot);
   }
 
+  /**
+   * 重载（`refresh`）时这根按祖先查空：记录查询本身收齐了就是这根名下已没有几何——数据批次删了它，或删光了它名下
+   * 带几何的成员。它和它名下的旧构件从场景撤下、不再算已加载；没收齐（409 / 截断 / 出错）或只是退到子树查询时不下结论，
+   * 场景保持原样。两种都不生成。
+   */
+  function finishRefreshOfEmptyRoot(
+    dbno: number,
+    root: string,
+    previousLeaves: string[],
+    incomplete: VisibleInstsIncomplete | null,
+    source: 'visible-insts' | 'subtree-refnos',
+  ): boolean {
+    if (
+      incomplete
+      && (incomplete.pending.length > 0 || incomplete.truncated_roots.length > 0 || Object.keys(incomplete.errors).length > 0)
+    ) {
+      const tail = describeVisibleInstsIncomplete(incomplete);
+      statusMessage.value = `refno=${root} 模型尚未就绪（${tail}），场景保持原样`;
+      progress.value = 100;
+      syncGlobalLoadStatus();
+      consoleStore.addLog('warning', `[model-load] 重载 ${root}：收集未完成（${tail}），场景保持原样`);
+      return false;
+    }
+    if (source !== 'visible-insts') {
+      statusMessage.value = `refno=${root} 记录查询未应答，场景保持原样`;
+      progress.value = 100;
+      syncGlobalLoadStatus();
+      consoleStore.addLog('warning', `[model-load] 重载 ${root}：记录查询失败、退到子树查询也是空，不当作删除，场景保持原样`);
+      return false;
+    }
+    const anyViewer = viewer as any;
+    const targets = uniqStrings([root, ...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, root)]);
+    const dtxLayer = anyViewer?.__dtxLayer;
+    const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets) : [];
+    anyViewer?.scene?.setObjectsVisible?.(targets, false);
+    loadedRoots.delete(root);
+    statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
+    progress.value = 100;
+    syncGlobalLoadStatus();
+    consoleStore.addLog(
+      'info',
+      `[model-load] 重载 ${root}：最新记录里这根名下没有几何（根被删，或带几何的成员删光），撤下 ${targets.length} 个 refno（${evicted.length} 个有对象）`,
+    );
+    emitToast({ message: `[提示] ${root} 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下`, level: 'info' });
+    return true;
+  }
+
+  /** 重载装完之后：重载前在这根名下、最新记录里已经没有的构件（数据批次删掉的成员）从场景撤下；根自己不撤。 */
+  function evictMembersMissingFromRefresh(dbno: number, root: string, previousLeaves: string[], loadRefnos: string[]): void {
+    const keep = new Set([root, ...loadRefnos]);
+    const stale = previousLeaves.filter((refno) => !keep.has(refno));
+    if (stale.length === 0) return;
+    const anyViewer = viewer as any;
+    const dtxLayer = anyViewer?.__dtxLayer;
+    const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, stale) : [];
+    anyViewer?.scene?.setObjectsVisible?.(stale, false);
+    consoleStore.addLog(
+      'info',
+      `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里，从场景撤下（${evicted.length} 个有对象）`,
+    );
+  }
+
   async function showModelByRefno(
     refno: string,
     loadOptions?: {
@@ -581,9 +648,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         noteDbnumModelGenerated(dbno);
       }
 
+      // 重载前这根名下的构件：重新查到的记录里没有的，就是数据批次删掉的，装完要从场景撤下
+      let previousLeaves: string[] = [];
       if (refresh) {
         // 记录缓存里这一根连同构件先清掉：下面按祖先重新查到的才是新会话的实例；装载走 replace，不再 generate。
-        getGenModelV1ModelSource().records.invalidateRoot(normalizedRoot);
+        previousLeaves = uniqStrings(
+          getGenModelV1ModelSource().records.invalidateRoot(normalizedRoot).map((r) => normalizeRefnoString(r)),
+        ).filter(Boolean);
+        // `invalidateRoot` 连 `leavesByRoot` 一起删了，光靠它算差集，在「上一次重载没收齐」或「服务换代清了缓存」
+        // 时会恒为空，被删成员就永远留在场景里。场景索引是另一份独立事实（DTX 运行时按属主链记得的 refno），并进来当基线。
+        previousLeaves = uniqStrings([...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, normalizedRoot)]);
       }
       statusMessage.value = '查询可见实例范围...';
       progress.value = 10;
@@ -668,6 +742,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
       };
 
+      // 重载只有在「visible-insts 真的查通了」时才敢下结论：查失败、或退到子树查询（那不是收齐的最新记录），
+      // 都要保持场景原样。判 !visibleOk 而不是看 visibleErr——抛出空 message 的 Error 时 visibleErr 是 ''，
+      // 按 visibleErr 判会从破坏性路径上 fail-open。
+      if (refresh && (!visibleOk || visibleSource !== 'visible-insts')) {
+        const why = visibleErr || (visibleOk ? `记录查询退到子树（${visibleSource}）` : '记录查询未应答');
+        consoleStore.addLog('warning', `[model-load] 重载 ${normalizedRoot} 未取得收齐的记录（${why}），场景保持原样`);
+        emitToast({ message: `[警告] ${normalizedRoot} 重载未完成：${why}，场景保持原样`, level: 'warning' });
+        statusMessage.value = `refno=${normalizedRoot} 重载未完成，场景保持原样`;
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        return false;
+      }
+
       if (!visibleOk && visibleErr) {
         consoleStore.addLog('warning', `[model-load] 查询加载范围失败：${visibleErr}`);
         emitToast({
@@ -682,6 +769,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           return false;
         }
       } else if (visibleOk && visibleRefnos.length === 0) {
+        if (refresh) return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource);
         const hasModel = await dbnumProbe;
         // pending（409，库正被整库任务占用）时不发：generate 同样撞锁，「稍后再显示」才是对的
         const pendingBusy = (scopeIncomplete?.pending.length ?? 0) > 0;
@@ -776,6 +864,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         [30, 95],
         `从 gen-model 加载 ${normalizedRoot}`,
       );
+      if (refresh && !scopeIncomplete) evictMembersMissingFromRefresh(dbno, normalizedRoot, previousLeaves, loadRefnos);
       if (typeof anyViewer.scene?.ensureRefnos === 'function') {
         anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
       }

@@ -699,6 +699,57 @@ export function resolveDtxRefnosByUnitRefno(dbno: number, unitRefno: string): st
   return out;
 }
 
+/**
+ * 把一批 refno 的旧对象从场景撤下：隐藏、收掉直段身份键，运行时索引里不再算已加载。与 `replaceExistingObjects`
+ * 对旧对象的处理同一套，只是不装新的——数据批次删掉的构件不会出现在重载后的记录里，replace 碰不到它们。
+ * 返回真正撤掉的 refno（本来就不在索引里的不算）。
+ *
+ * 和 replace 的区别：replace 紧接着会重新登记同一个 refno，残留会被覆盖；evict 没有后半段，所以这里必须把
+ * refno 与这批对象在**所有**运行时索引里的痕迹一起清掉，否则 `isDtxRefnoKnownAcrossAllDbnos` 仍把它当成
+ * 「认识的构件」，批注绑定会把它判成「在库未装」而不是缺失。
+ */
+export function evictDtxRefnos(dtxLayer: DTXLayer, dbno: number, refnos: Iterable<string>): string[] {
+  const cache = cachesByDbno.get(dbno);
+  if (!cache) return [];
+  const evicted: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of refnos) {
+    const refno = normalizeRefnoKey(String(raw ?? ''));
+    if (!refno || seen.has(refno)) continue;
+    seen.add(refno);
+    const objectIds = cache.refnoToObjectIds.get(refno) ?? [];
+    if (objectIds.length === 0 && !cache.loadedRefnos.has(refno)) continue;
+    if (objectIds.length > 0) dtxLayer.setObjectsVisible(objectIds, false);
+    for (const objectId of objectIds) {
+      const key = cache.objectIdToTubeKey.get(objectId);
+      if (key !== undefined) {
+        cache.objectIdToTubeKey.delete(objectId);
+        if (cache.tubeObjectIdByKey.get(key) === objectId) cache.tubeObjectIdByKey.delete(key);
+      }
+      // 按对象记的索引：对象已经不显示，留着会让 noun 计数、属性值与直管候选继续把旧对象算进去
+      cache.objectIdToRefno.delete(objectId);
+      cache.objectIdToSpecValue.delete(objectId);
+      cache.invalidTubiObjectIds.delete(objectId);
+      cache.tubiObjectIds.delete(objectId);
+    }
+    // 按 refno 记的索引：`isDtxRefnoKnownAcrossAllDbnos` 只看 refnoToNoun，这里不清就会一直返回 true
+    cache.refnoToObjectIds.set(refno, []);
+    cache.loadedRefnos.delete(refno);
+    cache.refnoLoadSource.delete(refno);
+    cache.refnoToNoun.delete(refno);
+    cache.refnoToOwnerNoun.delete(refno);
+    cache.refnoTransform.delete(refno);
+    cache.refnoToSpecValue.delete(refno);
+    // `refnoToOwnerRefno` 是「子件 → 生成根」的一跳边（见 model-source/genModelV1/instanceMapping.ts 与
+    // modelRecordSource.ts：记的是生成根，不是直接属主）。所以删掉被撤 refno 自己的条目只影响它自己，
+    // 不会断掉任何子孙的属主链。**如果将来改成记直接属主，这里必须改成「只清叶子」**，否则会静默断链。
+    cache.refnoToOwnerRefno.delete(refno);
+    evicted.push(refno);
+  }
+  if (evicted.length > 0) bumpDtxLoaderRevision();
+  return evicted;
+}
+
 export function isDtxRefnoLoaded(dbno: number, refno: string): boolean {
   const cache = cachesByDbno.get(dbno);
   if (!cache) return false;

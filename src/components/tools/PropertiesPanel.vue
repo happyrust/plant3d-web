@@ -251,7 +251,7 @@ function isGroupCollapsed(groupId: string): boolean {
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex h-full flex-col" data-testid="properties-panel">
     <!-- 头部 -->
     <div class="flex-shrink-0 border-b border-border px-3 py-2">
       <div class="flex items-center justify-between">

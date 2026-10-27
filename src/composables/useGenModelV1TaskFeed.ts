@@ -82,6 +82,12 @@ function scheduleReconnect(): void {
 function openSocket(): void {
   if (typeof WebSocket === 'undefined') return;
   if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) return;
+  // 走到这里旧 socket 要么没有、要么正在关（CLOSING / CLOSED，close 事件还没派发）：它的 ping 定时器随它一起停，
+  // 否则会被新连接 onopen 的赋值覆盖、再也清不掉
+  if (pingTimer) {
+    clearInterval(pingTimer);
+    pingTimer = null;
+  }
 
   let ws: WebSocket;
   try {
@@ -96,6 +102,9 @@ function openSocket(): void {
   let opened = false;
 
   ws.onopen = () => {
+    // 已被新连接顶替的旧 socket（退订后重订、CLOSING 期间显式 connect）：它的事件一律不碰模块级状态，
+    // 与 onclose 的 `current` 判断同一把尺子
+    if (socket !== ws) return;
     opened = true;
     connectFailures = 0;
     lastSeq = 0;
@@ -106,6 +115,8 @@ function openSocket(): void {
     }, PING_INTERVAL_MS);
   };
   ws.onmessage = (event: MessageEvent) => {
+    // 旧连接 CLOSING 期间的残留帧：不改 lastSeq / missedEvents，也不转给订阅方（新连接从头计号）
+    if (socket !== ws) return;
     if (typeof event.data !== 'string') return;
     let envelope: GenModelV1TaskEnvelope;
     try {
@@ -129,10 +140,20 @@ function openSocket(): void {
   };
   ws.onclose = () => {
     if (!opened) connectFailures += 1;
-    if (socket === ws) socket = null;
-    if (pingTimer) {
-      clearInterval(pingTimer);
-      pingTimer = null;
+    const current = socket === ws;
+    if (current) {
+      socket = null;
+      if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+      }
+    }
+    // 退订后又有人订阅、一条新连接已经接手：旧连接迟到的 close 不改状态
+    if (!current && socket !== null) return;
+    // 最后一个订阅者退订时主动关的：浏览器里 close 事件异步派发、晚于退订，这里要停在 idle、不重连
+    if (listeners.size === 0) {
+      feedStatus.value = 'idle';
+      return;
     }
     feedStatus.value = 'down';
     scheduleReconnect();

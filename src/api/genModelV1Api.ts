@@ -1043,6 +1043,51 @@ export function genModelV1TaskGet(taskId: string, options?: GenModelV1RequestOpt
   return genModelV1Fetch<TaskEntryDto>(`/api/v1/tasks/${encodeURIComponent(taskId)}`, options);
 }
 
+/** `GET /api/v1/tasks/{id}/changes` 的一条（gen-model web-service-api §4.4.1）：一个元素一条，按 refno 升序。 */
+export type TaskChangeItemDto = {
+  /** `a/b` */
+  refno: string;
+  noun?: string;
+  /** `added | modified | deleted` */
+  op: string;
+  attrs?: string[];
+  /** 这个元素归到哪个生成根（`a/b`） */
+  root_refno?: string | null;
+  disposition?: string;
+  [key: string]: unknown;
+};
+
+export type TaskChangesResponse = {
+  task_id: string;
+  dbnum: number;
+  start_sesno: number;
+  end_sesno: number;
+  total: number;
+  /** 服务端清单封顶 5000 条，超出为 true（`total` 仍是全数） */
+  truncated: boolean;
+  next_cursor: string | number | null;
+  items: TaskChangeItemDto[];
+};
+
+/**
+ * 一批的元素级变化清单。只有数据窗口落地了的批次有；任务在、清单没有也是 404。
+ * 轻量联动用它找批次里整根删掉的单元：删除走 DeleteCleanup，不出单元回执，`result.units` 里没有它们。
+ */
+export function genModelV1TaskChanges(
+  taskId: string,
+  params: { cursor?: string | null; limit?: number } = {},
+  options?: GenModelV1RequestOptions,
+): Promise<TaskChangesResponse> {
+  const query = new URLSearchParams();
+  if (params.cursor) query.set('cursor', params.cursor);
+  if (params.limit) query.set('limit', String(params.limit));
+  const suffix = query.toString();
+  return genModelV1Fetch<TaskChangesResponse>(
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/changes${suffix ? `?${suffix}` : ''}`,
+    options,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 增量记录（`/tasks` 列表只读视图）
 // ---------------------------------------------------------------------------

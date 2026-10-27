@@ -517,7 +517,10 @@ watch(
                       {{ row.db_type || '—' }}
                     </span>
                   </td>
-                  <td class="px-1.5 py-1.5 font-mono text-gray-500">{{ watermarkText(row) }}</td>
+                  <td class="px-1.5 py-1.5 font-mono text-gray-500"
+                    :data-testid="`model-generation-db-watermark-${row.dbnum}`">
+                    {{ watermarkText(row) }}
+                  </td>
                   <td class="px-1.5 py-1.5">
                     <span class="inline-flex items-center gap-0.5 rounded border px-1 py-0.5 text-[10px]"
                       :class="statusBadgeClass[dbnumPanelStatus(row)]"

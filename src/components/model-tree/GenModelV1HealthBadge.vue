@@ -10,9 +10,9 @@ import { useGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNoti
  * 底部状态栏的 gen-model 连接徽标（plan P1-4）：一个状态点 + 身份摘要 + 库三态，点一下重探。
  * 徽标常驻在 App.vue 底部状态栏左侧；数据源本身持有轮询，
  * 徽标挂载/卸载只增减自己的展示 owner，不再决定缓存正确性探针是否存活。
- * 徽标本身只探 `/health` 与 `/dbnums`。旁边多一条「轻量联动」提示（2026-10-26）：后端自己跑完的增量批次落在当前
+ * 徽标本身只探 `/health` 与 `/dbnums`。旁边多一条「轻量联动」的更新提示（2026-10-26）：后端自己跑完的数据批次落在当前
  * 装入的库 / 根上时只提示「有更新」，由人点「重载」才换场景里的实例；不被动重载（收口计划 §12「只吃自己 ensure
- * 出来的数据」仍成立）。
+ * 出来的数据」仍成立）。文案与悬停说明由 `useGenModelV1UpdateNotice` 给出。
  */
 const health = useGenModelV1Health();
 const updateNotice = useGenModelV1UpdateNotice();
@@ -24,22 +24,8 @@ try {
   queryClient = null;
 }
 
-const noticeText = computed(() => {
-  const n = updateNotice.notice.value;
-  if (!n) return '';
-  const span = n.startSesno !== null && n.startSesno !== n.endSesno ? `${n.startSesno}→${n.endSesno}` : String(n.endSesno);
-  const affected = n.loadedRoots.length > 0 ? `，场景内 ${n.loadedRoots.length} 根受影响` : '';
-  return `库 ${n.dbnum} 已更新到会话 ${span}（改 ${n.changedElements} 项${affected}）`;
-});
-const noticeTitle = computed(() => {
-  const n = updateNotice.notice.value;
-  if (!n) return '';
-  const lines = [`gen-model 任务 ${n.taskId}`, `批次里的生成根：${n.roots.join(', ') || '（无模型工作单元）'}`];
-  lines.push(n.loadedRoots.length > 0
-    ? `点「重载」按最新记录替换场景里的 ${n.loadedRoots.join(', ')}；不重新生成、不动相机`
-    : '受影响的构件都不在场景里，不用重载');
-  return lines.join('\n');
-});
+const noticeText = updateNotice.text;
+const noticeTitle = updateNotice.title;
 
 function reloadFromNotice(): void {
   const refnos = updateNotice.reload();
@@ -113,13 +99,15 @@ onUnmounted(() => {
       data-testid="gen-model-v1-update-notice"
       class="inline-flex h-5 max-w-[420px] items-center gap-1 rounded-sm border border-warning/50 bg-warning/15 px-1.5 text-[11px] text-foreground"
       :title="noticeTitle">
-      <span class="truncate">{{ noticeText }}</span>
+      <span class="truncate" data-testid="gen-model-v1-update-notice-text">{{ noticeText }}</span>
       <button v-if="updateNotice.notice.value.loadedRoots.length > 0"
         type="button"
+        data-testid="gen-model-v1-update-notice-reload"
         class="shrink-0 font-medium underline underline-offset-2 hover:text-primary"
         @mousedown.stop
         @click="reloadFromNotice">重载</button>
       <button type="button"
+        data-testid="gen-model-v1-update-notice-dismiss"
         class="shrink-0 px-0.5 text-muted-foreground hover:text-foreground"
         title="忽略"
         @mousedown.stop

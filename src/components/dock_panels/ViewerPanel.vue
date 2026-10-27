@@ -69,7 +69,11 @@ import {
 import { DISPLAY_THEME_PRESETS, isDisplayTheme, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
-import { setGenModelV1LoadedProbe, startGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNotice';
+import {
+  createGenModelV1LoadedProbe,
+  setGenModelV1LoadedProbe,
+  startGenModelV1UpdateNotice,
+} from '@/composables/useGenModelV1UpdateNotice';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
@@ -3869,14 +3873,13 @@ onMounted(async () => {
   };
   compatViewerRef.value = compat;
   modelGenerationRef.value = useModelGeneration({ viewer: compat });
-  // 轻量联动：后端自己跑完的增量批次落在当前装入的库 / 根上时，状态栏给提示，不自动换场景。
-  setGenModelV1LoadedProbe({
-    dbnums: () => (activeDbno !== null ? [activeDbno] : []),
-    // 单元根自己多半没对象（几何在成员名下），沿属主链问装载器；`show_refno` 直装的路不进 loadedRoots，也靠这一条。
-    isRootLoaded: (refno, dbnum) =>
-      (modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false)
-      || resolveDtxObjectIdsByUnitRefno(dbnum, refno).length > 0,
-  });
+  // 轻量联动：后端自己跑完的数据批次落在当前装入的库 / 根上时，状态栏给提示，不自动换场景。
+  // 单元根自己多半没对象（几何在成员名下），探针沿属主链问装载器；`show_refno` 直装的路不进 loadedRoots，也靠这一条。
+  setGenModelV1LoadedProbe(createGenModelV1LoadedProbe({
+    activeDbnum: () => activeDbno,
+    isModelActuallyLoaded: (refno) => modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false,
+    resolveUnitObjectIds: resolveDtxObjectIdsByUnitRefno,
+  }));
   startGenModelV1UpdateNotice();
 
   const tools = useDtxTools({
