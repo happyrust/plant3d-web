@@ -455,6 +455,39 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(dtxLayer.isObjectVisible(newIds[0]!)).toBe(true);
   });
 
+  it('evictDtxRefnos：数据批次删掉的构件从场景撤下、不再算已加载，留下的不动（增量更新 K09）', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99012;
+    const kept = '24384_24777';
+    const removed = '24384_24779';
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([
+      [kept, [makeInstanceEntry(kept, '1', 'BOX')]],
+      [removed, [makeInstanceEntry(removed, '1', 'CYLI')]],
+    ]));
+    const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [kept, removed], { dataSource: 'gen-model-v1' });
+    const keptIds = mod.resolveDtxObjectIdsByRefno(dbno, kept);
+    const removedIds = mod.resolveDtxObjectIdsByRefno(dbno, removed);
+    expect(removedIds).toHaveLength(1);
+    const revision = mod.dtxLoaderRevision.value;
+
+    expect(mod.evictDtxRefnos(dtxLayer, dbno, [removed, '24384/24779', '24384_99999'])).toEqual([removed]);
+
+    expect(dtxLayer.isObjectVisible(removedIds[0]!)).toBe(false);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, removed)).toEqual([]);
+    expect(mod.isDtxRefnoLoaded(dbno, removed)).toBe(false);
+    expect(mod.isDtxRefnoLoaded(dbno, kept)).toBe(true);
+    expect(dtxLayer.isObjectVisible(keptIds[0]!)).toBe(true);
+    expect(mod.dtxLoaderRevision.value).toBe(revision + 1);
+    // 撤下的 refno 不能还留在「认识的构件」里：批注绑定靠它区分「在库未装」与「已删」
+    expect(mod.isDtxRefnoKnownAcrossAllDbnos(removed)).toBe(false);
+    expect(mod.resolveDtxNounByRefno(dbno, removed)).toBeNull();
+    expect(mod.isDtxRefnoKnownAcrossAllDbnos(kept)).toBe(true);
+    expect(mod.evictDtxRefnos(dtxLayer, 424242, [kept])).toEqual([]);
+    expect(mod.evictDtxRefnos(dtxLayer, dbno, [removed])).toEqual([]);
+  });
+
   it('替换所需几何加载失败时保留旧对象可见', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
