@@ -223,8 +223,8 @@ Vue 相关：ctx 是普通对象，里面放 `Ref`，**不要** `reactive(ctx)`�
 - 第 9 步的 watch 没有按所有者分散到各控制器，而是集中在 `watchers.ts` 按原顺序注册：同一次 flush 里 watch 回调的执行顺序跟注册顺序走，分散注册会改变它。只有 pick_refno 的 watch（第 4 步）在 `pickCandidateController.installWatchers`，它本来就排在最前。
 - 装配顺序（hooks 按依赖方向流）：`picker → annotation → lod → inspection → host → cloudFlow → pick → measure → overlay → pointer → watchers → panelActions`。`annotation / lod / inspection` 对 `overlay.updateOverlayPositions / resolveCloudTargetBbox` 的引用是延迟转发（只在事件 / watch 里调）。
 - 顺手清掉的：各步搬走后不再用的 import（共 200 余个名字）、一条孤儿注释、没有读者的 `boxSelectState`（随指针分发搬走，未删）。
-- 未动：`annotationInteraction.ts` 里 `openAnnotationProcessingPage / openAnnotationEditor / handleAnnotationOverlayClick / resolveCurrentFormId / getAnnotationRecordByKind` 全仓没有调用方，基线里 5 条既有类型错误（3× `normalizeOptionalString` 未导入、2× `formId`）都在这支里，只随代码换了基线路径。它对应 `.plannotator/plan-sj-reject-ui.md` §5 的「批注处理页」路由，删不删单独拍板。
+- 死代码（追加提交 `0052ca3b`）：`annotationInteraction.ts` 里 `openAnnotationProcessingPage / openAnnotationEditor / handleAnnotationOverlayClick / resolveCurrentFormId / getAnnotationRecordByKind` 自 git init 基线快照起全仓就没有调用方（同一路由的在用实现是 `AnnotationOverlayBar.openAnnotationPanel`），基线里 5 条既有类型错误（3× `normalizeOptionalString` 未导入、2× `formId`）都在这支里。已删，ctx 去掉只有它用的 `userStore`，`type-check` 基线 445 → 440。
 
 门禁（每步都跑）：`npm run type-check` 445 条 = 基线、新增 0（第 5 步基线只换路径）；`eslint` 干净；`vitest` 370 文件 / 3515 用例全绿；apiShape 的 55 个返回键到最后一步一字不差。第 10 步后 `npm run build` 通过，无循环依赖告警（仅有拆分前就在的 `useDbnoInstancesDtxLoader` / `useDockApi` 动态 + 静态导入提示），主 chunk `index-*.js` 3,781 KB。§5 的手工项（ViewerPanel 里点选 / 测量 / 云线三步 / LOD 聚合 / 拖文字框 / 降级）未做，靠 12 个测试文件兑底。
 
-结果：`useDtxTools.ts` 7169 → 300 行（只剩选项解构、共享状态声明、`ctx`、控制器装配、return）；`dtxTools/` 12 个纯模块 + `controllers/` 12 个控制器 + `controllers/overlay/` 4 个，最大的单文件是 `measureController.ts` 829 行、`overlay/cloudOverlay.ts` 724 行。
+结果：`useDtxTools.ts` 7169 → 297 行（只剩选项解构、共享状态声明、`ctx`、控制器装配、return）；`dtxTools/` 12 个纯模块 + `controllers/` 12 个控制器 + `controllers/overlay/` 4 个，最大的单文件是 `measureController.ts` 829 行、`overlay/cloudOverlay.ts` 724 行。
