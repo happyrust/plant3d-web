@@ -1,8 +1,8 @@
-import { type Ref, computed, ref, watch } from 'vue';
+import { type Ref, computed, ref } from 'vue';
 
-import { Box3, Group, Line, Vector3 } from 'three';
+import { Group, Line } from 'three';
 
-import { computeAabbObbFromBox3, createRectAnnotationRecordFromObb, getDefaultTextAnnotationLabelWorldPos, isDtxInteractionReady } from './dtxTools/annotationRecords';
+import { isDtxInteractionReady } from './dtxTools/annotationRecords';
 import { type CloudOverlayEl, type CloudRenderStats } from './dtxTools/cloudRegion';
 import { createAnnotationInteraction } from './dtxTools/controllers/annotationInteraction';
 import { createCloudCreationFlow } from './dtxTools/controllers/cloudCreationFlow';
@@ -13,9 +13,10 @@ import { createOverlayHost } from './dtxTools/controllers/overlayHost';
 import { createOverlaySync } from './dtxTools/controllers/overlaySync';
 import { createPanelActions } from './dtxTools/controllers/panelActions';
 import { createPickCandidateController } from './dtxTools/controllers/pickCandidateController';
-import { getCanvasPos, nowId, parseRefnoFromDtxObjectId, vec3ToTuple } from './dtxTools/geometry';
-import { type PickRefnoCandidate, type PickRefnoRayHit } from './dtxTools/pickCandidates';
-import { clearGroup } from './dtxTools/visuals';
+import { createPointerDispatcher } from './dtxTools/controllers/pointerDispatcher';
+import { createSurfacePicker } from './dtxTools/controllers/surfacePicking';
+import { installDtxToolsWatchers } from './dtxTools/controllers/watchers';
+import { type PickRefnoCandidate } from './dtxTools/pickCandidates';
 
 import type { CloudLodState, DtxToolsContext } from './dtxTools/context';
 import type { AnnotationLeaderVisual, DragRect, InlineOverlayAnnotationDragState, LabelEl, ObbOverlayEl, PendingCloudAnchor, RectOverlayEl, RectPlaneDrag, TextAnnotationDragState } from './dtxTools/types';
@@ -28,7 +29,7 @@ import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingR
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { type AnnotationRecord, useToolStore } from '@/composables/useToolStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { createArrayVersionTracker, createValueVersionTracker } from '@/review/domain/annotationProjection/dirty';
@@ -166,6 +167,7 @@ export function useDtxTools(options: {
     overlayContainerRef,
     compatViewerRef,
     store,
+    selectionStore,
     requestRender,
     suppressStoreOverlays,
     unitSettings,
@@ -191,373 +193,32 @@ export function useDtxTools(options: {
     rectPreviewLine,
   };
 
+  const picker = createSurfacePicker(ctx);
   const annotation = createAnnotationInteraction(ctx, { updateOverlayPositions: () => overlay.updateOverlayPositions() });
   const lod = createCloudLodController(ctx, { updateOverlayPositions: () => overlay.updateOverlayPositions(), activateAnnotation: annotation.activateAnnotation });
   const inspection = createCloudInspection(ctx, { updateOverlayPositions: () => overlay.updateOverlayPositions(), resolveCloudTargetBbox: (cloud) => overlay.resolveCloudTargetBbox(cloud) });
   const host = createOverlayHost(ctx, { clearPinClusterDom: lod.clearPinClusterDom });
   const cloudFlow = createCloudCreationFlow(ctx, {
-    pickSurfacePoint,
+    pickSurfacePoint: picker.pickSurfacePoint,
     hideMarquee: host.hideMarquee,
     updateMarqueeStyle: host.updateMarqueeStyle,
     updateMarqueeRect: host.updateMarqueeRect,
     activateAnnotation: annotation.activateAnnotation,
   });
 
-  const pick = createPickCandidateController(ctx, { pickSurfaceRayHits, ensureToolsGroupAttached: host.ensureToolsGroupAttached });
+  const pick = createPickCandidateController(ctx, { pickSurfaceRayHits: picker.pickSurfaceRayHits, ensureToolsGroupAttached: host.ensureToolsGroupAttached });
   pick.installWatchers();
 
-  const measure = createMeasureController(ctx, { pickSurfacePoint, clearPendingCloudAnchor: cloudFlow.clearPendingCloudAnchor, hideMarquee: host.hideMarquee });
+  const measure = createMeasureController(ctx, { pickSurfacePoint: picker.pickSurfacePoint, clearPendingCloudAnchor: cloudFlow.clearPendingCloudAnchor, hideMarquee: host.hideMarquee });
 
   // overlaySync 依赖上面的控制器，所以最后装配；上面几个对 updateOverlayPositions / resolveCloudTargetBbox 的引用都是延迟调用的转发
   const overlay = createOverlaySync(ctx, { annotation, lod, inspection, host, pick });
+  const pointer = createPointerDispatcher(ctx, { picker, cloudFlow, pick, measure, host });
+  installDtxToolsWatchers(ctx, { overlay, measure, cloudFlow, host });
 
   function refreshReadyState() {
     readyRevision.value += 1;
   }
-
-  /** e2e / 单测：每条批注当前在视口里的降级态与外观（ADR-0050） */
-
-  function pickSurfacePoint(canvas: HTMLCanvasElement, e: PointerEvent): { entityId: string; worldPos: Vector3; objectId: string } | null {
-    const sel = selectionRef.value;
-    if (!sel) return null;
-    const pos = getCanvasPos(canvas, e);
-    const hit = sel.pickPoint(pos);
-    if (!hit) return null;
-    const refno = parseRefnoFromDtxObjectId(hit.objectId) || hit.objectId;
-    return { entityId: refno, worldPos: hit.point.clone(), objectId: hit.objectId };
-  }
-
-  /** 光标射线上的全部命中（含被遮挡的），由近到远，供候选轮换使用。 */
-  function pickSurfaceRayHits(canvas: HTMLCanvasElement, e: PointerEvent): PickRefnoRayHit[] {
-    const sel = selectionRef.value;
-    if (typeof sel?.pickPoints !== 'function') return [];
-    return sel.pickPoints(getCanvasPos(canvas, e)).map((hit) => ({
-      entityId: parseRefnoFromDtxObjectId(hit.objectId) || hit.objectId,
-      objectId: hit.objectId,
-      distance: hit.distance,
-    }));
-  }
-
-  // click-based tools
-  const clickTracker = ref<{ down: { x: number; y: number } | null; moved: boolean }>({ down: null, moved: false });
-  const boxSelectState = ref<{ active: boolean; startX: number; startY: number; endX: number; endY: number } | null>(null);
-
-  function onCanvasPointerDown(canvas: HTMLCanvasElement, e: PointerEvent) {
-    if (!ready.value) return;
-    if (e.button !== 0) return;
-    clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
-
-    const mode = store.toolMode.value;
-    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_refno_box' && mode !== 'pick_query_center') return;
-    if (mode === 'annotation_obb' || mode === 'pick_refno_box') {
-      cloudFlow.beginMarquee(canvas, e, mode);
-      return;
-    }
-    if (mode === 'annotation_cloud') {
-      if (pendingCloudAnchor.value) {
-        cloudFlow.beginMarquee(canvas, e, mode);
-      }
-      return;
-    }
-    if (mode === 'annotation_rect') {
-      return;
-    }
-  }
-
-  function onCanvasPointerMove(canvas: HTMLCanvasElement, e: PointerEvent) {
-    const down = clickTracker.value.down;
-    if (down) {
-      const dx = e.clientX - down.x;
-      const dy = e.clientY - down.y;
-      if (dx * dx + dy * dy > 9) clickTracker.value.moved = true;
-    }
-
-    const mode = store.toolMode.value;
-    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_refno_box' && mode !== 'pick_query_center') return;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb' || mode === 'pick_refno_box') {
-      cloudFlow.moveMarquee(canvas, e, mode);
-      return;
-    }
-
-  }
-
-  function onCanvasPointerUp(canvas: HTMLCanvasElement, e: PointerEvent) {
-    if (!ready.value) return;
-
-    const mode = store.toolMode.value;
-    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_refno_box' && mode !== 'pick_query_center') {
-      clickTracker.value = { down: null, moved: false };
-      return;
-    }
-    if (mode === 'annotation_obb' || mode === 'pick_refno_box') {
-      cloudFlow.endMarquee(canvas, e, mode);
-      return;
-    }
-    if (mode === 'annotation_cloud') {
-      if (marqueeState.value.active) {
-        cloudFlow.endMarquee(canvas, e, mode);
-        return;
-      }
-      if (clickTracker.value.moved) {
-        clickTracker.value = { down: null, moved: false };
-        return;
-      }
-      clickTracker.value = { down: null, moved: false };
-      if (!cloudFlow.canDrawCloudAnnotation()) {
-        cloudFlow.notifyCloudGateBlocked('target');
-        return;
-      }
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      cloudFlow.setPendingCloudAnchor({
-        worldPos: vec3ToTuple(hit.worldPos),
-        refno: hit.entityId,
-        entityId: hit.entityId,
-      });
-      return;
-    }
-    if (mode === 'annotation_rect') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      const compat = compatViewerRef.value;
-      if (!compat) return;
-      const pickedRefno = parseRefnoFromDtxObjectId(hit.objectId) || hit.entityId;
-      const aabb = compat.scene.getAABB([pickedRefno]);
-      if (!aabb) return;
-      const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
-      const obb = computeAabbObbFromBox3(box);
-      const n = store.rectAnnotations.value.length + 1;
-      const rec = createRectAnnotationRecordFromObb({
-        objectIds: [pickedRefno],
-        refnos: [pickedRefno],
-        obb,
-        title: `矩形批注 ${n}`,
-        regionV1: cloudFlow.buildSharedRegionForMembers([pickedRefno]) ?? undefined,
-      });
-      store.addRectAnnotation(rec);
-      return;
-    }
-
-    // 防止相机拖拽结束误触发
-    if (clickTracker.value.moved) {
-      clickTracker.value = { down: null, moved: false };
-      return;
-    }
-    clickTracker.value = { down: null, moved: false };
-
-    if (mode === 'none') {
-      // 普通模式下的点击选择，支持 Shift 多选
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) {
-        // 点击空白处，清除选择（除非按住 Shift）
-        if (!e.shiftKey) {
-          const viewer = compatViewerRef.value;
-          if (viewer) {
-            const prev = viewer.scene.selectedObjectIds;
-            if (prev.length > 0) {
-              viewer.scene.setObjectsSelected(prev, false);
-            }
-          }
-        }
-        return;
-      }
-
-      const refno = hit.entityId;
-      const viewer = compatViewerRef.value;
-      if (!viewer) return;
-
-      viewer.scene.ensureRefnos([refno]);
-
-      if (e.shiftKey) {
-        // Shift 多选：切换选中状态
-        const isSelected = viewer.scene.selectedObjectIds.includes(refno);
-        viewer.scene.setObjectsSelected([refno], !isSelected);
-      } else {
-        // 单选：清除之前的选择，选中当前对象
-        const prev = viewer.scene.selectedObjectIds;
-        if (prev.length > 0) {
-          viewer.scene.setObjectsSelected(prev, false);
-        }
-        viewer.scene.setObjectsSelected([refno], true);
-      }
-      return;
-    }
-
-    if (mode === 'pick_query_center') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      store.setPickedQueryCenter({ entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) });
-      store.setToolMode('none');
-      return;
-    }
-
-    if (pick.handlePointerUp(canvas, e, mode)) return;
-
-    if (measure.handlePointerUp(canvas, e, mode)) return;
-
-    // annotation: click to create text annotation
-    if (mode === 'annotation') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      const n = store.annotations.value.length + 1;
-      // 优先绑定当前点击命中的构件，避免沿用全局旧选中导致误绑。
-      const boundRefno = String(hit.entityId || '').trim() || selectionStore.selectedRefno.value || undefined;
-      const rec: AnnotationRecord = {
-        id: nowId('anno'),
-        entityId: hit.entityId,
-        worldPos: vec3ToTuple(hit.worldPos),
-        labelWorldPos: getDefaultTextAnnotationLabelWorldPos(vec3ToTuple(hit.worldPos)),
-        collapsed: false,
-        visible: true,
-        glyph: `A${n}`,
-        title: `批注 ${n}`,
-        description: '',
-        createdAt: Date.now(),
-        refno: boundRefno,
-      };
-      store.addAnnotation(rec);
-      return;
-    }
-
-    // 点击其它批注模式时，保持不误创建文字批注
-  }
-
-  function onCanvasPointerCancel(canvas: HTMLCanvasElement, e: PointerEvent) {
-    void e;
-    if (suppressStoreOverlays) {
-      clickTracker.value = { down: null, moved: false };
-      return;
-    }
-    const viewer = dtxViewerRef.value;
-    if (viewer) viewer.controls.enabled = true;
-    host.hideMarquee();
-    rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
-    try {
-      rectPreviewLine.value?.geometry.dispose()
-      ; (rectPreviewLine.value?.material as any)?.dispose?.();
-    } catch { /* ignore */ }
-    rectPreviewLine.value = null;
-    clickTracker.value = { down: null, moved: false };
-    try { canvas.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-  }
-
-  watch(
-    () => ({
-      measurements: store.measurements.value,
-      annotations: store.annotations.value,
-      cloudAnnotations: store.cloudAnnotations.value,
-      rectAnnotations: store.rectAnnotations.value,
-      obbAnnotations: store.obbAnnotations.value,
-      activeAnnotationId: store.activeAnnotationId.value,
-      activeCloudAnnotationId: store.activeCloudAnnotationId.value,
-      activeRectAnnotationId: store.activeRectAnnotationId.value,
-      activeObbAnnotationId: store.activeObbAnnotationId.value,
-    }),
-    () => {
-      if (!dtxViewerRef.value || !overlayContainerRef.value) return;
-      overlay.syncFromStore();
-    },
-    { deep: true }
-  );
-
-  watch(
-    () => annotationStyleStore.cloudDrawMode.value,
-    () => {
-      if (!dtxViewerRef.value || !overlayContainerRef.value) return;
-      overlay.syncFromStore();
-      requestRender?.();
-    },
-  );
-
-  watch(
-    () => annotationStyleStore.style.cloud,
-    () => {
-      if (!dtxViewerRef.value || !overlayContainerRef.value) return;
-      overlay.syncFromStore();
-      requestRender?.();
-    },
-    { deep: true },
-  );
-
-  // ADR-0050：解析表整表替换（模型加载 / 定位回执 / 详情卡重算 / 批注后到）→ 就地换降级外观，不重建 overlay
-  watch(bindingResolve.entries, () => {
-    if (!dtxViewerRef.value || !overlayContainerRef.value) return;
-    overlay.applyBindingDegrade();
-  });
-
-  // pick_refno：候选变化与取消拾取时同步高亮
-
-  // 显示单位变化：刷新测量标签等 overlay 文本
-  watch(
-    () => [unitSettings.displayUnit.value, unitSettings.precision.value],
-    () => {
-      if (!dtxViewerRef.value || !overlayContainerRef.value) return;
-      overlay.syncFromStore();
-      requestRender?.();
-    }
-  );
-
-  watch(
-    () => [store.toolMode.value, selectionStore.selectedRefnos.value.join('|')] as const,
-    ([mode, selectedRefnos]) => {
-      if (mode !== 'measure_object_to_object') return;
-      const refnos = selectedRefnos
-        .split('|')
-        .map((refno) => refno.trim())
-        .filter(Boolean);
-      measure.handleTreeObjectMeasureSelection(refnos);
-    },
-    { immediate: true },
-  );
-
-  watch(
-    () => store.cloudTargetRefnos.value.join('|'),
-    () => {
-      cloudFlow.clearPendingCloudAnchor();
-      host.hideMarquee();
-    },
-  );
-
-  watch(
-    () => store.toolMode.value,
-    (mode, prev) => {
-      if (mode !== prev) {
-        measure.resetProgress();
-      }
-      const pickingCloudTargets = mode === 'pick_refno' || mode === 'pick_refno_box';
-      const wasPickingCloudTargets = prev === 'pick_refno' || prev === 'pick_refno_box';
-      if (
-        !pickingCloudTargets &&
-        mode !== 'annotation_cloud' &&
-        (prev === 'annotation_cloud' || wasPickingCloudTargets)
-      ) {
-        // 退到 none 只是「收起工具」，目标集合留着待复用；
-        // 切到别的工具才是「换活儿」，按方案 §2.1 清理到底。
-        if (mode === 'none') cloudFlow.suspendCloudCreation();
-        else cloudFlow.cancelCloudCreation();
-      }
-      if (mode === 'none' && prev !== 'none') {
-        host.hideMarquee();
-      }
-    }
-  );
-
-  watch(
-    () => dtxViewerRef.value,
-    (viewer, prev) => {
-      if (prev && toolsGroup.parent === prev.scene) {
-        prev.scene.remove(toolsGroup);
-      }
-      if (viewer) {
-        host.ensureToolsGroupAttached();
-        overlay.syncFromStore();
-      } else {
-        clearGroup(toolsGroup);
-        host.clearOverlayEls();
-      }
-    },
-    { immediate: true }
-  );
 
   const panelActions = createPanelActions(ctx, {
     resolveCloudTargetBbox: overlay.resolveCloudTargetBbox,
@@ -640,10 +301,10 @@ export function useDtxTools(options: {
     dispose: panelActions.dispose,
 
     // input hook (ViewerPanel 使用)
-    onCanvasPointerDown,
-    onCanvasPointerMove,
-    onCanvasPointerUp,
-    onCanvasPointerCancel,
+    onCanvasPointerDown: pointer.onCanvasPointerDown,
+    onCanvasPointerMove: pointer.onCanvasPointerMove,
+    onCanvasPointerUp: pointer.onCanvasPointerUp,
+    onCanvasPointerCancel: pointer.onCanvasPointerCancel,
     cancelMeasurementInteraction: measure.cancelMeasurementInteraction,
 
     // 兼容：selectionStore 在 none 模式下由 ViewerPanel 处理

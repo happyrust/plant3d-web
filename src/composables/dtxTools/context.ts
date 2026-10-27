@@ -13,6 +13,7 @@ import type { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import type { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import type { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import type { useReviewStore } from '@/composables/useReviewStore';
+import type { useSelectionStore } from '@/composables/useSelectionStore';
 import type { useToolStore } from '@/composables/useToolStore';
 import type { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import type { useUserStore } from '@/composables/useUserStore';
@@ -87,6 +88,8 @@ export type DtxToolsContext = {
   overlayContainerRef: Ref<HTMLElement | null>;
   compatViewerRef: Ref<DtxCompatViewer | null>;
   store: ReturnType<typeof useToolStore>;
+  /** 构件选中态（none 模式的点选由 ViewerPanel 处理；这里给对象–对象测量的树选择与文字批注的回退绑定读）。只读 */
+  selectionStore: ReturnType<typeof useSelectionStore>;
   requestRender: (() => void) | null;
   /** 只画测量等自己的东西、不渲染 store 里的批注 overlay（嵌入小视口用）。装配选项，只读 */
   suppressStoreOverlays: boolean;
