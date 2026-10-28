@@ -61,6 +61,12 @@ export class DtxViewer {
   readonly gizmo: ViewportGizmo | null;
 
   private _rafId: number | null = null;
+  /**
+   * 在途 `flyTo` 动画的 raf 句柄。两次 `flyTo` 并发时两个 step 循环会各写各的插值，
+   * 最后一帧谁先谁赢（看起来就是「晚落地的那笔把相机从用户最新那一下上拽走」）。
+   * 起新动画前必须先撤旧的。
+   */
+  private _flyRafId: number | null = null;
   private _debug: boolean;
   private _gizmoEnabled: boolean;
 
@@ -251,6 +257,7 @@ export class DtxViewer {
 
   dispose(): void {
     this.stop();
+    this.cancelFlyTo();
     try {
       this.controls.dispose();
     } catch {
@@ -297,7 +304,19 @@ export class DtxViewer {
     }
   }
 
+  /**
+   * 撤掉在途的 `flyTo` 动画（相机停在当前这一帧，不回退也不跳到目标）。
+   * 相机意图收口（`supersedeCameraIntents`）与显式取消都走这里。
+   */
+  cancelFlyTo(): void {
+    if (this._flyRafId === null) return;
+    window.cancelAnimationFrame(this._flyRafId);
+    this._flyRafId = null;
+  }
+
   flyTo(position: Vector3, target: Vector3, options: FlyToOptions = {}): void {
+    // 起新动画先撤旧的：否则两个 step 循环同时 lerp 同一台相机，结果由最后一帧的先后决定
+    this.cancelFlyTo();
     const duration = Math.max(0, options.duration ?? 800);
     if (duration === 0) {
       this.camera.position.copy(position);
@@ -323,14 +342,16 @@ export class DtxViewer {
       this.controls.target.lerpVectors(fromTarget, toTarget, k);
       this.controls.update();
       if (t < 1) {
-        window.requestAnimationFrame(step);
-      } else if (this._debug) {
-         
-        console.log('[DtxViewer] flyTo done', { duration });
+        this._flyRafId = window.requestAnimationFrame(step);
+      } else {
+        this._flyRafId = null;
+        if (this._debug) {
+          console.log('[DtxViewer] flyTo done', { duration });
+        }
       }
     };
 
-    window.requestAnimationFrame(step);
+    this._flyRafId = window.requestAnimationFrame(step);
   }
 
   /**

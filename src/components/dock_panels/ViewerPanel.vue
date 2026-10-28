@@ -154,6 +154,8 @@ import {
   buildMeasurementComponentsText,
   buildMeasurementValueText,
 } from '@/utils/xeokitMeasurementFormat';
+import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
+import { flyToScope } from '@/viewer/camera/focusScope';
 import { CadGrid } from '@/viewer/dtx/dtxCadGrid';
 import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
@@ -1943,13 +1945,14 @@ async function locateShowSelected(): Promise<void> {
 
   // 先确保可见，再定位
   compat.scene.setObjectsVisible(targetRefnos, true);
-  const aabb = compat.scene.getAABB(targetRefnos);
-  if (!aabb) {
+  // 统一走 focusScope：构件直接并 → 子树并集（本地索引）→ 都没几何才提示，
+  // 不再「getAABB 空就报定位失败」（SITE / ZONE 这类自己没几何的范围根以前就是这么失败的）。
+  const result = await flyToScope(compat, { refnos: targetRefnos, source: 'toolbar' });
+  if (!result.ok) {
     emitToast({ message: '定位失败：未获取到对象包围盒' });
     requestRender();
     return;
   }
-  compat.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
   requestRender();
 }
 
@@ -4518,6 +4521,9 @@ onMounted(async () => {
       .then(async () => {
         // 带守卫的单构件飞行不在加载里飞（那时还没法核对），加载完再核一次、自己飞
         const singleFlyTo = !highlight && flyTo && unique.length === 1;
+        // 相机意图戳：开始加载前盖一次，落地时核对。与上面的 shouldApply 不是一回事——
+        // 那个管「这条任务回执还该不该生效」，这个只管「相机还该不该动」。
+        const cameraStamp = beginCameraIntent();
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
@@ -4556,6 +4562,9 @@ onMounted(async () => {
         if (!highlight && flyTo && debugState.ok.length > 0 && !(singleFlyTo && !shouldApply)) {
           const compat = compatViewerRef.value;
           if (!applyAllowed()) {
+            suppressed = true;
+          } else if (!isCameraIntentCurrent(cameraStamp)) {
+            // 加载期间用户已经发起过更新的取景（按了 F / 点了别处定位）：模型照常装，相机不动
             suppressed = true;
           } else if (compat) {
             compat.scene.ensureRefnos(debugState.ok);

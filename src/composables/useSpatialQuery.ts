@@ -74,6 +74,7 @@ import {
   type SpatialQueryStatus,
 } from '@/types/spatialQuery';
 import { getSpecValueName } from '@/types/spec';
+import { beginCameraIntent } from '@/viewer/camera/cameraIntent';
 
 type ViewerLike = {
   scene: {
@@ -2150,6 +2151,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const [min, max] = [tube.aabb?.min, tube.aabb?.max];
     const aabb6: Aabb6 | null = min && max ? [min[0], min[1], min[2], max[0], max[1], max[2]] : null;
     if (!isFiniteAabb6(aabb6)) return;
+    // 直段盒是服务端给的权威盒，直接飞；但要走同一套意图登记，否则晚到的批量加载会把它拽走。
+    beginCameraIntent();
     viewer.cameraFlight.flyTo({ aabb: resolveSceneWorldTransform(viewer).aabbToScene(aabb6!), fit: true, duration: 0.8 });
   }
 

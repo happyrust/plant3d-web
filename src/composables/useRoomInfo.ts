@@ -25,6 +25,7 @@ import { useSceneGraphOps } from '@/composables/useSceneGraph';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
+import { flyToScope } from '@/viewer/camera/focusScope';
 
 /** 成员预览上限（plant-ui 的「成员预览」也是截断的：全量请去「房间」页签）。 */
 export const MEMBER_PREVIEW_LIMIT = 50;
@@ -301,8 +302,7 @@ function flyToRoom(): void {
     emitToast({ message: '这间房还没有已加载几何的构件，先「加载房间模型」再聚焦', level: 'info' });
     return;
   }
-  const aabb = viewer.scene.getAABB(loaded);
-  if (aabb) viewer.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
+  void flyToScope(viewer, { refnos: loaded, source: 'room' });
 }
 
 /**

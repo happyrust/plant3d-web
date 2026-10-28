@@ -6,6 +6,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 import { getModelSource } from '@/model-source';
+import { flyToScope } from '@/viewer/camera/focusScope';
 
 export const NOUN_TYPES = [
   'PIPE', 'BRAN', 'EQUI', 'SUPP', 'STRU', 'WALL', 'SWALL', 'GWALL',
@@ -839,15 +840,27 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     void syncSceneSelection();
   }
 
-  async function flyTo(id: string) {
+  /**
+   * 定位到节点。
+   *
+   * 原来只收「已加载」的构件（`collectLoadedSubtreeRefnos`），一个都没加载就 `return` ——
+   * SITE / ZONE / PIPE 这类范围根从来没单独装过，按定位什么都不会发生，也没有任何提示
+   * （plant-ui `fix(focus)` `36cc91f2d` 修的就是这个）。现在走 `resolveFocusScope`：
+   * 直接并 → 子树并集（本地索引，`getSubtreeAABB`）→ 查一次子树清单，三级都空才回 false。
+   */
+  async function flyTo(id: string): Promise<boolean> {
     const viewer = viewerRef.value;
-    if (!viewer) return;
+    if (!viewer) return false;
 
-    const refnos = collectLoadedSubtreeRefnos(id);
-    if (refnos.length === 0) return;
-
-    const aabb = viewer.scene.getAABB(refnos);
-    viewer.cameraFlight.flyTo({ aabb });
+    const loaded = collectLoadedSubtreeRefnos(id);
+    const result = await flyToScope(viewer, {
+      refnos: loaded,
+      scopeRefnos: [id],
+      allowSubtreeQuery: true,
+      lookupSubtreeRefnos: querySubtreeRefnos,
+      source: 'tree',
+    });
+    return result.ok;
   }
 
   async function isolateXray(id: string) {

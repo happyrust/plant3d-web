@@ -708,6 +708,8 @@ export class DtxCompatViewer {
   readonly cameraFlight: {
     flyTo: (options: { aabb?: Aabb6 | number[] | null; duration?: number; fit?: boolean }) => void
     jumpTo: (options: { aabb?: Aabb6 | number[] | null }) => void
+    /** 撤掉在途飞行（相机停在当前帧）。相机意图收口与显式取消都走这里。 */
+    cancel: () => void
   };
 
   constructor(options: {
@@ -754,6 +756,9 @@ export class DtxCompatViewer {
       },
       jumpTo: (options) => {
         flyToImpl(options.aabb as any, 0);
+      },
+      cancel: () => {
+        this.__dtxViewer.cancelFlyTo();
       },
     };
   }

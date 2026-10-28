@@ -43,6 +43,8 @@ import { resolveSceneWorldTransform } from '@/composables/useSpatialQuery';
 import { showModelByRefnosWithAck, type ShowModelByRefnosResult } from '@/composables/useViewerContext';
 import { getModelSource } from '@/model-source';
 import { emitToast } from '@/ribbon/toastBus';
+import { beginCameraIntent } from '@/viewer/camera/cameraIntent';
+import { flyToScope } from '@/viewer/camera/focusScope';
 
 type Aabb6 = [number, number, number, number, number, number];
 
@@ -533,14 +535,19 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
       if (!min || !max) return false;
       const aabb6: Aabb6 = [min[0], min[1], min[2], max[0], max[1], max[2]];
       if (!aabb6.every((value) => Number.isFinite(value))) return false;
+      beginCameraIntent();
       viewer.cameraFlight.flyTo({ aabb: resolveSceneWorldTransform(viewer as unknown as Parameters<typeof resolveSceneWorldTransform>[0]).aabbToScene(aabb6) });
       return true;
     }
-    const refnos = (await collectRefnos(id)).filter((refno) => !!viewer.scene.objects[refno]);
-    if (refnos.length === 0) return false;
-    const aabb = viewer.scene.getAABB(refnos);
-    viewer.cameraFlight.flyTo({ aabb });
-    return true;
+    // 房间树里 SITE / ZONE / 房间这些范围根自己往往没几何：先补齐叶子，再走统一的子树范围解析
+    // （`resolveFocusScope` 第二档是本地索引的 `getSubtreeAABB`，不需要网络）。
+    const refnos = await collectRefnos(id);
+    const result = await flyToScope(viewer, {
+      refnos: refnos.filter((refno) => !!viewer.scene.objects[refno]),
+      scopeRefnos: [id],
+      source: 'room',
+    });
+    return result.ok;
   }
 
   /**

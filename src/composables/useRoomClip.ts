@@ -50,6 +50,7 @@ import {
 } from '@/room-clip/prism';
 import { RoomClipOverlay, type RoomPanelMeshInput } from '@/room-clip/RoomClipOverlay';
 import { RoomSolid } from '@/room-clip/roomSolid';
+import { beginCameraIntent } from '@/viewer/camera/cameraIntent';
 
 export const ROOM_VIEW_TRUNCATE_STORAGE_KEY = 'plant3d.roomView.truncateTubes';
 
@@ -571,6 +572,7 @@ function flyToBoundsMm(viewer: DtxCompatViewer, bounds: AabbMm): void {
   const sceneAabb = resolveSceneWorldTransform(
     viewer as unknown as Parameters<typeof resolveSceneWorldTransform>[0],
   ).aabbToScene(aabb6);
+  beginCameraIntent();
   viewer.cameraFlight?.flyTo?.({ aabb: sceneAabb, duration: 0.8, fit: true });
 }
 

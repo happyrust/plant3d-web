@@ -18,6 +18,7 @@ import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 import { emitToast } from '@/ribbon/toastBus';
+import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
 
 /**
  * 全局开关：是否显式启用自动生成
@@ -495,6 +496,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
     const refresh = loadOptions?.refresh === true;
+    // 相机意图戳：本次加载要飞的话，加载前盖一次；落地时核对，期间用户点了别处就不动相机。
+    const cameraStamp = loadOptions?.flyTo ? beginCameraIntent() : 0;
 
     const genuinelyLoaded = loadedRoots.has(normalizedRoot);
     if (!loadOptions?.regenerate && !refresh && checkRefnoExists(normalizedRoot)) {
@@ -872,7 +875,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         try {
           const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
           const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-          if (aabb) anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+          if (aabb && isCameraIntentCurrent(cameraStamp)) {
+            anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+          }
         } catch {
           // ignore flyTo errors
         }
@@ -989,6 +994,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       scene?: { getAABB?: (ids: string[]) => unknown }
       cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
     };
+    // 整库装载要飞的话，装载前盖一次意图戳；落地时核对，期间用户点了别处就不动相机。
+    const cameraStamp = loadOptions?.flyTo ? beginCameraIntent() : 0;
     const dtxLayer = anyViewer.__dtxLayer as any;
     if (!dtxLayer) {
       throw new Error('DTXLayer 未初始化，无法加载模型');
@@ -1141,7 +1148,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       try {
         const flyTargets = collected.refnos.length > 5000 ? collected.refnos.slice(0, 5000) : collected.refnos;
         const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-        if (aabb) {
+        if (aabb && isCameraIntentCurrent(cameraStamp)) {
           anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
         }
       } catch {
