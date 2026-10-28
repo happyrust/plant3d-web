@@ -99,6 +99,15 @@ function isMbd3dDisabled(raw: string | null): boolean {
   return raw?.trim() === '0';
 }
 
+/**
+ * 调试开关 `?mbd_partial=1`：允许部分显示。缺省（关）维持 ADR 0046 的原子拒绝——
+ * 只要有一个图元映射不过就整包不提交；打开后跳过的那几条只进诊断，其余照常渲染，
+ * 面板常驻「N 条被跳过」的横幅（`DimensionPanelDock`），避免使用者误以为图是完整的。
+ */
+function isMbdPartialEnabled(raw: string | null): boolean {
+  return raw?.trim() === '1';
+}
+
 function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensionRecord {
   const layout = record.layout;
   // Only explicit layouts carry the presentation hints.
@@ -160,7 +169,8 @@ export function createMbdExternalSync(
         // ADR 0046：先校验、后原子替换。实时 API 负载的任何跳过——契约校验阶段的
         // 逐条诊断（channelSkipped）与映射失败（mapped.skipped）——都整包拒绝，
         // 不部分提交。
-        if (skipped.length > 0) {
+        const partialEnabled = isMbdPartialEnabled(params.get('mbd_partial'));
+        if (skipped.length > 0 && !partialEnabled) {
           throw new MbdAtomicRejectionError(
             `MBD 负载整包拒绝：${skipped.length} 个图元无法映射`
               + `（首个：${skipped[0]!.id} — ${skipped[0]!.reason}）`,
@@ -199,6 +209,12 @@ export function createMbdExternalSync(
             ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
             ...(presentation3dDisabled
               ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
+              : []),
+            ...(skipped.length > 0
+              ? [
+                `mbd_partial=1：允许部分显示，已跳过 ${skipped.length} 个图元`
+                  + `（首个：${skipped[0]!.id} — ${skipped[0]!.reason}）`,
+              ]
               : []),
           ],
         });

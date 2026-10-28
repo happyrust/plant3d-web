@@ -152,6 +152,17 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 
 **未做（下一轮候选）**：阶段 A（A1 fixture 待用户提供真实负载）、B2/B3、C1/C2、D1/D2、E1–E3。
 
+### 第二轮（2026-10-29）：B2 + B3
+
+| ID | 状态 | 改动文件 | 验收 |
+| --- | --- | --- | --- |
+| B2 | 完成 | `src/dimension/ui/DimensionPanelDock.vue` | 「0 条 MBD 记录 + `loadError` 非空」时，BRAN 行出现红色角标「! 装载失败」（`title` 带完整原因），点一下把诊断 `<details>` 展开；有记录时不挂（失败但仍有部分记录属于第三轮 B3 的语义） |
+| B3 | 完成 | `useMbdExternalSync.ts`、`DimensionPanelDock.vue` | 新增开关 `?mbd_partial=1`：关（缺省）= 既有原子拒绝；开 = 跳过项只进 `diagnostics.skipped` 与 `notes`、其余照常提交，且**不弹错误 toast**（部分显示不是失败）。面板上常驻「已跳过 N 条，当前视图不代表完整标注」 |
+
+门禁：`vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts` → **73 文件 / 548 用例全绿**；`type-check` 440 条 / 127 文件，新增 0、已消失 0；`eslint`（4 个触及文件）0 问题。
+
+**已知边界（下一轮 A5 要补）**：现在能「部分显示」的只有**映射阶段**的跳过（`mapped.skipped`）与契约层将来产出的 `diagnostics`；`parseMbdV2PipeData` 本身仍是「一条图元非法就 `ok:false`」，那条路径在 B3 之前就整包失败了，开关拦不住。也就是说 A2/A3（未知字段容忍、未知 kind 降级）不做完，`offset` / `suppressed_reason` 这类现网故障仍然会整包丢失——B3 只是把「映射坏一条」这一半先接住。
+
 ### 与工作区其他改动的边界（勿混提交）
 
 本轮改动**只有这 8 个文件**：`src/api/mbdV2Api.ts`、`src/api/mbdV2Api.test.ts`、`src/composables/useMbdExternalSync.ts`、`src/composables/useMbdExternalSync.test.ts`、`src/dimension/adapters/mbdV2Contract.ts`、`src/dimension/ui/DimensionPanelDock.vue`、`src/dimension/ui/DimensionPanelDock.test.ts`、`src/components/dock_panels/ViewerPanel.vue`，外加 `docs/` 下三份文档。

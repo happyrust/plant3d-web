@@ -569,4 +569,73 @@ describe('DimensionPanelDock', () => {
     expect(rows()).toBe(200);
   });
 
+  /**
+   * B2：视口空白时「没有标注」与「取数失败」必须能区分——有 loadError 且一条 MBD
+   * 记录都没有时，BRAN 行上挂红色角标，点一下展开诊断；有记录时不挂。
+   */
+  it('shows a load-failure badge only when the viewport is empty because of an error', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: [],
+      skipped: [],
+      loadError: 'MBD 负载整包拒绝：1 个图元无法映射',
+    });
+
+    const withRecords = mountPanel();
+    await nextTick();
+    expect(withRecords.querySelector('[data-testid="mbd-error-badge"]')).toBeNull();
+    apps.splice(0).forEach(app => app.unmount());
+    document.body.innerHTML = '';
+
+    // 失败且一条 MBD 记录都没有 → 角标出现，点开诊断。
+    system.externalRegistry.replaceSource('mbd', []);
+    const empty = mountPanel();
+    await nextTick();
+    const badge = empty.querySelector('[data-testid="mbd-error-badge"]') as HTMLButtonElement;
+    expect(badge).not.toBeNull();
+    expect(badge.getAttribute('title')).toContain('整包拒绝');
+    expect(empty.querySelector('[data-testid="mbd-diagnostics"]')?.hasAttribute('open')).toBe(false);
+
+    badge.click();
+    await nextTick();
+    expect(empty.querySelector('[data-testid="mbd-diagnostics"]')?.hasAttribute('open')).toBe(true);
+  });
+
+  /** B3：部分显示开关只改 URL，并派发 popstate 让同步层重新拉取。 */
+  it('writes ?mbd_partial=1 from the partial-display toggle', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=24381_145018');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: [],
+      skipped: [],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    const toggle = host.querySelector('[data-testid="mbd-partial-toggle"]') as HTMLInputElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.checked).toBe(false);
+
+    const onPopstate = vi.fn();
+    window.addEventListener('popstate', onPopstate);
+    try {
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event('change'));
+      await nextTick();
+
+      expect(new URL(window.location.href).searchParams.get('mbd_partial')).toBe('1');
+      expect(onPopstate).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
 });

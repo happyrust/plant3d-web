@@ -399,6 +399,41 @@ describe('createMbdExternalSync', () => {
     expect(harness.diagnostics.set).toHaveBeenCalledTimes(3);
   });
 
+  it('keeps the atomic rejection by default and submits everything with ?mbd_partial=1', async () => {
+    const good = contractPayload().primitives[0]!;
+    const broken = contractPayload({ primitives: [good, good] });
+    const fetchPipeData = vi.fn(async () => ({
+      ok: true as const,
+      data: broken,
+      diagnostics: [],
+    }));
+
+    // 缺省：一坏就整包不提交（ADR 0046）。
+    const strict = createHarness({ search: '?mbd_refno=A', fetchPipeData });
+    await strict.sync.sync(strict.target);
+    expect(strict.target.replaceExternalSource).toHaveBeenLastCalledWith('mbd', []);
+    expect((strict.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0].loadError)
+      .toContain('整包拒绝');
+
+    // mbd_partial=1：可映射的那条照常提交，跳过的进诊断与 notes，且不算装载失败。
+    const partial = createHarness({ search: '?mbd_refno=A&mbd_partial=1', fetchPipeData });
+    await partial.sync.sync(partial.target);
+    const [, records] = (partial.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)!;
+    expect(records.map((record: { id: string }) => record.id)).toEqual(['dim-1']);
+    const diagnostics = (partial.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    // 成功路径不写 loadError（测试桩的 set 不做缺省填充，故是 undefined）。
+    expect(diagnostics.loadError).toBeUndefined();
+    expect(diagnostics.skipped).toEqual([{
+      id: 'dim-1',
+      reason: 'Duplicate primitive id within MBD payload',
+    }]);
+    expect(diagnostics.notes).toEqual([expect.stringContaining('mbd_partial=1')]);
+    // 部分显示不是失败，不该弹错误提示。
+    expect(partial.emitToast).not.toHaveBeenCalled();
+  });
+
   it('re-arms the failure toast after a successful sync', async () => {
     let fail = true;
     const harness = createHarness({

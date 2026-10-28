@@ -276,6 +276,40 @@ function showAllMbdKinds(): void {
 }
 
 /**
+ * B2：装载失败角标。视口空白的两种原因（「本分支没有标注」与「取数失败」）在
+ * 界面上必须能区分，所以「一条 MBD 记录都没有 + 有 loadError」时在 BRAN 行上挂
+ * 一个红色角标，点开直接展开下面的诊断面板。
+ */
+const mbdErrorBadgeVisible = computed(() =>
+  mbdDiagnostics.value.loadError !== null && mbdRecordCount.value === 0);
+const diagnosticsOpen = ref(false);
+
+function openMbdDiagnostics(): void {
+  diagnosticsOpen.value = true;
+}
+
+/**
+ * B3：允许部分显示。真实开关在 `useMbdExternalSync`（读 URL `mbd_partial=1`）：
+ * 关（缺省）= ADR 0046 的原子拒绝，一坏就整包不提交；开 = 跳过坏图元、其余照画，
+ * 并在面板上常驻「已跳过 N 条」。开关同样只改 URL 再派发 `popstate` 触发重新同步。
+ */
+function readMbdPartialEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('mbd_partial')?.trim() === '1';
+}
+
+const mbdPartialEnabled = ref(readMbdPartialEnabled());
+const mbdSkippedCount = computed(() => mbdDiagnostics.value.skipped.length);
+
+function setMbdPartialEnabled(enabled: boolean): void {
+  const url = new URL(window.location.href);
+  if (enabled) url.searchParams.set('mbd_partial', '1');
+  else url.searchParams.delete('mbd_partial');
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
+/**
  * BRAN 号输入：写 URL `mbd_refno`（`A/B` 与 `A_B` 两种写法都认，统一成下划线）
  * 并派发 `popstate` → ViewerPanel 走 `handleMbdLocationChange` 实时拉取；
  * 清空（隐藏）则删掉参数，来源被 `replaceExternalSource('mbd', [])` 清掉。
@@ -610,6 +644,14 @@ function act(
       data-testid="mbd-refno">
       <div class="flex flex-wrap items-center gap-2">
         <span class="font-semibold">BRAN 尺寸标注（MBD）</span>
+        <button v-if="mbdErrorBadgeVisible"
+          type="button"
+          class="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 font-semibold text-red-700"
+          data-testid="mbd-error-badge"
+          :title="mbdDiagnostics.loadError ?? ''"
+          @click="openMbdDiagnostics()">
+          ! 装载失败
+        </button>
         <input v-model="mbdRefnoInput"
           class="min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 py-0.5"
           data-testid="mbd-refno-input"
@@ -637,6 +679,26 @@ function act(
       <div class="mt-1">
         求解器以 {{ incompleteLayoutMode }} 模式产出，只覆盖部分标注类别。
         未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。
+      </div>
+    </div>
+    <div v-if="mbdDiagnostics.channel"
+      class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
+      data-testid="mbd-partial-display">
+      <label class="flex items-center gap-1">
+        <input type="checkbox"
+          data-testid="mbd-partial-toggle"
+          :checked="mbdPartialEnabled"
+          @change="setMbdPartialEnabled(($event.target as HTMLInputElement).checked)" />
+        <span>允许部分显示（跳过坏图元，其余照常绘制）</span>
+      </label>
+      <div v-if="mbdPartialEnabled" class="mt-1">
+        <span v-if="mbdSkippedCount > 0" data-testid="mbd-partial-banner">
+          已跳过 {{ mbdSkippedCount }} 条，当前视图不代表完整标注。
+        </span>
+        <span v-else data-testid="mbd-partial-banner">当前没有需要跳过的图元。</span>
+      </div>
+      <div v-else class="mt-1 opacity-70">
+        关闭时沿用原子拒绝（ADR 0046）：只要有一条图元无法映射，本分支不显示任何标注。
       </div>
     </div>
     <div v-if="mbdDiagnostics.channel"
@@ -736,8 +798,10 @@ function act(
       </div>
     </div>
     <details v-if="diagnosticsVisible"
+      :open="diagnosticsOpen"
       class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
-      data-testid="mbd-diagnostics">
+      data-testid="mbd-diagnostics"
+      @toggle="diagnosticsOpen = ($event.target as HTMLDetailsElement).open">
       <summary class="cursor-pointer font-semibold">
         MBD 诊断（{{ diagnosticsCount }}）
         <span v-if="mbdDiagnostics.channel" class="font-normal opacity-70">
