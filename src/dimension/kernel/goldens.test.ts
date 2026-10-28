@@ -195,3 +195,63 @@ describe('explicit annotation structural goldens', () => {
     expect(normalized).toMatchSnapshot();
   });
 });
+
+/**
+ * tag 与 dimension3d 是两条独立呈现路径（`layoutViewport` 先拦 tag 走
+ * `planTagBillboard`，`dimension3d` 走 `layoutDimension3d`），上面那组
+ * canonical 条目一条都没覆盖它们。没有这两条，后续任何「快照不变」的
+ * 承诺对这两条路径都是空话。
+ */
+const tagBillboardInput: ExplicitLayoutInput = {
+  id: 'explicit-tag-golden',
+  role: 'external',
+  labelPinned: true,
+  formattedLabel: '',
+  lines: [],
+  labelAnchor: [0.4, 0.2, 0.1],
+  arrowLines: [],
+  tag: {
+    style: 'card',
+    lines: [{ text: 'N 1 100' }, { text: 'EL. +2500' }],
+    target: [0.3, 0.15, 0.05],
+    dot: true,
+  },
+};
+
+const dimension3dInput: ExplicitLayoutInput = {
+  id: 'explicit-dimension3d-golden',
+  role: 'external',
+  labelPinned: true,
+  formattedLabel: '1250',
+  lines: [],
+  labelAnchor: [1.25, 0, 0.35],
+  arrowLines: [],
+  dimension3d: {
+    from: [0, 0, 0],
+    to: [2.5, 0, 0],
+    direction: [0, 0, 1],
+    surfaceM: 0.11,
+    row: 0,
+  },
+};
+
+describe('tag / dimension3d structural goldens', () => {
+  it('explicit-tag-billboard', () => {
+    const normalized = normalizeLayout(tagBillboardInput);
+
+    // The body is planned by `placeTagBillboards` after the flat pass: it
+    // lands as `derived.tag` plus path primitives (rounded-rect SDF edges),
+    // not as a flat `fill`.
+    expect(normalized.derived.tag?.candidate).toBe(0);
+    expect(normalized.derived.tag?.body.width).toBeGreaterThan(0);
+    expect(normalized.derived.formattedLabel).toBe('N 1 100');
+    expect(normalized).toMatchSnapshot();
+  });
+
+  it('explicit-dimension3d', () => {
+    const normalized = normalizeLayout(dimension3dInput);
+
+    expect(normalized.derived.formattedLabel).toBe('1250');
+    expect(normalized).toMatchSnapshot();
+  });
+});

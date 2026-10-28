@@ -6978,3 +6978,1334 @@ exports[`explicit annotation structural goldens > explicit-annotation 1`] = `
   ],
 }
 `;
+
+exports[`tag / dimension3d structural goldens > explicit-dimension3d 1`] = `
+{
+  "derived": {
+    "declutter": {
+      "quad": [
+        [
+          320.45,
+          200,
+        ],
+        [
+          329.55,
+          200,
+        ],
+        [
+          329.55,
+          180.5,
+        ],
+        [
+          320.45,
+          180.5,
+        ],
+      ],
+      "rank": 1027.472527,
+    },
+    "formattedLabel": "1250",
+  },
+  "dimensionId": "explicit-dimension3d-golden",
+  "hitRegions": [
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        450,
+        200,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        200,
+        200,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        450,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        450,
+        200,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        211.7,
+        196.19844,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        211.7,
+        196.19844,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        211.7,
+        203.80156,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        211.7,
+        203.80156,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        200,
+        200,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        450,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        438.3,
+        196.19844,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        438.3,
+        196.19844,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        438.3,
+        203.80156,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        438.3,
+        203.80156,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        450,
+        200,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 19.5,
+        "width": 9.1,
+        "x": 320.45,
+        "y": 180.5,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 27.5,
+    "width": 17.1,
+    "x": 316.45,
+    "y": 176.5,
+  },
+  "labelPinned": true,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 19.5,
+        "width": 9.1,
+        "x": 320.45,
+        "y": 180.5,
+      },
+      "capHeightPx": 13,
+      "kind": "glyph-run",
+      "origin": [
+        320.45,
+        196.1,
+      ],
+      "perspective": [
+        [
+          325,
+          196.1,
+        ],
+        [
+          338,
+          196.1,
+        ],
+        [
+          338,
+          183.1,
+        ],
+        [
+          325,
+          183.1,
+        ],
+      ],
+      "styleRole": "external",
+      "text": "1250",
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": [
+        211.7,
+        196.19844,
+      ],
+    },
+    {
+      "from": [
+        211.7,
+        196.19844,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": [
+        211.7,
+        203.80156,
+      ],
+    },
+    {
+      "from": [
+        211.7,
+        203.80156,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": [
+        200,
+        200,
+      ],
+    },
+    {
+      "from": [
+        450,
+        200,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": [
+        438.3,
+        196.19844,
+      ],
+    },
+    {
+      "from": [
+        438.3,
+        196.19844,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": [
+        438.3,
+        203.80156,
+      ],
+    },
+    {
+      "from": [
+        438.3,
+        203.80156,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": [
+        450,
+        200,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "dimension",
+      "styleRole": "external",
+      "to": [
+        450,
+        200,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": [
+        200,
+        200,
+      ],
+    },
+    {
+      "from": [
+        450,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": [
+        450,
+        200,
+      ],
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0.266,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "dimension",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          2.5,
+          0,
+          0.266,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0.1295,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          0,
+          0,
+          0.305,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          2.5,
+          0,
+          0.1295,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          2.5,
+          0,
+          0.305,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            0,
+            0,
+            0.266,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0.117,
+            0.038016,
+            0.266,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0.117,
+            -0.038016,
+            0.266,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+      ],
+      "styleRole": "external",
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            2.5,
+            0,
+            0.266,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            2.383,
+            0.038016,
+            0.266,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            2.383,
+            -0.038016,
+            0.266,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+      ],
+      "styleRole": "external",
+    },
+    {
+      "at": {
+        "anchor": [
+          1.25,
+          0.039,
+          0.266,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 13,
+      "frame": {
+        "origin": [
+          1.25,
+          0.039,
+          0.266,
+        ],
+        "xAxis": [
+          0.13,
+          0,
+          0,
+        ],
+        "yAxis": [
+          0,
+          0.13,
+          0,
+        ],
+      },
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "1250",
+    },
+  ],
+}
+`;
+
+exports[`tag / dimension3d structural goldens > explicit-tag-billboard 1`] = `
+{
+  "derived": {
+    "formattedLabel": "N 1 100",
+    "tag": {
+      "body": {
+        "height": 47,
+        "width": 34.9,
+        "x": 271.668464,
+        "y": 65.844317,
+      },
+      "candidate": 0,
+    },
+  },
+  "dimensionId": "explicit-tag-golden",
+  "hitRegions": [
+    {
+      "from": [
+        230,
+        185,
+      ],
+      "kind": "segment",
+      "part": "leader",
+      "to": [
+        274.594665,
+        112.844317,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 47,
+        "width": 34.9,
+        "x": 271.668464,
+        "y": 65.844317,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 51,
+    "width": 38.9,
+    "x": 269.668464,
+    "y": 63.844317,
+  },
+  "labelPinned": true,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 16.5,
+        "width": 18.7,
+        "x": 278.668464,
+        "y": 72.844317,
+      },
+      "capHeightPx": 11,
+      "kind": "glyph-run",
+      "origin": [
+        278.668464,
+        86.044317,
+      ],
+      "styleRole": "external",
+      "text": "N 1 100",
+      "tone": "tag-text",
+    },
+    {
+      "bounds": {
+        "height": 16.5,
+        "width": 20.9,
+        "x": 278.668464,
+        "y": 89.344317,
+      },
+      "capHeightPx": 11,
+      "kind": "glyph-run",
+      "origin": [
+        278.668464,
+        102.544317,
+      ],
+      "styleRole": "external",
+      "text": "EL. +2500",
+      "tone": "tag-text",
+    },
+    {
+      "from": [
+        230,
+        185,
+      ],
+      "kind": "line",
+      "part": "leader",
+      "styleRole": "external",
+      "to": [
+        274.594665,
+        112.844317,
+      ],
+      "tone": "tag-leader",
+    },
+    {
+      "closed": true,
+      "kind": "path",
+      "part": "tag",
+      "points": [
+        [
+          271.668464,
+          69.844317,
+        ],
+        [
+          271.972945,
+          68.313583,
+        ],
+        [
+          272.840036,
+          67.015889,
+        ],
+        [
+          274.13773,
+          66.148798,
+        ],
+        [
+          275.668464,
+          65.844317,
+        ],
+        [
+          302.568464,
+          65.844317,
+        ],
+        [
+          304.099197,
+          66.148798,
+        ],
+        [
+          305.396891,
+          67.015889,
+        ],
+        [
+          306.263982,
+          68.313583,
+        ],
+        [
+          306.568464,
+          69.844317,
+        ],
+        [
+          306.568464,
+          108.844317,
+        ],
+        [
+          306.263982,
+          110.37505,
+        ],
+        [
+          305.396891,
+          111.672744,
+        ],
+        [
+          304.099197,
+          112.539835,
+        ],
+        [
+          302.568464,
+          112.844317,
+        ],
+        [
+          275.668464,
+          112.844317,
+        ],
+        [
+          274.13773,
+          112.539835,
+        ],
+        [
+          272.840036,
+          111.672744,
+        ],
+        [
+          271.972945,
+          110.37505,
+        ],
+        [
+          271.668464,
+          108.844317,
+        ],
+      ],
+      "styleRole": "external",
+      "tone": "tag-fill",
+    },
+    {
+      "closed": true,
+      "kind": "path",
+      "part": "tag",
+      "points": [
+        [
+          271.668464,
+          69.844317,
+        ],
+        [
+          271.972945,
+          68.313583,
+        ],
+        [
+          272.840036,
+          67.015889,
+        ],
+        [
+          274.13773,
+          66.148798,
+        ],
+        [
+          275.668464,
+          65.844317,
+        ],
+        [
+          302.568464,
+          65.844317,
+        ],
+        [
+          304.099197,
+          66.148798,
+        ],
+        [
+          305.396891,
+          67.015889,
+        ],
+        [
+          306.263982,
+          68.313583,
+        ],
+        [
+          306.568464,
+          69.844317,
+        ],
+        [
+          306.568464,
+          108.844317,
+        ],
+        [
+          306.263982,
+          110.37505,
+        ],
+        [
+          305.396891,
+          111.672744,
+        ],
+        [
+          304.099197,
+          112.539835,
+        ],
+        [
+          302.568464,
+          112.844317,
+        ],
+        [
+          275.668464,
+          112.844317,
+        ],
+        [
+          274.13773,
+          112.539835,
+        ],
+        [
+          272.840036,
+          111.672744,
+        ],
+        [
+          271.972945,
+          110.37505,
+        ],
+        [
+          271.668464,
+          108.844317,
+        ],
+      ],
+      "styleRole": "external",
+      "tone": "tag-border",
+    },
+    {
+      "closed": true,
+      "kind": "path",
+      "part": "tag",
+      "points": [
+        [
+          232.4,
+          185,
+        ],
+        [
+          232.078461,
+          186.2,
+        ],
+        [
+          231.2,
+          187.078461,
+        ],
+        [
+          230,
+          187.4,
+        ],
+        [
+          228.8,
+          187.078461,
+        ],
+        [
+          227.921539,
+          186.2,
+        ],
+        [
+          227.6,
+          185,
+        ],
+        [
+          227.921539,
+          183.8,
+        ],
+        [
+          228.8,
+          182.921539,
+        ],
+        [
+          230,
+          182.6,
+        ],
+        [
+          231.2,
+          182.921539,
+        ],
+        [
+          232.078461,
+          183.8,
+        ],
+      ],
+      "styleRole": "external",
+      "tone": "tag-leader",
+    },
+  ],
+  "sceneTopology": [
+    {
+      "kind": "scene-fill",
+      "part": "tag",
+      "points": [
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            41.668464,
+            -115.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            41.972945,
+            -116.686417,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            42.840036,
+            -117.984111,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            44.13773,
+            -118.851202,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            45.668464,
+            -119.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            72.568464,
+            -119.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            74.099197,
+            -118.851202,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            75.396891,
+            -117.984111,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            76.263982,
+            -116.686417,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            76.568464,
+            -115.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            76.568464,
+            -76.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            76.263982,
+            -74.62495,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            75.396891,
+            -73.327256,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            74.099197,
+            -72.460165,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            72.568464,
+            -72.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            45.668464,
+            -72.155683,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            44.13773,
+            -72.460165,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            42.840036,
+            -73.327256,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            41.972945,
+            -74.62495,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            41.668464,
+            -76.155683,
+          ],
+        },
+      ],
+      "styleRole": "external",
+      "tone": "tag-fill",
+    },
+    {
+      "closed": true,
+      "kind": "scene-path",
+      "part": "tag",
+      "points": {
+        "count": 20,
+        "first": {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            41.668464,
+            -115.155683,
+          ],
+        },
+        "last": {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            41.668464,
+            -76.155683,
+          ],
+        },
+        "middle": {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            76.568464,
+            -76.155683,
+          ],
+        },
+      },
+      "styleRole": "external",
+      "tone": "tag-border",
+    },
+    {
+      "kind": "scene-fill",
+      "part": "tag",
+      "points": [
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            2.4,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            2.078461,
+            1.2,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            1.2,
+            2.078461,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            0,
+            2.4,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            -1.2,
+            2.078461,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            -2.078461,
+            1.2,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            -2.4,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            -2.078461,
+            -1.2,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            -1.2,
+            -2.078461,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            -0,
+            -2.4,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            1.2,
+            -2.078461,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0.15,
+            0.05,
+          ],
+          "offsetPx": [
+            2.078461,
+            -1.2,
+          ],
+        },
+      ],
+      "styleRole": "external",
+      "tone": "tag-leader",
+    },
+    {
+      "from": {
+        "anchor": [
+          0.3,
+          0.15,
+          0.05,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "leader",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          0.3,
+          0.15,
+          0.05,
+        ],
+        "offsetPx": [
+          44.594665,
+          -72.155683,
+        ],
+      },
+      "tone": "tag-leader",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.3,
+          0.15,
+          0.05,
+        ],
+        "offsetPx": [
+          58.018464,
+          -103.905683,
+        ],
+      },
+      "capHeightPx": 11,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "N 1 100",
+      "tone": "tag-text",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.3,
+          0.15,
+          0.05,
+        ],
+        "offsetPx": [
+          59.118464,
+          -87.405683,
+        ],
+      },
+      "capHeightPx": 11,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "EL. +2500",
+      "tone": "tag-text",
+    },
+  ],
+}
+`;

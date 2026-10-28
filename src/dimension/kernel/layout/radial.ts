@@ -7,7 +7,6 @@ import {
   sceneVertexAtScreen,
 } from '../geometry/sceneGeometry';
 import {
-  expandRect,
   makeGlyphHitRegion,
   makeLineHitRegion,
 } from '../geometry/screenGeometry';
@@ -19,13 +18,19 @@ import {
   dot3,
   EPSILON,
   length3,
-  lerp3,
   normalize3,
   scale3,
   sub3,
 } from '../vec';
 
 import { emptyLayout } from './linear';
+import {
+  backProjectedSegment,
+  labelBoundsOf,
+  sceneVertexOnSegment,
+  toScreen,
+  trimBoundsOf,
+} from './shared/screen';
 
 import type { LayoutContext } from './context';
 import type {
@@ -35,13 +40,7 @@ import type {
   ScreenGlyphRun,
   ScreenLine,
   Vec2,
-  Vec3,
 } from '../types';
-
-function toScreen(point: Vec3, context: LayoutContext): Vec2 {
-  const projected = context.projector.project(point);
-  return [projected.x, projected.y];
-}
 
 export function layoutRadial(
   input: Extract<NormalizedDimensionInput, { kind: 'radial' }>,
@@ -73,8 +72,8 @@ export function layoutRadial(
     input.center,
     scale3(direction, radiusM + input.placement.labelDistanceM),
   );
-  const circleScreen = toScreen(circlePoint, context);
-  const labelCenter = toScreen(labelAnchor, context);
+  const circleScreen = toScreen(circlePoint, context.projector);
+  const labelCenter = toScreen(labelAnchor, context.projector);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
   const glyphScene = sceneGlyph(
     formatted.text,
@@ -88,11 +87,8 @@ export function layoutRadial(
     context.projector,
     context.font,
   )[0] as ScreenGlyphRun;
-  const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
-  const trimBounds = expandRect(
-    glyph.unrotatedBounds ?? glyph.bounds,
-    context.theme.labelPaddingPx / 2,
-  );
+  const labelBounds = labelBoundsOf(glyph, context.theme);
+  const trimBounds = trimBoundsOf(glyph, context.theme);
   const trimmed = trimLineAgainstRotatedRect(
     circleScreen,
     labelCenter,
@@ -103,18 +99,10 @@ export function layoutRadial(
   );
   const dx = labelCenter[0] - circleScreen[0];
   const dy = labelCenter[1] - circleScreen[1];
-  const lengthSquared = dx * dx + dy * dy;
-  const vertexOnLeader = (point: Vec2) => {
-    const t = (
-      (point[0] - circleScreen[0]) * dx
-      + (point[1] - circleScreen[1]) * dy
-    ) / lengthSquared;
-    return sceneVertexAtScreen(
-      lerp3(circlePoint, labelAnchor, t),
-      point,
-      context.projector,
-    );
-  };
+  // No degenerate guard: a leader of zero screen length was ruled out above.
+  const leaderSegment = backProjectedSegment(circlePoint, labelAnchor, circleScreen, [dx, dy]);
+  const vertexOnLeader = (point: Vec2) =>
+    sceneVertexOnSegment(leaderSegment, point, context.projector, false);
   const scenePrimitives: ScenePrimitive[] = [
     ...trimmed.segments.map((segment) =>
       makeSceneLine(

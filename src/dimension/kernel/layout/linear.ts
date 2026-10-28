@@ -9,7 +9,6 @@ import {
   sceneVertexAtScreen,
 } from '../geometry/sceneGeometry';
 import {
-  expandRect,
   makeGlyphHitRegion,
   makeLineHitRegion,
 } from '../geometry/screenGeometry';
@@ -17,6 +16,14 @@ import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { deriveDimensionValue } from '../value';
 import { EPSILON, lerp3 } from '../vec';
+
+import {
+  backProjectedSegment,
+  labelBoundsOf,
+  sceneVertexOnSegment,
+  toScreen,
+  trimBoundsOf,
+} from './shared/screen';
 
 import type {
   LayoutResult,
@@ -49,11 +56,6 @@ export function emptyLayout(
   };
 }
 
-function toScreen(point: Vec3, context: LayoutContext): Vec2 {
-  const projected = context.projector.project(point);
-  return [projected.x, projected.y];
-}
-
 export function layoutLinearBetween(
   input: NormalizedDimensionInput,
   geometry: Readonly<{ a: Vec3; b: Vec3; placement: LinearPlacement }>,
@@ -64,8 +66,8 @@ export function layoutLinearBetween(
   const formatted = formatDimensionLabel(input, value, context.format);
   if (!value.ok || !formatted.ok) return emptyLayout(input.id, input.labelPinned);
 
-  const aScreen = toScreen(geometry.a, context);
-  const bScreen = toScreen(geometry.b, context);
+  const aScreen = toScreen(geometry.a, context.projector);
+  const bScreen = toScreen(geometry.b, context.projector);
   const screenDx = bScreen[0] - aScreen[0];
   const screenDy = bScreen[1] - aScreen[1];
   const screenLength = Math.hypot(screenDx, screenDy);
@@ -114,11 +116,8 @@ export function layoutLinearBetween(
     context.projector,
     context.font,
   )[0] as ScreenGlyphRun;
-  const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
-  const trimBounds = expandRect(
-    glyph.unrotatedBounds ?? glyph.bounds,
-    context.theme.labelPaddingPx / 2,
-  );
+  const labelBounds = labelBoundsOf(glyph, context.theme);
+  const trimBounds = trimBoundsOf(glyph, context.theme);
   const trimmed = trimLineAgainstRotatedRect(
     arrowA,
     arrowB,
@@ -153,18 +152,17 @@ export function layoutLinearBetween(
       styleRole,
     ),
   ];
-  const screenLengthSquared = screenDx * screenDx + screenDy * screenDy;
-  const sceneVertexOnDimension = (point: Vec2) => {
-    const t = (
-      (point[0] - arrowA[0]) * screenDx
-      + (point[1] - arrowA[1]) * screenDy
-    ) / screenLengthSquared;
-    return sceneVertexAtScreen(
-      lerp3(geometry.a, geometry.b, t),
-      point,
-      context.projector,
-    );
-  };
+  // The trimmed pieces are measured along the offset dimension line (origin
+  // `arrowA`), with the a → b screen delta; no degenerate guard here because
+  // the zero-length case already returned above.
+  const dimensionSegment = backProjectedSegment(
+    geometry.a,
+    geometry.b,
+    arrowA,
+    [screenDx, screenDy],
+  );
+  const sceneVertexOnDimension = (point: Vec2) =>
+    sceneVertexOnSegment(dimensionSegment, point, context.projector, false);
   sceneLines.push(...trimmed.segments.map((segment) =>
     makeSceneLine(
       sceneVertexOnDimension(segment.from),

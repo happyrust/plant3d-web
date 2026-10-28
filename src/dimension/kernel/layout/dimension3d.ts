@@ -9,7 +9,6 @@ import {
   sceneVertex,
 } from '../geometry/sceneGeometry';
 import {
-  expandRect,
   makeGlyphHitRegion,
   makeLineHitRegion,
 } from '../geometry/screenGeometry';
@@ -26,6 +25,8 @@ import {
 } from '../vec';
 
 import { emptyLayout } from './linear';
+import { lodSecondaryFar, lodShortLine } from './shared/lod';
+import { labelBoundsOf } from './shared/screen';
 
 import type {
   ExplicitDimension3dInput,
@@ -126,11 +127,9 @@ export function layoutDimension3d(
   // (atta) row disappears while the source text height projects below the
   // theme floor; a running dimension disappears once its line is shorter
   // than its own value text.
-  if (
-    input.lod?.tier === 'secondary'
-    && sourceHeightM > 0
-    && sourceHeightM / metresPerPixel < theme.sourceTextHeightMinPx
-  ) {
+  // Only the secondary floor applies here (no detail tier for 3D running
+  // dimensions); `metresPerPixel` is already finite and positive.
+  if (lodSecondaryFar(input.lod, sourceHeightM > 0 ? sourceHeightM / metresPerPixel : null, theme)) {
     return hidden('secondary-far');
   }
 
@@ -149,7 +148,7 @@ export function layoutDimension3d(
   if (
     input.lod?.hideShort
     && label.length > 0
-    && lineLengthPx < labelWidthPx * theme.lodMinLineToLabelRatio
+    && lodShortLine(lineLengthPx, labelWidthPx, theme)
   ) {
     return hidden('short-line');
   }
@@ -294,7 +293,7 @@ export function layoutDimension3d(
     scenePrimitives: primitives,
     primitives: projected,
     hitRegions,
-    labelBounds: expandRect(glyph.bounds, theme.labelPaddingPx / 2),
+    labelBounds: labelBoundsOf(glyph, theme),
     labelPinned: input.labelPinned,
     derived: {
       formattedLabel: label,
