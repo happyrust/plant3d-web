@@ -14,6 +14,7 @@ import DimensionPanelDock from './DimensionPanelDock.vue';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
 import * as v1Api from '@/api/genModelV1Api';
+import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 
 const mocks = vi.hoisted(() => ({
@@ -114,6 +115,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   mocks.dimensionSystem.value = null;
   mocks.emitToast.mockReset();
+  useMbdDiagnosticsStore().clear();
 });
 
 describe('DimensionPanelDock', () => {
@@ -486,6 +488,49 @@ describe('DimensionPanelDock', () => {
     } finally {
       window.removeEventListener('popstate', onPopstate);
       window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /**
+   * 「本分支标注不完整」横幅：求解器恒报 `isodim_main`，而它同样只产出 11 种图元
+   * 里的 7 种，所以白名单必须含它，否则横幅永不触发（缺陷 C4）。
+   */
+  it('warns about an incomplete annotation set for every partial layout mode the solver reports', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+
+    const banner = (host: HTMLElement) => host.querySelector('[data-testid="mbd-incomplete-annotation"]');
+    const withMode = (layoutMode: string | null) => {
+      useMbdDiagnosticsStore().set({
+        channel: 'api',
+        sourceId: '24381_145018',
+        issues: [],
+        skipped: [],
+        layoutMode,
+      });
+    };
+
+    // 生产路径恒报的值，以及仓内 fixture 仍在用的旧值。
+    for (const mode of ['isodim_main', 'linear_mvp']) {
+      withMode(mode);
+      const host = mountPanel();
+      await nextTick();
+      const node = banner(host);
+      expect(node, `${mode} should be flagged as partial`).not.toBeNull();
+      expect(node!.textContent).toContain(mode);
+      apps.splice(0).forEach(app => app.unmount());
+      document.body.innerHTML = '';
+    }
+
+    // 没有自报模式、或自报了未知模式时不替求解器下「不完整」的结论。
+    for (const mode of [null, 'some_future_mode']) {
+      withMode(mode);
+      const host = mountPanel();
+      await nextTick();
+      expect(banner(host), `${mode} must not be flagged`).toBeNull();
+      apps.splice(0).forEach(app => app.unmount());
+      document.body.innerHTML = '';
     }
   });
 

@@ -3,12 +3,12 @@ import type { ShallowRef } from 'vue';
 
 import type { MbdV2Issue } from '@/dimension';
 
-export type MbdDiagnosticsChannel = 'api' | 'parquet';
+export type MbdDiagnosticsChannel = 'api';
 
 export type MbdDiagnosticsSnapshot = Readonly<{
   loadedAt: number | null;
   channel: MbdDiagnosticsChannel | null;
-  /** refno（API 通道）或 dbno（parquet 通道）。 */
+  /** refno（API 通道）。 */
   sourceId: string | null;
   /** 后端排版 issues，对标 PML wronglines。 */
   issues: readonly MbdV2Issue[];
@@ -18,7 +18,7 @@ export type MbdDiagnosticsSnapshot = Readonly<{
   layoutMode: string | null;
   /** 求解器自报的排版备注（`meta.notes`）。 */
   notes: readonly string[];
-  /** 通道级装载失败原因（API/parquet 传输或契约错误）；成功时为 null。 */
+  /** 通道级装载失败原因（API 传输或契约错误）；成功时为 null。 */
   loadError: string | null;
 }>;
 
