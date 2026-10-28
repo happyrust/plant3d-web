@@ -196,11 +196,10 @@ function explicitRecord(
     id: primitive.id,
     role,
     // The solver already placed every label (`label_anchor`, ADR 0003
-    // deterministic layout), so no MBD record takes part in the Web declutter:
-    // `resolveLabelCollisions` only lets pinned labels claim space, never moves
-    // them, and never invents a leader to a relocated label. This matches the
-    // parquet channel (`mbdExternalDimensions.ts`); PR6's `layoutAuthority`
-    // will carry the same decision explicitly.
+    // deterministic layout): the record declares `layoutAuthority: 'solver'`
+    // below, `normalizeExternalDimension` folds that into `labelPinned`, and
+    // `resolveLabelCollisions` only lets a pinned label claim its space — it
+    // never moves one and never invents a leader to a relocated label.
     labelPinned: true,
     formattedLabel: parts.formattedLabel,
     lines: parts.lines ?? [],
@@ -226,6 +225,7 @@ function explicitRecord(
     sourceLabel: `MBD: ${primitive.id}`,
     role,
     category,
+    layoutAuthority: 'solver',
     layout,
   };
 }
@@ -530,7 +530,7 @@ function dimension3dInput(
  * character height and already points them outwards for small dimensions,
  * so no `sub_kind` heuristic is needed; the kernel's legibility floor
  * (`arrowLineMinLengthPx`, ADR 0056) keeps them readable on a plant-wide
- * view. Sources that carry no strokes (older parquet rows, hand-authored
+ * view. Sources that carry no strokes (older payload rows, hand-authored
  * data) fall back to the kernel's screen-scaled filled heads.
  *
  * With a group `cheight` the record also carries `dimension3d`, and the

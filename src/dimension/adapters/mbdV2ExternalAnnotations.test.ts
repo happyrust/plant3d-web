@@ -14,6 +14,7 @@ import { parseMbdV2PipeData } from './mbdV2Contract';
 import { mbdV2ToExternalRecords } from './mbdV2ExternalAnnotations';
 import {
   externalDimensionCategory,
+  externalLayoutAuthority,
   normalizeExternalDimension,
 } from './normalizeExternalDimensions';
 
@@ -57,6 +58,15 @@ describe('mbdV2ToExternalRecords', () => {
     ]);
     expect(result.skipped).toEqual([]);
     expect(result.records.every(record => record.source === 'mbd')).toBe(true);
+  });
+
+  it('declares solver layout authority on every record (S1: the solver placed the labels)', () => {
+    const result = mbdV2ToExternalRecords(fixtureData());
+
+    expect(result.records.every(record => record.layoutAuthority === 'solver')).toBe(true);
+    expect(result.records.every(record => externalLayoutAuthority(record) === 'solver')).toBe(true);
+    // The kernel still receives the decision as `labelPinned`.
+    expect(result.records.every(record => normalizeExternalDimension(record).labelPinned)).toBe(true);
   });
 
   it('categorises dimensions vs annotation primitives (ADR 0041)', () => {
@@ -194,7 +204,7 @@ describe('mbdV2ToExternalRecords', () => {
   it('falls back to screen-scaled filled heads when the source carries no arrow strokes', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
 
-    // `dim-ref-2` has `arrow_lines: []` (older parquet rows and hand-authored
+    // `dim-ref-2` has `arrow_lines: []` (older payload rows and hand-authored
     // data look the same), so the kernel draws its own heads at both ends.
     const layout = explicitLayout(result, 'dim-ref-2');
     expect(layout.arrowLines).toEqual([]);
