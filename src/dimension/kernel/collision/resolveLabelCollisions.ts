@@ -1,5 +1,7 @@
 import { translateRect } from '../geometry/screenGeometry';
+import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
+import type { DimensionTheme } from '../theme';
 import type {
   HitRegion,
   LayoutPrimitive,
@@ -13,9 +15,9 @@ import type {
 } from '../types';
 
 const GRID_SIZE_PX = 64;
-const CANDIDATE_STEP_PX = 8;
-const CANDIDATE_COUNT = 8;
-const EXTENDED_SEARCH_MAX_LABELS = 64;
+// Candidate step / count and the extended-search batch size live in
+// `theme.declutter` (T1.5); the occupancy grid and the direction cycle are
+// algorithm structure and stay here.
 const DIRECTIONS: readonly Vec2[] = [
   [0, -1],
   [1, 0],
@@ -308,16 +310,19 @@ function hasLabelText(result: LayoutResult): boolean {
  * Move automatic labels off pinned labels and off each other (stable id
  * order). `bounds` is the viewport: labels beyond it are left alone (see
  * `LabelOccupancy`); omitted = every label takes part wherever it projects.
+ * `rules` (default: the SolveSpace theme's `declutter`) sets the probe step
+ * and count, and the batch size above which the extra probe is dropped.
  */
 export function resolveLabelCollisions(
   inputs: readonly LayoutResult[],
   bounds?: ScreenRect,
+  rules: DimensionTheme['declutter'] = SOLVESPACE_DIMENSION_THEME.declutter,
 ): readonly LayoutResult[] {
   // ponytail: one extra probe for small overlays; use adaptive search if large
   // MBD batches need the same density without exceeding the performance budget.
-  const candidateCount = inputs.length <= EXTENDED_SEARCH_MAX_LABELS
-    ? CANDIDATE_COUNT + 1
-    : CANDIDATE_COUNT;
+  const candidateCount = inputs.length <= rules.extendedSearchMaxLabels
+    ? rules.candidateCount + 1
+    : rules.candidateCount;
   const occupancy = new LabelOccupancy(bounds);
   const results = [...inputs];
   for (const result of inputs) {
@@ -340,7 +345,7 @@ export function resolveLabelCollisions(
     let resolved: LayoutResult | undefined;
     for (let candidate = 0; candidate < candidateCount; candidate += 1) {
       const direction = DIRECTIONS[candidate % DIRECTIONS.length];
-      const distance = (candidate + 1) * CANDIDATE_STEP_PX;
+      const distance = (candidate + 1) * rules.candidateStepPx;
       const offset = [direction[0] * distance, direction[1] * distance] as const;
       if (occupancy.overlapsAt(result.labelBounds, offset[0], offset[1])) continue;
       resolved = moveLabel(result, offset);

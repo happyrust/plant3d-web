@@ -22,12 +22,14 @@ import {
   makeLineHitRegion,
   rectsOverlap,
 } from '../geometry/screenGeometry';
-import { resolveDimensionStyleRole } from '../theme';
+import { resolveDimensionStyleRole, SOLVESPACE_DIMENSION_THEME } from '../theme';
 import { add3, EPSILON, scale3, tryNormalize3 } from '../vec';
 
 import { emptyLayout } from './linear';
+import { lodTierHiddenReason, projectedSourceTextHeightPx } from './shared/lod';
 
 import type { ViewportProjector } from '../projector';
+import type { DimensionTheme } from '../theme';
 import type {
   DesignBox,
   ExplicitLayoutInput,
@@ -88,38 +90,9 @@ export type TagObstacles = Readonly<{
   overlays?: readonly ScreenRect[];
 }>;
 
-/** Rotations (degrees) about the preferred direction, tried in this order. */
-const CANDIDATE_ANGLES_DEG: readonly number[] = [0, 30, -30, 60, -60, 90, -90, 135, -135, 180];
-/**
- * Standoff multipliers, each ring tried only after the whole previous one is
- * blocked. The outer rings exist for close-ups, where a component's
- * projected box swallows the near rings (a valve filling half the view) and
- * the tag has to lead out of it rather than sit on the body.
- */
-const CANDIDATE_DISTANCE_SCALES: readonly number[] = [1, 1.6, 2.4, 3.4];
-/** Design-space probe length (px worth) used to project the `away` direction. */
-const AWAY_PROBE_PX = 50;
-/** Margin kept between a tag body and whatever it is placed against. */
-const BODY_MARGIN_PX = 2;
-/**
- * Intrusion weights (per px² covered) that rank the candidates when none is
- * clear: hiding a value or another tag is worst — and so is sliding under a
- * viewport overlay, which hides the tag itself — cutting a dimension stroke
- * next, covering a component's bounding box least — the box overstates the
- * body and the tag is meant to sit over the model anyway.
- */
-const LABEL_INTRUSION_WEIGHT = 4;
-const OVERLAY_INTRUSION_WEIGHT = 4;
-const STROKE_INTRUSION_WEIGHT = 2;
-const BOX_INTRUSION_WEIGHT = 1;
-/** A covered stroke counts as a band this wide (px) so its length becomes an area. */
-const STROKE_BAND_PX = 4;
-/**
- * Intrusion scores closer than this (px²) are a tie, which the earlier
- * candidate wins: clipped areas carry floating-point noise, and a later
- * candidate must beat the preferred one by a visible amount to displace it.
- */
-const INTRUSION_TIE_PX2 = 1e-6;
+// Candidate angles / rings, the `away` probe length, the body margin and the
+// intrusion weights live in `theme.tag` (T1.5); only the tessellation counts
+// and the style ordering below stay local.
 /** Corner subdivision of the rounded body; a pill's semicircles get more. */
 const CORNER_SEGMENTS = 4;
 const PILL_CORNER_SEGMENTS = 6;
@@ -257,18 +230,9 @@ export function planTagBillboard(
   // Level of detail, keyed on the projected source text height at the
   // solver's label position (same rule as the flat presentation).
   const metresPerPixel = projector.worldPerPixelAt(input.labelAnchor);
-  const projectedPx = input.textHeightM !== undefined && input.textHeightM > 0
-    && Number.isFinite(metresPerPixel) && metresPerPixel > 0
-    ? input.textHeightM / metresPerPixel
-    : null;
-  if (input.lod && projectedPx !== null) {
-    if (input.lod.tier === 'secondary' && projectedPx < theme.sourceTextHeightMinPx) {
-      return hidden('secondary-far');
-    }
-    if (input.lod.tier === 'detail' && projectedPx < theme.sourceTextHeightMaxPx) {
-      return hidden('detail-far');
-    }
-  }
+  const projectedPx = projectedSourceTextHeightPx(input.textHeightM, metresPerPixel);
+  const tierHidden = input.lod ? lodTierHiddenReason(input.lod, projectedPx, theme) : null;
+  if (tierHidden) return hidden(tierHidden);
   const closeUp = !input.lod || projectedPx === null || projectedPx >= theme.sourceTextHeightMaxPx;
   const lines = spec.lines
     .filter(line => closeUp || !line.detail)
@@ -309,7 +273,7 @@ export function planTagBillboard(
   let base: Vec2 | null = null;
   if (spec.target && spec.away) {
     const away = tryNormalize3(spec.away);
-    const probeM = projector.worldPerPixelAt(spec.target) * AWAY_PROBE_PX;
+    const probeM = projector.worldPerPixelAt(spec.target) * rules.awayProbePx;
     if (away && Number.isFinite(probeM) && probeM > 0) {
       const probe = projectSceneVertex(
         sceneVertex(add3(spec.target, scale3(away, probeM))),
@@ -333,8 +297,8 @@ export function planTagBillboard(
   });
   // A leaderless tag's own position counts as the nearest ring.
   const centres: { centre: Vec2; ring: number }[] = spec.target ? [] : [{ centre: anchor, ring: 0 }];
-  for (const [ring, scale] of CANDIDATE_DISTANCE_SCALES.entries()) {
-    for (const degrees of CANDIDATE_ANGLES_DEG) {
+  for (const [ring, scale] of rules.candidateDistanceScales.entries()) {
+    for (const degrees of rules.candidateAnglesDeg) {
       const turned = rotate2(direction, degrees);
       centres.push({
         centre: [
@@ -350,7 +314,7 @@ export function planTagBillboard(
   // since that is the rectangle the placement pass reasons about — on
   // screen first.
   const onScreen = (body: ScreenRect): boolean => rectInside(
-    expandRect(body, BODY_MARGIN_PX),
+    expandRect(body, rules.bodyMarginPx),
     projector.widthCssPx,
     projector.heightCssPx,
   );
@@ -359,7 +323,7 @@ export function planTagBillboard(
     ...onScreenBodies,
     ...bodies.filter(({ body }) => !onScreen(body)),
   ];
-  const candidates = ordered.map(({ body }) => expandRect(body, BODY_MARGIN_PX));
+  const candidates = ordered.map(({ body }) => expandRect(body, rules.bodyMarginPx));
   const rings = ordered.map(({ ring }) => ring);
   const envelope = unionRects(candidates);
 
@@ -392,7 +356,7 @@ export function planTagBillboard(
     if (spec.target) {
       const centre: Vec2 = [body.x + width / 2, body.y + height / 2];
       const edge = rectEdgeTowards(anchor, centre, width / 2, height / 2);
-      if (edge && Math.hypot(edge[0] - anchor[0], edge[1] - anchor[1]) > BODY_MARGIN_PX) {
+      if (edge && Math.hypot(edge[0] - anchor[0], edge[1] - anchor[1]) > rules.bodyMarginPx) {
         if (spec.dot) {
           primitives.push(sceneFill(
             Array.from({ length: DOT_SEGMENTS }, (_, step) => {
@@ -470,16 +434,6 @@ export function isTagBillboardPlan(
   value: TagBillboardPlan | LayoutResult,
 ): value is TagBillboardPlan {
   return 'materialize' in value;
-}
-
-/** The tag at its preferred position (no other labels considered). */
-export function layoutTagBillboard(
-  input: ExplicitLayoutInput,
-  spec: ExplicitTagInput,
-  context: LayoutContext,
-): LayoutResult {
-  const planned = planTagBillboard(input, spec, context);
-  return isTagBillboardPlan(planned) ? planned.materialize(0) : planned;
 }
 
 /** A planned tag and the slot it holds in the view's layout batch. */
@@ -646,6 +600,7 @@ export function placeTagBillboards(
   layouts: readonly LayoutResult[],
   planned: readonly PlannedTag[],
   obstacles: TagObstacles = {},
+  rules: DimensionTheme['tag'] = SOLVESPACE_DIMENSION_THEME.tag,
 ): readonly LayoutResult[] {
   if (planned.length === 0) return layouts;
   const plannedIndices = new Set(planned.map(tag => tag.index));
@@ -673,17 +628,17 @@ export function placeTagBillboards(
     const intrusion = (candidate: ScreenRect): number => {
       let score = 0;
       for (const label of labels) {
-        score += LABEL_INTRUSION_WEIGHT * rectsOverlapArea(candidate, label);
+        score += rules.intrusionWeights.label * rectsOverlapArea(candidate, label);
       }
       for (const overlay of nearOverlays) {
-        score += OVERLAY_INTRUSION_WEIGHT * rectsOverlapArea(candidate, overlay);
+        score += rules.intrusionWeights.overlay * rectsOverlapArea(candidate, overlay);
       }
       for (const stroke of nearStrokes) {
-        score += STROKE_INTRUSION_WEIGHT * STROKE_BAND_PX
+        score += rules.intrusionWeights.stroke * rules.strokeBandPx
           * segmentLengthInsideRect(stroke.segment, candidate);
       }
       for (const box of nearBoxes) {
-        score += BOX_INTRUSION_WEIGHT * rectPolygonOverlapArea(candidate, box.polygon);
+        score += rules.intrusionWeights.box * rectPolygonOverlapArea(candidate, box.polygon);
       }
       return score;
     };
@@ -701,11 +656,11 @@ export function placeTagBillboards(
         bestScore = 0;
         break;
       }
-      if (score < bestScore - INTRUSION_TIE_PX2) {
+      if (score < bestScore - rules.intrusionTiePx2) {
         bestScore = score;
         best = index;
       }
-      if (tag.plan.rings[index] === 0 && score < bestNearScore - INTRUSION_TIE_PX2) {
+      if (tag.plan.rings[index] === 0 && score < bestNearScore - rules.intrusionTiePx2) {
         bestNearScore = score;
         bestNear = index;
       }

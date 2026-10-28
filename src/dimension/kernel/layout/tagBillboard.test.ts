@@ -4,13 +4,13 @@ import { DEFAULT_DIMENSION_FORMAT } from '../format';
 import { rectPolygonOverlapArea, rectsOverlapArea, segmentLengthInsideRect } from '../geometry/obstacleGeometry';
 import { createTestFont, createTestProjector } from '../testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../theme';
+import { layoutViewport } from '../viewport/layoutViewport';
 
 import { layoutExplicit } from './explicit';
 import {
   collectTagObstacles,
   dimensionStrokes,
   isTagBillboardPlan,
-  layoutTagBillboard,
   placeTagBillboards,
   planTagBillboard,
   projectObstacleOutline,
@@ -21,6 +21,7 @@ import type { ScreenPolygon } from '../geometry/obstacleGeometry';
 import type {
   ExplicitLayoutInput,
   ExplicitTagInput,
+  InteractionState,
   LayoutObstacleSource,
   LayoutResult,
   SceneFill,
@@ -66,6 +67,20 @@ function context(pixelsPerMetre = 100): LayoutContext {
     format: DEFAULT_DIMENSION_FORMAT,
     interaction: 'normal',
   };
+}
+
+/**
+ * The tag at its preferred position, no other labels considered — the thin
+ * wrapper the kernel used to export; kept here so the per-tag cases below
+ * keep reading as before. Production goes through `layoutViewport`.
+ */
+function layoutTagBillboard(
+  input: ExplicitLayoutInput,
+  spec: ExplicitTagInput,
+  context: LayoutContext,
+): LayoutResult {
+  const planned = planTagBillboard(input, spec, context);
+  return isTagBillboardPlan(planned) ? planned.materialize(0) : planned;
 }
 
 function fills(result: ReturnType<typeof layoutTagBillboard>): SceneFill[] {
@@ -321,8 +336,12 @@ describe('layoutTagBillboard', () => {
     expect(first.y).toBeGreaterThanOrEqual(0);
   });
 
-  it('is reached through layoutExplicit and honours interaction roles', () => {
-    const hovered = layoutExplicit(input, { ...context(), interaction: 'hovered' });
+  it('is reached through layoutViewport and honours interaction roles', () => {
+    const hovered = layoutViewport(
+      [input],
+      context(),
+      new Map<string, InteractionState>([[input.id, 'hovered']]),
+    ).layouts[0]!;
     expect(hovered.scenePrimitives.length).toBeGreaterThan(0);
     expect(hovered.scenePrimitives.every(primitive => primitive.styleRole === 'hovered')).toBe(true);
     // Without the tag the same record takes the flat path: text at the

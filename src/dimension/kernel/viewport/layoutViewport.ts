@@ -96,8 +96,10 @@ export function layoutViewport(
       decluttered,
       tags,
       collectTagObstacles(decluttered, tags, baseContext.projector, options.obstacles),
+      baseContext.theme.tag,
     ),
     viewport,
+    baseContext.theme.declutter,
   );
   // Inspection (S4): once every record has its final geometry, ask the host
   // which of them sit behind model geometry; the painter fades those.

@@ -9,7 +9,6 @@ import {
   sceneVertexAtScreen,
 } from '../geometry/sceneGeometry';
 import {
-  expandRect,
   makeGlyphHitRegion,
   makeLineHitRegion,
 } from '../geometry/screenGeometry';
@@ -24,7 +23,6 @@ import {
   EPSILON,
   length2,
   length3,
-  lerp3,
   normalize3,
   scale2,
   scale3,
@@ -33,6 +31,13 @@ import {
 } from '../vec';
 
 import { emptyLayout } from './linear';
+import {
+  backProjectedSegment,
+  labelBoundsOf,
+  sceneVertexOnSegment,
+  toScreen,
+  trimBoundsOf,
+} from './shared/screen';
 
 import type { LayoutContext } from './context';
 import type {
@@ -45,13 +50,6 @@ import type {
   Vec2,
   Vec3,
 } from '../types';
-
-const MAX_ARC_STEP_RAD = (4 * Math.PI) / 180;
-
-function toScreen(point: Vec3, context: LayoutContext): Vec2 {
-  const projected = context.projector.project(point);
-  return [projected.x, projected.y];
-}
 
 export function layoutAngular(
   input: Extract<NormalizedDimensionInput, { kind: 'angular' }>,
@@ -92,8 +90,8 @@ export function layoutAngular(
       input.vertex,
       add3(scale3(unitA, radius * Math.cos(angle)), scale3(planeV, radius * Math.sin(angle))),
     );
-  const vertexScreen = toScreen(input.vertex, context);
-  const initialRadiusPx = length2(sub2(toScreen(pointAt(0), context), vertexScreen));
+  const vertexScreen = toScreen(input.vertex, context.projector);
+  const initialRadiusPx = length2(sub2(toScreen(pointAt(0), context.projector), vertexScreen));
   if (initialRadiusPx <= EPSILON) return emptyLayout(input.id, input.labelPinned);
   if (initialRadiusPx < context.theme.minArcRadiusPx) {
     radiusM *= context.theme.minArcRadiusPx / initialRadiusPx;
@@ -101,11 +99,11 @@ export function layoutAngular(
 
   const labelAngle = sweep * input.placement.labelT;
   const labelAnchor = pointAt(labelAngle);
-  const labelCenter = toScreen(labelAnchor, context);
+  const labelCenter = toScreen(labelAnchor, context.projector);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
   const tangentScreen = toScreen(
     pointAt(labelAngle + Math.sign(sweep || 1) * 1e-4),
-    context,
+    context.projector,
   );
   const glyphScene = sceneGlyph(
     formatted.text,
@@ -119,21 +117,19 @@ export function layoutAngular(
     context.projector,
     context.font,
   )[0] as ScreenGlyphRun;
-  const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
-  const trimBounds = expandRect(
-    glyph.unrotatedBounds ?? glyph.bounds,
-    context.theme.labelPaddingPx / 2,
-  );
+  const labelBounds = labelBoundsOf(glyph, context.theme);
+  const trimBounds = trimBoundsOf(glyph, context.theme);
   const outside = input.placement.labelT < 0 || input.placement.labelT > 1;
   const arcStartT = Math.min(0, input.placement.labelT);
   const arcEndT = Math.max(1, input.placement.labelT);
   const arcStart = sweep * arcStartT;
   const arcEnd = sweep * arcEndT;
   const arcSweep = arcEnd - arcStart;
-  const segmentCount = Math.max(1, Math.ceil(Math.abs(arcSweep) / MAX_ARC_STEP_RAD));
+  const maxArcStepRad = (context.theme.arcChordMaxStepDeg * Math.PI) / 180;
+  const segmentCount = Math.max(1, Math.ceil(Math.abs(arcSweep) / maxArcStepRad));
   const sceneLines: SceneLine[] = [];
 
-  const extensionRadiusM = radiusM + 5 * worldPerPixel;
+  const extensionRadiusM = radiusM + context.theme.angularRayOvershootPx * worldPerPixel;
   sceneLines.push(
     makeSceneLine(
       sceneVertex(input.vertex),
@@ -150,11 +146,11 @@ export function layoutAngular(
   );
 
   let previousWorld = pointAt(arcStart);
-  let previous = toScreen(previousWorld, context);
+  let previous = toScreen(previousWorld, context.projector);
   for (let index = 1; index <= segmentCount; index += 1) {
     const angle = arcStart + (arcSweep * index) / segmentCount;
     const currentWorld = pointAt(angle);
-    const current = toScreen(currentWorld, context);
+    const current = toScreen(currentWorld, context.projector);
     const trimmed = trimLineAgainstRotatedRect(
       previous,
       current,
@@ -165,20 +161,10 @@ export function layoutAngular(
     );
     const dx = current[0] - previous[0];
     const dy = current[1] - previous[1];
-    const lengthSquared = dx * dx + dy * dy;
-    const vertexOnChord = (point: Vec2) => {
-      const t = lengthSquared <= EPSILON
-        ? 0
-        : (
-          (point[0] - previous[0]) * dx
-          + (point[1] - previous[1]) * dy
-        ) / lengthSquared;
-      return sceneVertexAtScreen(
-        lerp3(previousWorld, currentWorld, t),
-        point,
-        context.projector,
-      );
-    };
+    // A chord shorter than EPSILON parks its vertices at the chord start.
+    const chord = backProjectedSegment(previousWorld, currentWorld, previous, [dx, dy]);
+    const vertexOnChord = (point: Vec2) =>
+      sceneVertexOnSegment(chord, point, context.projector, true);
     for (const segment of trimmed.segments) {
       sceneLines.push(makeSceneLine(
         vertexOnChord(segment.from),
@@ -193,10 +179,10 @@ export function layoutAngular(
 
   const sweepSign = Math.sign(sweep);
   const tangentDelta = sweepSign * 1e-4;
-  const arrowA = toScreen(pointAt(0), context);
-  const arrowB = toScreen(pointAt(sweep), context);
-  let inwardA = sub2(toScreen(pointAt(tangentDelta), context), arrowA);
-  let inwardB = sub2(toScreen(pointAt(sweep - tangentDelta), context), arrowB);
+  const arrowA = toScreen(pointAt(0), context.projector);
+  const arrowB = toScreen(pointAt(sweep), context.projector);
+  let inwardA = sub2(toScreen(pointAt(tangentDelta), context.projector), arrowA);
+  let inwardB = sub2(toScreen(pointAt(sweep - tangentDelta), context.projector), arrowB);
   if (outside) {
     inwardA = scale2(inwardA, -1);
     inwardB = scale2(inwardB, -1);

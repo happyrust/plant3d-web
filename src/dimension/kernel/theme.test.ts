@@ -22,6 +22,11 @@ describe('dimension theme', () => {
       labelPaddingPx: 8,
       outsideExtensionPx: 18,
       minArcRadiusPx: 15,
+      // T1.5 收口：原来散在 layout/explicit.ts（标记半径 4、行距 1.5）与 layout/angular.ts（弧步 4°、射线外伸 5 px）的字面量。
+      markerRadiusPx: 4,
+      labelLineAdvance: 1.5,
+      arcChordMaxStepDeg: 4,
+      angularRayOvershootPx: 5,
       // 文字笔画 1.8 px（2026-09-14 边缘羽化后加重，用户拍板）；尺寸线 1.2 px。
       textStrokeWidthPx: 1.8,
       dimensionStrokeWidthPx: 1.2,
@@ -43,6 +48,28 @@ describe('dimension theme', () => {
       },
       // 普通/外部标签文字用深色提升可读性；语义/交互角色回落 colors 保持高亮。
       textColors: { normal: '#111827', external: '#111827' },
+    });
+  });
+
+  it('pins the tag candidate geometry and intrusion weights (T1.5, formerly constants in layout/tagBillboard.ts)', () => {
+    // 候选角按这个顺序试、环距一环全堵才进下一环；权重里标签 / 叠层最重、笔画次之、包围盒最轻。
+    expect(SOLVESPACE_DIMENSION_THEME.tag).toMatchObject({
+      candidateAnglesDeg: [0, 30, -30, 60, -60, 90, -90, 135, -135, 180],
+      candidateDistanceScales: [1, 1.6, 2.4, 3.4],
+      awayProbePx: 50,
+      bodyMarginPx: 2,
+      intrusionWeights: { label: 4, overlay: 4, stroke: 2, box: 1 },
+      strokeBandPx: 4,
+      intrusionTiePx2: 1e-6,
+    });
+  });
+
+  it('pins the moving-label declutter steps (T1.5, formerly constants in collision/resolveLabelCollisions.ts)', () => {
+    // 8 个候选、每步 8 px；≤ 64 个标签的批次多试一个候选。
+    expect(SOLVESPACE_DIMENSION_THEME.declutter).toEqual({
+      candidateStepPx: 8,
+      candidateCount: 8,
+      extendedSearchMaxLabels: 64,
     });
   });
 

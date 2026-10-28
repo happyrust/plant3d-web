@@ -40,6 +40,14 @@ export type DimensionTheme = Readonly<{
   labelPaddingPx: number;
   outsideExtensionPx: number;
   minArcRadiusPx: number;
+  /** Default radius of an explicit marker that declares none (was `DEFAULT_MARKER_RADIUS_PX` in `layout/explicit.ts`). */
+  markerRadiusPx: number;
+  /** Line advance of stacked explicit texts as a multiple of the cap height (was the literal `1.5` in `layout/explicit.ts`). */
+  labelLineAdvance: number;
+  /** Largest angular step (degrees) of one chord when an angular arc is flattened (was `MAX_ARC_STEP_RAD` in `layout/angular.ts`). */
+  arcChordMaxStepDeg: number;
+  /** How far (px) an angular dimension's rays run past the arc (was the literal `5` in `layout/angular.ts`). */
+  angularRayOvershootPx: number;
   /**
    * Stroke widths (CSS px) for the screen-space stroke-quad renderer, hit
    * regions, and SVG export. Text strokes stay heavier than dimension lines
@@ -129,6 +137,30 @@ export type DimensionTheme = Readonly<{
      */
     blockedFallback: 'least-intrusion' | 'first-ring';
     /**
+     * Candidate positions (`layout/tagBillboard.ts`, formerly module
+     * constants): rotations (degrees) about the preferred direction, tried in
+     * this order, on standoff rings scaled by `candidateDistanceScales` — each
+     * ring only after the whole previous one is blocked; the outer rings exist
+     * for close-ups where a component's projected box swallows the near ones.
+     */
+    candidateAnglesDeg: readonly number[];
+    candidateDistanceScales: readonly number[];
+    /** Design-space probe length (px worth) used to project the `away` direction. */
+    awayProbePx: number;
+    /** Margin kept between a tag body and whatever it is placed against. */
+    bodyMarginPx: number;
+    /**
+     * Intrusion weights (per px² covered) that rank the candidates when none
+     * is clear: hiding a value or another tag is worst — and so is sliding
+     * under a viewport overlay — cutting a dimension stroke next, covering a
+     * component's bounding box least.
+     */
+    intrusionWeights: Readonly<{ label: number; overlay: number; stroke: number; box: number }>;
+    /** A covered stroke counts as a band this wide (px) so its length becomes an area. */
+    strokeBandPx: number;
+    /** Intrusion scores closer than this (px²) are a tie, which the earlier candidate wins. */
+    intrusionTiePx2: number;
+    /**
      * Stroke widths (CSS px, nominal). On screen the painter hints them
      * like the dimension strokes — whole device pixels, never below 2, an
      * axis-aligned edge snapped to the pixel grid (ADR 0064 补, 2026-09-14):
@@ -148,6 +180,18 @@ export type DimensionTheme = Readonly<{
     leaderColor: string;
     textColor: string;
     mutedTextColor: string;
+  }>;
+  /**
+   * Moving label declutter (`collision/resolveLabelCollisions.ts`, formerly
+   * module constants): an automatic label that overlaps a pinned one or an
+   * earlier label is tried at `candidateCount` positions, `candidateStepPx`
+   * further out per step, cycling the four screen directions; batches of at
+   * most `extendedSearchMaxLabels` labels get one extra probe.
+   */
+  declutter: Readonly<{
+    candidateStepPx: number;
+    candidateCount: number;
+    extendedSearchMaxLabels: number;
   }>;
   /**
    * Inspection display mode (S4, 2026-09-13): dimensions are never hidden,
@@ -195,6 +239,10 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   labelPaddingPx: 8,
   outsideExtensionPx: 18,
   minArcRadiusPx: 15,
+  markerRadiusPx: 4,
+  labelLineAdvance: 1.5,
+  arcChordMaxStepDeg: 4,
+  angularRayOvershootPx: 5,
   textStrokeWidthPx: 1.8,
   dimensionStrokeWidthPx: 1.2,
   dimension3d: {
@@ -225,6 +273,13 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     standoffSizeRatio: 0.35,
     upwardBias: { card: 1, frame: 1, pill: 0.5 },
     blockedFallback: 'least-intrusion',
+    candidateAnglesDeg: [0, 30, -30, 60, -60, 90, -90, 135, -135, 180],
+    candidateDistanceScales: [1, 1.6, 2.4, 3.4],
+    awayProbePx: 50,
+    bodyMarginPx: 2,
+    intrusionWeights: { label: 4, overlay: 4, stroke: 2, box: 1 },
+    strokeBandPx: 4,
+    intrusionTiePx2: 1e-6,
     leaderWidthPx: 0.9,
     borderWidthPx: 1,
     frameWidthPx: 1.2,
@@ -235,6 +290,11 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     leaderColor: '#64748b',
     textColor: '#0f172a',
     mutedTextColor: '#334155',
+  },
+  declutter: {
+    candidateStepPx: 8,
+    candidateCount: 8,
+    extendedSearchMaxLabels: 64,
   },
   inspection: {
     // ≈ 0.65 / 0.35 of the opaque contrast, blended in sRGB (see the type

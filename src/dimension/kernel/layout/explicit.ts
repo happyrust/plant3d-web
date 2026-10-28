@@ -9,10 +9,8 @@ import {
   sceneMarker,
   scenePath,
   sceneVertex,
-  sceneVertexAtScreen,
 } from '../geometry/sceneGeometry';
 import {
-  expandRect,
   makeCenteredGlyphRun,
   makeGlyphHitRegion,
   makeLineHitRegion,
@@ -21,11 +19,12 @@ import {
 } from '../geometry/screenGeometry';
 import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
-import { add3, EPSILON, lerp3 } from '../vec';
+import { add3, EPSILON } from '../vec';
 
 import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
-import { layoutTagBillboard } from './tagBillboard';
+import { lodShortLine, lodTierHiddenReason, projectedSourceTextHeightPx } from './shared/lod';
+import { backProjectedSegment, labelBoundsOf, sceneVertexOnSegment } from './shared/screen';
 
 import type {
   ExplicitArrowInput,
@@ -36,7 +35,6 @@ import type {
   SceneLine,
   ScenePrimitive,
   SceneTriangle,
-  SceneVertex,
   ScreenGlyphRun,
   ScreenLine,
   ScreenMarker,
@@ -45,8 +43,6 @@ import type {
   Vec2,
 } from '../types';
 import type { LayoutContext } from './context';
-
-const DEFAULT_MARKER_RADIUS_PX = 4;
 
 type ExplicitLine = ExplicitLayoutInput['lines'][number];
 
@@ -87,15 +83,16 @@ type LabelClearance = Readonly<{
  * not fill the viewport with one label. Everything else keeps the fixed
  * theme height.
  */
-function projectedSourceTextHeightPx(
+function sourceTextHeightPx(
   input: ExplicitLayoutInput,
   context: LayoutContext,
 ): number | null {
   const heightM = input.textHeightM;
   if (heightM === undefined || !(heightM > 0)) return null;
-  const metresPerPixel = context.projector.worldPerPixelAt(input.labelAnchor);
-  if (!Number.isFinite(metresPerPixel) || !(metresPerPixel > 0)) return null;
-  return heightM / metresPerPixel;
+  return projectedSourceTextHeightPx(
+    heightM,
+    context.projector.worldPerPixelAt(input.labelAnchor),
+  );
 }
 
 function resolveTextHeightPx(
@@ -126,21 +123,11 @@ function lodHiddenReason(
 ): ExplicitLodHiddenReason | null {
   const lod = input.lod;
   if (!lod) return null;
-  if (
-    lod.tier === 'secondary'
-    && projectedPx !== null
-    && projectedPx < context.theme.sourceTextHeightMinPx
-  ) {
-    return 'secondary-far';
-  }
-  // Detail tier (slope marks, skew aids, branch name): a close-up only.
-  if (
-    lod.tier === 'detail'
-    && projectedPx !== null
-    && projectedPx < context.theme.sourceTextHeightMaxPx
-  ) {
-    return 'detail-far';
-  }
+  // Tier rules (secondary floor, detail ceiling) are shared with the 3D and
+  // tag presentations; the short-line rule measures this presentation's own
+  // dimension line against the label at the resolved text height.
+  const tierHidden = lodTierHiddenReason(lod, projectedPx, context.theme);
+  if (tierHidden) return tierHidden;
   if (lod.hideShort && input.formattedLabel.length > 0) {
     const dimensionLine = input.lines.find(line => line.part === 'dimension');
     if (dimensionLine) {
@@ -148,7 +135,7 @@ function lodHiddenReason(
       const to = projectSceneVertex(sceneVertex(dimensionLine.to), context.projector);
       const lineLengthPx = Math.hypot(to[0] - from[0], to[1] - from[1]);
       const labelWidthPx = context.font.getWidth(textHeightPx, input.formattedLabel);
-      if (lineLengthPx < labelWidthPx * context.theme.lodMinLineToLabelRatio) {
+      if (lodShortLine(lineLengthPx, labelWidthPx, context.theme)) {
         return 'short-line';
       }
     }
@@ -183,7 +170,7 @@ function labelClearance(
     styleRole,
   );
   return {
-    rect: expandRect(glyph.bounds, context.theme.labelPaddingPx / 2),
+    rect: labelBoundsOf(glyph, context.theme),
     center,
     rotationRad,
   };
@@ -191,27 +178,6 @@ function labelClearance(
 
 function samePoint(a: Vec2, b: Vec2): boolean {
   return a[0] === b[0] && a[1] === b[1];
-}
-
-function vertexOnLine(
-  line: ExplicitLine,
-  fromScreen: Vec2,
-  toScreen: Vec2,
-  point: Vec2,
-  context: LayoutContext,
-): SceneVertex {
-  const deltaX = toScreen[0] - fromScreen[0];
-  const deltaY = toScreen[1] - fromScreen[1];
-  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
-  const t = lengthSquared <= EPSILON
-    ? 0
-    : ((point[0] - fromScreen[0]) * deltaX
-      + (point[1] - fromScreen[1]) * deltaY) / lengthSquared;
-  return sceneVertexAtScreen(
-    lerp3(line.from, line.to, t),
-    point,
-    context.projector,
-  );
 }
 
 function explicitSceneLines(
@@ -251,9 +217,16 @@ function explicitSceneLines(
       styleRole,
     ))];
   }
+  // A line shorter than EPSILON on screen parks its vertices at `line.from`.
+  const trimmedLine = backProjectedSegment(
+    line.from,
+    line.to,
+    fromScreen,
+    [toScreen[0] - fromScreen[0], toScreen[1] - fromScreen[1]],
+  );
   return segments.map(segment => withStyle(makeSceneLine(
-    vertexOnLine(line, fromScreen, toScreen, segment.from, context),
-    vertexOnLine(line, fromScreen, toScreen, segment.to, context),
+    sceneVertexOnSegment(trimmedLine, segment.from, context.projector, true),
+    sceneVertexOnSegment(trimmedLine, segment.to, context.projector, true),
     line.part,
     styleRole,
   )));
@@ -331,12 +304,12 @@ export function layoutExplicit(
   context: LayoutContext,
 ): LayoutResult {
   // A running dimension presented in 3D rebuilds its own geometry from the
-  // solver's pipe points, a tag presented as a billboard builds its body
-  // from its text; the flat path below stays for every other input.
+  // solver's pipe points; the flat path below stays for every other input.
+  // Billboard tags never arrive here: `layoutViewport` plans and places them
+  // before dispatching the rest to `layoutDimension`.
   if (input.dimension3d) return layoutDimension3d(input, input.dimension3d, context);
-  if (input.tag) return layoutTagBillboard(input, input.tag, context);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
-  const projectedTextHeightPx = projectedSourceTextHeightPx(input, context);
+  const projectedTextHeightPx = sourceTextHeightPx(input, context);
   const textHeightPx = resolveTextHeightPx(projectedTextHeightPx, context);
   const hidden = lodHiddenReason(input, projectedTextHeightPx, textHeightPx, context);
   if (hidden) {
@@ -380,7 +353,7 @@ export function layoutExplicit(
     sceneMarker(
       sceneVertex(marker.at),
       marker.shape,
-      marker.radiusPx ?? DEFAULT_MARKER_RADIUS_PX,
+      marker.radiusPx ?? context.theme.markerRadiusPx,
       styleRole,
       marker.style,
     ));
@@ -391,7 +364,7 @@ export function layoutExplicit(
     styleRole,
     labelRotationRad,
   );
-  const lineAdvancePx = textHeightPx * 1.5;
+  const lineAdvancePx = textHeightPx * context.theme.labelLineAdvance;
   const extraGlyphScenes = (input.texts ?? []).map((text) =>
     sceneGlyph(
       text.text,
@@ -431,7 +404,7 @@ export function layoutExplicit(
   );
   const glyph = glyphs[0]!;
   const extraGlyphs = glyphs.slice(1);
-  const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
+  const labelBounds = labelBoundsOf(glyph, context.theme);
   const hitRegions: HitRegion[] = [
     ...lines.map((line) =>
       makeLineHitRegion(line, context.theme.dimensionStrokeWidthPx)),
