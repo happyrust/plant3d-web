@@ -66,6 +66,7 @@ e2e/*
 !e2e/output-project-direct-entry.spec.ts
 !e2e/dimension-mbd-v2-fixture.spec.ts
 !e2e/dimension-real-ams-bran-version.spec.ts
+!e2e/dimension-doc-screenshots.spec.ts
 !e2e/helpers/
 !e2e/helpers/spatialQueryRealBran.ts
 !e2e/fixtures/
@@ -100,6 +101,7 @@ scripts/*
 !scripts/verify-d07-environment.mjs
 !scripts/verify-acceptance-gate.mjs
 !scripts/verify-build-provenance.mjs
+!scripts/check-dimension-doc-screenshots.mjs
 !scripts/pms-contract-sequence.ts
 !scripts/review-annotation-flow-contract.ts
 !scripts/online-review-acceptance.mjs

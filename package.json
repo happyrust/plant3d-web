@@ -25,6 +25,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npx @playwright/test test",
+    "gen:dimension-screenshots": "npx @playwright/test test e2e/dimension-doc-screenshots.spec.ts --config=playwright.novideo.config.ts",
+    "verify:dimension-screenshots": "node scripts/check-dimension-doc-screenshots.mjs",
     "test:e2e:pms": "npx @playwright/test test --config=playwright.pms.config.ts",
     "test:smoke:p0:model": "node scripts/p0-live-smoke.mjs model",
     "test:smoke:p0:measurement": "node scripts/p0-live-smoke.mjs measurement",
