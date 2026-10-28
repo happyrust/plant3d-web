@@ -210,6 +210,12 @@ export type MbdV2ParseDiagnostic = Readonly<{
   reason: string;
 }>;
 
+/**
+ * `diagnostics` 是「契约层逐条跳过、但负载整体仍可交付」的通道（未知 kind 等）。
+ * **当前实现恒回空数组**：`parseMbdV2PipeData` 只在「某条图元非法」时整包失败，
+ * 没有部分交付路径（缺陷 D4；开发计划 A3 落地后才会真正产出）。调用方
+ * （`useMbdExternalSync`）已经把它并进 `skipped`，所以 A3 改完无需改调用方。
+ */
 export type MbdV2ParseResult =
   | Readonly<{
     ok: true;

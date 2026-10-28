@@ -2841,19 +2841,15 @@ const mbdExternalSync = createMbdExternalSync({
   emitToast,
 });
 
-function syncMbdExternalDimensions(
-  system: DimensionSystem,
-  options: Readonly<{ forceRefresh?: boolean }> = {},
-): Promise<void> {
+function syncMbdExternalDimensions(system: DimensionSystem): Promise<void> {
   return mbdExternalSync.sync(system, {
-    ...options,
     isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
   });
 }
 
 function handleMbdLocationChange(): void {
   if (!dimensionSystem) return;
-  void syncMbdExternalDimensions(dimensionSystem, { forceRefresh: true });
+  void syncMbdExternalDimensions(dimensionSystem);
 }
 
 async function initializeDimensionViewport(): Promise<void> {

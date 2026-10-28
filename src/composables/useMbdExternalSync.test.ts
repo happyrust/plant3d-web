@@ -116,7 +116,7 @@ describe('createMbdExternalSync', () => {
   it('clears the source when only show_dbnum is present (parquet channel retired)', async () => {
     const harness = createHarness({ search: '?show_dbnum=250160' });
 
-    await harness.sync.sync(harness.target, { forceRefresh: true });
+    await harness.sync.sync(harness.target);
 
     expect(harness.fetchPipeData).not.toHaveBeenCalled();
     expect(harness.target.replaceExternalSource).toHaveBeenCalledWith('mbd', []);
@@ -376,5 +376,48 @@ describe('createMbdExternalSync', () => {
     expect(harness.emitToast).toHaveBeenCalledWith(expect.objectContaining({
       level: 'error',
     }));
+  });
+
+  it('surfaces a failed sync as one error toast and dedupes repeats of the same refno', async () => {
+    const harness = createHarness({
+      search: '?mbd_refno=A',
+      fetchPipeData: vi.fn(async () => {
+        throw new Error('MBD V2 API responded with status 422');
+      }),
+    });
+
+    await harness.sync.sync(harness.target);
+    await harness.sync.sync(harness.target);
+    await harness.sync.sync(harness.target);
+
+    expect(harness.emitToast).toHaveBeenCalledTimes(1);
+    expect(harness.emitToast).toHaveBeenCalledWith({
+      message: 'MBD 标注装载失败：MBD V2 API responded with status 422',
+      level: 'error',
+    });
+    // 去重只作用于弹窗：诊断每次都要照旧写入。
+    expect(harness.diagnostics.set).toHaveBeenCalledTimes(3);
+  });
+
+  it('re-arms the failure toast after a successful sync', async () => {
+    let fail = true;
+    const harness = createHarness({
+      search: '?mbd_refno=A',
+      fetchPipeData: vi.fn(async () => {
+        if (fail) throw new Error('boom');
+        return { ok: true as const, data: contractPayload(), diagnostics: [] };
+      }),
+    });
+
+    await harness.sync.sync(harness.target);
+    expect(harness.emitToast).toHaveBeenCalledTimes(1);
+
+    fail = false;
+    await harness.sync.sync(harness.target);
+    expect(harness.emitToast).toHaveBeenCalledTimes(1);
+
+    fail = true;
+    await harness.sync.sync(harness.target);
+    expect(harness.emitToast).toHaveBeenCalledTimes(2);
   });
 });

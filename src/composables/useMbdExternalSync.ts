@@ -25,7 +25,6 @@ export type MbdExternalSyncDeps = Readonly<{
 }>;
 
 export type MbdExternalSyncOptions = Readonly<{
-  forceRefresh?: boolean;
   /** 宿主级过期判定（例如尺寸系统已被替换或组件已卸载）。 */
   isCancelled?: () => boolean;
 }>;
@@ -34,7 +33,8 @@ export type MbdExternalSync = Readonly<{
   /**
    * 按 URL 参数把 MBD 图元同步进目标系统：`mbd_refno` → 实时 API；
    * 无 `mbd_refno` → 清空来源（离线 parquet 通道已随 legacy 数据源退役）。
-   * 通道失败时清空来源并把失败原因写入诊断（不静默清空诊断）。
+   * 通道失败时清空来源、把失败原因写入诊断并弹一次错误提示
+   * （同一 refno 的同一句原因只弹一次，成功后复位；不静默清空诊断）。
    */
   sync(
     target: MbdExternalSyncTarget,
@@ -116,6 +116,20 @@ export function createMbdExternalSync(
   deps: MbdExternalSyncDeps,
 ): MbdExternalSync {
   let syncVersion = 0;
+  /**
+   * 失败提示去重：同一 refno 的同一句原因只弹一次。取数失败往往是持续性
+   * 的（后端 422 / 网关 502），每次 popstate 都弹会在用户眼前刷屏；换源或
+   * 成功一次之后复位，下一次真失败仍要看得见。
+   */
+  let lastFailureToast: Readonly<{ refno: string; message: string }> | null = null;
+
+  const toastFailure = (refno: string, message: string): void => {
+    if (lastFailureToast?.refno === refno && lastFailureToast.message === message) {
+      return;
+    }
+    lastFailureToast = { refno, message };
+    deps.emitToast({ message: `MBD 标注装载失败：${message}`, level: 'error' });
+  };
 
   return {
     async sync(target, options = {}) {
@@ -130,6 +144,7 @@ export function createMbdExternalSync(
         if (cancelled()) return;
         target.replaceExternalSource('mbd', []);
         deps.diagnostics.clear();
+        lastFailureToast = null;
         return;
       }
 
@@ -166,6 +181,7 @@ export function createMbdExternalSync(
         const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
         const records = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
         target.replaceExternalSource('mbd', records);
+        lastFailureToast = null;
         deps.diagnostics.set({
           channel,
           sourceId,
@@ -195,9 +211,6 @@ export function createMbdExternalSync(
             level: 'error',
           });
         }
-        if (skipped.length > 0) {
-          console.warn('[dimension-v2] skipped MBD primitives', skipped);
-        }
       } catch (error) {
         if (cancelled()) return;
         target.replaceExternalSource('mbd', []);
@@ -209,6 +222,9 @@ export function createMbdExternalSync(
           skipped: rejection?.skipped ?? [],
           loadError: error instanceof Error ? error.message : String(error),
         });
+        // 视口空白 + 无提示 = 现场分不清「本分支没有标注」与「取数失败」，所以失败
+        // 必须有一次可见提示（诊断面板默认收起，光写诊断等于没提示）。
+        toastFailure(sourceId, error instanceof Error ? error.message : String(error));
         console.warn('[dimension-v2] MBD annotations unavailable', error);
       }
     },

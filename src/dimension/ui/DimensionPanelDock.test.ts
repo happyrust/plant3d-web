@@ -534,4 +534,39 @@ describe('DimensionPanelDock', () => {
     }
   });
 
+  /**
+   * D3：后端一次能回上百条 issue，面板默认按组截断（50 条 / 组），标题仍报全量
+   * 条数，并给一个「显示全部」的显式按钮——展开前节点数必须有上限。
+   */
+  it('caps the rendered diagnostics and reveals the rest on demand', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: Array.from({ length: 200 }, (_, index) => ({
+        id: `issue-${index}`,
+        severity: 'warning' as const,
+        category: 'avoidance' as const,
+        message: `lane overflow ${index}`,
+      })),
+      skipped: [],
+      layoutMode: null,
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    const rows = () => host.querySelectorAll('[data-issue-id]').length;
+    expect(rows()).toBe(50);
+
+    const toggle = host.querySelector('[data-testid="mbd-diagnostics-toggle"]') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.textContent).toContain('还有 150 条');
+
+    toggle.click();
+    await nextTick();
+    expect(rows()).toBe(200);
+  });
+
 });

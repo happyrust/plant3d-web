@@ -167,6 +167,33 @@ const diagnosticsBySeverity = computed(() => {
 });
 const diagnosticsCount = computed(() =>
   mbdDiagnostics.value.issues.length + mbdDiagnostics.value.skipped.length);
+/**
+ * 诊断列表承载：后端一次能回上百条 issue（`skipped` 同理），全量渲染意味着展开
+ * 一次就要建几百个 DOM 节点，面板本身还会跟着重排。默认每组截断，留一个显式的
+ * 「显示全部」口子；条数仍然按全量显示在标题里，不隐瞒规模。
+ */
+const DIAGNOSTICS_PAGE_SIZE = 50;
+const diagnosticsExpanded = ref(false);
+const visibleDiagnosticsBySeverity = computed(() => {
+  const groups = diagnosticsBySeverity.value;
+  const slice = (issues: MbdDiagnosticsSnapshot['issues']) =>
+    diagnosticsExpanded.value ? issues : issues.slice(0, DIAGNOSTICS_PAGE_SIZE);
+  return {
+    error: slice(groups.error),
+    warning: slice(groups.warning),
+    info: slice(groups.info),
+  };
+});
+const visibleSkippedDiagnostics = computed(() =>
+  diagnosticsExpanded.value
+    ? mbdDiagnostics.value.skipped
+    : mbdDiagnostics.value.skipped.slice(0, DIAGNOSTICS_PAGE_SIZE));
+const hiddenDiagnosticsCount = computed(() => {
+  const shown = Object.values(visibleDiagnosticsBySeverity.value)
+    .reduce((total, issues) => total + issues.length, 0)
+    + visibleSkippedDiagnostics.value.length;
+  return diagnosticsCount.value - shown;
+});
 const diagnosticsVisible = computed(() =>
   diagnosticsCount.value > 0
   || mbdDiagnostics.value.loadError !== null
@@ -733,7 +760,7 @@ function act(
             }">
             {{ severity }}（{{ diagnosticsBySeverity[severity].length }}）
           </div>
-          <div v-for="issue in diagnosticsBySeverity[severity]"
+          <div v-for="issue in visibleDiagnosticsBySeverity[severity]"
             :key="issue.id"
             class="mt-1 flex items-center justify-between gap-2"
             :data-issue-id="issue.id">
@@ -754,7 +781,7 @@ function act(
         <div class="mt-2 font-semibold">
           跳过图元（{{ mbdDiagnostics.skipped.length }}）
         </div>
-        <div v-for="entry in mbdDiagnostics.skipped"
+        <div v-for="entry in visibleSkippedDiagnostics"
           :key="entry.id"
           class="mt-1 break-all"
           :data-skipped-id="entry.id">
@@ -774,6 +801,16 @@ function act(
           {{ note }}
         </div>
       </template>
+      <div v-if="hiddenDiagnosticsCount > 0 || diagnosticsExpanded"
+        class="mt-2">
+        <button type="button"
+          class="rounded border border-slate-300 px-1.5 py-0.5 hover:bg-slate-100"
+          data-testid="mbd-diagnostics-toggle"
+          @click="diagnosticsExpanded = !diagnosticsExpanded">
+          <template v-if="diagnosticsExpanded">收起多余条目</template>
+          <template v-else>显示全部（还有 {{ hiddenDiagnosticsCount }} 条）</template>
+        </button>
+      </div>
     </details>
     <div class="min-h-0 flex-1">
       <DimensionSemanticList :items="items"

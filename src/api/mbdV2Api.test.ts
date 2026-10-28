@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { describeMbdV2HttpFailure, fetchMbdV2PipeData, resolveMbdApiBaseUrl } from './mbdV2Api';
+import {
+  MBD_FETCH_TIMEOUT_MS,
+  MBD_RESPONSE_MAX_BYTES,
+  describeMbdV2HttpFailure,
+  fetchMbdV2PipeData,
+  resolveMbdApiBaseUrl,
+} from './mbdV2Api';
 
 describe('resolveMbdApiBaseUrl', () => {
   it('uses a dedicated MBD backend port without redirecting the other APIs', () => {
@@ -25,6 +31,33 @@ describe('resolveMbdApiBaseUrl', () => {
       envBase: '',
       browserHostname: '127.0.0.1',
     })).toBe('');
+  });
+
+  /**
+   * `?mbdBackend` 能把整条 MBD 通道指到任意主机（含外网）。缺省必须收紧：
+   * 生产构建里忽略该参数，回落到常规后端 / VITE_MBD_API_BASE_URL。
+   */
+  it('ignores ?mbdBackend unless the caller opts in (production tightening)', () => {
+    const search = '?mbdBackend=https://evil.example';
+    expect(resolveMbdApiBaseUrl({
+      search,
+      envBase: '',
+      browserHostname: 'app.example.com',
+    })).toBe('');
+    expect(resolveMbdApiBaseUrl({
+      search,
+      envBase: 'http://localhost:18084',
+      browserHostname: 'app.example.com',
+    })).toBe('http://localhost:18084');
+  });
+
+  it('still honours ?mbdBackend for dev builds that pass the override flag', () => {
+    expect(resolveMbdApiBaseUrl({
+      search: '?mbdBackend=http://127.0.0.1:18084/',
+      envBase: '',
+      browserHostname: 'app.example.com',
+      allowQueryBackendOverride: true,
+    })).toBe('http://127.0.0.1:18084');
   });
 });
 
@@ -78,6 +111,7 @@ describe('fetchMbdV2PipeData', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('非 2xx：ok:false 且 error 是信封里的 message', async () => {
@@ -122,5 +156,73 @@ describe('fetchMbdV2PipeData', () => {
       error: 'MBD V2 refno must not be empty',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('超时：fetch 永不 settle 时在 MBD_FETCH_TIMEOUT_MS 后返回 ok:false', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockReturnValue(new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = fetchMbdV2PipeData('24381_145018');
+    await vi.advanceTimersByTimeAsync(MBD_FETCH_TIMEOUT_MS);
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('超时');
+      expect(result.error).toContain('15');
+    }
+    vi.useRealTimers();
+  });
+
+  it('Content-Length 超过上限：不读正文直接返回 ok:false', async () => {
+    const textSpy = vi.fn();
+    const oversized = String(MBD_RESPONSE_MAX_BYTES + 1);
+    const response = {
+      ok: true,
+      headers: new Headers({ 'content-length': oversized }),
+      text: textSpy,
+    } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+    const result = await fetchMbdV2PipeData('24381_145018');
+
+    expect(result).toEqual({
+      ok: false,
+      error: `MBD V2 API 响应过大：${MBD_RESPONSE_MAX_BYTES + 1} 字节，`
+        + `超过上限 ${MBD_RESPONSE_MAX_BYTES} 字节`,
+    });
+    expect(textSpy).not.toHaveBeenCalled();
+  });
+
+  it('Content-Length 缺失（chunked）：放行并正常解析', async () => {
+    const payload = {
+      version: 'v2',
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      primitives: [],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    };
+    const response = new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(response.headers.get('content-length')).toBeNull();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+    const result = await fetchMbdV2PipeData('24381_145018');
+
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it('调用方 signal 主动 abort：AbortError 原样抛出而不是 ok:false', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise<Response>(() => {})));
+    const controller = new AbortController();
+
+    const pending = fetchMbdV2PipeData('24381_145018', { signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
