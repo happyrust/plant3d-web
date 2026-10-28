@@ -21,9 +21,11 @@ test('dimension WebGL scene demo renders four types plus MBD and exports SVG', a
     'demo-radial',
     'demo-mbd-explicit',
   ]);
+  // 画家 group 固定四个 mesh：stroke cores / stroke edges / filled arrows / filled tag bodies
+  // （scenePainter.ts:956-970，getStats 返回 group.children.length）。
   expect(await page.evaluate(
     () => (window as any).__dimensionDemo.getSceneObjectCount(),
-  )).toBe(2);
+  )).toBe(4);
 
   const size = await page.evaluate(() => (window as any).__dimensionDemo.getCanvasSize());
   expect(size.width).toBe(Math.round(size.cssWidth * size.dpr));
