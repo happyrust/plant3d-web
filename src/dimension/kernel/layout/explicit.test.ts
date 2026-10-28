@@ -557,3 +557,96 @@ describe('layoutExplicit', () => {
     });
   });
 });
+
+// 求解器下发的角弧半径是 `aod × 0.7`（25 mm 管 → 17.5 mm），整机视图下不到
+// 2 px，弧退化成污点。只有 `part: 'dimension'`（`mapAngleDim` 的标注弧）按
+// `theme.minArcRadiusPx` 抬到屏幕下限；`part: 'arc'` 是模型上的真实圆/弧
+// （`mapAidArc` / `mapAidCircle`），必须 1:1 画。100 px/m 时下限 = 0.15 m = 15 px。
+describe('explicit arc pixel floor', () => {
+  const arcInput = (
+    arc: NonNullable<ExplicitLayoutInput['arcs']>[number],
+  ): ExplicitLayoutInput => ({
+    id: 'explicit-arc',
+    role: 'external',
+    labelPinned: true,
+    formattedLabel: '',
+    lines: [],
+    labelAnchor: [0, 0, 0],
+    arrowLines: [],
+    arcs: [arc],
+  });
+
+  // 弧心 [0, 0, 0] 投影到 (200, 200)。
+  const context: LayoutContext = {
+    projector: createTestProjector(100),
+    font: createTestFont(),
+    theme: SOLVESPACE_DIMENSION_THEME,
+    format: DEFAULT_DIMENSION_FORMAT,
+    interaction: 'normal',
+  };
+
+  const screenRadii = (result: ReturnType<typeof layoutExplicit>): number[] => {
+    const path = result.primitives.find(
+      (primitive): primitive is ScreenPath => primitive.kind === 'path',
+    );
+    expect(path).toBeDefined();
+    return path!.points.map(point => Math.hypot(point[0] - 200, point[1] - 200));
+  };
+
+  it('lifts a solver angle arc to the theme pixel floor before sampling', () => {
+    const result = layoutExplicit(
+      arcInput({
+        center: [0, 0, 0],
+        normal: [0, 0, 1],
+        radiusM: 0.01,
+        part: 'dimension',
+      }),
+      context,
+    );
+
+    const radii = screenRadii(result);
+    // 先放大再采样：15 px 的弧按 0.25 px 弦误差细分，点数远多于退化的 4 点。
+    expect(radii.length).toBeGreaterThan(8);
+    for (const radius of radii) expect(radius).toBeCloseTo(15, 0);
+  });
+
+  it('draws a real model arc 1:1 even below the floor', () => {
+    const result = layoutExplicit(
+      arcInput({
+        center: [0, 0, 0],
+        normal: [0, 0, 1],
+        radiusM: 0.01,
+        part: 'arc',
+      }),
+      context,
+    );
+
+    const radii = screenRadii(result);
+    expect(radii.length).toBeGreaterThan(0);
+    for (const radius of radii) expect(radius).toBeLessThan(2);
+  });
+
+  it('leaves an angle arc at or above the floor untouched', () => {
+    const atFloor = screenRadii(layoutExplicit(
+      arcInput({
+        center: [0, 0, 0],
+        normal: [0, 0, 1],
+        radiusM: 0.15,
+        part: 'dimension',
+      }),
+      context,
+    ));
+    for (const radius of atFloor) expect(radius).toBeCloseTo(15, 0);
+
+    const aboveFloor = screenRadii(layoutExplicit(
+      arcInput({
+        center: [0, 0, 0],
+        normal: [0, 0, 1],
+        radiusM: 0.2,
+        part: 'dimension',
+      }),
+      context,
+    ));
+    for (const radius of aboveFloor) expect(radius).toBeCloseTo(20, 0);
+  });
+});
