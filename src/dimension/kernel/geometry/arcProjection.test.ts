@@ -2,34 +2,34 @@ import { describe, expect, it } from 'vitest';
 
 import { createTestProjector } from '../testUtils';
 
-import { projectArcToScreenPath } from './arcProjection';
+import { sampleArcToDesignAndScreenPath } from './arcProjection';
 
 const CENTER_X = 200;
 const CENTER_Y = 200;
 
-describe('projectArcToScreenPath', () => {
+describe('sampleArcToDesignAndScreenPath', () => {
   it('projects a full circle as one closed path on the screen circle', () => {
-    const projected = projectArcToScreenPath(
+    const sampled = sampleArcToDesignAndScreenPath(
       { center: [0, 0, 0], normal: [0, 0, 1], radiusM: 0.5 },
       createTestProjector(),
     );
 
-    expect(projected).not.toBeNull();
-    expect(projected!.closed).toBe(true);
-    expect(projected!.points.length).toBeGreaterThanOrEqual(16);
-    for (const point of projected!.points) {
+    expect(sampled).not.toBeNull();
+    expect(sampled!.closed).toBe(true);
+    expect(sampled!.screenPoints.length).toBeGreaterThanOrEqual(16);
+    for (const point of sampled!.screenPoints) {
       const radius = Math.hypot(point[0] - CENTER_X, point[1] - CENTER_Y);
       expect(Math.abs(radius - 50)).toBeLessThan(0.5);
     }
   });
 
   it('keeps the chord error below the subdivision tolerance', () => {
-    const projected = projectArcToScreenPath(
+    const sampled = sampleArcToDesignAndScreenPath(
       { center: [0, 0, 0], normal: [0, 0, 1], radiusM: 1 },
       createTestProjector(),
     )!;
 
-    const points = [...projected.points, projected.points[0]!];
+    const points = [...sampled.screenPoints, sampled.screenPoints[0]!];
     for (let index = 0; index < points.length - 1; index += 1) {
       const from = points[index]!;
       const to = points[index + 1]!;
@@ -40,7 +40,7 @@ describe('projectArcToScreenPath', () => {
   });
 
   it('projects a quarter arc as an open path with exact endpoints', () => {
-    const projected = projectArcToScreenPath(
+    const sampled = sampleArcToDesignAndScreenPath(
       {
         center: [0, 0, 0],
         normal: [0, 0, 1],
@@ -51,10 +51,10 @@ describe('projectArcToScreenPath', () => {
       createTestProjector(),
     );
 
-    expect(projected).not.toBeNull();
-    expect(projected!.closed).toBe(false);
-    const first = projected!.points[0]!;
-    const last = projected!.points[projected!.points.length - 1]!;
+    expect(sampled).not.toBeNull();
+    expect(sampled!.closed).toBe(false);
+    const first = sampled!.screenPoints[0]!;
+    const last = sampled!.screenPoints[sampled!.screenPoints.length - 1]!;
     expect(first[0]).toBeCloseTo(CENTER_X, 6);
     expect(first[1]).toBeCloseTo(CENTER_Y + 50, 6);
     expect(last[0]).toBeCloseTo(CENTER_X + 50, 6);
@@ -63,15 +63,15 @@ describe('projectArcToScreenPath', () => {
 
   it('rejects degenerate arcs', () => {
     const projector = createTestProjector();
-    expect(projectArcToScreenPath(
+    expect(sampleArcToDesignAndScreenPath(
       { center: [0, 0, 0], normal: [0, 0, 1], radiusM: 0 },
       projector,
     )).toBeNull();
-    expect(projectArcToScreenPath(
+    expect(sampleArcToDesignAndScreenPath(
       { center: [0, 0, 0], normal: [0, 0, 0], radiusM: 1 },
       projector,
     )).toBeNull();
-    expect(projectArcToScreenPath(
+    expect(sampleArcToDesignAndScreenPath(
       {
         center: [0, 0, 0],
         normal: [0, 0, 1],

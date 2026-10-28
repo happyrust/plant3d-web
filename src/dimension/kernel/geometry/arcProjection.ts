@@ -18,11 +18,6 @@ export type DesignArc = Readonly<{
   endAngle?: number;
 }>;
 
-export type ProjectedArc = Readonly<{
-  points: readonly Vec2[];
-  closed: boolean;
-}>;
-
 export type SampledDesignArc = Readonly<{
   designPoints: readonly Vec3[];
   screenPoints: readonly Vec2[];
@@ -141,15 +136,4 @@ export function sampleArcToDesignAndScreenPath(
     }
   }
   return { designPoints, screenPoints: points, closed };
-}
-
-export function projectArcToScreenPath(
-  arc: DesignArc,
-  projector: ViewportProjector,
-  tolerancePx = DEFAULT_CHORD_TOLERANCE_PX,
-): ProjectedArc | null {
-  const sampled = sampleArcToDesignAndScreenPath(arc, projector, tolerancePx);
-  return sampled
-    ? { points: sampled.screenPoints, closed: sampled.closed }
-    : null;
 }

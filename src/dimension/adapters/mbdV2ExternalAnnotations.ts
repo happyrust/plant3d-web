@@ -1,5 +1,4 @@
-import { Matrix4, Vector3 } from 'three';
-
+import * as affine from '../kernel/geometry/affine';
 import {
   stablePerpendicular,
   stablePlaneBasis,
@@ -81,16 +80,10 @@ function frameTransformer(data: MbdV2PipeData): FrameTransform | null {
     };
   }
   if (!data.meta.source_to_design) return null;
-  const matrix = new Matrix4().fromArray([...data.meta.source_to_design]);
+  const matrix = data.meta.source_to_design;
   return {
-    point: (point) => {
-      const transformed = new Vector3(...point).applyMatrix4(matrix);
-      return [transformed.x, transformed.y, transformed.z];
-    },
-    direction: (direction) => {
-      const transformed = new Vector3(...direction).transformDirection(matrix);
-      return tryNormalize3([transformed.x, transformed.y, transformed.z]);
-    },
+    point: point => affine.transformPoint(matrix, point),
+    direction: direction => tryNormalize3(affine.transformDirection(matrix, direction)),
   };
 }
 

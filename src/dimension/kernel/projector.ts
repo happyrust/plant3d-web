@@ -11,12 +11,3 @@ export type ViewportProjector = {
   unproject(point: Readonly<{ x: number; y: number; depth: number }>): Vec3;
   worldPerPixelAt(point: Vec3): number;
 }
-
-export function alignToPixelGrid(point: Vec3, projector: ViewportProjector): Vec3 {
-  const screen = projector.project(point);
-  return projector.unproject({
-    x: Math.round(screen.x),
-    y: Math.round(screen.y),
-    depth: screen.depth,
-  });
-}

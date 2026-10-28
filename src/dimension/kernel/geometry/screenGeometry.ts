@@ -3,7 +3,6 @@ import type {
   HitRegion,
   ScreenGlyphRun,
   ScreenLine,
-  ScreenLinePart,
   ScreenMarker,
   ScreenPath,
   ScreenRect,
@@ -12,15 +11,6 @@ import type {
 
 /** Bounded hit-region count per path so large arcs stay within budget. */
 const MAX_PATH_HIT_REGIONS = 32;
-
-export function makeScreenLine(
-  from: Vec2,
-  to: Vec2,
-  part: ScreenLinePart,
-  styleRole: string,
-): ScreenLine {
-  return { kind: 'line', from, to, part, styleRole };
-}
 
 export function makeLineHitRegion(line: ScreenLine, widthPx: number): HitRegion {
   return {

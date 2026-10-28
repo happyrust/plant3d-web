@@ -1,6 +1,6 @@
 export * from './collision/resolveLabelCollisions';
 export * from './format';
-export * from './geometry/arrow';
+export * from './geometry/affine';
 export * from './geometry/screenGeometry';
 export * from './geometry/trimLineAgainstRect';
 export * from './glyph/glyphTrace';
