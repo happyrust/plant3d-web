@@ -43,9 +43,10 @@ type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
  * 的类别不会产生任何 issue，光看诊断列表看不出缺了什么。
  *
  * `isodim_main` 是当前生产路径恒报的值（`plant-mbd/src/layout.rs` 的
- * `LAYOUT_MODE_ISODIM_MAIN`，两条产出路径都写它），它同样只产出 11 种图元里的 7 种
- * （`angle_dim` / `aid_arc` / `aid_circle` / `aid_point` 有契约无产出），所以必须
- * 一起列进来；`linear_mvp` 保留是因为仓内 fixture 仍用它。待契约 `meta.coverage`
+ * `LAYOUT_MODE_ISODIM_MAIN`，两条产出路径都写它），它同样只产出 11 种图元里的 8 种
+ * （`aid_arc` / `aid_circle` / `aid_point` 仍无 live 产出方；`angle_dim` 自
+ * 2026-10-29 起已由 `plant-mbd` 的 `angle.rs` 产出），所以必须一起列进来；
+ * `linear_mvp` 保留是因为仓内 fixture 仍用它。待契约 `meta.coverage`
  * （开发计划 T4.1）到位后整段退休。
  */
 const PARTIAL_LAYOUT_MODES: readonly string[] = ['linear_mvp', 'isodim_main'];
