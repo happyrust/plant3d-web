@@ -253,6 +253,42 @@ describe('parseMbdV2PipeData', () => {
     }
   });
 
+  it('accepts an optional per-text height on aid_text and rejects non-positive ones', () => {
+    const payload = (primitive: Record<string, unknown>) => ({
+      version: 'v2',
+      input_refno: 'aid-text',
+      branch_refno: 'aid-text',
+      primitives: [primitive],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    });
+    const aidText = {
+      kind: 'aid_text',
+      id: 'angle:isoline:0:dir-text',
+      text: 'A:0',
+      position: [0, 0, 0],
+    };
+
+    // The installation-angle direction labels declare `cheight / 2`.
+    const withHeight = parseMbdV2PipeData(payload({ ...aidText, text_height_mm: 12.5 }));
+    expect(withHeight.ok).toBe(true);
+    if (!withHeight.ok) return;
+    const parsedText = withHeight.data.primitives[0];
+    expect(parsedText?.kind).toBe('aid_text');
+    expect((parsedText as { text_height_mm?: number }).text_height_mm).toBe(12.5);
+
+    // Absent stays valid (regression: every pre-existing producer omits it).
+    expect(parseMbdV2PipeData(payload(aidText))).toMatchObject({ ok: true });
+
+    // Zero, negative and NaN heights have no meaning and would poison the projection.
+    for (const textHeight of [0, -1, Number.NaN]) {
+      const rejected = parseMbdV2PipeData(payload({ ...aidText, text_height_mm: textHeight }));
+      expect(rejected, `text_height_mm ${String(textHeight)}`).toMatchObject({ ok: false });
+      if (rejected.ok) return;
+      expect(rejected.error).toContain('aid_text "angle:isoline:0:dir-text"');
+    }
+  });
+
   it('names the offending primitive and issue in rejection reasons', () => {
     const base = {
       version: 'v2',

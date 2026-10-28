@@ -88,6 +88,39 @@ function frameTransformer(data: MbdV2PipeData): FrameTransform | null {
 }
 
 /**
+ * A source-space (mm) length through the same transform as the geometry: the
+ * length of a that-long vector, so a uniform `source_to_design` scale reaches
+ * it while translation does not. Undefined for a non-positive length or a
+ * transform that collapses it.
+ */
+function sourceLengthToDesignM(
+  transform: FrameTransform,
+  millimetres: number,
+): number | undefined {
+  if (!(millimetres > 0)) return undefined;
+  const length = length3(sub3(
+    transform.point([millimetres, 0, 0]),
+    transform.point([0, 0, 0]),
+  ));
+  return length > 0 ? length : undefined;
+}
+
+/**
+ * A declared text height (always millimetres, on both geometry spaces) in
+ * Design Space. A `design_m` payload still declares heights in millimetres,
+ * so it divides by 1000; a `source_mm` payload goes through the transform.
+ */
+function textHeightToDesignM(
+  data: MbdV2PipeData,
+  transform: FrameTransform,
+  millimetres: number,
+): number | undefined {
+  if (!(millimetres > 0)) return undefined;
+  if (data.meta.geometry_space === 'design_m') return millimetres / 1000;
+  return sourceLengthToDesignM(transform, millimetres);
+}
+
+/**
  * Group text height in Design Space: `meta.cheight_mm` (PML `isoline`
  * character height, one value per payload) taken through the same transform
  * as the geometry — the length of a cheight-long vector, so a uniform
@@ -100,13 +133,8 @@ function groupTextHeightM(
   transform: FrameTransform,
 ): number | undefined {
   const cheight = data.meta.cheight_mm;
-  if (cheight === undefined || cheight === null || !(cheight > 0)) return undefined;
-  if (data.meta.geometry_space === 'design_m') return cheight / 1000;
-  const length = length3(sub3(
-    transform.point([cheight, 0, 0]),
-    transform.point([0, 0, 0]),
-  ));
-  return length > 0 ? length : undefined;
+  if (cheight === undefined || cheight === null) return undefined;
+  return textHeightToDesignM(data, transform, cheight);
 }
 
 function lineStyleFrom(style: string | undefined): DimensionLineStyle | undefined {
@@ -825,6 +853,21 @@ export function mbdV2ToExternalRecords(
           texts,
           ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
         });
+        // A per-primitive height wins over the group height: the solver draws
+        // the installation-angle direction labels at `cheight / 2` so they stay
+        // subordinate to the value text. Absent = keep following the group.
+        const ownTextHeightM = primitive.text_height_mm === undefined
+          ? undefined
+          : textHeightToDesignM(data, transform, primitive.text_height_mm);
+        if (ownTextHeightM !== undefined) {
+          record = {
+            ...record,
+            layout: {
+              ...(record.layout as ExplicitLayoutInput),
+              textHeightM: ownTextHeightM,
+            },
+          };
+        }
         break;
       }
       case 'leader_line': {
@@ -908,7 +951,11 @@ export function mbdV2ToExternalRecords(
       // Every record here comes from `explicitRecord`, so the layout is an
       // `ExplicitLayoutInput`; the group text height rides along with it so
       // the kernel can scale labels and the arrow floor with the model (S2).
-      records.push(textHeightM === undefined
+      // A record that already declared its own height (`aid_text`
+      // `text_height_mm`, e.g. the half-height direction labels) keeps it.
+      const hasOwnTextHeightM
+        = (record.layout as ExplicitLayoutInput).textHeightM !== undefined;
+      records.push(textHeightM === undefined || hasOwnTextHeightM
         ? record
         : {
           ...record,

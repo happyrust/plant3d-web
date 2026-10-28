@@ -159,11 +159,22 @@ export type MbdV2AidPoint = Readonly<{
   position: MbdV2Vec3;
 }>;
 
+/**
+ * Free text the solver places (PML `AIDTXT`). `text_height_mm` lets the
+ * solver declare a height that differs from the group height: the
+ * installation-angle direction labels are drawn at `cheight / 2` so they stay
+ * subordinate to the value text. Absent means "follow `meta.cheight_mm`",
+ * which is what every producer did before the field existed, so the mapper
+ * keeps the group height for it (ADR 0055 D7: the front end accepts the
+ * optional field first, the producer starts sending it later).
+ */
 export type MbdV2AidText = Readonly<{
   kind: 'aid_text';
   id: string;
   text: string;
   position: MbdV2Vec3;
+  /** Source-space (mm) cap height for this text; absent = the group height. */
+  text_height_mm?: number;
 }>;
 
 export type MbdV2WeldMark = Readonly<{
@@ -281,6 +292,15 @@ function isPositiveRadius(value: unknown): value is number {
   return isFiniteNumber(value) && value > 0;
 }
 
+/**
+ * Optional length field: absent is fine (older producers), present must be a
+ * finite positive number — a zero or negative height has no meaning and a
+ * NaN would poison the kernel's projection.
+ */
+function isOptionalPositiveNumber(value: unknown): value is number | undefined {
+  return value === undefined || isPositiveRadius(value);
+}
+
 /** Structure and finiteness only (ADR 0046); perpendicularity is re-derived by the mapper. */
 function isArcFrame(value: Record<string, unknown>): boolean {
   return isVec3(value.center)
@@ -346,7 +366,9 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
     case 'aid_point':
       return isVec3(value.position);
     case 'aid_text':
-      return typeof value.text === 'string' && isVec3(value.position);
+      return typeof value.text === 'string'
+        && isVec3(value.position)
+        && isOptionalPositiveNumber(value.text_height_mm);
     case 'weld_mark':
       return isVec3(value.position) && isOptionalString(value.weld_type);
     case 'slope_mark':

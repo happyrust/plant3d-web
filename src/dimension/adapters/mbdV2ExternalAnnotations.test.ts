@@ -597,6 +597,52 @@ describe('mbdV2ToExternalRecords', () => {
       .toBeCloseTo(0.027, 12);
   });
 
+  it('lets a single aid_text override the group text height with its own', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    // source_mm payload with S(0.001): 12.5 mm → 0.0125 m, 27 mm → 0.027 m.
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      primitives: [
+        { kind: 'aid_text', id: 'dir-text', text: 'A:0', position: [0, 0, 0], text_height_mm: 12.5 },
+        { kind: 'aid_text', id: 'plain-text', text: 'EL +1', position: [0, 0, 0] },
+      ],
+      meta: { ...parsed.data.meta, cheight_mm: 27 },
+    });
+
+    // The declared height wins over the group height, per record.
+    expect(explicitLayout(result, 'dir-text').textHeightM).toBeCloseTo(0.0125, 12);
+    // A record without its own height keeps following the group (regression).
+    expect(explicitLayout(result, 'plain-text').textHeightM).toBeCloseTo(0.027, 12);
+    // Different heights in one payload prove the override is per record.
+    expect(explicitLayout(result, 'dir-text').textHeightM)
+      .not.toBe(explicitLayout(result, 'plain-text').textHeightM);
+  });
+
+  it('keeps the group text height when no aid_text declares its own', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      primitives: [
+        { kind: 'aid_text', id: 'plain-text', text: 'EL +1', position: [0, 0, 0] },
+      ],
+      meta: { ...parsed.data.meta, cheight_mm: 27 },
+    });
+
+    expect(explicitLayout(result, 'plain-text').textHeightM).toBeCloseTo(0.027, 12);
+
+    // Without a group height there is still nothing to hang (unchanged).
+    const withoutGroup = mbdV2ToExternalRecords({
+      ...parsed.data,
+      primitives: [
+        { kind: 'aid_text', id: 'plain-text', text: 'EL +1', position: [0, 0, 0] },
+      ],
+      meta: { ...parsed.data.meta, cheight_mm: null },
+    });
+    expect(explicitLayout(withoutGroup, 'plain-text').textHeightM).toBeUndefined();
+  });
+
   it('tags linear dimensions with level-of-detail hints from sub_kind', () => {
     const parsed = parseMbdV2PipeData(cliLinearFixture);
     if (!parsed.ok) throw new Error(parsed.error);
