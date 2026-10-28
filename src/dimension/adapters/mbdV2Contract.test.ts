@@ -207,6 +207,52 @@ describe('parseMbdV2PipeData', () => {
     }))).toMatchObject({ ok: true });
   });
 
+  it('rejects aid styles outside solid | dashed | dash_dot, naming the primitive', () => {
+    const payload = (primitive: Record<string, unknown>) => ({
+      version: 'v2',
+      input_refno: 'aid',
+      branch_refno: 'aid',
+      primitives: [primitive],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    });
+    const frame = {
+      center: [0, 0, 0],
+      x_axis: [1, 0, 0],
+      normal: [0, 0, 1],
+      radius: 0.2,
+      start_angle_deg: 0,
+      sweep_angle_deg: 90,
+    };
+    const aids = {
+      aid_line: { start: [0, 0, 0], end: [0, 0, 1] },
+      aid_arc: frame,
+      aid_circle: { center: [0, 0, 0], normal: [0, 0, 1], radius: 0.1 },
+    };
+    const withStyle = (kind: string, fields: Record<string, unknown>, style?: unknown) =>
+      payload({
+        kind,
+        id: `${kind}-style`,
+        ...fields,
+        ...(style === undefined ? {} : { style }),
+      });
+
+    for (const [kind, fields] of Object.entries(aids)) {
+      // The kernel spelling (`dash-dot`), a different case, the empty string
+      // and null are producer mistakes the contract must not let through (C6).
+      for (const style of ['dotted', 'dash-dot', 'DASHED', '', null]) {
+        const rejected = parseMbdV2PipeData(withStyle(kind, fields, style));
+        expect(rejected.ok, `${kind} style ${JSON.stringify(style)}`).toBe(false);
+        if (rejected.ok) return;
+        expect(rejected.error).toContain(`${kind} "${kind}-style"`);
+      }
+      for (const style of ['solid', 'dashed', 'dash_dot', undefined]) {
+        const accepted = parseMbdV2PipeData(withStyle(kind, fields, style));
+        expect(accepted, `${kind} style ${String(style)}`).toMatchObject({ ok: true });
+      }
+    }
+  });
+
   it('names the offending primitive and issue in rejection reasons', () => {
     const base = {
       version: 'v2',

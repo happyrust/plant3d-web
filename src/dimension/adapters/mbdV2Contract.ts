@@ -233,6 +233,13 @@ const ISSUE_CATEGORIES: readonly MbdV2IssueCategory[] = [
   'other',
 ];
 
+/**
+ * Wire vocabulary of `style` on the aid kinds (`MbdV2AidLineStyle`). An
+ * unknown value rejects the payload (ADR 0046) rather than falling through
+ * to the mapper's no-style default (C6).
+ */
+const AID_LINE_STYLES: readonly MbdV2AidLineStyle[] = ['solid', 'dashed', 'dash_dot'];
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -243,6 +250,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalAidLineStyle(value: unknown): value is MbdV2AidLineStyle | undefined {
+  return value === undefined || AID_LINE_STYLES.includes(value as MbdV2AidLineStyle);
 }
 
 function isVec3(value: unknown): value is MbdV2Vec3 {
@@ -318,14 +329,14 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
     case 'aid_line':
       return isVec3(value.start)
         && isVec3(value.end)
-        && isOptionalString(value.style);
+        && isOptionalAidLineStyle(value.style);
     case 'aid_arc':
-      return isArcFrame(value) && isOptionalString(value.style);
+      return isArcFrame(value) && isOptionalAidLineStyle(value.style);
     case 'aid_circle':
       return isVec3(value.center)
         && isAxisVec3(value.normal)
         && isPositiveRadius(value.radius)
-        && isOptionalString(value.style);
+        && isOptionalAidLineStyle(value.style);
     case 'aid_point':
       return isVec3(value.position);
     case 'aid_text':
