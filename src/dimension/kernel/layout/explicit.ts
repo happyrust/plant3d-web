@@ -27,6 +27,7 @@ import { lodShortLine, lodTierHiddenReason, projectedSourceTextHeightPx } from '
 import { backProjectedSegment, labelBoundsOf, sceneVertexOnSegment } from './shared/screen';
 
 import type {
+  ExplicitArcInput,
   ExplicitArrowInput,
   ExplicitLayoutInput,
   ExplicitLodHiddenReason,
@@ -299,6 +300,41 @@ function explicitArrow(
   )];
 }
 
+/**
+ * 弧半径的屏幕像素下限（`theme.minArcRadiusPx`）。
+ *
+ * 求解器给的角弧半径是 `aod × 0.7`（`plant-mbd/src/angle.rs:452`，aod = 25 mm
+ * 即 17.5 mm），整机视图下投影不到 2 px，弧退化成几像素的折线，看起来像污点
+ * 而不是角度弧。下限按弧心的 `worldPerPixelAt` 折算成 Design Space 米，只在原
+ * 半径更小时抬到下限；`layout/angular.ts:84-98` 是同一条规则。
+ *
+ * 只有 `part: 'dimension'`（`mapAngleDim` 的标注弧）吃下限。`part: 'arc'` 是
+ * `aid_arc` / `aid_circle` 这类几何辅助弧（`mbdV2ExternalAnnotations.ts`
+ * `mapAidArc` / `mapAidCircle`），标的是模型上的真实圆/弧，放大就离开真实几何，
+ * 必须 1:1 画；`part` 未声明的旧输入同样保持 1:1。
+ *
+ * 缩放必须发生在采样之前：`sampleArcToDesignAndScreenPath` 的细分按弦误差
+ * （`tolerancePx`）决定点数，先放大半径再采样才拿到「真正 15 px 的弧」的合法
+ * 细分；对已采样的 2 点退化折线做屏幕放大只会得到一条变长的直线段。
+ */
+function explicitArc(
+  arc: ExplicitArcInput,
+  context: LayoutContext,
+): ReturnType<typeof sampleArcToDesignAndScreenPath> {
+  if (arc.part !== 'dimension') {
+    return sampleArcToDesignAndScreenPath(arc, context.projector);
+  }
+  const worldPerPixel = context.projector.worldPerPixelAt(arc.center);
+  if (!Number.isFinite(worldPerPixel) || worldPerPixel <= EPSILON) {
+    return sampleArcToDesignAndScreenPath(arc, context.projector);
+  }
+  const floorM = context.theme.minArcRadiusPx * worldPerPixel;
+  return sampleArcToDesignAndScreenPath(
+    arc.radiusM >= floorM ? arc : { ...arc, radiusM: floorM },
+    context.projector,
+  );
+}
+
 export function layoutExplicit(
   input: ExplicitLayoutInput,
   context: LayoutContext,
@@ -339,7 +375,7 @@ export function layoutExplicit(
   const sceneArrows = (input.arrows ?? []).flatMap(arrow =>
     explicitArrow(arrow, styleRole, context));
   const scenePaths = (input.arcs ?? []).flatMap((arc) => {
-    const sampled = sampleArcToDesignAndScreenPath(arc, context.projector);
+    const sampled = explicitArc(arc, context);
     if (!sampled) return [];
     return [scenePath(
       sampled.designPoints.map(point => sceneVertex(point)),

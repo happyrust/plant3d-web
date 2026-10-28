@@ -5842,6 +5842,399 @@ exports[`canonical dimension structural goldens > 'radial-500mm-radius' 1`] = `
 }
 `;
 
+exports[`explicit angle dimension structural goldens > angle-dim 1`] = `
+{
+  "derived": {
+    "formattedLabel": "44.5°",
+  },
+  "dimensionId": "explicit-angle-dim-golden",
+  "hitRegions": [
+    {
+      "from": [
+        240,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        240,
+        217,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        240,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        251.915457,
+        212.125258,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        240,
+        215,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        242.894252,
+        214.718129,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        242.894252,
+        214.718129,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        245.679729,
+        213.883108,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        245.679729,
+        213.883108,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        248.251746,
+        212.52632,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "from": [
+        248.251746,
+        212.52632,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        250.513639,
+        210.698757,
+      ],
+      "widthPx": 1.2,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 19.02004,
+        "width": 15.410553,
+        "x": 239.110399,
+        "y": 207.149709,
+      },
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 16.5,
+        "width": 3.3,
+        "x": 238.35,
+        "y": 211.75,
+      },
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 16.5,
+        "width": 25.3,
+        "x": 227.35,
+        "y": 228.25,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 27.02004,
+    "width": 23.410553,
+    "x": 235.110399,
+    "y": 203.149709,
+  },
+  "labelPinned": true,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 19.02004,
+        "width": 15.410553,
+        "x": 239.110399,
+        "y": 207.149709,
+      },
+      "capHeightPx": 11,
+      "kind": "glyph-run",
+      "origin": [
+        241.865675,
+        221.609729,
+      ],
+      "rotationCenter": [
+        246.815675,
+        216.659729,
+      ],
+      "rotationRad": -0.388336,
+      "styleRole": "external",
+      "text": "44.5°",
+      "unrotatedBounds": {
+        "height": 16.5,
+        "width": 9.9,
+        "x": 241.865675,
+        "y": 208.409729,
+      },
+    },
+    {
+      "bounds": {
+        "height": 16.5,
+        "width": 3.3,
+        "x": 238.35,
+        "y": 211.75,
+      },
+      "capHeightPx": 11,
+      "kind": "glyph-run",
+      "origin": [
+        238.35,
+        224.95,
+      ],
+      "styleRole": "external",
+      "text": "-X",
+    },
+    {
+      "bounds": {
+        "height": 16.5,
+        "width": 25.3,
+        "x": 227.35,
+        "y": 228.25,
+      },
+      "capHeightPx": 11,
+      "kind": "glyph-run",
+      "origin": [
+        227.35,
+        241.45,
+      ],
+      "styleRole": "external",
+      "text": "-X 44.5° Y",
+    },
+    {
+      "from": [
+        240,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": [
+        240,
+        217,
+      ],
+    },
+    {
+      "from": [
+        240,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": [
+        251.915457,
+        212.125258,
+      ],
+    },
+    {
+      "closed": false,
+      "kind": "path",
+      "part": "dimension",
+      "points": [
+        [
+          240,
+          215,
+        ],
+        [
+          242.894252,
+          214.718129,
+        ],
+        [
+          245.679729,
+          213.883108,
+        ],
+        [
+          248.251746,
+          212.52632,
+        ],
+        [
+          250.513639,
+          210.698757,
+        ],
+      ],
+      "styleRole": "external",
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0.4,
+          0,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          0.4,
+          -0.17,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.4,
+          0,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          0.519155,
+          -0.121253,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "closed": false,
+      "kind": "scene-path",
+      "part": "dimension",
+      "points": {
+        "count": 5,
+        "first": {
+          "anchor": [
+            0.4,
+            -0.15,
+            0.2,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        "last": {
+          "anchor": [
+            0.505136,
+            -0.106988,
+            0.2,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        "middle": {
+          "anchor": [
+            0.456797,
+            -0.138831,
+            0.2,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+      },
+      "styleRole": "external",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.468157,
+          -0.166597,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11,
+      "kind": "scene-glyph-run",
+      "rotationRad": -0.388336,
+      "styleRole": "external",
+      "text": "44.5°",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.4,
+          -0.2,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "-X",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.4,
+          -0.2,
+          0.2,
+        ],
+        "offsetPx": [
+          0,
+          16.5,
+        ],
+      },
+      "capHeightPx": 11,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "-X 44.5° Y",
+    },
+  ],
+}
+`;
+
 exports[`explicit annotation structural goldens > explicit-annotation 1`] = `
 {
   "derived": {
