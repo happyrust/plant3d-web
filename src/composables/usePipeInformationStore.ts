@@ -9,25 +9,39 @@ import { attributeText, buildPipeInformation, pipeAttribute, pipeInformationRefn
 
 const records = ref<PipeInformationRecord[]>([]);
 const suggestedRefno = ref('');
-const showAnnotations = ref(true);
+/** 用户的「显示管道信息卡片」偏好（落盘）。 */
+const showAnnotationsPref = ref(true);
+/** 本次会话从本机恢复了历史卡片后默认不上屏（不落盘）；用户开启显示或新查一条即解除。 */
+const restoredHidden = ref(false);
+const showAnnotations = computed<boolean>({
+  get: () => showAnnotationsPref.value && !restoredHidden.value,
+  set: (value) => {
+    showAnnotationsPref.value = value;
+    if (value) restoredHidden.value = false;
+  },
+});
 const hiddenRefnos = ref<string[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 let sequence = 0;
 let allowed = true;
 const persistence = createScopedResultPersistence({
-  prefix: 'plant3d-pipe-information-v1', sources: [records, showAnnotations, hiddenRefnos],
-  capture: () => ({ coordinateSpace: 'e3d-world-mm', records: records.value, showAnnotations: showAnnotations.value, hiddenRefnos: hiddenRefnos.value }),
+  prefix: 'plant3d-pipe-information-v1', sources: [records, showAnnotationsPref, hiddenRefnos],
+  capture: () => ({ coordinateSpace: 'e3d-world-mm', records: records.value, showAnnotations: showAnnotationsPref.value, hiddenRefnos: hiddenRefnos.value }),
   restore: value => {
-    if (value === null) { records.value = []; showAnnotations.value = true; hiddenRefnos.value = []; error.value = null; return; }
+    if (value === null) {
+      records.value = []; showAnnotationsPref.value = true; restoredHidden.value = false; hiddenRefnos.value = []; error.value = null; return;
+    }
     const snapshot = value as { coordinateSpace: string; records: unknown[]; showAnnotations: boolean; hiddenRefnos: string[] };
     if (!snapshot || snapshot.coordinateSpace !== 'e3d-world-mm' || !Array.isArray(snapshot.records) || typeof snapshot.showAnnotations !== 'boolean'
       || !Array.isArray(snapshot.hiddenRefnos) || !snapshot.hiddenRefnos.every(item => typeof item === 'string')) throw new Error('管道信息快照格式无效');
     const restored = snapshot.records.map(validatePipeInformationRecord);
     if (new Set(restored.map(item => item.refno)).size !== restored.length) throw new Error('管道信息参考号重复');
     records.value = restored;
-    showAnnotations.value = snapshot.showAnnotations;
+    showAnnotationsPref.value = snapshot.showAnnotations;
     hiddenRefnos.value = snapshot.hiddenRefnos.filter(refno => restored.some(item => item.refno === refno));
+    // 打开页面不自动绘制历史管道信息卡片：需用户在面板里手动开启显示。
+    restoredHidden.value = restored.length > 0;
   },
   invalidate: allow => { allowed = allow; sequence += 1; loading.value = false; },
 });
@@ -249,6 +263,8 @@ export function usePipeInformationStore() {
       });
       const index = records.value.findIndex(item => item.refno === refno);
       records.value = index < 0 ? [...records.value, record] : records.value.map((item, i) => i === index ? record : item);
+      // 新查出的卡片是用户主动操作，解除「恢复后默认隐藏」。
+      restoredHidden.value = false;
       return true;
     } catch (cause) {
       if (stamp !== sequence) return false;

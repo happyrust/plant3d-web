@@ -265,7 +265,8 @@ function resetPipeSnapshot() {
   selectedBranRefnos.value = [];
   selectedTubeKeys.value = [];
   resultMinDistance.value = null;
-  showAnnotations.value = true;
+  // 复位不是用户操作：只写偏好，不解除 clearance 的「恢复后默认隐藏」闸门。
+  clearanceStore.setShowAnnotationsPreference(true);
   maxDistance.value = 500;
   maxAngle.value = 5;
   detectionMode.value = 'all-pairs';
@@ -349,7 +350,7 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
     selectedBranRefnos.value = branRefnos;
     selectedTubeKeys.value = tubeKeys;
     resultMinDistance.value = minDistance;
-    showAnnotations.value = annotations;
+    clearanceStore.setShowAnnotationsPreference(annotations);
     maxDistance.value = distanceLimit;
     maxAngle.value = angleLimit;
     // 连排字段是后加的（可选）：旧快照没这两格就退回默认模式，不拿缺省值当格式错误。
@@ -365,14 +366,18 @@ function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   };
 }
 
-function restorePipeSnapshot(value: unknown) { preparePipeSnapshot(value)(); }
+function restorePipeSnapshot(value: unknown) {
+  preparePipeSnapshot(value)();
+  // 本机恢复：旧快照迁移会走 upsertRecord 解除闸门，这里重新挂上，打开页面不自动绘制历史结果。
+  if (value !== null) clearanceStore.markRestoredHidden();
+}
 
 function capturePipeSnapshot() {
   return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
     // 结果真相在 component 段；保留字段形状让旧校验 / `hasReviewClearanceResults` 不破。
     results: [],
     selectedBranRefnos: selectedBranRefnos.value, selectedTubeKeys: selectedTubeKeys.value, hiddenIds: [],
-    activeIndex: null, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
+    activeIndex: null, minDistance: resultMinDistance.value, showAnnotations: clearanceStore.showAnnotationsPreference.value,
     maxDistance: maxDistance.value, maxAngle: maxAngle.value,
     detectionMode: detectionMode.value, pipeRowAlignMode: pipeRowAlignMode.value,
     pipeRowFallbackNormal: pipeRowFallbackNormal.value, pipeRowMaxAdjacentMm: pipeRowMaxAdjacentMm.value,
@@ -381,7 +386,7 @@ function capturePipeSnapshot() {
 
 const persistence = createScopedResultPersistence({
   prefix: 'plant3d-pipe-distance-v1',
-  sources: [selectedBranRefnos, selectedTubeKeys, resultMinDistance, showAnnotations, maxDistance, maxAngle, detectionMode, pipeRowAlignMode,
+  sources: [selectedBranRefnos, selectedTubeKeys, resultMinDistance, clearanceStore.showAnnotationsPreference, maxDistance, maxAngle, detectionMode, pipeRowAlignMode,
     pipeRowFallbackNormal, pipeRowMaxAdjacentMm, pipeRowMinCommonMm, pipeRowBothMetrics, pipeRowKeyPoints],
   capture: capturePipeSnapshot,
   restore: restorePipeSnapshot,

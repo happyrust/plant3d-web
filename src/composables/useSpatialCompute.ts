@@ -557,7 +557,17 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     prefix: 'plant3d-bran-clearance-v1',
     sources: [() => scenarios.branNearestClearance],
     capture: captureSnapshot,
-    restore: value => prepareSnapshotRestore(value)(),
+    restore: value => {
+      const apply = prepareSnapshotRestore(value);
+      apply();
+      // 打开页面不自动绘制历史 BRAN 净距：本机恢复后清空已标注集合，需用户逐条点「标注」。
+      // 校审回放走导出的 prepareSnapshotRestore，不经过这里，照旧显示。
+      const scenario = scenarios.branNearestClearance;
+      if (scenario.drawnCandidateKeys.length > 0) {
+        scenario.drawnCandidateKeys = [];
+        applyBranSelection(scenario);
+      }
+    },
     invalidate: allowed => {
       calculationsAllowed = allowed;
       requestTokens.branNearestClearance = ++nextRequestToken;

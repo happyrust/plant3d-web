@@ -61,6 +61,25 @@ describe('useClearanceStore', () => {
     expect(store.records.value).toEqual([]);
   });
 
+  it('does not draw restored records on open until the user turns annotations on, and keeps the saved preference', async () => {
+    const storage = memoryStorage();
+    const store = useClearanceStore();
+    const key = 'plant3d-clearance-v1:restore-hidden';
+    store.bindPersistence('restore-hidden', storage);
+    await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });
+    expect(store.showAnnotations.value).toBe(true);
+    store.bindPersistence('restore-other', storage);
+    store.bindPersistence('restore-hidden', storage);
+    expect(store.records.value).toHaveLength(1);
+    expect(store.showAnnotations.value).toBe(false);
+    expect(store.showAnnotationsPreference.value).toBe(true);
+    store.persistRecords();
+    expect(JSON.parse(storage.data.get(key)!).showAnnotations).toBe(true);
+    store.showAnnotations.value = true;
+    expect(store.showAnnotations.value).toBe(true);
+    expect(store.visibleRecords.value).toHaveLength(1);
+  });
+
   it('preflights a detached cloud snapshot without clearing a draft or accepting later response changes', async () => {
     const store = useClearanceStore();
     const record = await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });

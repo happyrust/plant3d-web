@@ -24,7 +24,18 @@ import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 const records = ref<ClearanceRecord[]>([]);
 const activeId = ref<string | null>(null);
 const hiddenIds = ref<Set<string>>(new Set());
-const showAnnotations = ref(true);
+/** 用户的「显示标注」偏好（落盘）。 */
+const showAnnotationsPref = ref(true);
+/** 本次会话从本机恢复了历史记录后默认不上屏（不落盘）；用户开启显示或新算一条即解除。 */
+const restoredHidden = ref(false);
+const showAnnotations = computed<boolean>({
+  get: () => showAnnotationsPref.value && !restoredHidden.value,
+  set: (value) => {
+    showAnnotationsPref.value = value;
+    if (value) restoredHidden.value = false;
+  },
+});
+const showAnnotationsPreference = computed(() => showAnnotationsPref.value);
 const isComputing = ref(false);
 const lastError = ref<string | null>(null);
 const persistenceError = ref<string | null>(null);
@@ -44,7 +55,7 @@ function persistRecords(): boolean {
   if (restoring || !persistenceScope) return false;
   const raw = JSON.stringify({
     version: 1, scope: persistenceScope, records: records.value,
-    hiddenIds: [...hiddenIds.value], activeId: activeId.value, showAnnotations: showAnnotations.value,
+    hiddenIds: [...hiddenIds.value], activeId: activeId.value, showAnnotations: showAnnotationsPref.value,
   });
   unsavedScopes.set(persistenceScope, { raw, blocked: loadBlocked });
   if (!persistenceStorage) return false;
@@ -65,7 +76,7 @@ function persistRecords(): boolean {
   }
 }
 
-watch([records, hiddenIds, activeId, showAnnotations], () => { persistRecords(); }, { deep: true, flush: 'sync' });
+watch([records, hiddenIds, activeId, showAnnotationsPref], () => { persistRecords(); }, { deep: true, flush: 'sync' });
 
 const visibleRecords = computed(() => records.value.filter(record => !hiddenIds.value.has(record.id)));
 const activeRecord = computed(() => records.value.find(record => record.id === activeId.value) ?? null);
@@ -85,7 +96,7 @@ function errorText(error: unknown): string {
 export function useClearanceStore() {
   function captureSnapshot() {
     return cloneResultSnapshot({ records: records.value, hiddenIds: [...hiddenIds.value],
-      activeId: activeId.value, showAnnotations: showAnnotations.value });
+      activeId: activeId.value, showAnnotations: showAnnotationsPref.value });
   }
 
   /** 先验证并脱离外部对象；调用返回动作之前不会替换本机结果。 */
@@ -113,7 +124,8 @@ export function useClearanceStore() {
         records.value = stale;
         hiddenIds.value = hidden;
         activeId.value = selected;
-        showAnnotations.value = data.showAnnotations;
+        restoredHidden.value = false;
+        showAnnotationsPref.value = data.showAnnotations;
         lastError.value = null;
       } finally { restoring = false; }
     };
@@ -142,7 +154,8 @@ export function useClearanceStore() {
       records.value = [];
       hiddenIds.value = new Set();
       activeId.value = null;
-      showAnnotations.value = true;
+      showAnnotationsPref.value = true;
+      restoredHidden.value = false;
       lastError.value = null;
       persistenceError.value = null;
       persistenceLabel.value = storage ? '尚无本机记录' : '本机存储不可用';
@@ -164,7 +177,9 @@ export function useClearanceStore() {
       const ids = new Set(records.value.map(record => record.id));
       hiddenIds.value = new Set(data.hiddenIds.filter((id: string) => ids.has(id)));
       activeId.value = ids.has(data.activeId) ? data.activeId : null;
-      showAnnotations.value = data.showAnnotations;
+      showAnnotationsPref.value = data.showAnnotations;
+      // 打开页面不自动绘制历史净距：需用户在面板里手动开启显示。
+      restoredHidden.value = records.value.length > 0;
       persistenceLabel.value = unsaved ? '已恢复未落盘的内存记录，请重试保存并重算' : '已恢复本机记录，模型版本未核实，请重算';
     } catch (error) {
       loadBlocked = true;
@@ -179,6 +194,7 @@ export function useClearanceStore() {
     persistRecords();
     persistenceScope = null;
     persistenceStorage = null;
+    restoredHidden.value = false;
     calculationsAllowed = true;
     recordEpoch += 1;
     pendingComputations = 0;
@@ -192,6 +208,8 @@ export function useClearanceStore() {
 
   /** 同 id 覆盖（保留原 `createdAt`），否则追加。 */
   function upsertRecord(record: ClearanceRecord): ClearanceRecord {
+    // 新算出的结果是用户主动操作，解除「恢复后默认隐藏」。
+    restoredHidden.value = false;
     const index = records.value.findIndex(existing => existing.id === record.id);
     if (index < 0) {
       records.value = [...records.value, record];
@@ -345,9 +363,23 @@ export function useClearanceStore() {
     );
   }
 
+  /** 只写落盘偏好、不解除会话闸门；供快照复位/恢复这类非用户操作使用。 */
+  function setShowAnnotationsPreference(value: boolean) {
+    showAnnotationsPref.value = value;
+  }
+
+  /** 本机恢复（含旧快照迁移写入）之后重新挂上「默认不上屏」闸门；没有记录时不挂。 */
+  function markRestoredHidden() {
+    restoredHidden.value = records.value.length > 0;
+  }
+
   return {
     captureSnapshot,
     prepareSnapshotRestore,
+    setShowAnnotationsPreference,
+    /** 落盘偏好（不含会话闸门）；快照保存用它，免得把「本次隐藏」写成用户偏好。 */
+    showAnnotationsPreference,
+    markRestoredHidden,
     records,
     activeId,
     activeRecord,

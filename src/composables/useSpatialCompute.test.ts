@@ -183,7 +183,11 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.scenarios.branNearestClearance.branGroups).toEqual([]);
     store.bindPersistence('A', local);
     expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(6);
-    expect(store.scenarios.branNearestClearance.drawnCandidateKeys).toEqual(keys);
+    // 打开页面不自动绘制历史 BRAN 净距：结果行保留，标注需用户逐条手动开启。
+    expect(keys.length).toBeGreaterThan(0);
+    expect(store.scenarios.branNearestClearance.drawnCandidateKeys).toEqual([]);
+    expect(store.scenarios.branNearestClearance.annotationCandidates).toEqual([]);
+    expect(store.scenarios.branNearestClearance.resultRows.every(row => !row.drawn)).toBe(true);
     expect(store.scenarios.branNearestClearance.resultRows[0]?.label).toContain('过期');
     store.bindPersistence('history', local, false);
     const fetchMock = vi.fn();
