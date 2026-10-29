@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveBackendApiBaseUrl, resolveGenModelV1BaseUrl } from './apiBase';
+import { isMixedContentBackendBase, resolveBackendApiBaseUrl, resolveGenModelV1BaseUrl } from './apiBase';
 
 describe('resolveGenModelV1BaseUrl（gen-model /api/v1，与旧后端地址互不影响）', () => {
   it('开发环境默认直连 :8022（gen-model CORS 已放开，不绕代理）', () => {
@@ -67,6 +67,25 @@ describe('resolveGenModelV1BaseUrl（gen-model /api/v1，与旧后端地址互�
   it('非法值（非 http 协议 / 乱字符）忽略，落回默认', () => {
     expect(resolveGenModelV1BaseUrl({ isDev: true, envBase: 'ftp://x' })).toBe('http://localhost:8022');
     expect(resolveGenModelV1BaseUrl({ isDev: true, search: '?gm_backend=not a url' })).toBe('http://localhost:8022');
+  });
+});
+
+describe('isMixedContentBackendBase（HTTPS 页面退回 http:// override）', () => {
+  it('HTTPS 页面 + http:// 基址：判为混合内容，override 应被丢弃', () => {
+    expect(isMixedContentBackendBase('http://123.57.182.243:3100', 'https:')).toBe(true);
+    expect(isMixedContentBackendBase('http://localhost:3100', 'https:')).toBe(true);
+  });
+
+  it('HTTPS 页面 + https:// 基址、HTTP 页面 + http:// 基址：不受影响', () => {
+    expect(isMixedContentBackendBase('https://api.example.com', 'https:')).toBe(false);
+    expect(isMixedContentBackendBase('http://123.57.182.243:3100', 'http:')).toBe(false);
+    expect(isMixedContentBackendBase('http://localhost:3100', 'http:')).toBe(false);
+  });
+
+  it('非 http(s) 或非法基址不算混合内容（沿用既有的失败/忽略路径）', () => {
+    expect(isMixedContentBackendBase('ftp://x', 'https:')).toBe(false);
+    expect(isMixedContentBackendBase('not a url', 'https:')).toBe(false);
+    expect(isMixedContentBackendBase('http://x', null)).toBe(false);
   });
 });
 

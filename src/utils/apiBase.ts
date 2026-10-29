@@ -83,16 +83,46 @@ export function resolveBackendApiBaseUrl(options: ResolveBackendApiBaseUrlOption
   return normalized;
 }
 
+/**
+ * HTTPS 页面取不了 http:// 子资源：浏览器按混合内容策略直接拦截，fetch 必然
+ * TypeError（线上 MBD「显示 0 条」即此因——`?backend=http://host:3100` 被原样采信）。
+ * 此时采信 override 注定失败，退回同源 /api，与 localhost 误配置的降级口径一致。
+ */
+export function isMixedContentBackendBase(
+  base: string,
+  pageProtocol: string | null | undefined,
+): boolean {
+  if (pageProtocol !== 'https:') return false;
+  try {
+    return new URL(base).protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+let warnedMixedContentBackend = false;
+
 function getBackendOverrideFromQuery(): string | null {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
+  const pageProtocol = window.location.protocol;
+  const dropMixedContent = (base: string): string | null => {
+    if (!isMixedContentBackendBase(base, pageProtocol)) return base;
+    if (!warnedMixedContentBackend) {
+      warnedMixedContentBackend = true;
+      console.warn(
+        `[api-base] ${base} 在 HTTPS 页面会被浏览器按混合内容拦截，已退回同源 /api`,
+      );
+    }
+    return null;
+  };
   const port = params.get('backendPort');
-  if (port && /^\d+$/.test(port)) return `http://localhost:${port}`;
+  if (port && /^\d+$/.test(port)) return dropMixedContent(`http://localhost:${port}`);
   const backend = params.get('backend');
   if (backend) {
     try {
       new URL(backend);
-      return sanitize(backend);
+      return dropMixedContent(sanitize(backend));
     } catch {
       return null;
     }
