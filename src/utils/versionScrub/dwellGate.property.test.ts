@@ -1,5 +1,6 @@
-import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+
+import fc from 'fast-check';
 
 import { createDwellGate, CURSOR_DWELL_MS, type DwellSchedule } from './dwellGate';
 

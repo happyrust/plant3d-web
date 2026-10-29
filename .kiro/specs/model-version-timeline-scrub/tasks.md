@@ -78,12 +78,12 @@
     - 先读一遍现有 `select_session_at` 的比较精度与无偏移时间的解释方式；与上面不一致时以现有实现为准，同步改 1.2 的样例
     - _Requirements: 6.3, 8.1, 8.2, 8.3, 8.6_
 
-  - [~] 4.2 写属性测试：时间点解析遵循链序规则（Rust）
+  - [x] 4.2 写属性测试：时间点解析遵循链序规则（Rust）
     - **Property 29: 时间点解析遵循链序规则，前端、后端与会话链包装一致**
     - `select_latest_at`、`resolve_at_rows`、`select_session_at` 包装三者对暴力参考实现，proptest 100 次
     - **Validates: Requirements 6.3, 8.1, 8.2, 8.3, 8.6, 10.2**
 
-  - [~] 4.3 写属性测试：时间点解析往返（Rust）
+  - [x] 4.3 写属性测试：时间点解析往返（Rust）
     - **Property 31: 时间点解析往返**
     - **Validates: Requirements 8.7**
 
@@ -98,7 +98,7 @@
     - 按 Requirement 6.16 的优先级只返回最高一条
     - _Requirements: 6.2, 6.6, 6.16_
 
-  - [-] 5.2 写属性测试：请求校验与错误优先级
+  - [x] 5.2 写属性测试：请求校验与错误优先级
     - **Property 33: 请求校验与错误优先级（后端）**
     - **Validates: Requirements 6.2, 6.6, 6.16**
 
@@ -106,7 +106,7 @@
     - 版本表为空 → `REFNO_NOT_IN_CHAIN`（404）；请求会话之前（含）无行 → `UNIT_NOT_PRESENT` + `not-yet`；最后一行是 tombstone → `UNIT_NOT_PRESENT` + `deleted`；非 tombstone 但索引无根 → 500 `GEOMETRY_GENERATION_FAILED`
     - _Requirements: 6.5_
 
-  - [~] 5.4 写属性测试：单元不存在的原因判定
+  - [x] 5.4 写属性测试：单元不存在的原因判定
     - **Property 34: 单元不存在的原因判定（后端）**
     - **Validates: Requirements 6.5**
 
@@ -115,7 +115,7 @@
     - 指纹：设计库文件 `source_fingerprint` ‖ 当前 MDB 全部 pin（含 CATA）按 `(dbnum, path)` 排序后的 (路径, 长度, mtime)，可按 1 s TTL 记住
     - _Requirements: 6.10, 6.11, 7.4_
 
-  - [~] 5.6 写属性测试：geometryKey 是几何内容摘要
+  - [x] 5.6 写属性测试：geometryKey 是几何内容摘要
     - **Property 35: geometryKey 是几何内容摘要（后端）**
     - **Validates: Requirements 6.10, 6.11**
 
@@ -124,7 +124,7 @@
     - 只写 200；指纹变化整表清空；命中数 / 未命中数原子计数，只增不减；条目数只算当前指纹
     - _Requirements: 6.17, 7.2, 7.3, 7.4, 7.5_
 
-  - [~] 5.8 写属性测试：结果缓存模型
+  - [x] 5.8 写属性测试：结果缓存模型
     - **Property 36: 结果缓存模型（后端）**
     - **Validates: Requirements 6.17, 7.2, 7.3, 7.4, 7.5**
 
@@ -134,52 +134,52 @@
     - _Requirements: 6.17, 7.1, 7.5_
 
 - [ ] 6. 路由、属性时点与 `/health`
-  - [~] 6.1 实现编排 `realtime_history/mod.rs::query_realtime`
+  - [x] 6.1 实现编排 `realtime_history/mod.rs::query_realtime`
     - 按 design §1.2 的 1–8 步：校验 → 会话解析（`sesno` 查会话链，`time` 用该单元「仅自身」版本表走 `resolve_at_rows`）→ 指纹与缓存（命中不占名额，按 `If-None-Match` 回 304 或 200）→ 并发闸 → `spawn_blocking` 计算 → 超时 504 → 写缓存
     - 计算段：根不在索引走 `classify_absent`；noun 不在 `delivery_unit_types` 复用 Legacy 判定回 422 `NOT_A_DELIVERY_UNIT_ROOT`；`LimitExceeded` 回 413；`project_historical_records` → 按 `record_id` 去重留最后一条 → 按 `(source_refno, record_id)` 排序 → `instance_json` / `tube_json` 去 `snapshot_key` → 摘要 → 拼响应体（含 `stats`）
     - `GeometryFailurePolicy::BestEffort`；计算器放在 trait 后面，便于假计算器注入；不触碰 `HistoricalModelStore`、不建任务
     - _Requirements: 6.1, 6.3, 6.4, 6.5, 6.7, 6.8, 6.9, 6.10, 6.12, 6.14, 6.17, 7.1, 7.2, 7.3, 7.7, 7.8, 7.9_
 
-  - [~] 6.2 挂路由 `GET /api/v1/model/history/geometry`
+  - [x] 6.2 挂路由 `GET /api/v1/model/history/geometry`
     - 在 `web_service/mod.rs` 的 `/api/v1` 表上注册，项目身份沿用 `ProjectReq`（`#[serde(flatten)]`）；`If-None-Match` 去引号、去 `W/` 前缀
     - handler 内建 `CancelToken` 与 `CancelOnDrop`；200 / 304 都带 `ETag: "<geometryKey>"`、`X-Sesno`、`X-Session-Time`（无时间为空串）、`Cache-Control: no-cache`；503 带 `Retry-After`
     - CORS `Access-Control-Expose-Headers` 加 `ETag, X-Sesno, X-Session-Time, Retry-After`；错误体沿用 `ApiError::coded`
     - _Requirements: 6.2, 6.6, 6.14, 7.1, 7.6, 7.7_
 
-  - [~] 6.3 实现 `GET /api/v1/node/versions/resolve`
+  - [x] 6.3 实现 `GET /api/v1/node/versions/resolve`
     - `scope` 只能 `self` / `subtree`、`at` 须合法，否则 400 `INVALID_SELECTOR`；节点不存在 → 404 `NODE_NOT_FOUND`
     - 取 `node_versions(dbnum, refno, scope, …)` 全表，超过 5000 行时按 `since_sesno` 翻页取全，再 `resolve_at_rows`；`NoResolvable` → 422 `NO_RESOLVABLE_SESSION`，`BeforeOldest` → 422 `TIME_BEFORE_OLDEST_SESSION`
     - 用 curl 核对 `unit_versions` 与 `node_versions(scope=self)` 对同一单元根给出相同行集
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.10_
 
-  - [~] 6.4 实现 `GET /api/v1/element/attributes-at`
+  - [x] 6.4 实现 `GET /api/v1/element/attributes-at`
     - 把 `attributes_at` 的阻塞段抽成 `read_attributes_at(dbnum, source_file, sesno, refno, service)`，不经过快照回执；Legacy `tool=attributes` 改调它，保留 `exists: false` 语义
     - 错误：400 `INVALID_REFNO`、404 `SESSION_NOT_FOUND`、404 `REFNO_NOT_FOUND_AT_SESSION`
     - _Requirements: 6.13_
 
-  - [~] 6.5 在 `/health.model_cache` 增加 `realtime_history`
+  - [x] 6.5 在 `/health.model_cache` 增加 `realtime_history`
     - 字段 `cache_entries`、`cache_capacity`、`hits_total`、`misses_total`、`in_flight`、`concurrency_limit`、`input_cache { entries, capacity }`、`timeout_secs`；`historical` 分项不变
     - _Requirements: 6.12, 7.4, 7.5_
 
-  - [~] 6.6 写属性测试：并发闸与无快照副作用
+  - [x] 6.6 写属性测试：并发闸与无快照副作用
     - **Property 37: 并发闸与无快照副作用（后端，假计算器）**
     - 用 `tokio::time::pause` 与假计算器 trait 驱动
     - **Validates: Requirements 6.12, 6.17, 7.1, 7.5**
 
-  - [~] 6.7 写属性测试：ETag / If-None-Match 一致性
+  - [x] 6.7 写属性测试：ETag / If-None-Match 一致性
     - **Property 38: ETag / If-None-Match 一致性（后端）**
     - **Validates: Requirements 7.6, 7.7, 7.8, 7.9**
 
-  - [~] 6.8 写属性测试：两条路由的时间解析一致
+  - [x] 6.8 写属性测试：两条路由的时间解析一致
     - **Property 32: 两条路由的时间解析一致**
     - **Validates: Requirements 8.10**
 
-  - [~] 6.9 写属性测试：非法时间点被拒（Rust）
+  - [x] 6.9 写属性测试：非法时间点被拒（Rust）
     - **Property 30: 非法时间点被拒**
     - 覆盖 `parse_instant` 与两条路由的 400 `INVALID_SELECTOR`
     - **Validates: Requirements 6.2, 8.4, 10.2**
 
-  - [~] 6.10 写后端例子测试
+  - [x] 6.10 写后端例子测试
     - `SESSION_NOT_FOUND`、`NOT_A_DELIVERY_UNIT_ROOT`、注入小上限触发 413 且无几何、注入 1 s 超时与慢假计算器触发 504 且名额释放、丢弃 handler future 后假计算器在一个检查点内看到取消
     - `attributes-at` 三种错误、resolve 404 `NODE_NOT_FOUND` 与 422 `NO_RESOLVABLE_SESSION`、实时 `time` 选择器 422 `NO_RESOLVABLE_SESSION`、`REFNO_NOT_IN_CHAIN` 404、越界配置回落
     - _Requirements: 6.3, 6.4, 6.5, 6.7, 6.8, 6.9, 6.13, 6.14, 8.5, 8.6_
@@ -254,7 +254,7 @@
     - **Property 5: 提示与游标标签格式化**
     - **Validates: Requirements 1.3, 1.5, 2.7**
 
-- [ ] 10. 游标、停留门、钉
+- [x] 10. 游标、停留门、钉
   - [x] 10.1 实现 `src/utils/versionScrub/cursorNav.ts`
     - `isGeometryChange`（`noop` 与 null 为否）、`navigableTicks`、`snapToPointer`（并列取 sesno 大者，超出两端取首末）、`stepCursor`（端点不动）、`clickTick`（簇取 sesno 最大的可导航版本）、`initialCursor`（sesno 最大）、`coerceCursorForGeometryOnly`
     - _Requirements: 2.1, 2.2, 2.3, 2.5, 2.6, 2.9, 2.10, 2.11_
@@ -263,15 +263,15 @@
     - **Property 8: 游标不变量**
     - **Validates: Requirements 2.1, 2.4, 2.9, 2.11**
 
-  - [~] 10.3 写属性测试：指针吸附与初始位置
+  - [x] 10.3 写属性测试：指针吸附与初始位置
     - **Property 9: 指针吸附与初始位置**
     - **Validates: Requirements 2.2, 2.3**
 
-  - [~] 10.4 写属性测试：链序离散移动
+  - [x] 10.4 写属性测试：链序离散移动
     - **Property 10: 链序离散移动**
     - **Validates: Requirements 2.5, 2.6**
 
-  - [~] 10.5 写属性测试：勾选「只看几何变的」时的游标迁移
+  - [x] 10.5 写属性测试：勾选「只看几何变的」时的游标迁移
     - **Property 11: 勾选「只看几何变的」时的游标迁移**
     - **Validates: Requirements 2.10**
 
@@ -296,7 +296,7 @@
     - **Property 22: 与上一版比 / 与最新比**
     - **Validates: Requirements 5.10, 5.11, 5.12**
 
-- [ ] 11. 帧缓存、预取、忙重试
+- [x] 11. 帧缓存、预取、忙重试
   - [x] 11.1 实现 `src/utils/versionScrub/frameCache.ts`
     - 键 `${dbnum}|${unitRefno}|${sesno}`，缺省上限 12 个键；淘汰顺序：不受保护且不属于当前游标的最久未使用键 → 不受保护的键 → 暂时超限；`trimFrames` 在游标改变后收回到 12
     - 按 `geometryKey` 引用计数共享几何；`putSharedFrame` 供 304 使用；引用归 0 才产出 `free-geometry`；淘汰产出带 `legacySnapshotKey` 的 `evicted`
@@ -318,7 +318,7 @@
     - **Property 18: 预取计划**
     - **Validates: Requirements 4.3, 4.4, 4.5, 4.9, 4.11, 9.4**
 
-  - [~] 11.5 写属性测试：游标移动时的请求重分配
+  - [x] 11.5 写属性测试：游标移动时的请求重分配
     - **Property 19: 游标移动时的请求重分配**
     - **Validates: Requirements 3.15, 3.16, 4.8**
 
@@ -328,31 +328,31 @@
     - 游标请求与子树请求共用
     - _Requirements: 3.16, 4.11, 9.10_
 
-  - [~] 11.7 写属性测试：`HISTORY_BUSY` 有界重试（`retryOnBusy` 部分）
+  - [x] 11.7 写属性测试：`HISTORY_BUSY` 有界重试（`retryOnBusy` 部分）
     - **Property 15: `HISTORY_BUSY` 有界重试**
     - 文件 `src/utils/versionScrub/busyRetry.property.test.ts`，假时钟注入 `sleep`
     - **Validates: Requirements 3.16, 9.10**
 
-- [ ] 12. 时间解析、直达链接、子树计划
+- [x] 12. 时间解析、直达链接、子树计划
   - [x] 12.1 实现 `src/utils/versionScrub/timeResolve.ts`
     - `parseInstant`（语法 `YYYY-MM-DD[T| ]HH:mm[:ss[.fff]][Z|±HH:MM]`，截到秒）、`resolveAt`：与 4.1 同一链序规则；错误 `invalid-format` / `before-oldest` / `no-resolvable`
     - 已加载的带时间行都晚于 t 或都没时间、且还有更早的页时，由调用方先按 `since_sesno` 补齐再解析
     - _Requirements: 8.1, 8.2, 8.3, 8.6, 10.2_
 
-  - [~] 12.2 写属性测试：时间点解析遵循链序规则（前端）
+  - [x] 12.2 写属性测试：时间点解析遵循链序规则（前端）
     - **Property 29: 时间点解析遵循链序规则，前端、后端与会话链包装一致**
     - Session_Time 生成单调、会话 1 最晚、随机乱序三种形态
     - **Validates: Requirements 6.3, 8.1, 8.2, 8.3, 8.6, 10.2**
 
-  - [~] 12.3 写属性测试：非法时间点被拒（前端）
+  - [x] 12.3 写属性测试：非法时间点被拒（前端）
     - **Property 30: 非法时间点被拒**
     - **Validates: Requirements 6.2, 8.4, 10.2**
 
-  - [~] 12.4 写属性测试：时间点解析往返（前端）
+  - [x] 12.4 写属性测试：时间点解析往返（前端）
     - **Property 31: 时间点解析往返**
     - **Validates: Requirements 8.7**
 
-  - [~] 12.5 写共享样例对拍测试 `src/utils/versionScrub/timeResolve.test.ts`
+  - [x] 12.5 写共享样例对拍测试 `src/utils/versionScrub/timeResolve.test.ts`
     - 读 `docs/fixtures/version-time-resolve-cases.json`，`resolveAt` 逐条对拍
     - _Requirements: 8.10, 10.2_
 
@@ -362,15 +362,15 @@
     - `reconcileScrubState`：cursor 回落到 sesno 不大于它的最后一版，没有则 sesno 最小的一版；钉非整数或不在表中忽略并提示；A = B 只留 A；A 大于 B 时交换
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.6, 11.7, 11.8_
 
-  - [~] 12.7 写属性测试：直达链接往返并保留其他参数
+  - [x] 12.7 写属性测试：直达链接往返并保留其他参数
     - **Property 26: 直达链接往返并保留其他参数**
     - **Validates: Requirements 11.1, 11.4**
 
-  - [~] 12.8 写属性测试：链接状态校正
+  - [x] 12.8 写属性测试：链接状态校正
     - **Property 27: 链接状态校正**
     - **Validates: Requirements 11.2, 11.3, 11.7, 11.8**
 
-  - [~] 12.9 写属性测试：非法链接参数
+  - [x] 12.9 写属性测试：非法链接参数
     - **Property 28: 非法链接参数**
     - **Validates: Requirements 11.6**
 
@@ -379,20 +379,20 @@
     - `runBounded(tasks, limit)`：同时进行（含忙重试等待中）的任务不超过 `limit`
     - _Requirements: 9.2, 9.3, 9.9_
 
-  - [~] 12.11 写属性测试：子树装载计划
+  - [x] 12.11 写属性测试：子树装载计划
     - **Property 24: 子树装载计划**
     - **Validates: Requirements 9.2, 9.3**
 
-  - [~] 12.12 写属性测试：子树请求有界并发
+  - [x] 12.12 写属性测试：子树请求有界并发
     - **Property 25: 子树请求有界并发**
     - **Validates: Requirements 9.9**
 
-  - [~] 12.13 写属性测试：自比较全为未变
+  - [x] 12.13 写属性测试：自比较全为未变
     - **Property 23: 自比较全为未变**
     - 文件 `src/utils/modelUnitVersionCompare.property.test.ts`，对现有 `compareModelUnitGeometry(x, x)`
     - **Validates: Requirements 5.4**
 
-- [~] 13. Checkpoint：纯函数完成
+- [x] 13. Checkpoint：纯函数完成
   - `npx vitest run src/utils/versionScrub src/utils/modelUnitVersionCompare.property.test.ts` 通过，共享样例对拍通过
   - Ensure all tests pass, ask the user if questions arise.
 
