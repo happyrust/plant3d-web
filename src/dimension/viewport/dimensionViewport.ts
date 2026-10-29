@@ -139,6 +139,9 @@ export class DimensionViewport {
   private readonly externalHidden = new Set<string>();
   private layouts: readonly LayoutResult[] = [];
   private hitIndex: HitIndex = buildHitIndex([]);
+  // 上一次真正跑 layoutViewport 时使用的 projector；projector 在构造时
+  // 快照了相机与 designToWorld，实例相同即投影未变，纯 camera 失效可复用布局。
+  private lastLayoutProjector: ViewportProjector | null = null;
   private theme: DimensionTheme;
   private format: DimensionFormatPolicy;
   private displayMode: DimensionDisplayMode = 'engineering';
@@ -449,6 +452,7 @@ export class DimensionViewport {
     this.hoverListeners.clear();
     this.layoutListeners.clear();
     this.projector = null;
+    this.lastLayoutProjector = null;
     this.preview = null;
     this.externalHidden.clear();
     this.pendingStyleIds.clear();
@@ -505,6 +509,24 @@ export class DimensionViewport {
       });
       return;
     }
+    // 仅 'camera' 失效且 projector 实例未变（如纯指针按下触发的
+    // flushProjection）时，布局结果必然与上次全量一致：跳过 layoutViewport，
+    // 已绘制内容与当前 layouts/theme/displayMode 也保持一致，无需重绘，
+    // 只补一次重绘请求并按增量分支同样的方式上报帧耗。
+    if (
+      reasons.size === 1
+      && reasons.has('camera')
+      && this.lastLayoutProjector === this.projector
+      && this.layouts.length > 0
+    ) {
+      this.input.requestRender?.();
+      const completedAt = performance.now();
+      this.input.onFrame?.(completedAt - startedAt, {
+        layoutMs: 0,
+        paintMs: completedAt - startedAt,
+      });
+      return;
+    }
     const inputs = [
       ...this.normalizedUsers,
       ...this.normalizedExternal.filter(
@@ -528,6 +550,7 @@ export class DimensionViewport {
     });
     const layoutCompletedAt = performance.now();
     this.layouts = batch.layouts;
+    this.lastLayoutProjector = this.projector;
     this.hitIndex = batch.hitIndex;
     this.pendingStyleIds.clear();
     this.scenePainter.paint(this.layouts, this.theme, this.displayMode);

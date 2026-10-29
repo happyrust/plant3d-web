@@ -12,10 +12,19 @@ import {
 import { DEFAULT_DIMENSION_FORMAT } from '../kernel/format';
 import { createTestFont, createTestProjector } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
+import { layoutViewport } from '../kernel/viewport/layoutViewport';
 
 import { DimensionViewport } from './dimensionViewport';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
+
+vi.mock('../kernel/viewport/layoutViewport', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../kernel/viewport/layoutViewport')>();
+  return {
+    ...actual,
+    layoutViewport: vi.fn(actual.layoutViewport),
+  };
+});
 function createViewport() {
   const callbacks: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
@@ -207,6 +216,39 @@ describe('DimensionViewport', () => {
     harness.viewport.dispose();
     harness.viewport.renderOverlay(renderer as never, camera);
     expect(renderer.render).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the relayout on camera flushes while the projector instance is unchanged', () => {
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+    harness.flush();
+
+    expect(layoutViewport).toHaveBeenCalledTimes(1);
+
+    harness.viewport.flushProjection();
+    harness.viewport.flushProjection();
+
+    expect(layoutViewport).toHaveBeenCalledTimes(1);
+    expect(harness.viewport.getLayouts().map(layout => layout.dimensionId))
+      .toEqual(['linear-1']);
+    expect(harness.requestRender).toHaveBeenCalled();
+  });
+
+  it('relayouts on a camera flush when the projector instance changed', () => {
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+    harness.flush();
+
+    expect(layoutViewport).toHaveBeenCalledTimes(1);
+
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.flushProjection();
+
+    expect(layoutViewport).toHaveBeenCalledTimes(2);
   });
 
   it('converts a screen drag into a semantic linear placement', () => {
