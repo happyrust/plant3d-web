@@ -106,6 +106,7 @@ import {
   DIMENSION_XEOKIT_PREFIX,
   useXeokitMeasurementTools,
 } from '@/composables/useXeokitMeasurementTools';
+import { createDimensionFrameRecorder } from '@/debug/dimensionFrameStats';
 import { pipeInformationToExternalDimensions } from '@/dimension';
 import {
   branClearanceTargetRefno,
@@ -1001,6 +1002,11 @@ let offDimensionReviewBinding: (() => void) | null = null;
 let offDimensionSelectionBinding: (() => void) | null = null;
 let offDimensionHoverBinding: (() => void) | null = null;
 let offLocalDimensionAutosave: (() => void) | null = null;
+/**
+ * W4-1 性能基线：dev 下把尺寸视口逐帧耗时挂到 `window.__dimensionFrameStats`
+ * （`summary()` / `samples()` / `reset()`），只读观测、不改渲染；生产构建不挂也不记录。
+ */
+const dimensionFrameRecorder = isDev ? createDimensionFrameRecorder() : null;
 const dimensionHoverTooltip = ref<Readonly<{
   x: number;
   y: number;
@@ -2937,6 +2943,7 @@ async function initializeDimensionViewport(): Promise<void> {
     anchorResolver,
     requestFrame: callback => window.requestAnimationFrame(callback),
     cancelFrame: id => window.cancelAnimationFrame(id),
+    ...(dimensionFrameRecorder ? { onFrame: dimensionFrameRecorder.record } : {}),
   });
   if (!result.ok) {
     (window as any).__dimensionSystemError = `${result.stage}: ${
@@ -2958,6 +2965,10 @@ async function initializeDimensionViewport(): Promise<void> {
   }
 
   dimensionSystem = result.system;
+  if (dimensionFrameRecorder) {
+    dimensionFrameRecorder.reset();
+    (window as any).__dimensionFrameStats = dimensionFrameRecorder;
+  }
   void syncMbdExternalDimensions(result.system);
   result.system.pointer.setEditSessionFactory((target) => {
     if (!['label', 'dimension', 'arc', 'leader'].includes(target.part)) {
@@ -4876,6 +4887,7 @@ onUnmounted(() => {
   dimensionInitializationVersion += 1;
   dimensionSystem?.dispose();
   dimensionSystem = null;
+  delete (window as any).__dimensionFrameStats;
   stopLocalDimensionAutosave();
   offDimensionReviewBinding?.();
   offDimensionReviewBinding = null;
