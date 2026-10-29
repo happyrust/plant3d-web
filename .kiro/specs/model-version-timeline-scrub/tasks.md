@@ -425,18 +425,18 @@
     - **Property 7: 切换范围保留游标与钉，灰标位置正确**
     - **Validates: Requirements 1.9, 1.10**
 
-  - [~] 14.6 在 `src/viewer/modelUnitCompareController.ts` 增加浏览接口
+  - [x] 14.6 在 `src/viewer/modelUnitCompareController.ts` 增加浏览接口
     - `browseEnter` / `browseShow` / `browsePending` / `browseMissing` / `browseBadge` / `replaceSide` / `browseExit`；复用 A 侧隔离图层
     - `browseEnter` 只隐藏环境中这些单元；`browseShow` 按单元比 `geometryKey`，相同只改角标；进入后第一帧 `fitToBox`，之后不动相机；`focusRefno` 时只高亮该构件
     - `browseMissing` 清图层且环境同单元保持隐藏；`browseExit` 卸图层、恢复环境、清角标与属性横幅；角标文本来自 `browseBadgeText`
     - _Requirements: 3.1, 3.2, 3.8, 3.9, 3.11, 3.14, 5.8, 9.5_
 
-  - [~] 14.7 写属性测试：相同 geometryKey 不重装
+  - [x] 14.7 写属性测试：相同 geometryKey 不重装
     - **Property 14: 相同 geometryKey 不重装**
     - 文件 `src/viewer/modelUnitCompareBrowse.property.test.ts`，mock DTX 层，只计装载调用
     - **Validates: Requirements 3.8**
 
-  - [~] 14.8 为浏览接口写例子测试（`modelUnitCompareController.test.ts` 追加）
+  - [x] 14.8 为浏览接口写例子测试（`modelUnitCompareController.test.ts` 追加）
     - 进入浏览只隐藏该单元、首帧 fit 之后不动相机、退出恢复、`replaceSide` 不重建另一侧、叶子只高亮自身
     - _Requirements: 3.1, 3.9, 3.14, 5.8, 9.5_
 

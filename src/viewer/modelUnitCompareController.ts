@@ -27,6 +27,7 @@ import {
   type ModelUnitCompareSide,
   type ModelUnitCompareSplitOutline,
   type ModelUnitCompareViewMode,
+  type ModelUnitGeometryDiff,
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEnvironment,
   type ModelUnitVersionCompareEventDetail,
@@ -132,9 +133,59 @@ export type ModelUnitCompareOpenOptions = {
   refreshEnvironment?: boolean;
 };
 
-export type ModelUnitCompareController = {
+/**
+ * 拖动浏览的一帧：某会话下若干单元的几何（spec `model-version-timeline-scrub` design §5）。
+ * `geometryKey` 是服务端给的内容摘要，两个会话的键相等 ⇒ 几何逐条相同，不必重装。
+ */
+export type BrowseFrameDetail = {
+  dbnum: number;
+  sesno: number;
+  sessionTime: string | null;
+  units: { unitRefno: string; geometryKey: string | null; entries: ModelUnitVersionSide['entries'] }[];
+};
+
+/** 浏览模式对外的读数（角标文本由面板按 `browseBadgeText` 算好传进来） */
+export type ModelUnitCompareBrowseState = {
+  active: boolean;
+  /** 当前视口里装着的会话；`missing` / `loading` 时也要知道是哪一版 */
+  sesno: number | null;
+  sessionTime: string | null;
+  /** 角标文本（`browseBadgeText` 的结果） */
+  badge: string;
+  /** 已装入的单元与它们的 `geometryKey`：`geometryKey` 相同就只改角标 */
+  installed: { unitRefno: string; geometryKey: string | null }[];
+  /** 环境中被藏起来的单元根 */
+  unitRefnos: string[];
+  /** 当前这一版该单元不存在时的原因（`UNIT_NOT_PRESENT`）；装到了就是 null */
+  missingReason: 'not-yet' | 'deleted' | null;
+};
+
+/**
+ * 拖动浏览的三维接口（Requirement 3.1、3.2、3.8、3.9、3.11、3.14、5.8、9.5）：
+ * 复用 A 侧隔离图层那一套，但只有一层——浏览永远只显示一个会话。
+ */
+export type ModelUnitCompareBrowseApi = {
+  /** 进入浏览：只隐藏环境中这些单元，装一层空图层，相机等第一帧再对 */
+  browseEnter(ctx: { dbnum: number; unitRefnos: string[]; focusRefno?: string | null }): void;
+  /** 显示一帧；按单元比 `geometryKey`，相同只改角标（3.8）。`diffRows` = 单钉着色时的四态行 */
+  browseShow(frame: BrowseFrameDetail, opts?: { diffRows?: ModelUnitGeometryDiff[] }): Promise<void>;
+  /** 游标请求进行中：角标「正在加载 sesno N」，图层不动（3.3） */
+  browsePending(sesno: number): void;
+  /** `UNIT_NOT_PRESENT`：清图层，环境同单元保持隐藏（3.11） */
+  browseMissing(sesno: number, reason: 'not-yet' | 'deleted'): void;
+  /** 直接改角标文本（子树确认 / 已取消 / 最新版本无差异这些面板侧状态） */
+  browseBadge(text: string): void;
+  /** 对比模式里拖钉只换一侧，另一侧不重建（5.8） */
+  replaceSide(side: ModelUnitCompareSide, detailSide: ModelUnitVersionSide): Promise<void>;
+  /** 退出浏览：卸图层、恢复环境、清角标（3.14） */
+  browseExit(): void;
+};
+
+export type ModelUnitCompareController = ModelUnitCompareBrowseApi & {
   /** 视口侧运行态；面板经 `MODEL_UNIT_VERSION_COMPARE_STATE_EVENT` 收它的副本 */
   state: Ref<ModelUnitVersionCompareRuntimeState | null>;
+  /** 浏览模式读数（Requirement 3.2：角标 sesno 取自实际装入的帧） */
+  browse: Ref<ModelUnitCompareBrowseState>;
   /** 视口角标 / 图例用：本次对比按「模型几何差异」四态的构件数（与面板徽章同一份 `rows`） */
   statusCounts: ComputedRef<Record<ModelUnitGeometryStatus, number> | null>;
   /** 每次 open / clear 递增；校审恢复拿它判「期间有没有别的对比插进来」 */
@@ -177,6 +228,275 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
   let cameraState: CameraState | null = null;
   let runId = 0;
   let splitOutlineCache: ModelUnitCompareSplitOutline | null = null;
+
+  // -------------------------------------------------------------------------
+  // 拖动浏览（spec `model-version-timeline-scrub`）：一层隔离图层、一次一个会话
+  // -------------------------------------------------------------------------
+
+  /** 浏览模式的读数；面板经它出角标、e2e 经 dev hook 读它 */
+  const browse = ref<ModelUnitCompareBrowseState>({
+    active: false,
+    sesno: null,
+    sessionTime: null,
+    badge: '',
+    installed: [],
+    unitRefnos: [],
+    missingReason: null,
+  });
+  /** 浏览用的那一层（复用 A 侧的做法，但只有一层） */
+  let browseLayer: DTXLayer | null = null;
+  /** 浏览装着的单元 → `geometryKey`：相同就不重装（Requirement 3.8） */
+  let browseInstalled = new Map<string, string | null>();
+  /** 浏览进入时的相机与「还没对过框」标记：只在第一帧 fit 一次（Requirement 3.9） */
+  let browseCameraState: CameraState | null = null;
+  let browseFitted = false;
+  /** 浏览藏掉的环境对象（退出时按进入前的显隐还回去） */
+  let browseHiddenObjectIds: string[] = [];
+  let browseOriginalVisibility = new Map<string, boolean>();
+  let browseDbnum = 0;
+  let browseFocusRefno: string | null = null;
+  /** 每次 browseShow 递增：装到一半被新的一帧顶掉就丢掉这一帧的结果 */
+  let browseRun = 0;
+  /** 单钉着色：当前帧的四态行 */
+  let browseDiffRows: ModelUnitGeometryDiff[] | null = null;
+
+  function browsePublish(patch: Partial<ModelUnitCompareBrowseState>): void {
+    browse.value = { ...browse.value, ...patch };
+  }
+
+  function browseEnter(ctx: { dbnum: number; unitRefnos: string[]; focusRefno?: string | null }): void {
+    // 已经在一轮浏览里：只换焦点，不重藏环境、不动相机
+    if (browse.value.active) {
+      browseFocusRefno = ctx.focusRefno ?? null;
+      browsePublish({ unitRefnos: ctx.unitRefnos.map(host.normalizeRefno).filter(Boolean) });
+      return;
+    }
+    const viewer = host.viewer();
+    const primaryLayer = host.primaryLayer();
+    if (!viewer || !primaryLayer) return;
+
+    browseDbnum = ctx.dbnum;
+    browseFocusRefno = ctx.focusRefno ?? null;
+    browseFitted = false;
+    browseDiffRows = null;
+    browseRun += 1;
+    browseInstalled = new Map();
+    browseCameraState = {
+      position: viewer.camera.position.clone(),
+      target: viewer.controls.target.clone(),
+      near: viewer.camera.near,
+      far: viewer.camera.far,
+    };
+    const unitRefnos = ctx.unitRefnos.map(host.normalizeRefno).filter(Boolean);
+    // 只藏环境里这些单元（Requirement 3.1）：按整单元藏，构件级的 refno 这一层还列不出来
+    const targetObjectIds = collectModelUnitTargetObjectIds(
+      unitRefnos,
+      [],
+      (refno) => host.resolve.objectIdsByRefno(browseDbnum, refno),
+      (refno) => host.resolve.objectIdsByUnitRefno(browseDbnum, refno),
+    );
+    browseOriginalVisibility = new Map(
+      targetObjectIds.map((objectId) => [objectId, primaryLayer.isObjectVisible(objectId)] as const),
+    );
+    browseHiddenObjectIds = targetObjectIds;
+    primaryLayer.setObjectsVisible(targetObjectIds, false);
+
+    const layer = host.createLayer(viewer, primaryLayer);
+    host.attachLayer(layer, viewer);
+    layers = [layer];
+    browseLayer = layer;
+
+    browsePublish({
+      active: true,
+      sesno: null,
+      sessionTime: null,
+      badge: '',
+      installed: [],
+      unitRefnos,
+      missingReason: null,
+    });
+    host.requestRender();
+  }
+
+  /**
+   * 显示一帧。按单元比 `geometryKey`：相同就跳过重装（Requirement 3.8、Property 14），只改角标；
+   * 不同的单元用 `replaceExistingObjects` 重装它自己那一批，别的单元不动。
+   */
+  async function browseShow(frame: BrowseFrameDetail, opts: { diffRows?: ModelUnitGeometryDiff[] } = {}): Promise<void> {
+    const layer = browseLayer;
+    const viewer = host.viewer();
+    if (!browse.value.active || !layer || !viewer) return;
+    const run = ++browseRun;
+    browseDiffRows = opts.diffRows ?? null;
+
+    const changed: BrowseFrameDetail['units'] = [];
+    for (const unit of frame.units) {
+      const unitRefno = host.normalizeRefno(unit.unitRefno);
+      if (!unitRefno) continue;
+      const previous = browseInstalled.get(unitRefno);
+      // 键相同 = 几何逐条相同：这一单元一个对象都不重装
+      if (previous !== undefined && previous !== null && unit.geometryKey !== null && previous === unit.geometryKey) continue;
+      changed.push({ ...unit, unitRefno });
+    }
+
+    for (const unit of changed) {
+      if (run !== browseRun) return;
+      const refnos = [...unit.entries.keys()];
+      if (refnos.length === 0) {
+        browseInstalled.set(unit.unitRefno, unit.geometryKey);
+        continue;
+      }
+      await host.loadInstances(layer, frame.dbnum, refnos, {
+        includeOwnedTubings: false,
+        isolated: true,
+        expectedRootRefno: unit.unitRefno,
+        instanceEntriesByRefno: unit.entries,
+        replaceExistingObjects: true,
+        objectIdPrefix: `unit-browse:${unit.unitRefno}`,
+      });
+      if (run !== browseRun) return;
+      browseInstalled.set(unit.unitRefno, unit.geometryKey);
+    }
+
+    // 四态着色（单钉对照）：没给 diffRows 就把整层还原成不透明底色
+    const statusColors = Object.fromEntries(
+      Object.entries(MODEL_UNIT_GEOMETRY_STATUS_COLORS).map(([status, hex]) => [status, new Color(hex)]),
+    ) as Record<ModelUnitGeometryStatus, Color>;
+    if (browseDiffRows) {
+      for (const { objectId, status } of planModelUnitCompareObjectStyles(layer.getAllObjectIds(), browseDiffRows)) {
+        layer.setObjectMaterial(objectId, { color: statusColors[status] });
+      }
+    }
+
+    // 相机：进入后第一帧对一次框，之后不动（Requirement 3.9）
+    if (!browseFitted) {
+      const box = layer.getBoundingBox();
+      if (box && !box.isEmpty()) {
+        host.fitToBox(viewer, box);
+        browseFitted = true;
+      }
+    }
+    // 叶子构件「仅自身」时只高亮 focusRefno（Requirement 9.5）：按隔离图层自己的对象 id 取 refno，
+    // 不走 `host.resolve.objectIdsByRefno`——那是主图层（环境）的索引，浏览图层里的 id 不在里面
+    const focus = browseFocusRefno ? host.normalizeRefno(browseFocusRefno) : null;
+    if (focus) {
+      for (const objectId of layer.getAllObjectIds()) {
+        const refno = refnoFromCompareObjectId(objectId);
+        layer.setObjectVisible(objectId, !refno || host.normalizeRefno(refno) === focus);
+      }
+    } else {
+      // 上一帧可能为了只高亮一个构件把别的藏了：没有焦点就整层恢复可见（同键帧不重装，显隐得自己还）
+      for (const objectId of layer.getAllObjectIds()) layer.setObjectVisible(objectId, true);
+    }
+
+    browsePublish({
+      sesno: frame.sesno,
+      sessionTime: frame.sessionTime,
+      installed: [...browseInstalled].map(([unitRefno, geometryKey]) => ({ unitRefno, geometryKey })),
+      missingReason: null,
+    });
+    host.requestRender();
+  }
+
+  function browsePending(sesno: number): void {
+    if (!browse.value.active) return;
+    // 图层不动：上一次装好的几何留在视口里，只有角标说「正在加载」
+    browsePublish({ sesno });
+  }
+
+  function browseMissing(sesno: number, reason: 'not-yet' | 'deleted'): void {
+    const layer = browseLayer;
+    if (!browse.value.active || !layer) return;
+    browseRun += 1;
+    for (const objectId of layer.getAllObjectIds()) layer.setObjectVisible(objectId, false);
+    browseInstalled = new Map();
+    // 环境里那些单元保持隐藏：这一版它们不存在，露出环境里的「当前」几何会骗人
+    browsePublish({ sesno, sessionTime: null, installed: [], missingReason: reason });
+    host.requestRender();
+  }
+
+  function browseBadge(text: string): void {
+    if (!browse.value.active) return;
+    browsePublish({ badge: text });
+  }
+
+  /**
+   * 对比模式里拖钉只换一侧（Requirement 5.8）：卸掉该侧图层、只重装那一侧，另一侧不动。
+   * 复用 `open` 的两层结构——这里只做「该侧对象全撤再装」的最小动作。
+   */
+  async function replaceSide(side: ModelUnitCompareSide, detailSide: ModelUnitVersionSide): Promise<void> {
+    const current = state.value;
+    if (!current || current.status !== 'ready') return;
+    const layer = side === 'before' ? layers[0] : layers[1];
+    if (!layer) return;
+    const refnos = detailSide.refnos;
+    if (refnos.length === 0) {
+      for (const objectId of layer.getAllObjectIds()) layer.setObjectVisible(objectId, false);
+      host.requestRender();
+      return;
+    }
+    await host.loadInstances(layer, current.detail.dbnum, refnos, {
+      includeOwnedTubings: false,
+      isolated: true,
+      expectedRootRefno: current.detail.unitRefno,
+      instanceEntriesByRefno: detailSide.entries,
+      replaceExistingObjects: true,
+      objectIdPrefix: side === 'before' ? 'unit-compare:a' : 'unit-compare:b',
+    });
+    // 换的是「哪一版」，两侧的四态行由面板重算后随 `set-diff-only` 之类进来；这里只保证几何与着色对得上
+    const statusColors = Object.fromEntries(
+      Object.entries(MODEL_UNIT_GEOMETRY_STATUS_COLORS).map(([status, hex]) => [status, new Color(hex)]),
+    ) as Record<ModelUnitGeometryStatus, Color>;
+    for (const { objectId, status } of planModelUnitCompareObjectStyles(layer.getAllObjectIds(), current.detail.rows)) {
+      layer.setObjectMaterial(objectId, { color: statusColors[status] });
+    }
+    host.requestRender();
+  }
+
+  /** 退出浏览：卸图层、恢复环境显隐、相机回原位、清角标（Requirement 3.14） */
+  function browseExit(): void {
+    if (!browse.value.active) return;
+    browseRun += 1;
+    if (browseLayer) {
+      disposeLayer(browseLayer);
+      browseLayer = null;
+    }
+    layers = [];
+    const primaryLayer = host.primaryLayer();
+    if (primaryLayer) {
+      for (const objectId of browseHiddenObjectIds) {
+        const visible = browseOriginalVisibility.get(objectId);
+        if (visible !== undefined) primaryLayer.setObjectVisible(objectId, visible);
+      }
+    }
+    browseHiddenObjectIds = [];
+    browseOriginalVisibility = new Map();
+    browseInstalled = new Map();
+    browseDiffRows = null;
+    browseFocusRefno = null;
+    const viewer = host.viewer();
+    if (viewer && browseCameraState) {
+      viewer.camera.position.copy(browseCameraState.position);
+      viewer.controls.target.copy(browseCameraState.target);
+      viewer.camera.near = browseCameraState.near;
+      viewer.camera.far = browseCameraState.far;
+      viewer.camera.updateProjectionMatrix();
+      viewer.controls.update();
+    }
+    browseCameraState = null;
+    browseFitted = false;
+    if (host.selection.hasVersionPin()) host.selection.clearSelection();
+    browse.value = {
+      active: false,
+      sesno: null,
+      sessionTime: null,
+      badge: '',
+      installed: [],
+      unitRefnos: [],
+      missingReason: null,
+    };
+    host.requestRender();
+  }
 
   function devHook(): Record<string, unknown> | null {
     if (!host.isDev || typeof window === 'undefined') return null;
@@ -412,6 +732,9 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
 
   function clear(restoreCamera = true): void {
     runId += 1;
+    // 浏览与对比共用 `layers`：浏览中打开 / 关闭对比时先把浏览收掉，否则那一层会被这里 dispose 两次、
+    // 环境显隐也还错一份
+    if (browse.value.active) browseExit();
     host.onClear?.();
     for (const layer of layers.splice(0)) {
       disposeLayer(layer);
@@ -876,6 +1199,7 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
   return {
     state,
     statusCounts,
+    browse,
     get runId() { return runId; },
     open,
     clear,
@@ -891,6 +1215,13 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
     pickObject,
     splitRay,
     selectObject,
+    browseEnter,
+    browseShow,
+    browsePending,
+    browseMissing,
+    browseBadge,
+    replaceSide,
+    browseExit,
     dispose: stopPublish,
   };
 }

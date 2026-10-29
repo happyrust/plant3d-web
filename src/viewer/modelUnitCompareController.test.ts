@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Box3, PerspectiveCamera, Raycaster, Vector2, Vector3 } from 'three';
 
-import { createModelUnitCompareController, type ModelUnitCompareHost } from './modelUnitCompareController';
+import { createModelUnitCompareController, type BrowseFrameDetail, type ModelUnitCompareHost } from './modelUnitCompareController';
 
 import type { ModelVersion } from '@/model-source';
 import type { DTXLayer } from '@/utils/three/dtx';
@@ -511,5 +511,144 @@ describe('modelUnitCompareController', () => {
     h.controller.selectObject(pickB!);
     expect(h.selection.setSelectedRefnoAtVersion).toHaveBeenLastCalledWith('1_3', expect.objectContaining({ sesno: 20, label: 'B' }));
     expect(h.selection.setSelectedRefno).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // 拖动浏览（tasks.md 14.8）
+  // -------------------------------------------------------------------------
+
+  function browseFrame(sesno: number, geometryKey: string | null, refnos = ['1_2', '1_3']): BrowseFrameDetail {
+    return {
+      dbnum: 8000,
+      sesno,
+      sessionTime: `2026-09-${String(sesno).padStart(2, '0')}T00:00:00+00:00`,
+      units: [{ unitRefno: '1_1', geometryKey, entries: new Map(refnos.map((refno) => [refno, []])) }],
+    };
+  }
+
+  it('browseEnter：只隐藏环境中该单元的对象、装一层隔离图层；首帧 fit 一次，之后不动相机（R3.1、3.9）', async () => {
+    const h = current = harness();
+    const cameraBefore = h.viewer.camera.position.clone();
+
+    h.controller.browseEnter({ dbnum: 8000, unitRefnos: ['1/1'] });
+
+    // 只藏 1_1 那三个构件，环境里的 9_9 不动
+    expect(h.primary.isObjectVisible('o:1_2:0')).toBe(false);
+    expect(h.primary.isObjectVisible('o:1_3:0')).toBe(false);
+    expect(h.primary.isObjectVisible('o:1_4:0')).toBe(false);
+    expect(h.primary.isObjectVisible('o:9_9:0')).toBe(true);
+    expect(h.controller.browse.value.active).toBe(true);
+    expect(h.controller.browse.value.unitRefnos).toEqual(['1_1']);
+
+    await h.controller.browseShow(browseFrame(10, 'g:aaa'));
+    expect(h.host.fitToBox).toHaveBeenCalledTimes(1);
+    const fitted = h.viewer.camera.position.clone();
+    expect(fitted.equals(cameraBefore)).toBe(true); // 假 fitToBox 不动相机，这里只确认它被调过
+
+    await h.controller.browseShow(browseFrame(12, 'g:bbb'));
+    // 第二次不 fit：相机由用户自己控
+    expect(h.host.fitToBox).toHaveBeenCalledTimes(1);
+    expect(h.controller.browse.value.sesno).toBe(12);
+  });
+
+  it('browseShow：geometryKey 相同不重装几何，只改角标（R3.8）', async () => {
+    const h = current = harness();
+    h.controller.browseEnter({ dbnum: 8000, unitRefnos: ['1_1'] });
+    const loadCalls = () => (h.host.loadInstances as ReturnType<typeof vi.fn>).mock.calls.filter((call) => {
+      const options = call[3] as { objectIdPrefix?: string };
+      return !!options?.objectIdPrefix?.startsWith('unit-browse:');
+    }).length;
+
+    await h.controller.browseShow(browseFrame(10, 'g:same'));
+    expect(loadCalls()).toBe(1);
+
+    // 只改了属性的一版：摘要相同 → 一个对象都不重装
+    await h.controller.browseShow(browseFrame(12, 'g:same'));
+    expect(loadCalls()).toBe(1);
+    expect(h.controller.browse.value.sesno).toBe(12);
+    expect(h.controller.browse.value.installed).toEqual([{ unitRefno: '1_1', geometryKey: 'g:same' }]);
+
+    // 摘要变了 → 重装一次
+    await h.controller.browseShow(browseFrame(15, 'g:other'));
+    expect(loadCalls()).toBe(2);
+  });
+
+  it('browseMissing：清图层但环境同单元保持隐藏（R3.11）', async () => {
+    const h = current = harness();
+    h.controller.browseEnter({ dbnum: 8000, unitRefnos: ['1_1'] });
+    await h.controller.browseShow(browseFrame(10, 'g:aaa'));
+
+    h.controller.browseMissing(12, 'deleted');
+
+    const layer = h.created[0]!;
+    expect(layer.getVisibleObjectIds()).toEqual([]);
+    expect(h.controller.browse.value.missingReason).toBe('deleted');
+    expect(h.controller.browse.value.sesno).toBe(12);
+    // 环境里那些单元不因为「这一版没有」而露出来
+    expect(h.primary.isObjectVisible('o:1_2:0')).toBe(false);
+  });
+
+  it('browseExit：卸图层、恢复环境显隐与相机、清角标（R3.14）', async () => {
+    const h = current = harness();
+    const cameraBefore = h.viewer.camera.position.clone();
+    const targetBefore = h.viewer.controls.target.clone();
+    h.controller.browseEnter({ dbnum: 8000, unitRefnos: ['1_1'] });
+    await h.controller.browseShow(browseFrame(10, 'g:aaa'));
+    h.controller.browseBadge('浏览 · sesno 10');
+    // 模拟视口被用户拖过：退出要还回进入时的相机
+    h.viewer.camera.position.set(99, 99, 99);
+    h.viewer.controls.target.set(50, 50, 50);
+
+    h.controller.browseExit();
+
+    expect(h.forgotten).toHaveLength(1);
+    expect((h.created[0] as FakeLayer).disposed).toBe(true);
+    // 1_2 / 1_4 进入前是显示的，1_3 进入前就是隐藏的：各还各的
+    expect(h.primary.isObjectVisible('o:1_2:0')).toBe(true);
+    expect(h.primary.isObjectVisible('o:1_3:0')).toBe(false);
+    expect(h.primary.isObjectVisible('o:1_4:0')).toBe(true);
+    expect(h.viewer.camera.position.equals(cameraBefore)).toBe(true);
+    expect(h.viewer.controls.target.equals(targetBefore)).toBe(true);
+    expect(h.controller.browse.value).toMatchObject({ active: false, sesno: null, badge: '' });
+  });
+
+  it('browseShow 带 focusRefno：只让该构件可见（R9.5）', async () => {
+    const h = current = harness();
+    h.controller.browseEnter({ dbnum: 8000, unitRefnos: ['1_1'], focusRefno: '1_2' });
+    await h.controller.browseShow(browseFrame(10, 'g:aaa'));
+
+    const layer = h.created[0]!;
+    expect(layer.isObjectVisible('unit-browse:1_1:1_2:0')).toBe(true);
+    expect(layer.isObjectVisible('unit-browse:1_1:1_3:0')).toBe(false);
+  });
+
+  it('replaceSide：只重装那一侧，另一侧的对象不重建（R5.8）', async () => {
+    const h = current = harness();
+    await h.controller.open(detailOf());
+    const [a, b] = h.created as [FakeLayer, FakeLayer];
+    const bObjectsBefore = b.getAllObjectIds().slice();
+    const loadCallsBefore = (h.host.loadInstances as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    await h.controller.replaceSide('before', side(30, ['1_2']));
+
+    const browseCalls = (h.host.loadInstances as ReturnType<typeof vi.fn>).mock.calls.slice(loadCallsBefore);
+    expect(browseCalls).toHaveLength(1);
+    expect((browseCalls[0]![3] as { objectIdPrefix?: string }).objectIdPrefix).toBe('unit-compare:a');
+    // B 侧一个对象都没动
+    expect(b.getAllObjectIds()).toEqual(bObjectsBefore);
+    // A 侧换了新的一版：1_2 装进去了
+    expect(a.getAllObjectIds()).toContain('unit-compare:a:1_2:0');
+  });
+
+  it('clear 时浏览还开着：先收浏览再放对比图层，避免同一层被 dispose 两次', async () => {
+    const h = current = harness();
+    h.controller.browseEnter({ dbnum: 8000, unitRefnos: ['1_1'] });
+    await h.controller.browseShow(browseFrame(10, 'g:aaa'));
+
+    h.controller.clear();
+
+    expect(h.forgotten).toHaveLength(1);
+    expect(h.controller.browse.value.active).toBe(false);
+    expect(h.primary.isObjectVisible('o:1_2:0')).toBe(true);
   });
 });
