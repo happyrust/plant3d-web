@@ -47,6 +47,7 @@ type SettleResult = {
 type PaintProfileResult = {
   passes: number;
   segmentCount: number;
+  segmentsByKind: Readonly<Record<string, number>>;
   countMs: { p50: number; p95: number };
   writeMs: { p50: number; p95: number };
   trianglesMs: { p50: number; p95: number };
@@ -326,6 +327,7 @@ async function main(): Promise<void> {
       const triangleSamples: number[] = [];
       const fillSamples: number[] = [];
       let segmentCount = 0;
+      let segmentsByKind: Readonly<Record<string, number>> = {};
       for (let index = 0; index < passes; index += 1) {
         // 计数而不是先置 `current = null`：对 `current` 赋 null 会让 TS 把
         // 它窄化成 `null`，之后 `if (!profile) throw` 再窄化成 `never`。
@@ -343,6 +345,7 @@ async function main(): Promise<void> {
         triangleSamples.push(profile.trianglesMs);
         fillSamples.push(profile.fillsMs);
         segmentCount = profile.segmentCount;
+        segmentsByKind = profile.segmentsByKind;
       }
       renderer.render(scene, camera);
       const span = (samples: readonly number[]) => ({
@@ -352,6 +355,7 @@ async function main(): Promise<void> {
       return {
         passes,
         segmentCount,
+        segmentsByKind,
         countMs: span(countSamples),
         writeMs: span(writeSamples),
         trianglesMs: span(triangleSamples),

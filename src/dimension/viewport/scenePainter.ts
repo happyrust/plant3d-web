@@ -875,6 +875,8 @@ export type SceneDimensionPaintProfile = Readonly<{
   trianglesMs: number;
   fillsMs: number;
   segmentCount: number;
+  /** 段数按来源图元类型的分布（W5-5 诊断：定 writeMs 里字形与线框各占多少）。 */
+  segmentsByKind: Readonly<Record<string, number>>;
 }>;
 
 type DimensionVertexRange = Readonly<{
@@ -1040,13 +1042,26 @@ export class ThreeSceneDimensionPainter {
     const profiling = this.onPaintProfile !== undefined;
     const countStartedAt = profiling ? performance.now() : 0;
 
+    // 计数按 primitive 逐个做（`visitSegments` 就是这两层循环），这样诊断能
+    // 顺带拿到段数按图元类型的分布——决定 `writeMs` 里字形与线框各占多少。
     let segmentCount = 0;
-    visitSegments(
-      layouts,
-      this.font,
-      this.glyphCaches,
-      () => { segmentCount += 1; },
-    );
+    const segmentsByKind: Record<string, number> = {};
+    for (const layout of layouts) {
+      for (const primitive of layout.scenePrimitives) {
+        let primitiveSegments = 0;
+        visitPrimitiveSegments(
+          primitive,
+          this.font,
+          this.glyphCaches,
+          () => { primitiveSegments += 1; },
+        );
+        segmentCount += primitiveSegments;
+        if (profiling) {
+          segmentsByKind[primitive.kind] =
+            (segmentsByKind[primitive.kind] ?? 0) + primitiveSegments;
+        }
+      }
+    }
     const countCompletedAt = profiling ? performance.now() : 0;
     const lineVertexCount = segmentCount * 4;
     if (this.lineBuffers.ensureCapacity(lineVertexCount)) {
@@ -1242,6 +1257,7 @@ export class ThreeSceneDimensionPainter {
         trianglesMs: trianglesCompletedAt - writeCompletedAt,
         fillsMs: completedAt - trianglesCompletedAt,
         segmentCount,
+        segmentsByKind,
       });
     }
   }
