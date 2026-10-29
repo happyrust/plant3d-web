@@ -463,3 +463,305 @@ T5.1..T5.7（跨仓，T5.3 依赖 T3.1-T3.4 的算法口径）──────
 **累计门禁（本表全部落地后实测）**：`npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts` → **70 文件 / 471 通过**；`npm run type-check` → **440 条 / 127 文件，新增 0**；`npx eslint`（触及文件）0 问题；`npx playwright test`（novideo 配置）尺寸 smoke 2/2。
 
 **计划与实际的偏差**：§7 声称各任务 `owned_paths` 不重叠、可并行，实际 `explicit.ts` 被 T1.2 / T1.3 / T1.4 / T1.5 四个任务改到，`tagBillboard.ts` 被三个，`kernel/index.ts` 被 T1.1 / T1.6 共用一行。落地时按主题合并成独立提交（polar、契约 style、e2e、面板、T1.1+T1.6、T2.1、T1.2+T1.3、T1.4+T1.5），而不是按六个 T1 任务逐条拆。
+
+---
+
+## 13. 三路侦察后的可执行任务分解（2026-10-29）
+
+> 本轮不再新增判断，只把三份侦察（polar 参考系、求解器 11 kind 产出实况、三个零产出 kind 的 PML 源）的结论固化成可派工的 brief。所有 `文件:行号` 均来自实读。
+
+### 13.1 侦察确认的四个硬事实
+
+| # | 事实 | 证据 |
+| --- | --- | --- |
+| F1 | 11 个 kind 里 **7 个有产出**，`angle_dim` / `aid_arc` / `aid_circle` / `aid_point` 零产出；6 份金样对这四个 kind **各 0 条** | `fixtures/golden/*.json` 实测 kind 分布；`contract.rs:22-23` 自述「`angle.rs` 是第 ③ 步」 |
+| F2 | `angle.rs` **文件不存在**，`lib.rs` 无 `pub mod angle`，`layout.rs` 全文 `MbdPrimitive::` 命中只有 `LinearDim` | `Test-Path` 返 False；`lib.rs:27-37`；`layout.rs` |
+| F3 | `aid_arc` 与 `angle_dim` 是**同一个构造点**（`isoline.pmlobj:2865` 的 `arc` 同时喂 `aidarc` L2869 与角度文字 L2904）；`aid_circle` 只出现在支架/土建路径（`suiSupport.pmlobj:2619/3209`、`instSupport.pmlobj:5024`、`markCivil.pmlobj:2256-2304/5876-5877`），管道 ISO 路径零调用；`aid_point` 在整个 `vendor/MBD` 里**没有任何自动产出点**，只有 E3D 手动工具（`mbd.uic:194-207`） | 见 §13.3 |
+| F4 | polar 数值层 19 个导出**目录外零消费者**（`kernel/index.ts` 未导出 polar 路径）；参考系真实缺口是 D-a（平面正交基硬编码在 `isoHandleDimDir.ts:97-112`，不可注入）、D-b（角度零点/绕向随 D-a）、D-d（方向可见性/遮挡完全缺失）、D-e（投影/像素净空完全缺失） | 见 §13.2 |
+
+### 13.2 阶段 3 续（polar 参考系）任务表
+
+串行链：**T3.3a → T3.3b → T3.4 → T3.5 → T3.6**。可并行：T3.3c ∥（T3.4 金样只绑 2D）。
+
+| ID | 内容 | owned_paths | 依赖 |
+| --- | --- | --- | --- |
+| T3.3a | `PolarReference` / `PolarElement` 类型 | `kernel/layout/polar/reference/types.ts`（新） | 仅 numeric |
+| T3.3b | 2D 轴测 `IsoSheetReference`（照 `polarsystem.getDetail` L151-289 的 `referencedirs` / `prehoridir` 45°/135° 滞后 / `lookangle→showdir`） | `…/reference/isoSheet.ts` + `.test.ts` | T3.3a |
+| T3.3c | 3D 相机 `CameraReference`（`showDir` 从 `projector.forward` 派生 + 进入 <1°/退出 >3° 滞回，挂实例不挂模块；背向候选加罚） | `…/reference/camera.ts` + `.test.ts` | T3.3a |
+| T3.4 | `getBestPosAndOri` 14 步 + `balance` + `getDirAndCha` + `getResult` | `…/polar/place.ts`（超 600 行再拆）+ `.test.ts` | T3.3a + T3.3b |
+| T3.5 | 屏幕校验层：投影 → 像素净空 → 按 `alldisbests`（`polarsystem.pmlobj:1273-1282`）降级；可抽出 `collision/occupancy.ts`（从 `resolveLabelCollisions.ts:64-118` 提取 `LabelOccupancy`） | `…/polar/screenGuard.ts` + `.test.ts`；`kernel/collision/occupancy.ts`（新） | T3.4（需返回排序候选列表而非单个最优） |
+| T3.6 | 接入 `layoutViewport` + `mbd_polar=1`（读在 `useMbdExternalSync`，与 `mbd_3d` 同构；flag 不进 kernel，`ExplicitLayoutInput.polar` 是纯数据） | `kernel/types.ts`、`kernel/viewport/layoutViewport.ts`、`adapters/mbdV2ExternalAnnotations.ts`、`composables/useMbdExternalSync.ts`、`kernel/index.ts` | T3.3c + T3.5 |
+
+**polar 关键裁决**（写进 T3.3 模块头）：
+
+- 候选用角度区间（保 PML 打分对齐），验收用屏幕包围盒（`declutterPolicy.ts:72-85` 的 `convexQuadsOverlap` 现成）。**不做二选一**。
+- `getgoodradius`（`polarsystem.pmlobj:683-967`）整块跳过——它依赖 E3D 求交；`getgoodradiusfrombadradiuss`（`:969-1025`）已移植为 `goodRadiusFromBadRadii`（C7 修复版）。
+- `getMainDimDir`（`:347-365`）自递归版不移植，`maindimdir` 作参考系输入（软偏好，缺省 null）。
+- 死代码不移植：`getBestPosAndOriold/old2`、`replenishold`、`getSplitRange`、`mergeCellAngles`、obj 内 `mergeangles`。
+- 三个设计前必读偏差：**X1** `suiDirDis` 返回 `Math.abs(signed)`（`getGoodCheight.ts:52-53`），调用方又套一层 `Math.abs`（`:77`/`:86`）——14 步若需符号，此处是错误源头；**X2** `isoHandleDimDir.ts:54/62/67/75` 自建 `angleBetweenDeg/normalize/cross/dot`，与 `isoDirections.ts:1` 的 `kernel/vec.ts` 重复，且 `angleBetweenDeg` 对零向量返 0 而 `angleDeg` 返 `NaN`；**X3** `splitRange` 的 `orderRangesByBests`（`:170-184`）在 angle 模式用 `angleInAngles` 判定归属，会先把区间「认领」给更靠前的 best——移植时必须保持 PML 的入参顺序。
+
+### 13.3 阶段 5 续（求解器）任务表
+
+| ID | 内容 | 现状 | 依据 |
+| --- | --- | --- | --- |
+| **T5.1** | `angle.rs`：`collect_installation_angles` + `mem_p3dir_angle` + `build_angle` + `dir_text` + `installation_angle_primitives` | **✅ 已落地**（`plant-mbd` 提交 `0b89b76`，15 文件 +1708/−19；`angle.rs` 1019 行 + 21 条单测；`fixtures/p3-installation-angles.json` 10 个 toy case；六份金样已审阅重录） | PML `isobran.pmlobj:2563-2633` / `:2635-2757`、`isombdangle.pmlobj:35-104`、`isoline.pmlobj:2848-2958`、归属 `isobran.pmlobj:1153-1297` |
+| T5.2 | `PPoint.bore` | **✅ 已落地**（求解器 `data_source.rs:25-29` `Option<f64>` + `skip_serializing_if`；`angle.rs:175-179` 的 on-axis 闸门已按 PML 语义恢复；宿主 `gen-model` 提交 `1caf3a84` 在 `branch_query.rs:667` 透传 `point.bore`，净增 1 行） | `e3d-model/src/catalogue_point.rs:169-170` 的 `CataloguePoint.bore: Option<f64>`（`PBOR` 求值结果）直接可用；`plant-mbd` 的 `PPoint` 已加字段 |
+| T5.3 | Polar 避让 `occupancy.rs` | **未实现** | `IssueCategory::Avoidance` 在 `src/` 零产出；`layout.rs:302` 明写「没有 Polar 系统」 |
+| T5.4 | 小尺寸拆行 + 逐级缩字 | **部分实现** | 已照搬 `sepSmallDim`（`isodim.rs:1294-1367`：1mm 去重、`changeCheightAuto` 0.7、逐对缩字 0.8、叠行 `cheight*1.2*level`）；**缺** `pluslen` 项（`:1318` 只有 `text_length_units*cheight`）；`:1387-1391` 仍按 `MIN_DIM_LENGTH_MM=0.1` 抑制极短段 |
+| T5.5 | 调整焊附加串 ` +len` | **未实现** | `weld.rs` 全文无 `plus`/`adjust`；`isodim.rs` `tgrep "plus"` 零命中。PML `lindim.pmlobj:322-359`（`!plusstring = ' +' & string(!adjustlen)`） |
+| T5.6 | PCOM 切管件 | **未实现** | `split_isolines.rs:242-248` 仍输出 `"P1: PCOM not implemented"` |
+| T5.7 | 归段 / 跨段让位 | **部分实现（约一半）** | 已实现 `addUsedDirToNext`（PML `isobran.pmlobj:3288-3336`）：`isodim.rs:507-517` 收 `carried_occupancy` 压本段起点 `±od/2` 的 90° 占位，`:542-546` 按「与下一段管轴 >85° 才加」判据。**未实现** `addtopreornextpolarsystem`（`isobran.pmlobj:3184-3235`：pre/next 双向传递 + L3220-3234 的 `angle>160 && dis<od*15` 三跳让位），因本库无 `polarsystem` 概念 |
+
+**T5.1 的五个已裁决偏差**（必须写进 `angle.rs` 模块头）：
+
+1. **ATTA 近似**：PML 遍历 `pipeatta.attaobjects` 按 `objecttype` 分派（`ISOELBOPAD` 跳过、`ISOLUG/ISOPAD` 用 `object.dir`、其余 `attapos.direction(pos)`），并按 `realaod = 2·(dist(mempos,attapos)+routside)` 覆盖 aod（`isobran.pmlobj:2686`/`:2749`）。求解器没有 attaobjects 输入 → v1 用 `kind == Atta` 的 `ppoint(3).dir` 作 p3dir、自身 `outside_diameter` 作 aod（即 PML `ISOLEG` 分支的 3 参构造）。偏差：无法识别 `ISOELBOPAD`，`realaod` 偏大。
+2. **`ori.ydir` 兜底**：PML `handle any` 用 `ori of $!mem` 的 `ydir` 顶替 `adir`（`:2638-2641`）；求解器无 ori → 用 `ppoint(1).dir` 近似。
+3. **`showdir` 替代**：PML 用 `polarsystem.showdir`（观察向）；求解器用该 isoline 的 `dim_dir`，缺失退回 `UP`。
+4. **`radius = aod × 0.7`**：PML 走 `polarsystem.getgoodradius`（E3D 求交，求解器无此能力）。常数出处是 `isoline.pmlobj:2849-2850` 被注释掉的上一代实现（`radiusaodbili = 0.7`），量级与「清出管表面 ≈ aod/2」一致，以 aod 为上界天然不飞出。备选 A（`textlen/2`）系统性偏小（PML 恒把管身加进 polar，`isoline.pmlobj:274`）；备选 C（简化 polar 只对管身建坏带）留作后续迭代。
+5. **`gettext` 的 DSL 重写**：PML 用 `dir.wrt(world).string()` 的方向字符串再解析（`isombdangle.pmlobj:74-104`）。Rust 侧规则：±X/±Y/±Z 六轴逐一试，夹角 <1° 出纯轴文本；否则取 |分量| 最大的两轴 `A`/`B`，投到 (A,B) 平面与 A 的夹角 1 位小数去尾零 → `"{A} {θ}° {B}"`；分量并列按固定轴序 `X > Y > Z`。**未确认**：PML DSL 的 3 段/5 段次序约定无离线文档，本规则为自洽近似，需上线后对账。
+
+**T5.1 的其他硬约束**：
+
+- `AngleDim` **自带弧框架与 `leg_lines`**（`contract.rs:127-130` 明写「PML 的两个方向小字不在这里，用独立的 `aid_text`」）。**不要**另发同名 `aid_line` / `aid_arc` / 主 `aid_text`，否则前端双重绘制。
+- `p3` 在 P1 轴线上（`templine.distance(p3pos) < 1`）时 PML 查 `p3 bore`，unset 或 0 才跳过（`isobran.pmlobj:2595-2600`）。**无 `PPoint.bore` 时一律按跳过处理**（偏差方向是「少产出」，安全侧）。
+- 方向小字的 `textlen` 用 `chars().count() × 0.6 × (cheight/2)`（**字符数**，`isoline.pmlobj:2924`），主文字才用 `mbdtextlen`（`:2881`）。
+- 方向纠正是**整体替换**不是取反：`p3dir := normalize(p3pos − nearest_on_line)`（`isobran.pmlobj:2604-2607`）。
+- `start_angle_deg` 恒 0、`sweep_angle_deg` = `angle(dir1,dir2)`（`isoline.pmlobj:2863-2864`）。
+- `meta.notes` 追加 `installation_angles=N`；**不改 `layout_mode`**（`contract_guard.rs:329` 只断言 `notes.len() == 1`，安全）。
+- 布局失败一律**静默跳过**（PML 同款），不发 issue——否则 `layout.rs` 现有 `rules == [...]` 断言会破。
+
+**T5.1 对 6 份金样的影响面（实测粗算，非最终结论）**：
+
+| 金样 | 非 ATTA/ELBO/BEND 且带 P3 的成员 | 预期 |
+| --- | --- | --- |
+| `24381_145018` | OLET ×1、VALV ×1（p3dir 均轴对齐） | 非 ATTA 路径 0；**ATTA ×6 走近似路径，很可能新增** |
+| `24383_100028` | FTUB ×14（多数 p3dir = +Z 轴对齐，2 个斜向） | 斜向 2 个可能产出 |
+| `24383_76191` | 无 P3 | 0 |
+| `24383_91813` | FTUB ×5（p3dir 水平斜向，`(-0.713,0.701,0)`） | 5 个可能产出 |
+| `24383_99996` | FTUB ×10（2 个斜向） | 2 个可能产出 |
+| `24384_26229` | VALV ×1（+Z 轴对齐）、ATTA ×6 | ATTA 路径可能新增 |
+
+→ **必须先跑 `cargo run -p plant-mbd-cli -- golden diff` 逐条审阅差异，再由审阅方决定是否 `golden record --force`**。`golden_regression.rs` 与 `contract_guard.rs` 代码本身不改（`full-coverage.json` 已含四个零产出 kind 的实例）。
+
+### 13.4 三个零产出 kind 的优先级（裁决：不做 live 产出）
+
+| kind | PML 唯一产出点 | 裁决 | 理由 |
+| --- | --- | --- | --- |
+| `aid_arc` | `isoline.pmlobj:2869`（与 `angle_dim` 同一条 `arc`，`isoline.pmlobj:2865`） | **不单独产出** | 与 `angle_dim` 几何完全重合，同时输出会让前端画两条重合弧。ADR-0011 L44 已否决「腿拆成独立 `aid_line`」的同类做法。`aid_arc` 只在支架/土建/设备路径（本库非目标）才有独立出处 |
+| `aid_circle` | `suiSupport.pmlobj:2618`（管道信息圈）、`:3202-3210`（管夹标号圈）、`instSupport.pmlobj:5024`、`markCivil.pmlobj:2256-2304/5876-5877` | **不做** | 全部属支架/土建图（`vendor/plant-mbd/AGENTS.md` 明列非目标）；且需先补「同一 BRAN 多 ATTA 合并成多行文本 + A/B/C 字母标号」这条 `tag.rs:268-287` 缺口（当前每 ATTA 单独出一个 `AttaTag`） |
+| `aid_point` | **无自动产出点**（`mbd.uic:194-207` 是 E3D 手动工具；`getpolarelement.pmlobj:806-807` 只读不建） | **维持现状（契约有几何、live 不产出）** | 求解器主动造点等于伪造标注，违反 `vendor/plant-mbd/AGENTS.md`「布局失败输出 issues，不硬画错误标注」。要产出必须先让宿主透传库里的 `aidpoi` 列表（`BranchQueryResult` 加字段） |
+
+### 13.5 派工顺序（当前生效）
+
+```
+① ✅ T5.1   angle.rs（已提交 plant-mbd 0b89b76，六份金样已审阅重录）
+② ✅ T5.2   PPoint.bore 宿主透传（gen-model 1caf3a84，branch_query.rs:667 一行）
+③ ✅ T4.1   前端契约扩展 AidText.text_height_mm（先接受可选字段，1a40b46a）
+④ ✅ T4.2   plant-mbd mirror text_height_mm + angle.rs 下发 cheight/2 + 重录金样（63d566e）
+⑤ ✅ T4.4   过期注释（DimensionPanelDock.vue:47-49）
+⑥ ✅ T4.5   angle_dim golden 快照（+2 it，559 → 561）
+⑦ T4.3（explicit 弧像素下限，落点 explicit.ts:341-351）
+⑧ T3.3a    PolarReference 类型（前端串行链起点）
+⑨ T3.3b ∥ T3.3c
+⑩ T3.4 → T3.5 → T3.6
+⑪ T5.5（调整焊 +len）∥ T5.6（PCOM）
+⑫ T5.4（pluslen 小尺寸拆行）
+⑬ T5.3（occupancy）→ T5.7（跨段让位，依赖 T5.3）
+```
+
+**并行约束**：⑦ 改 `explicit.ts` + `explicit.test.ts`，⑧ 只新建 `polar/reference/types.ts`，两者无重叠可并行。⑪ 的两个侦察员互不重叠（T5.5 走 `isoline.pmlobj` / `lindim.pmlobj`，T5.6 走 `isobran.pmlobj` / `split_isolines.rs`）。
+
+### 13.6 门禁（每条必跑，只增不减）
+
+| 仓 | 命令 | 当前基线 |
+| --- | --- | --- |
+| 前端 | `cd 'D:\work\plant-code\old\plant3d-web'; npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts src/utils/refnoKey.test.ts` | **74 文件 / 561 通过**（T4.5 后） |
+| 前端 | `npm run type-check` | **440 条 / 127 文件，新增 0** |
+| 前端 | `npx eslint <触及文件>` | 0 问题 |
+| 求解器 | `cd 'D:\work\plant-code\old\vendor\plant-mbd'; cargo test --workspace` | **113 + 5 + 1 全绿**（`angle` 模块 +21 条单测） |
+| 求解器 | `cargo fmt --check` | 通过 |
+| 求解器 | `cargo run -p plant-mbd-cli -- golden diff` | **6 份全 match**（2026-10-29 重录后） |
+| 求解器 | `cargo run -p plant-mbd-cli -- layout --fixture fixtures/p3-installation-angles.json --verbose` | 10 case 全过，`issues=[]` |
+| e2e（触及尺寸时） | `npx playwright test --config=playwright.novideo.config.ts` | 尺寸 smoke 2/2 |
+
+### 13.7 环境坑（本轮新增）
+
+- **`vendor/plant-mbd` 是独立 git 仓库**（HEAD `0b89b76`）。`cargo fmt --check` 与 `cargo test --workspace` 是本仓提交前的硬门禁；`angle.rs` 首版未过 fmt，Lead 已 `cargo fmt` 收敛后提交。
+- **Devin 的 `edit_check` profile 无法写 `owned_paths` 之外的文件**，`request_scope` 授权也绕不过 assignment ACL。加 `PPoint.bore` 需要同时改 `tag.rs` / `isodim.rs` 的 10 处 `PPoint` 字面量——必须在 `owned_paths` 里显式列出这两个文件（并限定「只补 `bore: None`」），否则 worker 会退化成「字段加不上、闸门永久关闭」。
+- **`golden_regression` 失败是设计好的闸门**，不是回归。任何改产出的 feature 都会让 6 份金样全红；正确流程是 `golden diff` 逐条审阅 → 备份 → `golden record --force` 逐份重录（**必须显式传原 `--note`**，否则 note 会丢）→ 再跑 `cargo test --workspace` 与 `golden diff`。
+- **PML 源是 GBK/936**，`Read` 工具读不出中文；已转码到 `tmp/pml/`（`isobran` 6442 行、`isoline` 4941 行、`isombdangle` 110 行）与 `tmp/plantui-pml/`（13 个文件，含 `polarsystem.pmlobj` 3177 行）。转码方法：
+  ```powershell
+  $enc=[System.Text.Encoding]::GetEncoding(936)
+  $lines=[System.IO.File]::ReadAllLines($src,$enc)
+  [System.IO.File]::WriteAllLines($dst,$lines,(New-Object System.Text.UTF8Encoding($false)))
+  ```
+- **Devin 的 `read` profile 会拦外部路径**（`READ_OUT_OF_SCOPE`），即使 `scope` 里显式授权。必须把事实源副本放进 worker 的 cwd 或其子目录，或接受 `blocked` 状态下取 `devin_report` 的完整答案（报告本身不丢）。
+- **`devin_run` 的参数必须逐个传，不能拼进 `task` 字符串**——否则整段 XML 式参数会变成 `assignment_id` 的一部分（实测）。
+- **Devin 单 checkout 只能跑一个 job**（`WORKSPACE_BUSY`），跨仓任务必须串行。
+- **Devin 会改变文件行尾符**：`vendor/plant-mbd` 全仓是 LF（`core.autocrlf=false`、无 `.gitattributes`），worker 用某些编辑路径会把文件写成 CRLF，导致 `git diff` 出现「−N +N 全文替换」的假差异。判定方法：`git diff --ignore-cr-at-eol --stat` 为空即纯行尾差异，直接 `git checkout -- <file>` 恢复。
+
+### 13.8 T5.1 落地记录（2026-10-29）
+
+**提交**：`plant-mbd` `0b89b76` — 15 文件，+1708 / −19。
+
+| 文件 | 变更 |
+| --- | --- |
+| `crates/plant-mbd/src/angle.rs` | **新增 1019 行**：`InstallationAngle` 结构、`collect_installation_angles`（成员循环 + ATTA 近似循环）、`mem_p3dir_angle`（tilt / rotation 两路径 + `dissatisfy` 跳过）、`build_angle`（`anglepos` 三分支）、`dir_text`（六轴 + 两轴分解）、`goodori`（位置修正）、`installation_angle_primitives`（1 `AngleDim` + 2 `AidText`）、`assign_isoline`；21 条单测 |
+| `crates/plant-mbd/src/data_source.rs` | `PPoint.bore: Option<f64>`（+4 行） |
+| `crates/plant-mbd/src/layout.rs` | `assemble_isodim` 里收集 + 归段（`:172-189`）、逐段发图元（`:239-251`）、`meta.notes` 追加 `installation_angles=N`（`:265-270`）、`horizontal_tilt` 改 `pub(crate)` |
+| `crates/plant-mbd/src/lib.rs` | `pub mod angle` + 4 个 re-export + 里程碑注释 |
+| `crates/plant-mbd/src/contract.rs` | 5 行注释（serde 形状零变化，`contract_guard` 5/5 证明） |
+| `crates/plant-mbd/src/tag.rs` / `isodim.rs` | 各 7 / 3 处 `PPoint` 字面量补 `bore: None`（唯一改动） |
+| `fixtures/p3-installation-angles.json` | 新增 10 个 toy case（167 行） |
+| `fixtures/golden/*.json` | 6 份重录 |
+
+**六份金样差异（逐条审阅后重录）**：
+
+| 金样 | `installation_angles` | primitives | 差异 |
+| --- | --- | --- | --- |
+| `24381_145018` | 0 | 不变 | 仅 notes |
+| `24383_100028` | 0 | 不变 | 仅 notes |
+| `24383_76191` | 0 | 不变 | 仅 notes |
+| `24384_26229` | 0 | 不变 | 仅 notes |
+| `24383_91813` | **5** | 5 → 20 | +5 `angle_dim`（均 44.5° tilt）+10 `aid_text`（`-X` / `-X 44.5° Y`） |
+| `24383_99996` | **1** | 58 → 61 | +1 `angle_dim`（78° tilt，FTUB `24383_100027`）+2 `aid_text`（`-X` / `Y 12° -X`） |
+
+**关键判断**：`24383_91813` 的 5 条角度不是误报——该 BRAN 是 5 段共线 FTUB，每段都带一个离轴 P3（`dir=(-0.713, 0.701, 0)`，作参考方向用）。PML `isobran.pmlobj:100` 的成员表注释明写「branch member, 包括tubi」，`getinstallationangles` 的 `do !mem values !this.branmems` 循环必然包含它们。原计划 §13.3 表格里「`24383_91813` 5 个可能产出」的预估命中，与实测一致。
+
+**未落地（本轮范围外）**：`gen-model/src/mbd/branch_query.rs:663-667` 的 `catalogue_ppoints` 仍未给 `PPoint` 填 `bore`，所以 live 路径下 on-axis P3 一律按「bore unset」跳过（安全侧：少产出，不误产出）。这是 T5.2 的剩余部分。
+
+### 13.9 前端 `angle_dim` 渲染链路核实（2026-10-29）
+
+**判定：能画。** 弧、2 条腿、主文字、2 条方向小字四部分全链路已实现，无 TODO、无抛错分支、无 stub。
+
+**全链路（无断点）**：
+
+```
+parseMbdV2PipeData (mbdV2Contract.ts:433)
+ → mbdV2ToExternalRecords (mbdV2ExternalAnnotations.ts:755)
+ → case 'angle_dim' → mapAngleDim (680)          // 弧 + 腿 + 主文字
+ → case 'aid_text'  → explicitRecord (816-829)   // 2 条小字
+ → useMbdExternalSync 原子校验 (167-180) → replaceExternalSource (193)
+ → normalizeExternalDimension (normalizeExternalDimensions.ts:64)
+ → layoutViewport (dimensionViewport.ts:541)
+ → layoutDimension → layoutExplicit (layoutDimension.ts:74)
+ → sampleArcToDesignAndScreenPath (explicit.ts:342)
+ → scenePainter.paint (dimensionViewport.ts:556)
+```
+
+**契约层完全对齐**：`MbdV2AngleDim`（`mbdV2Contract.ts:109-116`）12 个字段与 Rust `contract.rs:131-144` 逐一对应，无缺失、无可选性差异。
+
+**弧的生成方式**：不是在 3D 里采样现成折线，而是按 `x_axis`/`normal`/`radius` **解析构造 3D 弧**再自适应投影采样：
+- 换基 + 起始角重定基到内核基底：`mbdV2ExternalAnnotations.ts:616-653`
+- 自适应细分（投影中点偏离 > 0.25 px 就二分，深度 ≤ 5、点数 ≤ 257）：`arcProjection.ts:38-139`
+- 闭合判定：无显式角或 `|sweep| ≈ 2π`（`arcProjection.ts:52-53`）
+
+**三处保真偏差（按严重度）**：
+
+| # | 偏差 | 根因 | 修复路径 |
+| --- | --- | --- | --- |
+| D1 | **方向小字字高被放大 2 倍**（后端 `angle.rs:495` 是 `cheight/2`，前端按主字高画） | 契约 `AidText { id, text, position }`（`contract.rs:187-191`）没有字高字段；`mbdV2ExternalAnnotations.ts:911-916` 给每条 record 统一挂 `textHeightM` | **需契约扩展 `AidText.text_height_mm`**（阶段 4 / T4.x）。前端按 id 含 `:angle:dirtext` 打折是硬编码，不做 |
+| D2 | 主文字与弧、与两条小字**互不避让** | `explicit.ts:159-160` 的 `labelClearance` 只在有 `part === 'dimension'` 的**直线**时生效，弧是 `path` 不是 line；`declutterPolicy.ts:107-108` 要求 `layout.derived.declutter`（只有 `dimension3d.ts:301` 产生）；`resolveLabelCollisions.ts:329-332` 对 pinned 只登记占位不移动 | 后端已按 PML 摆位（`angle.rs:472-477` / `:510-521`），正常不撞；密集角度会撞。修复需给 explicit 弧加按角区间的文字避让（T3.5 的屏幕校验层可复用） |
+| D3 | **无最小弧半径钳制**，相机拉近时弧退化成几像素 | `theme.ts:272 minArcRadiusPx: 15` / `:275 arcChordMaxStepDeg` / `:276 angularRayOvershootPx` 只被 `angular.ts` 使用，`explicit.ts` / `arcProjection.ts` 完全没读 | 在 `mappedArc:636-637` 之后按 `worldPerPixelAt(center)` 抬到 15 px |
+
+**两处视觉缺口（记录，不算 bug）**：弧与腿同色同线宽（`scenePainter.ts:489-500` 都取 `dimensionStrokeWidthPx` 与 `colors.external`，PML 原图也是同色）；角度弧无箭头（`mapAngleDim:692-698` 不设 `arrows`/`arrowLines`）。
+
+**测试覆盖缺口**：无 `angle_dim` 的 golden 快照（`goldens.test.ts:161-197` 只有全圆与 90° 弧）；无「主文字 + 2 条 `aid_text` 同屏」联合断言；无小半径弧退化测试。
+
+**两处过期注释待修**：`DimensionPanelDock.vue:48`（称 `angle_dim`「有契约无产出」）、`mbdV2Contract.ts:6-8`（同类表述）——后端 `angle.rs` 已落地，两处均需改为「`aid_arc` / `aid_circle` / `aid_point` 无 live 产出方」。
+
+### 13.10 由 §13.9 新增的任务（阶段 4 / 前端）
+
+| ID | 内容 | owned_paths | 依赖 | 优先级 |
+| --- | --- | --- | --- | --- |
+| **T4.1** | 契约扩展 `AidText.text_height_mm?: number`（前端先接受可选字段 → `plant-mbd` 契约 mirror → `angle.rs` 开始下发 `cheight/2`） | `src/dimension/adapters/mbdV2Contract.ts` + `.test.ts`、`src/dimension/adapters/mbdV2ExternalAnnotations.ts` + `.test.ts` | 无 | **✅ 已提交 `1a40b46a`** |
+| **T4.2** | `plant-mbd` 侧 mirror `AidText.text_height_mm` + `angle.rs` 填 `Some(cheight/2)` + 重录金样 | `contract.rs`、`angle.rs`、`slope.rs`（编译修复）、`contract_guard.rs`、`fixtures/golden/` | T4.1 落地 | **✅ 已提交 `63d566e`** |
+| **T4.3** | explicit 弧的最小像素半径（复用 `theme.minArcRadiusPx`） | **`src/dimension/kernel/layout/explicit.ts` + `.test.ts`**（见下方落点更正） | 无 | 中（解 D3） |
+| **T4.4** | 修两处过期注释 | `src/dimension/ui/DimensionPanelDock.vue`（`mbdV2Contract.ts` 经核实无需改） | 无 | **✅ 完成** |
+| **T4.5** | 补 `angle_dim` golden 快照（含主文字 + 2 条 `aid_text`） | `src/dimension/kernel/goldens.test.ts` | ✅ T4.1/T4.2 已落地 | **✅ 完成** |
+
+**T4.3 落点更正（侦察结论，2026-10-29）**：原计划写的 `mbdV2ExternalAnnotations.ts` 的 `mappedArc` 是错的，三个候选逐条排除：
+
+| 候选 | 判定 | 理由 |
+| --- | --- | --- |
+| `adapters/mbdV2ExternalAnnotations.ts` 的 `mappedArc`（`:616-681`） | **不可行** | 只有 `FrameTransform`，既无 `projector`（拿不到 `worldPerPixelAt`）也无 `theme`；其输出 `ExternalDimensionRecord.layout.arcs[].radiusM` 被 `mbdV2ExternalAnnotations.test.ts:272-289` 直接断言为 Design Space 半径，在此缩放会让契约→Design Space 的映射结果变成视图相关量 |
+| `kernel/geometry/arcProjection.ts` 的 `sampleArcToDesignAndScreenPath` | **不可行** | 纯几何、签名无 theme；被 `arcProjection.test.ts:10-80` 直接单测，加下限等于改公共接口，且它是全部弧消费者的唯一采样入口 |
+| **`kernel/layout/explicit.ts:341-351` 的 `scenePaths`** | **✅ 落点** | 唯一同时持有 `ExplicitArcInput` 与 `LayoutContext`（`projector` + `theme`）的地方；`EPSILON` 已在 `:19` 导入 |
+
+**T4.3 判定条件**：只有 `arc.part === 'dimension'`（`mapAngleDim` 的角弧，求解器 `radius = aod × 0.7`）吃下限；`part: 'arc'`（`mapAidArc` / `mapAidCircle`，标模型真实圆/弧）与 `part` 未声明的旧输入（goldens、`explicit.test.ts` 现有用例、`debug/dimensionKernelDemo.ts`）保持 1:1。因此**现有全部快照与测试不变**——现有最小弧半径是 0.25 m = 25 px，高于 15 px 下限，无法守护新行为，必须新增用例。
+
+**必须在采样之前缩放**：`sampleArcToDesignAndScreenPath` 的自适应细分按弦误差 0.25 px 决定点数（`arcProjection.ts:100-120`）；先放大 `radiusM` 再采样才是「真正 15 px 的弧」的合法细分，对已退化的 2 点折线做屏幕放大只会得到一条变长的直线段。
+
+**T4.3 已知副作用（不修，记录）**：`angle.rs:452-456` 的腿端点是 `anglepos + dir·(radius + cheight/2)`，弧半径被抬到下限后弧沿径向外扩，腿的内端会落进弧内，出现小缝。最小改动（只缩放弧）不处理；要处理需在 mapper 里按同一比例外移腿端点，或把腿按弧半径比例重投影。`labelAnchor` 不受影响（吃契约的 `label_anchor`，`mbdV2ExternalAnnotations.ts:693`），`labelAlong` 只与角度有关。
+
+**T4.4 落地结果**：`DimensionPanelDock.vue:47-49` 改为「11 种里的 8 种」+「`aid_arc` / `aid_circle` / `aid_point` 仍无 live 产出方；`angle_dim` 自 2026-10-29 起已由 `plant-mbd` 的 `angle.rs` 产出」。`mbdV2Contract.ts:6-8` 原文只陈述「几何自 2026-09-07 起齐备」（`every kind now has explicit geometry`），全文无「`angle_dim` 无产出」表述，**按约束不改**。ESLint 0 问题；`mbdV2Contract.test.ts` 10 + `DimensionPanelDock.test.ts` 8 = 18 通过。
+
+**T4.5 落地结果**：`goldens.test.ts` 末尾新增 `describe('explicit angle dimension structural goldens')`，2 个 it：
+
+1. `angle-dim` —— 结构快照。覆盖 3 条 screen line（2 条 `extension` 腿 + 1 条被 label 打断的 `dimension` 段）、1 条 `scene-path`（part `dimension`，`closed: false`）、3 条 glyph-run（`44.5°` 主文字 + `-X` + `-X 44.5° Y`）、hitRegions、labelBounds。快照新增 393 行、**0 删除**（既有 key 无改动）。
+2. `angle-dim-per-record-text-height` —— 逐条 `textHeightM` 生效。**最终选值 0.12 / 0.15，不是最初设想的 0.004 / 0.008**：`createTestProjector()` 默认 `pixelsPerMetre = 100`，`worldPerPixelAt()` 恒返 `1/100`，0.004 / 0.008 投成 0.4 / 0.8 px，双双被 `theme.sourceTextHeightMinPx: 11` 钳到同一档，断言无法区分。0.12 / 0.15 投成 12 / 15 px，严格落在 `11..18` 内部，保持投影比例 1.25。字号落点字段是 `ScreenGlyphRun.capHeightPx`（`types.ts:167`），不是 `sizePx` / `fontSizePx`。
+
+**维度全量回归：559 → 561 通过**（74 文件）。连跑两次确认无 flake。ESLint 0 问题。
+
+**T4.5 记录的两处数据模型边界（未改类型）**：① `ExplicitTextInput`（`types.ts:485-499`）无逐条 `textHeightM`，`explicit.ts:360-378` 里主文字与 `texts` 共用同一 `textHeightPx`——真实求解器把方向小字拆成独立 record 下发（各自带 `textHeightM`），这是数据模型边界不是 bug；② `labelClearance`（`explicit.ts:152-177`）只在 `lines` 里存在 `part: 'dimension'` 时生效，角度标注的弧是 `arcs`、腿是 `extension`，所以弧不会被主文字打断——当前行为符合预期（弧本来就绕过文字）。
+
+**契约改动顺序铁律（ADR 0055 D7）**：前端先接受可选字段 → `plant-mbd` 契约 mirror → producer 开始产出。反了会被 ADR 0046 的 fail-closed 整包拒收。**T4.1 必须先于 T4.2。**（本轮已按此顺序执行。）
+
+**T4.1 / T4.2 落地结果**：
+
+| 仓 | 提交 | 内容 |
+| --- | --- | --- |
+| 前端 | `1a40b46a` | `MbdV2AidText.text_height_mm?: number` + `isOptionalPositiveNumber` 校验；`sourceLengthToDesignM` / `textHeightToDesignM` 抽出（`groupTextHeightM` 改为调用，纯重构）；`aid_text` 分支算逐条字高；循环末尾统一覆盖改为「已有 `textHeightM` 就不覆盖」。测试 +3（74 文件 / 559 通过） |
+| 求解器 | `63d566e` | `AidText.text_height_mm: Option<f32>`（`serde default` + `skip_serializing_if`）；`angle.rs` 两条方向小字填 `Some(small_cheight as f32)`；`slope.rs` 坡度腿长小字填 `None`（编译修复）；`contract_guard.rs` 穷举字面量补字段。金样重录 2 份（`24383_91813` +10 处 `4.0`、`24383_99996` +2 处 `4.0`，逐行确认只有该字段） |
+
+**D1（方向小字 2 倍偏差）已闭合。**
+
+### 13.11 T3.3a 落地记录（2026-10-29）
+
+**提交**：前端 `5c7ee980` — `src/dimension/kernel/layout/polar/reference/types.ts`，124 行，纯类型。
+
+| 导出 | 对应 PML | 说明 |
+| --- | --- | --- |
+| `PolarCoords { dis, angle, radius }` | `getpolarelement.getOnePointData`（`getpolarelement.pmlobj:206-221`） | 字段顺序照 PML `[dis, angle, radius]` |
+| `PolarPlane { zero, normal }` | `polarsystem.pmlobj:289` 的 `ori = x is showdir and z is dir` | `zero` = 角度零点（`showdir`）、`normal` = 绕向轴（管轴） |
+| `PolarReference` | `polarsystem.pmlobj:70-110` 成员子集 + `:136-149` 落值 | `origin` / `axis` / `plane` / `showDir` / `mainDimDir` / `disRange` / `basicRadius` / `isInstPipe` / `kind` |
+| `PolarElement` | `polarelement.pmlobj:11-25` + `getpolarelement.pmlobj:174-204` | 三个闭区间 + `basic`；PML 的 `arc` / `line` 是构造缓存，可由 `PolarReference` 重建，不入类型 |
+
+**关键设计**：`showDir` 与 `plane` 是**值**不是常量，整个类型 `Readonly`。这样 2D 轴测（`showDir` 一次算定）与 3D 相机（每帧重算 + 滞回）共用同一份契约，实现方每帧构造新实例。`kind: 'iso-sheet' | 'camera'` 只供诊断与 A/B 开关，不参与计算。
+
+**明确不做**：不导出 `horidir`（PML 的独立自由度，无法从 `showDir` 反推——`showdir = arc(horidir, axis).angledirection(lookangle)`，不同 `lookangle` 给不同 `showDir` 而 `horidir` 不变）。`getresult` 的 `chardir`（`polarsystem.pmlobj:2513` 的 `textori = y is chardir and x is xdir`）由 `getresult` 现场算，不进平面。若 T3.4 发现需要 `horidir`，需要回改本契约——**这是已知的潜在缺口**。
+
+**验证**：`npx eslint` 0 问题；`npx tsc --noEmit` 单文件 0 错误；维度全量回归 564 通过（新增文件无消费者，数字未变）。
+
+### 13.12 T3.3b / T3.3c 派工要点（进行中）
+
+**T3.3b `isoSheet.ts`**（`getDetail:151-292` 逐值等价）：
+
+- 构造参数 `IsoSheetParams` 承载 PML 的 `pos` / `dir` / `limitMinDis` / `limitMaxDis` / `basicRadius` / `isinstpipe` / `lookangle` / `referencedirs` / `prehoridir` / `branlookdirection` / `fromltor` / `cenpos` / `midpos`——`PolarReference` 只有输出，没有这些构造输入，**这是契约缺口**，所以单独出一个参数结构。
+- 三段必须逐值照抄：`referencedirs` 命中（`abs(angle - 90) < 60`）、`prehoridir` 的 45°/135° 滞后（**注意 `golabel /sethoridirok` 只在 `angle < 45 || angle > 135` 时触发，45..135 之间会落到 `branlookdirection` 分支**）、`lookangle → showdir`（`:258-284`）。
+- `:201-223` 是 `--$(` 注释块内的死代码，整段跳过。
+- `arc.angledirection(θ)` 的语义是**切线方向**（不是半径方向），符号 `-x·sinθ + y·cosθ`（CCW 关于 z），需用仓内 `arcProjection.ts` 与 `mbdV2ExternalAnnotations.ts:694-701` 的 `arcTangent` 交叉验证手性。
+- `mainDimDir` 一律 `null`（PML `:292` 的 `getMainDimDir()` 是注释掉的）。
+- `orthogonal` 返 null 时的兜底是本任务唯一自由裁量点，必须显式记录。
+
+**T3.3c `camera.ts`**（`showDir` 从相机派生 + 滞回）：
+
+- `cameraShowDir(projector, axis)`：`forward` 投影到垂直 `axis` 的平面；相机沿轴看时返 `null`，调用方保留上一帧。
+- `hysteresisShowDir(previous, candidate, enterDeg = 1, exitDeg = 3)`：`< enterDeg` 采纳候选、`>= exitDeg` 切换、带内保持；`candidate === null` 保持 `previous`；`previous === null` 直接采纳候选。
+- **反平行必须显式处理**：相机绕过管轴背面时夹角从 179° 跳回 0°，会导致 `showDir` 突然翻转。裁决是「夹角 > 179° 也走 `exitDeg` 分支返回 candidate」，连续性交给 T3.5 的背向候选加罚——**不在这一层做插值或符号修正**，否则会掩盖真实相机运动。
+- 退化兜底：`orthogonal(axis, [0,0,1]) ?? orthogonal(axis, [0,1,0]) ?? [1,0,0]`（世界上方 → 北向 → 东向）。
+- `enterDeg > exitDeg` 或任一非有限时抛 `RangeError`。
+- 返回值必须满足 `dot(plane.zero, plane.normal) ≈ 0`、`|plane.zero| ≈ 1`，且**绝不改写传入的 `previous`**。
+
+**两处共同约束**：`kind` 分别填 `'iso-sheet'` / `'camera'`；`mainDimDir` 填 `null`；不新建 barrel（留给 T3.4）；不碰对方的文件（两个 worker 在同一目录并行，`isoSheet.*` 与 `camera.*` 互不重叠）。
+
+### 13.13 T3.5 落点预判（待 T3.4 接口裁决）
+
+T3.5 不需要新造碰撞算法，两块现成件可直接复用：
+
+| 现成件 | 位置 | 用途 |
+| --- | --- | --- |
+| `LabelOccupancy` | `collision/resolveLabelCollisions.ts:64-131` | 64 px 网格占用；含 viewport 裁剪（`:79-88`）防「投影到 1e5–1e9 px 的 sliver 把网格撑爆」——`all-pipes sweep 2026-09-14` 实测过 `RangeError: Map maximum size exceeded` |
+| `convexQuadsOverlap` | `layout/declutterPolicy.ts:72-85` | 凸四边形分离轴判定；配合 `quadBracketsLabel`（`:53-58`，面积比 0.05..1.2 才可信）处理近相机平面的退化四边形 |
+
+**关键依赖**：T3.4 的 `place()` **必须返回排序候选列表**，不能只返回单个最优。理由是 T3.5 要在像素域否决候选并降级——若只给一个最优，一旦它重叠就只能整体放弃。PML 本来就有这份数据：`:1261` 的提前退出分支因 `ifAcceptableToQuit = false`（`:1163`）恒假，每个轴向单元的最优都进了 `alldisbests`，`:1273-1281` 已排序，只取 `[1]` 是**丢弃**而非「本来就没有」。
