@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import fullCoverageFixture from '../../fixtures/mbd-v2/full-coverage.json';
+import liveIsodimFixture from '../../fixtures/mbd-v2/live-isodim-24381-145018.json';
 import cliLinearFixture from '../../fixtures/mbd-v2/rs-mbd-cli-linear.json';
 
 import { parseMbdV2PipeData } from './mbdV2Contract';
@@ -136,6 +137,32 @@ describe('parseMbdV2PipeData', () => {
     };
 
     expect(parseMbdV2PipeData(legacy)).toMatchObject({ ok: false });
+  });
+
+  /**
+   * A1（2026-10-29）：现网 `GET /api/mbd/v2/pipe/24381_145018` 的原样响应（本机
+   * gen-model :8022，77 个图元 / 0 条 issue / `layout_mode=isodim_main`）。这是
+   * 「契约测试必须能吃掉真实负载」的锚点：它的作用不是证明字段全对，而是任何
+   * 收紧（新增必填、加字段白名单）都必须先过这一关。
+   */
+  it('parses the live isodim payload unchanged', () => {
+    const result = parseMbdV2PipeData(liveIsodimFixture);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.diagnostics).toEqual([]);
+    expect(result.data.branch_refno).toBe('24381_145018');
+    expect(result.data.primitives).toHaveLength(77);
+    expect(result.data.meta.layout_mode).toBe('isodim_main');
+    const kinds = new Set(result.data.primitives.map(primitive => primitive.kind));
+    expect([...kinds].sort()).toEqual([
+      'aid_line',
+      'aid_text',
+      'label',
+      'leader_line',
+      'linear_dim',
+      'slope_mark',
+    ]);
   });
 
   it('accepts the arc kinds with a PML AIDARC frame (ADR 0055)', () => {

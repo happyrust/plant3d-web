@@ -4,7 +4,8 @@
 - 上游依据：[`2026-10-28-mbd-3d-dimension-annotation-audit-and-plan.md`](2026-10-28-mbd-3d-dimension-annotation-audit-and-plan.md)（该文负责 PML 算法搬迁与呈现层重构）
 - 本文定位：**只覆盖「数据链路的失败面与契约容错」**，与上游 §7 的 T3.3–T3.6 / T4 / T5 / T6 互补，不重复
 - 缺陷来源：[`docs/investigation/mbd-dimension-issues-2026-10-29.md`](../investigation/mbd-dimension-issues-2026-10-29.md)
-- 关键前提更新：**后端已在负载中发送 `offset` / `suppressed_reason`**（用户 2026-10-29 确认）→ 契约整包拒绝已从「未来风险」变为**现网故障**
+- 关键前提 ~~更新：后端已在负载中发送 `offset` / `suppressed_reason`（用户 2026-10-29 确认）→ 契约整包拒绝已从「未来风险」变为现网故障~~
+  → **2026-10-29 复核推翻**：`rs-mbd/crates/rs-mbd/src/contract.rs` 记录 2026-07-20 起抑制信息只进 `issues`、图元上的 `suppressed_reason` 已删除，`LinearDim` 无 `offset`；本机实抓 2 条现网负载（77 / 73 图元）亦不含这两个字段。R1 定位下调为「向前兼容缺口 + 误伤风险」，阶段 A 保留但不属止血优先级。详见排查报告 R1 的复核框。
 
 ## 0. 方法与限制（先声明）
 
@@ -16,7 +17,8 @@
 
 ## 1. 结论先行
 
-1. **P0：现网可能正在丢标注。** `mbdV2Contract.ts:322-324` 要求 `linear_dim.offset === undefined && suppressed_reason === undefined`，而 `:452-459` 只要有一条图元不合法就整包 `ok:false`，`useMbdExternalSync.ts:148` 随即清空来源。后端一旦发这两个字段，**该 BRAN 全部标注消失**，且 `?mbd_kinds` 无法兜底（过滤在校验之后）。
+0. ~~现网正在丢标注~~ —— 2026-10-29 复核**不成立**（见文首与排查报告 R1 复核框）；下述 1 的条件式结论只在「后端真发这两个字段」时成立，保留为阶段 A 的触发条件。
+1. **P0（条件式）：若后端下发新字段，会整包丢标注。** `mbdV2Contract.ts:322-324` 要求 `linear_dim.offset === undefined && suppressed_reason === undefined`，而 `:452-459` 只要有一条图元不合法就整包 `ok:false`，`useMbdExternalSync.ts:148` 随即清空来源。后端一旦发这两个字段，**该 BRAN 全部标注消失**，且 `?mbd_kinds` 无法兜底（过滤在校验之后）。
 2. **P0：失败对用户不可见。** `emitToast` 只在成功路径的 error 级 issue 上调用（`:193`）；`catch`（`:201-212`）只写诊断与 `console.warn`。视口空白 + 无提示 = 现场无法区分「没有标注」和「取数失败」。
 3. **P1：契约没有向前兼容策略。** 未知 `kind` 走 `default: false`（`:304-350`），新增图元 = 整包拒绝。需要区分「不认识的图元」与「认识的图元字段非法」。
 4. **P1：三处零成本清理**（死代码、空参数、恒空诊断通道）可一次性做掉，降低后续排查噪音。
@@ -40,7 +42,7 @@
 
 | ID | 任务 | 改动面 | 验收 |
 | --- | --- | --- | --- |
-| A1 | **真实负载取证**：抓一条含 `offset` / `suppressed_reason` 的 `GET /api/mbd/v2/pipe/{refno}` 响应，脱敏后存为 fixture（`src/dimension/adapters/__fixtures__/mbd-v2-suppressed.json`） | 仅新增 fixture + 说明 | fixture 能被 `parseMbdV2PipeData` 读到；当前实现应**失败**（红），作为 A2 的回归锚点 |
+| A1 | **真实负载取证**（部分完成，2026-10-29） | 已落地：`src/fixtures/mbd-v2/live-isodim-24381-145018.json`（现网原样 77 图元）+ `mbdV2Contract.test.ts` 的「契约必须吃掉真实负载」用例 + README 记录 | 现网负载 `ok:true`、77 图元、`diagnostics` 为空 —— 拿到的真实负载**不含** `offset`/`suppressed_reason`，所以「当前实现应失败（红）」这一验收项转为 A2 的手工变异用例 |
 | A2 | **未知字段容忍**：`isPrimitive` 改为「已知必填字段校验 + 未知字段忽略」；`linear_dim` 接受可选 `offset?: number`、`suppressed_reason?: string`（进 `MbdV2LinearDim` 类型） | `mbdV2Contract.ts:63-92`、`:304-350` | A1 的 fixture 解析 **ok:true**；`offset` 不影响几何（先忽略），`suppressed_reason` 的图元进入 `diagnostics` 并**不渲染** |
 | A3 | **未知 kind 降级**：`default` 分支由 `false` 改为「记录一条 `unsupported_kind` 诊断并跳过」，不再让整包失败 | `mbdV2Contract.ts:304-350`、`:427-474` | 新增用例：payload 含 2 条 `future_dim` + 3 条 `linear_dim` → `ok:true`、`primitives` 保留 3 条、`diagnostics` 报告 2 条 |
 | A4 | **严格模式开关**：`MbdV2ParseOptions.strict`（默认 false）；`strict: true` 时未知 kind / 未知字段仍整包拒绝，供契约回归与后端联调用 | 同上 + 调用方 `VideoPanel` 侧不传即默认宽松 | 同一 fixture 在 `strict` 下 `ok:false`、在默认下 `ok:true`；两条用例并存 |

@@ -14,6 +14,20 @@ rs-mbd CLI 真实生成物（勿手改；契约漂移守卫 `mbdV2Contract.test.
 - 文件 SHA-256：`8568D3A13BFA48B33A97164754AB47AE4251A8C33B6B19A700397ECE9BF613D1`。本次重生成结果与已提交 fixture 字节一致；上游改动落库后应把基线更新为可直接检出的 rs-mbd commit。
 - 内容：单个 `linear_dim`（`sub_kind=small`，文本 `80`），`geometry_space=source_mm`，`source_to_design` 为 0.001 缩放矩阵（→ 设计坐标米）。
 
+## `live-isodim-24381-145018.json`
+
+现网响应原样落盘（勿手改）：本机 gen-model `:8022` 的
+`GET /api/mbd/v2/pipe/24381_145018` → 200、21,840 字节、77 个图元、0 条 issue、
+`meta.layout_mode=isodim_main`、`meta.geometry_space=source_mm`。
+图元构成：`linear_dim` 18 / `aid_line` 21 / `label` 14 / `leader_line` 14 / `slope_mark` 7 / `aid_text` 3。
+
+- 抓取时间：2026-10-29（gen-model 侧 rs-mbd `crates/rs-mbd/src/contract.rs` 已删除
+  图元上的 `suppressed_reason`，改由 `issues[category=suppress]` 表达；本文件确实不含
+  `offset` / `suppressed_reason`）。
+- 用途：`mbdV2Contract.test.ts` 的「契约必须能吃掉真实负载」锚点。任何收紧（新增必填、
+  字段白名单、严格模式默认开）都要先过这一关。
+- 脱敏：整份负载只有几何坐标、`text`（尺寸数字 / 位号）与 refno，无账号、无路径。
+
 ## `full-coverage.json`
 
 手工编写的 mapper 全 kind 覆盖样本（非线上契约权威，仅测 `mbdV2ExternalAnnotations` 的映射分支）。

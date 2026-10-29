@@ -38,6 +38,21 @@
 
 ### R1（高）契约向前兼容：未知图元 / 新增字段 = 整包归零
 
+> **2026-10-29 复核（重要，更正最初前提）**：`rs-mbd` 的契约源 `crates/rs-mbd/src/contract.rs`
+> 明确记录——2026-07-20 起**被抑制的尺寸候选不进 `primitives`**，只进 `issues`
+> （`category = suppress`），并**删除**了图元上的 `suppressed_reason` 字段；
+> 该文件的 `MbdPrimitive::LinearDim` 变体也没有 `offset`。同日本机实抓
+> `GET :8022/api/mbd/v2/pipe/24381_145018`（77 个图元）与 `24383_100028`（73 个图元），
+> 两者都不含 `offset` / `suppressed_reason`。此外前端 `mbdV2Contract.test.ts` 早已把
+> 「带 `offset` 的 legacy 负载」写成**应当被拒**的用例。
+>
+> 也就是说：R1 描述的下方「现网正在丢标注」**目前没有证据支持**，当前规则属于
+> 对 2026-07 之前旧形状的防守；危险的是**任何一次后端按新语义加字段**（例如把抑制
+> 信息重新挂回图元），因为拒绝是整包级的。定位从「现网故障」下调为
+> 「向前兼容缺口 + 误伤风险」；阶段 A 仍然要做，但不再是止血优先级。
+
+
+
 - `mbdV2Contract.ts:304-350` 的 `isPrimitive` 对 `kind` 走 `switch`，`default: return false`。
 - `:322-324` 的 `linear_dim` 守卫要求 `value.offset === undefined && value.suppressed_reason === undefined`——即**携带这两个字段的负载一律判为非法**（`MbdV2LinearDim` 类型里也没有它们）。
 - `:452-459` 只要命中第一个非法图元就整体 `ok:false`，再由 `useMbdExternalSync.ts:148` 整包拒绝、清空来源。
