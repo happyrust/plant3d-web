@@ -8,7 +8,7 @@ import {
   type GenModelV1VersionApi,
 } from './versionSource';
 
-import type { ModelVersion } from '@/model-source/ports';
+import type { HistoryGeometryQueryOptions, ModelVersion } from '@/model-source/ports';
 
 import {
   GenModelV1ApiError,
@@ -16,12 +16,17 @@ import {
   type AttributeDiffResponse,
   type AttributeHistoryResponse,
   type ElementVersionsResponse,
+  type HistoryGeometryRawResult,
   type ModelVersionsResponse,
   type NodeDiffSummaryResponse,
   type NodeVersionsResponse,
   type TaskEntryDto,
 } from '@/api/genModelV1Api';
-import { ModelVersionRouteUnavailableError, NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
+import {
+  HistoryQueryError,
+  ModelVersionRouteUnavailableError,
+  NotDeliveryUnitRootError,
+} from '@/model-source/modelVersionErrors';
 
 function response(partial: Partial<ModelVersionsResponse>): ModelVersionsResponse {
   return {
@@ -781,5 +786,318 @@ describe('genModelV1 ModelVersionSource：快照被服务端回收（条数上�
     await geometry.release();
     await expect(source.attributesAt(geometry, '24381_145020')).rejects.toMatchObject({ code: 'SNAPSHOT_NOT_FOUND' });
     expect(historyGenerate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 拖动浏览的三条只读路由（tasks.md 14.2）
+// ---------------------------------------------------------------------------
+
+/** 一份 200 的几何回执：与 `history/query` 的行同形，另带 `geometryKey` 与三个头。 */
+function geometryRaw(partial: Partial<HistoryGeometryRawResult> = {}): HistoryGeometryRawResult {
+  return {
+    status: 200,
+    hasEnvelope: false,
+    code: null,
+    message: null,
+    detail: undefined,
+    retryAfterMs: null,
+    geometryKey: 'g:0123456789abcdef0123456789abcdef',
+    sesno: 66,
+    sessionTime: '2022-11-16T09:19:47+00:00',
+    body: {
+      dbnum: 7997,
+      unit_refno: '24381/145018',
+      sesno: 66,
+      session_time: '2022-11-16T09:19:47+00:00',
+      geometryKey: 'g:0123456789abcdef0123456789abcdef',
+      instances: [{
+        id: 'i-1',
+        snapshot_key: '24381_145018@66',
+        dbnum: 7997,
+        generic: 'VALV',
+        source_refno: '24381/145020',
+        mesh_id: 'deadbeef',
+        world_bounds: null,
+        world_transform: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] },
+        booled: true,
+        anc: [],
+      }],
+      tubes: [],
+    },
+    ...partial,
+  };
+}
+
+function errorRaw(status: number, code: string | null, extra: Partial<HistoryGeometryRawResult> = {}): HistoryGeometryRawResult {
+  return {
+    status,
+    hasEnvelope: code !== null,
+    code,
+    message: code ? `${code} 说明` : null,
+    detail: undefined,
+    retryAfterMs: null,
+    geometryKey: null,
+    sesno: null,
+    sessionTime: null,
+    body: null,
+    ...extra,
+  };
+}
+
+const geometryOpts: HistoryGeometryQueryOptions = { signal: new AbortController().signal };
+
+describe('queryHistoryGeometry（spec §4.15.1）', () => {
+  it('200：给出 geometryKey、sesno 与按 loadVersion 同一段映射装好的几何，release 是空操作', async () => {
+    const historyGeometry = vi.fn(async () => geometryRaw());
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const result = await source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts);
+
+    expect(historyGeometry).toHaveBeenCalledWith(
+      { dbnum: 7997, unitRefno: '24381_145018', sesno: 66 },
+      { signal: geometryOpts.signal },
+    );
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.geometryKey).toBe('g:0123456789abcdef0123456789abcdef');
+    expect(result.sesno).toBe(66);
+    expect(result.sessionTime).toBe('2022-11-16T09:19:47+00:00');
+    expect(result.geometry.refnos).toEqual(['24381_145020']);
+    expect(result.geometry.geometryKey).toBe('g:0123456789abcdef0123456789abcdef');
+    expect(result.geometry.entries.get('24381_145020')).toHaveLength(1);
+    // 实时路由不建快照：release 不该打后端
+    await result.geometry.release();
+  });
+
+  it('304：不给几何，只给 geometryKey / sesno / sessionTime（调用方与同一键的已装入帧共享）', async () => {
+    const historyGeometry = vi.fn(async () => geometryRaw({ status: 304, body: null }));
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const result = await source.queryHistoryGeometry!(
+      { dbnum: 7997, unitRefno: '24381_145018', time: '2022-11-16T09:19:47+00:00' },
+      { ...geometryOpts, ifNoneMatch: 'g:0123456789abcdef0123456789abcdef' },
+    );
+
+    expect(historyGeometry).toHaveBeenCalledWith(
+      {
+        dbnum: 7997,
+        unitRefno: '24381_145018',
+        time: '2022-11-16T09:19:47+00:00',
+        ifNoneMatch: 'g:0123456789abcdef0123456789abcdef',
+      },
+      { signal: geometryOpts.signal },
+    );
+    expect(result).toEqual({
+      kind: 'not-modified',
+      sesno: 66,
+      sessionTime: '2022-11-16T09:19:47+00:00',
+      geometryKey: 'g:0123456789abcdef0123456789abcdef',
+    });
+  });
+
+  it('带码 404（UNIT_NOT_PRESENT）是业务错误：抛 HistoryQueryError 并带 reason，不降级', async () => {
+    const historyGeometry = vi.fn(async () => errorRaw(404, 'UNIT_NOT_PRESENT', { detail: { reason: 'deleted' } }));
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const error = await source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(HistoryQueryError);
+    expect(error).toMatchObject({ code: 'UNIT_NOT_PRESENT', status: 404, reason: 'deleted' });
+    expect(error).not.toBeInstanceOf(ModelVersionRouteUnavailableError);
+  });
+
+  it('无码 404（服务端是旧构建）→ ModelVersionRouteUnavailableError，调用方据此降级到 loadVersion', async () => {
+    const historyGeometry = vi.fn(async () => errorRaw(404, null));
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    await expect(source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts))
+      .rejects.toBeInstanceOf(ModelVersionRouteUnavailableError);
+  });
+
+  it('无码 405（路由存在但方法不对）同样按「路由不可用」处理', async () => {
+    const historyGeometry = vi.fn(async () => errorRaw(405, null));
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    await expect(source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts))
+      .rejects.toMatchObject({ name: 'ModelVersionRouteUnavailableError', route: 'model/history/geometry' });
+  });
+
+  it('503 HISTORY_BUSY 带 Retry-After：抛 HistoryQueryError 并原样带出 retryAfterMs', async () => {
+    const historyGeometry = vi.fn(async () => errorRaw(503, 'HISTORY_BUSY', { retryAfterMs: 2000 }));
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const error = await source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(HistoryQueryError);
+    expect(error).toMatchObject({ code: 'HISTORY_BUSY', status: 503, retryAfterMs: 2000 });
+  });
+
+  it('网络失败 → HistoryQueryError(NETWORK)，不降级', async () => {
+    const historyGeometry = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'network', status: 0, path: '/api/v1/model/history/geometry', message: 'Failed to fetch' });
+    });
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const error = await source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(HistoryQueryError);
+    expect(error).toMatchObject({ code: 'NETWORK', status: null });
+    expect(error).not.toBeInstanceOf(ModelVersionRouteUnavailableError);
+  });
+
+  it('客户端超时（60 s 预算用完）→ HistoryQueryError(CLIENT_TIMEOUT)，界面显示「查询超时」', async () => {
+    const historyGeometry = vi.fn(async () => {
+      throw new GenModelV1ApiError({
+        code: 'timeout',
+        status: 0,
+        path: '/api/v1/model/history/geometry',
+        message: 'gen-model 请求超时 60000 ms: /api/v1/model/history/geometry',
+      });
+    });
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const error = await source.queryHistoryGeometry!({ dbnum: 7997, unitRefno: '24381/145018', sesno: 66 }, geometryOpts)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(HistoryQueryError);
+    expect(error).toMatchObject({ code: 'CLIENT_TIMEOUT', status: null });
+  });
+
+  it('调用方主动中止 → AbortError（不是 HistoryQueryError，调用方要能与真实失败分开）', async () => {
+    const controller = new AbortController();
+    const historyGeometry = vi.fn(async () => {
+      controller.abort(new Error('游标又动了'));
+      throw new GenModelV1ApiError({
+        code: 'cancelled',
+        status: 0,
+        path: '/api/v1/model/history/geometry',
+        message: 'aborted',
+        abortSource: 'caller',
+        cause: new Error('游标又动了'),
+      });
+    });
+    const source = createGenModelV1ModelVersionSource(api({ historyGeometry }));
+
+    const error = await source.queryHistoryGeometry!(
+      { dbnum: 7997, unitRefno: '24381/145018', sesno: 66 },
+      { signal: controller.signal },
+    ).catch((thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ name: 'AbortError' });
+    expect(error).not.toBeInstanceOf(HistoryQueryError);
+  });
+});
+
+describe('attributesAtSesno（spec §4.15.3）', () => {
+  it('200 exists:false 不是错误：回空属性表', async () => {
+    const attributesAt = vi.fn(async () => ({
+      status: 200,
+      hasEnvelope: false,
+      code: null,
+      message: null,
+      detail: undefined,
+      retryAfterMs: null,
+      body: { dbnum: 7997, sesno: 66, refno: '24381/145020', exists: false, noun: null, attributes: [] },
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ attributesAt }));
+
+    await expect(source.attributesAtSesno!({ dbnum: 7997, refno: '24381/145020', sesno: 66 }))
+      .resolves.toEqual({ sesno: 66, exists: false, noun: null, attributes: [] });
+    expect(attributesAt).toHaveBeenCalledWith(
+      { dbnum: 7997, refno: '24381_145020', sesno: 66 },
+      { signal: undefined },
+    );
+  });
+
+  it('无码 404 → ModelVersionRouteUnavailableError；带码 404 → HistoryQueryError', async () => {
+    const missing = vi.fn(async () => ({
+      status: 404, hasEnvelope: false, code: null, message: null, detail: undefined, retryAfterMs: null, body: null,
+    }));
+    await expect(createGenModelV1ModelVersionSource(api({ attributesAt: missing }))
+      .attributesAtSesno!({ dbnum: 7997, refno: '24381/145020', sesno: 66 }))
+      .rejects.toBeInstanceOf(ModelVersionRouteUnavailableError);
+
+    const coded = vi.fn(async () => ({
+      status: 404, hasEnvelope: true, code: 'SESSION_NOT_FOUND', message: '会话不在链上', detail: undefined, retryAfterMs: null, body: null,
+    }));
+    await expect(createGenModelV1ModelVersionSource(api({ attributesAt: coded }))
+      .attributesAtSesno!({ dbnum: 7997, refno: '24381/145020', sesno: 66 }))
+      .rejects.toMatchObject({ code: 'SESSION_NOT_FOUND', status: 404 });
+  });
+});
+
+describe('resolveNodeTime（spec §4.15.2）', () => {
+  it('200：回解析出的 sesno 与时刻', async () => {
+    const resolveNodeTime = vi.fn(async () => ({
+      status: 200,
+      hasEnvelope: false,
+      code: null,
+      message: null,
+      detail: undefined,
+      retryAfterMs: null,
+      body: { sesno: 12, session_time: '2026-09-22T02:00:00+00:00' },
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ resolveNodeTime }));
+
+    await expect(source.resolveNodeTime!({ dbnum: 7997, refno: '24384/23257', scope: 'subtree', at: '2026-09-22T02:00:00Z' }))
+      .resolves.toEqual({ sesno: 12, sessionTime: '2026-09-22T02:00:00+00:00' });
+    expect(resolveNodeTime).toHaveBeenCalledWith(
+      { dbnum: 7997, refno: '24384_23257', scope: 'subtree', at: '2026-09-22T02:00:00Z' },
+      { signal: undefined },
+    );
+  });
+
+  it('422 TIME_BEFORE_OLDEST_SESSION → HistoryQueryError，界面显示「早于最早版本」', async () => {
+    const resolveNodeTime = vi.fn(async () => ({
+      status: 422,
+      hasEnvelope: true,
+      code: 'TIME_BEFORE_OLDEST_SESSION',
+      message: '时间点早于全部带时间行',
+      detail: undefined,
+      retryAfterMs: null,
+      body: null,
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ resolveNodeTime }));
+
+    await expect(source.resolveNodeTime!({ dbnum: 7997, refno: '24384/23257', scope: 'self', at: '2000-01-01T00:00:00Z' }))
+      .rejects.toMatchObject({ code: 'TIME_BEFORE_OLDEST_SESSION', status: 422 });
+  });
+
+  it('无码 404 → ModelVersionRouteUnavailableError，调用方本面板会话改用前端 resolveAt', async () => {
+    const resolveNodeTime = vi.fn(async () => ({
+      status: 404, hasEnvelope: false, code: null, message: null, detail: undefined, retryAfterMs: null, body: null,
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ resolveNodeTime }));
+
+    await expect(source.resolveNodeTime!({ dbnum: 7997, refno: '24384/23257', scope: 'self', at: '2026-09-22T02:00:00Z' }))
+      .rejects.toBeInstanceOf(ModelVersionRouteUnavailableError);
+  });
+});
+
+describe('readRealtimeLimit（spec §4.15.4）', () => {
+  it('读 /health 的 model_cache.realtime_history.concurrency_limit', async () => {
+    const health = vi.fn(async () => ({ status: 'ok', model_cache: { realtime_history: { concurrency_limit: 6 } } }));
+    const source = createGenModelV1ModelVersionSource(api({ health }));
+
+    await expect(source.readRealtimeLimit!()).resolves.toBe(6);
+  });
+
+  it('health 里没有这一项 / 值不合法 / 请求失败 → null，不抛（预取按缺省 4 跑）', async () => {
+    const empty = createGenModelV1ModelVersionSource(api({ health: vi.fn(async () => ({ status: 'ok' })) }));
+    await expect(empty.readRealtimeLimit!()).resolves.toBeNull();
+
+    const bogus = createGenModelV1ModelVersionSource(api({
+      health: vi.fn(async () => ({ status: 'ok', model_cache: { realtime_history: { concurrency_limit: 0 } } })),
+    }));
+    await expect(bogus.readRealtimeLimit!()).resolves.toBeNull();
+
+    const failing = createGenModelV1ModelVersionSource(api({
+      health: vi.fn(async () => { throw new Error('health 挂了'); }),
+    }));
+    await expect(failing.readRealtimeLimit!()).resolves.toBeNull();
   });
 });

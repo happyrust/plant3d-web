@@ -39,19 +39,29 @@ import type {
   ModelVersionGeometry,
   ModelVersionLoadOptions,
   ModelVersionSource,
+  AttributesAtSesnoRequest,
+  HistoryGeometryQueryOptions,
+  HistoryGeometryRequest,
+  HistoryGeometryResult,
+  ResolveNodeTimeRequest,
+  ResolveNodeTimeResult,
 } from '../ports';
 
 import {
   fromV1Refno,
   genModelV1ElementAttributeDiff,
   genModelV1ElementAttributeHistory,
+  genModelV1ElementAttributesAt,
   genModelV1ElementVersions,
+  genModelV1Health,
   genModelV1ModelHistoryDelete,
   genModelV1ModelHistoryGenerate,
+  genModelV1ModelHistoryGeometry,
   genModelV1ModelHistoryQuery,
   genModelV1ModelVersions,
   genModelV1NodeDiffSummary,
   genModelV1NodeVersions,
+  genModelV1NodeVersionsResolve,
   genModelV1TaskGet,
   isGenModelV1ApiError,
   type AttributeHistoryChangeDto,
@@ -70,7 +80,7 @@ import {
   toV1Refno,
   unpackRefno,
 } from '@/api/genModelV1Api';
-import { ModelVersionRouteUnavailableError, NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
+import { ModelVersionRouteUnavailableError, NotDeliveryUnitRootError, HistoryQueryError } from '@/model-source/modelVersionErrors';
 
 /** `since_sesno` 连续拉的页数上限（服务端每页缺省 500）；再多说明链有问题，不无限拉。 */
 export const MAX_PAGES = 20;
@@ -92,6 +102,15 @@ export type GenModelV1VersionApi = {
   taskGet: typeof genModelV1TaskGet;
   historyQuery: typeof genModelV1ModelHistoryQuery;
   historyDelete: typeof genModelV1ModelHistoryDelete;
+  /**
+   * 拖动浏览的三条只读路由（spec §4.15）；返回原始回执，不判 2xx。
+   * 可选：只注入一部分后端面的调用方（测试、别的工作线）不必实现它们；缺了按「路由不可用」处理。
+   */
+  historyGeometry?: typeof genModelV1ModelHistoryGeometry;
+  attributesAt?: typeof genModelV1ElementAttributesAt;
+  resolveNodeTime?: typeof genModelV1NodeVersionsResolve;
+  /** `/health`；只用来读 `model_cache.realtime_history.concurrency_limit`，缺了回 null */
+  health?: typeof genModelV1Health;
   /** 测试里换成立即 resolve */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   now?: () => number;
@@ -108,6 +127,10 @@ const defaultApi: GenModelV1VersionApi = {
   taskGet: genModelV1TaskGet,
   historyQuery: genModelV1ModelHistoryQuery,
   historyDelete: genModelV1ModelHistoryDelete,
+  historyGeometry: genModelV1ModelHistoryGeometry,
+  attributesAt: genModelV1ElementAttributesAt,
+  resolveNodeTime: genModelV1NodeVersionsResolve,
+  health: genModelV1Health,
 };
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -279,6 +302,46 @@ function snapshotKeyOf(task: TaskEntryDto): string | null {
   return typeof key === 'string' && key ? key : null;
 }
 
+/**
+ * 拖动浏览三条只读路由的原始回执 → 端口语义（spec design §3）。
+ *
+ * - 404 / 405 **且正文没有 `error.code` 信封** = 服务端是旧构建、没有这条路由 → `ModelVersionRouteUnavailableError`（调用方降级）；
+ * - 带信封的 404 / 422 / 503 / 504 是业务错误 → `HistoryQueryError(码, { status, reason, retryAfterMs })`；
+ * - 200 / 304 由调用方各自处理。
+ */
+function toHistoryError(
+  route: string,
+  raw: { status: number; hasEnvelope: boolean; code: string | null; message: string | null; detail: unknown; retryAfterMs: number | null },
+): Error {
+  if ((raw.status === 404 || raw.status === 405 || raw.status === 501) && !raw.hasEnvelope) {
+    return new ModelVersionRouteUnavailableError(route);
+  }
+  const code = raw.code ?? `HTTP_${raw.status}`;
+  const reason = readAbsentReason(raw.detail);
+  return new HistoryQueryError(code, {
+    status: raw.status,
+    ...(reason ? { reason } : {}),
+    ...(raw.retryAfterMs !== null ? { retryAfterMs: raw.retryAfterMs } : {}),
+    ...(raw.message ? { message: raw.message } : {}),
+  });
+}
+
+/** `UNIT_NOT_PRESENT` 的 `detail.reason`：`not-yet`（还没建）/ `deleted`（已删除）。 */
+function readAbsentReason(detail: unknown): 'not-yet' | 'deleted' | undefined {
+  const reason = (detail as { reason?: unknown } | null | undefined)?.reason;
+  return reason === 'not-yet' || reason === 'deleted' ? reason : undefined;
+}
+
+/** `history/query` 的行 → 与 `loadVersion` 完全同一份几何（`instances` / `tubes` 共用这段映射）。 */
+function mapHistoryRows(unitRefno: string, rows: GeometryRows): Pick<ModelVersionGeometry, 'refnos' | 'entries' | 'ownerByRefno'> {
+  const entries = groupInstanceEntriesByRefno(historyRowsToGeomInstQueries(unitRefno, rows.instances, rows.tubes));
+  return {
+    refnos: [...entries.keys()],
+    entries,
+    ownerByRefno: ownerMapFromHistoryRows([...rows.instances, ...rows.tubes]),
+  };
+}
+
 function taskFailureMessage(task: TaskEntryDto): string {
   const result = task.result ?? {};
   const code = typeof result.code === 'string' ? result.code : task.state;
@@ -289,6 +352,12 @@ function taskFailureMessage(task: TaskEntryDto): string {
 export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = defaultApi): ModelVersionSource {
   const wait = api.sleep ?? sleep;
   const now = api.now ?? (() => Date.now());
+  // 三条新路由与 `/health` 是可选注入面：没注入就走真实后端，不因此判「路由不可用」——
+  // 「路由不可用」只能由服务端自己回的无信封 404 / 405 判出来。
+  const historyGeometry = api.historyGeometry ?? defaultApi.historyGeometry!;
+  const attributesAtRaw = api.attributesAt ?? defaultApi.attributesAt!;
+  const resolveNodeTimeRaw = api.resolveNodeTime ?? defaultApi.resolveNodeTime!;
+  const health = api.health ?? defaultApi.health!;
   const leases = new WeakMap<ModelVersionGeometry, SnapshotLease>();
   /** 服务端 generate 开头先丢掉同键的旧格，同一个键并发重建会互相顶掉，所以按旧键合并成一份。 */
   const renewing = new Map<string, Promise<string>>();
@@ -665,13 +734,10 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
       rows = await queryGeometryRows(snapshotKey, requestOptions);
       if (!rows) throw snapshotGoneError(snapshotKey);
     }
-    const entries = groupInstanceEntriesByRefno(historyRowsToGeomInstQueries(version.unitRefno, rows.instances, rows.tubes));
-    const ownerByRefno = ownerMapFromHistoryRows([...rows.instances, ...rows.tubes]);
+    const mapped = mapHistoryRows(version.unitRefno, rows);
     const lease: SnapshotLease = { version, key: snapshotKey, released: false };
     const geometry: ModelVersionGeometry = {
-      refnos: [...entries.keys()],
-      entries,
-      ownerByRefno,
+      ...mapped,
       handle: snapshotKey,
       async release() {
         if (lease.released) return;
@@ -734,7 +800,197 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  return { listVersions, listElementVersions, loadVersion, attributesAt, attributeHistory, attributeDiff, listNodeVersions, diffSummary };
+  // -------------------------------------------------------------------------
+  // 拖动浏览的三条只读路由（spec `model-version-timeline-scrub`，后端 spec §4.15）
+  // -------------------------------------------------------------------------
+
+  /**
+   * 实时历史几何：请求内现算，不建快照、无需 `release`；`ifNoneMatch` 命中同一摘要回 `not-modified`。
+   *
+   * 304 是**正常结局**（几何与已装入帧逐条相同），不是错误：`sesno` / `sessionTime` 从 `X-Sesno` /
+   * `X-Session-Time` 取，调用方与同一 `geometryKey` 的已装入帧共享几何、只改角标。
+   * 主动中止抛 `AbortError`（不是 `HistoryQueryError`）：调用方要能把它与真实失败分开。
+   */
+  async function queryHistoryGeometry(
+    req: HistoryGeometryRequest,
+    options: HistoryGeometryQueryOptions,
+  ): Promise<HistoryGeometryResult> {
+    const unitRefno = fromV1Refno(req.unitRefno);
+    const raw = await callOrTranslate('model/history/geometry', () => historyGeometry(
+      {
+        dbnum: req.dbnum,
+        unitRefno,
+        ...('sesno' in req ? { sesno: req.sesno } : { time: req.time }),
+        ...(options.ifNoneMatch ? { ifNoneMatch: options.ifNoneMatch } : {}),
+      },
+      {
+        signal: options.signal,
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      },
+    ), options.signal);
+
+    if (raw.status === 304) {
+      const geometryKey = raw.geometryKey;
+      if (!geometryKey) {
+        throw new HistoryQueryError('INVALID_RESPONSE', {
+          status: 304,
+          message: '服务端回 304 但没给 ETag，无法确认是哪一份几何',
+        });
+      }
+      return {
+        kind: 'not-modified',
+        sesno: raw.sesno ?? ('sesno' in req ? req.sesno : 0),
+        sessionTime: raw.sessionTime,
+        geometryKey,
+      };
+    }
+    if (raw.status !== 200) throw toHistoryError('model/history/geometry', raw);
+
+    const body = raw.body;
+    const geometryKey = raw.geometryKey ?? body?.geometryKey ?? null;
+    if (!body || !geometryKey) {
+      throw new HistoryQueryError('INVALID_RESPONSE', {
+        status: raw.status,
+        message: 'model/history/geometry 的 200 回执缺 geometryKey',
+      });
+    }
+    const mapped = mapHistoryRows(unitRefno, {
+      instances: Array.isArray(body.instances) ? body.instances : [],
+      tubes: Array.isArray(body.tubes) ? body.tubes : [],
+    });
+    return {
+      kind: 'ok',
+      sesno: raw.sesno ?? body.sesno,
+      sessionTime: raw.sessionTime ?? body.session_time ?? null,
+      geometryKey,
+      geometry: {
+        ...mapped,
+        geometryKey,
+        // 实时路由没有快照要还
+        release: releaseNothing,
+      },
+    };
+  }
+
+  /**
+   * 某构件在某 sesno 下的属性（`element/attributes-at`）：不要快照句柄，所以整条历史浏览路径都不建快照。
+   * 构件在该会话不存在回 `exists: false`——正常态，不是错误。
+   */
+  async function attributesAtSesno(
+    req: AttributesAtSesnoRequest,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ModelVersionAttributes> {
+    const raw = await callOrTranslate('element/attributes-at', () => attributesAtRaw(
+      { dbnum: req.dbnum, refno: fromV1Refno(req.refno), sesno: req.sesno },
+      { signal: options.signal },
+    ), options.signal);
+    if (raw.status !== 200) throw toHistoryError('element/attributes-at', raw);
+    const body = raw.body;
+    if (!body) {
+      throw new HistoryQueryError('INVALID_RESPONSE', {
+        status: raw.status,
+        message: 'element/attributes-at 的 200 回执体为空',
+      });
+    }
+    return {
+      sesno: Number(body.sesno ?? req.sesno),
+      exists: body.exists === true,
+      noun: body.noun ?? null,
+      attributes: (Array.isArray(body.attributes) ? body.attributes : []).map((row) => ({
+        name: String(row.name ?? ''),
+        valueType: String(row.value_type ?? ''),
+        display: String(row.display ?? ''),
+        isUnset: row.is_unset === true,
+        isUda: row.is_uda === true,
+      })),
+    };
+  }
+
+  /**
+   * 按时刻在节点版本表上解析会话（`node/versions/resolve`）。与服务端几何路由的 `time` 同一把尺子，
+   * 所以「按时刻取到哪一版」与时间轴上看到的那一行永远一致。
+   */
+  async function resolveNodeTime(
+    req: ResolveNodeTimeRequest,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ResolveNodeTimeResult> {
+    const raw = await callOrTranslate('node/versions/resolve', () => resolveNodeTimeRaw(
+      { dbnum: req.dbnum, refno: fromV1Refno(req.refno), scope: req.scope, at: req.at },
+      { signal: options.signal },
+    ), options.signal);
+    if (raw.status !== 200) throw toHistoryError('node/versions/resolve', raw);
+    const body = raw.body;
+    if (!body || !Number.isInteger(body.sesno)) {
+      throw new HistoryQueryError('INVALID_RESPONSE', {
+        status: raw.status,
+        message: 'node/versions/resolve 的 200 回执缺 sesno',
+      });
+    }
+    return { sesno: body.sesno, sessionTime: body.session_time };
+  }
+
+  /** 服务端实时历史并发上限（`/health.model_cache.realtime_history.concurrency_limit`）；读不到为 null，不抛。 */
+  async function readRealtimeLimit(): Promise<number | null> {
+    try {
+      const healthBody = await health();
+      const limit = healthBody.model_cache?.realtime_history?.concurrency_limit;
+      return typeof limit === 'number' && Number.isFinite(limit) && limit >= 1 ? Math.floor(limit) : null;
+    } catch {
+      // 读不到并发上限只是少一个调优参数：预取按缺省 4 跑，不该让整条浏览路径失败
+      return null;
+    }
+  }
+
+  /**
+   * 传输层错误翻译：网络失败 → `HistoryQueryError('NETWORK')`，前端超时 → `CLIENT_TIMEOUT`，
+   * 调用方主动中止 → `AbortError`（原样抛，调用方要能区分）。
+   */
+  async function callOrTranslate<T>(
+    route: string,
+    call: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    try {
+      return await call();
+    } catch (error) {
+      if (signal?.aborted) throw abortError(signal.reason);
+      if (!isGenModelV1ApiError(error)) throw error;
+      if (error.code === 'cancelled') throw abortError(error.cause);
+      if (error.code === 'network') {
+        throw new HistoryQueryError('NETWORK', { message: `连不上服务端（${route}）：${error.message}` });
+      }
+      if (error.code === 'timeout') {
+        throw new HistoryQueryError('CLIENT_TIMEOUT', {
+          message: `查询超时（${route}）：${error.message}`,
+        });
+      }
+      throw error;
+    }
+  }
+
+  return {
+    listVersions,
+    listElementVersions,
+    loadVersion,
+    attributesAt,
+    attributeHistory,
+    attributeDiff,
+    listNodeVersions,
+    diffSummary,
+    queryHistoryGeometry,
+    attributesAtSesno,
+    resolveNodeTime,
+    readRealtimeLimit,
+  };
+}
+
+/** 主动中止一律给 `DOMException('AbortError')`：调用方（与浏览器 fetch）只认这一种形状。 */
+function abortError(reason: unknown): Error {
+  const message = reason instanceof Error ? reason.message : 'aborted';
+  if (typeof DOMException === 'function') return new DOMException(message, 'AbortError');
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
 }
 
 /** `<unit_refno>@<sesno>` → sesno；解不出给 0（只用在没有句柄的空态上）。 */

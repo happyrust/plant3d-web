@@ -66,6 +66,12 @@ export type GenModelV1ApiErrorInit = {
   retryAfterMs?: number | null;
   cause?: unknown;
   abortSource?: GenModelV1AbortSource;
+  /**
+   * 非 2xx 时正文是不是 `{code,message,detail}` 信封。缺省 `true`：正常业务错误都带信封。
+   * 只有 `genModelV1FetchRaw` 走的原始回执能给出 `false`——axum 对**不存在的路由**回的裸 404 / 405 没有信封，
+   * 调用方据此判「服务端是旧构建、没有这条路由」，而不是当成业务错误。
+   */
+  hasEnvelope?: boolean;
 };
 
 export class GenModelV1ApiError extends Error {
@@ -77,6 +83,8 @@ export class GenModelV1ApiError extends Error {
   readonly abortSource: GenModelV1AbortSource;
   /** 仅 `generation_pending` / `timeout` 一类带；毫秒，来自 `Retry-After` 响应头。 */
   readonly retryAfterMs: number | null;
+  /** 非 2xx 时正文是不是 `{code,message,detail}` 信封；裸 404 / 405（路由不存在）为 false。 */
+  readonly hasEnvelope: boolean;
 
   constructor(init: GenModelV1ApiErrorInit) {
     super(init.message, init.cause !== undefined ? { cause: init.cause } : undefined);
@@ -88,6 +96,7 @@ export class GenModelV1ApiError extends Error {
     this.cause = init.cause;
     this.abortSource = init.abortSource ?? null;
     this.retryAfterMs = init.retryAfterMs ?? null;
+    this.hasEnvelope = init.hasEnvelope ?? true;
   }
 
   /** 库里确认没有这个 refno / 网格；只有这一档允许负缓存（spec §4.5）。 */
@@ -177,6 +186,10 @@ type InternalRequest = GenModelV1RequestOptions & {
   method?: 'GET' | 'POST' | 'DELETE';
   query?: Record<string, QueryValue>;
   body?: Record<string, unknown>;
+  /** 额外请求头（`If-None-Match` 一类）；`Accept` / `Content-Type` 由基座给，这里覆盖不了。 */
+  headers?: Record<string, string>;
+  /** 缺省不设（浏览器默认）。`no-store` 用于必须看到 304 原样回执的路由，避免被 HTTP 缓存合流成 200。 */
+  cache?: RequestCache;
 };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -249,6 +262,115 @@ async function readBody(resp: Response): Promise<{ text: string; json: unknown |
   } catch {
     return { text, json: undefined };
   }
+}
+
+/**
+ * 原始回执：状态码、响应头与已解析的正文，**不判 2xx**。
+ *
+ * 只给需要读非 2xx 语义的调用方用（`model/history/geometry` 的 304 与 503 `Retry-After`、
+ * `element/attributes-at` / `node/versions/resolve` 的「裸 404 = 路由不存在」）。传输层失败
+ * （网络 / 超时 / 主动中止）仍然抛 `GenModelV1ApiError`。
+ */
+export type GenModelV1RawResponse<T> = {
+  status: number;
+  statusText: string;
+  headers: Headers;
+  /** 正文是合法 JSON 时给值，否则 undefined */
+  json: T | undefined;
+  text: string;
+  /** 非 2xx 且正文是 `{code, message, detail}` 信封时为 true；裸 404 / 405 为 false。 */
+  hasEnvelope: boolean;
+  /** 信封里的 `code`（有信封时） */
+  code: string | null;
+};
+
+/**
+ * 发一次请求并把**原始回执**交回调用方：不判 2xx、不把业务错误翻成异常。
+ *
+ * 与 [`genModelV1Fetch`] 共用同一套 URL 拼装、超时与取消语义；区别只在返回。
+ * `cache: 'no-store'` 由调用方按需给——要看到真 304 就必须绕开 HTTP 缓存。
+ */
+export async function genModelV1FetchRaw<T>(
+  path: string,
+  request: InternalRequest = {},
+): Promise<GenModelV1RawResponse<T>> {
+  const method = request.method ?? 'GET';
+  const base = request.baseUrl ?? buildGenModelV1Url('');
+  const identity = identityEntries(request.identity);
+  const url = appendQuery(
+    joinUrl(base, path),
+    method === 'POST' ? request.query : { ...identity, ...(request.query ?? {}) },
+  );
+  const fetchImpl = request.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new GenModelV1ApiError({
+      code: 'network',
+      status: 0,
+      path,
+      message: 'fetch 不可用（非浏览器环境且未注入 fetchImpl）',
+    });
+  }
+
+  const controller = new AbortController();
+  const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  let abortSource: GenModelV1AbortSource = null;
+  const timer = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    abortSource = 'timeout';
+    controller.abort(new Error(`gen-model 请求超时 ${timeoutMs} ms: ${path}`));
+  }, timeoutMs);
+  const onOuterAbort = () => {
+    if (controller.signal.aborted) return;
+    abortSource = 'caller';
+    controller.abort(request.signal?.reason);
+  };
+  if (request.signal) {
+    if (request.signal.aborted) onOuterAbort();
+    else request.signal.addEventListener('abort', onOuterAbort, { once: true });
+  }
+
+  let resp: Response;
+  let body: { text: string; json: unknown | undefined };
+  try {
+    resp = await fetchImpl(url, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+        ...(request.headers ?? {}),
+      },
+      body: method === 'POST' ? JSON.stringify({ ...identity, ...(request.body ?? {}) }) : undefined,
+      signal: controller.signal,
+      ...(request.cache ? { cache: request.cache } : {}),
+    });
+    body = await readBody(resp);
+  } catch (error) {
+    const cancelledByCaller = abortSource === 'caller';
+    throw new GenModelV1ApiError({
+      code: cancelledByCaller ? 'cancelled' : 'network',
+      status: 0,
+      path,
+      message: `gen-model 请求失败 ${method} ${url}: ${error instanceof Error ? error.message : String(error)}`,
+      cause: error,
+      abortSource,
+    });
+  } finally {
+    clearTimeout(timer);
+    request.signal?.removeEventListener('abort', onOuterAbort);
+  }
+
+  const { text, json } = body;
+  const envelope = readEnvelope(json);
+  const hasEnvelope = typeof envelope?.code === 'string' && !!envelope.code;
+  return {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: resp.headers,
+    json: json as T | undefined,
+    text,
+    hasEnvelope,
+    code: hasEnvelope ? String(envelope?.code) : null,
+  };
 }
 
 /**
@@ -338,8 +460,8 @@ export async function genModelV1Fetch<T>(path: string, request: InternalRequest 
   }
 
   if (!resp.ok) {
-    const code =
-      typeof envelope?.code === 'string' && envelope.code ? (envelope.code as GenModelV1ErrorCode) : statusFallbackCode(resp.status);
+    const hasEnvelope = typeof envelope?.code === 'string' && !!envelope.code;
+    const code = hasEnvelope ? (envelope.code as GenModelV1ErrorCode) : statusFallbackCode(resp.status);
     const message =
       typeof envelope?.message === 'string' && envelope.message
         ? envelope.message
@@ -351,6 +473,7 @@ export async function genModelV1Fetch<T>(path: string, request: InternalRequest 
       message,
       detail: envelope?.detail ?? (json === undefined ? text || undefined : json),
       retryAfterMs: parseRetryAfterMs(resp.headers.get('Retry-After')),
+      hasEnvelope,
     });
   }
 
@@ -618,6 +741,29 @@ export type HealthResponse = {
   delivery_unit_types?: string[];
   initialization?: HealthInitialization;
   static_assets?: boolean;
+  /** 只报读数、不参与 health gate；`realtime_history` 是拖动浏览的并发上限来源（spec §4.15.4）。 */
+  model_cache?: GenModelV1ModelCacheHealth;
+  [key: string]: unknown;
+};
+
+/** `/health.model_cache`（spec §4.15.4）：历史快照与实时历史各自一份读数，互不影响。 */
+export type GenModelV1ModelCacheHealth = {
+  realtime_history?: GenModelV1RealtimeHistoryHealth;
+  [key: string]: unknown;
+};
+
+export type GenModelV1RealtimeHistoryHealth = {
+  /** 只数当前指纹下的条目 */
+  cache_entries?: number;
+  cache_capacity?: number;
+  hits_total?: number;
+  misses_total?: number;
+  /** `limit − available_permits()`：真正还在占 CPU 的计算数 */
+  in_flight?: number;
+  /** 并发闸上限（`model_history_concurrency`），拖动浏览的预取上限取它 */
+  concurrency_limit?: number;
+  input_cache?: { entries?: number; capacity?: number };
+  timeout_secs?: number;
   [key: string]: unknown;
 };
 
@@ -1552,6 +1698,199 @@ export function genModelV1NodeDiffSummary(
       scope: req.scope,
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// 模型版本时间轴的三条只读路由（spec `model-version-timeline-scrub`；后端 spec §4.15）
+//
+// 三条都**不判 2xx**：304 是正常结局（几何没变），404 / 405 还要区分「路由不存在」与「业务错误」。
+// 所以它们走 `genModelV1FetchRaw` 把原始回执交回 `versionSource`，由它翻成端口错误。
+// ---------------------------------------------------------------------------
+
+/** 拖动浏览的几何请求预算（spec §3.2）：服务端超时预算 20 s，客户端给到 60 s 留排队与慢盘余量。 */
+export const HISTORY_GEOMETRY_TIMEOUT_MS = 60_000;
+
+export type GenModelV1HistoryGeometryRequest = {
+  dbnum: number;
+  /** `a_b` / `a/b`：最小交付单元根 */
+  unitRefno: string;
+  /** 与 `time` 恰好给一个 */
+  sesno?: number;
+  /** `YYYY-MM-DD[T| ]HH:mm[:ss[.f{1,3}]][Z|±HH:MM]`；不带偏移按链序第一条带时间行的偏移解释 */
+  time?: string;
+  /** 已装入帧的 `geometryKey`；服务端摘要相同回 304 */
+  ifNoneMatch?: string;
+};
+
+/** `GET /api/v1/model/history/geometry` 的 200 体（`instances` / `tubes` 与 `history/query` 同形）。 */
+export type HistoryGeometryBodyDto = {
+  dbnum: number;
+  /** `a/b` */
+  unit_refno: string;
+  sesno: number;
+  session_time: string | null;
+  /** `g:` + 16 字节 hex；与 `ETag` 同值（`ETag` 带引号） */
+  geometryKey: string;
+  instances: HistoryInstanceRowDto[];
+  tubes: HistoryTubeRowDto[];
+  stats?: { visited?: number; generated?: number; failed?: number; elapsed_ms?: number; [key: string]: unknown };
+  [key: string]: unknown;
+};
+
+/** 原始回执的公共半边：状态码 + 错误信封（有就是业务错误，没有就是路由不存在 / 代理页）。 */
+export type GenModelV1RawEnvelope = {
+  status: number;
+  hasEnvelope: boolean;
+  code: string | null;
+  message: string | null;
+  detail: unknown;
+  /** 毫秒；来自 `Retry-After`（503 `HISTORY_BUSY` 是 1..5 s） */
+  retryAfterMs: number | null;
+};
+
+export type HistoryGeometryRawResult = GenModelV1RawEnvelope & {
+  /** `ETag` 去掉 `W/` 与引号；200 / 304 都有 */
+  geometryKey: string | null;
+  /** `X-Sesno`；200 / 304 都有 */
+  sesno: number | null;
+  /** `X-Session-Time`；会话无时间时是空串 → 这里给 null */
+  sessionTime: string | null;
+  /** 200 的体；304 / 错误为空 */
+  body: HistoryGeometryBodyDto | null;
+};
+
+export type AttributesAtRawResult = GenModelV1RawEnvelope & {
+  body: AttributesAtBodyDto | null;
+};
+
+export type ResolveNodeTimeRawResult = GenModelV1RawEnvelope & {
+  body: ResolveNodeTimeBodyDto | null;
+};
+
+/** `GET /api/v1/element/attributes-at` 的体：与 `history/query tool=attributes` 同形，去掉 `snapshot_key`。 */
+export type AttributesAtBodyDto = {
+  dbnum: number;
+  sesno: number;
+  /** `a/b` */
+  refno: string;
+  exists: boolean;
+  noun: string | null;
+  complete?: boolean;
+  attributes: ElementAttribute[];
+  diagnostics?: unknown;
+  elapsed_ms?: number;
+  [key: string]: unknown;
+};
+
+/** `GET /api/v1/node/versions/resolve` 的体：解析出的会话。 */
+export type ResolveNodeTimeBodyDto = {
+  sesno: number;
+  session_time: string;
+  [key: string]: unknown;
+};
+
+/** `ETag: W/"g:…"` / `"g:…"` → `g:…`。 */
+function stripEtag(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/^W\//, '').trim();
+  const unquoted = trimmed.replace(/^"|"$/g, '').trim();
+  return unquoted || null;
+}
+
+/** 头里的整数；缺 / 非法给 null。 */
+function headerInteger(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value.trim());
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function readMessage(json: unknown): string | null {
+  const envelope = readEnvelope(json);
+  return typeof envelope?.message === 'string' && envelope.message ? envelope.message : null;
+}
+
+/** 原始回执 → 公共半边（状态 / 信封 / 重试）。三条路由共用。 */
+function rawEnvelope(raw: GenModelV1RawResponse<unknown>, json: unknown): GenModelV1RawEnvelope {
+  const envelope = readEnvelope(json);
+  return {
+    status: raw.status,
+    hasEnvelope: raw.hasEnvelope,
+    code: raw.code,
+    message: readMessage(json),
+    detail: envelope?.detail ?? undefined,
+    retryAfterMs: parseRetryAfterMs(raw.headers.get('Retry-After')),
+  };
+}
+
+/**
+ * `GET /api/v1/model/history/geometry`（后端 spec §4.15.1）：单元在某一版下的实时几何，不建快照、不用 `release`。
+ *
+ * 200 带 `ETag` / `X-Sesno` / `X-Session-Time`；`ifNoneMatch` 命中同一摘要回 **304 空体**，三个头照给。
+ * `cache: 'no-store'`：浏览器 HTTP 缓存会把 304 合流成 200，那样就拿不到「几何没变」这个信号了。
+ */
+export async function genModelV1ModelHistoryGeometry(
+  req: GenModelV1HistoryGeometryRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<HistoryGeometryRawResult> {
+  const raw = await genModelV1FetchRaw<HistoryGeometryBodyDto>('/api/v1/model/history/geometry', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? HISTORY_GEOMETRY_TIMEOUT_MS,
+    cache: 'no-store',
+    headers: req.ifNoneMatch ? { 'If-None-Match': `"${req.ifNoneMatch.replace(/^"|"$/g, '')}"` } : undefined,
+    query: {
+      dbnum: req.dbnum,
+      unit_refno: toV1Refno(req.unitRefno),
+      sesno: req.sesno,
+      time: req.time,
+    },
+  });
+  const sessionTime = raw.headers.get('X-Session-Time');
+  const ok = raw.status === 200 && raw.json !== undefined;
+  return {
+    ...rawEnvelope(raw, raw.json),
+    geometryKey: stripEtag(raw.headers.get('ETag')),
+    sesno: headerInteger(raw.headers.get('X-Sesno')),
+    sessionTime: sessionTime === null ? null : sessionTime || null,
+    body: ok ? raw.json ?? null : null,
+  };
+}
+
+/**
+ * `GET /api/v1/element/attributes-at`（后端 spec §4.15.3）：构件在某一版下的属性，不要快照句柄。
+ * 构件在该会话不存在回 `exists: false`——是正常态，不是 404。
+ */
+export async function genModelV1ElementAttributesAt(
+  req: { dbnum: number; refno: string; sesno: number },
+  options?: GenModelV1RequestOptions,
+): Promise<AttributesAtRawResult> {
+  const raw = await genModelV1FetchRaw<AttributesAtBodyDto>('/api/v1/element/attributes-at', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: { dbnum: req.dbnum, refno: toV1Refno(req.refno), sesno: req.sesno },
+  });
+  return {
+    ...rawEnvelope(raw, raw.json),
+    body: raw.status === 200 && raw.json !== undefined ? raw.json ?? null : null,
+  };
+}
+
+/**
+ * `GET /api/v1/node/versions/resolve`（后端 spec §4.15.2）：把时间点解析成节点版本表上的一个会话。
+ * 与几何路由的 `time` 同一把尺子（`resolve_at_rows`），所以「按时刻取到哪一版」与时间轴上那一行永远一致。
+ */
+export async function genModelV1NodeVersionsResolve(
+  req: { dbnum: number; refno: string; scope: NodeDiffScopeDto; at: string },
+  options?: GenModelV1RequestOptions,
+): Promise<ResolveNodeTimeRawResult> {
+  const raw = await genModelV1FetchRaw<ResolveNodeTimeBodyDto>('/api/v1/node/versions/resolve', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: { dbnum: req.dbnum, refno: toV1Refno(req.refno), scope: req.scope, at: req.at },
+  });
+  return {
+    ...rawEnvelope(raw, raw.json),
+    body: raw.status === 200 && raw.json !== undefined ? raw.json ?? null : null,
+  };
 }
 
 export type GenModelV1HistoryGenerateRequest = {

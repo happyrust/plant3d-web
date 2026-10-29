@@ -399,13 +399,13 @@
 ### 阶段 2：plant3d-web（前端）— 接线
 
 - [ ] 14. 版本来源、组合式函数与三维浏览接口
-  - [~] 14.1 在 `versionSource.ts` / `genModelV1Api.ts` 实现三条新路由的客户端
+  - [x] 14.1 在 `versionSource.ts` / `genModelV1Api.ts` 实现三条新路由的客户端
     - `queryHistoryGeometry`：`If-None-Match: "<geometryKey>"`；超时用 `setTimeout` + `AbortController`（缺省 60 s，抛 `CLIENT_TIMEOUT`，界面显示「查询超时」）；304 从 `ETag` / `X-Sesno` / `X-Session-Time` 取值；200 的 `instances` / `tubes` 复用 `loadVersion` 现有映射，拆成共享函数 `mapHistoryRows`
     - `attributesAtSesno`、`resolveNodeTime`、`readRealtimeLimit`（读 `/health.model_cache.realtime_history.concurrency_limit`）
     - 只有「404 / 405 且响应体不是带 `error.code` 的 JSON」抛 `ModelVersionRouteUnavailableError`；带码 404 是业务错误；网络失败抛 `HistoryQueryError('NETWORK')`；主动中止抛 `AbortError`
     - _Requirements: 3.10, 3.12, 4.10, 6.13, 8.8, 9.9, 10.1, 10.6_
 
-  - [~] 14.2 为 `versionSource` 写例子测试
+  - [x] 14.2 为 `versionSource` 写例子测试
     - 200 / 304 / 带错误码的 404 / 无码 404 / 405 / 503 / 网络错误 / 客户端超时各一例，核对结果类型与是否抛 `ModelVersionRouteUnavailableError`
     - _Requirements: 10.1, 10.6_
 
