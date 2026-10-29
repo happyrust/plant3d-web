@@ -1,0 +1,2171 @@
+{
+  "pbtResults": {
+    "9.4 写属性测试：簇划分是刻度序列的有序切分": {
+      "status": "passed",
+      "lastRunTimestamp": 1793220153923
+    },
+    "10.7 写属性测试：拖动停留门": {
+      "status": "passed",
+      "lastRunTimestamp": 1793241194249
+    },
+    "9.5 写属性测试：刻度按序号等距排布": {
+      "status": "passed",
+      "lastRunTimestamp": 1793239580440
+    },
+    "9.6 写属性测试：时间异常标记": {
+      "status": "passed",
+      "lastRunTimestamp": 1793240439388
+    },
+    "9.7 写属性测试：影响类型配色": {
+      "status": "passed",
+      "lastRunTimestamp": 1793241222426
+    },
+    "11.2 写属性测试：帧缓存 LRU 与几何共享": {
+      "status": "passed",
+      "lastRunTimestamp": 1793241364281
+    },
+    "10.9 写属性测试：钉不变量": {
+      "status": "passed",
+      "lastRunTimestamp": 1793241838755
+    },
+    "9.8 写属性测试：序号缩放约束": {
+      "status": "passed",
+      "lastRunTimestamp": 1793241872593
+    },
+    "9.10 写属性测试：提示与游标标签格式化": {
+      "status": "passed",
+      "lastRunTimestamp": 1793243842314
+    },
+    "10.10 写属性测试：与上一版比 / 与最新比": {
+      "status": "passed",
+      "lastRunTimestamp": 1793242424137
+    },
+    "10.2 写属性测试：游标不变量": {
+      "status": "passed",
+      "lastRunTimestamp": 1793242839916
+    },
+    "11.4 写属性测试：预取计划": {
+      "status": "passed",
+      "lastRunTimestamp": 1793243870657
+    }
+  },
+  "executionHistory": {
+    "1.1 按链序口径更新设计稿 `ui/版本管理/version-timeline.pen`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216114828
+      },
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216132500
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218588881
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218606138
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219676968
+      }
+    ],
+    "1.2 新建时间点解析共享样例 `docs/fixtures/version-time-resolve-cases.json`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216114909
+      },
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216132581
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218588949
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218606214
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219677077
+      }
+    ],
+    "2.1 在 e3d-model 实现 `generate_subtree_with_hooks`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216114951
+      },
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216132632
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218588998
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218607126
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793239517104
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240233841
+      }
+    ],
+    "2.2 为停止钩子写例子测试": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216114999
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589057
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116179
+      }
+    ],
+    "2.3 抽出 `pub(crate) fn project_historical_records`（bake + project）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115050
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589109
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218607910
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219677133
+      }
+    ],
+    "2.4 核实共享网格目录的并发写是否安全": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115102
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589172
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116283
+      }
+    ],
+    "3.1 新增 `bounded_setting(raw, min, max, default)` 与四项配置": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115161
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589249
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218608850
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793221795113
+      }
+    ],
+    "3.2 实现只给历史用的输入缓存 `fast_model/historical_input.rs::HistoricalInputLru`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115209
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589300
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240352462
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241101361
+      }
+    ],
+    "3.3 实现 `CancelToken` 与 `E3dModelService::realtime_compute_source`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115252
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589363
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116333
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241129029
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241725545
+      }
+    ],
+    "4.1 实现 `select_latest_at`、`parse_instant`、`resolve_at_rows`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115310
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589415
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116387
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241129077
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241724429
+      }
+    ],
+    "4.2 写属性测试：时间点解析遵循链序规则（Rust）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115383
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589477
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116446
+      }
+    ],
+    "4.3 写属性测试：时间点解析往返（Rust）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115436
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589533
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116508
+      }
+    ],
+    "4.4 写共享样例对拍测试（Rust）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115499
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589584
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116588
+      }
+    ],
+    "5.1 实现参数校验 `realtime_history/validate.rs`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115548
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589650
+      },
+      {
+        "executionId": "90f39477-3566-4994-862e-a03766ba840b",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793236631009
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793239519018
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240234332
+      }
+    ],
+    "5.2 写属性测试：请求校验与错误优先级": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115598
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589730
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116634
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242656938
+      }
+    ],
+    "5.3 实现单元不存在判定 `realtime_history/absent.rs::classify_absent`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115647
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589785
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116697
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241738785
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242210984
+      }
+    ],
+    "5.4 写属性测试：单元不存在的原因判定": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115698
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589847
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116759
+      }
+    ],
+    "5.5 实现 `realtime_history/digest.rs` 的 `geometry_digest` 与 `source_set_fingerprint`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115745
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218589911
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116811
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241739156
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242211066
+      }
+    ],
+    "5.6 写属性测试：geometryKey 是几何内容摘要": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115787
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590007
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116860
+      }
+    ],
+    "5.7 实现结果缓存 `realtime_history/cache.rs::RealtimeResultCache`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115834
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590058
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116909
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242221447
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242652311
+      }
+    ],
+    "5.8 写属性测试：结果缓存模型": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115898
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590131
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241116964
+      }
+    ],
+    "5.9 实现并发闸 `realtime_history/gate.rs::RealtimeGate`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115948
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590241
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117015
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242221599
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242652943
+      }
+    ],
+    "6.1 实现编排 `realtime_history/mod.rs::query_realtime`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216115999
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590294
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117062
+      }
+    ],
+    "6.2 挂路由 `GET /api/v1/model/history/geometry`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116046
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590350
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117114
+      }
+    ],
+    "6.3 实现 `GET /api/v1/node/versions/resolve`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116087
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590417
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117180
+      }
+    ],
+    "6.4 实现 `GET /api/v1/element/attributes-at`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116132
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590477
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117224
+      }
+    ],
+    "6.5 在 `/health.model_cache` 增加 `realtime_history`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116182
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590529
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117266
+      }
+    ],
+    "6.6 写属性测试：并发闸与无快照副作用": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116228
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590586
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117320
+      }
+    ],
+    "6.7 写属性测试：ETag / If-None-Match 一致性": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116270
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590646
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117369
+      }
+    ],
+    "6.8 写属性测试：两条路由的时间解析一致": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116313
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590717
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117419
+      }
+    ],
+    "6.9 写属性测试：非法时间点被拒（Rust）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116355
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590777
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117467
+      }
+    ],
+    "6.10 写后端例子测试": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116399
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590845
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117515
+      }
+    ],
+    "7.1 编写 `scripts/verify/realtime-history-smoke.ps1`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116463
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590899
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117567
+      }
+    ],
+    "7.2 编写 `scripts/verify/realtime-vs-legacy.ps1`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116513
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218590949
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117619
+      }
+    ],
+    "8. Checkpoint：阶段 1 完成": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116597
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591000
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117676
+      }
+    ],
+    "9.1 新增 devDependency `fast-check`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116644
+      },
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216133676
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591058
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219688138
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793220037054
+      }
+    ],
+    "9.2 在 `src/model-source/ports.ts` 定义版本来源扩展类型": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116689
+      },
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216134638
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591111
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219688730
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793220037283
+      }
+    ],
+    "9.3 实现 `src/utils/versionScrub/tickLayout.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116735
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591161
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219689528
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793220038160
+      }
+    ],
+    "9.4 写属性测试：簇划分是刻度序列的有序切分": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116786
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591214
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793220041360
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793221795025
+      }
+    ],
+    "9.5 写属性测试：刻度按序号等距排布": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116833
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591268
+      },
+      {
+        "executionId": "90f39477-3566-4994-862e-a03766ba840b",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793236630124
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793239518126
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240233965
+      }
+    ],
+    "9.6 写属性测试：时间异常标记": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116881
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591326
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240355574
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241104031
+      }
+    ],
+    "9.7 写属性测试：影响类型配色": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116945
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591380
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117733
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241130254
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241724524
+      }
+    ],
+    "9.8 写属性测试：序号缩放约束": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216116986
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591433
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117822
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241740108
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242211145
+      }
+    ],
+    "9.9 实现 `src/utils/versionScrub/scrubFormat.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117031
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591493
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117864
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241741939
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242212334
+      }
+    ],
+    "9.10 写属性测试：提示与游标标签格式化": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117084
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591550
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117910
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242222777
+      }
+    ],
+    "10.1 实现 `src/utils/versionScrub/cursorNav.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117128
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591665
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241117966
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242224736
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242653881
+      }
+    ],
+    "10.2 写属性测试：游标不变量": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117170
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591721
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118017
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242655884
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793243010318
+      }
+    ],
+    "10.3 写属性测试：指针吸附与初始位置": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117219
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591782
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118068
+      }
+    ],
+    "10.4 写属性测试：链序离散移动": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117294
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591844
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118117
+      }
+    ],
+    "10.5 写属性测试：勾选「只看几何变的」时的游标迁移": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117351
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591916
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118167
+      }
+    ],
+    "10.6 实现 `src/utils/versionScrub/dwellGate.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117396
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218591969
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793220042412
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793221795172
+      }
+    ],
+    "10.7 写属性测试：拖动停留门": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117439
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592028
+      },
+      {
+        "executionId": "90f39477-3566-4994-862e-a03766ba840b",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793236629382
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793239517241
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240233914
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241128967
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241724607
+      }
+    ],
+    "10.8 实现 `src/utils/versionScrub/pins.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117482
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592083
+      },
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793220043280
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793239517020
+      }
+    ],
+    "10.9 写属性测试：钉不变量": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117529
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592147
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118218
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241741164
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242213287
+      }
+    ],
+    "10.10 写属性测试：与上一版比 / 与最新比": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117572
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592201
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118271
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242223695
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242652221
+      }
+    ],
+    "11.1 实现 `src/utils/versionScrub/frameCache.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117617
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592261
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240352512
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241101270
+      }
+    ],
+    "11.2 写属性测试：帧缓存 LRU 与几何共享": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117663
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592315
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118322
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241131071
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241726477
+      }
+    ],
+    "11.3 实现 `src/utils/versionScrub/prefetchPlan.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117712
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592380
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240353612
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241102084
+      }
+    ],
+    "11.4 写属性测试：预取计划": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117754
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592437
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118376
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793243779500
+      }
+    ],
+    "11.5 写属性测试：游标移动时的请求重分配": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117799
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592503
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118469
+      }
+    ],
+    "11.6 实现 `src/utils/versionScrub/busyRetry.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117845
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592567
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118515
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242657786
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793243010400
+      }
+    ],
+    "11.7 写属性测试：`HISTORY_BUSY` 有界重试（`retryOnBusy` 部分）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117886
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592633
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118572
+      }
+    ],
+    "12.1 实现 `src/utils/versionScrub/timeResolve.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117935
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592712
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118627
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793242658888
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793243010488
+      }
+    ],
+    "12.2 写属性测试：时间点解析遵循链序规则（前端）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216117986
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592778
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118679
+      }
+    ],
+    "12.3 写属性测试：非法时间点被拒（前端）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118032
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592833
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118733
+      }
+    ],
+    "12.4 写属性测试：时间点解析往返（前端）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118078
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592897
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118788
+      }
+    ],
+    "12.5 写共享样例对拍测试 `src/utils/versionScrub/timeResolve.test.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118119
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218592962
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118840
+      }
+    ],
+    "12.6 实现 `src/utils/versionScrub/scrubUrl.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118165
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593020
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118887
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793243780388
+      }
+    ],
+    "12.7 写属性测试：直达链接往返并保留其他参数": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118211
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593083
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118937
+      }
+    ],
+    "12.8 写属性测试：链接状态校正": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118250
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593220
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241118987
+      }
+    ],
+    "12.9 写属性测试：非法链接参数": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118296
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593285
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119083
+      }
+    ],
+    "12.10 实现 `src/utils/versionScrub/subtreeFramePlan.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118351
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593346
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793240354839
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241103289
+      }
+    ],
+    "12.11 写属性测试：子树装载计划": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118481
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593404
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119130
+      }
+    ],
+    "12.12 写属性测试：子树请求有界并发": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118532
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593478
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119180
+      }
+    ],
+    "12.13 写属性测试：自比较全为未变": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118590
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593536
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119238
+      }
+    ],
+    "13. Checkpoint：纯函数完成": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118650
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593597
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119291
+      }
+    ],
+    "14.1 在 `versionSource.ts` / `genModelV1Api.ts` 实现三条新路由的客户端": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118716
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593648
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119343
+      }
+    ],
+    "14.2 为 `versionSource` 写例子测试": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118774
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593715
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119397
+      }
+    ],
+    "14.3 在 `useNodeVersionTimeline.ts` 增加 `setPins(pins)`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118834
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593769
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119449
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793243781370
+      }
+    ],
+    "14.4 实现 `src/composables/useVersionScrubber.ts`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118884
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593818
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119498
+      }
+    ],
+    "14.5 写属性测试：切换范围保留游标与钉，灰标位置正确": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118939
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593886
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119550
+      }
+    ],
+    "14.6 在 `src/viewer/modelUnitCompareController.ts` 增加浏览接口": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216118998
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593933
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119604
+      }
+    ],
+    "14.7 写属性测试：相同 geometryKey 不重装": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119053
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218593994
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119655
+      }
+    ],
+    "14.8 为浏览接口写例子测试（`modelUnitCompareController.test.ts` 追加）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119119
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594047
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119757
+      }
+    ],
+    "14.9 实现 `src/composables/useVersionFrames.ts` 的浏览主流程（实时路由）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119179
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594098
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119802
+      }
+    ],
+    "14.10 在 `useVersionFrames.ts` 实现单钉着色、对比模式与子树浏览": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119232
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594152
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119848
+      }
+    ],
+    "14.11 在 `useVersionFrames.ts` 实现旧服务端降级": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119296
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594204
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119906
+      }
+    ],
+    "14.12 写属性测试：装载一致性": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119351
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594255
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241119962
+      }
+    ],
+    "14.13 写属性测试：304 复用已装入几何": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119414
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594312
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120015
+      }
+    ],
+    "14.14 写属性测试：退出浏览的资源清理": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119472
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594364
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120067
+      }
+    ],
+    "14.15 写属性测试：`HISTORY_BUSY` 有界重试（`useVersionFrames` 部分）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119532
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594420
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120120
+      }
+    ],
+    "14.16 为 `useVersionFrames` 写例子测试": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119595
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594484
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120170
+      }
+    ],
+    "15.1 实现 `src/components/model-version/VersionTimelineScrubber.vue`": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119652
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594614
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120224
+      }
+    ],
+    "15.2 为 `VersionTimelineScrubber` 写例子测试": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119715
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594683
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120274
+      }
+    ],
+    "15.3 让 `NodeVersionTimeline.vue` 跟随游标高亮": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119767
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594745
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120364
+      }
+    ],
+    "15.4 在 `ModelUnitVersionComparePanel.vue` 接入浏览、钉与对比": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119886
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594805
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120419
+      }
+    ],
+    "15.5 在面板中接入「所有子节点」范围的浏览（第 5 帧 b6sLdj）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216119948
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594866
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120462
+      }
+    ],
+    "15.6 在面板中接入降级与错误显示（第 6 帧 lusKv）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120000
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594917
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120507
+      }
+    ],
+    "15.7 接入直达链接与「复制链接」": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120051
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218594968
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120550
+      }
+    ],
+    "15.8 为面板写例子测试（`ModelUnitVersionComparePanel.test.ts` 追加）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120101
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218595026
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120602
+      }
+    ],
+    "16. Checkpoint：阶段 2 完成": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120153
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218595088
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120655
+      }
+    ],
+    "17.1 加性能测量埋点": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120205
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218595164
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120717
+      }
+    ],
+    "17.2 编写 `e2e/version-scrub-perf.spec.ts`（只手动跑，不进 CI）": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120258
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218595235
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120777
+      }
+    ],
+    "18. Final checkpoint：阶段 3 实测": [
+      {
+        "executionId": "54faf316-6cb3-4b08-9584-482f0aad070c",
+        "chatSessionId": "sess_e4b233c5-7c9b-4be2-829b-5c3c1a858025",
+        "timestamp": 1793216120314
+      },
+      {
+        "executionId": "7b0b895b-e92b-4606-93aa-a43532ea1b35",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793218595300
+      },
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241120836
+      }
+    ],
+    "1. 对齐设计稿与共享样例": [
+      {
+        "executionId": "144bcaa7-16ce-47e3-8404-e122fa3cd7be",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793219677199
+      }
+    ],
+    "3. 配置、历史输入缓存与实时计算源": [
+      {
+        "executionId": "b021a843-063f-4c5b-b23f-dd2f1f261fff",
+        "chatSessionId": "sess_a94d0259-973f-4088-91b9-7fa9e44a0b46",
+        "timestamp": 1793241725592
+      }
+    ]
+  }
+}
