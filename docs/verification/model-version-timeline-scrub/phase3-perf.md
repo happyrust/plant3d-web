@@ -113,3 +113,20 @@ pwsh scripts/verify/realtime-history-smoke.ps1 -EvidenceDir docs/verification/mo
 pwsh scripts/verify/realtime-vs-legacy.ps1 -EvidenceDir docs/verification/model-version-timeline-scrub
 ```
 
+## tasks.md 18（Final checkpoint）待办清单
+
+18 要求的三件事，前两件需要带新路由的二进制，第三件需要人工看一次界面。
+
+1. **换二进制**：当前 8022 上是 `D:\Rust\target\debug\aios-database.exe`（2026-10-29 16:31 构建，
+   PID 32948），二进制里搜不到 `realtime_history` / `model/history/geometry` 等字符串，是本特性之前的构建。
+   需要 `cd gen-model-timeline-scrub && cargo build --bin aios-database`，然后
+   `pwsh scripts/Start-AiosDatabaseManual.ps1 -Exe <新 exe> -Port 8022`（脚本自己会停掉占 8022 的进程，
+   并强制 `AIOS_STORE_MODE=rocksdb`）。SurrealDB 8009 已在跑（`/health` 回 200），不用重起。
+2. **重跑两个联调脚本**：命令见上一节，结果落 `docs/verification/model-version-timeline-scrub/`。
+3. **跑性能脚本**：`VERSION_SCRUB_PERF_GATE=1` + `VERSION_SCRUB_PERF_EVIDENCE=...`，
+   `npx playwright test e2e/version-scrub-perf.spec.ts --workers=1`。七条指标逐条记录，
+   300 ms / 500 ms / 2 s 若首次实测需调整，在本文件写明理由。
+
+后端合入 `refactor` 不在本次范围（`plan.md` 明确「不在本计划里部署」）。
+
+
