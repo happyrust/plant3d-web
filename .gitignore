@@ -65,6 +65,7 @@ e2e/*
 !e2e/pms-powerpms-review-new.spec.ts
 !e2e/output-project-direct-entry.spec.ts
 !e2e/dimension-mbd-v2-fixture.spec.ts
+!e2e/mbd-robustness.spec.ts
 !e2e/dimension-real-ams-bran-version.spec.ts
 !e2e/dimension-doc-screenshots.spec.ts
 !e2e/helpers/

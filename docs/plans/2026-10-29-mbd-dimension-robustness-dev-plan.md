@@ -7,7 +7,7 @@
 - 关键前提 ~~更新：后端已在负载中发送 `offset` / `suppressed_reason`（用户 2026-10-29 确认）→ 契约整包拒绝已从「未来风险」变为现网故障~~
   → **2026-10-29 复核推翻**：`rs-mbd/crates/rs-mbd/src/contract.rs` 记录 2026-07-20 起抑制信息只进 `issues`、图元上的 `suppressed_reason` 已删除，`LinearDim` 无 `offset`；本机实抓 2 条现网负载（77 / 73 图元）亦不含这两个字段。R1 定位下调为「向前兼容缺口 + 误伤风险」，阶段 A 保留但不属止血优先级。详见排查报告 R1 的复核框。
 
-> **状态（2026-10-29 对齐）**：A1–A5、B1–B4、C1–C3、D2、D3、E1、E2 已落地（§9 四轮）；剩余 **D1 / E3** 已并入现行计划 [`2026-10-29-mbd-dimension-remaining-work-dev-plan.md`](2026-10-29-mbd-dimension-remaining-work-dev-plan.md) 的 W4。本文不再派工，只保留记录；门禁基线以上游计划 §14「门禁基线总表」为准。
+> **状态（2026-10-29 对齐）**：A1–A5、B1–B4、C1–C3、D2、D3、E1、E2 已落地（§9 四轮）；**E3** 的 spec 与顺带的 **B3 补**（开关随 popstate 回读 URL）已落地（§9 第五轮，门禁待跑）；剩余 **D1** 已并入现行计划 [`2026-10-29-mbd-dimension-remaining-work-dev-plan.md`](2026-10-29-mbd-dimension-remaining-work-dev-plan.md) 的 W4-1。本文不再派工，只保留记录；门禁基线以上游计划 §14「门禁基线总表」为准。
 
 ## 0. 方法与限制（先声明）
 
@@ -154,7 +154,7 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 
 回滚方式：四处改动互不依赖，可逐个 `git checkout -- <file>` 回退；C3 若影响现网联调，先设 `VITE_MBD_ALLOW_QUERY_BACKEND=1` 而不是回退代码。
 
-> 上述「未做」清单已过期：B2/B3 见第二轮，A1–A5 见第三轮，C1/C2/D2/E1/E2 见第四轮（补记）。**仍未做**：`D1`（layoutMs 量化）、`E3`（e2e 回归）——均已并入现行计划 W4。
+> 上述「未做」清单已过期：B2/B3 见第二轮，A1–A5 见第三轮，C1/C2/D2/E1/E2 见第四轮（补记），E3 见第五轮（spec 已落地、门禁待跑）。**仍未做**：`D1`（layoutMs 量化）——已并入现行计划 W4-1。
 
 ### 第二轮（2026-10-29）：B2 + B3
 
@@ -194,7 +194,18 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 | E2 | 完成 | ff3836af | refno 归一化收口到 `src/utils/refnoKey.ts` 的 `toRefnoKey` |
 | E1 | 完成（测试文件 2026-10-29 入库） | f76729df | `src/dimension/adapters/pipeInformation.test.ts`、`normalizeUserDimensions.test.ts` 此前一直是未跟踪文件；本次入库时未跑门禁 |
 
-剩余 D1 / E3 → 现行计划 W4。
+剩余 D1 → 现行计划 W4-1；E3 见第五轮。
+
+### 第五轮（2026-10-29）：E3 e2e 回归 + B3 补（spec 与修复已写，门禁待跑）
+
+| ID | 状态 | 改动文件 | 验收 |
+| --- | --- | --- | --- |
+| E3 | spec 已落地，**门禁待执行者本机跑** | 新增 `e2e/mbd-robustness.spec.ts` + `.gitignore` 白名单行 `!e2e/mbd-robustness.spec.ts`（`e2e/*` 默认被忽略）；不碰 `src/` | 4 条用例、3 个 mock 分支（`page.route` 注入，复用 `src/fixtures/mbd-v2/rs-mbd-cli-linear.json` 的那条合法 `linear_dim`）：① `robust-mixed-unknown-kind`（合法 + 未知 kind `future_mark` + 退化弧）默认 → 契约层整包拒绝、0 条、`mbd-error-badge` 可见、title / 诊断点名 `invalid primitive future_mark "future-mark-1"`；**再在页内勾选「允许部分显示」** → URL 带上 `mbd_partial=1`、变成②的部分显示口径（1 条 + 「已跳过 2 条」）；取消勾选 → 回到整包拒绝、角标重现、横幅消失（B3 补的 e2e 面）；② 同一分支 `?mbd_partial=1` → 仍显示 1 条（id / `formattedLabel` 与 M0.1 冻结值一致）、无角标、`mbd-partial-banner`「已跳过 2 条」、诊断「跳过图元（2）」两条各带原因、notes 含 `mbd_partial=1：…已跳过 1 个图元` 与 `契约层跳过 1 个图元`；③ `robust-degenerate-arc`（`aid_arc` 的 `x_axis ∥ normal`，契约放行、mapper 塌成零向量）默认 → **映射层**原子拒绝「整包拒绝：1 个图元无法映射」+ 角标 + 跳过明细；再切 `robust-invalid-field`（`linear_dim` 缺 `end`）→ 契约层拒绝；④ partial 下退化弧被跳过（「已跳过 1 条」），再切 `robust-invalid-field` 仍整包拒绝（partial 只放宽未知 kind），切回后部分显示恢复。命令：`npx playwright test --config=playwright.novideo.config.ts e2e/mbd-robustness.spec.ts` |
+| B3 补 | 已修，**门禁待执行者本机跑** | `src/dimension/ui/DimensionPanelDock.vue`、`src/dimension/ui/DimensionPanelDock.test.ts`（e2e 面在上一行的用例①） | `syncDisplayModeFromLocation` 加一行 `mbdPartialEnabled.value = readMbdPartialEnabled();`，注释改口为「勾选框与横幅不自己记状态，popstate 时从 URL 回读」。组件用例 `re-reads ?mbd_partial on popstate so the toggle and the skipped banner follow the URL`：挂载时关，页内勾选 → URL 带 `mbd_partial=1`、勾选框保持勾选、横幅「已跳过 1 条」出现；`replaceState` 去掉参数再派发 popstate（浏览器后退）→ 勾选框与横幅一起回到关。命令：`npx vitest run src/dimension/ui/DimensionPanelDock.test.ts` |
+
+**口径澄清**：原任务写「`mbd_partial=1` 下仍有标注且角标可见」——B2 的装载失败角标按第二轮的定义只在 **0 条记录 + `loadError`** 时出现，部分显示时视图不空、角标不出现；此时的常驻提示是 B3 的横幅 `mbd-partial-banner`。spec 按这个口径断言（partial 下「无角标 + 有横幅」），不改 B2 的条件。
+
+**顺带发现（2026-10-29 已修，见上表「B3 补」行）**：`DimensionPanelDock.vue` 的 `mbdPartialEnabled` 只在挂载时读一次 URL（`ref(readMbdPartialEnabled())`），`syncDisplayModeFromLocation` 同步了 `mbd_refno` / `mbd_kinds` / `mbd_lod` / `mbd_3d` / `mbd_mode`，**没有**同步 `mbd_partial`。后果：面板已打开后再勾「允许部分显示」，同步层会按 partial 重拉并显示其余图元，但 `v-if="mbdPartialEnabled"` 的「已跳过 N 条」横幅不出现、说明文字仍是「关闭时沿用原子拒绝」；从 `?mbd_partial=1` 进入后取消勾选则反过来（横幅还在、实际已是原子拒绝）。修法一行已落：`syncDisplayModeFromLocation` 里加 `mbdPartialEnabled.value = readMbdPartialEnabled();`，组件用例钉住 popstate 后 `toggle.checked` 与横幅都跟随 URL；spec 用例①末尾随之加了「页内勾选 → 部分显示 → 取消勾选 → 整包拒绝」的往返，文件头注释同步改口。
 
 ### 与工作区其他改动的边界（勿混提交）
 
