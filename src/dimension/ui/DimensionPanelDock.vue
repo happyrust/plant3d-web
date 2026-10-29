@@ -34,6 +34,7 @@ import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
 
@@ -323,7 +324,7 @@ const mbdRefnoInput = ref(
 
 function writeMbdRefno(refno: string | null): void {
   const url = new URL(window.location.href);
-  const normalized = refno?.trim().replace('/', '_') ?? '';
+  const normalized = toRefnoKey(refno);
   if (normalized) url.searchParams.set('mbd_refno', normalized);
   else url.searchParams.delete('mbd_refno');
   window.history.pushState({}, '', url);

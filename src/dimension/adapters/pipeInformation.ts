@@ -2,6 +2,8 @@ import type { ExternalDimensionRecord } from './normalizeExternalDimensions';
 import type { Vec3 } from '../kernel/types';
 import type { ElementAttribute, ElementAttributesResponse, ModelBoundsResponse, SpatialCenterlineResponse } from '@/api/genModelV1Api';
 
+import { toRefnoKey } from '@/utils/refnoKey';
+
 export type PipeInformationField = { key: string; label: string; text: string; source: string; status: 'read' | 'derived' | 'missing' | 'unconfirmed' };
 export type PipeMemberDiameter = {
   refno: string; order: number; noun: string; implicit: boolean; outsideDiameterMm: number | null;
@@ -30,7 +32,8 @@ export type PipeInformationRecord = {
   insulationRows?: PipeInsulationRow[];
 };
 export const PIPE_INFORMATION_SOURCE = 'pipe-information' as const;
-export const pipeInformationRefno = (value: string) => value.trim().replace(/^=/, '').replace('/', '_');
+// 归一化收口到 toRefnoKey：全量替换斜杠（不是只换首个），多段 refno 才不会残留 `/` 导致键不相等
+export const pipeInformationRefno = (value: string) => toRefnoKey(value);
 export function pipeAttribute(response: ElementAttributesResponse, name: string): ElementAttribute | undefined {
   return response.attributes.find(attr => attr.name.toUpperCase() === name && !attr.is_unset
     && !['', 'unset', 'null', '0/0', '=0/0'].includes(attr.display.trim().toLowerCase()));

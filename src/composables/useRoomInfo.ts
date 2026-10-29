@@ -25,6 +25,7 @@ import { useSceneGraphOps } from '@/composables/useSceneGraph';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { showModelByRefnosWithAck, useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { flyToScope } from '@/viewer/camera/focusScope';
 
 /** 成员预览上限（plant-ui 的「成员预览」也是截断的：全量请去「房间」页签）。 */
@@ -73,8 +74,9 @@ async function spatialSource(): Promise<SpatialSource> {
   return getModelSource().spatial;
 }
 
+// 归一化统一收口到 toRefnoKey（修「只替换首个斜杠」），保留函数名以免动调用点。
 function normalizeRefno(refno: string): string {
-  return refno.trim().replace('/', '_');
+  return toRefnoKey(refno);
 }
 
 /** `calculation_status` 的字面意思 → 给用户看的一句（memberships 为空时才有意义）。 */

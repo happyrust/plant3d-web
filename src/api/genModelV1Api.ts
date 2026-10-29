@@ -16,6 +16,7 @@
  * - 显示只查 `model/records`（以节点为祖先，gen-model ADR-086），生成只有右键调 `model/generate`（ADR 0069）。
  */
 import { buildGenModelV1Url } from '@/utils/apiBase';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 // ---------------------------------------------------------------------------
 // 身份与错误
@@ -2086,7 +2087,9 @@ export function genModelV1SpatialRoomTree(
   only?: SpatialTreeLeafSelector,
   options?: GenModelV1RequestOptions,
 ): Promise<SpatialTreeResponse> {
-  const room = toV1Refno(roomRefno).replace('/', '_');
+  // `toV1Refno` 只认两段式；多段 refno 会原样透传（含 `/`），所以这里用 toRefnoKey
+  // 做全量替换，保证多段房间 refno 也不残留斜杠。
+  const room = toRefnoKey(toV1Refno(roomRefno));
   return genModelV1Fetch<SpatialTreeResponse>(`/api/v1/spatial/rooms/${encodeURIComponent(room)}/tree`, {
     ...options,
     query: {

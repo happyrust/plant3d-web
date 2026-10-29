@@ -43,6 +43,7 @@ import { resolveSceneWorldTransform } from '@/composables/useSpatialQuery';
 import { showModelByRefnosWithAck, type ShowModelByRefnosResult } from '@/composables/useViewerContext';
 import { getModelSource } from '@/model-source';
 import { emitToast } from '@/ribbon/toastBus';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { beginCameraIntent } from '@/viewer/camera/cameraIntent';
 import { flyToScope } from '@/viewer/camera/focusScope';
 
@@ -594,7 +595,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
    * （选中本来就从场景 / 别的面板来）。找不到回 null。
    */
   function revealRefno(refno: string): { id: string; index: number } | null {
-    const key = refno.replace('/', '_');
+    const key = toRefnoKey(refno);
     const nodes = nodesById.value;
     let hit: RoomTreeNode | null = null;
     for (const node of Object.values(nodes)) {
@@ -618,7 +619,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
    * 回它在 `flatRows` 里的下标供滚动。取树失败回 null（原因已按 `setError` 挂在房间根上）。
    */
   async function revealRoom(roomRefno: string): Promise<{ id: string; index: number } | null> {
-    const key = roomRefno.replace('/', '_');
+    const key = toRefnoKey(roomRefno);
     if (rootsStatus.value.status !== 'ready') await loadRoots();
     if (!roots.value.some((room) => room.refno === key)) return null;
     // 过滤词把这间房挡掉时 flatRows 里根本没有行：定位前清掉，比暗中放宽过滤好懂

@@ -14,6 +14,7 @@ import {
   resolveDtxRefnosByUnitRefno,
   resolveDtxTubeObjectIdsByKeys,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 export type Aabb6 = [number, number, number, number, number, number]
 
@@ -118,7 +119,7 @@ export class DtxCompatScene {
    * 获取 refno 对应的 DTX objectIds（如果未加载则为空）
    */
   private _getDtxObjectIds(refno: string): string[] {
-    const normalized = refno.trim().replace('/', '_');
+    const normalized = toRefnoKey(refno);
     if (this._dtxLayer.hasObject(normalized)) {
       return [normalized];
     }
@@ -658,7 +659,7 @@ export class DtxCompatScene {
   getSubtreeRefnos(refnos: string[]): string[] {
     const out = new Set<string>();
     for (const refno of refnos) {
-      const normalized = String(refno ?? '').trim().replace('/', '_');
+      const normalized = toRefnoKey(refno);
       if (!normalized) continue;
       if (this._getDtxObjectIds(normalized).length > 0) out.add(normalized);
       if (!/^\d+_/.test(normalized)) continue;
@@ -672,7 +673,7 @@ export class DtxCompatScene {
   /** `_getDtxObjectIds` 的子树版：自己的对象 + loader 里 owner 链落到该 refno 的对象；解不出库号就只有自己的。 */
   private _getDtxSubtreeObjectIds(refno: string): string[] {
     const own = this._getDtxObjectIds(refno);
-    const normalized = refno.trim().replace('/', '_');
+    const normalized = toRefnoKey(refno);
     if (!/^\d+_/.test(normalized)) return own;
     const dbno = tryGetDbnumByRefno(normalized);
     if (!dbno) return own;

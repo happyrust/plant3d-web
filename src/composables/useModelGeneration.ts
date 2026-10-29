@@ -18,6 +18,7 @@ import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 import { emitToast } from '@/ribbon/toastBus';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
 
 /**
@@ -124,8 +125,9 @@ export type ShowModelByDbnumResult = {
   budgetLimited?: boolean
 }
 
+// 归一化统一收口到 toRefnoKey（修「只替换首个斜杠」），保留函数名以免动调用点。
 function normalizeRefnoString(refno: string): string {
-  return String(refno || '').trim().replace('/', '_');
+  return toRefnoKey(refno);
 }
 
 function uniqStrings(list: string[]): string[] {

@@ -8,6 +8,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 import { pickPtsetWorldTransform, transformPtsetPoint } from '@/utils/three/ptsetTransform';
 import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat';
@@ -269,7 +270,7 @@ export function usePtsetVisualizationThree(
     const container = labelContainerRef.value;
     if (!viewer || !container) return false;
 
-    const normalizedRefno = refno.trim().replace('/', '_');
+    const normalizedRefno = toRefnoKey(refno);
     let dbno: number | null = null;
     try {
       dbno = getDbnumByRefno(normalizedRefno);

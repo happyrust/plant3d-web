@@ -50,6 +50,7 @@ import {
 } from '@/room-clip/prism';
 import { RoomClipOverlay, type RoomPanelMeshInput } from '@/room-clip/RoomClipOverlay';
 import { RoomSolid } from '@/room-clip/roomSolid';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { beginCameraIntent } from '@/viewer/camera/cameraIntent';
 
 export const ROOM_VIEW_TRUNCATE_STORAGE_KEY = 'plant3d.roomView.truncateTubes';
@@ -123,8 +124,9 @@ function writePersistedTruncateSetting(on: boolean): void {
   }
 }
 
+// 归一化统一收口到 toRefnoKey（修「只替换首个斜杠」），保留函数名以免动调用点。
 function normalizeRefno(refno: string): string {
-  return String(refno ?? '').trim().replace(/^=/, '').replace('/', '_');
+  return toRefnoKey(refno);
 }
 
 function uniqueNormalized(refnos: Iterable<string>): string[] {

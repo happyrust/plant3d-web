@@ -7,6 +7,7 @@ import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDispla
 import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
 import { parseMeshGeometryResult } from '@/utils/parseMeshGeometry';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { DTXLayer } from '@/utils/three/dtx';
 import {
   buildHiddenNounSet,
@@ -273,8 +274,9 @@ function refnoKeyCandidates(refno: string): string[] {
   const out = new Set<string>([raw]);
   const noEq = raw.replace(/^=/, '');
   out.add(noEq);
-  out.add(raw.replace('/', '_'));
-  out.add(noEq.replace('/', '_'));
+  // 全量替换候选：与下游键同一口径（toRefnoKey 换所有 `/`）；多写法都试一遍只扩大命中范围。
+  out.add(toRefnoKey(raw));
+  out.add(toRefnoKey(noEq));
   out.add(normalizeRefnoKey(raw));
   return [...out].filter(Boolean);
 }
@@ -654,7 +656,7 @@ async function ensureGeometriesForGeoHashes(
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
   const cache = cachesByDbno.get(dbno);
-  const key = String(refno ?? '').trim().replace('/', '_');
+  const key = toRefnoKey(refno);
   return cache?.refnoToObjectIds.get(key) ?? [];
 }
 
@@ -753,7 +755,7 @@ export function evictDtxRefnos(dtxLayer: DTXLayer, dbno: number, refnos: Iterabl
 export function isDtxRefnoLoaded(dbno: number, refno: string): boolean {
   const cache = cachesByDbno.get(dbno);
   if (!cache) return false;
-  const key = String(refno ?? '').trim().replace('/', '_');
+  const key = toRefnoKey(refno);
   return cache.loadedRefnos.has(key);
 }
 

@@ -18,6 +18,7 @@ import {
   type InstanceManifest,
   validateInstanceManifest,
 } from '@/utils/instances/instanceManifest';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { formatLengthMeters, formatVec3Meters } from '@/utils/unitFormat';
 
 type ToolsApi = {
@@ -161,7 +162,7 @@ function fitToScene() {
 function guessRootRefnoFromManifest(manifest: InstanceManifest): string | null {
   const v0 = (manifest as any)?.instances;
   if (Array.isArray(v0) && v0.length > 0 && v0[0] && typeof v0[0] === 'object') {
-    const r = String(v0[0]?.refno ?? '').trim().replace('/', '_');
+    const r = toRefnoKey(v0[0]?.refno);
     return r || null;
   }
   return null;
@@ -250,7 +251,7 @@ async function importInstancesAndLoadDtx() {
     return;
   }
 
-  const rootRefno = String(instancesRootRefno.value || '').trim().replace('/', '_');
+  const rootRefno = toRefnoKey(instancesRootRefno.value);
   if (!rootRefno) {
     instancesImportError.value = '请输入要加载的 root refno（例如 17496_106028）';
     return;

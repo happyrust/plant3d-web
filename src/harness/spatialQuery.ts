@@ -24,6 +24,7 @@ import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vu
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { SiteSpecValue } from '@/types/spec';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 // ---------------------------------------------------------------------------
 // mock 结果集：2 个专业分组 × 已加载/未加载/带距离/隐藏 组合
@@ -186,7 +187,7 @@ function seedClearanceRecords() {
   ];
   const now = new Date('2026-10-17T23:00:00+08:00');
   seeds.forEach(({ target, targetKind, result }) => {
-    const inputs = { ...SEEDED_CLEARANCE_INPUTS, targetRefno: target.refno.replace('/', '_'), targetKind } as Parameters<typeof surfaceClearanceToRecord>[1];
+    const inputs = { ...SEEDED_CLEARANCE_INPUTS, targetRefno: toRefnoKey(target.refno), targetKind } as Parameters<typeof surfaceClearanceToRecord>[1];
     clearance.upsertRecord(surfaceClearanceToRecord(clearanceResp(target, result, targetKind), inputs, now));
   });
   clearance.showAnnotations.value = true;

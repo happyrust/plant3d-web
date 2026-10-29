@@ -18,14 +18,16 @@
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { getModelSource } from '@/model-source';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 type RecordCacheLike = {
   peek?: (refno: string) => InstanceEntry[] | undefined;
   leavesOfRoot?: (root: string) => string[];
 };
 
+// 归一化统一收口到 toRefnoKey（修「只替换首个斜杠」），保留函数名以免动调用点。
 export function normalizeSceneRefno(refno: string): string {
-  return String(refno ?? '').trim().replace('/', '_');
+  return toRefnoKey(refno);
 }
 
 function recordCache(): RecordCacheLike | null {

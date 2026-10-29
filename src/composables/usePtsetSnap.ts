@@ -5,6 +5,7 @@ import type { Camera, Matrix4 } from 'three';
 
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
+import { toRefnoKey } from '@/utils/refnoKey';
 import {
   pickPtsetWorldTransform,
   ptsetElementOriginToScene,
@@ -33,8 +34,9 @@ export type UsePtsetSnapOptions = {
   getGlobalModelMatrix?: (() => Matrix4 | null) | null;
 };
 
+// 归一化统一收口到 toRefnoKey（修「只替换首个斜杠」），保留函数名以免动调用点。
 function normalizeRefno(refno: string): string {
-  return String(refno ?? '').trim().replace('/', '_');
+  return toRefnoKey(refno);
 }
 
 /**

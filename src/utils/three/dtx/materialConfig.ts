@@ -2,6 +2,7 @@ import { Color } from 'three';
 
 import type { DisplayTheme } from '@/composables/useDisplayThemeStore';
 
+import { toRefnoKey } from '@/utils/refnoKey';
 import { isPdmsColourRef, pdmsColourHex } from '@/viewer/e3dLook/pdmsColourTable';
 
 export type MaterialConfigEntry = {
@@ -89,7 +90,8 @@ export function normalizeNounKey(value: string): string {
 }
 
 export function normalizeRefnoKey(value: string): string {
-  return String(value || '').trim().replace('/', '_');
+  // 收口到公共归一化（trim → 剥一个前导 `=` → 全量 `/`→`_`）；旧实现只换首个斜杠，多段 refno 会残留
+  return toRefnoKey(value);
 }
 
 function clamp01(value: number, fallback: number): number {

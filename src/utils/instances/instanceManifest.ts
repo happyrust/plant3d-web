@@ -1,4 +1,5 @@
 import { describeValue, failFileValidation } from '@/utils/fileValidation';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 export type InstanceEntry = {
   geo_hash: string
@@ -364,7 +365,7 @@ const IDENTITY_MATRIX: number[] = [
 ];
 
 function normalizeRefnoString(refno: string): string {
-  return String(refno || '').trim().replace('/', '_');
+  return toRefnoKey(refno);
 }
 
 function withRefno(

@@ -145,6 +145,7 @@ import {
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareOpenDetail,
 } from '@/utils/modelUnitVersionCompare';
+import { toRefnoKey } from '@/utils/refnoKey';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
@@ -1758,7 +1759,7 @@ async function collectDescendantRefnos(rootRefno: string, maxDepth = 3, maxTotal
       const resp = await getModelSource().tree.children(item.refno, 200);
       if (resp.success && resp.children) {
         for (const child of resp.children) {
-          const childRefno = String(child.refno || '').trim().replace('/', '_');
+          const childRefno = toRefnoKey(child.refno);
           if (childRefno && !visited.has(childRefno)) {
             queue.push({ refno: childRefno, depth: item.depth + 1 });
           }
@@ -4237,7 +4238,7 @@ onMounted(async () => {
   const debugRefno = debugRefnoParam;
   if (debugRefno && !showDbnum && !showRefno && demoMode !== 'primitives') {
     // 支持 24381_145018 或 24381/145018 格式
-    const refnoStr = debugRefno.replace('/', '_');
+    const refnoStr = toRefnoKey(debugRefno);
     (async () => {
       try {
         emitToast({ message: `[信息] 正在查询 ${refnoStr} 的可见实例…`, level: 'info' });
@@ -4643,7 +4644,7 @@ onMounted(async () => {
       try {
         emitToast({ message: `正在加载点集数据: ${request.refno}` });
         // ptset 按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
-        const normalized = String(request.refno ?? '').trim().replace('/', '_');
+        const normalized = toRefnoKey(request.refno);
         const refnoKey = normalizeRefnoKeyLike(request.refno) || request.refno;
         ptsetVis.setPanelContext(refnoKey);
         let dbno: number | null = null;
