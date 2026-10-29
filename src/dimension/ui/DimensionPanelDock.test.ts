@@ -643,7 +643,7 @@ describe('DimensionPanelDock', () => {
   /**
    * W3-6（T4.6）：MBD 记录带 `isolineIndex` 时列表按直段成组——组头报编号、成员数、
    * 字高、OD（表里没有这一行就只报编号），没归属的殿后归「未分段」，组可折叠；
-   * 其它来源仍按类别两分。
+   * 其它来源仍按类别两分；只有表、没有任何记录带下标时不分组（表不触发分组）。
    */
   it('groups MBD records by isoline with the table facts in the header', async () => {
     const system = createSystem();
@@ -694,16 +694,28 @@ describe('DimensionPanelDock', () => {
     const rowIds = () => [...host.querySelectorAll('[data-dimension-id]')].map(node => node.getAttribute('data-dimension-id'));
     expect(headers()).toEqual([
       '用户尺寸',
-      '直段 0 · 成员 1 · 字高 25 mm · OD 114.3',
-      '直段 3 · 成员 2 · 字高 12 mm · OD 60.3',
+      '直段 0 · 成员 1 · 字高 25 mm · OD 114.3 mm',
+      '直段 3 · 成员 2 · 字高 12 mm · OD 60.3 mm',
       '直段 7',
       '未分段',
     ]);
     expect(rowIds()).toEqual(['linear-1', 'dim-0', 'dim-3', 'weld-3', 'dim-7', 'dim-loose']);
 
-    (host.querySelector('[data-group="直段 3 · 成员 2 · 字高 12 mm · OD 60.3"]') as HTMLButtonElement).click();
+    (host.querySelector('[data-group="直段 3 · 成员 2 · 字高 12 mm · OD 60.3 mm"]') as HTMLButtonElement).click();
     await nextTick();
     expect(rowIds()).toEqual(['linear-1', 'dim-0', 'dim-7', 'dim-loose']);
+
+    // 只有表、没有任何记录带 isolineIndex：表不触发分组，列表照旧两分，不出「未分段」空组头。
+    apps.splice(0).forEach(app => app.unmount());
+    document.body.innerHTML = '';
+    system.externalRegistry.replaceSource('mbd', [mbdRecord('dim-loose')]);
+    const tableOnly = mountPanel();
+    await nextTick();
+    const tableOnlyHeaders = [...tableOnly.querySelectorAll('[data-group]')]
+      .map(node => node.textContent?.trim() ?? '');
+    expect(tableOnlyHeaders.some(header => header === '未分段' || header.startsWith('直段'))).toBe(false);
+    expect([...tableOnly.querySelectorAll('[data-dimension-id]')].map(node => node.getAttribute('data-dimension-id')))
+      .toEqual(['linear-1', 'dim-loose']);
   });
 
   /** B3：部分显示开关只改 URL，并派发 popstate 让同步层重新拉取。 */

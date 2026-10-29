@@ -509,5 +509,8 @@ describe('createDimensionSystem', () => {
     expect(breakdown.paintMs).toBeGreaterThanOrEqual(0);
     // Layout + paint is the whole frame: nothing is measured twice or left out.
     expect(breakdown.layoutMs + breakdown.paintMs).toBeCloseTo(durationMs, 3);
+    // A full layoutViewport + paint pass names itself, so a recorder can bucket by
+    // kind instead of inferring a full-layout frame from `layoutMs > 0`.
+    expect(breakdown.kind).toBe('layout');
   });
 });

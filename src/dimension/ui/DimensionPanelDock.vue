@@ -158,15 +158,15 @@ function byCategory(
 }
 
 /**
- * MBD 按直段分组（W3-6）：负载带了 `meta.isolines` 表、或任一 MBD 记录带
- * `isolineIndex`，MBD 记录就按直段编号升序成组，没有归属的殿后归「未分段」；
- * 其它来源照旧按类别两分。两者都没有（今天的负载）时列表一行不变。
+ * MBD 按直段分组（W3-6）：任一 MBD 记录带 `isolineIndex`，MBD 记录就按直段编号升序
+ * 成组，没有归属的殿后归「未分段」；其它来源照旧按类别两分。`meta.isolines` 表只供
+ * 组头取成员数 / 字高 / OD，本身不触发分组：producer 只发表、图元还没带下标（或
+ * `mbd_kinds` 过滤后只剩无归属图元）时，全部记录落进唯一的「未分段」组只是多一层
+ * 空组头，不如一行不变。今天的负载（两者都没有）列表一行不变。
  */
-const mbdIsolineGrouping = computed(() =>
-  mbdDiagnostics.value.isolines.length > 0
-  || externalRecords.value.some(
-    record => record.source === 'mbd' && record.isolineIndex !== undefined,
-  ));
+const mbdIsolineGrouping = computed(() => externalRecords.value.some(
+  record => record.source === 'mbd' && record.isolineIndex !== undefined,
+));
 
 const items = computed<readonly DimensionListItem[]>(() => {
   const user = documentState.value?.records ?? [];
@@ -187,11 +187,16 @@ const isolinesByIndex = computed(() => new Map(
   mbdDiagnostics.value.isolines.map(isoline => [isoline.index, isoline] as const),
 ));
 
+/** 组头里的毫米值：最多两位小数、去尾零（27 →「27 mm」，60.3 →「60.3 mm」，27.0000001 →「27 mm」）。 */
+function formatMm(value: number): string {
+  return `${Number(value.toFixed(2))} mm`;
+}
+
 /** 组头：直段编号 + 表里的成员数 / 字高 / OD；表里没有这一行（悬空下标）就只报编号。 */
 function isolineGroupLabel(index: number): string {
   const isoline = isolinesByIndex.value.get(index);
   if (!isoline) return `直段 ${index}`;
-  return `直段 ${index} · 成员 ${isoline.members.length} · 字高 ${isoline.cheight_mm} mm · OD ${isoline.od_mm}`;
+  return `直段 ${index} · 成员 ${isoline.members.length} · 字高 ${formatMm(isoline.cheight_mm)} · OD ${formatMm(isoline.od_mm)}`;
 }
 
 function listGroupLabel(item: DimensionListItem): string | null {

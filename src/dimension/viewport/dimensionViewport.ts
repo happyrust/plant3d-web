@@ -33,9 +33,24 @@ import type {
 } from '../kernel/types';
 import type { Camera, Matrix4, WebGLRenderer } from 'three';
 
+/**
+ * 一帧的来源（W4-1 口径）：`layout` = 跑了全量 `layoutViewport` + `scenePainter.paint`；
+ * `style` = 只改交互样式的增量帧（`updateStyles`，必要时退回整幅 paint）；`camera` = 仅相机
+ * 失效且 projector 未换，布局与画面都没动，只补一次 `requestRender()`。
+ */
+export type DimensionFrameKind = 'layout' | 'style' | 'camera';
+
+/**
+ * `onFrame` 的分解。三种 `kind` 都满足 `layoutMs + paintMs === 整帧`，但 `paintMs` 的含义
+ * 随 `kind` 变：`layout` 帧是 `scenePainter.paint` 本身；`style` / `camera` 帧是整帧（后者
+ * 根本没画）。要比画家成本只看 `kind === 'layout'`；要数全量布局帧按 `kind` 判，不要按
+ * `layoutMs > 0`（极快的全量帧会测得 0）。`kind` 可选只为兑容只传两个耗时的调用方；
+ * 视口自己总是写。
+ */
 export type DimensionFrameBreakdown = Readonly<{
   layoutMs: number;
   paintMs: number;
+  kind?: DimensionFrameKind;
 }>;
 
 function subtract(a: DomainVec3, b: DomainVec3): DomainVec3 {
@@ -506,13 +521,14 @@ export class DimensionViewport {
       this.input.onFrame?.(completedAt - startedAt, {
         layoutMs: 0,
         paintMs: completedAt - startedAt,
+        kind: 'style',
       });
       return;
     }
     // 仅 'camera' 失效且 projector 实例未变（如纯指针按下触发的
     // flushProjection）时，布局结果必然与上次全量一致：跳过 layoutViewport，
     // 已绘制内容与当前 layouts/theme/displayMode 也保持一致，无需重绘，
-    // 只补一次重绘请求并按增量分支同样的方式上报帧耗。
+    // 只补一次重绘请求并按增量分支同样的方式上报帧耗（`kind: 'camera'` 标明这帧没画）。
     if (
       reasons.size === 1
       && reasons.has('camera')
@@ -524,6 +540,7 @@ export class DimensionViewport {
       this.input.onFrame?.(completedAt - startedAt, {
         layoutMs: 0,
         paintMs: completedAt - startedAt,
+        kind: 'camera',
       });
       return;
     }
@@ -559,6 +576,7 @@ export class DimensionViewport {
     this.input.onFrame?.(completedAt - startedAt, {
       layoutMs: layoutCompletedAt - startedAt,
       paintMs: completedAt - layoutCompletedAt,
+      kind: 'layout',
     });
     this.layoutListeners.forEach(listener => listener(this.layouts));
   }

@@ -207,9 +207,9 @@ W5-5 比的就是这几格（各取三次的中位数）：
 
 ## 已知口径问题（2026-10-29 只读审计，未修，W5-5 前需知情）
 
-1. **`paintMs` 在三类帧里语义不一致**：`dimensionViewport.ts:506-509`（只改样式的增量帧）与 `:524-527`（仅相机失效且 projector 未换）把**整帧**耗时记为 `paintMs`，而 `:559-562`（全量布局帧）的 `paintMs` 只含 `scenePainter.paint`。`:524-527` 那条分支实际**不绘制**（只有 `requestRender()`），却以 `paintMs ≈ 整帧` 入缓冲。后果：`paintMs` 分位被这两类帧往下拉或往上推，跨场景不可直接比。
+1. **`paintMs` 在三类帧里语义不一致**：`dimensionViewport.ts:506-509`（只改样式的增量帧）与 `:524-527`（仅相机失效且 projector 未换）把**整帧**耗时记为 `paintMs`，而 `:559-562`（全量布局帧）的 `paintMs` 只含 `scenePainter.paint`。`:524-527` 那条分支实际**不绘制**（只有 `requestRender()`），却以 `paintMs ≈ 整帧` 入缓冲。后果：`paintMs` 分位被这两类帧往下拉或往上推，跨场景不可直接比。**处理（2026-10-29，viewport 侧）**：`onFrame` 的 breakdown 加 `kind: 'layout' | 'style' | 'camera'`（`DimensionFrameKind`，三处上报点各标一种，上面的行号是加字段前的），数值口径未动（`layoutMs + paintMs` 仍恒等于整帧，facade 用例补断言 `kind === 'layout'`）；recorder 按 `kind` 分桶出分位（`paintMs` 只算 `layout` 帧）待 `src/debug` 在飞那刀入库后再做。
 2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
-3. **`layoutMs > 0` 的过滤会误杀极快的全量帧**：`dimensionFrameStats.ts:91` 用 `sample.layoutMs > 0` 判定全量布局帧；`performance.now()` 精度不足时（小场景可能只几十条记录）全量布局可能测得 `0`，该帧被归为增量帧，`layoutFrames` 少算。
+3. **`layoutMs > 0` 的过滤会误杀极快的全量帧**：`dimensionFrameStats.ts:91` 用 `sample.layoutMs > 0` 判定全量布局帧；`performance.now()` 精度不足时（小场景可能只几十条记录）全量布局可能测得 `0`，该帧被归为增量帧，`layoutFrames` 少算。**处理（2026-10-29）**：有了第 1 条的 `kind` 后，全量布局帧应按 `kind === 'layout'` 判定而不是 `layoutMs > 0`，随 recorder 分桶一起改。
 4. ~~**`record` 不校验 `durationMs`**~~ → **已修（2026-10-29）**：`dimensionFrameStats.ts` 的 `record` 现在丢弃非有限样本（`durationMs` / `layoutMs` / `paintMs` 任一不是有限数就不入缓冲），避免 `NaN` 毒化排序与 `max`；用例 `drops non-finite samples instead of poisoning the quantiles` 钉住。
 5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
