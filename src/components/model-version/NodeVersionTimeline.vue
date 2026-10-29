@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue';
+
 import { Check, Link } from 'lucide-vue-next';
 
 import { impactClass, impactLabel } from './nodeVersionPanelFormat';
@@ -39,6 +41,8 @@ const props = defineProps<{
   /** 容器撞上旧服务端（没有 node/versions）：露出手填会话号那一栏 */
   showManualPair: boolean;
   shareStatus: 'idle' | 'copied' | 'address';
+  /** 时间轴游标（Requirement 2.8）：对应行高亮并滚进可见区；行还在折叠段里就先展开 */
+  highlightSesno?: number | null;
 }>();
 
 /** 两个勾选、手填的两个输入框：父组件的 `useNodeVersionTimeline` 持有 */
@@ -63,6 +67,33 @@ function rowImpact(row: NodeTimelineRow) {
 function attributeOnlyShown(row: NodeTimelineRow): boolean {
   return timelineRowAttributeOnly(row, props.scope, props.selfColumnUnknown);
 }
+
+// ---------------------------------------------------------------------------
+// 跟随游标高亮（Requirement 2.8）
+// ---------------------------------------------------------------------------
+
+const listEl = ref<HTMLElement | null>(null);
+
+/**
+ * 游标落到折叠段里的行：先请父组件展开（`expand`），再在下一拍把该行滚进可见区。
+ * 展开后 `slice` 变化会再触发一次 watch，那时行已经在列表里。
+ */
+watch(
+  () => props.highlightSesno ?? null,
+  async (sesno) => {
+    if (sesno === null) return;
+    await nextTick();
+    const row = listEl.value?.querySelector<HTMLElement>(`[data-sesno="${sesno}"]`);
+    if (!row) {
+      // 行还没画出来：折叠段里就有它（父组件的 `sliceNodeTimelineRows` 会保住选中的行，
+      // 但更早的版本可能整段被折）。展开一次，下一拍再找。
+      if (props.slice.hidden > 0) emit('expand');
+      return;
+    }
+    row.scrollIntoView({ block: 'nearest' });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -141,15 +172,17 @@ function attributeOnlyShown(row: NodeTimelineRow): boolean {
     <span class="truncate">（容器的子树时间线要新版 node/versions，先手填）</span>
   </form>
 
-  <ul class="mt-2 space-y-1" data-testid="model-unit-compare-timeline">
+  <ul ref="listEl" class="mt-2 space-y-1" data-testid="model-unit-compare-timeline">
     <li v-for="row in slice.rows"
       :key="row.sesno"
       class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs"
       :class="[
         row.sesno === afterSesno ? 'border-emerald-300 bg-emerald-50/60' : row.sesno === beforeSesno ? 'border-blue-300 bg-blue-50/60' : 'border-border',
+        row.sesno === (highlightSesno ?? null) ? 'ring-2 ring-sky-400' : '',
         row.inScope ? '' : 'opacity-50',
       ]"
       :data-sesno="row.sesno"
+      :data-highlighted="row.sesno === (highlightSesno ?? null) ? 'true' : 'false'"
       :data-in-scope="row.inScope ? 'true' : 'false'">
       <span class="flex shrink-0 flex-col gap-0.5">
         <button type="button"

@@ -488,47 +488,47 @@
 ### 阶段 2：plant3d-web（前端）— 界面
 
 - [ ] 15. 时间轴组件与面板接线
-  - [~] 15.1 实现 `src/components/model-version/VersionTimelineScrubber.vue`
+  - [x] 15.1 实现 `src/components/model-version/VersionTimelineScrubber.vue`
     - 版式对照第 1 帧 (IXhiA) 与第 4 帧 (O1am8)，按 1.1 更新后的等距链序：轴标题「版本时间轴 · 本范围 n 版」、序号窗口文案、SVG 等距刻度、次级时间标注、图例、簇刻度（带数量）、Time_Anomaly_Marker、游标与标签、A / B 钉标记（第 2、3 帧）、加载 / 失败标记、悬停提示
     - 空态与异常态对照第 6 帧 (lusKv)：「该范围没有版本记录」、「当前范围没有可浏览的版本」、灰标「本范围无变化」、版本表错误码 + 消息 +「重试」、失败刻度「sesno N · 查询超时」+「重试」、日期框「跳到某一时刻，回车定位」与错误「时间格式无效」等
     - 按钮：浏览 / 退出浏览 / 钉为 A / 钉为 B / 对比 A / B / 与上一版比 / 与最新比 / 清除钉 / 复制链接 / 只看几何变的；禁用态按 Requirement 5.5、5.12；钉同一版本时提示「A 与 B 不能是同一版本」
     - `tabindex=0` 接左右键；拖动用 `pointerdown` + `setPointerCapture`，区域外松开也收到 `pointerup`；指针事件按 `requestAnimationFrame` 合帧，每帧最多吸附一次；游标只改 `transform`
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.10, 1.11, 1.12, 1.13, 2.1, 2.3, 2.4, 2.5, 2.6, 2.7, 2.9, 2.11, 3.12, 3.13, 5.1, 5.3, 5.5, 5.12, 8.8, 8.9_
 
-  - [~] 15.2 为 `VersionTimelineScrubber` 写例子测试
+  - [x] 15.2 为 `VersionTimelineScrubber` 写例子测试
     - 空表提示、版本表错误与重试、时间异常渲染与悬停内容、「无时间」与次级时间标注、图例、区域外松开、日期回车与各错误文案、按钮禁用态、剪贴板失败文本框
     - _Requirements: 1.2, 1.3, 1.4, 1.11, 1.12, 2.4, 5.5, 5.12, 8.8, 8.9, 11.5_
 
-  - [~] 15.3 让 `NodeVersionTimeline.vue` 跟随游标高亮
+  - [x] 15.3 让 `NodeVersionTimeline.vue` 跟随游标高亮
     - 接受 `highlightSesno`，高亮并 `scrollIntoView({ block: 'nearest' })`；行在折叠段里先展开，必要时「加载更早」直到含该行（第 1 帧「版本列表 · 与游标同步」）
     - _Requirements: 2.8_
 
-  - [~] 15.4 在 `ModelUnitVersionComparePanel.vue` 接入浏览、钉与对比
+  - [x] 15.4 在 `ModelUnitVersionComparePanel.vue` 接入浏览、钉与对比
     - 时间线上方挂 `VersionTimelineScrubber`，纵向列表保留；「浏览」进入 / 退出，卸载时调 `exitBrowse`
     - 视口角标对照第 1 帧（「浏览 · sesno 630 · 2026/09/18 19:50」、「环境 · 最新模型」、「仅自身：只高亮本构件」）、第 2 帧（单钉四态与四态图例）、第 3 帧（双钉「对比中」，A / B 分屏同相机）
     - 点隔离图层构件 → `attributesAtSesno` 取属性，横幅「属性来自 sesno N」，游标变化重取
     - 任一钉改变且两钉都在时刷新「属性对比」「差异摘要」两个 tab；「清除钉」回到不着色的浏览
     - _Requirements: 3.1, 3.2, 3.10, 3.14, 5.4, 5.6, 5.8, 5.9, 5.13, 9.5_
 
-  - [~] 15.5 在面板中接入「所有子节点」范围的浏览（第 5 帧 b6sLdj）
+  - [x] 15.5 在面板中接入「所有子节点」范围的浏览（第 5 帧 b6sLdj）
     - 轴标题「版本时间轴 · 子树 n 版」，游标标签与悬停带「单元 n」（只改属性为 0）
     - 确认对话框「要加载 N 个单元」，选项「全部加载 / 先装变化最大的 20 个 / 取消」；等待时角标「浏览 · sesno N · 等待确认」，取消后「sesno N 未加载（已取消）」
     - 差异摘要错误与部分失败单元列表（refno + 错误码 + 消息）
     - _Requirements: 9.1, 9.2, 9.3, 9.6, 9.7, 9.8_
 
-  - [~] 15.6 在面板中接入降级与错误显示（第 6 帧 lusKv）
+  - [x] 15.6 在面板中接入降级与错误显示（第 6 帧 lusKv）
     - `model/versions` 404 / 405 时沿用「服务端还没有 model/versions」，不渲染时间轴、不给「浏览」入口
     - 实时路由缺失时底部持续显示「服务端没有实时历史查询，改用逐版生成」；其它 HTTP 错误显示错误码与消息，网络错误显示「无法连接服务端」
     - 游标请求失败的错误码与消息列在面板中，`REFNO_NOT_IN_CHAIN` 等按通用错误显示
     - _Requirements: 1.12, 3.12, 10.1, 10.3, 10.6_
 
-  - [~] 15.7 接入直达链接与「复制链接」
+  - [x] 15.7 接入直达链接与「复制链接」
     - 「复制链接」用 `writeScrubUrl` 写剪贴板，成功提示「链接已复制」；失败时显示可全选的 URL 文本框与「复制失败，请手动复制」
     - URL 带 `cursor` 时按序：打开 `unit_refno` 节点 → 切 `scope`（未带时用缺省范围）→ `reconcileScrubState` 放游标、恢复钉 → 进入浏览；非法 `scope` / `cursor` 不进浏览并指明参数，能打开节点时游标放最新版；钉无效只忽略该钉并提示
     - 入口接在 `src/utils/modelUnitVersionCompare.ts` 现有 URL 解析处；不带 `cursor` 时走现有 `compare_a` / `compare_b` / `compare_autorun` 逻辑，现有用例保持通过
     - _Requirements: 11.1, 11.2, 11.3, 11.5, 11.6, 11.7, 11.8_
 
-  - [~] 15.8 为面板写例子测试（`ModelUnitVersionComparePanel.test.ts` 追加）
+  - [x] 15.8 为面板写例子测试（`ModelUnitVersionComparePanel.test.ts` 追加）
     - 游标高亮纵向列表行并展开折叠段、属性横幅随游标更新、钉变化刷新两个 tab、清除钉、子树 Changed_Unit 提示、`model/versions` 缺失隐藏时间轴、URL 带 `cursor` 的恢复顺序；现有 `compare_a` / `compare_b` / `compare_autorun` 用例保持通过
     - _Requirements: 2.8, 3.10, 5.9, 5.13, 9.1, 10.3, 11.2_
 

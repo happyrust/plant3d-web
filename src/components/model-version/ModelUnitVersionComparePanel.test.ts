@@ -14,6 +14,7 @@ const versionSourceMocks = vi.hoisted(() => ({
   attributeHistory: vi.fn(),
   listNodeVersions: vi.fn(),
   diffSummary: vi.fn(),
+  queryHistoryGeometry: vi.fn(),
 }));
 vi.mock('@/model-source', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/model-source')>();
@@ -1489,5 +1490,205 @@ describe('ModelUnitVersionComparePanel', () => {
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
+  });
+
+  // -------------------------------------------------------------------------
+  // 拖动浏览（spec `model-version-timeline-scrub`，tasks.md 15.8）
+  // -------------------------------------------------------------------------
+
+  /** 面板挂载前把地址栏换成给定 search，返回还原函数 */
+  function setSearch(search: string): () => void {
+    const original = window.location.search;
+    window.history.replaceState(null, '', `${window.location.pathname}${search}`);
+    return () => { window.history.replaceState(null, '', `${window.location.pathname}${original}`); };
+  }
+
+  /** 三维那一半：收 attach 并把桩接口交回去 */
+  function attachBrowseStub(): { calls: string[]; detach: () => void } {
+    const calls: string[] = [];
+    const api = {
+      browseEnter: () => { calls.push('enter'); },
+      browseShow: async (frame: { sesno: number }) => { calls.push(`show:${frame.sesno}`); },
+      browsePending: (sesno: number) => { calls.push(`pending:${sesno}`); },
+      browseMissing: () => { calls.push('missing'); },
+      browseBadge: () => { calls.push('badge'); },
+      browseExit: () => { calls.push('exit'); },
+      replaceSide: async () => { calls.push('replace'); },
+      open: async () => { calls.push('open'); },
+    };
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { action?: string; respond?: (value: unknown) => void };
+      if (detail?.action === 'attach') detail.respond?.(api);
+    };
+    window.addEventListener('plant3d:model-version-browse', listener);
+    return { calls, detach: () => window.removeEventListener('plant3d:model-version-browse', listener) };
+  }
+
+  it('时间轴随游标高亮纵向列表的行', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([
+      version(791, '2026-07-22T01:00:00Z'),
+      version(800, '2026-07-22T01:30:00Z'),
+      version(897, '2026-07-22T02:00:00Z'),
+    ]);
+    versionSourceMocks.listElementVersions.mockResolvedValue({
+      ...unitTimeline,
+      versions: [
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', elementImpact: 'mesh', unitImpact: 'mesh' },
+        { sesno: 800, sessionTime: '2026-07-22T01:30:00Z', elementImpact: 'mesh', unitImpact: 'mesh' },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: 'mesh', unitImpact: 'mesh' },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381/145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    // 未进入浏览：不高亮
+    expect(host.querySelector('[data-highlighted="true"]')).toBeNull();
+
+    // 时间轴存在，游标首帧在最新一版
+    const track = host.querySelector('[data-testid="version-timeline-scrubber-track"]') as HTMLElement;
+    expect(track).not.toBeNull();
+    track.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    await flushUi();
+
+    const cursorLabel = host.querySelector('[data-testid="version-timeline-scrubber-cursor-label"]')?.textContent ?? '';
+    expect(cursorLabel).toContain('sesno 800');
+
+    app.unmount();
+  });
+
+  it('URL 带 cursor：按序打开节点 → 切 scope → 放游标与钉 → 进入浏览', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([
+      version(791, '2026-07-22T01:00:00Z'),
+      version(897, '2026-07-22T02:00:00Z'),
+    ]);
+    versionSourceMocks.queryHistoryGeometry = vi.fn(async (req: { sesno?: number }) => ({
+      kind: 'ok' as const,
+      sesno: req.sesno ?? 897,
+      sessionTime: null,
+      geometryKey: `g${req.sesno ?? 897}`,
+      geometry: geometry(new Map([['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]]])),
+    }));
+
+    const restore = setSearch('?unit_refno=24381_145018&scope=self&cursor=791&compare_a=791');
+    const stub = attachBrowseStub();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUntil(() => stub.calls.some((call) => call.startsWith('show:')));
+
+    // 进了浏览：browseEnter 先发，再装游标那一版
+    expect(stub.calls[0]).toBe('enter');
+    expect(stub.calls.some((call) => call === 'show:791')).toBe(true);
+    // 游标落在 URL 指定的那一版
+    expect(host.querySelector('[data-testid="version-timeline-scrubber-cursor-label"]')?.textContent).toContain('sesno 791');
+
+    app.unmount();
+    stub.detach();
+    restore();
+  });
+
+  it('URL 的 cursor 不在版本表：回落到不大于它的最后一版并提示', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([
+      version(791, '2026-07-22T01:00:00Z'),
+      version(897, '2026-07-22T02:00:00Z'),
+    ]);
+    versionSourceMocks.queryHistoryGeometry = vi.fn(async (req: { sesno?: number }) => ({
+      kind: 'ok' as const,
+      sesno: req.sesno ?? 791,
+      sessionTime: null,
+      geometryKey: `g${req.sesno ?? 791}`,
+      geometry: geometry(new Map([['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]]])),
+    }));
+
+    const restore = setSearch('?unit_refno=24381_145018&scope=self&cursor=850');
+    const stub = attachBrowseStub();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUntil(() => host.querySelector('[data-testid="model-unit-compare-scrub-url-notice"]') !== null);
+
+    expect(host.querySelector('[data-testid="model-unit-compare-scrub-url-notice"]')?.textContent)
+      .toContain('链接中的版本 850 不在本范围，已定位到 791');
+    expect(host.querySelector('[data-testid="version-timeline-scrubber-cursor-label"]')?.textContent).toContain('sesno 791');
+
+    app.unmount();
+    stub.detach();
+    restore();
+  });
+
+  it('URL 的 scope 非法：不进浏览并指明参数', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([version(791, '2026-07-22T01:00:00Z')]);
+
+    const restore = setSearch('?unit_refno=24381_145018&scope=subtreeX&cursor=791');
+    const stub = attachBrowseStub();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUntil(() => host.querySelector('[data-testid="model-unit-compare-scrub-url-notice"]') !== null);
+
+    expect(host.querySelector('[data-testid="model-unit-compare-scrub-url-notice"]')?.textContent)
+      .toContain('scope 无效');
+    expect(stub.calls).not.toContain('enter');
+
+    app.unmount();
+    stub.detach();
+    restore();
+  });
+
+  it('点「浏览」进入浏览并装游标那一版；再点「退出浏览」卸图层', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([
+      version(791, '2026-07-22T01:00:00Z'),
+      version(897, '2026-07-22T02:00:00Z'),
+    ]);
+    versionSourceMocks.queryHistoryGeometry = vi.fn(async (req: { sesno?: number }) => ({
+      kind: 'ok' as const,
+      sesno: req.sesno ?? 897,
+      sessionTime: null,
+      geometryKey: `g${req.sesno ?? 897}`,
+      geometry: geometry(new Map([['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]]])),
+    }));
+
+    const stub = attachBrowseStub();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381/145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    // 缺省范围是「所有子节点」，走差异摘要那条路；这里测单单元，切到「仅自身」
+    (host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+    await flushUntil(() => stub.calls.some((call) => call.startsWith('show:')));
+    expect(stub.calls[0]).toBe('enter');
+    // 首帧装的是游标（最新一版）
+    expect(stub.calls).toContain('show:897');
+
+    const exitButton = host.querySelector('[data-testid="version-timeline-scrubber-exit-browse"]') as HTMLButtonElement | null;
+    expect(exitButton, `calls=${stub.calls.join(',')}`).not.toBeNull();
+    exitButton!.click();
+    await flushUi();
+    expect(stub.calls, 'exit 未派发').toContain('exit');
+
+    app.unmount();
+    stub.detach();
   });
 });

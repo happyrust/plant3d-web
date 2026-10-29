@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { GitCompare, RefreshCw } from 'lucide-vue-next';
 
 import NodeVersionAttributesTab from './NodeVersionAttributesTab.vue';
 import NodeVersionModelTab from './NodeVersionModelTab.vue';
 import NodeVersionTimeline from './NodeVersionTimeline.vue';
+import VersionTimelineScrubber from './VersionTimelineScrubber.vue';
 
 import type { ChangedElementRow } from './nodeVersionPanelFormat';
 
@@ -13,6 +14,8 @@ import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMeta
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNodeVersionTimeline } from '@/composables/useNodeVersionTimeline';
 import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
+import { useVersionFrames } from '@/composables/useVersionFrames';
+import { useVersionScrubber } from '@/composables/useVersionScrubber';
 import {
   getModelSource,
   ModelVersionRouteUnavailableError,
@@ -61,6 +64,8 @@ import {
   type AttributeNetDiffView,
   type NodeTimelineRow,
 } from '@/utils/nodeVersionTimeline';
+import { readScrubUrl, reconcileScrubState, writeScrubUrl } from '@/utils/versionScrub/scrubUrl';
+import { createLazyBrowseApi, requestVersionBrowseApi, type VersionBrowseApi } from '@/viewer/versionBrowseBridge';
 
 /**
  * 节点版本视图（ADR 0066；CONTEXT「节点版本视图 / 对比范围 / 属性变化时间线 / 属性净差 / 差异摘要」）。
@@ -277,6 +282,12 @@ async function probeMembers(refno: string): Promise<boolean | null> {
   } catch {
     return null;
   }
+}
+
+/** 时间轴「重试」：清掉错误重取一遍版本表（Requirement 1.12） */
+async function reloadVersions(): Promise<void> {
+  error.value = null;
+  await loadVersions();
 }
 
 async function loadVersions(): Promise<void> {
@@ -693,6 +704,117 @@ function closeCompare(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 拖动浏览（spec `model-version-timeline-scrub`，tasks.md 15.4–15.7）
+// ---------------------------------------------------------------------------
+
+/** 轴宽：`ResizeObserver` 喂进来（`layoutTicks` 必须有像素宽才算得出 x） */
+const scrubWidth = ref(600);
+const scrubber = useVersionScrubber(nodeTimeline, { source: getModelSource().versions, width: scrubWidth });
+
+/** 三维那一半的接口：面板先挂载、视口后回话，所以拿一层转发 */
+let browseApi: VersionBrowseApi | null = null;
+const lazyBrowseApi = createLazyBrowseApi(() => browseApi);
+
+const frames = useVersionFrames({
+  source: getModelSource().versions,
+  controller: lazyBrowseApi,
+});
+const browsing = computed(() => frames.mode.value !== 'idle');
+
+/** 时间轴上的失败 / 加载标记：面板再拼上版本表本身的错误 */
+const scrubTickStatus = frames.tickStatus;
+const scrubTableError = computed<{ code: string; message: string } | null>(() => {
+  if (error.value) return { code: 'ERROR', message: error.value };
+  return null;
+});
+
+onMounted(() => {
+  void requestVersionBrowseApi().then((api) => { browseApi = api; });
+});
+
+/** 进入浏览：范围决定单元，游标决定第一帧（Requirement 3.1、9.2） */
+async function enterBrowse(): Promise<void> {
+  const sesno = scrubber.cursor.value;
+  if (sesno === null || dbnum.value === null) return;
+  const unitRefnos = scope.value === 'subtree' && geometryGroups.value.length > 0
+    ? geometryGroups.value.map((group) => group.unitRefno!)
+    : [comparedUnitRefno.value];
+  await frames.enterBrowse({
+    dbnum: dbnum.value,
+    unitRefnos,
+    cursor: sesno,
+    ordered: scrubber.versions.value.map((v) => v.sesno),
+    scope: scope.value,
+    focusRefno: queriedIsUnitRoot.value ? null : queriedElementRefno.value,
+    latest: scrubber.versions.value.at(-1)?.sesno ?? null,
+  });
+}
+
+async function exitBrowse(): Promise<void> {
+  await frames.exitBrowse();
+}
+
+/** 游标一变就通知取数层：它决定走 150 ms 门还是立即发（Requirement 3.3、3.4） */
+const offCursorChange = scrubber.onCursorChange((sesno, trigger) => {
+  frames.cursorChanged(sesno, trigger);
+});
+
+watch(() => scrubber.pins.value, (pins) => { frames.pinsChanged(pins); }, { deep: true });
+
+async function enterCompareFromScrubber(): Promise<void> {
+  await frames.enterCompare();
+}
+
+/** 子树确认（Requirement 9.3、9.6） */
+function answerConfirm(choice: 'all' | 'top' | 'cancel'): void {
+  frames.answerConfirm(choice);
+}
+
+/** 「复制链接」（Requirement 11.1、11.5）：带 cursor 时写时间轴那一套参数 */
+async function copyScrubLink(): Promise<void> {
+  const cursor = scrubber.cursor.value;
+  if (cursor === null) return;
+  const link = writeScrubUrl(window.location.href, {
+    unitRefno: elementTimeline.value?.refno ?? normalizedRefno.value,
+    scope: scope.value,
+    cursor,
+    a: scrubber.pins.value.a,
+    b: scrubber.pins.value.b,
+  });
+  window.history.replaceState(window.history.state, '', link);
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(link);
+    shareStatus.value = 'copied';
+  } catch {
+    shareStatus.value = 'address';
+  }
+}
+
+/**
+ * 直达链接恢复（Requirement 11.2、11.3、11.7）：打开节点 → 切 scope → 放游标与钉 → 进入浏览。
+ * 面板挂载时在 `loadVersions` 之后调一次；非法参数不进浏览并指明是哪一项。
+ */
+const scrubUrlNotice = ref<string | null>(null);
+
+async function restoreFromScrubUrl(): Promise<void> {
+  const read = readScrubUrl(window.location.search);
+  if (read.kind === 'none') return;
+  if (read.kind === 'invalid') {
+    scrubUrlNotice.value = `链接中的 ${read.param} 无效（${read.raw}），未进入浏览`;
+    return;
+  }
+  if (read.scope !== null && read.scope !== scope.value) setScope(read.scope);
+  await nextTick();
+  const ordered = scrubber.versions.value.map((v) => v.sesno);
+  const state = reconcileScrubState(read, ordered);
+  scrubber.restoreFromUrl({ cursor: state.cursor, a: state.pins.a, b: state.pins.b });
+  if (state.notices.length > 0) scrubUrlNotice.value = state.notices.join('；');
+  await nextTick();
+  await enterBrowse();
+}
+
 function handleCompareLifecycle(event: Event): void {
   const detail = (event as CustomEvent<ModelUnitVersionCompareEventDetail>).detail;
   if (detail?.action !== 'close') return;
@@ -784,12 +906,30 @@ onMounted(() => {
     inspectRefno(pending);
     return;
   }
-  void autorunFromUrl();
+  void (async () => {
+    // URL 带 `cursor` 时先按 `compare_autorun` 那套把节点打开，再放游标、进浏览（Requirement 11.2）
+    const scrub = readScrubUrl(window.location.search);
+    if (scrub.kind === 'invalid' && scrub.unitRefno !== null) {
+      unitRefno.value = scrub.unitRefno;
+      await loadVersions();
+      scrubUrlNotice.value = `链接中的 ${scrub.param} 无效（${scrub.raw}），未进入浏览`;
+      return;
+    }
+    if (scrub.kind === 'ok') {
+      if (urlConfig.unitRefno === null) unitRefno.value = scrub.unitRefno;
+      await loadVersions();
+      await restoreFromScrubUrl();
+      return;
+    }
+    await autorunFromUrl();
+  })();
 });
 onBeforeUnmount(() => {
   requestId += 1;
   summaryRequestId += 1;
   closeCompare();
+  offCursorChange();
+  void frames.exitBrowse();
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);
   window.removeEventListener(MODEL_VERSION_INSPECT_EVENT, handleInspectRequest);
@@ -868,6 +1008,56 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-if="timelineRows.length > 0">
+        <VersionTimelineScrubber :scrubber="scrubber"
+          :width="scrubWidth"
+          :counts="timelineCounts"
+          :scope="scope"
+          :table-error="scrubTableError"
+          :tick-status="scrubTickStatus"
+          :geometry-only="geometryOnly"
+          :browsing="browsing"
+          :legacy-fallback="frames.legacyFallback.value"
+          :share-status="shareStatus"
+          @resize="scrubWidth = $event"
+          @retry-table="reloadVersions"
+          @retry-tick="frames.retry"
+          @enter-browse="enterBrowse"
+          @exit-browse="exitBrowse"
+          @compare="enterCompareFromScrubber"
+          @copy-link="copyScrubLink" />
+
+        <p v-if="scrubUrlNotice" class="mt-1 text-[10px] text-amber-700" data-testid="model-unit-compare-scrub-url-notice">
+          {{ scrubUrlNotice }}
+        </p>
+
+        <!-- 子树确认（Requirement 9.3、9.6） -->
+        <div v-if="frames.pendingConfirm.value" class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900"
+          data-testid="model-unit-compare-subtree-confirm">
+          <p>要加载 {{ frames.pendingConfirm.value.units.length }} 个单元（超过成本阈值或 20 个），先确认：</p>
+          <div class="mt-1.5 flex flex-wrap gap-1.5">
+            <button type="button" class="rounded border border-amber-400 px-2 py-0.5 hover:bg-amber-100"
+              data-testid="model-unit-compare-subtree-all" @click="answerConfirm('all')">
+              全部加载
+            </button>
+            <button type="button" class="rounded border border-amber-400 px-2 py-0.5 hover:bg-amber-100"
+              data-testid="model-unit-compare-subtree-top" @click="answerConfirm('top')">
+              先装变化最大的 {{ frames.pendingConfirm.value.top.length }} 个
+            </button>
+            <button type="button" class="rounded border border-amber-400 px-2 py-0.5 hover:bg-amber-100"
+              data-testid="model-unit-compare-subtree-cancel" @click="answerConfirm('cancel')">
+              取消
+            </button>
+          </div>
+        </div>
+
+        <!-- 游标请求失败的错误码与消息（Requirement 3.12） -->
+        <ul v-if="frames.errors.value.length > 0" class="mt-2 space-y-0.5 text-[10px] text-rose-700"
+          data-testid="model-unit-compare-scrub-errors">
+          <li v-for="(item, i) in frames.errors.value" :key="`${item.sesno}-${item.unitRefno ?? ''}-${i}`">
+            sesno {{ item.sesno }}<template v-if="item.unitRefno"> · {{ item.unitRefno }}</template>：{{ item.code }} · {{ item.message }}
+          </li>
+        </ul>
+
         <NodeVersionTimeline v-model:self-only="selfOnly"
           v-model:geometry-only="geometryOnly"
           v-model:manual-a="manualA"
@@ -884,6 +1074,7 @@ onBeforeUnmount(() => {
           :history-unavailable="historyUnavailable"
           :show-manual-pair="!hasUnit && !nodeVersions"
           :share-status="shareStatus"
+          :highlight-sesno="browsing ? scrubber.cursor.value : null"
           @pick="pickSide"
           @with-previous="compareWithPrevious"
           @with-latest="compareWithLatest"

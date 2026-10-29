@@ -174,6 +174,7 @@ import {
   type SglLookPresetId,
 } from '@/viewer/e3dLook';
 import { createModelUnitCompareController } from '@/viewer/modelUnitCompareController';
+import { isVersionBrowseAttach, MODEL_VERSION_BROWSE_EVENT, type VersionBrowseApi } from '@/viewer/versionBrowseBridge';
 
 defineProps<{
     params: {
@@ -811,6 +812,15 @@ const splitCompareRay = modelUnitCompare.splitRay;
 const pickModelUnitCompareObject = modelUnitCompare.pickObject;
 const selectModelUnitCompareObject = modelUnitCompare.selectObject;
 const handleModelUnitVersionCompare = modelUnitCompare.handleEvent;
+
+/**
+ * 拖动浏览的接口交接（spec `model-version-timeline-scrub`，tasks.md 15.4）：
+ * 面板发 `attach` 时把浏览接口交回去；面板比视口先挂载时也一样——它 attach 时 `pendingVersionBrowseApi` 已经在了。
+ */
+function handleVersionBrowseEvent(event: Event): void {
+  const detail = (event as CustomEvent).detail;
+  if (isVersionBrowseAttach(detail)) detail.respond(pendingVersionBrowseApi);
+}
 const clearanceProject = ref(getOutputProjectFromUrl());
 const offClearanceProject = onCurrentProjectPathChange((project) => { clearanceProject.value = project; });
 const clearanceStorageContext = computed(() => {
@@ -1189,6 +1199,9 @@ let offPtsetWatch: (() => void) | null = null;
 let offBranClearanceWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offModelUnitVersionCompare: (() => void) | null = null;
+let offVersionBrowse: (() => void) | null = null;
+/** 已就位的浏览接口：面板可能比视口先挂载，来 attach 时立刻回话 */
+let pendingVersionBrowseApi: VersionBrowseApi | null = null;
 let offOpenSpatialQuery: (() => void) | null = null;
 let offOpenModelGeneration: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
@@ -4624,6 +4637,12 @@ onMounted(async () => {
   offModelUnitVersionCompare = () =>
     window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleModelUnitVersionCompare);
 
+  // 拖动浏览：面板在 `ModelUnitVersionComparePanel`，三维控制器在这里，两边经 window 事件交接接口
+  window.addEventListener(MODEL_VERSION_BROWSE_EVENT, handleVersionBrowseEvent);
+  offVersionBrowse = () => window.removeEventListener(MODEL_VERSION_BROWSE_EVENT, handleVersionBrowseEvent);
+  // 面板可能比视口先挂载：先把接口挂在一处，等它来 attach 时立刻回话
+  pendingVersionBrowseApi = modelUnitCompare;
+
   function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: PtsetResponse }[]) {
     if (entries.length === 0) return;
     const [first, ...rest] = entries;
@@ -4898,6 +4917,9 @@ onUnmounted(() => {
 
   offModelUnitVersionCompare?.();
   offModelUnitVersionCompare = null;
+  offVersionBrowse?.();
+  offVersionBrowse = null;
+  pendingVersionBrowseApi = null;
   clearModelUnitVersionCompare();
 
   offOpenSpatialQuery?.();
