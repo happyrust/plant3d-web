@@ -408,4 +408,296 @@ describe('parseMbdV2PipeData', () => {
     expect(malformed.error).toContain('"bad-geometry"');
     expect(badIssue.error).toContain('"i-2"');
   });
+
+  /**
+   * T4.1（现行计划 W3-1 第①步）：`meta.coverage` 先接受、后消费。缺省 / `null` 照旧
+   * 放行（现网生产者都还没发），给了就原样透传给消费方（条目不限于前端已知 kind）；
+   * 不是「非空字符串数组」的形状按 ADR 0046 整包拒绝，和 `cheight_mm` / `layout_mode`
+   * 一个口径。
+   */
+  it('accepts an optional meta.coverage kind list and rejects malformed ones', () => {
+    const withMeta = (meta: Record<string, unknown>) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives: [],
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [], ...meta },
+    });
+
+    const absent = withMeta({});
+    expect(absent.ok).toBe(true);
+    if (absent.ok) expect(absent.data.meta.coverage).toBeUndefined();
+
+    expect(withMeta({ coverage: null })).toMatchObject({ ok: true, data: { meta: { coverage: null } } });
+    expect(withMeta({ coverage: [] })).toMatchObject({ ok: true, data: { meta: { coverage: [] } } });
+    const declared = withMeta({ coverage: ['linear_dim', 'angle_dim', 'future_mark'] });
+    expect(declared.ok).toBe(true);
+    if (declared.ok) {
+      expect(declared.data.meta.coverage).toEqual(['linear_dim', 'angle_dim', 'future_mark']);
+    }
+
+    for (const malformed of ['linear_dim', 0, [1], ['linear_dim', ''], { linear_dim: true }]) {
+      expect(withMeta({ coverage: malformed })).toEqual({
+        ok: false,
+        error: 'MBD V2 payload has invalid meta',
+      });
+    }
+  });
+
+  /**
+   * T4.5（现行计划 W3-2 第①步）：`meta.source_version` 用与 `/api/v1/spatial/centerline`
+   * 相同的形状（`dbnum` / `sesno` / `databases[{ dbnum, sesno, db_type }]`），面板才能和
+   * 管道信息卡、时间轴的版本口径直接对账。缺省 / `null` 放行；给了就校验结构、范围与
+   * 库号唯一，`databases: []`（离线 CLI 生产者）也认；其它形状整包拒绝。
+   */
+  it('accepts an optional meta.source_version in the centerline shape and rejects malformed ones', () => {
+    const withMeta = (meta: Record<string, unknown>) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives: [],
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [], ...meta },
+    });
+    const version = {
+      dbnum: 24381,
+      sesno: 145,
+      databases: [
+        { dbnum: 24381, sesno: 145, db_type: 'DESI' },
+        { dbnum: 5054, sesno: 48, db_type: 'CATA' },
+      ],
+    };
+
+    const absent = withMeta({});
+    expect(absent.ok).toBe(true);
+    if (absent.ok) expect(absent.data.meta.source_version).toBeUndefined();
+    expect(withMeta({ source_version: null }))
+      .toMatchObject({ ok: true, data: { meta: { source_version: null } } });
+
+    const declared = withMeta({ source_version: version });
+    expect(declared.ok).toBe(true);
+    if (declared.ok) expect(declared.data.meta.source_version).toEqual(version);
+    expect(withMeta({ source_version: { ...version, databases: [] } })).toMatchObject({ ok: true });
+
+    const malformed: unknown[] = [
+      '24381@145',
+      { ...version, dbnum: 0 },
+      { ...version, sesno: -1 },
+      { ...version, dbnum: 24381.5 },
+      { dbnum: 24381, sesno: 145 },
+      { ...version, databases: [{ dbnum: 24381, sesno: 145 }] },
+      { ...version, databases: [...version.databases, { dbnum: 5054, sesno: 49, db_type: 'CATA' }] },
+    ];
+    for (const candidate of malformed) {
+      expect(withMeta({ source_version: candidate })).toEqual({
+        ok: false,
+        error: 'MBD V2 payload has invalid meta',
+      });
+    }
+  });
+
+  /**
+   * T4.3（现行计划 W3-4 第①步）：`label` / `aid_text` / `slope_mark` 可选的 `text_dir`
+   * （文字基线方向，PML `ori` 的 X 轴）。缺省 = 视口水平（今天所有生产者的行为）；给了
+   * 就必须是有限且非零的三维向量，否则按 ADR 0046 点名整包拒绝；strict 下它是白名单
+   * 字段，但只属于这三种 kind。
+   */
+  it('accepts an optional text_dir baseline on label / aid_text / slope_mark and rejects degenerate ones', () => {
+    const withPrimitives = (primitives: unknown[], options?: { strict?: boolean }) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives,
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [] },
+    }, options);
+    const label = { kind: 'label', id: 'l-1', text: 'P-101', position: [0, 0, 0] };
+    const aidText = { kind: 'aid_text', id: 't-1', text: 'EL +1', position: [1, 0, 0] };
+    const slope = { kind: 'slope_mark', id: 's-1', text: '1:100', start: [0, 0, 0], end: [1, 0, 0.01] };
+
+    const oriented = [
+      { ...label, text_dir: [1, 0, 0] },
+      { ...aidText, text_dir: [0, 0, 1] },
+      { ...slope, text_dir: [1, 0, 0.01] },
+    ];
+    for (const strict of [false, true]) {
+      const result = withPrimitives(oriented, { strict });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.data.primitives).toEqual(oriented);
+    }
+    const bare = withPrimitives([label, aidText, slope]);
+    expect(bare.ok).toBe(true);
+    if (bare.ok) {
+      expect(bare.data.primitives.every(primitive => !('text_dir' in primitive))).toBe(true);
+    }
+
+    const degenerate: readonly (readonly [Record<string, unknown>, unknown])[] = [
+      [label, [0, 0, 0]],
+      [aidText, [1, 0]],
+      [slope, [1, Number.NaN, 0]],
+      [label, 'X'],
+    ];
+    for (const [primitive, textDir] of degenerate) {
+      const result = withPrimitives([{ ...primitive, text_dir: textDir }]);
+      expect(result).toMatchObject({ ok: false });
+      if (result.ok) continue;
+      expect(result.error).toContain(
+        `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
+      );
+    }
+
+    // 只属于这三种 kind：别的 kind 上出现 text_dir，默认模式当契约外字段忽略，strict 才拒。
+    const weld = { kind: 'weld_mark', id: 'w-1', position: [0, 0, 0], text_dir: [1, 0, 0] };
+    expect(withPrimitives([weld]).ok).toBe(true);
+    expect(withPrimitives([weld], { strict: true })).toMatchObject({ ok: false });
+  });
+
+  /**
+   * T4.4 + T4.6（现行计划 W3-5 / W3-6 第①步）：每种 kind 共有的两个可选定位字段——
+   * `object_refno`（图元所标注的构件 refno，host 认得的文本，格式不在契约里校验）与
+   * `isoline_idx`（所在直段下标，与 `meta.isolines[].index` / `MbdV2Issue.isoline_idx`
+   * 同一套编号）。缺省 = 未声明（今天所有生产者的行为）；给了 `object_refno` 就得像 `id`
+   * 一样是非空字符串，给了 `isoline_idx` 就得是非负安全整数，否则点名整包拒绝；strict 下
+   * 两者都是所有 kind 共有的白名单字段。
+   */
+  it('accepts optional object_refno / isoline_idx locators on every primitive kind and rejects malformed ones', () => {
+    const withPrimitives = (primitives: unknown[], options?: { strict?: boolean }) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives,
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [] },
+    }, options);
+    const frame = {
+      center: [0, 0, 0], x_axis: [1, 0, 0], normal: [0, 0, 1], radius: 1, start_angle_deg: 0, sweep_angle_deg: 90,
+    };
+    // 契约里的 11 种 kind 各一条最小形状。
+    const everyKind: readonly Record<string, unknown>[] = [
+      {
+        kind: 'linear_dim', id: 'd', start: [0, 0, 0], end: [1, 0, 0], text: '1000',
+        extension_lines: [], arrow_lines: [], label_anchor: [0.5, 0, 0],
+      },
+      { kind: 'angle_dim', id: 'a', text: '90°', leg_lines: [], label_anchor: [0, 0, 0], ...frame },
+      { kind: 'label', id: 'l', text: 'P-101', position: [0, 0, 0] },
+      { kind: 'leader_line', id: 'ld', start: [0, 0, 0], end: [1, 0, 0] },
+      { kind: 'aid_line', id: 'al', start: [0, 0, 0], end: [1, 0, 0] },
+      { kind: 'aid_arc', id: 'aa', ...frame },
+      { kind: 'aid_circle', id: 'ac', center: [0, 0, 0], normal: [0, 0, 1], radius: 1 },
+      { kind: 'aid_point', id: 'ap', position: [0, 0, 0] },
+      { kind: 'aid_text', id: 'at', text: 'EL +1', position: [0, 0, 0] },
+      { kind: 'weld_mark', id: 'w', position: [0, 0, 0] },
+      { kind: 'slope_mark', id: 's', text: '1:100', start: [0, 0, 0], end: [1, 0, 0.01] },
+    ];
+    expect(new Set(everyKind.map(primitive => primitive.kind)).size).toBe(11);
+
+    const tagged = everyKind.map((primitive, index) => ({
+      ...primitive,
+      object_refno: `24381_${145018 + index}`,
+      isoline_idx: index % 3,
+    }));
+    for (const strict of [false, true]) {
+      const result = withPrimitives(tagged, { strict });
+      expect(result.ok, `strict ${String(strict)}`).toBe(true);
+      if (result.ok) expect(result.data.primitives).toEqual(tagged);
+    }
+
+    // 缺省不凭空出现（今天所有生产者）。
+    const bare = withPrimitives([...everyKind]);
+    expect(bare.ok).toBe(true);
+    if (bare.ok) {
+      expect(bare.data.primitives.every(
+        primitive => !('object_refno' in primitive) && !('isoline_idx' in primitive),
+      )).toBe(true);
+    }
+
+    // 给了就得像 id 一样是非空字符串：空串 / 数字 / null 都点名整包拒绝（null 不等于缺省，
+    // Rust 侧 `Option` 的 None 不会序列化出来）；isoline_idx 则是非负安全整数：负数 / 小数 /
+    // 字符串 / null 同样点名拒绝。
+    for (const primitive of everyKind) {
+      for (const refno of ['', 24381, null]) {
+        const result = withPrimitives([{ ...primitive, object_refno: refno }]);
+        expect(result, `${primitive.kind as string} object_refno ${String(refno)}`)
+          .toMatchObject({ ok: false });
+        if (result.ok) continue;
+        expect(result.error).toContain(
+          `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
+        );
+      }
+      for (const idx of [-1, 1.5, '0', null]) {
+        const result = withPrimitives([{ ...primitive, isoline_idx: idx }]);
+        expect(result, `${primitive.kind as string} isoline_idx ${String(idx)}`)
+          .toMatchObject({ ok: false });
+        if (result.ok) continue;
+        expect(result.error).toContain(
+          `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
+        );
+      }
+    }
+  });
+
+  /**
+   * T4.2 + T4.6（现行计划 W3-3 / W3-6 第①步，2026-10-29 拍板）：`meta.isolines[]` 一张直段表
+   * （`index` / `members` / `cheight_mm` / `od_mm`），其中 `cheight_mm` 是直段级
+   * `isoline_cheight_mm`（`sepSmallDim` 缩字后的组字高），即 D7 三层字高里的中间一层。
+   * 缺省 / `null` 放行；给了就校验结构：下标非负安全整数且表内唯一（可不连续、可乱序——
+   * plant-mbd 会跳过没有 `ldir` 的袋），成员是非空字符串（可为空数组），两个长度都是有限
+   * 正数；其它形状整包拒绝 `invalid meta`。图元的 `isoline_idx` 不与表交叉校验：指向表里
+   * 没有的下标不算错，由消费侧回落全局 `cheight_mm`。
+   */
+  it('accepts an optional meta.isolines table and rejects malformed ones', () => {
+    const withMeta = (meta: Record<string, unknown>, primitives: unknown[] = []) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives,
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [], ...meta },
+    });
+    const row = { index: 0, members: ['24381_145018'], cheight_mm: 25, od_mm: 114.3 };
+    // 乱序 + 不连续（袋 1、3、4 没有 ldir 被跳过）+ 空成员，都是合法的表。
+    const table = [
+      { index: 2, members: ['24381_146980', '24381_146984'], cheight_mm: 12, od_mm: 60.3 },
+      row,
+      { index: 5, members: [], cheight_mm: 25, od_mm: 114.3 },
+    ];
+
+    const absent = withMeta({});
+    expect(absent.ok).toBe(true);
+    if (absent.ok) expect(absent.data.meta.isolines).toBeUndefined();
+    expect(withMeta({ isolines: null })).toMatchObject({ ok: true, data: { meta: { isolines: null } } });
+    expect(withMeta({ isolines: [] })).toMatchObject({ ok: true, data: { meta: { isolines: [] } } });
+
+    const declared = withMeta({ isolines: table });
+    expect(declared.ok).toBe(true);
+    if (declared.ok) expect(declared.data.meta.isolines).toEqual(table);
+
+    // 图元的 isoline_idx 不与表交叉校验：悬空下标放行，消费侧回落。
+    const dangling = withMeta({ isolines: table }, [
+      { kind: 'weld_mark', id: 'w', position: [0, 0, 0], isoline_idx: 7 },
+    ]);
+    expect(dangling.ok).toBe(true);
+
+    const malformed: unknown[] = [
+      {},
+      [1],
+      [{ ...row, index: -1 }],
+      [{ ...row, index: 1.5 }],
+      [{ ...row, index: '0' }],
+      [row, { ...row, members: [] }],
+      [{ ...row, members: '24381_145018' }],
+      [{ ...row, members: ['24381_145018', ''] }],
+      [{ ...row, cheight_mm: 0 }],
+      [{ ...row, cheight_mm: Number.NaN }],
+      [{ ...row, od_mm: -1 }],
+      [{ index: 0, members: [], cheight_mm: 25 }],
+    ];
+    for (const candidate of malformed) {
+      expect(withMeta({ isolines: candidate })).toEqual({
+        ok: false,
+        error: 'MBD V2 payload has invalid meta',
+      });
+    }
+  });
 });

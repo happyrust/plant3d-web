@@ -50,11 +50,67 @@ export type MbdV2Issue = Readonly<{
 
 export type MbdV2GeometrySpace = 'source_mm' | 'design_m';
 
+/** `meta.source_version.databases` 的一条：本次读取打开的一个库及其会话。 */
+export type MbdV2SourceDatabase = Readonly<{
+  dbnum: number;
+  sesno: number;
+  db_type: string;
+}>;
+
+/**
+ * T4.5（现行计划 W3-2）：本次负载读自哪个数据时点。形状与 `/api/v1/spatial/centerline`
+ * 的 `source_version`（`genModelV1Api.ts` `SpatialCenterlineResponse`）一致，面板才能直接和
+ * 管道信息卡 / 时间轴的版本口径对账：`dbnum@sesno` 是 BRAN 所在设计库的会话，
+ * `databases` 是本次读取打开的全部库（含目录库），每个库号只出现一次。
+ */
+export type MbdV2SourceVersion = Readonly<{
+  dbnum: number;
+  sesno: number;
+  databases: readonly MbdV2SourceDatabase[];
+}>;
+
+/**
+ * T4.6（现行计划 W3-6）+ T4.2（W3-3）：一条直段（PML `isoline`，plant-mbd `SplitResult::allarr`
+ * 的一袋）的结构摘要。`index` 是袋下标，与 `MbdV2Issue.isoline_idx`、图元的 `isoline_idx`
+ * 同一套编号；`members` 是袋成员 refno（按 `allarr` 顺序，host 认得的文本，格式不在契约里
+ * 校验）；`cheight_mm` 是直段级字高（plant-mbd `isoline_cheight_mm`：`changeCheightAuto` 之后，
+ * 角度 / 焊点 / 标签都按它摆，没出尺寸的直段也有公式值），`od_mm` 是直段外径；两者都是
+ * 源空间毫米，和 `meta.cheight_mm` 同口径。
+ */
+export type MbdV2Isoline = Readonly<{
+  index: number;
+  members: readonly string[];
+  cheight_mm: number;
+  od_mm: number;
+}>;
+
 export type MbdV2Meta = Readonly<{
   geometry_space: MbdV2GeometrySpace;
   source_to_design?: readonly number[];
   cheight_mm?: number | null;
   layout_mode?: string | null;
+  /**
+   * T4.1（现行计划 W3-1）：本次交付覆盖的图元 kind 列表，由求解器按它实际产出的
+   * 类别声明。现网生产者还没发这个字段（absent = 未声明，`null` 同义），所以前端
+   * 先接受、后消费（ADR 0055 D7 同款顺序）：面板的「本分支标注不完整」警示条改读
+   * 它之后，`PARTIAL_LAYOUT_MODES` 兜底才能退休。给了就必须是字符串数组（允许空
+   * 数组 = 明确声明什么都没覆盖；条目不限于前端已知的 kind），其它形状按 ADR 0046
+   * 整包拒绝。
+   */
+  coverage?: readonly string[] | null;
+  /**
+   * T4.5（现行计划 W3-2）：数据时点，形状见 {@link MbdV2SourceVersion}。absent / `null` =
+   * 生产者未声明（现网都还没发），前端先接受、后消费（ADR 0055 D7）。
+   */
+  source_version?: MbdV2SourceVersion | null;
+  /**
+   * T4.6 + T4.2（现行计划 W3-6 / W3-3）：直段表，形状见 {@link MbdV2Isoline}。absent / `null` =
+   * 生产者未声明（现网都还没发）。有了它，字高按 D7 分三层：图元自己的 `text_height_mm`
+   * > 所在直段的 `cheight_mm`（用图元的 `isoline_idx` 查表）> 全局 `meta.cheight_mm`（仍是
+   * 各直段取最大，继续作兑底）。不要求 `index` 连续或有序：plant-mbd 没有布局方向的直段
+   * 不进表；表里没有的下标消费侧回退全局值，不算错。
+   */
+  isolines?: readonly MbdV2Isoline[] | null;
   notes: readonly string[];
 }>;
 
@@ -63,6 +119,23 @@ export type MbdV2AidLineStyle = 'solid' | 'dashed' | 'dash_dot';
 export type MbdV2LinearDim = Readonly<{
   kind: 'linear_dim';
   id: string;
+  /**
+   * T4.4（现行计划 W3-5）：这条图元所标注 / 所落在的模型构件 refno，原样是 host 认得的
+   * 文本（plant-mbd 发 `<dbnum>_<seq>`，与 `MbdV2Issue.object_refno` 同口径；格式不在契约
+   * 里校验，消费侧统一过 `toRefnoKey`）。每种 kind 都可带，让点尺寸跳构件和巡检遮挡的
+   * `subject` 不再从 id 字符串里猜（今天 `tagSubject` / `weldSubject` 只认 plant-mbd 的
+   * id 约定）。缺省 = 未声明，即今天所有生产者的行为（ADR 0055 D7：前端先接受，producer
+   * 后产出）；给了就得像 `id` 一样是非空字符串。
+   */
+  object_refno?: string;
+  /**
+   * T4.6（现行计划 W3-6）：这条图元所在直段的下标，与 `MbdV2Issue.isoline_idx` 和
+   * `meta.isolines[].index` 同一套编号（plant-mbd `SplitResult::allarr` 的袋下标），让前端
+   * 不再从 id 里的 `:isoline:<n>:` 猜。缺省 = 未归段（BRAN 级的标签 / 支名，或今天的生产
+   * 者）；给了就得是非负安全整数。指向 `meta.isolines[]` 里没有的下标不算错：消费侧查不到
+   * 就回退全局 `meta.cheight_mm`。
+   */
+  isoline_idx?: number;
   start: MbdV2Vec3;
   end: MbdV2Vec3;
   text: string;
@@ -109,6 +182,10 @@ export type MbdV2ArcFrame = Readonly<{
 export type MbdV2AngleDim = Readonly<{
   kind: 'angle_dim';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   text: string;
   leg_lines: readonly MbdV2LineSegment[];
   label_anchor: MbdV2Vec3;
@@ -118,13 +195,23 @@ export type MbdV2AngleDim = Readonly<{
 export type MbdV2Label = Readonly<{
   kind: 'label';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   text: string;
   position: MbdV2Vec3;
+  /** 文字基线方向（T4.3），含义见 `MbdV2AidText.text_dir`；缺省 = 视口水平。 */
+  text_dir?: MbdV2Vec3;
 }>;
 
 export type MbdV2LeaderLine = Readonly<{
   kind: 'leader_line';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   start: MbdV2Vec3;
   end: MbdV2Vec3;
 }>;
@@ -132,6 +219,10 @@ export type MbdV2LeaderLine = Readonly<{
 export type MbdV2AidLine = Readonly<{
   kind: 'aid_line';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   start: MbdV2Vec3;
   end: MbdV2Vec3;
   style?: MbdV2AidLineStyle;
@@ -140,6 +231,10 @@ export type MbdV2AidLine = Readonly<{
 export type MbdV2AidArc = Readonly<{
   kind: 'aid_arc';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   style?: MbdV2AidLineStyle;
 }> & MbdV2ArcFrame;
 
@@ -147,6 +242,10 @@ export type MbdV2AidArc = Readonly<{
 export type MbdV2AidCircle = Readonly<{
   kind: 'aid_circle';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   center: MbdV2Vec3;
   normal: MbdV2Vec3;
   radius: number;
@@ -156,6 +255,10 @@ export type MbdV2AidCircle = Readonly<{
 export type MbdV2AidPoint = Readonly<{
   kind: 'aid_point';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   position: MbdV2Vec3;
 }>;
 
@@ -171,15 +274,30 @@ export type MbdV2AidPoint = Readonly<{
 export type MbdV2AidText = Readonly<{
   kind: 'aid_text';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   text: string;
   position: MbdV2Vec3;
   /** Source-space (mm) cap height for this text; absent = the group height. */
   text_height_mm?: number;
+  /**
+   * T4.3（现行计划 W3-4）：文字基线（阅读）方向，PML AIDTXT `ori` 的 X 轴。与其它几何
+   * 同在 `meta.geometry_space`，长度不限但不能是零向量；mapper 只取方向，经
+   * `source_to_design` 的线性部分变换后进 `labelAlong` / `along`。缺省 = 视口水平，
+   * 即今天所有生产者的行为（ADR 0055 D7：前端先接受，producer 后产出）。
+   */
+  text_dir?: MbdV2Vec3;
 }>;
 
 export type MbdV2WeldMark = Readonly<{
   kind: 'weld_mark';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   position: MbdV2Vec3;
   weld_type?: string;
 }>;
@@ -187,9 +305,15 @@ export type MbdV2WeldMark = Readonly<{
 export type MbdV2SlopeMark = Readonly<{
   kind: 'slope_mark';
   id: string;
+  /** 所属构件 refno（T4.4），见 `MbdV2LinearDim.object_refno`。 */
+  object_refno?: string;
+  /** 所在直段下标（T4.6），见 `MbdV2LinearDim.isoline_idx`。 */
+  isoline_idx?: number;
   text: string;
   start: MbdV2Vec3;
   end: MbdV2Vec3;
+  /** 文字基线方向（T4.3），含义见 `MbdV2AidText.text_dir`；缺省 = 视口水平。 */
+  text_dir?: MbdV2Vec3;
 }>;
 
 export type MbdPrimitive =
@@ -281,6 +405,20 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
 }
 
+/** 可选的构件 refno（`object_refno`，T4.4）：缺省可以，给了就得像 `id` 一样是非空字符串。 */
+function isOptionalNonEmptyString(value: unknown): value is string | undefined {
+  return value === undefined || isNonEmptyString(value);
+}
+
+/** 直段下标（`isoline_idx` / `meta.isolines[].index`）：非负安全整数。 */
+function isIsolineIndex(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function isOptionalIsolineIndex(value: unknown): value is number | undefined {
+  return value === undefined || isIsolineIndex(value);
+}
+
 function isOptionalAidLineStyle(value: unknown): value is MbdV2AidLineStyle | undefined {
   return value === undefined || AID_LINE_STYLES.includes(value as MbdV2AidLineStyle);
 }
@@ -298,6 +436,11 @@ function isFiniteNumber(value: unknown): value is number {
 /** Axis vectors: finite and not the zero vector (unit length is the mapper's job). */
 function isAxisVec3(value: unknown): value is MbdV2Vec3 {
   return isVec3(value) && (value[0] !== 0 || value[1] !== 0 || value[2] !== 0);
+}
+
+/** 可选的方向字段（`text_dir`）：缺省可以，给了就得是有限、非零的三维向量。 */
+function isOptionalAxisVec3(value: unknown): value is MbdV2Vec3 | undefined {
+  return value === undefined || isAxisVec3(value);
 }
 
 function isPositiveRadius(value: unknown): value is number {
@@ -339,8 +482,67 @@ function isMatrix4(value: unknown): value is readonly number[] {
     && value.every(item => typeof item === 'number' && Number.isFinite(item));
 }
 
+/** 库号：正的安全整数；会话号：非负安全整数（与 `pipeInformation.ts` 的 `validSourceVersion` 同口径）。 */
+function isDbnum(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
+function isSesno(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+/**
+ * `meta.source_version`：结构、取值范围与「同一库号只出现一次」三件事。有意**不**要求
+ * `databases` 含顶层那条（`pipeInformation.ts` 的 `validSourceVersion` 要求）：从 parquet
+ * 离线跑的生产者（rs-mbd CLI）没有打开任何库，`databases: []` 是它如实的声明，为一个
+ * 只供显示的字段整包拒收不值得。
+ */
+function isSourceVersion(value: unknown): value is MbdV2SourceVersion {
+  if (!isObject(value) || !isDbnum(value.dbnum) || !isSesno(value.sesno)) return false;
+  const databases = value.databases;
+  if (!Array.isArray(databases)) return false;
+  const seen = new Set<number>();
+  for (const database of databases) {
+    if (!isObject(database)
+      || !isDbnum(database.dbnum)
+      || !isSesno(database.sesno)
+      || typeof database.db_type !== 'string'
+      || seen.has(database.dbnum)) {
+      return false;
+    }
+    seen.add(database.dbnum);
+  }
+  return true;
+}
+
+/**
+ * `meta.isolines`：每条 `index` 非负整数且全表唯一（查表用），`members` 是非空字符串数组
+ * （允许空数组），`cheight_mm` / `od_mm` 是正的有限数（和半径 / `text_height_mm` 同一条规则：
+ * 零或负的字高没有意义，NaN 会毒化投影）。不要求 `index` 连续或有序。
+ */
+function isIsolineList(value: unknown): value is readonly MbdV2Isoline[] {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<number>();
+  for (const isoline of value) {
+    if (!isObject(isoline)
+      || !isIsolineIndex(isoline.index)
+      || seen.has(isoline.index)
+      || !Array.isArray(isoline.members)
+      || !isoline.members.every(member => isNonEmptyString(member))
+      || !isPositiveRadius(isoline.cheight_mm)
+      || !isPositiveRadius(isoline.od_mm)) {
+      return false;
+    }
+    seen.add(isoline.index);
+  }
+  return true;
+}
+
 function isPrimitive(value: unknown): value is MbdPrimitive {
   if (!isObject(value) || !isNonEmptyString(value.id)) return false;
+  // 所有 kind 共有的可选定位字段（T4.4 / T4.6）先于按 kind 的检查。
+  if (!isOptionalNonEmptyString(value.object_refno)) return false;
+  if (!isOptionalIsolineIndex(value.isoline_idx)) return false;
   switch (value.kind) {
     case 'linear_dim':
       return isVec3(value.start)
@@ -359,7 +561,8 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isOptionalString(value.sub_kind);
     case 'label':
       return typeof value.text === 'string'
-        && isVec3(value.position);
+        && isVec3(value.position)
+        && isOptionalAxisVec3(value.text_dir);
     case 'leader_line':
       return isVec3(value.start) && isVec3(value.end);
     case 'aid_line':
@@ -378,35 +581,40 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
     case 'aid_text':
       return typeof value.text === 'string'
         && isVec3(value.position)
-        && isOptionalPositiveNumber(value.text_height_mm);
+        && isOptionalPositiveNumber(value.text_height_mm)
+        && isOptionalAxisVec3(value.text_dir);
     case 'weld_mark':
       return isVec3(value.position) && isOptionalString(value.weld_type);
     case 'slope_mark':
       return typeof value.text === 'string'
         && isVec3(value.start)
-        && isVec3(value.end);
+        && isVec3(value.end)
+        && isOptionalAxisVec3(value.text_dir);
     default:
       // 不认识的 kind 由 classifyPrimitive 单独判：默认跳过 + 诊断，strict 才整包拒绝。
       return false;
   }
 }
 
-/** 已知 kind 的字段白名单（只在 `strict` 模式下检查「多出来的字段」）。 */
+/** 每种 kind 都有的字段：`kind` / `id`，以及可选的定位字段 `object_refno`（T4.4）/ `isoline_idx`（T4.6）。 */
+const COMMON_PRIMITIVE_FIELDS: readonly string[] = ['kind', 'id', 'object_refno', 'isoline_idx'];
+
+/** 已知 kind 自己的字段白名单，`COMMON_PRIMITIVE_FIELDS` 之外（只在 `strict` 模式下检查「多出来的字段」）。 */
 const PRIMITIVE_FIELDS: Readonly<Record<MbdPrimitiveKind, readonly string[]>> = {
-  linear_dim: ['kind', 'id', 'start', 'end', 'text', 'sub_kind',
+  linear_dim: ['start', 'end', 'text', 'sub_kind',
     'extension_lines', 'arrow_lines', 'label_anchor', 'reference'],
-  angle_dim: ['kind', 'id', 'text', 'leg_lines', 'label_anchor', 'sub_kind',
+  angle_dim: ['text', 'leg_lines', 'label_anchor', 'sub_kind',
     'center', 'x_axis', 'normal', 'radius', 'start_angle_deg', 'sweep_angle_deg'],
-  label: ['kind', 'id', 'text', 'position'],
-  leader_line: ['kind', 'id', 'start', 'end'],
-  aid_line: ['kind', 'id', 'start', 'end', 'style'],
-  aid_arc: ['kind', 'id', 'style',
+  label: ['text', 'position', 'text_dir'],
+  leader_line: ['start', 'end'],
+  aid_line: ['start', 'end', 'style'],
+  aid_arc: ['style',
     'center', 'x_axis', 'normal', 'radius', 'start_angle_deg', 'sweep_angle_deg'],
-  aid_circle: ['kind', 'id', 'center', 'normal', 'radius', 'style'],
-  aid_point: ['kind', 'id', 'position'],
-  aid_text: ['kind', 'id', 'text', 'position', 'text_height_mm'],
-  weld_mark: ['kind', 'id', 'position', 'weld_type'],
-  slope_mark: ['kind', 'id', 'text', 'start', 'end'],
+  aid_circle: ['center', 'normal', 'radius', 'style'],
+  aid_point: ['position'],
+  aid_text: ['text', 'position', 'text_height_mm', 'text_dir'],
+  weld_mark: ['position', 'weld_type'],
+  slope_mark: ['text', 'start', 'end', 'text_dir'],
 };
 
 const KNOWN_PRIMITIVE_KINDS = Object.keys(PRIMITIVE_FIELDS) as MbdPrimitiveKind[];
@@ -420,7 +628,8 @@ function isKnownPrimitiveKind(value: unknown): value is MbdPrimitiveKind {
 function hasUnknownPrimitiveFields(value: Record<string, unknown>): string | null {
   if (!isKnownPrimitiveKind(value.kind)) return null;
   const allowed = PRIMITIVE_FIELDS[value.kind];
-  const unknown = Object.keys(value).filter(key => !allowed.includes(key));
+  const unknown = Object.keys(value).filter(key =>
+    !COMMON_PRIMITIVE_FIELDS.includes(key) && !allowed.includes(key));
   return unknown.length > 0 ? unknown.join(', ') : null;
 }
 
@@ -509,6 +718,15 @@ function parseMeta(value: unknown): MbdV2Meta | null {
     || (value.layout_mode !== undefined
       && value.layout_mode !== null
       && typeof value.layout_mode !== 'string')
+    || (value.coverage !== undefined
+      && value.coverage !== null
+      && !(Array.isArray(value.coverage) && value.coverage.every(kind => isNonEmptyString(kind))))
+    || (value.source_version !== undefined
+      && value.source_version !== null
+      && !isSourceVersion(value.source_version))
+    || (value.isolines !== undefined
+      && value.isolines !== null
+      && !isIsolineList(value.isolines))
   ) return null;
   return {
     geometry_space: value.geometry_space,
@@ -517,6 +735,13 @@ function parseMeta(value: unknown): MbdV2Meta | null {
       : {}),
     ...(value.cheight_mm !== undefined ? { cheight_mm: value.cheight_mm as number | null } : {}),
     ...(value.layout_mode !== undefined ? { layout_mode: value.layout_mode as string | null } : {}),
+    ...(value.coverage !== undefined ? { coverage: value.coverage as readonly string[] | null } : {}),
+    ...(value.source_version !== undefined
+      ? { source_version: value.source_version as MbdV2SourceVersion | null }
+      : {}),
+    ...(value.isolines !== undefined
+      ? { isolines: value.isolines as readonly MbdV2Isoline[] | null }
+      : {}),
     notes: value.notes as string[],
   };
 }
