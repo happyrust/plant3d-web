@@ -16,7 +16,7 @@ describe('percentile', () => {
 });
 
 describe('createDimensionFrameRecorder', () => {
-  it('summarises layout over full-layout frames only and paint over every frame', () => {
+  it('infers the kind for legacy callers and keeps paint on full-layout frames', () => {
     const recorder = createDimensionFrameRecorder();
     const { record } = recorder;
     record(10, { layoutMs: 6, paintMs: 4 });
@@ -26,10 +26,31 @@ describe('createDimensionFrameRecorder', () => {
     expect(recorder.summary()).toEqual({
       frames: 3,
       layoutFrames: 2,
+      frameKinds: { layout: 2, style: 1, camera: 0 },
       frameMs: { p50: 7, p95: 10, max: 10 },
       layoutMs: { p50: 4, p95: 6, max: 6 },
       paintMs: { p50: 3, p95: 4, max: 4 },
     });
+  });
+
+  it('buckets by the reported kind instead of inferring it from layoutMs', () => {
+    const recorder = createDimensionFrameRecorder();
+    // 极快的全量帧：布局测得 0 ms，但 kind 说是 layout —— 按 `layoutMs > 0` 会漏算。
+    recorder.record(1, { layoutMs: 0, paintMs: 1, kind: 'layout' });
+    // 相机帧：视口根本没画，`paintMs` 是整帧 —— 不能算进画家成本。
+    recorder.record(9, { layoutMs: 0, paintMs: 9, kind: 'camera' });
+    // 样式帧：`paintMs` 也是整帧（必要时退回整幅 paint）。
+    recorder.record(5, { layoutMs: 0, paintMs: 5, kind: 'style' });
+
+    const summary = recorder.summary();
+    expect(summary.frames).toBe(3);
+    expect(summary.layoutFrames).toBe(1);
+    expect(summary.frameKinds).toEqual({ layout: 1, style: 1, camera: 1 });
+    expect(summary.layoutMs).toEqual({ p50: 0, p95: 0, max: 0 });
+    // 只有 layout 帧的 1 ms 进画家成本，相机帧的 9 ms 与样式帧的 5 ms 都被排除。
+    expect(summary.paintMs).toEqual({ p50: 1, p95: 1, max: 1 });
+    // 整帧分位仍然覆盖全部三类。
+    expect(summary.frameMs).toEqual({ p50: 5, p95: 9, max: 9 });
   });
 
   it('keeps only the newest frames once the ring is full, oldest first', () => {
@@ -52,6 +73,7 @@ describe('createDimensionFrameRecorder', () => {
     expect(recorder.summary()).toEqual({
       frames: 0,
       layoutFrames: 0,
+      frameKinds: { layout: 0, style: 0, camera: 0 },
       frameMs: { p50: 0, p95: 0, max: 0 },
       layoutMs: { p50: 0, p95: 0, max: 0 },
       paintMs: { p50: 0, p95: 0, max: 0 },
@@ -75,6 +97,7 @@ describe('createDimensionFrameRecorder', () => {
     expect(recorder.summary()).toEqual({
       frames: 1,
       layoutFrames: 1,
+      frameKinds: { layout: 1, style: 0, camera: 0 },
       frameMs: { p50: 10, p95: 10, max: 10 },
       layoutMs: { p50: 6, p95: 6, max: 6 },
       paintMs: { p50: 4, p95: 4, max: 4 },

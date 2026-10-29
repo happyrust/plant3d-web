@@ -114,7 +114,7 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
    `radiusScale = 0.4` 是可选的中景档（同一仰角、距离 ×0.4）。缓冲只留最近 600 帧，`frames` 别超过它。
 5. 对照（不进表）：手动拖动旋转 10 s 再看 `__dimensionFrameStats.summary()`。真实输入里有 damping 产生的增量帧，`layoutFrames` 会小于 `frames`，两档分开看。
 
-`summary()` 字段：`frames`（缓冲里的帧数）、`layoutFrames`（跑了全量布局的帧数）、`frameMs` / `paintMs`（全部帧的 P50 / P95 / max）、`layoutMs`（只算全量布局帧）。分位是最近邻秩，与 `dimensionPerf.ts` / `benchKernel.ts` 同一算法。
+`summary()` 字段：`frames`（缓冲里的帧数）、`layoutFrames`（跑了全量布局的帧数，按 `kind === 'layout'` 判）、`frameKinds`（`{ layout, style, camera }` 三类各多少帧，相加等于 `frames`）、`frameMs`（全部帧的 P50 / P95 / max）、`layoutMs` 与 `paintMs`（**都只算全量布局帧**）。分位是最近邻秩，与 `dimensionPerf.ts` / `benchKernel.ts` 同一算法。
 
 ## 记录（三次重复）
 
@@ -193,28 +193,28 @@ W5-5 比的就是这几格（各取三次的中位数）：
 
 ## 数字从哪来（本轮改动）
 
-- `createDimensionSystem({ onFrame })`（`src/dimension/facade/createDimensionSystem.ts`）：原样透传给 `DimensionViewport` 的 `onFrame`（`src/dimension/viewport/dimensionViewport.ts`）。视口三处上报：全量布局帧 `layoutMs + paintMs`；只改样式的增量帧与「相机失效但 projector 未换」的帧 `layoutMs = 0`、`paintMs = 整帧`。
-- `src/debug/dimensionFrameStats.ts`：环形缓冲（600 帧）+ 最近邻秩分位；`ViewerPanel.vue` 在 dev 构建把它挂为 `window.__dimensionFrameStats`，生产构建既不挂也不记录。
+- `createDimensionSystem({ onFrame })`（`src/dimension/facade/createDimensionSystem.ts`）：原样透传给 `DimensionViewport` 的 `onFrame`（`src/dimension/viewport/dimensionViewport.ts`）。视口三处上报：全量布局帧 `layoutMs + paintMs`；只改样式的增量帧与「相机失效但 projector 未换」的帧 `layoutMs = 0`、`paintMs = 整帧`。三处各带 `kind`（`layout` / `style` / `camera`），数值口径不变（`layoutMs + paintMs` 恒等于整帧）。
+- `src/debug/dimensionFrameStats.ts`：环形缓冲（600 帧）+ 最近邻秩分位，按 `kind` 分桶（`paintMs` 只算 `layout` 帧）；`ViewerPanel.vue` 在 dev 构建把它挂为 `window.__dimensionFrameStats`，生产构建既不挂也不记录。
 - `src/debug/dimensionPerf.ts`：新增 `window.__dimensionPerf.settle(passes)`；`run()` 与 e2e 门禁没动。
 - 可选对照：`npm run perf:dimensions:kernel`（Node 内核基准：1920×1080 @2x、2k 可见、热身 50 / 实测 200 次，打印 `layout+collision p50/p95` 与 `hit-test p50/p95`）。
 
 ## 注意
 
 - dev 构建（Vite 不压缩、Vue dev 模式）比生产略慢；基线与 W5-5 复测都用 dev，口径一致即可。
-- `layoutMs` 只统计全量布局帧。绕轨脚本每帧 `notifyViewerChanged()`，`layoutFrames ≈ frames`；手动拖动时增量帧多，两者分开。
+- `layoutMs` 与 `paintMs` 都只统计全量布局帧。绕轨脚本每帧 `notifyViewerChanged()`，`layoutFrames ≈ frames`；手动拖动时增量帧多，两者分开。
 - 首轮含字体 / 着色器热身，先空跑一次再记三次。
 - 三次的原始返回值（JSON）原样贴在下面「原始读数」；B / C 的读数也往同一节追加，或存 `runs/`。
 
-## 已知口径问题（2026-10-29 只读审计，未修，W5-5 前需知情）
+## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5 条当天已修，第 2、6 条保持）
 
-1. **`paintMs` 在三类帧里语义不一致**：`dimensionViewport.ts:506-509`（只改样式的增量帧）与 `:524-527`（仅相机失效且 projector 未换）把**整帧**耗时记为 `paintMs`，而 `:559-562`（全量布局帧）的 `paintMs` 只含 `scenePainter.paint`。`:524-527` 那条分支实际**不绘制**（只有 `requestRender()`），却以 `paintMs ≈ 整帧` 入缓冲。后果：`paintMs` 分位被这两类帧往下拉或往上推，跨场景不可直接比。**处理（2026-10-29，viewport 侧）**：`onFrame` 的 breakdown 加 `kind: 'layout' | 'style' | 'camera'`（`DimensionFrameKind`，三处上报点各标一种，上面的行号是加字段前的），数值口径未动（`layoutMs + paintMs` 仍恒等于整帧，facade 用例补断言 `kind === 'layout'`）；recorder 按 `kind` 分桶出分位（`paintMs` 只算 `layout` 帧）待 `src/debug` 在飞那刀入库后再做。
+1. ~~**`paintMs` 在三类帧里语义不一致**~~ → **已修（2026-10-29）**：`dimensionViewport.ts` 的 `onFrame` breakdown 加 `kind: 'layout' | 'style' | 'camera'`（`DimensionFrameKind`，三处上报点各标一种），数值口径未动（`layoutMs + paintMs` 仍恒等于整帧，facade 用例补断言 `kind === 'layout'`）；`dimensionFrameStats.ts` 的 `summary()` 现在按 `kind` 分桶，`paintMs` **只统计 `layout` 帧**，`style` / `camera` 帧的整帧耗时只进 `frameMs`。另加 `frameKinds` 计数，三类相加等于 `frames`。用例 `buckets by the reported kind instead of inferring it from layoutMs` 钉住。
 2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
-3. **`layoutMs > 0` 的过滤会误杀极快的全量帧**：`dimensionFrameStats.ts:91` 用 `sample.layoutMs > 0` 判定全量布局帧；`performance.now()` 精度不足时（小场景可能只几十条记录）全量布局可能测得 `0`，该帧被归为增量帧，`layoutFrames` 少算。**处理（2026-10-29）**：有了第 1 条的 `kind` 后，全量布局帧应按 `kind === 'layout'` 判定而不是 `layoutMs > 0`，随 recorder 分桶一起改。
+3. ~~**`layoutMs > 0` 的过滤会误杀极快的全量帧**~~ → **已修（2026-10-29）**：`dimensionFrameStats.ts` 的 `summary()` 现在按 `kind === 'layout'` 判定全量布局帧，不再看 `layoutMs > 0`。只传两个耗时的老调用方（不给 `kind`）仍按 `layoutMs > 0` 推断，视口自己总是给 `kind`。
 4. ~~**`record` 不校验 `durationMs`**~~ → **已修（2026-10-29）**：`dimensionFrameStats.ts` 的 `record` 现在丢弃非有限样本（`durationMs` / `layoutMs` / `paintMs` 任一不是有限数就不入缓冲），避免 `NaN` 毒化排序与 `max`；用例 `drops non-finite samples instead of poisoning the quantiles` 钉住。
 5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
 
-**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 4、5 条已在本轮修掉；第 1–3 条是视口上报语义问题，属渲染侧口径，W5-5 之前不修（要改得先定「增量帧的 paintMs 该记什么」，见 W4-1 的后续讨论）。
+**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径。
 
 ## 原始读数
 

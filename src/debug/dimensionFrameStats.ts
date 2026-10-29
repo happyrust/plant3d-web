@@ -1,4 +1,4 @@
-import type { DimensionFrameBreakdown } from '@/dimension/viewport/dimensionViewport';
+import type { DimensionFrameBreakdown, DimensionFrameKind } from '@/dimension/viewport/dimensionViewport';
 
 /**
  * 尺寸视口逐帧耗时的只读观测（W4-1 性能基线，
@@ -13,7 +13,13 @@ export type DimensionFrameSample = Readonly<{
   frameMs: number;
   /** 全量布局耗时；增量帧（只改样式 / 相机未换 projector）为 0 */
   layoutMs: number;
+  /** 视口原样报来的值：`layout` 帧只含 `scenePainter.paint`，`style` / `camera` 帧是整帧 */
   paintMs: number;
+  /**
+   * 帧来源。老调用方（只传两个耗时的 breakdown）不给，此时按 `layoutMs > 0` 推断；
+   * 视口自己总是给，所以 `kind === 'layout'` 才是判定全量帧的准绳。
+   */
+  kind?: DimensionFrameKind;
 }>;
 
 export type DimensionFrameQuantiles = Readonly<{
@@ -25,11 +31,17 @@ export type DimensionFrameQuantiles = Readonly<{
 export type DimensionFrameSummary = Readonly<{
   /** 缓冲里现有的帧数（≤ capacity） */
   frames: number;
-  /** 其中跑了全量布局（`layoutMs > 0`）的帧数 */
+  /**
+   * 其中跑了全量布局的帧数。按 `kind === 'layout'` 判（老调用方没给 kind 时退回
+   * `layoutMs > 0`）：极快的全量帧 `layoutMs` 可能测得 0，按耗时会漏算。
+   */
   layoutFrames: number;
+  /** 各类帧的条数，三类相加等于 `frames`（没给 kind 的样本按耗时推断后计入） */
+  frameKinds: Readonly<Record<DimensionFrameKind, number>>;
   frameMs: DimensionFrameQuantiles;
   /** 只统计全量布局帧；增量帧的 0 不拉低分位 */
   layoutMs: DimensionFrameQuantiles;
+  /** 只统计全量布局帧：`style` / `camera` 帧的 `paintMs` 是整帧，混进来跨场景就不可比 */
   paintMs: DimensionFrameQuantiles;
 }>;
 
@@ -60,6 +72,15 @@ function quantiles(values: readonly number[]): DimensionFrameQuantiles {
   };
 }
 
+/**
+ * 一帧的来源。视口自己报的 kind 优先；老调用方只传两个耗时时，非 0 的 `layoutMs`
+ * 说明跑了全量布局，否则无法区分 `style` 与 `camera`（两者都不布局），统一记 `style`。
+ */
+function frameKind(sample: DimensionFrameSample): DimensionFrameKind {
+  if (sample.kind !== undefined) return sample.kind;
+  return sample.layoutMs > 0 ? 'layout' : 'style';
+}
+
 /** `capacity` 缺省 600 帧 ≈ 60 fps 下 10 s，正好装下基线脚本的一圈绕轨。 */
 export function createDimensionFrameRecorder(capacity = 600): DimensionFrameRecorder {
   if (!Number.isInteger(capacity) || capacity <= 0) {
@@ -87,6 +108,7 @@ export function createDimensionFrameRecorder(capacity = 600): DimensionFrameReco
         frameMs: durationMs,
         layoutMs: breakdown.layoutMs,
         paintMs: breakdown.paintMs,
+        ...(breakdown.kind === undefined ? {} : { kind: breakdown.kind }),
       };
       if (buffer.length < capacity) {
         buffer.push(sample);
@@ -97,13 +119,18 @@ export function createDimensionFrameRecorder(capacity = 600): DimensionFrameReco
     },
     summary: () => {
       const all = samples();
-      const layoutFrames = all.filter(sample => sample.layoutMs > 0);
+      const layoutFrames = all.filter(sample => frameKind(sample) === 'layout');
+      const frameKinds: Record<DimensionFrameKind, number> = { layout: 0, style: 0, camera: 0 };
+      for (const sample of all) frameKinds[frameKind(sample)] += 1;
       return {
         frames: all.length,
         layoutFrames: layoutFrames.length,
+        frameKinds,
         frameMs: quantiles(all.map(sample => sample.frameMs)),
         layoutMs: quantiles(layoutFrames.map(sample => sample.layoutMs)),
-        paintMs: quantiles(all.map(sample => sample.paintMs)),
+        // `style` / `camera` 帧的 `paintMs` 是整帧（后者根本没画），混进来会把画家成本
+        // 拉偏；要比画家成本只能看全量布局帧。
+        paintMs: quantiles(layoutFrames.map(sample => sample.paintMs)),
       };
     },
     samples,

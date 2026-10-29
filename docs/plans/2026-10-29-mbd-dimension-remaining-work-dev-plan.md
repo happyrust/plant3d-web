@@ -181,7 +181,7 @@ cargo run -p plant-mbd-cli -- layout --fixture fixtures/p3-installation-angles.j
 
 - 首轮（2026-10-29）：`{"decision":"approved"}`（无批注）。`.planning/2026-10-29-mbd-dimension-remaining-work/.gate-result.json`。本计划自此为已批准版；D5 / D6 / D7 仍待拍板，分别在 W1-3 完成后、W1-1 与 W3-3 动手前定。
 
-## 10. 提交记录（2026-10-29 一轮，8 刀）
+## 10. 提交记录（2026-10-29 一轮，14 刀）
 
 CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`scope.violations` 为空。
 
@@ -196,6 +196,13 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 7 | `564eb21c` | A 合成 2k 性能基线三次实测填表 | 预算余量 32× / 20× |
 | 8 | `5f45c9b9` | 两处归因更正 + §8 两个裁决落定 + W3 六行补提交号 | — |
 | 9 | `24f69140` | 原始读数小节 + 已知口径问题（只读审计发现，未修） | — |
+| 10 | `36d701b2` | 计划文档新增 §10 提交记录 + hunk 拆分配方 + 粒度裁决 | — |
+| 11 | `3a3cd18d` | 修两个边界缺陷：`record` 拒非有限样本、`settle` 拒非正整数 | recorder 6/6 |
+| 12 | `66c78f0e` | W5-2 三档相机基线生成器（`e2e/dimension-camera-baseline.spec.ts` 388 行 + README 231 行 + `.gitignore` 1 行） | 不带门控 2 skipped（预期） |
+| 13 | `a9d80a4f` | 帧来源 `kind` 字段 + 面板分组只看记录（CT 窗口越界写的，Lead 复核后入库） | S2 81/709、type-check 439/126、eslint 0 |
+| 14 | 待提交 | recorder 按 `kind` 分桶 + README 已知口径问题第 1/3 条收口 | recorder 7/7、S2+debug 88/787 |
+
+**第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
 **hunk 级拆分的做法**（R4 的可复用配方，`plant-ui` 那次也用过同思路）：`git diff -U3 -- <file>` 落字节流 → 按 `@@` 切 hunk → 只保留目标 hunk 重组补丁 → `git apply --cached --check` 先验 → `git apply --cached` 正式应用。要点三条：① 索引必须是 HEAD 状态（`--cached` 的定位基准是索引不是工作区）；② 不要加 `--3way`（会把冲突标记写进索引）；③ 不要手工改 hunk 头的新行号（`git apply` 按 old 行号 + 上下文重算，改了反而失败）。回退只有 `git restore --staged -- <file>`，工作区一个字节不动。
 
