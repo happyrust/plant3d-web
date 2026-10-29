@@ -262,6 +262,26 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
 
   function browsePublish(patch: Partial<ModelUnitCompareBrowseState>): void {
     browse.value = { ...browse.value, ...patch };
+    // 角标 / 读数变化单独打一个 mark（tasks.md 17.1）：性能脚本据此算「游标变了到角标更新」的耗时。
+    // 打点同步，量到的是状态改好的时刻；Vue 把这段文本刷进 DOM 是紧随其后的同一个微任务批次，
+    // 所以脚本以 `frame-shown` 作主指标，这个 mark 只做辅助定位（角标是不是拖后腿）。
+    if (patch.sesno !== undefined || patch.badge !== undefined) {
+      markScrub('version-scrub:badge-updated', { sesno: browse.value.sesno, badge: browse.value.badge });
+    }
+  }
+
+  /** 性能埋点：只打点、不改行为；不支持 `detail` 的环境退一步只打点 */
+  function markScrub(name: string, detail?: Record<string, unknown>): void {
+    if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return;
+    try {
+      performance.mark(name, detail ? { detail } : undefined);
+    } catch {
+      try {
+        performance.mark(name);
+      } catch {
+        // 打点失败不影响浏览
+      }
+    }
   }
 
   function browseEnter(ctx: { dbnum: number; unitRefnos: string[]; focusRefno?: string | null }): void {
@@ -396,6 +416,23 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
       missingReason: null,
     });
     host.requestRender();
+    markScrubFrameShown(frame.sesno);
+  }
+
+  /**
+   * 性能埋点（tasks.md 17.1，Requirement 12.1–12.4）：首帧渲染完成且角标更新之后打一个 mark。
+   * `requestRender()` 只是提交，真正的首帧在下一个动画帧里画完，所以这里等两帧再打点：
+   * 第一帧是 Three.js 的绘制，第二帧才是「画面上已经看到」。只打点、不改行为，生产构建保留。
+   */
+  function markScrubFrameShown(sesno: number): void {
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : null;
+    if (!raf) {
+      markScrub('version-scrub:frame-shown', { sesno });
+      return;
+    }
+    raf(() => {
+      raf(() => markScrub('version-scrub:frame-shown', { sesno }));
+    });
   }
 
   function browsePending(sesno: number): void {

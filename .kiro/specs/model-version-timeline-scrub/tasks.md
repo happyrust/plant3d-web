@@ -398,7 +398,7 @@
 
 ### 阶段 2：plant3d-web（前端）— 接线
 
-- [ ] 14. 版本来源、组合式函数与三维浏览接口
+- [x] 14. 版本来源、组合式函数与三维浏览接口
   - [x] 14.1 在 `versionSource.ts` / `genModelV1Api.ts` 实现三条新路由的客户端
     - `queryHistoryGeometry`：`If-None-Match: "<geometryKey>"`；超时用 `setTimeout` + `AbortController`（缺省 60 s，抛 `CLIENT_TIMEOUT`，界面显示「查询超时」）；304 从 `ETag` / `X-Sesno` / `X-Session-Time` 取值；200 的 `instances` / `tubes` 复用 `loadVersion` 现有映射，拆成共享函数 `mapHistoryRows`
     - `attributesAtSesno`、`resolveNodeTime`、`readRealtimeLimit`（读 `/health.model_cache.realtime_history.concurrency_limit`）
@@ -487,7 +487,7 @@
 
 ### 阶段 2：plant3d-web（前端）— 界面
 
-- [ ] 15. 时间轴组件与面板接线
+- [x] 15. 时间轴组件与面板接线
   - [x] 15.1 实现 `src/components/model-version/VersionTimelineScrubber.vue`
     - 版式对照第 1 帧 (IXhiA) 与第 4 帧 (O1am8)，按 1.1 更新后的等距链序：轴标题「版本时间轴 · 本范围 n 版」、序号窗口文案、SVG 等距刻度、次级时间标注、图例、簇刻度（带数量）、Time_Anomaly_Marker、游标与标签、A / B 钉标记（第 2、3 帧）、加载 / 失败标记、悬停提示
     - 空态与异常态对照第 6 帧 (lusKv)：「该范围没有版本记录」、「当前范围没有可浏览的版本」、灰标「本范围无变化」、版本表错误码 + 消息 +「重试」、失败刻度「sesno N · 查询超时」+「重试」、日期框「跳到某一时刻，回车定位」与错误「时间格式无效」等
@@ -540,12 +540,12 @@
 ### 阶段 3：联调与性能
 
 - [ ] 17. 性能测量脚本
-  - [~] 17.1 加性能测量埋点
+  - [x] 17.1 加性能测量埋点
     - 在 `modelUnitCompareController` 首帧渲染完成且角标更新后打 `performance.mark('version-scrub:frame-shown', { detail: { sesno } })`，角标更新单独打一个 mark；在 `useVersionFrames` 暴露只读的调试读数（前端缓存键数、进行中请求数），供脚本读取
     - 埋点不改变行为，生产构建可保留
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.6, 12.7_
 
-  - [~] 17.2 编写 `e2e/version-scrub-perf.spec.ts`（只手动跑，不进 CI）
+  - [x] 17.2 编写 `e2e/version-scrub-perf.spec.ts`（只手动跑，不进 CI）
     - 用环境变量守卫（未设置时 `test.skip`），默认 `npm run test:e2e` 不执行它；前端以 `gm_backend` 指向 8022
     - 先核对被测 BRAN `24384_23257` 版本数 ≥ 25、几何变化 ≥ 5，不满足时记录实际数并换 BRAN 写明
     - 覆盖：缓存已有前后各 2 版时方向键 20 次每次 ≤ 300 ms；服务端缓存热、前端缓存空时 10 次每次 ≤ 500 ms；服务端缓存容量 0（`AIOS_MODEL_HISTORY_REALTIME_CACHE=0` 重启）时 10 次每次 ≤ 2 s；「仅属性」会话收到 304 且角标 200 ms 内更新，10 次；3–5 s 拖过 30 个刻度，每个 1 s 窗口 ≥ 30 fps、吸附后 100 ms 内更新标签；连续 10 分钟每 60 s 采样前端缓存键数 ≤ 12、`in_flight` ≤ 上限、结果缓存 ≤ 容量、历史快照数等于初值，退出后 1 s 内前端进行中请求为 0、5 s 内 `in_flight` 回到初值；500 行版本表首次渲染 ≤ 500 ms

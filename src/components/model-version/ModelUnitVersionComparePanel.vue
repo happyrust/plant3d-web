@@ -715,6 +715,8 @@ const scrubber = useVersionScrubber(nodeTimeline, { source: getModelSource().ver
 /** 三维那一半的接口：面板先挂载、视口后回话，所以拿一层转发 */
 let browseApi: VersionBrowseApi | null = null;
 const lazyBrowseApi = createLazyBrowseApi(() => browseApi);
+/** `frames.exposeDebug()` 的卸载函数 */
+let offExposeDebug: (() => void) | null = null;
 
 const frames = useVersionFrames({
   source: getModelSource().versions,
@@ -731,6 +733,8 @@ const scrubTableError = computed<{ code: string; message: string } | null>(() =>
 
 onMounted(() => {
   void requestVersionBrowseApi().then((api) => { browseApi = api; });
+  // 性能脚本读 `window.__versionScrubDebug`（tasks.md 17.1）
+  offExposeDebug = frames.exposeDebug();
 });
 
 /** 进入浏览：范围决定单元，游标决定第一帧（Requirement 3.1、9.2） */
@@ -929,6 +933,8 @@ onBeforeUnmount(() => {
   summaryRequestId += 1;
   closeCompare();
   offCursorChange();
+  offExposeDebug?.();
+  offExposeDebug = null;
   void frames.exitBrowse();
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);

@@ -74,8 +74,10 @@ export type VersionFramesState = {
   legacyFallback: Ref<boolean>;
   /** 子树范围的待确认计划（9.3） */
   pendingConfirm: Ref<(SubtreePlan & { kind: 'confirm' }) | null>;
-  /** 17.1 的只读调试读数 */
+  /** 17.1 的只读调试读数：前端缓存键数、进行中请求数（性能脚本读它） */
   debug: Ref<{ cacheKeys: number; inFlight: number }>;
+  /** 17.1：把同一份读数挂到 `window.__versionScrubDebug`，e2e 脚本不必知道 Vue 内部 */
+  exposeDebug(): () => void;
 
   enterBrowse(ctx: BrowseContext): Promise<void>;
   cursorChanged(sesno: number, trigger: CursorTrigger): void;
@@ -829,6 +831,16 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     // `legacyFallback` 不复位：它是「服务端版本」的判断，同一面板会话再进来还是旧服务端
   }
 
+  /**
+   * 17.1：把只读读数挂到 window 上，性能脚本直接读 `window.__versionScrubDebug`。
+   * 返回卸载函数；不改变任何行为。
+   */
+  function exposeDebug(): () => void {
+    const target = window as unknown as { __versionScrubDebug?: () => { cacheKeys: number; inFlight: number } };
+    target.__versionScrubDebug = () => ({ ...debug.value });
+    return () => { delete target.__versionScrubDebug; };
+  }
+
   return {
     mode,
     tickStatus,
@@ -836,6 +848,7 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     legacyFallback,
     pendingConfirm,
     debug,
+    exposeDebug,
     enterBrowse,
     cursorChanged,
     pinsChanged,
