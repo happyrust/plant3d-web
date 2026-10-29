@@ -180,3 +180,28 @@ cargo run -p plant-mbd-cli -- layout --fixture fixtures/p3-installation-angles.j
 ## 9. Plannotator 门禁记录
 
 - 首轮（2026-10-29）：`{"decision":"approved"}`（无批注）。`.planning/2026-10-29-mbd-dimension-remaining-work/.gate-result.json`。本计划自此为已批准版；D5 / D6 / D7 仍待拍板，分别在 W1-3 完成后、W1-1 与 W3-3 动手前定。
+
+## 10. 提交记录（2026-10-29 一轮，8 刀）
+
+CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`scope.violations` 为空。
+
+| # | 提交 | 内容 | 门禁 |
+| --- | --- | --- | --- |
+| 1 | `d7281249` | W3-1…W3-6 的 ① 契约六字段（`mbdV2Contract.ts` +257/-16，test +292） | 契约测试全绿；fail-closed 未动 |
+| 2 | `6ee4e6bd` | W3 消费侧 11 文件（mapper + 诊断 store + 面板 + 列表）+ 基线收紧 440→439 | S2 81/709、面板 11/11、列表 9/9、sync 17/17、eslint 0 |
+| 3 | `ea51d949` | W4-2 健壮性 e2e（spec +290、`.gitignore` 白名单、健壮性计划 §9） | 4 passed (6.1s) |
+| 4 | `1c8c350a` | W4-1 recorder + facade 观测缝 + `settle(passes)` + README 模板 | facade 14/14、recorder 5/5 |
+| 5 | `5b07f616` | W4-1 dev 挂 `window.__dimensionFrameStats`（`ViewerPanel.vue` **hunk 级拆分**，只含 5 个 MBD hunk） | 时间轴 4 个 hunk 全部留在工作区未提交 |
+| 6 | `42546128` | B6 文档回写（§14 第 12/13 行、类型基线、§13.14 的 be17e987 复核表、W0-1/W0-3/W4-2 状态） | CT 的 20 处引用行号逐条抽验准确 |
+| 7 | `564eb21c` | A 合成 2k 性能基线三次实测填表 | 预算余量 32× / 20× |
+| 8 | `5f45c9b9` | 两处归因更正 + §8 两个裁决落定 + W3 六行补提交号 | — |
+| 9 | `24f69140` | 原始读数小节 + 已知口径问题（只读审计发现，未修） | — |
+
+**hunk 级拆分的做法**（R4 的可复用配方，`plant-ui` 那次也用过同思路）：`git diff -U3 -- <file>` 落字节流 → 按 `@@` 切 hunk → 只保留目标 hunk 重组补丁 → `git apply --cached --check` 先验 → `git apply --cached` 正式应用。要点三条：① 索引必须是 HEAD 状态（`--cached` 的定位基准是索引不是工作区）；② 不要加 `--3way`（会把冲突标记写进索引）；③ 不要手工改 hunk 头的新行号（`git apply` 按 old 行号 + 上下文重算，改了反而失败）。回退只有 `git restore --staged -- <file>`，工作区一个字节不动。
+
+**CT 复核发现的两处归因错误**（已更正并入库 `5f45c9b9`）：
+1. TS2345 消失的真因不是补 `groupLabel` 默认值，而是 W3-6 的模板重构（旧 `DimensionSemanticList.vue:188` 的三元没收窄第二次索引）；文件数是 127 → 126 而非「126 不变」。
+2. B3 的 popstate 开关修复实际随 `6ee4e6bd` 入库，不在 `ea51d949` 里。
+
+**粒度裁决**：W3 的 11 个文件不按 W3-2…W3-6 拆五刀。理由：`mbdV2ExternalAnnotations.ts` 里 W3-3/4/5/6 的 hunk 交错（`isolineTextHeightsM` / `textBaseline` / `tagSubject` / `isolineIndex`），`DimensionPanelDock.vue` 与 `useMbdExternalSync*` 里 W3-2 与 W3-6 同行段；拆开要在 4 个文件里按行分 hunk 并对 5 个中间提交各跑一次门禁，收益只有 bisect 粒度。替代做法：W3 六行末尾标提交号（已做）。
+
