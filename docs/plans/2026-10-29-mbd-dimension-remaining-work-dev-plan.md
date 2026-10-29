@@ -119,7 +119,7 @@ W0 收口与基线（小，先做）
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）| 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
 | W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**已实现（2026-10-30）**：`theme.lodMinLineToLabelRatio` 改成 `{ primary: 0.8, secondary: 0.5, detail: 1.5 }`，`lodShortLine` 按 `tier` 取值，未声明按 primary；数值门禁绿（S2 81/709、type-check 439/126 新增 0）。**视觉 A/B 仍待后端**，详见 §11.1 |
 | W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**已实现 kernel 侧（2026-10-30）**：`ExplicitLayoutInput.labelPresentation?: 'interrupted' \| 'above'`，缺省等于现状（逐字段不变）；`above` 抬 11 px（字高 13）且线不切段，多行标签自动回落；「不侵入相邻行」落成 `labelBounds` 相交断言，并据此得出**行距须 ≥ 2.96 字高**（现有 1.5 字高不够）。**未接 MBD mapper**，线上行为零变化；固定相机 A/B 待后端。详见 §11.2 |
-| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**可执行判据见 §11.3，含一个必须先裁决的口径缺陷：现有门禁断言测的是 `renderer.render`，不含 layout → collision → paint，与 ADR 0040 的预算不同口径** |
+| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**门禁口径已修（2026-10-30）**：删掉测错东西的 `updateP95Ms ≤ 16`，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms，达标）。门禁实测 1 passed。**分帧本身未做**，`paintP95Ms` 53.40 仍是主要成本；生产档基线采不到（R9）。详见 §11.3 |
 
 ## 5. 决策
 
@@ -144,7 +144,8 @@ W0 收口与基线（小，先做）
 | R5 | 门禁数字再次分叉 | 只写审计计划 §14；范围缩写 S0 / S1 / S2 必须注明 |
 | R6 | `type-check` 基线 440 条，新代码踩既有坑 | 每个工作包验收含「新增 0 / 已消失 0」；不改基线放行 |
 | R7 | W1-1 单文件超 600 行、14 步难以评审 | 按步骤拆子模块；每步有独立用例；PML 原 case 金样是唯一真值 |
-| R8 | **性能门禁测错东西**：`e2e/dimension-perf.spec.ts:27` 的 `updateP95Ms ≤ 16` 只覆盖 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint，而 ADR 0040 的预算是三者合并的帧 p95；门禁绿了不代表达标 | W5-5 必须补一条 `settle(passes)` 分位断言（§11.3）；在此之前**不得引用门禁绿作为性能达标证据** |
+| R8 | **性能门禁测错东西**：`e2e/dimension-perf.spec.ts` 原来的 `updateP95Ms ≤ 16` 只覆盖 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint，而 ADR 0040 的预算是三者合并的帧 p95 | **已修（2026-10-30）**：删掉该断言，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms）。见 §11.3 |
+| R9 | **生产档性能页是坏的**：`public/dimension-perf.html:13` 指向 `/src/debug/dimensionPerf.ts`，`public/` 原样拷进 `dist/`，`vite.config.ts:154-157` 的 `build.rollupOptions.input` 也没这个页面 | 生产档基线目前采不到；要采先把性能页做成构建入口（独立一小刀，未做）。在此之前所有浏览器档数字都注明是 dev 档 |
 
 ## 7. 验收命令
 
@@ -204,7 +205,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 14 | `769bfab7` | recorder 按 `kind` 分桶 + README 已知口径问题第 1/3 条收口 | recorder 7/7、S2+debug 88/787、type-check 439/126、eslint 0 |
 | 15 | `f052535d` | §11 W5-3 / W5-4 / W5-5 可执行判据 + R8 门禁口径缺陷 + 性能 README 第 7 条 | 纯文档，无门禁 |
 | 16 | `e419a2f6` | W5-3 实现：`lodMinLineToLabelRatio` 三档化 + `lodShortLine` 按 tier | S2 81/709、type-check 439/126、eslint 7 文件 0 |
-| 17 | 待提交 | W5-4 kernel 侧：`labelPresentation: 'above'` + 不相交断言 + 行距约束 | S2 81/710、type-check 439/126、eslint 3 文件 0 |
+| 17 | `8ae96336` | W5-4 kernel 侧：`labelPresentation: 'above'` + 不相交断言 + 行距约束 | S2 81/710、type-check 439/126、eslint 3 文件 0 |
+| 18 | 待提交 | W5-5 门禁口径修正：`settle(20)` 不退化断言替换 `updateP95Ms ≤ 16` + 内核基准数字 + R9 | 门禁 1 passed (4.4s)；内核基准 p95 3.746 ms |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -270,32 +272,32 @@ W5-3 / W5-4 / W5-5 在 §4 里各只有一行验收描述（「中景多留一�
 
 **仍未做的一半**：固定相机 before / after 逐像素比对（`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md:105` 的「固定相机对比」）要 W5-2 生成器 + gen-model 后端 18084，当前后端不在线。上面钉住的是几何行为，不是画面。**另外 `above` 目前没有接到 MBD mapper**——`mbdV2ExternalAnnotations.ts` 不产生这个字段，所以线上行为零变化，这是有意的：接不接、接到哪个开关（面板选项 / URL 参数 / 全局默认）是产品决策，留到 W5-4 的视觉验收之后再定。
 
-### 11.3 W5-5 2k 分帧预算 —— 先说一个口径缺陷
+### 11.3 W5-5 2k 分帧预算 —— 门禁口径已修（2026-10-30），分帧本身未做
 
-**这是本节最重要的一条，建议优先裁决。**
+**原先的口径缺陷（2026-10-30 发现并已修）**：`e2e/dimension-perf.spec.ts` 只断言 `updateP95Ms ≤ 16` 与 `hitP95Ms ≤ 2`。前者测的**只是 `renderer.render(scene, camera)`**——见 `src/debug/dimensionPerf.ts:223-235`，60 帧循环里每帧只做「改相机 → `renderer.render`」，**不含 `layoutViewport`、不含 collision、不含 `scenePainter.paint`**。ADR 0040 的预算是「合并后的 **layout → collision → paint** 帧 p95 ≤ 16 ms」，所以那条断言测的不是 ADR 说的数。`hitP95Ms` 那条是对的（纯 CPU 命中，`:245-255`）。
 
-`e2e/dimension-perf.spec.ts:27-28` 现在断言两条：
+**「layout 超预算」这个说法不成立（重要更正）**：内核基准 `npm run perf:dimensions:kernel`（`test/perf/dimensions/benchKernel.ts`，同一份 `layoutDimension` + `resolveLabelCollisions`、2 000 可见、DPR 2、热身 50 + 实测 200 次分位、自带 16 ms 断言）2026-10-30 实测：
+
 ```
-expect(result.updateP95Ms).toBeLessThanOrEqual(16);
-expect(result.hitP95Ms).toBeLessThanOrEqual(2);
+layout+collision p50=2.433ms p95=3.746ms limit=16ms
+hit-test      p50=0.013ms p95=0.036ms limit=2ms
 ```
 
-但 `updateP95Ms` 测的**只是 `renderer.render(scene, camera)`**——见 `src/debug/dimensionPerf.ts:223-235`，60 帧循环里每帧只做「改相机 → `renderer.render`」，**不含 `layoutViewport`、不含 `scenePainter.paint`**。真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`），单次读数塞进 `layoutP95Ms` / `paintP95Ms`，**没有任何断言看这两个字段**。
+**p95 = 3.746 ms，余量 4.3×，达标。** 这是 ADR 口径下最接近的可运行度量。所以 layout 与命中测试都不是瓶颈；先前基于 dev 浏览器读数（`settle(20)` 的 26.20 + 78.60）推断「layout 一项就超预算」是错的——那是 dev 构建 + DPR 1 + headless GPU 上传混在一起的结果，与 ADR 参考环境（DPR 2）不可横向比。
 
-对照 ADR 0040 的原文（`docs/adr/0040-target-large-plant-dimension-scale.md`）：预算是「合并后的 **layout → collision → paint** 帧 p95 不超过 16 ms」。所以：
+**已改（门禁断言）**：`e2e/dimension-perf.spec.ts` 现在
+1. 保留 `hitP95Ms ≤ 2`（ADR 同口径）；
+2. **删掉** `updateP95Ms ≤ 16`（测错东西），改成在 `run()` 之后调 `settle(20)`，断言 `layoutP95Ms ≤ 26.2 × 1.2` 与 `paintP95Ms ≤ 78.6 × 1.2`——基线取 `docs/verification/mbd-perf-baseline-2026-10-29/README.md` 的 `settle(20)` 三次中位数，判「不退化」而不是对 16 ms 硬卡（档位不同，硬卡会误报）；
+3. 加 `DIMENSION_PERF_BASELINE_WRITE=1` 出口，换机器时用它打出新基线再更新常量，**不得为放行而调大**。
 
-- **当前门禁测的 0.50 ms 不是 ADR 说的那个数**，它是纯 GPU 提交耗时。门禁绿了不代表 layout→paint 达标。
-- A 场景 `settle(20)` 的实测是 `layoutP95Ms` 26.20 + `paintP95Ms` 78.60 ≈ **104.8 ms**（`docs/verification/mbd-perf-baseline-2026-10-29/README.md:180-181`），**单是 layout 一项就已超 16 ms 预算**。
-- `hitP95Ms` 那条是对的：`hitIndex.hitTest` 是纯 CPU 命中（`:245-255`），与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径。
+**实测（2026-10-30，本机）**：门禁通过（1 passed / 4.4 s）。同日读数 `settle(20)` = `layoutP95Ms` **16.70** / `paintP95Ms` **53.40**，比 10-29 基线（26.20 / 78.60）更低——说明那天的读数偏保守，基线留着不动（宁可松一点也不误报），但 W5-5 做分帧时应以今天这组为工作参考。
 
-**为什么不能直接判「超预算」**：A 场景是 dev 构建 + headless Chromium + DPR 1，而 ADR 的参考环境是 DPR 2；README 也注明 dev 比生产慢。所以 104.8 ms 不能直接和 16 ms 比。**但「门禁从没看过 layout/paint」这一点与构建档位无关，是确凿的口径缺口。**
+**仍有两件事没做**：
 
-**W5-5 的正确判据（建议）**：
-1. **补齐门禁口径**：新增一条断言，用 `settle(passes)` 的分位判 layout→paint，而不是用 `run()` 的单次读数。至少断言 `layoutP95Ms + paintP95Ms` 不高于**在目标构建档位下实测的基线 × 1.2**（README 现有的「P95 上浮超 20 %」判据）。基线值必须先在**生产构建**（`npm run build` + preview，或至少 `--mode production`）上测一次——现在 README 里的 A 数字是 dev 档，不能直接当生产基线。
-2. **分帧预算本身**：`paintP95Ms` 78.60 是主要成本（README `:182-184` 已指出）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms**，且**总帧数不超过 2 倍**（否则只是把成本摊长，交互会变卡）。
-3. **不许把门禁改成「跳过」**：现有 `test.skip(process.env.DIMENSION_PERF_GATE !== '1', ...)`（`e2e/dimension-perf.spec.ts:5-8`）是「默认不跑」，R5 已经登记为风险（「问题可能漏到线上」）。W5-5 要么把它接进 CI（至少 nightly），要么在文档里写明「本项只在本机跑」并承担后果——这是决策，不是实现细节。
+1. **生产档基线拿不到**（`README` 已知口径问题第 8 条）：`public/dimension-perf.html:13` 写的是 `<script src="/src/debug/dimensionPerf.ts">`，而 `public/` 被原样拷进 `dist/`，`vite.config.ts:154-157` 的 `build.rollupOptions.input` 也没有这个页面。**生产构建下这个性能页是坏的**，所以「生产档 p95」目前无法采集。要做就得先把它做成真正的构建入口——独立一小刀。
+2. **分帧本身**：`paintP95Ms` 53.40 是这一档的主要成本（`layoutP95Ms` 只有 16.70）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**（否则只是把成本摊长，交互变卡）。**这一条仍未动代码。**
 
-**回退**：门禁断言改严之后若当前树直接失败，属于**预期**（它暴露了真实成本），不得为了放行而放宽阈值或改基线。
+**R5（门禁默认 skip 会漏到线上）仍未解决**：`test.skip(process.env.DIMENSION_PERF_GATE !== '1', ...)` 保持原样。接不接 CI 是决策，不是实现细节——本轮未动。
 
 ### 11.4 未决问题（2026-10-30 更新：U1 / U4 已自决，U2 / U3 待办）
 
@@ -305,8 +307,8 @@ expect(result.hitP95Ms).toBeLessThanOrEqual(2);
 | --- | --- | --- |
 | U1 | Q5 三档 0.5 / 0.8 / 1.5 与 tier 的对应关系 | **已自决并实现**：secondary 0.5 / primary 0.8 / detail 1.5，未声明按 primary。理由与后果见 §11.1，行为由单测钉住（`e419a2f6`） |
 | U4 | `labelPresentation` 放 kernel 契约还是 MBD mapper 层 | **已自决**：放 kernel 的 `ExplicitLayoutInput`（`types.ts`）。理由：`above` 要沿**屏幕法向**抬，mapper 层拿不到投影；放 kernel 是唯一不重复实现投影的地方。字段可选 + 默认等于现状，风险有界。**故意不接 mapper**，线上零变化（`e419a2f6` 之后这一刀） |
-| U2 | 是否把 `updateP95Ms` 断言换成 `settle` 分位（会让门禁直接变红） | **待办**。倾向换，但换之前必须先有生产构建档的基线，否则阈值无从定（见 U3） |
-| U3 | 基线要不要在**生产构建**上重测 | **待办**。倾向要：现在只有 dev 档数字，拿它当生产基线不成立 |
+| U2 | 是否把 `updateP95Ms` 断言换成 `settle` 分位（会让门禁直接变红） | **已自决并实现**：换成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms`，判「不高于基线 × 1.2」。门禁**没有变红**——同日实测 16.70 / 53.40，低于基线。见 §11.3 |
+| U3 | 基线要不要在**生产构建**上重测 | **部分自决**：生产档**拿不到**（`public/dimension-perf.html` 指向 `/src/debug/dimensionPerf.ts`，生产构建下页面是坏的，README 第 8 条）。改用两个替代锚点：ADR 口径的内核基准（layout+collision p95 = 3.746 ms，达标）+ dev 档 `settle(20)` 的不退化判据。**要真拿生产档数字，得先把性能页做成构建入口——独立一小刀，未做** |
 
-U2 / U3 是同一件事的两半，按 U3 → U2 顺序做：先在生产构建上量一次 `settle(20)`，拿到基线，再把门禁断言换成「不高于基线 × 1.2」。这一步会跑 `npm run build`，耗时长且会写 `dist/`，单独一刀。
+**U2 / U3 的最终结论**：layout 的 16 ms 预算由内核基准守住（p95 3.746 ms）；浏览器门禁改判「不退化」。上轮基于 dev 浏览器读数推断的「layout 超预算」是错的，已在 §11.3 更正。
 

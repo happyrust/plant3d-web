@@ -180,16 +180,29 @@ W5-5 比的就是这几格（各取三次的中位数）：
 
 | 场景 | 指标 | 基线 |
 | --- | --- | --- |
-| A | `updateP95Ms` / `hitP95Ms` | **0.50 / 0.10**（`hitP95Ms` 对应预算 2 ms，余量 20×；`updateP95Ms` **不对应** ADR 的 16 ms，见下方警示）|
-| A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | **26.20 / 78.60**（这两列才是 layout → paint 口径，合计 104.8 ms）|
+| 内核（ADR 口径，最接近的度量）| `layout+collision` P95 | **3.746 ms**（预算 16，余量 4.3×；`npm run perf:dimensions:kernel`，DPR 2、实测 200 次）|
+| 内核（ADR 口径）| `hit-test` P95 | **0.036 ms**（预算 2，余量 55×）|
+| A | `updateP95Ms` / `hitP95Ms` | **0.50 / 0.10**（`hitP95Ms` 与 ADR 同口径；`updateP95Ms` **不对应** ADR 的 16 ms，见下方警示）|
+| A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | **26.20 / 78.60**（dev 档浏览器读数，与上面内核口径不可横向比）|
 | B 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
 | C 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
 
-**A 场景读数说明**：`hitP95Ms` 0.10 ms 说明**命中测试**不是瓶颈（与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径，`src/debug/dimensionPerf.ts:245-255` 是纯 CPU 命中）。`paintP95Ms`（`settle(20)` 的 78.60 ms）是 layout → paint 这一档的主要成本，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算要盯的是 `paintP95Ms`。
+**A 场景读数说明**：`hitP95Ms` 0.10 ms 说明**命中测试**不是瓶颈（与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径，`src/debug/dimensionPerf.ts:245-255` 是纯 CPU 命中）。`paintP95Ms`（`settle(20)` 的 78.60 ms）是 dev 档浏览器里 layout → paint 这一档的主要成本，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算要盯的是 `paintP95Ms`。
 
-**⚠️ `updateP95Ms` 与 ADR 0040 的预算不是同一件事（2026-10-30 补）**：`run()` 的 60 帧循环（`src/debug/dimensionPerf.ts:223-235`）每帧只做「改相机 → `renderer.render(scene, camera)`」，**不跑 `layoutViewport`、不跑 `scenePainter.paint`**；真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`）。ADR 0040 的预算是「合并后的 layout → collision → paint 帧 p95 不超过 16 ms」，所以 `e2e/dimension-perf.spec.ts:27` 那条 `updateP95Ms ≤ 16` **测的是纯 GPU 提交耗时，不是 ADR 那个数**。门禁绿不等于 layout → paint 达标。
+**⚠️ `updateP95Ms` 与 ADR 0040 的预算不是同一件事（2026-10-30 补）**：`run()` 的 60 帧循环（`src/debug/dimensionPerf.ts:223-235`）每帧只做「改相机 → `renderer.render(scene, camera)`」，**不跑 `layoutViewport`、不跑 `scenePainter.paint`**；真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`）。ADR 0040 的预算是「合并后的 layout → collision → paint 帧 p95 不超过 16 ms」，所以 `e2e/dimension-perf.spec.ts:27` 那条 `updateP95Ms ≤ 16` **测的是纯 GPU 提交成本，不是 ADR 那个数**。门禁绿不等于 layout → paint 达标。
 
-按同口径重算，A 场景 `settle(20)` 的 `layoutP95Ms` 26.20 + `paintP95Ms` 78.60 ≈ **104.8 ms**，单是 layout 一项就已超 16 ms 预算。**但这不是「判超预算」**：本表是 dev 构建 + headless Chromium + DPR 1，ADR 参考环境是 DPR 2，两者不可直接比。确凿的是**口径缺口**：门禁从未看过 layout / paint。W5-5 的处理见计划文档 §11.3 与风险 R8。
+**这个缺口有多大，要分两个口径看（2026-10-30 实测，两次结论不同，以本段为准）**：
+
+| 口径 | 覆盖 | 机器 / 档位 | p95 | 对 16 ms 预算 |
+| --- | --- | --- | --- | --- |
+| 内核基准 `npm run perf:dimensions:kernel` | layout + collision（**不含 paint**） | Node 26 / DPR 2 / 热身 50 + 实测 200 次 | **3.746 ms** | **达标**（余量 4.3×）|
+| 浏览器 `settle(20)` | layout + collision + hit index + paint | headless Chromium / DPR 1 / **dev 构建** | 26.20 + 78.60 = **104.8 ms** | 超出，但档位不可比 |
+
+内核基准那一行是 ADR 0040 口径里最接近的**可运行**度量：同一份 `layoutDimension` + `resolveLabelCollisions`、同样 2 000 可见、同样 DPR 2，`layout+collision p95 = 3.746 ms`，自带 16 ms 断言且通过（`test/perf/dimensions/benchKernel.ts:26`、`:218`）。所以**「layout 超预算」这个说法不成立**——它只在 dev 构建 + GPU 上传的浏览器读数里看着像超，那是 paint 与 dev 开销混进来的结果。
+
+浏览器那一行的 `paintP95Ms` 78.60 ms 才是真正可疑的成本，但它同样不能直接与 16 ms 比：dev 构建（Vite 未压缩、Vue dev 模式）+ DPR 1 + headless Chromium 的 GPU 路径都与 ADR 参考环境不同。**要判定 paint 是否达标，必须先在能跑生产档的地方量一次**——而这一步现在做不了，见下条。
+
+**生产档拿不到基线（2026-10-30 发现）**：`public/dimension-perf.html:13` 写的是 `<script type="module" src="/src/debug/dimensionPerf.ts">`，而 `public/` 由 Vite **原样拷贝**进 `dist/`，所以 `dist/dimension-perf.html` 里这条路径指向一个构建产物中不存在的文件——**生产构建下这个性能页是坏的**。`vite.config.ts:154-157` 的 `build.rollupOptions.input` 只列了 `index.html` 与 `pms-review-simulator.html`，没有这个页面。因此 W5-5 若要生产档基线，得先把它做成真正的构建入口（或改用 `vite preview` + 一个 dev-only 的等价入口），这本身是一小刀独立工作。
 
 **口径提醒**：`run()` 的 `layoutP95Ms` / `paintP95Ms` 是 60 帧之后**一次** settle 的读数（README `:52` 已注明），字段名带 P95 但不是分位；`settle(20)` 那两列才是真分位。两者不可横向直接比。
 
@@ -200,7 +213,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - `createDimensionSystem({ onFrame })`（`src/dimension/facade/createDimensionSystem.ts`）：原样透传给 `DimensionViewport` 的 `onFrame`（`src/dimension/viewport/dimensionViewport.ts`）。视口三处上报：全量布局帧 `layoutMs + paintMs`；只改样式的增量帧与「相机失效但 projector 未换」的帧 `layoutMs = 0`、`paintMs = 整帧`。三处各带 `kind`（`layout` / `style` / `camera`），数值口径不变（`layoutMs + paintMs` 恒等于整帧）。
 - `src/debug/dimensionFrameStats.ts`：环形缓冲（600 帧）+ 最近邻秩分位，按 `kind` 分桶（`paintMs` 只算 `layout` 帧）；`ViewerPanel.vue` 在 dev 构建把它挂为 `window.__dimensionFrameStats`，生产构建既不挂也不记录。
 - `src/debug/dimensionPerf.ts`：新增 `window.__dimensionPerf.settle(passes)`；`run()` 与 e2e 门禁没动。
-- 可选对照：`npm run perf:dimensions:kernel`（Node 内核基准：1920×1080 @2x、2k 可见、热身 50 / 实测 200 次，打印 `layout+collision p50/p95` 与 `hit-test p50/p95`）。
+- 可选对照：`npm run perf:dimensions:kernel`（Node 内核基准：1920×1080 @2x、2k 可见、热身 50 / 实测 200 次，打印 `layout+collision p50/p95` 与 `hit-test p50/p95`，自带 16 ms / 2 ms 断言）。**这是最接近 ADR 0040 口径的可运行度量**（`test/perf/dimensions/benchKernel.ts:26`、`:218`）：2026-10-30 实测 `layout+collision p95 = 3.746 ms`、`hit-test p95 = 0.036 ms`，均达标。
 
 ## 注意
 
@@ -209,7 +222,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - 首轮含字体 / 着色器热身，先空跑一次再记三次。
 - 三次的原始返回值（JSON）原样贴在下面「原始读数」；B / C 的读数也往同一节追加，或存 `runs/`。
 
-## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5 条当天已修，第 2、6 条保持，第 7 条待 W5-5）
+## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5 条当天已修，第 2、6 条保持，第 7、8 条 2026-10-30 新登记）
 
 1. ~~**`paintMs` 在三类帧里语义不一致**~~ → **已修（2026-10-29）**：`dimensionViewport.ts` 的 `onFrame` breakdown 加 `kind: 'layout' | 'style' | 'camera'`（`DimensionFrameKind`，三处上报点各标一种），数值口径未动（`layoutMs + paintMs` 仍恒等于整帧，facade 用例补断言 `kind === 'layout'`）；`dimensionFrameStats.ts` 的 `summary()` 现在按 `kind` 分桶，`paintMs` **只统计 `layout` 帧**，`style` / `camera` 帧的整帧耗时只进 `frameMs`。另加 `frameKinds` 计数，三类相加等于 `frames`。用例 `buckets by the reported kind instead of inferring it from layoutMs` 钉住。
 2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
@@ -218,6 +231,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
 7. **`updateP95Ms` 与 ADR 0040 的帧预算不同口径（2026-10-30 补，未修）**：`run()` 的 60 帧循环只测 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint；`e2e/dimension-perf.spec.ts:27` 却拿它对着 16 ms 判。ADR 0040 的预算是三者合并的帧 p95。**处置**：W5-5 补一条 `settle(passes)` 分位断言（计划文档 §11.3、风险 R8），在此之前不得引用门禁绿作为性能达标证据。
+8. **生产构建下的 `/dimension-perf.html` 是坏的（2026-10-30 发现，未修）**：`public/dimension-perf.html:13` 指向 `/src/debug/dimensionPerf.ts`，而 `public/` 被原样拷进 `dist/`；`vite.config.ts:154-157` 的 `build.rollupOptions.input` 也没有这个页面。所以生产档性能基线**目前无法采集**，W5-5 若要生产档数字，得先把它做成真正的构建入口。
 
 **这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径；第 7 条（门禁口径）**待 W5-5 修，属计划级缺口，不是本表的口径问题**。
 
