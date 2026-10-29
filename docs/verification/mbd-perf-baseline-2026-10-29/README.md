@@ -203,4 +203,58 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - dev 构建（Vite 不压缩、Vue dev 模式）比生产略慢；基线与 W5-5 复测都用 dev，口径一致即可。
 - `layoutMs` 只统计全量布局帧。绕轨脚本每帧 `notifyViewerChanged()`，`layoutFrames ≈ frames`；手动拖动时增量帧多，两者分开。
 - 首轮含字体 / 着色器热身，先空跑一次再记三次。
-- 三次的原始返回值（JSON）原样贴到本文件末尾「原始读数」或存 `runs/`。
+- 三次的原始返回值（JSON）原样贴在下面「原始读数」；B / C 的读数也往同一节追加，或存 `runs/`。
+
+## 已知口径问题（2026-10-29 只读审计，未修，W5-5 前需知情）
+
+1. **`paintMs` 在三类帧里语义不一致**：`dimensionViewport.ts:506-509`（只改样式的增量帧）与 `:524-527`（仅相机失效且 projector 未换）把**整帧**耗时记为 `paintMs`，而 `:559-562`（全量布局帧）的 `paintMs` 只含 `scenePainter.paint`。`:524-527` 那条分支实际**不绘制**（只有 `requestRender()`），却以 `paintMs ≈ 整帧` 入缓冲。后果：`paintMs` 分位被这两类帧往下拉或往上推，跨场景不可直接比。
+2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
+3. **`layoutMs > 0` 的过滤会误杀极快的全量帧**：`dimensionFrameStats.ts:91` 用 `sample.layoutMs > 0` 判定全量布局帧；`performance.now()` 精度不足时（小场景可能只几十条记录）全量布局可能测得 `0`，该帧被归为增量帧，`layoutFrames` 少算。
+4. **`record` 不校验 `durationMs`**：`dimensionFrameStats.ts:76-81` 直接存入；`NaN` 会让排序比较器返回 `NaN`（顺序不定）、`percentile` 可能返回 `NaN`，而 `quantiles` 的 `max` 因 `NaN > max` 恒 false 报 0。
+5. **`settle(passes)` 没有参数校验**：`dimensionPerf.ts:267` 接受任意 `passes`；`passes <= 0` 或非整数时循环不执行，返回全 0 读数，调用方无法与「真实测到 0 ms」区分。
+6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
+
+**这些都不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。
+
+## 原始读数
+
+### A 合成 2k（2026-10-29，`plant3d-web@42546128`，Ryzen 9 7950X / RX590 GME / Playwright 1.58.2 headless Chromium / 1920×1080 DPR 1）
+
+三次连续运行，每次 `run()` 后再 `settle(20)`：
+
+```json
+[
+  {
+    "round": 1,
+    "run": {"loaded":10000,"visible":2000,"external":500,"samples":60,
+            "updateP50Ms":0.30000001192092896,"updateP95Ms":0.5999999642372131,
+            "layoutP95Ms":26.30000001192093,"paintP95Ms":71.30000001192093,
+            "hitP95Ms":0.09999996423721313,"observedFps":57.931833543198415,
+            "sceneObjectCount":4},
+    "settle": {"passes":20,"layoutP50Ms":17.099999964237213,"layoutP95Ms":26.19999998807907,
+               "paintP50Ms":61.69999998807907,"paintP95Ms":76.60000002384186}
+  },
+  {
+    "round": 2,
+    "run": {"loaded":10000,"visible":2000,"external":500,"samples":60,
+            "updateP50Ms":0.30000001192092896,"updateP95Ms":0.5,
+            "layoutP95Ms":23.899999976158142,"paintP95Ms":61.69999998807907,
+            "hitP95Ms":0.09999996423721313,"observedFps":58.53087503862377,
+            "sceneObjectCount":4},
+    "settle": {"passes":20,"layoutP50Ms":15.699999988079071,"layoutP95Ms":27.80000001192093,
+               "paintP50Ms":59.39999997615814,"paintP95Ms":82}
+  },
+  {
+    "round": 3,
+    "run": {"loaded":10000,"visible":2000,"external":500,"samples":60,
+            "updateP50Ms":0.20000004768371582,"updateP95Ms":0.5,
+            "layoutP95Ms":21,"paintP95Ms":59.39999997615814,
+            "hitP95Ms":0.09999996423721313,"observedFps":58.77167205544248,
+            "sceneObjectCount":4},
+    "settle": {"passes":20,"layoutP50Ms":16.600000023841858,"layoutP95Ms":21.30000001192093,
+               "paintP50Ms":58.09999996423721,"paintP95Ms":78.60000002384186}
+  }
+]
+```
+
+取数方式：临时 spec 用 `page.evaluate` 调 `window.__dimensionPerf.run()` 与 `.settle(20)`，跑完即删（不入库）；等价的手工路径见上面「怎么跑」的 DevTools 两行。
