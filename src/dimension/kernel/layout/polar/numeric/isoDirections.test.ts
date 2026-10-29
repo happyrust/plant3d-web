@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isoGetBestDir, isoGetDimDir, orthogonal } from './isoDirections';
+import { horizontalFallbackDir, isoGetBestDir, isoGetDimDir, orthogonal } from './isoDirections';
 
 import type { Vec3 } from '../../../types';
 
@@ -26,6 +26,25 @@ describe('orthogonal (D2)', () => {
   it('has no answer for parallel or opposite directions', () => {
     expect(orthogonal(U, U)).toBeNull();
     expect(orthogonal(U, [0, 0, -1])).toBeNull();
+  });
+});
+
+describe('horizontalFallbackDir', () => {
+  it('is the horizontal normal axis × u for a non-vertical pipe', () => {
+    // E × U = [0,-1,0]（南向）；N × U = [1,0,0]（东向）。
+    expect(horizontalFallbackDir(E)).toEqual([0, -1, 0]);
+    expect(horizontalFallbackDir(N)).toEqual([1, 0, 0]);
+    expect(horizontalFallbackDir([3, 0, 0])).toEqual([0, -1, 0]);
+  });
+
+  it('falls back to n when the axis is vertical (polarsystem.pmlobj:297-299)', () => {
+    // U × n = [0,0,1] × [0,1,0] = [-1,0,0]（分量含 -0，故用 expectVec 逐位比）。
+    expectVec(horizontalFallbackDir(U), [-1, 0, 0]);
+    expectVec(horizontalFallbackDir([0, 0, -5]), [1, 0, 0]);
+  });
+
+  it('returns the constant last resort for a zero axis', () => {
+    expect(horizontalFallbackDir([0, 0, 0])).toEqual([1, 0, 0]);
   });
 });
 

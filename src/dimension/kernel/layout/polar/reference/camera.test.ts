@@ -47,6 +47,9 @@ function makePrevious(showDir: Vec3): PolarReference {
     axis: [1, 0, 0],
     plane: { zero: showDir, normal: [1, 0, 0] },
     showDir,
+    // 与 cameraReference 对 axis = [1,0,0] 的取值一致：orthogonal(axis, u) = [0,-1,0]。
+    horiDir: [0, -1, 0],
+    up: [0, 0, 1],
     mainDimDir: null,
     disRange: [0, 10] as const,
     basicRadius: 0.5,
@@ -200,6 +203,8 @@ describe('cameraReference', () => {
       zero: [...previous.plane.zero] as Vec3,
       normal: [...previous.plane.normal] as Vec3,
       showDir: [...previous.showDir] as Vec3,
+      horiDir: [...previous.horiDir] as Vec3,
+      up: [...previous.up] as Vec3,
       mainDimDir: previous.mainDimDir,
       disRange: [...previous.disRange] as [number, number],
       basicRadius: previous.basicRadius,
@@ -226,6 +231,8 @@ describe('cameraReference', () => {
     expect(previous.plane.zero).toEqual(snapshot.zero);
     expect(previous.plane.normal).toEqual(snapshot.normal);
     expect(previous.showDir).toEqual(snapshot.showDir);
+    expect(previous.horiDir).toEqual(snapshot.horiDir);
+    expect(previous.up).toEqual(snapshot.up);
     expect(previous.mainDimDir).toBe(snapshot.mainDimDir);
     expect(previous.disRange).toEqual(snapshot.disRange);
     expect(previous.basicRadius).toBe(snapshot.basicRadius);
@@ -319,5 +326,58 @@ describe('cameraReference', () => {
       projector: makeProjector([0, 0, -1]),
       previous: null,
     })).toThrow(RangeError);
+  });
+});
+
+describe('cameraReference — up 与 horiDir', () => {
+  const base = {
+    origin: [1, 2, 3] as Vec3,
+    disRange: [0, 10] as const,
+    basicRadius: 0.5,
+    isInstPipe: false,
+    previous: null,
+  };
+
+  it('fills up with world vertical for a horizontal pipe', () => {
+    const reference = cameraReference({
+      ...base,
+      axis: X_AXIS,
+      projector: makeProjector([0, 0, -1]),
+    });
+
+    expect(reference.up).toEqual([0, 0, 1]);
+    // horiDir 与图纸排版无关，只走兜底链：orthogonal([1,0,0], u) = [0,-1,0]。
+    expectVec(reference.horiDir, [0, -1, 0]);
+    // horiDir 与 showDir 是两回事（水平管下二者不相等）。
+    expectVec(reference.showDir, [0, 0, -1]);
+  });
+
+  it('falls back to n for a vertical pipe and keeps up = world vertical', () => {
+    const reference = cameraReference({
+      ...base,
+      axis: [0, 0, 1],
+      projector: makeProjector([0, 0, 1]),
+    });
+
+    expect(reference.up).toEqual([0, 0, 1]);
+    // orthogonal(u, u) 无解 → 换 n：cross(u, n) = [-1,0,0]。
+    expectVec(reference.horiDir, [-1, 0, 0]);
+    // 退化 showDir 与 horiDir 取同一条链，二者一致（对应 polarsystem.pmlobj:283）。
+    expectVec(reference.showDir, reference.horiDir);
+  });
+
+  it('keeps horiDir horizontal and unit for an oblique pipe', () => {
+    const axis: Vec3 = [Math.SQRT1_2, 0, Math.SQRT1_2];
+    const reference = cameraReference({
+      ...base,
+      axis,
+      projector: makeProjector([0, 0, -1]),
+    });
+
+    expect(Math.hypot(...reference.horiDir)).toBeCloseTo(1, 12);
+    const dotUp = reference.horiDir[2];
+    expect(Math.abs(dotUp)).toBeLessThan(1e-12);
+    // 与 degenerateShowDir 同链，但这里是正常路径，showDir 来自相机投影。
+    expectVec(reference.horiDir, [0, -1, 0]);
   });
 });

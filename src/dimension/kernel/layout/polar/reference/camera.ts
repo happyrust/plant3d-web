@@ -43,7 +43,7 @@
  */
 
 import { dot3, length3, scale3, sub3, tryNormalize3 } from '../../../vec';
-import { orthogonal } from '../numeric/isoDirections';
+import { horizontalFallbackDir } from '../numeric/isoDirections';
 
 import type { PolarReference } from './types';
 import type { ViewportProjector } from '../../../projector';
@@ -73,14 +73,8 @@ export const DEFAULT_ENTER_DEG = 1;
 /** 滞回退出阈值默认值（度）：与上一帧夹角达到它就切换。 */
 export const DEFAULT_EXIT_DEG = 3;
 
-/** 退化兜底第一选择：世界上方（`PML` 里的 `u`）。 */
+/** 世界竖直方向（PML 里的 `u`），填进 `PolarReference.up`。 */
 const WORLD_UP: Vec3 = [0, 0, 1];
-
-/** 退化兜底第二选择：世界北向（`PML` 里的 `n`）。 */
-const WORLD_NORTH: Vec3 = [0, 1, 0];
-
-/** 退化兜底最后选择（理论上不可达：单位向量不可能同时平行于上方与北向）。 */
-const WORLD_EAST: Vec3 = [1, 0, 0];
 
 /** 两方向的**无向**夹角，度，`[0, 180]`；任一向量退化时返回 `NaN`。 */
 function angleBetweenDeg(a: Vec3, b: Vec3): number {
@@ -196,11 +190,15 @@ export function hysteresisShowDir(
  * 平行则换北向、都平行则用 `[1,0,0]`」造一个与管轴正交的单位方向。
  *
  * **这是退化输入**：结果与相机的 roll 无关，只是让参考系保持合法（弧平面存在、
- * 角度零点有定义），不代表任何「最佳观察角」。`[1,0,0]` 一支理论上不可达——单位向量
- * 不可能同时平行于 `[0,0,1]` 与 `[0,1,0]`——保留它只为让返回值类型封闭。
+ * 角度零点有定义），不代表任何「最佳观察角」。
+ *
+ * 与 `PolarReference.horiDir` 用同一条链（`numeric/isoDirections.ts` 的
+ * `horizontalFallbackDir`），因此本层不必再写一份私有副本；`cameraReference` 里
+ * `horiDir` 与 `showDir` 的退化兜底取到同一个值，这与 `polarsystem.pmlobj:283`
+ * （竖直管 `showdir = horidir`）的退化形态一致。
  */
 function degenerateShowDir(unitAxis: Vec3): Vec3 {
-  return orthogonal(unitAxis, WORLD_UP) ?? orthogonal(unitAxis, WORLD_NORTH) ?? WORLD_EAST;
+  return horizontalFallbackDir(unitAxis);
 }
 
 /** `cameraReference` 的入参。 */
@@ -239,7 +237,10 @@ export type CameraReferenceInput = Readonly<{
  *    （`polarsystem.pmlobj:265-273` 要求 `showdir` 正交于 `dir`）。管轴不变时这一步是
  *    恒等变换，不改变任何已算出的值；
  * 5. 仍拿不到方向 → 退化兜底 `degenerateShowDir`；
- * 6. 返回**新对象**，`previous` 一个字段都不改。
+ * 6. `horiDir` 填 `horizontalFallbackDir(unitAxis)`——与 `degenerateShowDir` 同一条链，
+ *    但**不套** 2D 图纸的翻转规则（`polarsystem.pmlobj:227-248` 的 `prehoridir` /
+ *    `branlookdirection` / `fromltor` 是排版规则，三维下文字朝向由后续屏幕校验处理）；
+ * 7. 返回**新对象**，`previous` 一个字段都不改。
  */
 export function cameraReference(input: CameraReferenceInput): PolarReference {
   const { projector, origin, axis, disRange, basicRadius, isInstPipe, previous } = input;
@@ -260,6 +261,9 @@ export function cameraReference(input: CameraReferenceInput): PolarReference {
     axis: unitAxis,
     plane: { zero: showDir, normal: unitAxis },
     showDir,
+    // PML `polarsystem.horidir`（`:252`）在三维相机路径里没有图纸排版输入，取兜底链。
+    horiDir: horizontalFallbackDir(unitAxis),
+    up: WORLD_UP,
     mainDimDir: null,
     disRange: [disRange[0], disRange[1]] as const,
     basicRadius,

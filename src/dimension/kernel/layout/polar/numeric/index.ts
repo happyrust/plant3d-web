@@ -9,11 +9,12 @@
  */
 
 export { angleInAngles, angleUnique, mergeAngles } from './angleRanges';
+export { arcDirection, arcNear } from './arc';
 export { fallbackPlacement } from './fallbackPlacement';
 export { getGoodCheight, suiDirDis } from './getGoodCheight';
 export { goodRadiusFromBadRadii } from './goodRadius';
+export { horizontalFallbackDir, isoGetBestDir, isoGetDimDir, orthogonal } from './isoDirections';
 export { isoGetHandleDimDir } from './isoHandleDimDir';
-export { isoGetBestDir, isoGetDimDir, orthogonal } from './isoDirections';
 export {
   MBD_TEXT_LEN_FALLBACK,
   MBD_TEXT_LEN_PML_ENTRIES,
@@ -24,6 +25,7 @@ export { splitRange } from './splitRange';
 export { weightedWeight } from './weightedWeight';
 
 export type { AngleRange } from './angleRanges';
+export type { ArcFrame } from './arc';
 export type { IsoUsedDir } from './isoHandleDimDir';
 export type { RadiusBand } from './goodRadius';
 export type { Range } from './fallbackPlacement';

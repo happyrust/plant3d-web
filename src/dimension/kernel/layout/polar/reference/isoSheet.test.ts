@@ -38,18 +38,20 @@ function params(overrides: Partial<IsoSheetParams> = {}): IsoSheetParams {
 }
 
 describe('isoSheetReference — 水平管（polarsystem.pmlobj:157-196 / :258-284）', () => {
-  it('east pipe, lookangle 30: showdir is the arc tangent, plane.zero follows it', () => {
+  it('east pipe, lookangle 30: showdir is the arc radius at 30°, plane.zero follows it', () => {
     // 推导（axis = E = [1,0,0]，u = [0,0,1]）：
     // :185 horidir = E.orthogonal(u) = cross(E,u) = [0,-1,0]
     // :258 tempangle = 90 -> 走弧分支
     // :265 tempdir = horidir.orthogonal(u) = cross([0,-1,0],u) = [-1,0,0]
     // :269 angle([-1,0,0], [1,0,0]) = 180 > 90 -> tempdir = -dir = [-1,0,0]
     // :277 ori = X is [0,-1,0], z is [-1,0,0] -> y = z × x = [0,0,1]
-    // :280 angledirection(30) = -x·sin30 + y·cos30 = [0,0.5,√3/2]
+    // :280 angledirection(30) 是**径向**：cos30·x + sin30·y
+    //      = cos30·[0,-1,0] + sin30·[0,0,1] = [0, -√3/2, 0.5]
+    //      （旧切线实现给 -x·sin30 + y·cos30 = [0, 0.5, √3/2]，偏 90°）
     const reference = isoSheetReference(params());
 
-    expectVec(reference.showDir, [0, SIN_30, COS_30]);
-    expectVec(reference.plane.zero, [0, SIN_30, COS_30]);
+    expectVec(reference.showDir, [0, -COS_30, SIN_30]);
+    expectVec(reference.plane.zero, [0, -COS_30, SIN_30]);
     expectVec(reference.plane.normal, E);
     expect(reference.mainDimDir).toBeNull();
     expect(reference.kind).toBe('iso-sheet');
@@ -58,10 +60,11 @@ describe('isoSheetReference — 水平管（polarsystem.pmlobj:157-196 / :258-28
     expect(reference.isInstPipe).toBe(false);
   });
 
-  it('lookangle 0 yields the arc y axis, lookangle 90 yields -horidir', () => {
-    // angledirection(0) = y = z × x = [0,0,1]；angledirection(90) = -x = [0,1,0]
-    expectVec(isoSheetReference(params({ lookAngleDeg: 0 })).showDir, U);
-    expectVec(isoSheetReference(params({ lookAngleDeg: 90 })).showDir, [0, 1, 0]);
+  it('lookangle 0 yields horidir itself, lookangle 90 yields the arc y axis', () => {
+    // 径向：angledirection(0) = x' = horidir = [0,-1,0]；
+    //       angledirection(90) = y = z × x = [0,0,1]。
+    expectVec(isoSheetReference(params({ lookAngleDeg: 0 })).showDir, [0, -1, 0]);
+    expectVec(isoSheetReference(params({ lookAngleDeg: 90 })).showDir, U);
   });
 });
 
@@ -189,6 +192,52 @@ describe('isoSheetReference — fromLeftToRight 与 branlookdirection（polarsys
     }));
 
     expectVec(reference.showDir, [1, 0, 0]);
+  });
+});
+
+describe('isoSheetReference — up 与 horiDir（polarsystem.pmlobj:252 / u）', () => {
+  it('up is always world vertical', () => {
+    expectVec(isoSheetReference(params()).up, U);
+    expectVec(isoSheetReference(params({ axis: U })).up, U);
+    expectVec(isoSheetReference(params({ axis: [SIN_45, 0, SIN_45] })).up, U);
+  });
+
+  it('horiDir is the final horidir after the 150° prehoridir flip (:233-234)', () => {
+    // 竖直管让 showdir === horidir；horiDir 仍要独立反映翻转后的值。
+    const flipped = isoSheetReference(params({
+      axis: U,
+      preHoriDir: [COS_30, SIN_30, 0],
+      fromLeftToRight: true,
+    }));
+
+    expectVec(flipped.horiDir, [1, 0, 0]);
+    expectVec(flipped.showDir, [1, 0, 0]);
+  });
+
+  it('horiDir keeps the pre-flip value when the flip is skipped', () => {
+    // 30° < 45 → 走 /sethoridirok，horidir 保持 [-1,0,0]，fromltor 不生效。
+    const kept = isoSheetReference(params({
+      axis: U,
+      preHoriDir: [-COS_30, SIN_30, 0],
+      fromLeftToRight: false,
+    }));
+
+    expectVec(kept.horiDir, [-1, 0, 0]);
+  });
+
+  it('horiDir is the vertical-pipe fallback and stays horizontal', () => {
+    // axis ∥ u → orthogonal(axis,u) 无解 → 换 n：cross(u,n) = [-1,0,0]
+    const reference = isoSheetReference(params({ axis: U }));
+
+    expectVec(reference.horiDir, [-1, 0, 0]);
+    expect(reference.horiDir[2]).toBeCloseTo(0, 12);
+  });
+
+  it('horiDir is the raw horizontal dir for a horizontal pipe (before lookangle)', () => {
+    // 水平管：horiDir = E × U = [0,-1,0]，与 lookangle 无关；showDir 才是弧上的点。
+    for (const lookAngleDeg of [0, 30, 90]) {
+      expectVec(isoSheetReference(params({ lookAngleDeg })).horiDir, [0, -1, 0]);
+    }
   });
 });
 

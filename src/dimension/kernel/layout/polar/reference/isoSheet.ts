@@ -13,34 +13,19 @@
  * 文件头「All coordinates are design-world metres (X=E, Y=N, Z=U)」，同仓
  * `src/dimension/kernel/geometry/planeBasis.ts:11` 也把 `[0, 0, 1]` 当世界竖直参考轴。
  * 因此 `u = [0, 0, 1]`、`n = [0, 1, 0]`、`d = [0, 0, -1]`（`d` 本函数不用，列出备查）。
+ *
+ * `:277-280` 的 `arc.angledirection(!lookupangle)` 按**径向**解释（弧心 → 弧上该点），
+ * 由 `numeric/arc.ts` 的 `arcDirection` 提供；语义裁决依据见该文件头。
  */
 
-import { cross3, dot3, length3, tryNormalize3 } from '../../../vec';
-import { orthogonal } from '../numeric';
+import { dot3, length3, tryNormalize3 } from '../../../vec';
+import { arcDirection, horizontalFallbackDir, orthogonal } from '../numeric';
 
 import type { PolarReference } from './types';
 import type { Vec3 } from '../../../types';
 
 /** 世界竖直向上（PML `u`）。依据见文件头。 */
 const WORLD_UP: Vec3 = [0, 0, 1];
-/** 世界正北（PML `n`）。依据见文件头。 */
-const WORLD_NORTH: Vec3 = [0, 1, 0];
-
-/**
- * 退化输入的最后兜底方向。
- *
- * `orthogonal` 在 `a × b` 长度小于 `EPSILON` 时返 null（`numeric/isoDirections.ts:36-37`），
- * PML 会抛错并由 `handle any` 兜住（`isoGetDimDir.pmlfnc:7-8`）。本函数返回
- * `PolarReference` 而不是 `| null`，所以必须给出确定值：
- *
- * 1. `axis` 与 `u` 平行（竖直管）→ 改用 `n` 作参考轴，得 `[-1, 0, 0]`
- *    （`cross(u, n) = [-1, 0, 0]`）。这是唯一有几何意义的兜底：竖直管的「水平方向」
- *    只能由水平参考轴定，PML 在 `referencedirs` 为空时对竖直管本身是崩溃/未定义的
- *    （`:154` 的 `trydir` 抛错后 `horidir` 保持未赋值，`:228` 再调用会二次抛错）。
- * 2. `axis` 与 `u`、`n` 都平行 → 不可能同时成立（`u ⟂ n`），只剩 `axis` 为零向量一种
- *    情况（已在 `isoSheetReference` 入口用 `WORLD_UP` 顶替），故本常量只作类型兜底。
- */
-const DEGENERATE_HORIDIR: Vec3 = [1, 0, 0];
 
 /** 两方向夹角（度），对应 PML `DIRECTION.angle`，值域 `[0, 180]`。 */
 function angleDeg(a: Vec3, b: Vec3): number {
@@ -90,47 +75,6 @@ export type IsoSheetParams = Readonly<{
 }>;
 
 /**
- * PML `arc.angledirection(θ)` 在「`x = xAxis`、`z = zAxis`」朝向的弧上取 θ 处的切线方向。
- *
- * 手性依据（仓库内已有同约定实现，符号与手性由它们交叉验证）：
- * - `src/dimension/kernel/geometry/planeBasis.ts:22-31`：平面基 `u = normalize(ref × n)`、
- *   `v = normalize(n × u)`，即 `v = n × u`，右手系 `(u, v, n)`。
- * - `src/dimension/adapters/mbdV2ExternalAnnotations.ts:694-701`（`arcTangent`）：
- *   切向 = `-u·sin θ + v·cos θ`，注释写明「Counter-clockwise tangent (about `normal`)」。
- *
- * 套到 PML 的 `orientation('X is horidir and z is tempdir')`（`:277`）：
- * `u = xAxis`、`normal = zAxis`、`v = normalize(zAxis × xAxis)`，
- * 故 `angledirection(θ) = normalize(-xAxis·sin θ + v·cos θ)`。
- *
- * 正交化（关键）：`xAxis`（= `horidir`）与 `zAxis`（= ±`dir`）**不一定正交**
- * （`horidir` 来自 `tempdir.orthogonal(u)`，只保证 ⟂ `u`）。PML `orientation`
- * 构造器对非正交输入会重建成正交系，且本函数的语义要求 z 轴固定为 `±dir`
- * ——`:268` / `:274` 的注释「ensure the showdir is orthogonal the zdir of orientation
- * of this s/e 202306281001」正是为此，且 `:269-273` 已把 `tempdir` 钉到 `±dir`。
- * 因此按「z 优先」正交化：`x' = normalize(x - (x·z)z)`。这样切向恒 ⟂ `z = ±dir`，
- * 满足 `PolarReference` 里 `showDir` 落在 `plane.normal` 的正交补内的契约。
- * （若按 x 优先正交化，`z` 被改动就不再等于管轴，`:269-273` 那段钉 z 的代码失去意义。）
- */
-function arcTangentDegrees(xAxis: Vec3, zAxis: Vec3, angle: number): Vec3 {
-  const radians = (angle * Math.PI) / 180;
-  const projection = dot3(xAxis, zAxis);
-  const orthoX = tryNormalize3([
-    xAxis[0] - zAxis[0] * projection,
-    xAxis[1] - zAxis[1] * projection,
-    xAxis[2] - zAxis[2] * projection,
-  ]) ?? DEGENERATE_HORIDIR;
-  const yAxis = tryNormalize3(cross3(zAxis, orthoX)) ?? DEGENERATE_HORIDIR;
-  const sin = Math.sin(radians);
-  const cos = Math.cos(radians);
-  const tangent: Vec3 = [
-    yAxis[0] * cos - orthoX[0] * sin,
-    yAxis[1] * cos - orthoX[1] * sin,
-    yAxis[2] * cos - orthoX[2] * sin,
-  ];
-  return tryNormalize3(tangent) ?? DEGENERATE_HORIDIR;
-}
-
-/**
  * `polarsystem.pmlobj:157-196` 的 `horidir` 初值。
  *
  * - `:157-182`：`referencedirs` 非空时逐个试，取第一个「与 `u` 夹角落在
@@ -146,17 +90,10 @@ function initialHorizontalDir(params: IsoSheetParams, axis: Vec3): Vec3 {
   for (const tempdir of params.referenceDirs) {
     if (Math.abs(angleDeg(tempdir, WORLD_UP) - 90) < 60) {
       // 条件已排除 tempdir ∥ u，orthogonal 不会返 null；仍按契约兜底。
-      return orthogonal(tempdir, WORLD_UP) ?? fallbackHorizontalDir(axis);
+      return orthogonal(tempdir, WORLD_UP) ?? horizontalFallbackDir(axis);
     }
   }
-  return fallbackHorizontalDir(axis);
-}
-
-/** 竖直管（`axis ∥ u`）兜底：改用 `n` 作参考轴，二者皆平行时用常量。见 `DEGENERATE_HORIDIR`。 */
-function fallbackHorizontalDir(axis: Vec3): Vec3 {
-  return orthogonal(axis, WORLD_UP)
-    ?? orthogonal(axis, WORLD_NORTH)
-    ?? DEGENERATE_HORIDIR;
+  return horizontalFallbackDir(axis);
 }
 
 /**
@@ -170,7 +107,7 @@ function fallbackHorizontalDir(axis: Vec3): Vec3 {
  *   `golabel /sethoridirok`（`:236`）**跳过**下面的 `branlookdirection` / `fromltor` 分支
  * - `:240-248` → `branlookdirection` 优先，否则 `fromltor`
  * - `:250-252` → `this.horidir = horidir`
- * - `:258-284` → 非水平/非竖直管在弧上取 `lookangle` 处切向作 `showdir`
+ * - `:258-284` → 非水平/非竖直管在弧上取 `lookangle` 处的**径向**方向作 `showdir`
  * - `:289` → `ori = x is showdir and z is dir`
  */
 export function isoSheetReference(params: IsoSheetParams): PolarReference {
@@ -217,7 +154,12 @@ function buildReference(
     const tempdir = angleDeg(tempdirRaw, axis) <= 90 ? axis : opposite(axis);
     // `:277-280` `arc = object arc(pos, orientation('X is horidir and z is tempdir'), 0, 360, 1000, true)`
     //           `showdir = arc.angledirection(lookupangle)`
-    showDir = arcTangentDegrees(horidir, tempdir, params.lookAngleDeg);
+    //
+    // 语义：`angledirection` 给**径向**（弧心 → 弧上该点），不是切线。AVEVA 内建方法无
+    // 源码，依据是 `polarsystem.pmlobj` 内部用法互证（详见 `numeric/arc.ts` 文件头）：
+    // 这里是「角 + 半径」链的一环（`:813-816` 同构），且 `:729-730` / `:1255` / `:2422`
+    // 的 `near` ↔ `angledirection` 往返只有径向自洽。旧实现取切线，整体偏 90°。
+    showDir = arcDirection({ centre: params.origin, xAxis: horidir, zAxis: tempdir }, params.lookAngleDeg);
   } else {
     // `:282-283`
     showDir = horidir;
@@ -234,6 +176,10 @@ function buildReference(
     disRange: [params.disRange[0], params.disRange[1]],
     basicRadius: params.basicRadius,
     isInstPipe: params.isInstPipe,
+    // `:252` `!this.horidir = !horidir`：这里是全部翻转（`:227-238` prehoridir、
+    // `:240-248` branlookdirection / fromltor）之后的最终值。
+    horiDir: horidir,
+    up: WORLD_UP,
     kind: 'iso-sheet',
   };
 }

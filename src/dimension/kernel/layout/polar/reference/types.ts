@@ -84,6 +84,33 @@ export type PolarReference = Readonly<{
   plane: PolarPlane;
   /** 当前观察方向（PML `polarsystem.showdir`），单位向量，`plane.normal` 的正交补内。 */
   showDir: Vec3;
+  /**
+   * 水平参考方向（PML `polarsystem.horidir`，落值见 `polarsystem.pmlobj:252`
+   * `!this.horidir = !horidir`），单位向量、水平（⟂ `up`）。
+   *
+   * 用途是 PML `getzdir`（`polarsystem.pmlobj:380-398`）：`:381` 用
+   * `horidir.angle(showdir)` 判断二者是否退化（`< 1°` 或 `> 179°`，`:382`），
+   * 非退化时 `:394` 取 `horidir.orthogonal(showdir)` 作弧的 z 轴；退化时
+   * `:387-391` 改用 `dir` 的正负。T3.4 移植 `getBestPosAndOri` / `getresult`
+   * 需要它。
+   *
+   * **不能从 `showDir` 反推**：同一 `horiDir` 在不同 `lookangle` 下得到不同 `showDir`
+   * （`polarsystem.pmlobj:277-280`），反过来多对一，反推不出唯一解。
+   */
+  horiDir: Vec3;
+  /**
+   * 世界竖直方向（PML 里的 `u`），`[0, 0, 1]`。
+   *
+   * 两种实现都填同一个常量，保留成字段是为了让放置层不依赖「世界轴写死在哪个模块」。
+   * PML 用处：
+   *
+   * - `getresult` `:2424` `!angle = !this.dir.angle(U)`（判断管轴是否近竖直，走
+   *   `:2447` 的 `showdir.orthogonal(u)` 分支还是 `:2427` 的 `getzdir()` 分支）；
+   * - `getnormaldirs` `:2558` `!tempangle = !this.dir.angle(u)`（竖直管时把
+   *   `:2560-2561` 的 `showdir.orthogonal(u)` 及其反向加进候选方向）；
+   * - `normalanglerange` `:1777` 同一判定（决定角度禁区段）。
+   */
+  up: Vec3;
   /** 主干尺寸方向（PML `polarsystem.mainDimDir`），未定则为 null。 */
   mainDimDir: Vec3 | null;
   /** 沿轴可放置范围（PML `limitMinDis`..`limitMaxDis`），米。 */

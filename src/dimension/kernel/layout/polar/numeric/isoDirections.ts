@@ -19,6 +19,13 @@ import type { Vec3 } from '../../../types';
 /** 浮点平局容差（度）：acos 在 45° / 135° 一类对称输入上会差出 1e-14 级噪声。 */
 const TIE_EPSILON_DEG = 1e-9;
 
+/** 世界竖直向上（PML `u`），见 `horizontalFallbackDir`。 */
+const WORLD_UP: Vec3 = [0, 0, 1];
+/** 世界正北（PML `n`），见 `horizontalFallbackDir`。 */
+const WORLD_NORTH: Vec3 = [0, 1, 0];
+/** 兜底链末位，见 `horizontalFallbackDir`。 */
+const WORLD_EAST: Vec3 = [1, 0, 0];
+
 /** 两方向夹角（度），对应 PML `DIRECTION.angle`。 */
 function angleDeg(a: Vec3, b: Vec3): number {
   const cosine = dot3(a, b) / (length3(a) * length3(b));
@@ -49,6 +56,27 @@ export function isoGetBestDir(input: Vec3, dirs: readonly [Vec3, Vec3, Vec3]): V
     if (folded[index]! < folded[best]! - TIE_EPSILON_DEG) best = index;
   }
   return angles[best]! > 90 ? opposite(input) : input;
+}
+
+/**
+ * 「水平参考方向」的兜底链：先取与世界上方正交的方向（即 `axis × u`，管道走向的水平
+ * 法向），竖直管无解时改用世界北向，最后用 `[1,0,0]` 收口（单位向量不可能同时平行于
+ * `u` 与 `n`，该支理论上不可达，只为让返回值类型封闭）。
+ *
+ * 来源是 PML 的两处同构兜底，本函数是它们的唯一实现：
+ *
+ * - `polarsystem.pmlobj:185` `!horidir = !this.dir.orthogonal(u)`（`handle any` 之内，
+ *   竖直管时抛错）；
+ * - `polarsystem.pmlobj:297-299` / `:305-307` 的嵌套 `handle any`：先
+ *   `!this.dir.orthogonal(u)`，再失败则 `!horidir = n`。
+ *
+ * 注意 PML 在「竖直管且 `referencedirs` 为空」时并未真的走到 `n`（`:154` 的 `trydir`
+ * 抛错后 `horidir` 保持未赋值，`:228` 二次抛错），这里把它收敛成确定值。
+ *
+ * `axis` 为零向量时返回 `WORLD_EAST`（`orthogonal` 两次都返 null）。
+ */
+export function horizontalFallbackDir(axis: Vec3): Vec3 {
+  return orthogonal(axis, WORLD_UP) ?? orthogonal(axis, WORLD_NORTH) ?? WORLD_EAST;
 }
 
 /**
