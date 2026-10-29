@@ -222,10 +222,16 @@ export type MbdV2ParseDiagnostic = Readonly<{
 }>;
 
 /**
- * `diagnostics` 是「契约层逐条跳过、但负载整体仍可交付」的通道（未知 kind 等）。
- * **当前实现恒回空数组**：`parseMbdV2PipeData` 只在「某条图元非法」时整包失败，
- * 没有部分交付路径（缺陷 D4；开发计划 A3 落地后才会真正产出）。调用方
- * （`useMbdExternalSync`）已经把它并进 `skipped`，所以 A3 改完无需改调用方。
+ * `diagnostics` 是「契约层逐条跳过、但负载整体仍可交付」的通道。
+ *
+ * **当前实现恒回空数组，这是符合 ADR 0046 的既定行为，不是缺陷**：ADR 0046
+ * 要求出现尚未纳入 V2 契约的图元类型时整包拒绝，不得静默显示部分有效图元
+ * （不完整尺寸图会让用户误判标注已完整）。所以 `parseMbdV2PipeData` 遇到未知
+ * kind 直接走 `ok: false`，不存在「跳过这条、交付其余」的路径。
+ *
+ * 保留该字段是为了把契约层的逐条跳过接线点显式化：调用方
+ * （`useMbdExternalSync`）已把它并进 `skipped`，将来若 ADR 改为部分交付策略，
+ * 只需让 `parseMbdV2PipeData` 往这里写，调用方无需改动。
  */
 export type MbdV2ParseResult =
   | Readonly<{
