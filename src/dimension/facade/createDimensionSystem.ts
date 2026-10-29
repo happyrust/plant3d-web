@@ -35,6 +35,7 @@ import type { DimensionSnapPort } from '../ports/snapPort';
 import type { DimensionCommandJournal } from '../services/commandJournal';
 import type { ExternalDimensionSource } from '../services/externalDimensionRegistry';
 import type { ReplayPendingCommandsResult } from '../services/replayPendingCommands';
+import type { DimensionFrameBreakdown } from '../viewport/dimensionViewport';
 import type { Camera, Matrix4 } from 'three';
 
 /**
@@ -136,6 +137,12 @@ export type CreateDimensionSystemInput = Readonly<{
   cancelFrame: (id: number) => void;
   theme?: DimensionTheme;
   format?: DimensionFormatPolicy;
+  /**
+   * Observation seam: called after every viewport frame with its wall time
+   * and the layout / paint split (W4-1 perf baseline). It never influences
+   * what the frame does; omitted = nothing is measured.
+   */
+  onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void;
   /** Test seam: font loading needs fetch + DecompressionStream in browsers. */
   loadFont?: () => Promise<LffFont>;
 }>;
@@ -207,6 +214,7 @@ export async function createDimensionSystem(
     requestRender: () => input.viewer.requestRender(),
     ...(obstacles ? { obstacles } : {}),
     ...(occlusion ? { occlusion } : {}),
+    ...(input.onFrame ? { onFrame: input.onFrame } : {}),
   });
   viewport.setDocument(session.state);
   const externalRegistry = new ExternalDimensionRegistry();

@@ -33,11 +33,21 @@ type PerfResult = {
   sceneObjectCount: number;
 };
 
+/** `settle(passes)` 的读数：连续几次全量布局 + 绘制，各自的分位（W4-1 基线）。 */
+type SettleResult = {
+  passes: number;
+  layoutP50Ms: number;
+  layoutP95Ms: number;
+  paintP50Ms: number;
+  paintP95Ms: number;
+};
+
 declare global {
   interface Window {
     __dimensionPerf?: {
       ready: boolean;
       run(): Promise<PerfResult>;
+      settle(passes?: number): SettleResult;
     };
     __dimensionPerfError?: string;
   }
@@ -251,6 +261,24 @@ async function main(): Promise<void> {
         hitP95Ms: percentile(hitSamples, 0.95),
         observedFps: (60 * 1_000) / elapsed,
         sceneObjectCount: painter.getStats().sceneObjectCount,
+      };
+    },
+    // `run()` 只落一次布局，给不出 layout / paint 的分位；基线要分位时连续落几次。
+    settle(passes = 20) {
+      const layoutSamples: number[] = [];
+      const paintSamples: number[] = [];
+      for (let index = 0; index < passes; index += 1) {
+        const settled = settleLayout();
+        layoutSamples.push(settled.layoutMs);
+        paintSamples.push(settled.paintMs);
+      }
+      renderer.render(scene, camera);
+      return {
+        passes,
+        layoutP50Ms: percentile(layoutSamples, 0.5),
+        layoutP95Ms: percentile(layoutSamples, 0.95),
+        paintP50Ms: percentile(paintSamples, 0.5),
+        paintP95Ms: percentile(paintSamples, 0.95),
       };
     },
   };

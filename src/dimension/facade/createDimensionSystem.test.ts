@@ -79,6 +79,10 @@ function createHarness(input: {
   journal?: DimensionCommandJournal;
   anchorResolver?: DimensionAnchorResolver;
   viewer?: DimensionViewerAdapter;
+  onFrame?: (
+    durationMs: number,
+    breakdown: Readonly<{ layoutMs: number; paintMs: number }>,
+  ) => void;
 } = {}) {
   const inputCanvas = createInputCanvas();
   const viewer = input.viewer ?? createViewerAdapter();
@@ -91,6 +95,7 @@ function createHarness(input: {
     context: { documentId: 'doc-1' },
     repository: input.repository,
     anchorResolver: input.anchorResolver,
+    onFrame: input.onFrame,
     requestFrame: (callback) => {
       callbacks.push(callback);
       return callbacks.length;
@@ -468,5 +473,41 @@ describe('createDimensionSystem', () => {
     harness.flush();
 
     expect(system.viewport.getLayouts()).toHaveLength(0);
+  });
+
+  it('hands every viewport frame\'s timing to the host\'s observation hook (W4-1)', async () => {
+    const onFrame = vi.fn();
+    const harness = createHarness({ onFrame });
+    const system = await createdSystem(harness);
+    const record: ExternalDimensionRecord = {
+      id: 'mbd-1',
+      source: 'mbd',
+      sourceLabel: 'MBD',
+      role: 'external',
+      layout: {
+        id: 'mbd-1',
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [{ from: [-1, 0, 0], to: [1, 0, 0], part: 'dimension' }],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+      },
+    };
+
+    system.replaceExternalSource('mbd', [record]);
+    system.notifyViewerChanged();
+    for (let frames = 0; frames < 3 && system.viewport.getLayouts().length === 0; frames += 1) {
+      harness.flush();
+    }
+
+    expect(system.viewport.getLayouts().map(layout => layout.dimensionId)).toEqual(['mbd-1']);
+    expect(onFrame).toHaveBeenCalled();
+    const [durationMs, breakdown] = onFrame.mock.calls[onFrame.mock.calls.length - 1]!;
+    expect(durationMs).toBeGreaterThanOrEqual(0);
+    expect(breakdown.layoutMs).toBeGreaterThanOrEqual(0);
+    expect(breakdown.paintMs).toBeGreaterThanOrEqual(0);
+    // Layout + paint is the whole frame: nothing is measured twice or left out.
+    expect(breakdown.layoutMs + breakdown.paintMs).toBeCloseTo(durationMs, 3);
   });
 });
