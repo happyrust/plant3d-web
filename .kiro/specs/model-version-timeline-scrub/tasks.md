@@ -413,7 +413,7 @@
     - 直接写 `beforeSesno` / `afterSesno` 两端，允许一端为 null，同样走 `beforePairChange`；`pairReady` 不变，只有一钉时「对比 A / B」禁用
     - _Requirements: 5.1, 5.5, 5.9_
 
-  - [~] 14.4 实现 `src/composables/useVersionScrubber.ts`
+  - [x] 14.4 实现 `src/composables/useVersionScrubber.ts`
     - 吃 `useNodeVersionTimeline` 的 `rows`，不另取版本表；刻度与列表表头「本范围 n 版」同口径（排除 `attributeOnly` 与 `inScope === false` 的行）；`user` → 保存人、`comment` → 备注、`timelineRowImpact` → 影响类型、`unitsChanged` → 单元数
     - 范围切换保留游标与钉，视口重置为全量；不在新表的游标 / 钉按 `ghostOrdinal` 出灰标「本范围无变化」
     - 首次显示游标放 `initialCursor`；`zoom` 先把指针 x 反算成序号；`clickCluster` 缩放并把游标放簇内 sesno 最大的可导航版本
@@ -421,7 +421,7 @@
     - 钉通过 `setPins` 写回；`onCursorChange(cb)` 带触发方式 `drag | release | click | key | resolve | url`
     - _Requirements: 1.8, 1.9, 1.10, 1.13, 2.2, 2.6, 2.8, 5.1, 5.2, 5.9, 8.8, 8.9, 10.2_
 
-  - [~] 14.5 写属性测试：切换范围保留游标与钉，灰标位置正确
+  - [x] 14.5 写属性测试：切换范围保留游标与钉，灰标位置正确
     - **Property 7: 切换范围保留游标与钉，灰标位置正确**
     - **Validates: Requirements 1.9, 1.10**
 
