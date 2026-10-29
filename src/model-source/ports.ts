@@ -42,6 +42,9 @@ import type {
 } from '@/api/genModelSpatialApi';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
+/** 运行时类在 `modelVersionErrors.ts`（本文件只放类型），这里只做类型转出。 */
+export type { HistoryQueryError, HistoryQueryErrorCode } from './modelVersionErrors';
+
 /**
  * 数据源种类。只剩 `gen-model-v1`（gen-model `/api/v1`）：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM）
  * 2026-09-20 随生产切换退役，`?model_source=` / `VITE_MODEL_SOURCE` 开关一并删除。
@@ -318,13 +321,48 @@ export type ModelVersionGeometry = {
   ownerByRefno?: ReadonlyMap<string, string>;
   /** 适配器私有的取数句柄（gen-model-v1：`snapshot_key`；tombstone / 空几何没有）。调用方不得解读，只原样交回 `attributesAt`。 */
   handle?: unknown;
-  /** 释放服务端资源：gen-model-v1 = `DELETE /api/v1/model/history/{snapshot_key}` */
+  /**
+   * 几何内容摘要（`g:` + 16 字节 hex，spec `model-version-timeline-scrub`）：两份几何的键相等 ⇒ 几何逐条相同，
+   * 拖动浏览据此共享几何、只改角标。`queryHistoryGeometry` 给出；旧路由 `loadVersion` 不给（undefined）。
+   */
+  geometryKey?: string;
+  /** 释放服务端资源：gen-model-v1 = `DELETE /api/v1/model/history/{snapshot_key}`；实时路由无快照，空操作 */
   release(): Promise<void>;
 };
 
 export type ModelVersionLoadOptions = {
   signal?: AbortSignal;
 };
+
+/**
+ * 实时历史几何请求（`GET /api/v1/model/history/geometry`）：按 sesno 或按时刻二选一；时刻由服务端按链序解析成 sesno。
+ * `unitRefno` 是本仓内部键 `a_b`。
+ */
+export type HistoryGeometryRequest = { dbnum: number; unitRefno: string } & ({ sesno: number } | { time: string });
+
+export type HistoryGeometryQueryOptions = {
+  signal: AbortSignal;
+  /** 已装入帧的 `geometryKey`；服务端摘要相同回 304 → `not-modified` */
+  ifNoneMatch?: string;
+  /** 前端超时（毫秒），缺省 60 000；超时抛 `HistoryQueryError('CLIENT_TIMEOUT')` */
+  timeoutMs?: number;
+};
+
+/**
+ * 实时历史几何的结果。`not-modified`（304）不带几何：调用方与带同一 `geometryKey` 的已装入帧共享那份；
+ * `sesno` / `sessionTime` 取自 `X-Sesno` / `X-Session-Time` 头（按时刻请求时是解析后的会话）。
+ */
+export type HistoryGeometryResult =
+  | { kind: 'ok'; sesno: number; sessionTime: string | null; geometryKey: string; geometry: ModelVersionGeometry }
+  | { kind: 'not-modified'; sesno: number; sessionTime: string | null; geometryKey: string };
+
+/** 按 sesno 取某构件属性（`element/attributes-at`），不依赖快照句柄。 */
+export type AttributesAtSesnoRequest = { dbnum: number; refno: string; sesno: number };
+
+/** 按时刻解析节点版本表上的会话（`node/resolve-time`）：`at` 是 ISO 8601 时刻，取 ≤ 该时刻的最后一个会话。 */
+export type ResolveNodeTimeRequest = { dbnum: number; refno: string; scope: ModelNodeDiffScope; at: string };
+
+export type ResolveNodeTimeResult = { sesno: number; sessionTime: string };
 
 /** 一个模型版本下某构件的一行属性；与属性面板吃的 `element/attributes` 行同型（同一个渲染器印同一个字）。 */
 export type ModelVersionAttributeRow = {
@@ -593,6 +631,23 @@ export type ModelVersionSource = {
     scope: ModelNodeDiffScope,
     options?: ModelVersionLoadOptions,
   ): Promise<ModelNodeDiffSummary>;
+  /*
+   * 以下四个是拖动浏览（spec `model-version-timeline-scrub`）的新路由，均为可选：没实现的源调用方按「路由缺失」处理。
+   * 服务端是旧构建（404 / 405 且体里没有 `error.code`）→ 抛 `ModelVersionRouteUnavailableError`，面板降级到
+   * `loadVersion` / `attributesAt` / 前端按时刻解析；带码的业务错误、网络失败、超时 → 抛 `HistoryQueryError`，不降级。
+   */
+  /**
+   * 实时历史几何（`GET /api/v1/model/history/geometry`）：不建快照、无需 `release`；带 `ifNoneMatch` 且摘要相同回 `not-modified`。
+   * 单元在该会话不存在 → `HistoryQueryError('UNIT_NOT_PRESENT', { reason })`；服务端忙 → `HISTORY_BUSY`（带 `retryAfterMs`）；
+   * 调用方主动中止 → `DOMException('AbortError')`。
+   */
+  queryHistoryGeometry?(req: HistoryGeometryRequest, opts: HistoryGeometryQueryOptions): Promise<HistoryGeometryResult>;
+  /** 某构件在某 sesno 下的属性（`element/attributes-at`），不要快照句柄；不存在回 `exists: false`。 */
+  attributesAtSesno?(req: AttributesAtSesnoRequest, opts?: ModelVersionLoadOptions): Promise<ModelVersionAttributes>;
+  /** 按时刻在节点版本表上解析会话（`node/resolve-time`）；早于第一个会话等由服务端以 `HistoryQueryError` 回。 */
+  resolveNodeTime?(req: ResolveNodeTimeRequest, opts?: ModelVersionLoadOptions): Promise<ResolveNodeTimeResult>;
+  /** 服务端实时历史并发上限（`/health` 的 `model_cache.realtime_history.concurrency_limit`）；读不到为 null。 */
+  readRealtimeLimit?(): Promise<number | null>;
 };
 
 export type ModelSource = {

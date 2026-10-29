@@ -111,6 +111,27 @@ describe('useNodeVersionTimeline', () => {
     expect(beforePairChange).toHaveBeenCalledTimes(4);
   });
 
+  it('setPins：a → beforeSesno、b → afterSesno，允许一端为 null；换了才走 beforePairChange；pairReady 只在两端都有时为真', () => {
+    const beforePairChange = vi.fn();
+    const state = useNodeVersionTimeline({ beforePairChange });
+    state.setNode({ timeline: timelineOf('1_1', '1_1', [[10, 'mesh', 'mesh'], [12, null, 'mesh'], [15, 'noop', 'placement']]), history: null, nodeVersions: null, hasMembers: true });
+    state.setPins({ a: 10, b: null });
+    expect([state.beforeSesno.value, state.afterSesno.value]).toEqual([10, null]);
+    expect(state.pairReady.value).toBe(false);
+    expect(beforePairChange).toHaveBeenCalledTimes(1);
+    // 同一组钉：什么都不动
+    state.setPins({ a: 10, b: null });
+    expect(beforePairChange).toHaveBeenCalledTimes(1);
+    state.setPins({ a: 10, b: 15 });
+    expect([state.beforeSesno.value, state.afterSesno.value]).toEqual([10, 15]);
+    expect(state.pairReady.value).toBe(true);
+    expect(beforePairChange).toHaveBeenCalledTimes(2);
+    state.setPins({ a: null, b: null });
+    expect([state.beforeSesno.value, state.afterSesno.value]).toEqual([null, null]);
+    expect(state.pairReady.value).toBe(false);
+    expect(beforePairChange).toHaveBeenCalledTimes(3);
+  });
+
   it('applyManualPair：填错回文案、不动两端；填对按新旧摆正、不走 beforePairChange（容器兜底）', () => {
     const beforePairChange = vi.fn();
     const state = useNodeVersionTimeline({ beforePairChange });

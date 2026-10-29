@@ -35,3 +35,44 @@ export class ModelVersionRouteUnavailableError extends Error {
     this.route = route;
   }
 }
+/**
+ * 历史查询类路由（`model/history/geometry`、`node/resolve-time`、`element/attributes-at`）的业务 / 传输错误
+ * （spec `model-version-timeline-scrub` design §3）。路由缺失不走它，走 `ModelVersionRouteUnavailableError`。
+ *
+ * - `code`：服务端 `error.code`（`UNIT_NOT_PRESENT` / `HISTORY_BUSY` / `HISTORY_QUERY_TIMEOUT` / `SESSION_NOT_FOUND` …）
+ *   或前端自定的 `NETWORK`（fetch 失败，不降级）/ `CLIENT_TIMEOUT`（前端超时）；
+ * - `status`：HTTP 状态；`NETWORK` / `CLIENT_TIMEOUT` 没有响应，为 null；
+ * - `reason`：`UNIT_NOT_PRESENT` 时单元「还没建」还是「已删除」；
+ * - `retryAfterMs`：`HISTORY_BUSY` 的 `Retry-After`（毫秒，未钳位；钳位由 `retryAfterMs()` 负责）。
+ */
+export type HistoryQueryErrorCode =
+  | 'UNIT_NOT_PRESENT'
+  | 'HISTORY_BUSY'
+  | 'HISTORY_QUERY_TIMEOUT'
+  | 'SESSION_NOT_FOUND'
+  | 'REFNO_NOT_IN_CHAIN'
+  | 'NETWORK'
+  | 'CLIENT_TIMEOUT'
+  | (string & {});
+
+export type HistoryQueryErrorInit = {
+  status?: number | null;
+  reason?: 'not-yet' | 'deleted';
+  retryAfterMs?: number;
+  message?: string;
+};
+
+export class HistoryQueryError extends Error {
+  readonly code: HistoryQueryErrorCode;
+  readonly status: number | null;
+  readonly reason?: 'not-yet' | 'deleted';
+  readonly retryAfterMs?: number;
+  constructor(code: HistoryQueryErrorCode, init: HistoryQueryErrorInit = {}) {
+    super(init.message ?? `历史查询失败：${code}${init.status != null ? `（HTTP ${init.status}）` : ''}`);
+    this.name = 'HistoryQueryError';
+    this.code = code;
+    this.status = init.status ?? null;
+    if (init.reason !== undefined) this.reason = init.reason;
+    if (init.retryAfterMs !== undefined) this.retryAfterMs = init.retryAfterMs;
+  }
+}

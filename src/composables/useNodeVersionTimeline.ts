@@ -7,6 +7,7 @@ import type {
   ModelNodeVersionTimeline,
   ModelVersionImpactKind,
 } from '@/model-source';
+import type { Pins } from '@/utils/versionScrub/pins';
 
 import {
   buildNodeTimelineRows,
@@ -98,6 +99,12 @@ export type NodeVersionTimelineState = {
   pickSide(side: 'a' | 'b', sesno: number): void;
   compareWithPrevious(): void;
   compareWithLatest(): void;
+  /**
+   * 版本时间轴的 A / B 钉写回两端（Requirement 5.1、5.9）：a → beforeSesno，b → afterSesno，原样落、不重排
+   * （钉的排序与同版拒绝在 `utils/versionScrub/pins`）。允许一端为 null，此时 `pairReady` 为 false，「对比 A / B」禁用（5.5）。
+   * 与点行上的 A / B 一样，换了才先走 `beforePairChange`，没换什么都不做。
+   */
+  setPins(pins: Pins): void;
   /** 手填 A / B：填得不对回错误文案（面板显示），填对了回 null */
   applyManualPair(): string | null;
   /** 行上那颗徽章显示哪一列：`仅自身` 看自身列；自身列未知时只剩单元那一列可显示 */
@@ -209,6 +216,10 @@ export function useNodeVersionTimeline(options: UseNodeVersionTimelineOptions = 
     applyPair(pairWithLatest(rows.value, currentPair()));
   }
 
+  function setPins(pins: Pins): void {
+    applyPair({ a: pins.a, b: pins.b });
+  }
+
   function applyManualPair(): string | null {
     const a = Number.parseInt(manualA.value, 10);
     const b = Number.parseInt(manualB.value, 10);
@@ -262,6 +273,7 @@ export function useNodeVersionTimeline(options: UseNodeVersionTimelineOptions = 
     pickSide,
     compareWithPrevious,
     compareWithLatest,
+    setPins,
     applyManualPair,
     rowImpact,
     attributeOnlyShown,
