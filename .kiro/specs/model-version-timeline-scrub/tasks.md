@@ -532,7 +532,7 @@
     - 游标高亮纵向列表行并展开折叠段、属性横幅随游标更新、钉变化刷新两个 tab、清除钉、子树 Changed_Unit 提示、`model/versions` 缺失隐藏时间轴、URL 带 `cursor` 的恢复顺序；现有 `compare_a` / `compare_b` / `compare_autorun` 用例保持通过
     - _Requirements: 2.8, 3.10, 5.9, 5.13, 9.1, 10.3, 11.2_
 
-- [~] 16. Checkpoint：阶段 2 完成
+- [x] 16. Checkpoint：阶段 2 完成
   - `npm run type-check` 不新增基线外错误（不得为放行新错误改基线），`npm run lint` 与 `npm test` 通过
   - 本特性不改 `ReviewPanel.vue` / `DesignerCommentHandlingPanel.vue`，不跑审核面板那五套回归；若实施中改到这两个文件，按 AGENTS.md 跑五套并记录 baseline / after 差量
   - Ensure all tests pass, ask the user if questions arise.
