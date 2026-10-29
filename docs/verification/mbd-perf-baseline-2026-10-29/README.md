@@ -202,7 +202,9 @@ W5-5 比的就是这几格（各取三次的中位数）：
 
 浏览器那一行的 `paintP95Ms` 78.60 ms 才是真正可疑的成本，但它同样不能直接与 16 ms 比：dev 构建（Vite 未压缩、Vue dev 模式）+ DPR 1 + headless Chromium 的 GPU 路径都与 ADR 参考环境不同。**要判定 paint 是否达标，必须先在能跑生产档的地方量一次**——而这一步现在做不了，见下条。
 
-**生产档拿不到基线（2026-10-30 发现）**：`public/dimension-perf.html:13` 写的是 `<script type="module" src="/src/debug/dimensionPerf.ts">`，而 `public/` 由 Vite **原样拷贝**进 `dist/`，所以 `dist/dimension-perf.html` 里这条路径指向一个构建产物中不存在的文件——**生产构建下这个性能页是坏的**。`vite.config.ts:154-157` 的 `build.rollupOptions.input` 只列了 `index.html` 与 `pms-review-simulator.html`，没有这个页面。因此 W5-5 若要生产档基线，得先把它做成真正的构建入口（或改用 `vite preview` + 一个 dev-only 的等价入口），这本身是一小刀独立工作。
+**生产档性能页已修（2026-10-30，R9）**：原来是 `public/dimension-perf.html`，`public/` 由 Vite 原样拷进 `dist/`，里面写的 `/src/debug/dimensionPerf.ts` 在构建产物里不存在——**生产构建下这个页面是坏的**。已把它移到仓库根的 `dimension-perf.html` 并加进 `vite.config.ts:154-162` 的 `build.rollupOptions.input`（与 `pms-review-simulator.html` 同一处理），构建后 `dist/dimension-perf.html` 指向真实的 `assets/dimensionPerf-*.js`。dev（3101）与 preview（`npx vite preview --port 4102`）两档都已验证能打开。
+
+**生产档基线仍未采到（2026-10-30 尝试过，读数作废）**：页面修好后在 `vite preview`（生产构建）+ 本机真 Chrome（`channel: 'chrome'`，与 `playwright.config.ts` 同档）上跑了三次 `settle(20)`，中位数 `layoutP95Ms` 分别是 19.30 / 20.80 / 26.90、`paintP95Ms` 83.80 / 79.80 / 106.20——**方差大到不可用**。原因查到了：测量时机器上另一路正在跑两个 `playwright test e2e/version-scrub-perf.spec.ts`、一个 `playwright install`，还有 30 个 Chrome 进程，CPU 负载 30%。**这组数字不写进基线表**。要采生产档基线，必须等到机器空载；在此之前生产档的结论只有「页面能打开、能量」，没有可信数字。
 
 **口径提醒**：`run()` 的 `layoutP95Ms` / `paintP95Ms` 是 60 帧之后**一次** settle 的读数（README `:52` 已注明），字段名带 P95 但不是分位；`settle(20)` 那两列才是真分位。两者不可横向直接比。
 
@@ -231,7 +233,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
 7. **`updateP95Ms` 与 ADR 0040 的帧预算不同口径（2026-10-30 补，未修）**：`run()` 的 60 帧循环只测 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint；`e2e/dimension-perf.spec.ts:27` 却拿它对着 16 ms 判。ADR 0040 的预算是三者合并的帧 p95。**处置**：W5-5 补一条 `settle(passes)` 分位断言（计划文档 §11.3、风险 R8），在此之前不得引用门禁绿作为性能达标证据。
-8. **生产构建下的 `/dimension-perf.html` 是坏的（2026-10-30 发现，未修）**：`public/dimension-perf.html:13` 指向 `/src/debug/dimensionPerf.ts`，而 `public/` 被原样拷进 `dist/`；`vite.config.ts:154-157` 的 `build.rollupOptions.input` 也没有这个页面。所以生产档性能基线**目前无法采集**，W5-5 若要生产档数字，得先把它做成真正的构建入口。
+8. ~~**生产构建下的 `/dimension-perf.html` 是坏的**~~ → **已修（2026-10-30）**：页面从 `public/`（原样拷贝）移到仓库根并加进 `build.rollupOptions.input`，构建后指向真实 chunk，dev 与 preview 两档都能打开。**但生产档基线仍未采到**——首轮尝试时机器上有另一路的 playwright 任务在跑，读数方差过大已作废，见上一段。
 
 **这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径；第 7 条（门禁口径）**待 W5-5 修，属计划级缺口，不是本表的口径问题**。
 

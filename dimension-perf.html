@@ -11,6 +11,13 @@
   </head>
   <body>
     <canvas id="dimension-perf-canvas"></canvas>
+    <!--
+      放在仓库根而不是 `public/`：`public/` 的文件由 Vite 原样拷进 `dist/`，
+      里面写的 `/src/debug/dimensionPerf.ts` 在构建产物里不存在，生产档的性能页
+      因此是坏的（计划文档 R9 / 性能 README 第 8 条）。作为 `build.rollupOptions.input`
+      的一个入口，Vite 才会把 TS 真正打成一个 chunk。与 `pms-review-simulator.html`
+      同一处理方式。
+    -->
     <script type="module" src="/src/debug/dimensionPerf.ts"></script>
   </body>
 </html>

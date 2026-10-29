@@ -145,7 +145,7 @@ W0 收口与基线（小，先做）
 | R6 | `type-check` 基线 440 条，新代码踩既有坑 | 每个工作包验收含「新增 0 / 已消失 0」；不改基线放行 |
 | R7 | W1-1 单文件超 600 行、14 步难以评审 | 按步骤拆子模块；每步有独立用例；PML 原 case 金样是唯一真值 |
 | R8 | **性能门禁测错东西**：`e2e/dimension-perf.spec.ts` 原来的 `updateP95Ms ≤ 16` 只覆盖 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint，而 ADR 0040 的预算是三者合并的帧 p95 | **已修（2026-10-30）**：删掉该断言，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms）。见 §11.3 |
-| R9 | **生产档性能页是坏的**：`public/dimension-perf.html:13` 指向 `/src/debug/dimensionPerf.ts`，`public/` 原样拷进 `dist/`，`vite.config.ts:154-157` 的 `build.rollupOptions.input` 也没这个页面 | 生产档基线目前采不到；要采先把性能页做成构建入口（独立一小刀，未做）。在此之前所有浏览器档数字都注明是 dev 档 |
+| R9 | **生产档性能页是坏的**：`public/dimension-perf.html:13` 指向 `/src/debug/dimensionPerf.ts`，`public/` 原样拷进 `dist/`，`vite.config.ts` 的 `build.rollupOptions.input` 也没这个页面 | **已修（2026-10-30）**：页面移到仓库根 + 加进构建入口，dev 与 preview 两档验证可打开。生产档数字仍待机器空载时采（首轮读数被并行任务污染，已作废）|
 
 ## 7. 验收命令
 
@@ -206,7 +206,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 15 | `f052535d` | §11 W5-3 / W5-4 / W5-5 可执行判据 + R8 门禁口径缺陷 + 性能 README 第 7 条 | 纯文档，无门禁 |
 | 16 | `e419a2f6` | W5-3 实现：`lodMinLineToLabelRatio` 三档化 + `lodShortLine` 按 tier | S2 81/709、type-check 439/126、eslint 7 文件 0 |
 | 17 | `8ae96336` | W5-4 kernel 侧：`labelPresentation: 'above'` + 不相交断言 + 行距约束 | S2 81/710、type-check 439/126、eslint 3 文件 0 |
-| 18 | 待提交 | W5-5 门禁口径修正：`settle(20)` 不退化断言替换 `updateP95Ms ≤ 16` + 内核基准数字 + R9 | 门禁 1 passed (4.4s)；内核基准 p95 3.746 ms |
+| 18 | `a3a0484b` | W5-5 门禁口径修正：`settle(20)` 不退化断言替换 `updateP95Ms ≤ 16` + 内核基准数字 + R9 | 门禁 1 passed (4.4s)；内核基准 p95 3.746 ms |
+| 19 | 待提交 | R9 修复：`dimension-perf.html` 移到仓库根 + 加进 `build.rollupOptions.input`，删除 `public/` 副本 | `npm run build` 绿；dist 页指向真实 chunk；dev / preview 两档 200 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -294,8 +295,8 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 
 **仍有两件事没做**：
 
-1. **生产档基线拿不到**（`README` 已知口径问题第 8 条）：`public/dimension-perf.html:13` 写的是 `<script src="/src/debug/dimensionPerf.ts">`，而 `public/` 被原样拷进 `dist/`，`vite.config.ts:154-157` 的 `build.rollupOptions.input` 也没有这个页面。**生产构建下这个性能页是坏的**，所以「生产档 p95」目前无法采集。要做就得先把它做成真正的构建入口——独立一小刀。
-2. **分帧本身**：`paintP95Ms` 53.40 是这一档的主要成本（`layoutP95Ms` 只有 16.70）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**（否则只是把成本摊长，交互变卡）。**这一条仍未动代码。**
+1. ~~**生产档基线拿不到**~~ → **页面已修（2026-10-30）**：`public/dimension-perf.html` 移到仓库根的 `dimension-perf.html` 并加进 `vite.config.ts` 的 `build.rollupOptions.input`，构建后 `dist/dimension-perf.html` 指向真实的 `assets/dimensionPerf-*.js`，dev 与 `vite preview` 两档都验证能打开。**但生产档数字仍未采到**：首轮在 preview 上跑三次，`layoutP95Ms` 19.30 / 20.80 / 26.90、`paintP95Ms` 83.80 / 79.80 / 106.20，方差过大已作废——测量时另一路正跑两个 `playwright test e2e/version-scrub-perf.spec.ts` + `playwright install` + 30 个 Chrome，CPU 30%。要采须等机器空载。
+2. **分帧本身**：`paintP95Ms` 53.40（dev 档空载读数）是这一档的主要成本（`layoutP95Ms` 只有 16.70）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**（否则只是把成本摊长，交互变卡）。**这一条仍未动代码。**
 
 **R5（门禁默认 skip 会漏到线上）仍未解决**：`test.skip(process.env.DIMENSION_PERF_GATE !== '1', ...)` 保持原样。接不接 CI 是决策，不是实现细节——本轮未动。
 

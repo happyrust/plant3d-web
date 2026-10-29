@@ -146,9 +146,13 @@ export default defineConfig(({ mode }) => {
       // https://vitejs.dev/config/build-options.html#build-rollupoptions
       rollupOptions: {
         // 仿 PMS 调试页和主站一起进生产包。不写这条的话，下次 build 会把 dist 里的模拟器页清掉。
+        // 尺寸性能页同理：它原来是 `public/dimension-perf.html`，`public/` 被原样拷进 dist，
+        // 里面写的 `/src/debug/dimensionPerf.ts` 在产物里不存在（计划文档 R9），所以改成
+        // 真正的构建入口，生产档才能采性能基线。
         input: {
           index: fileURLToPath(new URL('./index.html', import.meta.url)),
           pmsReviewSimulator: fileURLToPath(new URL('./pms-review-simulator.html', import.meta.url)),
+          dimensionPerf: fileURLToPath(new URL('./dimension-perf.html', import.meta.url)),
         },
         output: {
           manualChunks: {
