@@ -117,7 +117,7 @@ W0 收口与基线（小，先做）
 | --- | --- | --- |
 | W5-1 | **T6.1** 真实 BRAN 视觉审阅，裁决 G9（坡度符号：PML 三角形 vs Web 线 + 箭头） | 结论进 ADR；截图落 `docs/verification/` |
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）| 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
-| W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**可执行判据见 §11.1**（含三档与 tier 的映射建议、四条断言、视觉那半必须用 W5-2 基线 A/B） |
+| W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**已实现（2026-10-30）**：`theme.lodMinLineToLabelRatio` 改成 `{ primary: 0.8, secondary: 0.5, detail: 1.5 }`，`lodShortLine` 按 `tier` 取值，未声明按 primary；数值门禁绿（S2 81/709、type-check 439/126 新增 0）。**视觉 A/B 仍待后端**，详见 §11.1 |
 | W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**可执行判据见 §11.2**（默认 `interrupted` 逐字段等于现状；「不侵入相邻行」落成 `labelBounds` 不相交断言） |
 | W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**可执行判据见 §11.3，含一个必须先裁决的口径缺陷：现有门禁断言测的是 `renderer.render`，不含 layout → collision → paint，与 ADR 0040 的预算不同口径** |
 
@@ -202,7 +202,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 12 | `66c78f0e` | W5-2 三档相机基线生成器（`e2e/dimension-camera-baseline.spec.ts` 388 行 + README 231 行 + `.gitignore` 1 行） | 不带门控 2 skipped（预期） |
 | 13 | `a9d80a4f` | 帧来源 `kind` 字段 + 面板分组只看记录（CT 窗口越界写的，Lead 复核后入库） | S2 81/709、type-check 439/126、eslint 0 |
 | 14 | `769bfab7` | recorder 按 `kind` 分桶 + README 已知口径问题第 1/3 条收口 | recorder 7/7、S2+debug 88/787、type-check 439/126、eslint 0 |
-| 15 | 待提交 | §11 W5-3 / W5-4 / W5-5 可执行判据 + R8 门禁口径缺陷 + 性能 README 第 7 条 | 纯文档，无门禁 |
+| 15 | `f052535d` | §11 W5-3 / W5-4 / W5-5 可执行判据 + R8 门禁口径缺陷 + 性能 README 第 7 条 | 纯文档，无门禁 |
+| 16 | 待提交 | W5-3 实现：`lodMinLineToLabelRatio` 三档化 + `lodShortLine` 按 tier | S2 81/709、type-check 439/126、eslint 7 文件 0 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -218,25 +219,32 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 
 W5-3 / W5-4 / W5-5 在 §4 里各只有一行验收描述（「中景多留一档」「不侵入相邻行」「P95 不退化」），没法照着做，也没法判对错。本节把三行展开成可执行的判据。**W5-1 不在本节**（它要真实 BRAN 视觉审阅，同样卡后端）。起草时只读代码，没跑任何命令。
 
-### 11.1 W5-3 短线阈值分级（Q5）
+### 11.1 W5-3 短线阈值分级（Q5）—— 已实现（2026-10-30）
 
-**现状**：短线隐藏是**单一比值**，不是分级。`theme.lodMinLineToLabelRatio: 1`（`src/dimension/kernel/theme.ts:268`），谓词 `lodShortLine(lineLengthPx, labelWidthPx, theme)` 判 `lineLengthPx < labelWidthPx * ratio`（`src/dimension/kernel/layout/shared/lod.ts:60-66`）。两个调用点：
+**原状**：短线隐藏是**单一比值**，不是分级。`theme.lodMinLineToLabelRatio: 1`（`src/dimension/kernel/theme.ts:268`），谓词 `lodShortLine(lineLengthPx, labelWidthPx, theme)` 判 `lineLengthPx < labelWidthPx * ratio`（`src/dimension/kernel/layout/shared/lod.ts:60-66`）。两个调用点：
 - `src/dimension/kernel/layout/explicit.ts:139`（平铺显式尺寸，只在 `lod.hideShort` 且标签非空时判）；
 - `src/dimension/kernel/layout/dimension3d.ts:151`（3D 运行尺寸）。
 
 `hideShort` 的赋值在 `src/dimension/adapters/mbdV2ExternalAnnotations.ts:698`：`hideShort: !outside`，即 `sub_kind === 'small'` 的尺寸不参与短线隐藏（solver 已把文字挪到线外，`sepSmallDim`）。
 
-**要改的**：把 `lodMinLineToLabelRatio: number` 换成按 tier 取值的三档。原文（`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md:104`）给的是 **0.5 / 0.8 / 1.5**，但没写哪个 tier 对哪一档。
+**已改**：`lodMinLineToLabelRatio` 从 `number` 变成 `Readonly<Record<'primary' | 'secondary' | 'detail', number>>`，取值 **primary 0.8 / secondary 0.5 / detail 1.5**。比值越小越宽松。`lodShortLine` 新增第四个参数 `tier`（缺省 `'primary'`），两个调用点把 `lod.tier` 传进去。
 
-**建议映射（需裁决，见 §11.4-U1）**：比值越小越宽松（越容易留下）。`secondary` → 0.5（ATTA 子尺寸，远景本该少画，但样本里它们本来就少，放宽不至于糊）、`primary` → 0.8（主尺寸，中景多留一档，正是 Q5 的原意）、`detail` → 1.5（坡标 / 斜标 / 支管名，近景专属，宁可更严）。这样「远景不变」（远景下 detail 已被 `lodDetailMinPx` 挡掉，secondary 的门槛本来就是 0）+「中景多留一档」（primary 从 1.0 放宽到 0.8）。
+**映射理由**（原文 `docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md:104` 只给了 0.5 / 0.8 / 1.5 三个数，没写谁对谁）：
+- `secondary`（ATTA 子尺寸）→ 0.5：一个支管的子尺寸本来就少，值得留；
+- `primary`（主尺寸）→ 0.8：**这一档就是 Q5 的原意「中景多留一档」**——旧的一刀切 1.0 会砍掉 0.8~1.0 个标签宽的主尺寸；
+- `detail`（坡标 / 斜标 / 支管名）→ 1.5：近景专属，不该挤中景；
+- 没写 `tier` 的输入按 `primary` 处理，避免「没声明 = 悄悄变严」。
 
-**验收判据**（三条都要）：
-1. 单测钉住三档映射与边界：`lodShortLine` 的比值改由 tier 决定后，`shared/lod.test.ts:62-66` 那条现有用例改成对三个 tier 各测一次「刚好等于阈值不算隐藏、差 0.01 px 算隐藏」。用例名建议 `applies the per-tier short-line ratio instead of one flat ratio`。
-2. **远景不变**要有断言，不能只靠肉眼：现有 `shared/lod.test.ts:52-58` 的「secondary 不按投影高度隐藏」保持绿；另加一条断言 `theme.lodDetailMinPx` 未变（detail 的远景观测行为由它决定，与短线比值无关）。
-3. 门禁照旧：`npx vitest run src/dimension` 全绿、`npm run type-check` 新增 0、`npx eslint` 触及文件 0。
-4. **视觉**那一半（「本样本远景不变；中景多留一档」）必须用 W5-2 的固定相机基线做 A/B 出图对比，后端不在线时**只能停在 1-3**，不得声称视觉验收通过。
+**为什么「远景不变」**：远景下 detail 已被 `lodDetailMinPx: 18` 挡掉（`theme.ts:267`，本次未动），secondary 的显示门槛本来就是 0（`lodSecondaryMinPx: 0`）。所以三档里只有 primary 的 1.0 → 0.8 会真正改变中景，这正是要的。
 
-**回退**：只动 `theme.ts` 一个字段的形状 + `shared/lod.ts` 一个函数 + 两个测试，`git restore` 即可；不涉及契约、不涉及 solver。
+**门禁（2026-10-30 实测）**：S2 = **81 文件 / 709 通过**；`npm run type-check` = 439 条 / 126 文件，新增 0 / 已消失 0；eslint 七个文件 0 error 0 warning。
+
+**测试改动**：
+- `shared/lod.test.ts`：新增 `applies the per-tier short-line ratio instead of one flat ratio`，钉住三档大小关系、每档的「刚好等于阈值不算隐藏 / 差 0.01 px 算隐藏」、0.9 标签宽在 primary 下保留而在一刀切 1.0 下隐藏（证明 primary 确实放宽了）、未声明 tier 等价于 primary、零宽标签永不隐藏。
+- `explicit.test.ts`：原用例的夹具是 0.9 个标签宽（旧阈值下隐藏、新 primary 阈值下保留），改成 0.8 减 1 px，并补两条——同一线在 `detail` 下更远也隐藏、0.6 标签宽的线在 primary 下隐藏但 secondary 下保留。
+- `theme.test.ts`：常量断言改成三档对象。
+
+**仍未做的一半**：「本样本远景不变；中景多留一档」的**视觉**验收要用 W5-2 的固定相机基线做 A/B 出图，需 gen-model 后端 18084（当前不在线）。**在出图之前不得声称视觉验收通过**——上面钉住的是数值行为，不是画面。
 
 ### 11.2 W5-4 「文字在线上方」可选模式（Q6）
 

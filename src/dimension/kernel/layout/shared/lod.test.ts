@@ -58,11 +58,34 @@ describe('tier predicates', () => {
     expect(lodDetailFar(undefined, between, theme)).toBe(false);
   });
 
-  it('elides a line shorter than the label-width ratio', () => {
-    const ratio = theme.lodMinLineToLabelRatio;
-    expect(lodShortLine(20 * ratio - 0.01, 20, theme)).toBe(true);
-    expect(lodShortLine(20 * ratio, 20, theme)).toBe(false);
-    expect(lodShortLine(0, 0, theme)).toBe(false);
+  it('applies the per-tier short-line ratio instead of one flat ratio', () => {
+    const ratios = theme.lodMinLineToLabelRatio;
+    // A smaller ratio is more permissive: 0.5 < 0.8 < 1.5.
+    expect(ratios.secondary).toBeLessThan(ratios.primary);
+    expect(ratios.primary).toBeLessThan(ratios.detail);
+
+    // The same 15 px line under a 20 px label: 0.75 label widths.
+    for (const tier of ['primary', 'secondary', 'detail'] as const) {
+      const threshold = 20 * ratios[tier];
+      expect(lodShortLine(threshold - 0.01, 20, theme, tier)).toBe(true);
+      expect(lodShortLine(threshold, 20, theme, tier)).toBe(false);
+    }
+
+    // 18 px of line under a 20 px label = 0.9 label widths. The old flat 1.0
+    // elided it; primary's 0.8 keeps it — that is Q5's "the mid view keeps one
+    // more tier". secondary's 0.5 keeps it too; detail's 1.5 still elides it.
+    expect(lodShortLine(18, 20, theme, 'secondary')).toBe(false);
+    expect(lodShortLine(18, 20, theme, 'primary')).toBe(false);
+    expect(lodShortLine(18, 20, theme, 'detail')).toBe(true);
+    // A flat 1.0 would have dropped it, so primary really did loosen.
+    expect(lodShortLine(18, 20, { ...theme, lodMinLineToLabelRatio: { primary: 1, secondary: 1, detail: 1 } }, 'primary'))
+      .toBe(true);
+
+    // A source that never declared a tier keeps the mid-range behaviour.
+    expect(lodShortLine(18, 20, theme)).toBe(lodShortLine(18, 20, theme, 'primary'));
+
+    // A zero-width label never hides anything, whatever the tier.
+    expect(lodShortLine(0, 0, theme, 'detail')).toBe(false);
   });
 
   it('reports the tiers in order: secondary, then detail, else nothing', () => {

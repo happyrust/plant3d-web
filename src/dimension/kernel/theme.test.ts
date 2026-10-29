@@ -20,8 +20,9 @@ describe('dimension theme', () => {
       // detail 仍是近景专属。
       lodSecondaryMinPx: 0,
       lodDetailMinPx: 18,
-      // 尺寸线投影短于 1 个标签宽的显式尺寸按 LOD 隐藏（2026-09-12 S3）。
-      lodMinLineToLabelRatio: 1,
+      // 尺寸线投影短于本档标签宽的显式尺寸按 LOD 隐藏（2026-09-12 S3）；
+      // 2026-10-30 起按 tier 分三档（Q5），比值越小越宽松。
+      lodMinLineToLabelRatio: { primary: 0.8, secondary: 0.5, detail: 1.5 },
       extensionOvershootPx: 10,
       labelPaddingPx: 8,
       outsideExtensionPx: 18,

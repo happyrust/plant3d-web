@@ -136,7 +136,7 @@ function lodHiddenReason(
       const to = projectSceneVertex(sceneVertex(dimensionLine.to), context.projector);
       const lineLengthPx = Math.hypot(to[0] - from[0], to[1] - from[1]);
       const labelWidthPx = context.font.getWidth(textHeightPx, input.formattedLabel);
-      if (lodShortLine(lineLengthPx, labelWidthPx, context.theme)) {
+      if (lodShortLine(lineLengthPx, labelWidthPx, context.theme, lod.tier)) {
         return 'short-line';
       }
     }

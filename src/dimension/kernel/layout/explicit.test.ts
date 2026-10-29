@@ -269,11 +269,15 @@ describe('layoutExplicit', () => {
   it('elides a dimension whose line projects shorter than its label when asked to', () => {
     const font = createTestFont();
     const labelWidthPx = font.getWidth(SOLVESPACE_DIMENSION_THEME.textHeightPx, input.formattedLabel);
+    // 2026-10-30 (Q5): the threshold is per tier. `primary` keeps a line down to
+    // 0.8 label widths, so the fixture has to sit just under that — a 0.9-width
+    // line used to be elided by the old flat ratio and now draws.
+    const primaryRatio = SOLVESPACE_DIMENSION_THEME.lodMinLineToLabelRatio.primary;
     const shortInput: ExplicitLayoutInput = {
       ...input,
-      lod: { hideShort: true },
-      // Just under one label width at 100 px/m.
-      lines: [{ from: [0, 0, 0], to: [(labelWidthPx - 1) / 100, 0, 0], part: 'dimension' }],
+      lod: { tier: 'primary', hideShort: true },
+      // Just under the primary threshold at 100 px/m.
+      lines: [{ from: [0, 0, 0], to: [(labelWidthPx * primaryRatio - 1) / 100, 0, 0], part: 'dimension' }],
     };
     const context = (pixelsPerMetre: number): LayoutContext => ({
       projector: createTestProjector(pixelsPerMetre),
@@ -286,11 +290,25 @@ describe('layoutExplicit', () => {
     const hidden = layoutExplicit(shortInput, context(100));
     expect(hidden.derived).toEqual({ formattedLabel: '25 REF', lodHidden: 'short-line' });
     expect(hidden.primitives).toEqual([]);
-    // Zoom in 10×: the same line now spans ten label widths and draws again.
+    // Zoom in 10×: the same line now spans eight label widths and draws again.
     expect(layoutExplicit(shortInput, context(1000)).derived.lodHidden).toBeUndefined();
     // Without opting in, the short line still draws (measurements, plain sources).
     expect(layoutExplicit({ ...shortInput, lod: undefined }, context(100)).derived.lodHidden)
       .toBeUndefined();
+
+    // Same line, tighter tier: `detail`'s 1.5 ratio elides it at the far zoom too.
+    expect(layoutExplicit({ ...shortInput, lod: { tier: 'detail', hideShort: true } }, context(100))
+      .derived.lodHidden).toBe('short-line');
+    // …while `secondary`'s 0.5 keeps a line that primary would drop.
+    const betweenSecondaryAndPrimary = (labelWidthPx * 0.6) / 100;
+    const midLength: ExplicitLayoutInput = {
+      ...shortInput,
+      lines: [{ from: [0, 0, 0], to: [betweenSecondaryAndPrimary, 0, 0], part: 'dimension' }],
+    };
+    expect(layoutExplicit({ ...midLength, lod: { tier: 'primary', hideShort: true } }, context(100))
+      .derived.lodHidden).toBe('short-line');
+    expect(layoutExplicit({ ...midLength, lod: { tier: 'secondary', hideShort: true } }, context(100))
+      .derived.lodHidden).toBeUndefined();
   });
 
   it('drops an arrow stroke that projects to a point', () => {

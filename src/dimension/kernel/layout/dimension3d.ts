@@ -148,7 +148,7 @@ export function layoutDimension3d(
   if (
     input.lod?.hideShort
     && label.length > 0
-    && lodShortLine(lineLengthPx, labelWidthPx, theme)
+    && lodShortLine(lineLengthPx, labelWidthPx, theme, input.lod.tier)
   ) {
     return hidden('short-line');
   }

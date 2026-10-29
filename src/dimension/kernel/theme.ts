@@ -60,8 +60,17 @@ export type DimensionTheme = Readonly<{
    * Level of detail for explicit inputs that opt in (`lod.hideShort`): a
    * dimension whose projected line is shorter than this many label widths is
    * elided for the current view (S3).
+   *
+   * Per tier since 2026-10-30 (Q5): one flat ratio either kept every short
+   * line or dropped every one, so a mid-range view lost rows that a far view
+   * kept. A smaller ratio is more permissive. `secondary` (ATTA sub-rows)
+   * loosens because a branch's sub-dimensions are few and worth keeping;
+   * `primary` loosens a little, which is the "mid view keeps one more tier"
+   * half of Q5; `detail` tightens because slope / skew marks are a close-up
+   * tier and should never crowd a mid view. An input with no `tier` is
+   * treated as `primary`.
    */
-  lodMinLineToLabelRatio: number;
+  lodMinLineToLabelRatio: Readonly<Record<'primary' | 'secondary' | 'detail', number>>;
   extensionOvershootPx: number;
   labelPaddingPx: number;
   outsideExtensionPx: number;
@@ -265,7 +274,10 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   // detail 仍是近景专属，门槛取字号上限。
   lodSecondaryMinPx: 0,
   lodDetailMinPx: 18,
-  lodMinLineToLabelRatio: 1,
+  // 短线阈值分级（Q5，2026-10-30）：比值越小越宽松。secondary 放宽（ATTA 子尺寸
+  // 本来就少，值得留）；primary 略放宽（中景多留一档，Q5 的原意）；detail 收紧
+  // （坡标 / 斜标是近景专属，不该挤中景）。没写 tier 的输入按 primary 处理。
+  lodMinLineToLabelRatio: { primary: 0.8, secondary: 0.5, detail: 1.5 },
   extensionOvershootPx: 10,
   labelPaddingPx: 8,
   outsideExtensionPx: 18,

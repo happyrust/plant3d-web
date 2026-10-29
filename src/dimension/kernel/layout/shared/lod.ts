@@ -56,13 +56,20 @@ export function lodDetailFar(
     && projectedPx < theme.lodDetailMinPx;
 }
 
-/** A dimension line shorter than `lodMinLineToLabelRatio` label widths cannot carry its value. */
+/**
+ * A dimension line shorter than its tier's label-width ratio cannot carry its
+ * value (Q5, per tier since 2026-10-30). A smaller ratio is more permissive;
+ * an input with no `tier` counts as `primary`, so a source that never declared
+ * a tier keeps the mid-range behaviour rather than silently tightening.
+ */
 export function lodShortLine(
   lineLengthPx: number,
   labelWidthPx: number,
   theme: DimensionTheme,
+  tier: ExplicitLodInput['tier'] = 'primary',
 ): boolean {
-  return lineLengthPx < labelWidthPx * theme.lodMinLineToLabelRatio;
+  const ratio = theme.lodMinLineToLabelRatio[tier ?? 'primary'];
+  return lineLengthPx < labelWidthPx * ratio;
 }
 
 /** The tier rules in their fixed order: secondary first, then detail. */
