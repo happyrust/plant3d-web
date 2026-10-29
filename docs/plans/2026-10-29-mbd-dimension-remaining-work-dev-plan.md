@@ -384,6 +384,31 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 
 **门禁**：`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` → 1 passed (4.2s)，`paintP95Ms` 53.40 → **47.20**（基线 78.6 × 1.2 = 94.32，余量仍在）。
 
+**同一刀还治了 `updateStyles`**（`c893aca3`）：它为了数顶点也走完整遍历，同样只为拿一个数就构造全部顶点。改成 `countPrimitiveSegments` 后，悬停 / 选中的增量重着色路径不再有这批分配。dimension 全量 78 文件 / 668 例绿。
+
+**剩余成本**：`writeMs` 现在 p50 37.7 / p95 39.7，占 paint 的 **93.5%**，是纯顶点写入，没有可再省的重复计算。往下只能分帧（§11.3.3 的判据）。
+
+### 11.3.5 分帧的设计约束（2026-10-30，实现前的定稿）
+
+分帧不是「把循环切成 N 段」那么简单，两个硬约束必须先解决：
+
+1. **单缓冲会让中间帧露出半成品。** `lineBuffers` 是单份 `BufferGeometry`，分批写就是逐批覆盖同一块显存。中途任何一次渲染都会画出「只画了一部分的尺寸线」——比卡一下更糟。
+2. **双缓冲内存不可接受。** 2k 可见下 846 604 顶点 × 12 个属性 × 4 字节 ≈ **67.7 MB**，双缓冲 135 MB。
+
+**定稿方案：分帧期间禁止渲染，完成后一次性 `requestRender()`。** 依据是宿主的渲染模型——`ViewerPanel.vue:3328-3331` 的 `requestRender()` 只是置 `needsRender = true` 再 `scheduleFrame()`，**不是常驻渲染循环**（`renderFrame` 在 `:3333`，由 rAF 调度且检查 `isRendering`）。所以只要分帧期间不 `requestRender`，就不会有任何一帧被画出来，单缓冲分批写是安全的。
+
+**但有一个竞态必须堵**：分帧期间用户拖相机，`DimensionViewport.updateCamera` 会调 `this.input.requestRender?.()`（`dimensionViewport.ts:235`），那一帧就会渲染出半成品。因此 `DimensionViewport` 需要一个 `painting` 标志，`render()` 入口在 `painting` 为真时直接返回（与现有 `if (!this.projector) return;` 同位置），相机失效只记入 `InvalidationSet`，等分帧完成后再消费。
+
+**接线顺序（实现时照此）**：
+
+1. `scenePainter` 增加 `paintAsync(layouts, theme, displayMode, onComplete): SceneDimensionPaintJob`，内部用注入的 `requestFrame`（缺省 `requestAnimationFrame`）每帧写一批 layout；`advance()` 返回是否写完，`finish()` 才 `finish()` 三个 buffer 并置 `dimensionRanges`。
+2. `dimensionViewport` 的 layout 分支改调 `paintAsync`，置 `this.painting = true`，`onComplete` 里清标志并 `requestRender()`。
+3. `render()` 开头加 `if (this.painting) return;`。
+4. 批大小按 §11.3.3 的判据定：首帧 p95 ≤ 16 ms。当前 `writeMs` p95 39.7 ÷ 16 ≈ **3 批**（每批约 13 ms），落在「≤ 6 帧补齐」内。
+5. 单测钉三件事：分批后顶点内容与同步 `paint()` 逐位相同；`finish()` 之前 `dimensionRanges` 不变；`cancel()` 不改变已发布几何。
+
+**为什么还没实现**：`scenePainter.ts` 是 1 486 行的渲染核心，分帧要动 `paint()` 主体 + `dimensionViewport` 的渲染时序，而 **W5-2 / W5-3 / W5-4 的视觉 A/B 都还没做**（等后端 18084）。§11.3.1 第 2 条的理由仍然成立：现在改时序，等后端上线后一次要比对四件事（分帧、短线三档、文字在线上方、相机基线），任何像素差异都定位不到来源。**这不是排期问题，是归因问题**——设计已定稿，等视觉 A/B 的窗口。
+
 ### 11.3.3 W5-5 判据重述（2026-10-30 自决，动手前置条件）
 
 §11.3 原文的判据是「**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**」。§11.3.2 的实测证明这两条在当前基线下**不能同时成立**：光 `writeMs` 的 p95 就有 69.1 ms，分 2 帧是 34.6 ms/帧，要压到 16 ms 需要 5～6 帧。原判据隐含假设 paint 只有 30 ms 上下，与实测 53～83 ms 不符。
