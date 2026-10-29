@@ -117,6 +117,40 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(large.fillVertexCount).toBe(small.fillVertexCount * 20);
   });
 
+  /**
+   * W5-5 诊断：`onPaintProfile` 只在宿主挂上去时才取时间戳，且它报的四段
+   * 之和覆盖整次 paint（`layout` 侧已单独计时，这里只看 paint 内部）。
+   * 这里钉的是「挂上去能拿到数、不挂就一次都不回调、各段非负、段数与几何
+   * 一致」，不是性能数字——数字随机器变，不能进单测。
+   */
+  it('reports a per-phase paint profile only when a host asks for one', () => {
+    const parent = new Group();
+    const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
+    painter.resize(800, 600);
+    const layouts = Array.from({ length: 50 }, (_, index) =>
+      layout(`dimension-${index}`, primitives));
+
+    const profiles: unknown[] = [];
+    const observe = vi.fn((profile: unknown) => profiles.push(profile));
+    painter.onPaintProfile = observe;
+    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    expect(observe).toHaveBeenCalledTimes(1);
+
+    // Unsubscribed again: the timestamps are no longer taken, so no report.
+    painter.onPaintProfile = undefined;
+    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    expect(observe).toHaveBeenCalledTimes(1);
+
+    const profile = profiles[0] as Record<string, number>;
+    // The count pass and the write pass visit the same primitives, so the
+    // reported segment total is what the geometry actually has.
+    expect(profile.segmentCount).toBeGreaterThan(0);
+    for (const key of ['countMs', 'writeMs', 'trianglesMs', 'fillsMs']) {
+      expect(profile[key]).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(profile[key])).toBe(true);
+    }
+  });
+
   it('fans a scene fill into the fills mesh under the strokes, in the tag tone colour', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());

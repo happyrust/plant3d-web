@@ -10,6 +10,7 @@ import type {
   LayoutResult,
   NormalizedDimensionInput,
 } from '@/dimension/kernel/types';
+import type { SceneDimensionPaintProfile } from '@/dimension/viewport/scenePainter';
 
 import { DEFAULT_DIMENSION_FORMAT } from '@/dimension/kernel/format';
 import { buildHitIndex, type HitIndex } from '@/dimension/kernel/hit/hitIndex';
@@ -42,12 +43,27 @@ type SettleResult = {
   paintP95Ms: number;
 };
 
+/** `paintProfile(passes)` 的读数：paint 内部四段的分位（W5-5 诊断）。 */
+type PaintProfileResult = {
+  passes: number;
+  segmentCount: number;
+  countMs: { p50: number; p95: number };
+  writeMs: { p50: number; p95: number };
+  trianglesMs: { p50: number; p95: number };
+  fillsMs: { p50: number; p95: number };
+};
+
 declare global {
   interface Window {
     __dimensionPerf?: {
       ready: boolean;
       run(): Promise<PerfResult>;
       settle(passes?: number): SettleResult;
+      /**
+       * W5-5 诊断：连续 settle 若干次，收集每次 paint 内部的四段分解，返回
+       * 各段的分位。用来决定分帧该切哪一刀，不改渲染行为。
+       */
+      paintProfile(passes?: number): PaintProfileResult;
     };
     __dimensionPerfError?: string;
   }
@@ -185,6 +201,22 @@ async function main(): Promise<void> {
   const inputs = [...userInputs(), ...externalInputs()];
   let layouts: readonly LayoutResult[] = [];
   let hitIndex: HitIndex = buildHitIndex([]);
+  /**
+   * W5-5 诊断：paint 内部四段的最近一次分解。这个页面本身就是性能探针页，
+   * 所以无条件挂上——`scenePainter.paint()` 只在挂了回调时才取时间戳，
+   * 生产构建里这个页面不存在（`dimension-perf.html` 只在探针入口引入）。
+   *
+   * 放在一个持有对象里而不是裸 `let`：赋值发生在回调中，TS 的控制流分析
+   * 看不到，裸 `let` 会被窄化成 `null` 再收窄成 `never`。
+   */
+  const paintProfileSink: {
+    current: SceneDimensionPaintProfile | null;
+    generation: number;
+  } = { current: null, generation: 0 };
+  painter.onPaintProfile = (profile) => {
+    paintProfileSink.current = profile;
+    paintProfileSink.generation += 1;
+  };
 
   const settleLayout = (): Readonly<{
     layoutMs: number;
@@ -282,6 +314,48 @@ async function main(): Promise<void> {
         layoutP95Ms: percentile(layoutSamples, 0.95),
         paintP50Ms: percentile(paintSamples, 0.5),
         paintP95Ms: percentile(paintSamples, 0.95),
+      };
+    },
+    // W5-5 诊断：只读，不改渲染。四段之和应当接近 `settle` 的 `paintMs`。
+    paintProfile(passes = 20) {
+      if (!Number.isInteger(passes) || passes <= 0) {
+        throw new RangeError(`passes must be a positive integer, got ${passes}`);
+      }
+      const countSamples: number[] = [];
+      const writeSamples: number[] = [];
+      const triangleSamples: number[] = [];
+      const fillSamples: number[] = [];
+      let segmentCount = 0;
+      for (let index = 0; index < passes; index += 1) {
+        // 计数而不是先置 `current = null`：对 `current` 赋 null 会让 TS 把
+        // 它窄化成 `null`，之后 `if (!profile) throw` 再窄化成 `never`。
+        const generation = paintProfileSink.generation;
+        settleLayout();
+        if (paintProfileSink.generation === generation) {
+          throw new Error('paint profile was not reported: onPaintProfile is not wired');
+        }
+        const profile = paintProfileSink.current;
+        if (!profile) {
+          throw new Error('paint profile was not reported: onPaintProfile is not wired');
+        }
+        countSamples.push(profile.countMs);
+        writeSamples.push(profile.writeMs);
+        triangleSamples.push(profile.trianglesMs);
+        fillSamples.push(profile.fillsMs);
+        segmentCount = profile.segmentCount;
+      }
+      renderer.render(scene, camera);
+      const span = (samples: readonly number[]) => ({
+        p50: percentile(samples, 0.5),
+        p95: percentile(samples, 0.95),
+      });
+      return {
+        passes,
+        segmentCount,
+        countMs: span(countSamples),
+        writeMs: span(writeSamples),
+        trianglesMs: span(triangleSamples),
+        fillsMs: span(fillSamples),
       };
     },
   };

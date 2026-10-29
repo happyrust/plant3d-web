@@ -855,6 +855,28 @@ export type SceneDimensionPainterStats = Readonly<{
   fillVertexCount: number;
 }>;
 
+/**
+ * Where one `paint()` spends its time, in milliseconds (W5-5 诊断). The four
+ * phases are the ones a framing strategy could split; see
+ * `docs/plans/2026-10-29-mbd-dimension-remaining-work-dev-plan.md` §11.3.1.
+ *
+ * - `countMs`: the first `visitSegments` pass, which only counts segments to
+ *   size the line buffer.
+ * - `writeMs`: the second `visitSegments` pass that writes four vertices per
+ *   segment, including any glyph-cache misses it triggers.
+ * - `trianglesMs` / `fillsMs`: the arrowhead and tag-body passes.
+ *
+ * Only recorded when a host asks for it (`SceneDimensionPainter.onPaintProfile`),
+ * so nothing in production pays for the timestamps.
+ */
+export type SceneDimensionPaintProfile = Readonly<{
+  countMs: number;
+  writeMs: number;
+  trianglesMs: number;
+  fillsMs: number;
+  segmentCount: number;
+}>;
+
 type DimensionVertexRange = Readonly<{
   lineStart: number;
   lineEnd: number;
@@ -944,6 +966,13 @@ export class ThreeSceneDimensionPainter {
   private triangleVertexCount = 0;
   private fillVertexCount = 0;
   private disposed = false;
+  /**
+   * Optional per-`paint()` phase breakdown (W5-5 diagnosis). Assigning one
+   * turns on the timestamps inside `paint()`; leaving it undefined — the
+   * production path — costs nothing. Read-only observation: it never changes
+   * what is drawn.
+   */
+  onPaintProfile: ((profile: SceneDimensionPaintProfile) => void) | undefined = undefined;
 
   constructor(
     private readonly parent: Object3D,
@@ -1007,6 +1036,10 @@ export class ThreeSceneDimensionPainter {
     if (this.disposed) return;
     this.setBlending(displayMode);
 
+    // W5-5 诊断：只在宿主挂了 `onPaintProfile` 时取时间戳，生产路径零开销。
+    const profiling = this.onPaintProfile !== undefined;
+    const countStartedAt = profiling ? performance.now() : 0;
+
     let segmentCount = 0;
     visitSegments(
       layouts,
@@ -1014,6 +1047,7 @@ export class ThreeSceneDimensionPainter {
       this.glyphCaches,
       () => { segmentCount += 1; },
     );
+    const countCompletedAt = profiling ? performance.now() : 0;
     const lineVertexCount = segmentCount * 4;
     if (this.lineBuffers.ensureCapacity(lineVertexCount)) {
       this.lines.geometry = this.lineBuffers.geometry;
@@ -1115,6 +1149,7 @@ export class ThreeSceneDimensionPainter {
     }
     this.lineBuffers.finish(lineVertexCount);
     this.lineVertexCount = lineVertexCount;
+    const writeCompletedAt = profiling ? performance.now() : 0;
 
     let triangleVertexCount = 0;
     for (const layout of layouts) {
@@ -1153,6 +1188,7 @@ export class ThreeSceneDimensionPainter {
     }
     this.triangleBuffers.finish(triangleVertexCount);
     this.triangleVertexCount = triangleVertexCount;
+    const trianglesCompletedAt = profiling ? performance.now() : 0;
 
     // Fills: one triangle fan per convex polygon, in the tone's colour.
     let fillVertexTotal = 0;
@@ -1198,6 +1234,16 @@ export class ThreeSceneDimensionPainter {
     this.fillBuffers.finish(fillVertexTotal);
     this.fillVertexCount = fillVertexTotal;
     this.dimensionRanges = ranges;
+    if (profiling) {
+      const completedAt = performance.now();
+      this.onPaintProfile?.({
+        countMs: countCompletedAt - countStartedAt,
+        writeMs: writeCompletedAt - countCompletedAt,
+        trianglesMs: trianglesCompletedAt - writeCompletedAt,
+        fillsMs: completedAt - trianglesCompletedAt,
+        segmentCount,
+      });
+    }
   }
 
   /**

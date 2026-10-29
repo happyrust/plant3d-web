@@ -207,7 +207,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 16 | `e419a2f6` | W5-3 实现：`lodMinLineToLabelRatio` 三档化 + `lodShortLine` 按 tier | S2 81/709、type-check 439/126、eslint 7 文件 0 |
 | 17 | `8ae96336` | W5-4 kernel 侧：`labelPresentation: 'above'` + 不相交断言 + 行距约束 | S2 81/710、type-check 439/126、eslint 3 文件 0 |
 | 18 | `a3a0484b` | W5-5 门禁口径修正：`settle(20)` 不退化断言替换 `updateP95Ms ≤ 16` + 内核基准数字 + R9 | 门禁 1 passed (4.4s)；内核基准 p95 3.746 ms |
-| 19 | 待提交 | R9 修复：`dimension-perf.html` 移到仓库根 + 加进 `build.rollupOptions.input`，删除 `public/` 副本 | `npm run build` 绿；dist 页指向真实 chunk；dev / preview 两档 200 |
+| 19 | `699381fc` | R9 修复：`dimension-perf.html` 移到仓库根 + 加进 `build.rollupOptions.input`，删除 `public/` 副本 | `npm run build` 绿；dist 页指向真实 chunk；dev / preview 两档 200 |
+| 20 | 本次 | W5-5 诊断：`scenePainter.onPaintProfile` 分段计时 + `window.__dimensionPerf.paintProfile(passes)` + §11.3.2 实测分布 | painter 14/14、dimension+debug 85/746、type-check 439/126 新增 0、eslint 0 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -296,7 +297,54 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 **仍有两件事没做**：
 
 1. ~~**生产档基线拿不到**~~ → **页面已修（2026-10-30）**：`public/dimension-perf.html` 移到仓库根的 `dimension-perf.html` 并加进 `vite.config.ts` 的 `build.rollupOptions.input`，构建后 `dist/dimension-perf.html` 指向真实的 `assets/dimensionPerf-*.js`，dev 与 `vite preview` 两档都验证能打开。**但生产档数字仍未采到**：首轮在 preview 上跑三次，`layoutP95Ms` 19.30 / 20.80 / 26.90、`paintP95Ms` 83.80 / 79.80 / 106.20，方差过大已作废——测量时另一路正跑两个 `playwright test e2e/version-scrub-perf.spec.ts` + `playwright install` + 30 个 Chrome，CPU 30%。要采须等机器空载。
-2. **分帧本身**：`paintP95Ms` 53.40（dev 档空载读数）是这一档的主要成本（`layoutP95Ms` 只有 16.70）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**（否则只是把成本摊长，交互变卡）。**这一条仍未动代码。**
+2. **分帧本身**：`paintP95Ms` 53.40（dev 档空载读数）是这一档的主要成本（`layoutP95Ms` 只有 16.70）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**（否则只是把成本摊长，交互变卡）。**这一条仍未动代码**，原因与下一步见下。
+
+### 11.3.1 分帧为什么还没动手（2026-10-30 判断）
+
+**先说结论：现在盲改 `scenePainter.ts` 不合适。** 三条理由：
+
+1. **不知道 paint 内部哪一段贵。** `paint()`（`src/dimension/viewport/scenePainter.ts:1002` 起）的 53 ms 里，已知至少四段成本：① 第一遍 `visitSegments` 只数 `segmentCount`（`:1011-1015`，纯计数）；② `ensureCapacity` + 取 12 个 buffer 视图（`:1019-1035`）；③ 第二遍 `visitSegments` 逐 primitive 写 4 个顶点 / 段（`:1068-1109`）；④ `glyphCaches` 的 miss 填充（`visitPrimitiveSegments` 的 `scene-glyph-run` 分支会调 `font` 取字形）。**没有分段计时，分帧该切哪一刀是猜的**——切错地方只会把成本摊长，正好撞上「总帧数不超 2 倍」那条判据。
+2. **分帧会改渲染时序，而 W5-2 / W5-3 / W5-4 的视觉 A/B 都还没做。** 现在改，等后端上线后一次要比对三件事（分帧、短线三档、文字在线上方），任何一个像素差异都定位不到是哪一刀引入的。
+3. **`scenePainter.ts` 是渲染核心，1355 行，没有独立的视觉门禁。** 单测能钉住 buffer 内容，钉不住「看起来对不对」。
+
+**正确的下一步顺序**：
+
+1. **先加分段计时（诊断，不改行为）**：在 `paint()` 里对上面四段各打一次 `performance.now()`，只在 dev 探针下收集（与 `window.__dimensionFrameStats` 同思路，生产不挂）。目标是拿到「② / ③ / ④ 各占多少」的实测分布。这一步的产出是数字，不是代码行为变化。
+2. **按分布选策略**：
+   - 若 ③ 写顶点占大头 → 分帧的正确形态是**按 layout 分批写**：把 `layouts` 切成 N 批，每帧写一批，N 帧后一起上传并 `requestRender`。判据是单帧 p95 ≤ 16 ms、N ≤ 2。
+   - 若 ④ 字形缓存 miss 占大头 → 不是分帧问题，是**缓存预热**问题：把 miss 摊到空闲帧，或对已布局的记录提前填充。
+   - 若 ① 计数遍历占大头 → 直接消掉这一遍（用上界估算容量 + 写完后截断），根本不需要分帧。
+3. **分帧实现完成后再做视觉 A/B**，与 W5-3 / W5-4 分开比对。
+
+**在拿到分段计时之前，这一项的状态是「等诊断」，不是「等排期」。** 诊断本身是一小刀独立工作。
+
+### 11.3.2 分段计时已落地，实测分布出来了（2026-10-30）
+
+诊断钩子已实现并入库（`scenePainter.ts` 的 `onPaintProfile` + `dimensionPerf.ts` 的 `window.__dimensionPerf.paintProfile(passes)`）。设计要点：回调**没挂就不取时间戳**，生产路径零开销；钩子是只读观测，不参与绘制决策。
+
+**实测（2026-10-30，dev 档 `127.0.0.1:3101`，1920×1080，`settle(5)` 预热后 20 次，2 000 条同屏可见）：**
+
+| 段 | p50 | p95 | p50 占比 |
+|---|---|---|---|
+| `countMs`（① 纯计数遍历） | 7.900 | 10.100 | 14.3% |
+| `writeMs`（③ 写 4 顶点/段） | **45.300** | **69.100** | **82.2%** |
+| `trianglesMs`（箭头三角） | 1.500 | 2.900 | 2.7% |
+| `fillsMs`（标签底） | 0.400 | 1.200 | 0.7% |
+| 四段合计 | 55.100 | 83.300 | 100% |
+
+同次 `settle(20)` 的 `paintP50Ms` = 52.800，与四段合计 55.100 对得上（差 2.3 ms 是 `setBlending` 与 map 分配）。**段数 211 651，即 846 604 个线段顶点。**
+
+**结论：主成本是 ③ 写顶点，占 82.2%；④ 字形缓存 miss 已排除**——`countMs` 那遍用同一个 `glyphCaches` 且先跑，write 遍必然全命中，所以 `writeMs` 里没有字形展开成本。§11.3.1 的 ④ 分支（缓存预热）**不适用**。
+
+**但 §11.3 那条「总帧数不超 2 倍」的判据在当前基线下自相矛盾**，必须改口径：
+
+- 按 p95 算，消掉 `countMs` 后 write 仍是 69.1 ms，分 2 帧 = **34.6 ms/帧**，离 16 ms 差 2.2 倍。
+- 要单帧 ≤ 16 ms 需要 **5～6 帧**，即总帧数是 5～6 倍，不是 2 倍。
+- 所以「单帧 ≤ 16 ms」与「总帧数 ≤ 2 倍」不能同时成立。原判据假设 paint 只有 30 ms 上下，与实测 53～83 ms 不符。
+
+**正确口径**：分帧的目标不是把 paint 塞进 16 ms，而是**把单帧的主线程占用压到不丢帧的水平**（16.7 ms 内完成一次 rAF 回调），允许在后续帧补齐。因此判据应改为「**首帧（可见帧）p95 ≤ 16 ms**，剩余帧在 ≤ 6 帧内补齐，且补齐期间用户可交互」。这条要在动手前先写进 §11.3 替换原判据。
+
+**下一个可省点（未做，需视觉 A/B）**：`writeMs` 里每个段调两次 `offsetVertex`（`scenePainter.ts:538`），每次都新建 `{anchor, offsetPx:[...]}` 对象；211 651 段 = **423 302 次临时对象分配**，而 `writeStrokeVertex` 只是解引用。改成直接传 anchor + offset 标量可省掉这批分配，语义零变化。这是「减少每帧成本」而非分帧，收益待测。
 
 **R5（门禁默认 skip 会漏到线上）仍未解决**：`test.skip(process.env.DIMENSION_PERF_GATE !== '1', ...)` 保持原样。接不接 CI 是决策，不是实现细节——本轮未动。
 
