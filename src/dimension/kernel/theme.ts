@@ -27,9 +27,35 @@ export type DimensionTheme = Readonly<{
    * on a plant-wide view and capped at the ceiling on a close-up, so labels
    * follow the model like PML `cheight` without becoming unreadable or
    * filling the viewport. Fixed-height sources ignore both.
+   *
+   * These two are a *legibility* interval only: they say how large a label is
+   * drawn, never whether it is drawn. Display gating lives in
+   * `lodSecondaryMinPx` / `lodDetailMinPx` below (2026-10-29).
    */
   sourceTextHeightMinPx: number;
   sourceTextHeightMaxPx: number;
+  /**
+   * Projected source text height (px) below which a `secondary` input is
+   * elided for the current view. Distinct from `sourceTextHeightMinPx` on
+   * purpose: that one clamps the drawn cap height, this one decides whether
+   * the record appears at all.
+   *
+   * It must stay separate because a source's declared text height varies by
+   * more than an order of magnitude between branches (measured on live MBD:
+   * `cheight_mm` 2 mm vs 27 mm, i.e. 0.12 px vs 1.5 px of projection at the
+   * same camera distance). Any single positive floor therefore hides whole
+   * branches instead of thinning dense ones — `0` means "never hide a
+   * secondary input by projection height"; `lodShortLine` still thins the
+   * ones whose dimension line cannot carry its own value.
+   */
+  lodSecondaryMinPx: number;
+  /**
+   * Projected source text height (px) at or above which a `detail` input
+   * (slope marks, skew aids, branch name) appears — a close-up only tier.
+   * Kept at the legibility ceiling so detail never competes with primary
+   * dimensions at a branch-wide view.
+   */
+  lodDetailMinPx: number;
   /**
    * Level of detail for explicit inputs that opt in (`lod.hideShort`): a
    * dimension whose projected line is shorter than this many label widths is
@@ -234,6 +260,11 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   arrowLineMinLengthPx: 13,
   sourceTextHeightMinPx: 11,
   sourceTextHeightMaxPx: 18,
+  // 显示门槛与字号钳制分离（2026-10-29）：secondary 不再按投影高度隐藏
+  // （实测 live MBD 的 cheight 跨 BRAN 差 13 倍，任何正数下限都会整条 BRAN 消失）；
+  // detail 仍是近景专属，门槛取字号上限。
+  lodSecondaryMinPx: 0,
+  lodDetailMinPx: 18,
   lodMinLineToLabelRatio: 1,
   extensionOvershootPx: 10,
   labelPaddingPx: 8,

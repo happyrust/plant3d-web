@@ -388,11 +388,13 @@ export type ExplicitLodInput = Readonly<{
   /**
    * `secondary` (e.g. MBD ATTA sub-dimensions, elbow elevation tags) is
    * elided while the source text height (`textHeightM`) projects below
-   * `theme.sourceTextHeightMinPx`, i.e. on a plant-wide view where only the
-   * main running dimensions matter. `detail` (slope marks, skew aids, the
-   * branch name) only appears on a close-up, once the source text height
-   * projects at `theme.sourceTextHeightMaxPx` or above — the three tiers
-   * are the far / mid / near levels of the reference drawing style.
+   * `theme.lodSecondaryMinPx` — a display gate kept separate from the
+   * `sourceTextHeightMinPx` legibility floor (2026-10-29), because a source's
+   * declared `cheight` differs by an order of magnitude between branches.
+   * `detail` (slope marks, skew aids, the branch name) only appears on a
+   * close-up, once the source text height projects at `theme.lodDetailMinPx`
+   * or above — the three tiers are the far / mid / near levels of the
+   * reference drawing style.
    */
   tier?: 'primary' | 'secondary' | 'detail';
   /**
@@ -535,7 +537,7 @@ export type ExplicitTagStyle = 'card' | 'frame' | 'pill';
 
 export type ExplicitTagLine = Readonly<{
   text: string;
-  /** Only shown on a close-up (source text height ≥ `theme.sourceTextHeightMaxPx`) when the input carries `lod`. */
+  /** Only shown on a close-up (source text height ≥ `theme.lodDetailMinPx`) when the input carries `lod`. */
   detail?: boolean;
 }>;
 

@@ -233,7 +233,10 @@ export function planTagBillboard(
   const projectedPx = projectedSourceTextHeightPx(input.textHeightM, metresPerPixel);
   const tierHidden = input.lod ? lodTierHiddenReason(input.lod, projectedPx, theme) : null;
   if (tierHidden) return hidden(tierHidden);
-  const closeUp = !input.lod || projectedPx === null || projectedPx >= theme.sourceTextHeightMaxPx;
+  // `closeUp` follows the same gate as the detail tier itself, so a tag never
+  // shows its detail lines at a distance where detail records are still
+  // elided (2026-10-29).
+  const closeUp = !input.lod || projectedPx === null || projectedPx >= theme.lodDetailMinPx;
   const lines = spec.lines
     .filter(line => closeUp || !line.detail)
     .map(line => line.text)

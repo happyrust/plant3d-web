@@ -214,14 +214,23 @@ describe('layoutDimension3d', () => {
   });
 
   it('applies the level-of-detail rules of the flat presentation', () => {
-    // atta row on a plant-wide view: cheight projects to 2.7 px < 11 px floor.
+    // 2026-10-29：secondary 的显示门槛与字号下限分离。默认主题 lodSecondaryMinPx=0，
+    // 所以 atta 行在 2.7 px 投影的远景也出图（字号被钳到可读区间）。
     const secondary = layoutDimension3d(
       { ...input, lod: { tier: 'secondary', hideShort: true } },
       spec,
       context(),
     );
-    expect(secondary.derived).toEqual({ formattedLabel: '1000', lodHidden: 'secondary-far' });
-    expect(secondary.scenePrimitives).toEqual([]);
+    expect(secondary.derived.lodHidden).toBeUndefined();
+    expect(secondary.scenePrimitives.length).toBeGreaterThan(0);
+    // 门槛仍可生效：主题给了正数 lodSecondaryMinPx 时恢复消隐。
+    const gated = layoutDimension3d(
+      { ...input, lod: { tier: 'secondary', hideShort: true } },
+      spec,
+      { ...context(), theme: { ...SOLVESPACE_DIMENSION_THEME, lodSecondaryMinPx: 11 } },
+    );
+    expect(gated.derived).toEqual({ formattedLabel: '1000', lodHidden: 'secondary-far' });
+    expect(gated.scenePrimitives).toEqual([]);
     // … but drawn once the view is close enough (27 px).
     expect(layoutDimension3d(
       { ...input, lod: { tier: 'secondary', hideShort: true } },

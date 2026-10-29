@@ -16,6 +16,10 @@ describe('dimension theme', () => {
       // 来源自报字高（MBD cheight）投影后的夹取区间（2026-09-12 S2）。
       sourceTextHeightMinPx: 11,
       sourceTextHeightMaxPx: 18,
+      // 显示门槛与字号钳制分离（2026-10-29）：secondary 不按投影高度隐藏，
+      // detail 仍是近景专属。
+      lodSecondaryMinPx: 0,
+      lodDetailMinPx: 18,
       // 尺寸线投影短于 1 个标签宽的显式尺寸按 LOD 隐藏（2026-09-12 S3）。
       lodMinLineToLabelRatio: 1,
       extensionOvershootPx: 10,

@@ -222,27 +222,36 @@ describe('layoutExplicit', () => {
     expect(wingLengthPx(1000, [0.0259, 0, 0])).toBeCloseTo(25.9, 9);
   });
 
-  it('elides secondary inputs while the source text height projects below the floor', () => {
+  it('keeps a secondary input while the source text projects below the legibility floor', () => {
     const secondary: ExplicitLayoutInput = {
       ...input,
       textHeightM: 0.027,
       lod: { tier: 'secondary' },
     };
-    const layoutAt = (pixelsPerMetre: number) => layoutExplicit(secondary, {
+    const layoutAt = (pixelsPerMetre: number, theme = SOLVESPACE_DIMENSION_THEME) => layoutExplicit(secondary, {
       projector: createTestProjector(pixelsPerMetre),
       font: createTestFont(),
-      theme: SOLVESPACE_DIMENSION_THEME,
+      theme,
       format: DEFAULT_DIMENSION_FORMAT,
       interaction: 'normal',
     });
 
-    // 2.7 px projected (< 11 px floor): plant-wide view, sub-dimension elided.
+    // 2026-10-29：显示门槛与字号钳制分离。默认主题里 lodSecondaryMinPx 为 0，
+    // 所以 2.7 px 的投影（远低于 11 px 字号下限）仍然出图，字号被钳到 11 px。
     const far = layoutAt(100);
-    expect(far.primitives).toEqual([]);
-    expect(far.scenePrimitives).toEqual([]);
-    expect(far.hitRegions).toEqual([]);
-    expect(far.labelPinned).toBe(true);
-    expect(far.derived).toEqual({ formattedLabel: '25 REF', lodHidden: 'secondary-far' });
+    expect(far.derived.lodHidden).toBeUndefined();
+    const farGlyph = far.primitives.find(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    )!;
+    expect(farGlyph.capHeightPx).toBe(SOLVESPACE_DIMENSION_THEME.sourceTextHeightMinPx);
+
+    // 门槛仍可生效：给主题一个正数 lodSecondaryMinPx，同一视角就恢复消隐。
+    const gated = layoutAt(100, { ...SOLVESPACE_DIMENSION_THEME, lodSecondaryMinPx: 11 });
+    expect(gated.primitives).toEqual([]);
+    expect(gated.scenePrimitives).toEqual([]);
+    expect(gated.hitRegions).toEqual([]);
+    expect(gated.labelPinned).toBe(true);
+    expect(gated.derived).toEqual({ formattedLabel: '25 REF', lodHidden: 'secondary-far' });
     // 13.5 px projected: drawn like any other input.
     const near = layoutAt(500);
     expect(near.derived.lodHidden).toBeUndefined();

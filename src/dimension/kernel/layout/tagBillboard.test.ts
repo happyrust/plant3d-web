@@ -278,8 +278,17 @@ describe('layoutTagBillboard', () => {
       target: [0, 0, 0],
     };
     const secondary: ExplicitLayoutInput = { ...input, tag: elbow, lod: { tier: 'secondary' } };
-    // Far (cheight 27 mm → 2.7 px < 11 px): hidden.
-    expect(layoutTagBillboard(secondary, elbow, context()).derived)
+    // 2026-10-29：secondary 的显示门槛与字号下限分离，默认主题不再按投影隐藏，
+    // 所以 far 也出图，只是 detail 行被 closeUp 挡掉。
+    const far = layoutTagBillboard(secondary, elbow, context());
+    expect(far.derived.lodHidden).toBeUndefined();
+    expect(glyphs(far).map(run => run.text)).toEqual(['hp']);
+    // 门槛仍可生效：给主题一个正数 lodSecondaryMinPx 就恢复消隐。
+    const gatedTheme = {
+      ...SOLVESPACE_DIMENSION_THEME,
+      lodSecondaryMinPx: 11,
+    };
+    expect(layoutTagBillboard(secondary, elbow, { ...context(), theme: gatedTheme }).derived)
       .toEqual({ formattedLabel: 'A', lodHidden: 'secondary-far' });
     // Mid range (500 px/m → 13.5 px): shown, primary lines only.
     const mid = layoutTagBillboard(secondary, elbow, context(500));

@@ -25,7 +25,13 @@ export function projectedSourceTextHeightPx(
     : null;
 }
 
-/** A `secondary` input disappears while its source text projects below the theme floor. */
+/**
+ * A `secondary` input disappears while its source text projects below
+ * `theme.lodSecondaryMinPx`. That threshold is a display gate, separate from
+ * the `sourceTextHeightMinPx` legibility floor that clamps the drawn cap
+ * height (2026-10-29): a branch whose `cheight` projects to 0.12 px must still
+ * be able to show its sub-dimensions at a readable size.
+ */
 export function lodSecondaryFar(
   lod: ExplicitLodInput | undefined,
   projectedPx: number | null,
@@ -33,10 +39,13 @@ export function lodSecondaryFar(
 ): boolean {
   return lod?.tier === 'secondary'
     && projectedPx !== null
-    && projectedPx < theme.sourceTextHeightMinPx;
+    && projectedPx < theme.lodSecondaryMinPx;
 }
 
-/** A `detail` input (slope marks, skew aids, branch name) is a close-up only. */
+/**
+ * A `detail` input (slope marks, skew aids, branch name) is a close-up only
+ * tier: it appears once its source text reaches `theme.lodDetailMinPx`.
+ */
 export function lodDetailFar(
   lod: ExplicitLodInput | undefined,
   projectedPx: number | null,
@@ -44,7 +53,7 @@ export function lodDetailFar(
 ): boolean {
   return lod?.tier === 'detail'
     && projectedPx !== null
-    && projectedPx < theme.sourceTextHeightMaxPx;
+    && projectedPx < theme.lodDetailMinPx;
 }
 
 /** A dimension line shorter than `lodMinLineToLabelRatio` label widths cannot carry its value. */

@@ -15,6 +15,14 @@ function quadOf(rect: ScreenRect): Quad {
   ];
 }
 
+function boundsOfQuad(quad: Quad): ScreenRect {
+  const xs = quad.map(point => point[0]);
+  const ys = quad.map(point => point[1]);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+}
+
 function layout(
   id: string,
   rect: ScreenRect,
@@ -102,5 +110,34 @@ describe('declutterOverlaps', () => {
       withQuad('point', [[5, 5], [5, 5], [5, 5], [5, 5]], 3000),
     ]);
     expect(results.map(result => result.derived.lodHidden)).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  it('falls back to the label bounds when a projected quad no longer brackets the text', () => {
+    // 2026-10-29：近平面越界会把文字四边形拉成一条细长斜条。实测面积与
+    // 自身包围盒之比低到 1e-5（正常 0.27~1.0），SAT 对这种细条与别处的
+    // 标签永远报「不重叠」，近景因此有 79 对重叠标签留在屏幕上。
+    // 这里构造同样的退化形状：包围盒覆盖对面标签，但细条本体不经过它。
+    const sliver: Quad = [[0, 0], [1000, 1000], [1005, 1005], [5, 5]];
+    const other: Quad = [[400, 100], [440, 100], [440, 120], [400, 120]];
+    // 细条本体与对面标签在 SAT 下判为不重叠……
+    expect(convexQuadsOverlap(sliver, other)).toBe(false);
+    // ……但两者的包围盒是重叠的。
+    const sliverBox = boundsOfQuad(sliver);
+    const otherBox = boundsOfQuad(other);
+    expect(sliverBox.x < otherBox.x + otherBox.width
+      && sliverBox.x + sliverBox.width > otherBox.x
+      && sliverBox.y < otherBox.y + otherBox.height
+      && sliverBox.y + sliverBox.height > otherBox.y).toBe(true);
+
+    const withQuad = (id: string, quad: Quad, rank: number): LayoutResult => ({
+      ...layout(id, boundsOfQuad(quad), rank),
+      derived: { formattedLabel: id, declutter: { rank, quad } },
+    });
+    const results = declutterOverlaps([
+      withQuad('sliver', sliver, 1001),
+      withQuad('normal', other, 1000),
+    ]);
+    // 回落到包围盒判定后，低排名的被消隐，而不是两者都留在屏幕上。
+    expect(results.map(result => result.derived.lodHidden)).toEqual([undefined, 'overlap']);
   });
 });

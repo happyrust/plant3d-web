@@ -373,6 +373,12 @@ function boundsOf(points: readonly Vec2[]): ScreenRect {
  * Screen corners of a framed (3D) glyph run's glyph box, in cap-height units
  * around the baseline centre: `[-w/2, descender] → [w/2, ascender]`, mapped
  * through the projected frame axes. The order is a convex quad.
+ *
+ * Near the camera plane a frame point can project outside the clip depth and
+ * the quad then stops describing the text's footprint (measured at a close-up:
+ * the area ratio to the label box ranged from 0.27 to 1.3e5). The quad is
+ * still returned — the caller decides — but `declutterOverlaps` must validate
+ * it before trusting a separating-axis verdict (2026-10-29).
  */
 export function projectTextFrameQuad(
   text: string,
