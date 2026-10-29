@@ -115,18 +115,61 @@ pwsh scripts/verify/realtime-vs-legacy.ps1 -EvidenceDir docs/verification/model-
 
 ## tasks.md 18（Final checkpoint）待办清单
 
-18 要求的三件事，前两件需要带新路由的二进制，第三件需要人工看一次界面。
+18 要求的三件事，前两件已完成（见下），第三件需要人工看一次界面。
 
-1. **换二进制**：当前 8022 上是 `D:\Rust\target\debug\aios-database.exe`（2026-10-29 16:31 构建，
-   PID 32948），二进制里搜不到 `realtime_history` / `model/history/geometry` 等字符串，是本特性之前的构建。
-   需要 `cd gen-model-timeline-scrub && cargo build --bin aios-database`，然后
-   `pwsh scripts/Start-AiosDatabaseManual.ps1 -Exe <新 exe> -Port 8022`（脚本自己会停掉占 8022 的进程，
-   并强制 `AIOS_STORE_MODE=rocksdb`）。SurrealDB 8009 已在跑（`/health` 回 200），不用重起。
-2. **重跑两个联调脚本**：命令见上一节，结果落 `docs/verification/model-version-timeline-scrub/`。
+1. **换二进制**：✅ 已完成。8022 上现在是 `0.1.44+g7b193c35db44.1793274571.dirty`
+   （`cargo build --bin aios-database`，rocksdb 档，`DB_OPTION_FILE=db_options/DbOption-issue7-e2e.toml`）。
+   `/health.model_cache.realtime_history` 分项在。
+2. **重跑两个联调脚本**：✅ 7.1 全绿；7.2 见下一节。
 3. **跑性能脚本**：`VERSION_SCRUB_PERF_GATE=1` + `VERSION_SCRUB_PERF_EVIDENCE=...`，
    `npx playwright test e2e/version-scrub-perf.spec.ts --workers=1`。七条指标逐条记录，
    300 ms / 500 ms / 2 s 若首次实测需调整，在本文件写明理由。
 
 后端合入 `refactor` 不在本次范围（`plan.md` 明确「不在本计划里部署」）。
+
+## 7.1 实测结果（2026-10-29，新构建）
+
+```
+pwsh scripts/verify/realtime-history-smoke.ps1 -EvidenceDir docs/verification/model-version-timeline-scrub
+```
+
+全部 14 步通过，关键读数：
+
+| 步骤 | 读数 |
+|---|---|
+| `/health.model_cache.realtime_history` | `cache_entries=2/32`、`in_flight=0/4`、`timeout_secs=60`、`input_cache=2/4` |
+| `model/versions` 计数 | 73 个版本、73 个几何变化版本（R12 前提满足） |
+| 实时几何首次 | HTTP 200、563 ms、`ETag="g:dba0a837141300f9252f01142890dde4"`、`instances=9`、`stats.visited=10`、`elapsed_ms=376` |
+| 缓存命中 | HTTP 200、541 ms、`fc.exe /b` 逐字节相同 |
+| `If-None-Match` | HTTP 304、体为空、四头与 200 一致 |
+| 两个选择器都给 | 400 `INVALID_SELECTOR`、`detail.params=["sesno","time"]` |
+| `time` 语法错 | 400 `INVALID_SELECTOR`、`detail.params=["time"]` |
+| `sesno` 不在版本表 | 404 `SESSION_NOT_FOUND` |
+| `attributes-at` 会话不存在 | 404 `SESSION_NOT_FOUND` |
+| 断开取消 | `in_flight` 每 0.5 s 采样 8 次全为 0 |
+| 快照数不变 | `historical.snapshots` 0 → 0 |
+| CORS 暴露头 | `etag,retry-after,x-sesno,x-session-time` |
+
+证据：`realtime-history-smoke.json`。
+
+## 7.2 实测结果（2026-10-29，新构建）
+
+等价比较按 `(source_refno, id)` 排序、去 `snapshot_key` 后逐项比：
+
+- 6 个组合（`24384/23257` 的 676–686）全部 `instances` 与 `tubes` 相等，不一致 0；
+- 同组合连查两次（未命中 + 命中）`ETag` 与 `instances` 逐项相等；
+- 并发闸：6 个并发冷查询 → `200,503,200,200,200,200`，`in_flight` 峰值恰好 4（等于 `concurrency_limit`），有请求被拒。
+
+并发闸这一条要**冷**会话才会触发：缓存命中不占名额（R7.1 明写），脚本会先跳过本次已请求过的
+会话，再从链上取未被碰过的版本并发打。第一次跑时误用了刚预热过的会话，六个全 200、`in_flight` 峰值 2，
+改成冷会话后闸正常拒。
+
+## 一处需要裁决的规范冲突
+
+见 `finding-r6-3-vs-r8-10.md`：对**交付单元根**，R6.3（`time` 用单元「仅自身」版本表）与
+R8.10（与 `resolve?scope=self` 一致）指向两张不同的表——`unit_versions` 73 行 vs
+`node_versions(scope=self)` 5 行。实测 `resolve?scope=subtree` 与 `unit_versions` 行集完全相同，
+所以冲突只在 `scope=self` 这一档。文档里列了三条出路，都需要规范所有者裁决。
+
 
 

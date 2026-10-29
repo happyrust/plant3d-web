@@ -115,7 +115,24 @@ function Invoke-Curl {
 }
 
 function Get-Json([string]$Url) {
-  return Invoke-RestMethod -Uri $Url -Method Get -TimeoutSec $TimeoutSec
+  # `-DateKind String`：默认会把 `session_time` 转成 DateTime 再按本地格式吐出来，
+  # 再拼进 `at=` 就成了 `09/08/2026 17:45:46`，服务端按语法拒掉。保留原始 ISO 文本。
+  return Invoke-RestMethod -Uri $Url -Method Get -TimeoutSec $TimeoutSec |
+    ConvertTo-Json -Depth 32 |
+    ConvertFrom-Json -DateKind String
+}
+
+# 走 curl 取 JSON：`Invoke-RestMethod` 会把查询串里的 `%2F` 当路径分隔符重新解析，
+# 带编码斜杠的 `refno` 因此回 400。curl 原样发，不重写 URL。
+function Get-JsonRaw([string]$Url) {
+  $body = Join-Path $work ('raw-' + [guid]::NewGuid().ToString('N') + '.json')
+  $code = (& curl.exe -s -o $body -w '%{http_code}' --max-time $TimeoutSec $Url) 2>&1
+  $status = 0
+  [void][int]::TryParse("$code".Trim(), [ref]$status)
+  $text = if (Test-Path $body) { Get-Content -Raw -LiteralPath $body -ErrorAction SilentlyContinue } else { '' }
+  Remove-Item $body -ErrorAction SilentlyContinue
+  if ($status -ne 200) { throw "HTTP $status $($text.Trim())" }
+  return ($text | ConvertFrom-Json -DateKind String)
 }
 
 function Get-RealtimeHealth {
@@ -222,21 +239,54 @@ if ($geometryKey) {
 # ---------------------------------------------------------------------------
 $withTime = @($rows | Where-Object { $_.session_time } )
 if ($withTime.Count -gt 0) {
-  # 取中间那一版的时刻（秒级），两边都应选中它
+  # 取中间那一版的时刻（秒级）
   $probe = $withTime[[int]([math]::Floor($withTime.Count / 2))]
   $at = [string]$probe.session_time
   $encodedAt = [uri]::EscapeDataString($at)
   $byTime = Invoke-Curl -Url "$api/model/history/geometry?dbnum=$Dbnum&unit_refno=$($unitSlash -replace '/', '%2F')&time=$encodedAt" -MaxTimeSec $TimeoutSec -Name 'g-time'
+
+  # R8.10 的一致性要看两边喂的是不是同一张表：
+  #   - 几何路由的 `time` 走 `unit_versions`（单元子树折叠，成员变化也算一版）
+  #   - resolve 的 `scope=self` 走 `node_versions(scope=self)`（只算节点自身那一格）
+  # 对单元根这两张表行集不同（本例 73 行 vs 5 行），所以 `scope=self` 只在**非单元根**时
+  # 才该与几何路由一致；单元根要与 `scope=subtree` 比（实测两者行集相同）。
+  # 见 docs/verification/model-version-timeline-scrub/finding-r6-3-vs-r8-10.md。
+  $selfRows = $null
+  try {
+    $selfRows = Get-JsonRaw "$api/node/versions?dbnum=$Dbnum&refno=$($unitSlash -replace '/', '%2F')&scope=self&limit=5000"
+  } catch { }
+  $selfSesnos = if ($selfRows) { @($selfRows.versions | ForEach-Object { [int]$_.sesno }) } else { @() }
+  $unitSesnos = @($rows | ForEach-Object { [int]$_.sesno })
+  $isUnitRoot = ($selfRows -ne $null) -and ($selfRows.unit_root -eq $unitSlash)
+  $compareScope = if ($isUnitRoot) { 'subtree' } else { 'self' }
+  $tableNote = if ($isUnitRoot) {
+    "refno 是交付单元根：几何路由按 unit_versions（$($unitSesnos.Count) 行），resolve 用 scope=subtree 对齐"
+  } else {
+    "refno 不是单元根：几何路由与 resolve 的 scope=self 应同表（$($selfSesnos.Count) 行）"
+  }
+
   $resolved = $null
   try {
-    $resolved = Get-Json "$api/node/versions/resolve?dbnum=$Dbnum&refno=$($unitSlash -replace '/', '%2F')&scope=self&at=$encodedAt"
+    $resolved = Get-JsonRaw "$api/node/versions/resolve?dbnum=$Dbnum&refno=$($unitSlash -replace '/', '%2F')&scope=$compareScope&at=$encodedAt"
   } catch {
     Record 'GET node/versions/resolve' $false $_.Exception.Message
   }
   if ($resolved) {
     $timeSesno = $byTime.Headers['x-sesno']
-    Record 'time 选择器与 resolve 一致' ($timeSesno -eq "$($resolved.sesno)") (
-      "at=$at geometry X-Sesno=$timeSesno resolve.sesno=$($resolved.sesno) resolve.session_time=$($resolved.session_time)")
+    Record "time 选择器与 resolve(scope=$compareScope) 一致" ($timeSesno -eq "$($resolved.sesno)") (
+      "at=$at geometry X-Sesno=$timeSesno resolve.sesno=$($resolved.sesno) resolve.session_time=$($resolved.session_time)；$tableNote")
+  }
+  # 单元根额外记一条：scope=self 与几何路由必然不同，把两个数都摆出来（不是失败，是规范冲突的证据）
+  if ($isUnitRoot) {
+    $selfResolved = $null
+    try {
+      $selfResolved = Get-JsonRaw "$api/node/versions/resolve?dbnum=$Dbnum&refno=$($unitSlash -replace '/', '%2F')&scope=self&at=$encodedAt"
+    } catch { }
+    if ($selfResolved) {
+      Note 'R6.3 / R8.10 冲突（单元根）' (
+        "同一时间点：geometry X-Sesno=$($byTime.Headers['x-sesno'])、resolve(scope=self)=$($selfResolved.sesno)、" +
+        "resolve(scope=subtree)=$($resolved.sesno)；unit_versions $($unitSesnos.Count) 行 vs node_versions(self) $($selfSesnos.Count) 行")
+    }
   }
 
   # 时间倒退的会话：找第一个 Session_Time 早于前一行的行，取它的时刻核对两边一致
@@ -252,7 +302,7 @@ if ($withTime.Count -gt 0) {
     $bTime = Invoke-Curl -Url "$api/model/history/geometry?dbnum=$Dbnum&unit_refno=$($unitSlash -replace '/', '%2F')&time=$bEncoded" -MaxTimeSec $TimeoutSec -Name 'g-back'
     $bResolved = $null
     try {
-      $bResolved = Get-Json "$api/node/versions/resolve?dbnum=$Dbnum&refno=$($unitSlash -replace '/', '%2F')&scope=self&at=$bEncoded"
+      $bResolved = Get-JsonRaw "$api/node/versions/resolve?dbnum=$Dbnum&refno=$($unitSlash -replace '/', '%2F')&scope=self&at=$bEncoded"
     } catch { }
     if ($bResolved) {
       Record '时间倒退会话两边一致' ($bTime.Headers['x-sesno'] -eq "$($bResolved.sesno)") (

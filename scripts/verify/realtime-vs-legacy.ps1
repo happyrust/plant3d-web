@@ -277,20 +277,65 @@ if (-not $rt0) {
 } elseif ($probeSesnos.Count -lt 2) {
   Record '并发闸' $false '版本表不足，无法并行探'
 } else {
-  $jobs = foreach ($sesno in $probeSesnos) {
-    Start-ThreadJob -ScriptBlock {
-      param($url)
-      $result = & curl.exe -s -o NUL -w '%{http_code}' --max-time 300 $url
-      return "$result".Trim()
-    } -ArgumentList "$api/model/history/geometry?dbnum=$Dbnum&unit_refno=$encodedFirst&sesno=$sesno"
+  # 并发打：`ForEach-Object -Parallel` 在 pwsh 7 里直接回值，比 ThreadJob + Receive-Job 稳
+  # （ThreadJob 里 curl 的输出在管道上会被吞）。采样线程同时盯 /health。
+  #
+  # 闸只在「冷计算」且真的重叠时才拒：缓存命中不占名额（R7.1 明写），而前面几步已经把
+  # 链尾那几版灌进缓存了，所以这里要挑**本脚本还没查过**的会话——取整条链最前面那些
+  # （它们离当前模型最远、通常也最慢），并且先量一次单发耗时确认是冷查询（> 100 ms）。
+  $warmSesnos = @{}
+  foreach ($sesno in $probeSesnos) { $warmSesnos[$sesno] = $true }
+  $coldCandidates = @(@($firstVersions.versions) |
+    ForEach-Object { [int]$_.sesno } |
+    Where-Object { -not $warmSesnos.ContainsKey($_) } |
+    Select-Object -First ([math]::Max($ConcurrencyProbes * 3, 12)))
+  if ($coldCandidates.Count -lt 2) { $coldCandidates = @($probeSesnos) }
+
+  $timings = foreach ($sesno in $coldCandidates) {
+    $started = Get-Date
+    & curl.exe -s -o NUL --max-time 300 "$api/model/history/geometry?dbnum=$Dbnum&unit_refno=$encodedFirst&sesno=$sesno" 2>&1 | Out-Null
+    [pscustomobject]@{ sesno = $sesno; ms = [int]((Get-Date) - $started).TotalMilliseconds }
   }
-  $inFlightSamples = @()
-  while (@($jobs | Where-Object { $_.State -eq 'Running' }).Count -gt 0) {
-    try { $inFlightSamples += [int](Get-Json "$api/health").model_cache.realtime_history.in_flight } catch { }
-    Start-Sleep -Milliseconds 200
+  # 第一次已经把这些会话算过一遍并写进缓存了；要真正并发冷算，得换一批没量过的。
+  # 这里换个思路：直接量耗时，挑最慢的几个，再在**它们被缓存前**并发打一轮。
+  # 上面那次量耗时本身就是冷算，所以下面并发打的那几个必然命中缓存——所以改成：
+  # 不预热，直接并发打冷会话（耗时不可预知，但闸只看 in_flight 与 503）。
+  $slowest = @($timings | Sort-Object -Property ms -Descending | Select-Object -First ([math]::Max(2, $ConcurrencyProbes)))
+  Write-Host ("[note] 冷会话单发耗时（这批已被写入缓存）-> " + (($slowest | ForEach-Object { "sesno $($_.sesno)=$($_.ms)ms" }) -join '，')) -ForegroundColor DarkGray
+
+  # 真正的并发冷算：从整条链里挑「本脚本从未请求过」的会话，直接并发打。
+  $usedSesnos = @{}
+  foreach ($sesno in $coldCandidates) { $usedSesnos[$sesno] = $true }
+  foreach ($sesno in $probeSesnos) { $usedSesnos[$sesno] = $true }
+  $freshCold = @(@($firstVersions.versions) |
+    ForEach-Object { [int]$_.sesno } |
+    Where-Object { -not $usedSesnos.ContainsKey($_) } |
+    Select-Object -First ([math]::Max($ConcurrencyProbes, 6)))
+  if ($freshCold.Count -lt 2) {
+    Write-Host '[note] 这条链上已经没有未请求过的会话，并发闸改用已缓存会话（命中不占名额，闸不会拒）' -ForegroundColor DarkGray
+    $freshCold = $coldCandidates
   }
-  $codes = @($jobs | Receive-Job)
-  $jobs | Remove-Job -Force
+  $probeUrls = @($freshCold | ForEach-Object { "$api/model/history/geometry?dbnum=$Dbnum&unit_refno=$encodedFirst&sesno=$_" })
+  Write-Host ("[note] 并发打的会话 -> " + ($freshCold -join ',')) -ForegroundColor DarkGray
+  $sampler = Start-ThreadJob -ScriptBlock {
+    param($healthUrl, $durationMs)
+    $samples = [System.Collections.Generic.List[int]]::new()
+    $deadline = (Get-Date).AddMilliseconds($durationMs)
+    while ((Get-Date) -lt $deadline) {
+      try {
+        $h = Invoke-RestMethod $healthUrl -TimeoutSec 2
+        $samples.Add([int]$h.model_cache.realtime_history.in_flight)
+      } catch { }
+      Start-Sleep -Milliseconds 150
+    }
+    , $samples.ToArray()
+  } -ArgumentList "$api/health", 30000
+  $codes = @($probeUrls | ForEach-Object -Parallel {
+    $result = & curl.exe -s -o NUL -w '%{http_code}' --max-time 300 $_
+    "$result".Trim()
+  } -ThrottleLimit $probeUrls.Count)
+  $inFlightSamples = @($sampler | Wait-Job -Timeout 40 | Receive-Job)
+  $sampler | Remove-Job -Force -ErrorAction SilentlyContinue
   $busy = @($codes | Where-Object { $_ -eq '503' })
   $maxInFlight = if ($inFlightSamples.Count -gt 0) { ($inFlightSamples | Measure-Object -Maximum).Maximum } else { 0 }
   $ok = ($maxInFlight -le $limit) -and ($busy.Count -ge 1 -or $probeSesnos.Count -lt $limit)

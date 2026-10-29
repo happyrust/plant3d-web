@@ -1,0 +1,201 @@
+{
+  "base": "http://127.0.0.1:8022",
+  "dbnum": 8000,
+  "unit": "24384/23257",
+  "target_sesno": 686,
+  "versions": {
+    "count": 73,
+    "geometry_changed": 73,
+    "sesnos": [
+      5,
+      211,
+      212,
+      213,
+      214,
+      215,
+      216,
+      217,
+      218,
+      219,
+      220,
+      225,
+      226,
+      227,
+      228,
+      231,
+      232,
+      251,
+      252,
+      257,
+      258,
+      259,
+      260,
+      261,
+      262,
+      263,
+      264,
+      265,
+      266,
+      282,
+      283,
+      284,
+      285,
+      380,
+      382,
+      417,
+      419,
+      421,
+      423,
+      425,
+      427,
+      429,
+      431,
+      437,
+      439,
+      441,
+      443,
+      559,
+      561,
+      563,
+      565,
+      567,
+      569,
+      571,
+      573,
+      626,
+      630,
+      652,
+      654,
+      660,
+      662,
+      664,
+      666,
+      668,
+      670,
+      672,
+      674,
+      676,
+      678,
+      680,
+      682,
+      684,
+      686
+    ]
+  },
+  "realtime_health": {
+    "cache_entries": 2,
+    "cache_capacity": 32,
+    "hits_total": 14,
+    "misses_total": 2,
+    "in_flight": 0,
+    "concurrency_limit": 4,
+    "input_cache": {
+      "entries": 2,
+      "capacity": 4
+    },
+    "timeout_secs": 60
+  },
+  "steps": [
+    {
+      "step": "GET /health model_cache.realtime_history",
+      "ok": true,
+      "detail": "cache_entries=2/32 in_flight=0/4 timeout_secs=60 input_cache=2/4 historical.snapshots=0"
+    },
+    {
+      "step": "GET model/versions 计数",
+      "ok": true,
+      "detail": "版本数 73（要 ≥ 25）、几何变化 73（要 ≥ 5）、latest=853、truncated=False"
+    },
+    {
+      "step": "被测 sesno",
+      "ok": true,
+      "detail": "686（几何变化版本 73 个；链 5,211,212,213,214,215,216,217,218,219,220,225,226,227,228,231,232,251,252,257,258,259,260,261,262,263,264,265,266,282,283,284,285,380,382,417,419,421,423,425,427,429,431,437,439,441,443,559,561,563,565,567,569,571,573,626,630,652,654,660,662,664,666,668,670,672,674,676,678,680,682,684,686）"
+    },
+    {
+      "step": "GET model/history/geometry（首次）",
+      "ok": true,
+      "detail": "HTTP 200 563ms ETag=\"g:dba0a837141300f9252f01142890dde4\" X-Sesno=686 X-Session-Time=2026-10-24T04:35:17+00:00 Cache-Control=no-cache"
+    },
+    {
+      "step": "实时几何体形状",
+      "ok": true,
+      "detail": "instances=9 tubes=0 geometryKey=g:dba0a837141300f9252f01142890dde4 stats.visited=10 elapsed_ms=376"
+    },
+    {
+      "step": "实时几何不含 snapshot_key",
+      "ok": true,
+      "detail": "Requirement 6.15：实时响应去掉 snapshot_key"
+    },
+    {
+      "step": "GET model/history/geometry（缓存命中）",
+      "ok": true,
+      "detail": "HTTP 200 541ms 体逐字节相同=True（fc.exe /b）"
+    },
+    {
+      "step": "GET model/history/geometry（If-None-Match）",
+      "ok": true,
+      "detail": "HTTP 304 体为空=True 四头与 200 一致=True ETag=\"g:dba0a837141300f9252f01142890dde4\""
+    },
+    {
+      "step": "time 选择器与 resolve(scope=subtree) 一致",
+      "ok": true,
+      "detail": "at=2026-09-08T17:45:46+08:00 geometry X-Sesno=419 resolve.sesno=419 resolve.session_time=2026-09-08T09:45:46+00:00；refno 是交付单元根：几何路由按 unit_versions（73 行），resolve 用 scope=subtree 对齐"
+    },
+    {
+      "step": "R6.3 / R8.10 冲突（单元根）",
+      "ok": true,
+      "detail": "同一时间点：geometry X-Sesno=419、resolve(scope=self)=283、resolve(scope=subtree)=419；unit_versions 73 行 vs node_versions(self) 5 行"
+    },
+    {
+      "step": "时间倒退会话",
+      "ok": true,
+      "detail": "本单元版本表的 Session_Time 单调递增，没有可验的倒退会话"
+    },
+    {
+      "step": "两个选择器都给 → 400 INVALID_SELECTOR",
+      "ok": true,
+      "detail": "HTTP 400 {\"code\":\"INVALID_SELECTOR\",\"message\":\"sesno and time are mutually exclusive\",\"detail\":{\"params\":[\"sesno\",\"time\"]}}"
+    },
+    {
+      "step": "time 语法错 → 400 INVALID_SELECTOR",
+      "ok": true,
+      "detail": "HTTP 400 {\"code\":\"INVALID_SELECTOR\",\"message\":\"time must match YYYY-MM-DD[T| ]HH:mm[:ss[.fff]][Z|±HH:MM], got \\\"not-a-time\\\"\",\"detail\":{\"params\":[\"time\"]}}"
+    },
+    {
+      "step": "sesno 不在版本表 → 404 SESSION_NOT_FOUND",
+      "ok": true,
+      "detail": "HTTP 404 {\"code\":\"SESSION_NOT_FOUND\",\"message\":\"会话 2147483647 不在该单元的版本表上\",\"detail\":null}"
+    },
+    {
+      "step": "sesno=1（链头之前）→ 404",
+      "ok": true,
+      "detail": "HTTP 404 {\"code\":\"SESSION_NOT_FOUND\",\"message\":\"会话 1 不在该单元的版本表上\",\"detail\":null}"
+    },
+    {
+      "step": "attributes-at 会话不存在 → 404 SESSION_NOT_FOUND",
+      "ok": true,
+      "detail": "HTTP 404 {\"code\":\"SESSION_NOT_FOUND\",\"message\":\"以会话 2147483647 钉住 D:\\\\AVEVA\\\\Projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001（DESI）失败: open D:\\\\AVEVA\\\\Projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001: open at Some(2147483647): D:\\\\AVEVA\\\\Projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001: no session 2147483647; newest is 853; the nearest retained session is 853, below it\",\"detail\":null}"
+    },
+    {
+      "step": "非交付单元 422",
+      "ok": true,
+      "detail": "未给 -NotADeliveryUnit，跳过（换一个构件 refno 重跑即可）"
+    },
+    {
+      "step": "断开取消（Requirement 6.14）",
+      "ok": true,
+      "detail": "in_flight 每 0.5 s：0,0,0,0,0,0,0,0（末值应为 0）"
+    },
+    {
+      "step": "快照数不变（Requirement 6.12）",
+      "ok": true,
+      "detail": "初值 0 → 现值 0"
+    },
+    {
+      "step": "CORS Access-Control-Expose-Headers",
+      "ok": true,
+      "detail": "值：etag,retry-after,x-sesno,x-session-time"
+    }
+  ],
+  "passed": true
+}
