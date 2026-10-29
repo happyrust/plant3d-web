@@ -32,6 +32,8 @@
 
 第二轮（B2 / B3）：D2 的可见性在面板侧补齐——「0 条记录 + `loadError`」时 BRAN 行挂「! 装载失败」角标，点开即诊断；R2（全有或全无）新增 `?mbd_partial=1` 开关，打开后跳过项只进诊断、其余照常渲染，并在面板常驻「已跳过 N 条」。注意契约层「一条图元非法 → `ok:false`」的路径仍未被覆盖，那要等 A2/A3。
 
+第三轮（A2 / A3 / A5）：R1 的**误伤面**已收口——已知 kind 上的契约外字段默认忽略（`offset` / `suppressed_reason` 这类旧字段不再整包失败），`strict` 保留白名单校验；不认识的 kind 在 `?mbd_partial=1` 下降级为逐条诊断并交付其余图元，默认仍按 ADR 0046 整包拒绝（不擅自改 ADR）。D4 的 `diagnostics` 通道自此第一次有真实产出。
+
 对应的风险项：R3（失败不可见，产品层）随 D2 一并缓解；R4（后端基址可被 URL 改写）按 C3 收紧——`?mbdBackend` 现在只在开发构建或构建期显式 `VITE_MBD_ALLOW_QUERY_BACKEND=1` 时生效，否则忽略并 `console.warn` 一次（`?mbdBackendPort` 只能改端口、不能改主机，未动）。
 
 ## 设计风险

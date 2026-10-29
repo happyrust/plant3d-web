@@ -43,7 +43,7 @@ MBD（Model-Based Definition）尺寸标注在 `plant3d-web` 里的完整链路�
 | `?mbd_lod=0` | 关闭分级显示（剥掉 mapper 打的 `lod` 提示） |
 | `?mbd_3d=0` | 关闭三维标注呈现，回落到求解器原位平面几何 |
 | `?mbd_mode=inspection` | 打开检视模式：被模型遮挡的尺寸淡化（ADR 0061） |
-| `?mbd_partial=1` | 允许部分显示：坏图元只进诊断、其余照常绘制；缺省仍是原子拒绝（ADR 0046） |
+| `?mbd_partial=1` | 允许部分显示：**不认识的图元 kind** 与**映射失败的图元**只进诊断、其余照常提交；缺省仍是 ADR 0046 的原子拒绝。打开时面板常驻「已跳过 N 条」 |
 | `?mbdBackendPort=<port>` | 覆盖 MBD 后端端口（只能改端口，主机仍是当前页面主机） |
 | `?mbdBackend=<绝对地址>` | 覆盖 MBD 后端基址。**2026-10-29 起收紧**：仅开发构建（`import.meta.env.DEV`）或构建期设了 `VITE_MBD_ALLOW_QUERY_BACKEND=1` 时生效；生产构建忽略该参数并 `console.warn` 一次，改用 `VITE_MBD_API_BASE_URL` |
 

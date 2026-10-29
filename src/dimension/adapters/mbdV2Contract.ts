@@ -216,23 +216,29 @@ export type MbdV2PipeData = Readonly<{
   issues: readonly MbdV2Issue[];
 }>;
 
+/** 契约层逐条跳过、但负载整体仍可交付的说明（A3：不认识的图元 kind）。 */
 export type MbdV2ParseDiagnostic = Readonly<{
   id: string;
   reason: string;
 }>;
 
 /**
- * `diagnostics` 是「契约层逐条跳过、但负载整体仍可交付」的通道。
+ * 解析选项。默认行为严格按 ADR 0046，两个开关各自只放宽一件事：
  *
- * **当前实现恒回空数组，这是符合 ADR 0046 的既定行为，不是缺陷**：ADR 0046
- * 要求出现尚未纳入 V2 契约的图元类型时整包拒绝，不得静默显示部分有效图元
- * （不完整尺寸图会让用户误判标注已完整）。所以 `parseMbdV2PipeData` 遇到未知
- * kind 直接走 `ok: false`，不存在「跳过这条、交付其余」的路径。
+ * | 情形 | 默认 | `partial: true` | `strict: true` |
+ * | --- | --- | --- | --- |
+ * | 不认识的图元 `kind` | 整包拒绝（ADR 0046） | 跳过它自己 + 记诊断 | 整包拒绝 |
+ * | 已知 `kind` 上的契约外字段 | 忽略（向前兼容） | 忽略 | 整包拒绝 |
+ * | 已知 `kind` 字段非法 | 整包拒绝 | 整包拒绝 | 整包拒绝 |
  *
- * 保留该字段是为了把契约层的逐条跳过接线点显式化：调用方
- * （`useMbdExternalSync`）已把它并进 `skipped`，将来若 ADR 改为部分交付策略，
- * 只需让 `parseMbdV2PipeData` 往这里写，调用方无需改动。
+ * `partial` 由用户体验开关 `?mbd_partial=1`（面板「允许部分显示」）驱动，是与
+ * ADR 0046 的显式、可撤销偏离；`strict` 供契约回归与后端联调对账。
  */
+export type MbdV2ParseOptions = Readonly<{
+  strict?: boolean;
+  partial?: boolean;
+}>;
+
 export type MbdV2ParseResult =
   | Readonly<{
     ok: true;
@@ -344,9 +350,7 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isLineSegmentArray(value.extension_lines)
         && isLineSegmentArray(value.arrow_lines)
         && isVec3(value.label_anchor)
-        && (value.reference === undefined || typeof value.reference === 'boolean')
-        && value.offset === undefined
-        && value.suppressed_reason === undefined;
+        && (value.reference === undefined || typeof value.reference === 'boolean');
     case 'angle_dim':
       return typeof value.text === 'string'
         && isArcFrame(value)
@@ -382,8 +386,71 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isVec3(value.start)
         && isVec3(value.end);
     default:
+      // 不认识的 kind 由 classifyPrimitive 单独判：默认跳过 + 诊断，strict 才整包拒绝。
       return false;
   }
+}
+
+/** 已知 kind 的字段白名单（只在 `strict` 模式下检查「多出来的字段」）。 */
+const PRIMITIVE_FIELDS: Readonly<Record<MbdPrimitiveKind, readonly string[]>> = {
+  linear_dim: ['kind', 'id', 'start', 'end', 'text', 'sub_kind',
+    'extension_lines', 'arrow_lines', 'label_anchor', 'reference'],
+  angle_dim: ['kind', 'id', 'text', 'leg_lines', 'label_anchor', 'sub_kind',
+    'center', 'x_axis', 'normal', 'radius', 'start_angle_deg', 'sweep_angle_deg'],
+  label: ['kind', 'id', 'text', 'position'],
+  leader_line: ['kind', 'id', 'start', 'end'],
+  aid_line: ['kind', 'id', 'start', 'end', 'style'],
+  aid_arc: ['kind', 'id', 'style',
+    'center', 'x_axis', 'normal', 'radius', 'start_angle_deg', 'sweep_angle_deg'],
+  aid_circle: ['kind', 'id', 'center', 'normal', 'radius', 'style'],
+  aid_point: ['kind', 'id', 'position'],
+  aid_text: ['kind', 'id', 'text', 'position', 'text_height_mm'],
+  weld_mark: ['kind', 'id', 'position', 'weld_type'],
+  slope_mark: ['kind', 'id', 'text', 'start', 'end'],
+};
+
+const KNOWN_PRIMITIVE_KINDS = Object.keys(PRIMITIVE_FIELDS) as MbdPrimitiveKind[];
+
+function isKnownPrimitiveKind(value: unknown): value is MbdPrimitiveKind {
+  return typeof value === 'string'
+    && (KNOWN_PRIMITIVE_KINDS as readonly string[]).includes(value);
+}
+
+/** 已知 kind 上出现了白名单以外的字段（只在 strict 模式下算错）。 */
+function hasUnknownPrimitiveFields(value: Record<string, unknown>): string | null {
+  if (!isKnownPrimitiveKind(value.kind)) return null;
+  const allowed = PRIMITIVE_FIELDS[value.kind];
+  const unknown = Object.keys(value).filter(key => !allowed.includes(key));
+  return unknown.length > 0 ? unknown.join(', ') : null;
+}
+
+type PrimitiveVerdict =
+  | Readonly<{ kind: 'ok' }>
+  | Readonly<{ kind: 'unsupported' }>
+  | Readonly<{ kind: 'invalid' }>;
+
+/**
+ * 一条图元的三分类：
+ * - `unsupported`：kind 不在契约里 —— 只有显式开了 `partial` 才只跳过它自己，
+ *   默认按 ADR 0046 整包拒绝；
+ * - `invalid`：认识的 kind 但字段不合法（strict 下还包括契约外字段）—— 永远整包
+ *   拒绝（写错的数据不可信）；
+ * - `ok`：可交付。
+ */
+function classifyPrimitive(
+  value: unknown,
+  options: Readonly<{ strict: boolean; partial: boolean }>,
+): PrimitiveVerdict {
+  if (!isObject(value)) return { kind: 'invalid' };
+  const kindUnknown = typeof value.kind === 'string' && !isKnownPrimitiveKind(value.kind);
+  if (kindUnknown) {
+    return options.partial && !options.strict
+      ? { kind: 'unsupported' }
+      : { kind: 'invalid' };
+  }
+  if (!isPrimitive(value)) return { kind: 'invalid' };
+  if (options.strict && hasUnknownPrimitiveFields(value)) return { kind: 'invalid' };
+  return { kind: 'ok' };
 }
 
 /** Names the offender so a rejected payload stays locatable (ADR 0046). */
@@ -457,8 +524,18 @@ function parseMeta(value: unknown): MbdV2Meta | null {
 /**
  * Strict validation for the external V2 JSON contract. Parquet rows are
  * normalized before this boundary and keep their own per-row diagnostics.
+ *
+ * 默认按 ADR 0046：不认识的图元 kind、认识但字段非法的图元，一律整包拒绝。
+ * 两处可显式放宽 —— `partial`（面板「允许部分显示」，`?mbd_partial=1`）让不认识的
+ * kind 降级成逐条诊断；契约外字段在默认模式下本就被忽略（A2，后端先发字段、前端
+ * 后支持），`strict` 才把它们当错。三种情形见 {@link MbdV2ParseOptions}。
  */
-export function parseMbdV2PipeData(value: unknown): MbdV2ParseResult {
+export function parseMbdV2PipeData(
+  value: unknown,
+  options: MbdV2ParseOptions = {},
+): MbdV2ParseResult {
+  const strict = options.strict === true;
+  const partial = options.partial === true;
   if (!isObject(value)) {
     return { ok: false, error: 'MBD V2 payload must be an object' };
   }
@@ -476,12 +553,29 @@ export function parseMbdV2PipeData(value: unknown): MbdV2ParseResult {
   if (!Array.isArray(value.issues)) {
     return { ok: false, error: 'MBD V2 payload is missing issues array' };
   }
-  const primitiveIndex = value.primitives.findIndex(candidate => !isPrimitive(candidate));
-  if (primitiveIndex >= 0) {
-    return {
-      ok: false,
-      error: primitiveRejection(value.primitives[primitiveIndex], primitiveIndex),
-    };
+  const primitives: MbdPrimitive[] = [];
+  const diagnostics: MbdV2ParseDiagnostic[] = [];
+  for (let index = 0; index < value.primitives.length; index += 1) {
+    const candidate = value.primitives[index];
+    const verdict = classifyPrimitive(candidate, { strict, partial });
+    if (verdict.kind === 'ok') {
+      primitives.push(candidate as MbdPrimitive);
+      continue;
+    }
+    if (verdict.kind === 'unsupported') {
+      const id = isObject(candidate) && isNonEmptyString(candidate.id)
+        ? candidate.id
+        : `#${index}`;
+      const kind = isObject(candidate) && typeof candidate.kind === 'string'
+        ? candidate.kind
+        : 'unknown';
+      diagnostics.push({
+        id,
+        reason: `还不认识的图元 kind：${kind}`,
+      });
+      continue;
+    }
+    return { ok: false, error: primitiveRejection(candidate, index) };
   }
   const parsedIssues = value.issues.map(parseIssue);
   const issueIndex = parsedIssues.findIndex(issue => issue === null);
@@ -499,10 +593,10 @@ export function parseMbdV2PipeData(value: unknown): MbdV2ParseResult {
       version: 'v2',
       input_refno: value.input_refno,
       branch_refno: value.branch_refno,
-      primitives: value.primitives as MbdPrimitive[],
+      primitives,
       meta,
       issues: parsedIssues as MbdV2Issue[],
     },
-    diagnostics: [],
+    diagnostics,
   };
 }

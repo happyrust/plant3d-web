@@ -17,7 +17,14 @@ export type MbdExternalSyncTarget = Pick<
 
 export type MbdExternalSyncDeps = Readonly<{
   /** 实时通道：按 refno 拉取契约数据（HTTP 层错误以 ok:false 或 reject 表达）。 */
-  fetchPipeData(refno: string): Promise<MbdV2ParseResult>;
+  /**
+   * 按 refno 拉取契约数据。`partial` 会传到契约解析层：只放宽「不认识的图元 kind」
+   * 一件事（其余非法一律整包失败），由 `?mbd_partial=1` 驱动。
+   */
+  fetchPipeData(
+    refno: string,
+    options?: Readonly<{ partial?: boolean }>,
+  ): Promise<MbdV2ParseResult>;
   diagnostics: MbdDiagnosticsStore;
   /** 通常为 () => window.location.search。 */
   getSearch(): string;
@@ -159,21 +166,25 @@ export function createMbdExternalSync(
 
       const channel = 'api' as const;
       const sourceId = mbdRefno;
+      const partialEnabled = isMbdPartialEnabled(params.get('mbd_partial'));
       try {
-        const parsed = await deps.fetchPipeData(mbdRefno);
+        const parsed = await deps.fetchPipeData(mbdRefno, { partial: partialEnabled });
         if (!parsed.ok) throw new Error(parsed.error);
         const payload: MbdV2PipeData = parsed.data;
         const channelSkipped = parsed.diagnostics;
         const mapped = mbdV2ToExternalRecords(payload);
         const skipped = [...channelSkipped, ...mapped.skipped];
-        // ADR 0046：先校验、后原子替换。实时 API 负载的任何跳过——契约校验阶段的
-        // 逐条诊断（channelSkipped）与映射失败（mapped.skipped）——都整包拒绝，
-        // 不部分提交。
-        const partialEnabled = isMbdPartialEnabled(params.get('mbd_partial'));
-        if (skipped.length > 0 && !partialEnabled) {
+        // ADR 0046：先校验、后原子替换。原子拒绝只针对**映射失败**（契约认可、
+        // 但映射不出来 —— 这是代码缺陷，半对的数据不可信）。
+        //
+        // 契约层的逐条诊断（`channelSkipped`，A3 起是「还不认识的图元 kind」）不再
+        // 触发整包拒绝：那是后端向前演进的信息，不是本地能判对错的错。它们照旧
+        // 进 diagnostics.skipped（面板可见、常驻提示），其余图元照常提交。
+        const mappedSkipped = mapped.skipped;
+        if (mappedSkipped.length > 0 && !partialEnabled) {
           throw new MbdAtomicRejectionError(
-            `MBD 负载整包拒绝：${skipped.length} 个图元无法映射`
-              + `（首个：${skipped[0]!.id} — ${skipped[0]!.reason}）`,
+            `MBD 负载整包拒绝：${mappedSkipped.length} 个图元无法映射`
+              + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
             payload.issues,
             skipped,
           );
@@ -210,10 +221,16 @@ export function createMbdExternalSync(
             ...(presentation3dDisabled
               ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
               : []),
-            ...(skipped.length > 0
+            ...(mappedSkipped.length > 0
               ? [
-                `mbd_partial=1：允许部分显示，已跳过 ${skipped.length} 个图元`
-                  + `（首个：${skipped[0]!.id} — ${skipped[0]!.reason}）`,
+                `mbd_partial=1：允许部分显示，已跳过 ${mappedSkipped.length} 个图元`
+                  + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
+              ]
+              : []),
+            ...(channelSkipped.length > 0
+              ? [
+                `契约层跳过 ${channelSkipped.length} 个图元`
+                  + `（首个：${channelSkipped[0]!.id} — ${channelSkipped[0]!.reason}）`,
               ]
               : []),
           ],

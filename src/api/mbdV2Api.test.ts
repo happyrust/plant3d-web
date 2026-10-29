@@ -147,6 +147,33 @@ describe('fetchMbdV2PipeData', () => {
     });
   });
 
+  it('partial 透传到契约解析：不认识的 kind 在 partial 下不再整包失败', async () => {
+    const payload = {
+      version: 'v2',
+      input_refno: 'future',
+      branch_refno: 'future',
+      primitives: [{ kind: 'future_dim', id: 'future-1' }],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    };
+    const respond = () => new Response(
+      JSON.stringify(payload),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(respond())));
+    const strictDefault = await fetchMbdV2PipeData('24381_1');
+    expect(strictDefault.ok).toBe(false);
+
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(respond())));
+    const partial = await fetchMbdV2PipeData('24381_1', { partial: true });
+    expect(partial.ok).toBe(true);
+    if (!partial.ok) return;
+    expect(partial.diagnostics).toEqual([
+      { id: 'future-1', reason: '还不认识的图元 kind：future_dim' },
+    ]);
+  });
+
   it('空 refno 不发请求', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

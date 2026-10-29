@@ -152,7 +152,7 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 
 回滚方式：四处改动互不依赖，可逐个 `git checkout -- <file>` 回退；C3 若影响现网联调，先设 `VITE_MBD_ALLOW_QUERY_BACKEND=1` 而不是回退代码。
 
-**未做（下一轮候选）**：阶段 A（A1 fixture 待用户提供真实负载）、B2/B3、C1/C2、D1/D2、E1–E3。
+> 上述「未做」清单已过期：B2/B3 见第二轮，A1–A5 见第三轮（`C2` 由并行会话落地）。**仍未做**：`D1`（layoutMs 量化）、`E1`（`pipeInformation` / `normalizeUserDimensions` 补测，并行会话已部分落地）、`E2`（refno 归一化收口）、`E3`（e2e 回归）。
 
 ### 第二轮（2026-10-29）：B2 + B3
 
@@ -164,6 +164,21 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 门禁：`vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts` → **73 文件 / 548 用例全绿**；`type-check` 440 条 / 127 文件，新增 0、已消失 0；`eslint`（4 个触及文件）0 问题。
 
 **已知边界（下一轮 A5 要补）**：现在能「部分显示」的只有**映射阶段**的跳过（`mapped.skipped`）与契约层将来产出的 `diagnostics`；`parseMbdV2PipeData` 本身仍是「一条图元非法就 `ok:false`」，那条路径在 B3 之前就整包失败了，开关拦不住。也就是说 A2/A3（未知字段容忍、未知 kind 降级）不做完，`offset` / `suppressed_reason` 这类现网故障仍然会整包丢失——B3 只是把「映射坏一条」这一半先接住。
+
+### 第三轮（2026-10-29）：A2 + A3 + A5（按「向前兼容」口径重做）
+
+| ID | 状态 | 落地 | 验收 |
+| --- | --- | --- | --- |
+| A2 | 完成 | `isPrimitive` 去掉 `offset` / `suppressed_reason` 两条守卫：**已知 kind 上的契约外字段一律忽略**（向前兼容）。反向开关 `strict` 用字段白名单把「多出来的字段」判成错 | 旧用例改写：legacy 形状默认 `ok:true`、`strict` 下 `ok:false`（含被点名图元） |
+| A3 | 完成（**默认仍按 ADR 0046**） | `classifyPrimitive` 三分类：不认识 kind / 认识但字段非法 / 可交付。**默认**不认识的 kind 仍整包拒绝；只有显式 `partial`（面板「允许部分显示」/ `?mbd_partial=1`）才降级为逐条 `diagnostics` 并交付其余 | 用例：默认 `ok:false`；`partial` 下 `ok:true` + 2 条 `还不认识的图元 kind` 诊断 + 1 条图元保留；`partial + strict` 再拒；「认识但字段非法」在 `partial` 下仍拒 |
+| A4 | 完成（合并进 A2/A3） | 开关统一为 `MbdV2ParseOptions = { strict?, partial? }`，默认值即 ADR 0046 行为 | 上表三种组合都有用例 |
+| A5 | 完成 | `useMbdExternalSync` 的原子拒绝只针对 **映射失败**（`mapped.skipped`）；契约层逐条诊断不再触发整包拒绝，只进 `diagnostics.skipped` + `notes`；`partial` 一路从 URL → sync → `fetchMbdV2PipeData` → `parseMbdV2PipeData` | 新增用例：只有契约层跳过时照常提交且不弹 toast；`fetchPipeData(refno, { partial })` 的传参有断言 |
+
+**与 ADR 0046 的关系（必须记录）**：ADR 0046 明确要求「出现尚未纳入 V2 契约的图元类型时整包拒绝、不得静默显示部分有效图元」。因此 A3 **没有**把宽容做成默认，而是做成面板上显式、可见、可撤销的开关（打开时面板常驻「已跳过 N 条，当前视图不代表完整标注」）。若产品希望把宽容变成默认，需要先改 ADR 0046，本计划不代为决定。
+
+**新增键位**：`?mbd_partial=1`（原有调试开关风格；关掉即回到 ADR 行为）。
+
+门禁：`vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts` → **75 文件 / 601 用例全绿**；`type-check` 440 条 / 127 文件，新增 0、已消失 0；`eslint`（6 个触及文件）0 问题。
 
 ### 与工作区其他改动的边界（勿混提交）
 

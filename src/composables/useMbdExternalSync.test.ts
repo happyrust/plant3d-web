@@ -101,7 +101,7 @@ describe('createMbdExternalSync', () => {
 
     await harness.sync.sync(harness.target);
 
-    expect(harness.fetchPipeData).toHaveBeenCalledWith('24381_145712');
+    expect(harness.fetchPipeData).toHaveBeenCalledWith('24381_145712', { partial: false });
     expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
     const [source, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
       .mock.calls[0]!;
@@ -399,6 +399,36 @@ describe('createMbdExternalSync', () => {
     expect(harness.diagnostics.set).toHaveBeenCalledTimes(3);
   });
 
+  /**
+   * A5（2026-10-29）：原子拒绝只留给「映射失败」。契约层的逐条诊断（A3 起是
+   * 还不认识的图元 kind）不该让整条分支变空白——它们进 diagnostics.skipped
+   * 与 notes，其余图元照常提交，也不弹错误 toast。
+   */
+  it('submits the rest when only the contract layer skipped units', async () => {
+    const harness = createHarness({
+      search: '?mbd_refno=A',
+      fetchPipeData: vi.fn(async () => ({
+        ok: true as const,
+        data: contractPayload(),
+        diagnostics: [{ id: 'future-1', reason: '还不认识的图元 kind：future_dim' }],
+      })),
+    });
+
+    await harness.sync.sync(harness.target);
+
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)!;
+    expect(records.map((record: { id: string }) => record.id)).toEqual(['dim-1']);
+    const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    expect(diagnostics.loadError).toBeUndefined();
+    expect(diagnostics.skipped).toEqual([
+      { id: 'future-1', reason: '还不认识的图元 kind：future_dim' },
+    ]);
+    expect(diagnostics.notes).toEqual([expect.stringContaining('契约层跳过 1 个图元')]);
+    expect(harness.emitToast).not.toHaveBeenCalled();
+  });
+
   it('keeps the atomic rejection by default and submits everything with ?mbd_partial=1', async () => {
     const good = contractPayload().primitives[0]!;
     const broken = contractPayload({ primitives: [good, good] });
@@ -432,6 +462,8 @@ describe('createMbdExternalSync', () => {
     expect(diagnostics.notes).toEqual([expect.stringContaining('mbd_partial=1')]);
     // 部分显示不是失败，不该弹错误提示。
     expect(partial.emitToast).not.toHaveBeenCalled();
+    // 部分显示必须一路传到契约解析层，否则「不认识的 kind」在解析阶段就已整包失败。
+    expect(partial.fetchPipeData).toHaveBeenCalledWith('A', { partial: true });
   });
 
   it('re-arms the failure toast after a successful sync', async () => {

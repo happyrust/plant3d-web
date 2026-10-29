@@ -116,7 +116,13 @@ describe('parseMbdV2PipeData', () => {
     expect(result).toMatchObject({ ok: false });
   });
 
-  it('rejects removed linear-dimension wire fields', () => {
+  /**
+   * A2（2026-10-29）：`offset` / `suppressed_reason` 是 2026-07 之前图元上的旧字段
+   * （rs-mbd 已删，抑制信息改走 `issues[category=suppress]`）。默认模式下它们
+   * **不再整包失败**——多出来的字段一律忽略，前端不替后端判新旧；只有 strict
+   * 模式（契约回归 / 联调对账）才把这种形状当错。
+   */
+  it('ignores removed linear-dimension wire fields by default and rejects them in strict mode', () => {
     const legacy = {
       version: 'v2',
       input_refno: 'legacy',
@@ -136,7 +142,69 @@ describe('parseMbdV2PipeData', () => {
       issues: [],
     };
 
-    expect(parseMbdV2PipeData(legacy)).toMatchObject({ ok: false });
+    const tolerant = parseMbdV2PipeData(legacy);
+    expect(tolerant.ok).toBe(true);
+    if (!tolerant.ok) return;
+    expect(tolerant.data.primitives).toHaveLength(1);
+    expect(tolerant.diagnostics).toEqual([]);
+
+    const strict = parseMbdV2PipeData(legacy, { strict: true });
+    expect(strict).toMatchObject({ ok: false });
+    if (strict.ok) return;
+    expect(strict.error).toContain('legacy-linear');
+  });
+
+  /**
+   * A3（2026-10-29）：不认识的图元 kind —— 默认仍按 ADR 0046 整包拒绝，只有显式
+   * `partial`（面板「允许部分显示」/ `?mbd_partial=1`）才降级成逐条诊断。「认识的
+   * kind 但字段非法」在任何模式下都整包拒绝——「不认识」和「写错了」不是一回事。
+   */
+  it('downgrades unknown primitive kinds only when partial display is requested', () => {
+    const linear = {
+      kind: 'linear_dim',
+      id: 'dim-1',
+      start: [0, 0, 0],
+      end: [1, 0, 0],
+      text: '1000',
+      extension_lines: [],
+      arrow_lines: [],
+      label_anchor: [0.5, 0, 0],
+    };
+    const payload = {
+      version: 'v2',
+      input_refno: 'future',
+      branch_refno: 'future',
+      primitives: [
+        { kind: 'future_dim', id: 'future-1', text: 'x' },
+        linear,
+        { kind: 'future_dim', id: 'future-2' },
+      ],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    };
+
+    // 默认：ADR 0046，整包拒绝。
+    expect(parseMbdV2PipeData(payload)).toMatchObject({ ok: false });
+
+    // partial：跳过不认识的、交付其余，并逐条记诊断。
+    const partial = parseMbdV2PipeData(payload, { partial: true });
+    expect(partial.ok).toBe(true);
+    if (!partial.ok) return;
+    expect(partial.data.primitives.map(primitive => primitive.id)).toEqual(['dim-1']);
+    expect(partial.diagnostics).toEqual([
+      { id: 'future-1', reason: '还不认识的图元 kind：future_dim' },
+      { id: 'future-2', reason: '还不认识的图元 kind：future_dim' },
+    ]);
+
+    // strict 把 partial 的宽容也收回。
+    expect(parseMbdV2PipeData(payload, { partial: true, strict: true }))
+      .toMatchObject({ ok: false });
+
+    // 「写错了」不是「不认识」：认识的 kind 字段非法，partial 也整包拒绝。
+    expect(parseMbdV2PipeData({
+      ...payload,
+      primitives: [{ ...linear, start: [0, 0] }],
+    }, { partial: true })).toMatchObject({ ok: false });
   });
 
   /**

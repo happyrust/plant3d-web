@@ -135,7 +135,7 @@ export const MBD_RESPONSE_MAX_BYTES = 20 * 1024 * 1024;
  */
 export async function fetchMbdV2PipeData(
   refno: string,
-  options: Readonly<{ signal?: AbortSignal }> = {},
+  options: Readonly<{ signal?: AbortSignal; partial?: boolean }> = {},
 ): Promise<MbdV2ParseResult> {
   const normalized = refno.trim();
   if (!normalized) {
@@ -195,7 +195,8 @@ export async function fetchMbdV2PipeData(
       };
     }
     const payload = await parseJsonResponse<unknown>(response, url);
-    return parseMbdV2PipeData(payload);
+    // `partial` 只放宽「不认识的图元 kind」一件事（面板「允许部分显示」）。
+    return parseMbdV2PipeData(payload, { partial: options.partial === true });
   };
 
   try {
