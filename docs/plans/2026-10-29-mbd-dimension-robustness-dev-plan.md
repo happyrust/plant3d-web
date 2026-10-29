@@ -7,11 +7,13 @@
 - 关键前提 ~~更新：后端已在负载中发送 `offset` / `suppressed_reason`（用户 2026-10-29 确认）→ 契约整包拒绝已从「未来风险」变为现网故障~~
   → **2026-10-29 复核推翻**：`rs-mbd/crates/rs-mbd/src/contract.rs` 记录 2026-07-20 起抑制信息只进 `issues`、图元上的 `suppressed_reason` 已删除，`LinearDim` 无 `offset`；本机实抓 2 条现网负载（77 / 73 图元）亦不含这两个字段。R1 定位下调为「向前兼容缺口 + 误伤风险」，阶段 A 保留但不属止血优先级。详见排查报告 R1 的复核框。
 
+> **状态（2026-10-29 对齐）**：A1–A5、B1–B4、C1–C3、D2、D3、E1、E2 已落地（§9 四轮）；剩余 **D1 / E3** 已并入现行计划 [`2026-10-29-mbd-dimension-remaining-work-dev-plan.md`](2026-10-29-mbd-dimension-remaining-work-dev-plan.md) 的 W4。本文不再派工，只保留记录；门禁基线以上游计划 §14「门禁基线总表」为准。
+
 ## 0. 方法与限制（先声明）
 
 | 项 | 状态 |
 | --- | --- |
-| `plannatator` skill | **本环境不存在**：`~/.claude/skills` 仅 `archify`，`~/.cursor/skills` 为空，`~/.factory/skills` 仅 `ct` / `devin`，`where /r %USERPROFILE% plannatator*` 无结果。`2026-10-28` 计划亦记录同一结论。本文沿用该计划的人工编排格式（阶段 → 任务 → 验收），未伪造 skill 产物 |
+| `plannatator` skill | ~~本环境不存在~~ **2026-10-29 更正**：工具在 `C:\Users\dpc\AppData\Local\plannotator\plannotator.exe`（拼写是 plannotator）；本文未走门禁，剩余工作已并入现行计划（见文首）并在那里过门禁。原记录：`~/.claude/skills` 仅 `archify`，`~/.cursor/skills` 为空，`~/.factory/skills` 仅 `ct` / `devin`，`where /r %USERPROFILE% plannatator*` 无结果。`2026-10-28` 计划亦记录同一结论。本文沿用该计划的人工编排格式（阶段 → 任务 → 验收），未伪造 skill 产物 |
 | 证据方式 | 全部 `文件:行` 由本轮只读排查逐条核出；未跑实机渲染，未跑测试 |
 | 结论强度 | 契约拒绝规则、死代码、空参数、无超时为**代码直读确认**；影响面（多少 BRAN 会空白）未实测，依赖阶段 A 的取数 |
 
@@ -110,7 +112,7 @@ npx eslint <触及文件>
 npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 ```
 
-准入标准：单测数量只增不减（当前 471）；`type-check` 零新增；改动文件 `eslint` 零问题；触及 `/api/mbd` 时必须有新用例。
+准入标准：单测数量只增不减（当前基线以上游计划 §14「门禁基线总表」为准，本文写作时为 471）；`type-check` 零新增；改动文件 `eslint` 零问题；触及 `/api/mbd` 时必须有新用例。
 
 ## 6. 风险
 
@@ -125,7 +127,7 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 ## 7. 明确不做
 
 - 不在此计划里做 PML 算法搬迁（属上游 T3.3–T3.6 / T4 / T5 / T6）。
-- 不改渲染外观（主题、字高、去重叠策略）。
+- 不改渲染外观（主题、字高、去重叠策略）。（2026-10-29 注：LOD 阈值拆分与退化四边形回退是上游计划的独立任务 T7.6，不属本计划，见上游 §13.15。）
 - 不做 2k 规模的分帧渲染（D1 只量化，D2 只剪触发条件）。
 - 不为 `offset` 造前端派生几何——语义未确认前只做「不丢数据」。
 
@@ -152,7 +154,7 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 
 回滚方式：四处改动互不依赖，可逐个 `git checkout -- <file>` 回退；C3 若影响现网联调，先设 `VITE_MBD_ALLOW_QUERY_BACKEND=1` 而不是回退代码。
 
-> 上述「未做」清单已过期：B2/B3 见第二轮，A1–A5 见第三轮（`C2` 由并行会话落地）。**仍未做**：`D1`（layoutMs 量化）、`E1`（`pipeInformation` / `normalizeUserDimensions` 补测，并行会话已部分落地）、`E2`（refno 归一化收口）、`E3`（e2e 回归）。
+> 上述「未做」清单已过期：B2/B3 见第二轮，A1–A5 见第三轮，C1/C2/D2/E1/E2 见第四轮（补记）。**仍未做**：`D1`（layoutMs 量化）、`E3`（e2e 回归）——均已并入现行计划 W4。
 
 ### 第二轮（2026-10-29）：B2 + B3
 
@@ -179,6 +181,20 @@ npx playwright test --config=playwright.novideo.config.ts   # 触及 e2e 时
 **新增键位**：`?mbd_partial=1`（原有调试开关风格；关掉即回到 ADR 行为）。
 
 门禁：`vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts` → **75 文件 / 601 用例全绿**；`type-check` 440 条 / 127 文件，新增 0、已消失 0；`eslint`（6 个触及文件）0 问题。
+
+### 第四轮（2026-10-29，补记）：并行会话与零散落地
+
+> 本轮是 2026-10-29 对齐时按提交记录补的，未重新实测门禁；当前数字以上游计划 §14 为准。
+
+| ID | 状态 | 提交 | 说明 |
+| --- | --- | --- | --- |
+| A1 | 完成 | f73adf91 | 现网负载 fixture `src/fixtures/mbd-v2/live-isodim-24381-145018.json` 入库，并复核 R1 前提不成立（见文首） |
+| C1 / C2 | 完成 | 6cb0588d | `src/api/mbdV2Api.ts:152` `AbortController`、`:132` Content-Length / `MBD_RESPONSE_MAX_BYTES`（与第一轮同一提交，由并行会话落地） |
+| D2 | 完成 | 47de00ac | 纯相机失效且投影未变时跳过重排 |
+| E2 | 完成 | ff3836af | refno 归一化收口到 `src/utils/refnoKey.ts` 的 `toRefnoKey` |
+| E1 | 完成（测试文件 2026-10-29 入库） | f76729df | `src/dimension/adapters/pipeInformation.test.ts`、`normalizeUserDimensions.test.ts` 此前一直是未跟踪文件；本次入库时未跑门禁 |
+
+剩余 D1 / E3 → 现行计划 W4。
 
 ### 与工作区其他改动的边界（勿混提交）
 

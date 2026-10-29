@@ -5,13 +5,15 @@
 - 参照基准：`D:\work\plant-code\old\vendor\MBD`（PML/E3D，需求事实源）· `vendor/plant-mbd`（Rust 求解器 + 冻结契约）· `gen-model`（宿主路由）
 - 被审对象：`src/dimension/**`、`src/api/mbdV2Api.ts`、`src/composables/useMbdExternalSync.ts`、`src/composables/useMbdDiagnosticsStore.ts`
 
+> **状态（2026-10-29 对齐）**：本文自 §12 起是执行日志，§7 的阶段表已不是现行路线。**现行计划见 [`2026-10-29-mbd-dimension-remaining-work-dev-plan.md`](2026-10-29-mbd-dimension-remaining-work-dev-plan.md)**——它合并了本文与[健壮性计划](2026-10-29-mbd-dimension-robustness-dev-plan.md)的剩余工作，门禁记录在其 §9。本文此后只追加落地记录（§13.x）与门禁基线总表（§14），不再新增任务；任务状态以 §12.4 的对齐表为准（§13.10 的 T4.1–T4.5 已改编号为 T7.1–T7.5）。
+
 ## 0. 本轮的方法与限制（先声明，避免误读结论强度）
 
 | 项 | 状态 |
 | --- | --- |
 | 侦察方式 | 5 个并行子代理：内核布局层 / vendor PML 算法 / 后端契约链路 / PML 朝向与避让 / 门禁与未完成项；全部只读，未改任何文件 |
 | CT 主脑复核 | **未完成**。4 个 CT 窗口（`bc-5716c2fd…` / `bc-cbe95b28…` / `bc-1d0a7c54…` / `bc-247197f3…`）以 `claude-fable-5-1-thinking-max` 派单，全部返回 `model_usage_exhausted`（配额耗尽），无输出 |
-| `plannatator` | **本环境不存在**。`where.exe plannatator`、`~/.factory/skills`、`~/.factory/tools`、MCP 工具清单、`D:\work` 全盘均无。计划改用本文件的人工编排格式，结构与 plannatator 的「阶段 → 任务 → 验收」一致 |
+| `plannatator` | ~~本环境不存在~~ **2026-10-29 更正**：工具在 `C:\Users\dpc\AppData\Local\plannotator\plannotator.exe`（拼写是 plannotator，当时按 plannatator 搜所以没找到）；本文与健壮性计划因此都没走过门禁，现行计划（见文首）已补走，记录在其 §9。原记录：`where.exe plannatator`、`~/.factory/skills`、`~/.factory/tools`、MCP 工具清单、`D:\work` 全盘均无。计划改用本文件的人工编排格式，结构与 plannatator 的「阶段 → 任务 → 验收」一致 |
 | 结论强度 | 所有 `文件:行号` 证据由子代理逐条核出，Lead 抽查了关键路径（`explicit.ts` / `dimension3d.ts` / `layoutViewport.ts` / `theme.ts` / `mbdV2Contract.ts` / `mbdV2ExternalAnnotations.ts` / `useMbdExternalSync.ts` / `declutterPolicy.ts` / `occlusionPolicy.ts`）。未做实机渲染复验 |
 
 ---
@@ -408,13 +410,24 @@ T5.1..T5.7（跨仓，T5.3 依赖 T3.1-T3.4 的算法口径）──────
 
 | 项 | 状态 |
 | --- | --- |
-| T2.1 / C3 `layoutAuthority` | **已落地**，见 §12.6 |
+| T2.1 / C3 `layoutAuthority` | **已落地**，见 §12.5（2026-10-29 前编号为 §12.6） |
 | T1.1–T1.7 | **已落地**，见 §12.7 |
 | T2.3 / C6 `aid_line.style` | **已落地**，见 §12.7 |
 | T3.1 / T3.2 polar 纯数值层 | **已落地**，见 §12.7 |
-| T3.3–T3.6 / T4 / T5 / T6 | 未开始 |
+| ~~T3.3–T3.6 / T4 / T5 / T6~~ | ~~未开始~~（2026-10-28 的记录；下列各行为 2026-10-29 对齐后的状态） |
+| T0.1 | 实质完成——C4 复核结论随 T2.2 落地（§12.1），无单独记录 |
+| T0.3 性能基线 | 未做，`docs/verification/` 下无 MBD 性能记录 → 现行计划 W4 |
+| T3.3a / T3.3b / T3.3c | **已落地**，见 §13.11（5c7ee980）/ §13.14（3f298e7c） |
+| T3.4–T3.6 | 未开始（`mbd_polar` 全源码零命中；T3.5 只有 §13.13 的落点预判）→ 现行计划 W1 |
+| §7 原 T4.1–T4.6（契约扩展） | 未开始（`meta.coverage` 在 adapters 零命中）。2026-10-29 裁决：保留 → 现行计划 W3 |
+| T7.1–T7.5（§13.10 新增，原误用 T4.1–T4.5 编号） | **已落地**，见 §13.10（1a40b46a、63d566e、483713ee + 68f36d5e） |
+| T7.6 LOD 阈值拆分 + 退化四边形回退（计划外批次） | **已落地**，见 §13.15（12f4bb1e） |
+| T5.1 / T5.2 | **已落地**，见 §13.3 / §13.8（plant-mbd 0b89b76、gen-model 1caf3a84） |
+| T5.3–T5.7 | 未开始（plant-mbd 停在 63d566e）→ 现行计划 W2 |
+| T6.1–T6.5 | 未开始，无记录 → 现行计划 W5 |
+| 健壮性计划 D1 / E3 | 未做 → 现行计划 W4（其余 A–E 项见该计划 §9） |
 
-### 12.6 B4：`layoutAuthority`（T2.1 / C3，已落地）
+### 12.5 B4：`layoutAuthority`（T2.1 / C3，已落地）
 
 **修法与计划原稿的偏差**：原稿写「`layoutViewport` 按 authority 分工」，实际 **kernel 一行未改**——`solver` 的语义就是现有的 `labelPinned: true`（`resolveLabelCollisions.ts:324-331`：pinned 只 `occupancy.insert` 占位、不进 `automatic` 候选，因此不移动、不补引线）。所以字段只在记录层显式化，由唯一归一入口折算成布尔送进内核，`goldens.test.ts.snap` 不变。
 
@@ -430,7 +443,7 @@ T5.1..T5.7（跨仓，T5.3 依赖 T3.1-T3.4 的算法口径）──────
 **门禁**：`npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts` → **60 文件 / 379 通过**（+7）；`npm run type-check` 新增 0；`npx eslint`（4 个文件）0 问题。
 
 
-### 12.5 本轮发现的范围外改动（需单独处置）
+### 12.6 本轮发现的范围外改动（需单独处置）
 
 执行 B3 期间，工作区出现一批不在任何 brief 声明范围内的改动，来源不明（时间戳 17:26，与 B3 同批）：
 
@@ -556,14 +569,14 @@ T5.1..T5.7（跨仓，T5.3 依赖 T3.1-T3.4 的算法口径）──────
 ```
 ① ✅ T5.1   angle.rs（已提交 plant-mbd 0b89b76，六份金样已审阅重录）
 ② ✅ T5.2   PPoint.bore 宿主透传（gen-model 1caf3a84，branch_query.rs:667 一行）
-③ ✅ T4.1   前端契约扩展 AidText.text_height_mm（先接受可选字段，1a40b46a）
-④ ✅ T4.2   plant-mbd mirror text_height_mm + angle.rs 下发 cheight/2 + 重录金样（63d566e）
-⑤ ✅ T4.4   过期注释（DimensionPanelDock.vue:47-49）
-⑥ ✅ T4.5   angle_dim golden 快照（+2 it，559 → 561）
-⑦ T4.3（explicit 弧像素下限，落点 explicit.ts:341-351）
-⑧ T3.3a    PolarReference 类型（前端串行链起点）
-⑨ T3.3b ∥ T3.3c
-⑩ T3.4 → T3.5 → T3.6
+③ ✅ T7.1（原 T4.1）   前端契约扩展 AidText.text_height_mm（先接受可选字段，1a40b46a）
+④ ✅ T7.2（原 T4.2）   plant-mbd mirror text_height_mm + angle.rs 下发 cheight/2 + 重录金样（63d566e）
+⑤ ✅ T7.4（原 T4.4）   过期注释（DimensionPanelDock.vue:47-49）
+⑥ ✅ T7.5（原 T4.5）   angle_dim golden 快照（+2 it，559 → 561）
+⑦ ✅ T7.3（原 T4.3）explicit 弧像素下限（483713ee + 68f36d5e，落点 explicit.ts:341-351；561 → 564）
+⑧ ✅ T3.3a（5c7ee980，564）    PolarReference 类型（前端串行链起点）
+⑨ ✅ T3.3b ∥ T3.3c（3f298e7c，见 §13.14）
+⑩ T3.4 → T3.5 → T3.6（→ 现行计划 W1）
 ⑪ T5.5（调整焊 +len）∥ T5.6（PCOM）
 ⑫ T5.4（pluslen 小尺寸拆行）
 ⑬ T5.3（occupancy）→ T5.7（跨段让位，依赖 T5.3）
@@ -670,15 +683,17 @@ parseMbdV2PipeData (mbdV2Contract.ts:433)
 
 **两处过期注释待修**：`DimensionPanelDock.vue:48`（称 `angle_dim`「有契约无产出」）、`mbdV2Contract.ts:6-8`（同类表述）——后端 `angle.rs` 已落地，两处均需改为「`aid_arc` / `aid_circle` / `aid_point` 无 live 产出方」。
 
-### 13.10 由 §13.9 新增的任务（阶段 4 / 前端）
+### 13.10 由 §13.9 新增的任务（T7.1–T7.5，前端 + 求解器）
+
+> **编号更正（2026-10-29）**：本表原用 T4.1–T4.5，与 §7 阶段 4 的契约扩展任务（meta.coverage / cheight_mm / ori / object_refno / source_version / isoline 列表）撞号，导致后者从状态表里消失。现改为 **T7.1–T7.5**；本节下文正文里的「T4.x」均指本表的 T7.x，§7 的原 T4.1–T4.6 仍指契约扩展（状态见 §12.4）。
 
 | ID | 内容 | owned_paths | 依赖 | 优先级 |
 | --- | --- | --- | --- | --- |
-| **T4.1** | 契约扩展 `AidText.text_height_mm?: number`（前端先接受可选字段 → `plant-mbd` 契约 mirror → `angle.rs` 开始下发 `cheight/2`） | `src/dimension/adapters/mbdV2Contract.ts` + `.test.ts`、`src/dimension/adapters/mbdV2ExternalAnnotations.ts` + `.test.ts` | 无 | **✅ 已提交 `1a40b46a`** |
-| **T4.2** | `plant-mbd` 侧 mirror `AidText.text_height_mm` + `angle.rs` 填 `Some(cheight/2)` + 重录金样 | `contract.rs`、`angle.rs`、`slope.rs`（编译修复）、`contract_guard.rs`、`fixtures/golden/` | T4.1 落地 | **✅ 已提交 `63d566e`** |
-| **T4.3** | explicit 弧的最小像素半径（复用 `theme.minArcRadiusPx`） | **`src/dimension/kernel/layout/explicit.ts` + `.test.ts`**（见下方落点更正） | 无 | 中（解 D3） |
-| **T4.4** | 修两处过期注释 | `src/dimension/ui/DimensionPanelDock.vue`（`mbdV2Contract.ts` 经核实无需改） | 无 | **✅ 完成** |
-| **T4.5** | 补 `angle_dim` golden 快照（含主文字 + 2 条 `aid_text`） | `src/dimension/kernel/goldens.test.ts` | ✅ T4.1/T4.2 已落地 | **✅ 完成** |
+| **T7.1**（原 T4.1） | 契约扩展 `AidText.text_height_mm?: number`（前端先接受可选字段 → `plant-mbd` 契约 mirror → `angle.rs` 开始下发 `cheight/2`） | `src/dimension/adapters/mbdV2Contract.ts` + `.test.ts`、`src/dimension/adapters/mbdV2ExternalAnnotations.ts` + `.test.ts` | 无 | **✅ 已提交 `1a40b46a`** |
+| **T7.2**（原 T4.2） | `plant-mbd` 侧 mirror `AidText.text_height_mm` + `angle.rs` 填 `Some(cheight/2)` + 重录金样 | `contract.rs`、`angle.rs`、`slope.rs`（编译修复）、`contract_guard.rs`、`fixtures/golden/` | T4.1 落地 | **✅ 已提交 `63d566e`** |
+| **T7.3**（原 T4.3） | explicit 弧的最小像素半径（复用 `theme.minArcRadiusPx`） | **`src/dimension/kernel/layout/explicit.ts` + `.test.ts`**（见下方落点更正） | 无 | **✅ 已提交 `483713ee`（实现 + angle_dim golden）/ `68f36d5e`（3 条用例）**，解 D3；561 → 564 |
+| **T7.4**（原 T4.4） | 修两处过期注释 | `src/dimension/ui/DimensionPanelDock.vue`（`mbdV2Contract.ts` 经核实无需改） | 无 | **✅ 完成** |
+| **T7.5**（原 T4.5） | 补 `angle_dim` golden 快照（含主文字 + 2 条 `aid_text`） | `src/dimension/kernel/goldens.test.ts` | ✅ T4.1/T4.2 已落地 | **✅ 完成** |
 
 **T4.3 落点更正（侦察结论，2026-10-29）**：原计划写的 `mbdV2ExternalAnnotations.ts` 的 `mappedArc` 是错的，三个候选逐条排除：
 
@@ -733,7 +748,7 @@ parseMbdV2PipeData (mbdV2Contract.ts:433)
 
 **验证**：`npx eslint` 0 问题；`npx tsc --noEmit` 单文件 0 错误；维度全量回归 564 通过（新增文件无消费者，数字未变）。
 
-### 13.12 T3.3b / T3.3c 派工要点（进行中）
+### 13.12 T3.3b / T3.3c 派工要点（已落地 3f298e7c，记录见 §13.14）
 
 **T3.3b `isoSheet.ts`**（`getDetail:151-292` 逐值等价）：
 
@@ -762,6 +777,62 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 | 现成件 | 位置 | 用途 |
 | --- | --- | --- |
 | `LabelOccupancy` | `collision/resolveLabelCollisions.ts:64-131` | 64 px 网格占用；含 viewport 裁剪（`:79-88`）防「投影到 1e5–1e9 px 的 sliver 把网格撑爆」——`all-pipes sweep 2026-09-14` 实测过 `RangeError: Map maximum size exceeded` |
-| `convexQuadsOverlap` | `layout/declutterPolicy.ts:72-85` | 凸四边形分离轴判定；配合 `quadBracketsLabel`（`:53-58`，面积比 0.05..1.2 才可信）处理近相机平面的退化四边形 |
+| `convexQuadsOverlap` | `layout/declutterPolicy.ts:72-85` | 凸四边形分离轴判定；配合 `quadBracketsLabel`（`:53-58`，面积比 0.05..1.2 才可信；T7.6 引入，见 §13.15）处理近相机平面的退化四边形 |
 
 **关键依赖**：T3.4 的 `place()` **必须返回排序候选列表**，不能只返回单个最优。理由是 T3.5 要在像素域否决候选并降级——若只给一个最优，一旦它重叠就只能整体放弃。PML 本来就有这份数据：`:1261` 的提前退出分支因 `ifAcceptableToQuit = false`（`:1163`）恒假，每个轴向单元的最优都进了 `alldisbests`，`:1273-1281` 已排序，只取 `[1]` 是**丢弃**而非「本来就没有」。
+
+### 13.14 T3.3b / T3.3c 落地记录（2026-10-29，补记）
+
+**提交**：前端 `3f298e7c` — 4 文件，+1049 行：`polar/reference/isoSheet.ts`（239 行）+ `isoSheet.test.ts`（218 行）、`polar/reference/camera.ts`（269 行）+ `camera.test.ts`（323 行）。
+
+| 导出 | 位置 | 对应 §13.12 要点 |
+| --- | --- | --- |
+| `isoSheetReference(params: IsoSheetParams): PolarReference` | `isoSheet.ts:176` | 2D 轴测参考系；`IsoSheetParams` 承载 PML `getDetail` 的构造输入 |
+| `cameraShowDir(projector, axis)` | `camera.ts:112` | 相机 forward 投到垂直管轴的平面；沿轴看返回 `null` |
+| `hysteresisShowDir(previous, candidate, enterDeg, exitDeg)` | `camera.ts:176` | `DEFAULT_ENTER_DEG = 1` / `DEFAULT_EXIT_DEG = 3` 滞回 |
+| `cameraReference(input)` | `camera.ts:244` | 3D 相机参考系，`kind: 'camera'` |
+
+**补记的边界**：本记录是 2026-10-29 对齐时补的，只核对了导出、行号与提交规模，**未逐条复核** §13.12 的要点（`orthogonal` 返 null 的兕底取法、反平行分支、`mainDimDir` 恒 `null`）；提交时**没有留下门禁数字**。两项都列入现行计划 W0 的核对清单。`kernel/index.ts` 未导出，与 §13.12「不新建 barrel，留给 T3.4」一致。
+
+### 13.15 T7.6 LOD 分层阈值拆分 + 退化四边形去重叠回退（计划外批次，2026-10-29 登记）
+
+**来源**：工作区里一批未登记在任何计划的内核改动（12 个源码 / 测试文件，+302 / −137 行），2026-10-29 审核时发现，裁决为「保留，登记为正式任务并单独提交」。**提交：`12f4bb1e`**。
+
+| 文件 | 内容 |
+| --- | --- |
+| `kernel/theme.ts` | `DimensionTheme` 新增 `lodSecondaryMinPx` / `lodDetailMinPx`；`SOLVESPACE_DIMENSION_THEME` 取 **0 / 18**。依据（源码注释）：现网 MBD 组字高 2 mm vs 27 mm，投影后 0.12 px vs 1.5 px，原先按同一投影高度门槛会把 secondary 整层藏掉 |
+| `kernel/layout/shared/lod.ts` | `lodSecondaryFar` → `projectedPx < theme.lodSecondaryMinPx`；`lodDetailFar` → `projectedPx < theme.lodDetailMinPx`。secondary 阈值取 0 即**次级层不再因投影高度被隐藏** |
+| `kernel/layout/tagBillboard.ts:236` | `closeUp` 改用 `theme.lodDetailMinPx` |
+| `kernel/layout/declutterPolicy.ts` | 新增 `quadArea` / `quadBracketsLabel`（四边形面积与 AABB 面积比在 0.05..1.2 内才可信）；`declutterOverlaps` 在任一四边形退化时回退到 AABB 判重。依据（源码注释）：近相机平面的投影四边形退化，屏上残留 79 个重叠标签，面积比最高 1.3e5 |
+| `kernel/geometry/sceneGeometry.ts`、`kernel/types.ts` | 注释（`projectTextFrameQuad` 退化情形说明） |
+| 6 个测试文件 | `declutterPolicy.test.ts`（+37）、`explicit.test.ts`（213 行改动）、`lod.test.ts`、`dimension3d.test.ts`、`tagBillboard.test.ts`、`theme.test.ts` |
+
+**决策记录**：
+
+- 这是**渲染行为变更**（LOD 可见性 + 去重叠胜负），与健壮性计划 §7「不改渲染外观」相抵；按 2026-10-29 裁决以独立任务 T7.6 入库，不并入健壮性计划。
+- 阈值 0 / 18 与 0.05..1.2 的取值来自源码注释里的现场数据，**没有** A/B 截图或量化记录。现行计划 W0 要求补一组固定相机前后对比截图，并确认 `theme.test.ts` 里的钉子覆盖这两个新字段。
+- 门禁数字：入库时未跑（按会话约定由用户本机执行），**待补**到 §14。
+
+---
+
+## 14. 门禁基线总表（两份计划共用，只增不减）
+
+> 本表是尺寸链 vitest 回归数字的唯一权威记录；§5.2 / §12.2 / §12.5 / §12.7 / §13.6 / §13.10 / §13.11 与健壮性计划 §2 / §9 里的数字都是它的历史切片。**各行的命令范围不同，数字不能跨范围直接比较**——这正是之前「两套计数各记各的」的根源。新批次在此追加一行，不再在各自小节另记。范围缩写：**S0** = `src/dimension src/composables/useMbdExternalSync.test.ts`；**S1** = S0 + `src/api/mbdV2Api.test.ts`；**S2** = S1 + `src/utils/refnoKey.test.ts`（§13.6 口径）。
+
+| 顺序 | 时点 / 批次 | 范围 | 文件 / 通过 | 记录位置 | 对应提交 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 2026-10-28 审计基线 | S0 | 58 / 362 | §5.2 | — |
+| 2 | 2026-10-28 第一批（T0.2 / T1.1 / T2.2 / T1.7）+ B4 layoutAuthority | S0 | 60 / 379 | §12.2、§12.5 | — |
+| 3 | 2026-10-28 晚 累计（T1.x / T2.3 / T3.1 / T3.2） | S0 | 70 / 471 | §12.7；健壮性 §2 | — |
+| 4 | 健壮性第一轮 B1 + B4 + C3 + D3（+ C1 / C2） | S1 | 71 / 487 | 健壮性 §9 | 6cb0588d |
+| 5 | 健壮性第二轮 B2 + B3 | S1 | 73 / 548 | 健壮性 §9 | b29f7031 |
+| 6 | T7.1 text_height_mm | S2 | 74 / 559 | §13.10 | 1a40b46a |
+| 7 | T7.5 angle_dim golden | S2 | 74 / 561 | §13.6、§13.10 | 483713ee |
+| 8 | T7.3 角弧下限 3 条用例 + T3.3a（纯类型，+0） | S2 | 564 通过 | §13.11 | 68f36d5e、5c7ee980 |
+| 9 | 健壮性第三轮 A2–A5 | S1 | 75 / 601 | 健壮性 §9 | 5b1bdfd0（前有 ff3836af E2、47de00ac D2、f73adf91 A1 fixture） |
+| 10 | T3.3b / T3.3c | — | **未记** | §13.14 | 3f298e7c |
+| 11 | E1 两份适配器测试入库 | — | **未记** | 健壮性 §9 第四轮 | f76729df |
+| 12 | T7.6 LOD / 去重叠 | — | **未记（待用户本机跑后补）** | §13.15 | 12f4bb1e |
+| 13 | **当前 HEAD 的真实数字** | S2 | **待跑** | 现行计划 W0 | — |
+
+**类型基线**：`npm run type-check` 自 §5.2 起始终是 **440 条 / 127 文件，新增 0 / 已消失 0**，最后一次实测在第 9 行（5b1bdfd0）；第 10–12 行之后未再实测。
