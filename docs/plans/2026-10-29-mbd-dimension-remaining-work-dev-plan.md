@@ -362,6 +362,28 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 - 「缓存预热」分支彻底排除：`countMs` 那遍已在同一个 `glyphCaches` 上跑过，write 遍全命中，字形**取形**成本为零，成本全在**写顶点**。
 - 优化字形顶点写入（例如把 `offsetVertex` 的临时对象消掉、或对整段字形做一次批量写入）比动分帧结构更划算，因为它同时降低总工作量——而分帧只是摊平。
 
+### 11.3.4 消掉计数遍历（2026-10-30 已实现，收益实测）
+
+§11.3.1 的 ① 分支（「计数遍历占大头就直接消掉」）已落地。原第一遍 `visitSegments` 走完整的 `visitPrimitiveSegments`，**对每一段都构造两次 `offsetVertex` 对象**（`scenePainter.ts:538`），只为了把一个数加一——2k 可见下是 40 万次临时对象分配，全被扔掉。
+
+改成 `countPrimitiveSegments`（`scenePainter.ts:708` 起）：只读缓存长度，不构造任何顶点。三个非字形分支直接算：`scene-line` 恒 1、`scene-path` = `(n−1) + 闭合`、`scene-marker` = cross 2 / 圆 20；字形两分支读 `caches.unit` / `caches.screen` 的长度（并顺带预热，供 write 遍全命中）。`finish(vertexCount)` 本来就只设 drawRange，所以容量不需要提前精确知道。
+
+**实测（同机同日，dev 档，20 次，2 000 可见）：**
+
+| 段 | 改前 p50 / p95 | 改后 p50 / p95 |
+|---|---|---|
+| `countMs` | 7.300 / 10.200 | **1.100 / 2.000** |
+| `writeMs` | 42.400 / 70.500 | **38.100 / 45.300** |
+| `trianglesMs` | 1.200 / 1.700 | 1.000 / 1.400 |
+| `fillsMs` | 0.500 / 0.700 | 0.300 / 0.400 |
+| **paint 合计** | **51.400 / 83.300** | **40.500 / 45.300** |
+
+**p50 −21.2%，p95 −45.6%。** `writeMs` 的 p95 掉得比消掉的 `countMs` 还多（70.5 → 45.3），因为不再有 40 万次临时对象触发 GC 抖动。两次独立测量一致（40.5 / 39.8）。
+
+**等价性证据**：`segmentsByKind` 在改动前后逐项相同（`scene-glyph-run` 202 108、`scene-marker` 3 674、`scene-line` 3 197、`scene-path` 2 672），说明计数公式与原遍历对每个图元类型给出同一个数；painter 14 例全绿（含逐顶点值断言），dimension + debug 85 文件 / 746 例全绿。
+
+**门禁**：`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` → 1 passed (4.2s)，`paintP95Ms` 53.40 → **47.20**（基线 78.6 × 1.2 = 94.32，余量仍在）。
+
 ### 11.3.3 W5-5 判据重述（2026-10-30 自决，动手前置条件）
 
 §11.3 原文的判据是「**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**」。§11.3.2 的实测证明这两条在当前基线下**不能同时成立**：光 `writeMs` 的 p95 就有 69.1 ms，分 2 帧是 34.6 ms/帧，要压到 16 ms 需要 5～6 帧。原判据隐含假设 paint 只有 30 ms 上下，与实测 53～83 ms 不符。

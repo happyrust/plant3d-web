@@ -715,6 +715,58 @@ function fillVertexCount(pointCount: number): number {
   return pointCount >= 3 ? (pointCount - 2) * 3 : 0;
 }
 
+/**
+ * How many line segments a primitive expands to, without building any of the
+ * vertices (W5-5). The first `paint()` pass only needs this number to size the
+ * line buffer; walking the real `visitPrimitiveSegments` for it also allocated
+ * two `SceneVertex` objects per glyph segment — 400k of them at 2k visible
+ * dimensions — for a count nobody kept.
+ *
+ * The glyph cases read the same caches `visitPrimitiveSegments` fills, so
+ * calling this first also warms them for the write pass.
+ */
+function countPrimitiveSegments(
+  primitive: ScenePrimitive,
+  font: LffFont,
+  caches: GlyphCaches,
+): number {
+  switch (primitive.kind) {
+    case 'scene-line':
+      return 1;
+    case 'scene-path':
+      return (primitive.points.length - 1)
+        + (primitive.closed && primitive.points.length > 2 ? 1 : 0);
+    case 'scene-marker':
+      return primitive.shape === 'cross' ? 2 : MARKER_CIRCLE_SEGMENTS;
+    case 'scene-glyph-run': {
+      if (primitive.frame) {
+        let unit = caches.unit.get(primitive.text);
+        if (!unit) {
+          unit = traceFramedGlyphRun(font, primitive.text);
+          caches.unit.set(primitive.text, unit);
+        }
+        // Halo and glyph pass, per run.
+        return unit.length * 2;
+      }
+      const cacheKey = [
+        primitive.capHeightPx,
+        primitive.rotationRad,
+        primitive.text,
+      ].join(':');
+      let segments = caches.screen.get(cacheKey);
+      if (!segments) {
+        segments = glyphSegments(font, primitive);
+        caches.screen.set(cacheKey, segments);
+      }
+      return segments.length;
+    }
+    case 'scene-triangle':
+    case 'scene-fill':
+      // Filled primitives go through the triangle / fill buffers.
+      return 0;
+  }
+}
+
 function visitSegments(
   layouts: readonly LayoutResult[],
   font: LffFont,
@@ -1042,18 +1094,16 @@ export class ThreeSceneDimensionPainter {
     const profiling = this.onPaintProfile !== undefined;
     const countStartedAt = profiling ? performance.now() : 0;
 
-    // 计数按 primitive 逐个做（`visitSegments` 就是这两层循环），这样诊断能
-    // 顺带拿到段数按图元类型的分布——决定 `writeMs` 里字形与线框各占多少。
+    // 计数按 primitive 逐个做，只读缓存长度、不构造顶点（W5-5）。这样诊断能
+    // 顺带拿到段数按图元类型的分布，而且这一遍同时把字形缓存预热了。
     let segmentCount = 0;
     const segmentsByKind: Record<string, number> = {};
     for (const layout of layouts) {
       for (const primitive of layout.scenePrimitives) {
-        let primitiveSegments = 0;
-        visitPrimitiveSegments(
+        const primitiveSegments = countPrimitiveSegments(
           primitive,
           this.font,
           this.glyphCaches,
-          () => { primitiveSegments += 1; },
         );
         segmentCount += primitiveSegments;
         if (profiling) {
