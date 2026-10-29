@@ -82,3 +82,34 @@ Requirement 12 的验证口径：第 2 条与第 4 条先对目标 sesno 各发�
 ## 首次实测结果
 
 **尚未实测**（需 rocksdb 档 8022 与 `npm run dev`）。跑完后把每个用例的 `console.log` 行与 `perf/*.json` 一并记到本文件「实测记录」小节，并注明是否调整过 300 ms / 500 ms / 2 s 门槛及理由。
+
+## 附：阶段 1 联调脚本的自检（2026-10-29）
+
+`scripts/verify/realtime-history-smoke.ps1`（tasks.md 7.1）与 `scripts/verify/realtime-vs-legacy.ps1`（7.2）
+已写好，并对着**当前 8022 上的旧构建**跑过一遍，确认脚本本身能跑通、失败信息指得准。
+
+当前 8022 进程（PID 32948）的 `/health.model_cache` 里**没有 `realtime_history` 分项**，说明跑的是本特性之前的
+二进制。两个脚本因此全部落在预期失败上：
+
+```
+[FAIL] GET /health model_cache.realtime_history -> 分项不在——要带实时历史那批改动的构建
+[ok]   GET model/versions 计数 -> 版本数 73（要 ≥ 25）、几何变化 73（要 ≥ 5）、latest=853
+[FAIL] GET model/history/geometry（首次） -> HTTP 500
+       {"code":"internal","message":"invalid snapshot key \"geometry\"","detail":null}
+[FAIL] CORS Access-Control-Expose-Headers -> 值：*
+```
+
+最后一条值得记：旧构建对 `Access-Control-Expose-Headers` 回 `*`。`*` 在 `credentials: 'include'` 的请求里不生效，
+浏览器的 JS 读不到 `ETag`，304 与 `Retry-After` 两条都会失效。新构建按 `SCRUB_EXPOSED_HEADERS` 逐项列出
+`ETag, Retry-After, x-sesno, x-session-time`，脚本按「四个头都在」判定。
+
+两个脚本都只读（`realtime-vs-legacy` 唯一的写是 Legacy 路径本来就要的 `generate` + 随后 `DELETE`）。
+夹具数字已经够 Requirement 12 的前提：BRAN `24384/23257` 有 73 个版本、73 个几何变化版本。
+
+**下一步**：换成带实时历史那批改动的二进制（rocksdb 档 8022）后重跑：
+
+```powershell
+pwsh scripts/verify/realtime-history-smoke.ps1 -EvidenceDir docs/verification/model-version-timeline-scrub
+pwsh scripts/verify/realtime-vs-legacy.ps1 -EvidenceDir docs/verification/model-version-timeline-scrub
+```
+

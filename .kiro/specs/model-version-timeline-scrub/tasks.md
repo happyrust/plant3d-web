@@ -185,12 +185,12 @@
     - _Requirements: 6.3, 6.4, 6.5, 6.7, 6.8, 6.9, 6.13, 6.14, 8.5, 8.6_
 
 - [ ] 7. 阶段 1 集成验证脚本（rocksdb 档 8022）
-  - [~] 7.1 编写 `scripts/verify/realtime-history-smoke.ps1`
+  - [x] 7.1 编写 `scripts/verify/realtime-history-smoke.ps1`
     - 把 design.md「阶段 1 后端集成验证」的 curl 清单落成脚本：版本表计数（版本数 ≥ 25、几何变化 ≥ 5，供 Requirement 12 前提）、实时几何与耗时、缓存命中字节相同（`fc.exe /b`）、304、`time` 选择器与 resolve 的 sesno 一致（含一个时间倒退会话的时间点）、错误码、`--max-time 1` 断开后每 0.5 s 采 `in_flight` 回落、快照数不变、带 `Origin` 时能读到 `Access-Control-Expose-Headers`
     - 输出命令、节点、sesno、返回与通过 / 不通过到 `docs/verification/`
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.7, 6.12, 6.14, 7.3, 7.5, 7.6, 7.7, 8.10_
 
-  - [~] 7.2 编写 `scripts/verify/realtime-vs-legacy.ps1`
+  - [x] 7.2 编写 `scripts/verify/realtime-vs-legacy.ps1`
     - **Property 39: 实时查询与 Legacy 路径等价（集成）**
     - BRAN `24384_23257` 与另一个 EQUI 单元的每个 sesno：实时路由与 Legacy（generate → 轮询 → query → DELETE）结果去 `snapshot_key`、按 `(source_refno, id)` 排序后比较，记录不一致组合数（期望 0）；Legacy 报错的组合实时也报错（`REFNO_NOT_FOUND_AT_SESSION` 对应 `UNIT_NOT_PRESENT`）；同组合连查两次（未命中 + 命中）逐项相等
     - 6 个并行冷查询：至少一个得到 503 与 `Retry-After`，采样 `/health` 的 `in_flight` 不超过 4
