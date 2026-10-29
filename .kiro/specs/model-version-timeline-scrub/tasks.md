@@ -440,7 +440,7 @@
     - 进入浏览只隐藏该单元、首帧 fit 之后不动相机、退出恢复、`replaceSide` 不重建另一侧、叶子只高亮自身
     - _Requirements: 3.1, 3.9, 3.14, 5.8, 9.5_
 
-  - [~] 14.9 实现 `src/composables/useVersionFrames.ts` 的浏览主流程（实时路由）
+  - [x] 14.9 实现 `src/composables/useVersionFrames.ts` 的浏览主流程（实时路由）
     - 请求表 `Map<FrameKey, { controller, role, promise }>`，同键只一个请求；游标落到正在预取的键上改角色为 `cursor`
     - 游标移动：先 `reassignOnCursorMove`；拖动经 150 ms 门，松开 / 点击 / 方向键立即请求；300 ms 停留后 `planPrefetch`；游标请求结束后再计划一次
     - 只写缓存，完成时 sesno 仍是当前游标才 `browseShow`；进行中 `browsePending`；视口已装入同单元时带 `If-None-Match`，304 → `putSharedFrame`
@@ -449,39 +449,39 @@
     - `exitBrowse`：中止全部请求与重试等待，`clearFrames`，执行副作用
     - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.11, 3.12, 3.13, 3.15, 3.16, 4.1, 4.3, 4.4, 4.5, 4.6, 4.8, 4.9, 4.10, 4.11_
 
-  - [~] 14.10 在 `useVersionFrames.ts` 实现单钉着色、对比模式与子树浏览
+  - [x] 14.10 在 `useVersionFrames.ts` 实现单钉着色、对比模式与子树浏览
     - 只有一个钉：`compareModelUnitGeometry(pinFrame, cursorFrame)` 算四态交给 `browseShow(frame, { diffRows })`；钉所在帧受缓存保护，缺失时按游标规则请求
     - `enterCompare`：缓存里有的 A / B 帧直接用，只请求缺失侧，`buildModelUnitCompareView` 拼 detail 调 `controller.open`；拖钉只 `replaceSide`；一侧失败时钉不变、另一侧不变、显示错误
     - 子树：游标变化 → `diffSummary(cursor, latest)` → `planSubtreeFrames`；`load` 用 `runBounded`（上限取 `readRealtimeLimit`，未取得按 4，每个任务包 `retryOnBusy`）；`confirm` 置 `pendingConfirm`，`answerConfirm('cancel')` 不发请求；差异摘要失败不发几何请求；部分失败成功单元照常显示、失败单元保持当前几何并列出
     - 子树预取只针对需装单元 ≤ 5 的相邻版本（`excluded`）
     - _Requirements: 5.4, 5.6, 5.7, 5.8, 9.2, 9.3, 9.4, 9.6, 9.7, 9.8, 9.9, 9.10_
 
-  - [~] 14.11 在 `useVersionFrames.ts` 实现旧服务端降级
+  - [x] 14.11 在 `useVersionFrames.ts` 实现旧服务端降级
     - `queryHistoryGeometry` 抛 `ModelVersionRouteUnavailableError` → `legacyFallback = true`，本面板会话改走 `loadVersion`（超时 300 s），帧带 `legacySnapshotKey`；停留门与预取规则不变，预取 generate 任务不超过 2 个
     - 淘汰 / 退出时 `release(snapshotKey)` 删除本会话创建且已移出缓存的键，失败或 10 s 未返回只 `console.warn`
     - 404 / 405 以外的错误与网络错误不降级，下次照常请求新路由；`gm_backend` 改变或面板关闭时复位
     - 降级时属性点选退回现有 `attributesAt(snapshot)`
     - _Requirements: 3.10, 10.1, 10.4, 10.5, 10.6_
 
-  - [~] 14.12 写属性测试：装载一致性
+  - [x] 14.12 写属性测试：装载一致性
     - **Property 13: 装载一致性**
     - 文件 `src/composables/useVersionFrames.property.test.ts`，mock 来源与控制器，可控 Promise
     - **Validates: Requirements 3.2, 3.5, 3.6, 3.7, 4.1, 10.4**
 
-  - [~] 14.13 写属性测试：304 复用已装入几何
+  - [x] 14.13 写属性测试：304 复用已装入几何
     - **Property 17: 304 复用已装入几何**
     - **Validates: Requirements 4.10**
 
-  - [~] 14.14 写属性测试：退出浏览的资源清理
+  - [x] 14.14 写属性测试：退出浏览的资源清理
     - **Property 20: 退出浏览的资源清理**
     - **Validates: Requirements 4.6, 10.5**
 
-  - [~] 14.15 写属性测试：`HISTORY_BUSY` 有界重试（`useVersionFrames` 部分）
+  - [x] 14.15 写属性测试：`HISTORY_BUSY` 有界重试（`useVersionFrames` 部分）
     - **Property 15: `HISTORY_BUSY` 有界重试**
     - 追加到 `busyRetry.property.test.ts`：游标请求忙等待期间角标始终为「正在加载 sesno <游标>」，只有重试用尽才标失败
     - **Validates: Requirements 3.16, 9.10**
 
-  - [~] 14.16 为 `useVersionFrames` 写例子测试
+  - [x] 14.16 为 `useVersionFrames` 写例子测试
     - 方向键 / 点击 / 松开立即请求、失败与超时标记与重试、游标请求忙重试 3 次后成功 / 用尽标失败 / 等待中游标移走、`UNIT_NOT_PRESENT` 两种原因、对比只请求缺失侧、一侧失败、子树确认三选项与取消、差异摘要失败、部分失败、降级与非 404 不降级
     - _Requirements: 3.4, 3.11, 3.12, 3.13, 3.16, 5.6, 5.7, 9.3, 9.6, 9.7, 9.8, 10.1, 10.6_
 
