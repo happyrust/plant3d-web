@@ -16,11 +16,11 @@
 | F1 | polar 数值层 19 个文件（`kernel/layout/polar/numeric/**`）与参考系层 3 个文件（`polar/reference/{types,isoSheet,camera}.ts`）已入库，**目录外零消费者**，`kernel/index.ts` 未导出 polar | 审计计划 §12.7 / §13.11 / §13.14；提交 5c7ee980、3f298e7c |
 | F2 | `mbd_polar` 在 `src/` 全源码零命中；`layoutViewport.ts:47-108` 的 pass 序列里没有 polar | 2026-10-29 grep |
 | F3 | 求解器停在 `63d566e`：`angle.rs` 已产出（0b89b76）、`PPoint.bore` 已透传（gen-model 1caf3a84）；`IssueCategory::Avoidance` 零产出、`split_isolines.rs:242-248` 仍输出 `PCOM not implemented`、`weld.rs` 无 `plus` | 审计计划 §13.3 |
-| F4 | 原 T4.1–T4.6 契约扩展一项未动：`meta.coverage` 在 adapters 零命中；`PARTIAL_LAYOUT_MODES = ['linear_mvp', 'isodim_main']` 的兜底仍在 `DimensionPanelDock.vue` | 审计计划 §12.1 的 T2.2 行、§12.4 |
+| F4 | 原 T4.1–T4.6 契约扩展一项未动（**2026-10-29 更新**：T4.1 的前端第①步已接，见 §4 W3-1）：审计时 `meta.coverage` 在 adapters 零命中；`PARTIAL_LAYOUT_MODES = ['linear_mvp', 'isodim_main']` 的兜底仍在 `DimensionPanelDock.vue` | 审计计划 §12.1 的 T2.2 行、§12.4 |
 | F5 | 契约已按 ADR 0055 D7 走通过一次完整三步（`AidText.text_height_mm`：前端 1a40b46a → plant-mbd 63d566e），流程可复用 | 审计计划 §13.10 |
 | F6 | 性能：`docs/verification/` 下没有任何 MBD 规模实测；`e2e/dimension-perf.spec.ts` 默认 skip | 审计计划 §5.1 |
 | F7 | 健壮性计划只剩 D1（layoutMs 量化）与 E3（`e2e/mbd-robustness.spec.ts`） | 健壮性计划 §9 第四轮 |
-| F8 | T7.6（LOD 阈值拆分 + 退化四边形回退，12f4bb1e）与 T3.3b/c（3f298e7c）入库时都没有门禁数字；当前 HEAD 的真实 vitest 数字未知 | 审计计划 §14 第 10–13 行 |
+| F8 | T7.6（LOD 阈值拆分 + 退化四边形回退，12f4bb1e）与 T3.3b/c（3f298e7c）入库时都没有门禁数字；当前 HEAD 的真实 vitest 数字未知（**2026-10-29 更新**：W0-1 已跑，S2 = 81 文件 / 709 通过，type-check 439 条 / 126 文件，见审计计划 §14 第 13 行） | 审计计划 §14 第 10–13 行 |
 | F9 | 2026-10-29 对齐期间工作区正有另一路在改 polar 目录（非本计划产物，未登记、未提交）：`polar/numeric/{arc.ts, arc.test.ts}`（新）、`polar/numeric/{index.ts, isoDirections.ts, isoDirections.test.ts}` 与 `polar/reference/{types.ts, isoSheet.ts, isoSheet.test.ts, camera.ts, camera.test.ts}`（改）；观察期间文件集还在增长 | `git status`（2026-10-29 两次快照） |
 
 ## 2. 目标与完成定义
@@ -57,13 +57,18 @@ W0 收口与基线（小，先做）
 
 ## 4. 工作包
 
+> **在飞登记（2026-10-29 13:56，R4 口径）**：W1-1 T3.4 与 W2-1 T5.5 已各有另一路在做，本计划不再派第二人，入库前也不动它们共用的文件。
+> - plant3d-web：`be17e987` 已入库「极坐标弧 near/angledirection 径向等价实现，参考系补 up / horiDir」（即 W0-4 说的 F9 批次，归属 = W1-1 前置；W0-3 的复核要对着它重核一次）；`src/dimension/kernel/layout/polar/place/`（`angles.ts` / `dirAndCha.ts` / `geometry.ts` / `index.ts` / `result.ts` / `types.ts`，6 个未跟踪文件）正在写，即 T3.4 本体。
+> - plant-mbd：`crates/plant-mbd/src/adjust_weld.rs` 未跟踪、仍在改（`collect_adjust_welds` / `plus_len_mm` / `adjust_weld_text`，覆盖 T5.5 与 T5.4 的 pluslen 部分）；其余改动暂存为 `stash@{0} wip-adjust-weld-verified-backup`。
+> - 两路入库前：W1-2 / W1-3 不碰 polar 目录；W2-2 / W2-3 不碰 `split_isolines.rs` / `isodim.rs`。可先做的是 W3 各项的第①步（W3-1 / W3-2 / W3-3 / W3-4 / W3-5 / W3-6 已接，W3-3 / W3-4 / W3-5 含 mapper 接线，W3-2 / W3-6 含面板消费，2026-10-29）、W4-1（模板 + 观测钩子已落，数字待本机填，2026-10-29）；W4-2 门禁已过、W0-1 / W0-3 已收口（2026-10-29，见 §4）。
+
 ### W0 收口与基线（无功能代码）
 
 | ID | 内容 | 验收 |
 | --- | --- | --- |
-| W0-1 | 在 HEAD 上跑一次 S2 全量 vitest + `npm run type-check`，把数字填进审计计划 §14 第 12 / 13 行（T7.6 与当前 HEAD） | §14 不再有「待跑」 |
+| W0-1 | 在 HEAD 上跑一次 S2 全量 vitest + `npm run type-check`，把数字填进审计计划 §14 第 12 / 13 行（T7.6 与当前 HEAD）。**状态（2026-10-29）**：已跑——S2 = 81 文件 / 709 通过 / 0 失败（6.49 s），`npm run type-check` 439 条 / 126 文件（新增 0 / 已消失 1，基线已收紧到 439 / 126）；已回写 §14 第 13 行（对应提交 120b1bec）与类型基线段，第 12 行按裁决标「未单测，并入第 13 行」 | §14 不再有「待跑」 |
 | W0-2 | T7.6 的前后对比：固定相机下 `24381_145018` 远 / 中 / 近三档截图（基于 12f4bb1e 与其父提交各一组），落 `docs/verification/mbd-lod-declutter-2026-10-29/`；确认 `theme.test.ts` 钉住 `lodSecondaryMinPx = 0` / `lodDetailMinPx = 18` | 目录存在、含相机参数；钉子用例存在 |
-| W0-3 | T3.3b / T3.3c 复核：对照审计计划 §13.12 逐条核 `orthogonal` 返 null 的兜底取法、反平行分支、`mainDimDir` 恒 `null`、`kind` 取值，结果补进 §13.14 | §13.14 的「补记的边界」段被实测结论替换 |
+| W0-3 | T3.3b / T3.3c 复核：对照审计计划 §13.12 逐条核 `orthogonal` 返 null 的兜底取法、反平行分支、`mainDimDir` 恒 `null`、`kind` 取值，结果补进 §13.14。**状态（2026-10-29）**：已对着 be17e987 复核——逐条表 + 给 T3.4 的两条提醒（退化轴策略、导入路径仍不一致；`numeric/arc.ts` 新增 `RangeError` 抛点）已落审计计划 §13.14「W0-3 复核（对着 be17e987）」 | §13.14 的「补记的边界」段被实测结论替换 |
 | W0-4 | 工作区卫生：等 F9 那路 polar 改动停下来后定归属——若是 T3.4 的前置（arc 工具 + 参考系接口调整）就作为 W1-1 的第一个提交并在审计计划 §13 记一行，否则单独登记；它改了 3f298e7c 刚入库的 `reference/*`，W0-3 的复核要对着改完的版本做；`.archify/` 已 ignore（89a5aeeb） | `git status --short` 只剩在做的工作包文件；§13 有该批次的行 |
 
 ### W1 polar 接入（T3.4 → T3.5 → T3.6）
@@ -92,19 +97,19 @@ W0 收口与基线（小，先做）
 
 | ID | 任务 | 消费方（给了就用） | 验收 |
 | --- | --- | --- | --- |
-| W3-1 | **T4.1** `meta.coverage: string[]`（本次交付覆盖的 kind） | `DimensionPanelDock.vue` 的不完整警示条改读 coverage，删 `PARTIAL_LAYOUT_MODES` 兜底 | 警示条按实际缺失显示；`PARTIAL_LAYOUT_MODES` 全仓零命中 |
-| W3-2 | **T4.5** `meta.source_version { dbnum, sesno, databases }` | 面板显示数据时点；可与时间轴功能的版本口径对齐 | 面板可见；缺字段时不显示、不报错 |
-| W3-3 | **T4.2** 逐 isoline 的 `cheight_mm`（`sepSmallDim` 缩字后的组字高） | 替代前端 11–18 px 夹取时的全局 `cheight_mm`；与 T7.1 的 `AidText.text_height_mm` 的关系按 D7 定 | 同一 BRAN 不同 isoline 字高可不同 |
-| W3-4 | **T4.3** `label` / `aid_text` / `slope_mark` 的设计空间基线方向（PML `ori`） | 前端 `labelAlong` / `along` 通道 | 给了即用；未给时行为不变 |
-| W3-5 | **T4.4** 每个 primitive 的 `object_refno` | 点尺寸跳构件不再解析 id 字符串 | 跳转用例 |
-| W3-6 | **T4.6** 直段结构（`isoline` 列表：index、成员、字高、od） | 前端按直段分组 / 折叠 | 面板分组用例 |
+| W3-1 | **T4.1** `meta.coverage: string[]`（本次交付覆盖的 kind）。**状态（2026-10-29）**：①前端契约已接——`mbdV2Contract.ts` 的 `MbdV2Meta` 加可选 `coverage?: readonly string[]`（可 `null`），`parseMeta` 缺省 / `null` 放行、给了就原样透传（条目不限于前端已知 kind，空数组也认）、不是非空字符串数组就整包拒绝 `invalid meta`（fail-closed 不变），用例 `accepts an optional meta.coverage kind list and rejects malformed ones`；②③待 plant-mbd 在飞那路入库后继续 | `DimensionPanelDock.vue` 的不完整警示条改读 coverage，删 `PARTIAL_LAYOUT_MODES` 兜底（排在③之后：producer 发了才有东西可读） | 警示条按实际缺失显示；`PARTIAL_LAYOUT_MODES` 全仓零命中 |
+| W3-2 | **T4.5** `meta.source_version { dbnum, sesno, databases }`。**状态（2026-10-29）**：①前端契约已接——`mbdV2Contract.ts` 新增 `MbdV2SourceVersion` / `MbdV2SourceDatabase`，与 `SpatialCenterlineResponse.source_version` 同形（`dbnum` 正整数、`sesno` 非负整数、`databases[{ dbnum, sesno, db_type }]` 且库号唯一；**不**要求 `databases` 含顶层那条，离线 CLI 的 `[]` 也认）；`MbdV2Meta.source_version?` 可 `null`，缺省 / `null` 放行、非法整包拒绝 `invalid meta`，用例 `accepts an optional meta.source_version in the centerline shape and rejects malformed ones`；消费侧也已接（2026-10-29）——`useMbdExternalSync` 把 `meta.source_version` 写进诊断 store（`sourceVersion`，缺省 / `null` → null），面板 MBD 标题行挂徽标「数据 `dbnum@sesno`」（`data-testid="mbd-source-version"`，悬停列各库 `dbnum@sesno (db_type)`），缺字段不挂、不报错；用例 `passes meta.source_version and meta.isolines through to diagnostics`（sync）、`shows the payload data version on the MBD header only when declared`（面板）；②③待 plant-mbd 入库后继续 | 面板显示数据时点；可与时间轴功能的版本口径对齐 | 面板可见；缺字段时不显示、不报错 |
+| W3-3 | **T4.2** 逐 isoline 的 `cheight_mm`（`sepSmallDim` 缩字后的组字高）。**状态（2026-10-29）**：①前端契约已接，与 W3-6 共用一个载体——`meta.isolines[].cheight_mm`（直段级 `isoline_cheight_mm`，即 plant-mbd `IsolineSummary.cheight` 的口径；全局 `meta.cheight_mm` 仍是各直段主尺寸字高的最大值，不变），图元用共有的 `isoline_idx` 查表；D7 已定三层取法（见 §5）。mapper 「给了即用」也已接（`mbdV2ExternalAnnotations.ts`：`isolineTextHeightsM` 按 `meta.isolines[].index` 建表，`groupTextHeightM` 逐条取 所在直段 `cheight_mm` > 全局 `meta.cheight_mm`，图元自带 `text_height_mm` 仍最优先；悬空 `isoline_idx` 回落全局；`Presentation3dContext` 带 `surfaceM`（全支延伸线长的下四分位，兑底）与 `isolineSurfacesM`（`meta.isolines[].od_mm` 换算到设计空间），`dimension3dInput` 的行位按该条记录的组字高读回——plant-mbd `isodim.rs` 的行距 `od + 1.2 · cheight · (row - 1)` 用的正是 isoline 级 cheight；有表、没全局字高时直段内的记录照样有字高与 3D 呈现；用例 `takes the isoline cheight before the payload-wide one for text height and 3D row spacing (T4.2 / T4.6)`）。`meta.isolines[].od_mm` 也已接（2026-10-29）：有表的直段按自己的 `od_mm` 起算 3D 行基面（plant-mbd 行位 `od + 1.2·cheight·(row-1)` 里的 `od` 就是它，`isodim.rs` `isoline.od = max(getod(mem))`），没表的仍用全支四分位，多管径支线因此准了；用例同上新增 `ownSurface` 子用例；②③待 plant-mbd 入库 | 替代前端 11–18 px 夹取时的全局 `cheight_mm`；与 T7.1 的 `AidText.text_height_mm` 的关系按 D7 定 | 同一 BRAN 不同 isoline 字高可不同 |
+| W3-4 | **T4.3** `label` / `aid_text` / `slope_mark` 的设计空间基线方向（PML `ori`）。**状态（2026-10-29）**：①前端契约已接——字段定名 `text_dir?: [x, y, z]`（文字基线 / 阅读方向，PML AIDTXT `ori` 的 X 轴，与其它几何同在 `meta.geometry_space`，非零有限向量；只挂在这三种 kind 上，strict 白名单同步），缺省 = 视口水平、给了非法就点名整包拒绝，用例 `accepts an optional text_dir baseline on label / aid_text / slope_mark and rejects degenerate ones`；mapper 「给了即用」也已接（`mbdV2ExternalAnnotations.ts` 新增 `textBaseline`：`transform.direction(text_dir)` 单位化后送进 `label` / `aid_text` / `slope_mark` 的 `labelAlong` 与多行 `texts[].along`，变换后塌掉只丢方向不丢图元；billboard tag 不读它，只对 `mbd_3d=0` 平面呈现生效；用例 `runs tag, aid and slope text along a declared text_dir, rotated by source_to_design (T4.3)`，原「没有 ori 保持水平」用例改为「未声明 `text_dir` 保持水平」并覆盖 `texts[].along`）；已知小尾巴：kernel `layoutExplicit` 的多行堆叠仍是屏幕竖直偏移（`stackIndex`），旋转文字的行距方向待 kernel 侧单独处理，不在本项范围；②③待 plant-mbd 入库 | 前端 `labelAlong` / `along` 通道 | 给了即用；未给时行为不变 |
+| W3-5 | **T4.4** 每个 primitive 的 `object_refno`。**状态（2026-10-29）**：①前端契约已接——字段定名 `object_refno?: string`（图元所标注 / 所落在的构件 refno，host 认得的文本，与 `MbdV2Issue.object_refno` 同口径，格式不在契约里校验、消费侧过 `toRefnoKey`），11 种 kind 共有（`COMMON_PRIMITIVE_FIELDS`，strict 白名单同步），缺省 = 未声明、给了就得是非空字符串否则点名整包拒绝，用例 `accepts optional object_refno / isoline_idx locators on every primitive kind and rejects malformed ones`（与 W3-6 的 `isoline_idx` 合一个用例）；mapper 「给了即用」也已接（`tagSubject` / `weldSubject` 改为有 `object_refno` 用它、没有再走 plant-mbd id 正则，含别的生产者 / 支端卡 / 支名这些 id 里本来没有 refno 的；用例 `takes a declared object_refno as the subject before reading the id (T4.4)`）。**有意不**把其它 kind 的 `object_refno` 透成 `ExplicitLayoutInput.subject`：`subject` 在 kernel 里是遮挡语义（`occlusionPolicy.occlusionProbe`：有 subject 就改为在锚点探、排除该构件自身），尺寸值文字站在空中不该改探法；「点尺寸跳构件」仓里还没有入口，到时在 `ExternalDimensionRecord` 上另起一个载体（如 `objectRefno`）再让所有 kind 透过去，交互（双击 / 右键）先定；②③待 plant-mbd 入库 | 点尺寸跳构件不再解析 id 字符串 | 跳转用例 |
+| W3-6 | **T4.6** 直段结构（`isoline` 列表：index、成员、字高、od）。**状态（2026-10-29）**：①前端契约已接——`MbdV2Meta.isolines?: MbdV2Isoline[] | null`，每行 `{ index, members: refno[], cheight_mm, od_mm }`（`index` = plant-mbd `SplitResult::allarr` 袋下标，与 `MbdV2Issue.isoline_idx` 同一套编号，非负安全整数且表内唯一，可不连续 / 乱序——没有 `ldir` 的袋会被跳过；`members` 非空字符串数组，可为空；两个长度都是有限正数），缺省 / `null` 放行、非法整包拒绝 `invalid meta`；11 种 kind 共有 `isoline_idx?: number`（`COMMON_PRIMITIVE_FIELDS`，strict 白名单同步），非负安全整数，**不**与表交叉校验（悬空下标由消费侧回落）；用例 `accepts an optional meta.isolines table and rejects malformed ones`、`accepts optional object_refno / isoline_idx locators on every primitive kind and rejects malformed ones`；消费侧也已接（2026-10-29）——`ExternalDimensionRecord.isolineIndex?`（mapper `explicitRecord` 从 `isoline_idx` 写，其它来源不带），`useMbdExternalSync` 把 `meta.isolines` 写进诊断 store（`isolines`，缺省 / `null` → `[]`）；`DimensionSemanticList` 新增 `groupLabel` 入参 + 组可折叠（组头按钮 `data-group` / `aria-expanded`、计数 `data-group-count`，折叠组的行不渲染、键盘跳过；折叠态只在内存、默认展开），`DimensionPanelDock` 在表非空或任一 MBD 记录带 `isolineIndex` 时把 MBD 记录按直段升序成组（组内尺寸前标注后），组头「直段 n · 成员 k · 字高 X mm · OD Y」（表里没这一行只报「直段 n」），无归属的殿后归「未分段」，其它来源照旧两分，今天的负载列表一行不变；用例 `lets the parent name groups and collapses a group on demand (W3-6)`（列表）、`groups MBD records by isoline with the table facts in the header`（面板）；②③待 plant-mbd 入库 | 前端按直段分组 / 折叠 | 面板分组用例 |
 
 ### W4 量化与覆盖（T0.3 / D1 / E3）
 
 | ID | 任务 | 验收 |
 | --- | --- | --- |
-| W4-1 | **T0.3 + D1 合并**：用 `src/debug/dimensionPerf.ts:179-206` 的 60 帧脚本与 `dimensionViewport.ts` 的 `onFrame` 指标，在 `24381_145018`（小）/ `24381_146979`（大）两条 BRAN 与一个 2k 记录合成场景上记录 `layoutMs` / `paintMs` 的 P50 / P95；**不改渲染逻辑** | `docs/verification/mbd-perf-baseline-2026-xx-xx/README.md` 含机器、相机、三次重复的数字；作为 W5-5 的基线 |
-| W4-2 | **E3** `e2e/mbd-robustness.spec.ts`：`?mbd_refno` 指向含「未知 kind + 一条非法图元」的 mock 分支，断言 `?mbd_partial=1` 下仍有标注且角标可见、默认下整包拒绝且角标可见 | `npx playwright test --config=playwright.novideo.config.ts e2e/mbd-robustness.spec.ts` 绿 |
+| W4-1 | **T0.3 + D1 合并**：用 `src/debug/dimensionPerf.ts:179-206` 的 60 帧脚本与 `dimensionViewport.ts` 的 `onFrame` 指标，在 `24381_145018`（小）/ `24381_146979`（大）两条 BRAN 与一个 2k 记录合成场景上记录 `layoutMs` / `paintMs` 的 P50 / P95；**不改渲染逻辑**。**状态（2026-10-29）**：模板 `docs/verification/mbd-perf-baseline-2026-10-29/README.md` 已写（环境 / 相机 / 三次重复表，A 合成 2k + B/C 两条 BRAN 的步骤与绕轨脚本；相机 = 加载后的自动 fit）；观测钩子已接——`createDimensionSystem({ onFrame })` 透传到 `DimensionViewport`，dev 下 `ViewerPanel.vue` 挂 `window.__dimensionFrameStats`（`src/debug/dimensionFrameStats.ts`：600 帧环形缓冲 + 最近邻秩 P50 / P95 / max，`layoutMs` 只算全量布局帧），`window.__dimensionPerf.settle(passes)` 给合成场景 layout / paint 的分位（`run()` 与 e2e 门禁未动）；用例 `hands every viewport frame's timing to the host's observation hook (W4-1)`（facade）、`src/debug/dimensionFrameStats.test.ts`；渲染逻辑未动；**数字待本机填**；实现侧门禁已过（2026-10-29）：facade `createDimensionSystem.test.ts` 14/14、`dimensionFrameStats.test.ts` 5/5、eslint 0 error / 0 warning | `docs/verification/mbd-perf-baseline-2026-10-29/README.md` 含机器、相机、三次重复的数字；作为 W5-5 的基线 |
+| W4-2 | **E3** `e2e/mbd-robustness.spec.ts`：`?mbd_refno` 指向含「未知 kind + 一条契约认可但映射不出来的图元」的 mock 分支，断言默认下整包拒绝且装载失败角标（B2）可见、`?mbd_partial=1` 下仍有标注且「已跳过 N 条」横幅（B3）可见（B2 角标按设计只在 0 条记录时出现，partial 下断言它不出现）；另覆盖「认识的 kind 但字段非法」在 partial 下仍整包拒绝。**状态（2026-10-29）**：spec 已写（4 用例 / 3 mock 分支；新增 spec 一个文件 + `.gitignore` 白名单行），用例①末尾含页内勾选「允许部分显示」的往返；顺带发现的 B3 开关 popstate 不同步已修（`DimensionPanelDock.vue` 一行 + 组件用例）；门禁已跑（2026-10-29）：`npx playwright test --config=playwright.novideo.config.ts e2e/mbd-robustness.spec.ts` 4 passed (6.1s)；口径澄清见健壮性计划 §9 第五轮 | `npx playwright test --config=playwright.novideo.config.ts e2e/mbd-robustness.spec.ts` 绿 |
 
 ### W5 视觉裁决与收尾（T6.1–T6.5）
 
@@ -126,7 +131,7 @@ W0 收口与基线（小，先做）
 | D4 | 一份现行计划合并两份旧计划的剩余工作 | **已定**（2026-10-29） |
 | D5 | `mbd_polar` 何时改为默认开：建议条件 = W1-3 的 A/B 截图通过 + 3D 模式无 NaN / 越界 + W4-1 口径下 P95 不退化 ≥ 10 % | 待定，W1-3 完成后拍板 |
 | D6 | T5.3 occupancy 与 T3.4 的算法口径谁先定：建议**前端 T3.4 先**（PML 原 case 金样已在 TS 侧），Rust 侧照金样对齐 | 待定，W1-1 动手前拍板 |
-| D7 | W3-3 `cheight_mm` 与 T7.1 的 `AidText.text_height_mm` 的关系：建议 `cheight_mm` 为 isoline 级缺省、`text_height_mm` 为 primitive 级覆盖，前端取后者优先 | 待定，W3-3 动手前拍板 |
+| D7 | W3-3 `cheight_mm` 与 T7.1 的 `AidText.text_height_mm` 的关系：三层取法——primitive 级 `text_height_mm`（给了即覆盖）> 所在直段 `meta.isolines[isoline_idx].cheight_mm`（直段级 `isoline_cheight_mm`）> 全局 `meta.cheight_mm`（仍是各直段主尺寸字高的最大值）；直段级与 W3-6 共用 `meta.isolines[]` 一张表，图元用共有的 `isoline_idx` 关联 | **已定**（2026-10-29） |
 
 ## 6. 风险
 

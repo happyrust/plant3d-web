@@ -792,7 +792,42 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 | `hysteresisShowDir(previous, candidate, enterDeg, exitDeg)` | `camera.ts:176` | `DEFAULT_ENTER_DEG = 1` / `DEFAULT_EXIT_DEG = 3` 滞回 |
 | `cameraReference(input)` | `camera.ts:244` | 3D 相机参考系，`kind: 'camera'` |
 
-**补记的边界**：本记录是 2026-10-29 对齐时补的，只核对了导出、行号与提交规模，**未逐条复核** §13.12 的要点（`orthogonal` 返 null 的兕底取法、反平行分支、`mainDimDir` 恒 `null`）；提交时**没有留下门禁数字**。两项都列入现行计划 W0 的核对清单。`kernel/index.ts` 未导出，与 §13.12「不新建 barrel，留给 T3.4」一致。
+**W0-3 逐条复核（2026-10-29，对着 3f298e7c 的提交版；工作区当时正有另一路在改这两个文件，改完后需重核——已重核，见下方「对着 be17e987」的表）**：
+
+| §13.12 要点 | isoSheet.ts | camera.ts |
+| --- | --- | --- |
+| 构造参数结构（`IsoSheetParams` 承载 pos / dir / limit / basicRadius / isinstpipe / lookangle / referencedirs / prehoridir / branlookdirection / fromltor / cenpos / midpos） | ✅ 12 个字段齐全；`centrePos` / `midPos` 注明是死参数、为 T3.4 透传保留 | — |
+| `referencedirs` 命中 `abs(angle-90) < 60` → `tempdir.orthogonal(u)` | ✅ `initialHorizontalDir` | — |
+| `prehoridir` 45°/135° 滞后，命中时 `golabel /sethoridirok` 跳过 `branlookdirection` / `fromltor` | ✅ 用提前 `return buildReference` 实现跳过；`> 135` 取反 | — |
+| `lookangle → showdir`（`:258-284`，10°..170° 才走弧） | ✅ `buildReference` + `arcTangentDegrees` | — |
+| `:201-223` 死代码跳过 | ✅ | — |
+| `arc.angledirection` = 切线 `-x·sinθ + y·cosθ`，与 `arcTangent` 交叉验证手性 | ✅ 文件头引 `planeBasis.ts:22-31` 与 `mbdV2ExternalAnnotations.ts:694-701`；**自由裁量点已显式记录**：`x` / `z` 不正交时按 z 优先正交化（保证 `showDir ⟂ dir`） | — |
+| `mainDimDir` 恒 `null` | ✅ | ✅ |
+| `orthogonal` 返 null 的兕底必须显式记录 | ✅ `fallbackHorizontalDir`：u → n → `DEGENERATE_HORIDIR=[1,0,0]`；零轴用 `WORLD_UP` 顶替；注释写明 PML 在此情形会崩 | ✅ `degenerateShowDir`：`orthogonal(axis,[0,0,1]) ?? orthogonal(axis,[0,1,0]) ?? [1,0,0]` |
+| `cameraShowDir`：forward 投到 ⊥ axis 平面；沿轴看返 `null` | — | ✅ 阈值 `PARALLEL_SIN_EPSILON = 1e-3`（≈ 0.057°），注释给了取值理由 |
+| `hysteresisShowDir` 五分支（null 两向 / `< enter` / `>= exit` / 带内保持） | — | ✅；**偏差**：函数本身不带 `enterDeg = 1, exitDeg = 3` 默认值，默认值在 `cameraReference` 里套（`DEFAULT_ENTER_DEG` / `DEFAULT_EXIT_DEG` 导出） |
+| 反平行显式处理：`> 179°` 走 `exitDeg` 分支返 candidate，不插值不修符号 | — | ✅ 注释整段说明，连续性交给 T3.5 候选打分 |
+| `enterDeg > exitDeg` 或非有限 → `RangeError` | — | ✅（额外：负数也抛） |
+| 返回值 `dot(zero, normal) ≈ 0`、`|zero| ≈ 1`，绝不改写 `previous` | — | ✅ 第 4 步重投影到新轴平面；返回新对象 |
+| `kind` 分别 `'iso-sheet'` / `'camera'`；不新建 barrel | ✅ | ✅；`kernel/index.ts` 未导出，与「留给 T3.4」一致 |
+
+**给 T3.4 的两条提醒**：① 退化轴的策略不一致——`isoSheetReference` 对零轴用 `WORLD_UP` 顶替，`cameraReference` 抛 `RangeError`；T3.4 调用前要统一（建议在 place 层入口统一抛）。② 两文件导入 `orthogonal` 的路径不同（`../numeric` vs `../numeric/isoDirections`），当前工作区里 `numeric/index.ts` 正在被改，落地后统一走 barrel。
+
+**W0-3 复核（2026-10-29，对着 be17e987「极坐标弧 near/angledirection 径向等价实现，参考系补 up / horiDir」；只读逐条核，门禁数字见 §14 第 13 行）**：
+
+| §13.12 要点 | be17e987 之后 | 结论 |
+| --- | --- | --- |
+| `arc.angledirection` 的语义（第 4 条写的是切线 `-x·sinθ + y·cosθ`） | 改为**径向**：`numeric/arc.ts` 的 `arcDirection(frame, θ)` 给「弧心 → 弧上该点」的单位向量，依据是 `polarsystem.pmlobj` 内部 `near` ↔ `angledirection` 往返只有径向自洽（`arc.ts` 文件头、`isoSheet.ts:158-161`）；`isoSheet.ts:162` 改调 `arcDirection({ centre, xAxis: horidir, zAxis: tempdir }, lookAngleDeg)`，`arcTangentDegrees` 已删 | 上表第 4 / 6 行**作废**；旧实现整体偏 90°，`isoSheet.test.ts` 的期望随之改。x / z 不正交时仍 z 优先正交化（`arc.ts` `arcBasis`） |
+| `orthogonal` 返 null 的兜底 | 两文件共用 `numeric/isoDirections.ts` 的 `horizontalFallbackDir(axis)`（= `orthogonal(axis,[0,0,1]) ?? orthogonal(axis,[0,1,0]) ?? [1,0,0]`）：`isoSheet.ts:93 / :96`（`fallbackHorizontalDir` / `DEGENERATE_HORIDIR` 已删），`camera.ts:265`（`degenerateShowDir` 同链） | ✅ 取法未变，实现合一 |
+| `prehoridir` 45° / 135° 滞后、`branlookdirection` / `fromltor` | `isoSheet.ts:121-127`（`> 135` 取反 `:124`，提前 `return` `:126`）、`:131-135` | ✅ 未变 |
+| 反平行 `> 179°` 走 exit、`hysteresisShowDir` 五分支、`enterDeg` / `exitDeg` 校验 | `camera.ts:122-132` 仍抛 `RangeError`；滞回与反平行的注释、实现未动 | ✅ 未变 |
+| `mainDimDir` 恒 `null` | `isoSheet.ts:175`；`camera.ts` 未变 | ✅ |
+| `kind` 取值；不新建 barrel | `isoSheet.ts:183` `'iso-sheet'`、`camera.ts` `'camera'`；`kernel/index.ts` 仍未导出 polar（`numeric/index.ts` 新导出 `arcDirection` / `arcNear` / `horizontalFallbackDir`，仍在目录内） | ✅ |
+| 契约（§13.11「明确不做：不导出 horidir」） | `PolarReference` 新增 `horiDir`（`types.ts:100`，PML `:252`，`getzdir :380-398` 要用）与 `up`（`types.ts:113`，`[0,0,1]`）；`isoSheet.ts:181-182` 填全部翻转后的 `horidir` / `WORLD_UP`，`camera.ts:265-266` 填 `horizontalFallbackDir(unitAxis)` / `WORLD_UP`（相机侧没有 2D 的翻转规则） | §13.11 的「已知的潜在缺口」已由 be17e987 回改关闭；`isoSheetReference` 现在在 `isoSheet.ts:113`（文件 185 行） |
+
+**给 T3.4 的两条提醒（复核后仍成立）**：① 退化轴策略仍不一致——`isoSheet.ts:116` 零轴用 `WORLD_UP` 顶替，`camera.ts:252` 抛 `RangeError`；另多出一处抛点 `arc.ts:68 / :77`（`zAxis` 零或 `xAxis ∥ zAxis`，注释自述与 `camera.ts` 同策略），`isoSheet.ts:162` 的弧分支在入参退化时会命中——T3.4 入口统一处理。② 导入路径仍不一致——`isoSheet.ts:22` 走 `'../numeric'` barrel，`camera.ts:46` 走 `'../numeric/isoDirections'` 直连；barrel 已导出 `horizontalFallbackDir`，可直接统一。
+
+**门禁数字**：3f298e7c 提交时未留，归入 §14 第 13 行的「当前 HEAD」一起跑；已随第 13 行补齐（2026-10-29，S2 81 / 709）。
 
 ### 13.15 T7.6 LOD 分层阈值拆分 + 退化四边形去重叠回退（计划外批次，2026-10-29 登记）
 
@@ -811,7 +846,7 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 
 - 这是**渲染行为变更**（LOD 可见性 + 去重叠胜负），与健壮性计划 §7「不改渲染外观」相抵；按 2026-10-29 裁决以独立任务 T7.6 入库，不并入健壮性计划。
 - 阈值 0 / 18 与 0.05..1.2 的取值来自源码注释里的现场数据，**没有** A/B 截图或量化记录。现行计划 W0 要求补一组固定相机前后对比截图，并确认 `theme.test.ts` 里的钉子覆盖这两个新字段。
-- 门禁数字：入库时未跑（按会话约定由用户本机执行），**待补**到 §14。
+- 门禁数字：入库时未跑（按会话约定由用户本机执行）；该批未单独切出数字，并入 §14 第 13 行的当前 HEAD 实测（§14 第 12 行已注明）。
 
 ---
 
@@ -832,7 +867,7 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 | 9 | 健壮性第三轮 A2–A5 | S1 | 75 / 601 | 健壮性 §9 | 5b1bdfd0（前有 ff3836af E2、47de00ac D2、f73adf91 A1 fixture） |
 | 10 | T3.3b / T3.3c | — | **未记** | §13.14 | 3f298e7c |
 | 11 | E1 两份适配器测试入库 | — | **未记** | 健壮性 §9 第四轮 | f76729df |
-| 12 | T7.6 LOD / 去重叠 | — | **未记（待用户本机跑后补）** | §13.15 | 12f4bb1e |
-| 13 | **当前 HEAD 的真实数字** | S2 | **待跑** | 现行计划 W0 | — |
+| 12 | T7.6 LOD / 去重叠 | — | 未单测，并入第 13 行（HEAD 已含 12f4bb1e 之后的提交，无法单独切出该时点的数字） | §13.15 | 12f4bb1e |
+| 13 | **当前 HEAD 的真实数字**（2026-10-29，W0-1 实测） | S2 | **81 / 709**（0 失败，6.49 s） | 现行计划 W0-1 | 120b1bec（工作区另含未提交的 W4-1 / W4-2 改动；W3 见 d7281249、6ee4e6bd） |
 
-**类型基线**：`npm run type-check` 自 §5.2 起始终是 **440 条 / 127 文件，新增 0 / 已消失 0**，最后一次实测在第 9 行（5b1bdfd0）；第 10–12 行之后未再实测。
+**类型基线**：`npm run type-check` 自 §5.2 起到第 9 行（5b1bdfd0）始终是 440 条 / 127 文件，新增 0 / 已消失 0；2026-10-29 在当前 HEAD（120b1bec，与第 13 行同一次）实测 **439 条 / 126 文件，新增 0 / 已消失 1**——消失的是 `src/dimension/ui/DimensionSemanticList.vue` 的 TS2345（`Argument of type 'DimensionListItem | undefined' is not assignable to parameter of type 'DimensionListItem'.`），修 W3-6 `groupLabel` 默认值时顺带消掉；基线已同步收紧（`npm run type-check:update-baseline`，`scripts/type-check-baseline.txt` 现为 439 条 / 126 文件），之后仍按「新增 0 / 已消失 0」放行。
