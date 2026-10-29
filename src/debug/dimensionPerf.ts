@@ -265,6 +265,9 @@ async function main(): Promise<void> {
     },
     // `run()` 只落一次布局，给不出 layout / paint 的分位；基线要分位时连续落几次。
     settle(passes = 20) {
+      if (!Number.isInteger(passes) || passes <= 0) {
+        throw new RangeError(`passes must be a positive integer, got ${passes}`);
+      }
       const layoutSamples: number[] = [];
       const paintSamples: number[] = [];
       for (let index = 0; index < passes; index += 1) {

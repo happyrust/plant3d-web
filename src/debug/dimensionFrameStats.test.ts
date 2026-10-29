@@ -64,4 +64,20 @@ describe('createDimensionFrameRecorder', () => {
     expect(() => createDimensionFrameRecorder(0)).toThrow(RangeError);
     expect(() => createDimensionFrameRecorder(1.5)).toThrow(RangeError);
   });
+
+  it('drops non-finite samples instead of poisoning the quantiles', () => {
+    const recorder = createDimensionFrameRecorder();
+    recorder.record(10, { layoutMs: 6, paintMs: 4 });
+    // NaN / Infinity 会毒化排序与 max（`NaN > max` 恒 false，max 会报 0）。
+    recorder.record(Number.NaN, { layoutMs: 0, paintMs: Number.NaN });
+    recorder.record(Number.POSITIVE_INFINITY, { layoutMs: Number.POSITIVE_INFINITY, paintMs: 0 });
+
+    expect(recorder.summary()).toEqual({
+      frames: 1,
+      layoutFrames: 1,
+      frameMs: { p50: 10, p95: 10, max: 10 },
+      layoutMs: { p50: 6, p95: 6, max: 6 },
+      paintMs: { p50: 4, p95: 4, max: 4 },
+    });
+  });
 });

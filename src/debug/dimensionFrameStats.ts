@@ -74,6 +74,15 @@ export function createDimensionFrameRecorder(capacity = 600): DimensionFrameReco
 
   return {
     record: (durationMs, breakdown) => {
+      // 非有限值会毒化分位：NaN 让排序比较器返回 NaN（顺序不定）、`percentile` 可能
+      // 返回 NaN，而 `quantiles` 的 `max` 因 `NaN > max` 恒 false 报 0。宁可不记。
+      if (
+        !Number.isFinite(durationMs)
+        || !Number.isFinite(breakdown.layoutMs)
+        || !Number.isFinite(breakdown.paintMs)
+      ) {
+        return;
+      }
       const sample: DimensionFrameSample = {
         frameMs: durationMs,
         layoutMs: breakdown.layoutMs,

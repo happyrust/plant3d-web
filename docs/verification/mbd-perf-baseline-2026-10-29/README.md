@@ -210,11 +210,11 @@ W5-5 比的就是这几格（各取三次的中位数）：
 1. **`paintMs` 在三类帧里语义不一致**：`dimensionViewport.ts:506-509`（只改样式的增量帧）与 `:524-527`（仅相机失效且 projector 未换）把**整帧**耗时记为 `paintMs`，而 `:559-562`（全量布局帧）的 `paintMs` 只含 `scenePainter.paint`。`:524-527` 那条分支实际**不绘制**（只有 `requestRender()`），却以 `paintMs ≈ 整帧` 入缓冲。后果：`paintMs` 分位被这两类帧往下拉或往上推，跨场景不可直接比。
 2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
 3. **`layoutMs > 0` 的过滤会误杀极快的全量帧**：`dimensionFrameStats.ts:91` 用 `sample.layoutMs > 0` 判定全量布局帧；`performance.now()` 精度不足时（小场景可能只几十条记录）全量布局可能测得 `0`，该帧被归为增量帧，`layoutFrames` 少算。
-4. **`record` 不校验 `durationMs`**：`dimensionFrameStats.ts:76-81` 直接存入；`NaN` 会让排序比较器返回 `NaN`（顺序不定）、`percentile` 可能返回 `NaN`，而 `quantiles` 的 `max` 因 `NaN > max` 恒 false 报 0。
-5. **`settle(passes)` 没有参数校验**：`dimensionPerf.ts:267` 接受任意 `passes`；`passes <= 0` 或非整数时循环不执行，返回全 0 读数，调用方无法与「真实测到 0 ms」区分。
+4. ~~**`record` 不校验 `durationMs`**~~ → **已修（2026-10-29）**：`dimensionFrameStats.ts` 的 `record` 现在丢弃非有限样本（`durationMs` / `layoutMs` / `paintMs` 任一不是有限数就不入缓冲），避免 `NaN` 毒化排序与 `max`；用例 `drops non-finite samples instead of poisoning the quantiles` 钉住。
+5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
 
-**这些都不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。
+**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 4、5 条已在本轮修掉；第 1–3 条是视口上报语义问题，属渲染侧口径，W5-5 之前不修（要改得先定「增量帧的 paintMs 该记什么」，见 W4-1 的后续讨论）。
 
 ## 原始读数
 
