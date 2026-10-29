@@ -618,6 +618,21 @@ export type ExplicitLayoutInput = Readonly<{
   /** Level-of-detail hints; omitted = always draw. */
   lod?: ExplicitLodInput;
   /**
+   * Where the value text sits relative to its dimension line (Q6, 2026-10-30).
+   *
+   * `interrupted` (default) is the engineering convention the kernel has
+   * always drawn: the text sits centred on the line and the line is broken
+   * around the label box. `above` lifts the text clear of the line along the
+   * line's screen normal and leaves the line whole — the ISO-style reading,
+   * offered as a mode because GB / ASME both accept the interrupted one.
+   *
+   * Only single-line labels qualify: a label that carries extra rows
+   * (`texts`) falls back to `interrupted`, because lifting a stack would push
+   * its lower rows back onto the line. Omitted means `interrupted`, so every
+   * existing caller keeps its exact pixels.
+   */
+  labelPresentation?: 'interrupted' | 'above';
+  /**
    * The model object the record sits on or inside, as the host knows it
    * (plant-mbd: the WELD component's refno in `…:weld:mark:<refno>`, whose
    * weld point lies on the bore axis inside its own bead and the pipe wall).

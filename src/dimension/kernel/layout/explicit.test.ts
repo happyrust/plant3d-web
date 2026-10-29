@@ -102,6 +102,81 @@ describe('layoutExplicit', () => {
     expect(result.hitRegions).toHaveLength(3);
   });
 
+  /**
+   * Q6 `labelPresentation`. `interrupted` is the engineering default and must
+   * stay byte-identical; `above` lifts the value text off its line and leaves
+   * the line whole. The third case is the one that matters in practice: `above`
+   * pushes the label into the row above unless the caller spaces rows wide
+   * enough, so the constraint is pinned here rather than left to screenshots.
+   */
+  it('presents the value text above an unbroken line only when asked', () => {
+    const context = (): LayoutContext => ({
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    });
+    // Label centred on its own line, so the interrupted default has to break it.
+    const onLine: ExplicitLayoutInput = { ...input, labelAnchor: [0.5, 0, 0] };
+    const dimensionLines = (layout: ReturnType<typeof layoutExplicit>): ScreenLine[] =>
+      layout.primitives.filter(
+        (primitive): primitive is ScreenLine =>
+          primitive.kind === 'line' && primitive.part === 'dimension',
+      );
+
+    // Default: two stubs around the label box (237.55..262.45 at 100 px/m).
+    const interrupted = layoutExplicit(onLine, context());
+    expect(dimensionLines(interrupted).map(line => roundNumbers([line.from, line.to])))
+      .toEqual([[[200, 200], [237.55, 200]], [[262.45, 200], [300, 200]]]);
+
+    // `above`: one untouched segment, and the text rises along the line normal
+    // by half a cap height + half the label padding + half a pixel = 11 px.
+    const above = layoutExplicit({ ...onLine, labelPresentation: 'above' }, context());
+    expect(dimensionLines(above).map(line => roundNumbers([line.from, line.to])))
+      .toEqual([[[200, 200], [300, 200]]]);
+    expect(roundNumbers(above.labelBounds)).toEqual(
+      roundNumbers({ x: 237.55, y: 175.25, width: 24.9, height: 27.5 }),
+    );
+    // Same box as the default, only lifted: 200 - 11 = 189 centre, 27.5 tall.
+    expect(interrupted.labelBounds).toMatchObject({ y: 186.25, height: 27.5 });
+
+    // A stacked label keeps the interrupted presentation: lifting the stack
+    // would put its lower rows back onto the line.
+    const stacked: ExplicitLayoutInput = {
+      ...onLine,
+      labelPresentation: 'above',
+      texts: [{ text: '25 REF', anchor: [0.5, 0, 0], stackIndex: 1 }],
+    };
+    expect(layoutExplicit(stacked, context()).labelBounds)
+      .toEqual(layoutExplicit({ ...stacked, labelPresentation: 'interrupted' }, context()).labelBounds);
+
+    // Row spacing: the lifted box reaches 24.75 px above its line (11 px lift
+    // + 13.75 px half box). A row 40 px above is clear …
+    const row = (id: string, lineY: number): ExplicitLayoutInput => ({
+      id,
+      role: 'external-reference',
+      labelPinned: true,
+      formattedLabel: '25 REF',
+      lines: [{ from: [0, lineY, 0], to: [1, lineY, 0], part: 'dimension' }],
+      labelAnchor: [0.5, lineY, 0],
+      arrowLines: [],
+      labelPresentation: 'above',
+    });
+    const overlaps = (a: typeof above.labelBounds, b: typeof above.labelBounds): boolean =>
+      a.x < b.x + b.width && b.x < a.x + a.width
+      && a.y < b.y + b.height && b.y < a.y + a.height;
+    const lower = layoutExplicit(row('lower', 0), context()).labelBounds;
+    const clearRow = layoutExplicit(row('upper', 0.4), context()).labelBounds;
+    expect(overlaps(lower, clearRow)).toBe(false);
+
+    // … while a row one `labelLineAdvance` (1.5 × 13 = 19.5 px) above is not.
+    // `above` therefore requires the caller to space rows ≥ 2.96 cap heights;
+    // at the stacked-line advance it intrudes on the neighbouring row.
+    const tightRow = layoutExplicit(row('upper', 0.195), context()).labelBounds;
+    expect(overlaps(lower, tightRow)).toBe(true);
+  });
+
   it('draws arrow strokes 1:1 once they project at or above the floor', () => {
     const context: LayoutContext = {
       projector: createTestProjector(),

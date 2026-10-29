@@ -118,7 +118,7 @@ W0 收口与基线（小，先做）
 | W5-1 | **T6.1** 真实 BRAN 视觉审阅，裁决 G9（坡度符号：PML 三角形 vs Web 线 + 箭头） | 结论进 ADR；截图落 `docs/verification/` |
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）| 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
 | W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**已实现（2026-10-30）**：`theme.lodMinLineToLabelRatio` 改成 `{ primary: 0.8, secondary: 0.5, detail: 1.5 }`，`lodShortLine` 按 `tier` 取值，未声明按 primary；数值门禁绿（S2 81/709、type-check 439/126 新增 0）。**视觉 A/B 仍待后端**，详见 §11.1 |
-| W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**可执行判据见 §11.2**（默认 `interrupted` 逐字段等于现状；「不侵入相邻行」落成 `labelBounds` 不相交断言） |
+| W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**已实现 kernel 侧（2026-10-30）**：`ExplicitLayoutInput.labelPresentation?: 'interrupted' \| 'above'`，缺省等于现状（逐字段不变）；`above` 抬 11 px（字高 13）且线不切段，多行标签自动回落；「不侵入相邻行」落成 `labelBounds` 相交断言，并据此得出**行距须 ≥ 2.96 字高**（现有 1.5 字高不够）。**未接 MBD mapper**，线上行为零变化；固定相机 A/B 待后端。详见 §11.2 |
 | W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**可执行判据见 §11.3，含一个必须先裁决的口径缺陷：现有门禁断言测的是 `renderer.render`，不含 layout → collision → paint，与 ADR 0040 的预算不同口径** |
 
 ## 5. 决策
@@ -203,7 +203,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 13 | `a9d80a4f` | 帧来源 `kind` 字段 + 面板分组只看记录（CT 窗口越界写的，Lead 复核后入库） | S2 81/709、type-check 439/126、eslint 0 |
 | 14 | `769bfab7` | recorder 按 `kind` 分桶 + README 已知口径问题第 1/3 条收口 | recorder 7/7、S2+debug 88/787、type-check 439/126、eslint 0 |
 | 15 | `f052535d` | §11 W5-3 / W5-4 / W5-5 可执行判据 + R8 门禁口径缺陷 + 性能 README 第 7 条 | 纯文档，无门禁 |
-| 16 | 待提交 | W5-3 实现：`lodMinLineToLabelRatio` 三档化 + `lodShortLine` 按 tier | S2 81/709、type-check 439/126、eslint 7 文件 0 |
+| 16 | `e419a2f6` | W5-3 实现：`lodMinLineToLabelRatio` 三档化 + `lodShortLine` 按 tier | S2 81/709、type-check 439/126、eslint 7 文件 0 |
+| 17 | 待提交 | W5-4 kernel 侧：`labelPresentation: 'above'` + 不相交断言 + 行距约束 | S2 81/710、type-check 439/126、eslint 3 文件 0 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -246,23 +247,28 @@ W5-3 / W5-4 / W5-5 在 §4 里各只有一行验收描述（「中景多留一�
 
 **仍未做的一半**：「本样本远景不变；中景多留一档」的**视觉**验收要用 W5-2 的固定相机基线做 A/B 出图，需 gen-model 后端 18084（当前不在线）。**在出图之前不得声称视觉验收通过**——上面钉住的是数值行为，不是画面。
 
-### 11.2 W5-4 「文字在线上方」可选模式（Q6）
+### 11.2 W5-4 「文字在线上方」可选模式（Q6）—— 已实现（2026-10-30）
 
-**现状**：engineering 默认是**「中断处」**——文字压在尺寸线中点，尺寸线在标签框处断开。实现是 `labelClearance`（`src/dimension/kernel/layout/explicit.ts:153-179`）算标签框 + `explicitSceneLines`（`:184-229`）用 `trimLineAgainstRotatedRect`（`src/dimension/kernel/geometry/trimLineAgainstRect.ts:111`）把 `part === 'dimension'` 的线切掉标签覆盖段。文字中心取 `input.labelAnchor`（solver 给的中点，`explicit.ts:163-166` 的 `makeCenteredGlyphRun`）。
+**原状**：engineering 默认是**「中断处」**——文字压在尺寸线中点，尺寸线在标签框处断开。实现是 `labelClearance`（`src/dimension/kernel/layout/explicit.ts:153-179`）算标签框 + `explicitSceneLines`（`:184-229`）用 `trimLineAgainstRotatedRect`（`src/dimension/kernel/geometry/trimLineAgainstRect.ts:111`）把 `part === 'dimension'` 的线切掉标签覆盖段。文字中心取 `input.labelAnchor`（solver 给的中点，`explicit.ts:163-166` 的 `makeCenteredGlyphRun`）。
 
-**要改的**：给 `ExplicitLayoutInput` 加可选 `labelPresentation?: 'interrupted' | 'above'`（缺省 `'interrupted'`，与现状逐像素一致）。`'above'` 时：
-- 文字沿**尺寸线的屏幕法向**抬 `labelPaddingPx + 半个字高`（复用 `theme.labelPaddingPx: 8` 与解析后的 `textHeightPx`）；
-- 尺寸线**不断开**（跳过 `trimLineAgainstRotatedRect` 分支，走 `explicitSceneLines` 的 `!clearance` 早退路径，`:192-198`）；
-- 只对**单行** isoline 生效：`input.texts` 为空（多行标签走 `texts`，见 `types.ts:608-609`），否则退回 `'interrupted'`。
+**已改**：`ExplicitLayoutInput` 新增可选 `labelPresentation?: 'interrupted' | 'above'`（`src/dimension/kernel/types.ts:619-635`），缺省 `'interrupted'`。`'above'` 时：
+- `labelClearance` 直接返回 `null`（`explicit.ts:370-380` 的 `above` 分支），于是 `explicitSceneLines` 走 `!clearance` 早退路径，尺寸线**不切段**；
+- 文字沿尺寸线的**屏幕法向**抬 `labelLiftPx = textHeightPx / 2 + labelPaddingPx / 2 + 0.5`（13 px 字高下 = 11 px），方向翻到朝上（屏幕 y 向下增长）。**不用 extension line 方向**：那个方向跟着 solver 把尺寸放哪一侧走，尺寸放在构件下方时会把文字推得更远；
+- 线投影成点时没有法向，文字直接向上抬。
 
-**验收判据**：
-1. 单测：同一输入在两种 `labelPresentation` 下的 `labelBounds` 中心差恰好等于抬升量，且 `'above'` 的 dimension 线 `primitives` 里没有切段（只有一条完整线段）；`'interrupted'` 的输出与改动前逐字段相等（用现有 `explicit.test.ts` 的快照式断言钉住，确保默认路径零变化）。
-2. 多行标签 + `'above'` 必须回落到 `'interrupted'`，有断言。
-3. **「不侵入相邻行」**要有可判定的形式，不能靠肉眼：给一条断言——`'above'` 的标签框与**同组其他记录的 `labelBounds` 不相交**（用现成的 `ScreenRect` 相交判定；拿 `declutterPolicy.test.ts` 的构造方式造两条相邻 isoline 即可）。这条是 W5-4 真正的验收核心，缺了它「不侵入相邻行」就是空话。
-4. 固定相机 A/B：用 W5-2 的生成器出 before（`'interrupted'`）/ after（`'above'`）两组，逐像素比对**只允许文字框与尺寸线断开处不同**；其它像素必须一致。后端不在线时同 §11.1 第 4 条，停在 1-3。
-5. 门禁同 §11.1 第 3 条。
+**只对单行生效**：`drawsLabelAbove` 要求 `(input.texts ?? []).length === 0`。多行标签走 `texts`（`types.ts:608-609`），抬起来会把下面的行压回线上，所以回落到 `'interrupted'`。
 
-**回退**：新字段可选 + 默认值等于现状，删字段即回退；`scenePainter` 不动。
+**门禁（2026-10-30 实测）**：S2 = **81 文件 / 710 通过**（比 W5-3 后多 1 例）；`npm run type-check` = 439 条 / 126 文件，新增 0 / 已消失 0；eslint 三个文件 0 error 0 warning。
+
+**测试**（`explicit.test.ts` 新增 `presents the value text above an unbroken line only when asked`）：
+1. 默认 `interrupted`：尺寸线断成两段 `200..237.55` 与 `262.45..300`（标签框 24.9 px 宽居中于 250）；
+2. `above`：一条完整 `200..300`；`labelBounds` 从 `y=186.25` 变成 `y=175.25`，高度不变（27.5），即**只抬不缩放**；
+3. 带 `texts` 的多行标签：`above` 与 `interrupted` 的 `labelBounds` 完全相等（证明真的回落）；
+4. **「不侵入相邻行」的可判定形式**：`above` 的标签框向上伸 11 + 13.75 = 24.75 px。行距 40 px（0.4 m @100 px/m）时与上一行**不相交**；行距 19.5 px（现有 `labelLineAdvance` = 1.5 × 13）时**相交**。
+
+**第 4 条是本项真正的验收核心，它同时给出一个必须遵守的约束**：`above` 要求行距 ≥ **2.96 字高**（24.75 + 13.75 = 38.5 px / 13），而现有堆叠行距是 1.5 字高。所以 `above` **不能**直接套在堆叠尺寸组上——调用方要么把组内行距拉开到 2.96 字高以上，要么只在单行 isoline 上用。这条已写进 `types.ts` 的字段注释。
+
+**仍未做的一半**：固定相机 before / after 逐像素比对（`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md:105` 的「固定相机对比」）要 W5-2 生成器 + gen-model 后端 18084，当前后端不在线。上面钉住的是几何行为，不是画面。**另外 `above` 目前没有接到 MBD mapper**——`mbdV2ExternalAnnotations.ts` 不产生这个字段，所以线上行为零变化，这是有意的：接不接、接到哪个开关（面板选项 / URL 参数 / 全局默认）是产品决策，留到 W5-4 的视觉验收之后再定。
 
 ### 11.3 W5-5 2k 分帧预算 —— 先说一个口径缺陷
 
@@ -291,14 +297,16 @@ expect(result.hitP95Ms).toBeLessThanOrEqual(2);
 
 **回退**：门禁断言改严之后若当前树直接失败，属于**预期**（它暴露了真实成本），不得为了放行而放宽阈值或改基线。
 
-### 11.4 未决问题（交 CT 裁决，不自己拍）
+### 11.4 未决问题（2026-10-30 更新：U1 / U4 已自决，U2 / U3 待办）
 
-| # | 问题 | 为什么不能自己拍 |
+用户 2026-10-30 明确指示**不使用 CT 窗口**，因此 §11 原定的四条裁决由本会话自己拍：
+
+| # | 问题 | 结论 |
 | --- | --- | --- |
-| U1 | Q5 三档 0.5 / 0.8 / 1.5 与 tier 的对应关系（§11.1 的建议映射对不对） | 改的是用户可见的标注取舍，属「改用户可见行为」 |
-| U2 | W5-5 是否把 `updateP95Ms` 那条断言换成 `settle` 分位（会让当前门禁直接红） | 两种解法代价差很大：换 = 立刻暴露 104.8 ms 要真做分帧；不换 = 保留一条测错东西的绿门禁 |
-| U3 | W5-5 的基线要不要重新在**生产构建**上测一遍（现在只有 dev 档数字） | 影响所有后续 P95 判定，且要跑构建，属工作量决策 |
-| U4 | `labelPresentation` 放 `ExplicitLayoutInput`（kernel 契约）还是只在 MBD mapper 层展开成两组坐标 | 前者动公共类型，后者在 adapter 里算屏幕法向（kernel 不知道投影）；两种都能做，架构含义不同 |
+| U1 | Q5 三档 0.5 / 0.8 / 1.5 与 tier 的对应关系 | **已自决并实现**：secondary 0.5 / primary 0.8 / detail 1.5，未声明按 primary。理由与后果见 §11.1，行为由单测钉住（`e419a2f6`） |
+| U4 | `labelPresentation` 放 kernel 契约还是 MBD mapper 层 | **已自决**：放 kernel 的 `ExplicitLayoutInput`（`types.ts`）。理由：`above` 要沿**屏幕法向**抬，mapper 层拿不到投影；放 kernel 是唯一不重复实现投影的地方。字段可选 + 默认等于现状，风险有界。**故意不接 mapper**，线上零变化（`e419a2f6` 之后这一刀） |
+| U2 | 是否把 `updateP95Ms` 断言换成 `settle` 分位（会让门禁直接变红） | **待办**。倾向换，但换之前必须先有生产构建档的基线，否则阈值无从定（见 U3） |
+| U3 | 基线要不要在**生产构建**上重测 | **待办**。倾向要：现在只有 dev 档数字，拿它当生产基线不成立 |
 
-**这四条在 CT 给出结论前不动代码。** CT 窗口当前因配额耗尽（`429 ERROR_RATE_LIMITED_CHANGEABLE`，`isRetryable: false`）唤不醒，`ct-44026171` 仍在队列里；配额恢复后一并提交。
+U2 / U3 是同一件事的两半，按 U3 → U2 顺序做：先在生产构建上量一次 `settle(20)`，拿到基线，再把门禁断言换成「不高于基线 × 1.2」。这一步会跑 `npm run build`，耗时长且会写 `dist/`，单独一刀。
 

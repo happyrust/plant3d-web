@@ -177,6 +177,54 @@ function labelClearance(
   };
 }
 
+/**
+ * Q6 `above` presentation: how far the value text rises clear of its dimension
+ * line. Half the cap height plus half the label padding, so the padded box the
+ * clearance pass would have trimmed against sits just off the stroke instead of
+ * touching it, plus half a pixel so a sub-pixel projection cannot make them
+ * coincide.
+ */
+function labelLiftPx(textHeightPx: number, theme: LayoutContext['theme']): number {
+  return textHeightPx / 2 + theme.labelPaddingPx / 2 + 0.5;
+}
+
+/**
+ * Screen offset that lifts the label off its line (Q6 `above`). The direction
+ * is the dimension line's screen normal, flipped to point up (screen y grows
+ * downwards). Deliberately *not* the extension-line direction: that one follows
+ * whichever side the solver offset the dimension to, so a dimension placed below
+ * its object would push the text further away from it. A line that projects to a
+ * point has no normal, so the text rises straight up.
+ */
+function labelLiftOffset(
+  input: ExplicitLayoutInput,
+  context: LayoutContext,
+  liftPx: number,
+): Vec2 {
+  const dimensionLine = input.lines.find(line => line.part === 'dimension');
+  if (!dimensionLine) return [0, -liftPx];
+  const from = projectSceneVertex(sceneVertex(dimensionLine.from), context.projector);
+  const to = projectSceneVertex(sceneVertex(dimensionLine.to), context.projector);
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const length = Math.hypot(dx, dy);
+  if (!(length > EPSILON)) return [0, -liftPx];
+  const nx = -dy / length;
+  const ny = dx / length;
+  return ny > 0
+    ? [-nx * liftPx, -ny * liftPx]
+    : [nx * liftPx, ny * liftPx];
+}
+
+/**
+ * Q6: whether this input draws its value text above the line with the line left
+ * whole. Only single-line labels qualify — a stack (`texts`) would put its lower
+ * rows back onto the line, so it keeps the interrupted presentation.
+ */
+function drawsLabelAbove(input: ExplicitLayoutInput): boolean {
+  return input.labelPresentation === 'above' && (input.texts ?? []).length === 0;
+}
+
 function samePoint(a: Vec2, b: Vec2): boolean {
   return a[0] === b[0] && a[1] === b[1];
 }
@@ -359,13 +407,22 @@ export function layoutExplicit(
     input.labelAlong,
     context,
   );
-  const clearance = labelClearance(
-    input,
-    labelRotationRad,
-    styleRole,
-    textHeightPx,
-    context,
-  );
+  // Q6: `above` lifts the text off the line and leaves the line whole, so there
+  // is nothing to trim — the clearance pass is skipped, which is also what makes
+  // the line draw as one untouched segment (see `explicitSceneLines`).
+  const above = drawsLabelAbove(input);
+  const liftOffsetPx: Vec2 = above
+    ? labelLiftOffset(input, context, labelLiftPx(textHeightPx, context.theme))
+    : [0, 0];
+  const clearance = above
+    ? null
+    : labelClearance(
+      input,
+      labelRotationRad,
+      styleRole,
+      textHeightPx,
+      context,
+    );
   const sceneLines = [
     ...input.lines.flatMap(line =>
       explicitSceneLines(line, clearance, styleRole, context)),
@@ -395,7 +452,7 @@ export function layoutExplicit(
     ));
   const glyphScene = sceneGlyph(
     input.formattedLabel,
-    sceneVertex(input.labelAnchor),
+    sceneVertex(input.labelAnchor, liftOffsetPx),
     textHeightPx,
     styleRole,
     labelRotationRad,
