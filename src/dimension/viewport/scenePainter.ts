@@ -1330,13 +1330,15 @@ export class ThreeSceneDimensionPainter {
     for (const layout of changed) {
       const range = this.dimensionRanges.get(layout.dimensionId);
       if (!range) return false;
+      // 同一个病：只为数顶点却走完整遍历（W5-5）。只读缓存长度即可。
       let lineVertexCount = 0;
-      visitSegments(
-        [layout],
-        this.font,
-        this.glyphCaches,
-        () => { lineVertexCount += 4; },
-      );
+      for (const primitive of layout.scenePrimitives) {
+        lineVertexCount += countPrimitiveSegments(
+          primitive,
+          this.font,
+          this.glyphCaches,
+        ) * 4;
+      }
       let triangleVertexCount = 0;
       let fillVertexTotal = 0;
       for (const primitive of layout.scenePrimitives) {
