@@ -3,19 +3,19 @@
 对应 `docs/plans/2026-10-29-mbd-dimension-remaining-work-dev-plan.md` W4-1；是 W5-5（2k 记录分帧预算）「相对基线 P95 不退化」的比较对象。
 **只量不改**：本轮没有动任何布局 / 绘制逻辑，新增的只是观测钩子（见「数字从哪来」）。
 
-状态：模板与钩子已落（2026-10-29），**数字待本机填**（表里的 `—`）。
+状态：**A 合成 2k 已实测填表**（2026-10-29，headless Chromium，`npm run perf:dimensions:browser` 同一条链路的 `run()` + `settle(20)` 各三次）；**B / C 真实 BRAN 仍待填**（需 gen-model 后端 18084 与真实 BRAN 数据，表里的 `—`）。
 
-## 环境（填）
+## 环境（A 场景已填；B / C 待填）
 
 | 项 | 值 |
 | --- | --- |
-| 机器 | CPU `—` / 内存 `—` / GPU `—`（`chrome://gpu` 的 `GL_RENDERER`）|
-| 系统 / 浏览器 | Windows `—` / Chrome `—`（`chrome://version`）|
-| 窗口 / DPR | 1920×1080 / DPR `—`（`window.devicePixelRatio`）；三维画布 `—`×`—` CSS px（主画布元素的 `clientWidth × clientHeight`）|
+| 机器 | AMD Ryzen 9 7950X 16-Core / 63.1 GB / AMD Radeon RX590 GME |
+| 系统 / 浏览器 | Windows 11 企业版 10.0.26200 / Playwright 1.58.2 自带 Chromium（headless）|
+| 窗口 / DPR | 1920×1080 / DPR 1（`test.use({ viewport: { width: 1920, height: 1080 } })`，未设 `deviceScaleFactor`）；A 场景画布由 `/dimension-perf.html` 自铺满视口 |
 | 电源 / 后台 | 接电源、高性能档；别的占 GPU 的进程关掉 |
-| 前端 | `plant3d-web` 提交 `—`（`git rev-parse --short HEAD`）；`npm run dev`（dev 构建，`http://127.0.0.1:3101`）|
-| 后端 | gen-model `—`（地址 / 构建），项目 `AvevaMarineSample` |
-| 日期 / 操作人 | `—` |
+| 前端 | `plant3d-web` 提交 `42546128`（A 场景实测时点）；`npm run dev`（dev 构建，`http://127.0.0.1:3101`，`reuseExistingServer: true`）|
+| 后端 | A 场景不需要后端（合成数据）；B / C 待填（地址 / 构建），项目 `AvevaMarineSample` |
+| 日期 / 操作人 | 2026-10-29 / Lead（A 场景）；B / C 待填 |
 
 ## 场景与相机
 
@@ -122,9 +122,10 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 
 | 次 | updateP50Ms | updateP95Ms | layoutP95Ms（单次） | paintP95Ms（单次） | hitP95Ms | observedFps | sceneObjectCount |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | — | — | — | — | — | — | — |
-| 2 | — | — | — | — | — | — | — |
-| 3 | — | — | — | — | — | — | — |
+| 1 | 0.30 | 0.60 | 26.30 | 71.30 | 0.10 | 57.93 | 4 |
+| 2 | 0.30 | 0.50 | 23.90 | 61.70 | 0.10 | 58.53 | 4 |
+| 3 | 0.20 | 0.50 | 21.00 | 59.40 | 0.10 | 58.77 | 4 |
+| 中位数 | 0.30 | 0.50 | 23.90 | 61.70 | 0.10 | 58.53 | 4 |
 
 预算（ADR 0040，`e2e/dimension-perf.spec.ts`）：`updateP95Ms ≤ 16`、`hitP95Ms ≤ 2`。
 
@@ -132,9 +133,10 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 
 | 次 | layoutP50Ms | layoutP95Ms | paintP50Ms | paintP95Ms |
 | --- | --- | --- | --- | --- |
-| 1 | — | — | — | — |
-| 2 | — | — | — | — |
-| 3 | — | — | — | — |
+| 1 | 17.10 | 26.20 | 61.70 | 76.60 |
+| 2 | 15.70 | 27.80 | 59.40 | 82.00 |
+| 3 | 16.60 | 21.30 | 58.10 | 78.60 |
+| 中位数 | 16.60 | 26.20 | 59.40 | 78.60 |
 
 ### B `24381_145018`（远景，自动 fit）
 
@@ -172,16 +174,20 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 | 2 | — | — | — | — | — | — | — | — | — | — |
 | 3 | — | — | — | — | — | — | — | — | — | — |
 
-## 基线结论（填）
+## 基线结论（A 已填 / B、C 待填）
 
 W5-5 比的就是这几格（各取三次的中位数）：
 
 | 场景 | 指标 | 基线 |
 | --- | --- | --- |
-| A | `updateP95Ms` / `hitP95Ms` | — / — |
-| A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | — / — |
-| B 远景 | `layoutMs P95` / `paintMs P95` | — / — |
-| C 远景 | `layoutMs P95` / `paintMs P95` | — / — |
+| A | `updateP95Ms` / `hitP95Ms` | **0.50 / 0.10**（预算 16 / 2，余量 32× / 20×）|
+| A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | **26.20 / 78.60** |
+| B 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
+| C 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
+
+**A 场景读数说明**：`updateP95Ms` 与 `hitP95Ms` 大幅低于预算，说明 2k 记录在 headless Chromium 下的**布局与命中测试**不是瓶颈；`paintP95Ms`（`settle(20)` 的 78.60 ms）才是这一档的真实成本，它是 20 次全量布局 + 绘制里最慢的那 5%，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算时要盯的是 `paintP95Ms`，不是 `updateP95Ms`。
+
+**口径提醒**：`run()` 的 `layoutP95Ms` / `paintP95Ms` 是 60 帧之后**一次** settle 的读数（README `:52` 已注明），字段名带 P95 但不是分位；`settle(20)` 那两列才是真分位。两者不可横向直接比。
 
 退化判据（建议，W5-5 时按实际数定稿）：P95 上浮超过 20 %，或 A 超出 ADR 0040 预算。
 
