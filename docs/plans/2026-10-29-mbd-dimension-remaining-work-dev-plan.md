@@ -117,9 +117,9 @@ W0 收口与基线（小，先做）
 | --- | --- | --- |
 | W5-1 | **T6.1** 真实 BRAN 视觉审阅，裁决 G9（坡度符号：PML 三角形 vs Web 线 + 箭头） | 结论进 ADR；截图落 `docs/verification/` |
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）| 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
-| W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档 |
-| W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行 |
-| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过 |
+| W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**可执行判据见 §11.1**（含三档与 tier 的映射建议、四条断言、视觉那半必须用 W5-2 基线 A/B） |
+| W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**可执行判据见 §11.2**（默认 `interrupted` 逐字段等于现状；「不侵入相邻行」落成 `labelBounds` 不相交断言） |
+| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**可执行判据见 §11.3，含一个必须先裁决的口径缺陷：现有门禁断言测的是 `renderer.render`，不含 layout → collision → paint，与 ADR 0040 的预算不同口径** |
 
 ## 5. 决策
 
@@ -144,6 +144,7 @@ W0 收口与基线（小，先做）
 | R5 | 门禁数字再次分叉 | 只写审计计划 §14；范围缩写 S0 / S1 / S2 必须注明 |
 | R6 | `type-check` 基线 440 条，新代码踩既有坑 | 每个工作包验收含「新增 0 / 已消失 0」；不改基线放行 |
 | R7 | W1-1 单文件超 600 行、14 步难以评审 | 按步骤拆子模块；每步有独立用例；PML 原 case 金样是唯一真值 |
+| R8 | **性能门禁测错东西**：`e2e/dimension-perf.spec.ts:27` 的 `updateP95Ms ≤ 16` 只覆盖 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint，而 ADR 0040 的预算是三者合并的帧 p95；门禁绿了不代表达标 | W5-5 必须补一条 `settle(passes)` 分位断言（§11.3）；在此之前**不得引用门禁绿作为性能达标证据** |
 
 ## 7. 验收命令
 
@@ -201,6 +202,7 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 12 | `66c78f0e` | W5-2 三档相机基线生成器（`e2e/dimension-camera-baseline.spec.ts` 388 行 + README 231 行 + `.gitignore` 1 行） | 不带门控 2 skipped（预期） |
 | 13 | `a9d80a4f` | 帧来源 `kind` 字段 + 面板分组只看记录（CT 窗口越界写的，Lead 复核后入库） | S2 81/709、type-check 439/126、eslint 0 |
 | 14 | `769bfab7` | recorder 按 `kind` 分桶 + README 已知口径问题第 1/3 条收口 | recorder 7/7、S2+debug 88/787、type-check 439/126、eslint 0 |
+| 15 | 待提交 | §11 W5-3 / W5-4 / W5-5 可执行判据 + R8 门禁口径缺陷 + 性能 README 第 7 条 | 纯文档，无门禁 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -211,4 +213,84 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 2. B3 的 popstate 开关修复实际随 `6ee4e6bd` 入库，不在 `ea51d949` 里。
 
 **粒度裁决**：W3 的 11 个文件不按 W3-2…W3-6 拆五刀。理由：`mbdV2ExternalAnnotations.ts` 里 W3-3/4/5/6 的 hunk 交错（`isolineTextHeightsM` / `textBaseline` / `tagSubject` / `isolineIndex`），`DimensionPanelDock.vue` 与 `useMbdExternalSync*` 里 W3-2 与 W3-6 同行段；拆开要在 4 个文件里按行分 hunk 并对 5 个中间提交各跑一次门禁，收益只有 bisect 粒度。替代做法：W3 六行末尾标提交号（已做）。
+
+## 11. W5 三项的可执行判据（2026-10-30 起草）
+
+W5-3 / W5-4 / W5-5 在 §4 里各只有一行验收描述（「中景多留一档」「不侵入相邻行」「P95 不退化」），没法照着做，也没法判对错。本节把三行展开成可执行的判据。**W5-1 不在本节**（它要真实 BRAN 视觉审阅，同样卡后端）。起草时只读代码，没跑任何命令。
+
+### 11.1 W5-3 短线阈值分级（Q5）
+
+**现状**：短线隐藏是**单一比值**，不是分级。`theme.lodMinLineToLabelRatio: 1`（`src/dimension/kernel/theme.ts:268`），谓词 `lodShortLine(lineLengthPx, labelWidthPx, theme)` 判 `lineLengthPx < labelWidthPx * ratio`（`src/dimension/kernel/layout/shared/lod.ts:60-66`）。两个调用点：
+- `src/dimension/kernel/layout/explicit.ts:139`（平铺显式尺寸，只在 `lod.hideShort` 且标签非空时判）；
+- `src/dimension/kernel/layout/dimension3d.ts:151`（3D 运行尺寸）。
+
+`hideShort` 的赋值在 `src/dimension/adapters/mbdV2ExternalAnnotations.ts:698`：`hideShort: !outside`，即 `sub_kind === 'small'` 的尺寸不参与短线隐藏（solver 已把文字挪到线外，`sepSmallDim`）。
+
+**要改的**：把 `lodMinLineToLabelRatio: number` 换成按 tier 取值的三档。原文（`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md:104`）给的是 **0.5 / 0.8 / 1.5**，但没写哪个 tier 对哪一档。
+
+**建议映射（需裁决，见 §11.4-U1）**：比值越小越宽松（越容易留下）。`secondary` → 0.5（ATTA 子尺寸，远景本该少画，但样本里它们本来就少，放宽不至于糊）、`primary` → 0.8（主尺寸，中景多留一档，正是 Q5 的原意）、`detail` → 1.5（坡标 / 斜标 / 支管名，近景专属，宁可更严）。这样「远景不变」（远景下 detail 已被 `lodDetailMinPx` 挡掉，secondary 的门槛本来就是 0）+「中景多留一档」（primary 从 1.0 放宽到 0.8）。
+
+**验收判据**（三条都要）：
+1. 单测钉住三档映射与边界：`lodShortLine` 的比值改由 tier 决定后，`shared/lod.test.ts:62-66` 那条现有用例改成对三个 tier 各测一次「刚好等于阈值不算隐藏、差 0.01 px 算隐藏」。用例名建议 `applies the per-tier short-line ratio instead of one flat ratio`。
+2. **远景不变**要有断言，不能只靠肉眼：现有 `shared/lod.test.ts:52-58` 的「secondary 不按投影高度隐藏」保持绿；另加一条断言 `theme.lodDetailMinPx` 未变（detail 的远景观测行为由它决定，与短线比值无关）。
+3. 门禁照旧：`npx vitest run src/dimension` 全绿、`npm run type-check` 新增 0、`npx eslint` 触及文件 0。
+4. **视觉**那一半（「本样本远景不变；中景多留一档」）必须用 W5-2 的固定相机基线做 A/B 出图对比，后端不在线时**只能停在 1-3**，不得声称视觉验收通过。
+
+**回退**：只动 `theme.ts` 一个字段的形状 + `shared/lod.ts` 一个函数 + 两个测试，`git restore` 即可；不涉及契约、不涉及 solver。
+
+### 11.2 W5-4 「文字在线上方」可选模式（Q6）
+
+**现状**：engineering 默认是**「中断处」**——文字压在尺寸线中点，尺寸线在标签框处断开。实现是 `labelClearance`（`src/dimension/kernel/layout/explicit.ts:153-179`）算标签框 + `explicitSceneLines`（`:184-229`）用 `trimLineAgainstRotatedRect`（`src/dimension/kernel/geometry/trimLineAgainstRect.ts:111`）把 `part === 'dimension'` 的线切掉标签覆盖段。文字中心取 `input.labelAnchor`（solver 给的中点，`explicit.ts:163-166` 的 `makeCenteredGlyphRun`）。
+
+**要改的**：给 `ExplicitLayoutInput` 加可选 `labelPresentation?: 'interrupted' | 'above'`（缺省 `'interrupted'`，与现状逐像素一致）。`'above'` 时：
+- 文字沿**尺寸线的屏幕法向**抬 `labelPaddingPx + 半个字高`（复用 `theme.labelPaddingPx: 8` 与解析后的 `textHeightPx`）；
+- 尺寸线**不断开**（跳过 `trimLineAgainstRotatedRect` 分支，走 `explicitSceneLines` 的 `!clearance` 早退路径，`:192-198`）；
+- 只对**单行** isoline 生效：`input.texts` 为空（多行标签走 `texts`，见 `types.ts:608-609`），否则退回 `'interrupted'`。
+
+**验收判据**：
+1. 单测：同一输入在两种 `labelPresentation` 下的 `labelBounds` 中心差恰好等于抬升量，且 `'above'` 的 dimension 线 `primitives` 里没有切段（只有一条完整线段）；`'interrupted'` 的输出与改动前逐字段相等（用现有 `explicit.test.ts` 的快照式断言钉住，确保默认路径零变化）。
+2. 多行标签 + `'above'` 必须回落到 `'interrupted'`，有断言。
+3. **「不侵入相邻行」**要有可判定的形式，不能靠肉眼：给一条断言——`'above'` 的标签框与**同组其他记录的 `labelBounds` 不相交**（用现成的 `ScreenRect` 相交判定；拿 `declutterPolicy.test.ts` 的构造方式造两条相邻 isoline 即可）。这条是 W5-4 真正的验收核心，缺了它「不侵入相邻行」就是空话。
+4. 固定相机 A/B：用 W5-2 的生成器出 before（`'interrupted'`）/ after（`'above'`）两组，逐像素比对**只允许文字框与尺寸线断开处不同**；其它像素必须一致。后端不在线时同 §11.1 第 4 条，停在 1-3。
+5. 门禁同 §11.1 第 3 条。
+
+**回退**：新字段可选 + 默认值等于现状，删字段即回退；`scenePainter` 不动。
+
+### 11.3 W5-5 2k 分帧预算 —— 先说一个口径缺陷
+
+**这是本节最重要的一条，建议优先裁决。**
+
+`e2e/dimension-perf.spec.ts:27-28` 现在断言两条：
+```
+expect(result.updateP95Ms).toBeLessThanOrEqual(16);
+expect(result.hitP95Ms).toBeLessThanOrEqual(2);
+```
+
+但 `updateP95Ms` 测的**只是 `renderer.render(scene, camera)`**——见 `src/debug/dimensionPerf.ts:223-235`，60 帧循环里每帧只做「改相机 → `renderer.render`」，**不含 `layoutViewport`、不含 `scenePainter.paint`**。真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`），单次读数塞进 `layoutP95Ms` / `paintP95Ms`，**没有任何断言看这两个字段**。
+
+对照 ADR 0040 的原文（`docs/adr/0040-target-large-plant-dimension-scale.md`）：预算是「合并后的 **layout → collision → paint** 帧 p95 不超过 16 ms」。所以：
+
+- **当前门禁测的 0.50 ms 不是 ADR 说的那个数**，它是纯 GPU 提交耗时。门禁绿了不代表 layout→paint 达标。
+- A 场景 `settle(20)` 的实测是 `layoutP95Ms` 26.20 + `paintP95Ms` 78.60 ≈ **104.8 ms**（`docs/verification/mbd-perf-baseline-2026-10-29/README.md:180-181`），**单是 layout 一项就已超 16 ms 预算**。
+- `hitP95Ms` 那条是对的：`hitIndex.hitTest` 是纯 CPU 命中（`:245-255`），与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径。
+
+**为什么不能直接判「超预算」**：A 场景是 dev 构建 + headless Chromium + DPR 1，而 ADR 的参考环境是 DPR 2；README 也注明 dev 比生产慢。所以 104.8 ms 不能直接和 16 ms 比。**但「门禁从没看过 layout/paint」这一点与构建档位无关，是确凿的口径缺口。**
+
+**W5-5 的正确判据（建议）**：
+1. **补齐门禁口径**：新增一条断言，用 `settle(passes)` 的分位判 layout→paint，而不是用 `run()` 的单次读数。至少断言 `layoutP95Ms + paintP95Ms` 不高于**在目标构建档位下实测的基线 × 1.2**（README 现有的「P95 上浮超 20 %」判据）。基线值必须先在**生产构建**（`npm run build` + preview，或至少 `--mode production`）上测一次——现在 README 里的 A 数字是 dev 档，不能直接当生产基线。
+2. **分帧预算本身**：`paintP95Ms` 78.60 是主要成本（README `:182-184` 已指出）。W5-5 的落地形态应该是「把 paint 拆到多帧」或「减少每帧重绘的记录数」，判据是**分帧后单帧 p95 ≤ 16 ms**，且**总帧数不超过 2 倍**（否则只是把成本摊长，交互会变卡）。
+3. **不许把门禁改成「跳过」**：现有 `test.skip(process.env.DIMENSION_PERF_GATE !== '1', ...)`（`e2e/dimension-perf.spec.ts:5-8`）是「默认不跑」，R5 已经登记为风险（「问题可能漏到线上」）。W5-5 要么把它接进 CI（至少 nightly），要么在文档里写明「本项只在本机跑」并承担后果——这是决策，不是实现细节。
+
+**回退**：门禁断言改严之后若当前树直接失败，属于**预期**（它暴露了真实成本），不得为了放行而放宽阈值或改基线。
+
+### 11.4 未决问题（交 CT 裁决，不自己拍）
+
+| # | 问题 | 为什么不能自己拍 |
+| --- | --- | --- |
+| U1 | Q5 三档 0.5 / 0.8 / 1.5 与 tier 的对应关系（§11.1 的建议映射对不对） | 改的是用户可见的标注取舍，属「改用户可见行为」 |
+| U2 | W5-5 是否把 `updateP95Ms` 那条断言换成 `settle` 分位（会让当前门禁直接红） | 两种解法代价差很大：换 = 立刻暴露 104.8 ms 要真做分帧；不换 = 保留一条测错东西的绿门禁 |
+| U3 | W5-5 的基线要不要重新在**生产构建**上测一遍（现在只有 dev 档数字） | 影响所有后续 P95 判定，且要跑构建，属工作量决策 |
+| U4 | `labelPresentation` 放 `ExplicitLayoutInput`（kernel 契约）还是只在 MBD mapper 层展开成两组坐标 | 前者动公共类型，后者在 adapter 里算屏幕法向（kernel 不知道投影）；两种都能做，架构含义不同 |
+
+**这四条在 CT 给出结论前不动代码。** CT 窗口当前因配额耗尽（`429 ERROR_RATE_LIMITED_CHANGEABLE`，`isRetryable: false`）唤不醒，`ct-44026171` 仍在队列里；配额恢复后一并提交。
 

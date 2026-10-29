@@ -180,12 +180,16 @@ W5-5 比的就是这几格（各取三次的中位数）：
 
 | 场景 | 指标 | 基线 |
 | --- | --- | --- |
-| A | `updateP95Ms` / `hitP95Ms` | **0.50 / 0.10**（预算 16 / 2，余量 32× / 20×）|
-| A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | **26.20 / 78.60** |
+| A | `updateP95Ms` / `hitP95Ms` | **0.50 / 0.10**（`hitP95Ms` 对应预算 2 ms，余量 20×；`updateP95Ms` **不对应** ADR 的 16 ms，见下方警示）|
+| A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | **26.20 / 78.60**（这两列才是 layout → paint 口径，合计 104.8 ms）|
 | B 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
 | C 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
 
-**A 场景读数说明**：`updateP95Ms` 与 `hitP95Ms` 大幅低于预算，说明 2k 记录在 headless Chromium 下的**布局与命中测试**不是瓶颈；`paintP95Ms`（`settle(20)` 的 78.60 ms）才是这一档的真实成本，它是 20 次全量布局 + 绘制里最慢的那 5%，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算时要盯的是 `paintP95Ms`，不是 `updateP95Ms`。
+**A 场景读数说明**：`hitP95Ms` 0.10 ms 说明**命中测试**不是瓶颈（与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径，`src/debug/dimensionPerf.ts:245-255` 是纯 CPU 命中）。`paintP95Ms`（`settle(20)` 的 78.60 ms）是 layout → paint 这一档的主要成本，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算要盯的是 `paintP95Ms`。
+
+**⚠️ `updateP95Ms` 与 ADR 0040 的预算不是同一件事（2026-10-30 补）**：`run()` 的 60 帧循环（`src/debug/dimensionPerf.ts:223-235`）每帧只做「改相机 → `renderer.render(scene, camera)`」，**不跑 `layoutViewport`、不跑 `scenePainter.paint`**；真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`）。ADR 0040 的预算是「合并后的 layout → collision → paint 帧 p95 不超过 16 ms」，所以 `e2e/dimension-perf.spec.ts:27` 那条 `updateP95Ms ≤ 16` **测的是纯 GPU 提交耗时，不是 ADR 那个数**。门禁绿不等于 layout → paint 达标。
+
+按同口径重算，A 场景 `settle(20)` 的 `layoutP95Ms` 26.20 + `paintP95Ms` 78.60 ≈ **104.8 ms**，单是 layout 一项就已超 16 ms 预算。**但这不是「判超预算」**：本表是 dev 构建 + headless Chromium + DPR 1，ADR 参考环境是 DPR 2，两者不可直接比。确凿的是**口径缺口**：门禁从未看过 layout / paint。W5-5 的处理见计划文档 §11.3 与风险 R8。
 
 **口径提醒**：`run()` 的 `layoutP95Ms` / `paintP95Ms` 是 60 帧之后**一次** settle 的读数（README `:52` 已注明），字段名带 P95 但不是分位；`settle(20)` 那两列才是真分位。两者不可横向直接比。
 
@@ -205,7 +209,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - 首轮含字体 / 着色器热身，先空跑一次再记三次。
 - 三次的原始返回值（JSON）原样贴在下面「原始读数」；B / C 的读数也往同一节追加，或存 `runs/`。
 
-## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5 条当天已修，第 2、6 条保持）
+## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5 条当天已修，第 2、6 条保持，第 7 条待 W5-5）
 
 1. ~~**`paintMs` 在三类帧里语义不一致**~~ → **已修（2026-10-29）**：`dimensionViewport.ts` 的 `onFrame` breakdown 加 `kind: 'layout' | 'style' | 'camera'`（`DimensionFrameKind`，三处上报点各标一种），数值口径未动（`layoutMs + paintMs` 仍恒等于整帧，facade 用例补断言 `kind === 'layout'`）；`dimensionFrameStats.ts` 的 `summary()` 现在按 `kind` 分桶，`paintMs` **只统计 `layout` 帧**，`style` / `camera` 帧的整帧耗时只进 `frameMs`。另加 `frameKinds` 计数，三类相加等于 `frames`。用例 `buckets by the reported kind instead of inferring it from layoutMs` 钉住。
 2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
@@ -213,8 +217,9 @@ W5-5 比的就是这几格（各取三次的中位数）：
 4. ~~**`record` 不校验 `durationMs`**~~ → **已修（2026-10-29）**：`dimensionFrameStats.ts` 的 `record` 现在丢弃非有限样本（`durationMs` / `layoutMs` / `paintMs` 任一不是有限数就不入缓冲），避免 `NaN` 毒化排序与 `max`；用例 `drops non-finite samples instead of poisoning the quantiles` 钉住。
 5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
+7. **`updateP95Ms` 与 ADR 0040 的帧预算不同口径（2026-10-30 补，未修）**：`run()` 的 60 帧循环只测 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint；`e2e/dimension-perf.spec.ts:27` 却拿它对着 16 ms 判。ADR 0040 的预算是三者合并的帧 p95。**处置**：W5-5 补一条 `settle(passes)` 分位断言（计划文档 §11.3、风险 R8），在此之前不得引用门禁绿作为性能达标证据。
 
-**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径。
+**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径；第 7 条（门禁口径）**待 W5-5 修，属计划级缺口，不是本表的口径问题**。
 
 ## 原始读数
 
