@@ -286,12 +286,93 @@ describe('mbdV2ToExternalRecords', () => {
     ], [8, 21.5, 33]);
   });
 
-  it('keeps tag and aid text viewport-horizontal until the contract has ori', () => {
+  it('keeps tag, aid and slope text viewport-horizontal when no text_dir is declared', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
 
+    // Every producer before T4.3 omits `text_dir`: no baseline reaches the
+    // kernel, neither on the primary label nor on the stacked lines.
     for (const id of ['label-1', 'aid-text-1', 'slope-1']) {
-      expect(explicitLayout(result, id).labelAlong).toBeUndefined();
+      const layout = explicitLayout(result, id);
+      expect(layout.labelAlong).toBeUndefined();
+      for (const text of layout.texts ?? []) expect(text.along).toBeUndefined();
     }
+  });
+
+  it('runs tag, aid and slope text along a declared text_dir, rotated by source_to_design (T4.3)', () => {
+    const parsed = parseMbdV2PipeData(translationFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const expectVec3Close = (
+      actual: readonly [number, number, number] | undefined,
+      expected: readonly [number, number, number],
+    ): void => {
+      expect(actual).toBeDefined();
+      expect(actual![0]).toBeCloseTo(expected[0], 9);
+      expect(actual![1]).toBeCloseTo(expected[1], 9);
+      expect(actual![2]).toBeCloseTo(expected[2], 9);
+    };
+
+    // T(10,20,30)·Rz(90°)·S(0.001): a direction is rotated only — E → N — and
+    // comes out unit length whatever its source length; translation and the
+    // 0.001 scale never reach it.
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      primitives: [
+        { kind: 'label', id: 'tag', text: 'X 1\nY 2', position: [0, 0, 0], text_dir: [1, 0, 0] },
+        { kind: 'aid_text', id: 'aid', text: 'A:0\nB:1', position: [0, 0, 0], text_dir: [0, 0, 2000] },
+        {
+          kind: 'slope_mark',
+          id: 'slope',
+          text: '1:100',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          text_dir: [0, 1, 0],
+        },
+      ],
+    });
+    expect(result.skipped).toEqual([]);
+
+    const tag = explicitLayout(result, 'tag');
+    expectVec3Close(tag.labelAlong, [0, 1, 0]);
+    // The stacked lines read the same way as the first one.
+    expect(tag.texts).toHaveLength(1);
+    expectVec3Close(tag.texts![0]!.along, [0, 1, 0]);
+    // The billboard spec is untouched: a tag body is always screen-facing.
+    expect(tag.tag).toMatchObject({ style: 'card', lines: [{ text: 'X 1' }, { text: 'Y 2' }] });
+
+    const aid = explicitLayout(result, 'aid');
+    expectVec3Close(aid.labelAlong, [0, 0, 1]);
+    expectVec3Close(aid.texts![0]!.along, [0, 0, 1]);
+
+    const slope = explicitLayout(result, 'slope');
+    expectVec3Close(slope.labelAlong, [-1, 0, 0]);
+    // The slope line itself keeps following the geometry, not the text.
+    expectVec3Close(slope.lines[0]!.from, [10, 20, 30]);
+    expectVec3Close(slope.lines[0]!.to, [10, 21, 30]);
+
+    // A `design_m` payload takes the direction as is, normalised.
+    const designSpace = mbdV2ToExternalRecords({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [] },
+      primitives: [
+        { kind: 'aid_text', id: 'aid', text: 'EL +1', position: [0, 0, 0], text_dir: [3, 4, 0] },
+      ],
+    });
+    expectVec3Close(explicitLayout(designSpace, 'aid').labelAlong, [0.6, 0.8, 0]);
+
+    // A transform that flattens the direction (zero Z scale) loses the
+    // baseline, not the primitive: that text falls back to viewport-horizontal.
+    const flattened = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: {
+        ...parsed.data.meta,
+        source_to_design: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      },
+      primitives: [
+        { kind: 'aid_text', id: 'aid', text: 'EL +1', position: [0, 0, 0], text_dir: [0, 0, 1] },
+      ],
+    });
+    expect(flattened.skipped).toEqual([]);
+    expect(explicitLayout(flattened, 'aid').labelAlong).toBeUndefined();
   });
 
   it('splits multi-line labels into stacked texts', () => {
@@ -491,6 +572,43 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(result, '24381_146979:isoline:0:weld:mark:24381_146980').subject).toBe('24381_146980');
     expect(explicitLayout(result, '24381_146979:isoline:1:weld:mark:24381_146984').subject).toBe('24381_146984');
     expect(explicitLayout(result, 'other-producer-weld').subject).toBeUndefined();
+  });
+
+  it('takes a declared object_refno as the subject before reading the id (T4.4)', () => {
+    const result = mbdV2ToExternalRecords({
+      ...fixtureData(),
+      primitives: [
+        // Declared: wins over the id convention …
+        { kind: 'label', id: 'b:isoline:0:tag:elbo:r1', text: '90°\nPE +1', position: [0, 0, 0], object_refno: '24381_105522' },
+        { kind: 'weld_mark', id: 'b:isoline:0:weld:mark:24381_146980', position: [1, 0, 0], object_refno: '24381_146999' },
+        // … names an object the id does not carry (another producer's ids, a
+        // branch end, the branch name) …
+        { kind: 'label', id: 'other-producer-tag', text: 'V-101', position: [2, 0, 0], object_refno: '24381_105530' },
+        { kind: 'weld_mark', id: 'other-producer-weld', position: [3, 0, 0], object_refno: '24381_147000' },
+        { kind: 'label', id: 'b:isoline:0:tag:connection:Head', text: 'X 1\nY 2\nPE 3', position: [4, 0, 0], object_refno: '24381_105540' },
+        { kind: 'label', id: 'b:tag:branch-name', text: 'Copy', position: [5, 0, 0], object_refno: '24381_105500' },
+        // … and not declared keeps the plant-mbd id convention (regression).
+        { kind: 'label', id: 'b:isoline:1:tag:name:r2', text: 'N', position: [6, 0, 0] },
+        { kind: 'weld_mark', id: 'b:isoline:1:weld:mark:24381_146984', position: [7, 0, 0] },
+        // A dimension's object is not an occlusion subject: its value text
+        // stands in free space and is probed plainly, whatever the producer
+        // declares (the jump-to-component consumer is a separate carrier).
+        {
+          kind: 'linear_dim', id: 'dim-with-object', start: [0, 0, 0], end: [1, 0, 0], text: '1000',
+          extension_lines: [], arrow_lines: [], label_anchor: [0.5, 0, 0], object_refno: '24381_105522',
+        },
+      ],
+    });
+
+    expect(explicitLayout(result, 'b:isoline:0:tag:elbo:r1').tag?.subject).toBe('24381_105522');
+    expect(explicitLayout(result, 'b:isoline:0:weld:mark:24381_146980').subject).toBe('24381_146999');
+    expect(explicitLayout(result, 'other-producer-tag').tag?.subject).toBe('24381_105530');
+    expect(explicitLayout(result, 'other-producer-weld').subject).toBe('24381_147000');
+    expect(explicitLayout(result, 'b:isoline:0:tag:connection:Head').tag?.subject).toBe('24381_105540');
+    expect(explicitLayout(result, 'b:tag:branch-name').tag).toMatchObject({ style: 'pill', subject: '24381_105500' });
+    expect(explicitLayout(result, 'b:isoline:1:tag:name:r2').tag?.subject).toBe('r2');
+    expect(explicitLayout(result, 'b:isoline:1:weld:mark:24381_146984').subject).toBe('24381_146984');
+    expect(explicitLayout(result, 'dim-with-object').subject).toBeUndefined();
   });
 
   it('marks slopes and skew aids as close-up detail', () => {
@@ -837,5 +955,123 @@ describe('mbdV2ToExternalRecords', () => {
     });
     expect(explicitLayout(bare, source.id).dimension3d).toBeDefined();
     expect(explicitLayout(bare, 'no-extensions').dimension3d).toBeUndefined();
+  });
+
+  it('takes the isoline cheight before the payload-wide one for text height and 3D row spacing (T4.2 / T4.6)', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const source = parsed.data.primitives[0]!;
+    if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+    // One row further out than `source` (500 mm extension lines): 532.4 mm is
+    // one 1.2·27 step past the surface under the payload-wide cheight, two
+    // 1.2·13.5 steps under isoline 0's.
+    const outerRow = {
+      ...source,
+      id: 'outer',
+      sub_kind: 'main',
+      start: [0, -532.4, 0] as const,
+      end: [80, -532.4, 0] as const,
+      label_anchor: [40, -532.4, 0] as const,
+      extension_lines: [
+        { from: [0, 0, 0] as const, to: [0, -532.4, 0] as const },
+        { from: [80, 0, 0] as const, to: [80, -532.4, 0] as const },
+      ],
+    };
+    // source_mm payload with S(0.001): 27 mm → 0.027 m, 13.5 mm → 0.0135 m,
+    // 54 mm → 0.054 m. Isoline 3 is tabled without members; 1 / 2 are not
+    // tabled at all (plant-mbd skips bags without a direction).
+    const meta = {
+      ...parsed.data.meta,
+      cheight_mm: 27,
+      isolines: [
+        { index: 0, members: ['24381_145018'], cheight_mm: 13.5, od_mm: 500 },
+        { index: 3, members: [], cheight_mm: 54, od_mm: 500 },
+      ],
+    };
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta,
+      primitives: [
+        { ...source, id: 'dim-isoline-0', isoline_idx: 0 },
+        { ...source, id: 'dim-isoline-3', isoline_idx: 3 },
+        { ...source, id: 'dim-dangling', isoline_idx: 9 },
+        { ...source, id: 'dim-unplaced' },
+        { ...outerRow, id: 'outer-isoline-0', isoline_idx: 0 },
+        { ...outerRow, id: 'outer-unplaced' },
+        { kind: 'weld_mark', id: 'weld-isoline-0', position: [0, 0, 0], isoline_idx: 0 },
+        { kind: 'aid_text', id: 'text-isoline-0', text: 'EL +1', position: [0, 0, 0], isoline_idx: 0 },
+        {
+          kind: 'aid_text', id: 'own-height', text: 'A:0', position: [0, 0, 0],
+          text_height_mm: 12.5, isoline_idx: 3,
+        },
+      ],
+    });
+
+    // Isoline layer: every kind in a tabled isoline takes that isoline's height.
+    expect(explicitLayout(result, 'dim-isoline-0').textHeightM).toBeCloseTo(0.0135, 12);
+    expect(explicitLayout(result, 'dim-isoline-3').textHeightM).toBeCloseTo(0.054, 12);
+    expect(explicitLayout(result, 'weld-isoline-0').textHeightM).toBeCloseTo(0.0135, 12);
+    expect(explicitLayout(result, 'text-isoline-0').textHeightM).toBeCloseTo(0.0135, 12);
+    // Payload layer: no isoline_idx, or one the table does not know (not an error).
+    expect(explicitLayout(result, 'dim-unplaced').textHeightM).toBeCloseTo(0.027, 12);
+    expect(explicitLayout(result, 'dim-dangling').textHeightM).toBeCloseTo(0.027, 12);
+    // Primitive layer still wins over the isoline's.
+    expect(explicitLayout(result, 'own-height').textHeightM).toBeCloseTo(0.0125, 12);
+
+    // The record carries its isoline for the panel's grouping (W3-6): the
+    // declared index as is (a dangling one included), no field without one.
+    const isolineIndexOf = (id: string) => result.records.find(item => item.id === id)?.isolineIndex;
+    expect(isolineIndexOf('dim-isoline-0')).toBe(0);
+    expect(isolineIndexOf('weld-isoline-0')).toBe(0);
+    expect(isolineIndexOf('own-height')).toBe(3);
+    expect(isolineIndexOf('dim-dangling')).toBe(9);
+    expect(result.records.find(item => item.id === 'dim-unplaced')).not.toHaveProperty('isolineIndex');
+
+    // The 3D row is read back with the same height: 32.4 mm past the surface
+    // is row 1 at the payload-wide step, row 2 at isoline 0's; the surface
+    // itself stays the branch-wide lower quartile (500 mm → 0.5 m).
+    expect(explicitLayout(result, 'outer-unplaced').dimension3d!.row).toBe(1);
+    expect(explicitLayout(result, 'outer-isoline-0').dimension3d!.row).toBe(2);
+    expect(explicitLayout(result, 'dim-isoline-0').dimension3d!.row).toBe(0);
+    expect(explicitLayout(result, 'outer-isoline-0').dimension3d!.surfaceM).toBeCloseTo(0.5, 12);
+
+    // The table alone is enough for a tabled record (height and 3D
+    // presentation); an untabled one still has nothing to hang.
+    const tableOnly = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: { ...meta, cheight_mm: null },
+      primitives: [
+        { ...source, id: 'dim-isoline-0', isoline_idx: 0 },
+        { ...source, id: 'dim-unplaced' },
+        { ...outerRow, id: 'outer-isoline-0', isoline_idx: 0 },
+        { ...outerRow, id: 'outer-unplaced' },
+      ],
+    });
+    expect(explicitLayout(tableOnly, 'outer-isoline-0').textHeightM).toBeCloseTo(0.0135, 12);
+    expect(explicitLayout(tableOnly, 'outer-isoline-0').dimension3d!.row).toBe(2);
+    expect(explicitLayout(tableOnly, 'outer-unplaced').textHeightM).toBeUndefined();
+    expect(explicitLayout(tableOnly, 'outer-unplaced').dimension3d).toBeUndefined();
+
+    // The table's od_mm is the solver's own innermost-row offset for that
+    // isoline, so its records read the surface from it (467.6 mm → 0.4676 m)
+    // while untabled ones keep the branch-wide quartile (0.5 m).
+    const ownSurface = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: {
+        ...meta,
+        isolines: [{ index: 0, members: ['24381_145018'], cheight_mm: 13.5, od_mm: 467.6 }],
+      },
+      primitives: [
+        { ...source, id: 'dim-isoline-0', isoline_idx: 0 },
+        { ...source, id: 'dim-unplaced' },
+        { ...outerRow, id: 'outer-isoline-0', isoline_idx: 0 },
+        { ...outerRow, id: 'outer-unplaced' },
+      ],
+    });
+    expect(explicitLayout(ownSurface, 'outer-isoline-0').dimension3d!.surfaceM).toBeCloseTo(0.4676, 12);
+    expect(explicitLayout(ownSurface, 'outer-isoline-0').dimension3d!.row).toBe(4);
+    expect(explicitLayout(ownSurface, 'dim-isoline-0').dimension3d!.row).toBe(2);
+    expect(explicitLayout(ownSurface, 'outer-unplaced').dimension3d!.surfaceM).toBeCloseTo(0.5, 12);
+    expect(explicitLayout(ownSurface, 'outer-unplaced').dimension3d!.row).toBe(1);
   });
 });

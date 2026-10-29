@@ -209,6 +209,8 @@ export function createMbdExternalSync(
           issues: payload.issues,
           skipped,
           layoutMode: payload.meta.layout_mode ?? null,
+          sourceVersion: payload.meta.source_version ?? null,
+          isolines: payload.meta.isolines ?? [],
           notes: [
             ...payload.meta.notes,
             ...(kindFilter

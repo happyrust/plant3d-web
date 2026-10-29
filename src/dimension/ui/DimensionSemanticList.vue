@@ -30,28 +30,73 @@ const props = withDefaults(defineProps<{
   user: { id: string; role: string } | null;
   formatPolicy: DimensionFormatPolicy;
   hiddenExternalIds?: readonly string[];
+  /**
+   * 父组件给某些行另起组名（MBD 按直段分组，W3-6）；返回 null 的行走默认的
+   * 「用户尺寸 / 外部尺寸 / 外部标注图元」三分。列表顺序仍由父组件按组排好。
+   */
+  groupLabel?: (item: DimensionListItem) => string | null;
   onSelect: (item: DimensionListItem) => void;
   onAction: (action: DimensionBoundAction, item: DimensionListItem) => void;
 }>(), {
   hiddenExternalIds: () => [],
+  // 函数型 prop 的默认值本身就是那个函数，不再套工厂：返回 null = 这一行没有自定义组名。
+  groupLabel: () => null,
 });
 
 const activeIndex = ref(0);
 const hiddenExternal = computed(() => new Set(props.hiddenExternalIds));
 
 function itemGroup(item: DimensionListItem): string {
+  const named = props.groupLabel?.(item);
+  if (named) return named;
   if (!isExternalDimensionRecord(item)) return '用户尺寸';
   return externalDimensionCategory(item) === 'annotation'
     ? '外部标注图元'
     : '外部尺寸';
 }
 
-/** 组标题只在该组第一行之前渲染一次（列表顺序由父组件按组排好）。 */
-const groupHeaders = computed(() => props.items.map((item, index) => {
-  const group = itemGroup(item);
-  const previousGroup = index > 0 ? itemGroup(props.items[index - 1]!) : null;
-  return group !== previousGroup ? group : null;
-}));
+/** 折叠状态只活在内存里，默认全部展开；组名一变（如成员数更新）就回到展开。 */
+const collapsedGroups = ref<ReadonlySet<string>>(new Set());
+
+type ListRow = Readonly<{
+  item: DimensionListItem;
+  index: number;
+  group: string;
+  /** 本行是该组第一行，组标题渲染在它前面（列表顺序由父组件按组排好）。 */
+  headsGroup: boolean;
+  /** 所在组折叠时整行不渲染，键盘也跳过它。 */
+  visible: boolean;
+}>;
+
+const rows = computed<readonly ListRow[]>(() => {
+  const groups = props.items.map(item => itemGroup(item));
+  return props.items.map((item, index) => {
+    const group = groups[index]!;
+    return {
+      item,
+      index,
+      group,
+      headsGroup: index === 0 || groups[index - 1] !== group,
+      visible: !collapsedGroups.value.has(group),
+    };
+  });
+});
+
+const groupSizes = computed(() => {
+  const sizes = new Map<string, number>();
+  for (const row of rows.value) sizes.set(row.group, (sizes.get(row.group) ?? 0) + 1);
+  return sizes;
+});
+
+function toggleGroup(group: string): void {
+  const next = new Set(collapsedGroups.value);
+  if (!next.delete(group)) next.add(group);
+  collapsedGroups.value = next;
+}
+
+function isRowVisible(index: number): boolean {
+  return rows.value[index]?.visible ?? false;
+}
 
 watch(
   () => [props.selectedId, props.items] as const,
@@ -72,6 +117,11 @@ watch(
 function optionId(item: DimensionListItem): string {
   return `dimension-option-${item.id}`;
 }
+
+const activeDescendant = computed(() => {
+  const row = rows.value[activeIndex.value];
+  return row?.visible ? optionId(row.item) : undefined;
+});
 
 function actionsFor(item: DimensionListItem): readonly DimensionBoundAction[] {
   return getDimensionBoundActions(item, props.user);
@@ -150,21 +200,29 @@ function invokeAction(
   props.onAction(action, item);
 }
 
+/** 键盘只在展开的行之间走；折叠组里的行跳过，到头就停住。 */
+function stepActive(direction: 1 | -1): void {
+  const count = props.items.length;
+  let next = activeIndex.value + direction;
+  while (next >= 0 && next < count && !isRowVisible(next)) next += direction;
+  if (next >= 0 && next < count) activeIndex.value = next;
+}
+
 function onKeydown(event: KeyboardEvent): void {
   if (props.items.length === 0) return;
   if (event.key === 'ArrowDown') {
     event.preventDefault();
-    activeIndex.value = Math.min(activeIndex.value + 1, props.items.length - 1);
+    stepActive(1);
     return;
   }
   if (event.key === 'ArrowUp') {
     event.preventDefault();
-    activeIndex.value = Math.max(activeIndex.value - 1, 0);
+    stepActive(-1);
     return;
   }
 
   const active = props.items[activeIndex.value];
-  if (!active) return;
+  if (!active || !isRowVisible(activeIndex.value)) return;
   if (event.key === 'Enter') {
     event.preventDefault();
     props.onSelect(active);
@@ -185,36 +243,46 @@ function onKeydown(event: KeyboardEvent): void {
     role="listbox"
     tabindex="0"
     aria-label="尺寸列表"
-    :aria-activedescendant="items[activeIndex] ? optionId(items[activeIndex]) : undefined"
+    :aria-activedescendant="activeDescendant"
     @keydown="onKeydown">
-    <template v-for="(item, index) in items" :key="item.id">
-      <div v-if="groupHeaders[index]"
+    <template v-for="row in rows" :key="row.item.id">
+      <div v-if="row.headsGroup"
         class="dimension-semantic-list__group"
-        role="presentation"
-        :data-group="groupHeaders[index]">
-        {{ groupHeaders[index] }}
+        role="presentation">
+        <button type="button"
+          class="dimension-semantic-list__group-toggle"
+          :data-group="row.group"
+          :aria-expanded="row.visible"
+          @click="toggleGroup(row.group)">
+          {{ row.group }}
+        </button>
+        <span class="dimension-semantic-list__group-count"
+          :data-group-count="row.group">
+          {{ groupSizes.get(row.group) }}
+        </span>
       </div>
-      <div :id="optionId(item)"
+      <div v-if="row.visible"
+        :id="optionId(row.item)"
         class="dimension-semantic-list__row"
-        :class="{ 'is-active': index === activeIndex }"
+        :class="{ 'is-active': row.index === activeIndex }"
         role="option"
-        :aria-selected="item.id === selectedId"
-        :data-dimension-id="item.id"
-        @click="selectItem(item, index)">
+        :aria-selected="row.item.id === selectedId"
+        :data-dimension-id="row.item.id"
+        @click="selectItem(row.item, row.index)">
         <div class="dimension-semantic-list__content">
-          <span>{{ itemLabel(item) }}</span>
-          <span v-if="statusLabel(item)"
+          <span>{{ itemLabel(row.item) }}</span>
+          <span v-if="statusLabel(row.item)"
             class="dimension-semantic-list__status">
-            {{ statusLabel(item) }}
+            {{ statusLabel(row.item) }}
           </span>
         </div>
         <div class="dimension-semantic-list__actions">
-          <button v-for="action in actionsFor(item).filter(action => action !== 'select')"
+          <button v-for="action in actionsFor(row.item).filter(action => action !== 'select')"
             :key="action"
             type="button"
             :data-action="action"
-            @click.stop="invokeAction(action, item)">
-            {{ actionLabel(action, item) }}
+            @click.stop="invokeAction(action, row.item)">
+            {{ actionLabel(action, row.item) }}
           </button>
         </div>
       </div>
@@ -237,11 +305,39 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 .dimension-semantic-list__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 4px 2px;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   opacity: 0.65;
+}
+
+.dimension-semantic-list__group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.dimension-semantic-list__group-toggle::before {
+  content: '▾';
+}
+
+.dimension-semantic-list__group-toggle[aria-expanded='false']::before {
+  content: '▸';
+}
+
+.dimension-semantic-list__group-count {
+  font-weight: 400;
 }
 
 .dimension-semantic-list__row {

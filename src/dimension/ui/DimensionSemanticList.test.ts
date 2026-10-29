@@ -4,7 +4,7 @@ import { createApp, nextTick, type App } from 'vue';
 import { linearRecord } from '../domain/testFixtures';
 import { DEFAULT_DIMENSION_FORMAT } from '../kernel/format';
 
-import { getDimensionBoundActions } from './dimensionBoundActions';
+import { getDimensionBoundActions, isExternalDimensionRecord } from './dimensionBoundActions';
 import DimensionSemanticList from './DimensionSemanticList.vue';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
@@ -32,6 +32,7 @@ function mountList(input: {
   items?: readonly (UserDimensionRecord | ExternalDimensionRecord)[];
   selectedId?: string | null;
   user?: { id: string; role: string } | null;
+  groupLabel?: (item: UserDimensionRecord | ExternalDimensionRecord) => string | null;
   onSelect?: ReturnType<typeof vi.fn>;
   onAction?: ReturnType<typeof vi.fn>;
 } = {}) {
@@ -42,6 +43,7 @@ function mountList(input: {
     selectedId: input.selectedId ?? null,
     user: input.user ?? { id: 'owner', role: 'designer' },
     formatPolicy: DEFAULT_DIMENSION_FORMAT,
+    ...(input.groupLabel ? { groupLabel: input.groupLabel } : {}),
     onSelect: input.onSelect ?? vi.fn(),
     onAction: input.onAction ?? vi.fn(),
   });
@@ -200,5 +202,50 @@ describe('DimensionSemanticList', () => {
     expect(headers).toEqual(['用户尺寸', '外部尺寸', '外部标注图元']);
     expect(host.querySelector('[data-dimension-id="weld-1"]')?.textContent)
       .toContain('MBD: weld-1');
+  });
+
+  it('lets the parent name groups and collapses a group on demand (W3-6)', async () => {
+    const tabled = (id: string, isolineIndex?: number): ExternalDimensionRecord => ({
+      ...external,
+      id,
+      layout: { ...external.layout, id },
+      ...(isolineIndex === undefined ? {} : { isolineIndex }),
+    });
+    const onSelect = vi.fn();
+    const host = mountList({
+      items: [linearRecord(), tabled('seg0-a', 0), tabled('seg0-b', 0), tabled('seg3', 3), tabled('loose')],
+      onSelect,
+      groupLabel: item => {
+        if (!isExternalDimensionRecord(item)) return null;
+        return item.isolineIndex === undefined ? '未分段' : `直段 ${item.isolineIndex}`;
+      },
+    });
+    const headers = () => [...host.querySelectorAll('[data-group]')]
+      .map(node => node.textContent?.trim());
+    const rowIds = () => [...host.querySelectorAll('[data-dimension-id]')]
+      .map(node => node.getAttribute('data-dimension-id'));
+    const toggle = () => host.querySelector<HTMLButtonElement>('[data-group="直段 0"]')!;
+
+    expect(headers()).toEqual(['用户尺寸', '直段 0', '直段 3', '未分段']);
+    expect(host.querySelector('[data-group-count="直段 0"]')?.textContent?.trim()).toBe('2');
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+
+    toggle().click();
+    await nextTick();
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    expect(rowIds()).toEqual(['linear-1', 'seg3', 'loose']);
+    expect(headers()).toEqual(['用户尺寸', '直段 0', '直段 3', '未分段']);
+
+    // Keyboard skips the collapsed rows: from linear-1, ArrowDown lands on seg3.
+    const list = host.querySelector('[role="listbox"]') as HTMLElement;
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await nextTick();
+    expect(list.getAttribute('aria-activedescendant')).toBe('dimension-option-seg3');
+    expect(onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'seg3' }));
+
+    toggle().click();
+    await nextTick();
+    expect(rowIds()).toEqual(['linear-1', 'seg0-a', 'seg0-b', 'seg3', 'loose']);
   });
 });

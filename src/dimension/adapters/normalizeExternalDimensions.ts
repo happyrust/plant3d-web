@@ -40,6 +40,11 @@ export type ExternalDimensionRecord = Readonly<{
    * 重算送进内核的 `labelPinned`。
    */
   layoutAuthority?: ExternalLayoutAuthority;
+  /**
+   * 所在直段（MBD `isoline_idx`，T4.6）：`meta.isolines[]` 里那一行的 `index`。
+   * 只有 MBD 生产者写，面板据它分组；缺省 = 不按直段归类。
+   */
+  isolineIndex?: number;
   layout: NormalizedDimensionInput | ExplicitLayoutInput;
 }>;
 

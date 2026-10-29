@@ -145,17 +145,75 @@ onUnmounted(() => {
   unsubscribeLayouts = null;
 });
 
-const items = computed(() => [
-  ...(documentState.value?.records ?? []),
-  ...externalRecords.value.filter(
-    record => externalDimensionCategory(record) === 'dimension',
-  ),
-  ...externalRecords.value.filter(
-    record => externalDimensionCategory(record) === 'annotation',
-  ),
-]);
-
 const mbdDiagnostics = useMbdDiagnosticsStore().snapshot;
+
+/** 同一来源内尺寸在前、标注在后（ADR 0041 两分）。 */
+function byCategory(
+  records: readonly ExternalDimensionRecord[],
+): readonly ExternalDimensionRecord[] {
+  return [
+    ...records.filter(record => externalDimensionCategory(record) === 'dimension'),
+    ...records.filter(record => externalDimensionCategory(record) === 'annotation'),
+  ];
+}
+
+/**
+ * MBD 按直段分组（W3-6）：负载带了 `meta.isolines` 表、或任一 MBD 记录带
+ * `isolineIndex`，MBD 记录就按直段编号升序成组，没有归属的殿后归「未分段」；
+ * 其它来源照旧按类别两分。两者都没有（今天的负载）时列表一行不变。
+ */
+const mbdIsolineGrouping = computed(() =>
+  mbdDiagnostics.value.isolines.length > 0
+  || externalRecords.value.some(
+    record => record.source === 'mbd' && record.isolineIndex !== undefined,
+  ));
+
+const items = computed<readonly DimensionListItem[]>(() => {
+  const user = documentState.value?.records ?? [];
+  if (!mbdIsolineGrouping.value) return [...user, ...byCategory(externalRecords.value)];
+  const mbd = externalRecords.value.filter(record => record.source === 'mbd');
+  const indices = [...new Set(mbd.flatMap(
+    record => (record.isolineIndex === undefined ? [] : [record.isolineIndex]),
+  ))].sort((a, b) => a - b);
+  return [
+    ...user,
+    ...byCategory(externalRecords.value.filter(record => record.source !== 'mbd')),
+    ...indices.flatMap(index => byCategory(mbd.filter(record => record.isolineIndex === index))),
+    ...byCategory(mbd.filter(record => record.isolineIndex === undefined)),
+  ];
+});
+
+const isolinesByIndex = computed(() => new Map(
+  mbdDiagnostics.value.isolines.map(isoline => [isoline.index, isoline] as const),
+));
+
+/** 组头：直段编号 + 表里的成员数 / 字高 / OD；表里没有这一行（悬空下标）就只报编号。 */
+function isolineGroupLabel(index: number): string {
+  const isoline = isolinesByIndex.value.get(index);
+  if (!isoline) return `直段 ${index}`;
+  return `直段 ${index} · 成员 ${isoline.members.length} · 字高 ${isoline.cheight_mm} mm · OD ${isoline.od_mm}`;
+}
+
+function listGroupLabel(item: DimensionListItem): string | null {
+  if (!mbdIsolineGrouping.value || !isExternalDimensionRecord(item) || item.source !== 'mbd') {
+    return null;
+  }
+  return item.isolineIndex === undefined ? '未分段' : isolineGroupLabel(item.isolineIndex);
+}
+
+/** 负载的数据时点（T4.5）：标题行徽标写 `dbnum@sesno`，悬停列出求解器读过的各库会话。 */
+const sourceVersionBadge = computed(() => {
+  const version = mbdDiagnostics.value.sourceVersion;
+  return version ? `数据 ${version.dbnum}@${version.sesno}` : null;
+});
+const sourceVersionTitle = computed(() => {
+  const version = mbdDiagnostics.value.sourceVersion;
+  if (!version) return '';
+  const databases = version.databases.map(
+    database => `${database.dbnum}@${database.sesno} (${database.db_type})`,
+  );
+  return `求解器读取的数据库会话：${databases.length > 0 ? databases.join('、') : `${version.dbnum}@${version.sesno}`}`;
+});
 const diagnosticsBySeverity = computed(() => {
   const groups: Record<'error' | 'warning' | 'info', MbdDiagnosticsSnapshot['issues'][number][]> = {
     error: [],
@@ -293,7 +351,9 @@ function openMbdDiagnostics(): void {
 /**
  * B3：允许部分显示。真实开关在 `useMbdExternalSync`（读 URL `mbd_partial=1`）：
  * 关（缺省）= ADR 0046 的原子拒绝，一坏就整包不提交；开 = 跳过坏图元、其余照画，
- * 并在面板上常驻「已跳过 N 条」。开关同样只改 URL 再派发 `popstate` 触发重新同步。
+ * 并在面板上常驻「已跳过 N 条」。开关同样只改 URL 再派发 `popstate` 触发重新同步；
+ * 勾选框与横幅不自己记状态，`popstate` 时从 URL 回读（`syncDisplayModeFromLocation`），
+ * 页内切换与浏览器前进 / 后退都与同步层实际用的模式一致。
  */
 function readMbdPartialEnabled(): boolean {
   if (typeof window === 'undefined') return false;
@@ -431,6 +491,7 @@ function syncDisplayModeFromLocation(): void {
     ? ''
     : new URLSearchParams(window.location.search).get('mbd_refno')?.trim() ?? '';
   mbdKindFilter.value = readMbdKindFilter();
+  mbdPartialEnabled.value = readMbdPartialEnabled();
   mbdLodDisabled.value = readMbdLodDisabled();
   mbd3dDisabled.value = readMbd3dDisabled();
   const mode = readMbdDisplayMode();
@@ -646,6 +707,12 @@ function act(
       data-testid="mbd-refno">
       <div class="flex flex-wrap items-center gap-2">
         <span class="font-semibold">BRAN 尺寸标注（MBD）</span>
+        <span v-if="sourceVersionBadge"
+          class="rounded border border-slate-300 bg-white px-1.5 py-0.5"
+          data-testid="mbd-source-version"
+          :title="sourceVersionTitle">
+          {{ sourceVersionBadge }}
+        </span>
         <button v-if="mbdErrorBadgeVisible"
           type="button"
           class="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 font-semibold text-red-700"
@@ -884,6 +951,7 @@ function act(
         :user="currentUser"
         :format-policy="DEFAULT_DIMENSION_FORMAT"
         :hidden-external-ids="hiddenExternalIds"
+        :group-label="listGroupLabel"
         :on-select="select"
         :on-action="act" />
     </div>

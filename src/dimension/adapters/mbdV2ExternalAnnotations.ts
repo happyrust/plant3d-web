@@ -61,6 +61,9 @@ type ExplicitLine = Readonly<{
 
 type TransformPoint = (point: MbdV2Vec3) => Vec3;
 
+/** What names a primitive's model object: the declared `object_refno` (T4.4), else its id. */
+type ObjectRef = Readonly<{ id: string; object_refno?: string }>;
+
 /**
  * Payload → Design Space. Points take the full affine matrix; axis vectors
  * take its upper 3×3 and come back unit length (or null when they collapse),
@@ -85,6 +88,24 @@ function frameTransformer(data: MbdV2PipeData): FrameTransform | null {
     point: point => affine.transformPoint(matrix, point),
     direction: direction => tryNormalize3(affine.transformDirection(matrix, direction)),
   };
+}
+
+/**
+ * Text baseline of a `label` / `aid_text` / `slope_mark` from its `text_dir`
+ * (PML AIDTXT `ori` X axis, T4.3), through the direction part of the
+ * transform like an arc axis: unit length in Design Space. Undefined when the
+ * primitive declares none — every producer before the field — or when the
+ * transform collapses it: the kernel then keeps viewport-horizontal text, so
+ * a lost direction costs orientation only, never the primitive (parse already
+ * rejected a zero or non-finite vector). A billboard tag never reads it (its
+ * body is screen-facing); the `mbd_3d=0` flat presentation does.
+ */
+function textBaseline(
+  primitive: Readonly<{ text_dir?: MbdV2Vec3 }>,
+  transform: FrameTransform,
+): Vec3 | undefined {
+  if (!primitive.text_dir) return undefined;
+  return transform.direction(primitive.text_dir) ?? undefined;
 }
 
 /**
@@ -121,20 +142,59 @@ function textHeightToDesignM(
 }
 
 /**
- * Group text height in Design Space: `meta.cheight_mm` (PML `isoline`
- * character height, one value per payload) taken through the same transform
- * as the geometry — the length of a cheight-long vector, so a uniform
- * `source_to_design` scale reaches it while translation does not. A
- * `design_m` payload still declares the height in millimetres. Undefined when
- * the solver did not report one; the kernel then keeps its fixed text height.
+ * Payload-wide group text height in Design Space: `meta.cheight_mm` (the
+ * largest main-dimension `cheight` over the branch's isolines, one value per
+ * payload) taken through the same transform as the geometry — the length of
+ * a cheight-long vector, so a uniform `source_to_design` scale reaches it
+ * while translation does not. A `design_m` payload still declares the height
+ * in millimetres. Undefined when the solver did not report one; the kernel
+ * then keeps its fixed text height.
  */
-function groupTextHeightM(
+function payloadTextHeightM(
   data: MbdV2PipeData,
   transform: FrameTransform,
 ): number | undefined {
   const cheight = data.meta.cheight_mm;
   if (cheight === undefined || cheight === null) return undefined;
   return textHeightToDesignM(data, transform, cheight);
+}
+
+/**
+ * Per-isoline text heights in Design Space keyed by `meta.isolines[].index`
+ * (T4.2 / W3-3): the solver's isoline-level `cheight` after
+ * `changeCheightAuto`, which is also what spaces that isoline's dimension
+ * rows (plant-mbd `isodim.rs`, `ROW_STEP_CHEIGHT_RATIO · cheight`). Empty
+ * when the payload carries no table.
+ */
+function isolineTextHeightsM(
+  data: MbdV2PipeData,
+  transform: FrameTransform,
+): ReadonlyMap<number, number> {
+  const heights = new Map<number, number>();
+  for (const isoline of data.meta.isolines ?? []) {
+    const heightM = textHeightToDesignM(data, transform, isoline.cheight_mm);
+    if (heightM !== undefined) heights.set(isoline.index, heightM);
+  }
+  return heights;
+}
+
+/**
+ * Group layer of the D7 text-height order for one primitive: its isoline's
+ * height when `isoline_idx` names a row of the table, else the payload-wide
+ * height. A dangling index is not an error (the contract does not
+ * cross-check the two); it simply falls through. The primitive layer
+ * (`text_height_mm`) goes on top of this at the call site.
+ */
+function groupTextHeightM(
+  primitive: Readonly<{ isoline_idx?: number }>,
+  isolineHeightsM: ReadonlyMap<number, number>,
+  payloadHeightM: number | undefined,
+): number | undefined {
+  if (primitive.isoline_idx !== undefined) {
+    const isolineHeightM = isolineHeightsM.get(primitive.isoline_idx);
+    if (isolineHeightM !== undefined) return isolineHeightM;
+  }
+  return payloadHeightM;
 }
 
 function lineStyleFrom(style: string | undefined): DimensionLineStyle | undefined {
@@ -182,9 +242,15 @@ function splitTextLines(text: string): readonly string[] {
   return lines.length > 0 ? lines : [text];
 }
 
+/**
+ * First line as the primary label, the rest as glyph runs stacked under the
+ * same anchor; every run shares the label's baseline (`along`) when the
+ * primitive declares one.
+ */
 function multiLineTexts(
   text: string,
   anchor: MbdV2Vec3,
+  along?: Vec3,
 ): Readonly<{ formattedLabel: string; texts: readonly ExplicitTextInput[] }> {
   const [first, ...rest] = splitTextLines(text);
   return {
@@ -193,6 +259,7 @@ function multiLineTexts(
       text: line,
       anchor: [anchor[0], anchor[1], anchor[2]] as Vec3,
       stackIndex: index + 1,
+      ...(along ? { along } : {}),
     })),
   };
 }
@@ -254,6 +321,9 @@ function explicitRecord(
     role,
     category,
     layoutAuthority: 'solver',
+    ...(primitive.isoline_idx !== undefined
+      ? { isolineIndex: primitive.isoline_idx }
+      : {}),
     layout,
   };
 }
@@ -310,32 +380,37 @@ type TagClass = Readonly<{
 }>;
 
 /**
- * The refno a plant-mbd tag id names after `:tag:<kind>:` — the elbow, the
- * bend, the tee, the support (`atta`), the named component, the component a
- * connection card or an elevation sits at; every kind plant-mbd emits puts
- * the component last (2026-09-14: `bend` / `atta` / `elevation` / `tee` tags
- * were probed like refno-less cards before). A branch end
- * (`connection:Head` / `connection:Tail`) is a point on the pipe, not a
- * component, and has none; so has `branch-name` (no component segment).
+ * The component a tag names, for the inspection pass: the contract's
+ * `object_refno` when the producer declares it (T4.4), else — plant-mbd ids
+ * — the refno after `:tag:<kind>:`: the elbow, the bend, the tee, the
+ * support (`atta`), the named component, the component a connection card or
+ * an elevation sits at; every kind plant-mbd emits puts the component last
+ * (2026-09-14: `bend` / `atta` / `elevation` / `tee` tags were probed like
+ * refno-less cards before). A branch end (`connection:Head` /
+ * `connection:Tail`) is a point on the pipe, not a component, and has none;
+ * so has `branch-name` (no component segment).
  */
-function tagSubject(id: string): string | undefined {
-  const match = /:tag:[^:]+:([^:]+)$/.exec(id);
+function tagSubject(primitive: ObjectRef): string | undefined {
+  if (primitive.object_refno) return primitive.object_refno;
+  const match = /:tag:[^:]+:([^:]+)$/.exec(primitive.id);
   const subject = match?.[1];
   if (!subject || subject === 'Head' || subject === 'Tail') return undefined;
   return subject;
 }
 
 /**
- * The WELD component a plant-mbd weld mark id names after `:weld:mark:`
+ * The WELD component a weld mark names: the contract's `object_refno` when
+ * declared (T4.4), else the refno a plant-mbd id carries after `:weld:mark:`
  * (`<bran>:isoline:<n>:weld:mark:<refno>`). The mark's position is that
  * component's origin — the weld point on the bore axis, inside the bead the
  * model draws for the WELD and inside the pipe wall — so the inspection
  * pass needs the refno to leave the weld's own geometry out of the ray
  * (2026-09-14: 27 / 27 weld marks of BRAN 24381_146979 faded without it).
- * Another producer's id carries none and the mark is probed plainly.
+ * Another producer that declares neither gets the mark probed plainly.
  */
-function weldSubject(id: string): string | undefined {
-  return /:weld:mark:([^:]+)$/.exec(id)?.[1] || undefined;
+function weldSubject(primitive: ObjectRef): string | undefined {
+  return primitive.object_refno
+    ?? (/:weld:mark:([^:]+)$/.exec(primitive.id)?.[1] || undefined);
 }
 
 /**
@@ -369,19 +444,19 @@ const ELEVATION_TAG: TagClass = {
  * name. The reference drawing style keeps coordinate blocks and names at
  * every distance, shows elevations from mid range (an elbow's angle and a
  * bend's radius only on a close-up) and the branch name only on a close-up.
- * The refno in the id (any kind) becomes the tag's `subject` for the
- * inspection pass.
+ * The tag's `subject` for the inspection pass is the declared `object_refno`,
+ * else the refno in a plant-mbd id (any kind).
  */
 function classifyTag(primitive: MbdV2Label): TagClass {
   const id = primitive.id;
-  const subject = tagSubject(id);
+  const subject = tagSubject(primitive);
   const withSubject = (tagClass: TagClass): TagClass =>
     subject ? { ...tagClass, subject } : tagClass;
   if (id.includes(':tag:connection:')) return withSubject({ style: 'card', dot: true });
   if (id.includes(':tag:name:')) return withSubject({ style: 'frame', dot: false });
   if (/:tag:(?:elbo|bend|elevation|tee):/.test(id)) return withSubject(ELEVATION_TAG);
   if (id.includes(':tag:branch-name')) {
-    return { style: 'pill', dot: false, lod: { tier: 'detail' } };
+    return withSubject({ style: 'pill', dot: false, lod: { tier: 'detail' } });
   }
   const coordinateBlock = splitTextLines(primitive.text)
     .some(line => /^(?:X|Y|PE)\s/.test(line));
@@ -415,19 +490,22 @@ function awayFromPipe(
 
 /**
  * Tag (`label`, optionally with its `leader_line`): the flat presentation is
- * the solver's text at its position plus the leader as drawn; with `tag`
- * the kernel presents it as a billboard call-out (card / frame / pill) that
- * keeps its leader on the pipe point (reference drawing style, 2026-09-12).
- * The `mbd_3d=0` switch strips `tag` and gets the flat presentation back.
+ * the solver's text at its position (along its `text_dir` when declared)
+ * plus the leader as drawn; with `tag` the kernel presents it as a billboard
+ * call-out (card / frame / pill) that keeps its leader on the pipe point
+ * (reference drawing style, 2026-09-12). The `mbd_3d=0` switch strips `tag`
+ * and gets the flat presentation back.
  */
 function mapLabel(
   primitive: MbdV2Label,
   leader: MbdV2LeaderLine | undefined,
   dimensions: readonly MbdV2LinearDim[],
-  transformPoint: TransformPoint,
+  transform: FrameTransform,
 ): ExternalDimensionRecord {
+  const transformPoint = transform.point;
   const position = transformPoint(primitive.position);
-  const { formattedLabel, texts } = multiLineTexts(primitive.text, position);
+  const along = textBaseline(primitive, transform);
+  const { formattedLabel, texts } = multiLineTexts(primitive.text, position, along);
   const target = leader ? transformPoint(leader.end) : undefined;
   const tagClass = classifyTag(primitive);
   const tag: ExplicitTagInput = {
@@ -449,6 +527,7 @@ function mapLabel(
   return explicitRecord(primitive, 'annotation', {
     formattedLabel,
     labelAnchor: position,
+    ...(along ? { labelAlong: along } : {}),
     texts,
     ...(target ? { lines: [{ from: position, to: target, part: 'leader' as const }] } : {}),
     ...(tagClass.lod ? { lod: tagClass.lod } : {}),
@@ -462,17 +541,24 @@ function isDetailAid(id: string): boolean {
 }
 
 /**
- * Group facts the 3D presentation needs from the whole payload: the solver's
- * row spacing is `1.2 · cheight` (plant-mbd `isodim.rs` row offset), and its
- * innermost row sits `od` from the pipe centre line, so the shortest
- * extension line in the branch reads as the pipe surface distance. The lower
- * quartile rather than the minimum keeps one odd short line from pulling the
- * whole branch inwards; on a branch with several pipe sizes the larger pipe's
- * rows come out one or two rows further, which still clears its body.
+ * Facts the 3D presentation needs beyond one primitive. The solver's
+ * innermost row sits `od` — the isoline's outside diameter — from the pipe
+ * centre line (plant-mbd `isodim.rs` row offset `od + 1.2 · cheight · (row − 1)`),
+ * and `meta.isolines[].od_mm` (T4.6) is that very `od`, so a record the table
+ * names reads its surface distance from there. Without the table the
+ * shortest extension line in the branch stands in for it: the lower quartile
+ * rather than the minimum keeps one odd short line from pulling the whole
+ * branch inwards; on a branch with several pipe sizes the larger pipe's rows
+ * then come out one or two rows further, which still clears its body. The row
+ * spacing itself is `1.2 · cheight` with the record's own group height
+ * (`groupTextHeightM`: its isoline's when the table names it, else the
+ * payload-wide one).
  */
 type Presentation3dContext = Readonly<{
-  cheightM: number;
+  /** Branch-wide surface distance: the extension-length lower quartile. */
   surfaceM: number;
+  /** Per-isoline `od_mm` in Design Space, keyed by the table's `index`. */
+  isolineSurfacesM: ReadonlyMap<number, number>;
 }>;
 
 const SOLVER_ROW_SPACING_CHEIGHT = 1.2;
@@ -489,10 +575,9 @@ function extensionLengthM(
 
 function presentation3dContext(
   data: MbdV2PipeData,
+  transform: FrameTransform,
   transformPoint: TransformPoint,
-  cheightM: number | undefined,
 ): Presentation3dContext | null {
-  if (cheightM === undefined) return null;
   const lengths = data.primitives
     .flatMap(primitive => (primitive.kind === 'linear_dim'
       ? [extensionLengthM(primitive, transformPoint)]
@@ -500,18 +585,22 @@ function presentation3dContext(
     .filter((length): length is number => length !== null && length > 0)
     .sort((a, b) => a - b);
   if (lengths.length === 0) return null;
-  return {
-    cheightM,
-    surfaceM: lengths[Math.floor(lengths.length * 0.25)]!,
-  };
+  const isolineSurfacesM = new Map<number, number>();
+  for (const isoline of data.meta.isolines ?? []) {
+    // The same millimetre → Design Space conversion the text heights take.
+    const surfaceM = textHeightToDesignM(data, transform, isoline.od_mm);
+    if (surfaceM !== undefined) isolineSurfacesM.set(isoline.index, surfaceM);
+  }
+  return { surfaceM: lengths[Math.floor(lengths.length * 0.25)]!, isolineSurfacesM };
 }
 
 /**
  * Per-dimension 3D presentation input (`ExplicitDimension3dInput`): the pipe
  * centre-line points are the extension lines' `from`, `dim_dir` is their
- * direction, and the solver row is read back from the extension length. A
- * dimension without exactly two extension lines (nothing to stand off from)
- * keeps the flat presentation.
+ * direction, and the solver row is read back from the extension length with
+ * its isoline's `od_mm` (else the branch-wide quartile) as the surface and
+ * the record's group height as the row step. A dimension without exactly two
+ * extension lines (nothing to stand off from) keeps the flat presentation.
  */
 function dimension3dInput(
   primitive: MbdV2LinearDim,
@@ -520,6 +609,7 @@ function dimension3dInput(
   labelAnchor: Vec3,
   transformPoint: TransformPoint,
   context: Presentation3dContext,
+  cheightM: number,
 ): ExplicitLayoutInput['dimension3d'] | undefined {
   if (primitive.extension_lines.length !== 2) return undefined;
   const [first, second] = primitive.extension_lines.map(line => ({
@@ -533,8 +623,11 @@ function dimension3dInput(
   if (!direction) return undefined;
   const extension = (length3(sub3(atStart.to, atStart.from))
     + length3(sub3(atEnd.to, atEnd.from))) / 2;
+  const surfaceM = (primitive.isoline_idx === undefined
+    ? undefined
+    : context.isolineSurfacesM.get(primitive.isoline_idx)) ?? context.surfaceM;
   const row = Math.max(0, Math.round(
-    (extension - context.surfaceM) / (SOLVER_ROW_SPACING_CHEIGHT * context.cheightM),
+    (extension - surfaceM) / (SOLVER_ROW_SPACING_CHEIGHT * cheightM),
   ));
   const span = sub3(end, start);
   const spanLength = dot3(span, span);
@@ -543,7 +636,7 @@ function dimension3dInput(
     from: atStart.from,
     to: atEnd.from,
     direction,
-    surfaceM: context.surfaceM,
+    surfaceM,
     row,
     ...(primitive.sub_kind === 'small'
       ? { outside: alongT < 0.5 ? 'start' : 'end' }
@@ -561,15 +654,17 @@ function dimension3dInput(
  * view. Sources that carry no strokes (older payload rows, hand-authored
  * data) fall back to the kernel's screen-scaled filled heads.
  *
- * With a group `cheight` the record also carries `dimension3d`, and the
- * kernel presents it as true 3D annotation standing off the pipe (reference
- * drawing style, 2026-09-12); the flat geometry below stays as the fallback
- * the `mbd_3d=0` debug switch returns to.
+ * With a group `cheight` (its isoline's or the payload-wide one) the record
+ * also carries `dimension3d`, and the kernel presents it as true 3D
+ * annotation standing off the pipe (reference drawing style, 2026-09-12); the
+ * flat geometry below stays as the fallback the `mbd_3d=0` debug switch
+ * returns to.
  */
 function mapLinearDim(
   primitive: MbdV2LinearDim,
   transformPoint: TransformPoint,
   presentation3d: Presentation3dContext | null,
+  cheightM: number | undefined,
 ): ExternalDimensionRecord {
   const role = primitive.reference ? 'external-reference' : 'external';
   const start = transformPoint(primitive.start);
@@ -588,8 +683,8 @@ function mapLinearDim(
     to: transformPoint(line.to),
   }));
   const outside = primitive.sub_kind === 'small';
-  const dimension3d = presentation3d
-    ? dimension3dInput(primitive, start, end, labelAnchor, transformPoint, presentation3d)
+  const dimension3d = presentation3d && cheightM !== undefined
+    ? dimension3dInput(primitive, start, end, labelAnchor, transformPoint, presentation3d, cheightM)
     : undefined;
   return explicitRecord(primitive, 'dimension', {
     formattedLabel: primitive.text,
@@ -603,10 +698,10 @@ function mapLinearDim(
       hideShort: !outside,
     },
     labelAnchor,
-    // 「工程文字朝向」: a dimension value runs along its dimension line. The
-    // contract carries no orientation yet, but for a linear dim the direction
-    // is the line itself, so this needs no guess. Tag/aid text keeps viewport
-    // horizontal until the contract declares PML's `ori`.
+    // 「工程文字朝向」: a dimension value runs along its dimension line, which
+    // is the direction itself, so a linear dim needs no field for it. Tag /
+    // aid / slope text takes the contract's `text_dir` (`textBaseline`) and
+    // stays viewport-horizontal without one.
     labelAlong: sub3(end, start),
     lines,
     ...(dimension3d ? { dimension3d } : {}),
@@ -798,8 +893,9 @@ export function mbdV2ToExternalRecords(
     };
   }
   const transformPoint = transform.point;
-  const textHeightM = groupTextHeightM(data, transform);
-  const presentation3d = presentation3dContext(data, transformPoint, textHeightM);
+  const payloadHeightM = payloadTextHeightM(data, transform);
+  const isolineHeightsM = isolineTextHeightsM(data, transform);
+  const presentation3d = presentation3dContext(data, transform, transformPoint);
   const leaderByLabel = pairLeaders(data, transformPoint);
   const pairedLeaderIds = new Set([...leaderByLabel.values()].map(leader => leader.id));
   const linearDims = data.primitives.filter(
@@ -820,9 +916,11 @@ export function mbdV2ToExternalRecords(
       continue;
     }
     let record: ExternalDimensionRecord | null = null;
+    // D7 group layer for this record; a linear dim also spaces its 3D rows by it.
+    const groupHeightM = groupTextHeightM(primitive, isolineHeightsM, payloadHeightM);
     switch (primitive.kind) {
       case 'linear_dim':
-        record = mapLinearDim(primitive, transformPoint, presentation3d);
+        record = mapLinearDim(primitive, transformPoint, presentation3d, groupHeightM);
         break;
       case 'angle_dim':
         record = mapAngleDim(primitive, transform);
@@ -838,18 +936,21 @@ export function mbdV2ToExternalRecords(
           primitive,
           leaderByLabel.get(primitive.id),
           linearDims,
-          transformPoint,
+          transform,
         );
         break;
       case 'aid_text': {
         const position = transformPoint(primitive.position);
+        const along = textBaseline(primitive, transform);
         const { formattedLabel, texts } = multiLineTexts(
           primitive.text,
           position,
+          along,
         );
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel,
           labelAnchor: position,
+          ...(along ? { labelAlong: along } : {}),
           texts,
           ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
         });
@@ -909,7 +1010,7 @@ export function mbdV2ToExternalRecords(
       }
       case 'weld_mark': {
         const position = transformPoint(primitive.position);
-        const subject = weldSubject(primitive.id);
+        const subject = weldSubject(primitive);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: '',
           labelAnchor: position,
@@ -934,9 +1035,11 @@ export function mbdV2ToExternalRecords(
       case 'slope_mark': {
         const start = transformPoint(primitive.start);
         const end = transformPoint(primitive.end);
+        const along = textBaseline(primitive, transform);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: primitive.text,
           labelAnchor: midpoint(start, end),
+          ...(along ? { labelAlong: along } : {}),
           lines: [{ from: start, to: end, part: 'dimension' }],
           arrowLines: slopeArrowLines(start, end),
           // Slopes are close-up detail in the reference drawing style.
@@ -951,15 +1054,16 @@ export function mbdV2ToExternalRecords(
       // Every record here comes from `explicitRecord`, so the layout is an
       // `ExplicitLayoutInput`; the group text height rides along with it so
       // the kernel can scale labels and the arrow floor with the model (S2).
-      // A record that already declared its own height (`aid_text`
-      // `text_height_mm`, e.g. the half-height direction labels) keeps it.
+      // D7 order: a record that already declared its own height (`aid_text`
+      // `text_height_mm`, e.g. the half-height direction labels) keeps it,
+      // otherwise it takes its isoline's, otherwise the payload-wide one.
       const hasOwnTextHeightM
         = (record.layout as ExplicitLayoutInput).textHeightM !== undefined;
-      records.push(textHeightM === undefined || hasOwnTextHeightM
+      records.push(groupHeightM === undefined || hasOwnTextHeightM
         ? record
         : {
           ...record,
-          layout: { ...(record.layout as ExplicitLayoutInput), textHeightM },
+          layout: { ...(record.layout as ExplicitLayoutInput), textHeightM: groupHeightM },
         });
     } else {
       // Parse already checked structure, so the arc kinds are the only ones

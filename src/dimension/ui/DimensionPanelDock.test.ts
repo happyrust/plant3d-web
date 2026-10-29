@@ -605,6 +605,107 @@ describe('DimensionPanelDock', () => {
     expect(empty.querySelector('[data-testid="mbd-diagnostics"]')?.hasAttribute('open')).toBe(true);
   });
 
+  /** W3-2（T4.5）：负载带 `meta.source_version` 时标题行挂「数据 dbnum@sesno」徽标，悬停列各库；缺省不挂。 */
+  it('shows the payload data version on the MBD header only when declared', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: [],
+      skipped: [],
+      sourceVersion: {
+        dbnum: 24381,
+        sesno: 145,
+        databases: [
+          { dbnum: 24381, sesno: 145, db_type: 'DESI' },
+          { dbnum: 5054, sesno: 48, db_type: 'CATA' },
+        ],
+      },
+    });
+
+    const declared = mountPanel();
+    await nextTick();
+    const badge = declared.querySelector('[data-testid="mbd-refno"] [data-testid="mbd-source-version"]');
+    expect(badge?.textContent?.replace(/\s+/g, ' ').trim()).toBe('数据 24381@145');
+    expect(badge?.getAttribute('title')).toContain('24381@145 (DESI)');
+    expect(badge?.getAttribute('title')).toContain('5054@48 (CATA)');
+    apps.splice(0).forEach(app => app.unmount());
+    document.body.innerHTML = '';
+
+    useMbdDiagnosticsStore().set({ channel: 'api', sourceId: '24381_145018', issues: [], skipped: [] });
+    const bare = mountPanel();
+    await nextTick();
+    expect(bare.querySelector('[data-testid="mbd-source-version"]')).toBeNull();
+  });
+
+  /**
+   * W3-6（T4.6）：MBD 记录带 `isolineIndex` 时列表按直段成组——组头报编号、成员数、
+   * 字高、OD（表里没有这一行就只报编号），没归属的殿后归「未分段」，组可折叠；
+   * 其它来源仍按类别两分。
+   */
+  it('groups MBD records by isoline with the table facts in the header', async () => {
+    const system = createSystem();
+    const mbdRecord = (
+      id: string,
+      isolineIndex?: number,
+      category?: 'annotation',
+    ): ExternalDimensionRecord => ({
+      id,
+      source: 'mbd',
+      sourceLabel: `MBD: ${id}`,
+      role: 'external',
+      ...(category ? { category } : {}),
+      ...(isolineIndex === undefined ? {} : { isolineIndex }),
+      layout: {
+        id,
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+      },
+    });
+    system.externalRegistry.replaceSource('mbd', [
+      mbdRecord('weld-3', 3, 'annotation'),
+      mbdRecord('dim-loose'),
+      mbdRecord('dim-3', 3),
+      mbdRecord('dim-0', 0),
+      mbdRecord('dim-7', 7),
+    ]);
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: [],
+      skipped: [],
+      isolines: [
+        { index: 3, members: ['24381_146980', '24381_146984'], cheight_mm: 12, od_mm: 60.3 },
+        { index: 0, members: ['24381_145018'], cheight_mm: 25, od_mm: 114.3 },
+      ],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    const headers = () => [...host.querySelectorAll('[data-group]')].map(node => node.textContent?.trim());
+    const rowIds = () => [...host.querySelectorAll('[data-dimension-id]')].map(node => node.getAttribute('data-dimension-id'));
+    expect(headers()).toEqual([
+      '用户尺寸',
+      '直段 0 · 成员 1 · 字高 25 mm · OD 114.3',
+      '直段 3 · 成员 2 · 字高 12 mm · OD 60.3',
+      '直段 7',
+      '未分段',
+    ]);
+    expect(rowIds()).toEqual(['linear-1', 'dim-0', 'dim-3', 'weld-3', 'dim-7', 'dim-loose']);
+
+    (host.querySelector('[data-group="直段 3 · 成员 2 · 字高 12 mm · OD 60.3"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(rowIds()).toEqual(['linear-1', 'dim-0', 'dim-7', 'dim-loose']);
+  });
+
   /** B3：部分显示开关只改 URL，并派发 popstate 让同步层重新拉取。 */
   it('writes ?mbd_partial=1 from the partial-display toggle', async () => {
     const system = createSystem();
@@ -634,6 +735,48 @@ describe('DimensionPanelDock', () => {
       expect(onPopstate).toHaveBeenCalledTimes(1);
     } finally {
       window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /**
+   * B3 补：开关状态随 URL 走——面板挂载后再勾选，或浏览器前进 / 后退带来 `popstate`，
+   * 勾选框与「已跳过 N 条」横幅都按当前 URL 重算，不停在挂载时读到的那一次。
+   */
+  it('re-reads ?mbd_partial on popstate so the toggle and the skipped banner follow the URL', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=24381_145018');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: [],
+      skipped: [{ id: 'mbd-2', reason: 'degenerate arc frame' }],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    const toggle = () => host.querySelector('[data-testid="mbd-partial-toggle"]') as HTMLInputElement;
+    const banner = () => host.querySelector('[data-testid="mbd-partial-banner"]');
+    expect(toggle().checked).toBe(false);
+    expect(banner()).toBeNull();
+
+    try {
+      // 页内勾选：开关只改 URL + 派发 popstate，面板自己也要听这个 popstate 回读。
+      toggle().checked = true;
+      toggle().dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(new URL(window.location.href).searchParams.get('mbd_partial')).toBe('1');
+      expect(toggle().checked).toBe(true);
+      expect(banner()?.textContent).toContain('已跳过 1 条');
+
+      // 浏览器后退到没有 mbd_partial 的地址：勾选框与横幅一起回到关。
+      window.history.replaceState({}, '', '/?mbd_refno=24381_145018');
+      window.dispatchEvent(new Event('popstate'));
+      await nextTick();
+      expect(toggle().checked).toBe(false);
+      expect(banner()).toBeNull();
+    } finally {
       window.history.replaceState({}, '', '/');
     }
   });

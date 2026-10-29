@@ -60,6 +60,8 @@ function createDiagnostics(): MbdDiagnosticsStore {
       skipped: [],
       layoutMode: null,
       notes: [],
+      sourceVersion: null,
+      isolines: [],
       loadError: null,
     }),
     set: vi.fn(),
@@ -323,6 +325,47 @@ describe('createMbdExternalSync', () => {
     expect(stripped[0].layout.textHeightM).toEqual(kept[0].layout.textHeightM);
     expect(disabled.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
       notes: [expect.stringContaining('mbd_3d=0')],
+    }));
+  });
+
+  /**
+   * W3-2 / W3-6 消费侧：`meta.source_version`（数据时点）与 `meta.isolines`（直段表）
+   * 原样进诊断 store，面板据此显示 dbnum@sesno、按直段分组；缺省时分别是 null / []。
+   */
+  it('passes meta.source_version and meta.isolines through to diagnostics', async () => {
+    const version = {
+      dbnum: 24381,
+      sesno: 145,
+      databases: [{ dbnum: 24381, sesno: 145, db_type: 'DESI' }],
+    };
+    const isolines = [{ index: 0, members: ['24381_145018'], cheight_mm: 25, od_mm: 114.3 }];
+    const declared = createHarness({
+      search: '?mbd_refno=A',
+      fetchPipeData: vi.fn(async () => ({
+        ok: true as const,
+        data: contractPayload({
+          meta: {
+            geometry_space: 'source_mm',
+            source_to_design: IDENTITY,
+            notes: [],
+            source_version: version,
+            isolines,
+          },
+        }),
+        diagnostics: [],
+      })),
+    });
+    await declared.sync.sync(declared.target);
+    expect(declared.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      sourceVersion: version,
+      isolines,
+    }));
+
+    const bare = createHarness({ search: '?mbd_refno=A' });
+    await bare.sync.sync(bare.target);
+    expect(bare.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      sourceVersion: null,
+      isolines: [],
     }));
   });
 

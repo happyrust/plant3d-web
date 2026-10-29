@@ -378,7 +378,6 @@ src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 
 src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 0 arguments, but got 1.
 src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 0 arguments, but got 1.
 src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 0 arguments, but got 1.
-src/dimension/ui/DimensionSemanticList.vue|TS2345|Argument of type 'DimensionListItem | undefined' is not assignable to parameter of type 'DimensionListItem'.
 src/dimension/viewport/dimensionViewport.test.ts|TS18048|'layout' is possibly 'undefined'.
 src/dimension/viewport/dimensionViewport.test.ts|TS18048|'region' is possibly 'undefined'.
 src/dimension/viewport/dimensionViewport.test.ts|TS18048|'region' is possibly 'undefined'.
