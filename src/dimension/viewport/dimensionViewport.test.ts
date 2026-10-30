@@ -19,6 +19,7 @@ import { DimensionViewport } from './dimensionViewport';
 import { ThreeSceneDimensionPainter } from './scenePainter';
 
 import type { DimensionFrameBreakdown } from './dimensionViewport';
+import type { SceneDimensionPaintJob } from './scenePainter';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
 vi.mock('../kernel/viewport/layoutViewport', async (importOriginal) => {
@@ -626,5 +627,206 @@ describe('DimensionViewport', () => {
     ).toBe(referenceLines.geometry.drawRange.count);
 
     harness.viewport.dispose();
+  });
+
+  /**
+   * 计划 §11.5 风险 4：`step()` 里 `job.advance()` 抛异常时，旧的实现会让
+   * `paintFrameId` 停在 null 而 `painting` 停在 true——此后 `render()` 永远
+   * 早退、`renderOverlay` 每帧重抛，尺寸层冻结在抛出前的画面且没有任何
+   * 自愈路径。
+   *
+   * 契约：异常不穿出帧回调（宿主 rAF 每帧抛会让整个 viewer 停摆），状态机
+   * 复位到「没有作业」并请求重绘；之后任何一次失效都能正常产出新几何。
+   */
+  it('recovers the paint state machine when a paint batch throws', () => {
+    const records = Array.from({ length: 12 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, index * 0.5, 0]),
+    }));
+
+    const harness = createViewport();
+    const painter = (harness.viewport as any)
+      .scenePainter as ThreeSceneDimensionPainter;
+    const boom = new Error('advance boom');
+    const job: SceneDimensionPaintJob = {
+      remaining: () => 1,
+      advance: vi.fn(() => { throw boom; }),
+      finish: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const paintSpy = vi.spyOn(painter, 'paintAsync').mockReturnValue(job);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument(records));
+      // Layout frame: startBatchedPaint picks up the throwing job and queues step.
+      harness.flush(1);
+      expect(harness.callbacks.length).toBeGreaterThan(0);
+
+      // The step's advance() throws: the exception must not escape the frame
+      // callback, and the state machine must unwind instead of wedging.
+      expect(() => harness.flush(1)).not.toThrow();
+
+      expect(job.advance).toHaveBeenCalledTimes(1);
+      expect(job.cancel).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalled();
+      expect(errorSpy.mock.calls.flat()).toContain(boom);
+      expect(harness.requestRender).toHaveBeenCalled();
+      // The dead job registered no further paint frame and holds no state.
+      expect((harness.viewport as any).paintFrameId).toBeNull();
+      expect((harness.viewport as any).pendingPaint).toBeNull();
+
+      // With the real painter back, a fresh invalidation must produce
+      // geometry again — proof painting fell back to false.
+      paintSpy.mockRestore();
+      harness.viewport.setDocument(emptyDimensionDocument(records));
+      harness.flush();
+
+      const geometry = (
+        harness.scene.getObjectByName('dimension-scene-lines') as any
+      ).geometry as { drawRange: { count: number } };
+      expect(geometry.drawRange.count).toBeGreaterThan(0);
+    } finally {
+      errorSpy.mockRestore();
+      paintSpy.mockRestore();
+    }
+  });
+
+  /**
+   * 计划 §11.5 风险 6：旧作业的 `step` 回调被 `cancelFrame` 取消后仍可能
+   * 真的跑到（宿主可能是 rAF + 已入队，harness 的 `cancelFrame` 本来也只
+   * 记录不出队）。它若不校验作业身份，会抹掉新作业刚登记的帧 id，并继续
+   * 推进旧作业的写入——两个 job 交错写同一块顶点缓冲，乱序直接上屏。
+   *
+   * 契约：旧回调跑进来必须是 no-op；末态顶点与「只跑第二次布局」逐位
+   * 相同，发布面（`drawRange`）也必须一致。钉的是「新旧作业不交错」，
+   * 不钉批大小或帧数。
+   */
+  it('does not let a superseded paint job callback touch the new job', () => {
+    // 两份文档记录数不同（9 vs 12），两个作业的批次切点错开：交错写入时
+    // 旧作业的顶点会落在新作业发布区间内部，末态逐位比较才看得到污染。
+    const makeRecords = (x: number, count: number) => Array.from(
+      { length: count },
+      (_, index) => linearRecord({
+        id: `linear-${index + 1}`,
+        b: exactAnchor([x, index * 0.5, 0]),
+      }),
+    );
+    const frames: DimensionFrameBreakdown[] = [];
+    const harness = createViewport((_durationMs, breakdown) => {
+      frames.push(breakdown);
+    });
+    const painter = (harness.viewport as any)
+      .scenePainter as ThreeSceneDimensionPainter;
+    const paintSpy = vi.spyOn(painter, 'paintAsync');
+
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument(makeRecords(1, 9)));
+    harness.flush(1); // layout A done; step_A queued, paint still in flight.
+
+    const jobA = paintSpy.mock.results[0]!.value as SceneDimensionPaintJob;
+    const cancelA = vi.spyOn(jobA, 'cancel');
+    expect(harness.callbacks).toHaveLength(1);
+
+    // 构造风险 6 的现场：新布局的 render() 走到 startBatchedPaint 时旧作业
+    // 还在飞。分帧期间 render() 会早退，所以这里先把 painting 拨回 false，
+    // 等价于「旧帧还没取消干净、新布局已经开始」的窗口。
+    (harness.viewport as any).painting = false;
+    harness.viewport.setDocument(emptyDimensionDocument(makeRecords(2, 12)));
+
+    // step_A 此时仍是当前作业的合法回调：正常推进一批并重新登记自己。
+    harness.flush(1);
+    // scheduler-B: layout B → startBatchedPaint 顶替旧作业 → step_B 入队。
+    harness.flush(1);
+
+    const jobB = paintSpy.mock.results[1]!.value as SceneDimensionPaintJob;
+    // 顶替旧作业时必须把它本身作废，而不只是取消它的帧回调。
+    expect(cancelA).toHaveBeenCalled();
+
+    // Queue: [step_A(stale), step_B]. 让已作废的回调在新作业开写之后才跑
+    // ——交换两者顺序，等价于宿主把旧回调排到了新帧之后；此时它若还能写，
+    // 顶点就会叠进新作业已写过的区间。
+    harness.callbacks.unshift(harness.callbacks.pop()!);
+    harness.flush(1); // step_B: writes job B's first batch, re-queues.
+    harness.flush(1); // step_A(stale): must be a no-op.
+    expect((harness.viewport as any).pendingPaint?.job).toBe(jobB);
+    expect((harness.viewport as any).painting).toBe(true);
+
+    // Drain: only step_B may write and publish, and only once.
+    harness.flush();
+    expect(frames.filter(frame => frame.kind === 'layout')).toHaveLength(1);
+
+    // Final vertices must be bitwise identical to a fresh synchronous paint
+    // of the second document — any interleaving with job A corrupts this.
+    const reference = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    reference.resize(400, 400, 2);
+    reference.paint(
+      harness.viewport.getLayouts(),
+      SOLVESPACE_DIMENSION_THEME,
+    );
+    const referenceLines = reference.group.getObjectByName(
+      'dimension-scene-lines',
+    ) as any;
+    const vertexCount = reference.getStats().lineVertexCount;
+    expect(vertexCount).toBeGreaterThan(0);
+
+    const geometry = (
+      harness.scene.getObjectByName('dimension-scene-lines') as any
+    ).geometry as {
+      drawRange: { count: number };
+      getAttribute: (name: string) => { array: Float32Array };
+    };
+    expect(
+      Array.from(geometry.getAttribute('position').array.slice(0, vertexCount * 3)),
+    ).toEqual(
+      Array.from(
+        referenceLines.geometry.getAttribute('position').array.slice(
+          0,
+          vertexCount * 3,
+        ),
+      ),
+    );
+    expect(geometry.drawRange.count).toBe(
+      referenceLines.geometry.drawRange.count,
+    );
+  });
+
+  /**
+   * 计划 §11.5 风险 4 的另一半：`painting === true` 但 `pendingPaint ===
+   * null`（作业刚被新布局取消）时，`renderOverlay` → `finishBatchedPaintNow`
+   * 不能只复位 `painting` 就 return——攒下的 `deferredReasons` 会永久丢失，
+   * 也没人替这一帧请求重绘。
+   *
+   * 契约：即使没有作业要补完，也要重放失效原因并发出一次重绘请求。
+   */
+  it('still requests a render when the overlay draws in a painting state without a job', () => {
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+    harness.flush();
+
+    const rendersSoFar = harness.requestRender.mock.calls.length;
+    const framesSoFar = harness.callbacks.length;
+
+    // 直接构造半状态：painting 仍 true，作业已经清掉，还攒了一条失效原因。
+    (harness.viewport as any).painting = true;
+    (harness.viewport as any).pendingPaint = null;
+    (harness.viewport as any).deferredReasons.add('theme');
+
+    const camera = new PerspectiveCamera();
+    const renderer = { autoClear: true, clearDepth: vi.fn(), render: vi.fn() };
+    harness.viewport.renderOverlay(renderer as never, camera);
+
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    // 没有作业要补完也要请求一次重绘，并把攒下的原因重新排进 scheduler。
+    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(rendersSoFar);
+    expect(harness.callbacks.length).toBeGreaterThan(framesSoFar);
+
+    // 回放的原因排到一个真实帧：跑完不再卡住，且再次请求重绘。
+    harness.flush();
+    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(
+      rendersSoFar + 1,
+    );
   });
 });

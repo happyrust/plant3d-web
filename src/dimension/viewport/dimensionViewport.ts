@@ -656,6 +656,10 @@ export class DimensionViewport {
       this.input.cancelFrame(this.paintFrameId);
       this.paintFrameId = null;
     }
+    // cancelFrame 未必拦得住已入队的旧回调（宿主可能是 rAF + 已入队）；
+    // 把旧作业本身作废，它的 advance/finish 从此是 no-op，跑进来也写不
+    // 进新作业的缓冲。必须在 pendingPaint 置空前拿到旧作业。
+    this.pendingPaint?.job.cancel();
     this.painting = false;
     this.pendingPaint = null;
     // 旧作业作废时它攒下的失效原因不必重放：本次调用本身就是一次新的全量
@@ -697,9 +701,32 @@ export class DimensionViewport {
     };
     this.pendingPaint = { job, batchLayouts, finish };
     const step = (): void => {
+      // 旧作业被顶替后，它已入队的回调仍可能跑到：那种回调不得把新作业
+      // 刚登记的帧 id 抹掉，也不得继续推进旧作业的写入进度。
+      if (this.pendingPaint?.job !== job) return;
       this.paintFrameId = null;
       if (this.disposed) return;
-      if (!job.advance(batchLayouts)) {
+      let done = false;
+      try {
+        done = job.advance(batchLayouts);
+      } catch (error) {
+        // advance 抛出时若什么都不做，paintFrameId 已空而 painting 停在
+        // true：render() 永远早退、renderOverlay 每帧重抛，尺寸层永久冻结。
+        // 作废作业、复位状态机、重放攒下的失效原因并请求重绘；异常本身不
+        // 吞（留一条带上下文的日志），也不向上抛——宿主的 rAF 回调每帧
+        // 抛一次会让整个 viewer 停摆。
+        console.error(
+          `[DimensionViewport] batched paint advance() threw; abandoning job (${layouts.length} layouts)`,
+          error,
+        );
+        job.cancel();
+        this.painting = false;
+        this.pendingPaint = null;
+        this.replayDeferredReasons();
+        this.input.requestRender();
+        return;
+      }
+      if (!done) {
         this.paintFrameId = this.input.requestFrame(step);
         return;
       }
@@ -723,8 +750,11 @@ export class DimensionViewport {
   private finishBatchedPaintNow(): void {
     const pending = this.pendingPaint;
     if (!pending) {
-      // 没有作业却在 painting：作业刚被新布局取消，几何已归新布局管，不必补救。
+      // 没有作业却在 painting：作业刚被新布局取消，几何已归新布局管，不必
+      // 补救；但攒下的失效原因不能跟着丢，也没人替这一帧请求重绘。
       this.painting = false;
+      this.replayDeferredReasons();
+      this.input.requestRender();
       return;
     }
     if (this.paintFrameId !== null) {

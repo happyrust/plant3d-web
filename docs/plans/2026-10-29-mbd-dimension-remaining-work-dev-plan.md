@@ -642,6 +642,18 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 
 **要先定清口径**：单个 BRAN 最多只有 463 个图元（`24381_105860`），所以「2k 记录」必然是多 BRAN 叠加或合成场景。这两个口径的结论不能互换——合成场景的段数分布（105.8 段/条）与真实 MBD 记录无关，真实记录单条段数可能高一个数量级。**在这个口径定下来之前，不要拿合成场景的读数当「2k 真实 BRAN 通过」的证据。**
 
+**口径实测（2026-10-30，从 `all-pipes-brans.json` 2 469 个 HTTP 200 的 BRAN 直接统计）**：把「记录」按会产生独立 `DimensionRecord` 的类型计（`linear_dim` + `slope_mark` + `weld_mark`，本仓只有这三类映射成尺寸记录）：
+
+| 量 | 值 |
+| --- | --- |
+| 单 BRAN 最多记录数 | **97**（`24381_105860`，图元 463） |
+| 记录数 top10 | 97 / 88 / 87 / 87 / 79 / 79 / 71 / 71 / 71 / 69 |
+| 全部 2 469 个 BRAN 记录合计 | 18 045 |
+| 平均每 BRAN | 7.3 条 |
+| **凑到 2 000 条记录** | **需最大的 32 个 BRAN 叠加**（合计 2 033 条） |
+
+也就是说「2k 记录」在真实数据里**不存在单 BRAN 口径**，只能是 32 个 BRAN 同屏，或一个专门造的合成场景。32 个 BRAN 同屏在业务上不是常规用法（一个管道包通常就几个 BRAN），所以更可能的真实目标其实是「几十条记录 / 几千图元」这一档，而不是 2 000 条记录。**这条要用户拍板**：是要「32 BRAN 叠加」的极端压测，还是要「单 BRAN 全量」的真实上限（97 条记录 / 463 图元）。
+
 ### 11.8 W5-1 G9 坡度符号 —— 侦察结论（2026-10-30），裁决材料已备齐，裁决本身待做
 
 W5-1 要裁决 G9：PML 用三角形，Web 用线 + 箭头。裁决前先把 Web 侧现状摸清。
@@ -745,4 +757,64 @@ W5-1 要裁决 G9：PML 用三角形，Web 用线 + 箭头。裁决前先把 Web
 **`npm run type-check` 的 2 条新增不属于本轮**：`src/viewer/versionBrowseBridge.ts` 与 `.test.ts` 本轮未动，报错是 `VersionBrowseApi` 缺 `browseLayerReady`——工作区里另一路未提交的 `src/viewer/modelUnitCompareController.ts` 刚给对应接口加了该字段。**不得为放行改基线**，等那一路提交后应自动消失。
 
 **仍未解决的**：这个上界只挡住「key 无限增长」，挡不住「单次布局本身就有 6 000 条 key 全部未命中」。首次进入新视角仍要 trace 一遍全部字形——那是必要计算，不是缺陷；但 §11.5 风险 2（真实记录段数超标）与风险 3～6（分帧窗口内的状态机与越界写）都还没修。
+
+### 11.11 分帧状态机：异常自愈 + 作业身份校验（2026-10-30）
+
+§11.5 风险 4 与风险 6 的修法。**这两条叠加起来的后果是「尺寸层永久冻结 + 控制台每帧刷异常」，比缺一段线严重得多**，所以排在字形缓存之后立刻修。
+
+**风险 4 的两条路径**（都在 `dimensionViewport.ts`）：
+
+1. `step()`（`:703-734`）先 `this.paintFrameId = null`，再 `job.advance(batchLayouts)`。若 `advance` 抛出（见 §11.12 的两条真实抛点），`paintFrameId` 已经是 null —— 没有下一帧了；`painting` 仍是 true，`pendingPaint` 仍非 null。此后 `render()` 永远早退并把失效原因堆进 `deferredReasons`，`requestRenderWhenPainted()` 永远丢弃，`renderOverlay()` → `finishBatchedPaintNow()` → `while (!pending.job.advance(...))` 再抛一次。**尺寸层冻结在抛异常前的画面，没有任何自愈路径。**
+2. `finishBatchedPaintNow()` 的 `pendingPaint === null` 分支只把 `painting = false` 就 `return`，既不 `replayDeferredReasons()` 也不 `requestRender()`。这一帧攒下的失效原因丢失，且没人请求重绘。
+
+**风险 6**：`startBatchedPaint()`（`:652-663`）取消旧作业时只调了 `cancelFrame`，**没调旧 job 的 `cancel()`**；`step` 闭包也不校验自己还是不是当前作业。宿主若用 rAF 且回调已入队，`cancelFrame` 拦不住：旧 `step` 会先 `this.paintFrameId = null`（**抹掉新作业刚登记的帧 id**），再继续推进旧 job 的 `lineVertexIndex` —— 两个 job 交错写同一块顶点缓冲，而 `finish()` 只在最后一批发布，所以乱序直接上屏。
+
+**改动**（`src/dimension/viewport/dimensionViewport.ts`，+32/−2）：
+
+- **A1** `step()` 的 `job.advance()` 包 try/catch。抛出时：`console.error` 记一条带 `layouts.length` 与错误对象的上下文 → `job.cancel()` → `painting = false` → `pendingPaint = null` → `replayDeferredReasons()` → `input.requestRender()` → `return`（不再 `requestFrame`）。**异常不向上抛**：宿主的 rAF 回调每帧抛一次会让整个 viewer 停摆（`ViewerPanel.vue:3417-3419` 的 `scheduleFrame()` 会被跳过）。
+- **A2** `finishBatchedPaintNow()` 的 `pendingPaint === null` 分支补 `replayDeferredReasons()` + `input.requestRender()`。
+- **A3** `startBatchedPaint()` 在 `cancelFrame` 之后、`pendingPaint = null` 之前调 `this.pendingPaint?.job.cancel()`。`cancel()` 的语义是「已发布几何保持上一次的好状态」（`scenePainter.ts:1385-1387`），所以作废旧作业不会破坏画面。
+- **A4** `step` 闭包第一行（在 `this.paintFrameId = null` **之前**）加 `if (this.pendingPaint?.job !== job) return;`。旧回调即使真跑了也不能碰新作业的状态。
+
+**为什么 A3 与 A4 都要**：A3 让旧作业的 `advance` 变成 no-op（`cancelled` 标志），A4 让旧回调根本不执行。单靠 A3，旧 `step` 仍会把 `paintFrameId` 抹成 null —— 新作业登记的帧 id 丢失，本帧不会再有 `requestFrame`，只能等宿主下一次 `renderOverlay` 补救。单靠 A4，旧作业的 `advance` 在别的路径上（`finishBatchedPaintNow` 的 `while`）仍可能被调用。两者互补。
+
+**测试三条**（`dimensionViewport.test.ts` +202）：
+
+1. `recovers the paint state machine when a paint batch throws` —— 用 `vi.spyOn(painter, 'paintAsync')` 塞一个 `advance` 抛错的假作业。断言：`flush(1)` 不抛出；`job.cancel` 被调用；`console.error` 收到那个错误对象；`requestRender` 被调用；`paintFrameId === null` 且 `pendingPaint === null`；**恢复真 painter 后一次新的 `setDocument` 能重新产出非零 `drawRange.count`**（这一条才是「painting 真的回 false 了」的实证，不能只看字段）。
+2. `does not let a superseded paint job callback touch the new job` —— 两份文档 9 条 vs 12 条记录（批次切点错开，交错写入才会落在新作业的发布区间内）。构造「旧作业还在飞时新布局已开始」的窗口（把 `painting` 拨回 false 让 `render()` 能走到 `startBatchedPaint`），断言旧作业 `cancel` 被调用、`pendingPaint.job` 仍是新作业、`painting` 仍为 true，末态 `position` 前 `lineVertexCount * 3` 个浮点与独立 painter 同步 `paint()` **逐位相同**，且 `drawRange.count` 相等。
+3. `still requests a render when the overlay draws in a painting state without a job` —— 直接构造 `painting = true` / `pendingPaint = null` / `deferredReasons` 有一条的半状态，调 `renderOverlay`，断言 `requestRender` 次数增加且 `callbacks` 队列变长（`replayDeferredReasons` 真的把原因排回去了）。
+
+**回滚验证（主会话独立重做五处，不采信 worker 自报）**：
+
+| 改坏的方式 | 结果 |
+| --- | --- |
+| 删掉 A4 身份校验 | 测试 2 红：`expected undefined to be { …(4) }`（旧 `step` 跑 job A 的 `finish()`，把 job B 的登记抹了） |
+| catch 里改成 `throw error`（等于没有 try/catch 的净效果） | 测试 1 红：`expected [Function] to not throw an error but 'Error: advance boom' was thrown` |
+| catch 里保留 `job.cancel()` 但删掉全部状态复位 | 测试 1 红：`expected "vi.fn()" to be called at least once`（`requestRender` 没被调） |
+| 只删 `this.painting = false;` 这一行 | 测试 1 红：`expected 0 to be greater than 0`（后续 `setDocument` 产不出几何——`painting` 卡死的直接证据） |
+| 删掉 A3 的 `job.cancel()` | 测试 2 红：`expected "cancel" to be called at least once` |
+| 删掉 A2 的两行补救 | 测试 3 红：`expected 1 to be greater than 1` |
+
+**门禁**：`dimensionViewport.test.ts` 20/20、`npx vitest run src/dimension` 78 文件 / **687 通过**（基线 684 + 3 新增）、全量 `npm test` 422 文件 / 4123 通过 / 1 todo、eslint 0。
+
+**这一轮没有修**：§11.5 风险 3（`paintAsync` 起手不主动归零 `drawRange`，`dimensionViewport.ts:219-220` 的注释与代码不符）与风险 5（`writeLineVertices` 无边界检查）。风险 3 只在「守卫失效」时才可见，而守卫刚被 A1/A2/A4 补强；风险 5 的触发前提是 `countPrimitiveSegments` 与 `visitPrimitiveSegments` 段数不一致，目前唯一已知的不一致是 `scene-path` 空 `points`（count 得 −1、visit 得 0），而该输入在当前调用链上不可达。两条都属于「需要主动加防线，而不是修一个正在发生的错」。
+
+### 11.12 `job.advance()` 真会抛异常的两条路径（2026-10-30，只读侦察）
+
+§11.11 的 A1 不是纯理论防御——`advance()` 确实会抛。把 `paintAsync` 起手计数与 `writeLineVertices` 两条路径逐个点查过，**真正会抛的只有两处**，其余「看起来会抛」的地方都不抛：
+
+| 检查点 | 位置 | 判定 |
+| --- | --- | --- |
+| `lineBuffers.array(name)` | `scenePainter.ts:395-399`、`:1507-1518` | **不抛**。`specs`（`:319-332`）与 12 次 `array()` 调用名逐一对应，`ensureCapacity` 用同一份 `specs` 重建 attribute（`:364-372`），`getAttribute` 永远命中 |
+| typed array 越界写 | `:1521-1546`、`:1417-1435` | **不抛**，静默丢弃（见下） |
+| `layouts[index]!` 越界 | `:1550`、`:1422` | **不抛、不可达**。`to = Math.min(layouts.length, written + count)`，`index ∈ [from, to)` |
+| `layoutAlpha` | `:1552`、`:1424` → `:851-860` | 只在主题缺 `inspection.occludedAlpha` 时抛 `TypeError`；§11.9 已证明不存在缺字段 theme 路径 |
+| `createColorResolver` / `srgbComponents` | `:1519`、`:833-836` | **不抛**。`new Color(hex)` 对未知模型/非法 hex 只 `console.warn` 并保持白色（`node_modules/three/src/math/Color.js:236-269`）；`theme.colors[role] ?? theme.colors.normal` 取不到时 `Color.set(undefined)` 走 `if (value && value.isColor)` 为假，什么也不做 |
+| `strokeWidthPx` / `resolveTagToneStrokeWidth` | `:1564`、`theme.ts:436-453` | **不抛**，switch 无 default 时返回 `undefined` → `Math.round(undefined)` 得 `NaN`，静默写进 buffer |
+| **`font.trace()` / `font.getWidth()`** | `:447`、`:450` → `lffParser.ts:259-297` | **会抛，第一条真实路径**。`getGlyph` 是惰性的（首次遇到该字符才解析），抛点：`lffParser.ts:39`、`:47`、`:66`、`:69`、`:123`（contour 语法）、`:212`（无 U+FFFD 替代字形）、`:216`（递归字形引用）、`:229`（非法字形引用） |
+| **`dashCode`** | `:1558` → `theme.ts:471-477` | **会抛，第二条真实路径**。`STYLE_LINE_DASH[lineStyle]` 对非枚举值返回 `undefined`，随后 `dash.length`（`:553`）抛 `TypeError`。`lineStyle` 来自外部数据且无运行时校验：`types.ts:461` `ExplicitArcInput.style`、`:468` `ExplicitMarkerInput.style`、`explicit.ts:596/605` |
+
+**两条路径的可达性不同**：`font.trace()` 的抛点全部是「字体文件本身有问题」（LFF 解析），属于部署期缺陷，一旦触发就是**每个含该字符的字形 run 都抛**；`dashCode` 的抛点是「外部 MBD 数据给了未知的 `lineStyle`」，属于数据驱动、**随 BRAN 变化**，`mbdV2ExternalAnnotations.ts` 的映射表若与后端新增的 `style` 值脱节就会命中。后者更可能先炸，且它的触发条件是「后端加了一个 style 值」——不需要任何代码改动。
+
+**为什么把这两条写在这里而不是另开一节修**：A1 的 try/catch 已经把「抛了会怎样」从「永久冻结」降级为「这一帧作废 + 记一条日志 + 下一次失效照常重跑」。要根治得在**入口**做校验（`lineStyle` 走白名单兜底到 `solid`，字体解析失败时退化成不画该 run），那属于输入契约层，不该塞进绘制状态机里。**建议单开一条 W5-6 处理 `lineStyle` 白名单**——但那是产品行为决策（未知 style 该画实线还是该报错），要人拍。
 
