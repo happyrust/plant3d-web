@@ -85,7 +85,27 @@ GET node/versions/resolve?...&scope=subtree&at=... → sesno: 419   ← 与几�
 ## 本次未做的事
 
 没有擅自改动任一侧的规范行为。第 1、2 条都会改变对外契约，第 3 条是改需求文本，
-三者都需要规范所有者确认。已按原样记录证据：`realtime-history-smoke.json` 里第 6 步是 FAIL。
+三者都需要规范所有者确认。
+
+## 冒烟脚本已按「单元根对 `scope=subtree`」判（2026-10-31）
+
+`scripts/verify/realtime-history-smoke.ps1` 第 6 步原来无条件拿 `scope=self` 与几何路由比，
+在单元根上必然 FAIL，把一条**规范冲突**记成了**脚本失败**，污染验证记录。现在按 refno 是不是
+单元根选对照口径（`selfRows.unit_root -eq refno` → 用 `scope=subtree`，否则用 `scope=self`），
+并额外 `Note` 一行把三个数都摆出来作为冲突证据：
+
+```
+[ok]   time 选择器与 resolve(scope=subtree) 一致
+       -> at=2026-09-08T17:45:46+08:00 geometry X-Sesno=419 resolve.sesno=419
+          refno 是交付单元根：几何路由按 unit_versions（73 行），resolve 用 scope=subtree 对齐
+[note] R6.3 / R8.10 冲突（单元根）
+       -> 同一时间点：geometry X-Sesno=419、resolve(scope=self)=283、resolve(scope=subtree)=419；
+          unit_versions 73 行 vs node_versions(self) 5 行
+```
+
+当前 `realtime-history-smoke.json`：20 步全 `ok`，`passed: true`。
+注意这只说明「按出路 3 的口径脚本自洽」，**不构成对三条出路的裁决**——
+冲突本身仍然存在，等规范所有者定。
 
 ## 附：本次同时修掉的一个真 bug
 
