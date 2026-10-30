@@ -308,15 +308,18 @@ AFTER-STEP  cursor=684  cacheKeys=1  frame-shown ✓     ← 有 history/geometr
    `browseLayerReady` 检查先失败）。改成分别报「browseLayerReady 30 s 未变 true」与
    「frame-shown 120 s 未出现（等 sesno ∈ {...}）」。
 
-#### 另外两条已确认但本次未改的缺陷（记在这里免得重查）
+#### 另外两条缺陷（2026-10-30：第 1 条已修，第 2 条仍未改）
 
-1. **`ensureGeometryForGeoHash` 的 `fetch(meshUrl)` 没有 timeout、没有 abort signal**
-   （`src/composables/useDbnoInstancesDtxLoader.ts:536`）。连接挂住就永久等；404 或非 `ok`
-   → 判 `missing` → 在 `replaceExistingObjects: true` 下走到 `:1211` 抛异常，成为未处理的
-   rejection。
+1. ~~**`ensureGeometryForGeoHash` 的 `fetch(meshUrl)` 没有 timeout、没有 abort signal**~~
+   **已修**（`src/composables/useDbnoInstancesDtxLoader.ts:536`）。裸 `fetch` 在连接挂住时
+   永久等待，而这个 Promise 挂在 `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部
+   `await pending` 一起卡死——表现为「视口一直在转、一帧都不出」且没有任何错误可查。
+   现在带 8 s 超时 + `AbortController`；超时后 `catch` 走兜底盒子、标 `failedGeoHash`、
+   `finally` 清 `loadingGeoHash`，不会留下永久挂起的条目。
 2. **子树路径（`loadUnits` / `fetchUnitAt`，`useVersionFrames.ts:633-648`）从不登记 `inFlight`、
    从不发 `If-None-Match`、静默忽略非 `'ok'` 结果**。所以子树模式下 `inFlight` 恒为 0，
-   不能用它判断「有没有在跑」。
+   不能用它判断「有没有在跑」。这条改的是取数层语义（要不要把子树请求纳入并发闸与 304 复用），
+   属于设计取舍，留给后续单独处理。
 
 > 早先怀疑的「`unitRefnos` 与 `plan.units` 两套集合分歧」在本夹具上不成立：`diff-summary(212,213)`
 > 只有 1 个单元（`24384/23257`），两个集合恰好一致。它是设计上的隐患（面板用 A/B 钉算、

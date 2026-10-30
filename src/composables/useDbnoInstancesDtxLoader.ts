@@ -257,6 +257,16 @@ export function resolveDtxObjectIdsByRefnos(refnos: Iterable<string>): Map<strin
 const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 
 /**
+ * 单块网格文件的取回超时。
+ *
+ * 裸 `fetch` 没有超时：连接挂住时 Promise 永不 settle，而它被挂在
+ * `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死，
+ * 表现为「视口一直在转、一帧都不出」且没有任何错误可查。本机冷读一块网格通常几十毫秒，
+ * 8 s 足够覆盖慢盘与首次解析。
+ */
+const MESH_FETCH_TIMEOUT_MS = 8_000;
+
+/**
  * 运行时索引的修订号：每完成一批实例加载 / 替换（含版本切换重载）就 +1。
  * 只增不减，供批注关联解析（ADR-0050）等消费方 `watch` 后重算，
  * 省得它们各自去猜「模型什么时候装完了」。
@@ -533,7 +543,18 @@ async function ensureGeometryForGeoHash(
     let notFoundNew = false;
 
     try {
-      const resp = await fetch(meshUrl);
+      // 必须带超时与 abort：裸 `fetch` 在连接挂住时**永久等待**，而这个 Promise 会挂在
+      // `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死
+      // ——表现为「浏览/对比一直在转、一帧都不出」，且没有任何错误可查。
+      // 超时按「单块网格」给：本机冷读 mesh 通常几十毫秒，8 s 足够覆盖慢盘与首次解析。
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
+      let resp: Response;
+      try {
+        resp = await fetch(meshUrl, { signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (resp.status === 404) {
         notFound = true;
         notFoundNew = !cache.notFoundGeoHash.has(geoHash);
