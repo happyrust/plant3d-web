@@ -115,11 +115,11 @@ W0 收口与基线（小，先做）
 
 | ID | 任务 | 验收 |
 | --- | --- | --- |
-| W5-1 | **T6.1** 真实 BRAN 视觉审阅，裁决 G9（坡度符号：PML 三角形 vs Web 线 + 箭头） | 结论进 ADR；截图落 `docs/verification/` |
+| W5-1 | **T6.1** 真实 BRAN 视觉审阅，裁决 G9（坡度符号：PML 三角形 vs Web 线 + 箭头） | 结论进 ADR；截图落 `docs/verification/`。**侦察已完成（2026-10-30，§11.8）**：Web 侧现状查明——走的是「一条 dimension 线 + 两条 20° 描边箭头翼」的**描边通道**，不是实心三角；`src/` 内 `wedge` / `slopeTriangle` 零命中；PML 侧**仓库内无规格**，只有两句二手转述与一个行号线索 `isoline.pmlobj:2564 drawslope`。**裁决仍缺 7 条信息**（PML 三角是实心还是描边、边长关系、与文字的相对位置、负坡/零坡行为、多坡度排布、**PML 侧出图截图**、语义对齐口径），全部必须问人或看实物。**可用材料**：`all-pipes-brans.json` 里 318 个 BRAN 有 `slope_mark`，最密集的 `24383_75125`（23 个）/ `24381_105860`（22 个）/ `24381_105733`（21 个），生成器已支持 `DIMENSION_CAMERA_BASELINE_REFNOS` 覆盖，可直接出图 |
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）**——已解除（2026-10-30 第二次核查）**：常驻 gen-model 服务 `http://127.0.0.1:8022`（`aios-database.exe` PID 11428，rocksdb 档）的 `/api/v1/health` 200、`/api/mbd/v2/pipe/24381_145018` 21.8 KB、`/api/mbd/v2/pipe/24383_91813` 5.6 KB 都通，**直接把 `GEN_MODEL_V1_BASE_URL` 指到 8022 即可出图，不必起 18084**。基线已实跑：`DIMENSION_CAMERA_BASELINE=1 npx playwright test --config=playwright.novideo.config.ts e2e/dimension-camera-baseline.spec.ts` → **2 passed**，两个 BRAN × far/mid/near 六张 PNG + 两份 `cameras.json` 已落 `docs/verification/dimension-camera-baseline-2026-10-29/<refno>/`（label `0731f98f / w5-baseline`，2026-10-30T02:36Z）。截图经人工查验：尺寸线、箭头、文字（2640.89 / 1902.35 / 1255.56 …）全部画出，LOD 计数 far/mid 档 drawn=21 / lodHidden=42、near 档 drawn=29 / lodHidden=34，三档 target 恒等。W5-3 / W5-4 / W5-5 / W0-2 的 A/B 从此有真实对照物 | 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
 | W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**已实现（2026-10-30）**：`theme.lodMinLineToLabelRatio` 改成 `{ primary: 0.8, secondary: 0.5, detail: 1.5 }`，`lodShortLine` 按 `tier` 取值，未声明按 primary；数值门禁绿（S2 81/709、type-check 439/126 新增 0）。**视觉 A/B 待跑**：后端已通（见 W5-2 行），对照物为 `dimension-camera-baseline-2026-10-29/` 的 `0731f98f / w5-baseline`，跑法 = 改动侧 `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指新目录 + `DIMENSION_CAMERA_BASELINE_LABEL` 标注，同相机逐档对比 `drawn` / `lodHidden` 与截图。详见 §11.1 |
 | W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**已实现 kernel 侧（2026-10-30）**：`ExplicitLayoutInput.labelPresentation?: 'interrupted' \| 'above'`，缺省等于现状（逐字段不变）；`above` 抬 11 px（字高 13）且线不切段，多行标签自动回落；「不侵入相邻行」落成 `labelBounds` 相交断言，并据此得出**行距须 ≥ 2.96 字高**（现有 1.5 字高不够）。**mapper 已接线（2026-10-30）**：`MbdV2MappingOptions.labelPresentation` + `?mbd_label=above` 开关，缺省字段缺席 = 像素不变；**固定相机 A/B 已出图**——3D 呈现（默认）下 `above` 与基线逐字节相同，因为 `src/dimension/kernel/layout/dimension3d.ts:246` 天然是 above 语义、不读该字段（**设计而非缺陷**）；`mbd_3d=0` 平面呈现下六图全部不同且方向正确（线不断、文字浮上）。**仍开着一条**：抬升后未检查是否撞到相邻图元的问题已由回落守卫解决（见下）；守卫只覆盖「本记录自己的图元」，跨记录行距仍归调用方。详见 §11.2 |
-| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**门禁口径已修（2026-10-30）**：删掉测错东西的 `updateP95Ms ≤ 16`，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms，达标）。**成本已定位（2026-10-30，§11.3.2）**：paint 内 `writeMs` 占 82～93%，其中字形段占 95.5%；消掉纯计数遍历后 paint p50 −21.2%、p95 −45.6%（§11.3.4）。**分帧已实现（`fd42623a`，§11.3.6）**：线顶点写入拆 3 批，单批 p95 **14.40 ms ≤ 16**、3 帧 ≤ 6、整次 36.20 ms 不高于同步 37.70 ms，三条判据全过；单测钉住「分批顶点与同步逐位相同」「cancel 不动已发布几何」「分帧中不渲染」。门禁 1 passed（`paintP95Ms` 45.70）。**生产档基线已采（`d1dd2fdd`，空载三次中位数 layoutP95 18.30 / paintP95 39.40）**。**分帧连带修掉三个真缺陷**：失效原因被早退吞掉（`b2aec28d`）、`paintMs` 只报第一批（`2b375907`）、`hitTest` 按未画出的新布局回答（`b25b5935`，§11.3.9）。**仍待**：真实 BRAN 上的视觉确认——分帧不改像素已由顶点逐位相同的单测证明，后端已通（见 W5-2 行），只需在 2k 记录的 BRAN 上跑一次页面肉眼确认无半成品帧 |
+| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**门禁口径已修（2026-10-30）**：删掉测错东西的 `updateP95Ms ≤ 16`，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms，达标）。**成本已定位（2026-10-30，§11.3.2）**：paint 内 `writeMs` 占 82～93%，其中字形段占 95.5%；消掉纯计数遍历后 paint p50 −21.2%、p95 −45.6%（§11.3.4）。**分帧已实现（`fd42623a`，§11.3.6）**：线顶点写入拆 3 批，单批 p95 **14.40 ms ≤ 16**、3 帧 ≤ 6、整次 36.20 ms 不高于同步 37.70 ms，三条判据全过；单测钉住「分批顶点与同步逐位相同」「cancel 不动已发布几何」「分帧中不渲染」。门禁 1 passed（`paintP95Ms` 45.70）。**生产档基线已采（`d1dd2fdd`，空载三次中位数 layoutP95 18.30 / paintP95 39.40）**。**分帧连带修掉三个真缺陷**：失效原因被早退吞掉（`b2aec28d`）、`paintMs` 只报第一批（`2b375907`）、`hitTest` 按未画出的新布局回答（`b25b5935`，§11.3.9）。**仍待**：真实 BRAN 上的视觉确认——分帧不改像素已由顶点逐位相同的单测证明，后端已通（见 W5-2 行），只需在 2k 记录的 BRAN 上跑一次页面肉眼确认无半成品帧。**2026-10-30 补充**：行为契约测试已补（§11.6，paint 帧数 ≥ 2 + 末帧与同步等价）；2k 规模风险清单已列（§11.5，六个风险点，最危险的是字形缓存无上限）；**2k 口径本身未定**——单个 BRAN 最多 463 个图元，「2k 记录」必然是多 BRAN 叠加或合成场景，两者结论不可互换（§11.7） |
 
 ## 5. 决策
 
@@ -600,4 +600,77 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 | U3 | 基线要不要在**生产构建**上重测 | **部分自决**：生产档**拿不到**（`public/dimension-perf.html` 指向 `/src/debug/dimensionPerf.ts`，生产构建下页面是坏的，README 第 8 条）。改用两个替代锚点：ADR 口径的内核基准（layout+collision p95 = 3.746 ms，达标）+ dev 档 `settle(20)` 的不退化判据。**要真拿生产档数字，得先把性能页做成构建入口——独立一小刀，未做** |
 
 **U2 / U3 的最终结论**：layout 的 16 ms 预算由内核基准守住（p95 3.746 ms）；浏览器门禁改判「不退化」。上轮基于 dev 浏览器读数推断的「layout 超预算」是错的，已在 §11.3 更正。
+
+### 11.5 2000 条规模上的分帧风险清单（2026-10-30 只读侦察）
+
+当前分帧的全部实测都在 **63 条 / 18 条** 的真实 BRAN 上做（`24381_145018` / `24383_91813`，段数 211 651、顶点 846 604）。按 2000 条外推之前，先把这条路径上会先炸的点列清楚。**这一节只报事实与风险，不含方案。**
+
+**先说清一个口径错误**：`211 651 段 / 846 604 顶点` 不是 63 条真实 BRAN 的数字，而是 `src/debug/dimensionPerf.ts:88-92` 的**2000 条合成场景**（`VISIBLE_USER = 1_500` + `VISIBLE_EXTERNAL = 500`）。所以「105.8 段/条」是合成场景的平均值，真实 MBD 记录的单条段数**没有入库记录**，外推必须按「段/条」重算。
+
+| # | 风险 | 证据 | 用户可见表现 |
+| --- | --- | --- | --- |
+| 1 | `glyphCaches.screen` **无上限、无淘汰**（`scenePainter.ts:680-689`），key 含浮点 `capHeightPx` 与 `rotationRad`，真实数据下几乎每条记录都是新 key；淘汰点只有 `:1710-1711` 的 `dispose()` | 单次全量布局新增 2 000～6 000 条 key × 约 120～150 B ≈ **8～30 MB**；相机连续拖动每秒数十次 → 秒级 0.5～1.8 GB | 拖相机十几秒后内存暴涨、GC 长停顿，最终 `RangeError: Invalid array buffer length` 或标签页 OOM |
+| 2 | 真实记录段数远超 105.8 段/条时，容量跨到 2^21 / 2^22（`ensureCapacity` 按 2 的幂倍增，`scenePainter.ts:341-345`） | 200 段/条 → 160 万顶点 → capacity 2 097 152 → line 缓冲 **100 MB**；300 段/条 → **201 MB**。单批 p95 按 51 μs/千顶点线性外推：14.4 → 27 → 41 ms | 3 帧补齐变成 3 次连续掉帧，外加一次 100 MB 量级的 `Float32Array` 分配停顿 |
+| 3 | `paintAsync` 起手**不主动把 `drawRange` 归零**，只有 `ensureCapacity` 真的增长时才顺带设 `(0,0)`（`:360` 早退分支不动 drawRange）。`dimensionViewport.ts:219-220` 的注释声称「起手就归零」，**与代码不符** | 容量已够时（第二次及以后的所有布局），`drawRange` 保持上一帧发布时的完整计数，而顶点缓冲正被逐批覆盖 | 若守卫失效，画的是「前几批新顶点 + 剩余旧顶点」的混合体 —— 尺寸线错乱成新旧两套交叠的乱线，比空白更难判断 |
+| 4 | `finishBatchedPaintNow()` 的 `pendingPaint === null` 分支（`dimensionViewport.ts:723-729`）只把 `painting = false` 就返回，**不补写、不 replay**；`step()` 里 `job.advance()` 一旦抛异常（`:702`），`painting` 会永久停在 `true` | 此后 `render()` 全部早退、`requestRenderWhenPainted()` 全部丢弃、`renderOverlay` 每帧在 `while (!advance())` 里再抛一次 | 尺寸层永久冻结在抛异常前那一刻，任何主题 / 文档 / 相机变更都不再上屏，控制台每帧刷异常 |
+| 5 | `writeLineVertices` 写顶点**无边界检查**（`scenePainter.ts:1493-1504` 直接下标写）；`countPrimitiveSegments` 与 `visitPrimitiveSegments` 一旦对某个图元给出不同段数，写入就越界 | typed array 越界写**不抛异常、静默丢弃** | 「部分尺寸线缺一段」，没有任何报错。当前两者一致（marker 圆 20、framed glyph `unit.length * 2`），但这是隐式契约，没有断言守着 |
+| 6 | `startBatchedPaint` 取消旧作业时**没有调用 `job.cancel()`**，且 `step` 闭包无 job 身份校验（`dimensionViewport.ts:655-663` / `:699-707`） | 旧 `step` 若在 `cancelFrame` 未生效时被调用，会先抹掉新 job 的 `paintFrameId`，然后两个 job 交错推进 `lineVertexIndex` | 极端情况下（快速连续拖相机 + 一次布局跨 3 帧）出现一帧顶点错乱的尺寸线，或画面停在上一布局几帧 |
+
+**按可能性排序，最可能先炸的三个**：
+
+1. **字形缓存无上限**（必然发生，只要拖相机）。验证：dev 环境绕轨 10 秒，Chrome Memory 快照对比两次的 `Map` retained size；或临时在 `scenePainter.ts:688` 后打 `caches.screen.size`，观察它随相机移动单调上升且永不回落。
+2. **真实记录段数超标**。验证：在真实 BRAN 上读 `window.__dimensionPerf.paintProfile(20)` 的 `segmentCount` 与 `segmentsByKind`（钩子已在 `src/debug/dimensionPerf.ts:336-379`），把 `segmentCount / 记录数` 与 105.8 对比；同时 `paintFramed(10, 3)` 看 `batchP95Ms` 是否仍 ≤ 16。
+3. **分帧窗口内 `painting` 卡死或混合缓冲上屏**。验证：在 `renderOverlay`（`dimensionViewport.ts:225`）与 `finishBatchedPaintNow`（`:723`）各加一行 `console.assert(this.painting === (this.pendingPaint !== null))`，2000 条规模下反复快速拖相机 30 秒，捕捉断言失败；并录屏逐帧检查拖动过程中是否出现「新旧两套尺寸线交叠」或「只剩箭头和标签底、线消失」的单帧。
+
+**下一步的真实 2k BRAN 从哪来**：`docs/verification/mbd-3d-dimension-presentation-2026-09-12/all-pipes-brans.json` 记录了全项目 **2 693 个 BRAN / 2 469 个 HTTP 200**，带每个的 `primitives` 与按类型的 `kinds` 计数。其中 `linear_dim` 最多的是 `24381_105860`（463 primitives / 75 linear_dim），`slope_mark` 最多的是 `24383_75125`（341 / 23）。**要凑 2000 条记录得选多条 BRAN 同屏，单个 BRAN 最多只有 463 个图元** —— 这一点先要定清「2k 记录」的口径是单 BRAN 还是多 BRAN 叠加，否则验证目标本身就是错的。
+
+### 11.6 分帧的行为契约测试（2026-10-30）
+
+分帧此前只有「四条缺陷各自一条回归测试」，缺一条**正面**的结构契约：批大小和批数可以随性能预算调整，但「中间帧不发布几何」「末帧与同步 `paint()` 等价」这两件事一变就是回归。
+
+新增 `keeps every batch unpublished until the last one lands`（`dimensionViewport.test.ts:516-620`）：40 条记录、逐帧推进，断言 ①布局帧 `drawRange.count === 0`；②每个 paint 中间帧 `drawRange.count === 0`（实测值，`ReusableGeometry.ensureCapacity` 换新几何时 `setDrawRange(0,0)`，只有 `finish()` 才写真值）；③**paint 帧数 ≥ 2**；④末帧 `position` 前 `lineVertexCount * 3` 个浮点与独立 `ThreeSceneDimensionPainter` 同步 `paint()` 逐位相同，且两边 `drawRange.count` 相等。
+
+**写这条测试时踩到一个会让整条契约空过的坑（重要）**：第一版把「帧数 ≥ 2」数成**总帧数**。但 layout 本身就是一帧，所以哪怕批大小被改成 `layouts.length`（一批写完），总帧数仍然是 2，断言照样通过。实测证据：正常批大小下 `frames=4 / midPaintSamples=3`；改成单批后 `frames=2 / midPaintSamples=1`，而**两种情况下中间帧的 `drawRange.count` 都是 0**——中间帧断言也拦不住。定稿改成**只数 paint 帧**（先 `flush(1)` 单独消化 layout 帧并断言此时未发布），下界 2。回滚验证如期变红：`分帧必须让 paint 本身跨帧：paint 只有一帧说明一批就写完了，契约没被走到: expected 1 to be greater than or equal to 2`。
+
+**这是本轮第四次「测试空过」**（前三次见 §11.3.7 / §11.3.9 / §11.3.10）。共同形态是：**断言的量与实现的可变部分耦合**（帧数含 layout 帧、探针点手写、只断言终态不断言中间态）。定稿的写法是「先把不可控的部分单独消化掉，再对真正要钉的量设下界，并额外断言这个量被真的观测到了」。
+
+**验证**：`dimensionViewport.test.ts` 17/17、`npx vitest run src/dimension` 78 文件 / **680 通过**、eslint 0。
+
+### 11.7 W5-5 的剩余一件事：2k 记录规模上的真实确认
+
+分帧的正确性（顶点逐位相同、中间帧不发布、宿主提前渲染先写完）已由单测钉住，像素零变化已由真实 BRAN 截图 SHA256 逐字节相同证明。**仍缺的是「2k 记录同屏」这个规模本身**：现有真实 BRAN 只有 63 条 / 18 条记录，而 §11.5 列出的六个风险全部只在 2k 量级才显形（尤其是字形缓存无上限那一条，拖相机十几秒就会涨到 GB 级）。
+
+**要先定清口径**：单个 BRAN 最多只有 463 个图元（`24381_105860`），所以「2k 记录」必然是多 BRAN 叠加或合成场景。这两个口径的结论不能互换——合成场景的段数分布（105.8 段/条）与真实 MBD 记录无关，真实记录单条段数可能高一个数量级。**在这个口径定下来之前，不要拿合成场景的读数当「2k 真实 BRAN 通过」的证据。**
+
+### 11.8 W5-1 G9 坡度符号 —— 侦察结论（2026-10-30），裁决材料已备齐，裁决本身待做
+
+W5-1 要裁决 G9：PML 用三角形，Web 用线 + 箭头。裁决前先把 Web 侧现状摸清。
+
+**数据流（8 步，全部核实）**：`src/api/mbdV2Api.ts:136` `fetchMbdV2PipeData`（路径 `:144` `/api/mbd/v2/pipe/{refno}`）→ `src/components/dock_panels/ViewerPanel.vue:2864` 注入 `fetchPipeData` → `src/composables/useMbdExternalSync.ts:184` 取包、`:188` `mbdV2ToExternalRecords` → `src/dimension/adapters/mbdV2ExternalAnnotations.ts:899` 映射（坡度分支 `:1057-1071`）→ `useMbdExternalSync.ts:220` `replaceExternalSource('mbd', …)` → `createDimensionSystem.ts:337-339` → `dimensionViewport.ts:543` → `layoutViewport.ts:47,76` → `layoutDimension.ts:74` → `layout/explicit.ts:386` `layoutExplicit`（笔画在 `:426-431`）→ `viewport/scenePainter.ts` 的 scene-line / scene-triangle 两条通道。
+
+契约来源 `mbdV2Contract.ts:305-317` `MbdV2SlopeMark`（`text` / `start` / `end` / 可选 `text_dir`），校验 `:588-592`，strict 白名单 `:617` `slope_mark: ['text','start','end','text_dir']`。
+
+**当前符号形状**：`mbdV2ExternalAnnotations.ts:1057-1071` 输出 `lines: [{ from: start, to: end, part: 'dimension' }]` + `arrowLines: slopeArrowLines(start, end)`，`labelAnchor` 取中点，`lod: { tier: 'detail' }`。箭头翼由 `:229-251` 生成，常量在 `:65-66`：`SLOPE_ARROW_LENGTH_RATIO = 0.08`、`SLOPE_ARROW_HALF_ANGLE_RAD = 20°`，即「翼长 = 0.08 × 字高、半张角 20°」。
+
+**关键事实：走的是描边通道，不是实心三角**。`arrowLines` 在 kernel 里是描边（`layout/explicit.ts:299-325` `explicitArrowLine` → `makeSceneLine(..., 'arrow', …)`，即 `SceneLine`）。实心三角走另一条路（`ExplicitArrowInput` → `explicit.ts:327-349` `explicitArrow` → `makeFilledSceneArrow`，`sceneGeometry.ts:287-321`，`kind: 'scene-triangle'`），**坡度完全没用这条路**——`explicitRecord` 的 `arrows` 字段压根没给（`mbdV2ExternalAnnotations.ts:319-321` 只在非空时才写）。
+
+**三角形在 Web 侧零痕迹**：`src/` 内搜 `wedge` / `slopeTriangle` / `slope_triangle` **零命中**；`triangle` 的命中全是无关项（`scenePainter.ts:286-334` 的 TRIANGLE_* shader、`genModelV1Api.ts:2755` 的 `triangle_count` 网格面数、room-clip / clearance 的三角面求交）；`G9` 只在 docs 里出现。
+
+**PML 三角形在仓库内无规格**。全仓只有两句二手转述：`docs/plans/2026-07-29-mbd-dimension-annotation-capability-audit.md:49` 与 `docs/plans/2026-10-28-mbd-3d-dimension-annotation-audit-and-plan.md:111`（后者给出唯一行号线索 `isoline.pmlobj:2564 drawslope`）。ADR 侧只有「由适配层拼装、不加专用原语」的决定（`docs/adr/0042-…:3`），没有形状定义。本机 `D:\work\plant-code\old` 下 `rs-server` / `gen-model` / `vendor-mdb` 均无 `MBD/markpipe` 目录。
+
+**现有测试钉住了什么**：只有 mapper 层一条形状断言会红——`src/dimension/adapters/mbdV2ExternalAnnotations.test.ts:652-655`（`lines` 长度 1、`arrowLines` 长度 2）。同文件 `:614-633`（`lod === { tier: 'detail' }`）、`:289-299` / `:301-350`（`text_dir` 与 `labelAnchor`）语义相关。**不会红**：`explicit.test.ts:180-235`（arrowLines 像素下限，自造输入）、`shared/lod.test.ts:53-95`、`kernel/__snapshots__/goldens.test.ts.snap`（搜 `slope` 零命中，golden 里没有坡度）、`SlopeAnnotation.test.ts` / `SlopeAnnotation3D.test.ts`（测旧类；`SlopeAnnotation3D` 在 `ViewerPanel.vue:150` 被 import 但全仓无 `new SlopeAnnotation3D`，是死引用）。
+
+**可配置性**：形状**硬编码**在 mapper 的模块级常量（`:64-66`，焊缝半径也在同一处，说明「符号几何归适配层」是既定做法），不走 theme。最小侵入挂点已经存在：`MbdV2MappingOptions`（`:60-62`）+ `?mbd_label=above` 那套 `parseXxx` 模板（`useMbdExternalSync.ts:117-119`）可原样复制成 `parseSlopeSymbol`。若要走实心三角，kernel 现有 explicit 输入没有对应原语（`types.ts:150` `ScreenMarkerShape` 只有 `'circle' | 'cross'`，`ExplicitLayoutInput` 无 fill 字段），需额外成本；用描边三角（三条 `lines` 或三条 `arrowLines`）则无需碰 kernel。
+
+**裁决 G9 仍缺的 7 条信息（仓库内查不到，必须问人或看 PML 实物）**：
+
+1. PML `drawslope`（`isoline.pmlobj:2564` 附近）的实际几何：三角形**实心还是描边**、边长与 `cheight` / 管径的关系、直角三角形还是等腰、斜边是否就是 slope 线、箭头尖朝哪端。
+2. 三角形与 `slope X%` 文字的相对位置（文字在三角形内 / 上方 / 旁边；是否随 `ori` 旋转）。
+3. 坡度符号是否依附 `aid_line`（`…:slope:rise:…` 的两腿）：现有 fixture 把 `slope:rise` 当独立 `aid_line`，但 PML 里三角的两条直角边是否由 solver 单独输出、还是仅由 `slope_mark` 的 start/end 隐式确定——仓内无法判定。
+4. 负坡 / 零坡（水平管、`i=0%`）时 PML 画什么：三角形退化？只出文字？
+5. 多段同直段多个 `slope_mark` 时的排布与重叠规则（PML 是否走 polarsystem 避让）。
+6. **一份真实 BRAN 的桌面端出图截图**作为判据物：现有 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 与 `dimension-camera-baseline-2026-10-29/` 只有 Web 侧截图，**没有 PML 侧对照图**。
+7. 裁决归属口径：`2026-07-29-…audit.md:97` 写「按 rs-mbd『语义对齐』词条不要求像素复刻，留金样人工审阅裁决」，但没写清「语义对齐」是否允许形状不同——这条要么引用 rs-mbd 原文，要么由人拍。
+
+**可用的视觉材料**：`all-pipes-brans.json` 里 **318 个 BRAN 有 `slope_mark`**（合计 1 467 个），最密集的是 `24383_75125`（23 个）、`24381_105860`（22 个）、`24381_105733`（21 个）——W5-1 出图直接用这三个，比现在两个基线 BRAN（0 个坡度）合适。生成器已支持 `DIMENSION_CAMERA_BASELINE_REFNOS` 覆盖。
 

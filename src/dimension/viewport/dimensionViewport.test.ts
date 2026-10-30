@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { PerspectiveCamera } from 'three';
+import { Group, PerspectiveCamera } from 'three';
 
 import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensions';
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
@@ -16,6 +16,7 @@ import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 import { layoutViewport } from '../kernel/viewport/layoutViewport';
 
 import { DimensionViewport } from './dimensionViewport';
+import { ThreeSceneDimensionPainter } from './scenePainter';
 
 import type { DimensionFrameBreakdown } from './dimensionViewport';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
@@ -497,5 +498,133 @@ describe('DimensionViewport', () => {
       labelT: 0.75,
       side: -1,
     });
+  });
+
+  /**
+   * W5-5 分帧的行为契约，而不是实现细节。
+   *
+   * 为什么这四条是契约：批大小（现在是 `ceil(layouts / 3)`）和批数（现在
+   * 由批大小推出）都可以随性能预算调整，改它们不该动这条测试；但下面两件事
+   * 一变就是回归——(1) 分帧中途绝不把完整几何发布出去，否则宿主那一帧会
+   * 画出写了一半的尺寸线；(2) 末帧的顶点必须与同步 `paint()` 逐位相同，
+   * 否则「分帧」就变成了「画错」。所以这里钉的是「跨帧」「中间帧未发布」
+   * 「末帧等价」，不钉帧数、不钉每批条数。
+   *
+   * 40 条记录：`ceil(40 / 3) = 14` 条/批 → 3 个 paint 帧，前面还有 1 个 layout
+   * 帧。记录数只保证「paint 一定跨帧」，具体批数不参与断言。
+   */
+  it('keeps every batch unpublished until the last one lands', () => {
+    const records = Array.from({ length: 40 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, (index % 8) * 0.25, 0]),
+    }));
+
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument(records));
+
+    /** 尺寸层线 mesh 的当前几何：`drawRange` 是发布面，`position` 是写入面。 */
+    const dimensionLines = () => {
+      const mesh = harness.scene.getObjectByName('dimension-scene-lines') as any;
+      const geometry = mesh.geometry as {
+        drawRange: { count: number };
+        getAttribute: (name: string) => { array: Float32Array };
+      };
+      return geometry;
+    };
+    /**
+     * 已发布的索引数——线缓冲是四顶点一个 quad 的索引几何，`drawRange.count`
+     * 记的是索引数而不是顶点数，只有 `finish()` 会把它从 0 写成真实值。
+     */
+    const publishedIndexCount = () => dimensionLines().drawRange.count;
+
+    // 第一帧是 layout：布局算完，几何一个顶点都还没写，更没有发布。
+    harness.flush(1);
+    expect(
+      publishedIndexCount(),
+      '布局完成的那一帧不得发布几何',
+    ).toBe(0);
+
+    // 之后的帧才是 paint。逐帧推进，并在每一帧之后（只要还有下一帧）
+    // 检查几何尚未发布。实测中间态 `drawRange.count === 0`：`paintAsync`
+    // 起手 `ensureCapacity` 换新 `BufferGeometry` 时 `ReusableGeometry`
+    // 会 `setDrawRange(0, 0)`，只有 `finish()` 才写入真正的索引数。
+    let paintFrames = 0;
+    let midPaintSamples = 0;
+    while (harness.callbacks.length > 0 && paintFrames < 32) {
+      harness.flush(1);
+      paintFrames += 1;
+      if (harness.callbacks.length > 0) {
+        midPaintSamples += 1;
+        expect(
+          publishedIndexCount(),
+          '分帧中途不得发布几何：那一帧会画出写了一半的尺寸线',
+        ).toBe(0);
+      }
+    }
+
+    // **只数 paint 帧，不数 layout 帧**。这一点是这条测试的关键：若把 layout
+    // 帧也算进来，那么「一批写完」的实现照样会有 2 帧（layout + paint），
+    // 断言会静默通过 —— 实测过：把批大小改成 `layouts.length` 后总帧数仍是 2，
+    // 这条契约一次都没被验证。分帧的语义是 **paint 本身跨帧**，所以下界是 2 个
+    // paint 帧，不是 2 个总帧。
+    expect(
+      paintFrames,
+      '分帧必须让 paint 本身跨帧：paint 只有一帧说明一批就写完了，契约没被走到',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      midPaintSamples,
+      '必须真的观察到 paint 的中间帧，否则上面的「未发布」断言一次都没跑',
+    ).toBeGreaterThanOrEqual(1);
+
+    const published = publishedIndexCount();
+    expect(
+      published,
+      '末帧必须发布几何，否则尺寸层永远不显示',
+    ).toBeGreaterThan(0);
+
+    // 末帧与同步 `paint()` 逐位相同：这是分帧唯一可以接受的正确性标准。
+    // 参照画家用同一份 layouts（分帧结束后 `getLayouts()` 就是这批布局）、
+    // 同一主题、同一 displayMode，与视口内部画家的 resize 参数一致
+    // （`createTestProjector()` 是 400×400 @ dpr 2）。
+    const reference = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    reference.resize(400, 400, 2);
+    reference.paint(
+      harness.viewport.getLayouts(),
+      SOLVESPACE_DIMENSION_THEME,
+    );
+    const referenceLines = reference.group.getObjectByName(
+      'dimension-scene-lines',
+    ) as any;
+    const vertexCount = reference.getStats().lineVertexCount;
+    expect(
+      vertexCount,
+      '参照画家必须真的写了顶点，否则下面的逐位比较是空比较',
+    ).toBeGreaterThan(0);
+
+    const expected = Array.from(
+      referenceLines.geometry.getAttribute('position').array.slice(
+        0,
+        vertexCount * 3,
+      ),
+    );
+    const actual = Array.from(
+      dimensionLines().getAttribute('position').array.slice(
+        0,
+        vertexCount * 3,
+      ),
+    );
+    expect(
+      actual,
+      '分帧写出的顶点必须与同步 paint() 逐位相同',
+    ).toEqual(expected);
+    // 发布面也必须等价：两边同一个 `drawRange`，不在这里写死「顶点 → 索引」
+    // 的换算公式（那是实现细节，随几何索引化方式变）。
+    expect(
+      published,
+      '末帧发布的 drawRange 必须与同步 paint() 的一致',
+    ).toBe(referenceLines.geometry.drawRange.count);
+
+    harness.viewport.dispose();
   });
 });
