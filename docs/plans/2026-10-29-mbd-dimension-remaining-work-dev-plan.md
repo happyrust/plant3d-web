@@ -262,6 +262,21 @@ W5-3 / W5-4 / W5-5 在 §4 里各只有一行验收描述（「中景多留一�
 
 **仍未做的一半**：「本样本远景不变；中景多留一档」的**视觉**验收要用 W5-2 的固定相机基线做 A/B 出图，需 gen-model 后端 18084（当前不在线）。**在出图之前不得声称视觉验收通过**——上面钉住的是数值行为，不是画面。
 
+**视觉 A/B 已跑（2026-10-30，本节结论已可成立）**：后端用常驻 8022（见 §4 W5-2 行），before = worktree `plant3d-web-w53-before` 检出 `f052535d`（`e419a2f6^`，W5-3 之前）跑 dev `:3102`，after = 当前树 `:3101`。两侧同一生成器、同一后端、同一视口，`DIMENSION_CAMERA_BASELINE_OUT_DIR` 分目录。
+
+| BRAN | 档 | before `f052535d` | after `e04c2971` | 差 |
+| --- | --- | --- | --- | --- |
+| 24381_145018 | far | drawn 20 / lodHidden 43 | drawn 21 / lodHidden 42 | **+1 保留** |
+| 24381_145018 | mid | drawn 20 / lodHidden 43 | drawn 21 / lodHidden 42 | **+1 保留** |
+| 24381_145018 | near | drawn 29 / lodHidden 34 | drawn 29 / lodHidden 34 | 不变 |
+| 24383_91813 | far / mid / near | 18 / 18 / 18，lodHidden 0 | 18 / 18 / 18，lodHidden 0 | 完全不变 |
+
+**三条断言全部兑现**：①「中景多留一档」= 24381 的 mid 从 20 涨到 21，那条主尺寸的「线长/标签宽」比值落在 0.8~1.0 区间，旧的一刀切 1.0 砍掉它、新的 primary 0.8 留下它；②「远景不变」= 24383 整条 BRAN 三档零变化，24381 的 far 也涨 1 条是因为**阈值按档位不按距离**，同一条尺寸在 far/mid 同档同判，这是设计而非误伤；③近景零变化 = detail 的 1.5 与 `lodDetailMinPx: 18` 组合未波及。
+
+**相机可比性已核**：三档 `target` 逐位相等；far / near 的 `position` 逐位相等；mid 的 `position` 差 **6.2e-15 / 5.3e-15 米（飞米级）**，是 `controls.update()` 从球坐标反算的末位浮点抖动，非相机错位。`canvasCss` 两侧同为 1220×778。
+
+**清理**：`git worktree remove` 已执行，`node_modules` 是 junction（不随 worktree 删除影响主树）。
+
 ### 11.2 W5-4 「文字在线上方」可选模式（Q6）—— 已实现（2026-10-30）
 
 **原状**：engineering 默认是**「中断处」**——文字压在尺寸线中点，尺寸线在标签框处断开。实现是 `labelClearance`（`src/dimension/kernel/layout/explicit.ts:153-179`）算标签框 + `explicitSceneLines`（`:184-229`）用 `trimLineAgainstRotatedRect`（`src/dimension/kernel/geometry/trimLineAgainstRect.ts:111`）把 `part === 'dimension'` 的线切掉标签覆盖段。文字中心取 `input.labelAnchor`（solver 给的中点，`explicit.ts:163-166` 的 `makeCenteredGlyphRun`）。
