@@ -484,6 +484,23 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 
 **验证**：`createDimensionSystem.test.ts` 14/14、`dimensionViewport.test.ts` 14/14、dimension + debug 85 文件 / 751 例全绿、type-check 439/126 新增 0、eslint 0。
 
+### 11.3.9 分帧期间 `hitTest` 按新布局回答（2026-10-30 修）
+
+**问题**：`hitIndex` 与 `layouts` 都在 layout 完成时换新（`dimensionViewport.ts:612-614`），但像素要等分帧写完才更新。中间 1～2 帧里用户点到的是**新布局的命中区域、旧画面的像素**——命中的东西屏幕上根本还没出现。消费方是 `ViewerPanel.vue` 的右键测量菜单，表现就是「右键点空处却弹出了某个尺寸的操作菜单」。
+
+**修法**：把索引拆成两份。`pendingHitIndex` 在 layout 完成时接新结果，`paintedHitIndex` 只在 `job.finish()` 发布几何的那一刻提升（同步降级路径 `remaining() === 0` 也提升，否则小图会一直用旧索引）。`hitTest()` 只读 `paintedHitIndex`；`dispose()` 两份一起清空。
+
+**为什么不在分帧期间直接禁用命中**：`ViewerPanel` 把 `hitTest` 返回 `null` 当成「点在空白处」，会走打开新测量的分支。禁用命中等于把误命中换成误操作，方向反了。按已画出的那一帧回答才是屏幕状态的正确镜像。
+
+**测试（第三次才写对，前两次空过）**：
+1. 第一版探针点写死 `[960, 540]`。测试投影器只有 400×400，`buildHitIndex` 按 `bounds` 裁剪单元，这个点根本不在任何单元里 → 两次 `hitTest` 都是 `null`，`if (hit)` 守卫把断言整个跳过，**回滚修复仍绿**。
+2. 第二版改成「命中结果前缀必须是 `before`」，但两份文档几何不同（`b` 的 x 从 1 改成 2），探针点落在其中一份外面 → 仍然 `null`，仍然空过。
+3. 定稿：两份文档**几何完全一致、只有 id 前缀不同**，探针点取自**已画那一帧的 `hitRegions[0]`**（`segment` 取 `from`，`rect` 取左上角），并先断言「这个点确实能命中 `before-1`」再往下走。回滚修复后如期变红：`expected 'after-1' to be 'before-1'`。
+
+**教训（与 §11.3.7 同一类）**：几何类测试的探针点不能手写，必须从被测对象自己的输出里取；并且要有一条「探针有效」的前置断言，否则「两次都返回 null」会让整条测试静默失效。空过的测试比没有测试更危险。
+
+**验证**：`dimensionViewport.test.ts` 15/15、`npx vitest run src/dimension` 78 文件 / 674 例全绿、type-check 439/126 新增 0、eslint 0。
+
 ### 11.3.3 W5-5 判据重述（2026-10-30 自决，动手前置条件）
 
 §11.3 原文的判据是「**分帧后单帧 p95 ≤ 16 ms 且总帧数不超过 2 倍**」。§11.3.2 的实测证明这两条在当前基线下**不能同时成立**：光 `writeMs` 的 p95 就有 69.1 ms，分 2 帧是 34.6 ms/帧，要压到 16 ms 需要 5～6 帧。原判据隐含假设 paint 只有 30 ms 上下，与实测 53～83 ms 不符。

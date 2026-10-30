@@ -153,7 +153,14 @@ export class DimensionViewport {
   >();
   private readonly externalHidden = new Set<string>();
   private layouts: readonly LayoutResult[] = [];
-  private hitIndex: HitIndex = buildHitIndex([]);
+  /**
+   * 命中索引必须跟**已画出的那一帧**同步（W5-5）。分帧期间 `layouts` 已经是
+   * 新布局，像素却还是上一次的；此时按新索引回答命中，用户点到的是屏幕上
+   * 根本还没出现的图元。所以新索引先放 `pendingHitIndex`，等 `job.finish()`
+   * 发布几何时才提升为 `paintedHitIndex`。
+   */
+  private paintedHitIndex: HitIndex = buildHitIndex([]);
+  private pendingHitIndex: HitIndex = buildHitIndex([]);
   // 上一次真正跑 layoutViewport 时使用的 projector；projector 在构造时
   // 快照了相机与 designToWorld，实例相同即投影未变，纯 camera 失效可复用布局。
   private lastLayoutProjector: ViewportProjector | null = null;
@@ -373,7 +380,7 @@ export class DimensionViewport {
   }
 
   hitTest(point: Vec2, tolerancePx: number): HitTarget | null {
-    return this.hitIndex.hitTest(point, tolerancePx);
+    return this.paintedHitIndex.hitTest(point, tolerancePx);
   }
 
   getLayouts(): readonly LayoutResult[] {
@@ -488,7 +495,8 @@ export class DimensionViewport {
     }
     this.scenePainter.dispose();
     this.layouts = [];
-    this.hitIndex = buildHitIndex([]);
+    this.paintedHitIndex = buildHitIndex([]);
+    this.pendingHitIndex = buildHitIndex([]);
     this.normalizedUsers = [];
     this.normalizedExternal = [];
     this.selectionListeners.clear();
@@ -603,7 +611,7 @@ export class DimensionViewport {
     const layoutCompletedAt = performance.now();
     this.layouts = batch.layouts;
     this.lastLayoutProjector = this.projector;
-    this.hitIndex = batch.hitIndex;
+    this.pendingHitIndex = batch.hitIndex;
     this.pendingStyleIds.clear();
     this.startBatchedPaint(startedAt, layoutCompletedAt);
     this.layoutListeners.forEach(listener => listener(this.layouts));
@@ -649,6 +657,7 @@ export class DimensionViewport {
     };
     if (job.remaining() === 0) {
       job.finish();
+      this.paintedHitIndex = this.pendingHitIndex;
       this.input.requestRender();
       report();
       return;
@@ -664,6 +673,9 @@ export class DimensionViewport {
       }
       job.finish();
       this.painting = false;
+      // 几何已经全部发布，命中索引此刻才跟上——分帧中途 hitTest 仍按旧索引
+      // 回答，和屏幕上的像素一致。
+      this.paintedHitIndex = this.pendingHitIndex;
       this.replayDeferredReasons();
       this.input.requestRender();
       report();

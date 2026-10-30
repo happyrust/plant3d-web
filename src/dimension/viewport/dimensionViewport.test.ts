@@ -373,6 +373,55 @@ describe('DimensionViewport', () => {
     expect(layoutFrames[0]!.paintMs).toBeGreaterThan(20);
   });
 
+  /**
+   * W5-5 分帧的第四个问题：`hitIndex` 与 `layouts` 在 layout 完成时就换新，
+   * 但画面要等分帧写完才更新。中间这 1～2 帧里用户点到的是**新布局的命中
+   * 区域、旧画面的像素**——命中一个屏幕上根本还没出现的东西。
+   *
+   * 判定：分帧中途 `hitTest` 必须仍按**上一帧已画出的**内容回答。
+   *
+   * 两份文档的几何完全一样、只有 id 前缀不同，这样同一个探针点必然命中，
+   * 命中结果的前缀就直接说明用的是哪一份索引。探针点取自已画那一帧的
+   * 命中区域（`hitRegions[0].from`），不能手写屏幕坐标——测试投影器只有
+   * 400×400，写死 1920×1080 的点会被索引裁剪掉、返回 null，测试就空过了。
+   */
+  it('answers hit tests from the painted frame while a batched paint is in flight', () => {
+    const makeRecords = (prefix: string) => Array.from(
+      { length: 12 },
+      (_, index) => linearRecord({
+        id: `${prefix}-${index + 1}`,
+        b: exactAnchor([1, index * 0.5, 0]),
+      }),
+    );
+
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument(makeRecords('before')));
+    harness.flush();
+
+    const painted = harness.viewport.getLayouts()[0]!;
+    expect(painted.dimensionId).toBe('before-1');
+    const region = painted.hitRegions[0]!;
+    const probe: [number, number] = region.kind === 'segment'
+      ? [region.from[0], region.from[1]]
+      : [region.rect.x, region.rect.y];
+
+    // 探针点必须先证明能命中，否则下面的断言会退化成「两次都是 null」。
+    expect(harness.viewport.hitTest(probe, 3)?.dimensionId).toBe('before-1');
+
+    // 新文档：布局完成，绘制跨三帧。
+    harness.viewport.setDocument(emptyDimensionDocument(makeRecords('after')));
+    harness.flush(1);
+
+    // 分帧中途，屏幕像素仍属于 before，命中必须仍按 before 回答。
+    expect(harness.viewport.hitTest(probe, 3)?.dimensionId).toBe('before-1');
+
+    harness.flush();
+    // 排空后命中跟着已画出的帧走。
+    expect(harness.viewport.hitTest(probe, 3)?.dimensionId).toBe('after-1');
+    expect(harness.viewport.getLayouts()[0]!.dimensionId).toBe('after-1');
+  });
+
   it('relayouts on a camera flush when the projector instance changed', () => {
     vi.mocked(layoutViewport).mockClear();
     const harness = createViewport();
