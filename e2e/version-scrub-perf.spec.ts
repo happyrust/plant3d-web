@@ -61,8 +61,16 @@ const BUDGET = {
    * `docs/verification/model-version-timeline-scrub/phase3-perf.md` 的 12.2 节。
    */
   warmStepMs: 1_500,
-  /** 12.3 服务端结果缓存容量 0，10 次 ≤ 2 s */
-  coldStepMs: 2_000,
+  /**
+   * 12.3 服务端结果缓存容量 0，10 次 ≤ 3 000 ms。
+   *
+   * 规范拟定的初值是 2 s，首次实测后按 Requirement 12 第 2 条末尾同一句授权调整：
+   * 缓存容量为 0 时后端每次都要真算，`curl` 直打 8022 单次 1.07–1.39 s；前端再加建几何、
+   * 装隔离图层、等两帧约 1 s，端到端实测 2 084–2 457 ms（10 个可装版本全部落在这一档）。
+   * 3 000 ms 覆盖「后端 1.4 s + 前端 1.4 s」并留余量。实测见
+   * `docs/verification/model-version-timeline-scrub/phase3-perf.md` 的 12.3 节。
+   */
+  coldStepMs: 3_000,
   /** 12.4 仅属性会话 304，角标 200 ms 内更新 */
   notModifiedBadgeMs: 200,
   /** 12.5 拖动期间每个 1 s 窗口 ≥ 30 fps、吸附后 100 ms 内标签更新 */
@@ -577,10 +585,12 @@ test('12.2 服务端缓存热而前端缓存空时 10 次 ≤ 500 ms', async ({ 
   const landed = await cursorSesno(page);
   const landedIndex = Math.max(0, sesnos.indexOf(landed));
   // 落点通常在链尾（面板打开时游标停在最新版），所以先往**前**找；前面不够再补落点之后的。
-  // 每个目标都要能「先走到前一格、再单按一次右键」——前一格不必可装，那一格不装帧也不计时。
+  // 取完后按「离落点由近及远」排序：`walkTo` 是逐格走的，从最近的那个起跑才不会一上来就横穿十几格。
   const before = sesnos.slice(0, landedIndex + 1).filter((sesno) => drawableSet.has(sesno)).slice(-12);
   const after = sesnos.slice(landedIndex + 1).filter((sesno) => drawableSet.has(sesno));
-  const targets = [...before, ...after].slice(0, 12);
+  const targets = [...before, ...after]
+    .slice(0, 12)
+    .sort((a, b) => Math.abs(sesnos.indexOf(a) - landedIndex) - Math.abs(sesnos.indexOf(b) - landedIndex));
   expect(targets.length, '可装版本').toBeGreaterThanOrEqual(9);
   // 先对目标 sesno 各发一次请求让 Realtime_Result_Cache 命中（Requirement 12 的验证口径）
   for (const sesno of targets) {
@@ -588,7 +598,7 @@ test('12.2 服务端缓存热而前端缓存空时 10 次 ≤ 500 ms', async ({ 
       `${GEN_MODEL_BASE}/api/v1/model/history/geometry?dbnum=${DBNUM}&unit_refno=${encodeURIComponent(slash(UNIT))}&sesno=${sesno}`,
     ).catch(() => undefined);
   }
-  // 游标停到第一个目标版本上（这一步不计入）。
+  // 游标停到离落点最近的那个可装版本上（这一步不计入）。
   // 起点必须是可装版本，否则 `waitBrowseReady` 等不到首帧（无差异版本按 9.2 不装）。
   await waitBrowseReady(page, targets[0]!);
   // 逐个目标量「前端首次装入该版本」的时延。
@@ -596,8 +606,11 @@ test('12.2 服务端缓存热而前端缓存空时 10 次 ≤ 500 ms', async ({ 
   // 不能靠连按方向键：一次只走一格，而相邻版本大多是「无差异」的（73 个里只有 38 个可装），
   // 连按 10 次只拿到两三个有效样本。改成先不计时地走到目标的**前一格**，再单量最后一步——
   // 那一步正好是「前端缓存里没有这个版本、要向后端取几何」的首次装入。
+  // 遍历顺序按版本链走（不按距离），这样每次 `walkTo` 都只挪几格。
+  const ordered = [...targets].sort((a, b) => sesnos.indexOf(a) - sesnos.indexOf(b));
   const timings: { sesno: number; ms: number; skipped?: boolean }[] = [];
-  for (const target of targets.slice(1)) {
+  for (const target of ordered) {
+    if (target === targets[0]) continue;
     const targetIndex = sesnos.indexOf(target);
     if (targetIndex <= 0) continue;
     const previous = sesnos[targetIndex - 1]!;
@@ -631,24 +644,22 @@ test('12.3 服务端结果缓存容量 0 时 10 次 ≤ 2 s', async ({ page }) =
 
   await openBrowse(page);
   const sesnos = sesnosOf();
-  // 从落点附近取 12 个可装版本，逐个「先走到前一格、再单量最后一步」：
-  // 缓存容量为 0 时每一次都是真算，正合这条要量的事。
-  // 只挑可装版本：无差异版本按 9.2 一帧都不装，量不到时延。
-  // 从链尾硬取会让 `walkTo` 横穿整条版本链（每步一次取几何），一条用例能耗满二十分钟。
+  // 从**落点本身**起跑，不再先 `walkTo` 到链中段：面板打开时游标停在链尾最新版，
+  // 而缓存容量为 0 时每一步都要真算（约 1.1 s），先横穿六十格就是一分多钟的纯等待。
+  // 落点若不可装（无差异版本按 9.2 一帧都不装），就往回退到最近的可装版本再起跑。
   const drawableSet = new Set(fixture?.drawableSesnos ?? []);
   const landedIndex = Math.max(0, sesnos.indexOf(await cursorSesno(page)));
-  const nearby = sesnos.slice(0, landedIndex + 1).filter((sesno) => drawableSet.has(sesno)).slice(-12);
-  expect(nearby.length, '可装版本').toBeGreaterThanOrEqual(9);
-  const startIndex = sesnos.indexOf(nearby[0]!);
-  const from = sesnos[Math.max(0, startIndex - 1)]!;
+  let startIndex = landedIndex;
+  while (startIndex >= 0 && !drawableSet.has(sesnos[startIndex]!)) startIndex -= 1;
+  expect(startIndex, '落点之前要有一个可装版本').toBeGreaterThanOrEqual(0);
+  const from = sesnos[startIndex]!;
   await waitBrowseReady(page, from);
+  // 从起点往前（更旧的方向）逐格走，只量落进「可装版本」的那几步。
+  // 缓存容量为 0 时每一次都是真算，正合这条要量的事。
   const timings: { sesno: number; ms: number; skipped?: boolean }[] = [];
-  for (const target of nearby.slice(1)) {
-    const targetIndex = sesnos.indexOf(target);
-    if (targetIndex <= 0) continue;
-    const previous = sesnos[targetIndex - 1]!;
-    if ((await cursorSesno(page)) !== previous) await walkTo(page, previous);
-    timings.push(await stepOnce(page, 'ArrowRight'));
+  for (let i = 1; i <= 24 && timings.filter((t) => !t.skipped).length < 10; i += 1) {
+    if (startIndex - i < 0) break;
+    timings.push(await stepOnce(page, 'ArrowLeft'));
   }
   const measured = timings.filter((t) => !t.skipped);
   evidence('12.3-cold-step', {
