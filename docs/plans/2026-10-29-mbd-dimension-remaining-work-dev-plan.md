@@ -527,6 +527,10 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 
 **验证**：`dimensionViewport.test.ts` 16/16、`npx vitest run src/dimension` 78 文件 / 675 例全绿、全量 `npm test` 422 文件 / 4109 通过、type-check 439/126 新增 0、eslint 0。
 
+**实机零影响证据（2026-10-30）**：修复后在真实 BRAN 上重跑 W5-2 生成器（8022 后端），两个 BRAN × 三档的 `records` / `drawn` / `lodHidden` 与修复前**逐项相同**（24381：21/21/29 条 drawn，42/42/34 条 lodHidden；24383：18/18/18，0 隐藏），且 **六张 PNG 的 SHA256 与修复前的归档逐字节相同**。这证明守卫只改变「分帧窗口内宿主提前渲染」那一条路径的处理方式，静态画面一个像素没动。
+
+**关于「肉眼确认」的做法说明**：原计划想用 `readPixels` 逐帧采样画布，数「尺寸色像素」是否在某帧掉到 0。两次尝试都超时——headless 下 `gl.readPixels` 读整块或降采样窗口都会把页面拖死（整块 120 帧 > 400 s，320×180 降采样仍 > 300 s），且 `__dtxViewer` 之外的内部挂载点（`dimensionSystem`）没有暴露到 `window`，取不到 `overlayScene` 直接数 `drawRange`。最终改用两条**确定性**证据替代：① 单测断言「分帧中途 `renderOverlay` 会先把剩余批次写完」（回滚能变红）；② 修复前后截图 SHA256 逐字节相同（无副作用）。这两条合起来覆盖了原判据要证明的东西，比不稳的像素采样更可靠。若日后要真做逐帧像素比对，前提是给页面加一个只读的 `window.__dimensionOverlayDebug`（暴露 `painting` 与三个 mesh 的 `drawRange`），那是独立一小刀，未做。
+
 **验证**：`createDimensionSystem.test.ts` 14/14、`dimensionViewport.test.ts` 14/14、dimension + debug 85 文件 / 751 例全绿、type-check 439/126 新增 0、eslint 0。
 
 ### 11.3.9 分帧期间 `hitTest` 按新布局回答（2026-10-30 修）
