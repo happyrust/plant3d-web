@@ -218,6 +218,9 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 27 | `b2aec28d` | 修分帧早退吞失效原因：`deferredReasons` + `replayDeferredReasons()` | viewport 13/13（回滚验证过能抓到）、dimension+debug 85/750、type-check 439/126、eslint 0 |
 | 28 | `2b375907` | 修 `onFrame` 只报第一批：`paintMs` 改为覆盖全部批次 + 两处 `flush()` 排空 | facade 14/14、viewport 14/14、dimension+debug 85/751、type-check 439/126、eslint 0 |
 | 29 | `b25b5935` | 修分帧期间 `hitTest` 按新布局回答：`paintedHitIndex` / `pendingHitIndex` 拆分，`job.finish()` 时才提升 | viewport 15/15（回滚验证过能抓到）、dimension 78/674、dimension+debug 85/752、全量 422/4108、type-check 439/126 新增 0、eslint 0 |
+| 30 | `e04c2971` | W5-2 真实 BRAN 相机基线落盘（改用常驻 8022，6 PNG + 2 侧车） | 生成器 2 passed；截图人工查验通过 |
+| 31 | `19b466b3` | W5-3 三档阈值视觉 A/B（before = worktree `f052535d`） | mid/far 各 +1 保留、near 与 24383 零变化；相机可比性已核 |
+| 32 | 本次 | 修分帧期间宿主渲染让尺寸层整层消失：`pendingPaint` + `finishBatchedPaintNow()` | viewport 16/16（回滚验证过能抓到）、dimension 78/675、全量 422/4109、type-check 439/126 新增 0、eslint 0 |
 
 **R5 裁决（2026-10-30 自决，接上表第 29 刀）**：`e2e/dimension-perf.spec.ts` 的 `test.skip(process.env.DIMENSION_PERF_GATE !== '1')` **保持默认 skip，不接 CI**。依据是 `.github/workflows/ci.yml:22` 的 gates 只有 type-check / eslint / vitest 三项，且该文件的注释已写明「E2E / PMS 联调要外网账号和浏览器，仍留在本地手动」；更重要的是门禁的两条断言绑的是**本机档位**（`BASELINE_LAYOUT_P95_MS = 26.2` / `BASELINE_PAINT_P95_MS = 78.6`，采自 Ryzen 9 7950X + dev 构建 + DPR 1 + headless GPU），换到 GitHub 的 `ubuntu-latest` 共享 runner 上必然因档位差异误报，而不是抓退化。真正的守门人分工是：layout 的 16 ms 由内核基准（`npm run perf:dimensions:kernel`，p95 3.746 ms）在数值层面守住，浏览器门禁只在**改渲染路径时**由人手动跑一次。要让 CI 也守，前提是先在 CI runner 上重新采一份基线并接受方差，这是独立一刀，本轮不做。
 
@@ -499,6 +502,30 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 **连带修正**：`createDimensionSystem.test.ts` 的 `flush()` 与 `dimensionViewport.test.ts` 的同名工具一样，原来只跑一个回调；分帧后必须排空队列，否则「等 `onFrame` 被调用」的循环在 layout 完成时就退出了，上报还没发生。两处都改成默认排空（可传 `maxFrames`）。
 
 **这条也说明一件事**：分帧改动会波及所有「一次 paint 就上报」的观测口径。W4-1 的 recorder 是长期工具，它的数字变了要当成回归对待，不能只看测试绿。
+
+### 11.3.10 分帧期间宿主渲染让尺寸层整层消失（2026-10-30 修）
+
+**问题**：`renderOverlay` 只有 `disposed` 一个守卫，而宿主在**每帧**渲染后无条件调它（`ViewerPanel.vue:3301` / `:3304`（`renderFrame` 路径）与 `:3394` / `:3397`（另一条渲染路径），共四处 `renderDimensionOverlay`）。`paintAsync` 起手不设 `drawRange`，而 `ReusableGeometry.ensureCapacity` 在**增长容量**时会 `new BufferGeometry()` 换一块新缓冲（`scenePainter.ts:359-393`），新几何的 `drawRange` 默认 `Infinity`。
+
+所以分帧的 1～2 帧里，只要相机在动（用户拖一下、惯性滑动、`controls` 的阻尼帧），宿主那帧就会：
+- 若容量没变 → 画出上一帧遗留的 `drawRange` 加一半新顶点；
+- 若容量变了 → 按 `Infinity` 画出整块**未初始化**的顶点（垃圾三角形）。
+
+两种都是可见缺陷。§11.3.5 当时写的「单缓冲禁渲染」只挡住了 `render()` 里的 `requestRender`，**漏掉了宿主这条无条件调用路径**。
+
+**修法**：`renderOverlay` 入口若 `painting` 为真，先调 `finishBatchedPaintNow()` 把剩余批次**一次写完**（`while (!job.advance(batch)) {}` → `finish()`），再照常画。这等价于「这一次分帧退化成同步」：多花一帧时间，但画面与几何永远一致。
+
+**为什么不是直接 `return`**：宿主这帧的主场景已经画完了，尺寸层这个 pass 若跳过，那帧就是**整层消失**（空白闪烁）。半成品与空白都不接受，而「这一次不分帧」是唯一不产生可见异常的选择。代价有界——只在「用户在分帧的 1～2 帧窗口内动了相机」时发生，正常浏览时 `advance()` 早已排空。
+
+**实现**：新增字段 `pendingPaint: { job, batchLayouts, finish } | null`，把原先内联在 `step()` 里的收尾逻辑提成 `finish()` 供两条路径共用（帧循环走完 / 宿主提前要）。`dispose()` 与「新布局作废旧作业」两处都要清 `pendingPaint`，否则 `finishBatchedPaintNow` 会去推进一个已作废的作业。
+
+**测试**（`finishes the batched paint before drawing when the host renders mid-batch`）：12 条记录 → `flush(1)` 停在第一批之后 → 调 `renderOverlay` → 断言 ① `renderer.render` 被调用 1 次（画了）② `cancelled` 有且只有 1 条（队列里那帧被取消，改同步写完）③ 收尾后 `hitTest` 按刚画出的那帧回答。
+
+**回滚验证**：把守卫改回 `if (this.painting) return;`，测试如期变红 —— `expected "vi.fn()" to be called 1 times, but got 0 times`，即 `renderOverlay` 一次都没画，正是「整层消失」那个现象。
+
+**教训（第三次同类）**：分帧的守卫必须覆盖**所有**「几何被读出去」的出口，不只是自己发起的 `requestRender`。这次漏的是宿主主动拉的那条。审计分帧/异步写入类改动时，正确做法是先列出「谁会读这块缓冲」，再逐个确认。
+
+**验证**：`dimensionViewport.test.ts` 16/16、`npx vitest run src/dimension` 78 文件 / 675 例全绿、全量 `npm test` 422 文件 / 4109 通过、type-check 439/126 新增 0、eslint 0。
 
 **验证**：`createDimensionSystem.test.ts` 14/14、`dimensionViewport.test.ts` 14/14、dimension + debug 85 文件 / 751 例全绿、type-check 439/126 新增 0、eslint 0。
 

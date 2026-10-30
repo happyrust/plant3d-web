@@ -12,6 +12,7 @@ import {
 } from './invalidation';
 import { ThreeSceneDimensionPainter } from './scenePainter';
 
+import type { SceneDimensionPaintJob } from './scenePainter';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { DimensionDocumentState } from '../domain/document';
 import type { UserDimensionRecord, Vec3 as DomainVec3 } from '../domain/types';
@@ -176,6 +177,15 @@ export class DimensionViewport {
   private painting = false;
   private paintFrameId: number | null = null;
   /**
+   * 在飞的分帧作业（W5-5）。留着它是为了让宿主提前要求渲染时能把剩余批次
+   * 一次写完（`finishBatchedPaintNow`），而不是画出写了一半的几何。
+   */
+  private pendingPaint: Readonly<{
+    job: SceneDimensionPaintJob;
+    batchLayouts: number;
+    finish: () => void;
+  }> | null = null;
+  /**
    * 分帧期间到达的失效原因（W5-5）。scheduler 已经把原因 `consume()` 掉了，
    * `render()` 早退时若不收下就永久丢失，分帧结束后会停在旧内容上。收尾时
    * 逐个 `invalidate()` 放回，让它们真正生效。
@@ -205,6 +215,14 @@ export class DimensionViewport {
    */
   renderOverlay(renderer: WebGLRenderer, camera: Camera): void {
     if (this.disposed) return;
+    // 分帧写入中，宿主却要渲染这一帧（`ViewerPanel.vue:3301/3304` 与 `:3394/3397`
+    // 四处都无条件调本方法）——多半是相机在动。此时几何只写了一半：`paintAsync`
+    // 起手就把 `drawRange` 归零，容量增长时还换过一块未初始化的 BufferGeometry。
+    //
+    // 直接 `return` 不行：宿主这帧已经重绘了主场景，尺寸层这个 pass 不执行就是
+    // **整层消失**（空白闪烁），比半成品更刺眼。所以把剩下的批次一次写完再画，
+    // 代价只是这一次分帧退化成同步（只有用户在分帧窗口内动了相机才会走到）。
+    if (this.painting) this.finishBatchedPaintNow();
     const autoClear = renderer.autoClear;
     renderer.autoClear = false;
     try {
@@ -488,6 +506,7 @@ export class DimensionViewport {
       this.paintFrameId = null;
     }
     this.painting = false;
+    this.pendingPaint = null;
     this.deferredReasons.clear();
     if (this.cameraSettleTimer !== null) {
       clearTimeout(this.cameraSettleTimer);
@@ -638,6 +657,7 @@ export class DimensionViewport {
       this.paintFrameId = null;
     }
     this.painting = false;
+    this.pendingPaint = null;
     // 旧作业作废时它攒下的失效原因不必重放：本次调用本身就是一次新的全量
     // 布局，那些原因已被满足。
     this.deferredReasons.clear();
@@ -664,15 +684,10 @@ export class DimensionViewport {
     }
     const batchLayouts = Math.max(1, Math.ceil(layouts.length / 3));
     this.painting = true;
-    const step = (): void => {
-      this.paintFrameId = null;
-      if (this.disposed) return;
-      if (!job.advance(batchLayouts)) {
-        this.paintFrameId = this.input.requestFrame(step);
-        return;
-      }
+    const finish = (): void => {
       job.finish();
       this.painting = false;
+      this.pendingPaint = null;
       // 几何已经全部发布，命中索引此刻才跟上——分帧中途 hitTest 仍按旧索引
       // 回答，和屏幕上的像素一致。
       this.paintedHitIndex = this.pendingHitIndex;
@@ -680,7 +695,46 @@ export class DimensionViewport {
       this.input.requestRender();
       report();
     };
+    this.pendingPaint = { job, batchLayouts, finish };
+    const step = (): void => {
+      this.paintFrameId = null;
+      if (this.disposed) return;
+      if (!job.advance(batchLayouts)) {
+        this.paintFrameId = this.input.requestFrame(step);
+        return;
+      }
+      finish();
+    };
     this.paintFrameId = this.input.requestFrame(step);
+  }
+
+  /**
+   * 宿主在分帧窗口内要求渲染：把剩下的批次一次写完再画（W5-5）。
+   *
+   * 触发路径是相机在动——`ViewerPanel.vue:3301/3304` 与 `:3394/3397` 的四处
+   * `renderDimensionOverlay` 都在宿主帧之后无条件执行。若此时直接跳过尺寸层，
+   * 那一帧就是整层消失；若照旧画，画出的是写了一半的顶点（`paintAsync` 起手
+   * 已把 `drawRange` 归零）。两个都不能接受，所以退化成同步：这一次多花一帧的
+   * 时间，画面与几何始终一致。
+   *
+   * 只影响「用户在分帧的 1～2 帧窗口里动了相机」这一种情况；正常浏览时
+   * `advance()` 早已把队列排空，走不到这里。
+   */
+  private finishBatchedPaintNow(): void {
+    const pending = this.pendingPaint;
+    if (!pending) {
+      // 没有作业却在 painting：作业刚被新布局取消，几何已归新布局管，不必补救。
+      this.painting = false;
+      return;
+    }
+    if (this.paintFrameId !== null) {
+      this.input.cancelFrame(this.paintFrameId);
+      this.paintFrameId = null;
+    }
+    while (!pending.job.advance(pending.batchLayouts)) {
+      // 一次写完，不再让出帧。
+    }
+    pending.finish();
   }
 
   /**

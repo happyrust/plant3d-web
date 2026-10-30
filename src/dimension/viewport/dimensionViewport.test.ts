@@ -235,6 +235,54 @@ describe('DimensionViewport', () => {
     expect(renderer.render).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * W5-5 分帧的第五个问题：宿主在分帧窗口内要求渲染时，几何只写了一半。
+   *
+   * `paintAsync` 起手就把 `drawRange` 归零，容量增长时还会换一块未初始化的
+   * `BufferGeometry`；而 `ViewerPanel.vue:3301/3304` 与 `:3394/3397` 四处
+   * `renderDimensionOverlay` 都在宿主帧之后**无条件**执行。分帧中途相机一动，
+   * 那帧要么画出写了一半的顶点，要么（若直接跳过）整层消失。
+   *
+   * 判定：分帧窗口内调 `renderOverlay` 必须把剩余批次一次写完再画，且不留下
+   * 待跑的绘制帧。用「剩余帧数」而不是「画了什么」来判，是因为 jsdom 里没有
+   * 真 GPU，`render()` 只是个桩——真正能观察到的是作业是否被同步收尾。
+   */
+  it('finishes the batched paint before drawing when the host renders mid-batch', () => {
+    const records = Array.from({ length: 12 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, index * 0.5, 0]),
+    }));
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument(records));
+
+    // One frame only: the first batch is written, the paint is still in flight.
+    harness.flush(1);
+    expect(harness.callbacks.length).toBeGreaterThan(0);
+
+    const camera = new PerspectiveCamera();
+    const renderer = {
+      autoClear: true,
+      clearDepth: vi.fn(),
+      render: vi.fn(),
+    };
+    harness.viewport.renderOverlay(renderer as never, camera);
+
+    // The overlay pass ran, and the queued paint frame was cancelled before it
+    // — the remaining batches were written synchronously instead.
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    expect(harness.cancelled).toHaveLength(1);
+    expect(harness.cancelled[0]).toBe(1);
+
+    // And the geometry is now complete: a hit test answers against the frame
+    // that was just drawn, not against a half-written one.
+    const region = harness.viewport.getLayouts()[0]!.hitRegions[0]!;
+    const probe: [number, number] = region.kind === 'segment'
+      ? [region.from[0], region.from[1]]
+      : [region.rect.x, region.rect.y];
+    expect(harness.viewport.hitTest(probe, 3)?.dimensionId).toBe('linear-1');
+  });
+
   it('skips the relayout on camera flushes while the projector instance is unchanged', () => {
     vi.mocked(layoutViewport).mockClear();
     const harness = createViewport();
