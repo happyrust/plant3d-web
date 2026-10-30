@@ -4,7 +4,8 @@ import { emptyLayout } from './linear';
 
 import type { LayoutResult, ScreenRect, Vec2 } from '../types';
 
-type Quad = readonly [Vec2, Vec2, Vec2, Vec2];
+/** Four screen-space corners, in order. Same shape as `ScreenQuad`. */
+export type Quad = readonly [Vec2, Vec2, Vec2, Vec2];
 
 type Candidate = Readonly<{
   index: number;
@@ -49,8 +50,11 @@ function quadArea(quad: Quad): number {
  * the test reported "no overlap" for every pair and 79 overlapping labels were
  * left on screen. Such a quad falls back to the axis-aligned bounds, which
  * always bound the drawn text (2026-10-29).
+ *
+ * Exported for the polar screen guard (W1-2), which runs the same SAT verdict
+ * on solver-placed candidates and needs the same degenerate-quad fallback.
  */
-function quadBracketsLabel(quad: Quad, box: ScreenRect): boolean {
+export function quadBracketsLabel(quad: Quad, box: ScreenRect): boolean {
   const area = box.width * box.height;
   if (!(area > 0)) return false;
   const ratio = quadArea(quad) / area;
