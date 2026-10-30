@@ -76,7 +76,7 @@ W0 收口与基线（小，先做）
 | ID | 任务 | owned_paths | 验收 |
 | --- | --- | --- | --- |
 | W1-1 | **T3.4** `getBestPosAndOri` 14 步 + `balance` + `getDirAndCha` + `getResult`，参考系（`PolarReference`）注入；**`place()` 返回排序候选列表**（审计计划 §13.13 的关键依赖），不只返回单个最优；超 600 行按步骤拆文件 | `kernel/layout/polar/place.ts`（+ 拆出的子模块）+ `.test.ts` | 2D 模式（`isoSheetReference`）用 PML 原 case 逐值一致（含 §13.2 的 X1–X3 三处偏差处理）；3D 模式（`cameraReference`）无 NaN、无越界；不改 numeric / reference 目录的既有导出 |
-| W1-2 | **T3.5** 屏幕校验层：投影 → 像素净空 → 按候选列表降级；`LabelOccupancy` 从 `resolveLabelCollisions.ts:64-131` 提取到 `kernel/collision/occupancy.ts`（原调用方改为引用，行为不变）；重叠判定复用 `convexQuadsOverlap` + T7.6 的 `quadBracketsLabel`。**状态（2026-10-30）**：提取已完成——`occupancy.ts` 新增（`LabelOccupancy` 类原样搬出，`GRID_SIZE_PX` 改名导出为 `OCCUPANCY_GRID_PX`），`resolveLabelCollisions.ts` 改为 import，行数 365 → 260。行为等价性证据：`resolveLabelCollisions.test.ts` 8/8、`layoutViewport.test.ts` 4/4、dimension 全量 78 文件 / 674 例全绿，且 **`kernel/__snapshots__/goldens.test.ts.snap` 零变动**（纯搬迁不产生任何布局差异）。**仍待**：`polar/screenGuard.ts` 本体，依赖 W1-1 的 `place()` 返回候选列表 | `kernel/layout/polar/screenGuard.ts` + `.test.ts`、`kernel/collision/occupancy.ts`、`kernel/collision/resolveLabelCollisions.ts` | 构造重叠 case 断言降级后不重叠；`resolveLabelCollisions` 既有用例与 goldens 快照 0 变动 |
+| W1-2 | **T3.5** 屏幕校验层：投影 → 像素净空 → 按候选列表降级；`LabelOccupancy` 从 `resolveLabelCollisions.ts:64-131` 提取到 `kernel/collision/occupancy.ts`（原调用方改为引用，行为不变）；重叠判定复用 `convexQuadsOverlap` + T7.6 的 `quadBracketsLabel`。**状态（2026-10-30）**：①提取已完成——`occupancy.ts` 新增（`LabelOccupancy` 类原样搬出，`GRID_SIZE_PX` 改名导出为 `OCCUPANCY_GRID_PX`），`resolveLabelCollisions.ts` 改为 import，行数 365 → 260；②**通用降级选择器已入库**（`kernel/collision/selectPlacement.ts`，见 §11.15），polar 侧等 `place()` 入库后补薄适配；③`polar/screenGuard.ts` 本体仍未动，依赖 W1-1 的 `place()` 返回候选列表 | `kernel/layout/polar/screenGuard.ts` + `.test.ts`、`kernel/collision/occupancy.ts`、`kernel/collision/selectPlacement.ts`、`kernel/collision/resolveLabelCollisions.ts` | 构造重叠 case 断言降级后不重叠；`resolveLabelCollisions` 既有用例与 goldens 快照 0 变动 |
 | W1-3 | **T3.6** 接入：`ExplicitLayoutInput.polar`（纯数据）进 kernel 类型；`layoutViewport` 在 `authority='solver'` 且带 polar 输入时走 polar 布局；URL `mbd_polar=1` 读在 `useMbdExternalSync`（与 `mbd_3d` 同构，flag 不进 kernel）；`kernel/index.ts` 导出 polar barrel | `kernel/types.ts`、`kernel/viewport/layoutViewport.ts`、`adapters/mbdV2ExternalAnnotations.ts`、`composables/useMbdExternalSync.ts`、`kernel/index.ts` | 默认关闭时全部既有快照不变；打开时 `24381_145018` / `24383_91813` 固定相机 A/B 截图落 `docs/verification/`；D5 的开关默认值在此之后才讨论 |
 
 ### W2 求解器补全（plant-mbd，T5.3–T5.7）
@@ -982,5 +982,41 @@ role=normal style=null       -> [] (len=0)
 **门禁**：`theme.test.ts` 10/10、`npx vitest run src/dimension` 78 文件 / **696 通过**（上轮 692，+4 即本轮新增）、全量 `npm test` 422 文件 / **4132 通过** / 1 todo、eslint 0、`npm run type-check` **439/126 新增 0**。
 
 **仍未收口的一条**：`font.trace()` 的 LFF 解析抛点（§11.13 第一条路径）。它属于部署期缺陷，A1 已把后果降级为「该帧作废 + 日志」，要根治得在字形解析层做「坏字形退化成不画该 run」，那是另一条独立的活。
+
+### 11.15 W1-2 通用降级选择器 `selectPlacement`（2026-10-30）
+
+**为什么抽这一层**。`resolveLabelCollisions.ts:240-248` 的降级循环与 polar 放置层 T3.5 要做的事形状相同、判据不同：
+
+| | 候选从哪来 | 「行不行」怎么判 |
+| --- | --- | --- |
+| 标签避让（`resolveLabelCollisions`） | 围绕原位按 `DIRECTIONS` × `steps` 现算 | `LabelOccupancy.overlapsAt` |
+| polar 屏幕校验（T3.5） | `place()` 的 `candidates`（已按 `score` 升序） | 投影后的像素净空 |
+
+把两者塞进一个函数只能靠回调透传候选生成，那就等于没抽。所以 `selectPlacement` 抽的是**共同骨架**：「按顺序试、第一个通过者胜出、全不过就退回兜底或报错」。候选产生与判据都留在调用方。
+
+**为什么不放 `polar/`**：polar 目录是另一路（T3.4）的在飞产物，W1-2 不得碰（§3 的入库顺序约束）。`selectPlacement` 的入参是结构化最小接口，不 import 任何 polar 类型，所以放 `kernel/collision/` 由两边共用；等 `place()` 入库后在 polar 侧补薄适配。
+
+**契约**（`kernel/collision/selectPlacement.ts`）：
+
+- `selectPlacement(candidates, accept, options?) → { chosen, index, outcome, tried }`
+- **不排序**：入参顺序就是优先级（`place()` 已按 `score` 升序、`DIRECTIONS` 是写死优先级）。再排一次会覆盖调用方意图。
+- **不改入参**：返回原对象引用。
+- **兜底三态**：`options` 无 `fallback` 键 → 全拒时返回 `candidates[0]`（候选序即优先级，最差也比不画强）；`fallback: T` → 返回它，`index: -1`；`fallback: null` → 抛 `NoAcceptablePlacementError`，把「没有可接受位置」的判断权交回调用方。
+- **空候选表**：无 `fallback` 或 `fallback: null` 时抛，`tried: 0`；给了 `fallback: T` 时返回它。消息与 `tried` 区分「压根没候选」（编排错误）与「候选都撞了」（数据/密度问题）——两者处理方式完全不同。
+- `onReject` 只在被拒的候选上调用（被接受的那个不进），用于诊断。
+
+**新增 10 条测试**（`selectPlacement.test.ts`），钉住：取第一个而非最后一个、跳过被拒并报 `tried`、全拒时缺省兜底取首项、显式 `fallback` 的 `index: -1`、`fallback: null` 抛错且消息含 `all 2 candidates were rejected`、空表与全拒可区分、`onReject` 拿到真下标且不覆盖接受项、不改入参、结构化 `bounds` 判据可用、首项通过时不调 `onReject`。
+
+**回滚验证（三处，全部如期变红）**：
+
+| 改坏的方式 | 结果 |
+| --- | --- |
+| 删 `if (hasFallback) throw`（`fallback: null` 静默回落首项） | 测试 5 红 |
+| 循环改成从末尾往前（取最后一个可接受项） | 测试 1、5、7 红（3 条） |
+| 删 `onReject?.(candidate, index)` 调用 | 测试 7 红 |
+
+**门禁**：`selectPlacement.test.ts` 10/10、`npx vitest run src/dimension` 79 文件 / **706 通过**（上轮 696，+10 即本轮新增）、全量 `npm test` **423 文件 / 4142 通过 / 1 todo**、eslint 0（`Array<T>` 写法被 `@typescript-eslint/array-type` 抓到，已改 `T[]`）、`npm run type-check` **439/126 新增 0**。
+
+**下一步**：`place()` 入库后，在 `polar/screenGuard.ts` 里用 `selectPlacement(placeResult.candidates, fitsInViewport)` 接上，判据是「投影包围盒 + 像素净空」；`LabelOccupancy` 直接复用（已在 `kernel/collision/occupancy.ts`）。
 
 
