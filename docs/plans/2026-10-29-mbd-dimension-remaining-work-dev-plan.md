@@ -118,7 +118,7 @@ W0 收口与基线（小，先做）
 | W5-1 | **T6.1** 真实 BRAN 视觉审阅，裁决 G9（坡度符号：PML 三角形 vs Web 线 + 箭头） | 结论进 ADR；截图落 `docs/verification/` |
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）**——已解除（2026-10-30 第二次核查）**：常驻 gen-model 服务 `http://127.0.0.1:8022`（`aios-database.exe` PID 11428，rocksdb 档）的 `/api/v1/health` 200、`/api/mbd/v2/pipe/24381_145018` 21.8 KB、`/api/mbd/v2/pipe/24383_91813` 5.6 KB 都通，**直接把 `GEN_MODEL_V1_BASE_URL` 指到 8022 即可出图，不必起 18084**。基线已实跑：`DIMENSION_CAMERA_BASELINE=1 npx playwright test --config=playwright.novideo.config.ts e2e/dimension-camera-baseline.spec.ts` → **2 passed**，两个 BRAN × far/mid/near 六张 PNG + 两份 `cameras.json` 已落 `docs/verification/dimension-camera-baseline-2026-10-29/<refno>/`（label `0731f98f / w5-baseline`，2026-10-30T02:36Z）。截图经人工查验：尺寸线、箭头、文字（2640.89 / 1902.35 / 1255.56 …）全部画出，LOD 计数 far/mid 档 drawn=21 / lodHidden=42、near 档 drawn=29 / lodHidden=34，三档 target 恒等。W5-3 / W5-4 / W5-5 / W0-2 的 A/B 从此有真实对照物 | 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
 | W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**已实现（2026-10-30）**：`theme.lodMinLineToLabelRatio` 改成 `{ primary: 0.8, secondary: 0.5, detail: 1.5 }`，`lodShortLine` 按 `tier` 取值，未声明按 primary；数值门禁绿（S2 81/709、type-check 439/126 新增 0）。**视觉 A/B 待跑**：后端已通（见 W5-2 行），对照物为 `dimension-camera-baseline-2026-10-29/` 的 `0731f98f / w5-baseline`，跑法 = 改动侧 `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指新目录 + `DIMENSION_CAMERA_BASELINE_LABEL` 标注，同相机逐档对比 `drawn` / `lodHidden` 与截图。详见 §11.1 |
-| W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**已实现 kernel 侧（2026-10-30）**：`ExplicitLayoutInput.labelPresentation?: 'interrupted' \| 'above'`，缺省等于现状（逐字段不变）；`above` 抬 11 px（字高 13）且线不切段，多行标签自动回落；「不侵入相邻行」落成 `labelBounds` 相交断言，并据此得出**行距须 ≥ 2.96 字高**（现有 1.5 字高不够）。**未接 MBD mapper**，线上行为零变化；A/B 待跑（后端已通，见 W5-2 行），须先接 mapper 开关再出图。详见 §11.2 |
+| W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**已实现 kernel 侧（2026-10-30）**：`ExplicitLayoutInput.labelPresentation?: 'interrupted' \| 'above'`，缺省等于现状（逐字段不变）；`above` 抬 11 px（字高 13）且线不切段，多行标签自动回落；「不侵入相邻行」落成 `labelBounds` 相交断言，并据此得出**行距须 ≥ 2.96 字高**（现有 1.5 字高不够）。**mapper 已接线（2026-10-30）**：`MbdV2MappingOptions.labelPresentation` + `?mbd_label=above` 开关，缺省字段缺席 = 像素不变；**固定相机 A/B 已出图**——3D 呈现（默认）下 `above` 与基线逐字节相同，因为 `src/dimension/kernel/layout/dimension3d.ts:246` 天然是 above 语义、不读该字段（**设计而非缺陷**）；`mbd_3d=0` 平面呈现下六图全部不同且方向正确（线不断、文字浮上）。**仍开着一条**：抬升后未检查是否撞到相邻图元的问题已由回落守卫解决（见下）；守卫只覆盖「本记录自己的图元」，跨记录行距仍归调用方。详见 §11.2 |
 | W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**门禁口径已修（2026-10-30）**：删掉测错东西的 `updateP95Ms ≤ 16`，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms，达标）。**成本已定位（2026-10-30，§11.3.2）**：paint 内 `writeMs` 占 82～93%，其中字形段占 95.5%；消掉纯计数遍历后 paint p50 −21.2%、p95 −45.6%（§11.3.4）。**分帧已实现（`fd42623a`，§11.3.6）**：线顶点写入拆 3 批，单批 p95 **14.40 ms ≤ 16**、3 帧 ≤ 6、整次 36.20 ms 不高于同步 37.70 ms，三条判据全过；单测钉住「分批顶点与同步逐位相同」「cancel 不动已发布几何」「分帧中不渲染」。门禁 1 passed（`paintP95Ms` 45.70）。**生产档基线已采（`d1dd2fdd`，空载三次中位数 layoutP95 18.30 / paintP95 39.40）**。**分帧连带修掉三个真缺陷**：失效原因被早退吞掉（`b2aec28d`）、`paintMs` 只报第一批（`2b375907`）、`hitTest` 按未画出的新布局回答（`b25b5935`，§11.3.9）。**仍待**：真实 BRAN 上的视觉确认——分帧不改像素已由顶点逐位相同的单测证明，后端已通（见 W5-2 行），只需在 2k 记录的 BRAN 上跑一次页面肉眼确认无半成品帧 |
 
 ## 5. 决策
@@ -301,7 +301,31 @@ W5-3 / W5-4 / W5-5 在 §4 里各只有一行验收描述（「中景多留一�
 
 **第 4 条是本项真正的验收核心，它同时给出一个必须遵守的约束**：`above` 要求行距 ≥ **2.96 字高**（24.75 + 13.75 = 38.5 px / 13），而现有堆叠行距是 1.5 字高。所以 `above` **不能**直接套在堆叠尺寸组上——调用方要么把组内行距拉开到 2.96 字高以上，要么只在单行 isoline 上用。这条已写进 `types.ts` 的字段注释。
 
-**仍未做的一半**：固定相机 before / after 逐像素比对（`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md:105` 的「固定相机对比」）要 W5-2 生成器 + gen-model 后端 18084，当前后端不在线。上面钉住的是几何行为，不是画面。**另外 `above` 目前没有接到 MBD mapper**——`mbdV2ExternalAnnotations.ts` 不产生这个字段，所以线上行为零变化，这是有意的：接不接、接到哪个开关（面板选项 / URL 参数 / 全局默认）是产品决策，留到 W5-4 的视觉验收之后再定。
+**固定相机 A/B 已完成（2026-10-30）**：生成器复用 W5-2 的 `e2e/dimension-camera-baseline.spec.ts`，新增 `DIMENSION_CAMERA_BASELINE_EXTRA_QUERY`（原样追加查询串，可覆盖同名默认参数），同后端 8022、同视口、`OUT_DIR` 分目录。结论分两半，都必须记住：
+
+1. **3D 呈现开着时（默认），`mbd_label=above` 六张图与基线逐字节相同。** 原因查明：`src/dimension/kernel/layout/dimension3d.ts:246` 的 `origin = add3(textCentre, scale3(up, rules.textGapH * h))` —— 3D 路径天然就是「文字沿 up 方向离开线」的 above 语义，它**不读 `labelPresentation`**。所以 `mbd_label` 对 3D 呈现无效**是设计而不是缺陷**，不要当 bug 修。
+2. **`mbd_3d=0`（平面呈现）时，`above` 与 `interrupted` 六张图全部不同。** 人工看图确认方向正确：`interrupted` 里 `2640.89` / `1650` 的尺寸线在文字处断开；`above` 里同两条线连续不断、文字浮在线上方。平面呈现下 `drawn` 从 21 变 28（`hidden` 42→35），near 档 29→31 —— 因为线不再被切段，段数变少反而多留了一档。
+
+产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/w54-ab-flat/{interrupted,above}-{24381,24383}/`，共 16 文件。
+
+**mapper 接线（`1e85ecb3` 之后一刀）**：`mbdV2ExternalAnnotations.ts` 新增 `MbdV2MappingOptions { labelPresentation?: 'interrupted' | 'above' }`，`mbdV2ToExternalRecords(data, options = {})` → `mapLinearDim` 第 5 参 → `ExplicitParts.labelPresentation` → `explicitRecord` 透传。**只在调用方显式给了才写字段**，缺省 = 字段缺席 = 像素不变。开关在 `useMbdExternalSync.ts` 的 `parseLabelPresentation(raw)`：只有 `?mbd_label=above` 返回 `'above'`，其它值或缺省一律 `'interrupted'` 且**不传 options**。单测 `mbd_label=above opts into the above-the-line text and stays off by default` 断言默认字段为 `undefined`（不是 `'interrupted'`）、opt-in 时其余字段（`lines` / `lod` / `labelAnchor`）不变。回滚验证：把 `parseLabelPresentation` 改成恒返回 `'above'` → 6 例变红。
+
+**行距不足回落守卫（2026-10-30，Devin `w54-above-row-guard-2026-10-30-r2` 实现，Lead 复核调整）**：
+
+`above` 原来只把文字沿尺寸线法线抬高 `labelLiftPx`，**从不检查抬起来以后撞到什么**。相邻描边落在抬起的标签框里时，`above` 比它替换掉的 `interrupted` 更差（文字压在别的线上）。现在补上逐条判定：
+
+- `layout/explicit.ts` 的 `aboveGuardObstacles()` 把本次布局**会画出的**图元投影成屏幕空间障碍（线段 / 圆盘），`aboveLabelIntrudes()` 把障碍点绕标签中心转 `-rotationRad`（与 `trimLineAgainstRotatedRect` 同一 world→local 约定）后量到补钉框的精确距离，`segmentToRectDistancePx()` 用「线段两端到框 + 框四角到线段」取最小（两凸形的最小值必在某一顶点上取到）。
+- 低于 `theme.aboveRowClearancePx`（**新增字段，默认 2 px**）则该条退回 `interrupted`：撤销 lift、重算 `clearance`、重发 `sceneLines`，尺寸线重新在标签处断开。
+- **为什么屏幕空间**：抬升量 `labelLiftPx` 本身就是像素量，只有投影后两者同口径；斜视 / 透视下设计空间距离不跟着像素拥挤走。
+- **为什么逐条**：同一张密集图里一条放得下、下一条放不下，整批切换会把本来能用的行一起降级。
+- **边界**：`LayoutContext` 没有到其它记录的通道，所以「别的东西」= 本次 `layoutExplicit` 输出里除「抬起来源的那条尺寸线」（标签本来就该悬在它上方 `labelLiftPx`）与标签自身之外的全部图元。跨记录的标签框与行距仍归调用方；将来 context 上有了邻居通道，按同样方式并进 `obstacles`。
+- **缺省零变化**：守卫门控在 `above && formattedLabel.length > 0`，非 above 路径不投影任何额外点。
+
+**Devin 交付时的两处偏差，Lead 已修**：①它新建了 `src/dimension/kernel/layout/types.ts` 装 theme 扩展类型 + 默认常量，用结构化交叉类型从 `context.theme` 读可选字段 —— 但 `DimensionTheme` 是**本仓自有类型**（`kernel/theme.ts:12`），不是外部契约，直接加必填字段才是对的；已把 `aboveRowClearancePx: number` 加进 `DimensionTheme` 与 `SOLVESPACE_DIMENSION_THEME`（值 2），删掉那个新文件，`explicit.ts` 改读 `context.theme.aboveRowClearancePx`。②`theme.test.ts` 的 `toMatchObject` 常量钉子同步补了该字段。
+
+**门禁（Lead 实跑）**：`npx vitest run src/dimension` = **78 文件 / 679 通过**（比接线前多 4 例，即新增守卫用例）；`npm run type-check` = 439 条 / 126 文件，**新增 0 / 已消失 0**；eslint 四个文件 0 error 0 warning；`goldens.test.ts.snap` 零变动。
+
+**回滚验证（Lead 独立重做，不采信 Devin 的自报）**：把 `const staysAbove = !aboveLabelIntrudes(` 临时改成 `const staysAbove = true || !aboveLabelIntrudes(`（永不回落）→ `explicit.test.ts` **3 failed / 20 passed**，失败点分别是「回落时尺寸线断成两段」（`expected [ [ [200,200],[300,200] ] ]` 实测 vs 两段期望）、「同批逐条判定」（`toHaveLength(2)` 实得 1）、「主题阈值覆盖」（`toHaveLength(2)` 实得 1）。恢复后 23/23 绿。**三条断言各自钉住一个不同性质，不是重复计数。**
 
 ### 11.3 W5-5 2k 分帧预算 —— 门禁口径已修（2026-10-30），分帧本身未做
 

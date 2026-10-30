@@ -752,3 +752,111 @@ describe('explicit arc pixel floor', () => {
     for (const radius of aboveFloor) expect(radius).toBeCloseTo(20, 0);
   });
 });
+
+// Q6 `above` 回落守卫：标签沿尺寸线法线抬起后，其屏幕像素包围盒若与本次布局
+// 会画出的其它图元距离小于 `aboveRowClearancePx`（默认 2 px，主题可覆盖），
+// 该条退回 interrupted —— 逐条判定，屏幕空间实测。
+describe('above row guard', () => {
+  const context = (): LayoutContext => ({
+    projector: createTestProjector(),
+    font: createTestFont(),
+    theme: SOLVESPACE_DIMENSION_THEME,
+    format: DEFAULT_DIMENSION_FORMAT,
+    interaction: 'normal',
+  });
+  const dimensionLines = (layout: ReturnType<typeof layoutExplicit>): ScreenLine[] =>
+    layout.primitives.filter(
+      (primitive): primitive is ScreenLine =>
+        primitive.kind === 'line' && primitive.part === 'dimension',
+    );
+  // `blockerY`：一条与尺寸线平行的相邻行延伸线，距尺寸线 blockerY 米
+  // （100 px/m 测试相机下 = blockerY×100 px）。锚点在尺寸线上，抬起后的标签
+  // 补钉盒屏幕 y 跨 175.25..202.75；尺寸线自身 y=200 但被排除在障碍外
+  // （标签本来就要悬在它上方 labelLiftPx 处）。
+  const row = (id: string, blockerY: number | null): ExplicitLayoutInput => ({
+    id,
+    role: 'external-reference',
+    labelPinned: true,
+    formattedLabel: '25 REF',
+    lines: blockerY === null
+      ? [{ from: [0, 0, 0], to: [1, 0, 0], part: 'dimension' }]
+      : [
+        { from: [0, 0, 0], to: [1, 0, 0], part: 'dimension' },
+        { from: [0, blockerY, 0], to: [1, blockerY, 0], part: 'extension' },
+      ],
+    labelAnchor: [0.5, 0, 0],
+    arrowLines: [],
+    labelPresentation: 'above',
+  });
+
+  it('keeps `above` while the lifted label clears the neighbouring strokes', () => {
+    const result = layoutExplicit(row('clear', 0.4), context());
+
+    // Blocker at screen y=160: 15.25 px off the lifted box's top edge, well
+    // clear of the 2 px guard band. The line stays whole and the label keeps
+    // its lift (same numbers as the plain `above` fixture).
+    expect(dimensionLines(result).map(line => roundNumbers([line.from, line.to])))
+      .toEqual([[[200, 200], [300, 200]]]);
+    expect(roundNumbers(result.labelBounds)).toEqual(
+      roundNumbers({ x: 237.55, y: 175.25, width: 24.9, height: 27.5 }),
+    );
+  });
+
+  it('falls back to `interrupted` and re-breaks the line when the lift lands on a neighbour', () => {
+    const blocked = row('blocked', 0.15);
+    const result = layoutExplicit(blocked, context());
+
+    // Blocker at screen y=185: inside the lifted box, distance 0. The record
+    // falls back — and the clearance path really ran, so the dimension line
+    // is broken around the label again instead of drawing whole underneath.
+    expect(dimensionLines(result).map(line => roundNumbers([line.from, line.to])))
+      .toEqual([[[200, 200], [237.55, 200]], [[262.45, 200], [300, 200]]]);
+    expect(roundNumbers(result.labelBounds)).toEqual(
+      roundNumbers({ x: 237.55, y: 186.25, width: 24.9, height: 27.5 }),
+    );
+    // Fallback output equals an explicit `interrupted` request, byte for byte.
+    expect(roundNumbers(result)).toEqual(roundNumbers(
+      layoutExplicit({ ...blocked, labelPresentation: 'interrupted' }, context()),
+    ));
+
+    // The guard band is 2 px, not contact: a stroke 1.25 px off the padded
+    // box still falls back, one 3.25 px off keeps `above`.
+    expect(dimensionLines(layoutExplicit(row('edge-blocked', 0.26), context())))
+      .toHaveLength(2);
+    expect(dimensionLines(layoutExplicit(row('edge-clear', 0.28), context())))
+      .toHaveLength(1);
+  });
+
+  it('decides per record inside one batch', () => {
+    const ctx = context();
+    const clear = layoutExplicit(row('clear', 0.4), ctx);
+    const blocked = layoutExplicit(row('blocked', 0.15), ctx);
+    const interrupted = layoutExplicit(
+      { ...row('plain', null), labelPresentation: 'interrupted' },
+      ctx,
+    );
+
+    // Same batch, both rows asked for `above`: the roomy one keeps it, the
+    // crowded one falls back — and its trimmed stubs match the explicit
+    // `interrupted` record's.
+    expect(dimensionLines(clear)).toHaveLength(1);
+    expect(dimensionLines(blocked)).toHaveLength(2);
+    expect(dimensionLines(blocked).map(line => roundNumbers([line.from, line.to])))
+      .toEqual(dimensionLines(interrupted).map(line => roundNumbers([line.from, line.to])));
+  });
+
+  it('takes the clearance threshold from the theme when it carries one', () => {
+    const wideTheme = {
+      ...SOLVESPACE_DIMENSION_THEME,
+      aboveRowClearancePx: 30,
+    } as LayoutContext['theme'];
+    const result = layoutExplicit(row('clear', 0.4), {
+      ...context(),
+      theme: wideTheme,
+    });
+
+    // 15.25 px of clearance passes the 2 px default but fails a 30 px
+    // requirement, so the same row now falls back.
+    expect(dimensionLines(result)).toHaveLength(2);
+  });
+});

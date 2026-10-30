@@ -30,6 +30,9 @@ describe('dimension theme', () => {
       // T1.5 收口：原来散在 layout/explicit.ts（标记半径 4、行距 1.5）与 layout/angular.ts（弧步 4°、射线外伸 5 px）的字面量。
       markerRadiusPx: 4,
       labelLineAdvance: 1.5,
+      // Q6 `above` 回落守卫的净空（2026-10-30）：抬起标签的补钉盒与同一布局画出的
+      // 其它图元小于此值就退回 interrupted。屏幕像素口径。
+      aboveRowClearancePx: 2,
       arcChordMaxStepDeg: 4,
       angularRayOvershootPx: 5,
       // 文字笔画 1.8 px（2026-09-14 边缘羽化后加重，用户拍板）；尺寸线 1.2 px。

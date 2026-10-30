@@ -79,6 +79,19 @@ export type DimensionTheme = Readonly<{
   markerRadiusPx: number;
   /** Line advance of stacked explicit texts as a multiple of the cap height (was the literal `1.5` in `layout/explicit.ts`). */
   labelLineAdvance: number;
+  /**
+   * Minimum clearance (CSS px) the Q6 `above` presentation demands between the
+   * lifted label's padded box and every other primitive the same layout call
+   * draws. Below it the record falls back to `interrupted`, which at least
+   * breaks the dimension line around the label — `above` raises the text along
+   * the line normal without asking what it rises into, so a neighbour closer
+   * than the lift makes `above` worse than what it replaced.
+   *
+   * Screen pixels on purpose: the lift (`labelLiftPx`, itself px) and the
+   * crowding it causes are only comparable after projection. 2 px is the
+   * point where two ~1 px strokes still read as one mark.
+   */
+  aboveRowClearancePx: number;
   /** Largest angular step (degrees) of one chord when an angular arc is flattened (was `MAX_ARC_STEP_RAD` in `layout/angular.ts`). */
   arcChordMaxStepDeg: number;
   /** How far (px) an angular dimension's rays run past the arc (was the literal `5` in `layout/angular.ts`). */
@@ -284,6 +297,10 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   minArcRadiusPx: 15,
   markerRadiusPx: 4,
   labelLineAdvance: 1.5,
+  // Q6 `above` 回落守卫的净空（2026-10-30）：抬起的标签补钉盒与同一次布局画出的
+  // 其它图元之间小于此值就退回 interrupted。屏幕像素口径（抬升量本身是 px）。
+  // 2 px = 两条 ~1 px 描边仍读成一笔的距离。
+  aboveRowClearancePx: 2,
   arcChordMaxStepDeg: 4,
   angularRayOvershootPx: 5,
   textStrokeWidthPx: 1.8,

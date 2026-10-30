@@ -1,4 +1,5 @@
 import { sampleArcToDesignAndScreenPath } from '../geometry/arcProjection';
+import { segmentLengthInsideRect } from '../geometry/obstacleGeometry';
 import {
   engineeringTextRotation,
   makeFilledSceneArrow,
@@ -26,6 +27,7 @@ import { emptyLayout } from './linear';
 import { lodShortLine, lodTierHiddenReason, projectedSourceTextHeightPx } from './shared/lod';
 import { backProjectedSegment, labelBoundsOf, sceneVertexOnSegment } from './shared/screen';
 
+import type { ViewportProjector } from '../projector';
 import type {
   ExplicitArcInput,
   ExplicitArrowInput,
@@ -36,6 +38,7 @@ import type {
   SceneLine,
   ScenePrimitive,
   SceneTriangle,
+  SceneVertex,
   ScreenGlyphRun,
   ScreenLine,
   ScreenMarker,
@@ -225,6 +228,156 @@ function drawsLabelAbove(input: ExplicitLayoutInput): boolean {
   return input.labelPresentation === 'above' && (input.texts ?? []).length === 0;
 }
 
+/**
+ * Screen shapes the `above` row guard measures the lifted label box against:
+ * the strokes and markers the same layout call emits, reduced to what a
+ * distance check needs.
+ */
+type AboveGuardObstacle =
+  | Readonly<{ kind: 'segment'; from: Vec2; to: Vec2 }>
+  | Readonly<{ kind: 'disc'; at: Vec2; radiusPx: number }>;
+
+/**
+ * Projected obstacles for the `above` row guard. Screen space on purpose:
+ * the lift the label takes (`labelLiftPx`) is a screen-pixel quantity, so
+ * "how far the text rises" and "what it rises into" are only comparable once
+ * `context.projector` has put both in the same frame — a design-space or
+ * pre-projection distance does not track pixel crowding under an oblique or
+ * perspective view.
+ */
+function aboveGuardObstacles(
+  primitives: readonly ScenePrimitive[],
+  projector: ViewportProjector,
+): AboveGuardObstacle[] {
+  const obstacles: AboveGuardObstacle[] = [];
+  const pushSegment = (from: SceneVertex, to: SceneVertex): void => {
+    obstacles.push({
+      kind: 'segment',
+      from: projectSceneVertex(from, projector),
+      to: projectSceneVertex(to, projector),
+    });
+  };
+  for (const primitive of primitives) {
+    switch (primitive.kind) {
+      case 'scene-line':
+        pushSegment(primitive.from, primitive.to);
+        break;
+      case 'scene-triangle':
+        for (let index = 0; index < 3; index += 1) {
+          pushSegment(
+            primitive.points[index]!,
+            primitive.points[(index + 1) % 3]!,
+          );
+        }
+        break;
+      case 'scene-path':
+        for (let index = 1; index < primitive.points.length; index += 1) {
+          pushSegment(primitive.points[index - 1]!, primitive.points[index]!);
+        }
+        if (primitive.closed && primitive.points.length > 1) {
+          pushSegment(
+            primitive.points[primitive.points.length - 1]!,
+            primitive.points[0]!,
+          );
+        }
+        break;
+      case 'scene-marker':
+        obstacles.push({
+          kind: 'disc',
+          at: projectSceneVertex(primitive.at, projector),
+          radiusPx: primitive.radiusPx,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+  return obstacles;
+}
+
+function pointToSegmentDistancePx(point: Vec2, from: Vec2, to: Vec2): number {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared <= EPSILON
+    ? 0
+    : Math.max(0, Math.min(1,
+      ((point[0] - from[0]) * dx + (point[1] - from[1]) * dy) / lengthSquared));
+  return Math.hypot(
+    point[0] - (from[0] + t * dx),
+    point[1] - (from[1] + t * dy),
+  );
+}
+
+function pointToRectDistancePx(point: Vec2, rect: ScreenRect): number {
+  return Math.hypot(
+    Math.max(rect.x - point[0], 0, point[0] - rect.x - rect.width),
+    Math.max(rect.y - point[1], 0, point[1] - rect.y - rect.height),
+  );
+}
+
+/**
+ * Exact segment → axis-aligned-rect distance in px: 0 on touch or crossing;
+ * otherwise the minimum is attained at a vertex of one of the two convex
+ * shapes, so comparing the segment ends against the rect and the rect
+ * corners against the segment suffices.
+ */
+function segmentToRectDistancePx(from: Vec2, to: Vec2, rect: ScreenRect): number {
+  const inside = (point: Vec2): boolean =>
+    point[0] >= rect.x && point[0] <= rect.x + rect.width
+    && point[1] >= rect.y && point[1] <= rect.y + rect.height;
+  if (inside(from) || inside(to)) return 0;
+  if (segmentLengthInsideRect({ from, to }, rect) > 0) return 0;
+  const corners: readonly Vec2[] = [
+    [rect.x, rect.y],
+    [rect.x + rect.width, rect.y],
+    [rect.x + rect.width, rect.y + rect.height],
+    [rect.x, rect.y + rect.height],
+  ];
+  return Math.min(
+    pointToRectDistancePx(from, rect),
+    pointToRectDistancePx(to, rect),
+    ...corners.map(corner => pointToSegmentDistancePx(corner, from, to)),
+  );
+}
+
+/**
+ * Whether the lifted label box crowds any obstacle below `clearancePx`. The
+ * box is measured in its local frame — obstacle points are rotated about the
+ * box centre by `-rotationRad`, the same world → local move
+ * `trimLineAgainstRotatedRect` makes — so a rotated label is checked against
+ * its real footprint, not its unrotated bounds.
+ */
+function aboveLabelIntrudes(
+  obstacles: readonly AboveGuardObstacle[],
+  rect: ScreenRect,
+  center: Vec2,
+  rotationRad: number,
+  clearancePx: number,
+): boolean {
+  const rotated = Math.abs(rotationRad) > EPSILON;
+  const cos = Math.cos(rotationRad);
+  const sin = Math.sin(rotationRad);
+  const local = (point: Vec2): Vec2 => {
+    if (!rotated) return point;
+    const dx = point[0] - center[0];
+    const dy = point[1] - center[1];
+    return [
+      center[0] + dx * cos + dy * sin,
+      center[1] - dx * sin + dy * cos,
+    ];
+  };
+  return obstacles.some((obstacle) => {
+    const distancePx = obstacle.kind === 'segment'
+      ? segmentToRectDistancePx(local(obstacle.from), local(obstacle.to), rect)
+      : Math.max(
+        0,
+        pointToRectDistancePx(local(obstacle.at), rect) - obstacle.radiusPx,
+      );
+    return distancePx < clearancePx;
+  });
+}
+
 function samePoint(a: Vec2, b: Vec2): boolean {
   return a[0] === b[0] && a[1] === b[1];
 }
@@ -410,11 +563,11 @@ export function layoutExplicit(
   // Q6: `above` lifts the text off the line and leaves the line whole, so there
   // is nothing to trim — the clearance pass is skipped, which is also what makes
   // the line draw as one untouched segment (see `explicitSceneLines`).
-  const above = drawsLabelAbove(input);
-  const liftOffsetPx: Vec2 = above
+  let above = drawsLabelAbove(input);
+  let liftOffsetPx: Vec2 = above
     ? labelLiftOffset(input, context, labelLiftPx(textHeightPx, context.theme))
     : [0, 0];
-  const clearance = above
+  let clearance = above
     ? null
     : labelClearance(
       input,
@@ -423,12 +576,13 @@ export function layoutExplicit(
       textHeightPx,
       context,
     );
-  const sceneLines = [
+  const buildSceneLines = (trim: LabelClearance | null): SceneLine[] => [
     ...input.lines.flatMap(line =>
-      explicitSceneLines(line, clearance, styleRole, context)),
+      explicitSceneLines(line, trim, styleRole, context)),
     ...input.arrowLines.flatMap(line =>
       explicitArrowLine(line, styleRole, arrowMinLengthPx, context)),
   ];
+  let sceneLines = buildSceneLines(clearance);
   const sceneArrows = (input.arrows ?? []).flatMap(arrow =>
     explicitArrow(arrow, styleRole, context));
   const scenePaths = (input.arcs ?? []).flatMap((arc) => {
@@ -450,6 +604,79 @@ export function layoutExplicit(
       styleRole,
       marker.style,
     ));
+  // Q6 `above` row guard, decided per record. `above` lifts the text off its
+  // line along the line normal but never asked what the label rises into:
+  // when a neighbouring stroke sits inside the lifted box the record is
+  // better off `interrupted`, which at least breaks the line around the
+  // label. Per record, not per batch — one row of a dense sheet can have the
+  // room the next lacks. Screen space, because the lift itself is a pixel
+  // quantity: projector output is the only frame where "how far the text
+  // rises" and "what it rises into" are measured alike.
+  //
+  // Scope boundary: this call sees the record's own emitted primitives only,
+  // so "other things" means every scene primitive here except the dimension
+  // line the label rose from (it is meant to hover `labelLiftPx` off it —
+  // checking it would void the presentation outright) and the label run
+  // itself. `LayoutContext` carries no channel to other records' primitives
+  // or label boxes, so cross-record row spacing stays the caller's job; if a
+  // neighbour channel ever lands on the context, fold its primitives into
+  // `obstacles` the same way.
+  //
+  // An empty label draws no ink, so there is nothing to collide with.
+  if (above && input.formattedLabel.length > 0) {
+    const liftSourceIndex = input.lines.findIndex(
+      line => line.part === 'dimension',
+    );
+    const obstacles = aboveGuardObstacles([
+      // While `above` stands `clearance` is null, so `explicitSceneLines`
+      // emitted exactly one scene line per `input.lines` entry, in order —
+      // the scene line at `liftSourceIndex` is the very line the lift normal
+      // came from. Arrow-stroke outputs trail the input lines and all stay.
+      ...sceneLines.filter((_, index) => index !== liftSourceIndex),
+      ...sceneArrows,
+      ...scenePaths,
+      ...sceneMarkers,
+    ], context.projector);
+    const liftedCenter = projectSceneVertex(
+      sceneVertex(input.labelAnchor, liftOffsetPx),
+      context.projector,
+    );
+    // The same padded box `labelClearance` would have trimmed against, only
+    // moved to the lifted position.
+    const liftedBox = labelBoundsOf(
+      makeCenteredGlyphRun(
+        context.font,
+        input.formattedLabel,
+        liftedCenter,
+        textHeightPx,
+        styleRole,
+      ),
+      context.theme,
+    );
+    const minClearancePx = context.theme.aboveRowClearancePx;
+    const staysAbove = !aboveLabelIntrudes(
+      obstacles,
+      liftedBox,
+      liftedCenter,
+      labelRotationRad,
+      minClearancePx,
+    );
+    if (!staysAbove) {
+      // Fall back to `interrupted` for this record: revert the lift, let the
+      // clearance pass build its trim box and re-emit the lines so the
+      // dimension line is broken around the label again.
+      above = false;
+      liftOffsetPx = [0, 0];
+      clearance = labelClearance(
+        input,
+        labelRotationRad,
+        styleRole,
+        textHeightPx,
+        context,
+      );
+      sceneLines = buildSceneLines(clearance);
+    }
+  }
   const glyphScene = sceneGlyph(
     input.formattedLabel,
     sceneVertex(input.labelAnchor, liftOffsetPx),
