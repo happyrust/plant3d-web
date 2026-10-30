@@ -923,9 +923,64 @@ after first advance   drawRange = {"start":0,"count":240}
 | `createColorResolver` / `srgbComponents` | `:1519`、`:833-836` | **不抛**。`new Color(hex)` 对未知模型/非法 hex 只 `console.warn` 并保持白色（`node_modules/three/src/math/Color.js:236-269`）；`theme.colors[role] ?? theme.colors.normal` 取不到时 `Color.set(undefined)` 走 `if (value && value.isColor)` 为假，什么也不做 |
 | `strokeWidthPx` / `resolveTagToneStrokeWidth` | `:1564`、`theme.ts:436-453` | **不抛**，switch 无 default 时返回 `undefined` → `Math.round(undefined)` 得 `NaN`，静默写进 buffer |
 | **`font.trace()` / `font.getWidth()`** | `:447`、`:450` → `lffParser.ts:259-297` | **会抛，第一条真实路径**。`getGlyph` 是惰性的（首次遇到该字符才解析），抛点：`lffParser.ts:39`、`:47`、`:66`、`:69`、`:123`（contour 语法）、`:212`（无 U+FFFD 替代字形）、`:216`（递归字形引用）、`:229`（非法字形引用） |
-| **`dashCode`** | `:1558` → `theme.ts:471-477` | **会抛，第二条真实路径**。`STYLE_LINE_DASH[lineStyle]` 对非枚举值返回 `undefined`，随后 `dash.length`（`:553`）抛 `TypeError`。`lineStyle` 来自外部数据且无运行时校验：`types.ts:461` `ExplicitArcInput.style`、`:468` `ExplicitMarkerInput.style`、`explicit.ts:596/605` |
+| **`dashCode`** | `:1558` → `theme.ts:471-477` | **会抛，第二条真实路径**，但生产链路上够不到（详见 §11.14）。`STYLE_LINE_DASH[lineStyle]` 对非枚举真值返回 `undefined`，随后 `dash.length`（`:553`）抛 `TypeError`。`lineStyle` 在**类型层**无运行时校验：`types.ts:461` `ExplicitArcInput.style`、`:468` `ExplicitMarkerInput.style`、`explicit.ts:596/605` |
 
-**两条路径的可达性不同**：`font.trace()` 的抛点全部是「字体文件本身有问题」（LFF 解析），属于部署期缺陷，一旦触发就是**每个含该字符的字形 run 都抛**；`dashCode` 的抛点是「外部 MBD 数据给了未知的 `lineStyle`」，属于数据驱动、**随 BRAN 变化**，`mbdV2ExternalAnnotations.ts` 的映射表若与后端新增的 `style` 值脱节就会命中。后者更可能先炸，且它的触发条件是「后端加了一个 style 值」——不需要任何代码改动。
+**两条路径的可达性不同**：`font.trace()` 的抛点全部是「字体文件本身有问题」（LFF 解析），属于部署期缺陷，一旦触发就是**每个含该字符的字形 run 都抛**；`dashCode` 的抛点是「拿到非枚举的 `lineStyle`」，但它需要一条**绕过 MBD 契约解析器**的路径才能送达——`mbdV2Contract.ts:422` 的 `isOptionalAidLineStyle` 用 `AID_LINE_STYLES`（`:394`）做白名单，未知值让整条图元判 `invalid`（`:660`）→ 按 ADR 0046 整包拒绝；`mbdV2ExternalAnnotations.ts:213` 的 `lineStyleFrom` 是第二道白名单，未知值回落 `undefined`。所以「后端加一个 style 值」的症状是**整包拒绝 + 面板报错**，不是 `TypeError`。
 
-**为什么把这两条写在这里而不是另开一节修**：A1 的 try/catch 已经把「抛了会怎样」从「永久冻结」降级为「这一帧作废 + 记一条日志 + 下一次失效照常重跑」。要根治得在**入口**做校验（`lineStyle` 走白名单兜底到 `solid`，字体解析失败时退化成不画该 run），那属于输入契约层，不该塞进绘制状态机里。**建议单开一条 W5-6 处理 `lineStyle` 白名单**——但那是产品行为决策（未知 style 该画实线还是该报错），要人拍。
+**为什么把这两条写在这里而不是另开一节修**：A1 的 try/catch 已经把「抛了会怎样」从「永久冻结」降级为「这一帧作废 + 记一条日志 + 下一次失效照常重跑」。要根治得在**入口**做校验，那属于输入契约层，不该塞进绘制状态机里。`lineStyle` 那条已在 W5-6 收口（§11.14）。
+
+### 11.14 W5-6 `lineStyle` 白名单 —— 收口（2026-10-30）
+
+**先修正 §11.13 的一个判断**。原文说 `dashCode` 的风险是「后端加一个 style 值就触发，不需改代码」。逐条查过链路后，**这个描述对生产路径不成立**：
+
+| 关卡 | 位置 | 未知 `style` 的行为 |
+| --- | --- | --- |
+| ① MBD 契约 | `mbdV2Contract.ts:422` `isOptionalAidLineStyle` + `:394` `AID_LINE_STYLES` | 该图元判 `invalid`（`:660`）→ 按 ADR 0046 **整包拒绝** |
+| ② mapper | `mbdV2ExternalAnnotations.ts:213` `lineStyleFrom` | 未知值 → `undefined`（回落角色样式） |
+| ③ 契约测试 | `mbdV2Contract.test.ts:335-348` | `dotted` / `dash-dot` / `DASHED` / `''` / `null` 全部断言 `ok: false` |
+
+也就是说，后端新增一个 style 值，症状是**整包拒绝 + 面板报错**（可见、可诊断），不是静默 `TypeError`。② 单独看也够：它覆盖 `aid_line` / `aid_arc` / `aid_circle` 三类唯一的 `style` 来源。
+
+**但类型层确实没有兜底**，这是真正要修的缺口：`ExplicitArcInput.style`（`types.ts:461`）、`ExplicitMarkerInput.style`（`:468`）、`ExplicitLayoutInput.lines[].style`（`:593`）都只是类型标注。任何不经解析器组装布局的路径（调试页 `dimensionPerf.ts`、演示页 `dimensionKernelDemo.ts`、未来的合成场景、或 ① ② 被 `partial: true` 放宽时）都能把任意字符串送进 `resolveDimensionLineDash`。实测确认它会抛：
+
+```
+role=normal style="dotted"   -> THROW TypeError: Cannot read properties of undefined (reading 'length')
+role=normal style="DASHED"   -> THROW TypeError
+role=normal style=7          -> THROW TypeError
+role=normal style="dash_dot" -> THROW TypeError
+role=normal style=""         -> [] (len=0)      // 假值，走 if 分支外
+role=normal style=null       -> [] (len=0)
+```
+
+**修法**（`theme.ts` `resolveDimensionLineDash`，+18/−2）：把 `STYLE_LINE_DASH[lineStyle]` 的结果先接成 `readonly number[] | undefined`，`undefined` 时**退化为「没有显式样式」，由语义角色决定**，并 `console.warn` 带出样式值与角色。这样：
+
+- 三个已知样式的图案**一字不变**（`solid` `[]`、`dashed` `[6,4]`、`dash-dot` `[8,3,2,3]`）；
+- 未知值不再抛，画面按角色画（`invalid` → `[7,3]`、`external-reference` → `[6,4]`、`normal` → 实线）；
+- 不静默：日志里能认出是哪个值、哪个角色；
+- 假值（`''` / `null` / `0` / `false`）仍走原来的 `if (lineStyle)` 短路，**不触发告警**——它们本来就不是「未知样式」。
+
+**为什么选「按角色」而不是「按实线」或「按报错」**：①按实线会让 `invalid` / `external-reference` 这类语义虚线悄悄变实线，视觉上「看起来对了但意思错了」，比不画更难发现；②按角色等于复现 mapper 的 no-style 默认（C6 的口径），与「这个图元没声明样式」完全同义；③报错就是 A1 要消除的那类「一条坏记录冻住整层」，与 §11.11 的结论直接冲突。
+
+**新增 4 条测试**（`theme.test.ts`，此前 `resolveDimensionLineDash` **零覆盖**）：
+
+| 测试 | 钉住什么 |
+| --- | --- |
+| `gives each known line style its own pattern` | 三个图案互不相同（全映射成 `[]` 也能过「不抛」，但那是把虚线画成实线） |
+| `lets an explicit style win over the role` | 显式样式优先（ADR 0042），缺省时角色必须接上 |
+| `falls back to the role instead of throwing` | 6 个非法值不抛 + 兜底走角色 + 告警含值与角色 |
+| `keeps a falsy but present line style falling through` | `''`/`null`/`0`/`false`/`undefined` 走角色且**不告警** |
+
+**回滚验证（四处，全部如期变红）**：
+
+| 改坏的方式 | 结果 |
+| --- | --- |
+| 兜底删掉，改回 `return STYLE_LINE_DASH[lineStyle]` | 测试 3 红（`TypeError: Cannot read properties of undefined`） |
+| 兜底保留但删 `console.warn` | 测试 3 红（`expected "vi.fn()" to be called at least once`） |
+| 兜底成 `styleDash ?? [4, 4]`（凭空造虚线） | 测试 3 红（`expected [4,4] to deeply equal []`） |
+| 已知样式也吞成 `[]` | 测试 1、2、3 红（3 条） |
+
+**门禁**：`theme.test.ts` 10/10、`npx vitest run src/dimension` 78 文件 / **696 通过**（上轮 692，+4 即本轮新增）、全量 `npm test` 422 文件 / **4132 通过** / 1 todo、eslint 0、`npm run type-check` **439/126 新增 0**。
+
+**仍未收口的一条**：`font.trace()` 的 LFF 解析抛点（§11.13 第一条路径）。它属于部署期缺陷，A1 已把后果降级为「该帧作废 + 日志」，要根治得在字形解析层做「坏字形退化成不画该 run」，那是另一条独立的活。
+
 

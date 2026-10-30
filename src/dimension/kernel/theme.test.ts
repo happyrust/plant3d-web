@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  resolveDimensionLineDash,
   resolveDimensionStyleRole,
   SOLVESPACE_DIMENSION_THEME,
 } from './theme';
@@ -113,5 +114,75 @@ describe('dimension theme', () => {
     expect(resolveDimensionStyleRole('external-reference', 'normal')).toBe('external-reference');
     expect(resolveDimensionStyleRole('invalid', 'hovered')).toBe('hovered');
     expect(resolveDimensionStyleRole('external', 'selected')).toBe('selected');
+  });
+});
+
+describe('resolveDimensionLineDash', () => {
+  it('gives each known line style its own pattern, not a shared default', () => {
+    // 三个已知样式必须各自不同：把它们全映射成 [] 也能让「不抛」的断言通过，
+    // 但那等于把虚线画成实线，画面错而不报错。这条钉住「每个值都真的被用上」。
+    expect(resolveDimensionLineDash('normal', 'solid')).toEqual([]);
+    expect(resolveDimensionLineDash('normal', 'dashed')).toEqual([6, 4]);
+    expect(resolveDimensionLineDash('normal', 'dash-dot')).toEqual([8, 3, 2, 3]);
+    expect(new Set([
+      JSON.stringify(resolveDimensionLineDash('normal', 'solid')),
+      JSON.stringify(resolveDimensionLineDash('normal', 'dashed')),
+      JSON.stringify(resolveDimensionLineDash('normal', 'dash-dot')),
+    ]).size).toBe(3);
+  });
+
+  it('lets an explicit style win over the role, and the role win when it is absent', () => {
+    // 显式样式优先（ADR 0042）：`invalid` 角色本身是 [7,3]，但给了 `dashed`
+    // 就得画 [6,4]。反过来没有样式时角色必须接上，否则带语义的虚线全变实线。
+    expect(resolveDimensionLineDash('invalid', 'dashed')).toEqual([6, 4]);
+    expect(resolveDimensionLineDash('invalid', 'solid')).toEqual([]);
+    expect(resolveDimensionLineDash('invalid', undefined)).toEqual([7, 3]);
+    expect(resolveDimensionLineDash('external-reference', undefined)).toEqual([6, 4]);
+    expect(resolveDimensionLineDash('approximate', undefined)).toEqual([2, 2]);
+    expect(resolveDimensionLineDash('normal', undefined)).toEqual([]);
+  });
+
+  it('falls back to the role instead of throwing on an out-of-band line style', () => {
+    // `DimensionLineStyle` 只存在于类型层：`ExplicitArcInput.style` /
+    // `ExplicitMarkerInput.style` / `ExplicitLayoutInput.lines[].style` 都没有
+    // 运行期校验，MBD 契约的 `AID_LINE_STYLES` 只覆盖 aid 三类图元。所以一个
+    // 绕过解析器的布局可以把任意字符串送到这里。
+    //
+    // 修前：`STYLE_LINE_DASH[lineStyle]` 得 `undefined`，调用方读 `.length`
+    // 抛 `TypeError`，抛点在分帧绘制内部 —— 正是 §11.11 的 A1 要降级的那类
+    // 「一条坏记录冻住整个尺寸层」。修后：退化成「没有显式样式」，角色决定。
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (const bogus of ['dotted', 'DASHED', 'dash_dot', 'dash dot', 'solid ', '7']) {
+        // 不抛是主断言。
+        expect(() => resolveDimensionLineDash('normal', bogus as never)).not.toThrow();
+        // 兜底必须是「按角色」，不是「按某个默认虚线」—— 否则画面会凭空多出虚线。
+        expect(resolveDimensionLineDash('normal', bogus as never)).toEqual([]);
+        expect(resolveDimensionLineDash('invalid', bogus as never)).toEqual([7, 3]);
+        expect(resolveDimensionLineDash('external-reference', bogus as never))
+          .toEqual([6, 4]);
+      }
+      // 兜底不能静默：日志里要能认出是哪个值、哪个角色。
+      expect(warn).toHaveBeenCalled();
+      expect(warn.mock.calls.some(args =>
+        String(args[0]).includes('"dotted"') && String(args[0]).includes('"normal"'),
+      )).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps a falsy but present line style falling through to the role', () => {
+    // `''` / `null` / `0` 是 `if (lineStyle)` 挡住的假值：它们不该进 `STYLE_LINE_DASH`
+    // 索引，也不该触发「未知样式」告警。这条钉住修 fallback 时没把假值判断改坏。
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (const falsy of ['', null, 0, false, undefined]) {
+        expect(resolveDimensionLineDash('approximate', falsy as never)).toEqual([2, 2]);
+      }
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

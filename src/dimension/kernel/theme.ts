@@ -467,11 +467,39 @@ const STYLE_LINE_DASH: Readonly<Record<DimensionLineStyle, readonly number[]>> =
 /**
  * Dash pattern for a primitive: an explicit per-primitive line style wins,
  * otherwise the semantic style role decides (ADR 0042).
+ *
+ * A `lineStyle` outside `DimensionLineStyle` is a data-driven possibility, not
+ * a type error: the MBD wire contract rejects unknown `style` values
+ * (`mbdV2Contract.ts` `AID_LINE_STYLES`), but `ExplicitArcInput.style` /
+ * `ExplicitMarkerInput.style` / `ExplicitLayoutInput.lines[].style` are typed
+ * only, so any path that assembles a layout without going through the parser
+ * can hand one over. Indexing `STYLE_LINE_DASH` with it yields `undefined`, and
+ * the callers read `.length` off the result — a `TypeError` thrown mid-frame,
+ * inside the batched paint, which is exactly the "one bad record freezes the
+ * dimension layer" shape §11.11/§11.13 exist to remove.
+ *
+ * So an unknown style degrades to "no explicit style" and the role decides,
+ * which is what the mapper's no-style default already means (C6). The known
+ * three keep their patterns untouched; only the previously-throwing case moves.
  */
 export function resolveDimensionLineDash(
   styleRole: string,
   lineStyle?: DimensionLineStyle,
 ): readonly number[] {
-  if (lineStyle) return STYLE_LINE_DASH[lineStyle];
+  if (lineStyle) {
+    // Typed as `readonly number[]` by the `Record` above — a complete record is
+    // what makes a missing enum member a compile error — but an out-of-band
+    // string still indexes to `undefined` at runtime. The annotation is the
+    // narrowing, not a cast.
+    const styleDash: readonly number[] | undefined = STYLE_LINE_DASH[lineStyle];
+    if (styleDash === undefined) {
+      console.warn(
+        `[dimension] unknown lineStyle ${JSON.stringify(lineStyle)} on role `
+          + `${JSON.stringify(styleRole)}; falling back to the role's pattern`,
+      );
+    } else {
+      return styleDash;
+    }
+  }
   return ROLE_LINE_DASH[styleRole] ?? [];
 }
