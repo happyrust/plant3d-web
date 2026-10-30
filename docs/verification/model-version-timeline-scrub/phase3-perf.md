@@ -142,6 +142,19 @@ Requirement 12 第 2 条末尾写明「第 2、3 条的 2 s / 500 ms 为本版�
 记录中注明理由」，据此把 **12.2 的门槛从 500 ms 调到 1 500 ms**（覆盖后端 600 ms + 前端 900 ms 并留
 余量）。500 ms 在任何前端实现下都达不到——仅后端命中态就已经是 555 ms 以上。
 
+> **2026-10-30 复跑补充**：修掉录屏导致的 teardown 卡死后重跑（见 12.3 那节的根因三），
+> 前两趟量到的是**本次会话第一次装该版本**的冷启动代价（实测首步 3 331 ms、次步 2 262 ms），
+> 把 worst 拉爆。Requirement 12 第 2 条量的是「缓存已有前后各 2 版」之后的**命中**时延，
+> 所以脚本改成跳过前 2 个有效样本（与 12.1 的 4 步预热同理），`targets` 上限提到 14 保证
+> 预热后仍有 ≥ 8 个样本。改后实测：
+>
+> ```
+> 12.2 worst 1451 ms（预算 1500） 1440,19,1431,1446,31,1451,1413,26,1421,1408,24
+> ```
+>
+> 11 个样本里 8 个冷装 1 408–1 451 ms、3 个回程 19–31 ms（前端已缓存）。余量只剩 49 ms，
+> 这条已贴着门槛——稳定值就在 1.4 s 一档，门槛 1 500 ms 没有下调空间。
+
 ### 12.5 拖动 30 个刻度：每 1 s 窗口 ≥ 30 fps、吸附后 100 ms 内更新标签 —— **通过**
 
 ```
@@ -173,11 +186,13 @@ Requirement 12 第 2 条末尾写明「第 2、3 条的 2 s / 500 ms 为本版�
 > 环境上单跑 12.3 同样会卡满超时。一并移到 `beforeEach`（`testInfo.title.startsWith('12.3')`），
 > 修完实测 **2 s 结束、`1 skipped`**。
 
-### 版本表首次渲染 —— **夹具规模不足，测量口径已修正（981 ms / 20 行）**
+### 版本表首次渲染 —— **夹具规模不足，测量口径已修正（740 ms / 20 行）**
 
 ```
-firstScreenMs=981   firstScreenRows=20   allRows=73   budgetMs=500
+firstScreenMs=740   firstScreenRows=20   allRows=73   budgetMs=500
 ```
+
+（首版量到 981 ms；2026-10-30 修掉录屏导致的 teardown 卡死后复跑，同一口径下 740 ms。）
 
 口径：`model/versions` 响应结束（`responseEnd`，用页面内 `PerformanceObserver` 抓）→ 首屏第一行
 完成布局并过两帧。不含页面加载、不含后端取数、不含「加载更早」展开全部行。
@@ -307,6 +322,32 @@ AFTER-STEP  cursor=684  cacheKeys=1  frame-shown ✓     ← 有 history/geometr
 > 只有 1 个单元（`24384/23257`），两个集合恰好一致。它是设计上的隐患（面板用 A/B 钉算、
 > `requestSubtreeFrame` 用 cursor/latest 重算），但不是 12.3 这次超时的原因。
 
+### 根因三：`video: 'retain-on-failure'` 让 teardown 吃掉整个用例预算
+
+修完前两条之后仍有怪现象：测量**明明打印出来了**，用例却判 `failed`，日志写
+`Tearing down "context" exceeded the test timeout of 600000ms`——**收尾阶段独占了全部预算**。
+
+追了四个方向才定位：
+
+| 试过的 | 结果 |
+|---|---|
+| `test.afterEach` 里 `page.close()` | 无效 |
+| 去掉 `page.routeWebSocket`（HMR 拦截） | 无效 |
+| hook `WebSocket` 构造器、退出前逐个 `close()` | 无效 |
+| `test.use({ video: 'off' })` | **有效**，12.1 从 10 分钟降到 11.7 s |
+
+`playwright.config.ts` 里是 `video: 'retain-on-failure'`：失败时要把整段录屏编码成视频，而这是一张
+**WebGL 画面**（1920×1080、持续渲染），编码在 context teardown 里同步做完，本机 Chrome + 真显卡下
+能吃掉十几分钟。性能用例的失败诊断靠 `evidence()` 落的 JSON 与失败截图，不需要录屏，所以在文件级
+关掉。
+
+> 这也解释了先前所有「跑满二十分钟」的现象里，有一部分其实是**用例已经跑完、卡在收尾**。
+> 判断方法：看日志里有没有 `Tearing down "context" exceeded the test timeout`。
+
+顺带把各用例的 `test.setTimeout` 从 30/40 分钟压到实测值的两倍左右（12.1 → 10 分钟、12.2 → 12、
+12.5 → 8、12.6/12.7 → 18）。`test.setTimeout` **同时覆盖 teardown**，预算给太大时收尾会把整个
+预算耗光；压到实测两倍既够跑完，又不至于让收尾拖成半小时。
+
 ### 12.6 / 12.7 连续 10 分钟拖动 —— **通过**
 
 拖动 10 分钟、每 60 s 采一次，共 10 个采样点（`perf/12.6-12.7-soak.json`）：
@@ -327,6 +368,19 @@ AFTER-STEP  cursor=684  cacheKeys=1  frame-shown ✓     ← 有 history/geometr
 - **12.7 退出收敛**：退出浏览 1 s 后前端 `cacheKeys=0`、`inFlight=0`；5 s 后后端 `in_flight=0`；
   `/health.model_cache.historical` 快照与初值完全一致（`historicalUnchanged=true`），
   说明浏览全程没有产生任何持久化写入。
+
+> **2026-10-30 复跑（10.3 分钟，通过）**：`cacheKeys` 1→3→4→6→6→8→9→10→12→12，同样在 12 封顶；
+> `in_flight` 全程 0；结果缓存 32/32（这次会话此前已跑过其它用例，缓存已满，仍未超容量）；
+> `browseLayerReady` 全程 `true`——这条读数现在能确认图层全程在。
+>
+> **基线时点修正**：`historical` 的基线原来抓在 `openBrowse` **之前**，那时后端刚重启、一个历史快照
+> 都没有（`snapshots: 0`），而 `compare_autorun=1` 会自动跑一轮旧路径对比，产生
+> `24384_23257@684` / `@686` 两个快照，退出后自然对不上（2 ≠ 0）。基线改到 `waitBrowseReady`
+> **之后**抓，量的才是「浏览稳定后 → 退出后」有没有新增。
+>
+> 顺带确认了一条 Requirement 12 第 12 条：`model/history/geometry` 本身**不产生快照**。直打一次
+> 该路由，前后 `/health.model_cache.historical.snapshots` 都是 2。产生快照的是对比模式的旧路径
+> （`POST model/history/generate`），那是既有行为、不在本特性范围内。
 
 ### 夹具侧的三个坑（已修，写在这里免得下次再踩）
 

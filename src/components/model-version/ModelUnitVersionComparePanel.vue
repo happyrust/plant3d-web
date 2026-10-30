@@ -756,18 +756,31 @@ async function enterBrowse(): Promise<void> {
   // 表现就是「浏览按钮点了、时间轴在动、视口永远不更新」。
   // 面板挂载时 `compare_autorun=1` 会自动进对比，这条尤其必要。
   closeCompare();
+  // `closeCompare` 只派事件，视口那边拆对比图层是异步的；让出几轮微任务再 `browseEnter`，
+  // 否则视口仍在收尾，`host.viewer()` / `host.primaryLayer()` 拿不到，图层建不起来
+  // （`browseLayerReady` 一直是 false，而 `__dtxViewer` / `__dtxLayer` 早已就绪）。
+  // 另外还可能有一条**在 `closeCompare` 之前就发出的** `open` 正在飞：它的 `clear()`
+  // 会在 `browseEnter` 之后才落地，把刚建好的图层清掉。所以这里不是「等一次」而是
+  // 「建起来之后再看几轮，确认没被清掉」，被清就重建。
+  await nextTick();
   const unitRefnos = scope.value === 'subtree' && geometryGroups.value.length > 0
     ? geometryGroups.value.map((group) => group.unitRefno!)
     : [comparedUnitRefno.value];
-  await frames.enterBrowse({
-    dbnum: dbnum.value,
-    unitRefnos,
-    cursor: sesno,
-    ordered: scrubber.versions.value.map((v) => v.sesno),
-    scope: scope.value,
-    focusRefno: queriedIsUnitRoot.value ? null : queriedElementRefno.value,
-    latest: scrubber.versions.value.at(-1)?.sesno ?? null,
-  });
+  const layerReady = (): boolean => frames.debug.value.browseLayerReady;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await frames.enterBrowse({
+      dbnum: dbnum.value,
+      unitRefnos,
+      cursor: sesno,
+      ordered: scrubber.versions.value.map((v) => v.sesno),
+      scope: scope.value,
+      focusRefno: queriedIsUnitRoot.value ? null : queriedElementRefno.value,
+      latest: scrubber.versions.value.at(-1)?.sesno ?? null,
+    });
+    if (layerReady()) return;
+    // 图层没建起来：让出一轮再重进
+    await nextTick();
+  }
 }
 
 async function exitBrowse(): Promise<void> {

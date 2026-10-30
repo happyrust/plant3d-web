@@ -4,6 +4,8 @@
     "inFlight": 0,
     "browseLayerReady": false
   },
+  "dtxViewer": true,
+  "dtxLayer": true,
   "marks": [
     "version-scrub:badge-updated",
     "version-scrub:badge-updated"
