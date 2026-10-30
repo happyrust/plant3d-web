@@ -715,4 +715,126 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(parent.children).not.toContain(painter.group);
     disposals.forEach(dispose => expect(dispose).toHaveBeenCalledOnce());
   });
+
+  it('quantizes the screen-glyph cache key so near-identical runs share one entry', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    painter.paint(
+      [
+        layout('a', [
+          sceneGlyph('A', { anchor: [0.5, 0, 0], offsetPx: [0, -28] }, 13, 'normal', 0.5),
+        ]),
+        layout('b', [
+          sceneGlyph('A', { anchor: [0.5, 0, 0], offsetPx: [0, -28] }, 13.004, 'normal', 0.50004),
+        ]),
+      ],
+      SOLVESPACE_DIMENSION_THEME,
+    );
+    // 13 vs 13.004 share a 0.01 px bucket, 0.5 vs 0.50004 a 1e-4 rad
+    // bucket — sub-visible jitter merges into a single entry.
+    expect(painter.getGlyphCacheStats().screen).toBe(1);
+  });
+
+  it('draws sub-bucket jitter from the shared trace, within half a device pixel', () => {
+    // 量化只改变「命中谁的 trace」，不改变可见结果：同桶内共用一个 trace 时
+    // 的几何与各自独占时相比必须小于半设备像素；跨桶时必须明显不同。
+    // 探针取 offsetPx 属性（屏幕空间顶点偏移），position 恒为 anchor，量不出差异。
+    const draw = (runs: readonly { heightPx: number; rotationRad: number }[]) => {
+      const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+      painter.resize(800, 600);
+      painter.paint(
+        runs.map((run, index) =>
+          layout(`run-${index}`, [
+            sceneGlyph(
+              '2640.89',
+              { anchor: [0.5, 0, 0], offsetPx: [0, -28] },
+              run.heightPx,
+              'normal',
+              run.rotationRad,
+            ),
+          ])),
+        SOLVESPACE_DIMENSION_THEME,
+      );
+      const lines = painter.group.getObjectByName('dimension-scene-lines') as any;
+      // offsetPx 是每顶点 2 分量；按实际写入顶点数切片，不能用数组长度
+      // （缓冲区按容量分配，尾部未写入的零会污染比较）。
+      const offsets = lines.geometry.getAttribute('offsetPx').array as Float32Array;
+      return {
+        offsets,
+        used: painter.getStats().lineVertexCount * 2,
+        cacheEntries: painter.getGlyphCacheStats().screen,
+      };
+    };
+    const sliceDelta = (a: Float32Array, aStart: number, b: Float32Array, bStart: number, count: number) => {
+      let max = 0;
+      for (let i = 0; i < count; i += 1) {
+        max = Math.max(max, Math.abs((a[aStart + i] ?? 0) - (b[bStart + i] ?? 0)));
+      }
+      return max;
+    };
+
+    const reference = draw([{ heightPx: 13, rotationRad: 0.5 }]);
+    const perRun = reference.used;
+    // 独占绘制：每条只用自己算出的 trace。
+    const alone = (heightPx: number, rotationRad: number) => draw([{ heightPx, rotationRad }]);
+
+    // 探针有效性：0.4 px 的 cap height 差必须被量出来，否则下面的
+    // 「小于半设备像素」无从判断。
+    const coarseRun = alone(13.4, 0.5);
+    expect(sliceDelta(reference.offsets, 0, coarseRun.offsets, 0, perRun)).toBeGreaterThan(0.1);
+
+    // 同桶共享：13 与 13.004 / 0.5 与 0.50004 落在同一量化格，第二条命中
+    // 第一条的 trace；与它独占时的差异必须远小于半设备像素（0.5）。
+    const shared = draw([
+      { heightPx: 13, rotationRad: 0.5 },
+      { heightPx: 13.004, rotationRad: 0.50004 },
+    ]);
+    expect(shared.cacheEntries).toBe(1);
+    expect(shared.used).toBe(perRun * 2);
+    const ownSecond = alone(13.004, 0.50004);
+    expect(ownSecond.used).toBe(perRun);
+    expect(
+      sliceDelta(shared.offsets, perRun, ownSecond.offsets, 0, perRun),
+    ).toBeLessThan(0.01);
+  });
+
+  it('keeps screen-glyph cache entries apart across quantization buckets', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    painter.paint(
+      [
+        layout('a', [
+          sceneGlyph('A', { anchor: [0.5, 0, 0], offsetPx: [0, -28] }, 13, 'normal', 0.5),
+        ]),
+        layout('b', [
+          sceneGlyph('A', { anchor: [0.5, 0, 0], offsetPx: [0, -28] }, 13.05, 'normal', 0.5),
+        ]),
+      ],
+      SOLVESPACE_DIMENSION_THEME,
+    );
+    // 0.05 px apart spans two 0.01 px buckets: real differences still split.
+    expect(painter.getGlyphCacheStats().screen).toBe(2);
+  });
+
+  it('evicts the oldest screen-glyph cache entries once the cap is reached', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    // 生产默认 SCREEN_GLYPH_CACHE_MAX_ENTRIES = 8 192（~2 000 条记录 × ≤3
+    // 个字形 run 的估算取 2 的幂）；测试用小的可配置上限验证机制。
+    painter.screenGlyphCacheMaxEntries = 8;
+    const layouts = Array.from({ length: 12 }, (_, index) =>
+      layout(`glyph-${index}`, [
+        sceneGlyph(
+          'A',
+          { anchor: [0, 0, 0], offsetPx: [0, -28] },
+          12 + index * 0.1,
+          'normal',
+          0,
+        ),
+      ]));
+    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    // 12 distinct cap-height buckets inserted into a cap of 8 — the
+    // oldest four were evicted, exactly the cap remains.
+    expect(painter.getGlyphCacheStats().screen).toBe(8);
+  });
 });

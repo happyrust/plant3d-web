@@ -674,3 +674,75 @@ W5-1 要裁决 G9：PML 用三角形，Web 用线 + 箭头。裁决前先把 Web
 
 **可用的视觉材料**：`all-pipes-brans.json` 里 **318 个 BRAN 有 `slope_mark`**（合计 1 467 个），最密集的是 `24383_75125`（23 个）、`24381_105860`（22 个）、`24381_105733`（21 个）——W5-1 出图直接用这三个，比现在两个基线 BRAN（0 个坡度）合适。生成器已支持 `DIMENSION_CAMERA_BASELINE_REFNOS` 覆盖。
 
+### 11.9 `DimensionTheme` 传递链路审计（2026-10-30，只读）
+
+给 `DimensionTheme` 加必填字段 `aboveRowClearancePx` 之后，必须确认这条链路上没有一处会把它丢掉。**结论：不存在能产出缺字段 theme 对象的路径。**
+
+| 环节 | 位置 | 形态 | 会不会丢字段 |
+| --- | --- | --- | --- |
+| 类型定义 | `src/dimension/kernel/theme.ts:12`（字段在 `:94` 附近） | `Readonly<{…}>` | — |
+| 唯一字面量构造 | `theme.ts:278` `SOLVESPACE_DIMENSION_THEME: DimensionTheme` | 完整对象字面量 + 类型注解 | 少字段编译期就报错，`:303` 已含 `aboveRowClearancePx: 2` |
+| 可选注入点 | `facade/createDimensionSystem.ts:138` `theme?: DimensionTheme` | 透传 | `:192` `?? SOLVESPACE_DIMENSION_THEME` 兜底 |
+| 视口存引用 | `viewport/dimensionViewport.ts:196-197` / `:168` | 只存引用 | 无解构 |
+| layout 上下文 | `dimensionViewport.ts:620-625` → `kernel/viewport/layoutViewport.ts:53-56` `{...baseContext}` | spread 透传 | 无白名单筛选 |
+| 分派与缓存键 | `kernel/layout/layoutDimension.ts:18` `WeakMap<LayoutContext['theme'], …>` | 按引用做 key | 不复制 |
+| 消费点 | `layout/explicit.ts:656` `context.theme.aboveRowClearancePx` | 直接读 | — |
+
+**运行期覆盖只有 `setTheme(theme: DimensionTheme)`（`dimensionViewport.ts:297-300`），收完整类型不是 `Partial`，全仓无 `updateTheme` / `patchTheme` / 浅合并入口；生产代码零调用者**（唯一调用在 `dimensionViewport.test.ts:369`）。
+
+**测试与调试脚本里的 theme 全部是 spread `SOLVESPACE_DIMENSION_THEME`**（`dimensionViewport.test.ts:365-368`、`dimension3d.test.ts:230`、`tagBillboard.test.ts:287-291` / `:634`、`explicit.test.ts:849-852` 等），没有一份手写完整字面量，因此不会触发「缺字段」类型错误——**反过来说，也没有任何测试在编译期钉住这个新字段**。真正的钉子只有两处：`theme.ts:278` 的 `: DimensionTheme` 注解（编译期）+ `theme.test.ts` 的 `toMatchObject` 里那一行（运行期，本轮已补）。
+
+`ViewerPanel.vue` **不构造也不传 `DimensionTheme`**：唯一的 `createDimensionSystem` 调用（`:2934-2953`）没有 `theme` 字段；该文件里所有 `theme` 标识符都是显示主题（`DisplayTheme` / `SGL_LOOK_PRESETS`），与 `DimensionTheme` 无关。
+
+**唯一的理论缺口在外部注入面**：`createDimensionSystem.ts:138` 若被宿主用 `as DimensionTheme`、`JSON.parse` 反序列化或从 `any` 赋值绕过类型检查，就能塞进缺字段对象。TS 在正常对象字面量写法下会拦住，当前仓库内也没有这样的调用者。
+
+### 11.10 字形缓存：量化 key + 上界 + 最旧淘汰（2026-10-30）
+
+§11.5 风险 1 的修法。**这一条是六个风险里唯一「只要拖相机就必然发生」的**，所以先修它。
+
+**两个缺陷叠加才致命**：
+
+1. **key 含未量化的浮点**。旧 key 是 `[capHeightPx, rotationRad, text].join(':')`。`capHeightPx` 由投影后的像素高度算出、`rotationRad` 由 `atan2` 算出，两者末位每帧都在抖；`join` 又用 JS 默认的数字转字符串（最短往返表示），末位一抖整个字符串就变。于是**每个 key 几乎只被用一次**，`Map` 只增不命中——缓存不但不省算力，还纯亏内存。
+2. **`Map` 无上限无淘汰**。唯一的清理点是 `dispose()`（`scenePainter.ts:1710-1711`）。单次全量布局新增 2 000～6 000 条 key × 约 120～150 B ≈ 8～30 MB；拖相机每秒数十次全量布局 → **秒级到 GB**，用户可见的是内存暴涨、GC 长停顿、`RangeError: Invalid array buffer length` 或标签页 OOM。
+
+**改动**（`src/dimension/viewport/scenePainter.ts`）：
+
+- 新增 `screenGlyphCacheKey(primitive)`：`capHeightPx` 量化到 **0.01 px**、`rotationRad` 量化到 **1e-4 rad**（≈0.006°），再拼 `text`。
+- 新增 `cachedScreenGlyphSegments(font, primitive, caches)`：命中直接返回，未命中先 trace；若 `size >= screenMaxEntries` 则先删 `keys().next().value`（`Map` 按插入序迭代，第一个就是最旧的）再 `set`。`visitPrimitiveSegments` 与 `countPrimitiveSegments` 两个调用点都改走它，保证「数段数」和「写顶点」看到的是同一份缓存内容——**这两处不一致就是 §11.5 风险 5 越界写的成因**，现在两者共用一个入口，天然对齐。
+- 新增 `SCREEN_GLYPH_CACHE_MAX_ENTRIES = 8_192`（推导：约 3 个字形 run/记录 × 2 000 记录 ≈ 6 000，取下一个 2 的幂留余量）；`GlyphCaches` 从 `Readonly<{screen,unit}>` 改为可变记录并加 `screenMaxEntries` 字段，两个调用点共享同一上限。
+- 新增只读 `getGlyphCacheStats(): { screen, unit }` 与 `screenGlyphCacheMaxEntries` 的 get/set（生产默认 8 192，测试可压小以验证淘汰）。
+
+**为什么量化不会改变画面**（实测，不是推断）。`glyphSegments()` 把 LFF 轮廓按 `capHeightPx / font.capHeight` 缩放，量化 0.01 px 在局部坐标里被再缩一次，落到屏幕上的位移更小。用 `offsetPx` 属性逐顶点量（`position` 恒为 anchor，**量不出字形差异**，这是写测试时的第一个坑）：
+
+| cap height 差 | `offsetPx` 最大差 |
+| --- | --- |
+| 13 → 13.004（同桶） | 0.0033 px |
+| 13 → 13.05（跨桶，0.05 px） | 0.0417 px |
+| 13 → 13.4 | 0.334 px |
+| 13 → 26 | 10.84 px |
+
+0.01 px 的量化步长下，桶内最大偏差 0.0033 px，远小于 DPR=2 时的半设备像素（0.25 CSS px）；而真正的差异（0.4 px 字高、翻倍字高）量级大两三个数量级，量化不会把它们并到一起。
+
+**为什么淘汰用 FIFO 而不是 LRU**：`Map` 的插入序天然是 FIFO，命中不刷新顺序。稳定视角下同一批 key 持续命中，不需要「热度」判定；一旦视角变化，整批 key 全部作废重算，FIFO 与 LRU 的行为几乎一致。真要做 LRU 得在每次命中时 `delete` + 重新 `set`，反而给热路径加写操作。
+
+**测试**（`scenePainter.test.ts` 新增 4 条）：
+
+1. `quantizes the screen-glyph cache key so near-identical runs share one entry` —— 13 vs 13.004 / 0.5 vs 0.50004 → 缓存 1 条。
+2. `keeps screen-glyph cache entries apart across quantization buckets` —— 差 0.05 px → 2 条（钉住「不许量化过头」）。
+3. `evicts the oldest screen-glyph cache entries once the cap is reached` —— 上限 8、插 12 个不同桶 → 恰好剩 8。
+4. **`draws sub-bucket jitter from the shared trace, within half a device pixel`** —— 这条是主会话补的。前三条只钉住「缓存条数」，**没有一条钉住「共用一个 trace 之后画出来的东西还是对的」**：把量化改成「所有字高都量化成 13」也能让前三条里两条通过。这条从被测对象自己的 `offsetPx` 输出取探针，先断言「0.4 px 字高差必须被量出来 > 0.1」（探针有效性前置），再断言同桶共享的第二条与它独占绘制时的差 < 0.01 px。
+
+**回滚验证（主会话独立重做三处，不采信 worker 自报）**：
+
+| 改坏的方式 | 结果 |
+| --- | --- |
+| key 退回未量化浮点 | 测试 1 红（`expected 2 to be 1`）、测试 4 红 |
+| `if (caches.screen.size >= caches.screenMaxEntries)` → `if (false)` | 测试 3 红（`expected 12 to be 8`） |
+| `Math.round(capHeightPx * 100) / 100` → `Math.round(capHeightPx)`（量化过头） | 测试 2 红（`expected 1 to be 2`）、测试 3 红（`expected 2 to be 8`） |
+
+**门禁**：`scenePainter.test.ts` 20/20、`npx vitest run src/dimension` 78 文件 / **684 通过**（基线 680 + 4 新增）、全量 `npm test` 422 文件 / 4119 通过 / 1 todo、eslint 0、`goldens.test.ts.snap` 零变动。
+
+**`npm run type-check` 的 2 条新增不属于本轮**：`src/viewer/versionBrowseBridge.ts` 与 `.test.ts` 本轮未动，报错是 `VersionBrowseApi` 缺 `browseLayerReady`——工作区里另一路未提交的 `src/viewer/modelUnitCompareController.ts` 刚给对应接口加了该字段。**不得为放行改基线**，等那一路提交后应自动消失。
+
+**仍未解决的**：这个上界只挡住「key 无限增长」，挡不住「单次布局本身就有 6 000 条 key 全部未命中」。首次进入新视角仍要 trace 一遍全部字形——那是必要计算，不是缺陷；但 §11.5 风险 2（真实记录段数超标）与风险 3～6（分帧窗口内的状态机与越界写）都还没修。
+

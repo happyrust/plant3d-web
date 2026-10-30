@@ -454,6 +454,46 @@ function glyphSegments(
     }));
 }
 
+/**
+ * Cache key for a screen-space glyph run. `capHeightPx` is quantized to
+ * 0.01 px and `rotationRad` to 1e-4 rad (~0.006°): screen-space text is
+ * hinted to whole device pixels (`hintedTextStrokeWidthPx`, stem snapping
+ * in the vertex shader), so differences below these steps cannot draw
+ * differently on any display — while unquantized `atan2`/projection
+ * outputs jitter in their last digits every frame, which used to make
+ * every key unique and the map grow without ever hitting.
+ */
+function screenGlyphCacheKey(primitive: SceneGlyphRun): string {
+  return [
+    Math.round(primitive.capHeightPx * 100) / 100,
+    Math.round(primitive.rotationRad * 1e4) / 1e4,
+    primitive.text,
+  ].join(':');
+}
+
+/**
+ * `caches.screen` lookup for `primitive`, tracing on a miss. Once the
+ * cache holds `screenMaxEntries` entries an insert first drops the oldest
+ * one — `Map` iterates keys in insertion order, so the first key is it.
+ */
+function cachedScreenGlyphSegments(
+  font: LffFont,
+  primitive: SceneGlyphRun,
+  caches: GlyphCaches,
+): readonly LocalGlyphSegment[] {
+  const cacheKey = screenGlyphCacheKey(primitive);
+  let segments = caches.screen.get(cacheKey);
+  if (!segments) {
+    segments = glyphSegments(font, primitive);
+    if (caches.screen.size >= caches.screenMaxEntries) {
+      const oldestKey = caches.screen.keys().next().value;
+      if (oldestKey !== undefined) caches.screen.delete(oldestKey);
+    }
+    caches.screen.set(cacheKey, segments);
+  }
+  return segments;
+}
+
 function frameVertex(frame: SceneTextFrame, local: Vec2): SceneVertex {
   const { origin, xAxis, yAxis } = frame;
   // Trace y points down the glyph; the frame's yAxis points up.
@@ -467,12 +507,31 @@ function frameVertex(frame: SceneTextFrame, local: Vec2): SceneVertex {
   };
 }
 
-type GlyphCaches = Readonly<{
-  /** Screen-space runs keyed by cap height, rotation and text. */
-  screen: Map<string, readonly LocalGlyphSegment[]>;
+/**
+ * Upper bound for `GlyphCaches.screen`. A full layout yields at most ~3
+ * distinct glyph runs per record (label, value, unit), so ~2 000 visible
+ * records keep ~6 000 keys live; 8 192 is the next power of two with
+ * headroom. The cache used to be unbounded while its key embedded raw
+ * floats — a dragging camera appended thousands of never-reused keys a
+ * second, growing the map by hundreds of MB within seconds.
+ */
+const SCREEN_GLYPH_CACHE_MAX_ENTRIES = 8_192;
+
+type GlyphCaches = {
+  /**
+   * Screen-space runs keyed by quantized cap height, rotation and text —
+   * see `screenGlyphCacheKey`. Evicts oldest-first at `screenMaxEntries`.
+   */
+  readonly screen: Map<string, readonly LocalGlyphSegment[]>;
   /** Framed runs keyed by text only (the frame changes with the camera). */
-  unit: Map<string, readonly LocalGlyphSegment[]>;
-}>;
+  readonly unit: Map<string, readonly LocalGlyphSegment[]>;
+  /**
+   * Bound for `screen`, consulted at every insert. A field of the record
+   * so both lookup sites share it; the painter exposes it as
+   * `screenGlyphCacheMaxEntries` for tests.
+   */
+  screenMaxEntries: number;
+};
 
 /**
  * How a stroke quad is styled: dimension lines by default, view-plane text,
@@ -677,16 +736,7 @@ function visitPrimitiveSegments(
         }
         return;
       }
-      const cacheKey = [
-        primitive.capHeightPx,
-        primitive.rotationRad,
-        primitive.text,
-      ].join(':');
-      let segments = caches.screen.get(cacheKey);
-      if (!segments) {
-        segments = glyphSegments(font, primitive);
-        caches.screen.set(cacheKey, segments);
-      }
+      const segments = cachedScreenGlyphSegments(font, primitive, caches);
       for (const segment of segments) {
         // Glyph strokes stay solid: role dash patterns (external-reference,
         // invalid, approximate) must never break up label text. Screen-space
@@ -748,17 +798,7 @@ function countPrimitiveSegments(
         // Halo and glyph pass, per run.
         return unit.length * 2;
       }
-      const cacheKey = [
-        primitive.capHeightPx,
-        primitive.rotationRad,
-        primitive.text,
-      ].join(':');
-      let segments = caches.screen.get(cacheKey);
-      if (!segments) {
-        segments = glyphSegments(font, primitive);
-        caches.screen.set(cacheKey, segments);
-      }
-      return segments.length;
+      return cachedScreenGlyphSegments(font, primitive, caches).length;
     }
     case 'scene-triangle':
     case 'scene-fill':
@@ -1031,6 +1071,7 @@ export class ThreeSceneDimensionPainter {
   private readonly glyphCaches: GlyphCaches = {
     screen: new Map<string, readonly LocalGlyphSegment[]>(),
     unit: new Map<string, readonly LocalGlyphSegment[]>(),
+    screenMaxEntries: SCREEN_GLYPH_CACHE_MAX_ENTRIES,
   };
   private dimensionRanges = new Map<string, DimensionVertexRange>();
   private lineVertexCount = 0;
@@ -1692,6 +1733,30 @@ export class ThreeSceneDimensionPainter {
       lineVertexCount: this.lineVertexCount,
       triangleVertexCount: this.triangleVertexCount,
       fillVertexCount: this.fillVertexCount,
+    };
+  }
+
+  /**
+   * Cap on the screen-glyph cache — `SCREEN_GLYPH_CACHE_MAX_ENTRIES`
+   * (8 192) in production. A test may assign a smaller cap to exercise
+   * the oldest-first eviction without painting thousands of distinct
+   * keys. Never changes what is drawn.
+   */
+  get screenGlyphCacheMaxEntries(): number {
+    return this.glyphCaches.screenMaxEntries;
+  }
+  set screenGlyphCacheMaxEntries(value: number) {
+    this.glyphCaches.screenMaxEntries = value;
+  }
+
+  /**
+   * Glyph-cache occupancy for tests and diagnostics. Read-only — never
+   * changes what is drawn.
+   */
+  getGlyphCacheStats(): { screen: number; unit: number } {
+    return {
+      screen: this.glyphCaches.screen.size,
+      unit: this.glyphCaches.unit.size,
     };
   }
 
