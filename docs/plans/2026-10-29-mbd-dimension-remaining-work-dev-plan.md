@@ -119,7 +119,7 @@ W0 收口与基线（小，先做）
 | W5-2 | **T6.4** QW4 固定相机截图基线（含相机参数），复用 `e2e/dimension-doc-screenshots` 生成器。**状态（2026-10-29）**：已裁决**新建** `e2e/dimension-camera-baseline.spec.ts`（`66c78f0e`，388 行 + README 231 行），不改既有生成器——后者是 demo 模式 + 四种用户尺寸图形，且 `scripts/check-dimension-doc-screenshots.mjs` 按写死的 CASES 与 HEAD 逐字节比对，塞进真实 BRAN + 三档会破坏那个门禁的契约；复用它的取景写法（`dimension-doc-screenshots.spec.ts:140-185`）。设计：同一 target 下 `far`（直接读自动 fit 后的相机，不重算）/ `mid`（×0.4）/ `near`（×0.2，不取 0.15——0.15 深入包围盒内易贴管件或被 near 平面切），相机参数落 `<OUT_DIR>/<refno>/cameras.json` 侧车（`tiers.<tier>.{scale,position,target,up,fov,near,far,records,drawn,lodHidden}`），产物归档 `docs/verification/dimension-camera-baseline-2026-10-29/`。**同一份生成器顺带解锁 W0-2**：`DIMENSION_CAMERA_BASELINE_BASE_URL` 指向另一个 worktree 的 dev server + `DIMENSION_CAMERA_BASELINE_OUT_DIR` 指不同目录，即可对 `12f4bb1e^` 与当前树各出一组 before / after。**真实出图仍待 gen-model 后端 18084 在线**（2026-10-30 核查：18084 拒绝连接，dev server 3101 活着）| 基线归档，后续 W1-3 / W5-3 / W5-4 的 A/B 都对着它比 |
 | W5-3 | **T6.2** Q5 短线阈值分级（0.5 / 0.8 / 1.5） | 本样本远景不变；中景多留一档。**已实现（2026-10-30）**：`theme.lodMinLineToLabelRatio` 改成 `{ primary: 0.8, secondary: 0.5, detail: 1.5 }`，`lodShortLine` 按 `tier` 取值，未声明按 primary；数值门禁绿（S2 81/709、type-check 439/126 新增 0）。**视觉 A/B 仍待后端**，详见 §11.1 |
 | W5-4 | **T6.3** Q6「文字在线上方」可选模式（仅单行 isoline） | 固定相机对比；不侵入相邻行。**已实现 kernel 侧（2026-10-30）**：`ExplicitLayoutInput.labelPresentation?: 'interrupted' \| 'above'`，缺省等于现状（逐字段不变）；`above` 抬 11 px（字高 13）且线不切段，多行标签自动回落；「不侵入相邻行」落成 `labelBounds` 相交断言，并据此得出**行距须 ≥ 2.96 字高**（现有 1.5 字高不够）。**未接 MBD mapper**，线上行为零变化；固定相机 A/B 待后端。详见 §11.2 |
-| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**门禁口径已修（2026-10-30）**：删掉测错东西的 `updateP95Ms ≤ 16`，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms，达标）。**成本已定位（2026-10-30，§11.3.2）**：paint 内 `writeMs` 占 82～93%，其中字形段占 95.5%；消掉纯计数遍历后 paint p50 −21.2%、p95 −45.6%（§11.3.4）。**分帧已实现（`fd42623a`，§11.3.6）**：线顶点写入拆 3 批，单批 p95 **14.40 ms ≤ 16**、3 帧 ≤ 6、整次 36.20 ms 不高于同步 37.70 ms，三条判据全过；单测钉住「分批顶点与同步逐位相同」「cancel 不动已发布几何」「分帧中不渲染」。门禁 1 passed（`paintP95Ms` 45.70）。**生产档基线已采（`d1dd2fdd`，空载三次中位数 layoutP95 18.30 / paintP95 39.40）**。**仍待**：真实 BRAN 上的视觉 A/B（分帧本身不改像素，但需与 W5-2/3/4 一起确认），需后端 18084 |
+| W5-5 | **T6.5** 2k 记录分帧预算 | 相对 W4-1 基线 P95 不退化；`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` 通过。**门禁口径已修（2026-10-30）**：删掉测错东西的 `updateP95Ms ≤ 16`，改成 `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 不退化判据；layout 的 16 ms 由内核基准守住（p95 3.746 ms，达标）。**成本已定位（2026-10-30，§11.3.2）**：paint 内 `writeMs` 占 82～93%，其中字形段占 95.5%；消掉纯计数遍历后 paint p50 −21.2%、p95 −45.6%（§11.3.4）。**分帧已实现（`fd42623a`，§11.3.6）**：线顶点写入拆 3 批，单批 p95 **14.40 ms ≤ 16**、3 帧 ≤ 6、整次 36.20 ms 不高于同步 37.70 ms，三条判据全过；单测钉住「分批顶点与同步逐位相同」「cancel 不动已发布几何」「分帧中不渲染」。门禁 1 passed（`paintP95Ms` 45.70）。**生产档基线已采（`d1dd2fdd`，空载三次中位数 layoutP95 18.30 / paintP95 39.40）**。**分帧连带修掉三个真缺陷**：失效原因被早退吞掉（`b2aec28d`）、`paintMs` 只报第一批（`2b375907`）、`hitTest` 按未画出的新布局回答（`b25b5935`，§11.3.9）。**仍待**：真实 BRAN 上的视觉 A/B（分帧本身不改像素，但需与 W5-2/3/4 一起确认），需后端 18084 |
 
 ## 5. 决策
 
@@ -216,7 +216,10 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 25 | `d1dd2fdd` | 生产档基线（空载三次中位数 layoutP95 18.30 / paintP95 39.40） | 纯文档 |
 | 26 | `fd42623a` | W5-5 分帧实现：`writeLineVertices` 共用 + `paintAsync` + `painting` 守卫，3 批 | painter 16/16、viewport 12/12、dimension+debug 85/749、type-check 439/126、eslint 0、门禁 1 passed |
 | 27 | `b2aec28d` | 修分帧早退吞失效原因：`deferredReasons` + `replayDeferredReasons()` | viewport 13/13（回滚验证过能抓到）、dimension+debug 85/750、type-check 439/126、eslint 0 |
-| 28 | 本次 | 修 `onFrame` 只报第一批：`paintMs` 改为覆盖全部批次 + 两处 `flush()` 排空 | facade 14/14、viewport 14/14、dimension+debug 85/751、type-check 439/126、eslint 0 |
+| 28 | `2b375907` | 修 `onFrame` 只报第一批：`paintMs` 改为覆盖全部批次 + 两处 `flush()` 排空 | facade 14/14、viewport 14/14、dimension+debug 85/751、type-check 439/126、eslint 0 |
+| 29 | `b25b5935` | 修分帧期间 `hitTest` 按新布局回答：`paintedHitIndex` / `pendingHitIndex` 拆分，`job.finish()` 时才提升 | viewport 15/15（回滚验证过能抓到）、dimension 78/674、dimension+debug 85/752、全量 422/4108、type-check 439/126 新增 0、eslint 0 |
+
+**R5 裁决（2026-10-30 自决，接上表第 29 刀）**：`e2e/dimension-perf.spec.ts` 的 `test.skip(process.env.DIMENSION_PERF_GATE !== '1')` **保持默认 skip，不接 CI**。依据是 `.github/workflows/ci.yml:22` 的 gates 只有 type-check / eslint / vitest 三项，且该文件的注释已写明「E2E / PMS 联调要外网账号和浏览器，仍留在本地手动」；更重要的是门禁的两条断言绑的是**本机档位**（`BASELINE_LAYOUT_P95_MS = 26.2` / `BASELINE_PAINT_P95_MS = 78.6`，采自 Ryzen 9 7950X + dev 构建 + DPR 1 + headless GPU），换到 GitHub 的 `ubuntu-latest` 共享 runner 上必然因档位差异误报，而不是抓退化。真正的守门人分工是：layout 的 16 ms 由内核基准（`npm run perf:dimensions:kernel`，p95 3.746 ms）在数值层面守住，浏览器门禁只在**改渲染路径时**由人手动跑一次。要让 CI 也守，前提是先在 CI runner 上重新采一份基线并接受方差，这是独立一刀，本轮不做。
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -513,7 +516,7 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 
 **追加约束（不许绕）**：分帧期间**不得出现半成品可见帧**。单缓冲分批写会让中间帧渲染出只画了一部分的尺寸线——那比卡一下更糟。因此分帧必须配合「写完整批后才 `requestRender`」或双缓冲，二者择一，在实现前先写清选哪个及内存代价（双缓冲在 211 651 段 × 4 顶点 × 12 个属性下要翻倍显存，需先算）。
 
-**R5（门禁默认 skip 会漏到线上）仍未解决**：`test.skip(process.env.DIMENSION_PERF_GATE !== '1', ...)` 保持原样。接不接 CI 是决策，不是实现细节——本轮未动。
+**R5（门禁默认 skip 会漏到线上）**：**已裁决，保持默认 skip 不接 CI**，理由与替代守门人见 §10 第 29 刀下方的「R5 裁决」段。
 
 ### 11.4 未决问题（2026-10-30 更新：U1 / U4 已自决，U2 / U3 待办）
 
