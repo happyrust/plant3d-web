@@ -300,6 +300,45 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
+  it('mbd_label=above opts into the above-the-line text and stays off by default', async () => {
+    const payload = contractPayload({
+      meta: { geometry_space: 'source_mm', source_to_design: IDENTITY, notes: [], cheight_mm: 27 },
+    });
+    const fetchPipeData = vi.fn(async () => ({ ok: true as const, data: payload, diagnostics: [] }));
+
+    // Default: the field is absent, which is what keeps every existing
+    // payload's pixels identical. Not `'interrupted'` — absent.
+    const byDefault = createHarness({ search: '?mbd_refno=A', fetchPipeData });
+    await byDefault.sync.sync(byDefault.target);
+    const [, plain] = (byDefault.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(plain[0].layout.labelPresentation).toBeUndefined();
+    expect(byDefault.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: expect.not.arrayContaining([expect.stringContaining('mbd_label')]),
+    }));
+
+    // Opt-in: the mode reaches the layout verbatim, and says so.
+    const above = createHarness({ search: '?mbd_refno=A&mbd_label=above', fetchPipeData });
+    await above.sync.sync(above.target);
+    const [, opted] = (above.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(opted[0].layout.labelPresentation).toBe('above');
+    // Only that one field moves; geometry and LOD hints are untouched.
+    expect(opted[0].layout.lines).toEqual(plain[0].layout.lines);
+    expect(opted[0].layout.lod).toEqual(plain[0].layout.lod);
+    expect(opted[0].layout.labelAnchor).toEqual(plain[0].layout.labelAnchor);
+    expect(above.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: [expect.stringContaining('mbd_label=above')],
+    }));
+
+    // Any other value is not the mode — `interrupted` stays the default.
+    const bogus = createHarness({ search: '?mbd_refno=A&mbd_label=interrupted', fetchPipeData });
+    await bogus.sync.sync(bogus.target);
+    const [, other] = (bogus.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(other[0].layout.labelPresentation).toBeUndefined();
+  });
+
   it('mbd_3d=0 strips the 3D presentation and falls back to the solver geometry', async () => {
     // The mapper only presents in 3D when the group declares a cheight.
     const payload = contractPayload({

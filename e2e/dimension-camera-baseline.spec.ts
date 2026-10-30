@@ -46,6 +46,8 @@ const BACKEND = (process.env.GEN_MODEL_V1_BASE_URL || 'http://127.0.0.1:18084').
 const PROJECT = process.env.PLANT3D_REAL_PROJECT || 'AvevaMarineSample';
 const BASE_URL = process.env.DIMENSION_CAMERA_BASELINE_BASE_URL || '';
 const LABEL = process.env.DIMENSION_CAMERA_BASELINE_LABEL || null;
+/** 追加的查询参数（A/B 开关），缺省空串 = 基线原样 */
+const EXTRA_QUERY = process.env.DIMENSION_CAMERA_BASELINE_EXTRA_QUERY || '';
 
 const DEFAULT_TIERS: readonly TierConfig[] = [
   { name: 'far', scale: 1 },
@@ -106,7 +108,13 @@ function distance(a: Vec3, b: Vec3): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
-/** 真实 BRAN 直达链接：参数名 `gm_backend` / `mbdBackend` 大小写不同，别合并 */
+/**
+ * 真实 BRAN 直达链接：参数名 `gm_backend` / `mbdBackend` 大小写不同，别合并。
+ *
+ * `DIMENSION_CAMERA_BASELINE_EXTRA_QUERY` 追加原样参数（`a=1&b=2` 形式），
+ * 用来出 A/B：W5-4 的 `mbd_label=above`、W5-3 的 `mbd_lod=0` 都靠它开关。
+ * 追加项覆盖同名默认参数——这正是不带开关的基线能保持不变的原因。
+ */
 function buildPath(refno: string): string {
   const params = new URLSearchParams({
     output_project: PROJECT,
@@ -116,6 +124,9 @@ function buildPath(refno: string): string {
     gm_backend: BACKEND,
     mbdBackend: BACKEND,
   });
+  for (const [key, value] of new URLSearchParams(EXTRA_QUERY)) {
+    params.set(key, value);
+  }
   return `/?${params.toString()}`;
 }
 

@@ -107,6 +107,18 @@ function isMbd3dDisabled(raw: string | null): boolean {
 }
 
 /**
+ * 调试开关 `?mbd_label=above`（W5-4 / Q6）：长度尺寸的数字浮到尺寸线上方、线不切段
+ * （ISO 读法）。缺省 / 其它值 = `interrupted`（工程惯例：文字压线、线在标签处断开）。
+ *
+ * **默认必须是 interrupted**：`above` 要的行距 ≥ 2.96 字高，而求解器的行距是
+ * `1.2 · cheight`，堆叠尺寸组会互相侵入（见计划 §11.2）。它是 A/B 与后续排布
+ * 改造的试验开关。
+ */
+function parseLabelPresentation(raw: string | null): 'interrupted' | 'above' {
+  return raw?.trim().toLowerCase() === 'above' ? 'above' : 'interrupted';
+}
+
+/**
  * 调试开关 `?mbd_partial=1`：允许部分显示。缺省（关）维持 ADR 0046 的原子拒绝——
  * 只要有一个图元映射不过就整包不提交；打开后跳过的那几条只进诊断，其余照常渲染，
  * 面板常驻「N 条被跳过」的横幅（`DimensionPanelDock`），避免使用者误以为图是完整的。
@@ -167,12 +179,16 @@ export function createMbdExternalSync(
       const channel = 'api' as const;
       const sourceId = mbdRefno;
       const partialEnabled = isMbdPartialEnabled(params.get('mbd_partial'));
+      const labelPresentation = parseLabelPresentation(params.get('mbd_label'));
       try {
         const parsed = await deps.fetchPipeData(mbdRefno, { partial: partialEnabled });
         if (!parsed.ok) throw new Error(parsed.error);
         const payload: MbdV2PipeData = parsed.data;
         const channelSkipped = parsed.diagnostics;
-        const mapped = mbdV2ToExternalRecords(payload);
+        const mapped = mbdV2ToExternalRecords(
+          payload,
+          labelPresentation === 'above' ? { labelPresentation } : {},
+        );
         const skipped = [...channelSkipped, ...mapped.skipped];
         // ADR 0046：先校验、后原子替换。原子拒绝只针对**映射失败**（契约认可、
         // 但映射不出来 —— 这是代码缺陷，半对的数据不可信）。
@@ -222,6 +238,9 @@ export function createMbdExternalSync(
             ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
             ...(presentation3dDisabled
               ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
+              : []),
+            ...(labelPresentation === 'above'
+              ? ['mbd_label=above：长度尺寸的数字浮在线上方、尺寸线不切段（ISO 读法，试验开关）']
               : []),
             ...(mappedSkipped.length > 0
               ? [

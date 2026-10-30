@@ -48,6 +48,19 @@ export type MbdV2MappingResult = Readonly<{
   skipped: readonly Readonly<{ id: string; reason: string }>[];
 }>;
 
+/**
+ * 映射期的呈现选项（W5-4 / Q6）。全部可选，缺省即当前线上行为。
+ *
+ * `labelPresentation: 'above'` 让长度尺寸的数字浮在尺寸线上方、线不切段
+ * （ISO 读法）。**默认不开**：`above` 要的行距 ≥ 2.96 字高（见计划 §11.2），
+ * 而 MBD 的求解器行距是 `1.2 · cheight`（`presentation3dContext` 的
+ * `SOLVER_ROW_SPACING_CHEIGHT`），堆叠尺寸组会互相侵入。它是 A/B 与后续
+ * 排布改造的试验开关，不是产品默认。
+ */
+export type MbdV2MappingOptions = Readonly<{
+  labelPresentation?: 'interrupted' | 'above';
+}>;
+
 const WELD_MARKER_RADIUS_PX = 5;
 const SLOPE_ARROW_LENGTH_RATIO = 0.08;
 const SLOPE_ARROW_HALF_ANGLE_RAD = (20 * Math.PI) / 180;
@@ -279,6 +292,8 @@ type ExplicitParts = Readonly<{
   tag?: ExplicitTagInput;
   /** The model object the record sits on (its refno), for the inspection pass. */
   subject?: string;
+  /** Q6 presentation mode, forwarded verbatim when the caller asked for one. */
+  labelPresentation?: 'interrupted' | 'above';
 }>;
 
 function explicitRecord(
@@ -310,6 +325,7 @@ function explicitRecord(
       : {}),
     ...(parts.texts && parts.texts.length > 0 ? { texts: parts.texts } : {}),
     ...(parts.lod ? { lod: parts.lod } : {}),
+    ...(parts.labelPresentation ? { labelPresentation: parts.labelPresentation } : {}),
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
     ...(parts.tag ? { tag: parts.tag } : {}),
     ...(parts.subject ? { subject: parts.subject } : {}),
@@ -665,6 +681,7 @@ function mapLinearDim(
   transformPoint: TransformPoint,
   presentation3d: Presentation3dContext | null,
   cheightM: number | undefined,
+  options: MbdV2MappingOptions,
 ): ExternalDimensionRecord {
   const role = primitive.reference ? 'external-reference' : 'external';
   const start = transformPoint(primitive.start);
@@ -703,6 +720,10 @@ function mapLinearDim(
     // aid / slope text takes the contract's `text_dir` (`textBaseline`) and
     // stays viewport-horizontal without one.
     labelAlong: sub3(end, start),
+    // Q6: opt-in only. Omitted = `interrupted`, which is what every existing
+    // payload already draws — the field's absence is the whole compatibility
+    // guarantee, so do not default it to anything else.
+    ...(options.labelPresentation ? { labelPresentation: options.labelPresentation } : {}),
     lines,
     ...(dimension3d ? { dimension3d } : {}),
     ...(arrowLines.length > 0
@@ -877,6 +898,7 @@ function mapAidCircle(
  */
 export function mbdV2ToExternalRecords(
   data: MbdV2PipeData,
+  options: MbdV2MappingOptions = {},
 ): MbdV2MappingResult {
   const records: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
@@ -920,7 +942,7 @@ export function mbdV2ToExternalRecords(
     const groupHeightM = groupTextHeightM(primitive, isolineHeightsM, payloadHeightM);
     switch (primitive.kind) {
       case 'linear_dim':
-        record = mapLinearDim(primitive, transformPoint, presentation3d, groupHeightM);
+        record = mapLinearDim(primitive, transformPoint, presentation3d, groupHeightM, options);
         break;
       case 'angle_dim':
         record = mapAngleDim(primitive, transform);
