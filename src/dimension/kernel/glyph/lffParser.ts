@@ -153,6 +153,21 @@ function getGlyphBounds(glyph: Glyph): Readonly<{
  */
 const MISSING_GLYPH_STAND_INS: ReadonlyMap<number, number> = new Map([[0x2248, 0x7e]]);
 
+/**
+ * The glyph a code point degrades to when its body does not parse: no strokes,
+ * zero bearings, and an advance of one letter spacing so a run that contains it
+ * keeps a finite, non-overlapping width. Not `undefined` and not a throw — see
+ * the `catch` in `getGlyph` for why a font defect must not propagate.
+ */
+function emptyGlyph(letterSpacing: number): Glyph {
+  return {
+    contours: [],
+    leftSideBearing: 0,
+    boundingWidth: 0,
+    advanceWidth: letterSpacing,
+  };
+}
+
 export class LffFont {
   readonly letterSpacing: number;
   readonly wordSpacing: number;
@@ -251,6 +266,26 @@ export class LffFont {
       };
       this.glyphCache.set(codePoint, glyph);
       return glyph;
+    } catch (error) {
+      // A glyph body that does not parse is a font defect, and the bundled
+      // font is one file: the defect is already shipped. Rethrowing would make
+      // every run containing that character throw on every frame — and the
+      // cache cannot help, because the failure happens before the glyph is
+      // cached. `trace`/`getWidth` are called from inside the batched paint
+      // (§11.11 A1), so one bad character in one label would cost that label
+      // its frame indefinitely.
+      //
+      // Degrading to an empty glyph costs exactly that one character: the rest
+      // of the run still draws, and the width stays finite because the advance
+      // falls back to the letter spacing. Cached so the warning is emitted once
+      // per code point, not once per frame.
+      const degraded = emptyGlyph(this.letterSpacing);
+      this.glyphCache.set(codePoint, degraded);
+      console.warn(
+        `[dimension] LFF glyph U+${codePoint.toString(16).toUpperCase()} failed to parse;`
+          + ` drawing it as blank: ${(error as Error).message}`,
+      );
+      return degraded;
     } finally {
       this.parsing.delete(codePoint);
     }

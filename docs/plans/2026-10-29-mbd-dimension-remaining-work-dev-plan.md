@@ -1019,4 +1019,52 @@ role=normal style=null       -> [] (len=0)
 
 **下一步**：`place()` 入库后，在 `polar/screenGuard.ts` 里用 `selectPlacement(placeResult.candidates, fitsInViewport)` 接上，判据是「投影包围盒 + 像素净空」；`LabelOccupancy` 直接复用（已在 `kernel/collision/occupancy.ts`）。
 
+### 11.16 §11.13 第一条路径收口：坏字形退化成不画该 run 的该字符（2026-10-30）
+
+§11.14 末尾留的那条独立活。`LffFont.getGlyph` 的解析体在 `try` 里，`finally` 只清 `parsing` 集合、**没有 `catch`** —— 任何 `SyntaxError` 直接穿到 `trace` / `getWidth`，进而穿到 `scenePainter` 的分帧绘制里。
+
+**实测爆炸半径**（构造一个只有 0x42 字形体坏掉的字体，其余 A/h/p/~/U+FFFD 都正常）：
+
+```
+broken-B font constructed OK (A/h/p fine)
+  trace "A"  -> 2 segments
+  trace "B"  -> THROW SyntaxError: Expected a number in LFF contour ...
+  trace "AB" -> THROW SyntaxError
+  trace "BA" -> THROW SyntaxError
+  getWidth "A"  -> 7.222222222222222
+  getWidth "B"  -> THROW SyntaxError
+  getWidth "AB" -> THROW SyntaxError
+```
+
+三条事实：①构造期不炸（`fromText` 只强制解析 `A` / `h` / `p` / `0x20`，见 `lffParser.ts:172-181`），所以**坏字形能一路装到运行期**；②只炸含该字符的 run，其余照常；③**每次调用都重抛**——失败发生在 `glyphCache.set` 之前，缓存帮不上忙。加上 `trace` 在分帧绘制内部调用（§11.11 A1），后果是「含该字符的那条标注每帧都失败」，A1 只能把它降级成「该帧作废 + 一条日志」，日志还是每帧一条。
+
+**修法**（`lffParser.ts` `getGlyph`，+24/−1，新增 `emptyGlyph()`）：`catch` 里缓存并返回一个空字形——`contours: []`、bearing 全 0、`advanceWidth = letterSpacing`，并 `console.warn` 带码位与原始错误。三个效果：
+
+- **不再抛**：`trace` 返回不含该字符笔画的段，`getWidth` 返回有限值；
+- **只损失那一个字符**：`'AB'` 里的 `A` 照样出笔画（实测 `mixed === onlyA`）；
+- **告警每码位一次**：降级结果进 `glyphCache`，不是每帧一条。
+
+**为什么降级成空字形而不是 U+FFFD 或抛给上层**：①退到 U+FFFD 是错的语义——U+FFFD 表示「这个字符不认识」，而这里字符认识、只是字形体坏了；画个方块比留白更误导；②抛给上层就是 A1 现状，等于没修；③空字形让「缺一个字」可见（用户看得到标签少了个字符）而不是「整条标注消失」，与 §11.14 的取舍同构。`advanceWidth = letterSpacing` 而不是 0：零宽会让前后字符重叠，读起来像乱码。
+
+**新增 4 条测试**（`lffParser.test.ts`，fixture 里 `[0042]` 本来就是刻意的坏字形，此前只被 `getGlyph('x')` 的回落用例间接碰到）：
+
+| 测试 | 钉住什么 |
+| --- | --- |
+| `degrades that one code point to blank instead of throwing` | `getGlyph` / `trace` / `getWidth` 三者都不抛，且降级结果 `contours` 为空 |
+| `keeps the rest of a mixed run drawable and the width finite` | `'AB'` 的笔画等于 `'A'` 的笔画；宽度有限且比 `'A'` 宽（B 确实占位） |
+| `warns once per code point, not once per call` | 连调 5 次只告警 1 次，日志含 `U+42` |
+| `leaves a glyph that parses untouched` | 好字形不受影响、不告警（防「整个 try 块返回值被替换」） |
+
+**回滚验证（三处，全部如期变红）**：
+
+| 改坏的方式 | 结果 |
+| --- | --- |
+| 删 `console.warn`（静默降级） | 测试 3 红 |
+| `catch` 改 `throw error` | 测试 1、2、3 红（3 条） |
+| 正常路径也返回 `emptyGlyph`（兜底吞掉好字形） | **9 条全红**——含 5 条既有用例 |
+
+**门禁**：`lffParser.test.ts` 9/9、`npx vitest run src/dimension` 79 文件 / **710 通过**（上轮 706，+4 即本轮新增）、全量 `npm test` **423 文件 / 4146 通过 / 1 todo**、eslint 0、`npm run type-check` **439/126 新增 0**。
+
+**仍然保留的一条已知行为**：`fromText` 构造期若 `A` / `h` / `p` 本身坏掉，仍然抛（`capHeight` / `ascender` / `descender` 算不出来，字体不可用）。这是**对的**——那种情况该在加载期就失败并回退到「不画尺寸层」，而不是带着 `capHeight = 0` 跑到绘制里去除零。`loadDimensionFont` 的调用方已有 `catch` 兜底。
+
 
