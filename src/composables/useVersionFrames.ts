@@ -635,7 +635,16 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     const query = deps.source.queryHistoryGeometry;
     if (!context || !query) throw new ModelVersionRouteUnavailableError('model/history/geometry');
     const result = await query({ dbnum: context.dbnum, unitRefno, sesno }, { signal });
-    if (result.kind !== 'ok') return;
+    // 只有 `ok` 带几何。`not-modified` 回的是 304，没有 `geometry` 字段，而本函数是
+    // `loadUnits` 里「缓存中没有这一帧」时才发起的——此时没有可复用的本地几何，
+    // 不能当成功。原先是 `return`，等于把失败算成成功：`loadUnits` 的 `failed` 恒为 0，
+    // 角标说「全部加载成功」而实际一帧都没装。
+    if (result.kind !== 'ok') {
+      throw new HistoryQueryError('INVALID_RESPONSE', {
+        status: 304,
+        message: `model/history/geometry 对 ${unitRefno}@${sesno} 回了 304，但本地没有可复用的几何`,
+      });
+    }
     commit(putFrame(cache, {
       key: keyOf(unitRefno, sesno),
       dbnum: context.dbnum,

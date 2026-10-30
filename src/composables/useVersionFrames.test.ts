@@ -487,6 +487,29 @@ describe('useVersionFrames：子树范围（Requirement 9.2、9.3、9.6、9.7、
     expect(frames.errors.value).toEqual([{ sesno: 10, unitRefno: 'unit_2', code: 'HISTORY_QUERY_TIMEOUT', message: expect.any(String) }]);
     expect(frames.tickStatus.value.get(10)).toBe('failed');
   });
+
+  it('子树单元回 304 但本地无几何：算失败，不当成功', async () => {
+    // `fetchUnitAt` 只在缓存里没有这一帧时才发起，此时 304 没有可复用的本地几何。
+    // 原实现 `if (result.kind !== 'ok') return` 把它当成功：`failed` 恒为 0，
+    // 角标说「全部加载成功」而实际一帧都没装。
+    const { frames, source } = setup({
+      respond: (call) => Promise.resolve({
+        kind: 'not-modified' as const,
+        sesno: call.sesno,
+        sessionTime: null,
+        geometryKey: 'sha256:304',
+      }),
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockResolvedValue(summaryWith([
+      { unitRefno: 'unit_1', added: 1, deleted: 0, modified: 0 },
+    ]));
+    await frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+
+    expect(frames.errors.value).toHaveLength(1);
+    expect(frames.errors.value[0]?.unitRefno).toBe('unit_1');
+    expect(frames.errors.value[0]?.code).toBe('INVALID_RESPONSE');
+    expect(frames.tickStatus.value.get(10)).toBe('failed');
+  });
 });
 
 describe('useVersionFrames：旧服务端降级（Requirement 10.1、10.5、10.6）', () => {
