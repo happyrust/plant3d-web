@@ -179,6 +179,12 @@ export type ModelUnitCompareBrowseApi = {
   replaceSide(side: ModelUnitCompareSide, detailSide: ModelUnitVersionSide): Promise<void>;
   /** 退出浏览：卸图层、恢复环境、清角标（3.14） */
   browseExit(): void;
+  /**
+   * 浏览图层是否已建好。`browseEnter` 在视口未就绪时静默返回、不建图层，
+   * 这时后续 `browseShow` 也全部静默返回——几何进了缓存但一帧都不显示。
+   * 性能脚本与面板的调试读数靠这条区分「几何没装上」与「图层没建」。
+   */
+  readonly browseLayerReady: boolean;
 };
 
 export type ModelUnitCompareController = ModelUnitCompareBrowseApi & {
@@ -1237,6 +1243,15 @@ export function createModelUnitCompareController(host: ModelUnitCompareHost): Mo
     state,
     statusCounts,
     browse,
+    /**
+     * 浏览图层是否已建好（`browseEnter` 建图层、`browseExit` 清掉）。
+     *
+     * `browseEnter` 在视口还没就绪时是**静默返回**的（`host.viewer()` / `host.primaryLayer()`
+     * 为 null），这时 `browse.value.active` 仍是 false，后续 `browseShow` 也会因 `!layer` 静默
+     * 返回——几何装进了缓存、`frame-shown` 一条都不打。性能脚本靠这条读数区分「几何没装上」
+     * 与「图层没建」。
+     */
+    get browseLayerReady() { return browseLayer !== null; },
     get runId() { return runId; },
     open,
     clear,

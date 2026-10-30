@@ -18,8 +18,9 @@ import {
  * `null`，`browseEnter` / `browseShow` 全部空转——浏览模式看着进去了，视口一帧都不装。
  */
 
-function fakeApi(): VersionBrowseApi {
+function fakeApi(overrides: Partial<VersionBrowseApi> = {}): VersionBrowseApi {
   return {
+    browseLayerReady: false,
     browseEnter: vi.fn(),
     browseShow: vi.fn(async () => {}),
     browsePending: vi.fn(),
@@ -28,6 +29,7 @@ function fakeApi(): VersionBrowseApi {
     replaceSide: vi.fn(async () => {}),
     browseExit: vi.fn(),
     open: vi.fn(async () => {}),
+    ...overrides,
   };
 }
 
@@ -84,5 +86,17 @@ describe('versionBrowseBridge', () => {
     expect(api.browseShow).toHaveBeenCalledTimes(1);
     expect(api.browseBadge).toHaveBeenCalledWith('浏览 · sesno 419');
     expect(api.browseExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('转发对象透传 browseLayerReady，未就位时读作 false', () => {
+    let current: VersionBrowseApi | null = null;
+    const lazy = createLazyBrowseApi(() => current);
+    // 未就位：不能是 `undefined`，否则 JSON 序列化会把这个字段整个丢掉，
+    // 诊断里「图层没建」与「几何没装上」就分不开了
+    expect(lazy.browseLayerReady).toBe(false);
+    expect(JSON.parse(JSON.stringify({ ready: lazy.browseLayerReady }))).toEqual({ ready: false });
+
+    current = fakeApi({ browseLayerReady: true });
+    expect(lazy.browseLayerReady).toBe(true);
   });
 });

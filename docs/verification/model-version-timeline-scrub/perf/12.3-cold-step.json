@@ -1,0 +1,97 @@
+{
+  "unit": "24384_23257",
+  "timings": [
+    {
+      "sesno": 682,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 680,
+      "ms": 1521
+    },
+    {
+      "sesno": 678,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 676,
+      "ms": 1541
+    },
+    {
+      "sesno": 674,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 672,
+      "ms": 1642
+    },
+    {
+      "sesno": 670,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 668,
+      "ms": 1620
+    },
+    {
+      "sesno": 666,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 664,
+      "ms": 1608
+    },
+    {
+      "sesno": 662,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 660,
+      "ms": 1573
+    },
+    {
+      "sesno": 654,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 652,
+      "ms": 1584
+    },
+    {
+      "sesno": 630,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 626,
+      "ms": 1592
+    },
+    {
+      "sesno": 573,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 571,
+      "ms": 1589
+    },
+    {
+      "sesno": 569,
+      "ms": 0,
+      "skipped": true
+    },
+    {
+      "sesno": 567,
+      "ms": 1601
+    }
+  ],
+  "measuredCount": 10,
+  "budgetMs": 3000
+}

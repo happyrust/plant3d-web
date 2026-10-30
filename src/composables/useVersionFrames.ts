@@ -74,8 +74,8 @@ export type VersionFramesState = {
   legacyFallback: Ref<boolean>;
   /** 子树范围的待确认计划（9.3） */
   pendingConfirm: Ref<(SubtreePlan & { kind: 'confirm' }) | null>;
-  /** 17.1 的只读调试读数：前端缓存键数、进行中请求数（性能脚本读它） */
-  debug: Ref<{ cacheKeys: number; inFlight: number }>;
+  /** 17.1 的只读调试读数：前端缓存键数、进行中请求数、浏览图层是否已建（性能脚本读它） */
+  debug: Ref<{ cacheKeys: number; inFlight: number; browseLayerReady: boolean }>;
   /** 17.1：把同一份读数挂到 `window.__versionScrubDebug`，e2e 脚本不必知道 Vue 内部 */
   exposeDebug(): () => void;
 
@@ -136,7 +136,7 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
   const errors = ref<VersionFrameError[]>([]);
   const legacyFallback = ref(false);
   const pendingConfirm = ref<(SubtreePlan & { kind: 'confirm' }) | null>(null);
-  const debug = ref({ cacheKeys: 0, inFlight: 0 });
+  const debug = ref({ cacheKeys: 0, inFlight: 0, browseLayerReady: false });
 
   let cache: FrameCacheState<ModelVersionGeometry> = emptyFrameCache<ModelVersionGeometry>();
   const inFlight = new Map<FrameKey, InFlightRequest>();
@@ -160,7 +160,11 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
   // ---------------------------------------------------------------- 小工具
 
   function publishDebug(): void {
-    debug.value = { cacheKeys: cache.frames.size, inFlight: inFlight.size };
+    debug.value = {
+      cacheKeys: cache.frames.size,
+      inFlight: inFlight.size,
+      browseLayerReady: deps.controller.browseLayerReady,
+    };
   }
 
   function setTick(sesno: number, status: 'loading' | 'failed' | null): void {
@@ -665,6 +669,9 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
       unitRefnos: context.unitRefnos,
       ...(context.focusRefno ? { focusRefno: context.focusRefno } : {}),
     });
+    // `browseEnter` 在视口未就绪时静默返回、不建图层；把读数立刻刷一次，
+    // 超时诊断才能区分「图层没建」与「几何没装上」
+    publishDebug();
     // 进入就取游标那一版：用户已经点进来了，不用等停留门
     await requestCursorFrame(context.cursor);
   }
@@ -836,7 +843,9 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
    * 返回卸载函数；不改变任何行为。
    */
   function exposeDebug(): () => void {
-    const target = window as unknown as { __versionScrubDebug?: () => { cacheKeys: number; inFlight: number } };
+    const target = window as unknown as {
+      __versionScrubDebug?: () => { cacheKeys: number; inFlight: number; browseLayerReady: boolean };
+    };
     target.__versionScrubDebug = () => ({ ...debug.value });
     return () => { delete target.__versionScrubDebug; };
   }

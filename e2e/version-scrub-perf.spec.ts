@@ -306,6 +306,16 @@ async function openBrowse(page: Page, extra: Record<string, string> = {}): Promi
   await subtree.click();
   await expect(subtree).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
   await expect(page.getByTestId('version-timeline-scrubber')).toBeVisible({ timeout: 60_000 });
+  // 等三维视口真的就绪：`browseEnter` 在 `viewer` / `primaryLayer` 为 null 时是**静默返回**的，
+  // 图层不建，之后 `browseShow` 全部静默返回——几何进缓存、一帧不显示，而 `cursorChanged`
+  // 仍会一路发 `diff-summary`，从外部看「在跑」其实永远装不上（12.3 全部 60 s 超时的真因）。
+  // `ViewerPanel` 把 `__dtxViewer` / `__dtxLayer` 挂到 window 上正是视口就绪的标志。
+  await page.waitForFunction(
+    () => Boolean((window as unknown as { __dtxViewer?: unknown }).__dtxViewer)
+      && Boolean((window as unknown as { __dtxLayer?: unknown }).__dtxLayer),
+    undefined,
+    { timeout: 120_000 },
+  );
 }
 
 const track = (page: Page) => page.getByTestId('version-timeline-scrubber-track');
@@ -338,17 +348,42 @@ async function waitBrowseReady(page: Page, cursor?: number): Promise<void> {
     () => undefined,
   );
   try {
+    // 先确认浏览图层建好了：`browseEnter` 在视口未就绪时静默返回、不建图层，
+    // 之后 `browseShow` 会一路静默返回——几何进了缓存但 `frame-shown` 一条都不打。
+    // 只等首帧的话，这种情形要干等到超时才发现。
     await page.waitForFunction(
-      () => performance.getEntriesByName('version-scrub:frame-shown').length > 0,
+      () => {
+        const read = (window as unknown as {
+          __versionScrubDebug?: () => { browseLayerReady?: boolean };
+        }).__versionScrubDebug;
+        return read?.().browseLayerReady === true;
+      },
       undefined,
+      { timeout: 30_000 },
+    ).catch(() => { throw new Error('browseLayerReady 30 s 未变 true：浏览图层没建起来（视口未就绪或跑的是旧 bundle）'); });
+    // 等**落点那一版**的 mark。点击浏览之后面板可能把游标折到邻近版本（`reconcileScrubState`），
+    // 所以这里在点击之后才读游标，并且同时接受「落点」与「期望目标」两者之一：
+    // 页面里可能已经有别的版本留下的 mark，只判 `length > 0` 会在错误的时机返回。
+    const landed = await cursorSesno(page);
+    const want = [landed, target].filter((v): v is number => Number.isFinite(v));
+    await page.waitForFunction(
+      (sesnos) => performance.getEntriesByName('version-scrub:frame-shown').some(
+        (entry) => sesnos.includes(
+          (entry as PerformanceMark & { detail?: { sesno?: number } }).detail?.sesno ?? Number.NaN,
+        ),
+      ),
+      want,
       { timeout: 120_000 },
-    );
+    ).catch(() => { throw new Error(`frame-shown 120 s 未出现（等 sesno ∈ {${want.join(', ')}}）`); });
   } catch (err) {
     const diag = await page.evaluate(() => {
       const read = (window as unknown as { __versionScrubDebug?: () => unknown }).__versionScrubDebug;
       const text = (id: string) => document.querySelector(`[data-testid="${id}"]`)?.textContent ?? null;
       return {
         debug: read ? read() : null,
+        // 视口就绪读数：`browseEnter` 在这两个为 null 时静默返回，图层不建
+        dtxViewer: Boolean((window as unknown as { __dtxViewer?: unknown }).__dtxViewer),
+        dtxLayer: Boolean((window as unknown as { __dtxLayer?: unknown }).__dtxLayer),
         marks: performance.getEntriesByType('mark').map((m) => m.name).filter((n) => n.startsWith('version-scrub')),
         scrubErrors: text('model-unit-compare-scrub-errors'),
         urlNotice: text('model-unit-compare-scrub-url-notice'),
@@ -367,7 +402,7 @@ async function waitBrowseReady(page: Page, cursor?: number): Promise<void> {
       };
     });
     evidence('debug-browse-timeout', diag);
-    throw new Error(`浏览首帧 180 s 未出现（诊断已写入 ${EVIDENCE_DIR ?? '未设目录'}）：${JSON.stringify(diag)}`);
+    throw new Error(`浏览首帧 150 s 未出现（诊断已写入 ${EVIDENCE_DIR ?? '未设目录'}）：${JSON.stringify(diag)}`);
   }
 }
 
@@ -389,6 +424,14 @@ async function stepOnce(
   expect(expected, `${before} 的${direction === 'ArrowRight' ? '后' : '前'}一版`).toBeDefined();
   const drawable = new Set(fixture?.drawableSesnos ?? []);
 
+  // 记下按键之前该 sesno 已经有过几条 mark：来回走同一对版本时，上一趟的 mark 还在
+  // `performance` 缓冲里，只判「存在」会立刻命中旧那条，`startTime` 早于本次起点，
+  // 相减得负数（实测出现过 -55 / -53 ms）。
+  const seenBefore = await page.evaluate(
+    (sesno) => (performance.getEntriesByName('version-scrub:frame-shown') as (PerformanceMark & { detail?: { sesno?: number } })[])
+      .filter((entry) => entry.detail?.sesno === sesno).length,
+    expected,
+  );
   const from = await page.evaluate(() => {
     performance.clearMarks('perf:step-start');
     performance.mark('perf:step-start');
@@ -402,10 +445,9 @@ async function stepOnce(
     return { sesno: expected, ms: 0, skipped: true };
   }
   await page.waitForFunction(
-    (sesno) => performance.getEntriesByName('version-scrub:frame-shown').some(
-      (entry) => (entry as PerformanceMark & { detail?: { sesno?: number } }).detail?.sesno === sesno,
-    ),
-    expected,
+    ({ sesno, seen }) => (performance.getEntriesByName('version-scrub:frame-shown') as (PerformanceMark & { detail?: { sesno?: number } })[])
+      .filter((entry) => entry.detail?.sesno === sesno).length > seen,
+    { sesno: expected, seen: seenBefore },
     { timeout: 60_000 },
   ).catch(() => undefined);
   const to = await page.evaluate((sesno) => {

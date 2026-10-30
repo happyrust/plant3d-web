@@ -751,6 +751,11 @@ onMounted(() => {
 async function enterBrowse(): Promise<void> {
   const sesno = scrubber.cursor.value;
   if (sesno === null || dbnum.value === null) return;
+  // 先进浏览之前必须把对比模式关掉：对比的 `open` 会走 `clear()` → `browseExit()`，
+  // 把刚建好的浏览图层清掉，之后 `browseShow` 全部静默返回——几何进了缓存但一帧不显示，
+  // 表现就是「浏览按钮点了、时间轴在动、视口永远不更新」。
+  // 面板挂载时 `compare_autorun=1` 会自动进对比，这条尤其必要。
+  closeCompare();
   const unitRefnos = scope.value === 'subtree' && geometryGroups.value.length > 0
     ? geometryGroups.value.map((group) => group.unitRefno!)
     : [comparedUnitRefno.value];

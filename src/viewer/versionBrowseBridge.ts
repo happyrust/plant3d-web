@@ -78,6 +78,10 @@ export function watchVersionBrowseApi(apply: (api: VersionBrowseApi) => void): (
  */
 export function createLazyBrowseApi(resolve: () => VersionBrowseApi | null): VersionBrowseApi {
   return {
+    // 这条必须是 getter 而不是方法：转发对象每次读都取当前接口，三维还没就位时读作 false。
+    // 漏了它会退化成 `undefined`，`JSON.stringify` 把整个字段丢掉——诊断里看不到这一项，
+    // 「图层没建」与「几何没装上」在日志里就长得一模一样。
+    get browseLayerReady() { return resolve()?.browseLayerReady === true; },
     browseEnter: (ctx) => { resolve()?.browseEnter(ctx); },
     browseShow: async (frame, opts) => { await resolve()?.browseShow(frame, opts); },
     browsePending: (sesno) => { resolve()?.browsePending(sesno); },

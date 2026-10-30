@@ -222,7 +222,7 @@ sesno 676 : 1.094 s
 > 加上当时起点定在链中段、`walkTo` 要先逐格挪六十多步（每步 1.1 s），整条就超时了。
 > 修法见上一节末尾的说明：从落点本身起跑、沿版本链逐格走。
 
-**重跑时暴露的第二个问题（未修，如实记录）**：把门槛改成 3 000 ms 后再跑一次，`waitBrowseReady`
+**重跑时暴露的第二个问题：根因已定位并修复**。把门槛改成 3 000 ms 后再跑，`waitBrowseReady`
 等首帧 180 s 超时，诊断是：
 
 ```
@@ -232,12 +232,80 @@ sesno 676 : 1.094 s
 ```
 
 游标已停在 684（可装版本）、范围是子树、没有错误、没有待确认框，但 `frame-shown` 一条都没打，
-`cacheKeys` 停在 1。同环境 `diff-summary(684,686)` 只要 1.5 s，所以不是慢。缓存容量 0 下
-首帧装不上的原因**尚未查清**。
+`cacheKeys` 停在 1。同环境 `diff-summary(684,686)` 只要 1.5 s，所以不是慢。
 
-上表那 10 个样本是**同一配置下更早一次跑出来的**（那次跑完了，`12.3-cold-step.json` 在
-`12.3` 之前那次成功运行写下的），按新门槛 3 000 ms 复核：最大值 2 457 ms ≤ 3 000 ms，判定通过。
-也就是说**测量数据有效、门槛调整有依据，但用例本身在缓存容量 0 下不稳定**，需要再查。
+**`browse: null` 不是「浏览没激活」**：浏览按钮是 `v-if="!browsing"`，读不到按钮就等于「已经在
+浏览模式」。两条 `badge-updated` 证明 `browseEnter` 成功（`modelUnitCompareController.ts:335`
+的 publish）且 `browsePending` 跑过（`:447`）——浏览模式确实进去了，停滞点在 `browseShow`。
+
+#### 根因一：转发对象漏了 `browseLayerReady`（诊断一直缺字段的真因）
+
+`createLazyBrowseApi`（`src/viewer/versionBrowseBridge.ts:79`）返回的是普通对象字面量，只转发了
+方法，没有转发 `browseLayerReady` 这个 getter。类型声明里有（`modelUnitCompareController.ts:187`），
+运行时读出来却是 `undefined`，`JSON.stringify` 直接把整个字段丢掉。
+
+后果是双重误导：诊断里永远看不到这一项，「图层没建」与「几何没装上」在日志里长得一模一样；
+我加的 30 s `browseLayerReady` 等待也永远等不到 `true`。已补 getter 并加 2 例单测
+（未就位读作 `false` 而不是 `undefined`，序列化后字段仍在）。
+
+#### 根因二：进浏览前没关对比，`open` 把刚建好的图层清掉
+
+`ModelUnitVersionComparePanel.vue` 的 `enterBrowse` 直接调 `frames.enterBrowse`，没有先
+`closeCompare()`。而面板挂载时 `compare_autorun=1` 会自动进对比模式；对比的 `open` 走到
+`clear()`（`modelUnitCompareController.ts:780`），那里 `if (browse.value.active) browseExit()`
+——**刚建好的浏览图层被自己清掉**。
+
+于是形成完整死循环：`browseEnter` 成功 → 对比 `open` 触发 `clear` → `browseExit` 清图层 →
+`browseLayerReady` 变回 `false` → 之后 `browseShow` 全部因 `!layer` 静默返回 → 几何进了缓存
+（`cacheKeys: 1`）但一帧都不显示；而 `cursorChanged` 仍在发 `diff-summary`，从外部看「在跑」。
+
+修法：`enterBrowse` 开头先 `closeCompare()`。
+
+#### 复现证据
+
+用一个独立 trace 脚本（Playwright + 监听 `/api/v1/`）抓真实请求序列，等视口真正就绪（60 s）后：
+
+```
+BEFORE      cursor=686  browseLayerReady=false
+AFTER-BROWSE            browseLayerReady=true          ← 点浏览后图层建起来了
+AFTER-STEP  cursor=684  cacheKeys=1  frame-shown ✓     ← 有 history/geometry 请求并返回 instances
+```
+
+而修 `closeCompare` 之前同一条流程：`browseLayerReady` 在 30 s 内变 `true` 又变回 `false`，
+`history/geometry` **一个请求都没发**，只有 `diff-summary(684,686)` 反复重试——与「图层被清掉」
+完全吻合。
+
+#### 修完后的实测
+
+```
+12.3 worst 1642 ms（预算 3000） 1521,1541,1642,1620,1608,1573,1584,1592,1589,1601
+```
+
+10 个样本 **1 521–1 642 ms**，全部通过，且比修之前那批（2 084–2 457 ms）快约 0.5 s——因为不再
+有空转重试。证据：`perf/12.3-cold-step.json`（`measuredCount: 10`、`budgetMs: 3000`）。
+
+#### 顺带修掉的两条测量缺陷
+
+1. **`stepOnce` 会量出负时长**（实测 -55 / -53 ms）。它只判「页面里存在该 sesno 的 mark」，
+   来回走同一对版本时上一趟的 mark 还在 `performance` 缓冲里，`startTime` 早于本次起点。
+   改成记下按键前的条数、只认**新增**的那条。
+2. **`waitBrowseReady` 的错误文案写死「150 s」**，掩盖了真实失败点（实际可能是 30 s 的
+   `browseLayerReady` 检查先失败）。改成分别报「browseLayerReady 30 s 未变 true」与
+   「frame-shown 120 s 未出现（等 sesno ∈ {...}）」。
+
+#### 另外两条已确认但本次未改的缺陷（记在这里免得重查）
+
+1. **`ensureGeometryForGeoHash` 的 `fetch(meshUrl)` 没有 timeout、没有 abort signal**
+   （`src/composables/useDbnoInstancesDtxLoader.ts:536`）。连接挂住就永久等；404 或非 `ok`
+   → 判 `missing` → 在 `replaceExistingObjects: true` 下走到 `:1211` 抛异常，成为未处理的
+   rejection。
+2. **子树路径（`loadUnits` / `fetchUnitAt`，`useVersionFrames.ts:633-648`）从不登记 `inFlight`、
+   从不发 `If-None-Match`、静默忽略非 `'ok'` 结果**。所以子树模式下 `inFlight` 恒为 0，
+   不能用它判断「有没有在跑」。
+
+> 早先怀疑的「`unitRefnos` 与 `plan.units` 两套集合分歧」在本夹具上不成立：`diff-summary(212,213)`
+> 只有 1 个单元（`24384/23257`），两个集合恰好一致。它是设计上的隐患（面板用 A/B 钉算、
+> `requestSubtreeFrame` 用 cursor/latest 重算），但不是 12.3 这次超时的原因。
 
 ### 12.6 / 12.7 连续 10 分钟拖动 —— **通过**
 
