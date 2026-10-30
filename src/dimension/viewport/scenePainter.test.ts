@@ -43,6 +43,37 @@ function layout(
   };
 }
 
+/**
+ * Every vertex attribute of one of the painter's meshes, as plain arrays, so
+ * two painters can be compared bit for bit (W5-5 分帧等价性).
+ */
+function snapshotAttributes(
+  painter: ThreeSceneDimensionPainter,
+  meshName: string,
+): Record<string, number[]> {
+  const mesh = painter.group.getObjectByName(meshName) as any;
+  const geometry = mesh.geometry;
+  const snapshot: Record<string, number[]> = {};
+  for (const name of Object.keys(geometry.attributes)) {
+    snapshot[name] = Array.from(geometry.getAttribute(name).array as Float32Array);
+  }
+  return snapshot;
+}
+
+/**
+ * How many vertices a mesh actually draws, i.e. what `finish()` publishes.
+ * Reading `position.length` would only give the buffer's capacity, which
+ * `ensureCapacity` sizes ahead of the write (W5-5 分帧).
+ */
+function publishedVertexCount(
+  painter: ThreeSceneDimensionPainter,
+  meshName: string,
+): number {
+  const mesh = painter.group.getObjectByName(meshName) as any;
+  const { count, start } = mesh.geometry.drawRange;
+  return count === Infinity ? 0 : count + start;
+}
+
 const primitives: readonly ScenePrimitive[] = [
   {
     kind: 'scene-line',
@@ -149,6 +180,74 @@ describe('ThreeSceneDimensionPainter', () => {
       expect(profile[key]).toBeGreaterThanOrEqual(0);
       expect(Number.isFinite(profile[key])).toBe(true);
     }
+  });
+
+  /**
+   * W5-5 分帧：`paintAsync` 只是把线写入拆成多批，几何必须与同步 `paint()`
+   * 逐位相同——这是分帧唯一可以接受的正确性标准。同时钉住「`finish()` 之前
+   * 不发布」与「`cancel()` 不破坏已发布几何」。
+   */
+  it('batches the same vertices as the synchronous paint, publishing only on finish', () => {
+    const layouts = Array.from({ length: 40 }, (_, index) =>
+      layout(`dimension-${index}`, primitives));
+
+    const synchronous = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    synchronous.resize(800, 600);
+    synchronous.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    const expectedLines = snapshotAttributes(synchronous, 'dimension-scene-lines');
+    const expectedTriangles = snapshotAttributes(synchronous, 'dimension-scene-arrows');
+    const expectedFills = snapshotAttributes(synchronous, 'dimension-scene-fills');
+    const expectedStats = synchronous.getStats();
+
+    const batched = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    batched.resize(800, 600);
+    const job = batched.paintAsync(layouts, SOLVESPACE_DIMENSION_THEME);
+    expect(job.remaining()).toBe(40);
+
+    // Before any batch: the buffer exists but draws nothing.
+    expect(publishedVertexCount(batched, 'dimension-scene-lines')).toBe(0);
+
+    // Advance in awkward batch sizes, including a size that does not divide 40.
+    let done = false;
+    let advances = 0;
+    while (!done) {
+      done = job.advance(7);
+      advances += 1;
+      if (!done) {
+        // Mid-job the buffer must still draw nothing.
+        expect(publishedVertexCount(batched, 'dimension-scene-lines')).toBe(0);
+      }
+    }
+    expect(advances).toBe(6); // ceil(40 / 7)
+    // Still nothing drawn until finish().
+    expect(publishedVertexCount(batched, 'dimension-scene-lines')).toBe(0);
+
+    job.finish();
+
+    expect(batched.getStats()).toEqual(expectedStats);
+    expect(snapshotAttributes(batched, 'dimension-scene-lines')).toEqual(expectedLines);
+    expect(snapshotAttributes(batched, 'dimension-scene-arrows')).toEqual(expectedTriangles);
+    expect(snapshotAttributes(batched, 'dimension-scene-fills')).toEqual(expectedFills);
+  });
+
+  it('leaves the published geometry untouched when a batched paint is cancelled', () => {
+    const layouts = Array.from({ length: 20 }, (_, index) =>
+      layout(`dimension-${index}`, primitives));
+
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    const publishedLines = snapshotAttributes(painter, 'dimension-scene-lines');
+    const publishedStats = painter.getStats();
+
+    const job = painter.paintAsync(layouts, SOLVESPACE_DIMENSION_THEME);
+    job.advance(5);
+    job.cancel();
+    job.finish();
+
+    // The cancelled job never published, so the last good frame is intact.
+    expect(painter.getStats()).toEqual(publishedStats);
+    expect(snapshotAttributes(painter, 'dimension-scene-lines')).toEqual(publishedLines);
   });
 
   it('fans a scene fill into the fills mesh under the strokes, in the tag tone colour', () => {

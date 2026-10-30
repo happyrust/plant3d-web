@@ -931,6 +931,23 @@ export type SceneDimensionPaintProfile = Readonly<{
   segmentsByKind: Readonly<Record<string, number>>;
 }>;
 
+/**
+ * A `paint()` split across animation frames (W5-5). `advance()` writes one
+ * batch of layouts per call; `finish()` publishes the geometry once every
+ * batch is in. Nothing becomes visible before `finish()`, so a partially
+ * written buffer is never drawn.
+ */
+export type SceneDimensionPaintJob = Readonly<{
+  /** Layouts still waiting to be written. */
+  remaining(): number;
+  /** Writes up to `batchLayouts` layouts; true once all are written. */
+  advance(batchLayouts?: number): boolean;
+  /** Publishes the buffers. Only valid after `advance()` returned true. */
+  finish(): void;
+  /** Abandons the job, leaving the published geometry untouched. */
+  cancel(): void;
+}>;
+
 type DimensionVertexRange = Readonly<{
   lineStart: number;
   lineEnd: number;
@@ -1132,86 +1149,17 @@ export class ThreeSceneDimensionPainter {
     const lineAlpha = this.lineBuffers.array('batchAlpha');
     const lineDashCode = this.lineBuffers.array('dashCode');
     const resolveColor = createColorResolver(theme);
-    const pixelRatio = this.pixelRatio.value;
-    const writeStrokeVertex = (
-      vertexIndex: number,
-      own: SceneVertex,
-      other: SceneVertex,
-      segmentT: 0 | 1,
-      side: -1 | 1,
-      widthPx: number,
-      layer: 0 | 1,
-      snap: 0 | 1,
-      color: readonly [number, number, number],
-      alpha: number,
-      code: number,
-    ): void => {
-      writeVec3(linePosition, vertexIndex, own.anchor);
-      writeVec2(lineOffset, vertexIndex, own.offsetPx);
-      writeVec3(lineOtherAnchor, vertexIndex, other.anchor);
-      writeVec2(lineOtherOffset, vertexIndex, other.offsetPx);
-      lineSegmentT[vertexIndex] = segmentT;
-      lineSide[vertexIndex] = side;
-      lineStrokeWidth[vertexIndex] = widthPx;
-      lineStrokeLayer[vertexIndex] = layer;
-      linePixelSnap[vertexIndex] = snap;
-      writeVec3(lineColor, vertexIndex, color);
-      lineAlpha[vertexIndex] = alpha;
-      lineDashCode[vertexIndex] = code;
-    };
 
     const ranges = new Map<string, DimensionVertexRange>();
-    let lineVertexIndex = 0;
-    for (const layout of layouts) {
-      const lineStart = lineVertexIndex;
-      const alpha = layoutAlpha(layout, theme, displayMode);
-      visitSegments(
-        [layout],
-        this.font,
-        this.glyphCaches,
-        (from, to, styleRole, lineStyle, stroke, hint) => {
-          const code = dashCode(styleRole, lineStyle);
-          const color = resolveColor(styleRole, stroke);
-          // Screen-space text and dimension strokes are hinted: whole device
-          // pixels wide, axis-aligned stems snapped to the grid in the vertex
-          // shader (ADR 0064).
-          const snap = hint ? 1 : 0;
-          const nominalWidthPx = strokeWidthPx(theme, stroke);
-          const widthPx = hint === 'text'
-            ? hintedTextStrokeWidthPx(nominalWidthPx, pixelRatio)
-            : hint === 'line'
-              ? hintedLineStrokeWidthPx(nominalWidthPx, pixelRatio)
-              : nominalWidthPx;
-          // The 3D-text halo sits on the farther depth layer so the glyph
-          // strokes drawn over it pass the depth test.
-          const layer = stroke === 'halo-3d' ? 1 : 0;
-          // The screen normal flips with the projected direction, so the
-          // vertices at the far end negate `side` to stay on the same
-          // world-space edge of the quad.
-          writeStrokeVertex(
-            lineVertexIndex, from, to, 0, -1, widthPx, layer, snap, color, alpha, code,
-          );
-          writeStrokeVertex(
-            lineVertexIndex + 1, from, to, 0, 1, widthPx, layer, snap, color, alpha, code,
-          );
-          writeStrokeVertex(
-            lineVertexIndex + 2, to, from, 1, 1, widthPx, layer, snap, color, alpha, code,
-          );
-          writeStrokeVertex(
-            lineVertexIndex + 3, to, from, 1, -1, widthPx, layer, snap, color, alpha, code,
-          );
-          lineVertexIndex += 4;
-        },
-      );
-      ranges.set(layout.dimensionId, {
-        lineStart,
-        lineEnd: lineVertexIndex,
-        triangleStart: 0,
-        triangleEnd: 0,
-        fillStart: 0,
-        fillEnd: 0,
-      });
-    }
+    this.writeLineVertices(
+      layouts,
+      0,
+      layouts.length,
+      0,
+      theme,
+      displayMode,
+      ranges,
+    );
     this.lineBuffers.finish(lineVertexCount);
     this.lineVertexCount = lineVertexCount;
     const writeCompletedAt = profiling ? performance.now() : 0;
@@ -1310,6 +1258,305 @@ export class ThreeSceneDimensionPainter {
         segmentsByKind,
       });
     }
+  }
+
+  /**
+   * Starts a `paint()` that writes its line vertices in batches instead of
+   * one long block (W5-5). Only the line pass is split: it is 93% of the
+   * cost, while arrows and tag fills together are under 4%.
+   *
+   * The caller drives it, one `advance()` per animation frame, and calls
+   * `finish()` once `advance()` reports completion. **Nothing is published
+   * before `finish()`**, so a partially written buffer must never be
+   * rendered — the caller has to hold off `requestRender()` until then.
+   * That is safe here because the host renders on demand rather than on a
+   * loop; see plan §11.3.5.
+   *
+   * `cancel()` leaves the published geometry exactly as it was, so an
+   * abandoned job cannot corrupt the last good frame.
+   */
+  paintAsync(
+    layouts: readonly LayoutResult[],
+    theme: DimensionTheme,
+    displayMode: DimensionDisplayMode = 'engineering',
+  ): SceneDimensionPaintJob {
+    if (this.disposed) {
+      // 已销毁：给一个什么都不做的作业，调用方不必区分。
+      return {
+        remaining: () => 0,
+        advance: () => true,
+        finish: () => { /* 没有可发布的几何 */ },
+        cancel: () => { /* 没有待放弃的写入 */ },
+      };
+    }
+
+    let segmentCount = 0;
+    for (const layout of layouts) {
+      for (const primitive of layout.scenePrimitives) {
+        segmentCount += countPrimitiveSegments(
+          primitive,
+          this.font,
+          this.glyphCaches,
+        );
+      }
+    }
+    const lineVertexCount = segmentCount * 4;
+    if (this.lineBuffers.ensureCapacity(lineVertexCount)) {
+      this.lines.geometry = this.lineBuffers.geometry;
+      this.lineEdges.geometry = this.lineBuffers.geometry;
+    }
+
+    const ranges = new Map<string, DimensionVertexRange>();
+    let written = 0;
+    let lineVertexIndex = 0;
+    let cancelled = false;
+    let finished = false;
+
+    return {
+      remaining: () => layouts.length - written,
+      advance: (batchLayouts = 64) => {
+        if (cancelled || finished) return true;
+        const count = Math.max(1, Math.floor(batchLayouts));
+        const to = Math.min(layouts.length, written + count);
+        lineVertexIndex = this.writeLineVertices(
+          layouts,
+          written,
+          to,
+          lineVertexIndex,
+          theme,
+          displayMode,
+          ranges,
+        );
+        written = to;
+        return written >= layouts.length;
+      },
+      finish: () => {
+        if (cancelled || finished) return;
+        finished = true;
+        this.publishLineBatch(
+          layouts,
+          lineVertexCount,
+          ranges,
+          theme,
+          displayMode,
+        );
+      },
+      cancel: () => {
+        cancelled = true;
+      },
+    };
+  }
+
+  /**
+   * Ends a batched paint: finishes the line buffer, then writes the two cheap
+   * passes (arrows, tag fills) and publishes the ranges. Split out of
+   * `paintAsync` only to keep that method readable.
+   */
+  private publishLineBatch(
+    layouts: readonly LayoutResult[],
+    lineVertexCount: number,
+    ranges: Map<string, DimensionVertexRange>,
+    theme: DimensionTheme,
+    displayMode: DimensionDisplayMode,
+  ): void {
+    this.lineBuffers.finish(lineVertexCount);
+    this.lineVertexCount = lineVertexCount;
+
+    const resolveColor = createColorResolver(theme);
+
+    let triangleVertexCount = 0;
+    for (const layout of layouts) {
+      for (const primitive of layout.scenePrimitives) {
+        if (primitive.kind === 'scene-triangle') triangleVertexCount += 3;
+      }
+    }
+    if (this.triangleBuffers.ensureCapacity(triangleVertexCount)) {
+      this.triangles.geometry = this.triangleBuffers.geometry;
+    }
+    const trianglePosition = this.triangleBuffers.array('position');
+    const triangleOffset = this.triangleBuffers.array('offsetPx');
+    const triangleColor = this.triangleBuffers.array('batchColor');
+    const triangleAlpha = this.triangleBuffers.array('batchAlpha');
+    let triangleVertexIndex = 0;
+    for (const layout of layouts) {
+      const triangleStart = triangleVertexIndex;
+      const alpha = layoutAlpha(layout, theme, displayMode);
+      for (const primitive of layout.scenePrimitives) {
+        if (primitive.kind !== 'scene-triangle') continue;
+        const color = resolveColor(primitive.styleRole, undefined);
+        for (const point of primitive.points) {
+          writeVec3(trianglePosition, triangleVertexIndex, point.anchor);
+          writeVec2(triangleOffset, triangleVertexIndex, point.offsetPx);
+          writeVec3(triangleColor, triangleVertexIndex, color);
+          triangleAlpha[triangleVertexIndex] = alpha;
+          triangleVertexIndex += 1;
+        }
+      }
+      const lineRange = ranges.get(layout.dimensionId)!;
+      ranges.set(layout.dimensionId, {
+        ...lineRange,
+        triangleStart,
+        triangleEnd: triangleVertexIndex,
+      });
+    }
+    this.triangleBuffers.finish(triangleVertexCount);
+    this.triangleVertexCount = triangleVertexCount;
+
+    let fillVertexTotal = 0;
+    for (const layout of layouts) {
+      for (const primitive of layout.scenePrimitives) {
+        if (primitive.kind === 'scene-fill') {
+          fillVertexTotal += fillVertexCount(primitive.points.length);
+        }
+      }
+    }
+    if (this.fillBuffers.ensureCapacity(fillVertexTotal)) {
+      this.fills.geometry = this.fillBuffers.geometry;
+    }
+    const fillPosition = this.fillBuffers.array('position');
+    const fillOffset = this.fillBuffers.array('offsetPx');
+    const fillColor = this.fillBuffers.array('batchColor');
+    const fillAlpha = this.fillBuffers.array('batchAlpha');
+    let fillVertexIndex = 0;
+    for (const layout of layouts) {
+      const fillStart = fillVertexIndex;
+      const alpha = layoutAlpha(layout, theme, displayMode);
+      for (const primitive of layout.scenePrimitives) {
+        if (primitive.kind !== 'scene-fill') continue;
+        const color = resolveColor(primitive.styleRole, primitive.tone);
+        const [first, ...rest] = primitive.points;
+        for (let index = 1; index < rest.length; index += 1) {
+          for (const point of [first!, rest[index - 1]!, rest[index]!]) {
+            writeVec3(fillPosition, fillVertexIndex, point.anchor);
+            writeVec2(fillOffset, fillVertexIndex, point.offsetPx);
+            writeVec3(fillColor, fillVertexIndex, color);
+            fillAlpha[fillVertexIndex] = alpha;
+            fillVertexIndex += 1;
+          }
+        }
+      }
+      const range = ranges.get(layout.dimensionId)!;
+      ranges.set(layout.dimensionId, {
+        ...range,
+        fillStart,
+        fillEnd: fillVertexIndex,
+      });
+    }
+    this.fillBuffers.finish(fillVertexTotal);
+    this.fillVertexCount = fillVertexTotal;
+    this.dimensionRanges = ranges;
+  }
+
+  /**
+   * Writes the line vertices of `layouts[from..to)` into the line buffers,
+   * starting at `startVertex`. Returns the vertex index after the last one
+   * written, plus the ranges for the layouts it covered. Shared by the
+   * synchronous `paint()` and the batched `paintAsync()` so both produce
+   * bit-identical vertices (W5-5).
+   */
+  private writeLineVertices(
+    layouts: readonly LayoutResult[],
+    from: number,
+    to: number,
+    startVertex: number,
+    theme: DimensionTheme,
+    displayMode: DimensionDisplayMode,
+    ranges: Map<string, DimensionVertexRange>,
+  ): number {
+    const linePosition = this.lineBuffers.array('position');
+    const lineOffset = this.lineBuffers.array('offsetPx');
+    const lineOtherAnchor = this.lineBuffers.array('otherAnchor');
+    const lineOtherOffset = this.lineBuffers.array('otherOffsetPx');
+    const lineSegmentT = this.lineBuffers.array('segmentT');
+    const lineSide = this.lineBuffers.array('side');
+    const lineStrokeWidth = this.lineBuffers.array('strokeWidthPx');
+    const lineStrokeLayer = this.lineBuffers.array('strokeLayer');
+    const linePixelSnap = this.lineBuffers.array('pixelSnap');
+    const lineColor = this.lineBuffers.array('batchColor');
+    const lineAlpha = this.lineBuffers.array('batchAlpha');
+    const lineDashCode = this.lineBuffers.array('dashCode');
+    const resolveColor = createColorResolver(theme);
+    const pixelRatio = this.pixelRatio.value;
+    const writeStrokeVertex = (
+      vertexIndex: number,
+      own: SceneVertex,
+      other: SceneVertex,
+      segmentT: 0 | 1,
+      side: -1 | 1,
+      widthPx: number,
+      layer: 0 | 1,
+      snap: 0 | 1,
+      color: readonly [number, number, number],
+      alpha: number,
+      code: number,
+    ): void => {
+      writeVec3(linePosition, vertexIndex, own.anchor);
+      writeVec2(lineOffset, vertexIndex, own.offsetPx);
+      writeVec3(lineOtherAnchor, vertexIndex, other.anchor);
+      writeVec2(lineOtherOffset, vertexIndex, other.offsetPx);
+      lineSegmentT[vertexIndex] = segmentT;
+      lineSide[vertexIndex] = side;
+      lineStrokeWidth[vertexIndex] = widthPx;
+      lineStrokeLayer[vertexIndex] = layer;
+      linePixelSnap[vertexIndex] = snap;
+      writeVec3(lineColor, vertexIndex, color);
+      lineAlpha[vertexIndex] = alpha;
+      lineDashCode[vertexIndex] = code;
+    };
+
+    let lineVertexIndex = startVertex;
+    for (let index = from; index < to; index += 1) {
+      const layout = layouts[index]!;
+      const lineStart = lineVertexIndex;
+      const alpha = layoutAlpha(layout, theme, displayMode);
+      visitSegments(
+        [layout],
+        this.font,
+        this.glyphCaches,
+        (segmentFrom, segmentTo, styleRole, lineStyle, stroke, hint) => {
+          const code = dashCode(styleRole, lineStyle);
+          const color = resolveColor(styleRole, stroke);
+          // Screen-space text and dimension strokes are hinted: whole device
+          // pixels wide, axis-aligned stems snapped to the grid in the vertex
+          // shader (ADR 0064).
+          const snap = hint ? 1 : 0;
+          const nominalWidthPx = strokeWidthPx(theme, stroke);
+          const widthPx = hint === 'text'
+            ? hintedTextStrokeWidthPx(nominalWidthPx, pixelRatio)
+            : hint === 'line'
+              ? hintedLineStrokeWidthPx(nominalWidthPx, pixelRatio)
+              : nominalWidthPx;
+          // The 3D-text halo sits on the farther depth layer so the glyph
+          // strokes drawn over it pass the depth test.
+          const layer = stroke === 'halo-3d' ? 1 : 0;
+          // The screen normal flips with the projected direction, so the
+          // vertices at the far end negate `side` to stay on the same
+          // world-space edge of the quad.
+          writeStrokeVertex(
+            lineVertexIndex, segmentFrom, segmentTo, 0, -1, widthPx, layer, snap, color, alpha, code,
+          );
+          writeStrokeVertex(
+            lineVertexIndex + 1, segmentFrom, segmentTo, 0, 1, widthPx, layer, snap, color, alpha, code,
+          );
+          writeStrokeVertex(
+            lineVertexIndex + 2, segmentTo, segmentFrom, 1, 1, widthPx, layer, snap, color, alpha, code,
+          );
+          writeStrokeVertex(
+            lineVertexIndex + 3, segmentTo, segmentFrom, 1, -1, widthPx, layer, snap, color, alpha, code,
+          );
+          lineVertexIndex += 4;
+        },
+      );
+      ranges.set(layout.dimensionId, {
+        lineStart,
+        lineEnd: lineVertexIndex,
+        triangleStart: 0,
+        triangleEnd: 0,
+        fillStart: 0,
+        fillEnd: 0,
+      });
+    }
+    return lineVertexIndex;
   }
 
   /**

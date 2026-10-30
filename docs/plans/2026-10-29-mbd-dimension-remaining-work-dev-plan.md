@@ -208,7 +208,13 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 17 | `8ae96336` | W5-4 kernel 侧：`labelPresentation: 'above'` + 不相交断言 + 行距约束 | S2 81/710、type-check 439/126、eslint 3 文件 0 |
 | 18 | `a3a0484b` | W5-5 门禁口径修正：`settle(20)` 不退化断言替换 `updateP95Ms ≤ 16` + 内核基准数字 + R9 | 门禁 1 passed (4.4s)；内核基准 p95 3.746 ms |
 | 19 | `699381fc` | R9 修复：`dimension-perf.html` 移到仓库根 + 加进 `build.rollupOptions.input`，删除 `public/` 副本 | `npm run build` 绿；dist 页指向真实 chunk；dev / preview 两档 200 |
-| 20 | 本次 | W5-5 诊断：`scenePainter.onPaintProfile` 分段计时 + `window.__dimensionPerf.paintProfile(passes)` + §11.3.2 实测分布 | painter 14/14、dimension+debug 85/746、type-check 439/126 新增 0、eslint 0 |
+| 20 | `ba80ef33` | W5-5 诊断：`scenePainter.onPaintProfile` 分段计时 + `window.__dimensionPerf.paintProfile(passes)` + §11.3.2 实测分布 | painter 14/14、dimension+debug 85/746、type-check 439/126 新增 0、eslint 0 |
+| 21 | `663a729e` | 段数按图元类型分布（字形 95.5%）+ §11.3.3 判据重述 | dimension+debug 85/746、type-check 439/126、eslint 0 |
+| 22 | `024e1959` | 消掉计数遍历：`countPrimitiveSegments` 只读缓存长度（p50 −21.2%、p95 −45.6%） | painter 14/14、门禁 1 passed（paintP95 47.20） |
+| 23 | `c893aca3` | `updateStyles` 同一类浪费一并治 | dimension 78/668 |
+| 24 | `2bbb75f0` | 分帧设计定稿：单缓冲禁渲染 + `painting` 标志 + 接线顺序 | 纯文档 |
+| 25 | `d1dd2fdd` | 生产档基线（空载三次中位数 layoutP95 18.30 / paintP95 39.40） | 纯文档 |
+| 26 | 本次 | W5-5 分帧实现：`writeLineVertices` 共用 + `paintAsync` + `painting` 守卫，3 批 | painter 16/16、viewport 12/12、dimension+debug 85/749、type-check 439/126、eslint 0、门禁 1 passed |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -408,6 +414,43 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 5. 单测钉三件事：分批后顶点内容与同步 `paint()` 逐位相同；`finish()` 之前 `dimensionRanges` 不变；`cancel()` 不改变已发布几何。
 
 **为什么还没实现**：`scenePainter.ts` 是 1 486 行的渲染核心，分帧要动 `paint()` 主体 + `dimensionViewport` 的渲染时序，而 **W5-2 / W5-3 / W5-4 的视觉 A/B 都还没做**（等后端 18084）。§11.3.1 第 2 条的理由仍然成立：现在改时序，等后端上线后一次要比对四件事（分帧、短线三档、文字在线上方、相机基线），任何像素差异都定位不到来源。**这不是排期问题，是归因问题**——设计已定稿，等视觉 A/B 的窗口。
+
+### 11.3.6 分帧已实现并通过三条判据（2026-10-30）
+
+§11.3.5 的设计已落地。
+
+**实现**：`scenePainter.ts` 把线写入抽成 `writeLineVertices(layouts, from, to, startVertex, …)`，同步 `paint()` 与新的 `paintAsync()` 共用这一份代码——这是「分批结果与同步逐位相同」的结构保证，不是靠两处逻辑对齐。`paintAsync()` 返回 `SceneDimensionPaintJob`（`advance` / `finish` / `cancel` / `remaining`）：`advance()` 每帧写一批，`finish()` 才 `finish()` 三个 buffer 并置 `dimensionRanges`。
+
+**接线**：`dimensionViewport.ts` 的 layout 分支改调 `startBatchedPaint()`，批大小 `ceil(layouts / 3)`；`painting` 为真时 `render()` 入口直接返回；新增 `requestRenderWhenPainted()`，`setProjector` 与 `setDesignToWorld` 两处直接 `requestRender` 都改走它——否则相机动一下就会把半成品画上屏。新布局到来时先 `cancelFrame` 掉在飞的旧作业（否则两批交错写同一缓冲）。
+
+**实测（dev 档，`paintFramed(10, batches)`，2 000 可见，每批单独计时）**：
+
+| 批数 | 单批 p50 | 单批 p95 | max | 整次 p50 |
+|---|---|---|---|---|
+| 2 | 15.60 | **24.00** | 24.10 | 37.70 |
+| **3** | **12.70** | **14.40** | 15.60 | 36.20 |
+| 4 | 9.60 | 10.40 | 12.80 | 35.90 |
+| 6 | 6.50 | 7.40 | 9.10 | 35.80 |
+
+**按 §11.3.3 三条判据逐项判**（取 3 批）：
+
+1. 首帧预算：单批 p95 **14.40 ms ≤ 16 ms** ✓
+2. 补齐帧数：**3 帧 ≤ 6 帧** ✓
+3. 不退化：整次 36.20 ms vs 同步 `paint()` 的 37.70 ms，**总工作量没有增加** ✓
+
+**2 批不合格**（p95 24.00 > 16），所以 3 批不是随手取的，是实测下界。再多批（4 / 6）虽然单批更小，但每多一帧就多一次 rAF 往返，而收益已经饱和（35.90 / 35.80 与 36.20 差在噪声内），因此停在 3。
+
+**单测钉住三条性质**（`scenePainter.test.ts` +2 例、`dimensionViewport.test.ts` +1 例）：
+
+- `batches the same vertices as the synchronous paint, publishing only on finish`：40 条记录、批大小 7（不整除），6 批写完；每批后 `drawRange` 仍是 0，`finish()` 后三个 mesh 的**全部顶点属性逐位等于**同步 `paint()` 的结果。
+- `leaves the published geometry untouched when a batched paint is cancelled`：`advance(5)` 后 `cancel()` 再 `finish()`，已发布几何与 `getStats()` 一字不变。
+- `does not render while a batched paint is only partly written`：分帧中途触发 `setProjector` + `flushProjection`，`requestRender` **一次都不多调**；排空后恢复。
+
+**测试设施修正**：`dimensionViewport.test.ts` 的 `flush()` 原来只跑一个回调，分帧要连跑 3 帧，改成默认排空队列（可传 `maxFrames` 观察中间态）。这是设施问题，不是实现缺陷。
+
+**门禁**：`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` → 1 passed，`paintP95Ms` 45.70。**注意探针页走的是同步 `paint()`**（`dimensionPerf.ts:243`），所以门禁数字不受分帧影响，它守的是「同步路径没退化」；分帧收益只在真实视口体现，用 `paintFramed` 单独量。
+
+**仍未做视觉 A/B**：分帧改变了绘制时序，但**像素内容应当零变化**（顶点逐位相同已由单测证明）。真实 BRAN 上的视觉确认仍要等后端 18084，与 W5-2 / W5-3 / W5-4 一起做。
 
 ### 11.3.3 W5-5 判据重述（2026-10-30 自决，动手前置条件）
 

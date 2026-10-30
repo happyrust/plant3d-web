@@ -162,6 +162,12 @@ export class DimensionViewport {
   private displayMode: DimensionDisplayMode = 'engineering';
   private cameraSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly pendingStyleIds = new Set<string>();
+  /**
+   * 分帧 paint 进行中（W5-5）。为真时几何只写了一半，**任何一帧都不能渲染**
+   * ——否则会画出只画了一部分的尺寸线。见 `render()` 入口的早退与计划 §11.3.5。
+   */
+  private painting = false;
+  private paintFrameId: number | null = null;
   private disposed = false;
 
   constructor(private readonly input: DimensionViewportInput) {
@@ -232,7 +238,7 @@ export class DimensionViewport {
       this.invalidate('camera');
       return;
     }
-    this.input.requestRender?.();
+    this.requestRenderWhenPainted();
     if (this.cameraSettleTimer !== null) {
       clearTimeout(this.cameraSettleTimer);
     }
@@ -242,9 +248,19 @@ export class DimensionViewport {
     }, 80);
   }
 
+  /**
+   * 请求重绘，但**分帧写入期间一律不发**（W5-5）：那时几何只写了一半，
+   * 任何一帧都会画出半成品。分帧收尾时会自己发一次，所以这里丢掉不会
+   * 造成画面停在旧内容上。
+   */
+  private requestRenderWhenPainted(): void {
+    if (this.painting) return;
+    this.input.requestRender?.();
+  }
+
   setDesignToWorld(matrix: Matrix4): void {
     this.scenePainter.setDesignToWorld(matrix);
-    this.input.requestRender?.();
+    this.requestRenderWhenPainted();
   }
 
   setTheme(theme: DimensionTheme): void {
@@ -454,6 +470,11 @@ export class DimensionViewport {
   dispose(): void {
     if (this.disposed) return;
     this.scheduler.dispose();
+    if (this.paintFrameId !== null) {
+      this.input.cancelFrame(this.paintFrameId);
+      this.paintFrameId = null;
+    }
+    this.painting = false;
     if (this.cameraSettleTimer !== null) {
       clearTimeout(this.cameraSettleTimer);
       this.cameraSettleTimer = null;
@@ -476,6 +497,9 @@ export class DimensionViewport {
 
   private render(reasons: ReadonlySet<DimensionViewportDirtyReason>): void {
     if (!this.projector) return;
+    // 分帧写入中：几何只写了一半，这一帧不能动（W5-5）。失效原因已经记在
+    // scheduler 的 InvalidationSet 里，分帧完成后会重新触发一次 render。
+    if (this.painting) return;
     const startedAt = performance.now();
     if (
       this.scenePainter
@@ -570,8 +594,7 @@ export class DimensionViewport {
     this.lastLayoutProjector = this.projector;
     this.hitIndex = batch.hitIndex;
     this.pendingStyleIds.clear();
-    this.scenePainter.paint(this.layouts, this.theme, this.displayMode);
-    this.input.requestRender();
+    this.startBatchedPaint();
     const completedAt = performance.now();
     this.input.onFrame?.(completedAt - startedAt, {
       layoutMs: layoutCompletedAt - startedAt,
@@ -579,5 +602,49 @@ export class DimensionViewport {
       kind: 'layout',
     });
     this.layoutListeners.forEach(listener => listener(this.layouts));
+  }
+
+  /**
+   * 把这一批布局的绘制拆到若干帧（W5-5）。每帧写一批线顶点，写完才
+   * `finish()` 发布几何并 `requestRender()`；期间 `painting` 为真，`render()`
+   * 直接早退，所以不会有半成品上屏。
+   *
+   * 批大小取 `ceil(layouts / 3)`：2k 可见下 paint 约 40 ms，3 批 ≈ 13 ms/帧，
+   * 落在计划 §11.3.3 的「首帧 ≤ 16 ms、≤ 6 帧补齐」内。布局很少时退化成
+   * 一次写完，不额外引入帧延迟。
+   */
+  private startBatchedPaint(): void {
+    // 上一次分帧还没写完就又来了新布局：旧作业必须作废，否则两批会交错
+    // 写同一块缓冲，顶点顺序就乱了。取消不动已发布几何，所以安全。
+    if (this.paintFrameId !== null) {
+      this.input.cancelFrame(this.paintFrameId);
+      this.paintFrameId = null;
+    }
+    this.painting = false;
+    const layouts = this.layouts;
+    const job = this.scenePainter.paintAsync(
+      layouts,
+      this.theme,
+      this.displayMode,
+    );
+    if (job.remaining() === 0) {
+      job.finish();
+      this.input.requestRender();
+      return;
+    }
+    const batchLayouts = Math.max(1, Math.ceil(layouts.length / 3));
+    this.painting = true;
+    const step = (): void => {
+      this.paintFrameId = null;
+      if (this.disposed) return;
+      if (!job.advance(batchLayouts)) {
+        this.paintFrameId = this.input.requestFrame(step);
+        return;
+      }
+      job.finish();
+      this.painting = false;
+      this.input.requestRender();
+    };
+    this.paintFrameId = this.input.requestFrame(step);
   }
 }

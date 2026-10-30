@@ -54,6 +54,16 @@ type PaintProfileResult = {
   fillsMs: { p50: number; p95: number };
 };
 
+/** `paintFramed(passes, batches)` 的读数：分帧后每批耗时（W5-5 诊断）。 */
+type FramedPaintResult = {
+  passes: number;
+  batches: number;
+  batchP50Ms: number;
+  batchP95Ms: number;
+  batchMaxMs: number;
+  totalP50Ms: number;
+};
+
 declare global {
   interface Window {
     __dimensionPerf?: {
@@ -65,6 +75,11 @@ declare global {
        * 各段的分位。用来决定分帧该切哪一刀，不改渲染行为。
        */
       paintProfile(passes?: number): PaintProfileResult;
+      /**
+       * W5-5 诊断：把 paint 拆成 `batches` 批跑一次，返回每批耗时与总计。
+       * 用来验证分帧后单批是否落进 16 ms 预算——不渲染，只量写入。
+       */
+      paintFramed(passes?: number, batches?: number): FramedPaintResult;
     };
     __dimensionPerfError?: string;
   }
@@ -360,6 +375,41 @@ async function main(): Promise<void> {
         writeMs: span(writeSamples),
         trianglesMs: span(triangleSamples),
         fillsMs: span(fillSamples),
+      };
+    },
+    // W5-5 诊断：量分帧后每批的实际耗时。不改渲染，只跑写入。
+    paintFramed(passes = 10, batches = 3) {
+      if (!Number.isInteger(passes) || passes <= 0) {
+        throw new RangeError(`passes must be a positive integer, got ${passes}`);
+      }
+      if (!Number.isInteger(batches) || batches <= 0) {
+        throw new RangeError(`batches must be a positive integer, got ${batches}`);
+      }
+      const batchSamples: number[] = [];
+      const totalSamples: number[] = [];
+      for (let pass = 0; pass < passes; pass += 1) {
+        const passStartedAt = performance.now();
+        const job = painter.paintAsync(layouts, SOLVESPACE_DIMENSION_THEME);
+        const perBatch = Math.max(1, Math.ceil(layouts.length / batches));
+        let batchStartedAt = performance.now();
+        while (!job.advance(perBatch)) {
+          // 每一批单独计时：这才是分帧后每帧的 paint 成本。
+          const now = performance.now();
+          batchSamples.push(now - batchStartedAt);
+          batchStartedAt = now;
+        }
+        batchSamples.push(performance.now() - batchStartedAt);
+        job.finish();
+        totalSamples.push(performance.now() - passStartedAt);
+      }
+      renderer.render(scene, camera);
+      return {
+        passes,
+        batches,
+        batchP50Ms: percentile(batchSamples, 0.5),
+        batchP95Ms: percentile(batchSamples, 0.95),
+        batchMaxMs: Math.max(...batchSamples),
+        totalP50Ms: percentile(totalSamples, 0.5),
       };
     },
   };

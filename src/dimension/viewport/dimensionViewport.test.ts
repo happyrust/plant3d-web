@@ -40,7 +40,19 @@ function createViewport() {
     cancelFrame: id => cancelled.push(id),
     requestRender,
   });
-  const flush = () => callbacks.shift()?.(performance.now());
+  /**
+   * Runs queued frames. W5-5 之后一次全量绘制要跨若干帧（分帧写线顶点），
+   * 所以默认把队列排空——每次 `requestFrame` 追加的回调也一并跑掉，直到
+   * 队列为空。传 `1` 只跑一帧，用来观察分帧中间态。
+   */
+  const flush = (maxFrames = Number.POSITIVE_INFINITY) => {
+    let frames = 0;
+    while (callbacks.length > 0 && frames < maxFrames) {
+      callbacks.shift()?.(performance.now());
+      frames += 1;
+    }
+    return frames;
+  };
   return {
     callbacks,
     cancelled,
@@ -234,6 +246,38 @@ describe('DimensionViewport', () => {
     expect(harness.viewport.getLayouts().map(layout => layout.dimensionId))
       .toEqual(['linear-1']);
     expect(harness.requestRender).toHaveBeenCalled();
+  });
+
+  /**
+   * W5-5 分帧的硬约束：写一半的缓冲绝不能被渲染。这里只跑第一帧，然后
+   * 在分帧进行中触发一次相机失效，确认 `render()` 早退、不调 `requestRender`
+   * ——否则那一帧会画出只画了一部分的尺寸线。
+   */
+  it('does not render while a batched paint is only partly written', () => {
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+    harness.flush();
+
+    const rendersAfterFirstPaint = harness.requestRender.mock.calls.length;
+    expect(rendersAfterFirstPaint).toBeGreaterThan(0);
+
+    // Start a fresh paint and stop after its first batch.
+    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+    harness.flush(1);
+
+    // Mid-paint: a camera invalidation must not reach the renderer.
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.flushProjection();
+
+    expect(harness.requestRender.mock.calls.length).toBe(rendersAfterFirstPaint);
+
+    // Draining the remaining batches publishes and renders again.
+    harness.flush();
+    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(
+      rendersAfterFirstPaint,
+    );
   });
 
   it('relayouts on a camera flush when the projector instance changed', () => {
