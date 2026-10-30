@@ -71,7 +71,7 @@
     - 调用方在 `spawn_blocking` 里运行它
     - _Requirements: 6.1, 6.8, 6.9, 6.14, 6.15_
 
-- [ ] 4. 时间点解析（`fast_model/time_resolve.rs`）
+- [x] 4. 时间点解析（`fast_model/time_resolve.rs`）
   - [x] 4.1 实现 `select_latest_at`、`parse_instant`、`resolve_at_rows`
     - 链序规则：从 sesno 最大的行往前，跳过无时间行，取第一个秒级 Session_Time ≤ t 的行；没有带时间的行为 `NoResolvable`，都晚于 t 为 `BeforeOldest`；无偏移的 t 按链序中第一条带时间行的偏移解释
     - 现有 `select_session_at` 改成 `select_latest_at(&chain.sessions, |s| s.time, at)` 的薄包装，Legacy `generate` 行为不变
@@ -91,7 +91,7 @@
     - 读 `docs/fixtures/version-time-resolve-cases.json`，`resolve_at_rows` 与 `select_session_at` 包装逐条对拍；现有 `select_session_at` 单元测试保持通过
     - _Requirements: 8.1, 8.10, 10.2_
 
-- [ ] 5. 实时查询纯逻辑（`fast_model/realtime_history/` 子模块）
+- [x] 5. 实时查询纯逻辑（`fast_model/realtime_history/` 子模块）
   - [x] 5.1 实现参数校验 `realtime_history/validate.rs`
     - 参数以 `Option<String>` 接收，自己裁决；缺 `dbnum` / `unit_refno` → 400 `INVALID_FIELD`（`detail.field`）；refno 不是两个正整数以 `_` 或 `/` 连接，或 `refno.dbno() != dbnum` → 400 `INVALID_REFNO`
     - `sesno` 与 `time` 恰好一个，`sesno` ∈ [1, 2³¹−1]，`time` 走 `parse_instant`；失败 400 `INVALID_SELECTOR`，`detail.params` 列出无效参数名
@@ -133,7 +133,7 @@
     - `OwnedSemaphorePermit` 随计算闭包移进阻塞线程，计算真正停下时释放
     - _Requirements: 6.17, 7.1, 7.5_
 
-- [ ] 6. 路由、属性时点与 `/health`
+- [x] 6. 路由、属性时点与 `/health`
   - [x] 6.1 实现编排 `realtime_history/mod.rs::query_realtime`
     - 按 design §1.2 的 1–8 步：校验 → 会话解析（`sesno` 查会话链，`time` 用该单元「仅自身」版本表走 `resolve_at_rows`）→ 指纹与缓存（命中不占名额，按 `If-None-Match` 回 304 或 200）→ 并发闸 → `spawn_blocking` 计算 → 超时 504 → 写缓存
     - 计算段：根不在索引走 `classify_absent`；noun 不在 `delivery_unit_types` 复用 Legacy 判定回 422 `NOT_A_DELIVERY_UNIT_ROOT`；`LimitExceeded` 回 413；`project_historical_records` → 按 `record_id` 去重留最后一条 → 按 `(source_refno, record_id)` 排序 → `instance_json` / `tube_json` 去 `snapshot_key` → 摘要 → 拼响应体（含 `stats`）
@@ -184,7 +184,7 @@
     - `attributes-at` 三种错误、resolve 404 `NODE_NOT_FOUND` 与 422 `NO_RESOLVABLE_SESSION`、实时 `time` 选择器 422 `NO_RESOLVABLE_SESSION`、`REFNO_NOT_IN_CHAIN` 404、越界配置回落
     - _Requirements: 6.3, 6.4, 6.5, 6.7, 6.8, 6.9, 6.13, 6.14, 8.5, 8.6_
 
-- [ ] 7. 阶段 1 集成验证脚本（rocksdb 档 8022）
+- [x] 7. 阶段 1 集成验证脚本（rocksdb 档 8022）
   - [x] 7.1 编写 `scripts/verify/realtime-history-smoke.ps1`
     - 把 design.md「阶段 1 后端集成验证」的 curl 清单落成脚本：版本表计数（版本数 ≥ 25、几何变化 ≥ 5，供 Requirement 12 前提）、实时几何与耗时、缓存命中字节相同（`fc.exe /b`）、304、`time` 选择器与 resolve 的 sesno 一致（含一个时间倒退会话的时间点）、错误码、`--max-time 1` 断开后每 0.5 s 采 `in_flight` 回落、快照数不变、带 `Origin` 时能读到 `Access-Control-Expose-Headers`
     - 输出命令、节点、sesno、返回与通过 / 不通过到 `docs/verification/`
@@ -208,7 +208,7 @@
 
 ### 阶段 2：plant3d-web（前端）— 纯函数
 
-- [ ] 9. 依赖、端口类型、刻度排布与格式化
+- [x] 9. 依赖、端口类型、刻度排布与格式化
   - [x] 9.1 新增 devDependency `fast-check`
     - `npm install -D fast-check`，同步更新 `package-lock.json`
     - 属性测试文件命名 `*.property.test.ts`，标签 `// Feature: model-version-timeline-scrub, Property N: …`，`{ numRuns: 100 }`
@@ -541,7 +541,7 @@
 
 ### 阶段 3：联调与性能
 
-- [ ] 17. 性能测量脚本
+- [x] 17. 性能测量脚本
   - [x] 17.1 加性能测量埋点
     - 在 `modelUnitCompareController` 首帧渲染完成且角标更新后打 `performance.mark('version-scrub:frame-shown', { detail: { sesno } })`，角标更新单独打一个 mark；在 `useVersionFrames` 暴露只读的调试读数（前端缓存键数、进行中请求数），供脚本读取
     - 埋点不改变行为，生产构建可保留
