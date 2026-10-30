@@ -605,13 +605,7 @@ export class DimensionViewport {
     this.lastLayoutProjector = this.projector;
     this.hitIndex = batch.hitIndex;
     this.pendingStyleIds.clear();
-    this.startBatchedPaint();
-    const completedAt = performance.now();
-    this.input.onFrame?.(completedAt - startedAt, {
-      layoutMs: layoutCompletedAt - startedAt,
-      paintMs: completedAt - layoutCompletedAt,
-      kind: 'layout',
-    });
+    this.startBatchedPaint(startedAt, layoutCompletedAt);
     this.layoutListeners.forEach(listener => listener(this.layouts));
   }
 
@@ -623,8 +617,12 @@ export class DimensionViewport {
    * 批大小取 `ceil(layouts / 3)`：2k 可见下 paint 约 40 ms，3 批 ≈ 13 ms/帧，
    * 落在计划 §11.3.3 的「首帧 ≤ 16 ms、≤ 6 帧补齐」内。布局很少时退化成
    * 一次写完，不额外引入帧延迟。
+   *
+   * `onFrame` 在**最后一批写完后**才上报，`paintMs` 是首帧起点到最后一批的
+   * 总耗时——不是第一批的耗时。分帧把成本摊到多帧，但 W4-1 的 recorder 要的
+   * 是「这次全量绘制总共花了多少」，报第一批会让基线低估数倍。
    */
-  private startBatchedPaint(): void {
+  private startBatchedPaint(frameStartedAt: number, layoutCompletedAt: number): void {
     // 上一次分帧还没写完就又来了新布局：旧作业必须作废，否则两批会交错
     // 写同一块缓冲，顶点顺序就乱了。取消不动已发布几何，所以安全。
     if (this.paintFrameId !== null) {
@@ -641,9 +639,18 @@ export class DimensionViewport {
       this.theme,
       this.displayMode,
     );
+    const report = (): void => {
+      const completedAt = performance.now();
+      this.input.onFrame?.(completedAt - frameStartedAt, {
+        layoutMs: layoutCompletedAt - frameStartedAt,
+        paintMs: completedAt - layoutCompletedAt,
+        kind: 'layout',
+      });
+    };
     if (job.remaining() === 0) {
       job.finish();
       this.input.requestRender();
+      report();
       return;
     }
     const batchLayouts = Math.max(1, Math.ceil(layouts.length / 3));
@@ -659,6 +666,7 @@ export class DimensionViewport {
       this.painting = false;
       this.replayDeferredReasons();
       this.input.requestRender();
+      report();
     };
     this.paintFrameId = this.input.requestFrame(step);
   }

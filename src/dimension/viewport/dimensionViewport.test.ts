@@ -17,6 +17,7 @@ import { layoutViewport } from '../kernel/viewport/layoutViewport';
 
 import { DimensionViewport } from './dimensionViewport';
 
+import type { DimensionFrameBreakdown } from './dimensionViewport';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
 vi.mock('../kernel/viewport/layoutViewport', async (importOriginal) => {
@@ -26,7 +27,9 @@ vi.mock('../kernel/viewport/layoutViewport', async (importOriginal) => {
     layoutViewport: vi.fn(actual.layoutViewport),
   };
 });
-function createViewport() {
+function createViewport(
+  onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void,
+) {
   const callbacks: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
   const requestRender = vi.fn();
@@ -40,6 +43,7 @@ function createViewport() {
     },
     cancelFrame: id => cancelled.push(id),
     requestRender,
+    ...(onFrame ? { onFrame } : {}),
   });
   /**
    * Runs queued frames. W5-5 之后一次全量绘制要跨若干帧（分帧写线顶点），
@@ -326,6 +330,47 @@ describe('DimensionViewport', () => {
     const lastCall = vi.mocked(layoutViewport).mock.calls.at(-1)!;
     expect((lastCall[1] as { theme: { textHeightPx: number } }).theme.textHeightPx)
       .toBe(themed.textHeightPx);
+  });
+
+  /**
+   * W5-5 分帧后，一次全量绘制的成本散在若干帧里。`onFrame` 若只报第一批，
+   * W4-1 的 recorder 会把 paint 低估数倍，基线直接失真。这里用可控时钟钉住
+   * 「报的是全部批次」：每跑一帧时间前进 10 ms，3 批就应当报出 ≈30 ms，
+   * 而不是第一批的 10 ms。
+   */
+  it('reports the whole batched paint cost, not just the first batch', () => {
+    const records = Array.from({ length: 12 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, index * 0.5, 0]),
+    }));
+    const frames: DimensionFrameBreakdown[] = [];
+    const harness = createViewport((_durationMs, breakdown) => {
+      frames.push(breakdown);
+    });
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument(records));
+
+    // Controllable clock: every frame costs exactly 10 ms.
+    let clock = 0;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const tick = (): void => { clock += 10; };
+    try {
+      // Drive the frames by hand so each one advances the clock.
+      let guard = 0;
+      while (harness.callbacks.length > 0 && guard < 20) {
+        tick();
+        harness.flush(1);
+        guard += 1;
+      }
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    const layoutFrames = frames.filter(frame => frame.kind === 'layout');
+    expect(layoutFrames).toHaveLength(1);
+    // 12 records split into ceil(12/3) = 4 per batch → 3 batches → ~30 ms.
+    // Reporting only the first batch would give ~10 ms.
+    expect(layoutFrames[0]!.paintMs).toBeGreaterThan(20);
   });
 
   it('relayouts on a camera flush when the projector instance changed', () => {

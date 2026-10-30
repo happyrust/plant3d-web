@@ -215,7 +215,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 24 | `2bbb75f0` | 分帧设计定稿：单缓冲禁渲染 + `painting` 标志 + 接线顺序 | 纯文档 |
 | 25 | `d1dd2fdd` | 生产档基线（空载三次中位数 layoutP95 18.30 / paintP95 39.40） | 纯文档 |
 | 26 | `fd42623a` | W5-5 分帧实现：`writeLineVertices` 共用 + `paintAsync` + `painting` 守卫，3 批 | painter 16/16、viewport 12/12、dimension+debug 85/749、type-check 439/126、eslint 0、门禁 1 passed |
-| 27 | 本次 | 修分帧早退吞失效原因：`deferredReasons` + `replayDeferredReasons()` | viewport 13/13（回滚验证过能抓到）、dimension+debug 85/750、type-check 439/126、eslint 0 |
+| 27 | `b2aec28d` | 修分帧早退吞失效原因：`deferredReasons` + `replayDeferredReasons()` | viewport 13/13（回滚验证过能抓到）、dimension+debug 85/750、type-check 439/126、eslint 0 |
+| 28 | 本次 | 修 `onFrame` 只报第一批：`paintMs` 改为覆盖全部批次 + 两处 `flush()` 排空 | facade 14/14、viewport 14/14、dimension+debug 85/751、type-check 439/126、eslint 0 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -468,6 +469,20 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 **教训**：验证「守卫有没有生效」的测试，必须同时断言「守卫被走到」和「守卫之后状态被补救」，只断言最终结果会被其它路径掩盖。修复与测试都用回滚验证过（`dimensionViewport.ts` 临时改成 `void reasons;`，测试变红，再恢复）。
 
 **验证**：`dimensionViewport.test.ts` 13/13、dimension + debug 85 文件 / 750 例全绿、type-check 439/126 新增 0、eslint 0。
+
+### 11.3.8 分帧让 `onFrame` 的 `paintMs` 失真（2026-10-30 修）
+
+分帧把一次全量绘制的成本摊到 3 帧，但 `onFrame` 仍在 `startBatchedPaint()` 返回后立刻上报——那时只写完第一批。结果是 **recorder 收到的 `paintMs` 只有单批的 ~13 ms，而真实总成本是 ~38 ms，低估近 3 倍**。W4-1 的整条基线（以及依赖它的「P95 不退化」判据）都建立在这个数上，所以这不是精度问题，是口径错误。
+
+**修法**：`startBatchedPaint(frameStartedAt, layoutCompletedAt)` 接收计时起点，内部定义 `report()`，在**最后一批写完**（`job.finish()` 之后）才调用；同步降级路径（`remaining() === 0`）也走同一个 `report()`。`paintMs = completedAt - layoutCompletedAt` 覆盖全部批次。
+
+**测试**：用可控时钟（`vi.spyOn(performance, 'now')`，每帧前进 10 ms）驱动 12 条记录 → 3 批 → 断言 `paintMs > 20`。回滚修复（把 `report()` 挪到批次循环之前）后如期变红：`expected [...] to have a length of 1 but got 2`——上报变成 2 次，正好暴露「第一批就报」。
+
+**连带修正**：`createDimensionSystem.test.ts` 的 `flush()` 与 `dimensionViewport.test.ts` 的同名工具一样，原来只跑一个回调；分帧后必须排空队列，否则「等 `onFrame` 被调用」的循环在 layout 完成时就退出了，上报还没发生。两处都改成默认排空（可传 `maxFrames`）。
+
+**这条也说明一件事**：分帧改动会波及所有「一次 paint 就上报」的观测口径。W4-1 的 recorder 是长期工具，它的数字变了要当成回归对待，不能只看测试绿。
+
+**验证**：`createDimensionSystem.test.ts` 14/14、`dimensionViewport.test.ts` 14/14、dimension + debug 85 文件 / 751 例全绿、type-check 439/126 新增 0、eslint 0。
 
 ### 11.3.3 W5-5 判据重述（2026-10-30 自决，动手前置条件）
 

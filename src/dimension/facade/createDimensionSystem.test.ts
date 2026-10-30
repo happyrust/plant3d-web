@@ -87,7 +87,18 @@ function createHarness(input: {
   const inputCanvas = createInputCanvas();
   const viewer = input.viewer ?? createViewerAdapter();
   const callbacks: FrameRequestCallback[] = [];
-  const flush = () => callbacks.shift()?.(performance.now());
+  /**
+   * Runs queued frames. W5-5 之后一次全量绘制跨若干帧（分帧写线顶点），
+   * 所以默认排空队列；传 `1` 只跑一帧，用来观察分帧中间态。
+   */
+  const flush = (maxFrames = Number.POSITIVE_INFINITY) => {
+    let frames = 0;
+    while (callbacks.length > 0 && frames < maxFrames) {
+      callbacks.shift()?.(performance.now());
+      frames += 1;
+    }
+    return frames;
+  };
   const promise = createDimensionSystem({
     inputCanvas: inputCanvas.canvas,
     viewer,
