@@ -1865,6 +1865,40 @@ export class ThreeSceneDimensionPainter {
     };
   }
 
+  /**
+   * Segments each layout would contribute, without writing anything (W5-5).
+   *
+   * A framing strategy needs to know where the cost sits *before* it splits the
+   * work: record count is the wrong unit — §11.17 measured 19 206 records whose
+   * segments range from 0 to 371 per record, and splitting 19 206 records into
+   * three batches costs 153 ms per batch while splitting by segment budget
+   * costs 15 ms. This walks the same `countPrimitiveSegments` pass
+   * `paintAsync` already does to size the buffer, so it warms the glyph cache
+   * instead of adding work.
+   */
+  segmentCounts(layouts: readonly LayoutResult[]): readonly number[] {
+    const counts: number[] = [];
+    for (const layout of layouts) {
+      let total = 0;
+      for (const primitive of layout.scenePrimitives) {
+        total += countPrimitiveSegments(primitive, this.font, this.glyphCaches);
+      }
+      counts.push(total);
+    }
+    return counts;
+  }
+
+  /** Total segments for a batch of layouts; see `segmentCounts`. */
+  segmentCount(layouts: readonly LayoutResult[]): number {
+    let total = 0;
+    for (const layout of layouts) {
+      for (const primitive of layout.scenePrimitives) {
+        total += countPrimitiveSegments(primitive, this.font, this.glyphCaches);
+      }
+    }
+    return total;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.clear();

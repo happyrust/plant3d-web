@@ -31,6 +31,8 @@ vi.mock('../kernel/viewport/layoutViewport', async (importOriginal) => {
 });
 function createViewport(
   onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void,
+  /** 覆盖每帧段预算（§11.17）。测试文档只有十几条记录，按真实预算一批就写完。 */
+  segmentBudgetPerFrame?: number,
 ) {
   const callbacks: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
@@ -46,6 +48,7 @@ function createViewport(
     cancelFrame: id => cancelled.push(id),
     requestRender,
     ...(onFrame ? { onFrame } : {}),
+    ...(segmentBudgetPerFrame === undefined ? {} : { segmentBudgetPerFrame }),
   });
   /**
    * Runs queued frames. W5-5 之后一次全量绘制要跨若干帧（分帧写线顶点），
@@ -394,9 +397,10 @@ describe('DimensionViewport', () => {
       b: exactAnchor([1, index * 0.5, 0]),
     }));
     const frames: DimensionFrameBreakdown[] = [];
+    // 预算压到 1 段/帧：12 条记录必然跨多帧，否则这条用例测不到「报全部批次」。
     const harness = createViewport((_durationMs, breakdown) => {
       frames.push(breakdown);
-    });
+    }, 1);
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.setDocument(emptyDimensionDocument(records));
 
@@ -511,8 +515,8 @@ describe('DimensionViewport', () => {
    * 否则「分帧」就变成了「画错」。所以这里钉的是「跨帧」「中间帧未发布」
    * 「末帧等价」，不钉帧数、不钉每批条数。
    *
-   * 40 条记录：`ceil(40 / 3) = 14` 条/批 → 3 个 paint 帧，前面还有 1 个 layout
-   * 帧。记录数只保证「paint 一定跨帧」，具体批数不参与断言。
+   * 40 条记录，预算压到 1 段/帧：必然跨多个 paint 帧，前面还有 1 个 layout
+   * 帧。记录数与预算只保证「paint 一定跨帧」，具体批数不参与断言。
    */
   it('keeps every batch unpublished until the last one lands', () => {
     const records = Array.from({ length: 40 }, (_, index) => linearRecord({
@@ -520,7 +524,7 @@ describe('DimensionViewport', () => {
       b: exactAnchor([1, (index % 8) * 0.25, 0]),
     }));
 
-    const harness = createViewport();
+    const harness = createViewport(undefined, 1);
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.setDocument(emptyDimensionDocument(records));
 
@@ -552,7 +556,7 @@ describe('DimensionViewport', () => {
     // 会 `setDrawRange(0, 0)`，只有 `finish()` 才写入真正的索引数。
     let paintFrames = 0;
     let midPaintSamples = 0;
-    while (harness.callbacks.length > 0 && paintFrames < 32) {
+    while (harness.callbacks.length > 0 && paintFrames < 512) {
       harness.flush(1);
       paintFrames += 1;
       if (harness.callbacks.length > 0) {
@@ -714,9 +718,10 @@ describe('DimensionViewport', () => {
       }),
     );
     const frames: DimensionFrameBreakdown[] = [];
+    // 同上报用例：预算压到 1 段/帧，保证旧作业与新作业都跨帧。
     const harness = createViewport((_durationMs, breakdown) => {
       frames.push(breakdown);
-    });
+    }, 1);
     const painter = (harness.viewport as any)
       .scenePainter as ThreeSceneDimensionPainter;
     const paintSpy = vi.spyOn(painter, 'paintAsync');
@@ -828,5 +833,46 @@ describe('DimensionViewport', () => {
     expect(harness.requestRender.mock.calls.length).toBeGreaterThan(
       rendersSoFar + 1,
     );
+  });
+
+  /**
+   * §11.17：批大小必须按**段数**预算算，不能按记录数。
+   *
+   * 真实数据里 19 206 条记录的段数从 0 到 371 不等（98 % 来自字形 run），所以
+   * 「一批 N 条记录」的成本能相差三个数量级。这里用同一份 20 条记录的文档，
+   * 只改预算，验证批数随预算变——若实现偷偷回到 `ceil(n/3)`，两条断言会同时
+   * 落到「批数固定为 3」，第二条必红。
+   */
+  it('sizes batches by the segment budget, not by the record count', () => {
+    const records = Array.from({ length: 20 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, (index % 4) * 0.5, 0]),
+    }));
+
+    /** 跑完一次全量布局，数它用了几个 paint 帧。 */
+    const paintFramesFor = (segmentBudgetPerFrame: number): number => {
+      const harness = createViewport(undefined, segmentBudgetPerFrame);
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument(records));
+      // 第一帧是 layout，之后才是 paint。
+      harness.flush(1);
+      let paintFrames = 0;
+      while (harness.callbacks.length > 0 && paintFrames < 1024) {
+        harness.flush(1);
+        paintFrames += 1;
+      }
+      return paintFrames;
+    };
+
+    const tight = paintFramesFor(1);
+    const loose = paintFramesFor(1_000_000);
+
+    // 预算够大：一次写完，只有一个 paint 帧。
+    expect(loose).toBe(1);
+    // 预算压到 1 段/帧：必然要很多帧。下界取 10 而不是 20——字形段数取决于
+    // 每条记录实际画了几个字符，不该把那个数字抄进断言。
+    expect(tight).toBeGreaterThanOrEqual(10);
+    // 两条一起看：批数确实随预算变，不是固定切三份。
+    expect(tight).toBeGreaterThan(loose);
   });
 });

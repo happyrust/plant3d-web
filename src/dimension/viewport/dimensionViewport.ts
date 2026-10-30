@@ -58,6 +58,48 @@ function subtract(a: DomainVec3, b: DomainVec3): DomainVec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
 
+/**
+ * 每帧愿意花在线顶点写入上的段数预算（§11.17）。
+ *
+ * 实测（热缓存、1920×1080 dpr2、Ryzen 9 7950X）单段约 **0.34 µs**，所以
+ * 47 000 段 ≈ 16 ms，正好一个 60 fps 帧。取 40 000 留出余量给同帧的布局、
+ * 三角与填充通道。
+ *
+ * 这是**算法结构**而不是可调参数：它由「一帧 16 ms」与「单段 0.34 µs」两个
+ * 事实决定，换机器会变的是那个 µs 数，不是这里的分母。真要按机器自适应，
+ * 得在运行时量 `advance()` 的实测耗时做闭环，那是另一条活（§11.17 末尾）。
+ */
+const SEGMENT_BUDGET_PER_FRAME = 40_000;
+
+/**
+ * 按段数预算决定每帧写多少条布局（§11.17）。
+ *
+ * 为什么不用记录数：19 206 条记录里每条段数从 0 到 371 不等，98 % 的段来自
+ * 字形 run。按记录数切批会让「一批」的成本相差三个数量级——`ceil(n/3)` 在
+ * 310 BRAN 上量到单批 153 ms，按段预算切则是 15 ms。
+ *
+ * 一条记录都不写会让 `advance` 永远推进不了，所以至少 1 条。总段数在预算内
+ * 时一次写完（`layouts.length`），不额外引入帧延迟。
+ */
+function batchLayoutsFor(
+  painter: Readonly<{ segmentCounts: (layouts: readonly LayoutResult[]) => readonly number[] }>,
+  layouts: readonly LayoutResult[],
+  segmentBudget: number,
+): number {
+  if (layouts.length <= 1) return Math.max(1, layouts.length);
+  const counts = painter.segmentCounts(layouts);
+  let budget = 0;
+  let used = 0;
+  for (const count of counts) {
+    if (budget > 0 && used + count > segmentBudget) break;
+    used += count;
+    budget += 1;
+  }
+  // 单条记录的段数就可能超过整帧预算（371 段/条的上限还远低于 4 万，但
+  // 极端合成场景可以更大）：那种情况也要写它，否则永远推进不了。
+  return Math.max(1, budget);
+}
+
 function addScaled(
   origin: DomainVec3,
   direction: DomainVec3,
@@ -120,6 +162,15 @@ type DimensionViewportBaseInput = Readonly<{
    * fades nothing (every record paints at its visible alpha).
    */
   occlusion?: OcclusionSource;
+  /**
+   * 每帧写多少段的预算（§11.17）。缺省 `SEGMENT_BUDGET_PER_FRAME`。
+   *
+   * 生产上不该改：它由「一帧 16 ms」与「单段 0.34 µs」两个事实决定。留这个
+   * 口子是给测试显式钉住分帧契约——测试构造的文档只有十几条记录、总段数远
+   * 小于真实预算，按真实预算会一批写完，那三条「必须跨帧」的用例就测不到
+   * 它们要测的东西了。
+   */
+  segmentBudgetPerFrame?: number;
 }>;
 
 export type DimensionViewportInput = DimensionViewportBaseInput & Readonly<{
@@ -645,9 +696,18 @@ export class DimensionViewport {
    * `finish()` 发布几何并 `requestRender()`；期间 `painting` 为真，`render()`
    * 直接早退，所以不会有半成品上屏。
    *
-   * 批大小取 `ceil(layouts / 3)`：2k 可见下 paint 约 40 ms，3 批 ≈ 13 ms/帧，
-   * 落在计划 §11.3.3 的「首帧 ≤ 16 ms、≤ 6 帧补齐」内。布局很少时退化成
-   * 一次写完，不额外引入帧延迟。
+   * 批大小按**段数预算**算，不按记录数（§11.17）。旧实现取 `ceil(layouts / 3)`，
+   * 那个常数是在「2k 记录」口径下试出来的；真实房间里有 MBD 的 BRAN 数中位数
+   * 19、p90 66、最大 310，310 个 BRAN 展开成 19 206 条记录 / 133 万段，按
+   * `ceil(n/3)` 切是每批 6 402 条 / 单批 153 ms——三帧不但没摊平，反而每帧都
+   * 卡 10 个刷新周期。
+   *
+   * 记录数不是成本单位：同一批 19 206 条记录里，每条段数从 0 到 371 不等，
+   * 98 % 的段来自字形 run。实测（热缓存、1920×1080 dpr2、Ryzen 9 7950X）单批
+   * 耗时与段数成正比，约 0.34 µs/段，所以按 `SEGMENT_BUDGET_PER_FRAME` 切能把
+   * 单批压在 16 ms 内，与记录数无关。
+   *
+   * 布局很少时退化成一次写完，不额外引入帧延迟。
    *
    * `onFrame` 在**最后一批写完后**才上报，`paintMs` 是首帧起点到最后一批的
    * 总耗时——不是第一批的耗时。分帧把成本摊到多帧，但 W4-1 的 recorder 要的
@@ -690,7 +750,11 @@ export class DimensionViewport {
       report();
       return;
     }
-    const batchLayouts = Math.max(1, Math.ceil(layouts.length / 3));
+    const batchLayouts = batchLayoutsFor(
+      this.scenePainter,
+      layouts,
+      this.input.segmentBudgetPerFrame ?? SEGMENT_BUDGET_PER_FRAME,
+    );
     this.painting = true;
     const finish = (): void => {
       job.finish();
