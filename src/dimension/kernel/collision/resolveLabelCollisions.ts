@@ -1,6 +1,8 @@
 import { translateRect } from '../geometry/screenGeometry';
 import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
+import { LabelOccupancy } from './occupancy';
+
 import type { DimensionTheme } from '../theme';
 import type {
   HitRegion,
@@ -14,10 +16,10 @@ import type {
   Vec2,
 } from '../types';
 
-const GRID_SIZE_PX = 64;
 // Candidate step / count and the extended-search batch size live in
-// `theme.declutter` (T1.5); the occupancy grid and the direction cycle are
-// algorithm structure and stay here.
+// `theme.declutter` (T1.5); the occupancy grid (moved to `occupancy.ts` so the
+// polar screen guard can share it) and the direction cycle are algorithm
+// structure and stay here.
 const DIRECTIONS: readonly Vec2[] = [
   [0, -1],
   [1, 0],
@@ -27,113 +29,6 @@ const DIRECTIONS: readonly Vec2[] = [
 
 function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function cellEnd(origin: number, size: number): number {
-  return size > 0
-    ? Math.ceil((origin + size) / GRID_SIZE_PX) - 1
-    : Math.floor(origin / GRID_SIZE_PX);
-}
-
-type CellRange = Readonly<{
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}>;
-
-function cellRangeOf(rect: ScreenRect): CellRange {
-  return {
-    minX: Math.floor(rect.x / GRID_SIZE_PX),
-    minY: Math.floor(rect.y / GRID_SIZE_PX),
-    maxX: cellEnd(rect.x, rect.width),
-    maxY: cellEnd(rect.y, rect.height),
-  };
-}
-
-/**
- * Occupied label rectangles on a 64 px grid. With `bounds` (the viewport)
- * the grid only covers the viewport padded by one cell: a label that
- * projects beyond it — a vertex near the camera plane puts label bounds in
- * the 1e5–1e9 px range, which registered cell by cell is 1e7–1e10 cells
- * (`RangeError: Map maximum size exceeded` / a 4 GB heap, all-pipes sweep
- * 2026-09-14) — neither claims space nor collides, and a label straddling
- * the edge is registered in its on-screen cells only. A non-finite bound
- * yields an empty range.
- */
-class LabelOccupancy {
-  private readonly columns = new Map<number, Map<number, ScreenRect[]>>();
-  private readonly clip: CellRange | null;
-
-  constructor(bounds?: ScreenRect) {
-    this.clip = bounds
-      ? cellRangeOf({
-        x: bounds.x - GRID_SIZE_PX,
-        y: bounds.y - GRID_SIZE_PX,
-        width: bounds.width + GRID_SIZE_PX * 2,
-        height: bounds.height + GRID_SIZE_PX * 2,
-      })
-      : null;
-  }
-
-  private cellRange(rect: ScreenRect): CellRange {
-    const range = cellRangeOf(rect);
-    if (!this.clip) return range;
-    return {
-      minX: Math.max(range.minX, this.clip.minX),
-      minY: Math.max(range.minY, this.clip.minY),
-      maxX: Math.min(range.maxX, this.clip.maxX),
-      maxY: Math.min(range.maxY, this.clip.maxY),
-    };
-  }
-
-  insert(rect: ScreenRect): void {
-    const { minX, minY, maxX, maxY } = this.cellRange(rect);
-    for (let x = minX; x <= maxX; x += 1) {
-      let column = this.columns.get(x);
-      if (!column) {
-        column = new Map();
-        this.columns.set(x, column);
-      }
-      for (let y = minY; y <= maxY; y += 1) {
-        const entries = column.get(y);
-        if (entries) entries.push(rect);
-        else column.set(y, [rect]);
-      }
-    }
-  }
-
-  overlaps(rect: ScreenRect): boolean {
-    return this.overlapsAt(rect, 0, 0);
-  }
-
-  overlapsAt(rect: ScreenRect, offsetX: number, offsetY: number): boolean {
-    const rectX = rect.x + offsetX;
-    const rectY = rect.y + offsetY;
-    const { minX, minY, maxX, maxY } = this.cellRange({
-      x: rectX,
-      y: rectY,
-      width: rect.width,
-      height: rect.height,
-    });
-    for (let cellX = minX; cellX <= maxX; cellX += 1) {
-      const column = this.columns.get(cellX);
-      if (!column) continue;
-      for (let cellY = minY; cellY <= maxY; cellY += 1) {
-        for (const occupied of column.get(cellY) ?? []) {
-          if (
-            rectX < occupied.x + occupied.width &&
-            rectX + rect.width > occupied.x &&
-            rectY < occupied.y + occupied.height &&
-            rectY + rect.height > occupied.y
-          ) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
 }
 
 function pointInRect(point: Vec2, rect: ScreenRect): boolean {
