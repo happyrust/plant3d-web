@@ -68,6 +68,20 @@ design §1.2 第 3 步写过一句实施假设：
    与 `unit_versions` 行集相同（本次核对 `283` / `419` 两行都在），所以
    `geometry(time)` 与 `resolve(scope=subtree)` 是一致的。
 
+### 2026-10-30 在当前构建上复核（结论不变，第 3 条证据更硬）
+
+构建 `0.1.44+g1ca68639061e`、8022、`cache_capacity=32`，同一 `at = 2026-09-08T17:45:46+08:00`、
+同一 refno `24384/23257`：
+
+```
+GET model/history/geometry?...&time=...            → X-Sesno: 419
+GET node/versions/resolve?...&scope=self&at=...    → sesno: 283
+GET node/versions/resolve?...&scope=subtree&at=... → sesno: 419   ← 与几何路由一致
+```
+
+三个数与前一次完全相同，说明这不是偶发或构建差异。第 3 条出路（把 R8.10 的措辞改成
+「与 `resolve(scope=subtree)` 一致」）现在有直接可比对的证据：两条路由对同一时间点给同一个 sesno。
+
 ## 本次未做的事
 
 没有擅自改动任一侧的规范行为。第 1、2 条都会改变对外契约，第 3 条是改需求文本，
