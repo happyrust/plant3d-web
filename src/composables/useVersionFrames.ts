@@ -140,6 +140,12 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
 
   let cache: FrameCacheState<ModelVersionGeometry> = emptyFrameCache<ModelVersionGeometry>();
   const inFlight = new Map<FrameKey, InFlightRequest>();
+  /**
+   * 子树请求的 controller。`inFlight` 只装游标/预取请求（它参与角色重分配与预取计数），
+   * 子树请求另记一份，`exitBrowse` 一并 abort——否则退出浏览后子树请求继续跑，
+   * 回来后 `commit` 把帧写进已清空的缓存。
+   */
+  const subtreeControllers = new Set<AbortController>();
   /** 排队中的预取 sesno */
   let queuedPrefetch: number[] = [];
   /** 本会话预取失败过的 sesno（`HISTORY_BUSY` 不进，4.11） */
@@ -602,17 +608,26 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
   /** 并发闸 + 忙重试（9.9、9.10）；部分失败照常显示成功单元（9.8） */
   async function loadUnits(context: BrowseContext, unitRefnos: string[]): Promise<void> {
     const pending = unitRefnos.filter((unitRefno) => !getFrame(cache, keyOf(unitRefno, context.cursor)));
+    // 每个子树请求的 controller 记进 `subtreeControllers`：`exitBrowse` 只 abort `inFlight`，
+    // 不单独记就意味着退出浏览后子树请求继续跑，回来后 `commit` 把帧写进已清空的缓存。
+    // 不塞进 `inFlight`：那张表参与角色重分配与预取计数，子树请求混进去会破坏它们的语义。
     const tasks = pending.map((unitRefno) => () => new Promise<void>((resolve, reject) => {
       const controller = new AbortController();
+      subtreeControllers.add(controller);
       retryOnBusy(
         (signal) => fetchUnitAt(unitRefno, context.cursor, signal),
         { signal: controller.signal, sleep },
-      ).then(resolve, reject);
+      ).then(resolve, reject).finally(() => { subtreeControllers.delete(controller); });
     }));
     const results = await runBounded(tasks, concurrencyLimit);
+    // 退出浏览后 `mode` 变回 `idle`：此时任何落地都会污染下一轮会话的状态。
+    // 不能比 `ctx !== context`——`enterBrowse` 里 `ctx = { ...context }` 是新对象，恒不相等。
+    if (mode.value !== 'browse') return;
     let failed = 0;
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') return;
+      // 退出导致的中止不是失败
+      if (isAbortError(result.reason)) return;
       failed += 1;
       addError({
         sesno: context.cursor,
@@ -827,6 +842,8 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     prefetchGate.dispose();
     for (const request of inFlight.values()) request.controller.abort();
     inFlight.clear();
+    for (const controller of subtreeControllers) controller.abort();
+    subtreeControllers.clear();
     queuedPrefetch = [];
     // 清空缓存并把降级路径的快照逐个还回去（4.6、10.5）
     const cleared = clearFrames(cache);

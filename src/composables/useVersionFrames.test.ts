@@ -397,33 +397,37 @@ describe('useVersionFrames：单钉着色（Requirement 5.4）', () => {
   });
 });
 
-describe('useVersionFrames：子树范围（Requirement 9.2、9.3、9.6、9.7、9.8）', () => {
-  function summaryWith(groups: { unitRefno: string; added: number; deleted: number; modified: number }[], needsConfirm = false): ModelNodeDiffSummary {
-    return {
-      dbnum: 8000,
-      refno: UNIT,
-      noun: 'ZONE',
-      scope: 'subtree' as ModelNodeDiffScope,
-      a: 10,
-      b: 15,
-      units: { changed: groups.length, unchanged: 0, total: groups.length, complete: true },
-      elements: { added: 0, deleted: 0, modified: 0, noop: 0 },
-      groups: groups.map((group) => ({
-        unitRefno: group.unitRefno,
-        unitNoun: 'BRAN',
-        unitName: group.unitRefno,
-        counts: { added: group.added, deleted: group.deleted, modified: group.modified, noop: 0 },
-        geometryChanged: true,
-        rows: [],
-        rowsTruncated: 0,
-      })),
-      needsConfirm,
-      estimatedProjections: groups.length,
-      confirmThresholdUnits: 2,
-      warnings: [],
-    };
-  }
+/** 子树差异摘要的样例：`loadUnits` 的单元来源 */
+function summaryWith(
+  groups: { unitRefno: string; added: number; deleted: number; modified: number }[],
+  needsConfirm = false,
+): ModelNodeDiffSummary {
+  return {
+    dbnum: 8000,
+    refno: UNIT,
+    noun: 'ZONE',
+    scope: 'subtree' as ModelNodeDiffScope,
+    a: 10,
+    b: 15,
+    units: { changed: groups.length, unchanged: 0, total: groups.length, complete: true },
+    elements: { added: 0, deleted: 0, modified: 0, noop: 0 },
+    groups: groups.map((group) => ({
+      unitRefno: group.unitRefno,
+      unitNoun: 'BRAN',
+      unitName: group.unitRefno,
+      counts: { added: group.added, deleted: group.deleted, modified: group.modified, noop: 0 },
+      geometryChanged: true,
+      rows: [],
+      rowsTruncated: 0,
+    })),
+    needsConfirm,
+    estimatedProjections: groups.length,
+    confirmThresholdUnits: 2,
+    warnings: [],
+  };
+}
 
+describe('useVersionFrames：子树范围（Requirement 9.2、9.3、9.6、9.7、9.8）', () => {
   it('游标就是最新版：不装任何帧，角标「最新版本，无历史差异」', async () => {
     const { frames, calls, badges } = setup();
     await frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 15, latest: 15, ordered: [10, 12, 15] }));
@@ -563,5 +567,29 @@ describe('useVersionFrames：退出中止全部请求（Requirement 4.6）', () 
 
     expect(signal.aborted).toBe(true);
     expect(frames.errors.value).toHaveLength(0);
+  });
+
+  it('子树请求也被 abort，且退出后不再落地', async () => {
+    // `inFlight` 只装游标/预取请求，子树请求另记一份。原先 `exitBrowse` 只 abort `inFlight`，
+    // 退出后子树请求继续跑，回来后 `commit` 把帧写进已清空的缓存。
+    const signals: AbortSignal[] = [];
+    const { frames, source } = setup({
+      respond: (call) => {
+        signals.push(call.signal);
+        return new Promise<HistoryGeometryResult>(() => undefined);
+      },
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockResolvedValue(summaryWith([
+      { unitRefno: 'unit_1', added: 1, deleted: 0, modified: 0 },
+    ]));
+    void frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+    await settle();
+    expect(signals.length).toBeGreaterThan(0);
+
+    await frames.exitBrowse();
+
+    expect(signals.every((s) => s.aborted)).toBe(true);
+    expect(frames.errors.value).toHaveLength(0);
+    expect(frames.debug.value.cacheKeys).toBe(0);
   });
 });

@@ -316,12 +316,12 @@ AFTER-STEP  cursor=684  cacheKeys=1  frame-shown ✓     ← 有 history/geometr
    `await pending` 一起卡死——表现为「视口一直在转、一帧都不出」且没有任何错误可查。
    现在带 8 s 超时 + `AbortController`；超时后 `catch` 走兜底盒子、标 `failedGeoHash`、
    `finally` 清 `loadingGeoHash`，不会留下永久挂起的条目。
-2. **子树路径（`loadUnits` / `fetchUnitAt`，`useVersionFrames.ts:633-648`）从不登记 `inFlight`、
-   从不发 `If-None-Match`**。所以子树模式下 `inFlight` 恒为 0，不能用它判断「有没有在跑」。
-   其中**静默吞错误**这一半已修（`useVersionFrames.ts:638`）：原先是
-   `if (result.kind !== 'ok') return`，而 `fetchUnitAt` 只在缓存里没有这一帧时才发起，
-   此时 304 没有可复用的本地几何——当成功处理会让 `loadUnits` 的 `failed` 恒为 0，
-   角标说「全部加载成功」而实际一帧都没装。现在抛 `INVALID_RESPONSE`，进失败统计。
+2. **子树路径（`loadUnits` / `fetchUnitAt`）从不登记 `inFlight`、从不发 `If-None-Match`**。
+   前半句的后果比原先记的更严重：`exitBrowse` 只 abort `inFlight` 里的 controller，
+   子树请求不在表里 → **退出浏览后子树请求继续跑**，回来后 `commit(putFrame(...))` 把帧写进
+   已经清空的缓存，下一轮会话看到上一轮的残留。已在 `useVersionFrames.ts` 里单独记一份
+   `subtreeControllers`，`exitBrowse` 一并 abort；`loadUnits` 落地前检查 `mode.value !== 'browse'`
+   直接返回；中止不再计入失败。
    剩下「不发 `If-None-Match`」没改：304 复用需要先定义「本地已有几何」的来源
    （当前 `fetchUnitAt` 的入参里没有可复用的 geometryKey），属于取数层语义取舍，留给后续单独处理。
 
