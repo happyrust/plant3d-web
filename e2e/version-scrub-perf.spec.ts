@@ -238,8 +238,26 @@ test.beforeAll(async () => {
   });
 });
 
-test.beforeEach(() => {
+test.beforeEach(({ browserName }, testInfo) => {
+  // 第一个参数必须是对象解构（Playwright 的硬要求）；这里不按浏览器分支，占位即可
+  void browserName;
   test.skip(probeReason !== null, probeReason ?? '');
+  // 12.4 需要「仅属性」会话（`geometryKey` 相同）才会走 304。夹具里没有这类版本时在这里就跳过，
+  // 不要进测试体——`page` fixture 一旦创建，跳过时关浏览器上下文能拖十几分钟。
+  if (testInfo.title.startsWith('12.3')) {
+    test.skip(
+      !CACHE_OFF,
+      '要用 AIOS_MODEL_HISTORY_REALTIME_CACHE=0 重启服务端，再加 VERSION_SCRUB_PERF_CACHE_OFF=1 跑',
+    );
+  }
+  if (testInfo.title.startsWith('12.4')) {
+    const attributeOnly = (fixture?.rows ?? []).filter((row) => !GEOMETRY_IMPACT.has(row.impact_kind));
+    test.skip(
+      attributeOnly.length === 0,
+      `${UNIT} 的 ${fixture?.rows.length ?? 0} 个版本全是几何变化版本（${describeImpactKinds()}），`
+        + '没有「仅属性」会话可走 304；要实测这条得换一个含仅属性会话的 BRAN',
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -606,7 +624,8 @@ test('12.2 服务端缓存热而前端缓存空时 10 次 ≤ 500 ms', async ({ 
 // ---------------------------------------------------------------------------
 
 test('12.3 服务端结果缓存容量 0 时 10 次 ≤ 2 s', async ({ page }) => {
-  test.skip(!CACHE_OFF, '要用 AIOS_MODEL_HISTORY_REALTIME_CACHE=0 重启服务端，再加 VERSION_SCRUB_PERF_CACHE_OFF=1 跑');
+  // `VERSION_SCRUB_PERF_CACHE_OFF` 未设时在 `beforeEach` 就跳过（那里 `page` 还没创建，
+  // 跳过是瞬时的；写在测试体里会先建 page，跳过时关上下文能拖十几分钟）
   const realtime = await realtimeHealth();
   expect(realtime?.cache_capacity, 'AIOS_MODEL_HISTORY_REALTIME_CACHE=0 应让 cache_capacity 为 0').toBe(0);
 
@@ -649,15 +668,16 @@ test('12.4 仅属性会话走 304 且角标 200 ms 内更新', async ({ page }) 
   // 304 的前提是「目标版本与已装入版本的 `geometryKey` 相同」，也就是「仅属性」会话。
   // 被测 BRAN 的版本表可能全是几何变化版本（`impact_kind` ∈ mesh/placement/delivery/tombstone），
   // 那就没有任何一次能走 304——这时按验证口径记下实际分布后跳过，不判红。
+  //
+  // 跳过判断放在 `beforeEach`（`attributeOnlySesnos` 为空时直接 `test.skip`），不在测试体里：
+  // 测试体一旦开始，`page` fixture 就已经创建，跳过时还要关一次浏览器上下文，
+  // 在这个环境里能拖十几分钟（表现为「明明该跳过却跑满二十分钟」）。
   const rows = fixture?.rows ?? [];
   const sesnos = rows.map((row) => row.sesno);
   const attributeOnlySesnos = rows
     .filter((row) => !GEOMETRY_IMPACT.has(row.impact_kind))
     .map((row) => row.sesno);
-  if (attributeOnlySesnos.length === 0) {
-    test.skip(true, `${UNIT} 的 ${sesnos.length} 个版本全是几何变化版本（${describeImpactKinds()}），没有「仅属性」会话可走 304`);
-    return;
-  }
+  expect(attributeOnlySesnos.length, '没有「仅属性」会话时应在 beforeEach 就跳过').toBeGreaterThan(0);
   const attributeOnly = new Set(attributeOnlySesnos);
 
   const responses: { url: string; status: number }[] = [];

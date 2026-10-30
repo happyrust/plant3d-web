@@ -164,9 +164,14 @@ Requirement 12 第 2 条末尾写明「第 2、3 条的 2 s / 500 ms 为本版�
 把分布写进跳过理由，不判红。要实测这一条得换一个含仅属性会话的 BRAN。
 
 > 这条最初表现为「明明 `attributeOnly.size === 0` 却仍在实际执行、跑满二十分钟」，原因在
-> `test.skip(condition, description)` 的**求值时机**：它写在测试体里、`page` fixture 已经创建之后，
-> 而当时的写法是先取 `sesnosOf()` 等夹具数据再求条件。改成测试体最前面直接按 `fixture.rows` 算
-> `attributeOnlySesnos`、为空就 `test.skip(true, ...)` 并 `return`，跳过立即生效。
+> **`test.skip()` 的位置**：它写在测试体里，而测试体一旦开始执行，Playwright 就已经创建了
+> `page` fixture；`test.skip()` 抛出后还要把这个浏览器上下文关掉，在本机（Chrome + WebGL +
+> dev server）关一次能拖十几分钟，表现为「该跳过却跑满二十分钟」。移到 `test.beforeEach`
+> 之后，跳过是瞬时的——实测 **3 s 结束、`1 skipped`**。
+>
+> 同一个坑还坑了 12.3：它的 `test.skip(!CACHE_OFF, ...)` 也在测试体内，在缓存容量非 0 的
+> 环境上单跑 12.3 同样会卡满超时。一并移到 `beforeEach`（`testInfo.title.startsWith('12.3')`），
+> 修完实测 **2 s 结束、`1 skipped`**。
 
 ### 版本表首次渲染 —— **夹具规模不足，测量口径已修正（981 ms / 20 行）**
 
