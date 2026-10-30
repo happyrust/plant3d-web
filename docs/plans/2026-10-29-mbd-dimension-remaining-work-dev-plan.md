@@ -214,7 +214,8 @@ CT 窗口（`claude-fable-5-1-thinking-max`，只读）逐刀复核后入库，`
 | 23 | `c893aca3` | `updateStyles` 同一类浪费一并治 | dimension 78/668 |
 | 24 | `2bbb75f0` | 分帧设计定稿：单缓冲禁渲染 + `painting` 标志 + 接线顺序 | 纯文档 |
 | 25 | `d1dd2fdd` | 生产档基线（空载三次中位数 layoutP95 18.30 / paintP95 39.40） | 纯文档 |
-| 26 | 本次 | W5-5 分帧实现：`writeLineVertices` 共用 + `paintAsync` + `painting` 守卫，3 批 | painter 16/16、viewport 12/12、dimension+debug 85/749、type-check 439/126、eslint 0、门禁 1 passed |
+| 26 | `fd42623a` | W5-5 分帧实现：`writeLineVertices` 共用 + `paintAsync` + `painting` 守卫，3 批 | painter 16/16、viewport 12/12、dimension+debug 85/749、type-check 439/126、eslint 0、门禁 1 passed |
+| 27 | 本次 | 修分帧早退吞失效原因：`deferredReasons` + `replayDeferredReasons()` | viewport 13/13（回滚验证过能抓到）、dimension+debug 85/750、type-check 439/126、eslint 0 |
 
 **第 13 刀的来历（口径提醒）**：`a9d80a4f` 不是 Lead 写的，也不是任何一份 brief 派出去的活——它是 CT 窗口在上一轮「只读审核报告」之后自行落盘的五文件改动（`git status` 在审核报告交付后出现，文件时间戳 `2026-10-30 01:11~01:12`，`ct_peek` 的 tool-log `id 16165` / `16166` 两条 `edit` 与文件时间戳对得上）。这违反了「CT 只读、构建测试提交归 Lead」的分工。内容本身经 Lead 逐行复核：`kind` 字段三处上报点各标一种、数值口径未动（`layoutMs + paintMs` 仍恒等整帧）、面板分组条件收紧、`formatMm` 的取整口径正确、两个用例补得对，门禁全绿，所以照收入库；但**已用 `ct_message` 告知它不要再写文件**，后续只读结论一律落对话。
 
@@ -451,6 +452,22 @@ hit-test      p50=0.013ms p95=0.036ms limit=2ms
 **门禁**：`DIMENSION_PERF_GATE=1 npx playwright test e2e/dimension-perf.spec.ts` → 1 passed，`paintP95Ms` 45.70。**注意探针页走的是同步 `paint()`**（`dimensionPerf.ts:243`），所以门禁数字不受分帧影响，它守的是「同步路径没退化」；分帧收益只在真实视口体现，用 `paintFramed` 单独量。
 
 **仍未做视觉 A/B**：分帧改变了绘制时序，但**像素内容应当零变化**（顶点逐位相同已由单测证明）。真实 BRAN 上的视觉确认仍要等后端 18084，与 W5-2 / W5-3 / W5-4 一起做。
+
+### 11.3.7 分帧的第三个缺陷：早退会吞掉失效原因（2026-10-30 修）
+
+§11.3.6 的 `render()` 早退有个隐蔽后果：`DimensionViewportScheduler` 是**先 `consume()` 再调 `onFrame`**（`invalidation.ts:63-68`），所以早退时那批失效原因已经被从队列里取走了。直接 `return` 等于把它们永久丢弃——分帧期间改主题、换文档、动相机都会静默失效，分帧结束后画面停在旧内容。
+
+**修法**：早退时把原因收进 `deferredReasons`，分帧收尾的 `replayDeferredReasons()` 逐个 `invalidate()` 放回队列。旧作业被新布局作废时直接清空（那次调用本身已是全量布局，原因已被满足），`dispose()` 也清空。
+
+**这条测试写错过三次，值得记下来**，因为它暴露了「测试绿但抓不到 bug」的典型陷阱：
+
+1. 第一版用单条记录 → 批大小 `ceil(1/3) = 1`，一批就写完，**早退分支根本走不到**。回滚修复后测试仍绿。
+2. 第二版加 12 条记录让分帧真的跨 3 帧，但只断言「最终主题被应用」→ `setTheme` 自己会 `invalidate`，scheduler 重新调度，掩盖了丢弃。回滚后仍绿。
+3. 第三版改成断言**中间那一帧没跑 `layoutViewport`**（证明早退确实发生）**且**排空后多跑一次布局（证明原因被留住）。回滚修复后如期变红：`expected 2 to be greater than 2`。
+
+**教训**：验证「守卫有没有生效」的测试，必须同时断言「守卫被走到」和「守卫之后状态被补救」，只断言最终结果会被其它路径掩盖。修复与测试都用回滚验证过（`dimensionViewport.ts` 临时改成 `void reasons;`，测试变红，再恢复）。
+
+**验证**：`dimensionViewport.test.ts` 13/13、dimension + debug 85 文件 / 750 例全绿、type-check 439/126 新增 0、eslint 0。
 
 ### 11.3.3 W5-5 判据重述（2026-10-30 自决，动手前置条件）
 

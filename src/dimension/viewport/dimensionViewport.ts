@@ -168,6 +168,12 @@ export class DimensionViewport {
    */
   private painting = false;
   private paintFrameId: number | null = null;
+  /**
+   * 分帧期间到达的失效原因（W5-5）。scheduler 已经把原因 `consume()` 掉了，
+   * `render()` 早退时若不收下就永久丢失，分帧结束后会停在旧内容上。收尾时
+   * 逐个 `invalidate()` 放回，让它们真正生效。
+   */
+  private readonly deferredReasons = new Set<DimensionViewportDirtyReason>();
   private disposed = false;
 
   constructor(private readonly input: DimensionViewportInput) {
@@ -475,6 +481,7 @@ export class DimensionViewport {
       this.paintFrameId = null;
     }
     this.painting = false;
+    this.deferredReasons.clear();
     if (this.cameraSettleTimer !== null) {
       clearTimeout(this.cameraSettleTimer);
       this.cameraSettleTimer = null;
@@ -497,9 +504,13 @@ export class DimensionViewport {
 
   private render(reasons: ReadonlySet<DimensionViewportDirtyReason>): void {
     if (!this.projector) return;
-    // 分帧写入中：几何只写了一半，这一帧不能动（W5-5）。失效原因已经记在
-    // scheduler 的 InvalidationSet 里，分帧完成后会重新触发一次 render。
-    if (this.painting) return;
+    // 分帧写入中：几何只写了一半，这一帧不能动（W5-5）。但 scheduler 已经把
+    // 这批失效原因 `consume()` 掉了，直接返回就等于丢掉它们——分帧结束后
+    // 画面会停在旧内容上。所以先把原因存下来，收尾时重新放回队列。
+    if (this.painting) {
+      for (const reason of reasons) this.deferredReasons.add(reason);
+      return;
+    }
     const startedAt = performance.now();
     if (
       this.scenePainter
@@ -621,6 +632,9 @@ export class DimensionViewport {
       this.paintFrameId = null;
     }
     this.painting = false;
+    // 旧作业作废时它攒下的失效原因不必重放：本次调用本身就是一次新的全量
+    // 布局，那些原因已被满足。
+    this.deferredReasons.clear();
     const layouts = this.layouts;
     const job = this.scenePainter.paintAsync(
       layouts,
@@ -643,8 +657,20 @@ export class DimensionViewport {
       }
       job.finish();
       this.painting = false;
+      this.replayDeferredReasons();
       this.input.requestRender();
     };
     this.paintFrameId = this.input.requestFrame(step);
+  }
+
+  /**
+   * 分帧收尾：把期间到达的失效原因放回 scheduler，让它们真正重跑一次布局
+   * （W5-5）。没有它们，分帧期间改主题 / 换文档 / 动相机都会静默丢失。
+   */
+  private replayDeferredReasons(): void {
+    if (this.deferredReasons.size === 0) return;
+    const reasons = [...this.deferredReasons];
+    this.deferredReasons.clear();
+    for (const reason of reasons) this.invalidate(reason);
   }
 }

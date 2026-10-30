@@ -6,6 +6,7 @@ import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensi
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
 import {
   emptyDimensionDocument,
+  exactAnchor,
   linearRecord,
   projectedRecord,
 } from '../domain/testFixtures';
@@ -278,6 +279,53 @@ describe('DimensionViewport', () => {
     expect(harness.requestRender.mock.calls.length).toBeGreaterThan(
       rendersAfterFirstPaint,
     );
+  });
+
+  /**
+   * W5-5 分帧的第二个硬约束：`render()` 在分帧期间早退，而 scheduler 已经把
+   * 失效原因 `consume()` 掉了。若早退时直接丢，那次失效就永久消失。
+   *
+   * 必须用**足够多的记录**让 paint 真的跨帧：批大小是 `ceil(n / 3)`，只有一
+   * 条记录时一批就写完，早退分支根本走不到。这里 12 条 → 每批 4 条 → 3 帧。
+   */
+  it('keeps invalidations that arrive while a batched paint is in flight', () => {
+    const records = Array.from({ length: 12 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, index * 0.5, 0]),
+    }));
+
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport();
+    harness.viewport.setProjector(createTestProjector());
+    harness.viewport.setDocument(emptyDimensionDocument(records));
+    harness.flush();
+    const layoutsAfterFirstPaint = vi.mocked(layoutViewport).mock.calls.length;
+    expect(layoutsAfterFirstPaint).toBe(1);
+
+    // Start a fresh paint and stop after its first batch: painting === true.
+    harness.viewport.setDocument(emptyDimensionDocument(records));
+    harness.flush(1);
+    const layoutsMidPaint = vi.mocked(layoutViewport).mock.calls.length;
+
+    // This invalidation is consumed by the scheduler and delivered to render()
+    // while the batch is still being written, so render() must early-return.
+    const themed = {
+      ...SOLVESPACE_DIMENSION_THEME,
+      textHeightPx: SOLVESPACE_DIMENSION_THEME.textHeightPx + 4,
+    };
+    harness.viewport.setTheme(themed);
+    harness.flush(1);
+    // The early-returned frame did not lay out — proof the guard was hit.
+    expect(vi.mocked(layoutViewport).mock.calls.length).toBe(layoutsMidPaint);
+
+    // Draining replays the kept reason: one more full layout with the new theme.
+    harness.flush();
+    expect(vi.mocked(layoutViewport).mock.calls.length).toBeGreaterThan(
+      layoutsMidPaint,
+    );
+    const lastCall = vi.mocked(layoutViewport).mock.calls.at(-1)!;
+    expect((lastCall[1] as { theme: { textHeightPx: number } }).theme.textHeightPx)
+      .toBe(themed.textHeightPx);
   });
 
   it('relayouts on a camera flush when the projector instance changed', () => {
