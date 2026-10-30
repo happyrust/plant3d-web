@@ -175,7 +175,12 @@ import {
   type SglLookPresetId,
 } from '@/viewer/e3dLook';
 import { createModelUnitCompareController } from '@/viewer/modelUnitCompareController';
-import { isVersionBrowseAttach, MODEL_VERSION_BROWSE_EVENT, type VersionBrowseApi } from '@/viewer/versionBrowseBridge';
+import {
+  isVersionBrowseAttach,
+  MODEL_VERSION_BROWSE_EVENT,
+  respondVersionBrowseApi,
+  type VersionBrowseApi,
+} from '@/viewer/versionBrowseBridge';
 
 defineProps<{
     params: {
@@ -816,7 +821,8 @@ const handleModelUnitVersionCompare = modelUnitCompare.handleEvent;
 
 /**
  * 拖动浏览的接口交接（spec `model-version-timeline-scrub`，tasks.md 15.4）：
- * 面板发 `attach` 时把浏览接口交回去；面板比视口先挂载时也一样——它 attach 时 `pendingVersionBrowseApi` 已经在了。
+ * 面板发 `attach` 时把浏览接口交回去；面板比视口先挂载时，视口挂载后主动广播一次
+ * `respond`，让那份早已发出、当时没人听的 `attach` 也能拿到接口。
  */
 function handleVersionBrowseEvent(event: Event): void {
   const detail = (event as CustomEvent).detail;
@@ -4651,8 +4657,10 @@ onMounted(async () => {
   // 拖动浏览：面板在 `ModelUnitVersionComparePanel`，三维控制器在这里，两边经 window 事件交接接口
   window.addEventListener(MODEL_VERSION_BROWSE_EVENT, handleVersionBrowseEvent);
   offVersionBrowse = () => window.removeEventListener(MODEL_VERSION_BROWSE_EVENT, handleVersionBrowseEvent);
-  // 面板可能比视口先挂载：先把接口挂在一处，等它来 attach 时立刻回话
+  // 面板可能比视口先挂载：先把接口挂在一处，等它来 attach 时立刻回话；
+  // 反过来（面板已经发过 attach 但当时没人在听）这里主动广播一次，把它接上。
   pendingVersionBrowseApi = modelUnitCompare;
+  respondVersionBrowseApi(modelUnitCompare);
 
   function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: PtsetResponse }[]) {
     if (entries.length === 0) return;

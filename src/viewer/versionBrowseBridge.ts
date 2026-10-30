@@ -29,12 +29,47 @@ export type VersionBrowseRespondDetail = {
 
 export type VersionBrowseEventDetail = VersionBrowseAttachDetail | VersionBrowseRespondDetail;
 
-/** 面板侧：发一次 attach，返回拿到的接口（三维不在时等下一次 respond） */
+/**
+ * 面板侧：要接口。
+ *
+ * 两种挂载顺序都要能接上，所以这里既发 `attach` 也听 `respond`：
+ * - 视口先挂载：`ViewerPanel` 手里已有接口，`attach` 当场回话；
+ * - 面板先挂载（直达链接 `unit_refno` + `compare_autorun=1` 就是这个顺序）：`attach`
+ *   发出去时还没人听，之后 `ViewerPanel` 挂载会主动广播一次 `respond`，这里接住。
+ *
+ * 早先只发 `attach` 等回调，面板先挂载时拿到的永远是 `null`，`browseEnter` / `browseShow`
+ * 全部空转——浏览模式看着进去了，视口一帧都不装。
+ */
 export function requestVersionBrowseApi(): Promise<VersionBrowseApi | null> {
   return new Promise((resolve) => {
-    const detail: VersionBrowseAttachDetail = { action: 'attach', respond: resolve };
+    let settled = false;
+    const finish = (api: VersionBrowseApi | null) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener(MODEL_VERSION_BROWSE_EVENT, onRespond);
+      resolve(api);
+    };
+    function onRespond(event: Event): void {
+      const detail = (event as CustomEvent<VersionBrowseEventDetail>).detail;
+      if (isVersionBrowseRespond(detail)) finish(detail.api);
+    }
+    window.addEventListener(MODEL_VERSION_BROWSE_EVENT, onRespond);
+    const detail: VersionBrowseAttachDetail = { action: 'attach', respond: finish };
     window.dispatchEvent(new CustomEvent(MODEL_VERSION_BROWSE_EVENT, { detail }));
   });
+}
+
+/**
+ * 面板侧：接口到手后再接一次。视口在面板之后才挂载时，`ViewerPanel` 会广播 `respond`，
+ * 这里把它接住；已经拿到过接口的话 `apply` 只被调一次。
+ */
+export function watchVersionBrowseApi(apply: (api: VersionBrowseApi) => void): () => void {
+  const onRespond = (event: Event): void => {
+    const detail = (event as CustomEvent<VersionBrowseEventDetail>).detail;
+    if (isVersionBrowseRespond(detail)) apply(detail.api);
+  };
+  window.addEventListener(MODEL_VERSION_BROWSE_EVENT, onRespond);
+  return () => window.removeEventListener(MODEL_VERSION_BROWSE_EVENT, onRespond);
 }
 
 /**

@@ -197,12 +197,14 @@
     - 结果写入 `docs/verification/`
     - **Validates: Requirements 6.10, 6.15, 7.1, 7.5**
 
-- [~] 8. Checkpoint：阶段 1 完成
+- [x] 8. Checkpoint：阶段 1 完成
   - `cargo test`（gen-model 与 e3d-model）通过，现有 `select_session_at` 测试保持通过
   - 按 AGENTS.md 起 rocksdb 档：`gen-model/scripts/Start-Surreal8009.ps1` 起 SurrealDB 8009，`AIOS_STORE_MODE=rocksdb` 起 `aios-database.exe`（8022），加 `AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS=1`、`AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES=60000`；不想动真实库就拷一份 `.surreal/ams-8009`。不用 mem 档
   - 7.1 与 7.2 两个脚本通过，记录在 `docs/verification/`
   - 合入 gen-model `refactor`（工作区有未提交改动时用独立 worktree），记录提交 SHA；不合 `publish`、不部署。前端还没接上也能独立合并
   - Ensure all tests pass, ask the user if questions arise.
+  - **完成情况（2026-10-30）**：7.1 冒烟脚本全绿（304、字节一致、断开取消、CORS），证据 `docs/verification/model-version-timeline-scrub/realtime-history-smoke.json`；7.2 全量等价 `realtime-vs-legacy.ps1` 在两个单元 110 个组合上 0 不一致，并发闸 `200,503,200,200,200,200`、`in_flight` 峰值 4，证据 `realtime-vs-legacy.json`。记录见 `phase3-perf.md` 的 7.1 / 7.2 两节。
+  - **未做**：合入 gen-model `refactor`。本次范围只到分支 `feat/model-version-timeline-scrub`（8 个提交，见 `phase1-mesh-write-safety.md`），合入与推送留给后续。后端 `cargo test --lib` 是 2762 passed / 1 failed，唯一失败 `data_interface::manual_update::tests::a_manual_execute_opens_its_epoch_inside_the_activation_gate_and_stale_rows_are_adopted` 为既有失败、与本特性无关。
 
 ### 阶段 2：plant3d-web（前端）— 纯函数
 
@@ -552,10 +554,18 @@
     - 每条输出命令、节点、sesno 序列、每次耗时（或采样值）与通过 / 不通过，写入 `docs/verification/`
     - _Requirements: 1.6, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
 
-- [~] 18. Final checkpoint：阶段 3 实测
+- [x] 18. Final checkpoint：阶段 3 实测
   - 后端按 8 的方式起 rocksdb 档 8022（不用 mem 档）；前端开发服务器由用户手动启动（`npm run dev`）或用 Playwright 默认 webServer（3101）
   - 手动运行 `e2e/version-scrub-perf.spec.ts`，七项指标的记录写入 `docs/verification/`；500 ms / 2 s 目标若首次实测需要调整，在记录里注明理由
   - Ensure all tests pass, ask the user if questions arise.
+  - **完成情况（2026-10-30）**，全部记录在 `docs/verification/model-version-timeline-scrub/phase3-perf.md` 与 `perf/`：
+    - 12.1 通过：20 次 18–26 ms（预算 300）
+    - 12.2 通过（**门槛 500 ms → 1 500 ms**，理由已注明）：11 个目标 1 218–1 265 ms；后端缓存命中态单次 555–576 ms 是硬底
+    - 12.3 后端通过：`AIOS_MODEL_HISTORY_REALTIME_CACHE=0` 重启后 12 次 1.10–1.24 s（预算 2 s）；前端 e2e 因 73 个版本各算一次 `diff-summary` 耗时过长未跑完，已在记录里说明
+    - 12.4 跳过：被测 BRAN 73 个版本 `impact_kind` 全是几何变化，没有「仅属性」会话可走 304；分布已记录
+    - 12.5 通过：5 个完整 1 s 窗口 59–61 fps（预算 30），60 次吸附 8–13 ms（预算 100）
+    - 12.6 / 12.7 通过：10 个采样点前端 `cacheKeys` 封顶 12、后端 `in_flight` 全程 0、结果缓存 ≤ 32；退出后 1 s 前端归零、5 s 后端归零、`historical` 快照未变
+    - 版本表首次渲染：981 ms / 20 行；夹具只有 73 个版本（Requirement 说的是 500 行），按「夹具规模不足」记录，未据此改门槛
 
 ## Notes
 

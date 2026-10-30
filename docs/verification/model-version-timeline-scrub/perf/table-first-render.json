@@ -1,0 +1,8 @@
+{
+  "unit": "24384_23257",
+  "firstScreenMs": 981,
+  "firstScreenRows": 20,
+  "allRows": 73,
+  "budgetMs": 500,
+  "note": "版本表数据到手（`model/versions` 200）→ 首屏第一行完成布局并过两帧；不含页面加载与后端取数，也不含「加载更早」展开全部行（`allRows` 是展开后的总行数）"
+}

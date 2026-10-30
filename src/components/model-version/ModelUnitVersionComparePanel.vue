@@ -65,7 +65,12 @@ import {
   type NodeTimelineRow,
 } from '@/utils/nodeVersionTimeline';
 import { readScrubUrl, reconcileScrubState, writeScrubUrl } from '@/utils/versionScrub/scrubUrl';
-import { createLazyBrowseApi, requestVersionBrowseApi, type VersionBrowseApi } from '@/viewer/versionBrowseBridge';
+import {
+  createLazyBrowseApi,
+  requestVersionBrowseApi,
+  watchVersionBrowseApi,
+  type VersionBrowseApi,
+} from '@/viewer/versionBrowseBridge';
 
 /**
  * 节点版本视图（ADR 0066；CONTEXT「节点版本视图 / 对比范围 / 属性变化时间线 / 属性净差 / 差异摘要」）。
@@ -717,6 +722,8 @@ let browseApi: VersionBrowseApi | null = null;
 const lazyBrowseApi = createLazyBrowseApi(() => browseApi);
 /** `frames.exposeDebug()` 的卸载函数 */
 let offExposeDebug: (() => void) | null = null;
+/** 长期听三维接口的卸载函数（视口可能晚于本面板挂载） */
+let offVersionBrowseApi: (() => void) | null = null;
 
 const frames = useVersionFrames({
   source: getModelSource().versions,
@@ -732,7 +739,10 @@ const scrubTableError = computed<{ code: string; message: string } | null>(() =>
 });
 
 onMounted(() => {
-  void requestVersionBrowseApi().then((api) => { browseApi = api; });
+  // 三维接口：先 attach 一次，同时长期听 `respond`——视口可能比本面板晚挂载
+  // （直达链接 `unit_refno` + `compare_autorun=1` 就是这个顺序），那时才回话。
+  void requestVersionBrowseApi().then((api) => { if (api) browseApi = api; });
+  offVersionBrowseApi = watchVersionBrowseApi((api) => { browseApi = api; });
   // 性能脚本读 `window.__versionScrubDebug`（tasks.md 17.1）
   offExposeDebug = frames.exposeDebug();
 });
@@ -935,6 +945,8 @@ onBeforeUnmount(() => {
   offCursorChange();
   offExposeDebug?.();
   offExposeDebug = null;
+  offVersionBrowseApi?.();
+  offVersionBrowseApi = null;
   void frames.exitBrowse();
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);

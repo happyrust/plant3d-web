@@ -1,0 +1,608 @@
+{
+  "base": "http://127.0.0.1:8022",
+  "dbnum": 8000,
+  "units": [
+    {
+      "unit": "24384/23257",
+      "versions": 73,
+      "compared": 73,
+      "mismatched": 0
+    },
+    {
+      "unit": "24384/24776",
+      "versions": 37,
+      "compared": 37,
+      "mismatched": 0
+    }
+  ],
+  "total_combos": 110,
+  "mismatched_combos": 0,
+  "steps": [
+    {
+      "step": "GET model/versions 24384/23257",
+      "ok": true,
+      "detail": "版本数 73：5,211,212,213,214,215,216,217,218,219,220,225,226,227,228,231,232,251,252,257,258,259,260,261,262,263,264,265,266,282,283,284,285,380,382,417,419,421,423,425,427,429,431,437,439,441,443,559,561,563,565,567,569,571,573,626,630,652,654,660,662,664,666,668,670,672,674,676,678,680,682,684,686"
+    },
+    {
+      "step": "  sesno 5",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 211",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 212",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 213",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 214",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 215",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 216",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 217",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 218",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 219",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 220",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 225",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 226",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 227",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 228",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 231",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 232",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 251",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 252",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 257",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 258",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 259",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 260",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 261",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 262",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 263",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 264",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 265",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 266",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 282",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 283",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 284",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 285",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 380",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 382",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 417",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 419",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 421",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 423",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 425",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 427",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 429",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 431",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 437",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 439",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 441",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 443",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 559",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 561",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 563",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 565",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 567",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 569",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 571",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 573",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 626",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 630",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 652",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 654",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 660",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 662",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 664",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 666",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 668",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 670",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 672",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 674",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 676",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 678",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 680",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 682",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 684",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 686",
+      "ok": true,
+      "detail": "instances 9=9 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "单元 24384/23257 汇总",
+      "ok": true,
+      "detail": "比较 73 个组合，不一致 0 个"
+    },
+    {
+      "step": "GET model/versions 24384/24776",
+      "ok": true,
+      "detail": "版本数 37：5,205,206,240,241,253,254,535,538,540,543,545,547,550,552,554,557,608,610,615,618,628,632,647,649,656,658,688,690,692,694,696,698,704,707,713,714"
+    },
+    {
+      "step": "  sesno 5",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 205",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 206",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 240",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 241",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 253",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 254",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 535",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 538",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 540",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 543",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 545",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 547",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 550",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 552",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 554",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 557",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 608",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 610",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 615",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 618",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 628",
+      "ok": true,
+      "detail": "instances 2=2 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 632",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 647",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 649",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 656",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 658",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 688",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 690",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 692",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 694",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 696",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 698",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 704",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 707",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 713",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "  sesno 714",
+      "ok": true,
+      "detail": "instances 1=1 相等=True；tubes 0=0 相等=True"
+    },
+    {
+      "step": "单元 24384/24776 汇总",
+      "ok": true,
+      "detail": "比较 37 个组合，不一致 0 个"
+    },
+    {
+      "step": "同组合连查两次（未命中 + 命中）",
+      "ok": true,
+      "detail": "sesno 686；两次 instances 逐项相等=True；ETag g:dba0a837141300f9252f01142890dde4 / g:dba0a837141300f9252f01142890dde4"
+    },
+    {
+      "step": "并发闸（Requirement 7.1）",
+      "ok": true,
+      "detail": "并发 6 个：状态码 200,503,200,200,200,200；503 数 1；in_flight 采样最大 1 1 0 4 4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0（上限 4）"
+    },
+    {
+      "step": "503 带 Retry-After",
+      "ok": true,
+      "detail": "有请求被拒即证明闸生效（Retry-After 由服务端头给出，脚本以状态码判定）"
+    }
+  ],
+  "passed": true
+}

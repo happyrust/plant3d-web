@@ -81,7 +81,172 @@ Requirement 12 的验证口径：第 2 条与第 4 条先对目标 sesno 各发�
 
 ## 首次实测结果
 
-**尚未实测**（需 rocksdb 档 8022 与 `npm run dev`）。跑完后把每个用例的 `console.log` 行与 `perf/*.json` 一并记到本文件「实测记录」小节，并注明是否调整过 300 ms / 500 ms / 2 s 门槛及理由。
+环境：rocksdb 档 8022（`0.1.44+g1ca68639061e`，`DB_OPTION_FILE=db_options/DbOption-issue7-e2e.toml`）、
+被测 BRAN `24384/23257`（dbnum 8000）、Playwright + 本机 Chrome、`--workers=1`。
+
+夹具（`perf/probe-fixture.json`）：
+
+```
+latest=686  versionCount=73  impact_kind 分布：placement=68、mesh=4、delivery=1
+geometrySesnoCount=73  drawableSesnos=38 个（相对最新版 686 真有几何差异的那些）
+```
+
+### 12.1 缓存热时方向键 20 次 ≤ 300 ms —— **通过**
+
+```
+12.1 worst 26 ms（预算 300） 26,26,24,23,20,25,20,24,24,21,22,25,18,20,23,19,22,23,19,19
+```
+
+20 次全部在 18–26 ms 之间，远低于 300 ms。
+
+> 第一轮实测（`pair=212,213`）的读数是 `34,29,25,26,38,30,26,-56,35,26,25,31,29,-64,28,-47,33,30,28,-65`，
+> 正数 25–38 ms、8 个负值。负值是跨 mark 的计时噪声（终点 `frame-shown` 早于起点 `perf:step-start`，
+> 说明那一版在按键前就已画完、mark 时间戳落在窗口之外），不影响结论。改用「从面板落点就近取相邻对」
+> 后噪声明显减少（只剩 0 个负值的那一轮），因为不必再横穿版本链。
+
+### 12.2 服务端缓存热、前端缓存空 10 次 —— **通过（门槛由 500 ms 调到 1 500 ms）**
+
+```
+budget=500  measured=5   targets=563,567,571,626,652,660,664,668,672,676,680,684
+sesno 567 = 1207 ms      ← 首次，服务端缓存命中
+sesno 571 = 1218 ms      ← 首次，服务端缓存命中
+sesno 571 = 22 / 20 / 23 ms（回程，前端已缓存）
+（565 / 569 / 573 等相邻版本不在 `drawableSesnos` 里，按 9.2 不装帧，记 skipped）
+```
+
+改成「逐个目标先不计时地走到前一格、再单量最后一步」后拿到 11 个有效样本，全部落在同一档：
+
+```
+budget=1000  measured=11
+567=1254  571=1205  626=1199  652=1229  660=1205  664=1228
+668=1220  672=1205  676=1252  680=1238  684=1234   （ms）
+```
+
+单独量后端 `model/history/geometry` 的**缓存命中**耗时（`curl` 直打 8022，确认命中态）：
+
+```
+sesno 563 : 564 ms  8128 B
+sesno 567 : 563 ms  8128 B
+sesno 571 : 568 ms  8128 B
+sesno 626 : 555 ms  8128 B
+sesno 652 : 576 ms  8128 B
+```
+
+`/health.model_cache.realtime_history` 当时是 `cache_entries=16 / cache_capacity=32`、`hits_total=56`、
+`misses_total=41`、`in_flight=0`，确认走的是命中分支。缓存**未命中**时同一查询要 15 821 ms。
+
+拆账：后端命中态每次 555–576 ms，前端拿到 8 KB 响应后建几何 + 装隔离图层 + 等两帧才打
+`frame-shown`，再占约 640 ms，合计 1 200–1 254 ms。
+
+Requirement 12 第 2 条末尾写明「第 2、3 条的 2 s / 500 ms 为本版拟定目标，首次实测后若需调整须在验证
+记录中注明理由」，据此把 **12.2 的门槛从 500 ms 调到 1 500 ms**（覆盖后端 600 ms + 前端 900 ms 并留
+余量）。500 ms 在任何前端实现下都达不到——仅后端命中态就已经是 555 ms 以上。
+
+### 12.5 拖动 30 个刻度：每 1 s 窗口 ≥ 30 fps、吸附后 100 ms 内更新标签 —— **通过**
+
+```
+12.5 fps/窗口 61,60,60,59,59,1（跨度 1004,1001,1001,1001,1001,0 ms，判定 5 个完整窗口）
+     minFps=59（预算 30）  dragDurationMs=5007
+     吸附标签时延 8–13 ms（60 次采样，预算 100 ms）
+```
+
+5 个完整 1 s 窗口的帧数是 59–61，全部 ≥ 30 fps；60 次吸附全部在 8–13 ms 内更新标签，
+远低于 100 ms。最后一个窗口只有 1 帧、跨度 0 ms（`mouse.up()` 之后那一帧），
+按 Requirement 12 第 5 条「拖动期间每一个连续 1 s 的时间窗」不计入判定，只记进证据。
+
+> 脚本最初把不满 1 s 的尾窗也算进去，`minFps` 被拉到 26 而误判。现在只判定跨度 ≥ 900 ms 的窗口，
+> 每个窗口的跨度一并写进 `perf/12.5-drag.json` 的 `windowSpansMs`。
+
+### 12.4 仅属性会话 304 —— **跳过（夹具不支持）**
+
+被测 BRAN 的 73 个版本 `impact_kind` 全是几何变化版本（`placement=68`、`mesh=4`、`delivery=1`），
+没有「仅属性」会话，因此不存在 `geometryKey` 相同的相邻版本，也就走不到 304。脚本按验证口径
+把分布写进跳过理由，不判红。要实测这一条得换一个含仅属性会话的 BRAN。
+
+> 这条最初表现为「明明 `attributeOnly.size === 0` 却仍在实际执行、跑满二十分钟」，原因在
+> `test.skip(condition, description)` 的**求值时机**：它写在测试体里、`page` fixture 已经创建之后，
+> 而当时的写法是先取 `sesnosOf()` 等夹具数据再求条件。改成测试体最前面直接按 `fixture.rows` 算
+> `attributeOnlySesnos`、为空就 `test.skip(true, ...)` 并 `return`，跳过立即生效。
+
+### 版本表首次渲染 —— **夹具规模不足，测量口径已修正（981 ms / 20 行）**
+
+```
+firstScreenMs=981   firstScreenRows=20   allRows=73   budgetMs=500
+```
+
+口径：`model/versions` 响应结束（`responseEnd`，用页面内 `PerformanceObserver` 抓）→ 首屏第一行
+完成布局并过两帧。不含页面加载、不含后端取数、不含「加载更早」展开全部行。
+
+两点要注意：
+
+1. **夹具规模不够**。Requirement 12 说「500 行版本表」，被测 BRAN 只有 73 个版本，首屏 20 行。
+   这条测的是 20 行，不是 500 行。
+2. **测量口径本身受开发服务器干扰**。首版脚本在列表已渲染完、只等 `children.length === 0` 时
+   才开始计时，量到 4 ms（空转，无意义）；第二版从导航开始算，量到 3 338 ms（混进 Vite 冷启动
+   与整个应用加载）；现在这一版只算「数据到手 → 首帧」，981 ms。
+
+981 ms 里包含 Vue 把 20 行 v-for 建出来、以及面板同时挂载时间轴、视口、范围切换等兄弟组件的
+开销。要判断这条到底该不该判红，得先有 500 行的夹具——当前数据下这个数字不具判定意义，
+按「夹具不支持」记，不据此改门槛。
+
+### 12.3 服务端结果缓存容量 0 时 10 次 ≤ 2 s —— **后端通过（前端 e2e 未跑完，见下）**
+
+停掉 8022 上原来的进程，以 `AIOS_MODEL_HISTORY_REALTIME_CACHE=0` 重启后 `/health` 确认
+`cache_capacity=0`，再逐个版本打 `model/history/geometry`：
+
+| sesno | 秒 | sesno | 秒 |
+|---|---|---|---|
+| 626 | 1.10 | 680 | 1.22 |
+| 652 | 1.17 | 684 | 1.16 |
+| 660 | 1.15 | 563 | 1.16 |
+| 664 | 1.11 | 567 | 1.18 |
+| 668 | 1.24 | 571 | 1.16 |
+| 672 | 1.17 | | |
+| 676 | 1.17 | | |
+
+12 次全部在 **1.10–1.24 s**（预算 2 s），`misses_total` 从 0 涨到 14、`cache_capacity=0`，
+确认每一次都是真算、没有走缓存。
+
+**前端 e2e 这一侧没跑完**：`openBrowse` 把范围切到「所有子节点」后，面板会为 73 个版本各算一次
+`diff-summary`，缓存容量为 0 时每次都要重算，等满 20 分钟仍未进到测量环节（后端
+`misses_total=0`，说明一个历史查询都没发出）。这条要跑完得等一个版本数少得多的夹具，
+或给 e2e 加一个「跳过 `diff-summary` 预热」的开关。
+
+### 12.6 / 12.7 连续 10 分钟拖动 —— **通过**
+
+拖动 10 分钟、每 60 s 采一次，共 10 个采样点（`perf/12.6-12.7-soak.json`）：
+
+| 采样 | 前端 cacheKeys | 后端 in_flight | 结果缓存 |
+|---|---|---|---|
+| 1 | 4 | 0 | 19/32 |
+| 2 | 6 | 0 | 21/32 |
+| 3 | 6 | 0 | 21/32 |
+| 4 | 8 | 0 | 23/32 |
+| 5 | 9 | 0 | 24/32 |
+| 6 | 12 | 0 | 26/32 |
+| 7–9 | 12 | 0 | 26/32 |
+| 10 | 12 | 0 | 27/32 |
+
+- **12.6 前端缓存有界**：`cacheKeys` 从 4 涨到 12 后封顶不动（预算 ≤ 12），LRU 淘汰生效；
+  后端 `in_flight` 全程 0（≤ `concurrency_limit=4`），结果缓存 19→27（≤ `cache_capacity=32`）。
+- **12.7 退出收敛**：退出浏览 1 s 后前端 `cacheKeys=0`、`inFlight=0`；5 s 后后端 `in_flight=0`；
+  `/health.model_cache.historical` 快照与初值完全一致（`historicalUnchanged=true`），
+  说明浏览全程没有产生任何持久化写入。
+
+### 夹具侧的三个坑（已修，写在这里免得下次再踩）
+
+1. **游标必须落在「相对最新版真有几何差异」的版本上**。子树范围下 `requestSubtreeFrame` 会先算
+   `diff-summary`，`groups` 里没有 `geometryChanged` 的单元就直接按 9.2 判「无差异」，一帧都不装、
+   不打 `frame-shown`。最初用 `model/versions` 的任意版本当游标（如 419），`diff-summary(419, 686)`
+   返回 `changed=0`，测试等满 180 s 超时。现在探针用 `node/diff-summary` 逐个算出 `drawableSesnos`
+   （38 个），用例只在这些版本上计时。
+2. **范围要用「所有子节点」**，不是「仅自身」。`fixture.rows` 来自 `model/versions`（按单元子树折叠，
+   73 行），对应界面的「所有子节点」；切到「仅自身」走 `node/versions?scope=self`，对单元根只有 5 行，
+   游标永远走不到夹具里那 73 个 sesno。这是 `finding-r6-3-vs-r8-10.md` 那个规范冲突在测试侧的投影。
+3. **不要用 URL 直达链接定位游标**。面板 `onMounted` 里 `restoreFromScrubUrl` 在版本表填好之前就
+   `reconcileScrubState`，空表会把游标原样留下，随后 `loadVersions` 完成又被 `watch(orderedSesnos)`
+   重置，落点不可控。用方向键逐格走（`walkTo` 只等 `data-sesno`，不等帧）。
+
 
 ## 附：阶段 1 联调脚本的自检（2026-10-29）
 
@@ -152,17 +317,33 @@ pwsh scripts/verify/realtime-history-smoke.ps1 -EvidenceDir docs/verification/mo
 
 证据：`realtime-history-smoke.json`。
 
-## 7.2 实测结果（2026-10-29，新构建）
+## 7.2 实测结果（2026-10-29，新构建，全量）
+
+```powershell
+pwsh scripts/verify/realtime-vs-legacy.ps1 -TimeoutSec 600 -EvidenceDir docs/verification/model-version-timeline-scrub
+```
 
 等价比较按 `(source_refno, id)` 排序、去 `snapshot_key` 后逐项比：
 
-- 6 个组合（`24384/23257` 的 676–686）全部 `instances` 与 `tubes` 相等，不一致 0；
+| 单元 | 版本数 | 比较组合 | 不一致 |
+|---|---|---|---|
+| `24384/23257` | 73 | 73 | 0 |
+| `24384/24776` | 37 | 37 | 0 |
+| **合计** | **110** | **110** | **0** |
+
+Legacy 侧走 `generate` → 轮询 `tasks/{id}` → `query tool=instances` + `tool=tubes` → `DELETE`，
+每条在 `finally` 里清理，跑完 `historical.snapshots` 回到初值。Property 39（实时与 Legacy 等价）
+在 110 个组合上成立。
+
+另外两条：
+
 - 同组合连查两次（未命中 + 命中）`ETag` 与 `instances` 逐项相等；
-- 并发闸：6 个并发冷查询 → `200,503,200,200,200,200`，`in_flight` 峰值恰好 4（等于 `concurrency_limit`），有请求被拒。
+- 并发闸：6 个并发冷查询 → `200,503,200,200,200,200`，`in_flight` 峰值恰好 4（等于 `concurrency_limit`），
+  有请求被拒即证明闸生效。
 
 并发闸这一条要**冷**会话才会触发：缓存命中不占名额（R7.1 明写），脚本会先跳过本次已请求过的
 会话，再从链上取未被碰过的版本并发打。第一次跑时误用了刚预热过的会话，六个全 200、`in_flight` 峰值 2，
-改成冷会话后闸正常拒。
+改成冷会话后闸正常拒。证据：`realtime-vs-legacy.json`。
 
 ## 一处需要裁决的规范冲突
 
