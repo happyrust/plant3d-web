@@ -797,9 +797,58 @@ W5-1 要裁决 G9：PML 用三角形，Web 用线 + 箭头。裁决前先把 Web
 
 **门禁**：`dimensionViewport.test.ts` 20/20、`npx vitest run src/dimension` 78 文件 / **687 通过**（基线 684 + 3 新增）、全量 `npm test` 422 文件 / 4123 通过 / 1 todo、eslint 0。
 
-**这一轮没有修**：§11.5 风险 3（`paintAsync` 起手不主动归零 `drawRange`，`dimensionViewport.ts:219-220` 的注释与代码不符）与风险 5（`writeLineVertices` 无边界检查）。风险 3 只在「守卫失效」时才可见，而守卫刚被 A1/A2/A4 补强；风险 5 的触发前提是 `countPrimitiveSegments` 与 `visitPrimitiveSegments` 段数不一致，目前唯一已知的不一致是 `scene-path` 空 `points`（count 得 −1、visit 得 0），而该输入在当前调用链上不可达。两条都属于「需要主动加防线，而不是修一个正在发生的错」。
+**这一轮没有修**：§11.5 风险 3（`paintAsync` 起手不主动归零 `drawRange`，`dimensionViewport.ts:219-220` 的注释与代码不符）与风险 5（`writeLineVertices` 无边界检查）——**下一节已修**。
 
-### 11.12 `job.advance()` 真会抛异常的两条路径（2026-10-30，只读侦察）
+### 11.12 绘制缓冲的两条防线：`drawRange` 起手归零 + 段数越界截断（2026-10-30）
+
+§11.5 风险 3 与风险 5。
+
+**风险 3 的事实**（实测，不是推断）。`paintAsync` 起手的 `lineBuffers.ensureCapacity(lineVertexCount)` 只在**容量真的增长**时返回 true 并换新 `BufferGeometry`；`ensureCapacity` 的早退分支 `if (required <= this.capacity) return false;`（`scenePainter.ts:360`）不动 `drawRange`。新几何在 `:389` 设了 `setDrawRange(0, 0)`，但**容量不变时 `drawRange` 保留上一次 `finish()` 发布的值**。实测：
+
+```
+after paint           drawRange = {"start":0,"count":240}
+after paintAsync start drawRange = {"start":0,"count":240}
+after first advance   drawRange = {"start":0,"count":240}
+```
+
+后果：容量不变时（绝大多数情况，新布局顶点数不超过历史峰值）顶点缓冲正被逐批从 index 0 覆写，`drawRange` 却仍指向上一帧的长度。守卫若失效，画出来的是「新批次前缀 + 旧几何尾部」按旧 count 混合的垃圾。**防线要放在产生坏数据的一侧**，不能只靠 `renderOverlay` 的守卫。
+
+- **3a**（`scenePainter.ts`）：`paintAsync` 在 `ensureCapacity` 之后**无条件**调 `this.lineBuffers.clear()`（就是 `setDrawRange(0, 0)`）。三角形与填充缓冲在 `publishLineBatch` 里同样加 `clear()`——那两遍目前是同步的、不会有机会被渲染，但加上之后「写入中的缓冲不可见」这条性质就不再依赖调用时机。
+- **3b**（`dimensionViewport.ts`）：把 `renderOverlay` 上方那段与代码不符的注释改成事实陈述（只在容量增长时换空几何；容量不变时 `drawRange` 仍指向上一次的索引数，而顶点已被从头部覆写）。
+
+**副作用与取舍**：`cancel()` 的语义从「已发布几何原样保留」变成「线层空白、三角形/填充仍是上一帧」。原注释写「abandoned job cannot corrupt the last good frame」，现在更准确的说法是「abandoned job blanks the stroke layer instead of corrupting it；下一次 paint 恢复完整帧」。这是**用一帧空白换掉混合顶点**，因为混合顶点看起来像画面坏了，空白看起来像还没画完。`cancel` 只在「上一次分帧还没写完就又来了新布局」这一种情况下被调用（`startBatchedPaint`），正常浏览走不到。
+
+**风险 5 的事实**。`writeStrokeVertex` 直接按下标写 12 个 typed array，无任何上界判断。`Float32Array` 越界写**静默丢弃、不抛异常**（规范里 `IntegerIndexedElementSet` 对无效索引直接返回 true），所以段数算多了的表现是「部分尺寸线缺一段」，没有任何报错。逐分支对照 `countPrimitiveSegments` 与 `visitPrimitiveSegments`，**唯一不一致的是 `scene-path` 且 `points.length === 0`**：count 返回 `(0 − 1) + 0 = −1`，visit 返回 0 次。
+
+- **5a**：`countPrimitiveSegments` 的 `scene-path` 分支改成 `Math.max(0, points.length − 1)`。
+- **5b**：`visitSegments` 的 `visit` 回调入口加段级检查 `if (!fitsWithin(lineVertexIndex, 4, capacityVertices)) { overflowed = true; return; }`。`ReusableGeometry` 新增只读 `get vertexCapacity()`。**段级而不是顶点级**：4 个顶点在同一回调里连续写，一次比较足够；2k 可见规模下每帧省约 120 万次比较。
+- **5c**：截断后 `paint()` 与 `paintAsync()` 都**发布实际写入数**（不是预算数）并 `console.warn` 一条带 `expected` / `written` / `layouts` 的日志。**不抛异常**——抛出去会走到 §11.11 的 `step()` try/catch，虽然不再冻结，但「因为段数算错就整帧不画」比「缺最后几段线」更糟。代价：`ranges` 里后续布局的 `lineEnd` 会指向不存在的顶点，`updateStyles` 的长度校验持续返回 `false`，退化成每次整幅 `paint()` —— 画面正确，只是慢。
+
+**测试五条**（`scenePainter.test.ts` +158）：
+
+1. `clears the line drawRange when a batched paint starts without capacity growth` —— 先 `paint()` 30 条布局（容量定型），再 `paintAsync()` 同一批（走「不换几何」分支），断言起手、每个中间帧 `drawRange.count === 0`，`finish()` 后等于正确值。
+2. `counts an empty scene-path as zero segments, matching the visit pass`。
+3. `truncates a line write at buffer capacity instead of writing past it` —— 用 `miscountedLayout()`（`scenePrimitives` 是个 getter：count 那遍看到 2 点路径，之后看到 17 点）制造「count 少算 15 段」的现场；缓冲的 16 顶点下限只容得下 16 段里的前 4 段，断言告警参数 `{expected: 4, written: 16, layouts: 1}`、`lineVertexCount === 16`、`drawRange` 换算后是 24。
+4. `publishes only the written vertices when a batched paint truncates` —— 同一现场走 `paintAsync()`。
+5. `bounds a segment quad write against the line buffer capacity` —— `fitsWithin` 的边界值。
+
+**第二次「测试空过」（本轮第五次）**：第 2 条初版只断言 `lineVertexCount === 0` 与 `drawRange === 0`。把 5a 改回 `points.length − 1` 之后**它仍然通过**——因为 5c 让发布数改用「实际写入数」，count 算成 −1 之后写入仍是 0 个顶点、发布仍是 0，**症状被下游完全掩盖**。定稿改成从 `onPaintProfile` 的 `segmentCount` 与 `segmentsByKind` 取探针（那是 count 那遍唯一的直接输出），回滚后如期变红：`expected -1 to be +0`。
+
+**回滚验证（主会话独立重做五处）**：
+
+| 改坏的方式 | 结果 |
+| --- | --- |
+| 删 `paintAsync` 里的 `lineBuffers.clear()` | 测试 1 红（`expected 840 to be +0`）、`leaves the published geometry untouched when a batched paint is cancelled` 也红（`expected 1260 to be +0`） |
+| `scene-path` count 改回 `points.length − 1` | 测试 2 红（`expected -1 to be +0`） |
+| `fitsWithin` 的 capacity 换成 `Infinity`（等于没有检查） | 测试 3 红（告警没被调用）、测试 4 红（`expected 64 to be 16`） |
+| `paint()` 改回 `finish(lineVertexCount)` | 测试 3 红（`expected 4 to be 16`） |
+| `paintAsync()` 的 `finish` 改回传 `lineVertexCount` | 测试 4 红（`expected 4 to be 16`） |
+
+**门禁**：`scenePainter.test.ts` 25/25、`npx vitest run src/dimension` 78 文件 / **692 通过**、全量 `npm test` 422 文件 / 4128 通过 / 1 todo、eslint 0、`npm run type-check` 439/126 新增 0。
+
+**至此 §11.5 的六个风险里，1（字形缓存）、3（`drawRange`）、4（状态机卡死）、5（越界写）、6（作业交错）已修；只剩 2（真实记录段数超标）需要真实 2k 规模的数据，见 §11.7 的口径统计。**
+
+### 11.13 `job.advance()` 真会抛异常的两条路径（2026-10-30，只读侦察）
 
 §11.11 的 A1 不是纯理论防御——`advance()` 确实会抛。把 `paintAsync` 起手计数与 `writeLineVertices` 两条路径逐个点查过，**真正会抛的只有两处**，其余「看起来会抛」的地方都不抛：
 

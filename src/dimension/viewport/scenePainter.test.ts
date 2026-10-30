@@ -12,6 +12,7 @@ import { createTestFont } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 
 import {
+  fitsWithin,
   hintedLineStrokeWidthPx,
   hintedTextStrokeWidthPx,
   srgbComponents,
@@ -23,7 +24,7 @@ function srgb(hex: string): Color {
   return new Color(hex).getRGB(new Color(), SRGBColorSpace) as Color;
 }
 
-import type { LayoutResult, ScenePrimitive } from '../kernel/types';
+import type { LayoutResult, ScenePrimitive, SceneVertex } from '../kernel/types';
 
 function layout(
   id: string,
@@ -39,6 +40,37 @@ function layout(
     derived: {
       formattedLabel: id,
       valueM: 1,
+    },
+  };
+}
+
+/**
+ * A `LayoutResult` whose `scenePrimitives` disagree between the count pass
+ * and every later pass: the count sees a two-point path (1 segment), the
+ * rest see 17 points (16 segments). `LayoutResult` is plain data, so a
+ * getter is the only way to reproduce an under-budgeted
+ * `countPrimitiveSegments` inside one synchronous `paint()` — exactly the
+ * hazard `writeLineVertices`'s bounds check exists for. The count pass runs
+ * first in both `paint()` and `paintAsync()`, so `accesses === 1` is it.
+ */
+function miscountedLayout(id: string): LayoutResult {
+  const vertex = (x: number): SceneVertex => ({
+    anchor: [x, 0, 0],
+    offsetPx: [0, 0],
+  });
+  const path = (pointCount: number): ScenePrimitive => ({
+    kind: 'scene-path',
+    points: Array.from({ length: pointCount }, (_, index) => vertex(index)),
+    closed: false,
+    part: 'dimension',
+    styleRole: 'normal',
+  });
+  let accesses = 0;
+  return {
+    ...layout(id, []),
+    get scenePrimitives() {
+      accesses += 1;
+      return [path(accesses === 1 ? 2 : 17)];
     },
   };
 }
@@ -245,7 +277,11 @@ describe('ThreeSceneDimensionPainter', () => {
     job.cancel();
     job.finish();
 
-    // The cancelled job never published, so the last good frame is intact.
+    // The cancelled job never published: stats and vertex bytes keep the
+    // last good frame, while `paintAsync`'s opening `clear()` already
+    // blanked the line `drawRange` — cancel leaves the layer invisible,
+    // not corrupt.
+    expect(publishedVertexCount(painter, 'dimension-scene-lines')).toBe(0);
     expect(painter.getStats()).toEqual(publishedStats);
     expect(snapshotAttributes(painter, 'dimension-scene-lines')).toEqual(publishedLines);
   });
@@ -836,5 +872,140 @@ describe('ThreeSceneDimensionPainter', () => {
     // 12 distinct cap-height buckets inserted into a cap of 8 — the
     // oldest four were evicted, exactly the cap remains.
     expect(painter.getGlyphCacheStats().screen).toBe(8);
+  });
+
+  /**
+   * 防线 3a：`paintAsync` 起手无条件把线缓冲的 `drawRange` 归零。
+   * `ensureCapacity` 只在容量增长时才换上一块 `drawRange` 为零的新几何；
+   * 容量不变的常见路径上归零全靠这行 `clear()`。若回退，分帧窗口里
+   * `drawRange` 仍指着上一帧发布的索引数，而顶点缓冲正被从头部覆写——
+   * 画出来是「新前缀 + 旧尾巴」的混合顶点。
+   */
+  it('clears the line drawRange when a batched paint starts without capacity growth', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    const layouts = Array.from({ length: 30 }, (_, index) =>
+      layout(`dimension-${index}`, primitives));
+    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    const lines = painter.group.getObjectByName('dimension-scene-lines') as any;
+    const expectedCount = (painter.getStats().lineVertexCount / 4) * 6;
+    expect(lines.geometry.drawRange.count).toBe(expectedCount);
+
+    // Same layouts → same vertex count → `ensureCapacity` keeps both the
+    // geometry object and its `drawRange`, so this exercises the
+    // no-growth path the clear exists for.
+    const job = painter.paintAsync(layouts, SOLVESPACE_DIMENSION_THEME);
+    expect(lines.geometry.drawRange.count).toBe(0);
+    job.advance(1);
+    expect(lines.geometry.drawRange.count).toBe(0);
+    while (!job.advance(4)) { /* drain the rest of the batches */ }
+    expect(lines.geometry.drawRange.count).toBe(0);
+    job.finish();
+    expect(lines.geometry.drawRange.count).toBe(expectedCount);
+  });
+
+  /**
+   * 防线 5a：空 `scene-path`（`points: []`）在 count 与 visit 两遍里必须
+   * 一致——都是 0 段。修复前 count 返回 −1。
+   *
+   * **探针必须取 count 自己的输出**：只断言 `lineVertexCount` / `drawRange`
+   * 是测不出来的——5c 让发布数改用「实际写入数」，于是 count 算成 −1 之后
+   * 写入仍是 0 个顶点、发布仍是 0，症状被下游掩盖。唯一直接看得到 count
+   * 的地方是 `onPaintProfile` 的 `segmentCount` 与 `segmentsByKind`。
+   */
+  it('counts an empty scene-path as zero segments, matching the visit pass', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    const profiles: { segmentCount: number; segmentsByKind: Record<string, number> }[] = [];
+    painter.onPaintProfile = profile => {
+      profiles.push({
+        segmentCount: profile.segmentCount,
+        segmentsByKind: { ...profile.segmentsByKind },
+      });
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      painter.paint(
+        [layout('empty', [{
+          kind: 'scene-path',
+          points: [],
+          closed: false,
+          part: 'dimension',
+          styleRole: 'normal',
+        }])],
+        SOLVESPACE_DIMENSION_THEME,
+      );
+      expect(profiles).toHaveLength(1);
+      // The count pass itself: 0, never −1.
+      expect(profiles[0]!.segmentCount).toBe(0);
+      expect(profiles[0]!.segmentsByKind['scene-path']).toBe(0);
+      expect(painter.getStats().lineVertexCount).toBe(0);
+      expect(publishedVertexCount(painter, 'dimension-scene-lines')).toBe(0);
+      // Zero is not a truncation: the bounds guard must stay quiet.
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  /**
+   * 防线 5b + 5c（同步路径）：段数算少时 `writeLineVertices` 在容量边界
+   * 截断、告警、并且只发布实际写入数。缓冲的 16 顶点下限容纳 16 段里的
+   * 前 4 段；`drawRange` 必须盖住且只盖住这 16 个顶点——按预算 4 发布会
+   * 把上一帧的旧顶点画出来，按需写 64 则是越界。
+   */
+  it('truncates a line write at buffer capacity instead of writing past it', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      painter.paint([miscountedLayout('miscounted')], SOLVESPACE_DIMENSION_THEME);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('truncated'),
+        expect.objectContaining({ expected: 4, written: 16, layouts: 1 }),
+      );
+      expect(painter.getStats().lineVertexCount).toBe(16);
+      // `quadIndexed`: drawRange 是索引数 = (vertexCount / 4) * 6。
+      expect(publishedVertexCount(painter, 'dimension-scene-lines')).toBe(24);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  /**
+   * 防线 5b + 5c（分帧路径）：与上一条同一场景，但走 `paintAsync()`，
+   * 确认截断同样只发布实际写入数、统计与 `drawRange` 一致且告警一次。
+   */
+  it('publishes only the written vertices when a batched paint truncates', () => {
+    const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    painter.resize(800, 600);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const job = painter.paintAsync(
+        [miscountedLayout('miscounted')],
+        SOLVESPACE_DIMENSION_THEME,
+      );
+      expect(job.advance(1)).toBe(true);
+      job.finish();
+      const stats = painter.getStats();
+      expect(stats.lineVertexCount).toBe(16);
+      const lines = painter.group.getObjectByName('dimension-scene-lines') as any;
+      // `quadIndexed`: drawRange 是索引数 = (vertexCount / 4) * 6。
+      expect(lines.geometry.drawRange.count).toBe((stats.lineVertexCount / 4) * 6);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  /**
+   * 防线 5b 的边界函数：一段的 4 个顶点连续写，段级一次比较足够；
+   * 恰好写满是允许的最后位置。
+   */
+  it('bounds a segment quad write against the line buffer capacity', () => {
+    expect(fitsWithin(0, 4, 16)).toBe(true);
+    expect(fitsWithin(12, 4, 16)).toBe(true);
+    expect(fitsWithin(13, 4, 16)).toBe(false);
+    expect(fitsWithin(16, 4, 16)).toBe(false);
   });
 });

@@ -398,6 +398,15 @@ class ReusableGeometry {
     ).array as Float32Array;
   }
 
+  /**
+   * Vertices the current buffers can hold. `ensureCapacity` sizes ahead of
+   * the actual write, so an index at or past this is out of bounds — and
+   * typed arrays drop out-of-range stores silently rather than throwing.
+   */
+  get vertexCapacity(): number {
+    return this.capacity;
+  }
+
   finish(vertexCount: number): void {
     this.geometry.setDrawRange(
       0,
@@ -784,7 +793,11 @@ function countPrimitiveSegments(
     case 'scene-line':
       return 1;
     case 'scene-path':
-      return (primitive.points.length - 1)
+      // `Math.max(0, …)`: an empty path visits no segments, so the count
+      // must be 0, not −1. A negative count under-sizes the buffer by four
+      // vertices and shifts every later layout's range — the tail stroke
+      // then drops silently (typed arrays ignore out-of-range stores).
+      return Math.max(0, primitive.points.length - 1)
         + (primitive.closed && primitive.points.length > 2 ? 1 : 0);
     case 'scene-marker':
       return primitive.shape === 'cross' ? 2 : MARKER_CIRCLE_SEGMENTS;
@@ -805,6 +818,39 @@ function countPrimitiveSegments(
       // Filled primitives go through the triangle / fill buffers.
       return 0;
   }
+}
+
+/**
+ * Whether one segment's four-vertex quad still fits at `vertexIndex` in a
+ * buffer of `capacity` vertices. Checked once per segment — its vertices
+ * are written consecutively, so a single comparison covers all four —
+ * because typed arrays drop out-of-range stores silently: an under-sized
+ * buffer would lose tail strokes with no error raised anywhere.
+ */
+export function fitsWithin(
+  vertexIndex: number,
+  needed: number,
+  capacity: number,
+): boolean {
+  return vertexIndex + needed <= capacity;
+}
+
+/**
+ * The one observable record of a truncated line write: the count pass
+ * under-budgeted, so the write stopped at capacity and the published
+ * `drawRange` covers only what landed. Warn rather than throw — a missing
+ * tail of strokes beats an unpainted frame.
+ */
+function warnLineTruncation(
+  expected: number,
+  written: number,
+  layouts: number,
+): void {
+  console.warn(
+    '[SceneDimensionPainter] segment count under-budgeted the line buffer;'
+      + ' write truncated at capacity',
+    { expected, written, layouts },
+  );
 }
 
 function visitSegments(
@@ -984,7 +1030,12 @@ export type SceneDimensionPaintJob = Readonly<{
   advance(batchLayouts?: number): boolean;
   /** Publishes the buffers. Only valid after `advance()` returned true. */
   finish(): void;
-  /** Abandons the job, leaving the published geometry untouched. */
+  /**
+   * Abandons the job: `finish()` becomes a no-op and nothing the job
+   * managed to write is published. The line `drawRange` was already
+   * cleared at job start, so the layer stays blank instead of reverting
+   * to — or mixing with — the previous frame.
+   */
   cancel(): void;
 }>;
 
@@ -1192,7 +1243,7 @@ export class ThreeSceneDimensionPainter {
     const resolveColor = createColorResolver(theme);
 
     const ranges = new Map<string, DimensionVertexRange>();
-    this.writeLineVertices(
+    const lineWrite = this.writeLineVertices(
       layouts,
       0,
       layouts.length,
@@ -1201,8 +1252,15 @@ export class ThreeSceneDimensionPainter {
       displayMode,
       ranges,
     );
-    this.lineBuffers.finish(lineVertexCount);
-    this.lineVertexCount = lineVertexCount;
+    if (lineWrite.overflowed) {
+      warnLineTruncation(lineVertexCount, lineWrite.vertexIndex, layouts.length);
+    }
+    // Publish the count actually written, not the count pass's budget:
+    // after an under-budgeted write, `finish(budget)` would extend
+    // `drawRange` over tail vertices still holding the previous frame's
+    // bytes and draw them as garbage.
+    this.lineBuffers.finish(lineWrite.vertexIndex);
+    this.lineVertexCount = lineWrite.vertexIndex;
     const writeCompletedAt = profiling ? performance.now() : 0;
 
     let triangleVertexCount = 0;
@@ -1313,8 +1371,12 @@ export class ThreeSceneDimensionPainter {
    * That is safe here because the host renders on demand rather than on a
    * loop; see plan §11.3.5.
    *
-   * `cancel()` leaves the published geometry exactly as it was, so an
-   * abandoned job cannot corrupt the last good frame.
+   * `cancel()` leaves the line `drawRange` cleared (done unconditionally at
+   * job start) and whatever vertex prefix the job managed to write — all
+   * unpublished, since `finish()` becomes a no-op. The triangle and fill
+   * buffers still hold the previous frame's complete geometry. An
+   * abandoned job therefore blanks the stroke layer instead of corrupting
+   * it; the next paint restores a complete frame.
    */
   paintAsync(
     layouts: readonly LayoutResult[],
@@ -1346,10 +1408,18 @@ export class ThreeSceneDimensionPainter {
       this.lines.geometry = this.lineBuffers.geometry;
       this.lineEdges.geometry = this.lineBuffers.geometry;
     }
+    // `ensureCapacity` only zeroes `drawRange` when it swaps in a fresh
+    // geometry; on the common no-growth path the range still publishes the
+    // previous `finish()`'s indices while this job overwrites the buffer
+    // from index 0 — a render inside the batch window would draw new
+    // heads over stale tails. Clear unconditionally: in-progress writes
+    // may render as nothing, never as mixed vertices.
+    this.lineBuffers.clear();
 
     const ranges = new Map<string, DimensionVertexRange>();
     let written = 0;
     let lineVertexIndex = 0;
+    let overflowed = false;
     let cancelled = false;
     let finished = false;
 
@@ -1359,7 +1429,7 @@ export class ThreeSceneDimensionPainter {
         if (cancelled || finished) return true;
         const count = Math.max(1, Math.floor(batchLayouts));
         const to = Math.min(layouts.length, written + count);
-        lineVertexIndex = this.writeLineVertices(
+        const lineWrite = this.writeLineVertices(
           layouts,
           written,
           to,
@@ -1368,15 +1438,23 @@ export class ThreeSceneDimensionPainter {
           displayMode,
           ranges,
         );
+        lineVertexIndex = lineWrite.vertexIndex;
+        overflowed ||= lineWrite.overflowed;
         written = to;
         return written >= layouts.length;
       },
       finish: () => {
         if (cancelled || finished) return;
         finished = true;
+        if (overflowed) {
+          warnLineTruncation(lineVertexCount, lineVertexIndex, layouts.length);
+        }
+        // Publish what the batches actually wrote, not the count pass's
+        // budget: after a truncation the budget would extend `drawRange`
+        // over tail vertices still holding the previous frame's bytes.
         this.publishLineBatch(
           layouts,
-          lineVertexCount,
+          lineVertexIndex,
           ranges,
           theme,
           displayMode,
@@ -1395,13 +1473,13 @@ export class ThreeSceneDimensionPainter {
    */
   private publishLineBatch(
     layouts: readonly LayoutResult[],
-    lineVertexCount: number,
+    writtenLineVertexCount: number,
     ranges: Map<string, DimensionVertexRange>,
     theme: DimensionTheme,
     displayMode: DimensionDisplayMode,
   ): void {
-    this.lineBuffers.finish(lineVertexCount);
-    this.lineVertexCount = lineVertexCount;
+    this.lineBuffers.finish(writtenLineVertexCount);
+    this.lineVertexCount = writtenLineVertexCount;
 
     const resolveColor = createColorResolver(theme);
 
@@ -1414,6 +1492,12 @@ export class ThreeSceneDimensionPainter {
     if (this.triangleBuffers.ensureCapacity(triangleVertexCount)) {
       this.triangles.geometry = this.triangleBuffers.geometry;
     }
+    // Same defence as the line buffer's `clear()` in `paintAsync`: without
+    // growth, `drawRange` keeps the previously published count while the
+    // writes below overwrite from index 0. This pass is synchronous — no
+    // render can interleave today — but the clear keeps "writes in
+    // progress are invisible" true if it is ever split like the line pass.
+    this.triangleBuffers.clear();
     const trianglePosition = this.triangleBuffers.array('position');
     const triangleOffset = this.triangleBuffers.array('offsetPx');
     const triangleColor = this.triangleBuffers.array('batchColor');
@@ -1454,6 +1538,8 @@ export class ThreeSceneDimensionPainter {
     if (this.fillBuffers.ensureCapacity(fillVertexTotal)) {
       this.fills.geometry = this.fillBuffers.geometry;
     }
+    // Same defence as `triangleBuffers.clear()` above.
+    this.fillBuffers.clear();
     const fillPosition = this.fillBuffers.array('position');
     const fillOffset = this.fillBuffers.array('offsetPx');
     const fillColor = this.fillBuffers.array('batchColor');
@@ -1491,9 +1577,18 @@ export class ThreeSceneDimensionPainter {
   /**
    * Writes the line vertices of `layouts[from..to)` into the line buffers,
    * starting at `startVertex`. Returns the vertex index after the last one
-   * written, plus the ranges for the layouts it covered. Shared by the
-   * synchronous `paint()` and the batched `paintAsync()` so both produce
-   * bit-identical vertices (W5-5).
+   * written and whether the write hit the buffer's capacity, plus the
+   * ranges for the layouts it covered. Shared by the synchronous `paint()`
+   * and the batched `paintAsync()` so both produce bit-identical vertices
+   * (W5-5).
+   *
+   * A segment that would not fit is dropped — typed arrays discard
+   * out-of-range stores silently, so an under-budgeted count pass would
+   * otherwise lose tail strokes with no error — and every later segment
+   * drops the same way, `lineVertexIndex` frozen at the boundary. The
+   * caller republishes the truncated count and warns. The collapsed
+   * `lineEnd`s left behind fail `updateStyles`'s per-layout length check,
+   * degrading style-only updates to full `paint()`s: correct, just slower.
    */
   private writeLineVertices(
     layouts: readonly LayoutResult[],
@@ -1503,7 +1598,7 @@ export class ThreeSceneDimensionPainter {
     theme: DimensionTheme,
     displayMode: DimensionDisplayMode,
     ranges: Map<string, DimensionVertexRange>,
-  ): number {
+  ): { vertexIndex: number; overflowed: boolean } {
     const linePosition = this.lineBuffers.array('position');
     const lineOffset = this.lineBuffers.array('offsetPx');
     const lineOtherAnchor = this.lineBuffers.array('otherAnchor');
@@ -1518,6 +1613,7 @@ export class ThreeSceneDimensionPainter {
     const lineDashCode = this.lineBuffers.array('dashCode');
     const resolveColor = createColorResolver(theme);
     const pixelRatio = this.pixelRatio.value;
+    const capacityVertices = this.lineBuffers.vertexCapacity;
     const writeStrokeVertex = (
       vertexIndex: number,
       own: SceneVertex,
@@ -1545,6 +1641,7 @@ export class ThreeSceneDimensionPainter {
       lineDashCode[vertexIndex] = code;
     };
 
+    let overflowed = false;
     let lineVertexIndex = startVertex;
     for (let index = from; index < to; index += 1) {
       const layout = layouts[index]!;
@@ -1555,6 +1652,14 @@ export class ThreeSceneDimensionPainter {
         this.font,
         this.glyphCaches,
         (segmentFrom, segmentTo, styleRole, lineStyle, stroke, hint) => {
+          // One bounds check per segment — its four vertices are written
+          // consecutively, so a single comparison covers them all. On a
+          // miss the index never advances again, so every later segment in
+          // the batch drops the same way (see the doc comment).
+          if (!fitsWithin(lineVertexIndex, 4, capacityVertices)) {
+            overflowed = true;
+            return;
+          }
           const code = dashCode(styleRole, lineStyle);
           const color = resolveColor(styleRole, stroke);
           // Screen-space text and dimension strokes are hinted: whole device
@@ -1597,7 +1702,7 @@ export class ThreeSceneDimensionPainter {
         fillEnd: 0,
       });
     }
-    return lineVertexIndex;
+    return { vertexIndex: lineVertexIndex, overflowed };
   }
 
   /**
