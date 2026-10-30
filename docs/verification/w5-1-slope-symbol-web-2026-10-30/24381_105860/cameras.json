@@ -1,0 +1,89 @@
+{
+  "label": "w5-1-g9-web-side",
+  "generatedAt": "2026-10-30T10:16:15.526Z",
+  "url": "http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24381_105860&show_refno_select=0&mbd_refno=24381_105860&gm_backend=http%3A%2F%2F127.0.0.1%3A8022&mbdBackend=http%3A%2F%2F127.0.0.1%3A8022",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "devicePixelRatio": 1,
+  "canvasCss": {
+    "width": 1220,
+    "height": 778
+  },
+  "refno": "24381_105860",
+  "tiers": {
+    "far": {
+      "scale": 1,
+      "position": [
+        37.76030175781248,
+        28.320226318359268,
+        37.760301757812414
+      ],
+      "target": [
+        -4.440892098500626e-16,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        0,
+        1
+      ],
+      "fov": 30,
+      "near": 0.1,
+      "far": 1000,
+      "records": 422,
+      "drawn": 57,
+      "lodHidden": 365
+    },
+    "mid": {
+      "scale": 0.4,
+      "position": [
+        15.104120703124991,
+        11.328090527343688,
+        15.104120703124948
+      ],
+      "target": [
+        -4.440892098500626e-16,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        0,
+        1
+      ],
+      "fov": 30,
+      "near": 0.02417839033982269,
+      "far": 967.1356135929075,
+      "records": 422,
+      "drawn": 57,
+      "lodHidden": 365
+    },
+    "near": {
+      "scale": 0.2,
+      "position": [
+        7.5520603515624956,
+        5.664045263671844,
+        7.552060351562474
+      ],
+      "target": [
+        -4.440892098500626e-16,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        0,
+        1
+      ],
+      "fov": 30,
+      "near": 0.012089195169911342,
+      "far": 483.5678067964537,
+      "records": 422,
+      "drawn": 71,
+      "lodHidden": 351
+    }
+  }
+}

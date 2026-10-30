@@ -746,7 +746,7 @@ W5-1 要裁决 G9：PML 用三角形，Web 用线 + 箭头。裁决前先把 Web
 6. **一份真实 BRAN 的桌面端出图截图**作为判据物：现有 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 与 `dimension-camera-baseline-2026-10-29/` 只有 Web 侧截图，**没有 PML 侧对照图**。
 7. 裁决归属口径：`2026-07-29-…audit.md:97` 写「按 rs-mbd『语义对齐』词条不要求像素复刻，留金样人工审阅裁决」，但没写清「语义对齐」是否允许形状不同——这条要么引用 rs-mbd 原文，要么由人拍。
 
-**可用的视觉材料**：`all-pipes-brans.json` 里 **318 个 BRAN 有 `slope_mark`**（合计 1 467 个），最密集的是 `24383_75125`（23 个）、`24381_105860`（22 个）、`24381_105733`（21 个）——W5-1 出图直接用这三个，比现在两个基线 BRAN（0 个坡度）合适。生成器已支持 `DIMENSION_CAMERA_BASELINE_REFNOS` 覆盖。
+**可用的视觉材料**：`all-pipes-brans.json` 里 **318 个 BRAN 有 `slope_mark`**（合计 1 467 个），最密集的是 `24383_75125`（23 个）、`24381_105860`（22 个）、`24381_105733`（21 个）——W5-1 出图直接用这三个，比现在两个基线 BRAN（0 个坡度）合适。**Web 侧现状已出图**（2026-10-30）：`docs/verification/w5-1-slope-symbol-web-2026-10-30/`，三个 BRAN × 三档 + cameras.json 侧车 + README；图上确认坡度符号是「红色线对 + 描边箭头」（翼长 0.08 × 字高、半张角 20°），无三角形——§11.8「走描边通道」结论的视觉证据。**裁决本身仍等 PML 侧对照物与人拍**。生成器已支持 `DIMENSION_CAMERA_BASELINE_REFNOS` 覆盖。
 
 ### 11.9 `DimensionTheme` 传递链路审计（2026-10-30，只读）
 
