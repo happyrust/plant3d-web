@@ -1,9 +1,10 @@
 # 模型版本时间轴拖拽浏览（model-version-timeline-scrub）开发计划 · 全量重排 · 2026-10-29
 
-> ## 执行状态（2026-10-31 更新）
+> ## 执行状态（2026-10-31 下午更新）
 >
-> **W0–W9 全部完成**，唯一未做的是计划 §8 已划出范围的「后端合入 `refactor`」。
-> 本文件正文仍是 2026-10-29 的「待执行」措辞，作为历史依据保留；以本节为准看进度。
+> **W0–W9 全部完成**。剩下三件事，见紧接本节的「剩余工作」：W10 审核发现修复（前端 4 条）、
+> W4 收尾（后端合入 `refactor`，需确认）、未提交内容处置（需确认）。
+> 本文件正文仍是 2026-10-29 的「待执行」措辞，作为历史依据保留；以本节和「剩余工作」为准看进度。
 >
 > | 阶段 | 状态 | 落地 |
 > |---|---|---|
@@ -22,16 +23,75 @@
 > 两个联调脚本全绿（smoke 20 步 ok、vs-legacy 37 组合零不一致）；
 > 性能 e2e 4 passed / 3 skipped / 0 failed（12.4 与版本表首帧按夹具跳过）。
 >
-> **后端分支**：`feat/model-version-timeline-scrub`，领先 `refactor` 9 个提交，工作区干净。
+> **后端分支**：`feat/model-version-timeline-scrub` @ `62619584f`，领先 `refactor` 9 个提交、落后 24 个，
+> 工作树干净，没有推送到远端。
 >
-> **W4 剩下的合入动作**（计划原文要求，尚未执行）：`git rebase refactor`（冲突预期只在
-> `e3d_model_service.rs`、`options.rs`、`fast_model/mod.rs` 三处，保留两边）→ `cargo test` 绿
-> → 合入 `refactor` → SHA 写进 `tasks.md` 第 8 组。不合 `publish`、不部署。
-> 这一步会动 `refactor` 分支，属于对外可见的分支变更，执行前需确认。
+> **W4 合入**：尚未执行。原先预期的冲突位置（`e3d_model_service.rs` / `options.rs` / `fast_model/mod.rs`）
+> 已经过时，2026-10-31 的核查结果与步骤见「剩余工作 · W4 收尾」。
 >
 > **期间修掉的实质问题**：27 条，见 `docs/verification/model-version-timeline-scrub/phase3-perf.md`。
 > **一处规范冲突已裁决**：R6.3 / R8.10 选第 3 条出路（改 R8.10 措辞为「所有子节点」），
 > 见 `docs/verification/model-version-timeline-scrub/finding-r6-3-vs-r8-10.md`。
+> **2026-10-31 审核**：10-30 晚至 10-31 的四个修复提交（ba146905、307f97f7、31e5f250、e2d82c95）里
+> 有 4 条问题待修，其中 2 条已用临时用例复现，列为 W10；307f97f7 没有问题。
+
+## 剩余工作（2026-10-31 重排，以本节为准）
+
+顺序：**W10**（前端修复，只动本仓，每条一个提交、可逐条回滚）→ **W4 收尾**（后端合入，动 `refactor`，需确认）→
+**未提交内容处置**（需确认）。W10 与 W4 第 1 步互不依赖，可以并行。
+
+### W10 · 审核发现修复（前端）
+
+**W10-1 · 子树请求中止补全**（ba146905 没覆盖的两条路径，已复现）
+
+- 现象：`useVersionFrames.ts:609` `loadUnits` 的 `AbortController` 在任务真正开始时才创建，`exitBrowse` 只能中止并发上限内已经开始的那几个。`exitBrowse`（`:839`）在中止之后、`ctx = null`（`:855`）之前对每个缓存帧 `await releaseFrameGeometry(...)`，就在这几轮里 `runBounded` 启动排队任务，拿到的是未中止的 signal。另外 `fetchUnitAt`（`:648`）在 `await query(...)` 之后不查 signal 就 `commit(putFrame(...))`，而 `retryOnBusy` 的 `raceAbort` 只让上层先拿到 AbortError，不会停掉底下的请求。
+- 实测（临时用例，已删）：10 个单元、前 4 个立即返回、其余挂起，退出后 unit_9 / unit_10 仍被发出且 signal 未中止；放行响应后，已清空的缓存从 0 变成 6。
+- 修法：每次 `loadUnits` 先建一个共享的 `AbortController` 登记进 `subtreeControllers`（或改成会话级 controller：`enterBrowse` 新建、`exitBrowse` abort），所有任务共用它的 signal，任务开始前先查 `aborted`；`fetchUnitAt` 在 `await query(...)` 之后、`commit` 之前再查一次 signal 与会话（见 W10-2）。
+- 测试：ba146905 那条用例里「退出后不落地」的断言没有约束力（假数据源永不返回，去掉修复也绿）。新增用例：有排队任务、退出后才放行响应，断言退出后没有新请求、`cacheKeys` 保持 0。回滚验证：去掉修复后该用例必须红。
+
+**W10-2 · 会话守卫改为身份比较**（已复现，频率低）
+
+- 现象：`loadUnits` 落地前的守卫是 `mode.value !== 'browse'`（`:625`），退出后同一轮内重进时旧会话会越过它，用 `setTick(context.cursor, null)` 清掉新会话的「加载中」刻度。手动点击之间碰不到，程序里连着 exit → enter 的路径会碰到。
+- 注释（`:623-624`）说「不能比 `ctx !== context`，`enterBrowse` 里 `ctx = { ...context }` 是新对象」，这个理由不成立：`requestCursorFrame` 与 `answerConfirm` 都是 `const context = ctx` 后往下传，`loadUnits` 收到的就是 `ctx` 本身，同一会话内恒等。
+- 修法：守卫改为 `if (ctx !== context) return;`（或会话号），更正 `:623-624` 与 `:143-147` 的注释。
+- 测试：退出后立即重进，旧会话的结果不得改写新会话的 `tickStatus` / `errors` / 角标。
+
+**W10-3 · DTX 网格取回超时覆盖响应体**（31e5f250 补完）
+
+- 现象：`useDbnoInstancesDtxLoader.ts` 的 `ensureGeometryForGeoHash` 在 `fetch(meshUrl, { signal })` 返回响应头后立即 `clearTimeout`，后面的 `await resp.arrayBuffer()` 不受超时约束——响应体卡住时同一 geoHash 仍会永久挂起，正是这条提交要修的症状。超时只在 `debug` 时打日志；超时与 404 / 解析失败一样记进 `loadedGeoHash` + `failedGeoHash`，之后只有强制重载（`forceRetryNotFound`）才重拉。
+- 修法：`clearTimeout` 挪到读完响应体之后（同一个 signal 也会中止响应体读取）；超时单独 `console.warn`，不受 `debug` 控制；超时不记 `loadedGeoHash`，下次调用可以重试，404 / 解析失败保持现状。
+- 测试：假 `fetch` 先回头、响应体永不结束，假计时器推 8 s 后任务结束且 `loadingGeoHash` 清空；超时后再次调用会重新发请求。
+
+**W10-4 · 面板进入浏览的重试循环**（e2d82c95）
+
+- 现象：`ModelUnitVersionComparePanel.vue:769-783` 每轮都要等整帧加载完（秒级）；期间用户退出或面板卸载（`onBeforeUnmount` 里 `void frames.exitBrowse()`，`:968`），下一轮仍会再调 `frames.enterBrowse`，把浏览图层建回来，卸载后留下孤儿图层；8 次都失败时静默返回，没有日志也没有角标。这段没有单元测试。
+- 修法：进入时取一个令牌（仿照面板已有的 `requestId`），每轮前检查令牌未变、组件未卸载、用户未退出；8 次失败打 `console.warn` 并给角标。根治（单列、可选）：让关对比之前就发出的 `open` 被取代后不再执行 `clear()`（控制器侧加世代号），之后可去掉重试循环。
+- 测试：面板例子测试——重试期间触发退出 / 卸载，之后不得再调 `browseEnter`；连续 8 次图层未就绪时有告警。
+
+**W10 门禁**：全量 `npx vitest run`、`npm run type-check` 新增 0、改动文件 eslint 干净；每条一个提交。W10-1 / 2 / 4 落地后，在 8022 后端起着时重跑性能 e2e 12.1 / 12.5 / 12.6-12.7，更新 `docs/verification/model-version-timeline-scrub/perf/`，`phase3-perf.md` 记一行。
+
+### W4 收尾 · 后端合入 `refactor`（需确认后执行）
+
+2026-10-31 只读核查（`git merge-tree` 预演，没有动任何分支）：
+
+- 特性分支改 24 个文件（+6 885 / −450）。预演只有 **1 处冲突**：`src/fast_model/spatial_centerline.rs`（特性侧 `89914b3f5` 改 1 行；`refactor` 侧 `9b539f814`、`6e881ecdf` 改了同一处测试夹具）。原先预期的三处现在都能自动合并。
+- 真正的阻碍：主工作区 `old/gen-model`（检出 `refactor`）有 142 条未提交改动，其中 6 个文件与特性改动重叠：`docs/specs/web-service-api.md`、`src/fast_model/e3d_model_service.rs`、`src/fast_model/mod.rs`、`src/mbd/branch_query.rs`、`src/options.rs`、`src/web_service/handlers.rs`。在主工作区 `git merge` 会被拒绝；`tasks.md:204` 说的「用独立 worktree 合入」也行不通——`refactor` 已检出在主工作区，绕开它直接移动 `refactor` 引用，会让那 142 条改动看起来像在回退合入内容。
+- 步骤：
+  1. （不碰 `refactor`，可先做）特性工作树 `git rebase refactor`，解决 `spatial_centerline.rs` 夹具冲突，跑 §7 的 `cargo test --lib`。分支未推送，rebase 不需要强推。
+  2. （需要主工作区所有者先处理）那 6 个重叠文件先提交或另存，然后在主工作区 `git merge --ff-only feat/model-version-timeline-scrub`（rebase 后可快进）。
+  3. 合入 SHA 写进 `tasks.md` 第 8 组（`:207` 的「未做」改掉）；不合 `publish`、不部署、不推送。
+
+### 未提交内容处置（需确认）
+
+- `docs/verification/model-version-timeline-scrub/realtime-history-smoke.json`：只有数字变化（`cache_entries` 32→7、命中 / 未命中计数、耗时），是一次复跑覆盖了已提交的证据，换行为 CRLF。
+- `ui/版本管理/version-timeline.pen`：+843 / −355 的设计稿改动，来源不明。
+- 不属于本计划、不动：`.planning/` 下 room-* / w41 / w54-* 数据与 `adjust_weld.live.rs.bak`、`src/dimension/kernel/layout/polar/place/`（MBD 标注工作线）。审核里 bbf3f367 的分帧批大小问题（只按第一批算条数）也归 MBD 标注计划。
+
+### 待拍板（在 plannotator 里批注即可）
+
+- **D9 · W4 怎么推进。** (a) 现在只做第 1 步（特性工作树 rebase + `cargo test`，不碰 `refactor`），第 2 步等主工作区那 6 个文件处理完再做（推荐：可回滚，只改未推送的特性分支）；(b) 第 1–3 步一起做，由你先处理主工作区；(c) W4 整体延后。
+- **D10 · 冒烟复跑结果。** (a) 作为复跑证据提交（推荐，与 96d79c77「留复跑结果」一致）；(b) 还原成已提交版本。
+- **D11 · `.pen` 设计稿。** (a) 是本特性的改动就按 §6 单独提交；(b) 不动（推荐，来源不明时不替别人提交）。
 
 依据是同日对 `plant3d-web/.kiro/specs/model-version-timeline-scrub/` 四份规格与四个工作区的只读审核，以及随后落盘的 14 处规格修订（§1.1）。所有结论带 `file:line`；行号以 2026-10-29 的工作树为准：plant3d-web `main` @ `a07e26b3`（工作区脏，107 条），gen-model 主工作区 `refactor` @ `1caf3a848`（12311 条未提交改动，本特性不碰），本特性后端工作树 `old/gen-model-timeline-scrub/` 分支 `feat/version-time-resolve-cases` @ `d82cd90ce`（18 条改动全部未提交），`old/vendor/e3d-model` `main` @ `f1f98b8`（停止钩子已提交）。
 
@@ -331,3 +391,4 @@ $env:VERSION_SCRUB_PERF = '1'; npx playwright test e2e/version-scrub-perf.spec.t
 ## 9. Plannotator 门禁记录
 
 - 首轮（2026-10-29）：`{"decision":"approved"}`（无批注）。`.planning/2026-10-29-model-version-timeline-scrub/.gate-result.json`。本计划自此为已批准版；D4 / D6 仍待拍板，在 W0-2 / W0-4 动手前定。
+- 第二轮（2026-10-31，审核后重排）：`{"decision":"approved"}`（无批注）。`.planning/2026-10-29-model-version-timeline-scrub/.gate-result-2026-10-31.json`。「剩余工作」一节自此为已批准版，W10 按节内顺序执行；D9 / D10 / D11 没有批注，仍待拍板，在 W4 第 1 步与处置未提交内容之前定。
