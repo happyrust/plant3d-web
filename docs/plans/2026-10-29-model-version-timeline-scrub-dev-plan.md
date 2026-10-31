@@ -1,5 +1,38 @@
 # 模型版本时间轴拖拽浏览（model-version-timeline-scrub）开发计划 · 全量重排 · 2026-10-29
 
+> ## 执行状态（2026-10-31 更新）
+>
+> **W0–W9 全部完成**，唯一未做的是计划 §8 已划出范围的「后端合入 `refactor`」。
+> 本文件正文仍是 2026-10-29 的「待执行」措辞，作为历史依据保留；以本节为准看进度。
+>
+> | 阶段 | 状态 | 落地 |
+> |---|---|---|
+> | W0 入库与规格收尾 | 完成 | 两仓全部提交，规格 14 处修订已落盘 |
+> | W1 后端编排与路由 | 完成 | `realtime_history/query.rs` 编排 + `model_history_geometry` handler |
+> | W2 resolve / attributes-at / health | 完成 | 三条只读路由 + `/health` 分项 |
+> | W3 后端测试补齐 | 完成 | 属性测试 29–39 与例子测试；`cargo test --lib` 2762 passed |
+> | W4 集成验证与合入 | **部分** | 两个验证脚本全绿；**`git rebase refactor` + 合入未做**（见下） |
+> | W5 前端纯函数测试补齐 | 完成 | 11 模块 + 16 测试文件 |
+> | W6 前端接线 | 完成 | 三条路由客户端、`versionSource` 接线 |
+> | W7 浏览主流程 | 完成 | `useVersionFrames` 约 880 行 |
+> | W8 界面 | 完成 | `VersionTimelineScrubber.vue`、面板接入 |
+> | W9 联调与性能 | 完成 | Requirement 12 七条指标全部落地 |
+>
+> **验收结果**：前端全量 vitest 423 文件 / 4 149 passed / 1 todo；`type-check` 新增 0；
+> 两个联调脚本全绿（smoke 20 步 ok、vs-legacy 37 组合零不一致）；
+> 性能 e2e 4 passed / 3 skipped / 0 failed（12.4 与版本表首帧按夹具跳过）。
+>
+> **后端分支**：`feat/model-version-timeline-scrub`，领先 `refactor` 9 个提交，工作区干净。
+>
+> **W4 剩下的合入动作**（计划原文要求，尚未执行）：`git rebase refactor`（冲突预期只在
+> `e3d_model_service.rs`、`options.rs`、`fast_model/mod.rs` 三处，保留两边）→ `cargo test` 绿
+> → 合入 `refactor` → SHA 写进 `tasks.md` 第 8 组。不合 `publish`、不部署。
+> 这一步会动 `refactor` 分支，属于对外可见的分支变更，执行前需确认。
+>
+> **期间修掉的实质问题**：27 条，见 `docs/verification/model-version-timeline-scrub/phase3-perf.md`。
+> **一处规范冲突已裁决**：R6.3 / R8.10 选第 3 条出路（改 R8.10 措辞为「所有子节点」），
+> 见 `docs/verification/model-version-timeline-scrub/finding-r6-3-vs-r8-10.md`。
+
 依据是同日对 `plant3d-web/.kiro/specs/model-version-timeline-scrub/` 四份规格与四个工作区的只读审核，以及随后落盘的 14 处规格修订（§1.1）。所有结论带 `file:line`；行号以 2026-10-29 的工作树为准：plant3d-web `main` @ `a07e26b3`（工作区脏，107 条），gen-model 主工作区 `refactor` @ `1caf3a848`（12311 条未提交改动，本特性不碰），本特性后端工作树 `old/gen-model-timeline-scrub/` 分支 `feat/version-time-resolve-cases` @ `d82cd90ce`（18 条改动全部未提交），`old/vendor/e3d-model` `main` @ `f1f98b8`（停止钩子已提交）。
 
 本文件只是计划，不改代码。按用户 2026-10-29 的选择做**全量重排**：18 个任务组全部重新排进 W0–W9；已完成的 41 个子任务不重做，只进 §4.0 的回顾与验收表。任务编号、属性编号沿用 `tasks.md` / `design.md`（Correctness Properties 1–39），验收以 `requirements.md` 为准；需要编译、跑测试、起服务的步骤都由用户在工作包末尾按 §7 自己执行。
