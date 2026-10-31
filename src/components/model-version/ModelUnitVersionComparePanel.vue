@@ -140,6 +140,12 @@ const elementDiffs = ref(new Map<string, AttributeNetDiffView | 'loading' | stri
 let requestId = 0;
 let summaryRequestId = 0;
 let selfDiffRequestId = 0;
+/**
+ * 只在进入浏览时推进。对比装载要几秒，装完比对它：期间进过浏览就不派 `open`——控制器的 `open` 先 `clear()`，
+ * 会顺手 `browseExit()` 把浏览图层拆掉，而那时进入浏览的重试循环早已返回。
+ * 退出浏览不推进：浏览中发起的对比，装载期间退出浏览，照常打开。
+ */
+let browseEntryId = 0;
 
 const normalizedRefno = computed(() => unitRefno.value.trim().replace(/\//g, '_'));
 
@@ -606,6 +612,8 @@ async function runCompareUnits(pairs: readonly ModelUnitComparePair[]): Promise<
   compareCompleted.value = false;
   if (dbnum.value === null || pairs.length === 0) return;
   const run = ++requestId;
+  const entry = browseEntryId;
+  const current = (): boolean => run === requestId && entry === browseEntryId;
   comparing.value = true;
   error.value = null;
   activeTab.value = 'model';
@@ -614,10 +622,10 @@ async function runCompareUnits(pairs: readonly ModelUnitComparePair[]): Promise<
   try {
     load = await loadModelUnitComparePairs(pairs, {
       loadVersion: (version) => getModelSource().versions.loadVersion(version),
-      shouldApply: () => run === requestId,
+      shouldApply: current,
       onProgress: (progress) => { compareProgress.value = progress; },
     });
-    if (run !== requestId) return;
+    if (!current()) return;
     const loaded = load.pairs;
     // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
     const attributesAt: ModelUnitCompareAttributesAt = (side, refno, signal) => getModelSource().versions.attributesAt(
@@ -639,7 +647,8 @@ async function runCompareUnits(pairs: readonly ModelUnitComparePair[]): Promise<
     dispatch(view.detail);
     focusQueriedElement();
   } catch (cause) {
-    if (run === requestId) error.value = messageOf(cause);
+    // 进浏览作废时装载器抛「已取消」：那是我们自己取消的，不当错误显示
+    if (current()) error.value = messageOf(cause);
   } finally {
     // 作废或半路出错：本次已取到的几何不留，还给来源（装载器自己失败时已经还过）
     if (load && !adopted) void load.release();
@@ -760,18 +769,17 @@ async function enterBrowse(): Promise<void> {
   const sesno = scrubber.cursor.value;
   if (sesno === null || dbnum.value === null) return;
   const run = ++browseRequestId;
+  browseEntryId += 1;
   browseLayerNotice.value = null;
   // 先进浏览之前必须把对比模式关掉：对比的 `open` 会走 `clear()` → `browseExit()`，
   // 把刚建好的浏览图层清掉，之后 `browseShow` 全部静默返回——几何进了缓存但一帧不显示，
   // 表现就是「浏览按钮点了、时间轴在动、视口永远不更新」。
-  // 面板挂载时 `compare_autorun=1` 会自动进对比，这条尤其必要。
+  // 面板挂载时 `compare_autorun=1` 会自动进对比，这条尤其必要；那时对比多半还在装载，
+  // 装完的 `open` 由上面推进的 `browseEntryId` 挡住。
   closeCompare();
   // `closeCompare` 只派事件，视口那边拆对比图层是异步的；让出几轮微任务再 `browseEnter`，
   // 否则视口仍在收尾，`host.viewer()` / `host.primaryLayer()` 拿不到，图层建不起来
-  // （`browseLayerReady` 一直是 false，而 `__dtxViewer` / `__dtxLayer` 早已就绪）。
-  // 另外还可能有一条**在 `closeCompare` 之前就发出的** `open` 正在飞：它的 `clear()`
-  // 会在 `browseEnter` 之后才落地，把刚建好的图层清掉。所以这里不是「等一次」而是
-  // 「建起来之后再看几轮，确认没被清掉」，被清就重建。
+  // （`browseLayerReady` 一直是 false，而 `__dtxViewer` / `__dtxLayer` 早已就绪）。没建起来就重进，最多 8 次。
   await nextTick();
   if (run !== browseRequestId) return;
   const unitRefnos = scope.value === 'subtree' && geometryGroups.value.length > 0

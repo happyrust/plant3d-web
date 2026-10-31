@@ -1819,5 +1819,108 @@ describe('ModelUnitVersionComparePanel', () => {
         stub.detach();
       }
     });
+
+    /** 对比装载（`loadVersion`）先挂着，测试里放行；放行交出去的几何都记下 */
+    function holdCompareLoads() {
+      const pending: { item: ModelVersion; resolve: (value: ModelVersionGeometry) => void }[] = [];
+      const handedOut: ModelVersionGeometry[] = [];
+      versionSourceMocks.loadVersion.mockImplementation((item: ModelVersion) => new Promise<ModelVersionGeometry>((resolve) => {
+        pending.push({ item, resolve });
+      }));
+      return {
+        pending,
+        handedOut,
+        async releaseAll(): Promise<void> {
+          // 装载器工位并发、顺序领活：放一批才领下一批
+          for (let round = 0; round < 4; round += 1) {
+            for (const entry of pending.splice(0)) {
+              const loaded = geometryBySesno[entry.item.sesno]!();
+              handedOut.push(loaded);
+              entry.resolve(loaded);
+            }
+            await settle();
+          }
+        },
+      };
+    }
+
+    function listenOpens(): { opens: unknown[]; stop: () => void } {
+      const opens: unknown[] = [];
+      const listener = (event: Event) => {
+        const detail = (event as CustomEvent).detail as { action?: string } | undefined;
+        if (detail?.action === 'open') opens.push(detail);
+      };
+      window.addEventListener('plant3d:model-unit-version-compare', listener);
+      return { opens, stop: () => window.removeEventListener('plant3d:model-unit-version-compare', listener) };
+    }
+
+    it('对比还在装载时点「浏览」：装完不再派 open，几何还回去，也不报「已取消」', async () => {
+      versionSourceMocks.queryHistoryGeometry = vi.fn(async (req: { sesno?: number }) => ({
+        kind: 'ok' as const,
+        sesno: req.sesno ?? 897,
+        sessionTime: null,
+        geometryKey: `g${req.sesno ?? 897}`,
+        geometry: geometry(new Map([['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]]])),
+      }));
+      const loads = holdCompareLoads();
+      const { opens, stop } = listenOpens();
+      const stub = attachBrowseStub();
+      const { host, app } = await mountOnUnit();
+      const runButton = () => host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement;
+
+      try {
+        (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+        await flushUi();
+        runButton().click();
+        await flushUntil(() => loads.pending.length > 0);
+        (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+        await flushUntil(() => stub.calls.some((call) => call.startsWith('show:')));
+        await loads.releaseAll();
+
+        // 控制器的 `open` 先 `clear()`，会把刚建好的浏览图层拆掉
+        expect(opens).toEqual([]);
+        expect(loads.handedOut.length).toBeGreaterThan(0);
+        for (const item of loads.handedOut) expect(item.release).toHaveBeenCalled();
+        expect(host.textContent).not.toContain('版本对比装载已取消');
+        expect(runButton().disabled).toBe(false);
+        expect(host.querySelector('[data-testid="version-timeline-scrubber-exit-browse"]')).not.toBeNull();
+      } finally {
+        stop();
+        app.unmount();
+        stub.detach();
+      }
+    });
+
+    it('浏览中发起的对比，装载期间退出浏览：照常打开', async () => {
+      versionSourceMocks.queryHistoryGeometry = vi.fn(async (req: { sesno?: number }) => ({
+        kind: 'ok' as const,
+        sesno: req.sesno ?? 897,
+        sessionTime: null,
+        geometryKey: `g${req.sesno ?? 897}`,
+        geometry: geometry(new Map([['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]]])),
+      }));
+      const loads = holdCompareLoads();
+      const { opens, stop } = listenOpens();
+      const stub = attachBrowseStub();
+      const { host, app } = await mountOnUnit();
+
+      try {
+        (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+        await flushUntil(() => stub.calls.some((call) => call.startsWith('show:')));
+        (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+        await flushUi();
+        (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
+        await flushUntil(() => loads.pending.length > 0);
+        (host.querySelector('[data-testid="version-timeline-scrubber-exit-browse"]') as HTMLButtonElement).click();
+        await flushUi();
+        await loads.releaseAll();
+
+        expect(opens).toHaveLength(1);
+      } finally {
+        stop();
+        app.unmount();
+        stub.detach();
+      }
+    });
   });
 });
