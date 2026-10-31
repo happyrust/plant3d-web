@@ -5,7 +5,7 @@
 > **W0–W10 全部完成**，D9 / D10 / D11 已按推荐执行（用户 2026-10-31：「全部按推荐继续执行」）；
 > 修 W10 期间新复现的两条（W10-5、W10-6）也已按 D12 / D13 (a) 修完（用户 2026-10-31：「两条都按推荐修」），
 > 12.6 的拖动脚本按 D14 (a) 加了停顿并复跑（用户 2026-10-31：「按推荐继续。」）。
-> 剩下的见紧接本节的「剩余工作」：W4 第 2、3 步（等主工作区处理那 6 个重叠文件）。
+> 剩下的见紧接本节的「剩余工作」：W4 第 2、3 步（等主工作区处理那 4 个重叠文件）。
 > 本文件正文仍是 2026-10-29 的「待执行」措辞，作为历史依据保留；以本节和「剩余工作」为准看进度。
 >
 > | 阶段 | 状态 | 落地 |
@@ -14,7 +14,7 @@
 > | W1 后端编排与路由 | 完成 | `realtime_history/query.rs` 编排 + `model_history_geometry` handler |
 > | W2 resolve / attributes-at / health | 完成 | 三条只读路由 + `/health` 分项 |
 > | W3 后端测试补齐 | 完成 | 属性测试 29–39 与例子测试；`cargo test --lib` 2762 passed |
-> | W4 集成验证与合入 | **部分** | 两个验证脚本全绿；第 1 步已做（rebase 到 `refactor`，`cargo test --lib` 2773 passed）；**合入未做**（见下） |
+> | W4 集成验证与合入 | **部分** | 两个验证脚本全绿；第 1 步已做（最新 rebase 到 `refactor` @ `128c5ab3b`，`cargo test --lib` 2781 passed / 1 failed，该失败为 `refactor` 既有）；**合入未做**（见下） |
 > | W5 前端纯函数测试补齐 | 完成 | 11 模块 + 16 测试文件 |
 > | W6 前端接线 | 完成 | 三条路由客户端、`versionSource` 接线 |
 > | W7 浏览主流程 | 完成 | `useVersionFrames` 约 880 行 |
@@ -27,10 +27,11 @@
 > 性能 e2e 4 passed / 3 skipped / 0 failed（12.4 与版本表首帧按夹具跳过）；W10 后、W10-5 / W10-6 后各复跑一次 12.1 / 12.5 / 12.6-12.7，
 > 都是 3 passed，但后一次 12.6 没把前端缓存压到上限；按 D14 (a) 加停顿后单跑 12.6/12.7 1 passed，`cacheKeys` 12 封顶。
 >
-> **后端分支**：`feat/model-version-timeline-scrub` @ `e8fad6acd`（2026-11-01 rebase 到
-> `refactor` @ `2d36d6e05`），领先 9 个提交、落后 0 个，**可直接快进**，工作树干净，没有推送到远端。
+> **后端分支**：`feat/model-version-timeline-scrub` @ `ff76d62c5`（2026-11-01 02:18 rebase 到
+> `refactor` @ `128c5ab3b`），领先 9 个提交、落后 0 个，**可直接快进**，工作树干净，没有推送到远端。
+> 备份标签 `backup/timeline-scrub-before-128c5ab3b` 指向 rebase 前的 `e8fad6acd`。
 >
-> **W4 合入**：第 1 步已做；第 2 步要等主工作区所有者先处理那 6 个重叠文件，见「剩余工作 · W4 收尾」。
+> **W4 合入**：第 1 步已做；第 2 步要等主工作区所有者先处理那 4 个重叠文件（`docs/specs/web-service-api.md`、`src/fast_model/e3d_model_service.rs`、`src/options.rs`、`src/web_service/handlers.rs`），见「剩余工作 · W4 收尾」。
 >
 > **期间修掉的实质问题**：27 条，见 `docs/verification/model-version-timeline-scrub/phase3-perf.md`。
 > **一处规范冲突已裁决**：R6.3 / R8.10 选第 3 条出路（改 R8.10 措辞为「所有子节点」），
@@ -132,6 +133,10 @@ W10-5 / W10-6 按 D12 / D13 (a) 修完，门禁全绿；12.6 拖动脚本按 D14
      - 合入仍被阻塞，原因未变：`refactor` 被主工作区占用，Git 拒绝从别的 worktree 移动它
        （`fatal: cannot force update the branch 'refactor' used by worktree at ...`），
        而主工作区有 142 条未提交改动、6 个文件与特性重叠。用户已明确「不碰它工作区」。
+     **2026-11-01 02:18 再 rebase 一次**（用户选「先 rebase 并跑测试」；`refactor` 又进了 `128c5ab3b`，只改 `manual_update.rs`、`model_update_plan.rs`、`update_scope.rs`、`pdms_inst.rs`）：
+     - 无冲突。`e8fad6acd` → `ff76d62c5`，领先 9、落后 0，仍是 `refactor` 的直接后代。备份标签 `backup/timeline-scrub-before-128c5ab3b` 指向 `e8fad6acd`。
+     - `cargo test --lib --no-default-features --features ws,gen_model,manifold,project_hd,http_api`：**2781 passed / 1 failed / 114 ignored**（58.75 s）。失败仍是上面那条源码文本断言，特性 9 个提交仍不碰 `cata_dependency.rs` / `startup_reconcile.rs` / `model_coverage.rs`。
+     - 合入仍未做。主工作区未提交约 133 条；与特性重叠的已从 6 个减到 4 个：`docs/specs/web-service-api.md`、`src/fast_model/e3d_model_service.rs`、`src/options.rs`、`src/web_service/handlers.rs`（合计约 +662 / −70，未暂存）。`src/fast_model/mod.rs` 与 `src/mbd/branch_query.rs` 已不重叠。
   3. 合入 SHA 写进 `tasks.md` 第 8 组（`:207` 的「未做」改掉）；不合 `publish`、不部署、不推送。
 
 ### 未提交内容处置（需确认）
