@@ -204,7 +204,7 @@
   - 合入 gen-model `refactor`（工作区有未提交改动时用独立 worktree），记录提交 SHA；不合 `publish`、不部署。前端还没接上也能独立合并
   - Ensure all tests pass, ask the user if questions arise.
   - **完成情况（2026-10-30）**：7.1 冒烟脚本全绿（304、字节一致、断开取消、CORS），证据 `docs/verification/model-version-timeline-scrub/realtime-history-smoke.json`；7.2 全量等价 `realtime-vs-legacy.ps1` 在两个单元 110 个组合上 0 不一致，并发闸 `200,503,200,200,200,200`、`in_flight` 峰值 4，证据 `realtime-vs-legacy.json`。记录见 `phase3-perf.md` 的 7.1 / 7.2 两节。
-  - **未做**：合入 gen-model `refactor`。本次范围只到分支 `feat/model-version-timeline-scrub`（8 个提交，见 `phase1-mesh-write-safety.md`），合入与推送留给后续。后端 `cargo test --lib` 是 2762 passed / 1 failed，唯一失败 `data_interface::manual_update::tests::a_manual_execute_opens_its_epoch_inside_the_activation_gate_and_stale_rows_are_adopted` 为既有失败、与本特性无关。
+  - **已做（2026-11-01）**：合入 gen-model `refactor`，快进到 `535fff7d1`（`feat/model-version-timeline-scrub`，9 个提交，基于 `5133bc271`）。没有推送，没有合 `publish`，没有部署。合入前 `cargo test --lib --no-default-features --features ws,gen_model,manifold,project_hd,http_api`：2781 passed / 1 failed / 114 ignored；唯一失败 `data_interface::cata_dependency::tests::the_catalogue_reconcile_refreshes_dependency_rows_after_scheduling_roots_and_exposes_it` 是 `refactor` 上的源码文本断言，特性提交没改那几个文件。
 
 ### 阶段 2：plant3d-web（前端）— 纯函数
 
