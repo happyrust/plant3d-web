@@ -592,4 +592,39 @@ describe('useVersionFrames：退出中止全部请求（Requirement 4.6）', () 
     expect(frames.errors.value).toHaveLength(0);
     expect(frames.debug.value.cacheKeys).toBe(0);
   });
+
+  it('排队中的子树任务退出后不再发出，迟到的响应也不落地', async () => {
+    // 并发上限 4：unit_1–4 立即返回，unit_5–8 挂起，unit_9–10 还在排队。
+    // `exitBrowse` 逐帧 `await` 释放缓存时，排队任务会趁这几轮开跑；它们必须已经被中止。
+    // 假数据源不理 signal，模拟「响应已在路上」：退出后放行的响应不得写进已清空的缓存。
+    const hanging: (() => void)[] = [];
+    const requestedAfterExit: string[] = [];
+    let exiting = false;
+    const { frames, source } = setup({
+      respond: (call) => {
+        if (exiting) requestedAfterExit.push(call.unitRefno);
+        if (Number(call.unitRefno.split('_')[1]) <= 4) return ok(call);
+        return new Promise<HistoryGeometryResult>((resolve) => {
+          hanging.push(() => { void ok(call).then(resolve); });
+        });
+      },
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockResolvedValue(summaryWith(
+      Array.from({ length: 10 }, (_, i) => ({ unitRefno: `unit_${i + 1}`, added: 1, deleted: 0, modified: 0 })),
+    ));
+    void frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+    for (let i = 0; i < 5; i += 1) await settle();
+    expect(frames.debug.value.cacheKeys).toBe(4);
+    expect(hanging).toHaveLength(4);
+
+    exiting = true;
+    await frames.exitBrowse();
+    for (let i = 0; i < 5; i += 1) await settle();
+    expect(requestedAfterExit).toEqual([]);
+
+    for (const release of hanging) release();
+    for (let i = 0; i < 5; i += 1) await settle();
+    expect(frames.debug.value.cacheKeys).toBe(0);
+    expect(frames.errors.value).toHaveLength(0);
+  });
 });

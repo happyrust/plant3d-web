@@ -141,7 +141,7 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
   let cache: FrameCacheState<ModelVersionGeometry> = emptyFrameCache<ModelVersionGeometry>();
   const inFlight = new Map<FrameKey, InFlightRequest>();
   /**
-   * 子树请求的 controller。`inFlight` 只装游标/预取请求（它参与角色重分配与预取计数），
+   * 子树请求的 controller（每次 `loadUnits` 整批共用一个）。`inFlight` 只装游标/预取请求（它参与角色重分配与预取计数），
    * 子树请求另记一份，`exitBrowse` 一并 abort——否则退出浏览后子树请求继续跑，
    * 回来后 `commit` 把帧写进已清空的缓存。
    */
@@ -608,18 +608,18 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
   /** 并发闸 + 忙重试（9.9、9.10）；部分失败照常显示成功单元（9.8） */
   async function loadUnits(context: BrowseContext, unitRefnos: string[]): Promise<void> {
     const pending = unitRefnos.filter((unitRefno) => !getFrame(cache, keyOf(unitRefno, context.cursor)));
-    // 每个子树请求的 controller 记进 `subtreeControllers`：`exitBrowse` 只 abort `inFlight`，
-    // 不单独记就意味着退出浏览后子树请求继续跑，回来后 `commit` 把帧写进已清空的缓存。
+    // 整批共用一个 controller，开跑前就记进 `subtreeControllers`，`exitBrowse` 一并 abort。
+    // 不能每个任务开跑时才建：超过并发上限的任务还在 `runBounded` 里排队，中止时不在集合里，
+    // 之后开跑拿到的是没中止的 signal，照样发请求、把帧写进已清空的缓存。
     // 不塞进 `inFlight`：那张表参与角色重分配与预取计数，子树请求混进去会破坏它们的语义。
-    const tasks = pending.map((unitRefno) => () => new Promise<void>((resolve, reject) => {
-      const controller = new AbortController();
-      subtreeControllers.add(controller);
-      retryOnBusy(
-        (signal) => fetchUnitAt(unitRefno, context.cursor, signal),
-        { signal: controller.signal, sleep },
-      ).then(resolve, reject).finally(() => { subtreeControllers.delete(controller); });
-    }));
+    const controller = new AbortController();
+    subtreeControllers.add(controller);
+    const tasks = pending.map((unitRefno) => () => retryOnBusy(
+      (signal) => fetchUnitAt(unitRefno, context.cursor, signal),
+      { signal: controller.signal, sleep },
+    ));
     const results = await runBounded(tasks, concurrencyLimit);
+    subtreeControllers.delete(controller);
     // 退出浏览后 `mode` 变回 `idle`：此时任何落地都会污染下一轮会话的状态。
     // 不能比 `ctx !== context`——`enterBrowse` 里 `ctx = { ...context }` 是新对象，恒不相等。
     if (mode.value !== 'browse') return;
@@ -650,6 +650,9 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     const query = deps.source.queryHistoryGeometry;
     if (!context || !query) throw new ModelVersionRouteUnavailableError('model/history/geometry');
     const result = await query({ dbnum: context.dbnum, unitRefno, sesno }, { signal });
+    // 响应可能在中止之后才到：数据源不一定理会 signal，`retryOnBusy` 的赛跑只让上层先结束，
+    // 不会停掉这里。中止了就不落地，否则帧会写进 `exitBrowse` 已清空的缓存。
+    if (signal.aborted) throw new DOMException('This operation was aborted', 'AbortError');
     // 只有 `ok` 带几何。`not-modified` 回的是 304，没有 `geometry` 字段，而本函数是
     // `loadUnits` 里「缓存中没有这一帧」时才发起的——此时没有可复用的本地几何，
     // 不能当成功。原先是 `return`，等于把失败算成成功：`loadUnits` 的 `failed` 恒为 0，
