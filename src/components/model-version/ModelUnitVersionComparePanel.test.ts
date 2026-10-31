@@ -1503,16 +1503,21 @@ describe('ModelUnitVersionComparePanel', () => {
     return () => { window.history.replaceState(null, '', `${window.location.pathname}${original}`); };
   }
 
-  /** 三维那一半：收 attach 并把桩接口交回去 */
-  function attachBrowseStub(): { calls: string[]; detach: () => void } {
+  /**
+   * 三维那一半：收 attach 并把桩接口交回去。图层缺省照真控制器：`browseEnter` 后建好、`browseExit` 后撤掉；
+   * `layerReady` 用来模拟视口一直没就绪。
+   */
+  function attachBrowseStub(options: { layerReady?: () => boolean } = {}): { calls: string[]; detach: () => void } {
     const calls: string[] = [];
+    let layerBuilt = false;
     const api = {
-      browseEnter: () => { calls.push('enter'); },
+      get browseLayerReady() { return options.layerReady ? options.layerReady() : layerBuilt; },
+      browseEnter: () => { calls.push('enter'); layerBuilt = true; },
       browseShow: async (frame: { sesno: number }) => { calls.push(`show:${frame.sesno}`); },
       browsePending: (sesno: number) => { calls.push(`pending:${sesno}`); },
       browseMissing: () => { calls.push('missing'); },
       browseBadge: () => { calls.push('badge'); },
-      browseExit: () => { calls.push('exit'); },
+      browseExit: () => { calls.push('exit'); layerBuilt = false; },
       replaceSide: async () => { calls.push('replace'); },
       open: async () => { calls.push('open'); },
     };
@@ -1687,8 +1692,132 @@ describe('ModelUnitVersionComparePanel', () => {
     exitButton!.click();
     await flushUi();
     expect(stub.calls, 'exit 未派发').toContain('exit');
+    // 图层一次就建好：只进一次，不走重试
+    expect(stub.calls.filter((call) => call === 'enter')).toHaveLength(1);
 
     app.unmount();
     stub.detach();
+  });
+
+  describe('浏览图层迟迟建不起来', () => {
+    /** 查 24381_145018 并切到「仅自身」：缺省的「所有子节点」走差异摘要那条路 */
+    async function mountOnUnit(): Promise<{ host: HTMLElement; app: ReturnType<typeof createApp> }> {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const app = createApp(ModelUnitVersionComparePanel);
+      app.mount(host);
+      const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+      input.value = '24381/145018';
+      input.dispatchEvent(new Event('input'));
+      (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+      await flushUi();
+      (host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).click();
+      await flushUi();
+      return { host, app };
+    }
+
+    /** 帧一直不回：重试循环停在第一轮的 `frames.enterBrowse` 里，直到退出 / 卸载把请求中止 */
+    function hangHistoryGeometry(): void {
+      versionSourceMocks.queryHistoryGeometry = vi.fn(() => new Promise(() => undefined));
+    }
+
+    async function settle(): Promise<void> {
+      for (let i = 0; i < 3; i += 1) await flushUi();
+    }
+
+    it('重试期间点「退出浏览」：之后不再建图层', async () => {
+      hangHistoryGeometry();
+      const stub = attachBrowseStub({ layerReady: () => false });
+      const { host, app } = await mountOnUnit();
+
+      try {
+        (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+        await flushUntil(() => stub.calls.includes('pending:897'));
+        (host.querySelector('[data-testid="version-timeline-scrubber-exit-browse"]') as HTMLButtonElement).click();
+        await settle();
+
+        const exitAt = stub.calls.indexOf('exit');
+        expect(exitAt, `calls=${stub.calls.join(',')}`).toBeGreaterThan(-1);
+        expect(stub.calls.slice(exitAt), `calls=${stub.calls.join(',')}`).not.toContain('enter');
+      } finally {
+        app.unmount();
+        stub.detach();
+      }
+    });
+
+    it('重试期间面板卸载：之后不再建图层，不留孤儿图层', async () => {
+      hangHistoryGeometry();
+      const stub = attachBrowseStub({ layerReady: () => false });
+      const { host, app } = await mountOnUnit();
+      let mounted = true;
+
+      try {
+        (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+        await flushUntil(() => stub.calls.includes('pending:897'));
+        app.unmount();
+        mounted = false;
+        await settle();
+
+        const exitAt = stub.calls.indexOf('exit');
+        expect(exitAt, `calls=${stub.calls.join(',')}`).toBeGreaterThan(-1);
+        expect(stub.calls.slice(exitAt), `calls=${stub.calls.join(',')}`).not.toContain('enter');
+      } finally {
+        if (mounted) app.unmount();
+        stub.detach();
+      }
+    });
+
+    it('点「浏览」后同一轮就卸载：一次图层都不建', async () => {
+      hangHistoryGeometry();
+      const stub = attachBrowseStub({ layerReady: () => false });
+      const { host, app } = await mountOnUnit();
+      let mounted = true;
+
+      try {
+        // 点击同步跑到「等对比图层拆完」那一个 `nextTick`，卸载就落在第一次进入之前
+        (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+        app.unmount();
+        mounted = false;
+        await settle();
+
+        expect(stub.calls, `calls=${stub.calls.join(',')}`).not.toContain('enter');
+      } finally {
+        if (mounted) app.unmount();
+        stub.detach();
+      }
+    });
+
+    it('连续 8 次图层没建起来：告警并在时间轴下提示，退出后提示收起', async () => {
+      versionSourceMocks.queryHistoryGeometry = vi.fn(async (req: { sesno?: number }) => ({
+        kind: 'ok' as const,
+        sesno: req.sesno ?? 897,
+        sessionTime: null,
+        geometryKey: `g${req.sesno ?? 897}`,
+        geometry: geometry(new Map([['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]]])),
+      }));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const stub = attachBrowseStub({ layerReady: () => false });
+      const { host, app } = await mountOnUnit();
+      const notice = () => host.querySelector('[data-testid="model-unit-compare-browse-layer-notice"]');
+
+      try {
+        (host.querySelector('[data-testid="version-timeline-scrubber-browse"]') as HTMLButtonElement).click();
+        await flushUntil(() => notice() !== null);
+        expect(stub.calls.filter((call) => call === 'enter')).toHaveLength(8);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('浏览图层'),
+          expect.objectContaining({ dbnum: 7997, unitRefnos: ['24381_145018'], cursor: 897, attempts: 8 }),
+        );
+        expect(notice()?.textContent).toContain('已重试 8 次');
+
+        (host.querySelector('[data-testid="version-timeline-scrubber-exit-browse"]') as HTMLButtonElement).click();
+        await flushUi();
+        expect(notice()).toBeNull();
+      } finally {
+        warn.mockRestore();
+        app.unmount();
+        stub.detach();
+      }
+    });
   });
 });

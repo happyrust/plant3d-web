@@ -747,10 +747,20 @@ onMounted(() => {
   offExposeDebug = frames.exposeDebug();
 });
 
+/** 进入 / 退出浏览、面板卸载都推进它：进入的重试循环每轮比对，过期就停（同 `requestId`） */
+let browseRequestId = 0;
+/**
+ * 重试到上限浏览图层仍没建起来时的提示。视口角标（`browseBadge`）要浏览图层建好才显示，
+ * 这时恰好没有图层，只能在面板里说。
+ */
+const browseLayerNotice = ref<string | null>(null);
+
 /** 进入浏览：范围决定单元，游标决定第一帧（Requirement 3.1、9.2） */
 async function enterBrowse(): Promise<void> {
   const sesno = scrubber.cursor.value;
   if (sesno === null || dbnum.value === null) return;
+  const run = ++browseRequestId;
+  browseLayerNotice.value = null;
   // 先进浏览之前必须把对比模式关掉：对比的 `open` 会走 `clear()` → `browseExit()`，
   // 把刚建好的浏览图层清掉，之后 `browseShow` 全部静默返回——几何进了缓存但一帧不显示，
   // 表现就是「浏览按钮点了、时间轴在动、视口永远不更新」。
@@ -763,11 +773,16 @@ async function enterBrowse(): Promise<void> {
   // 会在 `browseEnter` 之后才落地，把刚建好的图层清掉。所以这里不是「等一次」而是
   // 「建起来之后再看几轮，确认没被清掉」，被清就重建。
   await nextTick();
+  if (run !== browseRequestId) return;
   const unitRefnos = scope.value === 'subtree' && geometryGroups.value.length > 0
     ? geometryGroups.value.map((group) => group.unitRefno!)
     : [comparedUnitRefno.value];
   const layerReady = (): boolean => frames.debug.value.browseLayerReady;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  // 每轮都要等整帧加载完（秒级）。这期间退出、卸载、重新进入（都会推进 `browseRequestId`）或转去对比，
+  // 再调 `frames.enterBrowse` 就会把浏览图层建回来——卸载后成了孤儿图层，对比也被改回浏览。
+  const superseded = (): boolean => run !== browseRequestId || frames.mode.value !== 'browse';
+  const attempts = 8;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     await frames.enterBrowse({
       dbnum: dbnum.value,
       unitRefnos,
@@ -777,13 +792,23 @@ async function enterBrowse(): Promise<void> {
       focusRefno: queriedIsUnitRoot.value ? null : queriedElementRefno.value,
       latest: scrubber.versions.value.at(-1)?.sesno ?? null,
     });
-    if (layerReady()) return;
+    if (superseded() || layerReady()) return;
     // 图层没建起来：让出一轮再重进
     await nextTick();
+    if (superseded()) return;
   }
+  console.warn(`[version-scrub] 浏览图层重试 ${attempts} 次仍没建起来，视口不会随游标更新`, {
+    dbnum: dbnum.value,
+    unitRefnos,
+    cursor: sesno,
+    attempts,
+  });
+  browseLayerNotice.value = `三维浏览图层没建起来（已重试 ${attempts} 次）：时间轴照常，视口不会随游标更新；退出浏览后重进可再试`;
 }
 
 async function exitBrowse(): Promise<void> {
+  browseRequestId += 1;
+  browseLayerNotice.value = null;
   await frames.exitBrowse();
 }
 
@@ -959,6 +984,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   requestId += 1;
   summaryRequestId += 1;
+  browseRequestId += 1;
   closeCompare();
   offCursorChange();
   offExposeDebug?.();
@@ -1064,6 +1090,9 @@ onBeforeUnmount(() => {
 
         <p v-if="scrubUrlNotice" class="mt-1 text-[10px] text-amber-700" data-testid="model-unit-compare-scrub-url-notice">
           {{ scrubUrlNotice }}
+        </p>
+        <p v-if="browseLayerNotice" class="mt-1 text-[10px] text-amber-700" data-testid="model-unit-compare-browse-layer-notice">
+          {{ browseLayerNotice }}
         </p>
 
         <!-- 子树确认（Requirement 9.3、9.6） -->
