@@ -267,6 +267,39 @@ const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 const MESH_FETCH_TIMEOUT_MS = 8_000;
 
 /**
+ * 每个图层里「取回超时、先放了兜底盒子」的 geoHash。几何缓存按 dbno 共用、图层各装各的：
+ * 重拉成功后，挂着盒子的图层要各自换掉——`addGeometry` 见键已存在会直接返回旧句柄，盒子换不掉。
+ */
+const timeoutBoxesByLayer = new WeakMap<DTXLayer, Set<string>>();
+
+function hasTimeoutBox(dtxLayer: DTXLayer, geoHash: string): boolean {
+  return timeoutBoxesByLayer.get(dtxLayer)?.has(geoHash) === true;
+}
+
+/** 超时：图层里还没有这个键才放兜底盒子（`addObject` 要求几何已登记），记下来等重拉成功后替换 */
+function installTimeoutBox(dtxLayer: DTXLayer, geoHash: string): void {
+  if (dtxLayer.hasGeometry(geoHash)) return;
+  dtxLayer.addGeometry(geoHash, getUnitBoxGeometry());
+  let boxes = timeoutBoxesByLayer.get(dtxLayer);
+  if (!boxes) {
+    boxes = new Set();
+    timeoutBoxesByLayer.set(dtxLayer, boxes);
+  }
+  boxes.add(geoHash);
+}
+
+/** 装入取到的几何；强制刷新、或图层里挂着超时盒子时替换 */
+function installGeometry(dtxLayer: DTXLayer, geoHash: string, geometry: BufferGeometry, replace = false): void {
+  const boxes = timeoutBoxesByLayer.get(dtxLayer);
+  if (replace || boxes?.has(geoHash)) {
+    boxes?.delete(geoHash);
+    dtxLayer.replaceGeometry(geoHash, geometry);
+    return;
+  }
+  dtxLayer.addGeometry(geoHash, geometry);
+}
+
+/**
  * 运行时索引的修订号：每完成一批实例加载 / 替换（含版本切换重载）就 +1。
  * 只增不减，供批注关联解析（ADR-0050）等消费方 `watch` 后重算，
  * 省得它们各自去猜「模型什么时候装完了」。
@@ -460,8 +493,8 @@ async function ensureGeometryForGeoHash(
     && cache.loadedGeoHash.has(geoHash)
     && !(forceRetryNotFound && (wasNotFound || wasFailed))
   ) {
-    if (!dtxLayer.hasGeometry(geoHash) && cachedGeometry) {
-      dtxLayer.addGeometry(geoHash, cachedGeometry);
+    if (cachedGeometry && (!dtxLayer.hasGeometry(geoHash) || hasTimeoutBox(dtxLayer, geoHash))) {
+      installGeometry(dtxLayer, geoHash, cachedGeometry);
     }
     if (dtxLayer.hasGeometry(geoHash)) {
       return {
@@ -478,8 +511,11 @@ async function ensureGeometryForGeoHash(
   if (pending) {
     await pending;
     const resolvedGeometry = cache.geometryByGeoHash.get(geoHash);
-    if (!dtxLayer.hasGeometry(geoHash) && resolvedGeometry) {
-      dtxLayer.addGeometry(geoHash, resolvedGeometry);
+    if (!cache.loadedGeoHash.has(geoHash)) {
+      // 等的那一轮超时了（其他结局都会记已加载）：这个图层同样先放盒子
+      installTimeoutBox(dtxLayer, geoHash);
+    } else if (resolvedGeometry && (!dtxLayer.hasGeometry(geoHash) || hasTimeoutBox(dtxLayer, geoHash))) {
+      installGeometry(dtxLayer, geoHash, resolvedGeometry);
     }
     return {
       status: cache.notFoundGeoHash.has(geoHash)
@@ -541,20 +577,17 @@ async function ensureGeometryForGeoHash(
     let geometry: BufferGeometry | null = null;
     let notFound = false;
     let notFoundNew = false;
+    let timedOut = false;
 
+    // 必须带超时与 abort：裸 `fetch` 在连接挂住时**永久等待**，而这个 Promise 会挂在
+    // `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死
+    // ——表现为「浏览/对比一直在转、一帧都不出」，且没有任何错误可查。
+    // 超时按「单块网格」给：本机冷读 mesh 通常几十毫秒，8 s 足够覆盖慢盘与首次解析。
+    // 计时要盖到读完响应体：响应头到了、体卡住一样会永久等待；同一个 signal 会让 `arrayBuffer()` 一起 reject。
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
     try {
-      // 必须带超时与 abort：裸 `fetch` 在连接挂住时**永久等待**，而这个 Promise 会挂在
-      // `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死
-      // ——表现为「浏览/对比一直在转、一帧都不出」，且没有任何错误可查。
-      // 超时按「单块网格」给：本机冷读 mesh 通常几十毫秒，8 s 足够覆盖慢盘与首次解析。
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
-      let resp: Response;
-      try {
-        resp = await fetch(meshUrl, { signal: controller.signal });
-      } finally {
-        clearTimeout(timer);
-      }
+      const resp = await fetch(meshUrl, { signal: controller.signal });
       if (resp.status === 404) {
         notFound = true;
         notFoundNew = !cache.notFoundGeoHash.has(geoHash);
@@ -591,20 +624,35 @@ async function ensureGeometryForGeoHash(
         }
       }
     } catch (e) {
-      if (debug) console.warn('[dtx][instances-json] load mesh failed', { geoHash, meshUrl, e });
+      if (controller.signal.aborted) {
+        timedOut = true;
+        console.warn('[dtx][instances-json] mesh 取回超时，先用兜底盒子，下次装载重拉', {
+          geoHash,
+          meshUrl,
+          timeoutMs: MESH_FETCH_TIMEOUT_MS,
+        });
+      } else if (debug) {
+        console.warn('[dtx][instances-json] load mesh failed', { geoHash, meshUrl, e });
+      }
+    } finally {
+      clearTimeout(timer);
     }
 
     if (geometry) {
-      if (forceRefresh) {
-        dtxLayer.replaceGeometry(geoHash, geometry);
-      } else {
-        dtxLayer.addGeometry(geoHash, geometry);
-      }
+      installGeometry(dtxLayer, geoHash, geometry, forceRefresh);
       cache.geometryByGeoHash.set(geoHash, geometry);
       cache.loadedGeoHash.add(geoHash);
       cache.notFoundGeoHash.delete(geoHash);
       cache.failedGeoHash.delete(geoHash);
       return { status: 'ok' as const, notFoundNew: false };
+    }
+
+    if (timedOut) {
+      // 超时只说明这一次没取到：不记已加载、不动已缓存的几何，下次装载重拉；
+      // 记 failed，同时在等的调用才会拿到 'error'（替换装载据此保留旧对象）。
+      installTimeoutBox(dtxLayer, geoHash);
+      cache.failedGeoHash.add(geoHash);
+      return { status: 'error' as const, notFoundNew: false };
     }
 
     // 404 或解析失败：用兜底盒子承接，避免完全不可见；同时保留 notFound 标记，便于后续生成后重拉 GLB。
@@ -645,6 +693,8 @@ async function ensureGeometriesForGeoHashes(
     if (forceRefresh) return true;
     if (!dtxLayer.hasGeometry(h)) return true;
     if (!cache.loadedGeoHash.has(h)) return true;
+    // 别的图层已重拉成功、这个图层还挂着超时盒子：照样进 `ensureGeometryForGeoHash`，在那里换成缓存里的几何
+    if (hasTimeoutBox(dtxLayer, h)) return true;
     // 对曾经 404 的几何体：允许重试拉取（用于生成完成后的 forceReload）。
     return forceRetryNotFound && (cache.notFoundGeoHash.has(h) || cache.failedGeoHash.has(h));
   });

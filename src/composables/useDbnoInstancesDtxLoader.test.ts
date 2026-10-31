@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 记录源经 `getModelSource().records`（gen-model-v1 ensure → records）喂给加载链；这里 mock 掉数据源，
@@ -37,6 +40,24 @@ function makeInstanceEntry(refno: string, geoHash = '1', noun = 'VALV') {
     ],
     uniforms: { refno, noun, owner_refno: '', owner_noun: '', spec_value: 0 },
   };
+}
+
+// gen-model `assets/meshes` 里的真实语料（3.mesh 是 629 顶点的单位球），用来和兜底盒子区分
+function meshFixture(name: string): ArrayBuffer {
+  const buf = readFileSync(join(process.cwd(), 'src', 'fixtures', 'meshes', name));
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+}
+
+/** 响应头已到、响应体永不结束：只有 signal 能让它结束（浏览器里 abort 会让读体 reject） */
+function bodyThatNeverEnds(signal: AbortSignal | null | undefined): Promise<ArrayBuffer> {
+  return new Promise((_resolve, reject) => {
+    signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true });
+  });
+}
+
+/** 装载链在发出网格请求前后都只有微任务：转到条件成立或转够次数为止 */
+async function flushUntil(done: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !done(); i += 1) await Promise.resolve();
 }
 
 describe('useDbnoInstancesDtxLoader', () => {
@@ -711,5 +732,101 @@ describe('useDbnoInstancesDtxLoader', () => {
 
     expect(recordSourceMocks.instanceEntriesByRefnos).not.toHaveBeenCalled();
     expect(layer.getAllObjectIds()).toHaveLength(1);
+  });
+
+  describe('网格取回超时', () => {
+    const geoHash = 'slow-body-mesh';
+    const sphereVertices = 629;
+    let meshCalls = 0;
+
+    /** 第一次取网格：头到了、体卡住；之后每次都回真实的单位球 */
+    function stubSlowThenOk(): void {
+      const sphere = meshFixture('3.mesh');
+      meshCalls = 0;
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (!String(url).includes('/api/v1/meshes/')) return { ok: false, status: 404 };
+        meshCalls += 1;
+        if (meshCalls > 1) return { ok: true, status: 200, arrayBuffer: async () => sphere.slice(0) };
+        return { ok: true, status: 200, arrayBuffer: () => bodyThatNeverEnds(init?.signal) };
+      }));
+      recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map(
+        ['24381_1', '24381_2'].map((refno) => [refno, [makeInstanceEntry(refno, geoHash, 'EQUI')]]),
+      ));
+    }
+
+    it('响应体卡住也在 8 s 后结束并告警（不看 debug）；超时不记已加载，下次装载重拉并换掉兜底盒子', async () => {
+      const { DTXLayer } = await import('@/utils/three/dtx');
+      const mod = await import('./useDbnoInstancesDtxLoader');
+      const dbno = 99009;
+      stubSlowThenOk();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const layer = new DTXLayer({ maxVertices: 2048, maxIndices: 8192, maxObjects: 8 });
+
+      try {
+        let settled = false;
+        void mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, ['24381_1'], { dataSource: 'gen-model-v1', debug: false })
+          .then(() => { settled = true; });
+        await flushUntil(() => meshCalls === 1);
+        await vi.advanceTimersByTimeAsync(8_000);
+        await flushUntil(() => settled);
+
+        expect(settled).toBe(true);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('超时'), expect.objectContaining({ geoHash }));
+        expect(layer.getAllObjectIds()).toHaveLength(1);
+        expect(layer.getGeometryRawSlice(geoHash)!.positions.length).not.toBe(sphereVertices * 3);
+
+        await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, ['24381_2'], { dataSource: 'gen-model-v1', debug: false });
+
+        expect(meshCalls).toBe(2);
+        expect(layer.getAllObjectIds()).toHaveLength(2);
+        expect(layer.getGeometryRawSlice(geoHash)!.positions.length).toBe(sphereVertices * 3);
+      } finally {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+        warn.mockRestore();
+      }
+    });
+
+    it('两个图层同时等同一块超时网格：都先放兜底盒子；一层重拉成功后，另一层下次装载直接换上缓存的真几何', async () => {
+      // 几何缓存按 dbno 共用、图层各装各的（版本对比两侧就是这样）：第二层是在等第一层的请求，
+      // 重拉也只由一层发起，另一层的盒子要靠下次装载时换掉。
+      const { DTXLayer } = await import('@/utils/three/dtx');
+      const mod = await import('./useDbnoInstancesDtxLoader');
+      const dbno = 99010;
+      stubSlowThenOk();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const sideA = new DTXLayer({ maxVertices: 2048, maxIndices: 8192, maxObjects: 8 });
+      const sideB = new DTXLayer({ maxVertices: 2048, maxIndices: 8192, maxObjects: 8 });
+      const load = (layer: InstanceType<typeof DTXLayer>, prefix: string, refno: string) => mod.loadDbnoInstancesForVisibleRefnosDtx(
+        layer, dbno, [refno], { dataSource: 'gen-model-v1', isolated: true, objectIdPrefix: prefix },
+      );
+
+      try {
+        let settled = 0;
+        void load(sideA, 'unit-compare:a', '24381_1').then(() => { settled += 1; });
+        void load(sideB, 'unit-compare:b', '24381_1').then(() => { settled += 1; });
+        await flushUntil(() => meshCalls === 1);
+        await vi.advanceTimersByTimeAsync(8_000);
+        await flushUntil(() => settled === 2);
+
+        expect(settled).toBe(2);
+        expect(meshCalls).toBe(1);
+        expect(sideB.getGeometryRawSlice(geoHash)!.positions.length).not.toBe(sphereVertices * 3);
+
+        await load(sideA, 'unit-compare:a', '24381_2');
+        expect(meshCalls).toBe(2);
+        expect(sideA.getGeometryRawSlice(geoHash)!.positions.length).toBe(sphereVertices * 3);
+
+        await load(sideB, 'unit-compare:b', '24381_2');
+        expect(meshCalls).toBe(2);
+        expect(sideB.getGeometryRawSlice(geoHash)!.positions.length).toBe(sphereVertices * 3);
+      } finally {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+        warn.mockRestore();
+      }
+    });
   });
 });
