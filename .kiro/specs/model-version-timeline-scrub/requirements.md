@@ -230,7 +230,7 @@
 7. FOR ALL 版本表中带 Session_Time 的版本 v，用 v 的 Session_Time 做时间点解析 SHALL 返回版本 w，w 是 Chain_Order 中满足 Session_Time ≤ v 的 Session_Time 的 sesno 最大的版本，且 w 的 sesno ≥ v 的 sesno；当 v 之后（sesno 更大）的所有带时间版本的 Session_Time 都晚于 v 的 Session_Time 时，w 等于 v（往返性质）。
 8. WHEN 用户在 Timeline_Scrubber 的日期输入框中输入时间点并按回车确认, THE Timeline_Scrubber SHALL 把 Version_Cursor 移到解析得到的 sesno 对应的 Version_Tick，并按 Requirement 2 第 7 条在游标旁显示该版本的 sesno 与 Session_Time。
 9. IF 日期输入框中的时间点无法解析，或 Version_Service 返回 `TIME_BEFORE_OLDEST_SESSION`、`INVALID_SELECTOR`、`NODE_NOT_FOUND` 或 `NO_RESOLVABLE_SESSION`, THEN THE Timeline_Scrubber SHALL 保持 Version_Cursor 原位置不变，保留输入框中的文本，并在输入框旁显示一条错误信息，说明失败原因（格式无效、早于最早版本、节点不存在或没有可解析的版本）。
-10. FOR ALL Delivery_Unit refno 与时间点, Realtime_History_Query 以 `time` 解析出的 sesno（Requirement 6 第 3 条）SHALL 等于时间点解析请求对同一 refno、Compare_Scope「仅自身」与同一时间点返回的 sesno（一致性质）。
+10. FOR ALL Delivery_Unit refno 与时间点, Realtime_History_Query 以 `time` 解析出的 sesno（Requirement 6 第 3 条）SHALL 等于时间点解析请求对同一 refno、Compare_Scope「所有子节点」与同一时间点返回的 sesno（一致性质）。Realtime_History_Query 的 `time` 选择器在 Delivery_Unit 自身的版本表上解析，该版本表把「子树里任一成员变化」也算作这个单元的一版（与 `node/versions?scope=subtree` 同一行集），因此对照口径是「所有子节点」而不是「仅自身」。对非 Delivery_Unit 的叶子构件，两种范围的版本表相同，本条与「仅自身」等价。
 
 ### Requirement 9: 容器节点（所有子节点范围）的拖拽浏览
 

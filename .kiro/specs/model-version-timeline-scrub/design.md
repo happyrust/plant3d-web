@@ -325,7 +325,9 @@ pub fn resolve_at_rows(rows: &[VersionInstant], at: &str) -> Result<(u32, String
 
 `node/versions/resolve` handler：参数校验（`scope` 只能 `self` / `subtree`、`at` 合法，否则 400 `INVALID_SELECTOR`）→ 节点不存在 → 404 `NODE_NOT_FOUND`（8.5）→ `node_versions(dbnum, refno, scope, None, Some(5000))` 取全表（同一缓存）→ `resolve_at_rows`。`NoResolvable` → 422 `NO_RESOLVABLE_SESSION`（8.6）；`BeforeOldest` → 422 `TIME_BEFORE_OLDEST_SESSION`（8.3）。版本表超过 5000 行被截断时按 `since_sesno` 翻页取全，再解析（链序规则从 sesno 最大往前找，截断会丢掉最新的行，所以必须取全）。
 
-实时几何路由的 `time` 选择器调用同一个 `resolve_at_rows`，输入是该单元的「仅自身」版本表（`unit_versions` 按单元子树折叠，与 `node_versions(scope=self)` 对单元根相同；阶段 1 用 curl 核对两者对同一单元给出相同行集），所以 Requirement 8.10 的一致性由同一函数同一输入保证。
+实时几何路由的 `time` 选择器调用同一个 `resolve_at_rows`，输入是该单元的 `unit_versions` 版本表（按单元子树折叠：子树里任一成员变化也算这个单元的一版），所以 Requirement 8.10 的一致性由同一函数同一输入保证——**对照口径是 `node/versions?scope=subtree`**。
+
+注意（阶段 3 实测更正）：本文件早先写的「`unit_versions` 与 `node_versions(scope=self)` 对单元根相同」不成立。对交付单元根 `24384/23257`（73 个版本）：`unit_versions` **73 行**，`node_versions(scope=self)` **5 行**（只算单元根自己那条记录的变化），`node_versions(scope=subtree)` **73 行**。所以 `geometry(time)` 与 `resolve(scope=subtree)` 给同一个 sesno（实测均为 419），与 `resolve(scope=self)` 必然不同（283）。R8.10 已按此改写为「所有子节点」口径，证据见 `docs/verification/model-version-timeline-scrub/finding-r6-3-vs-r8-10.md`。
 
 共享样例 `docs/fixtures/version-time-resolve-cases.json`：每条为 `{ rows: [{ sesno, session_time|null }], at, expect: { sesno, session_time } | { error } }`。必须包含：会话 1 的时间晚于其后全部会话（AvevaMarineSample 形态）、中间一段时间倒退、同秒多行、无偏移时间点、全部无时间、t 早于全部带时间行、t 恰等于某行 v 的时间、但 sesno 更大的某行时间不晚于 v（往返结果 w ≠ v 的情形）。Rust 与 TS 各一个例子测试读它对拍，`select_session_at` 的包装另用其中几条做回归。
 
@@ -1018,7 +1020,7 @@ type ScrubUrlState = { unitRefno: string; scope: 'self' | 'subtree'; cursor: num
 
 ### Property 32: 两条路由的时间解析一致
 
-*For any* 单元「仅自身」版本表（以假版本表来源注入）与时间点，实时几何路由的 `time` 选择器解析出的 sesno 等于 `node/versions/resolve`（`scope=self`）对同一 refno 与时间点返回的 sesno；两者都失败时错误码相同。
+*For any* 单元版本表（以假版本表来源注入）与时间点，实时几何路由的 `time` 选择器解析出的 sesno 等于 `node/versions/resolve` 对同一张表、同一时间点返回的 sesno；两者都失败时错误码相同。该性质钉的是「同一函数同一输入 → 同一结果」，与 `scope` 口径无关：`time` 选择器吃 `unit_versions` 表，与它同表的是 `scope=subtree`（见 §1.5 的实测更正）。
 
 **Validates: Requirements 8.10**
 
@@ -1190,9 +1192,10 @@ curl.exe -s -D h1.txt -w "%{http_code} %{time_total}\n" "$B/model/history/geomet
 curl.exe -s -D h2.txt "$B/model/history/geometry?dbnum=8000&unit_refno=24384_23257&sesno=897" -o g897b.json; fc.exe /b g897.json g897b.json
 # 304
 curl.exe -s -o NUL -w "%{http_code}\n" -H "If-None-Match: `"<ETag 值>`"" "$B/model/history/geometry?dbnum=8000&unit_refno=24384_23257&sesno=<仅属性会话>"
-# time 选择器与 resolve 路由一致（R8.10）；另取一个时间倒退会话的时间点，核对两者都按链序规则选中 sesno 最大的满足行
+# time 选择器与 resolve 路由一致（R8.10）；对照口径是 scope=subtree（time 选择器吃 unit_versions，
+# 与它同表的是「所有子节点」）。另取一个时间倒退会话的时间点，核对两者都按链序规则选中 sesno 最大的满足行
 curl.exe -s "$B/model/history/geometry?dbnum=8000&unit_refno=24384_23257&time=2026-05-12T09:31:04%2B08:00" -D ht.txt -o NUL
-curl.exe -s "$B/node/versions/resolve?dbnum=8000&refno=24384_23257&scope=self&at=2026-05-12T09:31:04%2B08:00"
+curl.exe -s "$B/node/versions/resolve?dbnum=8000&refno=24384_23257&scope=subtree&at=2026-05-12T09:31:04%2B08:00"
 # 错误码：无效选择器 / 不在链上 / 单元不存在 / 非交付单元
 curl.exe -s "$B/model/history/geometry?dbnum=8000&unit_refno=24384_23257&sesno=1&time=2026-01-01T00:00:00Z"
 curl.exe -s "$B/model/history/geometry?dbnum=8000&unit_refno=24384_23257&sesno=2147483647"

@@ -149,7 +149,7 @@
   - [x] 6.3 实现 `GET /api/v1/node/versions/resolve`
     - `scope` 只能 `self` / `subtree`、`at` 须合法，否则 400 `INVALID_SELECTOR`；节点不存在 → 404 `NODE_NOT_FOUND`
     - 取 `node_versions(dbnum, refno, scope, …)` 全表，超过 5000 行时按 `since_sesno` 翻页取全，再 `resolve_at_rows`；`NoResolvable` → 422 `NO_RESOLVABLE_SESSION`，`BeforeOldest` → 422 `TIME_BEFORE_OLDEST_SESSION`
-    - 用 curl 核对 `unit_versions` 与 `node_versions(scope=self)` 对同一单元根给出相同行集
+    - 用 curl 核对 `unit_versions` 与 `node_versions(scope=subtree)` 对同一单元根给出相同行集（阶段 3 实测：`scope=self` 对单元根只有 5 行，与 `unit_versions` 的 73 行不同，R8.10 已按「所有子节点」口径改写）
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.10_
 
   - [x] 6.4 实现 `GET /api/v1/element/attributes-at`
