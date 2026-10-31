@@ -924,8 +924,42 @@ test('12.5 拖动 30 个刻度时每个 1 s 窗口 ≥ 30 fps 且吸附后 100 m
 });
 
 // ---------------------------------------------------------------------------
-// 12.6 / 12.7 连续 10 分钟来回拖动：每 60 s 采样；退出后 1 s / 5 s 收敛
+// 12.6 / 12.7 连续 10 分钟来回拖动（隔一阵停下等这一版画完）：每 60 s 采样；退出后 1 s / 5 s 收敛
 // ---------------------------------------------------------------------------
+
+type SoakPause = { sesno: number; ms: number; outcome: 'shown' | 'timeout' | 'no-diff' };
+
+/**
+ * 拖动中按住不动，等游标那一版画完（最多 `maxMs`）。
+ * 判据是最近一条 `frame-shown` 就是这一版：缓存里有的话一落上去就画了，等「新 mark」会等空。
+ * 无差异版本（不在 `drawable` 里）一帧都不装，只停 `idleMs`。大差异先弹的成本确认（9.3）按「全装」放行，
+ * 用 `dispatchEvent` 点：鼠标不挪，拖动不断。
+ */
+async function holdForCursorFrame(
+  page: Page,
+  drawable: Set<number>,
+  { maxMs, idleMs }: { maxMs: number; idleMs: number },
+): Promise<SoakPause> {
+  const sesno = await cursorSesno(page);
+  const startedAt = Date.now();
+  if (!drawable.has(sesno)) {
+    await page.waitForTimeout(idleMs);
+    return { sesno, ms: Date.now() - startedAt, outcome: 'no-diff' };
+  }
+  const confirmAll = page.getByTestId('model-unit-compare-subtree-all');
+  while (Date.now() - startedAt < maxMs) {
+    const shown = await page.evaluate(
+      (target) => (performance.getEntriesByName('version-scrub:frame-shown') as (PerformanceMark & { detail?: { sesno?: number } })[])
+        .at(-1)?.detail?.sesno === target,
+      sesno,
+    );
+    if (shown) return { sesno, ms: Date.now() - startedAt, outcome: 'shown' };
+    // 确认框可能在 `isVisible` 之后就收起：不给超时的话 `dispatchEvent` 会一直等元素回来
+    if (await confirmAll.isVisible()) await confirmAll.dispatchEvent('click', undefined, { timeout: 1_000 }).catch(() => undefined);
+    await page.waitForTimeout(100);
+  }
+  return { sesno, ms: Date.now() - startedAt, outcome: 'timeout' };
+}
 
 test('12.6/12.7 连续 10 分钟拖动时缓存与并发有界，退出后 1 s / 5 s 收敛', async ({ page }) => {
   // 拖动本身就是 10 分钟，加进入浏览、采样与收尾；预算含 teardown，理由同 12.1
@@ -962,6 +996,13 @@ test('12.6/12.7 连续 10 分钟拖动时缓存与并发有界，退出后 1 s /
   const startedAt = Date.now();
   const TEN_MINUTES = 10 * 60_000;
   let nextSampleAt = 60_000;
+  // 隔 37 步（约 3.7 s）按住不动一次，等这一版画完再接着拖：游标一移走，在飞的子树批次就不再装，
+  // 一路不停的话前端缓存涨不起来，「≤ 12」也就没被压到。
+  // 37 与来回一趟的步数（约 90）互质，停顿点会轮遍整条轨道，不会总落在同几个刻度上。
+  const PAUSE_EVERY = 37;
+  const PAUSE_MAX_MS = 5_000;
+  const pauses: SoakPause[] = [];
+  let moves = 0;
 
   const y = cursorBox.y + cursorBox.height / 2;
   await page.mouse.move(cursorBox.x + cursorBox.width / 2, y);
@@ -977,6 +1018,10 @@ test('12.6/12.7 连续 10 分钟拖动时缓存与并发有界，退出后 1 s /
     if (position <= 0.05) { position = 0.05; direction = 1; }
     await page.mouse.move(left + (right - left) * position, y, { steps: 2 });
     await page.waitForTimeout(80);
+    moves += 1;
+    if (moves % PAUSE_EVERY === 0) {
+      pauses.push(await holdForCursorFrame(page, soakDrawable, { maxMs: PAUSE_MAX_MS, idleMs: 400 }));
+    }
     if (Date.now() - startedAt >= nextSampleAt) {
       nextSampleAt += 60_000;
       samples.push({
@@ -997,8 +1042,19 @@ test('12.6/12.7 连续 10 分钟拖动时缓存与并发有界，退出后 1 s /
   const afterBackend = afterHealth?.model_cache?.realtime_history ?? null;
   const historicalAfter = JSON.stringify(afterHealth?.model_cache?.historical ?? null);
 
+  const shownPauses = pauses.filter((pause) => pause.outcome === 'shown');
+  const pauseStats = {
+    every: PAUSE_EVERY,
+    maxMs: PAUSE_MAX_MS,
+    total: pauses.length,
+    shown: shownPauses.length,
+    timeout: pauses.filter((pause) => pause.outcome === 'timeout').length,
+    noDiff: pauses.filter((pause) => pause.outcome === 'no-diff').length,
+    distinctShown: new Set(shownPauses.map((pause) => pause.sesno)).size,
+    shownMsMax: shownPauses.reduce((max, pause) => Math.max(max, pause.ms), 0),
+  };
   evidence('12.6-12.7-soak', {
-    unit: UNIT, samples, afterExit, afterBackend, baseline,
+    unit: UNIT, samples, pauses: pauseStats, afterExit, afterBackend, baseline,
     historicalUnchanged: historicalAfter === historicalBaseline,
     budget: {
       frameCacheKeys: BUDGET.frameCacheKeys,
@@ -1007,6 +1063,7 @@ test('12.6/12.7 连续 10 分钟拖动时缓存与并发有界，退出后 1 s /
     },
   });
   console.log('12.6 samples', JSON.stringify(samples));
+  console.log('12.6 pauses', JSON.stringify(pauseStats));
   console.log('12.7 afterExit', JSON.stringify(afterExit), 'afterBackend', JSON.stringify(afterBackend));
 
   for (const sample of samples) {
@@ -1018,6 +1075,8 @@ test('12.6/12.7 连续 10 分钟拖动时缓存与并发有界，退出后 1 s /
       expect(sample.backend.cache_entries, `结果缓存条目 @${sample.at}`).toBeLessThanOrEqual(sample.backend.cache_capacity);
     }
   }
+  // 画出过的版本比缓存上限多，上面的「≤ 12」才是真被压过；否则这一轮的读数证明不了上限
+  expect(pauseStats.distinctShown, '停顿时画出的不同版本数').toBeGreaterThan(BUDGET.frameCacheKeys);
   expect(afterExit?.inFlight ?? 0, '退出后 1 s 前端进行中请求').toBe(0);
   expect(afterExit?.cacheKeys ?? 0, '退出后 1 s 前端缓存').toBe(0);
   expect(historicalAfter, '`/health.model_cache.historical` 快照数应等于初值').toBe(historicalBaseline);
