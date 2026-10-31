@@ -684,4 +684,148 @@ describe('useVersionFrames：结算只认发起请求的会话', () => {
     expect(shows).toEqual([]);
     expect(frames.tickStatus.value.get(10)).toBe('loading');
   });
+
+  /** 差异摘要一律挂起，按调用顺序交出放行 / 驳回的把手 */
+  function holdSummaries(source: ModelVersionSource) {
+    const held: { resolve: (summary: ModelNodeDiffSummary) => void; reject: (error: unknown) => void }[] = [];
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise<ModelNodeDiffSummary>((resolve, reject) => {
+      held.push({ resolve, reject });
+    }));
+    return held;
+  }
+
+  it('差异摘要晚到、那时已退出又重进：确认框与角标不落到新会话', async () => {
+    const { frames, source, calls, badges } = setup();
+    const held = holdSummaries(source);
+    const context = contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: [] });
+    void frames.enterBrowse(context);
+    for (let i = 0; i < 3; i += 1) await settle();
+    await frames.exitBrowse();
+    void frames.enterBrowse(context);
+    expect(held).toHaveLength(2);
+    badges.length = 0;
+
+    held[0]!.resolve(summaryWith(
+      [1, 2, 3].map((i) => ({ unitRefno: `unit_${i}`, added: i, deleted: 0, modified: 0 })),
+      true,
+    ));
+    for (let i = 0; i < 3; i += 1) await settle();
+
+    expect(frames.pendingConfirm.value).toBeNull();
+    expect(badges).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it('差异摘要失败晚到、那时已退出又重进：不改写新会话的刻度与错误', async () => {
+    const { frames, source } = setup();
+    const held = holdSummaries(source);
+    const context = contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] });
+    void frames.enterBrowse(context);
+    for (let i = 0; i < 3; i += 1) await settle();
+    await frames.exitBrowse();
+    void frames.enterBrowse(context);
+    expect(held).toHaveLength(2);
+
+    held[0]!.reject(new HistoryQueryError('HISTORY_QUERY_TIMEOUT', { status: 504, message: '查询超时' }));
+    for (let i = 0; i < 3; i += 1) await settle();
+
+    expect(frames.tickStatus.value.get(10)).toBe('loading');
+    expect(frames.errors.value).toEqual([]);
+  });
+});
+
+describe('useVersionFrames：子树批次结算前游标移走', () => {
+  it('旧批次失败只记在发起时那一版：新游标的刻度仍是「加载中」，也不打「加载失败」角标', async () => {
+    // 游标 10 那批还在路上就移到 12；12 自己那批一直挂着，10 那批随后失败。
+    let failA!: () => void;
+    const { frames, source, calls, badges } = setup({
+      respond: (call) => (call.sesno === 10
+        ? new Promise<HistoryGeometryResult>((_resolve, reject) => {
+          failA = () => reject(new HistoryQueryError('NETWORK', { message: '无法连接服务端' }));
+        })
+        : new Promise<HistoryGeometryResult>(() => undefined)),
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockResolvedValue(summaryWith([
+      { unitRefno: 'unit_1', added: 1, deleted: 0, modified: 0 },
+    ]));
+    void frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+    for (let i = 0; i < 3; i += 1) await settle();
+    frames.cursorChanged(12, 'click');
+    for (let i = 0; i < 3; i += 1) await settle();
+    expect(calls.map((c) => c.sesno)).toEqual([10, 12]);
+
+    failA();
+    for (let i = 0; i < 5; i += 1) await settle();
+
+    expect(frames.errors.value.map((entry) => entry.sesno)).toEqual([10]);
+    expect(frames.tickStatus.value.get(10)).toBe('failed');
+    expect(frames.tickStatus.value.get(12)).toBe('loading');
+    expect(badges.filter((text) => text.includes('加载失败'))).toEqual([]);
+  });
+
+  it('待确认挂着时游标移走：确认框作废、那一格不再「加载中」，再答「全部装」也不按新游标发请求', async () => {
+    const { frames, source, calls } = setup();
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_dbnum: number, _refno: string, a: number) => (a === 10
+        ? summaryWith([1, 2, 3].map((i) => ({ unitRefno: `unit_${i}`, added: i, deleted: 0, modified: 0 })), true)
+        : new Promise<ModelNodeDiffSummary>(() => undefined)),
+    );
+    await frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: [] }));
+    expect(frames.pendingConfirm.value?.kind).toBe('confirm');
+    expect(frames.tickStatus.value.get(10)).toBe('loading');
+
+    frames.cursorChanged(12, 'click');
+    expect(frames.pendingConfirm.value).toBeNull();
+    expect(frames.tickStatus.value.has(10)).toBe(false);
+
+    frames.answerConfirm('all');
+    for (let i = 0; i < 3; i += 1) await settle();
+    expect(calls).toEqual([]);
+  });
+
+  it('差异摘要回来时游标已移走：不置确认框、不打角标，那一格的「加载中」摘掉', async () => {
+    const held: ((summary: ModelNodeDiffSummary) => void)[] = [];
+    const { frames, source, calls, badges } = setup();
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise<ModelNodeDiffSummary>((resolve) => {
+      held.push(resolve);
+    }));
+    void frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: [] }));
+    for (let i = 0; i < 3; i += 1) await settle();
+    frames.cursorChanged(12, 'click');
+    expect(held).toHaveLength(2);
+    badges.length = 0;
+
+    held[0]!(summaryWith([1, 2, 3].map((i) => ({ unitRefno: `unit_${i}`, added: i, deleted: 0, modified: 0 })), true));
+    for (let i = 0; i < 3; i += 1) await settle();
+
+    expect(frames.pendingConfirm.value).toBeNull();
+    expect(frames.tickStatus.value.has(10)).toBe(false);
+    expect(frames.tickStatus.value.get(12)).toBe('loading');
+    expect(badges).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it('排队的任务在游标移走后才开跑：仍按发起时那一版取', async () => {
+    // 并发上限 4：unit_1–4 先发、挂着，unit_5–6 排队；游标移到 12 之后放行 unit_1，unit_5 才开跑。
+    const hanging = new Map<string, () => void>();
+    const { frames, source, calls } = setup({
+      respond: (call) => new Promise<HistoryGeometryResult>((resolve) => {
+        hanging.set(`${call.unitRefno}@${call.sesno}`, () => { void ok(call).then(resolve); });
+      }),
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_dbnum: number, _refno: string, a: number) => (a === 10
+        ? summaryWith(Array.from({ length: 6 }, (_, i) => ({ unitRefno: `unit_${i + 1}`, added: 1, deleted: 0, modified: 0 })))
+        : new Promise<ModelNodeDiffSummary>(() => undefined)),
+    );
+    void frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+    for (let i = 0; i < 3; i += 1) await settle();
+    expect(calls.map((c) => `${c.unitRefno}@${c.sesno}`)).toEqual(['unit_1@10', 'unit_2@10', 'unit_3@10', 'unit_4@10']);
+
+    frames.cursorChanged(12, 'click');
+    hanging.get('unit_1@10')!();
+    for (let i = 0; i < 3; i += 1) await settle();
+
+    expect(calls.slice(4).map((c) => `${c.unitRefno}@${c.sesno}`)).toEqual(['unit_5@10']);
+  });
 });

@@ -564,15 +564,18 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
       await Promise.all(context.unitRefnos.map((unitRefno) => requestUnit(unitRefno, sesno, 'cursor')));
       return;
     }
+    // 摘要要等一阵，回来先比会话：期间退出、重进或转去对比，结果就不归当前会话，什么都不动（同 `loadUnits`）
     let summary;
     try {
       summary = await deps.source.diffSummary(context.dbnum, context.unitRefnos[0]!, sesno, latest, 'subtree');
     } catch (error) {
+      if (mode.value !== 'browse' || ctx !== context) return;
       // 差异摘要失败：不发任何几何请求，视口不动（9.7）
       setTick(sesno, 'failed');
       addError({ sesno, code: codeOf(error), message: messageOf(error) });
       return;
     }
+    if (mode.value !== 'browse' || ctx !== context) return;
     const groups: SubtreeUnitChange[] = summary.groups
       .filter((group) => group.unitRefno !== null && group.geometryChanged)
       .map((group) => ({
@@ -592,6 +595,11 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     });
     // 记下这一版需装几个单元：子树预取只碰 ≤ 5 的版本（9.4）
     subtreeUnitCounts.set(sesno, groups.length - cachedUnits.size);
+    // 游标已经移走：确认框、角标与装载都归游标所在那一版，这一格的「加载中」摘掉就走
+    if (context.cursor !== sesno) {
+      setTick(sesno, null);
+      return;
+    }
     if (plan.kind === 'latest') {
       setTick(sesno, null);
       deps.controller.browseBadge(`浏览 · sesno ${sesno} · 最新版本，无历史差异`);
@@ -602,12 +610,15 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
       deps.controller.browseBadge(`浏览 · sesno ${sesno} · 等待确认`);
       return;
     }
-    await loadUnits(context, plan.units.map((unit) => unit.unitRefno));
+    await loadUnits(context, sesno, plan.units.map((unit) => unit.unitRefno));
   }
 
-  /** 并发闸 + 忙重试（9.9、9.10）；部分失败照常显示成功单元（9.8） */
-  async function loadUnits(context: BrowseContext, unitRefnos: string[]): Promise<void> {
-    const pending = unitRefnos.filter((unitRefno) => !getFrame(cache, keyOf(unitRefno, context.cursor)));
+  /**
+   * 并发闸 + 忙重试（9.9、9.10）；部分失败照常显示成功单元（9.8）。
+   * 取数与结算都按 `sesno`（发起时那一版）：`context.cursor` 随游标就地改写，排队任务开跑、整批结算时可能早已不是它。
+   */
+  async function loadUnits(context: BrowseContext, sesno: number, unitRefnos: string[]): Promise<void> {
+    const pending = unitRefnos.filter((unitRefno) => !getFrame(cache, keyOf(unitRefno, sesno)));
     // 整批共用一个 controller，开跑前就记进 `subtreeControllers`，`exitBrowse` 一并 abort。
     // 不能每个任务开跑时才建：超过并发上限的任务还在 `runBounded` 里排队，中止时不在集合里，
     // 之后开跑拿到的是没中止的 signal，照样发请求、把帧写进已清空的缓存。
@@ -615,7 +626,7 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     const controller = new AbortController();
     subtreeControllers.add(controller);
     const tasks = pending.map((unitRefno) => () => retryOnBusy(
-      (signal) => fetchUnitAt(unitRefno, context.cursor, signal),
+      (signal) => fetchUnitAt(unitRefno, sesno, signal),
       { signal: controller.signal, sleep },
     ));
     const results = await runBounded(tasks, concurrencyLimit);
@@ -631,18 +642,16 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
       if (isAbortError(result.reason)) return;
       failed += 1;
       addError({
-        sesno: context.cursor,
+        sesno,
         unitRefno: pending[index],
         code: codeOf(result.reason),
         message: messageOf(result.reason),
       });
     });
-    if (failed > 0) {
-      setTick(context.cursor, 'failed');
-      deps.controller.browseBadge(`浏览 · sesno ${context.cursor} · ${failed} 个单元加载失败`);
-    } else {
-      setTick(context.cursor, null);
-    }
+    setTick(sesno, failed > 0 ? 'failed' : null);
+    // 游标已经移走：角标与视口归游标所在那一版，这里只结自己这一格的刻度与错误
+    if (context.cursor !== sesno) return;
+    if (failed > 0) deps.controller.browseBadge(`浏览 · sesno ${sesno} · ${failed} 个单元加载失败`);
     await showCursorFrame();
   }
 
@@ -708,6 +717,12 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
   function cursorChanged(sesno: number, trigger: CursorTrigger): void {
     const context = ctx;
     if (mode.value !== 'browse' || !context) return;
+    // 待确认只属于游标所在那一版：游标移走就作废，连同那一格的「加载中」。
+    // 留着的话，`answerConfirm` 会把按旧版算出的单元拿到新游标去装。
+    if (pendingConfirm.value && sesno !== context.cursor) {
+      pendingConfirm.value = null;
+      setTick(context.cursor, null);
+    }
     context.cursor = sesno;
 
     // 1. 先按新游标重分配在飞的请求（3.15、4.8）
@@ -838,7 +853,8 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
       return;
     }
     const units = choice === 'top' ? plan.top : plan.units;
-    void loadUnits(context, units.map((unit) => unit.unitRefno));
+    // 游标一移 `cursorChanged` 就清掉待确认，答得了的一定是当前游标那一版
+    void loadUnits(context, context.cursor, units.map((unit) => unit.unitRefno));
   }
 
   async function exitBrowse(): Promise<void> {
