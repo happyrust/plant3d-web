@@ -628,3 +628,60 @@ describe('useVersionFrames：退出中止全部请求（Requirement 4.6）', () 
     expect(frames.errors.value).toHaveLength(0);
   });
 });
+
+describe('useVersionFrames：结算只认发起请求的会话', () => {
+  it('退出后立即重进：旧会话的结算不改写新会话的刻度、错误与角标', async () => {
+    // 退出时缓存为空，`exitBrowse` 不经过任何 `await` 就做完；旧会话的 `loadUnits` 要再过几轮微任务
+    // 才结算，那时新会话已把 `mode` 置回 `browse`。新会话的请求一律挂起，刻度应一直是「正在加载」。
+    let reentered = false;
+    const { frames, source, calls, badges } = setup({
+      respond: (call) => (!reentered && call.unitRefno === 'unit_1'
+        ? Promise.reject(new HistoryQueryError('NETWORK', { message: '无法连接服务端' }))
+        : new Promise<HistoryGeometryResult>(() => undefined)),
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockResolvedValue(summaryWith([
+      { unitRefno: 'unit_1', added: 1, deleted: 0, modified: 0 },
+      { unitRefno: 'unit_2', added: 1, deleted: 0, modified: 0 },
+    ]));
+    const context = contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] });
+    void frames.enterBrowse(context);
+    for (let i = 0; i < 3; i += 1) await settle();
+    expect(calls.map((c) => c.unitRefno)).toEqual(['unit_1', 'unit_2']);
+
+    await frames.exitBrowse();
+    reentered = true;
+    badges.length = 0;
+    void frames.enterBrowse(context);
+    expect(frames.tickStatus.value.get(10)).toBe('loading');
+
+    for (let i = 0; i < 5; i += 1) await settle();
+    expect(frames.tickStatus.value.get(10)).toBe('loading');
+    expect(frames.errors.value).toEqual([]);
+    expect(badges).toEqual([]);
+  });
+
+  it('没退出就重进：旧会话迟到的帧不记到新会话名下', async () => {
+    // 不经 `exitBrowse` 就没有 abort。帧键按落地时 `ctx` 的 dbnum 算，旧会话（8000）的帧一旦落地
+    // 就记成新会话（9000）的，还会被当成新会话游标那一版装进视口。
+    const hanging: (() => void)[] = [];
+    const { frames, source, shows } = setup({
+      respond: (call) => new Promise<HistoryGeometryResult>((resolve) => {
+        hanging.push(() => { void ok(call).then(resolve); });
+      }),
+    });
+    (source.diffSummary as ReturnType<typeof vi.fn>).mockResolvedValue(summaryWith([
+      { unitRefno: 'unit_1', added: 1, deleted: 0, modified: 0 },
+    ]));
+    void frames.enterBrowse(contextOf({ scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+    for (let i = 0; i < 3; i += 1) await settle();
+    void frames.enterBrowse(contextOf({ dbnum: 9000, scope: 'subtree', cursor: 10, latest: 15, unitRefnos: ['unit_1'] }));
+    for (let i = 0; i < 3; i += 1) await settle();
+    expect(hanging).toHaveLength(2);
+
+    hanging[0]!();
+    for (let i = 0; i < 5; i += 1) await settle();
+    expect(frames.debug.value.cacheKeys).toBe(0);
+    expect(shows).toEqual([]);
+    expect(frames.tickStatus.value.get(10)).toBe('loading');
+  });
+});

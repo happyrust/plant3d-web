@@ -620,9 +620,10 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     ));
     const results = await runBounded(tasks, concurrencyLimit);
     subtreeControllers.delete(controller);
-    // 退出浏览后 `mode` 变回 `idle`：此时任何落地都会污染下一轮会话的状态。
-    // 不能比 `ctx !== context`——`enterBrowse` 里 `ctx = { ...context }` 是新对象，恒不相等。
-    if (mode.value !== 'browse') return;
+    // 只在发起这批请求的那个浏览会话里结算。`mode` 挡住对比模式与退出途中（`exitBrowse` 逐帧
+    // `await` 时 `ctx` 还没清）；`ctx !== context` 挡住退出后立即重进——那时 `mode` 已回到 `browse`，
+    // 旧会话的结算会改写新会话的刻度、错误与角标。`context` 是调用方当时取的 `ctx`，同一会话内恒等。
+    if (mode.value !== 'browse' || ctx !== context) return;
     let failed = 0;
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') return;
@@ -652,7 +653,8 @@ export function useVersionFrames(deps: VersionFramesDeps): VersionFramesState {
     const result = await query({ dbnum: context.dbnum, unitRefno, sesno }, { signal });
     // 响应可能在中止之后才到：数据源不一定理会 signal，`retryOnBusy` 的赛跑只让上层先结束，
     // 不会停掉这里。中止了就不落地，否则帧会写进 `exitBrowse` 已清空的缓存。
-    if (signal.aborted) throw new DOMException('This operation was aborted', 'AbortError');
+    // 没退出就重进不会 abort，另查会话：帧键按当前 `ctx` 的 dbnum 算，旧会话的帧会记到新会话名下。
+    if (signal.aborted || ctx !== context) throw new DOMException('This operation was aborted', 'AbortError');
     // 只有 `ok` 带几何。`not-modified` 回的是 304，没有 `geometry` 字段，而本函数是
     // `loadUnits` 里「缓存中没有这一帧」时才发起的——此时没有可复用的本地几何，
     // 不能当成功。原先是 `return`，等于把失败算成成功：`loadUnits` 的 `failed` 恒为 0，
