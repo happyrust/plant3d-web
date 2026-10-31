@@ -27,8 +27,8 @@
 > 性能 e2e 4 passed / 3 skipped / 0 failed（12.4 与版本表首帧按夹具跳过）；W10 后、W10-5 / W10-6 后各复跑一次 12.1 / 12.5 / 12.6-12.7，
 > 都是 3 passed，但后一次 12.6 没把前端缓存压到上限；按 D14 (a) 加停顿后单跑 12.6/12.7 1 passed，`cacheKeys` 12 封顶。
 >
-> **后端分支**：`feat/model-version-timeline-scrub` @ `d0f2a479c`（2026-10-31 由 `62619584f` rebase 到
-> `refactor` @ `2badaf2e0`），领先 9 个提交、落后 0 个，工作树干净，没有推送到远端。
+> **后端分支**：`feat/model-version-timeline-scrub` @ `e8fad6acd`（2026-11-01 rebase 到
+> `refactor` @ `2d36d6e05`），领先 9 个提交、落后 0 个，**可直接快进**，工作树干净，没有推送到远端。
 >
 > **W4 合入**：第 1 步已做；第 2 步要等主工作区所有者先处理那 6 个重叠文件，见「剩余工作 · W4 收尾」。
 >
@@ -118,6 +118,20 @@ W10-5 / W10-6 按 D12 / D13 (a) 修完，门禁全绿；12.6 拖动脚本按 D14
      **已做（2026-10-31）**：`62619584f` → `d0f2a479c`（基于 `refactor` @ `2badaf2e0`）。`spatial_centerline.rs` 取 `refactor` 的 JSON `member()` 夹具，特性侧那 1 行随之不需要，该文件退出特性改动（24 → 23 个文件）；`branch_query.rs` 的 `bore: point.bore` 一处 `refactor` 已有，自动消掉，最终内容与 rebase 前一致；`Cargo.lock` 差异 441 → 107 行（`refactor` 已去掉 duckdb / arrow）。`cargo test --lib --no-default-features --features ws,gen_model,manifold,project_hd,http_api`：2 773 passed / 0 failed / 117 ignored。
   2. （需要主工作区所有者先处理）那 6 个重叠文件先提交或另存，然后在主工作区 `git merge --ff-only feat/model-version-timeline-scrub`（rebase 后可快进）。
      rebase 后复核（2026-10-31）：特性改 23 个文件，与主工作区未提交改动重叠的仍是上面这 6 个；`refactor` 仍在 `2badaf2e0`，可以快进。
+     **2026-11-01 再 rebase 一次**（`refactor` 已前进到 `2d36d6e05`，11 个新提交）：
+     - 一处冲突 `src/mbd/branch_query.rs` 的 `adjust_len`：`refactor` 侧已从 UDA `:PIPE-ADLONGTH`
+       读出真实值（`branch_query.rs:324-332`），特性侧当年为兼容契约只填 `None`，**取 `refactor` 侧**。
+     - 结果：HEAD `e8fad6acd`，领先 9 个提交、落后 0 个，**是 `refactor` 的直接后代，可纯快进**。
+     - `cargo check` 通过；`cargo test --lib` **2781 passed / 1 failed**。失败的是
+       `data_interface::cata_dependency::tests::the_catalogue_reconcile_refreshes_dependency_rows_after_scheduling_roots_and_exposes_it`
+       ——它是**源码文本断言**（`include_str!` 拼 `model_coverage.rs` + `startup_reconcile.rs` 后 grep 固定串）。
+       实测目标串 `"catalogue_cascade,\n        catalogue_dependency_refresh,\n    };"` 在 **`refactor` 与特性 HEAD 上都找不到**，
+       且特性 9 个提交从未碰过这两个文件（`git diff --name-only refactor..HEAD` 无此二者），
+       所以是 `refactor` 上的**既有失败**，与本特性无关。
+     - 备份标签 `backup/timeline-scrub-pre-rebase` 指向 rebase 前的 `d0f2a479c`。
+     - 合入仍被阻塞，原因未变：`refactor` 被主工作区占用，Git 拒绝从别的 worktree 移动它
+       （`fatal: cannot force update the branch 'refactor' used by worktree at ...`），
+       而主工作区有 142 条未提交改动、6 个文件与特性重叠。用户已明确「不碰它工作区」。
   3. 合入 SHA 写进 `tasks.md` 第 8 组（`:207` 的「未做」改掉）；不合 `publish`、不部署、不推送。
 
 ### 未提交内容处置（需确认）
