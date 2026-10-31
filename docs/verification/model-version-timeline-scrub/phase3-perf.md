@@ -91,6 +91,11 @@ latest=686  versionCount=73  impact_kind 分布：placement=68、mesh=4、delive
 geometrySesnoCount=73  drawableSesnos=38 个（相对最新版 686 真有几何差异的那些）
 ```
 
+> **2026-10-31 W10 修复后复跑（3 passed）**：同一后端与夹具，前端 `ba74df9e`。
+> 12.1 worst 37 ms（20 次 22–37 ms）；12.5 五个完整窗口 59–60 fps、吸附标签 8–20 ms；
+> 12.6/12.7 历时 10.2 分钟，`cacheKeys` 4→12 封顶、后端 `in_flight` ≤ 1、结果缓存 8→25 / 32，
+> 退出后前端归零、`historicalUnchanged=true`。`perf/` 下这三个 JSON 是本次读数，下文各节的数字来自更早几轮。
+
 ### 12.1 缓存热时方向键 20 次 ≤ 300 ms —— **通过**
 
 ```

@@ -2,17 +2,38 @@
   "unit": "24384_23257",
   "samples": [
     {
-      "at": "2026-10-31T00:00:12.400Z",
+      "at": "2026-10-31T10:14:37.934Z",
+      "frontend": {
+        "cacheKeys": 4,
+        "inFlight": 0,
+        "browseLayerReady": true
+      },
+      "backend": {
+        "cache_entries": 8,
+        "cache_capacity": 32,
+        "hits_total": 355,
+        "misses_total": 265,
+        "in_flight": 1,
+        "concurrency_limit": 4,
+        "input_cache": {
+          "entries": 4,
+          "capacity": 4
+        },
+        "timeout_secs": 60
+      }
+    },
+    {
+      "at": "2026-10-31T10:15:37.892Z",
       "frontend": {
         "cacheKeys": 5,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 32,
+        "cache_entries": 9,
         "cache_capacity": 32,
-        "hits_total": 349,
-        "misses_total": 247,
+        "hits_total": 355,
+        "misses_total": 265,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -23,17 +44,17 @@
       }
     },
     {
-      "at": "2026-10-31T00:01:12.321Z",
+      "at": "2026-10-31T10:16:37.887Z",
       "frontend": {
         "cacheKeys": 7,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 32,
+        "cache_entries": 11,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 248,
+        "hits_total": 355,
+        "misses_total": 267,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -44,17 +65,17 @@
       }
     },
     {
-      "at": "2026-10-31T00:02:12.410Z",
+      "at": "2026-10-31T10:17:37.905Z",
       "frontend": {
-        "cacheKeys": 7,
+        "cacheKeys": 8,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 32,
+        "cache_entries": 12,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 248,
+        "hits_total": 355,
+        "misses_total": 268,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -65,59 +86,17 @@
       }
     },
     {
-      "at": "2026-10-31T00:03:12.385Z",
-      "frontend": {
-        "cacheKeys": 9,
-        "inFlight": 0,
-        "browseLayerReady": true
-      },
-      "backend": {
-        "cache_entries": 2,
-        "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 250,
-        "in_flight": 0,
-        "concurrency_limit": 4,
-        "input_cache": {
-          "entries": 4,
-          "capacity": 4
-        },
-        "timeout_secs": 60
-      }
-    },
-    {
-      "at": "2026-10-31T00:04:12.316Z",
-      "frontend": {
-        "cacheKeys": 10,
-        "inFlight": 0,
-        "browseLayerReady": true
-      },
-      "backend": {
-        "cache_entries": 3,
-        "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 251,
-        "in_flight": 0,
-        "concurrency_limit": 4,
-        "input_cache": {
-          "entries": 4,
-          "capacity": 4
-        },
-        "timeout_secs": 60
-      }
-    },
-    {
-      "at": "2026-10-31T00:05:12.366Z",
+      "at": "2026-10-31T10:18:37.946Z",
       "frontend": {
         "cacheKeys": 12,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 5,
+        "cache_entries": 16,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 253,
+        "hits_total": 355,
+        "misses_total": 272,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -128,17 +107,17 @@
       }
     },
     {
-      "at": "2026-10-31T00:06:12.386Z",
+      "at": "2026-10-31T10:19:37.955Z",
       "frontend": {
         "cacheKeys": 12,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 5,
+        "cache_entries": 19,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 253,
+        "hits_total": 355,
+        "misses_total": 275,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -149,17 +128,17 @@
       }
     },
     {
-      "at": "2026-10-31T00:07:12.371Z",
+      "at": "2026-10-31T10:20:37.971Z",
       "frontend": {
         "cacheKeys": 12,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 6,
+        "cache_entries": 21,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 254,
+        "hits_total": 355,
+        "misses_total": 277,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -170,17 +149,17 @@
       }
     },
     {
-      "at": "2026-10-31T00:08:12.394Z",
+      "at": "2026-10-31T10:21:37.944Z",
       "frontend": {
         "cacheKeys": 12,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 7,
+        "cache_entries": 22,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 255,
+        "hits_total": 355,
+        "misses_total": 278,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -191,17 +170,38 @@
       }
     },
     {
-      "at": "2026-10-31T00:09:12.381Z",
+      "at": "2026-10-31T10:22:37.892Z",
       "frontend": {
         "cacheKeys": 12,
         "inFlight": 0,
         "browseLayerReady": true
       },
       "backend": {
-        "cache_entries": 7,
+        "cache_entries": 24,
         "cache_capacity": 32,
-        "hits_total": 350,
-        "misses_total": 255,
+        "hits_total": 358,
+        "misses_total": 280,
+        "in_flight": 0,
+        "concurrency_limit": 4,
+        "input_cache": {
+          "entries": 4,
+          "capacity": 4
+        },
+        "timeout_secs": 60
+      }
+    },
+    {
+      "at": "2026-10-31T10:23:37.871Z",
+      "frontend": {
+        "cacheKeys": 12,
+        "inFlight": 0,
+        "browseLayerReady": true
+      },
+      "backend": {
+        "cache_entries": 25,
+        "cache_capacity": 32,
+        "hits_total": 358,
+        "misses_total": 281,
         "in_flight": 0,
         "concurrency_limit": 4,
         "input_cache": {
@@ -218,10 +218,10 @@
     "browseLayerReady": false
   },
   "afterBackend": {
-    "cache_entries": 7,
+    "cache_entries": 25,
     "cache_capacity": 32,
-    "hits_total": 350,
-    "misses_total": 255,
+    "hits_total": 358,
+    "misses_total": 281,
     "in_flight": 0,
     "concurrency_limit": 4,
     "input_cache": {
@@ -231,11 +231,11 @@
     "timeout_secs": 60
   },
   "baseline": {
-    "cache_entries": 32,
+    "cache_entries": 5,
     "cache_capacity": 32,
-    "hits_total": 347,
-    "misses_total": 244,
-    "in_flight": 0,
+    "hits_total": 354,
+    "misses_total": 261,
+    "in_flight": 1,
     "concurrency_limit": 4,
     "input_cache": {
       "entries": 4,
