@@ -11,6 +11,7 @@ import {
   EMBED_LANDING_STATE_UPDATED_EVENT,
   EMBED_MODE_PARAMS_STORAGE_KEY,
   type EmbedLandingState,
+  type EmbedModeParams,
 } from './embedRoleLanding';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
@@ -339,8 +340,10 @@ async function handleManualComponentSubmit() {
       return;
     }
 
-    if (items.length === 1) {
-      await handleManualComponentPick(items[0]);
+    // 长度已由上一行守卫为 1，取第一个即唯一一项；解构避开 noUncheckedIndexedAccess 的 undefined
+    const [onlyItem] = items;
+    if (onlyItem !== undefined && items.length === 1) {
+      await handleManualComponentPick(onlyItem);
       return;
     }
 
@@ -421,17 +424,14 @@ const notification = ref<{ type: 'success' | 'error' | null; message: string; de
   message: '',
   details: '',
 });
-// 嵌入模式参数
-const embedModeParams = ref<{
-  formId: string | null;
-  userToken: string | null;
-  userId: string | null;
-  projectId: string | null;
-  isEmbedMode: boolean;
-}>({
+// 嵌入模式参数：直接用共享的 EmbedModeParams，别在这里手写子集。
+// 手写版漏了 workflowRole / launchInput / workflowMode / externalWorkflowMode，
+// 导致 resolvePassiveWorkflowMode 与 launchInput.formId 读取全部对不上。
+const embedModeParams = ref<EmbedModeParams>({
   formId: null,
   userToken: null,
   userId: null,
+  workflowRole: null,
   projectId: null,
   isEmbedMode: false,
 });

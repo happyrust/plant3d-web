@@ -92,8 +92,12 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import {
   useToolStore,
+  type AnnotationRecord,
   type AnnotationType,
+  type CloudAnnotationRecord,
   type MeasurementRecord,
+  type ObbAnnotationRecord,
+  type RectAnnotationRecord,
 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -1241,13 +1245,16 @@ async function confirmCurrentData() {
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: hasUnsavedPendingData.value,
+      // 快照类型上四个批注数组是 unknown[]（历史记录结构可能更旧，见 ConfirmedRecordData 注释），
+      // 写入侧由 buildReviewConfirmSnapshotPayload 保证形状；这里按 Store 的真实类型标注，
+      // 与 ReviewConfirmation.vue 同路径写法一致。
       payload: {
         type: 'batch' as const,
-        annotations: [...currentDraftConfirmPayload.value.annotations],
-        cloudAnnotations: [...currentDraftConfirmPayload.value.cloudAnnotations],
-        rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations],
-        obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations],
-        measurements: [...currentDraftConfirmPayload.value.measurements],
+        annotations: [...currentDraftConfirmPayload.value.annotations] as AnnotationRecord[],
+        cloudAnnotations: [...currentDraftConfirmPayload.value.cloudAnnotations] as CloudAnnotationRecord[],
+        rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations] as RectAnnotationRecord[],
+        obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations] as ObbAnnotationRecord[],
+        measurements: [...currentDraftConfirmPayload.value.measurements] as MeasurementRecord[],
         dimensionDocument: currentDraftConfirmPayload.value.dimensionDocument,
         dimensionDocumentVersion: currentDraftConfirmPayload.value.dimensionDocumentVersion,
         note: confirmNote.value.trim(),

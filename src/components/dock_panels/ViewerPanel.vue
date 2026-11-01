@@ -2779,7 +2779,8 @@ function createViewerDimensionRepository() {
     async load(context: { taskId?: string; formId?: string }) {
       const fallbackContext = getDimensionDocumentContext();
       const loaded = localRepository
-        ? await localRepository.load(context)
+        // 本地仓储的 documentId 由构造时的 scope 决定，load() 不收 context
+        ? await localRepository.load()
         : context.taskId
           ? await apiRepository.load(context)
           : createEmptyDimensionDocument({
@@ -4665,8 +4666,9 @@ onMounted(async () => {
   respondVersionBrowseApi(modelUnitCompare);
 
   function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: PtsetResponse }[]) {
-    if (entries.length === 0) return;
+    // 解构出 first 后单独判空：上面的 length 守卫不收窄解构结果
     const [first, ...rest] = entries;
+    if (first === undefined) return;
     ptsetVis.setPanelContext(contextRefno);
     ptsetVis.renderPtset(first.refno, first.response);
     for (const item of rest) {

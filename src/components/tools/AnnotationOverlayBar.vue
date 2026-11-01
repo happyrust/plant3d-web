@@ -19,6 +19,8 @@ import {
   X,
 } from 'lucide-vue-next';
 
+import type { PendingCloudAnchor } from '@/composables/dtxTools/types';
+
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import AnnotationColorPicker from '@/components/tools/AnnotationColorPicker.vue';
@@ -47,8 +49,10 @@ import {
 type CloudGateBlock = { step: 'target' | 'anchor'; at: number };
 
 type ToolsApi = {
-  ready: Ref<boolean>;
-  statusText: Ref<string>;
+  // 这里只读 .value。useDtxTools 以 computed() 给出（ComputedRef），
+  // 声明成可写 Ref 会让它不满足本类型；写成 Readonly<Ref<>> 两者都收。
+  ready: Readonly<Ref<boolean>>;
+  statusText: Readonly<Ref<string>>;
   flyToAnnotation: (id: string) => void;
   removeAnnotation: (id: string) => void;
   flyToCloudAnnotation?: (id: string) => void;
@@ -57,7 +61,9 @@ type ToolsApi = {
   removeCloudAnnotation?: (id: string) => void;
   removeRectAnnotation?: (id: string) => void;
   removeObbAnnotation?: (id: string) => void;
-  pendingCloudAnchor?: Ref<{ refno: string } | null>;
+  // 与 useDtxTools 的 `PendingCloudAnchor` 对齐：refno / entityId 都是可选的，
+  // 这里只判「有没有待定锚点」，不读里面的字段。
+  pendingCloudAnchor?: Readonly<Ref<PendingCloudAnchor | null>>;
   clearPendingCloudAnchor?: () => void;
   rollbackCloudCreationStep?: () => boolean;
   cloudGateBlock?: Ref<CloudGateBlock | null>;

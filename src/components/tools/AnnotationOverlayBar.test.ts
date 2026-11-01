@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref, shallowRef } from 'vue';
 
+import type { PendingCloudAnchor } from '@/composables/dtxTools/types';
+
 const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn());
 const saveAnnotationBasicFieldsMock = vi.hoisted(() => vi.fn());
 
@@ -395,7 +397,7 @@ describe('AnnotationOverlayBar', () => {
     store.clearAll();
     store.setToolMode('annotation_cloud');
 
-    const pendingCloudAnchor = ref<{ refno: string } | null>(null);
+    const pendingCloudAnchor = ref<PendingCloudAnchor | null>(null);
     const cloudGateBlock = ref<{ step: 'target' | 'anchor'; at: number } | null>(null);
     const clearPendingCloudAnchor = vi.fn(() => {
       pendingCloudAnchor.value = null;
@@ -435,7 +437,7 @@ describe('AnnotationOverlayBar', () => {
     expect(host.querySelector('[data-testid="annotation-cloud-step-back"]')).toBeFalsy();
 
     // 锚点就绪后推进到第 3 步，并出现「重选锚点」
-    pendingCloudAnchor.value = { refno: 'REF/A' };
+    pendingCloudAnchor.value = { worldPos: [0, 0, 0], refno: 'REF/A' };
     await nextTick();
     expect(stepState('anchor')).toBe('done');
     expect(stepState('outline')).toBe('active');
@@ -898,7 +900,8 @@ describe('AnnotationOverlayBar', () => {
     store.clearAll();
     store.setToolMode('annotation_cloud');
 
-    const pendingCloudAnchor = ref<{ refno: string } | null>(null);
+    // 与真实 `PendingCloudAnchor` 对齐：worldPos 必填，refno / entityId 可选。
+    const pendingCloudAnchor = ref<PendingCloudAnchor | null>(null);
     const tools = {
       ready: ref(true), statusText: ref('云线批注'),
       flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
@@ -932,7 +935,7 @@ describe('AnnotationOverlayBar', () => {
     expect(probe().getAttribute('data-armed')).toBe('false');
 
     // 锚点就绪：下一步是在画布上拖轮廓，停靠位放行 pointer 事件，并把状态交给插槽
-    pendingCloudAnchor.value = { refno: 'REF/A' };
+    pendingCloudAnchor.value = { worldPos: [0, 0, 0], refno: 'REF/A' };
     await nextTick();
     expect(footerWrap().className).toContain('pointer-events-none');
     expect(footerWrap().getAttribute('data-canvas-drag-armed')).toBe('true');
