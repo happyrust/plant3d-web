@@ -83,10 +83,10 @@
     ]
   },
   "realtime_health": {
-    "cache_entries": 7,
+    "cache_entries": 32,
     "cache_capacity": 32,
-    "hits_total": 350,
-    "misses_total": 255,
+    "hits_total": 423,
+    "misses_total": 333,
     "in_flight": 0,
     "concurrency_limit": 4,
     "input_cache": {
@@ -99,7 +99,7 @@
     {
       "step": "GET /health model_cache.realtime_history",
       "ok": true,
-      "detail": "cache_entries=7/32 in_flight=0/4 timeout_secs=60 input_cache=4/4 historical.snapshots=2"
+      "detail": "cache_entries=32/32 in_flight=0/4 timeout_secs=60 input_cache=4/4 historical.snapshots=0"
     },
     {
       "step": "GET model/versions 计数",
@@ -114,12 +114,12 @@
     {
       "step": "GET model/history/geometry（首次）",
       "ok": true,
-      "detail": "HTTP 200 1267ms ETag=\"g:dba0a837141300f9252f01142890dde4\" X-Sesno=686 X-Session-Time=2026-10-24T04:35:17+00:00 Cache-Control=no-cache"
+      "detail": "HTTP 200 1064ms ETag=\"g:dba0a837141300f9252f01142890dde4\" X-Sesno=686 X-Session-Time=2026-10-24T04:35:17+00:00 Cache-Control=no-cache"
     },
     {
       "step": "实时几何体形状",
       "ok": true,
-      "detail": "instances=9 tubes=0 geometryKey=g:dba0a837141300f9252f01142890dde4 stats.visited=10 elapsed_ms=515"
+      "detail": "instances=9 tubes=0 geometryKey=g:dba0a837141300f9252f01142890dde4 stats.visited=10 elapsed_ms=442"
     },
     {
       "step": "实时几何不含 snapshot_key",
@@ -129,7 +129,7 @@
     {
       "step": "GET model/history/geometry（缓存命中）",
       "ok": true,
-      "detail": "HTTP 200 818ms 体逐字节相同=True（fc.exe /b）"
+      "detail": "HTTP 200 618ms 体逐字节相同=True（fc.exe /b）"
     },
     {
       "step": "GET model/history/geometry（If-None-Match）",
@@ -189,7 +189,7 @@
     {
       "step": "快照数不变（Requirement 6.12）",
       "ok": true,
-      "detail": "初值 2 → 现值 2"
+      "detail": "初值 0 → 现值 0"
     },
     {
       "step": "CORS Access-Control-Expose-Headers",
