@@ -40,6 +40,10 @@
 > - 前端全量 vitest **4 166 passed / 1 todo**（423 文件）；`type-check` 439 条 / 基线 439 / 新增 0。
 > - 唯一失败 `cata_dependency` 的源码文本断言，已在**纯 `refactor`（`2d36d6e05`，零特性代码）**
 >   上单跑复现：`0 passed; 1 failed` —— 确为既有失败。
+> - **该失败已有他人在修**（2026-11-01 发现）：特性工作树里 `src/data_interface/cata_dependency.rs`
+>   有一处**未提交**改动（+17 行），把那条钉从「整段字符串必须出现」改成「`catalogue_cascade`
+>   与 `catalogue_dependency_refresh` 都在、且后者在前者之后」。实测该改动让此测试转为
+>   `1 passed; 0 failed`。**这不是本特性的改动，未提交、未动它**；本特性与该失败无关这一点不变。
 >
 > **期间修掉的实质问题**：27 条，见 `docs/verification/model-version-timeline-scrub/phase3-perf.md`。
 > **一处规范冲突已裁决**：R6.3 / R8.10 选第 3 条出路（改 R8.10 措辞为「所有子节点」），
