@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { shallowRef } from 'vue';
 
-import { createMbdExternalSync } from './useMbdExternalSync';
+import { MBD_FETCH_CONCURRENCY, createMbdExternalSync } from './useMbdExternalSync';
 
 import type {
   MbdDiagnosticsSnapshot,
@@ -63,6 +63,7 @@ function createDiagnostics(): MbdDiagnosticsStore {
       sourceVersion: null,
       isolines: [],
       loadError: null,
+      sources: [],
     }),
     set: vi.fn(),
     clear: vi.fn(),
@@ -217,6 +218,11 @@ describe('createMbdExternalSync', () => {
     expect(harness.target.replaceExternalSource).not.toHaveBeenCalled();
   });
 
+  /**
+   * 2026-11-02 多 BRAN 语义变更：原子拒绝从「掀翻全局」改成「逐包生效」。
+   * 单 refno 时唯一一包被拒，可观察结果仍是整屏清空 + `['mbd', []]`，
+   * 所以本用例不用改断言；跨包互不清场的语义见下方新增用例。
+   */
   it('rejects an API payload atomically when any primitive fails to map', async () => {
     const goodPayload = contractPayload();
     const duplicated = contractPayload({
@@ -408,6 +414,7 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
+  // 2026-11-02 起原子拒绝按包生效：单 refno 时唯一一包被拒仍走整屏清空分支。
   it('mbd_kinds does not bypass atomic rejection of a broken payload', async () => {
     const good = contractPayload().primitives[0]!;
     const harness = createHarness({
@@ -568,5 +575,273 @@ describe('createMbdExternalSync', () => {
     fail = true;
     await harness.sync.sync(harness.target);
     expect(harness.emitToast).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * 2026-11-02 多 BRAN：`mbd_refno=A,B` 逐包取数、合并成**一次**
+   * `replaceExternalSource`（整槽覆盖，逐包提交会互相顶掉）。两包图元
+   * 同叫 `dim-1`：各包 id 编号空间独立，多包时按 `refno:` 前缀区分，
+   * 否则 registry 的重复 id 校验会直接抛。
+   */
+  it('merges multiple refnos into a single replaceExternalSource call', async () => {
+    const fetchPipeData = vi.fn(async (refno: string) => ({
+      ok: true as const,
+      data: contractPayload({ input_refno: refno, branch_refno: refno }),
+      diagnostics: [],
+    }));
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
+
+    await harness.sync.sync(harness.target);
+
+    expect(fetchPipeData).toHaveBeenCalledWith('A', { partial: false });
+    expect(fetchPipeData).toHaveBeenCalledWith('B', { partial: false });
+    expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
+    const [source, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(source).toBe('mbd');
+    expect(records.map((record: { id: string }) => record.id))
+      .toEqual(['A:dim-1', 'B:dim-1']);
+    expect(harness.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      channel: 'api',
+      sourceId: 'A,B',
+    }));
+  });
+
+  /**
+   * 2026-11-02 逐包拒绝：A 包映射失败（重复图元 id）只剔除 A 自己，
+   * B 包照常提交；失败原因进逐源诊断与聚合 loadError，并按 refno 弹提示。
+   */
+  it('rejects only the broken package and still submits the healthy ones', async () => {
+    const good = contractPayload().primitives[0]!;
+    const fetchPipeData = vi.fn(async (refno: string) => ({
+      ok: true as const,
+      data: contractPayload({
+        input_refno: refno,
+        branch_refno: refno,
+        primitives: refno === 'A' ? [good, good] : [{ ...good, id: 'dim-b' }],
+      }),
+      diagnostics: [],
+    }));
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
+
+    await harness.sync.sync(harness.target);
+
+    expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(records.map((record: { id: string }) => record.id)).toEqual(['B:dim-b']);
+
+    const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    expect(diagnostics.sourceId).toBe('A,B');
+    expect(diagnostics.loadError).toContain('整包拒绝');
+    expect(diagnostics.loadError).toContain('A');
+    expect(diagnostics.skipped).toEqual([{
+      id: 'dim-1',
+      reason: 'Duplicate primitive id within MBD payload',
+    }]);
+    expect(diagnostics.sources).toHaveLength(2);
+    expect(diagnostics.sources[0]).toEqual(expect.objectContaining({
+      refno: 'A',
+      loadError: expect.stringContaining('整包拒绝'),
+    }));
+    expect(diagnostics.sources[1]).toEqual(expect.objectContaining({
+      refno: 'B',
+      loadError: null,
+    }));
+    expect(harness.emitToast).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'error',
+      message: expect.stringContaining('整包拒绝'),
+    }));
+  });
+
+  /**
+   * 2026-11-02 并发上限：refno 多于 {@link MBD_FETCH_CONCURRENCY} 时先起
+   * CONCURRENCY 个取数，有完成的才补位，不会一次性全部并发出去。
+   */
+  it('caps concurrent fetches at MBD_FETCH_CONCURRENCY', async () => {
+    type FetchResult = Awaited<ReturnType<MbdExternalSyncDeps['fetchPipeData']>>;
+    const deferreds: { resolve: (value: FetchResult) => void }[] = [];
+    const fetchPipeData = vi.fn(
+      () => new Promise<FetchResult>((resolve) => {
+        deferreds.push({ resolve });
+      }),
+    );
+    const refnoCount = MBD_FETCH_CONCURRENCY + 2;
+    const refnos = Array.from({ length: refnoCount }, (_, index) => `R${index}`);
+    const harness = createHarness({
+      search: `?mbd_refno=${refnos.join(',')}`,
+      fetchPipeData,
+    });
+
+    const pending = harness.sync.sync(harness.target);
+    // worker 池同步起第一批：正好 CONCURRENCY 个在途，多一个都不发。
+    expect(fetchPipeData).toHaveBeenCalledTimes(MBD_FETCH_CONCURRENCY);
+
+    deferreds[0]!.resolve({ ok: true, data: contractPayload(), diagnostics: [] });
+    await vi.waitFor(() => {
+      expect(fetchPipeData).toHaveBeenCalledTimes(MBD_FETCH_CONCURRENCY + 1);
+    });
+
+    // 逐个放行剩下的包，每轮都要等新的 deferred 出现。不能写成 `for (const d of
+    // deferreds) d.resolve(...)`：resolve 只是排微任务，worker 补位要等这个同步
+    // 循环退出后才发生，于是循环遍历的是「补齐之前」那份快照，末尾几个包永远不
+    // 启动，`await pending` 挂死（超时 20s）。
+    let resolved = 1;
+    while (resolved < refnoCount) {
+      await vi.waitFor(() => {
+        expect(deferreds.length).toBeGreaterThan(resolved);
+      });
+      deferreds[resolved]!.resolve({ ok: true, data: contractPayload(), diagnostics: [] });
+      resolved += 1;
+    }
+    await pending;
+    expect(fetchPipeData).toHaveBeenCalledTimes(refnoCount);
+    // 多包同 id（各包都叫 dim-1）靠 refno 前缀区分，合并不抛错。
+    expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(records).toHaveLength(refnoCount);
+  });
+
+  /** `mbd_refno` 值全空（解析成 `[]`）与参数缺失同路：整槽清空 + 清诊断。 */
+  it('clears the source when mbd_refno parses to an empty list', async () => {
+    const harness = createHarness({ search: '?mbd_refno=,,' });
+
+    await harness.sync.sync(harness.target);
+
+    expect(harness.fetchPipeData).not.toHaveBeenCalled();
+    expect(harness.target.replaceExternalSource).toHaveBeenCalledWith('mbd', []);
+    expect(harness.diagnostics.clear).toHaveBeenCalledTimes(1);
+    expect(harness.diagnostics.set).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 2026-11-02 聚合诊断：顶层字段是「所有源的聚合视图」——`sourceId` 逗号
+   * 拼接、`issues`/`skipped`/`notes`/`isolines` 各源拼接、`layoutMode` 与
+   * `sourceVersion` 取第一个非空；逐源明细进 `sources`，多源 notes 带
+   * `refno：` 前缀归因。
+   */
+  it('aggregates per-source diagnostics into the snapshot fields', async () => {
+    const version = {
+      dbnum: 24381,
+      sesno: 145,
+      databases: [{ dbnum: 24381, sesno: 145, db_type: 'DESI' }],
+    };
+    const fetchPipeData = vi.fn(async (refno: string) => ({
+      ok: true as const,
+      data: contractPayload({
+        input_refno: refno,
+        branch_refno: refno,
+        meta: refno === 'A'
+          ? {
+            geometry_space: 'source_mm' as const,
+            source_to_design: IDENTITY,
+            notes: ['note-a'],
+            source_version: version,
+            isolines: [{ index: 0, members: ['24381_145018'], cheight_mm: 25, od_mm: 114.3 }],
+          }
+          : {
+            geometry_space: 'source_mm' as const,
+            source_to_design: IDENTITY,
+            notes: [],
+            layout_mode: 'linear_mvp',
+          },
+        issues: [{
+          id: `issue-${refno}`,
+          severity: 'warning' as const,
+          category: 'data' as const,
+          message: `${refno} warning`,
+        }],
+      }),
+      diagnostics: refno === 'B'
+        ? [{ id: 'future-1', reason: '还不认识的图元 kind：future_dim' }]
+        : [],
+    }));
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
+
+    await harness.sync.sync(harness.target);
+
+    const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    expect(diagnostics.sourceId).toBe('A,B');
+    expect(diagnostics.issues.map((issue: { id: string }) => issue.id))
+      .toEqual(['issue-A', 'issue-B']);
+    expect(diagnostics.skipped).toEqual([
+      { id: 'future-1', reason: '还不认识的图元 kind：future_dim' },
+    ]);
+    expect(diagnostics.layoutMode).toBe('linear_mvp');
+    expect(diagnostics.sourceVersion).toEqual(version);
+    expect(diagnostics.isolines).toEqual([
+      { index: 0, members: ['24381_145018'], cheight_mm: 25, od_mm: 114.3 },
+    ]);
+    expect(diagnostics.loadError).toBeUndefined();
+    // 多源时逐源 notes 带 refno 前缀（A 的 meta.note、B 的契约层跳过提示）。
+    expect(diagnostics.notes).toEqual(expect.arrayContaining([
+      'A：note-a',
+      expect.stringContaining('B：契约层跳过 1 个图元'),
+    ]));
+    expect(diagnostics.sources).toEqual([
+      expect.objectContaining({ refno: 'A', loadError: null }),
+      expect.objectContaining({ refno: 'B', loadError: null }),
+    ]);
+  });
+
+  /**
+   * 2026-11-02 失败提示按 refno 去重：A、B 各失败各的，互不把对方的去重
+   * 记忆顶掉——单条记忆时第二次 sync 会漏报 B、或重复弹 A。
+   */
+  it('dedupes failure toasts per refno instead of sharing one slot', async () => {
+    const fetchPipeData = vi.fn(async (refno: string) => {
+      throw new Error(`boom-${refno}`);
+    });
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
+
+    await harness.sync.sync(harness.target);
+    await harness.sync.sync(harness.target);
+
+    // A、B 各弹一次；第二轮同样的原因各自去重。
+    expect(harness.emitToast).toHaveBeenCalledTimes(2);
+    expect(harness.emitToast).toHaveBeenCalledWith({
+      message: 'MBD 标注装载失败：boom-A',
+      level: 'error',
+    });
+    expect(harness.emitToast).toHaveBeenCalledWith({
+      message: 'MBD 标注装载失败：boom-B',
+      level: 'error',
+    });
+    // 去重只作用于弹窗：每轮诊断照旧写入。
+    expect(harness.diagnostics.set).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * 2026-11-02 多包竞态：第一批在途时被新 sync 顶替，老结果整体放弃，
+   * 不提交半批；新 sync 正常合并。
+   */
+  it('discards the whole batch when a newer multi-refno sync starts', async () => {
+    type FetchResult = Awaited<ReturnType<MbdExternalSyncDeps['fetchPipeData']>>;
+    const deferreds: { resolve: (value: FetchResult) => void }[] = [];
+    const fetchPipeData = vi.fn(
+      () => new Promise<FetchResult>((resolve) => {
+        deferreds.push({ resolve });
+      }),
+    );
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
+
+    const first = harness.sync.sync(harness.target);
+    const second = harness.sync.sync(harness.target);
+    // 新 sync 又占满并发位：两批各两个在途。
+    expect(fetchPipeData).toHaveBeenCalledTimes(4);
+    for (const deferred of deferreds) {
+      deferred.resolve({ ok: true, data: contractPayload(), diagnostics: [] });
+    }
+    await Promise.all([first, second]);
+
+    // 只有新 sync 提交：A:dim-1 + B:dim-1 一批，不是两批叠出来的四条。
+    expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(records.map((record: { id: string }) => record.id))
+      .toEqual(['A:dim-1', 'B:dim-1']);
   });
 });

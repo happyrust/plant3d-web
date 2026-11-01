@@ -1,4 +1,7 @@
-import type { MbdDiagnosticsStore } from './useMbdDiagnosticsStore';
+import type {
+  MbdDiagnosticsSourceSnapshot,
+  MbdDiagnosticsStore,
+} from './useMbdDiagnosticsStore';
 import type {
   DimensionSystem,
   ExternalDimensionRecord,
@@ -9,6 +12,7 @@ import type {
 import type { ToastPayload } from '@/ribbon/toastBus';
 
 import { mbdV2ToExternalRecords } from '@/dimension';
+import { parseMbdRefnos } from '@/utils/mbdRefnoParam';
 
 export type MbdExternalSyncTarget = Pick<
   DimensionSystem,
@@ -40,8 +44,12 @@ export type MbdExternalSync = Readonly<{
   /**
    * 按 URL 参数把 MBD 图元同步进目标系统：`mbd_refno` → 实时 API；
    * 无 `mbd_refno` → 清空来源（离线 parquet 通道已随 legacy 数据源退役）。
-   * 通道失败时清空来源、把失败原因写入诊断并弹一次错误提示
-   * （同一 refno 的同一句原因只弹一次，成功后复位；不静默清空诊断）。
+   *
+   * 多 BRAN（2026-11-02）：`mbd_refno=A,B` 逐包取数（并发上限
+   * {@link MBD_FETCH_CONCURRENCY}，后端没有批量接口），所有成功包的记录合并后
+   * 一次性 `replaceExternalSource`——它是整槽覆盖，逐包提交会互相顶掉。
+   * 某一包取数或映射失败只剔除那一包（逐包拒绝），其余包照常显示、失败原因进
+   * 逐源诊断；每个失败 refno 的同一句原因只弹一次错误提示，成功后复位。
    */
   sync(
     target: MbdExternalSyncTarget,
@@ -52,8 +60,16 @@ export type MbdExternalSync = Readonly<{
 }>;
 
 /**
- * 原子拒绝（ADR 0046）：负载校验或映射未全量成功时携带诊断明细进入统一
- * 失败分支，不提交任何部分记录。
+ * 多 BRAN 同屏取数的并发上限：后端没有批量接口只能逐包拉，全串行会让
+ * `mbd_refno=A,B,C,…` 的首屏等所有包依次回来；4 是「不淹掉连接、也不让用户
+ * 干等」的折中。导出常量便于测试断言上限生效。
+ */
+export const MBD_FETCH_CONCURRENCY = 4;
+
+/**
+ * 包级原子拒绝（ADR 0046，2026-11-02 改为逐包生效）：单包内映射未全量成功时
+ * 该包不提交任何部分记录。错误对象携带该包的诊断明细，在包级 catch 里转成
+ * 这一包的逐源诊断——不再抛到 sync 顶层掀翻其它包。
  */
 class MbdAtomicRejectionError extends Error {
   constructor(
@@ -65,6 +81,15 @@ class MbdAtomicRejectionError extends Error {
     this.name = 'MbdAtomicRejectionError';
   }
 }
+
+/**
+ * 单包取数 + 映射的结果：诊断字段与 {@link MbdDiagnosticsSourceSnapshot}
+ * 同形（`refno` 起逐源归因），外加本包要提交的记录。`loadError` 非空即
+ * 该包失败，其 `records` 恒为空。
+ */
+type MbdSourceLoadOutcome = MbdDiagnosticsSourceSnapshot & Readonly<{
+  records: readonly ExternalDimensionRecord[];
+}>;
 
 /**
  * 调试过滤 `?mbd_kinds=linear_dim[,slope_mark,…]`：只把这些 kind 的图元送进画家
@@ -119,9 +144,10 @@ function parseLabelPresentation(raw: string | null): 'interrupted' | 'above' {
 }
 
 /**
- * 调试开关 `?mbd_partial=1`：允许部分显示。缺省（关）维持 ADR 0046 的原子拒绝——
- * 只要有一个图元映射不过就整包不提交；打开后跳过的那几条只进诊断，其余照常渲染，
- * 面板常驻「N 条被跳过」的横幅（`DimensionPanelDock`），避免使用者误以为图是完整的。
+ * 调试开关 `?mbd_partial=1`：允许部分显示。缺省（关）维持 ADR 0046 的逐包原子
+ * 拒绝——一包里有一个图元映射不过，那一包就不提交（2026-11-02 起不再掀翻
+ * 其它包）；打开后跳过的那几条只进诊断，其余照常渲染，面板常驻「N 条被跳过」
+ * 的横幅（`DimensionPanelDock`），避免使用者误以为图是完整的。
  */
 function isMbdPartialEnabled(raw: string | null): boolean {
   return raw?.trim() === '1';
@@ -145,17 +171,18 @@ export function createMbdExternalSync(
 ): MbdExternalSync {
   let syncVersion = 0;
   /**
-   * 失败提示去重：同一 refno 的同一句原因只弹一次。取数失败往往是持续性
+   * 失败提示按 refno 去重：同一 refno 的同一句原因只弹一次。取数失败往往是持续性
    * 的（后端 422 / 网关 502），每次 popstate 都弹会在用户眼前刷屏；换源或
-   * 成功一次之后复位，下一次真失败仍要看得见。
+   * 成功一次之后复位，下一次真失败仍要看得见。多 BRAN 时按 refno 各记各的，
+   * 否则不同包轮流顶掉单条记忆，要么漏报要么重复刷屏。
    */
-  let lastFailureToast: Readonly<{ refno: string; message: string }> | null = null;
+  const failureToasts = new Map<string, string>();
 
   const toastFailure = (refno: string, message: string): void => {
-    if (lastFailureToast?.refno === refno && lastFailureToast.message === message) {
+    if (failureToasts.get(refno) === message) {
       return;
     }
-    lastFailureToast = { refno, message };
+    failureToasts.set(refno, message);
     deps.emitToast({ message: `MBD 标注装载失败：${message}`, level: 'error' });
   };
 
@@ -165,121 +192,226 @@ export function createMbdExternalSync(
       const cancelled = (): boolean =>
         version !== syncVersion || (options.isCancelled?.() ?? false);
 
-      const params = new URLSearchParams(deps.getSearch());
-      const mbdRefno = params.get('mbd_refno')?.trim() || '';
+      const search = deps.getSearch();
+      const params = new URLSearchParams(search);
+      const refnos = parseMbdRefnos(search);
 
-      if (!mbdRefno) {
+      if (refnos.length === 0) {
         if (cancelled()) return;
         target.replaceExternalSource('mbd', []);
         deps.diagnostics.clear();
-        lastFailureToast = null;
+        failureToasts.clear();
         return;
       }
 
       const channel = 'api' as const;
-      const sourceId = mbdRefno;
       const partialEnabled = isMbdPartialEnabled(params.get('mbd_partial'));
       const labelPresentation = parseLabelPresentation(params.get('mbd_label'));
-      try {
-        const parsed = await deps.fetchPipeData(mbdRefno, { partial: partialEnabled });
-        if (!parsed.ok) throw new Error(parsed.error);
-        const payload: MbdV2PipeData = parsed.data;
-        const channelSkipped = parsed.diagnostics;
-        const mapped = mbdV2ToExternalRecords(
-          payload,
-          labelPresentation === 'above' ? { labelPresentation } : {},
-        );
-        const skipped = [...channelSkipped, ...mapped.skipped];
-        // ADR 0046：先校验、后原子替换。原子拒绝只针对**映射失败**（契约认可、
-        // 但映射不出来 —— 这是代码缺陷，半对的数据不可信）。
-        //
-        // 契约层的逐条诊断（`channelSkipped`，A3 起是「还不认识的图元 kind」）不再
-        // 触发整包拒绝：那是后端向前演进的信息，不是本地能判对错的错。它们照旧
-        // 进 diagnostics.skipped（面板可见、常驻提示），其余图元照常提交。
-        const mappedSkipped = mapped.skipped;
-        if (mappedSkipped.length > 0 && !partialEnabled) {
-          throw new MbdAtomicRejectionError(
-            `MBD 负载整包拒绝：${mappedSkipped.length} 个图元无法映射`
-              + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
-            payload.issues,
-            skipped,
+      const kindFilter = parseMbdKindFilter(params.get('mbd_kinds'));
+      const lodDisabled = isMbdLodDisabled(params.get('mbd_lod'));
+      const presentation3dDisabled = isMbd3dDisabled(params.get('mbd_3d'));
+      /**
+       * 多 BRAN 同屏时给记录 id 加 `refno:` 前缀：各包的图元 id 编号空间各自
+       * 独立（两个 BRAN 都能叫 dim-1），`replaceSource` 又是整槽校验、遇重复
+       * id 直接抛——不加前缀合并必然失败。单包保持裸 id，与旧行为一致。
+       */
+      const multiRefnos = refnos.length > 1;
+
+      const loadSource = async (refno: string): Promise<MbdSourceLoadOutcome | null> => {
+        try {
+          const parsed = await deps.fetchPipeData(refno, { partial: partialEnabled });
+          // 在途 sync 被新 sync 顶替或宿主作废：立刻收手，不白费映射，外层也会整体放弃。
+          if (cancelled()) return null;
+          if (!parsed.ok) throw new Error(parsed.error);
+          const payload: MbdV2PipeData = parsed.data;
+          const channelSkipped = parsed.diagnostics;
+          const mapped = mbdV2ToExternalRecords(
+            payload,
+            labelPresentation === 'above' ? { labelPresentation } : {},
           );
+          const skipped = [...channelSkipped, ...mapped.skipped];
+          // ADR 0046：先校验、后提交。原子拒绝只针对**映射失败**（契约认可、
+          // 但映射不出来 —— 这是代码缺陷，半对的数据不可信），且现在按包生效
+          // （2026-11-02 多 BRAN）：只剔除这一包，不掀翻其它包。
+          //
+          // 契约层的逐条诊断（`channelSkipped`，A3 起是「还不认识的图元 kind」）不再
+          // 触发整包拒绝：那是后端向前演进的信息，不是本地能判对错的错。它们照旧
+          // 进 diagnostics.skipped（面板可见、常驻提示），其余图元照常提交。
+          const mappedSkipped = mapped.skipped;
+          if (mappedSkipped.length > 0 && !partialEnabled) {
+            throw new MbdAtomicRejectionError(
+              `MBD 负载整包拒绝：${mappedSkipped.length} 个图元无法映射`
+                + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
+              payload.issues,
+              skipped,
+            );
+          }
+          const kindById = new Map<string, string>(
+            payload.primitives.map(primitive => [primitive.id, primitive.kind]),
+          );
+          const filtered = kindFilter
+            ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
+            : mapped.records;
+          const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
+          const stripped = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
+          const records = multiRefnos
+            ? stripped.map(record => ({
+              ...record,
+              id: `${refno}:${record.id}`,
+              sourceLabel: `MBD ${refno}: ${record.id}`,
+              layout: { ...record.layout, id: `${refno}:${record.id}` },
+            }))
+            : stripped;
+          return {
+            refno,
+            records,
+            issues: payload.issues,
+            skipped,
+            layoutMode: payload.meta.layout_mode ?? null,
+            sourceVersion: payload.meta.source_version ?? null,
+            isolines: payload.meta.isolines ?? [],
+            loadError: null,
+            notes: [
+              ...payload.meta.notes,
+              ...(kindFilter
+                ? [
+                  `mbd_kinds=${[...kindFilter].join(',')}：调试过滤，仅显示 `
+                    + `${stripped.length}/${mapped.records.length} 个图元`,
+                ]
+                : []),
+              ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
+              ...(presentation3dDisabled
+                ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
+                : []),
+              ...(labelPresentation === 'above'
+                ? ['mbd_label=above：长度尺寸的数字浮在线上方、尺寸线不切段（ISO 读法，试验开关）']
+                : []),
+              ...(mappedSkipped.length > 0
+                ? [
+                  `mbd_partial=1：允许部分显示，已跳过 ${mappedSkipped.length} 个图元`
+                    + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
+                ]
+                : []),
+              ...(channelSkipped.length > 0
+                ? [
+                  `契约层跳过 ${channelSkipped.length} 个图元`
+                    + `（首个：${channelSkipped[0]!.id} — ${channelSkipped[0]!.reason}）`,
+                ]
+                : []),
+            ],
+          };
+        } catch (error) {
+          // 逐包拒绝的出口：取数失败、契约错误、映射未全量成功都转成这一包的
+          // loadError——只有它不提交，其余包照常。
+          const rejection = error instanceof MbdAtomicRejectionError ? error : null;
+          return {
+            refno,
+            records: [],
+            issues: rejection?.issues ?? [],
+            skipped: rejection?.skipped ?? [],
+            layoutMode: null,
+            notes: [],
+            sourceVersion: null,
+            isolines: [],
+            loadError: error instanceof Error ? error.message : String(error),
+          };
         }
-        if (cancelled()) return;
-        const kindFilter = parseMbdKindFilter(params.get('mbd_kinds'));
-        const kindById = new Map<string, string>(
-          payload.primitives.map(primitive => [primitive.id, primitive.kind]),
-        );
-        const lodDisabled = isMbdLodDisabled(params.get('mbd_lod'));
-        const presentation3dDisabled = isMbd3dDisabled(params.get('mbd_3d'));
-        const filtered = kindFilter
-          ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
-          : mapped.records;
-        const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
-        const records = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
-        target.replaceExternalSource('mbd', records);
-        lastFailureToast = null;
-        deps.diagnostics.set({
-          channel,
-          sourceId,
-          issues: payload.issues,
-          skipped,
-          layoutMode: payload.meta.layout_mode ?? null,
-          sourceVersion: payload.meta.source_version ?? null,
-          isolines: payload.meta.isolines ?? [],
-          notes: [
-            ...payload.meta.notes,
-            ...(kindFilter
-              ? [
-                `mbd_kinds=${[...kindFilter].join(',')}：调试过滤，仅显示 `
-                  + `${records.length}/${mapped.records.length} 个图元`,
-              ]
-              : []),
-            ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
-            ...(presentation3dDisabled
-              ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
-              : []),
-            ...(labelPresentation === 'above'
-              ? ['mbd_label=above：长度尺寸的数字浮在线上方、尺寸线不切段（ISO 读法，试验开关）']
-              : []),
-            ...(mappedSkipped.length > 0
-              ? [
-                `mbd_partial=1：允许部分显示，已跳过 ${mappedSkipped.length} 个图元`
-                  + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
-              ]
-              : []),
-            ...(channelSkipped.length > 0
-              ? [
-                `契约层跳过 ${channelSkipped.length} 个图元`
-                  + `（首个：${channelSkipped[0]!.id} — ${channelSkipped[0]!.reason}）`,
-              ]
-              : []),
-          ],
-        });
-        const errorCount = payload.issues.filter(
-          issue => issue.severity === 'error',
-        ).length;
-        if (errorCount > 0) {
-          deps.emitToast({
-            message: `MBD 标注存在 ${errorCount} 条 error 诊断，详见尺寸面板`,
-            level: 'error',
-          });
-        }
+      };
+
+      // 后端没有批量接口：固定大小的 worker 池逐包拉取，结果按 `mbd_refno`
+      // 顺序落位（与并发完成的先后无关）。
+      const outcomes: (MbdSourceLoadOutcome | null)[] = Array.from(
+        { length: refnos.length },
+        () => null,
+      );
+      let nextIndex = 0;
+      const workers = Array.from(
+        { length: Math.min(MBD_FETCH_CONCURRENCY, refnos.length) },
+        async () => {
+          while (nextIndex < refnos.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            outcomes[index] = await loadSource(refnos[index]!);
+          }
+        },
+      );
+      await Promise.all(workers);
+      // 中途被顶替 / 宿主作废 / 任一包因取消而中途收手：整体放弃，不提交半批。
+      if (cancelled() || outcomes.includes(null)) return;
+      const results = outcomes as readonly MbdSourceLoadOutcome[];
+
+      const allRecords = results.flatMap(result => result.records);
+      const sources: MbdDiagnosticsSourceSnapshot[] = results.map(
+        ({ records: _records, ...source }) => source,
+      );
+      const failed = sources.filter(source => source.loadError !== null);
+
+      // 合并所有成功包的记录，一次性整槽提交。合并级失败（理论上只剩跨包
+      // 重复 id 之外的情形）兜底成整槽清空 + 失败进诊断，不抛给调用方。
+      let commitError: string | null = null;
+      try {
+        target.replaceExternalSource('mbd', allRecords);
       } catch (error) {
-        if (cancelled()) return;
+        commitError = error instanceof Error ? error.message : String(error);
         target.replaceExternalSource('mbd', []);
-        const rejection = error instanceof MbdAtomicRejectionError ? error : null;
-        deps.diagnostics.set({
-          channel,
-          sourceId,
-          issues: rejection?.issues ?? [],
-          skipped: rejection?.skipped ?? [],
-          loadError: error instanceof Error ? error.message : String(error),
+      }
+
+      // 聚合写诊断：顶层字段保留给现有面板读取点（`DimensionPanelDock` 不改
+      // 也能工作），逐源明细进 `sources`。
+      const summarizeFailures = (): string | null => {
+        if (failed.length === 0) return null;
+        // 单源时原样用那句错误，与多源改造前的文案一致。
+        if (refnos.length === 1) return failed[0]!.loadError;
+        const details = failed
+          .map(source => `${source.refno} — ${source.loadError}`)
+          .join('；');
+        return `${failed.length}/${refnos.length} 个包装载失败：${details}`;
+      };
+      const loadError = commitError ?? summarizeFailures();
+      deps.diagnostics.set({
+        channel,
+        sourceId: refnos.join(','),
+        sources,
+        issues: sources.flatMap(source => source.issues),
+        skipped: sources.flatMap(source => source.skipped),
+        layoutMode: sources.find(source => source.layoutMode !== null)?.layoutMode ?? null,
+        // 各包按自己的视角生成提示、再拼接；多源时补 refno 前缀归因，否则
+        // 几条来源不同的「调试过滤」拼在一起分不清是谁的。
+        notes: sources.flatMap(
+          source => source.notes.map(note => (multiRefnos ? `${source.refno}：${note}` : note)),
+        ),
+        sourceVersion: sources.find(source => source.sourceVersion !== null)?.sourceVersion ?? null,
+        isolines: sources.flatMap(source => source.isolines),
+        ...(loadError !== null ? { loadError } : {}),
+      });
+
+      // 视口空白 + 无提示 = 现场分不清「本分支没有标注」与「取数失败」，所以失败
+      // 必须有一次可见提示（诊断面板默认收起，光写诊断等于没提示）。按 refno
+      // 分别去重；成功的包复位自己的记忆，下一次真失败仍要看得见。
+      for (const source of sources) {
+        if (source.loadError !== null) toastFailure(source.refno, source.loadError);
+        else failureToasts.delete(source.refno);
+      }
+      if (commitError !== null) {
+        toastFailure(refnos.join(','), commitError);
+      }
+      for (const source of failed) {
+        console.warn('[dimension-v2] MBD annotations unavailable', source.refno, source.loadError);
+      }
+      if (commitError !== null) {
+        console.warn('[dimension-v2] MBD annotations unavailable', commitError);
+      }
+
+      const errorCount = sources
+        .filter(source => source.loadError === null)
+        .flatMap(source => source.issues)
+        .filter(issue => issue.severity === 'error')
+        .length;
+      if (errorCount > 0) {
+        deps.emitToast({
+          message: `MBD 标注存在 ${errorCount} 条 error 诊断，详见尺寸面板`,
+          level: 'error',
         });
-        // 视口空白 + 无提示 = 现场分不清「本分支没有标注」与「取数失败」，所以失败
-        // 必须有一次可见提示（诊断面板默认收起，光写诊断等于没提示）。
-        toastFailure(sourceId, error instanceof Error ? error.message : String(error));
-        console.warn('[dimension-v2] MBD annotations unavailable', error);
       }
     },
     invalidate() {
