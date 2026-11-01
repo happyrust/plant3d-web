@@ -3,16 +3,22 @@ import { createApp, nextTick, ref } from 'vue';
 
 import { UserRole, type AnnotationComment } from '@/types/auth';
 
-const reviewCommentGetByAnnotationMock = vi.hoisted(() => vi.fn(async () => ({
-  success: true,
-  comments: [],
-})));
+const reviewCommentGetByAnnotationMock = vi.hoisted(() => vi.fn(
+  async (_annotationId: string, _annotationType?: string, _context?: { formId?: string; taskId?: string }) => ({
+    success: true,
+    comments: [] as AnnotationComment[],
+  }),
+));
 
 vi.mock('@/api/reviewApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/reviewApi')>();
   return {
     ...actual,
-    reviewCommentGetByAnnotation: (...args: unknown[]) => reviewCommentGetByAnnotationMock(...args),
+    reviewCommentGetByAnnotation: (
+      annotationId: string,
+      annotationType: AnnotationComment['annotationType'],
+      context?: { formId?: string; taskId?: string },
+    ) => reviewCommentGetByAnnotationMock(annotationId, annotationType, context),
   };
 });
 

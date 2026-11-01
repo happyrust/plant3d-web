@@ -29,6 +29,8 @@ import {
   unwrapRecordIdDebugShape,
 } from './reviewApi';
 
+import { present } from '@/testing/present';
+
 describe('reviewApi base url defaults', () => {
   const modelContext = { schemaVersion: 1 as const, project: 'P', dbnum: 7997, taskId: 'T', formId: 'F', node: 'jd',
     comparison: { dbnum: 7997, refno: '24381_145018', a: 626, b: 630, units: [], viewMode: 'split' as const, activeSide: 'after' as const, diffOnly: false } };
@@ -166,7 +168,7 @@ describe('reviewApi base url defaults', () => {
 
     await reviewTaskGetList({ formId: 'FORM-FB4EF9F13DF1' });
 
-    expect(fetchMock.mock.calls[0][0]).toEqual(
+    expect(present(fetchMock.mock.calls[0], 'fetch call #1')[0]).toEqual(
       expect.stringMatching(/\/api\/review\/tasks\?form_id=FORM-FB4EF9F13DF1$/),
     );
   });
@@ -329,7 +331,7 @@ describe('reviewApi base url defaults', () => {
       id: 'attachment-1',
       mimeType: 'image/png',
     }));
-    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({
+    expect(present(fetchMock.mock.calls[1], 'fetch call #2')[1]).toEqual(expect.objectContaining({
       headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: expect.stringContaining('"contentBase64"'),
     }));
@@ -361,7 +363,7 @@ describe('reviewApi base url defaults', () => {
 
     await reviewRecordGetByTaskId('task-form-scope', { formId: 'FORM-SCOPE' });
 
-    expect(fetchMock.mock.calls[0][0]).toEqual(
+    expect(present(fetchMock.mock.calls[0], 'fetch call #1')[0]).toEqual(
       expect.stringMatching(/\/api\/review\/records\/by-task\/task-form-scope\?form_id=FORM-SCOPE$/),
     );
   });
@@ -581,7 +583,7 @@ describe('reviewApi base url defaults', () => {
 
   it('serializes optional dimension document fields on confirmed record requests', async () => {
     const dimensionDocument = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       documentId: 'dimension-document-api',
       records: [],
     };

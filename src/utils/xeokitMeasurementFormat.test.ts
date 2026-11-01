@@ -354,6 +354,7 @@ describe('xeokitMeasurementFormat', () => {
       kind: 'elevation_point',
       point: { entityId: 'o:24381_145018:0', worldPos: [0, 0, 3] },
       absoluteElevation: 3,
+      datumElevation: 0,
       relativeElevation: 1,
       visible: true,
       approximate: false,

@@ -33,21 +33,21 @@ const {
   restoreEmbedWorkbenchContextMock: vi.fn(),
   restoreEmbedFormSnapshotContextMock: vi.fn(),
   switchProjectByIdMock: vi.fn(() => true),
-  setCurrentTaskMock: vi.fn(async () => undefined),
+  setCurrentTaskMock: vi.fn(async (..._args: unknown[]) => undefined),
   importJsonMock: vi.fn(),
   syncFromStoreMock: vi.fn(),
-  initializeMock: vi.fn(async () => undefined),
+  initializeMock: vi.fn(async (..._args: unknown[]) => undefined),
   setEmbedUserMock: vi.fn(),
-  loadReviewTasksMock: vi.fn(async () => undefined),
+  loadReviewTasksMock: vi.fn(async (..._args: unknown[]) => undefined),
   clearCurrentUserSelectionMock: vi.fn(),
   setDockApiMock: vi.fn(),
   notifyDockLayoutChangeMock: vi.fn(),
   setGlobalSelectedRefnoMock: vi.fn(),
-  waitForViewerReadyMock: vi.fn(async () => true),
-  showModelByRefnosWithAckMock: vi.fn(async () => ({ ok: [], fail: [], error: null })),
-  onCommandMock: vi.fn(() => () => undefined),
+  waitForViewerReadyMock: vi.fn(async (..._args: unknown[]) => true),
+  showModelByRefnosWithAckMock: vi.fn(async (..._args: unknown[]) => ({ ok: [], fail: [], error: null })),
+  onCommandMock: vi.fn((_handler: (commandId: string) => void) => () => undefined),
   ensurePanelAndActivateMock: vi.fn(),
-  dockPanelExistsMock: vi.fn(() => false),
+  dockPanelExistsMock: vi.fn((_panelId: string) => false),
   setAttributeDisplayModeMock: vi.fn(),
 }));
 
@@ -172,7 +172,7 @@ vi.mock('@/components/review/embedFormSnapshotRestore', () => ({
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
-  dockPanelExists: (...args: unknown[]) => dockPanelExistsMock(...args),
+  dockPanelExists: (panelId: string) => dockPanelExistsMock(panelId),
   ensurePanelAndActivate: (...args: unknown[]) => ensurePanelAndActivateMock(...args),
   setDockApi: (...args: unknown[]) => setDockApiMock(...args),
   notifyDockLayoutChange: (...args: unknown[]) => notifyDockLayoutChangeMock(...args),
@@ -216,7 +216,7 @@ vi.mock('@/composables/useReviewStore', () => ({
     // 注：DockLayout.vue 的 isExternalSjReturnedFormFocused 读 reviewStore.currentTask.value，
     // mock 必须暴露 currentTask ref，否则触发 TypeError: Cannot read properties of undefined (reading 'value')。
     currentTask: currentTaskRef,
-    setCurrentTask: (...args: unknown[]) => setCurrentTaskMock(...args),
+    setCurrentTask: (task: ReviewTask | null) => setCurrentTaskMock(task),
     addConfirmedRecord: vi.fn(),
     clearConfirmedRecords: vi.fn(),
     exportReviewData: vi.fn(() => '{}'),
@@ -254,9 +254,9 @@ vi.mock('@/composables/useToolStore', () => ({
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
-    initialize: (...args: unknown[]) => initializeMock(...args),
+    initialize: () => initializeMock(),
     setEmbedUser: (...args: unknown[]) => setEmbedUserMock(...args),
-    loadReviewTasks: (...args: unknown[]) => loadReviewTasksMock(...args),
+    loadReviewTasks: () => loadReviewTasksMock(),
     clearCurrentUserSelection: (...args: unknown[]) => clearCurrentUserSelectionMock(...args),
     pendingReviewTasks: pendingReviewTasksRef,
     myInitiatedTasks: myInitiatedTasksRef,
@@ -273,12 +273,12 @@ vi.mock('@/composables/useViewerContext', () => ({
   useViewerContext: () => ({
     tools: ref({ syncFromStore: (...args: unknown[]) => syncFromStoreMock(...args) }),
   }),
-  showModelByRefnosWithAck: (...args: unknown[]) => showModelByRefnosWithAckMock(...args),
-  waitForViewerReady: (...args: unknown[]) => waitForViewerReadyMock(...args),
+  showModelByRefnosWithAck: (options: unknown) => showModelByRefnosWithAckMock(options),
+  waitForViewerReady: (options?: unknown) => waitForViewerReadyMock(options),
 }));
 
 vi.mock('@/ribbon/commandBus', () => ({
-  onCommand: (...args: unknown[]) => onCommandMock(...args),
+  onCommand: (handler: (commandId: string) => void) => onCommandMock(handler),
 }));
 
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {

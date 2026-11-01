@@ -101,15 +101,15 @@ describe('SolveSpaceVectorFont', () => {
     const attempts = new Map<string, number>();
     const url = '/fonts/retry-case.lff.gz';
 
-    vi.spyOn(globalThis, 'fetch' as any).mockImplementation(
-      async (input: RequestInfo | URL) => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
         const key = String(input);
         const n = (attempts.get(key) ?? 0) + 1;
         attempts.set(key, n);
         if (key.includes('retry-case') && n === 1) {
           throw new TypeError('Failed to fetch');
         }
-        return new Response(payload, { status: 200 }) as any;
+        return new Response(payload, { status: 200 });
       },
     );
 

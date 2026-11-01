@@ -32,6 +32,8 @@ import {
   type ModelUnitVersionSide,
 } from './modelUnitVersionCompare';
 
+import { present } from '@/testing/present';
+
 function snapshot(refno: string, signature: string): ModelUnitGeometrySnapshot {
   return { refno, noun: 'PIPE', signature };
 }
@@ -264,9 +266,18 @@ describe('modelUnitVersionCompare', () => {
       uniforms: { noun: 'PIPE', name },
     });
 
-    const oldSnapshot = geometrySnapshotsFromInstanceEntries(new Map([['1_1', [entry('old', 0)]]]))[0];
-    const renamedSnapshot = geometrySnapshotsFromInstanceEntries(new Map([['1_1', [entry('new', 0)]]]))[0];
-    const movedSnapshot = geometrySnapshotsFromInstanceEntries(new Map([['1_1', [entry('new', 10)]]]))[0];
+    const oldSnapshot = present(
+      geometrySnapshotsFromInstanceEntries(new Map([['1_1', [entry('old', 0)]]]))[0],
+      'oldSnapshot',
+    );
+    const renamedSnapshot = present(
+      geometrySnapshotsFromInstanceEntries(new Map([['1_1', [entry('new', 0)]]]))[0],
+      'renamedSnapshot',
+    );
+    const movedSnapshot = present(
+      geometrySnapshotsFromInstanceEntries(new Map([['1_1', [entry('new', 10)]]]))[0],
+      'movedSnapshot',
+    );
 
     expect(renamedSnapshot.signature).toBe(oldSnapshot.signature);
     expect(movedSnapshot.signature).not.toBe(oldSnapshot.signature);

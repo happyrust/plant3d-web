@@ -18,6 +18,7 @@ import type {
 
 import { buildBranParallelSpacingRecord } from '@/clearance/adapters/branSpacingRecords';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import { present } from '@/testing/present';
 
 type DraftState = SpatialQueryDraft;
 
@@ -412,15 +413,15 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const presets = Array.from(host.querySelectorAll('[data-testid="radius-preset"]')) as HTMLButtonElement[];
     expect(presets.length).toBe(4);
-    expect(presets[0].textContent).toContain('1 m');
-    expect(presets[1].textContent).toContain('5 m');
+    expect(present(presets[0], 'presets[0]').textContent).toContain('1 m');
+    expect(present(presets[1], 'presets[1]').textContent).toContain('5 m');
 
-    presets[2].click(); // 10 m
+    present(presets[2], 'presets[2]').click(); // 10 m
     await nextTick();
 
     expect(stubState.draft.radius).toBe(10000);
     const reread = Array.from(host.querySelectorAll('[data-testid="radius-preset"]')) as HTMLButtonElement[];
-    expect(reread[2].className).toContain('bg-brand-subtle');
+    expect(present(reread[2], 'reread[2]').className).toContain('bg-brand-subtle');
 
     unmount();
   });

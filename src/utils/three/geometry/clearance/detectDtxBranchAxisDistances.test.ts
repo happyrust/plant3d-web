@@ -16,9 +16,10 @@ type MockObject = {
 function createPipePointCloud(center: Vector3, radius = 0.05, length = 4): BufferGeometry {
   const positions: number[] = [];
   const steps = 24;
+  const offsets: [number, number][] = [[radius, 0], [-radius, 0], [0, radius], [0, -radius]];
   for (let i = 0; i <= steps; i++) {
     const z = center.z - length / 2 + (length * i) / steps;
-    for (const [dx, dy] of [[radius, 0], [-radius, 0], [0, radius], [0, -radius]]) {
+    for (const [dx, dy] of offsets) {
       positions.push(center.x + dx, center.y + dy, z);
     }
   }

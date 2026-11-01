@@ -17,6 +17,8 @@ import { describe, expect, it } from 'vitest';
 
 import { parseMeshGeometry, parseMeshGeometryResult } from './parseMeshGeometry';
 
+import { present } from '@/testing/present';
+
 // jsdom 环境下 import.meta.url 会被改写，按 vitest 的项目根（cwd）取金样
 function fixture(name: string): ArrayBuffer {
   const buf = readFileSync(join(process.cwd(), 'src', 'fixtures', 'meshes', name));
@@ -28,8 +30,11 @@ function boundsOf(positions: number[]): { min: number[]; max: number[] } {
   const max = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < positions.length; i += 3) {
     for (let axis = 0; axis < 3; axis++) {
-      min[axis] = Math.min(min[axis], positions[i + axis]);
-      max[axis] = Math.max(max[axis], positions[i + axis]);
+      const component = present(positions[i + axis], `positions[${i + axis}]`);
+      const lower = present(min[axis], `min[${axis}]`);
+      const upper = present(max[axis], `max[${axis}]`);
+      min[axis] = Math.min(lower, component);
+      max[axis] = Math.max(upper, component);
     }
   }
   return { min, max };
@@ -49,7 +54,11 @@ describe('parseMeshGeometry（rkyv 布局金样）', () => {
     // 单位法向：每条模长 ≈ 1
     for (let i = 0; i < parsed!.normals!.length; i += 3) {
       const [x, y, z] = parsed!.normals!.slice(i, i + 3);
-      expect(Math.hypot(x, y, z)).toBeCloseTo(1, 5);
+      expect(Math.hypot(
+        present(x, `normal x at ${i}`),
+        present(y, `normal y at ${i}`),
+        present(z, `normal z at ${i}`),
+      )).toBeCloseTo(1, 5);
     }
   });
 

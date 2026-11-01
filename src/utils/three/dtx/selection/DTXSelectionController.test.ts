@@ -11,19 +11,6 @@ import {
 } from 'three';
 
 const { outlineHelpers, MockOutlineHelper } = vi.hoisted(() => {
-  const helpers: {
-    outlinedObjects: string[];
-    init: ReturnType<typeof vi.fn>;
-    setGeometryGetter: ReturnType<typeof vi.fn>;
-    setStyle: ReturnType<typeof vi.fn>;
-    setEnabled: ReturnType<typeof vi.fn>;
-    render: ReturnType<typeof vi.fn>;
-    resize: ReturnType<typeof vi.fn>;
-    dispose: ReturnType<typeof vi.fn>;
-    setOutlinedObjects: ReturnType<typeof vi.fn>;
-    getOutlinedObjects: ReturnType<typeof vi.fn>;
-  }[] = [];
-
   class OutlineHelper {
     outlinedObjects: string[] = [];
     init = vi.fn();
@@ -44,6 +31,10 @@ const { outlineHelpers, MockOutlineHelper } = vi.hoisted(() => {
 
     getOutlinedObjects = vi.fn(() => [...this.outlinedObjects]);
   }
+
+  // 元素类型取自类实例本身，避免 `ReturnType<typeof vi.fn>` 落到
+  // `Mock<Procedure | Constructable>` 这个不可调用的联合上。
+  const helpers: OutlineHelper[] = [];
 
   return {
     outlineHelpers: helpers,

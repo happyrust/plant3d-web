@@ -20,8 +20,15 @@ const BRAN: EleTreeNodeDto = { refno: '24381_145018', noun: 'BRAN', name: '/B1',
 const ROOTS: TreeRootsResponse = { source: 'direct', project: 'AvevaMarineSample', mdb: '/ALL', nodes: [SITE_A, SITE_B] };
 const ROOT_ID = makeVirtualRootId('AvevaMarineSample', '/ALL');
 
-function fakeApi(overrides: Partial<GenModelV1TreeApi> = {}): GenModelV1TreeApi & { calls: Record<string, number> } {
-  const calls: Record<string, number> = { roots: 0, children: 0, ancestors: 0, search: 0 };
+type CallCounters = {
+  roots: number;
+  children: number;
+  ancestors: number;
+  search: number;
+};
+
+function fakeApi(overrides: Partial<GenModelV1TreeApi> = {}): GenModelV1TreeApi & { calls: CallCounters } {
+  const calls: CallCounters = { roots: 0, children: 0, ancestors: 0, search: 0 };
   const api: GenModelV1TreeApi = {
     roots: vi.fn(async () => { calls.roots++; return ROOTS; }),
     children: vi.fn(async (refno: string) => {

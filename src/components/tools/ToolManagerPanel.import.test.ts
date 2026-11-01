@@ -63,15 +63,19 @@ vi.mock('@/utils/unitFormat', () => ({
 }));
 
 vi.mock('@/review/adapters/importSnapshotAdapter', () => ({
-  buildSnapshotFromImportPayload: vi.fn((payload: Record<string, unknown>) => ({
-    source: 'import_package',
-    annotations: [{ annotationId: 'text-1', annotationType: 'text', payload: payload.annotations?.[0] }],
-    comments: [],
-    measurements: [],
-    attachments: [],
-    models: [],
-    meta: { sourceVersion: 1, createdAt: 1 },
-  })),
+  buildSnapshotFromImportPayload: vi.fn((payload: Record<string, unknown>) => {
+    const annotations = payload.annotations;
+    const firstAnnotation = Array.isArray(annotations) ? annotations[0] : undefined;
+    return {
+      source: 'import_package',
+      annotations: [{ annotationId: 'text-1', annotationType: 'text', payload: firstAnnotation }],
+      comments: [],
+      measurements: [],
+      attachments: [],
+      models: [],
+      meta: { sourceVersion: 1, createdAt: 1 },
+    };
+  }),
 }));
 
 vi.mock('@/review/adapters/toolStoreAdapter', () => ({
