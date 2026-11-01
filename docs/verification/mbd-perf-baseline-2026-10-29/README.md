@@ -151,7 +151,7 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 | 3 | 0.20 | 0.50 | 21.00 | 59.40 | 0.10 | 58.77 | 4 |
 | 中位数 | 0.30 | 0.50 | 23.90 | 61.70 | 0.10 | 58.53 | 4 |
 
-预算（ADR 0040，`e2e/dimension-perf.spec.ts`）：`updateP95Ms ≤ 16`、`hitP95Ms ≤ 2`。
+预算（ADR 0040，`e2e/dimension-perf.spec.ts`）：`hitP95Ms ≤ 2`；`settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 对 dev 档基线（26.2 / 78.6）判 1.2 倍不退化。`updateP95Ms` 不再进断言（见下方「⚠️」段）。
 
 ### A 合成 2k（`settle(20)`）
 
@@ -225,7 +225,14 @@ W5-5 比的就是这几格（各取三次的中位数）：
 
 **A 场景读数说明**：`hitP95Ms` 0.10 ms 说明**命中测试**不是瓶颈（与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径，`src/debug/dimensionPerf.ts:245-255` 是纯 CPU 命中）。`paintP95Ms`（`settle(20)` 的 78.60 ms）是 dev 档浏览器里 layout → paint 这一档的主要成本，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算要盯的是 `paintP95Ms`。
 
-**⚠️ `updateP95Ms` 与 ADR 0040 的预算不是同一件事（2026-10-30 补）**：`run()` 的 60 帧循环（`src/debug/dimensionPerf.ts:223-235`）每帧只做「改相机 → `renderer.render(scene, camera)`」，**不跑 `layoutViewport`、不跑 `scenePainter.paint`**；真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`）。ADR 0040 的预算是「合并后的 layout → collision → paint 帧 p95 不超过 16 ms」，所以 `e2e/dimension-perf.spec.ts:27` 那条 `updateP95Ms ≤ 16` **测的是纯 GPU 提交成本，不是 ADR 那个数**。门禁绿不等于 layout → paint 达标。
+**⚠️ `updateP95Ms` 与 ADR 0040 的预算不是同一件事（2026-10-30 补，同日已修）**：`run()` 的 60 帧循环（`src/debug/dimensionPerf.ts:223-235`）每帧只做「改相机 → `renderer.render(scene, camera)`」，**不跑 `layoutViewport`、不跑 `scenePainter.paint`**；真正的 layout + collision + paint 在 `settleLayout()`（`:190-217`）里，而 `run()` 只在 60 帧之后调它**一次**（`:243`）。ADR 0040 的预算是「合并后的 layout → collision → paint 帧 p95 不超过 16 ms」。
+
+**门禁已改（`a3a0484b`，2026-10-30）**：`e2e/dimension-perf.spec.ts` 不再拿 `updateP95Ms ≤ 16` 判，改为：
+
+- `hitP95Ms ≤ 2`（`:58`，与 ADR 0040 的 pointer hit-test 预算同口径，纯 CPU）；
+- `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 对**本机 dev 档基线**判「不退化」（`:79-84`，常量 `BASELINE_LAYOUT_P95_MS = 26.2` / `BASELINE_PAINT_P95_MS = 78.6`，`REGRESSION_FACTOR = 1.2`）。
+
+为什么不对 16 ms 硬判：门禁跑的是 **dev 构建 + DPR 1 + headless GPU**，档位与 ADR 参考环境（生产构建 / DPR 2）不同，硬卡会在档位差异上误报。16 ms 的达标判定留给内核基准（`npm run perf:dimensions:kernel`，自带断言）。换机器时先跑 `DIMENSION_PERF_BASELINE_WRITE=1` 打新基线再改常量——**不得为了放行而调大**。
 
 **这个缺口有多大，要分两个口径看（2026-10-30 实测，两次结论不同，以本段为准）**：
 
@@ -274,7 +281,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - 首轮含字体 / 着色器热身，先空跑一次再记三次。
 - 三次的原始返回值（JSON）原样贴在下面「原始读数」；B / C 的读数也往同一节追加，或存 `runs/`。
 
-## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5、8 条已修，第 2、6 条保持，第 7 条待 W5-5，第 9 条 2026-10-30 新登记）
+## 已知口径问题（2026-10-29 只读审计；第 1、3、4、5、7、8 条已修，第 2、6 条保持，第 9 条 2026-10-30 新登记，第 10 条 2026-11-01 新登记）
 
 1. ~~**`paintMs` 在三类帧里语义不一致**~~ → **已修（2026-10-29）**：`dimensionViewport.ts` 的 `onFrame` breakdown 加 `kind: 'layout' | 'style' | 'camera'`（`DimensionFrameKind`，三处上报点各标一种），数值口径未动（`layoutMs + paintMs` 仍恒等于整帧，facade 用例补断言 `kind === 'layout'`）；`dimensionFrameStats.ts` 的 `summary()` 现在按 `kind` 分桶，`paintMs` **只统计 `layout` 帧**，`style` / `camera` 帧的整帧耗时只进 `frameMs`。另加 `frameKinds` 计数，三类相加等于 `frames`。用例 `buckets by the reported kind instead of inferring it from layoutMs` 钉住。
 2. **相机停下后必然产生一条 `layoutMs = 0` 的帧**：`setProjector`（`dimensionViewport.ts:224-227`）设 80 ms `cameraSettleTimer` → `invalidate('camera')`，此时 `lastLayoutProjector === projector` 且 `reasons` 只有 `camera`，命中 `:516-529` 分支。绕轨脚本每帧 `notifyViewerChanged()` 会重置该 timer，但循环结束后的 `flyTo(home)` 仍会留下一条。
@@ -282,12 +289,12 @@ W5-5 比的就是这几格（各取三次的中位数）：
 4. ~~**`record` 不校验 `durationMs`**~~ → **已修（2026-10-29）**：`dimensionFrameStats.ts` 的 `record` 现在丢弃非有限样本（`durationMs` / `layoutMs` / `paintMs` 任一不是有限数就不入缓冲），避免 `NaN` 毒化排序与 `max`；用例 `drops non-finite samples instead of poisoning the quantiles` 钉住。
 5. ~~**`settle(passes)` 没有参数校验**~~ → **已修（2026-10-29）**：`dimensionPerf.ts` 的 `settle` 现在对非正整数 `passes` 抛 `RangeError`，不再返回「全 0 读数但 `passes` 原样回传」这种无法与真实 0 ms 区分的值。
 6. **`run()` 的 `layoutP95Ms` / `paintP95Ms` 是单次读数**：字段名带 P95 但非分位（`:52` 已注明），与 `settle(20)` 的同名指标不可横向比。
-7. **`updateP95Ms` 与 ADR 0040 的帧预算不同口径（2026-10-30 补，未修）**：`run()` 的 60 帧循环只测 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint；`e2e/dimension-perf.spec.ts:27` 却拿它对着 16 ms 判。ADR 0040 的预算是三者合并的帧 p95。**处置**：W5-5 补一条 `settle(passes)` 分位断言（计划文档 §11.3、风险 R8），在此之前不得引用门禁绿作为性能达标证据。
+7. ~~**`updateP95Ms` 与 ADR 0040 的帧预算不同口径**~~ → **已修（`a3a0484b`，2026-10-30）**：门禁不再拿 `run()` 的 `updateP95Ms` 对 16 ms 判，改为 `hitP95Ms ≤ 2` + `settle(20)` 的 `layoutP95Ms` / `paintP95Ms` 对本机 dev 档基线判「不退化」（1.2 倍）。16 ms 的达标判定留在内核基准里。详见上文「⚠️ `updateP95Ms` 与 ADR 0040 的预算不是同一件事」。
 8. ~~**生产构建下的 `/dimension-perf.html` 是坏的**~~ → **已修（2026-10-30）**：页面从 `public/`（原样拷贝）移到仓库根并加进 `build.rollupOptions.input`，构建后指向真实 chunk，dev 与 preview 两档都能打开。**生产档基线也已采到**（2026-10-30 机器空载，三次中位数 `layoutP95Ms` 18.30 / `paintP95Ms` 39.40），见上一段表格。
 9. **`paintProfile(passes)` 是只读诊断，不进任何门禁（2026-10-30 新增）**：它返回 paint 内部四段（`countMs` / `writeMs` / `trianglesMs` / `fillsMs`）与段数分布，用于定位成本，**不是预算指标**。四段之和与 `settle` 的 `paintMs` 差 1～3 ms（`setBlending` 与 map 分配不在任一段内），两者不可互相替代。`onPaintProfile` 不挂时 `paint()` 连 `performance.now()` 都不调，所以生产路径没有这项开销。
 10. **相机连续运动不再每帧全量布局（2026-11-01 修，口径已在上文更正）**：`setProjector` 现在按 `max(100 ms, 上次全量布局成本 × 2)` 节流。原第 2 条描述的「静止 80 ms 兜底」仍在，只是运动期间多了一条「到点就排」。后果：绕轨脚本的 `layoutFrames` 不再是 `frames`，**要量最坏情况必须每步显式 `flushProjection()`**；`frameMs` 也会因为多了只重绘帧而分布改变，与旧数据不可直接比。
 
-**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径；第 7 条（门禁口径）**待 W5-5 修，属计划级缺口，不是本表的口径问题**。
+**这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5、7 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径；第 10 条（节流）改了绕轨口径但没改 `onFrame` 字段含义，与旧基线仍可直接比。
 
 ## 原始读数
 
