@@ -4,6 +4,7 @@ import { nextTick, ref, shallowRef } from 'vue';
 import * as THREE from 'three';
 
 import { worldDistanceAidChildId } from '@/measurement/aids/worldDistanceAidPlan';
+import { present } from '@/testing/present';
 
 // 本文件的 P-Point / 基本体关键点用例把 `getModelSource().keypoints` 端口整个 mock 掉（2026-09-12 起测量关键点经这个端口取数）。
 // 用例正文沿用 2026-09-20 legacy 退役前的写法——「parquet 表」与「`:3100` ptset API 兜底」两组 mock 分别对应
@@ -684,7 +685,8 @@ describe('useXeokitMeasurementTools', () => {
       origin: { entityId: 'a', worldPos: [0, 0, 0] },
       target: { entityId: 'a', worldPos: [0, 0, 0] },
       visible: true,
-      approximate: false,
+      // `XeokitDistanceDraft.approximate` 是字面量 `true`（草稿阶段一律近似）
+      approximate: true,
       createdAt: 1,
     });
     const tools = useXeokitMeasurementTools({
@@ -1345,7 +1347,7 @@ describe('useXeokitMeasurementTools', () => {
     tools.onCanvasPointerUp(canvas, event);
 
     expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
-    const record = store.xeokitDistanceMeasurements.value[0];
+    const record = present(store.xeokitDistanceMeasurements.value[0], 'first distance measurement');
     expect(record.origin.sourceInfo).toEqual({
       source: 'ptset',
       candidateId: 'ptset:24381_145018#1',
@@ -1425,14 +1427,14 @@ describe('useXeokitMeasurementTools', () => {
 
     clickAt(150, 100);
     expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
-    expect(store.xeokitDistanceMeasurements.value[0].origin.worldPos).toEqual([0, 0, 6]);
-    expect(store.xeokitDistanceMeasurements.value[0].target.worldPos).toEqual([0.5, 0, 6]);
+    expect(present(store.xeokitDistanceMeasurements.value[0]).origin.worldPos).toEqual([0, 0, 6]);
+    expect(present(store.xeokitDistanceMeasurements.value[0]).target.worldPos).toEqual([0.5, 0, 6]);
     expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([0.5, 0, 6]);
 
     clickAt(150, 50);
     expect(store.xeokitDistanceMeasurements.value).toHaveLength(2);
-    expect(store.xeokitDistanceMeasurements.value[1].origin.worldPos).toEqual([0.5, 0, 6]);
-    expect(store.xeokitDistanceMeasurements.value[1].target.worldPos).toEqual([0.5, 0.5, 6]);
+    expect(present(store.xeokitDistanceMeasurements.value[1]).origin.worldPos).toEqual([0.5, 0, 6]);
+    expect(present(store.xeokitDistanceMeasurements.value[1]).target.worldPos).toEqual([0.5, 0.5, 6]);
     expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([0.5, 0.5, 6]);
 
     tools.dispose();

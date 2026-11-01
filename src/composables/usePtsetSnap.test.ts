@@ -5,6 +5,7 @@ import { Matrix4, PerspectiveCamera } from 'three';
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
 import { projectToCanvas, snapToCandidates } from '@/composables/usePtsetSnap';
+import { present } from '@/testing/present';
 import {
   applyPtsetTransformToPoint,
   isUsablePtsetWorldTransform,
@@ -49,9 +50,9 @@ describe('ptsetTransform', () => {
     const identity16 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
     const cands = ptsetResponseToSceneCandidates('1_1', resp, identity16, null);
     expect(cands).toHaveLength(1);
-    expect(cands[0].worldPos[0]).toBeCloseTo(1, 6);
-    expect(cands[0].worldPos[1]).toBeCloseTo(2, 6);
-    expect(cands[0].worldPos[2]).toBeCloseTo(3, 6);
+    expect(present(cands[0]).worldPos[0]).toBeCloseTo(1, 6);
+    expect(present(cands[0]).worldPos[1]).toBeCloseTo(2, 6);
+    expect(present(cands[0]).worldPos[2]).toBeCloseTo(3, 6);
   });
 
   it('应用 globalModelMatrix（mm→m 缩放）', () => {
@@ -59,15 +60,15 @@ describe('ptsetTransform', () => {
     const identity16 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
     const gm = new Matrix4().makeScale(0.001, 0.001, 0.001);
     const cands = ptsetResponseToSceneCandidates('1_1', resp, identity16, gm);
-    expect(cands[0].worldPos[0]).toBeCloseTo(1, 6);
-    expect(cands[0].worldPos[1]).toBeCloseTo(2, 6);
-    expect(cands[0].worldPos[2]).toBeCloseTo(3, 6);
+    expect(present(cands[0]).worldPos[0]).toBeCloseTo(1, 6);
+    expect(present(cands[0]).worldPos[1]).toBeCloseTo(2, 6);
+    expect(present(cands[0]).worldPos[2]).toBeCloseTo(3, 6);
   });
 
   it('conversion_factor 作用于局部坐标', () => {
     const resp = makeResponse([{ number: 1, pt: [1, 2, 3] }], 2);
     const cands = ptsetResponseToSceneCandidates('1_1', resp, null, null);
-    expect(cands[0].worldPos).toEqual([2, 4, 6]);
+    expect(present(cands[0]).worldPos).toEqual([2, 4, 6]);
   });
 
   it('行主序 3x4 矩阵带平移', () => {

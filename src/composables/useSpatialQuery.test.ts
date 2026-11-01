@@ -131,6 +131,8 @@ import {
 
 import type {
   NegativeNounsResult,
+  QueryNearbyByPositionFn,
+  QueryNearbyByRefnoFn,
   SpatialNearbyParams,
   SpatialNearbyRefnosResult,
   SpatialNearbyResult,
@@ -143,6 +145,14 @@ import type {
 } from '@/api/genModelSpatialApi';
 
 import { GenModelV1ApiError } from '@/api/genModelV1Api';
+
+/**
+ * URL 初始化的 store 桩：草稿沿用真实 `SpatialQueryDraft` 类型（否则字面量里的
+ * `mode` / `shape` 会被推成 `string`），再补上测试要断言的 `submitQuery`。
+ */
+type UrlStoreStub = Parameters<typeof initializeSpatialQueryFromUrl>[1] & {
+  submitQuery: ReturnType<typeof vi.fn<(page?: number) => void>>;
+};
 
 function createViewerStub() {
   const selected = new Set<string>();
@@ -211,7 +221,7 @@ describe('createSpatialQueryStore', () => {
 
   it('范围查询应合并本地已加载结果和服务端未加载结果', async () => {
     const viewer = createViewerStub();
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
       total_count: 3,
@@ -237,7 +247,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -274,7 +284,7 @@ describe('createSpatialQueryStore', () => {
 
   it('应向服务端透传 sort/keyword，并使用服务端全量分组计数与顺序', async () => {
     const viewer = createViewerStub();
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
       total_count: 5,
@@ -294,7 +304,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -335,7 +345,7 @@ describe('createSpatialQueryStore', () => {
 
   it('范围查询应透传 specValues 并按专业过滤结果', async () => {
     const viewer = createViewerStub();
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
       total_count: 2,
@@ -350,7 +360,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -389,7 +399,7 @@ describe('createSpatialQueryStore', () => {
       if (first === 'loaded_neg') return [20, 0, 0, 30, 10, 10];
       return null;
     });
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       total_count: 3,
       returned_count: 3,
@@ -404,7 +414,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -441,7 +451,7 @@ describe('createSpatialQueryStore', () => {
       if (first === 'loaded_neg') return [20, 0, 0, 30, 10, 10];
       return null;
     });
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       total_count: 3,
       returned_count: 3,
@@ -456,7 +466,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -496,7 +506,7 @@ describe('createSpatialQueryStore', () => {
       if (first === 'loaded_negx') return [20, 0, 0, 30, 10, 10];
       return null;
     });
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       total_count: 2,
       returned_count: 2,
@@ -518,7 +528,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -547,7 +557,7 @@ describe('createSpatialQueryStore', () => {
 
   it('翻页查询应把 page 和 per_page 传给服务端并保留总数', async () => {
     const viewer = createViewerStub();
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: true,
       total_count: 25,
@@ -561,7 +571,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -589,7 +599,7 @@ describe('createSpatialQueryStore', () => {
     const viewer = createViewerStub();
     const queryNearbyByPosition = vi.fn();
     const querySpatialIndex = vi.fn();
-    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByRefno = vi.fn<QueryNearbyByRefnoFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       center: {
         x: 100,
@@ -630,7 +640,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -703,7 +713,7 @@ describe('createSpatialQueryStore', () => {
   });
 
   it('distance coordinate 查询应走 nearby 坐标路径且不调用 refno 或 legacy query', async () => {
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       center: {
         x: 10,
@@ -722,7 +732,7 @@ describe('createSpatialQueryStore', () => {
     const querySpatialIndex = vi.fn();
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: null },
+      viewerRef: ref(null),
       selection: { selectedRefno: { value: null } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       queryNearbyByPosition,
@@ -848,7 +858,7 @@ describe('createSpatialQueryStore', () => {
   it('distance「沿 BRAN 中心线」：refno 路径多带 source_mode，不扫本地，服务端回来的源 BRAN 自身被剔掉', async () => {
     const viewer = createViewerStub();
     const queryNearbyByPosition = vi.fn();
-    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByRefno = vi.fn<QueryNearbyByRefnoFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       total_count: 2,
       returned_count: 2,
@@ -1114,7 +1124,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: null } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       batchLoadRefnos,
@@ -1258,7 +1268,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: null } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       batchLoadRefnos,
@@ -1337,7 +1347,7 @@ describe('createSpatialQueryStore', () => {
     }));
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: null } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       batchLoadRefnos,
@@ -1411,7 +1421,7 @@ describe('createSpatialQueryStore', () => {
     const setSelectedRefno = vi.fn();
 
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: null }, setSelectedRefno } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       createRequestId: () => requestId,
@@ -1495,7 +1505,7 @@ describe('createSpatialQueryStore', () => {
   it('显示/隐藏、隔离和恢复动作应作用于当前返回 refno 且不清空结果集', () => {
     const viewer = createViewerStub();
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer },
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: null } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
     });
@@ -1578,7 +1588,7 @@ describe('createSpatialQueryStore', () => {
       autorun: true,
     });
 
-    const store = {
+    const store: UrlStoreStub = {
       draft: {
         mode: 'range',
         rangeCenterSource: 'selected',
@@ -1593,7 +1603,9 @@ describe('createSpatialQueryStore', () => {
         onlyVisible: true,
         includeNegative: false,
         specValues: [1],
+        rooms: [],
         limit: 5,
+        sortBy: 'distanceAsc',
       },
       resetQuery: vi.fn(),
       setMode: vi.fn((mode: 'range' | 'distance') => {
@@ -1601,7 +1613,7 @@ describe('createSpatialQueryStore', () => {
       }),
       submitQuery: vi.fn(),
     };
-    const openDrawer = vi.fn((_mode: 'range' | 'distance', options?: { autoSubmit?: boolean }) => {
+    const openDrawer = vi.fn((_mode?: 'range' | 'distance', options?: { useSelection?: boolean; autoSubmit?: boolean }) => {
       if (options?.autoSubmit) {
         store.submitQuery(1);
       }
@@ -1648,7 +1660,7 @@ describe('createSpatialQueryStore', () => {
   });
 
   it('「每页数量」清空 / 非正整数：canSubmit 为假；宿主脚本硬提交时 per_page 按缺省 100 发，半径也钳到 100 m', async () => {
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       total_count: 0,
       returned_count: 0,
@@ -1691,7 +1703,7 @@ describe('createSpatialQueryStore', () => {
   });
 
   it('spatial URL 没有 autorun 时只打开并填充，不触发查询', () => {
-    const store = {
+    const store: UrlStoreStub = {
       draft: {
         mode: 'distance',
         rangeCenterSource: 'selected',
@@ -1706,7 +1718,9 @@ describe('createSpatialQueryStore', () => {
         onlyVisible: false,
         includeNegative: false,
         specValues: [],
+        rooms: [],
         limit: 100,
+        sortBy: 'distanceAsc',
       },
       resetQuery: vi.fn(),
       setMode: vi.fn((mode: 'range' | 'distance') => {
@@ -1812,7 +1826,7 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
 
   it('「当前选中」中心先换回 mm 再发服务端，本地扫描也按 mm 量距', async () => {
     const viewer = createScaledViewerStub();
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
       total_count: 2,
@@ -1891,7 +1905,7 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
   it('「当前选中」选中的是没加载几何的 owner（PIPE / ZONE）：不报错，改发 refno 让服务端按子树盒解中心，center 回来写回草稿', async () => {
     const viewer = createScaledViewerStub();
     const selection = { selectedRefno: { value: 'pipe_1' as string | null } };
-    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByRefno = vi.fn<QueryNearbyByRefnoFn>(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
       total_count: 1,
@@ -2181,7 +2195,7 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
   it('P3：refno 路由的请求勾「仅看当前可见」，服务端回来的「已加载但被隐藏」构件按查看器实际可见性剔掉，并提示本页后筛', async () => {
     const viewer = createViewerStub();
     viewer.scene.objects.loaded_a.visible = false;
-    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+    const queryNearbyByRefno = vi.fn<QueryNearbyByRefnoFn>(async (): Promise<SpatialQueryResult> => ({
       ...pageResponse(1, 100, 2, [
         { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
         { refno: 'loaded_b', noun: 'PIPE', spec_value: 1, distance: 195 },
@@ -2439,7 +2453,7 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
 
   it('低：「按名称」在不按名称排全集的源（gen-model-v1）下结果带提示、顺序仍沿用服务端；legacy、换按距离、纯本地路径都不提示', async () => {
     const viewer = createViewerStub();
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => pageResponse(1, 100, 2, [
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => pageResponse(1, 100, 2, [
       { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
       { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
     ]));
@@ -2596,7 +2610,7 @@ describe('房间 / 专业过滤（ADR 0067，plan 2026-09-20）', () => {
     return {
       viewer,
       store: createSpatialQueryStore({
-        viewerRef: { value: viewer } as any,
+        viewerRef: ref(viewer),
         selection: { selectedRefno: { value: 'loaded_a' } } as any,
         toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
         ...overrides,
@@ -2744,7 +2758,7 @@ describe('房间 / 专业过滤（ADR 0067，plan 2026-09-20）', () => {
   });
 
   it('带房间过滤时本地独有命中不追加（归属只有服务端判得出），「仅看已加载」也不走纯本地路径', async () => {
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => serverResult());
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => serverResult());
     const { store } = makeStore({ queryNearbyByPosition });
     store.draft.mode = 'range';
     store.draft.rangeCenterSource = 'selected';
@@ -2792,7 +2806,7 @@ describe('房间 / 专业过滤（ADR 0067，plan 2026-09-20）', () => {
   });
 
   it('v1 源有了专业维度：范围查询缺省仍「先专业后距离」，spec_value 直接进结果项与分组', async () => {
-    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => serverResult({
+    const queryNearbyByPosition = vi.fn<QueryNearbyByPositionFn>(async (): Promise<SpatialQueryResult> => serverResult({
       results: [
         { refno: 'server_only', noun: 'EQUI', spec_value: 6, dbnum: 24381, distance: 18 },
         { refno: 'server_two', noun: 'PIPE', spec_value: 1, dbnum: 7997, distance: 20 },
@@ -2929,7 +2943,7 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
   function makeStore(overrides: Parameters<typeof createSpatialQueryStore>[0] = {}) {
     const viewer = createViewerStub();
     const store = createSpatialQueryStore({
-      viewerRef: { value: viewer } as any,
+      viewerRef: ref(viewer),
       selection: { selectedRefno: { value: 'loaded_a' } } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       ...overrides,

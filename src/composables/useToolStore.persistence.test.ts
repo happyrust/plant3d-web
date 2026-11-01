@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
+import { UserRole } from '@/types/auth';
+
 function createLocalStorageMock() {
   const store = new Map<string, string>();
   return {
@@ -487,7 +489,7 @@ describe('useToolStore - persistence', () => {
           annotationType: 'text',
           authorId: 'u-1',
           authorName: 'A',
-          authorRole: 'designer',
+          authorRole: UserRole.DESIGNER,
           content: 'comment in form 1',
           createdAt: 10,
         },
@@ -504,7 +506,7 @@ describe('useToolStore - persistence', () => {
           annotationType: 'text',
           authorId: 'u-1',
           authorName: 'A',
-          authorRole: 'designer',
+          authorRole: UserRole.DESIGNER,
           content: 'comment in form 2',
           createdAt: 11,
         },
@@ -521,7 +523,7 @@ describe('useToolStore - persistence', () => {
           annotationType: 'text',
           authorId: 'u-1',
           authorName: 'A',
-          authorRole: 'designer',
+          authorRole: UserRole.DESIGNER,
           content: 'unscoped comment',
           createdAt: 12,
         },
@@ -555,7 +557,7 @@ describe('useToolStore - persistence', () => {
         id: 'c-add-thread',
         authorId: 'u-1',
         authorName: 'A',
-        authorRole: 'designer',
+        authorRole: UserRole.DESIGNER,
         content: 'added through store',
         createdAt: 10,
       },
@@ -594,7 +596,7 @@ describe('useToolStore - persistence', () => {
           annotationType: 'text',
           authorId: 'u-1',
           authorName: 'A',
-          authorRole: 'designer',
+          authorRole: UserRole.DESIGNER,
           content: 'unscoped comment',
           createdAt: 5,
         },
@@ -630,7 +632,7 @@ describe('useToolStore - persistence', () => {
           annotationType: 'text',
           authorId: 'u-1',
           authorName: 'A',
-          authorRole: 'designer',
+          authorRole: UserRole.DESIGNER,
           content: 'comment in task 1',
           createdAt: 10,
         },
@@ -648,7 +650,7 @@ describe('useToolStore - persistence', () => {
           annotationType: 'text',
           authorId: 'u-1',
           authorName: 'A',
-          authorRole: 'designer',
+          authorRole: UserRole.DESIGNER,
           content: 'comment in task 2',
           createdAt: 11,
         },

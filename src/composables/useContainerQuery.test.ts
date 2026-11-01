@@ -75,9 +75,10 @@ function mountProbe(options?: Parameters<typeof useContainerQuery>[1]) {
       captured.mode = q.mode;
       captured.width = q.width;
       return () => h('div', {
-        ref: (el: Element | null) => {
-          target.value = el as HTMLElement | null;
-          captured.targetEl = el as HTMLElement | null;
+        // 参数类型由 h() 的 VNodeRef 推断；这里只把它落到 HTMLElement。
+        ref: (el) => {
+          target.value = el instanceof HTMLElement ? el : null;
+          captured.targetEl = el instanceof HTMLElement ? el : null;
         },
       });
     },

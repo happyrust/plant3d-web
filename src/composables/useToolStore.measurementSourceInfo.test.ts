@@ -91,9 +91,11 @@ describe('useToolStore - measurement source info', () => {
         },
       },
       absoluteElevation: 3,
+      datumElevation: 0,
       relativeElevation: 3,
       visible: true,
-      approximate: false,
+      // `XeokitElevationPointMeasurementRecord.approximate` 是字面量 `true`
+      approximate: true,
       createdAt: 2,
     });
     await nextTick();

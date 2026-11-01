@@ -42,12 +42,11 @@ describe('usePanelZones', () => {
   });
 
   it('restores every panel that was open in a zone', () => {
-    const panels = new Map(
-      ['measurement', 'dimension'].map((id) => [
-        id,
-        createPanel('right', 412, () => panels.delete(id)),
-      ]),
-    );
+    // 面板的回调要引用容器本身，所以先建空 Map 再填，避免自引用把类型推断打穿。
+    const panels = new Map<string, ReturnType<typeof createPanel>>();
+    for (const id of ['measurement', 'dimension']) {
+      panels.set(id, createPanel('right', 412, () => panels.delete(id)));
+    }
     const ensurePanel = vi.fn((id: string) => {
       const panel = createPanel('right', 412, () => panels.delete(id));
       panels.set(id, panel);

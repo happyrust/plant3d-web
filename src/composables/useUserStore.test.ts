@@ -767,7 +767,8 @@ describe('review task websocket notifications', () => {
     vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
     getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SJ');
 
-    let resolveRefresh: ((value: { success: true; tasks: any[]; total: number }) => void) | null = null;
+    // 显式可选函数类型：写成 `T | null` 时 `resolveRefresh?.(...)` 会被判成不可调用。
+    let resolveRefresh: ((value: { success: true; tasks: any[]; total: number }) => void) | undefined;
     reviewTaskGetListMock
       .mockResolvedValueOnce({ success: true, tasks: [], total: 0 })
       .mockImplementationOnce(
@@ -1258,7 +1259,8 @@ describe('normalizeReviewTask', () => {
       returnReason: '请修改',
       reviewComment: '请修改',
     }));
-    expect(task.workflowHistory?.[0]).toEqual(expect.objectContaining({
+    expect(task).not.toBeNull();
+    expect(task?.workflowHistory?.[0]).toEqual(expect.objectContaining({
       operatorId: 'JH',
       operatorName: '李校核员',
     }));
@@ -1317,7 +1319,8 @@ describe('normalizeBackendUser', () => {
       username: 'checker',
       email: 'checker@example.com',
       name: '校核员',
-      role: 'jd',
+      // 后端工作流角色码（'jd' = 校对），由 normalizeBackendUser 经 fromBackendRole 翻译
+      role: 'jd' as UserRole,
     });
 
     expect(user.role).toBe(UserRole.PROOFREADER);
@@ -1331,7 +1334,7 @@ describe('normalizeBackendUser', () => {
       username: 'reviewer',
       email: 'reviewer@example.com',
       name: '审核员',
-      role: 'reviewer',
+      role: 'reviewer' as UserRole,
     });
 
     expect(user.role).toBe(UserRole.REVIEWER);
@@ -1347,16 +1350,7 @@ describe('switch user auth helpers', () => {
 
   it('does not map HumanCode reviewer identity to legacy seeded ids', () => {
     const request = buildSwitchUserTokenRequest(
-      {
-        id: 'SH',
-        username: 'reviewer',
-        email: 'reviewer@example.com',
-        name: '审核员',
-        role: UserRole.REVIEWER,
-        status: UserStatus.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
+      { id: 'SH', role: UserRole.REVIEWER },
       'project-123',
     );
 
@@ -1366,16 +1360,7 @@ describe('switch user auth helpers', () => {
 
   it('builds a token request using backend workflow role codes', () => {
     const request = buildSwitchUserTokenRequest(
-      {
-        id: 'SH',
-        username: 'reviewer',
-        email: 'reviewer@example.com',
-        name: '审核员',
-        role: UserRole.REVIEWER,
-        status: UserStatus.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
+      { id: 'SH', role: UserRole.REVIEWER },
       'project-123',
     );
 

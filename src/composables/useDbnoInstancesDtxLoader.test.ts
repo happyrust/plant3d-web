@@ -3,10 +3,24 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { InstanceEntry } from '@/utils/instances/instanceManifest';
+
 // 记录源经 `getModelSource().records`（gen-model-v1 ensure → records）喂给加载链；这里 mock 掉数据源，
 // 只测加载链本身（实例 → DTX 对象、来源身份、隔离图层、直管归属…）。
+// 真实 `InstanceEntry` 的 uniforms 就是 `Record<string, unknown>`；这里照抄，
+// 让各用例只写自己关心的那几个键，不必为每个键补全。
+type InstanceEntryStub = {
+  geo_hash: string;
+  matrix: number[];
+  uniforms: Record<string, unknown> | null;
+};
+
+// 泛型标注成真实记录源的签名（按 refno 分组的实例表），
+// 这样各用例里 mockImplementation 的返回形状与调用处的期望类型一致。
 const recordSourceMocks = vi.hoisted(() => ({
-  instanceEntriesByRefnos: vi.fn(async () => new Map()),
+  instanceEntriesByRefnos: vi.fn<(dbno: number, refnos: string[]) => Promise<Map<string, InstanceEntryStub[]>>>(
+    async () => new Map(),
+  ),
 }));
 
 vi.mock('@/model-source', () => ({
@@ -714,12 +728,17 @@ describe('useDbnoInstancesDtxLoader', () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
     const refno = '24381_145018';
-    const entries = new Map([[
+    const entries = new Map<string, InstanceEntry[]>([[
       refno,
       [{
         geo_hash: '1',
         matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-        uniforms: { refno, noun: 'BRAN', owner_refno: '', owner_noun: '' },
+        uniforms: { refno, noun: 'BRAN', owner_refno: '', owner_noun: '', spec_value: 0 },
+        geo_index: 0,
+        color_index: 0,
+        name_index: 0,
+        site_name_index: 0,
+        lod_mask: 0,
       }],
     ]]);
     const layer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });

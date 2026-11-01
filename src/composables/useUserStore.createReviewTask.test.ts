@@ -212,6 +212,7 @@ describe('useUserStore.createReviewTask', () => {
           url: '/files/review_attachments/att-1.dwg',
           size: 128,
           mimeType: 'application/dwg',
+          uploadedAt: 1700000000000,
         },
       ])
     ).resolves.toBeUndefined();
@@ -224,6 +225,7 @@ describe('useUserStore.createReviewTask', () => {
         url: '/files/review_attachments/att-1.dwg',
         size: 128,
         mimeType: 'application/dwg',
+        uploadedAt: 1700000000000,
       },
     ]);
   });
@@ -485,6 +487,7 @@ describe('useUserStore.createReviewTask', () => {
         url: '/files/review_attachments/att-1.pdf',
         size: 128,
         mimeType: 'application/pdf',
+        uploadedAt: 1700000000000,
       },
     ]);
 
@@ -496,6 +499,7 @@ describe('useUserStore.createReviewTask', () => {
           url: '/files/review_attachments/att-1.pdf',
           size: 128,
           mimeType: 'application/pdf',
+          uploadedAt: 1700000000000,
         },
       ],
     });

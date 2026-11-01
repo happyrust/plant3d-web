@@ -9,8 +9,9 @@ vi.mock('@/ribbon/toastBus', () => ({
   emitToast: vi.fn(),
 }));
 
-const mockRecords = [
-  { id: 'a1', type: 'text', severity: 'general' as string | undefined, title: '旧标题', description: '旧描述' },
+// 定长元组：下面直接按下标读写，元组已知索引不受 noUncheckedIndexedAccess 影响。
+const mockRecords: [{ id: string; type: string; severity: string | undefined; title: string; description: string }] = [
+  { id: 'a1', type: 'text', severity: 'general', title: '旧标题', description: '旧描述' },
 ];
 
 const mockUpdateSeverity = vi.fn();

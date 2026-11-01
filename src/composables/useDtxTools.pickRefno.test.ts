@@ -11,6 +11,8 @@ import { useToolStore } from './useToolStore';
 
 import type { Obb } from './useToolStore';
 
+import { present } from '@/testing/present';
+
 vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => ({
     selectedRefno: ref<string | null>(null),
@@ -311,8 +313,13 @@ describe('computeCloudLayout', () => {
     expect(points.length).toBe((16 * 4 + 2) * 3);
     expect(points.length % 3).toBe(0);
 
-    const first = [points[0], points[1], points[2]];
-    const last = [points[points.length - 3], points[points.length - 2], points[points.length - 1]];
+    // 标成三元组：逐点取值，缺了当场失败，也免去下标访问的 undefined。
+    const first: [number, number, number] = [present(points[0]), present(points[1]), present(points[2])];
+    const last: [number, number, number] = [
+      present(points[points.length - 3]),
+      present(points[points.length - 2]),
+      present(points[points.length - 1]),
+    ];
     expect(last[0]).toBeCloseTo(first[0]);
     expect(last[1]).toBeCloseTo(first[1]);
     expect(last[2]).toBeCloseTo(first[2]);

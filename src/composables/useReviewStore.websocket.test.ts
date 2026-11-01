@@ -1,9 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const reviewTaskGetHistoryMock = vi.fn(async () => ({ success: true, history: [] }));
-const reviewRecordGetByTaskIdMock = vi.fn(async () => ({ success: true, records: [] }));
-const reviewTaskGetByIdMock = vi.fn(async () => ({ success: false }));
-const getReviewUserWebSocketUrlMock = vi.fn(() => null);
+import type { WorkflowStep } from '@/types/auth';
+
+// 显式声明各桩的返回形状：不标的话默认实现会被推成 `{ success: boolean }` 之类，
+// 用例里 mockResolvedValueOnce 塞更完整的响应就会报「对象字面量多了未知属性」。
+// 历史桩用 WorkflowStep 形状（store 只把 history 原样存进 reviewHistory）。
+const reviewTaskGetHistoryMock = vi.fn<() => Promise<{ success: boolean; history: WorkflowStep[] }>>(
+  async () => ({ success: true, history: [] }),
+);
+const reviewRecordGetByTaskIdMock = vi.fn<() => Promise<{ success: boolean; records: ConfirmedRecordStub[] }>>(
+  async () => ({ success: true, records: [] }),
+);
+const reviewTaskGetByIdMock = vi.fn<() => Promise<{ success: boolean; task?: unknown }>>(
+  async () => ({ success: false }),
+);
+const getReviewUserWebSocketUrlMock = vi.fn<() => string | null>(() => null);
+
+type ConfirmedRecordStub = {
+  id: string;
+  taskId: string;
+  type: 'batch';
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations: unknown[];
+  measurements: unknown[];
+  confirmedAt: number;
+  note: string;
+};
 const currentUserRef = { value: { id: 'reviewer-live-1' } };
 
 const webSocketCtor = vi.fn(() => {
@@ -153,6 +177,7 @@ describe('useReviewStore websocket fallback', () => {
         {
           id: 'record-1',
           taskId: 'task-hydration',
+          type: 'batch',
           annotations: [],
           cloudAnnotations: [],
           rectAnnotations: [],

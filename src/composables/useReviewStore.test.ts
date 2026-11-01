@@ -395,6 +395,7 @@ describe('useReviewStore', () => {
       visible: true,
       glyph: '1',
       title: '需要驳回处理的批注',
+      description: '',
       createdAt: 1710000000400,
     });
 

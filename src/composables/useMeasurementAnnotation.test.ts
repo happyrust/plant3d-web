@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ref, shallowRef } from 'vue';
 
 import { MeasurementAnnotationManager } from './useMeasurementAnnotation';
 
@@ -7,12 +8,12 @@ import type { DistanceMeasurementRecord } from './useToolStore';
 
 function createAnnotationSystem(): UseAnnotationThreeReturn {
   return {
-    annotations: { value: new Map() },
+    annotations: shallowRef(new Map()),
     annotationGroup: {} as any,
     materials: {} as any,
     interactionController: {} as any,
-    hoveredId: { value: null },
-    selectedId: { value: null },
+    hoveredId: ref<string | null>(null),
+    selectedId: ref<string | null>(null),
     createLeaderAnnotation: vi.fn() as any,
     addAnnotation: vi.fn(),
     removeAnnotation: vi.fn(),

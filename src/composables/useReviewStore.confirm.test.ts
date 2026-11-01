@@ -40,6 +40,7 @@ import { reviewModelVersionKey, type ReviewModelContext } from '@/components/rev
 import { dimensionDocumentToSnapshot } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { emptyDimensionDocument, linearRecord } from '@/dimension/domain/testFixtures';
 import { DimensionDocumentSession } from '@/dimension/services/dimensionDocumentSession';
+import { present } from '@/testing/present';
 
 const memoryJournal = {
   load: () => null,
@@ -131,13 +132,14 @@ describe('useReviewStore - confirm without OBB', () => {
       visible: true,
       glyph: '1',
       title: 'Text annotation',
+      description: '',
       createdAt: Date.now(),
     });
 
     toolStore.addCloudAnnotation({
       id: 'cloud-1',
+      objectIds: ['entity-1'],
       anchorWorldPos: [1, 1, 1],
-      screenSpacePoints: [[100, 100], [200, 200]],
       visible: true,
       title: 'Cloud annotation',
       description: '',
@@ -146,6 +148,7 @@ describe('useReviewStore - confirm without OBB', () => {
 
     toolStore.addRectAnnotation({
       id: 'rect-1',
+      objectIds: ['entity-1'],
       obb: {
         center: [2, 2, 2],
         axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -170,10 +173,11 @@ describe('useReviewStore - confirm without OBB', () => {
 
     const confirmed = reviewStore.confirmedRecords.value;
     expect(confirmed).toHaveLength(1);
-    expect(confirmed[0].annotations).toHaveLength(1);
-    expect(confirmed[0].cloudAnnotations).toHaveLength(1);
-    expect(confirmed[0].rectAnnotations).toHaveLength(1);
-    expect(confirmed[0].obbAnnotations).toEqual([]);
+    const first = present(confirmed[0], 'confirmed[0]');
+    expect(first.annotations).toHaveLength(1);
+    expect(first.cloudAnnotations).toHaveLength(1);
+    expect(first.rectAnnotations).toHaveLength(1);
+    expect(first.obbAnnotations).toEqual([]);
   });
 
   it('should preserve stable task and form lineage on confirmed records', async () => {
