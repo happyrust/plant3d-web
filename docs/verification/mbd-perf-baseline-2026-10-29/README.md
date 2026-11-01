@@ -135,10 +135,25 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 本文 2026-10-29 版写「每帧 `notifyViewerChanged()`，所以**每帧都是全量布局**（`layoutFrames ≈ frames`）」，**这句只在不加 `flushProjection()` 时成立到 2026-10-31 为止**，现在不成立：
 
 - `DimensionViewport.setProjector`（`src/dimension/viewport/dimensionViewport.ts`）已改为**按成本自适应降频**：距上次全量布局不到 `max(100 ms, 上次全量布局成本 × 2)` 时，只按新投影重画旧布局（`requestRenderWhenPainted()`）并重启 80 ms 静止兜底，不排全量布局。
-- 因此「相机连续动 600 帧」在真实绕轨里大约每 `interval` 一次全量布局，其余帧是只重绘。按 B 场景实测（全量布局成本 ≈ 18.5 ms）interval = 100 ms ≈ 6 帧一次，600 帧约 **100 次**全量布局；按 C 场景（≈ 19 ms）同量级。成本高的场景（`24381_1443` 那种 19 206 条记录、全量 ≈ 540 ms）interval 自动放大到 ≈ 1 080 ms，几乎退化成「只在静止时重排」。
+- 因此「相机连续动 600 帧」在真实绕轨里大约每 `interval` 一次全量布局，其余帧是只重绘。实测（2026-11-02，见下「节流实测」）B / C 都是 600 帧 **94 次**、间隔 P50 约 100～102 ms。成本高的场景（`24381_1443` 那种 19 206 条记录、全量 ≈ 540 ms）interval 自动放大到 ≈ 1 080 ms，几乎退化成「只在静止时重排」。
 - 上表 B / C 的数字**不是**这个口径：它们每步都 `flushProjection()` 强制全量布局，量的是**最坏情况**（每帧都排）。两者不可混用，判退化时要说清是哪一种。
 
 **最坏情况（每步强制全量布局）的代价**：B 远景 `frameMs` P50 18.6 / P95 19.5；C 远景 P50 18.9 / P95 19.8。即 1920×1080、DPR 1、dev 构建下，这两个真实 BRAN 即便每帧全量重排也还在 60 fps 附近（约 19 ms/帧）。节流后的实际绕轨只会更快，不会更慢。
+
+#### 节流实测（2026-11-02，不加强制，真绕轨）
+
+同一脚本去掉 `flushProjection()`，600 帧绕轨 10 s，采样 `lastCameraLayoutGrantedAtMs` 拿真实重排间隔：
+
+| 场景 | 记录 | 重排次数 | 指纹变化 | 间隔 P50 | 间隔 P95 | 间隔 min | `frameMs` P50 / P95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| B `24381_145018` | 63 | **94** | **94** | 102.1 | 117.9 | 94.1 | 18.0 / 23.2 |
+| C `24381_146979` | 166 | **94** | **94** | 100.5 | 117.6 | 98.0 | 17.7 / 19.0 |
+
+- 600 帧 / 10 s ÷ 94 次 ≈ **106 ms 一次**，与 100 ms 下限吻合；`frameMs` P95 仍在 19～23 ms，没退化。
+- **指纹变化次数 = 重排次数**（94 = 94）：每次放行都真的画出了新投影，不存在「排了但被顶掉、画面停在旧内容」——这是计划里风险 1 的反证。
+- `min` 略低于 100（94.1 / 98.0）是采样粒度：`lastFullLayoutAtMs` 在布局收尾时写，采样在下一帧 rAF 才看到，两者差一帧。
+
+**这里暴露过一个真实缺陷，已修**：初版判据拿「距上次布局**完成**」算，而布局要一帧 rAF + layout + paint 才写那个时刻（真实房间 20～30 ms）。这段窗口里再调 `setProjector` 会重复放行，实测 600 帧放了 **120** 次、间隔 P50 只有 **23.9 ms**——比下限高约 20 %。改成以**放行**时刻（`lastCameraLayoutGrantedAtMs`）为基准后降到 94 次。用例 `does not grant a second layout while the previous one is still running` 钉住。
 
 ## 记录（三次重复）
 
@@ -272,6 +287,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - `src/debug/dimensionFrameStats.ts`：环形缓冲（600 帧）+ 最近邻秩分位，按 `kind` 分桶（`paintMs` 只算 `layout` 帧）；`ViewerPanel.vue` 在 dev 构建把它挂为 `window.__dimensionFrameStats`，生产构建既不挂也不记录。
 - `src/debug/dimensionPerf.ts`：新增 `window.__dimensionPerf.settle(passes)`；`run()` 与 e2e 门禁没动。
 - **2026-11-01 追加（节流重排，不改口径只改频率）**：`DimensionViewport.setProjector` 现在按 `max(100 ms, 上次全量布局成本 × 2)` 决定「重排 / 只重绘」，成本取 `onFrame` 上报的 `layoutMs + paintMs`（`kind === 'layout'` 帧）。`onFrame` 的字段与三类 `kind` 含义**一字未动**，所以上面的基线数值与新代码仍可直接比。新增输入口 `cameraMotionLayoutIntervalMs`（缺省 100，仅测试用）。
+- **2026-11-02 追加（判据基准改正）**：节流判据的基准从「上次布局**完成**」改为「上次**放行**」（新增私有字段 `lastCameraLayoutGrantedAtMs`，`flushProjection()` 也算一次放行）。原因是完成时刻要等一帧 rAF + layout + paint 才写，那段窗口里会重复放行；实测 600 帧从 120 次降到 94 次。`onFrame` 口径仍然没动。
 - 可选对照：`npm run perf:dimensions:kernel`（Node 内核基准：1920×1080 @2x、2k 可见、热身 50 / 实测 200 次，打印 `layout+collision p50/p95` 与 `hit-test p50/p95`，自带 16 ms / 2 ms 断言）。**这是最接近 ADR 0040 口径的可运行度量**（`test/perf/dimensions/benchKernel.ts:26`、`:218`）：2026-10-30 实测 `layout+collision p95 = 3.746 ms`、`hit-test p95 = 0.036 ms`，均达标。
 
 ## 注意
