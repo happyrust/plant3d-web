@@ -34,7 +34,12 @@ import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
-import { toRefnoKey } from '@/utils/refnoKey';
+import {
+  appendMbdRefno,
+  formatMbdRefnos,
+  parseMbdRefnos,
+  removeMbdRefno,
+} from '@/utils/mbdRefnoParam';
 
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
 
@@ -377,32 +382,48 @@ function setMbdPartialEnabled(enabled: boolean): void {
 }
 
 /**
- * BRAN 号输入：写 URL `mbd_refno`（`A/B` 与 `A_B` 两种写法都认，统一成下划线）
+ * BRAN 号（多值）：写 URL `mbd_refno`（`A/B` 与 `A_B` 两种写法都认，统一成下划线）
  * 并派发 `popstate` → ViewerPanel 走 `handleMbdLocationChange` 实时拉取；
  * 清空（隐藏）则删掉参数，来源被 `replaceExternalSource('mbd', [])` 清掉。
+ *
+ * 为什么是列表而不是单个字符串：同一视图要同时看几个 BRAN 的标注，而输入框只能
+ * 表达「当前唯一值」——追加第二个必然覆盖第一个。编解码（逗号分隔、归一化、保序
+ * 去重）收口在 `utils/mbdRefnoParam`，这里只做「面板 → URL」这一端，于是
+ * `searchParams.set/delete` 的调用点与 `popstate` 链路都不必改。
  */
-const mbdRefnoInput = ref(
-  typeof window === 'undefined'
-    ? ''
-    : new URLSearchParams(window.location.search).get('mbd_refno')?.trim() ?? '',
+const mbdRefnos = ref<readonly string[]>(
+  typeof window === 'undefined' ? [] : [...parseMbdRefnos(window.location.search)],
 );
 
-function writeMbdRefno(refno: string | null): void {
+/** 草稿：待追加的单个 BRAN 号，追加成功后清空，避免误以为它仍在生效。 */
+const mbdRefnoDraft = ref('');
+
+/** 唯一的 URL 写入口：列表 → `mbd_refno`，空列表则删参数（= 不再显示任何标注）。 */
+function writeMbdRefnos(refnos: readonly string[]): void {
   const url = new URL(window.location.href);
-  const normalized = toRefnoKey(refno);
-  if (normalized) url.searchParams.set('mbd_refno', normalized);
-  else url.searchParams.delete('mbd_refno');
+  const value = formatMbdRefnos(refnos);
+  if (value === null) url.searchParams.delete('mbd_refno');
+  else url.searchParams.set('mbd_refno', value);
   window.history.pushState({}, '', url);
   window.dispatchEvent(new Event('popstate'));
 }
 
+/** 回车 / 点按钮：把草稿追加到列表末尾；已存在或空输入不写 URL（不触发重新取数）。 */
 function applyMbdRefno(): void {
-  writeMbdRefno(mbdRefnoInput.value || null);
+  const next = appendMbdRefno(mbdRefnos.value, mbdRefnoDraft.value);
+  mbdRefnoDraft.value = '';
+  if (next.length === mbdRefnos.value.length) return;
+  writeMbdRefnos(next);
+}
+
+/** 关掉某一枚标签：只删这一项，其余顺序不变。 */
+function dropMbdRefno(refno: string): void {
+  writeMbdRefnos(removeMbdRefno(mbdRefnos.value, refno));
 }
 
 function hideMbdAnnotations(): void {
-  mbdRefnoInput.value = '';
-  writeMbdRefno(null);
+  mbdRefnoDraft.value = '';
+  writeMbdRefnos([]);
 }
 
 /**
@@ -492,9 +513,11 @@ const dimensionOcclusion = computed(() => {
 });
 
 function syncDisplayModeFromLocation(): void {
-  mbdRefnoInput.value = typeof window === 'undefined'
-    ? ''
-    : new URLSearchParams(window.location.search).get('mbd_refno')?.trim() ?? '';
+  mbdRefnos.value = typeof window === 'undefined'
+    ? []
+    : [...parseMbdRefnos(window.location.search)];
+  // 后退 / 前进换了地址，草稿里那半个 BRAN 已经与任何来源无关，留着只会误导。
+  mbdRefnoDraft.value = '';
   mbdKindFilter.value = readMbdKindFilter();
   mbdPartialEnabled.value = readMbdPartialEnabled();
   mbdLodDisabled.value = readMbdLodDisabled();
@@ -726,24 +749,46 @@ function act(
           @click="openMbdDiagnostics()">
           ! 装载失败
         </button>
-        <input v-model="mbdRefnoInput"
+        <input v-model="mbdRefnoDraft"
           class="min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 py-0.5"
-          data-testid="mbd-refno-input"
-          placeholder="例：24381/145018"
+          data-testid="mbd-refno-draft"
+          placeholder="例：24381/145018，回车追加"
           @keydown.enter="applyMbdRefno()" />
         <button type="button"
           class="rounded border px-1.5 py-0.5"
-          data-testid="mbd-refno-show"
+          data-testid="mbd-refno-append"
           @click="applyMbdRefno()">
-          显示标注
+          追加
         </button>
         <button type="button"
           class="rounded border px-1.5 py-0.5 disabled:opacity-40"
           data-testid="mbd-refno-hide"
-          :disabled="!mbdDiagnostics.channel"
+          :disabled="mbdRefnos.length === 0"
           @click="hideMbdAnnotations()">
           隐藏
         </button>
+      </div>
+      <!--
+        已生效的 BRAN 逐枚列出：单值时就只有一枚，与旧版「输入框里一个值」的观感接近；
+        多值时必须能单独关掉某一枚，否则用户只能整组清空再重输。
+      -->
+      <div v-if="mbdRefnos.length > 0"
+        class="mt-1 flex flex-wrap items-center gap-1"
+        data-testid="mbd-refno-chips">
+        <span v-for="refno in mbdRefnos"
+          :key="refno"
+          class="flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5"
+          data-testid="mbd-refno-chip"
+          :data-refno="refno">
+          <span>{{ refno }}</span>
+          <button type="button"
+            class="rounded px-0.5 leading-none text-slate-500 hover:text-red-600"
+            data-testid="mbd-refno-chip-remove"
+            :title="`移除 ${refno}`"
+            @click="dropMbdRefno(refno)">
+            ×
+          </button>
+        </span>
       </div>
     </div>
     <div v-if="incompleteLayoutMode"

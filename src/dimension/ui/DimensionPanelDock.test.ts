@@ -118,6 +118,17 @@ afterEach(() => {
   useMbdDiagnosticsStore().clear();
 });
 
+/** 已生效的 BRAN 标签，按 DOM 顺序取 `data-refno`——顺序即 URL 里的顺序。 */
+function chips(host: HTMLElement): string[] {
+  return [...host.querySelectorAll('[data-testid="mbd-refno-chip"]')]
+    .map(node => node.getAttribute('data-refno') ?? '');
+}
+
+/** 待追加的草稿输入框。 */
+function draftInput(host: HTMLElement): HTMLInputElement {
+  return host.querySelector<HTMLInputElement>('[data-testid="mbd-refno-draft"]')!;
+}
+
 describe('DimensionPanelDock', () => {
   it('loads business pipe tags, preserves provenance and missing fields, and isolates persisted/late responses', async () => {
     const store = usePipeInformationStore();
@@ -788,6 +799,153 @@ describe('DimensionPanelDock', () => {
       await nextTick();
       expect(toggle().checked).toBe(false);
       expect(banner()).toBeNull();
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /**
+   * 多 BRAN（`?mbd_refno=A,B`）：URL 里每一项都要在面板上可见，否则用户没法知道
+   * 当前视图到底叠了哪几个分支的标注。
+   */
+  it('renders one chip per BRAN in ?mbd_refno=A,B', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A,B');
+    try {
+      const host = mountPanel();
+      await nextTick();
+      expect(chips(host)).toEqual(['A', 'B']);
+      expect(host.querySelector('[data-testid="mbd-refno-chips"]')).not.toBeNull();
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /** 追加：草稿输入一个 BRAN，回车后进 URL 末尾并派发一次 popstate 触发重新取数。 */
+  it('appends a drafted BRAN to ?mbd_refno and dispatches popstate', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A,B');
+    const onPopstate = vi.fn();
+    window.addEventListener('popstate', onPopstate);
+    try {
+      const host = mountPanel();
+      await nextTick();
+      const draft = draftInput(host);
+      const popstatesBefore = onPopstate.mock.calls.length;
+
+      draft.value = 'C';
+      draft.dispatchEvent(new Event('input'));
+      await nextTick();
+      draft.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await nextTick();
+
+      expect(new URL(window.location.href).searchParams.get('mbd_refno')).toBe('A,B,C');
+      expect(onPopstate.mock.calls.length).toBe(popstatesBefore + 1);
+      expect(chips(host)).toEqual(['A', 'B', 'C']);
+      // 草稿清空：留着旧文本会让用户以为它还没生效。
+      expect(draft.value).toBe('');
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /** 重复追加已存在的 BRAN：不产生第二枚标签，也不该多一次取数（URL 与 popstate 都不动）。 */
+  it('ignores a duplicated BRAN instead of adding a second chip', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A_B,B');
+    const onPopstate = vi.fn();
+    window.addEventListener('popstate', onPopstate);
+    try {
+      const host = mountPanel();
+      await nextTick();
+      const draft = draftInput(host);
+      const popstatesBefore = onPopstate.mock.calls.length;
+
+      // 归一化后同一个 BRAN：`A/B` 与 `A_B` 视为重复，不因写法不同就多加一枚。
+      draft.value = 'A/B';
+      draft.dispatchEvent(new Event('input'));
+      await nextTick();
+      draft.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await nextTick();
+
+      expect(chips(host)).toEqual(['A_B', 'B']);
+      expect(new URL(window.location.href).searchParams.get('mbd_refno')).toBe('A_B,B');
+      expect(onPopstate.mock.calls.length).toBe(popstatesBefore);
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /** 单枚标签的 × ：只摘掉这一项，其余顺序保持不变。 */
+  it('removes a single BRAN from ?mbd_refno when its chip is closed', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A,B,C');
+    try {
+      const host = mountPanel();
+      await nextTick();
+      expect(chips(host)).toEqual(['A', 'B', 'C']);
+
+      const removeB = host.querySelector<HTMLButtonElement>(
+        '[data-testid="mbd-refno-chip"][data-refno="B"] [data-testid="mbd-refno-chip-remove"]',
+      );
+      expect(removeB).not.toBeNull();
+      removeB!.click();
+      await nextTick();
+
+      expect(new URL(window.location.href).searchParams.get('mbd_refno')).toBe('A,C');
+      expect(chips(host)).toEqual(['A', 'C']);
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /** 清空全部：URL 里不能留下空值参数，否则同步层会拿一个空 BRAN 去取数。 */
+  it('drops the mbd_refno parameter entirely when every BRAN is cleared', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A,B');
+    try {
+      const host = mountPanel();
+      await nextTick();
+      const hide = host.querySelector<HTMLButtonElement>('[data-testid="mbd-refno-hide"]')!;
+      expect(hide.disabled).toBe(false);
+      hide.click();
+      await nextTick();
+
+      const search = new URL(window.location.href).searchParams;
+      expect(search.has('mbd_refno')).toBe(false);
+      expect(chips(host)).toEqual([]);
+      expect(host.querySelector('[data-testid="mbd-refno-chips"]')).toBeNull();
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  /** 旧链接兼容：单值 `?mbd_refno=A` 仍是一枚标签，且还能继续追加第二个。 */
+  it('keeps single-value ?mbd_refno=A working as one chip that can still grow', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A');
+    try {
+      const host = mountPanel();
+      await nextTick();
+      expect(chips(host)).toEqual(['A']);
+
+      const draft = draftInput(host);
+      draft.value = 'B';
+      draft.dispatchEvent(new Event('input'));
+      await nextTick();
+      draft.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await nextTick();
+
+      expect(new URL(window.location.href).searchParams.get('mbd_refno')).toBe('A,B');
+      expect(chips(host)).toEqual(['A', 'B']);
     } finally {
       window.history.replaceState({}, '', '/');
     }
