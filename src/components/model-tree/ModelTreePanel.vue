@@ -29,6 +29,7 @@ import {
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
 import { emitToast } from '@/ribbon/toastBus';
+import { appendMbdRefno, formatMbdRefnos, parseMbdRefnos } from '@/utils/mbdRefnoParam';
 import { MODEL_UNIT_VERSION_COMPARE_EVENT, requestModelVersionInspect } from '@/utils/modelUnitVersionCompare';
 
 const props = defineProps<{
@@ -1149,6 +1150,52 @@ function viewMbdDimensions() {
   closeContextMenu();
 }
 
+/**
+ * 右键菜单是否给「加入尺寸标注视图」：当前节点是 BRAN、视图里**已经有** BRAN、且当前这个
+ * BRAN **还不在**视图里（已在里面就没得加，`appendMbdRefno` 会原样返回，点了没反应）。
+ *
+ * 为什么把 `window.location.search` 的读取挂在 `contextNodeId` 上：`window.location` 不是响应式的，
+ * 直接写 `computed(() => parseMbdRefnos(window.location.search))` 会永远返回首次求值的缓存。
+ * 这里让它依赖 `contextNodeId`（`contextNodeIsBran` 与 `treeNodeRefno(id)` 都依赖它），而
+ * `closeContextMenu()` 会把 `contextNodeId` 清成 `null`，所以**每次右键打开菜单都会重算一次**，
+ * 读到的是当次 URL 的真实状态。菜单开着的时候 URL 不会被别处改（改 URL 的入口都伴随关菜单），
+ * 这个取值时机够用。
+ */
+const contextNodeCanJoinMbdView = computed(() => {
+  if (!contextNodeIsBran.value) return false;
+  const id = contextNodeId.value;
+  const refno = id ? treeNodeRefno(id) : '';
+  if (!refno) return false;
+  const existing = parseMbdRefnos(window.location.search);
+  // 视图里一个 BRAN 都没有时，「加入」和「查看」效果一样，多一项只会让用户以为两个按钮有区别。
+  if (existing.length === 0) return false;
+  return !existing.includes(normalizeRefnoKeyLike(refno));
+});
+
+/**
+ * 「加入尺寸标注视图」（多 BRAN 同屏）：把当前 BRAN **追加**到 URL 的 `mbd_refno` 列表末尾，
+ * 保留已有的 BRAN。与「查看尺寸标注」的覆盖语义分开：那个是「只看这一个」，这个是「一起看」。
+ *
+ * 链路与 `viewMbdDimensions()` 相同：改 URL → 派发 `popstate` → ViewerPanel 的
+ * `handleMbdLocationChange` 重新拉取；同时选中该构件并打开尺寸标注面板看诊断。
+ * `appendMbdRefno` 幂等（已在列表里则原样返回），所以重复点击不会写出重复项。
+ */
+function addMbdDimensionsToView() {
+  if (!contextNodeId.value) return;
+  const refno = treeNodeRefno(contextNodeId.value);
+  if (!refno) return;
+  const next = appendMbdRefno(parseMbdRefnos(window.location.search), normalizeRefnoKeyLike(refno));
+  const encoded = formatMbdRefnos(next);
+  selection.setSelectedRefno(refno);
+  const url = new URL(window.location.href);
+  if (encoded) url.searchParams.set('mbd_refno', encoded);
+  else url.searchParams.delete('mbd_refno');
+  window.history.replaceState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+  ensurePanelAndActivate('dimension');
+  closeContextMenu();
+}
+
 function onSearchEnter(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return;
@@ -1509,6 +1556,14 @@ function onSearchEnter(value: string) {
           data-testid="model-tree-view-mbd-dimensions"
           @click="viewMbdDimensions">
           查看尺寸标注
+        </button>
+        <!-- 「加入」只在视图里已有 BRAN 时才出现：没有任何 mbd_refno 时，加入与「查看」效果相同，
+             多一项只会让用户以为两个按钮有区别。 -->
+        <button v-if="contextNodeCanJoinMbdView" type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          data-testid="model-tree-add-mbd-dimensions"
+          @click="addMbdDimensionsToView">
+          加入尺寸标注视图
         </button>
       </div>
     </Teleport>
