@@ -254,12 +254,17 @@ export function createMbdExternalSync(
             : mapped.records;
           const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
           const stripped = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
+          // 真实后端的图元 id 已经带 refno 前缀（`24381_145018:isoline:0:...`），
+          // 跨 BRAN 天然不冲突；只有那些不带前缀的 id 才需要补，否则会得到
+          // `24381_145018:24381_145018:isoline:...` 这种重复噪声。
+          const qualify = (id: string): string =>
+            id.startsWith(`${refno}:`) ? id : `${refno}:${id}`;
           const records = multiRefnos
             ? stripped.map(record => ({
               ...record,
-              id: `${refno}:${record.id}`,
-              sourceLabel: `MBD ${refno}: ${record.id}`,
-              layout: { ...record.layout, id: `${refno}:${record.id}` },
+              id: qualify(record.id),
+              sourceLabel: `MBD: ${qualify(record.id)}`,
+              layout: { ...record.layout, id: qualify(record.id) },
             }))
             : stripped;
           return {

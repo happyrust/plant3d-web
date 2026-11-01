@@ -608,6 +608,36 @@ describe('createMbdExternalSync', () => {
   });
 
   /**
+   * 真实后端的图元 id 本身已带 refno 前缀（`24381_145018:isoline:0:...`，见
+   * `src/fixtures/mbd-v2/live-isodim-24381-145018.json`），跨 BRAN 天然不冲突。
+   * 加前缀必须幂等：已带该 refno 的 id 原样保留，否则会得到
+   * `24381_145018:24381_145018:isoline:...`，面板与 `sourceLabel` 里全是重复噪声。
+   */
+  it('does not double-prefix ids that already carry the refno', async () => {
+    const fetchPipeData = vi.fn(async (refno: string) => ({
+      ok: true as const,
+      data: contractPayload({
+        input_refno: refno,
+        branch_refno: refno,
+        primitives: [{
+          ...contractPayload().primitives[0]!,
+          id: `${refno}:isoline:0:main:Head--${refno}`,
+        }],
+      }),
+      diagnostics: [],
+    }));
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
+
+    await harness.sync.sync(harness.target);
+
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(records.map((record: { id: string }) => record.id))
+      .toEqual(['A:isoline:0:main:Head--A', 'B:isoline:0:main:Head--B']);
+    expect(records[0].sourceLabel).toBe('MBD: A:isoline:0:main:Head--A');
+  });
+
+  /**
    * 2026-11-02 逐包拒绝：A 包映射失败（重复图元 id）只剔除 A 自己，
    * B 包照常提交；失败原因进逐源诊断与聚合 loadError，并按 refno 弹提示。
    */
