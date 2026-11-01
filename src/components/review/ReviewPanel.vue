@@ -1026,7 +1026,7 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
   if (result.error && result.ok.length === 0) {
     emitToast({
       message: `构件定位失败：${result.error}`,
-      type: 'warning',
+      level: 'warning',
     });
   }
 }
