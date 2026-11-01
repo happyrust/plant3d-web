@@ -5,7 +5,9 @@ import {
   type EmbeddedWorkflowActionMessage,
 } from './pmsReviewSimulatorEmbedMessages';
 
-import type { ReviewAttachment } from '@/types/auth';
+// ReviewTask 定义在 @/types/auth（reviewApi 只是 import 后使用，没有 re-export），
+// 原来从 '@/api/reviewApi' 取它是错的，会让整条 ReviewTask 类型链退化成 error/any。
+import type { ReviewAttachment, ReviewTask } from '@/types/auth';
 
 import { GenModelV1ApiError, genModelV1Health } from '@/api/genModelV1Api';
 import {
@@ -20,8 +22,8 @@ import {
   reviewTaskGetList,
   reviewTaskReturn,
   reviewTaskSubmitToNext,
+  type ReviewAnnotationCheckBlocker,
   type ReviewAnnotationCheckResult,
-  type ReviewTask,
   type WorkflowVerifyNextStep,
 } from '@/api/reviewApi';
 import { formatAttachmentSize } from '@/components/review/reviewAttachmentFlow';
@@ -136,6 +138,22 @@ function normalizeWorkflowVerifyRecommendedAction(
   return null;
 }
 
+// ReviewAnnotationCheckBlocker 的两个字段是字面量联合，而这里是从 unknown 归一化而来。
+// 取值与 @/api/reviewApi 的 normalizeReviewAnnotationCheckResult 保持一致：
+// 未知 annotationType 落 'text'、未知 stateCode 落 'open'，避免越出联合类型。
+function normalizeBlockerAnnotationType(value: unknown): ReviewAnnotationCheckBlocker['annotationType'] {
+  const normalized = String(value || '').trim();
+  return normalized === 'cloud' || normalized === 'rect' ? normalized : 'text';
+}
+
+function normalizeBlockerStateCode(value: unknown): ReviewAnnotationCheckBlocker['stateCode'] {
+  const normalized = String(value || '').trim();
+  if (normalized === 'pending_review' || normalized === 'approved' || normalized === 'rejected') {
+    return normalized;
+  }
+  return 'open';
+}
+
 function normalizeWorkflowVerifyAnnotationCheck(
   raw?: ReviewAnnotationCheckResult | Record<string, unknown> | null,
 ): ReviewAnnotationCheckResult | null {
@@ -169,12 +187,14 @@ function normalizeWorkflowVerifyAnnotationCheck(
         : {};
       return {
         annotationId: String(blocker.annotationId || blocker.annotation_id || ''),
-        annotationType: String(blocker.annotationType || blocker.annotation_type || ''),
+        annotationType: normalizeBlockerAnnotationType(
+          blocker.annotationType || blocker.annotation_type,
+        ),
         title: typeof blocker.title === 'string' && blocker.title.trim() ? blocker.title.trim() : undefined,
         description: typeof blocker.description === 'string' && blocker.description.trim()
           ? blocker.description.trim()
           : undefined,
-        stateCode: String(blocker.stateCode || blocker.state_code || ''),
+        stateCode: normalizeBlockerStateCode(blocker.stateCode || blocker.state_code),
         stateLabel: String(blocker.stateLabel || blocker.state_label || ''),
         refnos: Array.isArray(blocker.refnos)
           ? blocker.refnos.filter((refno): refno is string => typeof refno === 'string')
@@ -500,21 +520,23 @@ const PMS_USER_CONTEXT: Record<SimulatorPmsUser, { label: string }> = {
   PZ: { label: 'PZ' },
 };
 
-const STATUS_LABELS: Record<ReviewTask['status'], string> = {
+const STATUS_LABELS = {
   draft: '草稿',
   submitted: '待处理',
   in_review: '审核中',
   approved: '已通过',
   rejected: '已驳回',
   cancelled: '已取消',
-};
+} satisfies Record<ReviewTask['status'], string>;
 
-const NODE_LABELS: Record<string, string> = {
+// 键集合与 WorkflowRole 一一对应；用 satisfies 而不是 Record<string, string>，
+// 这样 NODE_LABELS[role]（role: WorkflowRole）在 noUncheckedIndexedAccess 下仍是 string。
+const NODE_LABELS = {
   sj: '编制',
   jd: '校对',
   sh: '审核',
   pz: '批准',
-};
+} satisfies Record<WorkflowRole, string>;
 
 const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
 let PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
@@ -710,7 +732,9 @@ function persistSimulatorSession(): void {
 }
 
 let refs: {
-  body: HTMLBodyElement;
+  // document.body 的 TS 静态类型就是 HTMLElement（不是 HTMLBodyElement），
+  // 这里的用法只有 classList.add/remove，收窄成 HTMLElement 不影响运行行为。
+  body: HTMLElement;
   currentUserLabel: HTMLSpanElement;
   currentPmsUserLabel: HTMLSpanElement;
   roleButtons: HTMLDivElement;
@@ -787,6 +811,11 @@ let refs: {
   workflowDialogFeedback: HTMLDivElement;
   workflowDialogCancelBtn: HTMLButtonElement;
   workflowDialogConfirmBtn: HTMLButtonElement;
+  // 全屏浮动的「流转操作」按钮与抽屉遮罩：DOM 在 pms-review-simulator.html
+  // （id="floating-workflow-btn" / id="drawer-backdrop"），initRefs 里也已经 getEl 取过，
+  // 只是这份元素表类型漏声明了两个键——属于漏声明，不是键名写错。
+  floatingWorkflowBtn: HTMLButtonElement;
+  drawerBackdrop: HTMLDivElement;
 };
 
 function toSimulatorTestRowSummary(row: ReviewListRow): SimulatorTestRowSummary {
@@ -987,8 +1016,11 @@ function exposeSimulatorTestApi(): void {
 }
 
 function initRefs(): void {
+  // document.body 的静态类型是 HTMLElement；refs.body 只需要 classList，
+  // 用 HTMLBodyElement 只是历史声明，这里按真实类型收窄成 HTMLElement 即可。
+  const body: HTMLElement = document.body;
   refs = {
-    body: document.body,
+    body,
     currentUserLabel: getEl<HTMLSpanElement>('current-user-label'),
     currentPmsUserLabel: getEl<HTMLSpanElement>('current-role-label'),
     roleButtons: getEl<HTMLDivElement>('role-buttons'),
@@ -1201,12 +1233,14 @@ function toDateTime(timestamp: number | null | undefined): string {
 }
 
 function escapeHtml(text: string): string {
+  // lib 目标不含 ES2021，没有 String.prototype.replaceAll；
+  // split/join 与 replaceAll 的「替换全部、不解释替换串」语义等价（这里替换串无 $ 符号）。
   return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('\'', '&#39;');
+    .split('&').join('&amp;')
+    .split('<').join('&lt;')
+    .split('>').join('&gt;')
+    .split('"').join('&quot;')
+    .split('\'').join('&#39;');
 }
 
 function inboxSubmittedLabelForWorkflowRole(role: WorkflowRole): string {
@@ -1427,7 +1461,9 @@ function attachWorkflowTitle(response: WorkflowSyncResponse): WorkflowSyncRespon
   };
 }
 
-function normalizeWorkflowNodeId(raw: unknown): string | null {
+// 返回值必然是 WorkflowRole 之一（sj/jd/sh/pz）或 null，之前声明成 string | null
+// 让调用方赋给 WorkflowRole 字段时全部报错；这里把真实值域写进签名，不改任何分支逻辑。
+function normalizeWorkflowNodeId(raw: unknown): WorkflowRole | null {
   const normalized = String(raw || '')
     .trim()
     .toLowerCase();
@@ -1493,7 +1529,7 @@ function getWorkflowNextStepPayload(): Record<string, unknown> | null {
     : null;
 }
 
-function deriveWorkflowNextStepRaw(): string | null {
+function deriveWorkflowNextStepRaw(): WorkflowRole | null {
   const detail = getWorkflowNextStepDetailPayload();
   if (detail) {
     const node = normalizeWorkflowNodeId(detail.node as string | undefined)
@@ -2326,8 +2362,10 @@ function renderWorkflowDialogState(): void {
       opt.textContent = option.label;
       refs.workflowDialogTargetSelect.appendChild(opt);
     });
-    if (options.length > 0) {
-      const currentTarget = normalizeWorkflowNodeId(state.workflowDialog.targetNode) || options[0].value;
+    // options.length > 0 已保证首项存在；取出后再判空只是给 noUncheckedIndexedAccess 收窄。
+    const firstOption = options[0];
+    if (firstOption) {
+      const currentTarget = normalizeWorkflowNodeId(state.workflowDialog.targetNode) || firstOption.value;
       refs.workflowDialogTargetSelect.value = currentTarget;
       state.workflowDialog.targetNode = currentTarget;
     } else {
@@ -2613,7 +2651,9 @@ async function refreshList(): Promise<void> {
       state.selectedTaskId = null;
     }
     if (!state.selectedTaskId && state.selectedTaskIds.length > 0) {
-      state.selectedTaskId = state.selectedTaskIds[0];
+      // length > 0 保证首项存在；判空只为 noUncheckedIndexedAccess 收窄，运行时不会走空分支。
+      const firstSelectedId = state.selectedTaskIds[0];
+      if (firstSelectedId) state.selectedTaskId = firstSelectedId;
     }
     if (!state.selectedTaskId) {
       const focusFormId = state.iframeMeta?.formId || state.lastOpenedFormId || null;

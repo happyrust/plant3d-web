@@ -89,11 +89,15 @@ function parseArgs(): PmsContractSequenceOptions {
   let verbose = false;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--base' && args[i + 1]) { base = args[++i]; }
-    else if (args[i] === '--project' && args[i + 1]) { projectId = args[++i]; }
-    else if (args[i] === '--user' && args[i + 1]) { user = args[++i] as SimulatorPmsUser; }
-    else if (args[i] === '--mode' && args[i + 1]) { workflowMode = args[++i]; }
-    else if (args[i] === '--verbose' || args[i] === '-v') { verbose = true; }
+    // noUncheckedIndexedAccess 下 args[i] / args[i + 1] 都是 string | undefined，
+    // 先取出再判空，与原 `args[i + 1] &&` 守卫 + `args[++i]` 取值语义完全一致。
+    const flag = args[i];
+    const value = args[i + 1];
+    if (flag === '--base' && value) { base = value; i++; }
+    else if (flag === '--project' && value) { projectId = value; i++; }
+    else if (flag === '--user' && value) { user = value as SimulatorPmsUser; i++; }
+    else if (flag === '--mode' && value) { workflowMode = value; i++; }
+    else if (flag === '--verbose' || flag === '-v') { verbose = true; }
   }
 
   return { base: base.replace(/\/$/, ''), projectId, user, workflowMode, verbose };
@@ -227,6 +231,14 @@ function collectStepFacts(result: StepResult): string[] {
   return facts;
 }
 
+// 调用点都在刚 push 完一条结果之后，数组必然非空；
+// 这里只是让 noUncheckedIndexedAccess 下的类型收窄，运行行为与直接下标取值一致。
+function lastResult(results: StepResult[]): StepResult {
+  const result = results[results.length - 1];
+  if (!result) throw new Error('results 为空，不应发生：调用前必然刚 push 过一条结果');
+  return result;
+}
+
 function printResult(r: StepResult): void {
   const icon = r.ok ? '✓' : '✗';
   const httpLabel = r.status > 0 ? `HTTP ${r.status}` : 'HTTP -';
@@ -271,7 +283,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
   results.push(buildStepResult('auth/token', authOk, authResp, {
     detail: bearerToken ? 'Bearer token 已获取' : '未返回 Bearer token',
   }));
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   console.log('\n[1/6] POST /api/review/embed-url');
   const embedPayload = buildEmbedUrlPayload({
@@ -297,7 +309,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
     detail: formId ? '已返回嵌入上下文' : '未提取到 form_id',
     formId: formId || null,
   }));
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   let seededTaskId: string | null = null;
   let seedStepOk = false;
@@ -323,7 +335,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
       seededTask: true,
     }));
   }
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   console.log('\n[3/6] POST /api/review/workflow/verify');
   if (!seedStepOk || !formId || !token) {
@@ -375,7 +387,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
           : '未返回完整 verify 合同字段',
     }));
   }
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   console.log('\n[4/6] POST /api/review/workflow/sync (action=query)');
   const syncPayload = buildWorkflowSyncPayload({
@@ -406,7 +418,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
     taskId: seededTaskId,
     detail: syncDetail,
   }));
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   console.log('\n[5/6] POST /api/review/cache/preload');
   const cachePayload = buildCachePreloadPayload({
@@ -420,7 +432,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
   results.push(buildStepResult('cache/preload', cacheOk, cacheResp, {
     formId: formId || null,
   }));
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   console.log(`\n[6/6] POST /api/review/delete (${formId ? 'cleanup seeded form' : 'dry-run'})`);
   const deletePayload = buildDeleteReviewPayload({
@@ -437,7 +449,7 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
     taskId: seededTaskId,
     detail: formId ? '已请求清理 seed form' : '未拿到 form_id，退回 dry-run',
   }));
-  printResult(results[results.length - 1]);
+  printResult(lastResult(results));
 
   return results;
 }

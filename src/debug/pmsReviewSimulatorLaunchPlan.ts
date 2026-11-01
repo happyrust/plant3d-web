@@ -72,7 +72,10 @@ export function resolveDefaultSimulatorProjectId(
     if (availableProjectSet.has(DEFAULT_SIMULATOR_PROJECT_ID)) {
       return DEFAULT_SIMULATOR_PROJECT_ID;
     }
-    return normalizedProjects[0];
+    // noUncheckedIndexedAccess 下 [0] 带 undefined；上面的 length > 0 保证它存在，
+    // 这里的判空只是给类型收窄，运行时不会走进去。
+    const firstProject = normalizedProjects[0];
+    if (firstProject) return firstProject;
   }
 
   return params.get('project')?.trim() || DEFAULT_SIMULATOR_PROJECT_ID;

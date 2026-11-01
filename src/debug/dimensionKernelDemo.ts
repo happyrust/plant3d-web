@@ -41,10 +41,17 @@ declare global {
   }
 }
 
-const canvas = document.querySelector<HTMLCanvasElement>(
-  '#dimension-demo-canvas',
-);
-if (!canvas) throw new Error('Dimension demo canvas is missing');
+// 抽成函数返回非空类型：模块级 const 的窄化不会带入 main() 的函数体，
+// 而 main() 里对 canvas 的读写原本就依赖「模块加载时已抛过不存在」这一事实。
+function requireDemoCanvas(): HTMLCanvasElement {
+  const element = document.querySelector<HTMLCanvasElement>(
+    '#dimension-demo-canvas',
+  );
+  if (!element) throw new Error('Dimension demo canvas is missing');
+  return element;
+}
+
+const canvas = requireDemoCanvas();
 
 const inputs: readonly (
   | NormalizedDimensionInput
