@@ -59,7 +59,10 @@ function moveSceneLabel(
   const source = result.scenePrimitives ?? [];
   let projectedIndex = 0;
   let connectedLeader = false;
-  let primaryGlyph: SceneGlyphRun | null = null;
+  // Collected into an array rather than a `let … ??=` inside the callback: the
+  // control-flow analysis does not see assignments made in the closure, and
+  // would narrow the variable to `never` after the guard below.
+  const primaryGlyphs: SceneGlyphRun[] = [];
   const moved = source.map((primitive): ScenePrimitive => {
     if (primitive.kind === 'scene-triangle') {
       projectedIndex += 3;
@@ -68,7 +71,7 @@ function moveSceneLabel(
     const projected = result.primitives[projectedIndex];
     projectedIndex += 1;
     if (primitive.kind === 'scene-glyph-run') {
-      primaryGlyph ??= primitive;
+      if (primaryGlyphs.length === 0) primaryGlyphs.push(primitive);
       return { ...primitive, at: moveSceneVertex(primitive.at, offset) };
     }
     if (
@@ -87,7 +90,8 @@ function moveSceneLabel(
     }
     return primitive;
   });
-  if (connectedLeader || !primaryGlyph) return moved;
+  const primaryGlyph = primaryGlyphs[0];
+  if (connectedLeader || primaryGlyph === undefined) return moved;
   const glyphIndex = moved.findIndex(
     primitive => primitive.kind === 'scene-glyph-run',
   );
@@ -240,6 +244,7 @@ export function resolveLabelCollisions(
     let resolved: LayoutResult | undefined;
     for (let candidate = 0; candidate < candidateCount; candidate += 1) {
       const direction = DIRECTIONS[candidate % DIRECTIONS.length];
+      if (direction === undefined) continue;
       const distance = (candidate + 1) * rules.candidateStepPx;
       const offset = [direction[0] * distance, direction[1] * distance] as const;
       if (occupancy.overlapsAt(result.labelBounds, offset[0], offset[1])) continue;

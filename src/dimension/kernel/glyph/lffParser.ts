@@ -51,7 +51,9 @@ class LineReader {
   }
 
   private skipWhitespace(): void {
-    while (this.offset < this.input.length && /\s/.test(this.input[this.offset])) {
+    while (this.offset < this.input.length) {
+      const character = this.input[this.offset];
+      if (character === undefined || !/\s/.test(character)) return;
       this.offset += 1;
     }
   }
@@ -62,7 +64,10 @@ function polar(radius: number, angle: number): Vec2 {
 }
 
 function appendBulge(points: Vec2[], endpoint: Vec2, bulge: number): void {
-  if (points.length === 0) {
+  // Empty points and an out-of-range index are the same condition here, so one
+  // check both throws the original error and narrows `start` below.
+  const start = points[points.length - 1];
+  if (start === undefined) {
     throw new SyntaxError('An LFF bulge requires a preceding point');
   }
   if (bulge === 0) {
@@ -71,7 +76,6 @@ function appendBulge(points: Vec2[], endpoint: Vec2, bulge: number): void {
 
   const reversed = bulge < 0;
   const alpha = Math.atan(bulge) * 4;
-  const start = points[points.length - 1];
   const middle: Vec2 = [(start[0] + endpoint[0]) / 2, (start[1] + endpoint[1]) / 2];
   const halfChord = Math.hypot(endpoint[0] - start[0], endpoint[1] - start[1]) / 2;
   let chordAngle = Math.atan2(endpoint[1] - start[1], endpoint[0] - start[0]);
@@ -134,10 +138,12 @@ function getGlyphBounds(glyph: Glyph): Readonly<{
   const points = glyph.contours.flatMap((contour) => contour.points);
   if (points.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
-  let minX = points[0][0];
-  let maxX = points[0][0];
-  let minY = points[0][1];
-  let maxY = points[0][1];
+  const first = points[0];
+  if (first === undefined) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  let minX = first[0];
+  let maxX = first[0];
+  let minY = first[1];
+  let maxY = first[1];
   for (const point of points) {
     minX = Math.min(minX, point[0]);
     maxX = Math.max(maxX, point[0]);
@@ -206,7 +212,7 @@ export class LffFont {
     const headerPattern = /^#\s*(\w+)\s*:\s*(.*?)\s*$/gim;
 
     for (const match of normalized.matchAll(headerPattern)) {
-      const name = match[1].toLowerCase();
+      const name = match[1]?.toLowerCase();
       if (name === 'letterspacing') letterSpacing = Number(match[2]);
       if (name === 'wordspacing') wordSpacing = Number(match[2]);
     }
@@ -320,6 +326,7 @@ export class LffFont {
         for (let index = 1; index < contour.points.length; index += 1) {
           const from = contour.points[index - 1];
           const to = contour.points[index];
+          if (from === undefined || to === undefined) continue;
           segments.push({
             from: [cursorX + from[0] * scale, origin[1] - from[1] * scale],
             to: [cursorX + to[0] * scale, origin[1] - to[1] * scale],
@@ -336,7 +343,10 @@ export class LffFont {
     const headers = [...this.lffData.matchAll(pattern)];
     for (let index = 0; index < headers.length; index += 1) {
       const match = headers[index];
-      const codePoint = Number.parseInt(match[1], 16);
+      if (match === undefined) continue;
+      const codePointText = match[1];
+      if (codePointText === undefined) continue;
+      const codePoint = Number.parseInt(codePointText, 16);
       this.glyphSources.set(codePoint, {
         bodyStart: match.index + match[0].length,
         bodyEnd: headers[index + 1]?.index ?? this.lffData.length,

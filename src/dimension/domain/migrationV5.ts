@@ -83,7 +83,9 @@ function semanticSource(
   value: unknown,
 ): SemanticAnchorRef['source'] | null {
   if (typeof value !== 'string') return null;
-  switch (value.toLowerCase().replaceAll('_', '-')) {
+  // `replace(/_/g, '-')` is `String.prototype.replaceAll` spelled without the
+  // ES2021 lib entry: a one-character literal with no regex metacharacters.
+  switch (value.toLowerCase().replace(/_/g, '-')) {
     case 'ptset':
     case 'p-point':
       return 'p-point';
@@ -164,12 +166,13 @@ function appendIgnoredFieldDiagnostics(
   legacyId: string,
   diagnostics: V5MigrationDiagnostic[],
 ): void {
-  if (Object.hasOwn(raw, 'textOverride')) {
+  // `Object.hasOwn` without the ES2022 lib entry; same own-property test.
+  if (Object.prototype.hasOwnProperty.call(raw, 'textOverride')) {
     diagnostics.push(
       diagnostic(raw, 'ignored-text-override', 'warning', legacyId),
     );
   }
-  if (Object.hasOwn(raw, 'isReference')) {
+  if (Object.prototype.hasOwnProperty.call(raw, 'isReference')) {
     diagnostics.push(
       diagnostic(raw, 'ignored-reference', 'warning', legacyId),
     );

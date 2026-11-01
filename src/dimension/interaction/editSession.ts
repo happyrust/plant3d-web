@@ -101,6 +101,21 @@ function nonZero(vector: Vec3 | undefined): vector is Vec3 {
       > 1e-18;
 }
 
+/**
+ * Same test the radial picker used inline, spelled as a type predicate so the
+ * narrowed `capability` reaches `SemanticAnchorRef['source']`.
+ */
+function isCircularCandidate(
+  candidate: SnapCandidate,
+): candidate is SnapCandidate & Readonly<{ capability: 'circle' | 'arc' }> {
+  return (
+    (candidate.capability === 'circle' || candidate.capability === 'arc')
+    && candidate.anchor.snapshot !== null
+    && nonZero(candidate.direction)
+    && nonZero(candidate.normal)
+  );
+}
+
 function selectedCandidate(
   input: DimensionEditSessionInput,
   screen: Vec2,
@@ -527,11 +542,7 @@ class RadialEditSession extends BaseEditSession
         capabilities: ['circle', 'arc', 'point'],
         thresholdPx: this.input.thresholdPx ?? 18,
       });
-      const circular = candidates.find(candidate =>
-        (candidate.capability === 'circle' || candidate.capability === 'arc')
-        && candidate.anchor.snapshot !== null
-        && nonZero(candidate.direction)
-        && nonZero(candidate.normal));
+      const circular = candidates.find(isCircularCandidate);
       if (
         circular?.anchor.snapshot
         && circular.direction

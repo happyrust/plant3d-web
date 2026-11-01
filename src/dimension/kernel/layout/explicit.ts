@@ -45,6 +45,7 @@ import type {
   ScreenPath,
   ScreenRect,
   Vec2,
+  Vec3,
 } from '../types';
 import type { LayoutContext } from './context';
 
