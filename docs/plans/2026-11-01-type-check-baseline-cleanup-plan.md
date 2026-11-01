@@ -81,9 +81,18 @@ npm run type-check                           → 当前 0 条 / 基线 0 条 / �
 
 双胞胎面板 5 套回归（AGENTS.md 要求）每批都跑，baseline 与 after 同为 137 passed，**无新增 fail**。
 
+收尾又补了两项（2026-11-02）：
+
+```
+npm run build        → ✓ built in 23.07s，末尾「当前 0 条错误 / 基线 0 条 / 新增 0」
+npx eslint <本计划改过的 81 个文件> --max-warnings 0  → exit 0，无输出
+```
+
+**关于 `npm run lint` 全量跑出的 114 error**：全部来自未跟踪的 `.cursor/skills/impeccable/scripts/*.js`（`git ls-files` 查不到该路径，属本机工具脚本，不入库）。另外 `src/harness/*` 的 13 条是 `vue/one-component-per-file` **warning**，HEAD 就存在（`annotTools.ts` 那 3 条已用文件级 `eslint-disable` 注明理由）。这两类都与本计划无关，**没有为它们改代码**。
+
 ## 七、边界
 
 - 未碰别人未提交的 `.kiro/specs/.../design.md`、`src/dimension/kernel/layout/polar/place/`。
-- `src/dimension/viewport/dimensionViewport.ts` 与其测试里有别人未提交的 W4-1 节流改动（+151 行），**已从暂存中剔除**，未提交。
+- `src/dimension/viewport/dimensionViewport.ts` 与其测试里有别人未提交的 W4-1 节流改动，**已从暂存中剔除**，未提交；该改动后由另一会话以 `42f50b29` 单独提交。
 - 未改任何 `tsconfig*.json`，未用 `as any` / `as unknown as` / `!` / `@ts-expect-error`。
 - 未推送、未合 `publish`、未部署。
