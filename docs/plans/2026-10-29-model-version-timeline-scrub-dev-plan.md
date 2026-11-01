@@ -13,8 +13,8 @@
 > | W0 入库与规格收尾 | 完成 | 两仓全部提交，规格 14 处修订已落盘 |
 > | W1 后端编排与路由 | 完成 | `realtime_history/query.rs` 编排 + `model_history_geometry` handler |
 > | W2 resolve / attributes-at / health | 完成 | 三条只读路由 + `/health` 分项 |
-> | W3 后端测试补齐 | 完成 | 属性测试 29–39 与例子测试；`cargo test --lib` 2762 passed |
-> | W4 集成验证与合入 | 完成 | 两个验证脚本全绿；2026-11-01 快进合入 `refactor` @ `535fff7d1`。合入前 `cargo test --lib` 2781 passed / 1 failed，该失败为 `refactor` 既有。没有推送 |
+> | W3 后端测试补齐 | 完成 | 属性测试 29–39 与例子测试；当时 `cargo test --lib` 2762 passed（数字随 `refactor` 前进而增长，合入前已到 2781，不是回归） |
+> | W4 集成验证与合入 | 完成 | 两个验证脚本全绿；2026-11-01 快进合入 `refactor` @ `535fff7d1`（该提交现已是 `refactor` 历史的一部分，其后 `refactor` 又前进若干提交）。合入前 `cargo test --lib` 2781 passed / 1 failed，该失败为 `refactor` 既有。没有推送 |
 > | W5 前端纯函数测试补齐 | 完成 | 11 模块 + 16 测试文件 |
 > | W6 前端接线 | 完成 | 三条路由客户端、`versionSource` 接线 |
 > | W7 浏览主流程 | 完成 | `useVersionFrames` 约 880 行 |
@@ -31,6 +31,15 @@
 > （2026-11-01）。没有推送到远端。备份标签 `backup/timeline-scrub-before-5133bc27` 指向合入前再 rebase 之前的 `ff76d62c5`。
 >
 > **W4 合入**：第 2、3 步已做。主工作区 `git merge --ff-only` 到 `535fff7d1`；SHA 写进 `tasks.md` 第 8 组。不合 `publish`、不部署、不推送。
+>
+> **2026-11-01 实况复核**（在合入后的 `refactor` 上重跑，不采信文档自述）：
+> - `535fff7d1` 确认是 `refactor` 的祖先（`git merge-base --is-ancestor` 退出码 0）；
+>   `refactor` 上 `src/fast_model/realtime_history/` 与 `535fff7d1` 的同名目录**逐字节一致**。
+> - 当前 `refactor`（`13690b248`，合入后又前进 10 个提交）上跑本特性测试：
+>   `realtime_history` **60 passed / 0 failed**、`time_resolve` **17 passed / 0 failed**。
+> - 前端全量 vitest **4 166 passed / 1 todo**（423 文件）；`type-check` 439 条 / 基线 439 / 新增 0。
+> - 唯一失败 `cata_dependency` 的源码文本断言，已在**纯 `refactor`（`2d36d6e05`，零特性代码）**
+>   上单跑复现：`0 passed; 1 failed` —— 确为既有失败。
 >
 > **期间修掉的实质问题**：27 条，见 `docs/verification/model-version-timeline-scrub/phase3-perf.md`。
 > **一处规范冲突已裁决**：R6.3 / R8.10 选第 3 条出路（改 R8.10 措辞为「所有子节点」），
