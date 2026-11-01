@@ -57,12 +57,23 @@ export function formatMeasurementPathWithResolvedLabels(
   resolveLabel: MeasurementPathLabelResolver,
 ): string {
   const [origin, maybeCorner, target] = getMeasurementPathDisplayPoints(record);
+  // getMeasurementPathDisplayPoints 恒返回 [origin, ...(corner), target]，
+  // 下标取不到时原代码同样会在这里抛 TypeError（读 undefined.fallbackLabel），保持抛错语义。
+  if (!origin) {
+    throw new Error('measurement path display points missing origin');
+  }
   const originLabel = resolveLabel(origin) || origin.fallbackLabel;
   const targetPoint = record.kind === 'angle' ? target : maybeCorner;
+  if (!targetPoint) {
+    throw new Error('measurement path display points missing target');
+  }
   const targetLabel = resolveLabel(targetPoint) || targetPoint.fallbackLabel;
 
   if (record.kind === 'angle') {
     const corner = maybeCorner;
+    if (!corner) {
+      throw new Error('measurement path display points missing corner');
+    }
     const cornerLabel = resolveLabel(corner) || corner.fallbackLabel;
     return `起点 ${originLabel} -> 拐点 ${cornerLabel} -> 终点 ${targetLabel}`;
   }

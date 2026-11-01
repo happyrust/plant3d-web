@@ -584,7 +584,7 @@ onMounted(() => {
 
     <WorkflowReturnDialog v-if="selectedTask"
       :visible="showReturnDialog"
-      :current-node="selectedTask.currentNode"
+      :current-node="selectedTask.currentNode ?? 'sj'"
       :loading="taskActionLoading"
       @update:visible="(v) => { showReturnDialog = v; }"
       @confirm="handleReturnConfirm" />

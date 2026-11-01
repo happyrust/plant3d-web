@@ -308,7 +308,8 @@ async function ensureRestoredTaskModelsVisible(task: ReviewTask | null): Promise
 
 async function ensureModelRefnosVisible(
   componentRefnos: string[],
-  context: { taskId?: string; formId?: string | null },
+  // `taskId` 只有日志用；调用方传的是 `restoredTaskId`，语义上就是「可能没有任务」的 null，不是漏判。
+  context: { taskId?: string | null; formId?: string | null },
 ): Promise<void> {
   if (componentRefnos.length === 0) return;
 

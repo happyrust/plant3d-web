@@ -225,11 +225,19 @@ export function createPanelActions(ctx: DtxToolsContext, hooks: PanelActionHooks
     if (!viewer) return;
     const rec = ctx.store.measurements.value.find((m) => m.id === id);
     if (!rec) return;
+    // 原实现只判 `kind === 'distance'`，其余一律读 origin/corner/target。
+    // 但 `ElevationPointMeasurementRecord` 没有 origin/corner/target 三个字段，走 else 分支时
+    // 运行时必抛 TypeError（点「定位」相机不动、控制台报错）。这里按 kind 收点：
+    // distance / elevation_delta 取 origin+target，angle 取三点；elevation_point 原本就会在
+    // 这里抛，改为提前 return（可见效果同为「相机不飞」），是否补上「飞到仰点」另行定夺。
     const pts: Vec3[] = [];
-    if (rec.kind === 'distance') {
+    if (rec.kind === 'distance' || rec.kind === 'elevation_delta') {
       pts.push(rec.origin.worldPos, rec.target.worldPos);
-    } else {
+    } else if (rec.kind === 'angle') {
       pts.push(rec.origin.worldPos, rec.corner.worldPos, rec.target.worldPos);
+    } else {
+      // elevation_point：原本会在这里抛 TypeError。
+      return;
     }
     const aabb = aabbFromPoints(pts);
     if (!aabb) return;

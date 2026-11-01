@@ -66,7 +66,10 @@ export const SPEC_BADGE_STYLES: Record<SiteSpecValue, SpecBadgeStyle> = {
 
 export function getSpecBadgeStyle(specValue: number | string): SpecBadgeStyle {
   const value = typeof specValue === 'string' ? parseInt(specValue, 10) : specValue;
-  return SPEC_BADGE_STYLES[value] ?? SPEC_BADGE_STYLES[SiteSpecValue.Unknown];
+  // SPEC_BADGE_STYLES 的键是枚举成员，直接用 number 索引会被 noImplicitAny 拦；
+  // 越界值运行时本来就走 `?? Unknown` 兜底，这里保持同样的查表 + 兜底语义。
+  return (SPEC_BADGE_STYLES as Record<number, SpecBadgeStyle | undefined>)[value]
+    ?? SPEC_BADGE_STYLES[SiteSpecValue.Unknown];
 }
 
 /**

@@ -244,7 +244,10 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
       const tx = refnoTransform[12];
       const ty = refnoTransform[13];
       const tz = refnoTransform[14];
-      if (Number.isFinite(tx) && Number.isFinite(ty) && Number.isFinite(tz)) {
+      // noUncheckedIndexedAccess：下标访问带 undefined；长度已判 16，缺值只可能是稀疏数组，
+      // 原实现会把 undefined 传进 vec3ByMatrix 算出 NaN，这里同样按「不算出坐标」处理。
+      if (tx !== undefined && ty !== undefined && tz !== undefined
+        && Number.isFinite(tx) && Number.isFinite(ty) && Number.isFinite(tz)) {
         refnoPosition = vec3ByMatrix([tx, ty, tz], globalMatrix);
       }
     }

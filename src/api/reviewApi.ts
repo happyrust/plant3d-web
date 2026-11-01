@@ -2335,21 +2335,24 @@ type RawTokenResponse = Partial<TokenResponse> & {
   expires_in?: number;
 };
 
+/** `/api/auth/verify` 回的有效 claims。抽成具名类型：`VerifyResponse['data']` 是可选，取不出内层字段。 */
+export type VerifyClaims = {
+  projectId: string;
+  userId: string;
+  userName?: string;
+  formId?: string;
+  role?: string;
+  workflowMode?: string;
+  exp: number;
+  iat: number;
+};
+
 export type VerifyResponse = {
   code: number;
   message: string;
   data?: {
     valid: boolean;
-    claims?: {
-      projectId: string;
-      userId: string;
-      userName?: string;
-      formId?: string;
-      role?: string;
-      workflowMode?: string;
-      exp: number;
-      iat: number;
-    };
+    claims?: VerifyClaims;
     error?: string;
   };
 };
@@ -2380,7 +2383,7 @@ type RawVerifyResponse = {
   };
 };
 
-function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyResponse['data']['claims'] | undefined {
+function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyClaims | undefined {
   if (!raw) return undefined;
   const projectId = raw.projectId || raw.project_id;
   const userId = raw.userId || raw.user_id;
@@ -2466,7 +2469,11 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
  * 验证 JWT Token
  * POST /api/auth/verify
  */
-export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
+export async function authVerifyToken(
+  token?: string,
+  /** 验证接口的 base URL 覆盖；不传（含显式传 `undefined`）时仍走 `getBaseUrl()`，与单参调用完全等价。 */
+  baseUrl?: string,
+): Promise<VerifyResponse> {
   const tokenToVerify = token || getAuthToken();
   if (!tokenToVerify) {
     return {
@@ -2476,7 +2483,7 @@ export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
     };
   }
 
-  const base = getBaseUrl().replace(/\/$/, '');
+  const base = (baseUrl?.trim() || getBaseUrl()).replace(/\/$/, '');
   const resp = await fetch(`${base}/api/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

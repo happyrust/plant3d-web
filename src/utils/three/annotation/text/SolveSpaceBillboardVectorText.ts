@@ -90,7 +90,8 @@ export class SolveSpaceBillboardVectorText {
   private _worldPerPixel = 1;
 
   private font: SolveSpaceVectorFont | null = null;
-  private fontPromise: Promise<SolveSpaceVectorFont> | null = null;
+  // 载入失败时 catch 分支返回 undefined（并把 fontPromise 置 null），故 Promise 结果允许 undefined。
+  private fontPromise: Promise<SolveSpaceVectorFont | undefined> | null = null;
   private fontSource:
     | SolveSpaceVectorFont
     | Promise<SolveSpaceVectorFont>
@@ -441,6 +442,9 @@ export class SolveSpaceBillboardVectorText {
       })
       .catch(() => {
         this.fontPromise = null;
+        // 显式返回 undefined：catch 原本就是「吞掉失败、不产出字体」，
+        // 用 undefined 让 Promise 结果类型与字段声明 `SolveSpaceVectorFont | undefined` 对齐。
+        return undefined;
       });
   }
 

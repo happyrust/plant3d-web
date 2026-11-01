@@ -10,6 +10,7 @@
  * 仅供 vite（端口 5191）下 /harness/annot-tools.html 人工 / 截图访问，
  * 不参与生产构建入口。
  */
+/* eslint-disable vue/one-component-per-file -- harness 截图页按设计在一个入口里挂多个根组件 */
 import { createApp, defineComponent, h, ref } from 'vue';
 
 import '@/assets/tailwind.css';
@@ -161,12 +162,22 @@ createApp(AnnotationPanel, { tools: toolsApi }).mount('#app-panel');
 createApp(AnnotationStylePanel).mount('#app-style');
 createApp(AnnotationOverlayBar, { tools: toolsApi }).mount('#app-overlay');
 
+/**
+ * noUncheckedIndexedAccess：数组下标访问带 undefined。这里三份 fixture 都是固定字面量；
+ * 万一记录缺失，AnnotationCard 里读 `record.title` 原本就会抛 TypeError，所以提前显式抛，语义等价。
+ */
+const [textAnnotationA, textAnnotationB] = textAnnotations;
+const [cloudAnnotationA] = cloudAnnotations;
+if (!textAnnotationA || !textAnnotationB || !cloudAnnotationA) {
+  throw new Error('harness annotTools fixture 缺少批注记录');
+}
+
 /** AnnotationCard 三态：选中 / 未选中 / 带截图（含角色点） */
 const CardsRoot = defineComponent({
   setup() {
     return () => h('div', { class: 'flex flex-col gap-3' }, [
       h(AnnotationCard, {
-        record: textAnnotations[0],
+        record: textAnnotationA,
         type: 'text',
         isActive: true,
         commentCount: 3,
@@ -174,14 +185,14 @@ const CardsRoot = defineComponent({
         authorName: '王设计师',
       }),
       h(AnnotationCard, {
-        record: textAnnotations[1],
+        record: textAnnotationB,
         type: 'text',
         isActive: false,
         authorRole: UserRole.PROOFREADER,
         authorName: '张校对员',
       }),
       h(AnnotationCard, {
-        record: cloudAnnotations[0],
+        record: cloudAnnotationA,
         type: 'cloud',
         isActive: false,
         commentCount: 1,

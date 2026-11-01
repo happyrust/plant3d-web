@@ -43,7 +43,15 @@ const forwardedAttrs = computed(() => {
   return rest;
 });
 
-const resolvedAriaLabel = computed(() => loadingAriaLabel.value ?? attrs['aria-label']);
+const resolvedAriaLabel = computed<string | undefined>(() => {
+  if (loadingAriaLabel.value !== undefined) return loadingAriaLabel.value;
+  // `attrs` 是 `Record<string, unknown>`，静态类型上是 unknown；渲染层写 aria-label 时本来就会把值转成字符串
+  // （`setAttribute`），所以这里显式 `String(...)`，与改动前 `?? attrs['aria-label']` 的最终 DOM 结果一致。
+  const attrAriaLabel = attrs['aria-label'];
+  if (typeof attrAriaLabel === 'string') return attrAriaLabel;
+  if (attrAriaLabel === undefined || attrAriaLabel === null) return undefined;
+  return String(attrAriaLabel);
+});
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-primary-foreground shadow-sm hover:opacity-90 focus-visible:ring-primary/30',

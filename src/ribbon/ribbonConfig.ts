@@ -1,4 +1,4 @@
-import type { RibbonTabConfig } from '@/ribbon/ribbonTypes';
+import type { RibbonGroupConfig, RibbonItem, RibbonTabConfig } from '@/ribbon/ribbonTypes';
 
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
@@ -329,11 +329,14 @@ export function filterReviewDockAnnotationTab(tabs: RibbonTabConfig[], hideAnnot
 function filterPassiveWorkflowEntries(tabs: RibbonTabConfig[]): RibbonTabConfig[] {
   if (showMyTasksEntry) return tabs;
 
-  return tabs.map((tab) => ({
+  return tabs.map((tab): RibbonTabConfig => ({
     ...tab,
-    groups: tab.groups.map((group) => ({
+    groups: tab.groups.map((group): RibbonGroupConfig => ({
       ...group,
-      items: group.items.flatMap((item) => {
+      // flatMap 的返回元素必须显式收窄成 RibbonItem：分支里既有 `[item]`（RibbonButtonItem）
+      // 又有 `{...item, items: nextItems}`（RibbonStackItem），不标注时 TS 会推成联合数组，
+      // 无法满足 RibbonGroupConfig.items 的 RibbonItem[]。逻辑与原来一致。
+      items: group.items.flatMap((item): RibbonItem[] => {
         if (item.kind === 'button') {
           return item.commandId === 'panel.myTasks' ? [] : [item];
         }

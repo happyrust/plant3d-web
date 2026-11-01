@@ -278,7 +278,17 @@ async function loadWorkflowHistory() {
     if (!response.success) {
       throw new Error(response.error_message || '加载工作流历史失败');
     }
-    workflowHistory.value = response.history || [];
+    // 请求层（reviewTaskGetWorkflow）已经用 normalizeWorkflowSteps 归一过 node/action/timestamp，
+    // 但 WorkflowHistoryResponse['history'] 的元素仍声明为 string 字段；这里只把类型收窄到
+    // WorkflowStep 的联合类型，字段值逐个原样搬运，不重新解析、不改时间戳。
+    workflowHistory.value = (response.history || []).map((step) => ({
+      node: step.node as WorkflowStep['node'],
+      action: step.action as WorkflowStep['action'],
+      operatorId: step.operatorId,
+      operatorName: step.operatorName,
+      ...(step.comment === undefined ? {} : { comment: step.comment }),
+      timestamp: step.timestamp,
+    }));
   } catch (error) {
     workflowHistory.value = props.task.workflowHistory || [];
     workflowError.value = error instanceof Error ? error.message : '加载工作流历史失败';

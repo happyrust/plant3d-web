@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, ref, watch, type ComponentPublicInstance, type Ref } from 'vue';
 
 import MeasurementAidPanel from '@/components/tools/MeasurementAidPanel.vue';
 import MeasurementResultInspector from '@/components/tools/MeasurementResultInspector.vue';
@@ -211,7 +211,13 @@ function getVisibilityActionLabel(visible: boolean): string {
   return visible ? '隐藏' : '恢复显示';
 }
 
-function setMeasurementRowRef(id: string, el: Element | null) {
+// Vue 的模板 ref 回调签名是 `Element | ComponentPublicInstance | null`（v-for 里传的是组件/元素实例）。
+// 原实现只把 HTMLElement 收进表、其余 delete，这里把入参放宽到同一联合类型，
+// 再走同一个 `instanceof HTMLElement` 判定，行为不变。
+function setMeasurementRowRef(
+  id: string,
+  el: Element | ComponentPublicInstance | null,
+) {
   if (el instanceof HTMLElement) {
     measurementRowEls.value.set(id, el);
     return;

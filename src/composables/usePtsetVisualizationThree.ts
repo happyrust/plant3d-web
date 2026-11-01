@@ -3,6 +3,7 @@ import { ref, watch, type Ref } from 'vue';
 import { Box3, BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Matrix4, Vector3 } from 'three';
 
 import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import type { LengthUnit } from '@/composables/useUnitSettingsStore';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -265,7 +266,7 @@ export function usePtsetVisualizationThree(
     }
   }
 
-  function appendEntry(refno: string, response: PtsetResponse, unitFactor: number, policy: string, targetUnit: string, displayUnit: string, precision: number, gm: Matrix4) {
+  function appendEntry(refno: string, response: PtsetResponse, unitFactor: number, policy: string, targetUnit: string, displayUnit: LengthUnit, precision: number, gm: Matrix4) {
     const viewer = dtxViewerRef.value;
     const container = labelContainerRef.value;
     if (!viewer || !container) return false;

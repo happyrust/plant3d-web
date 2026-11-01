@@ -46,13 +46,13 @@ import { buildAnnotationWorkspaceSummary } from './annotationWorkspaceModel';
 
 import type { AnnotationTableSortKey } from './annotationTableSorting';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
+import type { AnnotationType } from '@/composables/useToolStore';
 
 import { useAnnotationTableFilter } from '@/composables/useAnnotationTableFilter';
 import { useContainerQuery } from '@/composables/useContainerQuery';
 import {
   getAnnotationSeverityDisplay,
   type AnnotationSeverity,
-  type AnnotationType,
 } from '@/types/auth';
 
 // ----------------------------------------------------------------------

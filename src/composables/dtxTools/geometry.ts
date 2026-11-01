@@ -28,12 +28,14 @@ export function measureLabelSize(el: HTMLElement): { width: number; height: numb
 }
 
 export function escapeAnnotationLabelText(value: string): string {
+  // `String.prototype.replaceAll` 需要 lib ES2021，本工程 lib 是 ES2020；
+  // `split(sep).join(repl)` 对字符串参数与 replaceAll 完全等价（同样是全量、无正则转义问题）。
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('\'', '&#39;');
+    .split('&').join('&amp;')
+    .split('<').join('&lt;')
+    .split('>').join('&gt;')
+    .split('"').join('&quot;')
+    .split('\'').join('&#39;');
 }
 
 export function vec3ToTuple(v: Vector3): Vec3 {

@@ -2,13 +2,13 @@
  * 三维可视件工厂：云线 / 矩形 / OBB 的线框几何与材质，及 dispose。
  * 从 useDtxTools.ts 拆出（docs/plans/2026-10-26-usedtxtools-split-plan.md 第 1 步），实现未改。
  */
-import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
-import { Box3, BufferAttribute, BufferGeometry, Group, LineDashedMaterial, LineSegments, Raycaster, Vector2, Vector3 } from 'three';
+import { MeshLine, MeshLineGeometry } from '@lume/three-meshline';
+import { Box3, BufferAttribute, BufferGeometry, Color, Group, LineDashedMaterial, LineSegments, Raycaster, Vector2, Vector3 } from 'three';
 
 import { topCenterFromBox3 } from './annotationRecords';
 import { CLOUD_BBOX_EDGE_INDEX_PAIRS, dashSizeFromLineSegments } from './cloudGeometry';
 import { parseRefnoFromDtxObjectId } from './geometry';
-import { buildAnnotationLeaderStyle, createAnnotationLeader } from './leaderVisual';
+import { buildAnnotationLeaderStyle, createAnnotationLeader, createMeshLineMaterial } from './leaderVisual';
 
 import type { BoxOverlayEl, CloudAnnotationVisual, RectAnnotationVisual } from './types';
 import type { CloudAnnotationRecord, ObbAnnotationRecord, RectAnnotationRecord, Vec3 } from '@/composables/useToolStore';
@@ -220,8 +220,10 @@ export function createCloudAnnotationVisual(
   // 小针与盒边用 LineDashedMaterial：正常态 gapSize 0 等价实线，记录降级（ADR-0050）时只改 dash / gap 就是虚线，不必换材质
   const pinMaterial = new LineDashedMaterial({ color: cloudSt.color, dashSize: 1, gapSize: 0 });
   const outlineGeometry = new MeshLineGeometry();
-  const outlineMaterial = new MeshLineMaterial({
-    color: cloudSt.color,
+  const outlineMaterial = createMeshLineMaterial({
+    // 同 leaderVisual：MeshLineMaterial.color 类型为 three `Color`，传数字会经
+    // `Material.setValues` 的 `currentValue.set(number)` 转成同一结果，显式构造不改行为。
+    color: new Color(cloudSt.color),
     lineWidth: cloudSt.linewidth,
     transparent: true,
     opacity: cloudSt.opacity,

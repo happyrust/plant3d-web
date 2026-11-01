@@ -657,7 +657,7 @@ defineExpose({
             type="button"
             class="h-7 rounded-md px-2 text-xs font-medium text-brand transition-colors hover:bg-brand-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             data-testid="file-upload-start-button"
-            @click.stop="startUpload">
+            @click.stop="startUpload()">
             开始上传
           </button>
           <button v-if="!disabled"

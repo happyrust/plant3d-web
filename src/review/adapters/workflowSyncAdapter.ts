@@ -120,6 +120,11 @@ export function buildSnapshotFromWorkflowSync(
 
   for (let recordIndex = 0; recordIndex < mergedRecords.length; recordIndex += 1) {
     const merged = mergedRecords[recordIndex];
+    // mergedRecords 由 records.map 产出，长度与 records 一致；下标取空时原代码同样会在
+    // 读 merged.annotations 处抛 TypeError，这里显式保持同一行为。
+    if (!merged) {
+      throw new Error(`merged workflow record missing at index ${recordIndex}`);
+    }
     const sourceRecord = records[recordIndex];
     const recordTaskId = typeof sourceRecord?.taskId === 'string' ? sourceRecord.taskId : snapshot.taskId;
 
@@ -254,10 +259,18 @@ function appendMeasurements(
     if (!raw || typeof raw !== 'object') continue;
     const measurementId = typeof raw.id === 'string' ? raw.id : '';
     if (!measurementId) continue;
+    // 先把 kind 从原始对象里摘出来：它声明为 unknown，直接展开会让 payload.kind 变成 unknown，
+    // 而 ReviewSnapshotMeasurementPayload.kind 只能是 string。非字符串的 kind 一律不写该键，
+    // 与旧行为一致（下游只看 payload.kind 是否为字符串来决定是否补 kind）。
+    const { kind: rawKind, ...rest } = raw;
     snapshot.measurements.push({
       measurementId,
-      kind: normalizeMeasurementKind(raw.kind),
-      payload: { ...raw },
+      kind: normalizeMeasurementKind(rawKind),
+      payload: {
+        ...rest,
+        id: measurementId,
+        ...(typeof rawKind === 'string' ? { kind: rawKind } : {}),
+      },
     });
   }
 }

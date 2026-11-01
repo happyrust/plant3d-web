@@ -19,12 +19,18 @@ import {
 import { isComputationProvenance } from '@/measurement/domain/computationProvenance';
 import { fromBackendRole, type AnnotationComment } from '@/types/auth';
 
-type ReplayRecordLike = {
-  annotations: unknown[];
-  cloudAnnotations: unknown[];
-  rectAnnotations: unknown[];
-  obbAnnotations: unknown[];
-  measurements: ReviewSnapshotMeasurementPayload[];
+/**
+ * 回放适配器共用的记录形状：toolStoreAdapter 用伪记录复用同一条 V7 序列化实现，
+ * confirmedRecordsRestore 直接喂 `ConfirmedRecord[]`（measurements 是经典
+ * `MeasurementRecord[]`，obbAnnotations 可选），所以各集合字段只能是只读且可缺省的
+ * `unknown[]`，具体形状由 `buildReplayMeasurements` 在运行时归一。
+ */
+export type ReplayRecordLike = {
+  annotations?: readonly unknown[];
+  cloudAnnotations?: readonly unknown[];
+  rectAnnotations?: readonly unknown[];
+  obbAnnotations?: readonly unknown[];
+  measurements?: readonly unknown[];
   id?: unknown;
   taskId?: unknown;
   formId?: unknown;
@@ -70,7 +76,7 @@ function normalizeWorkflowComment(raw: WorkflowAnnotationCommentData): Annotatio
 }
 
 function attachCommentsToItems(
-  items: unknown[],
+  items: readonly unknown[],
   annotationType: AnnotationTypeKey,
   groupedComments: Map<string, AnnotationComment[]>,
 ): unknown[] {
@@ -103,9 +109,10 @@ function getRecordTaskId(record: ReplayRecordLike, options: ReviewRecordReplayOp
 }
 
 function injectContextIntoItems(
-  items: unknown[],
+  items: readonly unknown[],
   context: { formId?: string; taskId?: string },
-): unknown[] {
+): readonly unknown[] {
+  // 无上下文时原样返回入参（不复制），保持旧实现的引用语义。
   if (!context.formId && !context.taskId) return items;
 
   return items.map((item) => {
@@ -140,7 +147,7 @@ function parseReplayRecordTimestamp(record: ReplayRecordLike): number {
 }
 
 function normalizeReplayRecords(
-  records: ReplayRecordLike[],
+  records: readonly ReplayRecordLike[],
   options: ReviewRecordReplayOptions,
 ): ReplayRecordLike[] {
   return records
@@ -160,7 +167,7 @@ function normalizeReplayRecords(
         cloudAnnotations: injectContextIntoItems(record.cloudAnnotations ?? [], context),
         rectAnnotations: injectContextIntoItems(record.rectAnnotations ?? [], context),
         obbAnnotations: injectContextIntoItems(record.obbAnnotations ?? [], context),
-        measurements: injectContextIntoItems(record.measurements ?? [], context) as ReviewSnapshotMeasurementPayload[],
+        measurements: injectContextIntoItems(record.measurements ?? [], context),
       };
     });
 }
@@ -207,8 +214,11 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   const sourceAnnotationId = typeof record.sourceAnnotationId === 'string'
     ? record.sourceAnnotationId
     : undefined;
+  // MeasurementSourceLink.sourceAnnotationType 是 AnnotationType 四值联合。
+  // 只有落在这四个值里才可能匹配到批注（消费侧是 `sourceAnnotationType !== annotation.type`），
+  // 历史脏值原本也永远匹配不上，这里归一为 undefined 保持同一判定结果。
   const sourceAnnotationType = typeof record.sourceAnnotationType === 'string'
-    ? record.sourceAnnotationType
+    ? normalizeAnnotationType(record.sourceAnnotationType) ?? undefined
     : undefined;
   const formId = typeof record.formId === 'string'
     ? record.formId.trim() || undefined
@@ -320,20 +330,22 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   return null;
 }
 
-function buildReplayMeasurements(measurements: ReviewSnapshotMeasurementPayload[]): {
+function buildReplayMeasurements(measurements: readonly unknown[]): {
   measurements: UnifiedMeasurementRecord[];
-  legacyMeasurements: ReviewSnapshotMeasurementPayload[];
+  legacyMeasurements: unknown[];
 } {
   const unifiedMeasurements: UnifiedMeasurementRecord[] = [];
-  const legacyMeasurements: ReviewSnapshotMeasurementPayload[] = [];
+  const legacyMeasurements: unknown[] = [];
 
   for (const measurement of measurements) {
     if (isUnifiedMeasurementRecord(measurement)) {
       unifiedMeasurements.push(normalizeUnifiedMeasurementRecord(measurement));
       continue;
     }
-    const normalized = normalizeReplayMeasurement(measurement as unknown);
+    const normalized = normalizeReplayMeasurement(measurement);
     if (!normalized) {
+      // 认不出的历史测量原样透传到 legacyMeasurements 旁路（V7 payload 里就是 unknown[]），
+      // 不做任何字段猜测。
       legacyMeasurements.push(measurement);
       continue;
     }
@@ -345,7 +357,7 @@ function buildReplayMeasurements(measurements: ReviewSnapshotMeasurementPayload[
 
   return {
     measurements: dedupeReplayItems(unifiedMeasurements) as UnifiedMeasurementRecord[],
-    legacyMeasurements: dedupeReplayItems(legacyMeasurements) as ReviewSnapshotMeasurementPayload[],
+    legacyMeasurements: dedupeReplayItems(legacyMeasurements),
   };
 }
 
@@ -383,12 +395,12 @@ export function mergeWorkflowCommentsIntoRecords(
     measurements: injectContextIntoItems(
       record.measurements ?? [],
       { formId, taskId: normalizeOptionalContext(record.taskId) },
-    ) as ReviewSnapshotMeasurementPayload[],
+    ),
   }));
 }
 
 export function buildReviewRecordReplayPayload(
-  records: ReplayRecordLike[],
+  records: readonly ReplayRecordLike[],
   options: ReviewRecordReplayOptions = {},
 ): string {
   const normalizedRecords = normalizeReplayRecords(records, options);

@@ -39,7 +39,9 @@ export function canReturnAtCurrentNode(currentNode?: WorkflowNode): boolean {
 
 export function getDefaultReturnTargetNode(currentNode?: WorkflowNode): WorkflowNode {
   const idx = WORKFLOW_NODE_ORDER.indexOf(currentNode ?? 'sj');
-  return idx > 0 ? WORKFLOW_NODE_ORDER[idx - 1] : 'sj';
+  // WORKFLOW_NODE_ORDER 是 sj/jd/sh/pz 四元素常量数组，idx > 0 时 idx-1 必在范围内；
+  // 取不到时原代码返回 undefined 会被下游当节点用而崩，这里显式退回 'sj'（与 idx <= 0 分支一致）。
+  return idx > 0 ? WORKFLOW_NODE_ORDER[idx - 1] ?? 'sj' : 'sj';
 }
 
 export function getAvailableReturnNodes(currentNode?: WorkflowNode): WorkflowNode[] {
@@ -436,7 +438,9 @@ export function buildUnsavedReviewConfirmPayload(
     cloudAnnotations: diffSnapshotCollection(current.cloudAnnotations, baseline.cloudAnnotations),
     rectAnnotations: diffSnapshotCollection(current.rectAnnotations, baseline.rectAnnotations),
     obbAnnotations: diffSnapshotCollection(current.obbAnnotations, baseline.obbAnnotations),
-    measurements: diffSnapshotCollection(current.measurements, baseline.measurements),
+    // diffSnapshotCollection 保持逐项原样透传（只做 id/内容比对），因此返回值就是 measurements 的子集，
+    // 这里补回元素类型即可，不改运行路径。
+    measurements: diffSnapshotCollection(current.measurements, baseline.measurements) as ReviewSnapshotMeasurementPayload[],
     ...(JSON.stringify(normalizeDimensionDocumentForComparison(current) ?? null)
       !== JSON.stringify(normalizeDimensionDocumentForComparison(baseline) ?? null)
       ? {

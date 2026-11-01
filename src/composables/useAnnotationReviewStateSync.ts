@@ -224,6 +224,9 @@ export function applyAnnotationReviewStatesToToolStore(
   for (const view of pickLatestAnnotationStates(views)) {
     const annotationId = view.annotationId.trim();
     const normalized = normalizeAnnotationReviewStateView(view);
+    // `pickLatestAnnotationStates` 只保留 `isValidAnnotationType` 通过的条目，
+    // 这里再窄化一次让类型与运行时不变式对齐（不通过就跳过，与原逻辑一致）。
+    if (!isValidAnnotationType(view.annotationType)) continue;
     const ok = store.setAnnotationReviewState(view.annotationType, annotationId, normalized);
     if (ok) appliedCount += 1;
   }

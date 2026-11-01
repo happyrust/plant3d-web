@@ -515,6 +515,10 @@ async function gunzipToText(data: Uint8Array): Promise<string> {
     );
   }
   const ds = new DS('gzip');
-  const stream = new Blob([data]).stream().pipeThrough(ds);
+  // TS 5.9 起 `Uint8Array` 带 ArrayBuffer 泛型参数，入参可能是 `Uint8Array<ArrayBufferLike>`
+  // （含 SharedArrayBuffer），而 DOM 的 `BlobPart` 只收 ArrayBuffer 支撑的视图。
+  // `new Uint8Array(data)` 复制一份到普通 ArrayBuffer 上，字节内容一致，只为满足类型。
+  const bytes = new Uint8Array(data);
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
   return await new Response(stream).text();
 }

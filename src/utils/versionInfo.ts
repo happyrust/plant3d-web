@@ -67,8 +67,10 @@ function normalizeVersionInfo(raw: unknown): VersionInfo | null {
   // 如果后端返回的时间包含 UTC+8 或 UTC，转换为北京时间显示（跨时区稳定）
   if (buildDate !== '未知' && (buildDate.includes('UTC') || buildDate.includes('UTC+8'))) {
     const utcMatch = buildDate.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
-    if (utcMatch) {
-      const dateStr = utcMatch[1];
+    // noUncheckedIndexedAccess：match 结果下标带 undefined；有 match 就一定有位 1（分组存在），
+    // 这里显式判空，缺失时跳过转换（等价于原逻辑里不可能发生的分支）。
+    const dateStr = utcMatch?.[1];
+    if (dateStr) {
       // UTC+8 → 字符串已经是北京墙钟时间，用 'Z' 作为 UTC 解析再直接 formatMsAsBeijing 保形
       // UTC    → 字符串是 UTC 时间，formatMsAsBeijing 会自动加 8 小时
       const isoLike = buildDate.includes('UTC+8')

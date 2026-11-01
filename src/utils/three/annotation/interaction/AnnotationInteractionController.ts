@@ -11,7 +11,7 @@ import { ref, shallowRef, type Ref, type ShallowRef } from 'vue';
 
 import * as THREE from 'three';
 
-import type { AnnotationBase } from './core/AnnotationBase';
+import type { AnnotationBase } from '../core/AnnotationBase';
 
 export type AnnotationInteractionOptions = {
   /** 是否启用悬停高亮 */

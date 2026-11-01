@@ -19,8 +19,13 @@ let applied = false;
 export function applyMeshLineShaderCompat(): void {
   if (applied) return;
 
-  const meshlineVert = ShaderChunk.meshline_vert;
-  const commonChunk = ShaderChunk.common;
+  // `@lume/three-meshline` 在模块求值时把 `meshline_vert` / `meshline_frag` 注册进
+  // `THREE.ShaderChunk`（见包内 `meshline.glsl.js`），但 `@types/three` 的 `ShaderChunk`
+  // 只声明了 three 自带的 chunk，没有这两个键。这里按「三方扩展过的注册表」读，
+  // 运行时对象不变，只是补上索引签名。
+  const chunks = ShaderChunk as typeof ShaderChunk & Record<string, string | undefined>;
+  const meshlineVert = chunks.meshline_vert;
+  const commonChunk = chunks.common;
 
   if (typeof meshlineVert !== 'string' || meshlineVert.length === 0) {
     applied = true;
@@ -37,7 +42,7 @@ export function applyMeshLineShaderCompat(): void {
     return;
   }
 
-  ShaderChunk.meshline_vert = `${commonChunk}\n${meshlineVert}`;
+  chunks.meshline_vert = `${commonChunk}\n${meshlineVert}`;
   applied = true;
 }
 

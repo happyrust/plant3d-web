@@ -45,22 +45,32 @@ function normalizeCollisionObjectIds(item: CollisionItem): string[] {
     .filter((value): value is string => !!value);
 }
 
+/**
+ * DtxCompatScene 没有 `setObjectsHighlighted` / `highlightedObjectIds`（碰撞高亮走的是
+ * viewer 的兼容扩展），这里按运行时实际存在的可选能力取用，不做任何行为变更。
+ */
+type SceneWithHighlight = {
+  highlightedObjectIds?: string[];
+  setObjectsHighlighted?: (objectIds: string[], highlighted: boolean) => void;
+};
+
+function getSceneWithHighlight(): SceneWithHighlight | null {
+  const viewer = viewerContext.viewerRef.value as { scene?: unknown } | null;
+  const scene = viewer?.scene;
+  if (!scene || typeof scene !== 'object') return null;
+  return scene as SceneWithHighlight;
+}
+
 function clearViewerHighlight(): void {
-  const viewer = viewerContext.viewerRef.value as {
-    scene?: {
-      highlightedObjectIds?: string[];
-      setObjectsHighlighted?: (objectIds: string[], highlighted: boolean) => void;
-    };
-  } | null;
+  const scene = getSceneWithHighlight();
+  if (!scene?.setObjectsHighlighted) return;
 
-  if (!viewer?.scene?.setObjectsHighlighted) return;
-
-  const highlighted = Array.isArray(viewer.scene.highlightedObjectIds)
-    ? viewer.scene.highlightedObjectIds
+  const highlighted = Array.isArray(scene.highlightedObjectIds)
+    ? scene.highlightedObjectIds
     : [];
 
   if (highlighted.length > 0) {
-    viewer.scene.setObjectsHighlighted(highlighted, false);
+    scene.setObjectsHighlighted(highlighted, false);
   }
 }
 
@@ -142,15 +152,16 @@ function handleCollisionLocate(item: CollisionItem) {
 
 function handleCollisionHighlight(item: CollisionItem) {
   const viewer = viewerContext.viewerRef.value;
+  const scene = getSceneWithHighlight();
   const objectIds = normalizeCollisionObjectIds(item);
-  if (!viewer?.scene?.setObjectsHighlighted || objectIds.length === 0) return;
+  if (!scene?.setObjectsHighlighted || objectIds.length === 0) return;
 
   clearViewerHighlight();
 
-  const existingObjectIds = objectIds.filter((objectId) => !!viewer.scene?.getAABB?.([objectId]));
+  const existingObjectIds = objectIds.filter((objectId) => !!viewer?.scene?.getAABB?.([objectId]));
   if (existingObjectIds.length === 0) return;
 
-  viewer.scene.setObjectsHighlighted(existingObjectIds, true);
+  scene.setObjectsHighlighted(existingObjectIds, true);
 }
 
 // 辅助数据

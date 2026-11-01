@@ -401,8 +401,12 @@ export function resolveMaterialForInstance(
     defaultMaterial.color !== undefined ? defaultMaterial.color : (DEFAULT_MATERIAL.color ?? '#90a4ae');
   let colorValue = chosen.color ?? fallbackColor;
   // 按专业覆盖颜色：spec_value 1=PIPE 2=ELEC 3=INST 4=HVAC 5=CIVIL 6=STRU（0=未分类，不覆盖）
-  if (spec_value != null && spec_value > 0 && disciplineOverrides[String(spec_value)]) {
-    colorValue = disciplineOverrides[String(spec_value)];
+  // noUncheckedIndexedAccess：下标查表带 undefined，取一次局部变量后判空，语义与原来的「有值才覆盖」一致。
+  const disciplineColor = spec_value != null && spec_value > 0
+    ? disciplineOverrides[String(spec_value)]
+    : undefined;
+  if (disciplineColor) {
+    colorValue = disciplineColor;
   }
   const baseMetalness = typeof defaultMaterial.metalness === 'number' ? defaultMaterial.metalness : 0.1;
   const baseRoughness = typeof defaultMaterial.roughness === 'number' ? defaultMaterial.roughness : 0.5;

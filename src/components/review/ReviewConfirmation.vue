@@ -15,8 +15,17 @@ import {
 } from './reviewPanelActions';
 import { resolvePassiveWorkflowMode } from './workflowMode';
 
+import type { ConfirmedRecord } from '@/composables/useReviewStore';
+
 import { useReviewStore } from '@/composables/useReviewStore';
-import { useToolStore } from '@/composables/useToolStore';
+import {
+  useToolStore,
+  type AnnotationRecord,
+  type CloudAnnotationRecord,
+  type MeasurementRecord,
+  type ObbAnnotationRecord,
+  type RectAnnotationRecord,
+} from '@/composables/useToolStore';
 import { emitToast } from '@/ribbon/toastBus';
 
 const props = withDefaults(defineProps<{
@@ -139,20 +148,24 @@ async function confirmCurrentData() {
 
   confirmSaving.value = true;
   confirmError.value = null;
+  // 证据快照里的批注/测量在 ReviewConfirmSnapshotPayload 上是 unknown[]（历史记录结构可能更旧），
+  // 写入侧由 buildReviewConfirmSnapshotPayload 保证形状；这里按 ConfirmedRecord 的字段类型标注，
+  // 与 useReviewStore 内部同路径的写法一致。
+  const payload: Omit<ConfirmedRecord, 'id' | 'confirmedAt'> = {
+    type: 'batch' as const,
+    annotations: [...unsavedConfirmPayload.value.annotations] as AnnotationRecord[],
+    cloudAnnotations: [...unsavedConfirmPayload.value.cloudAnnotations] as CloudAnnotationRecord[],
+    rectAnnotations: [...unsavedConfirmPayload.value.rectAnnotations] as RectAnnotationRecord[],
+    obbAnnotations: [...unsavedConfirmPayload.value.obbAnnotations] as ObbAnnotationRecord[],
+    measurements: [...unsavedConfirmPayload.value.measurements] as MeasurementRecord[],
+    dimensionDocument: unsavedConfirmPayload.value.dimensionDocument,
+    dimensionDocumentVersion: unsavedConfirmPayload.value.dimensionDocumentVersion,
+    note: confirmNote.value.trim(),
+  };
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: hasUnsavedPendingData.value,
-      payload: {
-        type: 'batch' as const,
-        annotations: [...unsavedConfirmPayload.value.annotations],
-        cloudAnnotations: [...unsavedConfirmPayload.value.cloudAnnotations],
-        rectAnnotations: [...unsavedConfirmPayload.value.rectAnnotations],
-        obbAnnotations: [...unsavedConfirmPayload.value.obbAnnotations],
-        measurements: [...unsavedConfirmPayload.value.measurements],
-        dimensionDocument: unsavedConfirmPayload.value.dimensionDocument,
-        dimensionDocumentVersion: unsavedConfirmPayload.value.dimensionDocumentVersion,
-        note: confirmNote.value.trim(),
-      },
+      payload,
       addConfirmedRecord: reviewStore.addConfirmedRecord,
       clearDraftData: () => {},
       resetNote: () => {

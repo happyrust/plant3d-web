@@ -114,6 +114,11 @@ export function buildCommentThreadIndex(
       entry.threadOrder = idx;
     });
     const sample = bucket[0];
+    // bucket 在上面的循环里刚 push 过，恒非空；取不到时原代码读 sample.annotationId
+    // 同样会抛 TypeError，这里显式保持同一失败行为。
+    if (!sample) {
+      throw new Error(`comment thread bucket empty for key ${key}`);
+    }
     byKey.set(key, {
       key,
       annotationId: sample.annotationId,

@@ -153,18 +153,20 @@ async function renderAllBranchChildren() {
     }
   }
 
-  if (loaded.length === 0) {
+  // noUncheckedIndexedAccess 下 `loaded[0]` 带 undefined；长度已在上方判空，这里再取一次局部变量做窄化。
+  const [firstLoaded, ...restLoaded] = loaded;
+  if (!firstLoaded) {
     branchError.value = '批量绘制时未取回任何有效 ptset';
     return;
   }
 
-  ptsetVis.value.setPanelContext(contextRefno.value ?? loaded[0].refno);
-  ptsetVis.value.renderPtset(loaded[0].refno, loaded[0].response);
-  for (const item of loaded.slice(1)) {
+  ptsetVis.value.setPanelContext(contextRefno.value ?? firstLoaded.refno);
+  ptsetVis.value.renderPtset(firstLoaded.refno, firstLoaded.response);
+  for (const item of restLoaded) {
     ptsetVis.value.appendPtset(item.refno, item.response, { setCurrent: false });
   }
   ptsetVis.value.flyToPtset();
-  branchSelectedRefno.value = loaded[0].refno;
+  branchSelectedRefno.value = firstLoaded.refno;
   branchRenderedAll.value = loaded.length > 1;
   branchError.value = null;
 }

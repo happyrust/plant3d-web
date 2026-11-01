@@ -73,7 +73,10 @@ export function createCommentEventLog(
       // 取 chronological 末尾 `want` 条
       for (let i = total - want; i < total; i += 1) {
         const idx = (start + i) % capacity;
-        out.push(buffer[idx]);
+        // count 只统计已写入的槽位，start 由 count/head 反推，取到的槽位必已写入；
+        // 这里跳过空槽（环形缓冲尚未填满的历史空洞），不改变正常路径的返回内容。
+        const entry = buffer[idx];
+        if (entry) out.push(entry);
       }
       return out;
     },

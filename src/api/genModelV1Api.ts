@@ -87,7 +87,10 @@ export class GenModelV1ApiError extends Error {
   readonly hasEnvelope: boolean;
 
   constructor(init: GenModelV1ApiErrorInit) {
-    super(init.message, init.cause !== undefined ? { cause: init.cause } : undefined);
+    // 本项目 `lib` 停在 ES2020（`ErrorOptions` 是 ES2022 才进 lib），`super(msg, { cause })` 过不了类型检查。
+    // 行为不变：`cause` 是类字段，`useDefineForClassFields` 下 super() 之后一定被重新定义，
+    // 实际值来自下面这行 `this.cause = init.cause`——原来的第二参数在运行时并没有留下任何效果。
+    super(init.message);
     this.name = 'GenModelV1ApiError';
     this.code = init.code;
     this.status = init.status;

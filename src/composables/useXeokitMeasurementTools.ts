@@ -925,13 +925,15 @@ export function useXeokitMeasurementTools(options: {
       );
     const key = entries.map((entry) => entry.refno).join('|');
     if (key === shownPtsetKey) return;
-    if (entries.length === 0) {
+    // noUncheckedIndexedAccess：`entries[0]` 带 undefined；上方已判空，这里再窄化一次。
+    const [firstEntry, ...restEntries] = entries;
+    if (!firstEntry) {
       ptsetHoverViz.clearVisualization();
       shownPtsetKey = null;
       return;
     }
-    ptsetHoverViz.renderPtset(entries[0].refno, entries[0].resp);
-    for (const entry of entries.slice(1)) {
+    ptsetHoverViz.renderPtset(firstEntry.refno, firstEntry.resp);
+    for (const entry of restEntries) {
       ptsetHoverViz.appendPtset(entry.refno, entry.resp, { setCurrent: false });
     }
     ptsetHoverViz.setVisible(true);
@@ -3128,7 +3130,9 @@ export function useXeokitMeasurementTools(options: {
     screen: Readonly<{ x: number; y: number }>,
   ): readonly MeasurementViewerSnapCandidate[] {
     const selection = selectionRef.value;
-    const picked = selection?.pickPoint({ x: screen.x, y: screen.y }) ?? null;
+    // DTXSelectionController.pickPoint 收 Vector2；直接 new Vector2(x, y) 与传字面量 {x,y}
+    // 在实现里只读 .x/.y，等价。
+    const picked = selection?.pickPoint(new Vector2(screen.x, screen.y)) ?? null;
     const base: PickHit | null = picked
       ? {
         entityId: picked.objectId,

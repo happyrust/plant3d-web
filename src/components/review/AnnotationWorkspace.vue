@@ -27,7 +27,8 @@ import {
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 
-import type { AnnotationSeverity, AnnotationType } from '@/types/auth';
+import type { AnnotationType } from '@/composables/useToolStore';
+import type { AnnotationSeverity } from '@/types/auth';
 
 type AnnotationWorkspaceDensity = 'normal' | 'dock';
 

@@ -3,11 +3,35 @@
  * 从 useDtxTools.ts 拆出（docs/plans/2026-10-26-usedtxtools-split-plan.md 第 1 步），实现未改。
  */
 import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
-import { Group, Vector2, Vector3 } from 'three';
+import { Color, Group, Vector2, Vector3 } from 'three';
 
 import type { AnnotationLeaderKind, AnnotationLeaderStyle, AnnotationLeaderVisual } from './types';
 
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
+
+/**
+ * `@lume/three-meshline` 的 d.ts 把构造参数声明成 `ShaderMaterialParameters & MeshLineMaterial`
+ * （本应是 `Partial<...>`），导致调用方被要求提供 85 个实例成员。运行时构造函数只做
+ * `super({uniforms, vertexShader, fragmentShader})` 再 `this.setValues(parameters)`，
+ * 所以真实参数形状就是下面这个结构。这里只把「参数对象」标注成真实形状，
+ * 构造时补一层到库声明类型的断言（不是 any，也不改变运行时）。
+ */
+type MeshLineMaterialInit = {
+  color?: Color
+  lineWidth?: number
+  transparent?: boolean
+  opacity?: number
+  depthTest?: boolean
+  depthWrite?: boolean
+  sizeAttenuation?: boolean
+  resolution?: Vector2
+}
+
+type MeshLineMaterialCtorArg = ConstructorParameters<typeof MeshLineMaterial>[0]
+
+export function createMeshLineMaterial(init: MeshLineMaterialInit): MeshLineMaterial {
+  return new MeshLineMaterial(init as MeshLineMaterialCtorArg);
+}
 
 export function buildAnnotationLeaderStyle(kind: AnnotationLeaderKind): AnnotationLeaderStyle {
   const { style } = useAnnotationStyleStore();
@@ -52,8 +76,13 @@ export function createAnnotationLeader(
   haloGeometry.setPoints(positions);
   const coreGeometry = new MeshLineGeometry();
   coreGeometry.setPoints(positions);
-  const haloMaterial = new MeshLineMaterial({
-    color: style.haloColor,
+  // 库的 d.ts 把构造参数写成 `ShaderMaterialParameters & MeshLineMaterial`（应为 Partial），
+  // 于是调用方被要求提供 85 个实例成员。运行时构造只读下面这几个字段，先按真实参数形状建对象，
+  // 再单层断言到库声明类型（不是 any，也不改运行时）。
+  // 另外 `color` 显式构造成 `Color`：原来传数字时 three 的 `Material.setValues`
+  // 会走 `currentValue.set(number)`，结果等价，颜色不变。
+  const haloMaterial = createMeshLineMaterial({
+    color: new Color(style.haloColor),
     lineWidth: style.haloLinewidth,
     transparent: true,
     opacity: style.haloOpacity,
@@ -62,8 +91,8 @@ export function createAnnotationLeader(
     sizeAttenuation: false,
     resolution: new Vector2(1, 1),
   });
-  const coreMaterial = new MeshLineMaterial({
-    color: style.color,
+  const coreMaterial = createMeshLineMaterial({
+    color: new Color(style.color),
     lineWidth: style.linewidth,
     transparent: true,
     opacity: style.opacity,

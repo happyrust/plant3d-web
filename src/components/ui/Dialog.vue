@@ -188,7 +188,11 @@ onBeforeUnmount(() => {
 });
 
 if (import.meta.env.MODE === 'test') {
-  window.__dialogScrollLockTestReset__ = resetScrollLockState;
+  // 与上面 `dialogWindow` 同一做法：测试钩子只在测试里挂，用局部窄化，不动全局 Window 类型。
+  const testWindow = window as Window & {
+    __dialogScrollLockTestReset__?: () => void;
+  };
+  testWindow.__dialogScrollLockTestReset__ = resetScrollLockState;
 }
 </script>
 

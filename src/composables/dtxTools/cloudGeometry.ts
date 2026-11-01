@@ -255,8 +255,11 @@ function buildCloudWavyRectanglePoints2D(
     }
   }
 
-  if (points.length > 0) {
-    points.push({ ...points[0] });
+  // 闭合回第一个点；noUncheckedIndexedAccess 下 `points[0]` 带 undefined，
+  // 长度已判非空，缺失时直接跳过闭合（原实现会 push `{...undefined}` 得到空对象，闭合点无效）。
+  const firstPoint = points[0];
+  if (firstPoint) {
+    points.push({ ...firstPoint });
   }
 
   return points;

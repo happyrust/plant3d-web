@@ -11,18 +11,14 @@
  */
 
 import type { ReviewSnapshot } from '../domain/reviewSnapshot';
+import type { ReviewSnapshotMeasurementPayload } from '@/api/reviewApi';
 
-import { buildReviewRecordReplayPayload } from '@/components/review/reviewRecordReplay';
+import {
+  buildReviewRecordReplayPayload,
+  type ReplayRecordLike,
+} from '@/components/review/reviewRecordReplay';
 
-type ReplayRecordLike = {
-  annotations: unknown[];
-  cloudAnnotations: unknown[];
-  rectAnnotations: unknown[];
-  obbAnnotations: unknown[];
-  measurements: unknown[];
-};
-
-function lowerSnapshotMeasurements(snapshot: ReviewSnapshot): unknown[] {
+function lowerSnapshotMeasurements(snapshot: ReviewSnapshot): ReviewSnapshotMeasurementPayload[] {
   return snapshot.measurements.map((measurement) => ({
     ...measurement.payload,
     ...(typeof measurement.payload.kind === 'string' || measurement.kind === 'unknown'
@@ -32,30 +28,36 @@ function lowerSnapshotMeasurements(snapshot: ReviewSnapshot): unknown[] {
 }
 
 export function buildReplayPayloadFromSnapshot(snapshot: ReviewSnapshot): string {
-  const fakeRecord: ReplayRecordLike = {
-    annotations: [],
-    cloudAnnotations: [],
-    rectAnnotations: [],
-    obbAnnotations: [],
-    measurements: lowerSnapshotMeasurements(snapshot),
-  };
+  // 分桶容器是本地可变的临时数组，最后才作为只读记录交给序列化实现。
+  const annotations: unknown[] = [];
+  const cloudAnnotations: unknown[] = [];
+  const rectAnnotations: unknown[] = [];
+  const obbAnnotations: unknown[] = [];
 
   for (const annotation of snapshot.annotations) {
     switch (annotation.annotationType) {
       case 'text':
-        fakeRecord.annotations.push(annotation.payload);
+        annotations.push(annotation.payload);
         break;
       case 'cloud':
-        fakeRecord.cloudAnnotations.push(annotation.payload);
+        cloudAnnotations.push(annotation.payload);
         break;
       case 'rect':
-        fakeRecord.rectAnnotations.push(annotation.payload);
+        rectAnnotations.push(annotation.payload);
         break;
       case 'obb':
-        fakeRecord.obbAnnotations.push(annotation.payload);
+        obbAnnotations.push(annotation.payload);
         break;
     }
   }
+
+  const fakeRecord: ReplayRecordLike = {
+    annotations,
+    cloudAnnotations,
+    rectAnnotations,
+    obbAnnotations,
+    measurements: lowerSnapshotMeasurements(snapshot),
+  };
 
   return buildReviewRecordReplayPayload([fakeRecord]);
 }

@@ -85,7 +85,9 @@ function pushMeasurements(
       kind: normalizeMeasurementKind(payload.kind) === 'unknown'
         ? fallbackKind
         : normalizeMeasurementKind(payload.kind),
-      payload,
+      // ReviewSnapshotMeasurementPayload 的 id 必填为 string；payload.id 已在上方窄化成非空字符串，
+      // 显式写回以免丢掉这一项。
+      payload: { ...payload, id: measurementId },
     });
   }
 }

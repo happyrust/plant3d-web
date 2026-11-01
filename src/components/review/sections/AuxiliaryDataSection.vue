@@ -6,13 +6,8 @@ import { Database, Search, MapPin, Highlighter } from 'lucide-vue-next';
 import CollisionResultList from '../CollisionResultList.vue';
 import ReviewAuxData from '../ReviewAuxData.vue';
 
+import type { CollisionItem } from '@/api/reviewApi';
 import type { ReviewTask } from '@/types/auth';
-
-interface CollisionItem {
-  ObjectOne: string;
-  ObjectTow: string;
-  Distance: number;
-}
 
 interface Props {
   task: ReviewTask | null;
@@ -67,7 +62,10 @@ const effectiveProjectId = computed(() => props.projectId || 'default');
 
     <!-- 碰撞查询 -->
     <div v-show="activeTab === 'collision'" class="space-y-3">
+      <!-- CollisionResultList 的必填 props 是 items + total（列表头部「共 N 条」用它）。
+           此前只传了 items，total 一直是 undefined，头部数字为空；这里补成当前列表长度。 -->
       <CollisionResultList :items="collisionData"
+        :total="collisionData.length"
         :loading="collisionLoading"
         @locate="emit('locate', $event)"
         @highlight="emit('highlight', $event)" />

@@ -43,7 +43,9 @@ function loadPersisted(): PersistedStateV2 {
     const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
     const raw = rawV2 ?? localStorage.getItem(STORAGE_KEY_V1);
     if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as Partial<PersistedStateV2> & { version?: number };
+    // `PersistedStateV2.version` 是字面量 2，但这里同时要读 V1 的存量 JSON（version 为 1），
+    // 所以把 version 放宽成 number 再判，判据与运行时行为一致。
+    const parsed = JSON.parse(raw) as Omit<Partial<PersistedStateV2>, 'version'> & { version?: number };
     if (parsed.version !== 1 && parsed.version !== 2) return defaults;
 
     const modelUnit: ModelUnit = parsed.modelUnit === 'm' || parsed.modelUnit === 'raw' ? parsed.modelUnit : 'mm';
