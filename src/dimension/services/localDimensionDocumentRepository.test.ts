@@ -38,19 +38,19 @@ describe('LocalStorageDimensionDocumentRepository', () => {
       storage,
       scopeB,
     );
-    const initialA = await repositoryA.load({});
+    const initialA = await repositoryA.load();
     const saved = await repositoryA.save({
       ...initialA,
       records: [linearRecord({ id: 'local-a' })],
     });
 
     expect(saved.ok).toBe(true);
-    await expect(repositoryA.load({})).resolves.toMatchObject({
+    await expect(repositoryA.load()).resolves.toMatchObject({
       documentId: localDimensionDocumentId(scopeA),
       baseVersion: 1,
       records: [expect.objectContaining({ id: 'local-a' })],
     });
-    await expect(repositoryB.load({})).resolves.toMatchObject({
+    await expect(repositoryB.load()).resolves.toMatchObject({
       documentId: localDimensionDocumentId(scopeB),
       baseVersion: 0,
       records: [],
@@ -63,7 +63,7 @@ describe('LocalStorageDimensionDocumentRepository', () => {
       storage,
       'project=A|db=1',
     );
-    const stale = await repository.load({});
+    const stale = await repository.load();
     const first = await repository.save({
       ...stale,
       records: [linearRecord({ id: 'first' })],
@@ -94,7 +94,7 @@ describe('LocalStorageDimensionDocumentRepository', () => {
       scope,
     );
 
-    await expect(repository.load({})).rejects.toBeInstanceOf(
+    await expect(repository.load()).rejects.toBeInstanceOf(
       LocalDimensionDocumentCorruptError,
     );
   });

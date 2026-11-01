@@ -14,6 +14,8 @@ import type {
 } from '../types';
 import type { LayoutContext } from './context';
 
+import { present } from '@/testing/present';
+
 const context: LayoutContext = {
   projector: createTestProjector(),
   font: createTestFont(),
@@ -82,7 +84,13 @@ describe('layoutAngular', () => {
     const extensions = lines.filter((line) => line.part === 'extension');
     const arrows = lines.filter((line) => line.part === 'arrow');
 
-    expect(Math.hypot(arrows[0].from[0] - 200, arrows[0].from[1] - 200)).toBeCloseTo(15, 6);
+    const firstArrow = present(arrows[0], 'first arrow line');
+    expect(
+      Math.hypot(
+        present(firstArrow.from[0], 'arrow from x') - 200,
+        present(firstArrow.from[1], 'arrow from y') - 200,
+      ),
+    ).toBeCloseTo(15, 6);
     expect(extensions).toEqual([
       {
         kind: 'line',
@@ -107,12 +115,15 @@ describe('layoutAngular', () => {
       (primitive): primitive is ScreenLine =>
         primitive.kind === 'line' && primitive.part === 'arc',
     );
-    const glyph = result.primitives.find(
-      (primitive): primitive is ScreenGlyphRun =>
-        primitive.kind === 'glyph-run',
-    )!;
+    const glyph = present(
+      result.primitives.find(
+        (primitive): primitive is ScreenGlyphRun =>
+          primitive.kind === 'glyph-run',
+      ),
+      'label glyph run',
+    );
     const isStrictlyInside = (point: Vec2) => {
-      const center = glyph.rotationCenter!;
+      const center = present(glyph.rotationCenter, 'glyph rotation center');
       const rotation = -(glyph.rotationRad ?? 0);
       const dx = point[0] - center[0];
       const dy = point[1] - center[1];
@@ -154,7 +165,10 @@ describe('layoutAngular', () => {
         primitive.kind === 'line' && primitive.part === 'arc',
     );
 
-    expect(arrows[0].to[1]).toBeGreaterThan(arrows[0].from[1]);
+    const firstArrow = present(arrows[0], 'first arrow line');
+    expect(present(firstArrow.to[1], 'arrow to y')).toBeGreaterThan(
+      present(firstArrow.from[1], 'arrow from y'),
+    );
     expect(Math.min(...arcs.flatMap((line) => [line.from[0], line.to[0]]))).toBeLessThan(200);
   });
 

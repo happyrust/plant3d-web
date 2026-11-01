@@ -5,6 +5,8 @@ import { DimensionPointerController } from './pointerController';
 
 import type { DimensionSnapPort, SnapCandidate } from '../ports/snapPort';
 
+import { present } from '@/testing/present';
+
 function createCanvas(): HTMLCanvasElement {
   return {
     getBoundingClientRect: () => ({
@@ -159,8 +161,11 @@ describe('DimensionPointerController', () => {
     expect(viewport.setHover).toHaveBeenCalledWith('existing');
     controller.pointerDown(event(30, 50));
     expect(flushProjection).toHaveBeenCalledTimes(1);
-    expect(flushProjection.mock.invocationCallOrder[0])
-      .toBeLessThan(viewport.hitTest.mock.invocationCallOrder[1]);
+    expect(
+      present(flushProjection.mock.invocationCallOrder[0], 'flushProjection call order'),
+    ).toBeLessThan(
+      present(viewport.hitTest.mock.invocationCallOrder[1], 'hitTest call order'),
+    );
     expect(viewport.setSelection).toHaveBeenCalledWith('existing');
   });
 

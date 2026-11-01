@@ -4,6 +4,8 @@ import { DtxDimensionSnapPort } from './dtxDimensionSnapPort';
 
 import type { ViewerSnapCandidate } from './dtxDimensionSnapPort';
 
+import { present } from '@/testing/present';
+
 const candidates: readonly ViewerSnapCandidate[] = [
   {
     id: 'mesh',
@@ -99,7 +101,7 @@ describe('DtxDimensionSnapPort', () => {
             normal: [0, 0, 1],
           },
         },
-        candidates[0],
+        present(candidates[0], 'first candidate'),
       ],
       sceneWorldToDesignMetres: point => [
         point[0] * 0.001,

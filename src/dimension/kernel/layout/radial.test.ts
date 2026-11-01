@@ -6,8 +6,10 @@ import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { layoutRadial } from './radial';
 
-import type { NormalizedDimensionInput, ScreenLine } from '../types';
+import type { NormalizedDimensionInput, ScreenLine, Vec2 } from '../types';
 import type { LayoutContext } from './context';
+
+import { present } from '@/testing/present';
 
 const context: LayoutContext = {
   projector: createTestProjector(),
@@ -46,34 +48,40 @@ describe('layoutRadial', () => {
 
     expect(radius.derived).toEqual({ valueM: 0.5, formattedLabel: 'R500.00' });
     expect(diameter.derived).toEqual({ valueM: 1, formattedLabel: '⌀1000.00' });
-    const radiusLeader = lines(radius)[0];
-    const diameterLeader = lines(diameter)[0];
+    const radiusLeader = present(lines(radius)[0], 'radius leader line');
+    const diameterLeader = present(lines(diameter)[0], 'diameter leader line');
     expect(radiusLeader.from).toEqual(diameterLeader.from);
-    const radiusVector = [
+    const radiusVector: Vec2 = [
       radiusLeader.to[0] - radiusLeader.from[0],
       radiusLeader.to[1] - radiusLeader.from[1],
     ];
-    const diameterVector = [
+    const diameterVector: Vec2 = [
       diameterLeader.to[0] - diameterLeader.from[0],
       diameterLeader.to[1] - diameterLeader.from[1],
     ];
-    expect(radiusVector[0] * diameterVector[1] - radiusVector[1] * diameterVector[0]).toBeCloseTo(
-      0,
-      6,
-    );
+    expect(
+      radiusVector[0] * diameterVector[1] - radiusVector[1] * diameterVector[0],
+    ).toBeCloseTo(0, 6);
   });
 
   it('projects the leader direction into the circle plane and trims the label end', () => {
     const result = layoutRadial(input('radius'), context);
-    const leader = result.primitives.find(
-      (primitive): primitive is ScreenLine =>
-        primitive.kind === 'line' && primitive.part === 'leader',
+    const leader = present(
+      result.primitives.find(
+        (primitive): primitive is ScreenLine =>
+          primitive.kind === 'line' && primitive.part === 'leader',
+      ),
+      'leader line',
     );
 
-    expect(leader).toBeDefined();
-    expect(leader!.from[0] - 200).toBeCloseTo(200 - leader!.from[1], 12);
-    expect(leader!.to[0]).toBeLessThan(result.labelBounds.x + result.labelBounds.width);
-    expect(leader!.to[1]).toBeGreaterThan(result.labelBounds.y);
+    expect(present(leader.from[0], 'leader from x') - 200).toBeCloseTo(
+      200 - present(leader.from[1], 'leader from y'),
+      12,
+    );
+    expect(present(leader.to[0], 'leader to x')).toBeLessThan(
+      result.labelBounds.x + result.labelBounds.width,
+    );
+    expect(present(leader.to[1], 'leader to y')).toBeGreaterThan(result.labelBounds.y);
   });
 
   it('honors authoritative labels for external dimensions', () => {

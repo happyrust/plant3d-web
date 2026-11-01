@@ -10,6 +10,7 @@ function layout(
 ): LayoutResult {
   return {
     dimensionId,
+    scenePrimitives: [],
     primitives: [],
     hitRegions,
     labelBounds: { x: 0, y: 0, width: 0, height: 0 },

@@ -36,7 +36,7 @@ describe('review dimension snapshot adapter', () => {
       documentId: 'document-round-trip',
       records: state.records,
     });
-    expect(Object.hasOwn(snapshot, 'baseVersion')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(snapshot, 'baseVersion')).toBe(false);
     expect(dimensionDocumentFromSnapshot(snapshot, {
       taskId: 'task-1',
       formId: 'form-1',

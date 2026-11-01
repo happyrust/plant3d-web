@@ -8,6 +8,8 @@ import { layoutViewport } from './layoutViewport';
 
 import type { NormalizedDimensionInput } from '../types';
 
+import { present } from '@/testing/present';
+
 const baseContext = {
   projector: createTestProjector(),
   font: createTestFont(),
@@ -34,12 +36,17 @@ describe('layoutViewport', () => {
       baseContext,
       new Map([['a', 'selected']]),
     );
-    const selected = batch.layouts.find((layout) => layout.dimensionId === 'a')!;
+    const selected = present(
+      batch.layouts.find((layout) => layout.dimensionId === 'a'),
+      'selected layout',
+    );
 
     expect(
       selected.primitives.every((primitive) => primitive.styleRole === 'selected'),
     ).toBe(true);
-    expect(batch.layouts[0].labelBounds).not.toEqual(batch.layouts[1].labelBounds);
+    expect(present(batch.layouts[0], 'layout 0').labelBounds).not.toEqual(
+      present(batch.layouts[1], 'layout 1').labelBounds,
+    );
     const labelCenter = [
       selected.labelBounds.x + selected.labelBounds.width / 2,
       selected.labelBounds.y + selected.labelBounds.height / 2,
@@ -88,7 +95,7 @@ describe('layoutViewport', () => {
       baseContext,
       new Map(),
     );
-    const layout = batch.layouts[0]!;
+    const layout = present(batch.layouts[0], 'past-the-camera layout');
 
     // In step with the scene primitives, nothing non-finite.
     expect(layout.primitives).toHaveLength(layout.scenePrimitives.length);
@@ -104,8 +111,10 @@ describe('layoutViewport', () => {
   it('defaults missing interaction state to normal', () => {
     const batch = layoutViewport([linear('linear')], baseContext, new Map());
 
-    expect(batch.layouts[0].primitives.every((primitive) => primitive.styleRole === 'normal')).toBe(
-      true,
-    );
+    expect(
+      present(batch.layouts[0], 'layout').primitives.every(
+        (primitive) => primitive.styleRole === 'normal',
+      ),
+    ).toBe(true);
   });
 });

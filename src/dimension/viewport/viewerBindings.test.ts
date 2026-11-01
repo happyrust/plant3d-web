@@ -4,6 +4,8 @@ import { Matrix4, PerspectiveCamera } from 'three';
 
 import { createDimensionViewerBindings } from './viewerBindings';
 
+import { present } from '@/testing/present';
+
 function createEventTargetCanvas() {
   const listeners = new Map<string, EventListener>();
   const canvas = {
@@ -69,7 +71,10 @@ describe('createDimensionViewerBindings', () => {
 
     bindings?.syncProjector();
 
-    const projector = setProjector.mock.calls[0][0];
+    const projector = present(
+      setProjector.mock.calls[0],
+      'setProjector call',
+    )[0];
     expect(projector.widthCssPx).toBe(400);
     expect(projector.heightCssPx).toBe(300);
     expect(projector.dpr).toBe(2);

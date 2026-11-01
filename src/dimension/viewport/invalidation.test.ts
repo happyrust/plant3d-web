@@ -5,6 +5,8 @@ import {
   InvalidationSet,
 } from './invalidation';
 
+import { present } from '@/testing/present';
+
 describe('InvalidationSet', () => {
   it('deduplicates reasons and atomically consumes them', () => {
     const invalidations = new InvalidationSet();
@@ -47,7 +49,10 @@ describe('DimensionViewportScheduler', () => {
     expect(callbacks).toHaveLength(1);
     callbacks.shift()?.(1);
     expect(onFrame).toHaveBeenCalledTimes(1);
-    expect([...onFrame.mock.calls[0][0]]).toEqual(['camera', 'size']);
+    expect([...present(onFrame.mock.calls[0], 'first frame call')[0]]).toEqual([
+      'camera',
+      'size',
+    ]);
     expect(callbacks).toHaveLength(0);
   });
 

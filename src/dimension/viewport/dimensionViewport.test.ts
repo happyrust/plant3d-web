@@ -22,6 +22,8 @@ import type { DimensionFrameBreakdown } from './dimensionViewport';
 import type { SceneDimensionPaintJob } from './scenePainter';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
+import { present } from '@/testing/present';
+
 vi.mock('../kernel/viewport/layoutViewport', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../kernel/viewport/layoutViewport')>();
   return {
@@ -196,11 +198,11 @@ describe('DimensionViewport', () => {
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
     harness.flush();
-    const layout = harness.viewport.getLayouts()[0];
-    const region = layout.hitRegions[0];
+    const layout = present(harness.viewport.getLayouts()[0], 'first layout');
+    const region = present(layout.hitRegions[0], 'first hit region');
     const point = region.kind === 'segment'
       ? region.from
-      : [region.rect.x, region.rect.y] as const;
+      : ([region.rect.x, region.rect.y] as const);
 
     expect(harness.viewport.hitTest(point, 3)?.dimensionId).toBe('linear-1');
 

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { LffFont } from './lffParser';
 
+import { present } from '@/testing/present';
+
 const INLINE_LFF = [
   '# LetterSpacing: 1',
   '# WordSpacing: 4',
@@ -78,14 +80,17 @@ describe('LffFont', () => {
   });
 
   it('expands each bulge into eight deterministic line subdivisions', () => {
-    const points = LffFont.fromText(INLINE_LFF).getGlyph(0x30).contours[0].points;
+    const points = present(
+      LffFont.fromText(INLINE_LFF).getGlyph(0x30).contours[0],
+      'digit zero contour',
+    ).points;
 
     expect(points).toHaveLength(10);
     expect(points[0]).toEqual([0, 0]);
-    expect(points[5][0]).toBeCloseTo(1, 12);
-    expect(points[5][1]).toBeCloseTo(-1, 12);
-    expect(points[9][0]).toBeCloseTo(2, 12);
-    expect(points[9][1]).toBeCloseTo(0, 12);
+    expect(present(points[5], 'point 5')[0]).toBeCloseTo(1, 12);
+    expect(present(points[5], 'point 5')[1]).toBeCloseTo(-1, 12);
+    expect(present(points[9], 'point 9')[0]).toBeCloseTo(2, 12);
+    expect(present(points[9], 'point 9')[1]).toBeCloseTo(0, 12);
   });
 
   it('traces deterministic screen-space segments', () => {

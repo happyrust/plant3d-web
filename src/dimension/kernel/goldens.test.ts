@@ -20,6 +20,8 @@ import type {
   Vec3,
 } from './types';
 
+import { present } from '@/testing/present';
+
 const baseContext = {
   projector: createTestProjector(),
   font: createTestFont(),
@@ -28,7 +30,11 @@ const baseContext = {
 };
 
 function vec3(value: readonly number[]): Vec3 {
-  return [value[0], value[1], value[2]];
+  return [
+    present(value[0], 'vec3 x'),
+    present(value[1], 'vec3 y'),
+    present(value[2], 'vec3 z'),
+  ];
 }
 
 const manifest: readonly Readonly<{
@@ -135,7 +141,10 @@ function compactScenePrimitive(primitive: ScenePrimitive) {
 }
 
 function normalizeLayout(input: NormalizedDimensionInput | ExplicitLayoutInput) {
-  const result = layoutViewport([input], baseContext, new Map()).layouts[0];
+  const result = present(
+    layoutViewport([input], baseContext, new Map()).layouts[0],
+    'layout for input',
+  );
   const primitives = result.primitives
     .map((primitive, sourceOrder) => ({ primitive, sourceOrder }))
     .sort(

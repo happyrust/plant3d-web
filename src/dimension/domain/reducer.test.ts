@@ -9,6 +9,8 @@ import {
   radialRecord,
 } from './testFixtures';
 
+import { present } from '@/testing/present';
+
 describe('reduceDimensionDocument', () => {
   it('creates one immutable record', () => {
     const state = emptyDimensionDocument();
@@ -243,7 +245,9 @@ describe('reduceDimensionDocument', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.state.records[0]?.placement.arcChoice).toBe('major');
+      const saved = present(result.state.records[0], 'saved record');
+      if (saved.kind !== 'angular') throw new Error('expected an angular record');
+      expect(saved.placement.arcChoice).toBe('major');
       expect(result.inverse).toEqual({
         type: 'set-angle-arc',
         dimensionId: record.id,

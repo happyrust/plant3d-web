@@ -49,6 +49,7 @@ describe('layoutResultsToSvg', () => {
     const svg = layoutResultsToSvg(
       [{
         dimensionId: 'dimension<&1',
+        scenePrimitives: [],
         primitives: [
           {
             kind: 'line',
@@ -98,6 +99,7 @@ describe('layoutResultsToSvg', () => {
     const svg = layoutResultsToSvg(
       [{
         dimensionId: 'annotation-1',
+        scenePrimitives: [],
         primitives: [
           {
             kind: 'path',

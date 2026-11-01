@@ -18,6 +18,8 @@ import type {
   Vec3,
 } from './types';
 
+import { present } from '@/testing/present';
+
 /**
  * Drives the SolveSpace-style renderer from the canonical fixture data and
  * asserts the *visible* scene output (the authoritative `scenePrimitives`
@@ -35,11 +37,18 @@ const baseContext = {
 };
 
 function vec3(value: readonly number[]): Vec3 {
-  return [value[0], value[1], value[2]];
+  return [
+    present(value[0], 'vec3 x'),
+    present(value[1], 'vec3 y'),
+    present(value[2], 'vec3 z'),
+  ];
 }
 
 function layoutOf(input: NormalizedDimensionInput): LayoutResult {
-  return layoutViewport([input], baseContext, new Map()).layouts[0];
+  return present(
+    layoutViewport([input], baseContext, new Map()).layouts[0],
+    'layout for input',
+  );
 }
 
 function linePartCount(scene: readonly ScenePrimitive[], part: ScreenLinePart): number {

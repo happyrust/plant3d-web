@@ -4,6 +4,8 @@ import { resolveLabelCollisions } from './resolveLabelCollisions';
 
 import type { LayoutResult, ScreenGlyphRun } from '../types';
 
+import { present } from '@/testing/present';
+
 function layout(
   id: string,
   x: number,
@@ -68,9 +70,12 @@ function layout(
 }
 
 function glyphOf(result: LayoutResult): ScreenGlyphRun {
-  return result.primitives.find(
-    (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
-  )!;
+  return present(
+    result.primitives.find(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    ),
+    'glyph run',
+  );
 }
 
 describe('resolveLabelCollisions', () => {
@@ -80,9 +85,24 @@ describe('resolveLabelCollisions', () => {
     const a = layout('a', 0, 0);
     const results = resolveLabelCollisions([b, pinned, a]);
 
-    expect(glyphOf(results[1]).bounds).toEqual({ x: 0, y: 0, width: 4, height: 4 });
-    expect(glyphOf(results[2]).bounds).toEqual({ x: 0, y: -8, width: 4, height: 4 });
-    expect(glyphOf(results[0]).bounds).not.toEqual({ x: 0, y: 0, width: 4, height: 4 });
+    expect(glyphOf(present(results[1], 'result 1')).bounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 4,
+      height: 4,
+    });
+    expect(glyphOf(present(results[2], 'result 2')).bounds).toEqual({
+      x: 0,
+      y: -8,
+      width: 4,
+      height: 4,
+    });
+    expect(glyphOf(present(results[0], 'result 0')).bounds).not.toEqual({
+      x: 0,
+      y: 0,
+      width: 4,
+      height: 4,
+    });
   });
 
   it('tries candidates in up, right, down, left order', () => {
@@ -119,21 +139,23 @@ describe('resolveLabelCollisions', () => {
       layout('pinned', 0, 0, true),
       layout('auto', 0, 0),
     ]);
+    const pinnedLayout = present(pinned, 'pinned layout');
+    const movedLayout = present(moved, 'moved layout');
 
-    expect(pinned.primitives[0]).toEqual(moved.primitives[0]);
+    expect(pinnedLayout.primitives[0]).toEqual(movedLayout.primitives[0]);
     expect(
-      moved.primitives.some(
+      movedLayout.primitives.some(
         (primitive) => primitive.kind === 'line' && primitive.part === 'leader',
       ),
     ).toBe(true);
     expect(
-      moved.scenePrimitives.some(
+      movedLayout.scenePrimitives.some(
         primitive => primitive.kind === 'scene-line'
           && primitive.part === 'leader',
       ),
     ).toBe(true);
     expect(
-      moved.scenePrimitives.find(
+      movedLayout.scenePrimitives.find(
         primitive => primitive.kind === 'scene-glyph-run',
       ),
     ).toMatchObject({ at: { offsetPx: [2, -6] } });

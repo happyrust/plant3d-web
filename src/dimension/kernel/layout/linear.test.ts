@@ -9,6 +9,8 @@ import { layoutLinear } from './linear';
 import type { NormalizedDimensionInput, ScreenLine } from '../types';
 import type { LayoutContext } from './context';
 
+import { present } from '@/testing/present';
+
 const context: LayoutContext = {
   projector: createTestProjector(),
   font: createTestFont(),
@@ -112,8 +114,14 @@ describe('layoutLinear', () => {
       part: 'dimension',
       styleRole: 'normal',
     });
-    expect(arrows[0].to[0]).toBeLessThan(arrows[0].from[0]);
-    expect(arrows[2].to[0]).toBeGreaterThan(arrows[2].from[0]);
+    const firstArrow = present(arrows[0], 'first arrow line');
+    const thirdArrow = present(arrows[2], 'third arrow line');
+    expect(present(firstArrow.to[0], 'first arrow to x')).toBeLessThan(
+      present(firstArrow.from[0], 'first arrow from x'),
+    );
+    expect(present(thirdArrow.to[0], 'third arrow to x')).toBeGreaterThan(
+      present(thirdArrow.from[0], 'third arrow from x'),
+    );
   });
 
   it('uses semantic roles unless interaction state overrides them', () => {
