@@ -729,10 +729,12 @@ const activeMeasureStatusText = computed(() => {
   return tools ? tools.statusText.value : '';
 });
 const activeMeasureHoverText = computed(() => {
-  // xeokit 测量：提示条第二行放拾取消息（E3D `!!alert.*` 对应的告警、已选第一项 / 求交已选、P-Point 加载中、
+  // 提示条第二行放拾取消息（E3D `!!alert.*` 对应的告警、已选第一项 / 求交已选、P-Point 加载中、
   // 未命中原因……）。它此前只喂给指针透镜的 subtitle，而透镜未吸附时不画——这些话一直没有可见出口（golden MD §36）。
-  if (isXeokitMeasureMode.value) return xeokitMeasurementToolsRef.value?.pickPointMessage.value ?? '';
-  return toolsRef.value?.hoverText?.value ?? '';
+  // 非 xeokit 测量模式没有等价来源：旧代码读 `toolsRef.value?.hoverText`，而 useDtxTools 从未提供该字段，
+  // 可选链让它一直静默返回空串。这里直接返回空串，不再留一条永不生效的分支。
+  if (!isXeokitMeasureMode.value) return '';
+  return xeokitMeasurementToolsRef.value?.pickPointMessage.value ?? '';
 });
 
 // 工具栏“设置”弹层
