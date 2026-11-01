@@ -54,6 +54,13 @@ export type DimensionFrameBreakdown = Readonly<{
   kind?: DimensionFrameKind;
 }>;
 
+/**
+ * 相机连续运动时的重排节流下限（W4-1）。绕轨脚本每帧都调
+ * `notifyViewerChanged()`，若每次相机变化都全量重排，一帧都排不完；若只等
+ * 静止 80 ms，运动中一次都不重排，标签就按旧投影摆放、帧耗时也完全不可观测。
+ */
+const CAMERA_MOTION_LAYOUT_INTERVAL_MS = 100;
+
 function subtract(a: DomainVec3, b: DomainVec3): DomainVec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
@@ -171,6 +178,15 @@ type DimensionViewportBaseInput = Readonly<{
    * 它们要测的东西了。
    */
   segmentBudgetPerFrame?: number;
+  /**
+   * 相机连续运动时两次**全量重排**之间的最小间隔（W4-1）。缺省
+   * `CAMERA_MOTION_LAYOUT_INTERVAL_MS`。
+   *
+   * 真实间隔取 `max(本值, 上次全量布局成本 × 2)`：固定间隔在重场景下会让每
+   * 次重排都被下一次相机变化顶掉，分帧永远写不完、画面停在旧内容上。留这个
+   * 口子是给测试显式钉住节流契约，生产上不该改。
+   */
+  cameraMotionLayoutIntervalMs?: number;
 }>;
 
 export type DimensionViewportInput = DimensionViewportBaseInput & Readonly<{
@@ -220,6 +236,13 @@ export class DimensionViewport {
   private format: DimensionFormatPolicy;
   private displayMode: DimensionDisplayMode = 'engineering';
   private cameraSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * 上一次全量布局的完成时刻与实测成本（W4-1）。`setProjector` 用它们决定
+   * 这次相机变化是「重排」还是「只重绘」，成本取 `layoutMs + paintMs`（分帧
+   * 时是全部批次的总耗时，见 `startBatchedPaint` 的 `report`）。
+   */
+  private lastFullLayoutAtMs = 0;
+  private lastFullLayoutCostMs = 0;
   private readonly pendingStyleIds = new Set<string>();
   /**
    * 分帧 paint 进行中（W5-5）。为真时几何只写了一半，**任何一帧都不能渲染**
@@ -321,6 +344,26 @@ export class DimensionViewport {
       || sizeChanged
       || this.layouts.length === 0
     ) {
+      this.invalidate('camera');
+      return;
+    }
+    // 相机连续运动（绕轨、拖拽、飞行动画）时，不是每次变化都值得全量重排：
+    // 重排一次的成本在真实房间里能到几百毫秒，每帧都排就一帧也排不完，画面
+    // 反而停在旧内容上。但也不能像旧实现那样只等静止——那样运动中标签一直
+    // 按旧投影摆放，帧耗时也完全不可观测。折中：按实测成本降频。
+    //
+    // 间隔取 `max(下限, 上次成本 × 2)`：保证一次重排至少占有它自己耗时两倍
+    // 的时间窗口，成本高的场景自动降到接近「只在静止时重排」。分帧进行中不
+    // 打断——`render()` 会把这条 `camera` 收进 `deferredReasons`，收尾时重放。
+    const intervalMs = Math.max(
+      this.input.cameraMotionLayoutIntervalMs ?? CAMERA_MOTION_LAYOUT_INTERVAL_MS,
+      this.lastFullLayoutCostMs * 2,
+    );
+    if (performance.now() - this.lastFullLayoutAtMs >= intervalMs) {
+      if (this.cameraSettleTimer !== null) {
+        clearTimeout(this.cameraSettleTimer);
+        this.cameraSettleTimer = null;
+      }
       this.invalidate('camera');
       return;
     }
@@ -578,6 +621,8 @@ export class DimensionViewport {
     this.layoutListeners.clear();
     this.projector = null;
     this.lastLayoutProjector = null;
+    this.lastFullLayoutAtMs = 0;
+    this.lastFullLayoutCostMs = 0;
     this.preview = null;
     this.externalHidden.clear();
     this.pendingStyleIds.clear();
@@ -737,9 +782,16 @@ export class DimensionViewport {
     );
     const report = (): void => {
       const completedAt = performance.now();
+      const layoutMs = layoutCompletedAt - frameStartedAt;
+      const paintMs = completedAt - layoutCompletedAt;
+      // 节流判据（W4-1）的输入：这次全量布局真正花了多少。分帧时 `paintMs`
+      // 是全部批次的总耗时，所以 19 206 条记录的场景报的是 ≈540 ms 而不是
+      // 第一批的 16 ms——间隔才会按真实成本放大。
+      this.lastFullLayoutAtMs = completedAt;
+      this.lastFullLayoutCostMs = layoutMs + paintMs;
       this.input.onFrame?.(completedAt - frameStartedAt, {
-        layoutMs: layoutCompletedAt - frameStartedAt,
-        paintMs: completedAt - layoutCompletedAt,
+        layoutMs,
+        paintMs,
         kind: 'layout',
       });
     };

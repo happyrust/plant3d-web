@@ -35,6 +35,8 @@ function createViewport(
   onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void,
   /** 覆盖每帧段预算（§11.17）。测试文档只有十几条记录，按真实预算一批就写完。 */
   segmentBudgetPerFrame?: number,
+  /** 覆盖相机运动重排间隔下限（W4-1）。 */
+  cameraMotionLayoutIntervalMs?: number,
 ) {
   const callbacks: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
@@ -51,6 +53,9 @@ function createViewport(
     requestRender,
     ...(onFrame ? { onFrame } : {}),
     ...(segmentBudgetPerFrame === undefined ? {} : { segmentBudgetPerFrame }),
+    ...(cameraMotionLayoutIntervalMs === undefined
+      ? {}
+      : { cameraMotionLayoutIntervalMs }),
   });
   /**
    * Runs queued frames. W5-5 之后一次全量绘制要跨若干帧（分帧写线顶点），
@@ -491,6 +496,157 @@ describe('DimensionViewport', () => {
     harness.viewport.flushProjection();
 
     expect(layoutViewport).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * W4-1 节流契约之一：相机连续变化、但距上次全量布局还不到间隔时，只按新
+   * 投影重画旧布局，不再跑 `layoutViewport`。
+   *
+   * 旧实现在这条路径上从不重排（要等静止 80 ms 才排），绕轨脚本每帧都调
+   * `notifyViewerChanged()`，600 帧一次重排都没有——标签全程按旧投影摆放，
+   * 帧耗时也完全不可观测。判据必须「到点就排」，而不是「只等静止」。
+   */
+  it('only redraws while the camera moves faster than the layout interval', () => {
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport(undefined, undefined, 100);
+
+    let clock = 1_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+      harness.flush();
+      expect(layoutViewport).toHaveBeenCalledTimes(1);
+
+      // 相机每帧都变，但每帧只前进 10 ms：远不到 100 ms 的间隔。
+      for (let frame = 0; frame < 5; frame += 1) {
+        clock += 10;
+        harness.viewport.setProjector(createTestProjector());
+        harness.flush();
+      }
+
+      expect(layoutViewport).toHaveBeenCalledTimes(1);
+      // 没有排新帧，但重绘请求发了——画面跟着新投影走。
+      expect(harness.callbacks).toHaveLength(0);
+      expect(harness.requestRender).toHaveBeenCalled();
+
+      // 收尾：把 80 ms 静止兜底定时器一并清掉，别漏到别的用例里。
+      harness.viewport.dispose();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  /**
+   * 节流契约之二：累计等待到间隔就必须真排一次。这条与上一条配对——只有
+   * 上一条会退化成「永不重排」，只有这一条会退化成「每帧都重排」。
+   */
+  it('relayouts once the layout interval has elapsed during camera motion', () => {
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport(undefined, undefined, 100);
+
+    let clock = 5_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+      harness.flush();
+      expect(layoutViewport).toHaveBeenCalledTimes(1);
+
+      clock += 100;
+      harness.viewport.setProjector(createTestProjector());
+
+      // `setProjector` 自己就排了一帧全量布局，不必等静止兜底。
+      expect(harness.callbacks).toHaveLength(1);
+      harness.flush();
+      expect(layoutViewport).toHaveBeenCalledTimes(2);
+
+      harness.viewport.dispose();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  /**
+   * 节流契约之三：静止 80 ms 的兜底不能被节流破坏。相机停下后必须补一次
+   * 全量布局，否则停在「旧投影 + 只重绘」的状态上，标签永远差最后一次。
+   */
+  it('still relayouts after the camera settles, even when throttled', () => {
+    vi.mocked(layoutViewport).mockClear();
+    // 间隔拉到极长，确保这条用例只测静止兜底，不测间隔到点。
+    const harness = createViewport(undefined, undefined, 10_000_000);
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+      harness.flush();
+      expect(layoutViewport).toHaveBeenCalledTimes(1);
+
+      harness.viewport.setProjector(createTestProjector());
+      expect(harness.callbacks).toHaveLength(0);
+
+      vi.advanceTimersByTime(80);
+      expect(harness.callbacks).toHaveLength(1);
+      harness.flush();
+      expect(layoutViewport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * 节流契约之四：间隔不是固定 100 ms，而是 `max(100, 上次全量布局成本 × 2)`。
+   *
+   * 为什么必须自适应：`24381_1443` 那种 19 206 条记录的场景，一次全量布局
+   * 88.6 ms + 绘制 450 ms ≈ 540 ms。固定 100 ms 会让每次重排都被下一次相机
+   * 变化顶掉，分帧永远写不完、画面停在旧内容上。这里用「每帧 60 ms、多批」
+   * 造出远超 100 ms 的布局成本，再按实测成本算出间隔：差一点不排，越过就排。
+   */
+  it('scales the layout interval by the last full layout cost', () => {
+    const records = Array.from({ length: 12 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, index * 0.5, 0]),
+    }));
+    vi.mocked(layoutViewport).mockClear();
+    // 段预算压到 1 段/帧，让绘制真的跨帧，成本才测得出来。
+    const harness = createViewport(undefined, 1, 100);
+
+    let clock = 10_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument(records));
+
+      // 每跑一帧时间前进 60 ms，直到这次全量绘制收尾。
+      let guard = 0;
+      while (harness.callbacks.length > 0 && guard < 4_096) {
+        clock += 60;
+        harness.flush(1);
+        guard += 1;
+      }
+      const costMs = (harness.viewport as any).lastFullLayoutCostMs as number;
+      // 间隔必须真的被放大到 `成本 × 2`，否则这条用例退化成「固定 100 ms」。
+      expect(costMs).toBeGreaterThan(100);
+      const intervalMs = costMs * 2;
+
+      // 差一点到放大后的间隔：只重绘，不重排。
+      clock += intervalMs - 20;
+      harness.viewport.setProjector(createTestProjector());
+      expect(harness.callbacks).toHaveLength(0);
+      expect(layoutViewport).toHaveBeenCalledTimes(1);
+
+      // 越过放大后的间隔：必须真排一次。
+      clock += 40;
+      harness.viewport.setProjector(createTestProjector());
+      expect(harness.callbacks).toHaveLength(1);
+      harness.flush();
+      expect(layoutViewport).toHaveBeenCalledTimes(2);
+
+      harness.viewport.dispose();
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('converts a screen drag into a semantic linear placement', () => {
