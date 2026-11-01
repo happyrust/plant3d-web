@@ -4176,7 +4176,7 @@ onMounted(async () => {
         }
         if (visibleInstsUserHint) {
           emitToast({ message: `[警告] ${visibleInstsUserHint}`, level: 'warning' });
-          consoleStore.addLog('warn', `[show_refno] ${visibleInstsUserHint}`);
+          consoleStore.addLog('warning', `[show_refno] ${visibleInstsUserHint}`);
         }
 
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
@@ -4202,7 +4202,7 @@ onMounted(async () => {
             message: `[警告] 加载结束但未绘制实例。${detail} ${reason}`,
             level: 'warning',
           });
-          consoleStore.addLog('warn', `[show_refno] 加载结束但未绘制实例。${detail} ${reason}`);
+          consoleStore.addLog('warning', `[show_refno] 加载结束但未绘制实例。${detail} ${reason}`);
         } else {
           emitToast({ message: `[成功] ${detail}`, level: 'success' });
         }
