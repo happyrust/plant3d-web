@@ -630,18 +630,63 @@ describe('DimensionViewport', () => {
       expect(costMs).toBeGreaterThan(100);
       const intervalMs = costMs * 2;
 
-      // 差一点到放大后的间隔：只重绘，不重排。
-      clock += intervalMs - 20;
+      // 判据基准是**放行**时刻，不是布局完成时刻：布局要跑几十毫秒，那段时间
+      // 里再调 setProjector 不该重复放行。这里从放行时刻量。
+      const grantedAt = (harness.viewport as any).lastCameraLayoutGrantedAtMs as number;
+      expect(grantedAt).toBeGreaterThan(0);
+
+      // 回到放行时刻附近重放一次：差一点到放大后的间隔 → 只重绘，不重排。
+      clock = grantedAt + intervalMs - 20;
       harness.viewport.setProjector(createTestProjector());
       expect(harness.callbacks).toHaveLength(0);
       expect(layoutViewport).toHaveBeenCalledTimes(1);
 
       // 越过放大后的间隔：必须真排一次。
-      clock += 40;
+      clock = grantedAt + intervalMs + 20;
       harness.viewport.setProjector(createTestProjector());
       expect(harness.callbacks).toHaveLength(1);
       harness.flush();
       expect(layoutViewport).toHaveBeenCalledTimes(2);
+
+      harness.viewport.dispose();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  /**
+   * 节流契约之五：放行之后、布局真正跑完之前，不得重复放行。
+   *
+   * 这是 2026-11-02 实测暴露的缺陷：判据原本用「距上次布局**完成**」，而布局
+   * 要等一帧 rAF + layout + paint（真实房间 20～30 ms）才写那个时刻。这段窗口
+   * 里再调一次 `setProjector`，判据会认为「已超过间隔」并重复放行，实际重排
+   * 频率比下限高约 20 %——600 帧绕轨实测 120 次，而 100 ms 下限只允许约 100 次。
+   *
+   * 契约：以**放行**时刻为基准，间隔未到就只重绘，哪怕上一次布局还没完成。
+   */
+  it('does not grant a second layout while the previous one is still running', () => {
+    vi.mocked(layoutViewport).mockClear();
+    const harness = createViewport(undefined, 1, 100);
+
+    let clock = 20_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      harness.viewport.setProjector(createTestProjector());
+      harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+      // 只跑 layout 那一帧，绘制留在队列里：布局已经完成，但分帧还没收尾。
+      harness.flush(1);
+      expect(harness.callbacks.length).toBeGreaterThan(0);
+
+      const grantedAt = (harness.viewport as any).lastCameraLayoutGrantedAtMs as number;
+      expect(grantedAt).toBe(20_000);
+
+      // 布局完成时刻晚于放行时刻（模拟 layout + paint 的几十毫秒）。
+      clock = grantedAt + 30;
+      harness.viewport.setProjector(createTestProjector());
+
+      // 关键断言：距**放行**才 30 ms，远不到 100 ms —— 不得放行第二次。
+      expect(harness.callbacks).toHaveLength(1);
+      expect(layoutViewport).toHaveBeenCalledTimes(1);
 
       harness.viewport.dispose();
     } finally {

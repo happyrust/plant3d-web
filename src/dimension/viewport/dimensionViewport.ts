@@ -243,6 +243,16 @@ export class DimensionViewport {
    */
   private lastFullLayoutAtMs = 0;
   private lastFullLayoutCostMs = 0;
+  /**
+   * 上一次**放行**全量布局的时刻（W4-1）。节流判据必须用它，不能用
+   * `lastFullLayoutAtMs`：后者要等布局真正跑完（一帧 rAF + 布局 + 绘制，真实
+   * 房间 20～30 ms）才更新，而这段时间里 `setProjector` 会被再调一次——那时
+   * 「距上次完成」已超过间隔，判据重复放行，实际重排频率比下限高约 20 %
+   * （实测 600 帧放行 120 次，而 100 ms 下限只允许约 100 次）。
+   *
+   * 记录**放行**时刻就没有这个窗口：放行即占位，下一次必须等满间隔。
+   */
+  private lastCameraLayoutGrantedAtMs = 0;
   private readonly pendingStyleIds = new Set<string>();
   /**
    * 分帧 paint 进行中（W5-5）。为真时几何只写了一半，**任何一帧都不能渲染**
@@ -344,7 +354,7 @@ export class DimensionViewport {
       || sizeChanged
       || this.layouts.length === 0
     ) {
-      this.invalidate('camera');
+      this.grantCameraLayout();
       return;
     }
     // 相机连续运动（绕轨、拖拽、飞行动画）时，不是每次变化都值得全量重排：
@@ -359,12 +369,8 @@ export class DimensionViewport {
       this.input.cameraMotionLayoutIntervalMs ?? CAMERA_MOTION_LAYOUT_INTERVAL_MS,
       this.lastFullLayoutCostMs * 2,
     );
-    if (performance.now() - this.lastFullLayoutAtMs >= intervalMs) {
-      if (this.cameraSettleTimer !== null) {
-        clearTimeout(this.cameraSettleTimer);
-        this.cameraSettleTimer = null;
-      }
-      this.invalidate('camera');
+    if (performance.now() - this.lastCameraLayoutGrantedAtMs >= intervalMs) {
+      this.grantCameraLayout();
       return;
     }
     this.requestRenderWhenPainted();
@@ -375,6 +381,19 @@ export class DimensionViewport {
       this.cameraSettleTimer = null;
       this.invalidate('camera');
     }, 80);
+  }
+
+  /**
+   * 放行一次全量布局：记下放行时刻（节流判据的基准，见
+   * `lastCameraLayoutGrantedAtMs`）、清掉静止兜底定时器，然后失效。
+   */
+  private grantCameraLayout(): void {
+    this.lastCameraLayoutGrantedAtMs = performance.now();
+    if (this.cameraSettleTimer !== null) {
+      clearTimeout(this.cameraSettleTimer);
+      this.cameraSettleTimer = null;
+    }
+    this.invalidate('camera');
   }
 
   /**
@@ -513,6 +532,9 @@ export class DimensionViewport {
       clearTimeout(this.cameraSettleTimer);
       this.cameraSettleTimer = null;
     }
+    // 强制通道也算一次放行（W4-1）：调用方（指针按下、基线采集）要的是「就按
+    // 当前投影同步一次」，紧接着的相机变化不该立刻再排一次。
+    this.lastCameraLayoutGrantedAtMs = performance.now();
     this.render(new Set(['camera']));
   }
 
@@ -623,6 +645,7 @@ export class DimensionViewport {
     this.lastLayoutProjector = null;
     this.lastFullLayoutAtMs = 0;
     this.lastFullLayoutCostMs = 0;
+    this.lastCameraLayoutGrantedAtMs = 0;
     this.preview = null;
     this.externalHidden.clear();
     this.pendingStyleIds.clear();
