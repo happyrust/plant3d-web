@@ -3,9 +3,11 @@
 对应 `docs/plans/2026-10-29-mbd-dimension-remaining-work-dev-plan.md` W4-1；是 W5-5（2k 记录分帧预算）「相对基线 P95 不退化」的比较对象。
 **只量不改**：本轮没有动任何布局 / 绘制逻辑，新增的只是观测钩子（见「数字从哪来」）。
 
-状态：**A 合成 2k 已实测填表**（2026-10-29，headless Chromium，`npm run perf:dimensions:browser` 同一条链路的 `run()` + `settle(20)` 各三次）；**B / C 真实 BRAN 仍待填**（需 gen-model 后端 18084 与真实 BRAN 数据，表里的 `—`）。
+状态：**A / B / C 全部已实测填表**。A 合成 2k 为 2026-10-29（headless Chromium，`npm run perf:dimensions:browser` 同一条链路的 `run()` + `settle(20)` 各三次）；B `24381_145018` 与 C `24381_146979` 为 2026-11-01 补采（gen-model 后端 8022 + 真实 BRAN，远景 / 中景各三次，每步强制全量布局）。
 
-## 环境（A 场景已填；B / C 待填）
+**口径变更（2026-11-01）**：B / C 采集期间 `DimensionViewport.setProjector` 已改为**按成本自适应降频重排**（`fix(dimension): 相机运动中按实测成本降频重排`）。相机连续运动时不再每帧全量布局，而是每 `max(100 ms, 上次全量布局成本 × 2)` 排一次，另保留静止 80 ms 兜底。本文 B / C 表因此是**最坏情况**读数：采集脚本每步显式调 `flushProjection()`，强制每一步都是真全量布局，与节流无关。日常绕轨的实际重排频率见「绕轨口径（2026-11-01 更正）」。
+
+## 环境
 
 | 项 | 值 |
 | --- | --- |
@@ -13,17 +15,17 @@
 | 系统 / 浏览器 | Windows 11 企业版 10.0.26200 / Playwright 1.58.2 自带 Chromium（headless）|
 | 窗口 / DPR | 1920×1080 / DPR 1（`test.use({ viewport: { width: 1920, height: 1080 } })`，未设 `deviceScaleFactor`）；A 场景画布由 `/dimension-perf.html` 自铺满视口 |
 | 电源 / 后台 | 接电源、高性能档；别的占 GPU 的进程关掉 |
-| 前端 | `plant3d-web` 提交 `42546128`（A 场景实测时点）；`npm run dev`（dev 构建，`http://127.0.0.1:3101`，`reuseExistingServer: true`）|
-| 后端 | A 场景不需要后端（合成数据）；B / C 待填（地址 / 构建），项目 `AvevaMarineSample` |
-| 日期 / 操作人 | 2026-10-29 / Lead（A 场景）；B / C 待填 |
+| 前端 | `plant3d-web` 提交 `42546128`（A 场景实测时点）；B / C 于 `main` 的 W4-1 节流提交之后采集。`npm run dev`（dev 构建，`http://127.0.0.1:3101`，`reuseExistingServer: true`）|
+| 后端 | A 场景不需要后端（合成数据）；B / C 用本机 `aios-database.exe`（rocksdb 档）监听 **`http://127.0.0.1:8022`**，项目 `AvevaMarineSample`；旧的 18084 已不在用（`/api/v1/health` 拒绝连接）|
+| 日期 / 操作人 | 2026-10-29 / Lead（A 场景）；2026-11-01 / Lead（B、C 场景）|
 
 ## 场景与相机
 
 | 场景 | 内容 | 相机 |
 | --- | --- | --- |
 | A 合成 2k | `/dimension-perf.html`（`src/debug/dimensionPerf.ts`）：装 10 000 条、可见 2 000 条（1 500 用户 + 500 外部），正交相机，视口 1920×1080 | 脚本自带 |
-| B 小 BRAN `24381_145018` | 全类别 77 图元 → 63 条记录（18 条 `linear_dim`：11 main / 7 atta，`cheight_mm=27`；09-12 基线同一条管）| 加载后的自动 fit |
-| C 大 BRAN `24381_146979` | 58 个对象、27 个焊缝标记，09-12 远景画出 48 条 | 加载后的自动 fit |
+| B 小 BRAN `24381_145018` | 全类别 77 图元 → **63 条记录**（18 条 `linear_dim`：11 main / 7 atta，`cheight_mm=27`；09-12 基线同一条管）；远景画出 **21 条** | 加载后的自动 fit |
+| C 大 BRAN `24381_146979` | 58 个对象、27 个焊缝标记 → **166 条记录**；远景画出 **58 条** | 加载后的自动 fit |
 
 自动 fit = `ViewerPanel.vue::fitDtxViewerToFocusBox`：`distance = max(maxDim × 2.5, 5)`，
 `position = center + distance × (0.8, 0.6, 0.8)`，`target = center`（Y 向上）。加载完成后**不碰鼠标**，把相机抄进下表：
@@ -66,17 +68,20 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 
    ```text
    http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24381_145018&show_refno_select=0
-     &mbd_refno=24381_145018&gm_backend=http://127.0.0.1:18084&mbdBackend=http://127.0.0.1:18084
+     &mbd_refno=24381_145018&gm_backend=http://127.0.0.1:8022&mbdBackend=http://127.0.0.1:8022
    ```
+
+   后端换地址只改 `gm_backend` 与 `mbdBackend` 两处（参数名大小写不同，别合并）。2026-11-01 起本机后端固定在 **8022**（`aios-database.exe`，rocksdb 档）；18084 是旧口径，已不可连。
 
 2. 等加载完：toast「[成功] 对象 N…」、尺寸面板「BRAN 尺寸标注（MBD）」列出记录、`window.__dimensionSystemError === undefined`。
 3. 相机不动，按上面的方法把 `position` / `target` 抄进表。
-4. DevTools 里跑绕轨脚本：绕 `target` 的竖直轴匀速转一圈，600 帧；每帧 `notifyViewerChanged()`，所以**每帧都是全量布局**（`layoutFrames ≈ frames`）。先空跑一次热身（字体 / 着色器），再记三次：
+4. DevTools 里跑绕轨脚本：绕 `target` 的竖直轴匀速转一圈，600 帧，**每步强制全量布局**：
 
    ```js
    await (async ({ frames = 600, radiusScale = 1 } = {}) => {
      const viewer = window.__dtxViewer;
      const system = window.__viewerContext.dimensionSystem.value;
+     const viewport = system.viewport;
      const stats = window.__dimensionFrameStats;          // dev 构建才有
      const target = viewer.controls.target.clone();
      const home = viewer.camera.position.clone();
@@ -84,6 +89,9 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
      const radius = Math.hypot(offset.x, offset.z);
      const phi0 = Math.atan2(offset.z, offset.x);
      const next = () => new Promise(requestAnimationFrame);
+     const settlePainted = async () => {
+       for (let i = 0; i < 400 && viewport.painting; i += 1) await next();
+     };
      stats.reset();
      for (let i = 1; i <= frames; i += 1) {
        await next();
@@ -98,11 +106,17 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
          { duration: 0 },
        );
        system.notifyViewerChanged();
+       // 节流之后 notifyViewerChanged() 不一定排全量布局（见下方口径更正）；
+       // 这一步要的是最坏情况，所以显式强制一次，并等分帧写完再进下一步。
+       viewport.flushProjection();
+       await settlePainted();
      }
      await next();
      viewer.flyTo(home, target, { duration: 0 });
      system.notifyViewerChanged();
-     const layouts = system.viewport.getLayouts();
+     viewport.flushProjection();
+     await settlePainted();
+     const layouts = viewport.getLayouts();
      return {
        records: layouts.length,
        drawn: layouts.filter(layout => layout.primitives.length > 0).length,
@@ -111,10 +125,20 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
    })();
    ```
 
-   `radiusScale = 0.4` 是可选的中景档（同一仰角、距离 ×0.4）。缓冲只留最近 600 帧，`frames` 别超过它。
-5. 对照（不进表）：手动拖动旋转 10 s 再看 `__dimensionFrameStats.summary()`。真实输入里有 damping 产生的增量帧，`layoutFrames` 会小于 `frames`，两档分开看。
+   `radiusScale = 0.4` 是可选的中景档（同一仰角、距离 ×0.4）。缓冲只留最近 600 帧，`frames` 别超过它。先空跑一次热身（字体 / 着色器），再记三次。
+5. 对照（不进表）：手动拖动旋转 10 s 再看 `__dimensionFrameStats.summary()`。真实输入里有 damping 产生的增量帧，且相机运动节流会让 `layoutFrames` 明显小于 `frames`，与上表的强制全量口径**分开看**。
 
 `summary()` 字段：`frames`（缓冲里的帧数）、`layoutFrames`（跑了全量布局的帧数，按 `kind === 'layout'` 判）、`frameKinds`（`{ layout, style, camera }` 三类各多少帧，相加等于 `frames`）、`frameMs`（全部帧的 P50 / P95 / max）、`layoutMs` 与 `paintMs`（**都只算全量布局帧**）。分位是最近邻秩，与 `dimensionPerf.ts` / `benchKernel.ts` 同一算法。
+
+### 绕轨口径（2026-11-01 更正）
+
+本文 2026-10-29 版写「每帧 `notifyViewerChanged()`，所以**每帧都是全量布局**（`layoutFrames ≈ frames`）」，**这句只在不加 `flushProjection()` 时成立到 2026-10-31 为止**，现在不成立：
+
+- `DimensionViewport.setProjector`（`src/dimension/viewport/dimensionViewport.ts`）已改为**按成本自适应降频**：距上次全量布局不到 `max(100 ms, 上次全量布局成本 × 2)` 时，只按新投影重画旧布局（`requestRenderWhenPainted()`）并重启 80 ms 静止兜底，不排全量布局。
+- 因此「相机连续动 600 帧」在真实绕轨里大约每 `interval` 一次全量布局，其余帧是只重绘。按 B 场景实测（全量布局成本 ≈ 18.5 ms）interval = 100 ms ≈ 6 帧一次，600 帧约 **100 次**全量布局；按 C 场景（≈ 19 ms）同量级。成本高的场景（`24381_1443` 那种 19 206 条记录、全量 ≈ 540 ms）interval 自动放大到 ≈ 1 080 ms，几乎退化成「只在静止时重排」。
+- 上表 B / C 的数字**不是**这个口径：它们每步都 `flushProjection()` 强制全量布局，量的是**最坏情况**（每帧都排）。两者不可混用，判退化时要说清是哪一种。
+
+**最坏情况（每步强制全量布局）的代价**：B 远景 `frameMs` P50 18.6 / P95 19.5；C 远景 P50 18.9 / P95 19.8。即 1920×1080、DPR 1、dev 构建下，这两个真实 BRAN 即便每帧全量重排也还在 60 fps 附近（约 19 ms/帧）。节流后的实际绕轨只会更快，不会更慢。
 
 ## 记录（三次重复）
 
@@ -140,41 +164,45 @@ window.__dimensionPerf.settle(20);    // 连续 20 次全量布局 + 绘制 → 
 
 ### B `24381_145018`（远景，自动 fit）
 
-相机：`position` `—`，`target` `—`；记录 `—` 条 / 画出 `—` 条。
+相机：`position` `[17.8139, 13.3604, 17.8139]`，`target` `[0, 0, 0]`；记录 **63** 条 / 画出 **21** 条。口径：每步 `flyTo(duration 0)` + `notifyViewerChanged()` + `flushProjection()`，600 步全部是全量布局（`layoutFrames = 600 = frames`）。
 
 | 次 | frames | layoutFrames | layoutMs P50 | layoutMs P95 | layoutMs max | paintMs P50 | paintMs P95 | paintMs max | frameMs P50 | frameMs P95 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | — | — | — | — | — | — | — | — | — | — |
-| 2 | — | — | — | — | — | — | — | — | — | — |
-| 3 | — | — | — | — | — | — | — | — | — | — |
+| 1 | 600 | 600 | 1.90 | 3.40 | 5.10 | 16.80 | 17.90 | 26.70 | 18.60 | 19.50 |
+| 2 | 600 | 600 | 1.80 | 3.20 | 5.40 | 16.70 | 17.80 | 26.30 | 18.50 | 19.30 |
+| 3 | 600 | 600 | 1.70 | 3.30 | 5.20 | 16.70 | 17.70 | 28.50 | 18.50 | 19.30 |
+| **中位数** | 600 | 600 | **1.80** | **3.30** | **5.20** | **16.70** | **17.80** | **26.70** | **18.50** | **19.30** |
 
-中景（`radiusScale = 0.4`，可选）：
+中景（`radiusScale = 0.4`）：
 
 | 次 | frames | layoutFrames | layoutMs P50 | layoutMs P95 | layoutMs max | paintMs P50 | paintMs P95 | paintMs max | frameMs P50 | frameMs P95 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | — | — | — | — | — | — | — | — | — | — |
-| 2 | — | — | — | — | — | — | — | — | — | — |
-| 3 | — | — | — | — | — | — | — | — | — | — |
+| 1 | 600 | 600 | 1.50 | 2.40 | 7.80 | 17.30 | 18.30 | 30.60 | 18.80 | 19.80 |
+| 2 | 600 | 600 | 1.50 | 2.40 | 5.30 | 17.30 | 18.40 | 30.40 | 18.90 | 19.90 |
+| 3 | 600 | 600 | 1.50 | 2.20 | 5.50 | 17.20 | 18.20 | 31.40 | 18.80 | 19.70 |
+| **中位数** | 600 | 600 | **1.50** | **2.40** | **5.50** | **17.30** | **18.30** | **30.60** | **18.80** | **19.80** |
 
 ### C `24381_146979`（远景，自动 fit）
 
-相机：`position` `—`，`target` `—`；记录 `—` 条 / 画出 `—` 条。
+相机：`position` `[5.8616, 4.3962, 5.8616]`，`target` `[0, 0, 0]`；记录 **166** 条 / 画出 **58** 条。口径同 B。
 
 | 次 | frames | layoutFrames | layoutMs P50 | layoutMs P95 | layoutMs max | paintMs P50 | paintMs P95 | paintMs max | frameMs P50 | frameMs P95 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | — | — | — | — | — | — | — | — | — | — |
-| 2 | — | — | — | — | — | — | — | — | — | — |
-| 3 | — | — | — | — | — | — | — | — | — | — |
+| 1 | 600 | 600 | 3.30 | 5.30 | 9.60 | 15.70 | 16.90 | 27.20 | 18.90 | 19.80 |
+| 2 | 600 | 600 | 3.40 | 5.50 | 10.60 | 15.60 | 17.10 | 26.40 | 18.90 | 19.90 |
+| 3 | 600 | 600 | 3.40 | 5.20 | 7.30 | 15.50 | 17.10 | 28.80 | 18.90 | 19.80 |
+| **中位数** | 600 | 600 | **3.40** | **5.30** | **9.60** | **15.60** | **17.10** | **27.20** | **18.90** | **19.80** |
 
-中景（`radiusScale = 0.4`，可选）：
+中景（`radiusScale = 0.4`）：
 
 | 次 | frames | layoutFrames | layoutMs P50 | layoutMs P95 | layoutMs max | paintMs P50 | paintMs P95 | paintMs max | frameMs P50 | frameMs P95 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | — | — | — | — | — | — | — | — | — | — |
-| 2 | — | — | — | — | — | — | — | — | — | — |
-| 3 | — | — | — | — | — | — | — | — | — | — |
+| 1 | 600 | 600 | 2.40 | 3.90 | 9.80 | 16.80 | 18.10 | 32.90 | 19.20 | 20.50 |
+| 2 | 600 | 600 | 2.30 | 3.70 | 7.30 | 16.80 | 18.00 | 28.10 | 19.10 | 20.10 |
+| 3 | 600 | 600 | 2.30 | 3.70 | 5.70 | 16.80 | 17.80 | 28.30 | 19.00 | 20.00 |
+| **中位数** | 600 | 600 | **2.30** | **3.70** | **7.30** | **16.80** | **18.00** | **28.30** | **19.10** | **20.10** |
 
-## 基线结论（A 已填 / B、C 待填）
+## 基线结论（A / B / C 均已填）
 
 W5-5 比的就是这几格（各取三次的中位数）：
 
@@ -186,8 +214,14 @@ W5-5 比的就是这几格（各取三次的中位数）：
 | A | `settle(20)` `layoutP95Ms` / `paintP95Ms` | **26.20 / 78.60**（dev 档浏览器读数，与上面内核口径不可横向比）|
 | A（生产档，2026-10-30 空载）| `settle(20)` `layoutP95Ms` / `paintP95Ms` | **18.30 / 39.40**（`vite preview` + 真 Chrome，三次中位数）|
 | A（dev 档，2026-10-30 优化后）| `settle(20)` `paintP95Ms` | **47.20～49.10**（W5-5 消掉计数遍历后，同口径对比见 §11.3.4）|
-| B 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
-| C 远景 | `layoutMs P95` / `paintMs P95` | — / —（待 gen-model 后端 + 真实 BRAN）|
+| B 远景（`24381_145018`）| `layoutMs P95` / `paintMs P95` | **3.30 / 17.80**（63 条记录 / 画出 21 条）|
+| B 中景（`radiusScale = 0.4`）| `layoutMs P95` / `paintMs P95` | **2.40 / 18.30**（同上）|
+| C 远景（`24381_146979`）| `layoutMs P95` / `paintMs P95` | **5.30 / 17.10**（166 条记录 / 画出 58 条）|
+| C 中景（`radiusScale = 0.4`）| `layoutMs P95` / `paintMs P95` | **3.70 / 18.00**（同上）|
+
+**B / C 的读法（2026-11-01）**：这两组是**每步强制全量布局的最坏情况**，不是日常绕轨。`layoutMs` 与记录数正相关（63 条 → 1.8 ms，166 条 → 3.4 ms，约 0.02 ms/条），`paintMs` 与记录数几乎无关（15.6～16.8 ms），说明瓶颈在固定开销（缓冲上传 / 状态切换）而不是记录数。两组的三次重复方差都在 ±5 % 内，可用。
+
+**与 A 的量级关系**：A（2 000 可见 / 500 外部）`paintP95Ms` 78.60 是 C（166 条）的 4.6 倍、B（63 条）的 4.4 倍；`layoutP95Ms` 26.20 是 C 的 4.9 倍。记录数差 12～32 倍，成本只差 4～5 倍——与「`paintMs` 大头是固定开销」一致，也与「2k 记录是 A 场景人为堆出来的压力档」一致。真实 BRAN 房间（中位数 19 个 BRAN、最大 310 个）的多 BRAN 叠加量级见 `docs/investigation/multi-bran-screen-feasibility-2026-11-01.md`。
 
 **A 场景读数说明**：`hitP95Ms` 0.10 ms 说明**命中测试**不是瓶颈（与 ADR 的「pointer hit-test p95 ≤ 2 ms」同口径，`src/debug/dimensionPerf.ts:245-255` 是纯 CPU 命中）。`paintP95Ms`（`settle(20)` 的 78.60 ms）是 dev 档浏览器里 layout → paint 这一档的主要成本，与 `run()` 里单次 settle 的 61.70 ms 同量级。W5-5 做分帧预算要盯的是 `paintP95Ms`。
 
@@ -230,12 +264,13 @@ W5-5 比的就是这几格（各取三次的中位数）：
 - `createDimensionSystem({ onFrame })`（`src/dimension/facade/createDimensionSystem.ts`）：原样透传给 `DimensionViewport` 的 `onFrame`（`src/dimension/viewport/dimensionViewport.ts`）。视口三处上报：全量布局帧 `layoutMs + paintMs`；只改样式的增量帧与「相机失效但 projector 未换」的帧 `layoutMs = 0`、`paintMs = 整帧`。三处各带 `kind`（`layout` / `style` / `camera`），数值口径不变（`layoutMs + paintMs` 恒等于整帧）。
 - `src/debug/dimensionFrameStats.ts`：环形缓冲（600 帧）+ 最近邻秩分位，按 `kind` 分桶（`paintMs` 只算 `layout` 帧）；`ViewerPanel.vue` 在 dev 构建把它挂为 `window.__dimensionFrameStats`，生产构建既不挂也不记录。
 - `src/debug/dimensionPerf.ts`：新增 `window.__dimensionPerf.settle(passes)`；`run()` 与 e2e 门禁没动。
+- **2026-11-01 追加（节流重排，不改口径只改频率）**：`DimensionViewport.setProjector` 现在按 `max(100 ms, 上次全量布局成本 × 2)` 决定「重排 / 只重绘」，成本取 `onFrame` 上报的 `layoutMs + paintMs`（`kind === 'layout'` 帧）。`onFrame` 的字段与三类 `kind` 含义**一字未动**，所以上面的基线数值与新代码仍可直接比。新增输入口 `cameraMotionLayoutIntervalMs`（缺省 100，仅测试用）。
 - 可选对照：`npm run perf:dimensions:kernel`（Node 内核基准：1920×1080 @2x、2k 可见、热身 50 / 实测 200 次，打印 `layout+collision p50/p95` 与 `hit-test p50/p95`，自带 16 ms / 2 ms 断言）。**这是最接近 ADR 0040 口径的可运行度量**（`test/perf/dimensions/benchKernel.ts:26`、`:218`）：2026-10-30 实测 `layout+collision p95 = 3.746 ms`、`hit-test p95 = 0.036 ms`，均达标。
 
 ## 注意
 
 - dev 构建（Vite 不压缩、Vue dev 模式）比生产略慢；基线与 W5-5 复测都用 dev，口径一致即可。
-- `layoutMs` 与 `paintMs` 都只统计全量布局帧。绕轨脚本每帧 `notifyViewerChanged()`，`layoutFrames ≈ frames`；手动拖动时增量帧多，两者分开。
+- `layoutMs` 与 `paintMs` 都只统计全量布局帧。**2026-11-01 起绕轨脚本必须每步加 `flushProjection()` 才是 `layoutFrames = frames`**：节流后 `notifyViewerChanged()` 单独调用只保证「到点才排」，600 帧大约排 100 次。手动拖动时增量帧更多，三种口径（强制全量 / 节流绕轨 / 手动拖动）分开记。
 - 首轮含字体 / 着色器热身，先空跑一次再记三次。
 - 三次的原始返回值（JSON）原样贴在下面「原始读数」；B / C 的读数也往同一节追加，或存 `runs/`。
 
@@ -250,6 +285,7 @@ W5-5 比的就是这几格（各取三次的中位数）：
 7. **`updateP95Ms` 与 ADR 0040 的帧预算不同口径（2026-10-30 补，未修）**：`run()` 的 60 帧循环只测 `renderer.render`（`src/debug/dimensionPerf.ts:223-235`），不含 layout / collision / paint；`e2e/dimension-perf.spec.ts:27` 却拿它对着 16 ms 判。ADR 0040 的预算是三者合并的帧 p95。**处置**：W5-5 补一条 `settle(passes)` 分位断言（计划文档 §11.3、风险 R8），在此之前不得引用门禁绿作为性能达标证据。
 8. ~~**生产构建下的 `/dimension-perf.html` 是坏的**~~ → **已修（2026-10-30）**：页面从 `public/`（原样拷贝）移到仓库根并加进 `build.rollupOptions.input`，构建后指向真实 chunk，dev 与 preview 两档都能打开。**生产档基线也已采到**（2026-10-30 机器空载，三次中位数 `layoutP95Ms` 18.30 / `paintP95Ms` 39.40），见上一段表格。
 9. **`paintProfile(passes)` 是只读诊断，不进任何门禁（2026-10-30 新增）**：它返回 paint 内部四段（`countMs` / `writeMs` / `trianglesMs` / `fillsMs`）与段数分布，用于定位成本，**不是预算指标**。四段之和与 `settle` 的 `paintMs` 差 1～3 ms（`setBlending` 与 map 分配不在任一段内），两者不可互相替代。`onPaintProfile` 不挂时 `paint()` 连 `performance.now()` 都不调，所以生产路径没有这项开销。
+10. **相机连续运动不再每帧全量布局（2026-11-01 修，口径已在上文更正）**：`setProjector` 现在按 `max(100 ms, 上次全量布局成本 × 2)` 节流。原第 2 条描述的「静止 80 ms 兜底」仍在，只是运动期间多了一条「到点就排」。后果：绕轨脚本的 `layoutFrames` 不再是 `frames`，**要量最坏情况必须每步显式 `flushProjection()`**；`frameMs` 也会因为多了只重绘帧而分布改变，与旧数据不可直接比。
 
 **这些不影响 A 场景已填数字的可用性**（三次重复、同一脚本、同一环境，横向比的是同一口径），但 W5-5 做「P95 不退化」判定时要按场景分别比，不要把 B / C 的 `paintMs` 与 A 的 `paintMs` 放一张表里排名。第 1、3、4、5 条已修掉；第 2 条（相机停下后的那条 `layoutMs = 0` 帧）不是缺陷，现在会被正确记成 `kind: 'camera'` 并只进 `frameMs`；第 6 条（`run()` 的单次读数）保持原样，与 recorder 分位是两套口径；第 7 条（门禁口径）**待 W5-5 修，属计划级缺口，不是本表的口径问题**。
 
@@ -295,3 +331,56 @@ W5-5 比的就是这几格（各取三次的中位数）：
 ```
 
 取数方式：临时 spec 用 `page.evaluate` 调 `window.__dimensionPerf.run()` 与 `.settle(20)`，跑完即删（不入库）；等价的手工路径见上面「怎么跑」的 DevTools 两行。
+
+### B / C 真实 BRAN（2026-11-01，`plant3d-web@main` + 后端 8022，Ryzen 9 7950X / RX590 GME / Playwright 1.58.2 headless Chromium / 1920×1080 DPR 1）
+
+临时 spec 逐 BRAN 打开直达链接，`page.evaluate` 里跑「热身 20 步 → 远景 3 × 600 步 → 中景 3 × 600 步」，每步 `flyTo(duration 0)` + `notifyViewerChanged()` + `flushProjection()` + 等分帧写完。跑完即删（`e2e/*` 已 gitignore）。
+
+```json
+{
+  "B": {
+    "refno": "24381_145018",
+    "camera": {"position":[17.813905273437495,13.360428955078117,17.81390527343747],"target":[0,8.881784197001252e-16,1.7763568394002505e-15]},
+    "records": 63,
+    "drawn": 21,
+    "far": [
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.6,"p95":19.5,"max":31.8},
+       "layoutMs":{"p50":1.9,"p95":3.4,"max":5.1},"paintMs":{"p50":16.8,"p95":17.9,"max":26.7}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.5,"p95":19.3,"max":27.7},
+       "layoutMs":{"p50":1.8,"p95":3.2,"max":5.4},"paintMs":{"p50":16.7,"p95":17.8,"max":26.3}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.5,"p95":19.3,"max":29.7},
+       "layoutMs":{"p50":1.7,"p95":3.3,"max":5.2},"paintMs":{"p50":16.7,"p95":17.7,"max":28.5}}
+    ],
+    "mid": [
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.8,"p95":19.8,"max":32.3},
+       "layoutMs":{"p50":1.5,"p95":2.4,"max":7.8},"paintMs":{"p50":17.3,"p95":18.3,"max":30.6}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.9,"p95":19.9,"max":32.0},
+       "layoutMs":{"p50":1.5,"p95":2.4,"max":5.3},"paintMs":{"p50":17.3,"p95":18.4,"max":30.4}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.8,"p95":19.7,"max":33.0},
+       "layoutMs":{"p50":1.5,"p95":2.2,"max":5.5},"paintMs":{"p50":17.2,"p95":18.2,"max":31.4}}
+    ]
+  },
+  "C": {
+    "refno": "24381_146979",
+    "camera": {"position":[5.8616250000000045,4.3962187499999885,5.861624999999991],"target":[-8.881784197001252e-16,-8.881784197001252e-16,5.551115123125783e-17]},
+    "records": 166,
+    "drawn": 58,
+    "far": [
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.9,"p95":19.8,"max":33.5},
+       "layoutMs":{"p50":3.3,"p95":5.3,"max":9.6},"paintMs":{"p50":15.7,"p95":16.9,"max":27.2}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.9,"p95":19.9,"max":30.9},
+       "layoutMs":{"p50":3.4,"p95":5.5,"max":10.6},"paintMs":{"p50":15.6,"p95":17.1,"max":26.4}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":18.9,"p95":19.8,"max":33.3},
+       "layoutMs":{"p50":3.4,"p95":5.2,"max":7.3},"paintMs":{"p50":15.5,"p95":17.1,"max":28.8}}
+    ],
+    "mid": [
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":19.2,"p95":20.5,"max":34.9},
+       "layoutMs":{"p50":2.4,"p95":3.9,"max":9.8},"paintMs":{"p50":16.8,"p95":18.1,"max":32.9}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":19.1,"p95":20.1,"max":30.8},
+       "layoutMs":{"p50":2.3,"p95":3.7,"max":7.3},"paintMs":{"p50":16.8,"p95":18.0,"max":28.1}},
+      {"frames":600,"layoutFrames":600,"frameMs":{"p50":19.0,"p95":20.0,"max":30.7},
+       "layoutMs":{"p50":2.3,"p95":3.7,"max":5.7},"paintMs":{"p50":16.8,"p95":17.8,"max":28.3}}
+    ]
+  }
+}
+```
