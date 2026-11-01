@@ -5,6 +5,8 @@ import { createEmptyReviewSnapshot, type SnapshotComment } from '../domain/revie
 
 import { createCommentThreadStore } from './commentThreadStore';
 
+import { present } from '@/testing/present';
+
 function makeComment(
   partial: Partial<SnapshotComment> & { commentId: string; annotationId: string; createdAt: number },
 ): SnapshotComment {
@@ -62,7 +64,7 @@ describe('createCommentThreadStore', () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     expect(store.getIndex().totalEntries).toBe(1);
-    expect(store.getThread(buildCommentThreadKey('text', 'a-1'))?.entries[0].commentId).toBe('c-1');
+    expect(present(store.getThread(buildCommentThreadKey('text', 'a-1'))?.entries[0], 'thread entry').commentId).toBe('c-1');
   });
 
   it('upsertComment replaces existing entry by commentId, notifies only when changed', () => {
@@ -81,7 +83,7 @@ describe('createCommentThreadStore', () => {
       store.upsertComment(makeComment({ commentId: 'c-1', annotationId: 'a-1', createdAt: 5, content: 'v2' })).changed,
     ).toBe(true);
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(store.getThread(buildCommentThreadKey('text', 'a-1'))?.entries[0].createdAt).toBe(5);
+    expect(present(store.getThread(buildCommentThreadKey('text', 'a-1'))?.entries[0], 'thread entry').createdAt).toBe(5);
   });
 
   it('upsertComment keeps the same commentId isolated by formId and taskId', () => {
@@ -104,8 +106,8 @@ describe('createCommentThreadStore', () => {
     }));
 
     expect(store.getIndex().totalEntries).toBe(2);
-    expect(store.getThread(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-1'))?.entries[0].content).toBe('task-1');
-    expect(store.getThread(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-2'))?.entries[0].content).toBe('task-2');
+    expect(present(store.getThread(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-1'))?.entries[0], 'thread entry').content).toBe('task-1');
+    expect(present(store.getThread(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-2'))?.entries[0], 'thread entry').content).toBe('task-2');
   });
 
   it('deleteComment removes entry and clears empty thread', () => {

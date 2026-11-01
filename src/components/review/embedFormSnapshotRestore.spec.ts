@@ -6,6 +6,7 @@ import {
   restoreEmbedFormSnapshotContext,
 } from './embedFormSnapshotRestore';
 
+import { present } from '@/testing/present';
 import { UserRole, type ReviewTask } from '@/types/auth';
 
 describe('restoreEmbedFormSnapshot', () => {
@@ -109,7 +110,7 @@ describe('restoreEmbedFormSnapshot', () => {
     expect(importTools).toHaveBeenCalledTimes(1);
     expect(syncTools).toHaveBeenCalledTimes(1);
 
-    const payload = JSON.parse(importTools.mock.calls[0][0] as string) as {
+    const payload = JSON.parse(present(importTools.mock.calls[0], 'importTools call')[0] as string) as {
       annotations: { formId?: string; comments?: { authorRole: UserRole; content: string }[] }[];
       measurements: {
         approximate?: boolean;
@@ -161,7 +162,7 @@ describe('restoreEmbedFormSnapshot', () => {
     expect(result.recordCount).toBe(0);
     expect(importTools).toHaveBeenCalledTimes(1);
     expect(syncTools).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(importTools.mock.calls[0][0] as string)).toEqual({
+    expect(JSON.parse(present(importTools.mock.calls[0], 'importTools call')[0] as string)).toEqual({
       version: 7,
       measurements: [],
       legacyMeasurements: [],
@@ -248,7 +249,7 @@ describe('restoreEmbedFormSnapshot', () => {
     });
 
     expect(importTools).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(importTools.mock.calls[0][0] as string)).toEqual(expect.objectContaining({
+    expect(JSON.parse(present(importTools.mock.calls[0], 'importTools call')[0] as string)).toEqual(expect.objectContaining({
       annotations: [
         expect.objectContaining({
           id: 'anno-old-1',
@@ -256,7 +257,7 @@ describe('restoreEmbedFormSnapshot', () => {
         }),
       ],
     }));
-    expect(JSON.parse(importTools.mock.calls[1][0] as string)).toEqual({
+    expect(JSON.parse(present(importTools.mock.calls[1], 'importTools call')[0] as string)).toEqual({
       version: 7,
       measurements: [],
       legacyMeasurements: [],

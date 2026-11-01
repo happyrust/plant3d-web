@@ -5,6 +5,8 @@ import {
   createCommentEventLog,
 } from './commentEventLog';
 
+import { present } from '@/testing/present';
+
 describe('commentEventLog', () => {
   it('starts empty with default capacity', () => {
     const log = createCommentEventLog();
@@ -28,7 +30,7 @@ describe('commentEventLog', () => {
   it('respects explicit `at` when provided', () => {
     const log = createCommentEventLog({ now: () => 1 });
     log.push({ kind: 'thread_upsert', at: 100 });
-    expect(log.snapshot()[0].at).toBe(100);
+    expect(present(log.snapshot()[0], 'event entry').at).toBe(100);
   });
 
   it('overwrites oldest entries when capacity exceeded', () => {
@@ -66,6 +68,6 @@ describe('commentEventLog', () => {
     log.push({ kind: 'thread_upsert', key: 'a' });
     log.push({ kind: 'thread_upsert', key: 'b' });
     expect(log.snapshot()).toHaveLength(1);
-    expect(log.snapshot()[0].key).toBe('b');
+    expect(present(log.snapshot()[0], 'event entry').key).toBe('b');
   });
 });

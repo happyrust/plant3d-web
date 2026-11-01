@@ -11,6 +11,8 @@ import {
 
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
 
+import { present } from '@/testing/present';
+
 function createItem(overrides: Partial<AnnotationWorkspaceItem> = {}): AnnotationWorkspaceItem {
   return {
     id: 'ann-1',
@@ -97,7 +99,7 @@ describe('toAnnotationTableCsv', () => {
       commentCount: 2,
       statusLabel: '待处理',
       priorityLabel: '高',
-      severity: 'severe',
+      severity: 'principle',
       activityAt: new Date('2026-04-22T08:30:00Z').getTime(),
     });
     const csv = toAnnotationTableCsv([item]);
@@ -209,7 +211,7 @@ describe('downloadCsv', () => {
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(appended).toHaveLength(1);
-    expect(appended[0].download).toBe('test.csv');
+    expect(present(appended[0], 'appended anchor').download).toBe('test.csv');
 
     // 推进 1 秒让 setTimeout 跑完
     vi.advanceTimersByTime(1_100);

@@ -51,12 +51,12 @@ describe('buildRowClipboardLine', () => {
       refnos: ['24381_145018'],
       statusLabel: '待处理',
       priorityLabel: '高',
-      severity: 'severe',
+      severity: 'principle',
       activityAt: new Date('2026-04-22T00:00:00Z').getTime(),
       commentCount: 2,
     });
     const line = buildRowClipboardLine(item, 0);
-    // 应包含: 1, 高·severe, DN800 管段, 偏左, refno, 待处理, 时间, 2
+    // 应包含: 1, 高·principle, DN800 管段, 偏左, refno, 待处理, 时间, 2
     expect(line).toContain('DN800 管段');
     expect(line).toContain('24381_145018');
     expect(line).toContain('待处理');

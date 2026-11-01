@@ -4,20 +4,27 @@ import { createApp, h, nextTick, ref } from 'vue';
 import { UserRole, type AnnotationComment } from '@/types/auth';
 
 const backendComments = ref<AnnotationComment[]>([]);
-const reviewCommentGetByAnnotationMock = vi.fn(async () => ({
-  success: true,
-  comments: backendComments.value,
-}));
-const reviewCommentCreateMock = vi.fn();
-const reviewCommentUpdateMock = vi.fn(async () => ({ success: true }));
+const reviewCommentGetByAnnotationMock = vi.fn<
+  (annotationId: string, annotationType?: string, context?: unknown) => Promise<{
+    success: boolean;
+    comments: AnnotationComment[];
+  }>
+    >(async () => ({
+      success: true,
+      comments: backendComments.value,
+    }));
+const reviewCommentCreateMock = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+const reviewCommentUpdateMock = vi.fn<(...args: unknown[]) => Promise<{ success: boolean }>>(
+  async () => ({ success: true }),
+);
 const setAnnotationCommentsMock = vi.fn();
 let commentAddedCallback: ((data: unknown) => void) | null = null;
 
 vi.mock('@/api/reviewApi', () => ({
-  reviewCommentGetByAnnotation: (...args: unknown[]) => reviewCommentGetByAnnotationMock(...args),
-  reviewCommentCreate: (...args: unknown[]) => reviewCommentCreateMock(...args),
+  reviewCommentGetByAnnotation: reviewCommentGetByAnnotationMock,
+  reviewCommentCreate: reviewCommentCreateMock,
   reviewCommentDelete: vi.fn(async () => ({ success: true })),
-  reviewCommentUpdate: (...args: unknown[]) => reviewCommentUpdateMock(...args),
+  reviewCommentUpdate: reviewCommentUpdateMock,
 }));
 
 vi.mock('@/composables/useReviewStore', () => ({

@@ -37,24 +37,40 @@ const flyToXeokitMeasurementMock = vi.fn();
 const syncFromStoreMock = vi.fn();
 const clearDraftDataByPayloadMock = vi.fn();
 const submitTaskToNextNodeMock = vi.fn(async () => undefined);
-const notifyParentWorkflowActionMock = vi.fn(() => false);
-const reviewAnnotationCheckMock = vi.fn(async () => ({
-  success: true,
+const notifyParentWorkflowActionMock = vi.fn<(...args: unknown[]) => boolean>(() => false);
+const reviewAnnotationCheckMock = vi.fn<(...args: unknown[]) => Promise<{
+  success: boolean;
   data: {
-    passed: true,
-    recommendedAction: 'submit',
-    currentNode: 'sj',
+    passed: boolean;
+    recommendedAction: string;
+    currentNode: string;
     summary: {
-      total: 0,
-      open: 0,
-      pendingReview: 0,
-      approved: 0,
-      rejected: 0,
+      total: number;
+      open: number;
+      pendingReview: number;
+      approved: number;
+      rejected: number;
+    };
+    blockers: unknown[];
+    message: string;
+  };
+}>>(async () => ({
+    success: true,
+    data: {
+      passed: true,
+      recommendedAction: 'submit',
+      currentNode: 'sj',
+      summary: {
+        total: 0,
+        open: 0,
+        pendingReview: 0,
+        approved: 0,
+        rejected: 0,
+      },
+      blockers: [],
+      message: 'ok',
     },
-    blockers: [],
-    message: 'ok',
-  },
-}));
+  }));
 const persistenceState = new Map<string, unknown>();
 const persistenceStorageKeys: string[] = [];
 const activeUnmounts: (() => void)[] = [];

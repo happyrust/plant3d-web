@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { CloudAnnotationRecord } from '@/composables/useToolStore';
+
+import { present } from '@/testing/present';
+
 describe('annotationWorkspaceModel', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', {
@@ -25,22 +29,29 @@ describe('annotationWorkspaceModel', () => {
   it('derives screenshot fields from legacy cloud thumbnailUrl', async () => {
     const { buildAnnotationWorkspaceItems } = await import('./annotationWorkspaceModel');
 
-    const [item] = buildAnnotationWorkspaceItems({
+    // 旧数据在云线记录上直接挂 thumbnailUrl / attachmentId，读取侧按 legacy 字段兜底
+    const legacyCloud: CloudAnnotationRecord & {
+      thumbnailUrl?: string;
+      attachmentId?: string;
+    } = {
+      id: 'cloud-1',
+      objectIds: ['obj-1'],
+      anchorWorldPos: [1, 2, 3],
+      visible: true,
+      title: '云线批注',
+      description: '管线间距不足',
+      createdAt: 1777041600000,
+      thumbnailUrl: 'https://example.com/cloud.png',
+      attachmentId: 'att-cloud',
+    };
+
+    const [first] = buildAnnotationWorkspaceItems({
       annotations: [],
       rectAnnotations: [],
       obbAnnotations: [],
-      cloudAnnotations: [{
-        id: 'cloud-1',
-        objectIds: ['obj-1'],
-        anchorWorldPos: [1, 2, 3],
-        visible: true,
-        title: '云线批注',
-        description: '管线间距不足',
-        createdAt: 1777041600000,
-        thumbnailUrl: 'https://example.com/cloud.png',
-        attachmentId: 'att-cloud',
-      }],
+      cloudAnnotations: [legacyCloud],
     });
+    const item = present(first, 'first workspace item');
 
     expect(item.thumbnailUrl).toBe('https://example.com/cloud.png');
     expect(item.screenshot).toEqual({
@@ -52,7 +63,7 @@ describe('annotationWorkspaceModel', () => {
   it('projects cloud members and anchor separately from bindings', async () => {
     const { buildAnnotationWorkspaceItems } = await import('./annotationWorkspaceModel');
 
-    const [item] = buildAnnotationWorkspaceItems({
+    const [first] = buildAnnotationWorkspaceItems({
       annotations: [],
       rectAnnotations: [],
       obbAnnotations: [],
@@ -73,6 +84,7 @@ describe('annotationWorkspaceModel', () => {
         createdAt: 1,
       }],
     });
+    const item = present(first, 'first workspace item');
 
     expect(item.refnos).toEqual(['REF/A', 'REF/B']);
     expect(item.cloudBindings).toEqual([

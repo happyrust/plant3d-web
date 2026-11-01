@@ -11,6 +11,7 @@ import { loadReviewModelComparison } from './reviewModelContextRestore';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
 import type { ReviewModelContext } from './reviewModelContext';
+import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type {
   ModelAttributeDiff,
   ModelElementVersionTimeline,
@@ -22,19 +23,22 @@ import type {
 
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { getReviewCommentThreadStore } from '@/review/services/sharedStores';
+import { present } from '@/testing/present';
 
-function createRecord(overrides: Record<string, unknown> = {}) {
-  return {
+function createRecord(overrides: Record<string, unknown> = {}): ConfirmedRecord {
+  const base: ConfirmedRecord = {
     id: 'record-1',
     taskId: 'task-1',
     confirmedAt: 1,
+    type: 'batch',
+    note: '',
     annotations: [],
     cloudAnnotations: [],
     rectAnnotations: [],
     obbAnnotations: [],
     measurements: [],
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 describe('saved historical model comparison', () => {
@@ -426,9 +430,9 @@ describe('createConfirmedRecordsRestorer', () => {
       taskId: 'task-1',
       annotations: [{ id: 'anno-1', title: 'anno' }],
     })]);
-    let resolveReady: ((value: boolean) => void) | null = null;
+    const readySignal: { resolve?: (value: boolean) => void } = {};
     const waitForViewerReady = vi.fn(() => new Promise<boolean>((resolve) => {
-      resolveReady = resolve;
+      readySignal.resolve = resolve;
     }));
 
     const restorer = createConfirmedRecordsRestorer({
@@ -441,7 +445,7 @@ describe('createConfirmedRecordsRestorer', () => {
 
     const pending = restorer.restoreConfirmedRecordsIntoScene();
     currentTaskId.value = 'task-2';
-    resolveReady?.(true);
+    readySignal.resolve?.(true);
     await pending;
 
     expect(waitForViewerReady).toHaveBeenCalledTimes(1);
@@ -476,7 +480,7 @@ describe('createConfirmedRecordsRestorer', () => {
 
     await restorer.restoreConfirmedRecordsIntoScene();
 
-    const payload = JSON.parse(importJSON.mock.calls[0][0] as string);
+    const payload = JSON.parse(present(importJSON.mock.calls[0], 'importJSON call')[0] as string);
     expect(payload.annotations).toEqual([
       expect.objectContaining({
         id: 'anno-form-restore',
@@ -722,8 +726,12 @@ describe('createConfirmedRecordsRestorer', () => {
     await restorer.restoreConfirmedRecordsIntoScene();
 
     expect(importJSON).toHaveBeenCalledTimes(1);
-    expect(importJSON).toHaveBeenCalledWith(buildReviewRecordReplayPayload(confirmedRecords.value));
-    expect(JSON.parse(importJSON.mock.calls[0][0] as string)).toEqual(expect.objectContaining({
+    const replayRecords = confirmedRecords.value.map((record) => ({
+      ...record,
+      obbAnnotations: record.obbAnnotations ?? [],
+    }));
+    expect(importJSON).toHaveBeenCalledWith(buildReviewRecordReplayPayload(replayRecords));
+    expect(JSON.parse(present(importJSON.mock.calls[0], 'importJSON call')[0] as string)).toEqual(expect.objectContaining({
       version: 7,
       measurements: [
         expect.objectContaining({

@@ -103,7 +103,7 @@ describe('isSnapshotEmpty', () => {
     expect(
       isSnapshotEmpty({
         ...baseline,
-        measurements: [{ measurementId: 'm', kind: 'distance', payload: {} }],
+        measurements: [{ measurementId: 'm', kind: 'distance', payload: { id: 'm' } }],
       }),
     ).toBe(false);
 
@@ -132,7 +132,7 @@ describe('isSnapshotEmpty', () => {
       isSnapshotEmpty({
         ...baseline,
         dimensionDocument: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           documentId: 'dimension-document-1',
           records: [],
         },

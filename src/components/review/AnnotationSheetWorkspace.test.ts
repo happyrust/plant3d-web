@@ -88,9 +88,8 @@ async function mountWorkspace(options: {
     visible: true,
     sourceAnnotationId: options.currentId ?? 'pending',
     sourceAnnotationType: 'text' as const,
-    start: [0, 0, 0] as [number, number, number],
-    end: [1, 0, 0] as [number, number, number],
-    distance: 1,
+    origin: { entityId: '24381_145018', worldPos: [0, 0, 0] as [number, number, number] },
+    target: { entityId: '24381_145019', worldPos: [1, 0, 0] as [number, number, number] },
   };
   const app = createApp({
     render: () => h(AnnotationSheetWorkspace, {

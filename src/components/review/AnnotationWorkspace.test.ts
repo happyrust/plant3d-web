@@ -11,6 +11,8 @@ import type {
 } from './annotationWorkspaceModel';
 import type { AnnotationType } from '@/composables/useToolStore';
 
+import { present } from '@/testing/present';
+
 vi.mock('./ReviewCommentsTimeline.vue', () => ({
   default: {
     name: 'ReviewCommentsTimelineStub',
@@ -76,7 +78,7 @@ async function mountWorkspace(options: {
       items: options.items ?? baseItems,
       summary: baseSummary,
       activeFilter: 'all',
-      selectedAnnotation: options.selectedAnnotation ?? baseItems[2],
+      selectedAnnotation: options.selectedAnnotation ?? present(baseItems[2], 'baseItems[2]'),
       linkedMeasurements: [],
       confirmNote: '',
       unsavedAnnotationCount: 0,
@@ -85,7 +87,7 @@ async function mountWorkspace(options: {
       confirmSaving: false,
       layout: options.layout ?? 'split',
       density: 'dock',
-      showWorkflow: options.showWorkflow,
+      showWorkflow: options.showWorkflow ?? true,
       onCollapseTextAnnotations: (payload: AnnotationWorkspaceTextCollapsePayload) => collapseCalls.push(payload),
       onOpenAnnotation: (item: AnnotationWorkspaceItem) => openCalls.push(item),
     }, {

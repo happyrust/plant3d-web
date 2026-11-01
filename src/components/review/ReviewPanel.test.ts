@@ -2,7 +2,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { createApp, h, nextTick, ref, type Component } from 'vue';
 
 import type { ShowModelByRefnosResult } from '@/composables/useViewerContext';
-import type { ReviewTask } from '@/types/auth';
+import type { AnnotationComment, ReviewTask } from '@/types/auth';
+
+import { UserRole } from '@/types/auth';
 
 const currentTask = ref<ReviewTask | null>(null);
 const reviewMode = { value: false };
@@ -64,9 +66,15 @@ const reviewAnnotationCheckMock = vi.hoisted(() => vi.fn(async () => ({
 })));
 const submitTaskToNextNodeMock = vi.hoisted(() => vi.fn(async () => {}));
 const returnTaskToNodeMock = vi.hoisted(() => vi.fn(async () => {}));
-const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn(async () => true));
-const saveAnnotationBasicFieldsMock = vi.hoisted(() => vi.fn(async () => true));
-const refreshCommentThreadMock = vi.hoisted(() => vi.fn(async () => {}));
+const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn<
+  (...args: unknown[]) => Promise<boolean>
+    >(async () => true));
+const saveAnnotationBasicFieldsMock = vi.hoisted(() => vi.fn<
+  (...args: unknown[]) => Promise<boolean>
+    >(async () => true));
+const refreshCommentThreadMock = vi.hoisted(() => vi.fn<
+  (...args: unknown[]) => Promise<void>
+    >(async () => {}));
 
 vi.mock('@/composables/useAnnotationSeveritySync', () => ({
   saveAnnotationSeverity: (...args: unknown[]) => saveAnnotationSeverityMock(...args),
@@ -186,7 +194,9 @@ const toolStoreMock = vi.hoisted(() => ({
   addAnnotation: vi.fn(),
   addMeasurement: vi.fn(),
   clearAll: vi.fn(),
-  getAnnotationComments: vi.fn(() => []),
+  getAnnotationComments: vi.fn(
+    (_type: string, _id: string, _formId?: string | null, _taskId?: string | null): AnnotationComment[] => [],
+  ),
   importJSON: vi.fn(),
   toolMode: { value: 'none' as string },
   setToolMode: vi.fn(),
@@ -1586,7 +1596,7 @@ describe('ReviewPanel', () => {
         annotationType: 'text',
         authorId: 'proofreader_001',
         authorName: 'JH',
-        authorRole: 'proofreader',
+        authorRole: UserRole.PROOFREADER,
         content: '评论线程回归',
         createdAt: 1710000000100,
       },

@@ -19,6 +19,7 @@ import type {
 import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 
 import { createComputationProvenance } from '@/measurement/domain/computationProvenance';
+import { present } from '@/testing/present';
 import { UserRole, type AnnotationComment } from '@/types/auth';
 
 const FIXED_NOW = 1_700_000_000_000;
@@ -229,7 +230,7 @@ describe('buildSnapshotFromTaskRecords', () => {
       'cloud:c1',
     ]);
     expect(snapshot.annotations.every((a) => a.taskId === 'task-1')).toBe(true);
-    expect(snapshot.annotations[0].payload).toMatchObject({ id: 't0a', glyph: 'M' });
+    expect(present(snapshot.annotations[0], 'first annotation').payload).toMatchObject({ id: 't0a', glyph: 'M' });
     expect(snapshot.annotations.find((a) => a.annotationId === 'c0')?.payload.bindings).toEqual(
       makeCloudAnnotation('c0').bindings,
     );
@@ -285,7 +286,7 @@ describe('buildSnapshotFromTaskRecords', () => {
     });
     expect(snapshot.meta.inlineCommentIndex).toEqual(['text:t0']);
 
-    expect(snapshot.annotations[0].payload.comments).toEqual([comment]);
+    expect(present(snapshot.annotations[0], 'first annotation').payload.comments).toEqual([comment]);
   });
 
   it('normalizes measurement kind and preserves payload', () => {
@@ -322,7 +323,7 @@ describe('buildSnapshotFromTaskRecords', () => {
       annotations: [makeTextAnnotation('t0')],
     });
     const snapshot = buildSnapshotFromTaskRecords([r0]);
-    expect(snapshot.annotations[0].taskId).toBe('inner-task');
+    expect(present(snapshot.annotations[0], 'first annotation').taskId).toBe('inner-task');
   });
 
   it('preserves screenshot payload on annotations', () => {

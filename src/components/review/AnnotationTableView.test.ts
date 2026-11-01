@@ -6,6 +6,8 @@ import AnnotationTableView from './AnnotationTableView.vue';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
 import type { AnnotationSeverity } from '@/types/auth';
 
+import { present } from '@/testing/present';
+
 // ------------------------------------------------------------
 // ResizeObserver mock · 用于响应式断点测试
 // ------------------------------------------------------------
@@ -44,15 +46,17 @@ function fireContainerResize(target: Element, width: number) {
   }
 }
 
-const downloadCsvMock = vi.fn();
-const toAnnotationTableCsvMock = vi.fn(() => 'mock,csv\nrow1,data1');
+const downloadCsvMock = vi.fn<(filename: string, content: string) => boolean>(() => true);
+const toAnnotationTableCsvMock = vi.fn<(items: AnnotationWorkspaceItem[]) => string>(
+  () => 'mock,csv\nrow1,data1',
+);
 
 vi.mock('./annotationTableExport', async () => {
   const actual = await vi.importActual<typeof import('./annotationTableExport')>('./annotationTableExport');
   return {
     ...actual,
-    downloadCsv: (...args: unknown[]) => downloadCsvMock(...args),
-    toAnnotationTableCsv: (...args: unknown[]) => toAnnotationTableCsvMock(...(args as [AnnotationWorkspaceItem[]])),
+    downloadCsv: (filename: string, content: string) => downloadCsvMock(filename, content),
+    toAnnotationTableCsv: (items: AnnotationWorkspaceItem[]) => toAnnotationTableCsvMock(items),
   };
 });
 
@@ -283,7 +287,7 @@ describe('AnnotationTableView', () => {
     await nextTick();
 
     expect(selectSpy).toHaveBeenCalledTimes(1);
-    expect(selectSpy.mock.calls[0][0].id).toBe('click-target');
+    expect(present(selectSpy.mock.calls[0], 'select call')[0].id).toBe('click-target');
     expect(openSpy).not.toHaveBeenCalled();
 
     destroy();
@@ -302,7 +306,7 @@ describe('AnnotationTableView', () => {
     await nextTick();
 
     expect(selectSpy).toHaveBeenCalledTimes(1);
-    expect(selectSpy.mock.calls[0][0].id).toBe('dbl-target');
+    expect(present(selectSpy.mock.calls[0], 'select call')[0].id).toBe('dbl-target');
     expect(openSpy).not.toHaveBeenCalled();
 
     destroy();
@@ -494,7 +498,7 @@ describe('AnnotationTableView', () => {
     await nextTick();
 
     expect(locateSpy).toHaveBeenCalledTimes(1);
-    expect(locateSpy.mock.calls[0][0].id).toBe('loc-target');
+    expect(present(locateSpy.mock.calls[0], 'locate call')[0].id).toBe('loc-target');
     expect(selectSpy).not.toHaveBeenCalled();
 
     destroy();
@@ -777,7 +781,7 @@ describe('AnnotationTableView', () => {
 
     expect(toAnnotationTableCsvMock).toHaveBeenCalledTimes(1);
     expect(downloadCsvMock).toHaveBeenCalledTimes(1);
-    const [filename, content] = downloadCsvMock.mock.calls[0];
+    const [filename, content] = present(downloadCsvMock.mock.calls[0], 'download call');
     expect(String(filename)).toMatch(/^plant3d-annotations-SJ-0418-\d{8}\.csv$/);
     expect(content).toBe('mock,csv\nrow1,data1');
 
@@ -938,25 +942,28 @@ describe('AnnotationTableView', () => {
     expect(rows.length).toBe(3);
 
     // 聚焦第一行 → 按 ↓ 应到第二行
-    rows[0].focus();
-    rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    const row0 = present(rows[0], 'row 0');
+    const row1 = present(rows[1], 'row 1');
+    const row2 = present(rows[2], 'row 2');
+    row0.focus();
+    row0.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     await nextTick();
-    expect(document.activeElement).toBe(rows[1]);
+    expect(document.activeElement).toBe(row1);
 
     // 在第二行按 ↓ 到第三行
-    rows[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    row1.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     await nextTick();
-    expect(document.activeElement).toBe(rows[2]);
+    expect(document.activeElement).toBe(row2);
 
     // 在第三行按 ↓ 被夹紧（保持最后一行）
-    rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    row2.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     await nextTick();
-    expect(document.activeElement).toBe(rows[2]);
+    expect(document.activeElement).toBe(row2);
 
     // 按 ↑ 返回第二行
-    rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    row2.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     await nextTick();
-    expect(document.activeElement).toBe(rows[1]);
+    expect(document.activeElement).toBe(row1);
 
     destroy();
   });
@@ -972,14 +979,17 @@ describe('AnnotationTableView', () => {
 
     const rows = host.querySelectorAll<HTMLElement>('[role="row"][data-testid^="annotation-table-row-"]');
 
-    rows[1].focus();
-    rows[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    const row0 = present(rows[0], 'row 0');
+    const row1 = present(rows[1], 'row 1');
+    const row2 = present(rows[2], 'row 2');
+    row1.focus();
+    row1.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
     await nextTick();
-    expect(document.activeElement).toBe(rows[2]);
+    expect(document.activeElement).toBe(row2);
 
-    rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    row2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
     await nextTick();
-    expect(document.activeElement).toBe(rows[0]);
+    expect(document.activeElement).toBe(row0);
 
     destroy();
   });
@@ -1040,7 +1050,7 @@ describe('AnnotationTableView', () => {
     await nextTick();
 
     expect(locateSpy).toHaveBeenCalledTimes(1);
-    expect(locateSpy.mock.calls[0][0].id).toBe('ctx-2');
+    expect(present(locateSpy.mock.calls[0], 'ctx locate call')[0].id).toBe('ctx-2');
     expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
 
     destroy();

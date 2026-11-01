@@ -8,7 +8,9 @@ import { UserRole, type ReviewTask } from '@/types/auth';
 const mocks = vi.hoisted(() => ({
   loadReviewTasks: vi.fn(() => Promise.resolve()),
   setCurrentTask: vi.fn(),
-  reviewTaskGetById: vi.fn(async () => ({ success: false })),
+  reviewTaskGetById: vi.fn<(...args: unknown[]) => Promise<{ success: boolean; task?: ReviewTask }>>(
+    async () => ({ success: false }),
+  ),
   reviewAnnotationCheck: vi.fn(async () => ({
     success: true,
     data: {

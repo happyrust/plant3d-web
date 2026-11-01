@@ -29,7 +29,7 @@ vi.mock('@/ribbon/toastBus', () => ({
 }));
 
 vi.mock('./workflowBridge', () => ({
-  notifyParentWorkflowAction: (...args: unknown[]) => notifyParentWorkflowActionMock(...args),
+  notifyParentWorkflowAction: (): boolean => notifyParentWorkflowActionMock(),
 }));
 
 describe('TaskReviewDetail', () => {

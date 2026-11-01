@@ -9,16 +9,27 @@ const reviewState = ref<unknown>(undefined);
 const currentUser = ref({ id: 'reviewer-1', name: '校对甲', role: UserRole.PROOFREADER });
 let commentAddedCallback: ((data: unknown) => void) | null = null;
 
-const annotationReviewStateApplyMock = vi.fn(async () => ({ success: true }));
-const reviewCommentGetByAnnotationMock = vi.fn(async () => ({
-  success: true,
-  comments: backendComments.value,
-}));
-const reviewCommentUpdateMock = vi.fn(async () => ({ success: true }));
-const reviewCommentCreateMock = vi.fn(async () => ({
-  success: true,
-  comment: undefined as unknown,
-}));
+const annotationReviewStateApplyMock = vi.fn<
+  (...args: unknown[]) => Promise<{ success: boolean; state?: unknown }>
+    >(async () => ({ success: true }));
+const reviewCommentGetByAnnotationMock = vi.fn<
+  (annotationId: string, annotationType?: string, context?: unknown) => Promise<{
+    success: boolean;
+    comments: AnnotationComment[];
+  }>
+    >(async () => ({
+      success: true,
+      comments: backendComments.value,
+    }));
+const reviewCommentUpdateMock = vi.fn<(...args: unknown[]) => Promise<{ success: boolean }>>(
+  async () => ({ success: true }),
+);
+const reviewCommentCreateMock = vi.fn<
+  (...args: unknown[]) => Promise<{ success: boolean; comment?: AnnotationComment }>
+    >(async () => ({
+      success: true,
+      comment: undefined,
+    }));
 const updateAnnotationCommentMock = vi.fn();
 const addCommentToAnnotationMock = vi.fn();
 const applyAnnotationReviewActionMock = vi.fn(() => ({
@@ -34,7 +45,7 @@ const setAnnotationReviewStateMock = vi.fn((type: string, id: string, state: unk
 const emitToastMock = vi.fn();
 
 vi.mock('@/api/reviewApi', () => ({
-  annotationReviewStateApply: (...args: unknown[]) => annotationReviewStateApplyMock(...args),
+  annotationReviewStateApply: annotationReviewStateApplyMock,
   annotationReviewStatesQuery: vi.fn(async () => ({ success: true, states: [] })),
   normalizeAnnotationReviewStateView: (view: Record<string, unknown>) => ({
     resolutionStatus: view.resolutionStatus,
@@ -46,10 +57,10 @@ vi.mock('@/api/reviewApi', () => ({
     updatedByRole: view.updatedByRole,
     history: Array.isArray(view.history) ? view.history : [],
   }),
-  reviewCommentGetByAnnotation: (...args: unknown[]) => reviewCommentGetByAnnotationMock(...args),
-  reviewCommentCreate: (...args: unknown[]) => reviewCommentCreateMock(...args),
+  reviewCommentGetByAnnotation: reviewCommentGetByAnnotationMock,
+  reviewCommentCreate: reviewCommentCreateMock,
   reviewCommentDelete: vi.fn(),
-  reviewCommentUpdate: (...args: unknown[]) => reviewCommentUpdateMock(...args),
+  reviewCommentUpdate: reviewCommentUpdateMock,
 }));
 
 vi.mock('@/composables/useReviewStore', () => ({
@@ -76,8 +87,8 @@ vi.mock('@/composables/useToolStore', () => ({
       };
     },
     getAnnotationReviewState: vi.fn(() => reviewState.value),
-    setAnnotationReviewState: (...args: unknown[]) => setAnnotationReviewStateMock(...args),
-    applyAnnotationReviewAction: (...args: unknown[]) => applyAnnotationReviewActionMock(...args),
+    setAnnotationReviewState: setAnnotationReviewStateMock,
+    applyAnnotationReviewAction: applyAnnotationReviewActionMock,
     updateAnnotationComment: vi.fn(),
     removeAnnotationComment: vi.fn(),
     addCommentToAnnotation: vi.fn(),

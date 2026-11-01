@@ -10,7 +10,7 @@ const loadReviewTasksMock = vi.fn(() => Promise.resolve());
 const mockStore = {
   myInitiatedTasks: { value: [] as ReviewTask[] },
   currentUser: { value: { id: 'designer-1', name: '王设计师' } },
-  loadReviewTasks: (...args: unknown[]) => loadReviewTasksMock(...args),
+  loadReviewTasks: (): Promise<void> => loadReviewTasksMock(),
 };
 
 const persistenceState = new Map<string, unknown>();

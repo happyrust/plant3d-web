@@ -392,7 +392,7 @@ describe('reviewPanelActions', () => {
 
   it('尺寸文档内容变化时提交完整文档和当前基线版本', () => {
     const baselineDocument = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       documentId: 'dimension-document-1',
       records: [],
     };
@@ -404,6 +404,7 @@ describe('reviewPanelActions', () => {
         a: { snapshot: [0, 0, 0] as const, accuracy: 'exact' as const },
         b: { snapshot: [1, 0, 0] as const, accuracy: 'exact' as const },
         placement: { offsetM: 0.1, labelT: 0.5, side: 1 as const },
+        labelPinned: false,
         authorId: 'owner',
         authorRole: 'designer',
         createdAt: 1,
@@ -429,7 +430,7 @@ describe('reviewPanelActions', () => {
 
   it('尺寸文档内容未变化时不因版本字段产生未保存差异', () => {
     const document = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       documentId: 'dimension-document-1',
       records: [],
     };
