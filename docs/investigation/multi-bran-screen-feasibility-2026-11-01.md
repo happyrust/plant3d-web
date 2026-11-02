@@ -183,3 +183,17 @@ OLD: batchLayouts=6402 batches=3  per-batch p50=153.6ms p95=183.5ms
 | 段数 / 批数实测 | 计划 §11.17（`24381_1443` 探针）|
 | 单 BRAN 成本 | `docs/verification/mbd-perf-baseline-2026-10-29/README.md`「B / C 真实 BRAN」表 |
 | 后端可用性 | `aios-database.exe` 监听 `127.0.0.1:8022`（rocksdb 档），`/api/v1/health` 200 |
+
+---
+
+## 2026-11-02 落地后状态（勘误）
+
+第 4.1 节「现有 UI 没有多 BRAN 同屏入口」的结论**已过时**：本文写作当天只读侦察，次日多 BRAN 链路已全部落地并跑通端到端。现状：
+
+- `mbd_refno` / `show_refno` 都是逗号分隔多值（编解码收口在 `src/utils/refnoListParam.ts`，`mbdRefnoParam.ts` 保留旧导出名作别名）；面板输入框、模型树右键「加入视图」、逐个移除都已接多值。
+- 同步层逐包取数（并发上限 4、逐包原子拒绝不再连坐）、诊断按 `sources[]` 逐源记账，多源时面板按 BRAN 分组显示。
+- 几何侧 `show_refno` 同样多值：`src/components/dock_panels/multiBranLoadPlan.ts` 逐条解析 dbnum、按库分组、**串行**装载（防 OOM）、按组隔离失败（`ViewerPanel.vue` 消费）。
+- 第 1.3 / 1.4 节的取舍结果：选了 (a) 单 `'mbd'` 槽 + 数组拼接（id 跨 BRAN 唯一，实测无冲突）；原子拒绝粒度定为「逐包拒、成功的照常显示」。
+- `show_dbnum` 覆盖与 `activeDbno` 兜底只在单 BRAN 时生效（`resolveShowDbnumOverride`），多 BRAN 一律逐条解析——否则跨库的包会按第一个库的实例表查，静默装不出几何。
+
+端到端证据（三条真实 BRAN 跨 dbnum 7997 / 7999，标注 247 条、几何 85 对象、混入不存在 BRAN 逐包降级）见 `docs/verification/multi-bran-e2e-2026-11-02/README.md`。第 4.2 节的每 BRAN 成本数字仍然有效，且现在有了走到大输入的真实界面路径。
