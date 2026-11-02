@@ -38,6 +38,13 @@ import { useClearanceDimensionSync } from '@/clearance/composables/useClearanceD
 import { useComponentToWallClearance } from '@/clearance/composables/useComponentToWallClearance';
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import {
+  formatGroupFailures,
+  mergeRootRefnoWithVisibleRefnos as mergeRefnoEntries,
+  prepareBranLoadPlan,
+  resolveShowDbnumOverride,
+  runBranLoadPlan,
+} from '@/components/dock_panels/multiBranLoadPlan';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import ModelGenerationDialog from '@/components/model-generation/ModelGenerationDialog.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
@@ -147,6 +154,7 @@ import {
   type ModelUnitVersionCompareOpenDetail,
 } from '@/utils/modelUnitVersionCompare';
 import { toRefnoKey } from '@/utils/refnoKey';
+import { parseRefnoList, SHOW_REFNO_PARAM } from '@/utils/refnoListParam';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
@@ -244,15 +252,22 @@ function normalizeCompareRefno(raw: unknown): string {
   return normalizeRefnoKeyLike(String(raw ?? '')) || '';
 }
 
+/**
+ * 根 refno 与可见子实例合并。实现搬到 `multiBranLoadPlan`（可单测），这里只保留
+ * 组件内三处调用点用的同名薄包装，避免与 `refnoListParam` 的归一化口径分叉。
+ */
 function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: string[]): string[] {
-  const root = normalizeRefnoKeyLike(rootRefno);
-  const merged = new Set<string>();
-  if (root) merged.add(root);
-  for (const refno of visibleRefnos) {
-    const normalized = normalizeRefnoKeyLike(String(refno || ''));
-    if (normalized) merged.add(normalized);
-  }
-  return Array.from(merged);
+  return mergeRefnoEntries(rootRefno, visibleRefnos);
+}
+
+/**
+ * 解析 `show_refno`（几何侧按 BRAN 直装，2026-11-02 起支持多值）。
+ *
+ * 编解码与 `mbd_refno` 同一套（`utils/refnoListParam.ts`）：逗号分隔、归一化、
+ * 保序去重。单值 `?show_refno=A` 仍是 `['A']`，旧链接行为不变。
+ */
+function parseShowRefnos(search: string): readonly string[] {
+  return parseRefnoList(search, SHOW_REFNO_PARAM);
 }
 
 function getSelectionStoreRefnos(): string[] {
@@ -3830,6 +3845,20 @@ onMounted(async () => {
     // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
     (compat as any).__dtxLastLoadedDbno = _dbno;
     (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
+    // 累计视图：多 BRAN 同屏要证明「两个库都装上了」，只记最后一个库会把
+    // 「其实只装了一个库」伪装成成功。这两个数组只追加、不覆盖。
+    const loadedDbnoSet: number[] = Array.isArray((compat as any).__dtxLoadedDbnos)
+      ? (compat as any).__dtxLoadedDbnos
+      : [];
+    if (!loadedDbnoSet.includes(_dbno)) loadedDbnoSet.push(_dbno);
+    (compat as any).__dtxLoadedDbnos = loadedDbnoSet;
+    const loadedRefnosAll: string[] = Array.isArray((compat as any).__dtxLoadedRefnosAll)
+      ? (compat as any).__dtxLoadedRefnosAll
+      : [];
+    for (const refno of loadedRefnos) {
+      if (!loadedRefnosAll.includes(refno)) loadedRefnosAll.push(refno);
+    }
+    (compat as any).__dtxLoadedRefnosAll = loadedRefnosAll;
     // 按需实例加载：把树侧已有的可见/选中状态回放到新加载的对象（避免默认 visible=true 覆盖）
     compat.scene.applyStateToRefnos(loadedRefnos, { computeAabb: false });
 
@@ -4066,7 +4095,12 @@ onMounted(async () => {
 
   const urlParams = new URLSearchParams(window.location.search);
   const showDbnum = urlParams.get('show_dbnum');
-  const showRefno = normalizeRefnoKeyLike(urlParams.get('show_refno') || '');
+  // `show_refno` 支持多个 BRAN（`?show_refno=A,B,C`，2026-11-02）：多 BRAN 同屏时
+  // 几何侧也要把每个包的构件装进来，否则标注叠了三个包、模型只有一包。
+  // 编解码与 `mbd_refno` 共用 `utils/refnoListParam.ts`，口径不会分叉。
+  const showRefnos = parseShowRefnos(window.location.search);
+  // 单值时代的下游判断（`show_dbnum` / `debug_refno` 互斥、空值跳过）都按首项走。
+  const showRefno = showRefnos[0] ?? '';
   // 调试入口（2026-09-12 MBD 长度尺寸显示优化 QW3）：`show_refno_select=0` 只加载该 BRAN、
   // 不把它置为选中，免得选中高亮盖住 MBD 尺寸线；缺省仍选中，行为不变。
   const showRefnoSelect = urlParams.get('show_refno_select') !== '0';
@@ -4075,9 +4109,19 @@ onMounted(async () => {
     const parsed = Number(showDbnum);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   })();
-  const resolveDbnoForRefno = (refno: string): number | null => {
-    if (showDbnumValue !== null) return showDbnumValue;
-    if (activeDbno !== null) return activeDbno;
+  /**
+   * 解析一个 BRAN 属于哪个库。
+   *
+   * `refnoCount` 决定两条兜底能不能用，都只在单 BRAN 时给：
+   * - `activeDbno` 是「当前正在看的库」，多 BRAN 可能跨库，用它兜底会把别的包塞进错误的库；
+   * - `show_dbnum` 同理（见 `resolveShowDbnumOverride`）。
+   * 多 BRAN 一律按 `getDbnumByRefno` 逐条解析（`db_meta_info` 的 ref0 → dbnum 映射）。
+   */
+  const resolveDbnoForRefno = (refno: string, refnoCount: number): number | null => {
+    const allowActiveFallback = refnoCount === 1;
+    const dbnumOverride = resolveShowDbnumOverride(showDbnumValue, refnoCount);
+    if (dbnumOverride !== null) return dbnumOverride;
+    if (allowActiveFallback && activeDbno !== null) return activeDbno;
     try {
       return getDbnumByRefno(refno);
     } catch {
@@ -4136,78 +4180,203 @@ onMounted(async () => {
   if (showRefno && demoMode !== 'primitives') {
     (async () => {
       try {
-        emitToast({ message: `[信息] 正在加载 ${showRefno} …`, level: 'info' });
-        console.log(`[show_refno] refno=${showRefno}`);
-        if (showRefnoSelect) selectionStore.setSelectedRefno(showRefno);
+        const refnoCount = showRefnos.length;
+        emitToast({
+          message: refnoCount > 1
+            ? `[信息] 正在加载 ${refnoCount} 个 BRAN（${showRefnos.join('、')}）…`
+            : `[信息] 正在加载 ${showRefno} …`,
+          level: 'info',
+        });
+        console.log('[show_refno] refnos=', showRefnos);
+        if (showRefnoSelect) {
+          // 单 BRAN 走原路（`setSelectedRefno`）；多 BRAN 选中整组，属性面板跟随首个。
+          if (refnoCount === 1) {
+            selectionStore.setSelectedRefno(showRefno);
+          } else {
+            selectionStore.setSelectedRefnos([...showRefnos], showRefno);
+          }
+        }
 
         if (showDbnumValue === null) {
           await ensureDbMetaInfoLoaded();
         }
 
-        const dbno = resolveDbnoForRefno(showRefno);
-        if (dbno === null) {
-          console.error(`[show_refno] 无法解析 ${showRefno} 的 dbnum`);
+        // 编排（解析 dbnum → 按库分组 → 逐包查可见子实例 → 合并 refno）搬进
+        // `multiBranLoadPlan.ts`，本组件只注入真实依赖并消费结果：这段逻辑没有三维副作用，
+        // 却决定了「跨库分组有没有真的接进加载路径」，必须能脱离场景单测。
+        const plan = await prepareBranLoadPlan(
+          showRefnos,
+          refno => resolveDbnoForRefno(refno, refnoCount),
+          refno => getModelSource().tree.visibleInsts(refno),
+          refno => describeNoGeometryReason(refno),
+        );
+        const { prepared, unresolved, hints, failures: prepareFailures } = plan;
+
+        if (unresolved.length > 0) {
+          console.error('[show_refno] 无法解析 dbnum 的 refno:', unresolved);
+          consoleStore.addLog(
+            'error',
+            `[show_refno] 无法解析 dbnum（refno=${unresolved.join('、')}）`,
+          );
+        }
+        if (prepared.length === 0 && prepareFailures.length === 0) {
           emitToast({
-            message: `[错误] 无法解析 dbnum（refno=${showRefno}）`,
+            message: `[错误] 无法解析 dbnum（refno=${showRefnos.join('、')}）`,
             level: 'error',
           });
           return;
         }
-
-        console.log(`[show_refno] refno=${showRefno} -> dbnum=${dbno}`);
-
-        // 先查询可见子实例（容器节点本身没有几何数据）
-        let loadRefnos = [showRefno];
-        let visibleInstsUserHint: string | null = null;
-        let noGeometryReason: string | null = null;
-        try {
-          const visResp = await getModelSource().tree.visibleInsts(showRefno);
-          const visRefnos = visResp?.refnos ?? [];
-          if (visRefnos.length > 0) {
-            loadRefnos = mergeRootRefnoWithVisibleRefnos(showRefno, visRefnos);
-            console.log(`[show_refno] visible-insts 返回 ${visRefnos.length} 个子实例，合并根节点后共 ${loadRefnos.length} 个 refno`);
-          } else if (visResp?.success) {
-            noGeometryReason = await describeNoGeometryReason(showRefno);
-            visibleInstsUserHint =
-              `可见子实例为 0（refno=${showRefno}），仅加载根节点；${noGeometryReason || '若为容器可能没有几何，请检查可见性或数据'}`;
-          }
-        } catch (e) {
-          console.warn('[show_refno] visible-insts 查询失败，回退直接加载', e);
-          visibleInstsUserHint = '查询可见子实例失败，已回退为仅加载根 refno';
-        }
-        if (visibleInstsUserHint) {
-          emitToast({ message: `[警告] ${visibleInstsUserHint}`, level: 'warning' });
-          consoleStore.addLog('warning', `[show_refno] ${visibleInstsUserHint}`);
+        if (prepareFailures.length > 0) {
+          const failureText = formatGroupFailures(prepareFailures);
+          console.error('[show_refno] 分组准备失败:', prepareFailures);
+          emitToast({ message: `[错误] 部分分组准备失败：${failureText}`, level: 'error' });
+          consoleStore.addLog('error', `[show_refno] 部分分组准备失败：${failureText}`);
         }
 
-        const result = await loadDbnoInstancesForVisibleRefnosDtx(
-          dtxLayer,
-          dbno,
-          loadRefnos,
-          { lodAssetKey: 'L1', debug: true, dataSource: 'gen-model-v1' }
+        if (hints.length > 0) {
+          const hintText = hints.join('；');
+          emitToast({ message: `[警告] ${hintText}`, level: 'warning' });
+          consoleStore.addLog('warning', `[show_refno] ${hintText}`);
+        }
+
+        // 串行加载：每组等前一组完成再开始下一组（多组并发装几何会 OOM）。
+        // 按组隔离失败：一个坏包不能连坐其余好包（单 BRAN 时代只有一组，一个大 try/catch
+        // 够用；多 BRAN 之后必须逐组兜住）。顺序与隔离都在 `runBranLoadPlan` 里，本组件
+        // 只提供「装一组」这一句副作用。
+        let totalObjects = 0;
+        let totalLoadedRefnos = 0;
+        let totalSkippedRefnos = 0;
+        const missingMesh404 = new Set<string>();
+        const missingNoGeo = new Set<string>();
+        const missingMesh404Hashes = new Set<string>();
+        const missingRefnos = new Set<string>();
+        const perGroupDetail: string[] = [];
+        let firstNoGeometryReason: string | null = null;
+
+        const loadOutcome = await runBranLoadPlan(
+          prepared,
+          async (group) => {
+            const result = await loadDbnoInstancesForVisibleRefnosDtx(
+              dtxLayer,
+              group.dbno,
+              group.refnos,
+              { lodAssetKey: 'L1', debug: true, dataSource: 'gen-model-v1' }
+            );
+            (compat as any).__dtxAfterInstancesLoaded?.(group.dbno, group.refnos);
+            return result;
+          },
+          (group) => {
+            console.log(`[show_refno] 加载 dbnum=${group.dbno}，refno 数=${group.refnos.length}`);
+          },
         );
-        (compat as any).__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+
+        for (const outcome of loadOutcome.succeeded) {
+          const { dbno, value: result } = outcome;
+          totalObjects += result.loadedObjects;
+          totalLoadedRefnos += result.loadedRefnos;
+          totalSkippedRefnos += result.skippedRefnos;
+          for (const refno of result.missingBreakdown.mesh404Refnos) missingMesh404.add(refno);
+          for (const refno of result.missingBreakdown.noGeoRowsRefnos) missingNoGeo.add(refno);
+          for (const hash of result.missingBreakdown.mesh404GeoHashes) missingMesh404Hashes.add(hash);
+          for (const refno of result.missingRefnos ?? []) missingRefnos.add(refno);
+          if (result.loadedObjects === 0 && firstNoGeometryReason === null) {
+            firstNoGeometryReason =
+              prepared.find(group => group.dbno === dbno)?.noGeometryReason ?? null;
+          }
+          perGroupDetail.push(
+            `dbnum ${dbno}：${result.loadedObjects} 对象（${result.loadedRefnos} 个 refno，跳过 ${result.skippedRefnos}）`,
+          );
+          console.log('[show_refno] 组加载完成', { dbno, result });
+        }
+
+        const allFailures = [...prepareFailures, ...loadOutcome.failures];
+        const failureText = formatGroupFailures(allFailures);
+        if (loadOutcome.failures.length > 0) {
+          console.error('[show_refno] 分组加载失败:', loadOutcome.failures);
+          consoleStore.addLog('error', `[show_refno] 分组加载失败：${failureText}`);
+        }
+
+        // 测试/自动化：把多 BRAN 这一轮的分组结果整体暴露出来。e2e 需要区分
+        // 「两个库都装上了」与「只装了一个库」，也需要看到某个不存在的 BRAN 是
+        // 在哪一组被判定缺失——`__dtxLastLoadedDbno` 只记最后一个库，不够用。
+        if (typeof window !== 'undefined') {
+          (window as any).__dtxLastMultiBranLoad = {
+            refnos: [...showRefnos],
+            prepared: prepared.map(group => ({
+              dbno: group.dbno,
+              refnos: [...group.refnos],
+            })),
+            succeeded: loadOutcome.succeeded.map(outcome => ({
+              dbno: outcome.dbno,
+              refnos: [...outcome.refnos],
+              loadedObjects: outcome.value.loadedObjects,
+              loadedRefnos: outcome.value.loadedRefnos,
+              skippedRefnos: outcome.value.skippedRefnos,
+              missingRefnos: [...(outcome.value.missingRefnos ?? [])],
+            })),
+            failures: allFailures.map(failure => ({
+              dbno: failure.dbno,
+              refnos: [...failure.refnos],
+              error: failure.error,
+            })),
+            unresolved: [...unresolved],
+            updatedAt: new Date().toISOString(),
+          };
+        }
 
         requestRender();
+        // 所有组装完再 fit 一次，避免每组各 fit 一次把镜头来回甩。
         if (fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0)) {
           requestRender();
         }
 
         const detail =
-          `对象 ${result.loadedObjects}（已加载 ${result.loadedRefnos}，跳过 ${result.skippedRefnos}，` +
-          `mesh 缺失 ${result.missingBreakdown.mesh404Refnos.length}，无几何 ${result.missingBreakdown.noGeoRowsRefnos.length}）`;
-        if (result.loadedObjects === 0) {
-          noGeometryReason = noGeometryReason || await describeNoGeometryReason(showRefno);
+          `对象 ${totalObjects}（已加载 ${totalLoadedRefnos}，跳过 ${totalSkippedRefnos}，` +
+          `mesh 缺失 ${missingMesh404.size}，无几何 ${missingNoGeo.size}）`;
+        const groupSuffix = perGroupDetail.length > 1 ? `；${perGroupDetail.join('；')}` : '';
+        const failureSuffix = failureText ? `；${failureText}` : '';
+        const requestedGroupCount = prepared.length + prepareFailures.length;
+        const succeededGroupCount = loadOutcome.succeeded.length;
+        // 部分成功口径：只要有一组没装成，就不能报「成功」——否则用户看到绿条、
+        // 画面里却缺一个包，正是这轮要修的信息失真。
+        const partialPrefix = allFailures.length > 0
+          ? `[警告] ${requestedGroupCount} 组中 ${succeededGroupCount} 组成功`
+          : null;
+
+        if (totalObjects === 0) {
+          const noGeometryReason = firstNoGeometryReason
+            ?? await describeNoGeometryReason(showRefno);
           const reason = noGeometryReason ? `原因：${noGeometryReason}` : '请检查左侧可见性或 Parquet 数据';
           emitToast({
-            message: `[警告] 加载结束但未绘制实例。${detail} ${reason}`,
+            message: `${partialPrefix ?? '[警告]'} 加载结束但未绘制实例。${detail} ${reason}${groupSuffix}${failureSuffix}`,
             level: 'warning',
           });
-          consoleStore.addLog('warning', `[show_refno] 加载结束但未绘制实例。${detail} ${reason}`);
+          consoleStore.addLog(
+            'warning',
+            `[show_refno] 加载结束但未绘制实例。${detail} ${reason}${groupSuffix}${failureSuffix}`,
+          );
+        } else if (partialPrefix) {
+          emitToast({
+            message: `${partialPrefix}。${detail}${groupSuffix}${failureSuffix}`,
+            level: 'warning',
+          });
+          consoleStore.addLog('warning', `[show_refno] ${partialPrefix}。${detail}${failureSuffix}`);
         } else {
-          emitToast({ message: `[成功] ${detail}`, level: 'success' });
+          emitToast({ message: `[成功] ${detail}${groupSuffix}`, level: 'success' });
         }
-        console.log('[show_refno] ✅ 加载完成', result);
+        console.log('[show_refno] ✅ 加载完成', {
+          refnos: showRefnos,
+          groups: prepared.map(group => ({ dbno: group.dbno, refnos: group.refnos.length })),
+          failedGroups: loadOutcome.failures.map(failure => failure.dbno),
+          prepareFailedGroups: prepareFailures.map(failure => failure.dbno),
+          unresolved,
+          loadedObjects: totalObjects,
+          loadedRefnos: totalLoadedRefnos,
+          skippedRefnos: totalSkippedRefnos,
+          missingMesh404: [...missingMesh404],
+          missingNoGeo: [...missingNoGeo],
+          missingMesh404Hashes: [...missingMesh404Hashes],
+        });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[show_refno] 加载失败:', e);
