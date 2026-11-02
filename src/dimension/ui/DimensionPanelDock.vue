@@ -173,17 +173,54 @@ const mbdIsolineGrouping = computed(() => externalRecords.value.some(
   record => record.source === 'mbd' && record.isolineIndex !== undefined,
 ));
 
+/**
+ * 多源时把一条 MBD 记录归因到它的来源 BRAN。单源返回 `''`——那时所有记录同源，
+ * 旧的裸 index 分组就是对的，不必引入复合键。
+ *
+ * 依据是记录 id 前缀：多 BRAN 同步时 id 已按 `${refno}:` 限定（见
+ * `useMbdExternalSync.ts` 的 `qualify()`），所以前缀能反查来源。单包时 id 保持
+ * 裸形态，正好落到 `''` 分支。
+ */
+const sourceRefnoOf = (record: ExternalDimensionRecord): string => {
+  const sources = mbdDiagnostics.value.sources;
+  if (sources.length <= 1) return '';
+  for (const source of sources) {
+    if (record.id.startsWith(`${source.refno}:`)) return source.refno;
+  }
+  return '';
+};
+
+/**
+ * 分组键。各包的直段编号空间独立（每包都从 0 起），拍平后同号必然相撞——
+ * 用 `(refno, index)` 复合键才不会把两个 BRAN 的「直段 0」合成一组。
+ */
+const isolineGroupKey = (record: ExternalDimensionRecord): string =>
+  `${sourceRefnoOf(record)}\u0000${record.isolineIndex ?? ''}`;
+
 const items = computed<readonly DimensionListItem[]>(() => {
   const user = documentState.value?.records ?? [];
   if (!mbdIsolineGrouping.value) return [...user, ...byCategory(externalRecords.value)];
   const mbd = externalRecords.value.filter(record => record.source === 'mbd');
-  const indices = [...new Set(mbd.flatMap(
-    record => (record.isolineIndex === undefined ? [] : [record.isolineIndex]),
-  ))].sort((a, b) => a - b);
+  // 按复合键分组，键顺序沿用首次出现的顺序，再按 (refno, index) 排序：
+  // refno 顺序与 `mbd_refno` 一致，同源内按直段编号升序。
+  const buckets = new Map<string, ExternalDimensionRecord[]>();
+  for (const record of mbd) {
+    if (record.isolineIndex === undefined) continue;
+    const key = isolineGroupKey(record);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(record);
+    else buckets.set(key, [record]);
+  }
+  const keys = [...buckets.keys()].sort((a, b) => {
+    const [refnoA = '', indexA = ''] = a.split('\u0000');
+    const [refnoB = '', indexB = ''] = b.split('\u0000');
+    if (refnoA !== refnoB) return refnoA < refnoB ? -1 : 1;
+    return Number(indexA) - Number(indexB);
+  });
   return [
     ...user,
     ...byCategory(externalRecords.value.filter(record => record.source !== 'mbd')),
-    ...indices.flatMap(index => byCategory(mbd.filter(record => record.isolineIndex === index))),
+    ...keys.flatMap(key => byCategory(buckets.get(key) ?? [])),
     ...byCategory(mbd.filter(record => record.isolineIndex === undefined)),
   ];
 });
@@ -192,23 +229,39 @@ const isolinesByIndex = computed(() => new Map(
   mbdDiagnostics.value.isolines.map(isoline => [isoline.index, isoline] as const),
 ));
 
+/** 逐源的直段表，多源时按 `(refno, index)` 查；单源退化成顶层扁平表。 */
+const isolinesBySourceIndex = computed(() => {
+  const byKey = new Map<string, MbdDiagnosticsSnapshot['isolines'][number]>();
+  for (const source of mbdDiagnostics.value.sources) {
+    for (const isoline of source.isolines) {
+      byKey.set(`${source.refno}\u0000${isoline.index}`, isoline);
+    }
+  }
+  return byKey;
+});
+
 /** 组头里的毫米值：最多两位小数、去尾零（27 →「27 mm」，60.3 →「60.3 mm」，27.0000001 →「27 mm」）。 */
 function formatMm(value: number): string {
   return `${Number(value.toFixed(2))} mm`;
 }
 
 /** 组头：直段编号 + 表里的成员数 / 字高 / OD；表里没有这一行（悬空下标）就只报编号。 */
-function isolineGroupLabel(index: number): string {
-  const isoline = isolinesByIndex.value.get(index);
+function isolineGroupLabel(index: number, refno = ''): string {
+  // 多源时先查逐源表，避免同号直段取到别的 BRAN 的元数据；单源退回扁平表。
+  const isoline = (refno ? isolinesBySourceIndex.value.get(`${refno}\u0000${index}`) : undefined)
+    ?? isolinesByIndex.value.get(index);
   if (!isoline) return `直段 ${index}`;
-  return `直段 ${index} · 成员 ${isoline.members.length} · 字高 ${formatMm(isoline.cheight_mm)} · OD ${formatMm(isoline.od_mm)}`;
+  const prefix = refno ? `${refno} ` : '';
+  return `${prefix}直段 ${index} · 成员 ${isoline.members.length} · 字高 ${formatMm(isoline.cheight_mm)} · OD ${formatMm(isoline.od_mm)}`;
 }
 
 function listGroupLabel(item: DimensionListItem): string | null {
   if (!mbdIsolineGrouping.value || !isExternalDimensionRecord(item) || item.source !== 'mbd') {
     return null;
   }
-  return item.isolineIndex === undefined ? '未分段' : isolineGroupLabel(item.isolineIndex);
+  return item.isolineIndex === undefined
+    ? '未分段'
+    : isolineGroupLabel(item.isolineIndex, sourceRefnoOf(item));
 }
 
 /** 负载的数据时点（T4.5）：标题行徽标写 `dbnum@sesno`，悬停列出求解器读过的各库会话。 */

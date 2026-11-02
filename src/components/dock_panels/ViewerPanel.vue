@@ -40,6 +40,7 @@ import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import {
   formatGroupFailures,
+  formatSideEffectFailures,
   mergeRootRefnoWithVisibleRefnos as mergeRefnoEntries,
   prepareBranLoadPlan,
   resolveShowDbnumOverride,
@@ -250,14 +251,6 @@ function normalizeRefnoKeyLike(raw: string): string | null {
 
 function normalizeCompareRefno(raw: unknown): string {
   return normalizeRefnoKeyLike(String(raw ?? '')) || '';
-}
-
-/**
- * 根 refno 与可见子实例合并。实现搬到 `multiBranLoadPlan`（可单测），这里只保留
- * 组件内三处调用点用的同名薄包装，避免与 `refnoListParam` 的归一化口径分叉。
- */
-function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: string[]): string[] {
-  return mergeRefnoEntries(rootRefno, visibleRefnos);
 }
 
 /**
@@ -4131,7 +4124,12 @@ onMounted(async () => {
 
   // 启动预拉：db_meta_info（关键，提供 refno->dbnum 映射）
   // demo 模式（primitives）不依赖后端数据，跳过预拉避免无后端时初始化失败。
-  if (demoMode !== 'primitives' && !showDbnum) {
+  //
+  // 多 BRAN 时必须拉：`resolveShowDbnumOverride` 在 refnoCount>1 时恒返回 null，
+  // `show_dbnum` 的整库覆盖用不上，每个 BRAN 只能靠 `getDbnumByRefno` 查映射。
+  // 若这里跟着 `!showDbnum` 跳过，`?show_refno=A,B&show_dbnum=7997` 会全部解析
+  // 失败、一个都不装——用户看到的是「什么都没加载」而不是跨库结果。
+  if (demoMode !== 'primitives' && (!showDbnum || showRefnos.length > 1)) {
     try {
       await ensureDbMetaInfoLoaded();
     } catch (e) {
@@ -4197,7 +4195,9 @@ onMounted(async () => {
           }
         }
 
-        if (showDbnumValue === null) {
+        // 多 BRAN 时无论有没有 `show_dbnum` 都要保证 meta 就位：覆盖逻辑用不上，
+        // 只能逐条 `getDbnumByRefno` 查映射。启动预拉已覆盖大部分情况，这里幂等兜底。
+        if (showDbnumValue === null || refnoCount > 1) {
           await ensureDbMetaInfoLoaded();
         }
 
@@ -4255,18 +4255,21 @@ onMounted(async () => {
 
         const loadOutcome = await runBranLoadPlan(
           prepared,
-          async (group) => {
-            const result = await loadDbnoInstancesForVisibleRefnosDtx(
-              dtxLayer,
-              group.dbno,
-              group.refnos,
-              { lodAssetKey: 'L1', debug: true, dataSource: 'gen-model-v1' }
-            );
-            (compat as any).__dtxAfterInstancesLoaded?.(group.dbno, group.refnos);
-            return result;
-          },
-          (group) => {
-            console.log(`[show_refno] 加载 dbnum=${group.dbno}，refno 数=${group.refnos.length}`);
+          async (group) => loadDbnoInstancesForVisibleRefnosDtx(
+            dtxLayer,
+            group.dbno,
+            group.refnos,
+            { lodAssetKey: 'L1', debug: true, dataSource: 'gen-model-v1' }
+          ),
+          {
+            onGroupStart: (group) => {
+              console.log(`[show_refno] 加载 dbnum=${group.dbno}，refno 数=${group.refnos.length}`);
+            },
+            // 装载后副作用单独兜住：几何此刻已在场景里，这里抛错不能把整组判成失败，
+            // 否则会出现「提示说 N 组中 M 组成功、画面里模型却在」的自相矛盾。
+            afterGroupLoaded: (group) => {
+              (compat as any).__dtxAfterInstancesLoaded?.(group.dbno, group.refnos);
+            },
           },
         );
 
@@ -4295,6 +4298,14 @@ onMounted(async () => {
           console.error('[show_refno] 分组加载失败:', loadOutcome.failures);
           consoleStore.addLog('error', `[show_refno] 分组加载失败：${failureText}`);
         }
+        // 几何已进场景、收尾动作失败：按警告报，不能混进 failures（那会把已画出来的
+        // 组说成没装上）。
+        if (loadOutcome.sideEffectFailures.length > 0) {
+          const sideEffectText = formatSideEffectFailures(loadOutcome.sideEffectFailures);
+          console.warn('[show_refno] 分组收尾失败:', loadOutcome.sideEffectFailures);
+          emitToast({ message: `[警告] ${sideEffectText}`, level: 'warning' });
+          consoleStore.addLog('warning', `[show_refno] ${sideEffectText}`);
+        }
 
         // 测试/自动化：把多 BRAN 这一轮的分组结果整体暴露出来。e2e 需要区分
         // 「两个库都装上了」与「只装了一个库」，也需要看到某个不存在的 BRAN 是
@@ -4319,6 +4330,10 @@ onMounted(async () => {
               refnos: [...failure.refnos],
               error: failure.error,
             })),
+            sideEffectFailures: loadOutcome.sideEffectFailures.map(failure => ({
+              dbno: failure.dbno,
+              error: failure.error,
+            })),
             unresolved: [...unresolved],
             updatedAt: new Date().toISOString(),
           };
@@ -4335,32 +4350,55 @@ onMounted(async () => {
           `mesh 缺失 ${missingMesh404.size}，无几何 ${missingNoGeo.size}）`;
         const groupSuffix = perGroupDetail.length > 1 ? `；${perGroupDetail.join('；')}` : '';
         const failureSuffix = failureText ? `；${failureText}` : '';
+        // `unresolved` 是「连库号都解析不出来」的 BRAN，它没进 `prepared`，也就不会
+        // 出现在 `loadOutcome.failures` 里。把它单列出来计入失败口径，否则
+        // `?show_refno=A,garbage` 会报「[成功] 对象 N」而画面里少一个包——
+        // 正是本轮要修的那类信息失真。
+        const unresolvedSuffix = unresolved.length > 0
+          ? `；无法解析 dbnum：${unresolved.join('、')}`
+          : '';
         const requestedGroupCount = prepared.length + prepareFailures.length;
         const succeededGroupCount = loadOutcome.succeeded.length;
-        // 部分成功口径：只要有一组没装成，就不能报「成功」——否则用户看到绿条、
-        // 画面里却缺一个包，正是这轮要修的信息失真。
-        const partialPrefix = allFailures.length > 0
-          ? `[警告] ${requestedGroupCount} 组中 ${succeededGroupCount} 组成功`
+        const hasAnyFailure = allFailures.length > 0 || unresolved.length > 0;
+        // 部分成功口径：只要有一组没装成（含解析不出的 BRAN），就不能报「成功」——
+        // 否则用户看到绿条、画面里却缺一个包。
+        const partialPrefix = hasAnyFailure
+          ? `[警告] ${requestedGroupCount + unresolved.length} 组中 ${succeededGroupCount} 组成功`
           : null;
 
         if (totalObjects === 0) {
           const noGeometryReason = firstNoGeometryReason
             ?? await describeNoGeometryReason(showRefno);
           const reason = noGeometryReason ? `原因：${noGeometryReason}` : '请检查左侧可见性或 Parquet 数据';
+          // 一组都没装成时「未绘制实例」是错的说法（不是零几何，是没装上），
+          // 且级别必须是 error：单 BRAN 装载抛错的旧行为就是 `[错误] 加载失败：…`。
+          const allFailed = hasAnyFailure && succeededGroupCount === 0;
+          if (allFailed) {
+            const reasonText = failureText || `无法解析 dbnum：${unresolved.join('、')}`;
+            emitToast({
+              message: `[错误] 加载失败：${reasonText}`,
+              level: 'error',
+            });
+            consoleStore.addLog('error', `[show_refno] 加载失败：${reasonText}`);
+          } else {
+            emitToast({
+              message: `${partialPrefix ?? '[警告]'} 加载结束但未绘制实例。${detail} ${reason}${groupSuffix}${failureSuffix}${unresolvedSuffix}`,
+              level: 'warning',
+            });
+            consoleStore.addLog(
+              'warning',
+              `[show_refno] 加载结束但未绘制实例。${detail} ${reason}${groupSuffix}${failureSuffix}${unresolvedSuffix}`,
+            );
+          }
+        } else if (partialPrefix) {
           emitToast({
-            message: `${partialPrefix ?? '[警告]'} 加载结束但未绘制实例。${detail} ${reason}${groupSuffix}${failureSuffix}`,
+            message: `${partialPrefix}。${detail}${groupSuffix}${failureSuffix}${unresolvedSuffix}`,
             level: 'warning',
           });
           consoleStore.addLog(
             'warning',
-            `[show_refno] 加载结束但未绘制实例。${detail} ${reason}${groupSuffix}${failureSuffix}`,
+            `[show_refno] ${partialPrefix}。${detail}${failureSuffix}${unresolvedSuffix}`,
           );
-        } else if (partialPrefix) {
-          emitToast({
-            message: `${partialPrefix}。${detail}${groupSuffix}${failureSuffix}`,
-            level: 'warning',
-          });
-          consoleStore.addLog('warning', `[show_refno] ${partialPrefix}。${detail}${failureSuffix}`);
         } else {
           emitToast({ message: `[成功] ${detail}${groupSuffix}`, level: 'success' });
         }
@@ -4369,6 +4407,7 @@ onMounted(async () => {
           groups: prepared.map(group => ({ dbno: group.dbno, refnos: group.refnos.length })),
           failedGroups: loadOutcome.failures.map(failure => failure.dbno),
           prepareFailedGroups: prepareFailures.map(failure => failure.dbno),
+          sideEffectFailedGroups: loadOutcome.sideEffectFailures.map(failure => failure.dbno),
           unresolved,
           loadedObjects: totalObjects,
           loadedRefnos: totalLoadedRefnos,
@@ -4463,7 +4502,7 @@ onMounted(async () => {
 
         // 2. 查询该 refno 下的可见实例（经数据源端口：gen-model-v1 = 以节点为祖先查 records，不生成）
         const visResp = await getModelSource().tree.visibleInsts(refnoStr);
-        const refnos = mergeRootRefnoWithVisibleRefnos(refnoStr, visResp?.refnos ?? []);
+        const refnos = mergeRefnoEntries(refnoStr, visResp?.refnos ?? []);
         console.log(`[debug_refno] visible-insts 合并根节点后返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
         if (refnos.length === 0) {
           emitToast({

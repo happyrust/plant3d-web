@@ -849,6 +849,84 @@ describe('DimensionPanelDock', () => {
       .toEqual(['linear-1', 'dim-loose']);
   });
 
+  /**
+   * 多 BRAN（`?mbd_refno=A,B`）时各包的直段编号空间独立，两包都能有「直段 0」。
+   * 分组必须按 `(refno, index)` 复合键：否则两个 BRAN 的同号直段被合成一组，
+   * 组头还会显示成其中一个源的成员数 / 字高 / OD，读起来像另一个源的元数据。
+   */
+  it('keeps same-numbered isolines from different BRANs in separate groups', async () => {
+    const system = createSystem();
+    const mbdRecord = (id: string, isolineIndex: number): ExternalDimensionRecord => ({
+      id,
+      source: 'mbd',
+      sourceLabel: `MBD: ${id}`,
+      role: 'external',
+      isolineIndex,
+      layout: {
+        id,
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+      },
+    });
+    system.externalRegistry.replaceSource('mbd', [
+      mbdRecord('A:isoline:0:main', 0),
+      mbdRecord('B:isoline:0:main', 0),
+    ]);
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A,B');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A,B',
+      issues: [],
+      skipped: [],
+      isolines: [
+        { index: 0, members: ['A-member'], cheight_mm: 25, od_mm: 114.3 },
+        { index: 0, members: ['B-member'], cheight_mm: 12, od_mm: 60.3 },
+      ],
+      sources: [
+        {
+          refno: 'A',
+          issues: [],
+          skipped: [],
+          layoutMode: null,
+          notes: [],
+          sourceVersion: null,
+          isolines: [{ index: 0, members: ['A-member'], cheight_mm: 25, od_mm: 114.3 }],
+          loadError: null,
+        },
+        {
+          refno: 'B',
+          issues: [],
+          skipped: [],
+          layoutMode: null,
+          notes: [],
+          sourceVersion: null,
+          isolines: [{ index: 0, members: ['B-member'], cheight_mm: 12, od_mm: 60.3 }],
+          loadError: null,
+        },
+      ],
+    });
+
+    try {
+      const host = mountPanel();
+      await nextTick();
+      const headers = [...host.querySelectorAll('[data-group]')]
+        .map(node => node.textContent?.trim() ?? '');
+      // 两个「直段 0」各自成组，组头带来源前缀，元数据取自己那一份。
+      expect(headers).toEqual([
+        '用户尺寸',
+        'A 直段 0 · 成员 1 · 字高 25 mm · OD 114.3 mm',
+        'B 直段 0 · 成员 1 · 字高 12 mm · OD 60.3 mm',
+      ]);
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
   /** B3：部分显示开关只改 URL，并派发 popstate 让同步层重新拉取。 */
   it('writes ?mbd_partial=1 from the partial-display toggle', async () => {
     const system = createSystem();

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   formatGroupFailures,
+  formatSideEffectFailures,
   mergeRootRefnoWithVisibleRefnos,
   prepareBranLoadPlan,
   resolveShowDbnumOverride,
@@ -240,6 +241,7 @@ describe('runBranLoadPlan', () => {
       { dbno: 2, refnos: ['24383_91813'], value: 'db2' },
     ]);
     expect(result.failures).toEqual([]);
+    expect(result.sideEffectFailures).toEqual([]);
   });
 
   it('keeps loading the remaining groups when one throws', async () => {
@@ -279,11 +281,69 @@ describe('runBranLoadPlan', () => {
 
   it('fires onGroupStart before each group so progress stays observable', async () => {
     const started: number[] = [];
-    await runBranLoadPlan(groups, async () => 'ok', group => started.push(group.dbno));
+    await runBranLoadPlan(groups, async () => 'ok', {
+      onGroupStart: group => started.push(group.dbno),
+    });
     expect(started).toEqual([1, 2]);
   });
 
+  it('does not fail a group when onGroupStart throws', async () => {
+    const result = await runBranLoadPlan(groups, async () => 'ok', {
+      onGroupStart: () => { throw new Error('log 坏了'); },
+    });
+    expect(result.succeeded).toHaveLength(2);
+    expect(result.failures).toEqual([]);
+    expect(result.sideEffectFailures).toEqual([]);
+  });
+
+  it('keeps a loaded group successful when its after-load side effect throws', async () => {
+    // 几何已经在场景里了：收尾失败只能记 sideEffectFailures，不能把整组说成没装上。
+    const result = await runBranLoadPlan(groups, async () => 'loaded', {
+      afterGroupLoaded: (group) => {
+        if (group.dbno === 1) throw new Error('auto-fit 失败');
+      },
+    });
+
+    expect(result.succeeded.map(outcome => outcome.dbno)).toEqual([1, 2]);
+    expect(result.failures).toEqual([]);
+    expect(result.sideEffectFailures).toEqual([
+      { dbno: 1, error: 'auto-fit 失败' },
+    ]);
+  });
+
+  it('never runs the side effect for a group whose load threw', async () => {
+    const sideEffects: number[] = [];
+    const result = await runBranLoadPlan(groups, async (group) => {
+      if (group.dbno === 1) throw new Error('boom');
+      return 'ok';
+    }, {
+      afterGroupLoaded: (group) => sideEffects.push(group.dbno),
+    });
+
+    expect(sideEffects).toEqual([2]);
+    expect(result.sideEffectFailures).toEqual([]);
+  });
+
   it('returns empty results for an empty plan', async () => {
-    expect(await runBranLoadPlan([], async () => 'ok')).toEqual({ succeeded: [], failures: [] });
+    expect(await runBranLoadPlan([], async () => 'ok')).toEqual({
+      succeeded: [],
+      failures: [],
+      sideEffectFailures: [],
+    });
+  });
+});
+
+describe('formatSideEffectFailures', () => {
+  it('says the group was loaded, only the wrap-up failed', () => {
+    expect(formatSideEffectFailures([
+      { dbno: 7997, error: 'auto-fit 失败' },
+      { dbno: 7999, error: 'refreshSpatialIndex 失败' },
+    ])).toBe(
+      'dbnum 7997 已装载但收尾失败：auto-fit 失败；dbnum 7999 已装载但收尾失败：refreshSpatialIndex 失败',
+    );
+  });
+
+  it('returns an empty string when nothing failed', () => {
+    expect(formatSideEffectFailures([])).toBe('');
   });
 });

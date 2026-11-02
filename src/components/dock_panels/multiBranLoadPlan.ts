@@ -190,11 +190,37 @@ export function formatGroupFailures(failures: readonly GroupFailure[]): string {
     .join('；');
 }
 
+/** 把「装载成功但收尾失败」压成一行提示。 */
+export function formatSideEffectFailures(failures: readonly GroupSideEffectFailure[]): string {
+  return failures
+    .map(failure => `dbnum ${failure.dbno} 已装载但收尾失败：${failure.error}`)
+    .join('；');
+}
+
 /** 装载成功的一组。`value` 是装载器原始返回值，编排层不解释它。 */
 export type GroupLoadOutcome<T> = {
   dbno: number;
   refnos: readonly string[];
   value: T;
+};
+
+/** 装载成功、但**装载后副作用**失败的一组。几何已经在场景里，不能算这一组装载失败。 */
+export type GroupSideEffectFailure = {
+  dbno: number;
+  error: string;
+};
+
+export type BranLoadPlanRunOptions<T> = {
+  /** 每组开始前触发，用于进度日志。它抛错不影响装载。 */
+  onGroupStart?: (group: PreparedGroup) => void;
+  /**
+   * 一组装载成功后的副作用：刷新空间索引、重放可见性、单位归一化、auto-fit 等。
+   *
+   * 它抛错**不算**这一组失败。几何此刻已经在场景里了，若把整组记成失败，统计会报
+   * 0 对象、提示会报「N 组中 M 组成功」，而画面里模型明明在——「提示说失败、画面有
+   * 模型」比不报错更糟。这类错误单独进 `sideEffectFailures`，按警告呈现。
+   */
+  afterGroupLoaded?: (group: PreparedGroup, value: T) => void;
 };
 
 /**
@@ -206,23 +232,41 @@ export type GroupLoadOutcome<T> = {
  *
  * `loadGroup` 的副作用（`dtxLayer` 写入、`compat.__dtxAfterInstancesLoaded`）留在
  * 调用方注入的函数里——编排层只管顺序、归集与失败隔离，不碰三维对象，才能单测。
+ *
+ * 三层错误语义，别混：
+ * - `loadGroup` 抛错 → `failures`（这一组真的没装进来）；
+ * - `afterGroupLoaded` 抛错 → `sideEffectFailures`（装进来了，收尾动作失败）；
+ * - `onGroupStart` 抛错 → 忽略（只是日志）。
  */
 export async function runBranLoadPlan<T>(
   prepared: readonly PreparedGroup[],
   loadGroup: (group: PreparedGroup) => Promise<T>,
-  onGroupStart?: (group: PreparedGroup) => void,
+  options: BranLoadPlanRunOptions<T> = {},
 ): Promise<{
   succeeded: GroupLoadOutcome<T>[];
   failures: GroupFailure[];
+  sideEffectFailures: GroupSideEffectFailure[];
 }> {
   const succeeded: GroupLoadOutcome<T>[] = [];
   const failures: GroupFailure[] = [];
+  const sideEffectFailures: GroupSideEffectFailure[] = [];
 
   for (const group of prepared) {
     try {
-      onGroupStart?.(group);
+      options.onGroupStart?.(group);
+    } catch {
+      // 进度日志失败不该影响装载。
+    }
+    try {
       const value = await loadGroup(group);
       succeeded.push({ dbno: group.dbno, refnos: group.refnos, value });
+      if (options.afterGroupLoaded) {
+        try {
+          options.afterGroupLoaded(group, value);
+        } catch (error) {
+          sideEffectFailures.push({ dbno: group.dbno, error: errorMessage(error) });
+        }
+      }
     } catch (error) {
       failures.push({
         dbno: group.dbno,
@@ -232,5 +276,5 @@ export async function runBranLoadPlan<T>(
     }
   }
 
-  return { succeeded, failures };
+  return { succeeded, failures, sideEffectFailures };
 }

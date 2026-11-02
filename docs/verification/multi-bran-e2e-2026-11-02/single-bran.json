@@ -142,6 +142,7 @@
       }
     ],
     "failures": [],
+    "sideEffectFailures": [],
     "unresolved": []
   },
   "stats": {

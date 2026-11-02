@@ -479,6 +479,7 @@
       }
     ],
     "failures": [],
+    "sideEffectFailures": [],
     "unresolved": []
   },
   "stats": {
@@ -487,8 +488,8 @@
     "totalIndices": 44520,
     "uniqueGeometries": 35
   },
-  "layoutMs": 21.199999928474426,
-  "paintMs": 9.100000023841858,
+  "layoutMs": 36.200000047683716,
+  "paintMs": 10.5,
   "isolineCount": 0,
   "sources": []
 }

@@ -484,6 +484,7 @@
       }
     ],
     "failures": [],
+    "sideEffectFailures": [],
     "unresolved": []
   },
   "stats": {
