@@ -1,23 +1,30 @@
-import { toRefnoKey } from './refnoKey';
+import {
+  appendRefno,
+  formatRefnoList,
+  MBD_REFNO_PARAM,
+  normalizeRefnoList,
+  parseRefnoList,
+  removeRefno,
+  type RefnoList,
+} from './refnoListParam';
 
 /**
  * `mbd_refno` 的多值编解码（多 BRAN 同屏）。
  *
- * 编码沿用单参数、逗号分隔：`?mbd_refno=A,B,C`。选它而不是重复 key 或新参数，
- * 是因为写入端（`DimensionPanelDock.vue` 的输入框、`ModelTreePanel.vue` 的右键
- * 菜单）本来就是 `URLSearchParams.set` 单值语义，逗号分隔改的是**值**不是**键**，
- * 所有 `searchParams.set/delete` 调用点都不必换 API，`popstate` 链路也不用动。
+ * 2026-11-02 起实现搬到 `utils/refnoListParam.ts`：`show_refno` 要的是同一套
+ * 「逗号分隔、归一化、保序去重」语义，留两份几乎相同的解析逻辑迟早分叉。
+ * 这里只保留 `mbd` 前缀的导出名作别名，既有调用点（`useMbdExternalSync`、
+ * `DimensionPanelDock`、`ModelTreePanel`）与既有测试一行不用改。
  *
- * 兼容性：单值 `?mbd_refno=A` 解析成 `['A']`，与旧行为完全一致；空值解析成
- * `[]`。旧链接、旧文档、旧采集脚本都不受影响。
+ * 编码仍是单参数、逗号分隔：`?mbd_refno=A,B,C`。选它而不是重复 key 或新参数，
+ * 是因为写入端本来就是 `URLSearchParams.set` 单值语义，逗号分隔改的是**值**不是
+ * **键**，所有 `searchParams.set/delete` 调用点都不必换 API，`popstate` 链路也不用动。
  *
- * 归一化：每项过一遍 `toRefnoKey`（trim → 剥一个前导 `=` → `/` 换 `_`），与
- * 写入端 `toRefnoKey` 同一口径。解析后**保序去重**——同一个 BRAN 写两次不该
- * 触发两次取数，但顺序要保住（诊断列表、记录 id 前缀都按这个顺序）。
+ * 兼容性：单值 `?mbd_refno=A` 解析成 `['A']`，与旧行为完全一致；空值解析成 `[]`。
  */
 
-/** 一个 BRAN 在 URL 里的写法，已归一化。 */
-export type MbdRefno = string;
+/** 一个 BRAN 在 `mbd_refno` 里的写法，已归一化。 */
+export type MbdRefno = RefnoList;
 
 /**
  * 从查询串里解析 `mbd_refno`，返回归一化后的 BRAN 列表。
@@ -28,17 +35,7 @@ export type MbdRefno = string;
  * - 没有该参数或全为空 → `[]`。
  */
 export function parseMbdRefnos(search: string): readonly MbdRefno[] {
-  const raw = new URLSearchParams(search).get('mbd_refno');
-  if (raw === null) return [];
-  const seen = new Set<MbdRefno>();
-  const refnos: MbdRefno[] = [];
-  for (const part of raw.split(',')) {
-    const refno = toRefnoKey(part);
-    if (!refno || seen.has(refno)) continue;
-    seen.add(refno);
-    refnos.push(refno);
-  }
-  return refnos;
+  return parseRefnoList(search, MBD_REFNO_PARAM);
 }
 
 /**
@@ -46,15 +43,7 @@ export function parseMbdRefnos(search: string): readonly MbdRefno[] {
  * `searchParams.delete`）。逐项归一化并去重，与 {@link parseMbdRefnos} 对称。
  */
 export function formatMbdRefnos(refnos: readonly string[]): string | null {
-  const seen = new Set<MbdRefno>();
-  const parts: MbdRefno[] = [];
-  for (const raw of refnos) {
-    const refno = toRefnoKey(raw);
-    if (!refno || seen.has(refno)) continue;
-    seen.add(refno);
-    parts.push(refno);
-  }
-  return parts.length > 0 ? parts.join(',') : null;
+  return formatRefnoList(refnos);
 }
 
 /**
@@ -65,11 +54,7 @@ export function appendMbdRefno(
   refnos: readonly string[],
   refno: string,
 ): readonly MbdRefno[] {
-  const next = toRefnoKey(refno);
-  if (!next) return [...refnos];
-  const existing = refnos.map(entry => toRefnoKey(entry));
-  if (existing.includes(next)) return [...refnos];
-  return [...refnos, next];
+  return appendRefno(refnos, refno);
 }
 
 /**
@@ -79,7 +64,15 @@ export function removeMbdRefno(
   refnos: readonly string[],
   refno: string,
 ): readonly MbdRefno[] {
-  const target = toRefnoKey(refno);
-  if (!target) return [...refnos];
-  return refnos.filter(entry => toRefnoKey(entry) !== target);
+  return removeRefno(refnos, refno);
+}
+
+/**
+ * 归一化一个 BRAN 序列（保序去重）。`mbd_refno` 与 `show_refno` 共用同一口径，
+ * 需要把 `visibleInsts` 这类接口返回值并进列表时用它，别再手写 Set。
+ */
+export function normalizeMbdRefnos(
+  refnos: readonly (string | null | undefined)[],
+): readonly MbdRefno[] {
+  return normalizeRefnoList(refnos);
 }
