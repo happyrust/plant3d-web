@@ -258,7 +258,69 @@ const visibleSkippedDiagnostics = computed(() =>
   diagnosticsExpanded.value
     ? mbdDiagnostics.value.skipped
     : mbdDiagnostics.value.skipped.slice(0, DIAGNOSTICS_PAGE_SIZE));
+
+type DiagnosticsSeverity = 'error' | 'warning' | 'info';
+type DiagnosticsIssue = MbdDiagnosticsSnapshot['issues'][number];
+type DiagnosticsSkipped = MbdDiagnosticsSnapshot['skipped'][number];
+
+/**
+ * 多 BRAN 同屏（2026-11-02）：`mbd_refno=A,B` 时后端逐包回诊断，同步层把每包的
+ * `issues` / `skipped` 拆进 `sources[]`。聚合视图拍平后分不清哪条属于哪个包——
+ * `issues[].refno` 指向的是构件不是包，所以只能按包分组展示。
+ *
+ * 单源（`sources.length <= 1`）返回 `null`，模板走原来的拍平路径，零变化：
+ * 既有的 17 条面板用例、以及所有单 BRAN 链接的观感都不受影响。
+ */
+const diagnosticsSourceGroups = computed<readonly {
+  refno: string;
+  total: number;
+  hidden: number;
+  failed: boolean;
+  loadError: string | null;
+  bySeverity: Record<DiagnosticsSeverity, readonly DiagnosticsIssue[]>;
+  visibleBySeverity: Record<DiagnosticsSeverity, readonly DiagnosticsIssue[]>;
+  visibleSkipped: readonly DiagnosticsSkipped[];
+}[] | null>(() => {
+  const sources = mbdDiagnostics.value.sources;
+  if (sources.length <= 1) return null;
+  const slice = <T>(items: readonly T[]): readonly T[] =>
+    diagnosticsExpanded.value ? items : items.slice(0, DIAGNOSTICS_PAGE_SIZE);
+  return sources.map(source => {
+    const bySeverity: Record<DiagnosticsSeverity, DiagnosticsIssue[]> = {
+      error: [],
+      warning: [],
+      info: [],
+    };
+    for (const issue of source.issues) {
+      bySeverity[issue.severity].push(issue);
+    }
+    const visibleBySeverity: Record<DiagnosticsSeverity, readonly DiagnosticsIssue[]> = {
+      error: slice(bySeverity.error),
+      warning: slice(bySeverity.warning),
+      info: slice(bySeverity.info),
+    };
+    const visibleSkipped = slice(source.skipped);
+    const total = source.issues.length + source.skipped.length;
+    const shown = visibleBySeverity.error.length
+      + visibleBySeverity.warning.length
+      + visibleBySeverity.info.length
+      + visibleSkipped.length;
+    return {
+      refno: source.refno,
+      total,
+      hidden: total - shown,
+      failed: source.loadError !== null,
+      loadError: source.loadError,
+      bySeverity,
+      visibleBySeverity,
+      visibleSkipped,
+    };
+  });
+});
+
 const hiddenDiagnosticsCount = computed(() => {
+  const groups = diagnosticsSourceGroups.value;
+  if (groups) return groups.reduce((total, group) => total + group.hidden, 0);
   const shown = Object.values(visibleDiagnosticsBySeverity.value)
     .reduce((total, issues) => total + issues.length, 0)
     + visibleSkippedDiagnostics.value.length;
@@ -933,43 +995,107 @@ function act(
         data-testid="mbd-load-error">
         装载失败：{{ mbdDiagnostics.loadError }}
       </div>
-      <div v-for="severity in (['error', 'warning', 'info'] as const)"
-        :key="severity">
-        <template v-if="diagnosticsBySeverity[severity].length > 0">
-          <div class="mt-2 font-semibold"
-            :class="{
-              'text-red-700': severity === 'error',
-              'text-amber-700': severity === 'warning',
-            }">
-            {{ severity }}（{{ diagnosticsBySeverity[severity].length }}）
-          </div>
-          <div v-for="issue in visibleDiagnosticsBySeverity[severity]"
-            :key="issue.id"
-            class="mt-1 flex items-center justify-between gap-2"
-            :data-issue-id="issue.id">
-            <span class="min-w-0 break-all">
-              [{{ issue.category }}] {{ issue.message }}
+      <!--
+        多 BRAN 同屏（2026-11-02）：逐包分组，组头写 `refno · N 条诊断 · 失败/正常`。
+        单源走下面的原拍平路径，零变化。
+      -->
+      <template v-if="diagnosticsSourceGroups">
+        <details v-for="group in diagnosticsSourceGroups"
+          :key="group.refno"
+          open
+          class="mt-2 rounded border border-slate-200 bg-white p-1.5"
+          data-testid="mbd-diagnostics-source"
+          :data-refno="group.refno">
+          <summary class="cursor-pointer font-semibold">
+            {{ group.refno }} · {{ group.total }} 条诊断 ·
+            <span :class="group.failed ? 'text-red-700' : 'text-emerald-700'">
+              {{ group.failed ? '失败' : '正常' }}
             </span>
-            <button v-if="issue.refno"
-              type="button"
-              class="shrink-0 rounded border px-1.5 py-0.5"
-              :data-locate-refno="issue.refno"
-              @click="locateIssueRefno(issue.refno)">
-              定位 {{ issue.refno }}
-            </button>
+          </summary>
+          <div v-if="group.loadError"
+            class="mt-1 font-semibold text-red-700"
+            :data-testid="`mbd-diagnostics-source-error-${group.refno}`">
+            装载失败：{{ group.loadError }}
+          </div>
+          <div v-for="severity in (['error', 'warning', 'info'] as const)"
+            :key="severity">
+            <template v-if="group.bySeverity[severity].length > 0">
+              <div class="mt-1 font-semibold"
+                :class="{
+                  'text-red-700': severity === 'error',
+                  'text-amber-700': severity === 'warning',
+                }">
+                {{ severity }}（{{ group.bySeverity[severity].length }}）
+              </div>
+              <div v-for="issue in group.visibleBySeverity[severity]"
+                :key="issue.id"
+                class="mt-1 flex items-center justify-between gap-2"
+                :data-issue-id="issue.id">
+                <span class="min-w-0 break-all">
+                  [{{ issue.category }}] {{ issue.message }}
+                </span>
+                <button v-if="issue.refno"
+                  type="button"
+                  class="shrink-0 rounded border px-1.5 py-0.5"
+                  :data-locate-refno="issue.refno"
+                  @click="locateIssueRefno(issue.refno)">
+                  定位 {{ issue.refno }}
+                </button>
+              </div>
+            </template>
+          </div>
+          <template v-if="group.visibleSkipped.length > 0">
+            <div class="mt-1 font-semibold">
+              跳过图元（{{ group.visibleSkipped.length }}）
+            </div>
+            <div v-for="entry in group.visibleSkipped"
+              :key="entry.id"
+              class="mt-1 break-all"
+              :data-skipped-id="entry.id">
+              {{ entry.id }}：{{ entry.reason }}
+            </div>
+          </template>
+        </details>
+      </template>
+      <template v-else>
+        <div v-for="severity in (['error', 'warning', 'info'] as const)"
+          :key="severity">
+          <template v-if="diagnosticsBySeverity[severity].length > 0">
+            <div class="mt-2 font-semibold"
+              :class="{
+                'text-red-700': severity === 'error',
+                'text-amber-700': severity === 'warning',
+              }">
+              {{ severity }}（{{ diagnosticsBySeverity[severity].length }}）
+            </div>
+            <div v-for="issue in visibleDiagnosticsBySeverity[severity]"
+              :key="issue.id"
+              class="mt-1 flex items-center justify-between gap-2"
+              :data-issue-id="issue.id">
+              <span class="min-w-0 break-all">
+                [{{ issue.category }}] {{ issue.message }}
+              </span>
+              <button v-if="issue.refno"
+                type="button"
+                class="shrink-0 rounded border px-1.5 py-0.5"
+                :data-locate-refno="issue.refno"
+                @click="locateIssueRefno(issue.refno)">
+                定位 {{ issue.refno }}
+              </button>
+            </div>
+          </template>
+        </div>
+        <template v-if="mbdDiagnostics.skipped.length > 0">
+          <div class="mt-2 font-semibold">
+            跳过图元（{{ mbdDiagnostics.skipped.length }}）
+          </div>
+          <div v-for="entry in visibleSkippedDiagnostics"
+            :key="entry.id"
+            class="mt-1 break-all"
+            :data-skipped-id="entry.id">
+            {{ entry.id }}：{{ entry.reason }}
           </div>
         </template>
-      </div>
-      <template v-if="mbdDiagnostics.skipped.length > 0">
-        <div class="mt-2 font-semibold">
-          跳过图元（{{ mbdDiagnostics.skipped.length }}）
-        </div>
-        <div v-for="entry in visibleSkippedDiagnostics"
-          :key="entry.id"
-          class="mt-1 break-all"
-          :data-skipped-id="entry.id">
-          {{ entry.id }}：{{ entry.reason }}
-        </div>
       </template>
       <template v-if="mbdDiagnostics.layoutMode || mbdDiagnostics.notes.length > 0">
         <div class="mt-2 font-semibold">求解器自报</div>

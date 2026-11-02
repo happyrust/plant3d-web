@@ -581,6 +581,126 @@ describe('DimensionPanelDock', () => {
   });
 
   /**
+   * 多 BRAN 同屏（2026-11-02）：`sources[]` 有多个包时按包分组，组头写
+   * `refno · N 条诊断 · 失败/正常`；单源仍走原拍平路径，不出现分组节点。
+   */
+  it('groups diagnostics per BRAN only when more than one source is present', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+
+    const source = (refno: string, issueCount: number, loadError: string | null = null) => ({
+      refno,
+      issues: Array.from({ length: issueCount }, (_, index) => ({
+        id: `${refno}-issue-${index}`,
+        severity: 'warning' as const,
+        category: 'avoidance' as const,
+        message: `lane overflow ${index}`,
+      })),
+      skipped: [],
+      layoutMode: null,
+      notes: [],
+      sourceVersion: null,
+      isolines: [],
+      loadError,
+    });
+
+    // 单源：聚合视图拍平，没有分组节点。
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018',
+      issues: source('24381_145018', 2).issues,
+      skipped: [],
+      sources: [source('24381_145018', 2)],
+    });
+    const single = mountPanel();
+    await nextTick();
+    expect(single.querySelectorAll('[data-testid="mbd-diagnostics-source"]').length).toBe(0);
+    expect(single.querySelectorAll('[data-issue-id]').length).toBe(2);
+    apps.splice(0).forEach(app => app.unmount());
+    document.body.innerHTML = '';
+
+    // 多源：两个分组，各自只列本包的诊断，失败的包标红。
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381_145018,24383_91813',
+      issues: [
+        ...source('24381_145018', 2).issues,
+        ...source('24383_91813', 1).issues,
+      ],
+      skipped: [],
+      sources: [
+        source('24381_145018', 2),
+        source('24383_91813', 1, 'MBD 负载整包拒绝：1 个图元无法映射'),
+      ],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    const groups = Array.from(
+      host.querySelectorAll<HTMLDetailsElement>('[data-testid="mbd-diagnostics-source"]'),
+    );
+    expect(groups.map(node => node.dataset.refno)).toEqual(['24381_145018', '24383_91813']);
+
+    const first = groups[0]!;
+    expect(first.querySelector('summary')?.textContent).toContain('24381_145018 · 2 条诊断');
+    expect(first.querySelector('summary')?.textContent).toContain('正常');
+    expect(first.querySelectorAll('[data-issue-id]').length).toBe(2);
+
+    const second = groups[1]!;
+    expect(second.querySelector('summary')?.textContent).toContain('24383_91813 · 1 条诊断');
+    expect(second.querySelector('summary')?.textContent).toContain('失败');
+    expect(second.querySelectorAll('[data-issue-id]').length).toBe(1);
+    expect(second.textContent).toContain('整包拒绝');
+  });
+
+  /**
+   * 多源分组的截断仍按组独立：每组 50 条上限，标题报全量，隐藏条数汇总到
+   * 「显示全部」按钮上。
+   */
+  it('caps each BRAN group independently and reports the aggregated hidden count', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+
+    const manyIssues = (refno: string) =>
+      Array.from({ length: 60 }, (_, index) => ({
+        id: `${refno}-${index}`,
+        severity: 'error' as const,
+        category: 'avoidance' as const,
+        message: `overflow ${index}`,
+      }));
+    const source = (refno: string) => ({
+      refno,
+      issues: manyIssues(refno),
+      skipped: [],
+      layoutMode: null,
+      notes: [],
+      sourceVersion: null,
+      isolines: [],
+      loadError: null,
+    });
+
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A,B',
+      issues: [...manyIssues('A'), ...manyIssues('B')],
+      skipped: [],
+      sources: [source('A'), source('B')],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    expect(host.querySelectorAll('[data-issue-id]').length).toBe(100);
+    const toggle = host.querySelector<HTMLButtonElement>('[data-testid="mbd-diagnostics-toggle"]');
+    expect(toggle?.textContent).toContain('还有 20 条');
+
+    toggle!.click();
+    await nextTick();
+    expect(host.querySelectorAll('[data-issue-id]').length).toBe(120);
+  });
+
+  /**
    * B2：视口空白时「没有标注」与「取数失败」必须能区分——有 loadError 且一条 MBD
    * 记录都没有时，BRAN 行上挂红色角标，点一下展开诊断；有记录时不挂。
    */
