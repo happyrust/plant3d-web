@@ -197,6 +197,56 @@ export function formatSideEffectFailures(failures: readonly GroupSideEffectFailu
     .join('；');
 }
 
+/** 已经装进场景的一组：URL 里哪些 BRAN 促成了它，以及实际装进去的 refno。 */
+export type AppliedShowGroup = {
+  dbno: number;
+  /** 这组对应 URL 里的哪些 BRAN（已归一化）。 */
+  rootRefnos: readonly string[];
+  /** 实际装进场景的 refno（根 + 可见子实例）。 */
+  loadedRefnos: readonly string[];
+};
+
+export type ShowRefnoDelta = {
+  /** 要整组撤下的已装组。 */
+  evict: AppliedShowGroup[];
+  /** 要新装的 BRAN，保持 URL 顺序。 */
+  load: string[];
+  /** 已由保留组覆盖、无需动的 BRAN，保持 URL 顺序。 */
+  unchanged: string[];
+};
+
+/**
+ * 对比「已装的组」与 URL 里新的 `show_refno`，得出增量：撤哪些组、装哪些 BRAN。
+ *
+ * 组是撤除的最小单位：组里**任一** BRAN 不在新列表里就整组撤下，免得半个包留在
+ * 场景里（同库多 BRAN 是一次装进去的，没法按 BRAN 拆出各自的子实例）。整组撤下后，
+ * 该组里仍在新列表中的 BRAN 不再被覆盖，会自然落进 `load` 重装。
+ */
+export function planShowRefnoDelta(
+  applied: readonly AppliedShowGroup[],
+  nextRefnos: readonly string[],
+): ShowRefnoDelta {
+  const next = normalizeRefnoList(nextRefnos);
+  const nextSet = new Set(next);
+  const evict: AppliedShowGroup[] = [];
+  const covered = new Set<string>();
+
+  for (const group of applied) {
+    const roots = normalizeRefnoList(group.rootRefnos);
+    if (roots.some(refno => !nextSet.has(refno))) {
+      evict.push(group);
+    } else {
+      for (const refno of roots) covered.add(refno);
+    }
+  }
+
+  const load: string[] = [];
+  const unchanged: string[] = [];
+  for (const refno of next) {
+    (covered.has(refno) ? unchanged : load).push(refno);
+  }
+  return { evict, load, unchanged };
+}
 /** 装载成功的一组。`value` 是装载器原始返回值，编排层不解释它。 */
 export type GroupLoadOutcome<T> = {
   dbno: number;

@@ -40,6 +40,13 @@ import {
   parseMbdRefnos,
   removeMbdRefno,
 } from '@/utils/mbdRefnoParam';
+import {
+  appendRefno,
+  formatRefnoList,
+  parseRefnoList,
+  removeRefno,
+  SHOW_REFNO_PARAM,
+} from '@/utils/refnoListParam';
 
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
 
@@ -542,6 +549,44 @@ function hideMbdAnnotations(): void {
 }
 
 /**
+ * 几何侧 BRAN 列表：写 URL `show_refno` 并派发 `popstate`，ViewerPanel 按增量撤装几何。
+ * 与 `mbd_refno` 各自独立——两边都列同一个 BRAN 才会同时看到模型与尺寸线。
+ */
+function readShowRefnos(): readonly string[] {
+  return typeof window === 'undefined' ? [] : [...parseRefnoList(window.location.search, SHOW_REFNO_PARAM)];
+}
+
+const showRefnos = ref<readonly string[]>(readShowRefnos());
+
+const showRefnoDraft = ref('');
+
+/** 唯一的 URL 写入口：列表 → `show_refno`，空列表则删参数（= 撤下全部按 BRAN 装的几何）。 */
+function writeShowRefnos(refnos: readonly string[]): void {
+  const url = new URL(window.location.href);
+  const value = formatRefnoList(refnos);
+  if (value === null) url.searchParams.delete(SHOW_REFNO_PARAM);
+  else url.searchParams.set(SHOW_REFNO_PARAM, value);
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
+function applyShowRefno(): void {
+  const next = appendRefno(showRefnos.value, showRefnoDraft.value);
+  showRefnoDraft.value = '';
+  if (next.length === showRefnos.value.length) return;
+  writeShowRefnos(next);
+}
+
+function dropShowRefno(refno: string): void {
+  writeShowRefnos(removeRefno(showRefnos.value, refno));
+}
+
+function hideShowGeometry(): void {
+  showRefnoDraft.value = '';
+  writeShowRefnos([]);
+}
+
+/**
  * 分级显示（LOD，S3）的面板开关与统计。开关同样只改 URL（`mbd_lod=0` = 关）并派发
  * `popstate`，由同步层剥掉 `lod` 提示；统计读最近一次布局里 MBD 记录的 `derived.lodHidden`。
  */
@@ -631,8 +676,10 @@ function syncDisplayModeFromLocation(): void {
   mbdRefnos.value = typeof window === 'undefined'
     ? []
     : [...parseMbdRefnos(window.location.search)];
+  showRefnos.value = readShowRefnos();
   // 后退 / 前进换了地址，草稿里那半个 BRAN 已经与任何来源无关，留着只会误导。
   mbdRefnoDraft.value = '';
+  showRefnoDraft.value = '';
   mbdKindFilter.value = readMbdKindFilter();
   mbdPartialEnabled.value = readMbdPartialEnabled();
   mbdLodDisabled.value = readMbdLodDisabled();
@@ -901,6 +948,53 @@ function act(
             data-testid="mbd-refno-chip-remove"
             :title="`移除 ${refno}`"
             @click="dropMbdRefno(refno)">
+            ×
+          </button>
+        </span>
+      </div>
+    </div>
+    <div class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
+      data-testid="show-refno">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-semibold">BRAN 模型（几何）</span>
+        <input v-model="showRefnoDraft"
+          class="min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 py-0.5"
+          data-testid="show-refno-draft"
+          aria-label="追加要显示模型的 BRAN 号"
+          placeholder="例：24383/91813，回车追加"
+          @keydown.enter="applyShowRefno()" />
+        <button type="button"
+          class="rounded border px-1.5 py-0.5"
+          data-testid="show-refno-append"
+          @click="applyShowRefno()">
+          追加
+        </button>
+        <button type="button"
+          class="rounded border px-1.5 py-0.5 disabled:opacity-40"
+          data-testid="show-refno-hide"
+          :disabled="showRefnos.length === 0"
+          @click="hideShowGeometry()">
+          隐藏
+        </button>
+      </div>
+      <div class="mt-1 text-slate-500">
+        几何侧与标注侧各自独立；两侧都列同一个 BRAN 才会同时看到模型与尺寸线。
+      </div>
+      <div v-if="showRefnos.length > 0"
+        class="mt-1 flex flex-wrap items-center gap-1"
+        data-testid="show-refno-chips">
+        <span v-for="refno in showRefnos"
+          :key="refno"
+          class="flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5"
+          data-testid="show-refno-chip"
+          :data-refno="refno">
+          <span>{{ refno }}</span>
+          <button type="button"
+            class="rounded px-0.5 leading-none text-slate-500 hover:text-red-600"
+            data-testid="show-refno-chip-remove"
+            :title="`移除 ${refno}`"
+            :aria-label="`移除 ${refno}`"
+            @click="dropShowRefno(refno)">
             ×
           </button>
         </span>

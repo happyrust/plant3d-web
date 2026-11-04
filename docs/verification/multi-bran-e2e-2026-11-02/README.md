@@ -4,8 +4,9 @@
 
 - 后端：`aios-database.exe` `:8022`（rocksdb 档，`/api/v1/health` 200，工程 `AvevaMarineSample`）
 - 前端：Vite dev server `:3101`
-- 验证脚本：临时 spec `e2e/multi-bran-e2e-tmp.spec.ts`，**已按 `e2e/*` 不入库的约定删除**。
-  复跑需按下方「复跑脚本要点」重建（场景与断言口径都写在那里）。
+- 验证脚本：本轮用的临时 spec `e2e/multi-bran-e2e-tmp.spec.ts` 已删除。2026-11-05 起回归用例入库为
+  `e2e/multi-bran-show-refno.spec.ts`（`.gitignore` 白名单），覆盖跨库同屏与「面板移除 / 再追加」的增量撤装；
+  下方「复跑脚本要点」照旧是它的断言口径。
 - 运行：`npx playwright test e2e/multi-bran-e2e-tmp.spec.ts --workers=1 --reporter=line`，2 passed（约 19 秒）
 
 ## 场景与 URL
@@ -96,7 +97,14 @@ auto-fit）原先在 `loadGroup` 内部调用，一旦它抛错，这一组会�
 
 ## 复跑脚本要点
 
-临时 spec 已删除，重建时这几处是**必需的**，否则会重现本轮修掉的问题：
+正式 spec `e2e/multi-bran-show-refno.spec.ts` 已按下面几条实现，复跑：
+
+```powershell
+$env:MULTI_BRAN_E2E = '1'
+npx playwright test e2e/multi-bran-show-refno.spec.ts --workers=1 --reporter=line
+```
+
+未设 `MULTI_BRAN_E2E=1` 或后端 `/api/v1/health` 不通时整文件 skip。改写或另起用例时这几处是**必需的**，否则会重现本轮修掉的问题：
 
 1. **断言 `loadedDbnos` 等于 `[7997, 7999]`**，而不是 `totalObjects > 单 BRAN`。
    `snapshot()` 读 `__xeokitViewer.__dtxLoadedDbnos`（累计）与 `__dtxLastMultiBranLoad`（分组明细），
@@ -109,6 +117,8 @@ auto-fit）原先在 `loadGroup` 内部调用，一旦它抛错，这一组会�
    允许（记 `expectedResourceMiss`）；其余错误与全部 `pageerror` 必须为空。
 5. **截图盖场景标签**，否则两个场景产出同一张 PNG。
 6. **断言 `sideEffectFailures` 为空**（`multiLoad.sideEffectFailures = []`），与 `failures` 分开检查。
+7. **撤下按可见对象数断言**（2026-11-05）：`evictDtxRefnos` 只隐藏对象，`getStats().totalObjects` 不会减少；
+   用例按 refno 前缀数 `visible` 对象，并用 `window.__dtxShowRefnoApplied` 判断这一轮增量已生效。
 
 ## 验收命令（本轮全绿）
 

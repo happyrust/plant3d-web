@@ -1149,4 +1149,91 @@ describe('DimensionPanelDock', () => {
     }
   });
 
+  describe('show_refno geometry list', () => {
+    function showChips(host: HTMLElement): string[] {
+      return [...host.querySelectorAll('[data-testid="show-refno-chip"]')]
+        .map(node => node.getAttribute('data-refno') ?? '');
+    }
+
+    /** 几何侧追加：只写 `show_refno`，不碰 `mbd_refno`，并派发一次 popstate 让 ViewerPanel 增量装载。 */
+    it('appends a drafted BRAN to ?show_refno and dispatches popstate', async () => {
+      mocks.dimensionSystem.value = createSystem();
+      window.history.replaceState({}, '', '/?show_refno=24381_145018&mbd_refno=A');
+      const onPopstate = vi.fn();
+      window.addEventListener('popstate', onPopstate);
+      try {
+        const host = mountPanel();
+        await nextTick();
+        expect(showChips(host)).toEqual(['24381_145018']);
+        const draft = host.querySelector<HTMLInputElement>('[data-testid="show-refno-draft"]')!;
+        draft.value = '24383/91813';
+        draft.dispatchEvent(new Event('input'));
+        await nextTick();
+        host.querySelector<HTMLButtonElement>('[data-testid="show-refno-append"]')!.click();
+        await nextTick();
+
+        const search = new URL(window.location.href).searchParams;
+        expect(search.get('show_refno')).toBe('24381_145018,24383_91813');
+        expect(search.get('mbd_refno')).toBe('A');
+        expect(onPopstate).toHaveBeenCalledTimes(1);
+        expect(showChips(host)).toEqual(['24381_145018', '24383_91813']);
+        expect(draft.value).toBe('');
+      } finally {
+        window.removeEventListener('popstate', onPopstate);
+        window.history.replaceState({}, '', '/');
+      }
+    });
+
+    it('removes a single BRAN from ?show_refno when its chip is closed', async () => {
+      mocks.dimensionSystem.value = createSystem();
+      window.history.replaceState({}, '', '/?show_refno=A,B,C');
+      try {
+        const host = mountPanel();
+        await nextTick();
+        host.querySelector<HTMLButtonElement>(
+          '[data-testid="show-refno-chip"][data-refno="B"] [data-testid="show-refno-chip-remove"]',
+        )!.click();
+        await nextTick();
+        expect(new URL(window.location.href).searchParams.get('show_refno')).toBe('A,C');
+        expect(showChips(host)).toEqual(['A', 'C']);
+      } finally {
+        window.history.replaceState({}, '', '/');
+      }
+    });
+
+    it('drops the show_refno parameter entirely on hide', async () => {
+      mocks.dimensionSystem.value = createSystem();
+      window.history.replaceState({}, '', '/?show_refno=A,B&mbd_refno=A');
+      try {
+        const host = mountPanel();
+        await nextTick();
+        const hide = host.querySelector<HTMLButtonElement>('[data-testid="show-refno-hide"]')!;
+        expect(hide.disabled).toBe(false);
+        hide.click();
+        await nextTick();
+        const search = new URL(window.location.href).searchParams;
+        expect(search.has('show_refno')).toBe(false);
+        expect(search.get('mbd_refno')).toBe('A');
+        expect(host.querySelector('[data-testid="show-refno-chips"]')).toBeNull();
+      } finally {
+        window.history.replaceState({}, '', '/');
+      }
+    });
+
+    it('re-reads ?show_refno on popstate (browser back / forward)', async () => {
+      mocks.dimensionSystem.value = createSystem();
+      window.history.replaceState({}, '', '/?show_refno=A');
+      try {
+        const host = mountPanel();
+        await nextTick();
+        expect(showChips(host)).toEqual(['A']);
+        window.history.replaceState({}, '', '/?show_refno=A/1,B');
+        window.dispatchEvent(new Event('popstate'));
+        await nextTick();
+        expect(showChips(host)).toEqual(['A_1', 'B']);
+      } finally {
+        window.history.replaceState({}, '', '/');
+      }
+    });
+  });
 });

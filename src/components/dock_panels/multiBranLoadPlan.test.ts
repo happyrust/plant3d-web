@@ -4,9 +4,11 @@ import {
   formatGroupFailures,
   formatSideEffectFailures,
   mergeRootRefnoWithVisibleRefnos,
+  planShowRefnoDelta,
   prepareBranLoadPlan,
   resolveShowDbnumOverride,
   runBranLoadPlan,
+  type AppliedShowGroup,
   type PreparedGroup,
   type VisibleInstsResult,
 } from './multiBranLoadPlan';
@@ -345,5 +347,91 @@ describe('formatSideEffectFailures', () => {
 
   it('returns an empty string when nothing failed', () => {
     expect(formatSideEffectFailures([])).toBe('');
+  });
+});
+
+describe('planShowRefnoDelta', () => {
+  const groupA: AppliedShowGroup = {
+    dbno: 1,
+    rootRefnos: ['24381_145018'],
+    loadedRefnos: ['24381_145018', '24381_200001'],
+  };
+  const groupB: AppliedShowGroup = {
+    dbno: 2,
+    rootRefnos: ['24383_91813'],
+    loadedRefnos: ['24383_91813', '24383_300001'],
+  };
+
+  it('returns nothing to do for empty applied and empty next', () => {
+    expect(planShowRefnoDelta([], [])).toEqual({ evict: [], load: [], unchanged: [] });
+  });
+
+  it('loads everything on the first round (nothing applied yet)', () => {
+    expect(planShowRefnoDelta([], ['24381_145018', '24383_91813'])).toEqual({
+      evict: [],
+      load: ['24381_145018', '24383_91813'],
+      unchanged: [],
+    });
+  });
+
+  it('only loads the appended BRAN', () => {
+    expect(planShowRefnoDelta([groupA], ['24381_145018', '24383_91813'])).toEqual({
+      evict: [],
+      load: ['24383_91813'],
+      unchanged: ['24381_145018'],
+    });
+  });
+
+  it('only evicts the removed BRAN group', () => {
+    expect(planShowRefnoDelta([groupA, groupB], ['24381_145018'])).toEqual({
+      evict: [groupB],
+      load: [],
+      unchanged: ['24381_145018'],
+    });
+  });
+
+  it('evicts and loads in the same round when the list is swapped', () => {
+    expect(planShowRefnoDelta([groupA], ['24383_91813'])).toEqual({
+      evict: [groupA],
+      load: ['24383_91813'],
+      unchanged: [],
+    });
+  });
+
+  it('evicts every group when the list is cleared', () => {
+    expect(planShowRefnoDelta([groupA, groupB], [])).toEqual({
+      evict: [groupA, groupB],
+      load: [],
+      unchanged: [],
+    });
+  });
+
+  it('is idempotent when the list did not change', () => {
+    expect(planShowRefnoDelta([groupA, groupB], ['24383_91813', '24381/145018'])).toEqual({
+      evict: [],
+      load: [],
+      unchanged: ['24383_91813', '24381_145018'],
+    });
+  });
+
+  it('evicts the whole group when only part of its BRANs were removed, and reloads the rest', () => {
+    const shared: AppliedShowGroup = {
+      dbno: 1,
+      rootRefnos: ['24381_145018', '24381_145019'],
+      loadedRefnos: ['24381_145018', '24381_145019', '24381_200001'],
+    };
+    expect(planShowRefnoDelta([shared], ['24381_145019', '24381_145020'])).toEqual({
+      evict: [shared],
+      load: ['24381_145019', '24381_145020'],
+      unchanged: [],
+    });
+  });
+
+  it('keeps URL order for load and unchanged', () => {
+    expect(planShowRefnoDelta([groupB], ['24381_1', '24383_91813', '24381_2'])).toEqual({
+      evict: [],
+      load: ['24381_1', '24381_2'],
+      unchanged: ['24383_91813'],
+    });
   });
 });
