@@ -275,14 +275,14 @@ E3D .dat
 
 ### 阶段 3：PML 算法骨架移植（核心，工作量最大）
 
-| ID | 任务 | owned_paths | 验收 |
-| --- | --- | --- | --- |
-| T3.1 | 纯数值层：`mergeAngles` / `angleInAngles` / `splitRange` / `weightedWeight` / `mbdTextLen` / `getGoodCheight` / `isoGetBestDir` / `isoGetHandleDimDir` | `src/dimension/kernel/layout/polar/numeric/` | 逐函数单测，用 PML 原值做金样（含 `weightedWeight` 两张档位表、`splitRange` 分级网格） |
-| T3.2 | 修 C7 / C8 / C9 三个 PML 缺陷，并在代码注释里写明「与 PML 原实现的差异及理由」 | 同 T3.1 | 缺陷用例（坏半径带、Step 14 兜底、小写 x 字宽） |
-| T3.3 | 参考系层：`PolarReference` 接口 + 2D 轴测实现（与 PML 一致）+ 3D 相机实现 | `src/dimension/kernel/layout/polar/reference/` | 2D 实现跑 PML 原 case 逐值一致；3D 实现有单元测试（showDir 滞回） |
-| T3.4 | `getBestPosAndOri` 14 步 + `balance` + `getDirAndCha` + `getResult`，参考系可注入 | `src/dimension/kernel/layout/polar/place.ts` | 2D 模式与 PML 结果一致；3D 模式无 NaN、无越界 |
-| T3.5 | 屏幕空间校验层：投影 → 像素净空 → 降级候选 | `src/dimension/kernel/layout/polar/screenGuard.ts` | 构造重叠 case，断言降级后不重叠 |
-| T3.6 | 接入 `layoutViewport`：MBD 记录在 `authority='solver'` 且契约带 polar 结果时走 polar 布局，否则走现有路径 | `kernel/viewport/layoutViewport.ts`、`kernel/layout/explicit.ts` | A/B 开关（URL `mbd_polar=1`）对比；默认关闭 |
+| ID | 任务 | owned_paths | 验收 | 状态 |
+| --- | --- | --- | --- | --- |
+| T3.1 | 纯数值层：`mergeAngles` / `angleInAngles` / `splitRange` / `weightedWeight` / `mbdTextLen` / `getGoodCheight` / `isoGetBestDir` / `isoGetHandleDimDir` | `src/dimension/kernel/layout/polar/numeric/` | 逐函数单测，用 PML 原值做金样（含 `weightedWeight` 两张档位表、`splitRange` 分级网格） | ✅ 已落地，见 §12.7 |
+| T3.2 | 修 C7 / C8 / C9 三个 PML 缺陷，并在代码注释里写明「与 PML 原实现的差异及理由」 | 同 T3.1 | 缺陷用例（坏半径带、Step 14 兜底、小写 x 字宽） | ✅ 已落地，见 §12.7 |
+| T3.3 | 参考系层：`PolarReference` 接口 + 2D 轴测实现（与 PML 一致）+ 3D 相机实现 | `src/dimension/kernel/layout/polar/reference/` | 2D 实现跑 PML 原 case 逐值一致；3D 实现有单元测试（showDir 滞回） | ✅ 已落地（T3.3a/b/c），见 §13.11、§13.14 |
+| T3.4 | `getBestPosAndOri` 14 步 + `balance` + `getDirAndCha` + `getResult`，参考系可注入 | `src/dimension/kernel/layout/polar/place.ts` | 2D 模式与 PML 结果一致；3D 模式无 NaN、无越界 | **✅ 已提交 `1b4c86ab`**，见 §13.16 |
+| T3.5 | 屏幕空间校验层：投影 → 像素净空 → 降级候选 | `src/dimension/kernel/layout/polar/screenGuard.ts` | 构造重叠 case，断言降级后不重叠 | **✅ 已提交 `59554218`**，见 §13.16（§13.13 的落点预判已裁决，见该节末尾更新） |
+| T3.6 | 接入 `layoutViewport`：MBD 记录在 `authority='solver'` 且契约带 polar 结果时走 polar 布局，否则走现有路径 | `kernel/viewport/layoutViewport.ts`、`kernel/layout/explicit.ts` | A/B 开关（URL `mbd_polar=1`）对比；默认关闭 | **进行中（T3.6a）**，见 §13.17 |
 
 ### 阶段 4：契约扩展（跨仓，需与 plant-mbd 同步）
 
@@ -299,15 +299,15 @@ E3D .dat
 
 ### 阶段 5：求解器补全（跨仓，plant-mbd）
 
-| ID | 任务 | 验收 |
-| --- | --- | --- |
-| T5.1 | `angle.rs`：`collect_installation_angles` + `angle_primitives`（tilt / rotation 两种，PML `getmemP3dirangle` 口径） | 新 toy fixture `p3-installation-angles.json` 8 case 全绿 |
-| T5.2 | `PPoint.bore` 进宿主（P3 在 P1 轴线上时要用） | `e3d-model` `RoutePoint.bore` 带出 |
-| T5.3 | Polar 避让（`occupancy.rs`） | 密集簇不再重叠；`IssueCategory::Avoidance` 开始产出 |
-| T5.4 | 小尺寸拆行 + 逐级缩字（PML `lindim` 370-463） | 短段不再一律 elide |
-| T5.5 | 调整焊附加串 ` +len` | `linear_dim.text` 带 plus 串 |
-| T5.6 | PCOM 切管件 | `split_isolines.rs:242-248` 的 issue 消失 |
-| T5.7 | 归段 / 跨段让位（PML `isobran` 3184-3336） | 相邻直段尺寸不互相压 |
+| ID | 任务 | 验收 | 状态 |
+| --- | --- | --- | --- |
+| T5.1 | `angle.rs`：`collect_installation_angles` + `angle_primitives`（tilt / rotation 两种，PML `getmemP3dirangle` 口径） | 新 toy fixture `p3-installation-angles.json` 8 case 全绿 | ✅ 已落地（`0b89b76`），见 §13.3、§13.8 |
+| T5.2 | `PPoint.bore` 进宿主（P3 在 P1 轴线上时要用） | `e3d-model` `RoutePoint.bore` 带出 | ✅ 已落地（求解器 + `gen-model` `1caf3a84`），见 §13.3 |
+| T5.3 | Polar 避让（`occupancy.rs`） | 密集簇不再重叠；`IssueCategory::Avoidance` 开始产出 | 未开始 |
+| T5.4 | 小尺寸拆行 + 逐级缩字（PML `lindim` 370-463） | 短段不再一律 elide | **✅ 已提交 `5bef17f`**（与 T5.5 同一提交），见 §13.18 |
+| T5.5 | 调整焊附加串 ` +len` | `linear_dim.text` 带 plus 串 | **✅ 已提交 `5bef17f`**，见 §13.18 |
+| T5.6 | PCOM 切管件 | `split_isolines.rs:242-248` 的 issue 消失 | **✅ 已提交 `8f19cdf`**，见 §13.18 |
+| T5.7 | 归段 / 跨段让位（PML `isobran` 3184-3336） | 相邻直段尺寸不互相压 | 部分实现（见 §13.3），`addtopreornextpolarsystem` 未做 |
 
 ### 阶段 6：视觉裁决与收尾
 
@@ -418,12 +418,15 @@ T5.1..T5.7（跨仓，T5.3 依赖 T3.1-T3.4 的算法口径）──────
 | T0.1 | 实质完成——C4 复核结论随 T2.2 落地（§12.1），无单独记录 |
 | T0.3 性能基线 | 未做，`docs/verification/` 下无 MBD 性能记录 → 现行计划 W4 |
 | T3.3a / T3.3b / T3.3c | **已落地**，见 §13.11（5c7ee980）/ §13.14（3f298e7c） |
-| T3.4–T3.6 | 未开始（`mbd_polar` 全源码零命中；T3.5 只有 §13.13 的落点预判）→ 现行计划 W1 |
+| T3.4 / T3.5 | **已落地**，见 §13.16（`1b4c86ab`、`59554218`） |
+| T3.6 | 进行中（T3.6a，`mbd_polar=1` 默认关），见 §13.17 |
 | §7 原 T4.1–T4.6（契约扩展） | 未开始（`meta.coverage` 在 adapters 零命中）。2026-10-29 裁决：保留 → 现行计划 W3 |
 | T7.1–T7.5（§13.10 新增，原误用 T4.1–T4.5 编号） | **已落地**，见 §13.10（1a40b46a、63d566e、483713ee + 68f36d5e） |
 | T7.6 LOD 阈值拆分 + 退化四边形回退（计划外批次） | **已落地**，见 §13.15（12f4bb1e） |
 | T5.1 / T5.2 | **已落地**，见 §13.3 / §13.8（plant-mbd 0b89b76、gen-model 1caf3a84） |
-| T5.3–T5.7 | 未开始（plant-mbd 停在 63d566e）→ 现行计划 W2 |
+| T5.4 / T5.5 | **已落地**，见 §13.18（`5bef17f`） |
+| T5.6 | **已落地**，见 §13.18（`8f19cdf`） |
+| T5.3 / T5.7 | 未开始（`addtopreornextpolarsystem` 未做）→ 现行计划 W2 |
 | T6.1–T6.5 | 未开始，无记录 → 现行计划 W5 |
 | 健壮性计划 D1 / E3 | 未做 → 现行计划 W4（其余 A–E 项见该计划 §9） |
 
@@ -576,9 +579,9 @@ T5.1..T5.7（跨仓，T5.3 依赖 T3.1-T3.4 的算法口径）──────
 ⑦ ✅ T7.3（原 T4.3）explicit 弧像素下限（483713ee + 68f36d5e，落点 explicit.ts:341-351；561 → 564）
 ⑧ ✅ T3.3a（5c7ee980，564）    PolarReference 类型（前端串行链起点）
 ⑨ ✅ T3.3b ∥ T3.3c（3f298e7c，见 §13.14）
-⑩ T3.4 → T3.5 → T3.6（→ 现行计划 W1）
-⑪ T5.5（调整焊 +len）∥ T5.6（PCOM）
-⑫ T5.4（pluslen 小尺寸拆行）
+⑩ ✅ T3.4（1b4c86ab，见 §13.16）→ ✅ T3.5（59554218，见 §13.16）→ T3.6（进行中 T3.6a，见 §13.17）
+⑪ ✅ T5.5（调整焊 +len，5bef17f）∥ ✅ T5.6（PCOM，8f19cdf）（见 §13.18）
+⑫ ✅ T5.4（pluslen 小尺寸拆行，5bef17f，与 T5.5 同一提交，见 §13.18）
 ⑬ T5.3（occupancy）→ T5.7（跨段让位，依赖 T5.3）
 ```
 
@@ -770,16 +773,20 @@ parseMbdV2PipeData (mbdV2Contract.ts:433)
 
 **两处共同约束**：`kind` 分别填 `'iso-sheet'` / `'camera'`；`mainDimDir` 填 `null`；不新建 barrel（留给 T3.4）；不碰对方的文件（两个 worker 在同一目录并行，`isoSheet.*` 与 `camera.*` 互不重叠）。
 
-### 13.13 T3.5 落点预判（待 T3.4 接口裁决）
+### 13.13 T3.5 落点预判（已裁决，落地记录见 §13.16）
+
+> 本节原为「待 T3.4 接口裁决」的预判，T3.4 / T3.5 已于 `1b4c86ab` / `59554218` 落地（见 §13.16）。以下保留原预判要点，逐条标注实际裁决结果。
 
 T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 
-| 现成件 | 位置 | 用途 |
-| --- | --- | --- |
-| `LabelOccupancy` | `collision/resolveLabelCollisions.ts:64-131` | 64 px 网格占用；含 viewport 裁剪（`:79-88`）防「投影到 1e5–1e9 px 的 sliver 把网格撑爆」——`all-pipes sweep 2026-09-14` 实测过 `RangeError: Map maximum size exceeded` |
-| `convexQuadsOverlap` | `layout/declutterPolicy.ts:72-85` | 凸四边形分离轴判定；配合 `quadBracketsLabel`（`:53-58`，面积比 0.05..1.2 才可信；T7.6 引入，见 §13.15）处理近相机平面的退化四边形 |
+| 现成件 | 位置 | 用途 | 裁决结果 |
+| --- | --- | --- | --- |
+| `LabelOccupancy` | `collision/resolveLabelCollisions.ts:64-131` | 64 px 网格占用；含 viewport 裁剪（`:79-88`）防「投影到 1e5–1e9 px 的 sliver 把网格撑爆」——`all-pipes sweep 2026-09-14` 实测过 `RangeError: Map maximum size exceeded` | **✅ 复用**：`screenGuard.ts` 直接依赖 `LabelOccupancy`，净空只在查询侧外扩一次（默认 4px），未另造网格 |
+| `convexQuadsOverlap` | `layout/declutterPolicy.ts:72-85` | 凸四边形分离轴判定；配合 `quadBracketsLabel`（`:53-58`，面积比 0.05..1.2 才可信；T7.6 引入，见 §13.15）处理近相机平面的退化四边形 | **✅ 复用**：两个函数原样引入 `screenGuard.ts`，退化四边形判定沿用 T7.6 的面积比口径 |
 
 **关键依赖**：T3.4 的 `place()` **必须返回排序候选列表**，不能只返回单个最优。理由是 T3.5 要在像素域否决候选并降级——若只给一个最优，一旦它重叠就只能整体放弃。PML 本来就有这份数据：`:1261` 的提前退出分支因 `ifAcceptableToQuit = false`（`:1163`）恒假，每个轴向单元的最优都进了 `alldisbests`，`:1273-1281` 已排序，只取 `[1]` 是**丢弃**而非「本来就没有」。
+
+**裁决结果**：`place()` 已按此要求实现为 `polarPlace()`，返回 `PolarPlaceResult { best, candidates, perDisBest, diagnostics }`（`candidates` 排序，`best === candidates[0]`），`screenGuard` 按候选顺序否决/降级，不止给单个最优。细节见 §13.16。
 
 ### 13.14 T3.3b / T3.3c 落地记录（2026-10-29，补记）
 
@@ -848,6 +855,78 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 - 阈值 0 / 18 与 0.05..1.2 的取值来自源码注释里的现场数据，**没有** A/B 截图或量化记录。现行计划 W0 要求补一组固定相机前后对比截图，并确认 `theme.test.ts` 里的钉子覆盖这两个新字段。
 - 门禁数字：入库时未跑（按会话约定由用户本机执行）；该批未单独切出数字，并入 §14 第 13 行的当前 HEAD 实测（§14 第 12 行已注明）。
 
+### 13.16 T3.4 / T3.5 落地记录（2026-10-29）
+
+**前置提交（T3.4 之前，先修 `arc.angledirection` 手性与参考系契约）**：`be17e987` —— `polar/numeric/arc.ts` 把 `arcDirection` 改为径向语义（弧心 → 弧上该点）、`arcNear` 是其逆；`PolarReference` 补 `up` / `horiDir` 两个字段；`isoSheet.ts` 的 `showDir` 由切线方向改径向方向。细节与复核见 §13.14 末尾「W0-3 复核（对着 be17e987）」表。
+
+**T3.4a（前置辅助层）**：提交 `a1bf732d` —— 新增 `polar/place/` 目录下的辅助模块 `types.ts`、`geometry.ts`、`angles.ts`、`dirAndCha.ts`、`result.ts`、`index.ts`。
+
+- **重要纠正**：PML `getanglerange`（`polarsystem.pmlobj` 约 `:1820-1844`）的 `--$(` 块注释起始被同一行的行注释 `--` 吃掉，导致这段原本以为是死代码的块实际是**活代码**。连带后果：空输入时的默认结果是 `normalAngleRange()`（`[[45,135],[-135,-45]]`），**不是** `[[0,360]]`（原计划 §6.1 / §13.2 一直假设的全角度兜底）。移植时已按活代码口径实现。
+
+**T3.4b（核心 14 步）**：提交 `1b4c86ab` —— 新增 `disEles.ts`、`balance.ts`、`place.ts`（导出 `polarPlace`，完整 14 步）。
+
+- **接口裁决**（回应 §13.13 的「关键依赖」）：`polarPlace()` 返回 `PolarPlaceResult { best, candidates, perDisBest, diagnostics }`：`candidates` 是排序后的全部候选，`best === candidates[0]`；`perDisBest` 保留每个轴向距离单元的最优（PML 的 `alldisbests`，§13.13 指出不能被丢弃的那份数据）；`diagnostics` 记录移植过程中的内部状态（兜底是否触发等）。
+- 修了 `balance`（`polarsystem.pmlobj:618-620`）的 `totalw=0` 除零——PML 原实现在全部权重为 0 时会除零，移植版显式短路。
+- 修了 `nint` 单位 bug：PML 原始量纲混用，移植版改用 `nintMm`（显式标注毫米单位，避免再次混用）。
+- **发现**：Step 14 兜底分支在当前输入域下不可达，`diagnostics.usedFallback` 恒为 `false`；真正遇到无解输入时，错误路径是 `getResult` 内部抛 `RangeError`（不是走 Step 14 兜底）。这与原计划 §6.1 表格「`getgoodradiusfrombadradiuss` 返回最外缘」相关的 C7/C8 假设不完全一致，记录为移植中的新发现，未额外处理（无解属上游输入异常，抛错是合理行为）。
+
+**T3.5（屏幕空间校验层）**：提交 `59554218` —— 新增 `polar/screenGuard.ts`，导出 `screenGuard` / `registerChosen`。
+
+- 复用 `convexQuadsOverlap`（`declutterPolicy.ts:72-85`）与 `quadBracketsLabel`（`:53-58`）、`LabelOccupancy`（`resolveLabelCollisions.ts:64-131`），未另造碰撞算法（兑现 §13.13 的预判）。
+- 净空（clearance）只在查询侧外扩一次，不在写入侧重复外扩；默认 4px。
+- 否决原因枚举：`overlap`（与已占用网格/标签重叠）、`offscreen`（投影出视口）、`degenerate`（四边形面积比超出 0.05..1.2 可信区间）、`backfacing`（候选朝向背对相机，呼应 §6.1「候选 `pos` 加 raycast / depth 惩罚」的简化版）。
+- `registerChosen` 做跨帧延续匹配：按 `(disIndex, radiusIndex)` 组合键 + 5° 角度容差匹配上一帧已选中的候选（`previous`），避免同一标注在帧间抖动切换候选。
+
+**门禁（T3.4 + T3.5 累计，polar 目录范围）**：`npx vitest run src/dimension/kernel/layout/polar` → **23 文件 / 268 用例全过**；维度全量回归（`npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts src/utils/refnoKey.test.ts`）→ **86 文件全过**；`npm run type-check` → 基线 **0 条**（`900f8682` 已从 440 条收紧到 0，基线清零发生在本批次之前，T3.4/T3.5 新增 0）。
+
+### 13.17 T3.6 接入方案（进行中）
+
+**侦察结论（T3.6 落地前的现状核实）**：
+
+- `mbd_3d`（现有的 3D 重建开关，`dimension3d.ts` 对应的输入通道）走三段式：composable 读取 URL/配置参数 → 剥离出 kernel 只认的数据字段 → kernel 入口只接数据，不感知 flag 从哪来。T3.6 的 `mbd_polar=1` 照此结构复刻，不在 kernel 内部读 flag。
+- `layoutExplicit` 当前**没有**候选搜索逻辑，直接使用求解器下发的 `labelAnchor` 摆放标签；接入 polar 布局后，`explicit.ts` 侧改为优先尝试 `polarPlace` + `screenGuard` 产出的候选，不改变无 polar 数据时的既有行为。
+- 契约缺口：当前 `ExplicitLayoutInput` 没有 `disRange` 字段（PML 原始概念里沿管轴的允许摆放距离区间），T3.6a 用投影近似顶替（见下）。
+- `label` 图元本身不带管轴信息；因为同一 `isoline_idx` 下的 `linear_dim.start` / `linear_dim.end` 已有管轴两端点，T3.6a 反推同管的 `linear_dim` 端点连线作为管轴方向。
+- `basicRadius`（polar 参考系的基准半径）取 `od_mm / 2`（管外径的一半），与求解器侧 `radius = aod × 0.7` 的口径（§13.3 T5.1 偏差 4）不是同一个量，T3.6a 不混用。
+- 没有现成的跨帧缓存点；`registerChosen` 的延续匹配状态挂在 painter 实例上（随 painter 生命周期），不进 kernel 的无状态布局管线。
+
+**v1（T3.6a，实现中）**：
+
+- 只接入 `label` 图元（不含 `aid_text` / 其他 kind）。
+- 新增 URL 开关 `mbd_polar=1`，默认关闭；关闭时行为与接入前逐位相同。
+- `disRange` 用管轴投影的 ±3× 字高近似（没有契约字段前的过渡口径）。
+- 参与 polar 占用计算的元素只有管体本身（不含构件包围盒、不含同管已布局的其他标注）。
+- 失败处理：`polarPlace` 内部抛 `RangeError` 或 `screenGuard` 判定 `allRejected`（全部候选被否决）时，保留原有 `labelAnchor`，不中断渲染、不抛到上层。
+- 默认关闭时零行为变化（现有快照/测试不受影响）。
+
+**留给 v2（T3.6a 范围外，明确不做）**：
+
+- `aid_text` 接入（当前只接 `label`）。
+- 同一管体已布局的标注累积为 `PolarElement`（供后续标注感知彼此占用，当前每条独立计算）。
+- 构件包围盒参与 polar 占用判定（当前只有管体）。
+- `mainDimDir`（软偏好方向）目前恒为 `null`，v1 不提供驱动输入。
+- `easy` 模式（PML 术语，简化求解路径）无驱动输入，v1 不支持。
+- 3D 视锥换算下的径向上限与像素净空精细调参（v1 用固定近似值，不做自适应）。
+
+### 13.18 T5.4 / T5.5 / T5.6 落地记录（plant-mbd，2026-10-29）
+
+**T5.4 + T5.5（同一提交）**：`plant-mbd` 提交 `5bef17f` —— 调整焊附加长度实现（`adjust_weld.rs`）。` +len` 串作为独立的 `aid_text` 图元下发，不拼进 `linear_dim` 的尺寸文本字符串本身；字高取 `cheight × 0.6`。T5.4（小尺寸拆行 + 逐级缩字）的剩余部分（§13.3 记录的 `pluslen` 项）随本提交一并补齐。
+
+**T5.6（PCOM 切管件）**：`plant-mbd` 提交 `8f19cdf` —— `pcom.rs`。水平布置下 `ldir`（局部方向）钉死为世界竖直轴；`arrive eq 2` 的原 PML 分支降级处理为 `split.geometry` 类别的 issue（不再是 §13.3 记录的 `"P1: PCOM not implemented"` 占位文案）。
+
+**RJ PCOM 专用尺寸取点 + `*JH` 具名 Z 型件取点（与 T5.6 配套的求解器改动）**：`plant-mbd` 提交 `41ae234`。
+
+- `isoDim.pmlobj` 对应取点逻辑迁移位置：L156-159、L470-472、L475-537、L635、L827-868。
+- `isobran.pmlobj` 的 `*JH` 具名 Z 型件 P2/P3 中点迁移位置：L1636-1644。
+- 缺 P 点时的处理：退回原点并记录 issue（不中断整体布局）。
+- 测试结果：138 + 3 + 5 + 1 + 10 + 7 全绿；6 份金样零变化（本批改动不影响现有金样产出）。
+- **仍未迁移**（范围外，记录待后续批次）：`isoDim.pmlobj` L869-933（`INST *UA`、`FILT *FI`、`*FL`/`*JH` 具名取点的其余分支）、L793-809（KD）、L499-511 / L810-825（`isodim` 内 `ispipespecialelement` 分支）。
+
+**宿主 `gen-model` 配套改动**：
+
+- 提交 `9d35bc446` —— 读取 `:PIPE-ADLONGTH` 属性（调整焊附加长度的数据来源）。
+- 提交 `ffc4a47a6` —— `catalogue_ppoints` 补充查询 P0/P9 点位。
+
 ---
 
 ## 14. 门禁基线总表（两份计划共用，只增不减）
@@ -869,5 +948,6 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 | 11 | E1 两份适配器测试入库 | — | **未记** | 健壮性 §9 第四轮 | f76729df |
 | 12 | T7.6 LOD / 去重叠 | — | 未单测，并入第 13 行（HEAD 已含 12f4bb1e 之后的提交，无法单独切出该时点的数字） | §13.15 | 12f4bb1e |
 | 13 | **当前 HEAD 的真实数字**（2026-10-29，W0-1 实测） | S2 | **81 / 709**（0 失败，6.49 s） | 现行计划 W0-1 | 120b1bec（工作区另含未提交的 W4-1 / W4-2 改动；W3 见 d7281249、6ee4e6bd） |
+| 14 | T3.4 + T3.5（polar 目录范围）+ 维度全量回归 | polar 子集 / S2 | polar 子集 **23 文件 / 268 通过**；S2 **86 文件全过** | §13.16 | be17e987（前置）、a1bf732d（T3.4a）、1b4c86ab（T3.4b）、59554218（T3.5） |
 
 **类型基线**：`npm run type-check` 自 §5.2 起到第 9 行（5b1bdfd0）始终是 440 条 / 127 文件，新增 0 / 已消失 0；2026-10-29 在当前 HEAD（120b1bec，与第 13 行同一次）实测 **439 条 / 126 文件，新增 0 / 已消失 1**——消失的是 `src/dimension/ui/DimensionSemanticList.vue` 的 TS2345（`Argument of type 'DimensionListItem | undefined' is not assignable to parameter of type 'DimensionListItem'.`），**归因更正（2026-10-29 复核）**：真正消掉它的不是补 `groupLabel` 默认值，而是 W3-6 的模板重构——旧版 `DimensionSemanticList.vue:188` 的 `:aria-activedescendant="items[activeIndex] ? optionId(items[activeIndex]) : undefined"` 里三元没收窄第二次索引，把 `DimensionListItem | undefined` 传给了 `optionId(item: DimensionListItem)`，是旧文件里唯一这样的调用点；新版改成 `activeDescendant` computed（`DimensionSemanticList.vue:121-124` 的 `row?.visible ? optionId(row.item) : undefined`）+ 模板引用。所以是真修、不是改基线掩盖；基线已同步收紧（`npm run type-check:update-baseline`，`scripts/type-check-baseline.txt` 现为 439 条 / 126 文件），之后仍按「新增 0 / 已消失 0」放行。
