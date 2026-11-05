@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue';
 
 import { authVerifyToken } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
@@ -26,6 +26,9 @@ const extensionHeight = computed(() => {
 });
 
 const urlParams = new URLSearchParams(window.location.search);
+const isRvmCheckPage = urlParams.get('page')?.trim() === 'rvm-check';
+const RvmCheckPage = defineAsyncComponent(() => import('@/components/rvm-check/RvmCheckPage.vue'));
+const RvmCheckLoginDialog = defineAsyncComponent(() => import('@/components/rvm-check/RvmCheckLoginDialog.vue'));
 const requestedOutputProject = urlParams.get('output_project')?.trim() ?? '';
 const hasRequestedOutputProject = requestedOutputProject.length > 0;
 
@@ -99,65 +102,69 @@ onMounted(() => {
 
 <template>
   <v-app class="h-screen">
-    <ConfirmDialog />
-    <OnboardingOverlay />
-    <ReviewGuideCenter />
-    <RoomInfoDialog />
-    
-    <div v-if="projectPending" class="h-screen w-full" data-testid="project-bootstrap-loading" />
-    <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
-    
+    <RvmCheckPage v-if="isRvmCheckPage" />
     <template v-else>
-      <v-app-bar class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
-        :height="0"
-        :extension-height="extensionHeight">
-        <template #extension>
-          <RibbonBar v-if="isRibbonMode" ref="ribbonBarRef" class="w-full">
-            <template #header-right>
-              <div class="flex items-center gap-2 px-2">
-                <v-btn size="small" variant="text" title="切换到普通菜单" @click="toggleMenuMode">
-                  <v-icon size="18">mdi-menu</v-icon>
-                </v-btn>
-                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.startContextualGuide('currentRole')">
-                  <v-icon size="18">mdi-help-circle-outline</v-icon>
-                </v-btn>
-                <LayoutToggleButtons />
-                <AboutDialog />
-                <ReleaseNotesDialog />
-                <UserAvatar />
-              </div>
-            </template>
-          </RibbonBar>
-          <HierarchicalMenuBar v-else class="w-full">
-            <template #header-right>
-              <div class="flex items-center gap-2 px-2">
-                <v-btn size="small" variant="text" title="切换到 Ribbon 菜单" @click="toggleMenuMode">
-                  <v-icon size="18">mdi-ribbon</v-icon>
-                </v-btn>
-                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.startContextualGuide('currentRole')">
-                  <v-icon size="18">mdi-help-circle-outline</v-icon>
-                </v-btn>
-                <LayoutToggleButtons />
-                <AboutDialog />
-                <ReleaseNotesDialog />
-                <UserAvatar />
-              </div>
-            </template>
-          </HierarchicalMenuBar>
-        </template>
-      </v-app-bar>
+      <ConfirmDialog />
+      <OnboardingOverlay />
+      <ReviewGuideCenter />
+      <RoomInfoDialog />
+      <RvmCheckLoginDialog />
+    
+      <div v-if="projectPending" class="h-screen w-full" data-testid="project-bootstrap-loading" />
+      <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
+    
+      <template v-else>
+        <v-app-bar class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
+          :height="0"
+          :extension-height="extensionHeight">
+          <template #extension>
+            <RibbonBar v-if="isRibbonMode" ref="ribbonBarRef" class="w-full">
+              <template #header-right>
+                <div class="flex items-center gap-2 px-2">
+                  <v-btn size="small" variant="text" title="切换到普通菜单" @click="toggleMenuMode">
+                    <v-icon size="18">mdi-menu</v-icon>
+                  </v-btn>
+                  <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.startContextualGuide('currentRole')">
+                    <v-icon size="18">mdi-help-circle-outline</v-icon>
+                  </v-btn>
+                  <LayoutToggleButtons />
+                  <AboutDialog />
+                  <ReleaseNotesDialog />
+                  <UserAvatar />
+                </div>
+              </template>
+            </RibbonBar>
+            <HierarchicalMenuBar v-else class="w-full">
+              <template #header-right>
+                <div class="flex items-center gap-2 px-2">
+                  <v-btn size="small" variant="text" title="切换到 Ribbon 菜单" @click="toggleMenuMode">
+                    <v-icon size="18">mdi-ribbon</v-icon>
+                  </v-btn>
+                  <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.startContextualGuide('currentRole')">
+                    <v-icon size="18">mdi-help-circle-outline</v-icon>
+                  </v-btn>
+                  <LayoutToggleButtons />
+                  <AboutDialog />
+                  <ReleaseNotesDialog />
+                  <UserAvatar />
+                </div>
+              </template>
+            </HierarchicalMenuBar>
+          </template>
+        </v-app-bar>
 
-      <v-main class="flex-1 min-h-0 d-flex flex-row" style="flex: 1 1 auto;">
-        <div class="flex-1 min-h-0 flex flex-col">
-          <div class="min-h-0 flex-1">
-            <DockLayout />
+        <v-main class="flex-1 min-h-0 d-flex flex-row" style="flex: 1 1 auto;">
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="min-h-0 flex-1">
+              <DockLayout />
+            </div>
+            <div class="flex h-7 shrink-0 items-center border-t border-border bg-background px-2"
+              data-testid="app-status-bar">
+              <GenModelV1HealthBadge />
+            </div>
           </div>
-          <div class="flex h-7 shrink-0 items-center border-t border-border bg-background px-2"
-            data-testid="app-status-bar">
-            <GenModelV1HealthBadge />
-          </div>
-        </div>
-      </v-main>
+        </v-main>
+      </template>
     </template>
   </v-app>
 </template>

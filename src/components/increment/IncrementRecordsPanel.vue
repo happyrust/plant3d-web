@@ -69,7 +69,8 @@ const filters: { key: RecordKind | 'all'; label: string }[] = [
 ];
 
 const entries = computed(() =>
-  tasks.value.filter((entry) => filter.value === 'all' || recordKindLabel(entry.kind).key === filter.value),
+  tasks.value.filter((entry) => entry.kind !== 'rvm_check'
+    && (filter.value === 'all' || recordKindLabel(entry.kind).key === filter.value)),
 );
 
 let timer: ReturnType<typeof setInterval> | null = null;

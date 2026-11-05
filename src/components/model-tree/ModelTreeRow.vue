@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight, Circle, CircleDashed, CircleMinus, Eye, EyeO
 
 import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 
+import { rvmStatusTitle, type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
+import RvmStatusIcon from '@/components/rvm-check/RvmStatusIcon.vue';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { type CheckState, type FlatRow } from '@/composables/useModelTree';
 import { getPdmsTypeIconUrl } from '@/lib/pdmsTypeIcon';
@@ -32,6 +34,8 @@ const props = defineProps<{
   fullNames?: boolean;
   /** 行的悬停全文（`FlatRow` 没有 title 位；房间页签的直段行把两端 refno / 距离 / 所属 BRAN 挂在这里） */
   rowTitle?: string;
+  /** RVM 核对最新结论；没核对过不传 */
+  rvmStatus?: RvmNodeStatus | null;
 }>();
 
 const emit = defineEmits<{
@@ -39,6 +43,7 @@ const emit = defineEmits<{
   (e: 'toggle-visible', id: string, visible: boolean): void;
   (e: 'select', index: number, ev: MouseEvent): void;
   (e: 'context', id: string, ev: MouseEvent): void;
+  (e: 'rvm-status', refno: string): void;
 }>();
 
 const INDENT_PX = 20;
@@ -248,6 +253,16 @@ onUnmounted(() => {
         data-testid="model-tree-diff-count">
         {{ diffCount }}
       </span>
+
+      <button v-if="rvmStatus && !ghost" type="button"
+        class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+        :title="rvmStatusTitle(rvmStatus)"
+        data-testid="model-tree-rvm-status"
+        :data-rvm-status="rvmStatus.verdict"
+        @mousedown.stop
+        @click.stop="emit('rvm-status', rvmStatus.refno)">
+        <RvmStatusIcon :verdict="rvmStatus.verdict" />
+      </button>
 
       <button v-if="dbStatus" type="button"
         class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"

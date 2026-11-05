@@ -635,6 +635,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'reviewAttachmentPreview');
   closePanelIfExists(dockApi, 'spatialCompute');
   closePanelIfExists(dockApi, 'incrementRecords');
+  closePanelIfExists(dockApi, 'rvmCheck');
 
   const collapsedZones = getCollapsedZones();
 
@@ -717,6 +718,7 @@ function createEmbedFocusedLayout(
     'materialConfig',
     'spatialCompute',
     'incrementRecords',
+    'rvmCheck',
   ].forEach((panelId) => {
     closePanelIfExists(dockApi, panelId);
   });
@@ -976,6 +978,16 @@ function ensurePanel(panelId: string) {
       id: 'incrementRecords',
       component: 'IncrementRecordsPanel',
       title: '增量记录',
+      position: viewerPanel
+        ? { referencePanel: viewerPanel, direction: 'below' }
+        : undefined,
+    });
+  }
+  if (normalizedPanelId === 'rvmCheck') {
+    return addPanelSafely(dockApi, {
+      id: 'rvmCheck',
+      component: 'RvmCheckPanel',
+      title: 'RVM 核对',
       position: viewerPanel
         ? { referencePanel: viewerPanel, direction: 'below' }
         : undefined,
@@ -1338,6 +1350,10 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.incrementRecords':
       togglePanel('incrementRecords');
+      return;
+    case 'panel.rvmCheck':
+    case 'task.rvmCheck':
+      togglePanel('rvmCheck');
       return;
     case 'panel.reviewAttachmentPreview':
       openReviewAttachmentPreviewPanel();

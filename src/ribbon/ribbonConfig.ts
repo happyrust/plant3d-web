@@ -227,6 +227,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           // gen-model 自己监听 E3D 库变化做增量，模型「变了什么」看版本对比，每一轮的账看增量记录。
           { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
           { kind: 'button', id: 'task.incrementRecords', label: '增量记录', icon: 'history', commandId: 'panel.incrementRecords' },
+          { kind: 'button', id: 'task.rvmCheck', label: 'RVM 核对', icon: 'compare', commandId: 'panel.rvmCheck' },
         ],
       },
     ],

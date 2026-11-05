@@ -30,6 +30,7 @@ import RenderModeSettingsPanelDock from '@/components/dock_panels/RenderModeSett
 import ReviewAttachmentPreviewPanelDock from '@/components/dock_panels/ReviewAttachmentPreviewPanelDock.vue';
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
+import RvmCheckPanelDock from '@/components/dock_panels/RvmCheckPanelDock.vue';
 import SpatialComputePanelDock from '@/components/dock_panels/SpatialComputePanelDock.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
 import DimensionPanelDock from '@/dimension/ui/DimensionPanelDock.vue';
@@ -59,6 +60,7 @@ app.component('ReviewAttachmentPreviewPanel', ReviewAttachmentPreviewPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('SpatialComputePanel', SpatialComputePanelDock);
 app.component('IncrementRecordsPanel', IncrementRecordsPanelDock);
+app.component('RvmCheckPanel', RvmCheckPanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
 app.component('RenderModeSettingsPanel', RenderModeSettingsPanelDock);
 

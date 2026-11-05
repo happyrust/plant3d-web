@@ -16,6 +16,7 @@ import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { openRoomInfo, useRoomInfo } from '@/composables/useRoomInfo';
+import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import {
@@ -672,6 +673,7 @@ function onGlobalMouseDown(ev: MouseEvent) {
 
 onMounted(async () => {
   window.addEventListener('mousedown', onGlobalMouseDown);
+  void rvmCheck.restoreFromHistory();
 
   // 等待 DOM 渲染完成后，强制 virtualizer 重新测量滚动容器
   // 解决初始化时 containerRef 为 null 导致虚拟列表无法正确计算可见区域的问题
@@ -1111,6 +1113,34 @@ function viewRoomInfo() {
   closeContextMenu();
 }
 
+const rvmCheck = useRvmCheckStore();
+
+function rvmStatusOf(row: { id: string; refno?: string; ghost?: boolean }) {
+  if (row.ghost) return null;
+  const refno = treeNodeRefno(row.refno || row.id);
+  return refno ? rvmCheck.statusByRefno.value[refno] ?? null : null;
+}
+
+/** 「核对 RVM」：没登录过 E3D TTY 先弹登录窗，再排进核对队列，打开 RVM 核对面板看进度。 */
+async function checkRvm() {
+  const id = contextNodeId.value;
+  closeContextMenu();
+  const refno = id ? treeNodeRefno(id) : '';
+  if (!refno) return;
+  const node = pdmsTree.nodesById.value[refno];
+  const ok = await rvmCheck.ensureLogin();
+  if (!ok) return;
+  const added = rvmCheck.enqueue([{ refno, name: node?.shortName || node?.name || '', noun: node?.type || '' }]);
+  if (added === 0) emitToast({ message: '这个节点已经在核对队列里了', level: 'info' });
+  ensurePanelAndActivate('rvmCheck');
+}
+
+function openRvmStatus(refno: string) {
+  const status = rvmCheck.statusByRefno.value[refno];
+  if (status?.taskId) void rvmCheck.openRun(status.taskId);
+  ensurePanelAndActivate('rvmCheck');
+}
+
 /**
  * 「查看历史版本」：把这个构件交给版本对比面板。面板自己解它所属的最小交付单元——树里点的多半是
  * 单元里的某个构件（FTUB / BOX…），不是单元根。
@@ -1464,10 +1494,12 @@ function onSearchEnter(value: string) {
             :ghost="rowAt(vr.index)!.ghost"
             :ghost-unplaced="rowAt(vr.index)!.ghostUnplaced"
             :full-names="showFullNames"
+            :rvm-status="rvmStatusOf(rowAt(vr.index)!)"
             @toggle-expand="toggleExpand"
             @toggle-visible="setVisible"
             @select="selectByRowIndex"
-            @context="openContextMenu" />
+            @context="openContextMenu"
+            @rvm-status="openRvmStatus" />
         </div>
       </div>
     </div>
@@ -1550,6 +1582,12 @@ function onSearchEnter(value: string) {
           data-testid="model-tree-view-version-history"
           @click="viewVersionHistory">
           查看历史版本
+        </button>
+        <button v-if="contextNodeId && isRefnoLike(contextNodeId)" type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          data-testid="model-tree-check-rvm"
+          @click="checkRvm">
+          核对 RVM
         </button>
         <button v-if="contextNodeIsBran" type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
