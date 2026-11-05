@@ -277,6 +277,47 @@ export function sglHlrSamplesFor(params: Pick<SglLookPipelineParams, 'aa' | 'leg
   return params.aa.mode === 'msaa' ? params.aa.samples : 1;
 }
 
+/** 一帧里各趟开不开（`SglLookPipeline.render` 按它跑） */
+export interface SglFramePasses {
+  /** 法线/深度趟（AO、模糊、HLR、去杂都读它） */
+  normalDepth: boolean;
+  /** HBAO + 双边模糊 */
+  ao: boolean;
+  /** HLR 边线 */
+  hlr: boolean;
+  /** HLR 去杂 */
+  declutter: boolean;
+  /** 背景渐变 */
+  gradient: boolean;
+  /** FXAA 后处理 */
+  fxaa: boolean;
+}
+
+/**
+ * 本帧跑哪几趟。交互中（拖动 / 飞行）只画颜色：法线/深度趟连同依赖它的 AO、HLR、去杂全跳过，
+ * 几何只画一遍；渐变背景与 FXAA 照旧。非交互时法线/深度趟始终画（调试面板要看它）。
+ */
+export function sglFramePasses(
+  params: Pick<SglLookPipelineParams, 'legacyMode'> & {
+    hlr: Pick<SglHlrParams, 'enabled' | 'declutter'>;
+    ao: Pick<SglAoParams, 'enabled'>;
+    background: Pick<SglBackgroundParams, 'gradient'>;
+    aa: Pick<SglAaParams, 'mode'>;
+  },
+  interacting: boolean,
+): SglFramePasses {
+  const effectsOn = !params.legacyMode;
+  const hlr = !interacting && effectsOn && params.hlr.enabled;
+  return {
+    normalDepth: !interacting,
+    ao: !interacting && effectsOn && params.ao.enabled,
+    hlr,
+    declutter: hlr && params.hlr.declutter,
+    gradient: effectsOn && params.background.gradient,
+    fxaa: params.aa.mode === 'fxaa',
+  };
+}
+
 /**
  * 自己能输出「眼空间面法线 + 线性深度」的材质（如 DTXMaterial：顶点来自纹理，没法用 overrideMaterial）。
  * 管线在法线/深度通道前调 `setSglNormalDepthOutput(true)`，画完调 `false`。
@@ -861,7 +902,7 @@ export class SglLookPipeline {
   private _colorSamples = 0;
   /** 法线/深度与 HLR 通道当前的超采样倍数 */
   private readonly _hlrSupersample = new Vector2(1, 1);
-  /** 交互中（拖动 / 飞行）：跳过 AO 与模糊，HLR 超采样降到 1×1；颜色图的 MSAA 不动，免得反复重建 */
+  /** 交互中（拖动 / 飞行）：只画颜色，见 `sglFramePasses`；离屏图尺寸不动，免得反复重建 */
   private _interacting = false;
 
   private readonly _aoUniforms: AoUniforms = {
@@ -1044,8 +1085,7 @@ export class SglLookPipeline {
     } else {
       this._colorRT.setSize(w, h);
     }
-    if (this._interacting) this._hlrSupersample.set(1, 1);
-    else sglHlrSupersampleGrid(sglHlrSamplesFor(this.params), this._hlrSupersample);
+    sglHlrSupersampleGrid(sglHlrSamplesFor(this.params), this._hlrSupersample);
     this._ndRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
     this._hlrRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
     this._declutterRT.setSize(w, h);
@@ -1078,8 +1118,8 @@ export class SglLookPipeline {
   }
 
   /**
-   * 拖动时临时降画质：开着时跳过 AO 和模糊，HLR 超采样降到 1×1，边线与渐变背景照画。
-   * 切换时法线/深度与 HLR 离屏图按新倍数重建一次（下一帧 render 里）。
+   * 拖动时临时降画质：开着时只画颜色趟，跳过法线/深度、AO、模糊、HLR 与去杂，没有边线和伪阴影；
+   * 渐变背景、MSAA、FXAA 照旧。离屏图不重建，关掉后下一帧即恢复全画质。
    */
   setInteracting(on: boolean): void {
     this._interacting = on;
@@ -1089,7 +1129,7 @@ export class SglLookPipeline {
     return this._interacting;
   }
 
-  /** HLR 通道实际用的超采样倍数 (kx, ky)，交互中为 1×1，否则 kx·ky = HLR 采样档位 */
+  /** HLR 通道的超采样倍数 (kx, ky)，kx·ky = HLR 采样档位（交互中 HLR 不跑，倍数不变） */
   get hlrSupersample(): Vector2 {
     return this._hlrSupersample.clone();
   }
@@ -1098,11 +1138,11 @@ export class SglLookPipeline {
   render(scene: Scene, camera: Camera, target: WebGLRenderTarget | null = null): void {
     const renderer = this._renderer;
     const p = this.params;
-    const effectsOn = !p.legacyMode;
-    const useAo = effectsOn && p.ao.enabled && !this._interacting;
-    const useHlr = effectsOn && p.hlr.enabled;
-    const useGradient = effectsOn && p.background.gradient;
-    const useFxaa = p.aa.mode === 'fxaa';
+    const passes = sglFramePasses(p, this._interacting);
+    const useAo = passes.ao;
+    const useHlr = passes.hlr;
+    const useGradient = passes.gradient;
+    const useFxaa = passes.fxaa;
 
     // 目标尺寸 / MSAA 采样数 / HLR 超采样随参数变（尺寸没变时是空操作）
     this._ensureTargets();
@@ -1123,37 +1163,8 @@ export class SglLookPipeline {
     // 法线/深度通道绝不画背景（背景像素要留深度 0）
     scene.background = null;
 
-    // ② 面法线 + 线性深度（背景深度 = 哨兵 1e18，同 sglDx11）
-    this._collectRenderables(scene, useAo && p.ao.blurSharpnessAuto);
-    const source = this.options.normalDepthSource;
-    renderer.setRenderTarget(this._ndRT);
-    renderer.setClearColor(0x000000, 0);
-    this._clearNormalDepth();
-    if (source !== 'providers') {
-      // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来。
-      // 效果标记是 overrideMaterial 的 uniform，所以按标记编码分趟画（共用深度缓冲，遮挡关系不变；全参与时只有一趟）
-      scene.overrideMaterial = this._ndMaterial;
-      for (const scale of this._effectScales) {
-        for (const r of this._renderables) {
-          r.object.visible = r.visible && r.isMesh && !r.isProviderMesh && r.effectScale === scale;
-        }
-        this._ndMaterial.uniforms.uEffectFlag!.value = scale;
-        renderer.render(scene, camera);
-      }
-      this._ndMaterial.uniforms.uEffectFlag!.value = 1;
-      scene.overrideMaterial = prevOverride;
-      for (const r of this._renderables) r.object.visible = r.visible;
-    }
-    if (source !== 'override' && this._providerMaterials.size > 0) {
-      // provider 网格自己输出法线/深度；其它可渲染对象全部藏起来
-      for (const r of this._renderables) {
-        if (r.visible && !r.isProviderMesh) r.object.visible = false;
-      }
-      for (const m of this._providerMaterials) m.setSglNormalDepthOutput(true);
-      renderer.render(scene, camera);
-      for (const m of this._providerMaterials) m.setSglNormalDepthOutput(false);
-      for (const r of this._renderables) r.object.visible = r.visible;
-    }
+    // ② 面法线 + 线性深度（背景深度 = 哨兵 1e18，同 sglDx11）；交互中整趟跳过
+    if (passes.normalDepth) this._renderNormalDepth(scene, camera, prevOverride, useAo && p.ao.blurSharpnessAuto);
 
     // ① 正常着色（自绘背景时清透明，合成用 alpha 与渐变混；沿用场景背景时由 three 画背景）
     scene.background = this.options.useSceneBackground ? prevBackground : null;
@@ -1269,6 +1280,41 @@ export class SglLookPipeline {
     renderer.setClearColor(prevClearColor, prevClearAlpha);
     renderer.autoClear = prevAutoClear;
     scene.background = prevBackground;
+  }
+
+  /** ② 法线/深度趟：遍历可渲染对象，普通 Mesh 走 overrideMaterial、provider 材质自己输出；画完还原可见性与 overrideMaterial */
+  private _renderNormalDepth(scene: Scene, camera: Camera, prevOverride: Material | null, collectBounds: boolean): void {
+    const renderer = this._renderer;
+    this._collectRenderables(scene, collectBounds);
+    const source = this.options.normalDepthSource;
+    renderer.setRenderTarget(this._ndRT);
+    renderer.setClearColor(0x000000, 0);
+    this._clearNormalDepth();
+    if (source !== 'providers') {
+      // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来。
+      // 效果标记是 overrideMaterial 的 uniform，所以按标记编码分趟画（共用深度缓冲，遮挡关系不变；全参与时只有一趟）
+      scene.overrideMaterial = this._ndMaterial;
+      for (const scale of this._effectScales) {
+        for (const r of this._renderables) {
+          r.object.visible = r.visible && r.isMesh && !r.isProviderMesh && r.effectScale === scale;
+        }
+        this._ndMaterial.uniforms.uEffectFlag!.value = scale;
+        renderer.render(scene, camera);
+      }
+      this._ndMaterial.uniforms.uEffectFlag!.value = 1;
+      scene.overrideMaterial = prevOverride;
+      for (const r of this._renderables) r.object.visible = r.visible;
+    }
+    if (source !== 'override' && this._providerMaterials.size > 0) {
+      // provider 网格自己输出法线/深度；其它可渲染对象全部藏起来
+      for (const r of this._renderables) {
+        if (r.visible && !r.isProviderMesh) r.object.visible = false;
+      }
+      for (const m of this._providerMaterials) m.setSglNormalDepthOutput(true);
+      renderer.render(scene, camera);
+      for (const m of this._providerMaterials) m.setSglNormalDepthOutput(false);
+      for (const r of this._renderables) r.object.visible = r.visible;
+    }
   }
 
   /** 中间结果，供调试面板看 */
