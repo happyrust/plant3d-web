@@ -27,7 +27,10 @@ vi.mock('@/model-source', () => ({
   getModelSource: () => ({
     kind: 'gen-model-v1',
     records: { instanceEntriesByRefnos: recordSourceMocks.instanceEntriesByRefnos },
-    meshes: { meshUrl: (geoHash: string) => `/api/v1/meshes/${geoHash}.mesh` },
+    meshes: {
+      meshUrl: (geoHash: string) => `/api/v1/meshes/${geoHash}.mesh`,
+      lod1MeshUrl: (geoHash: string) => `/api/v1/meshes/${geoHash}.mesh?lod=1`,
+    },
   }),
 }));
 
@@ -847,5 +850,62 @@ describe('useDbnoInstancesDtxLoader', () => {
         warn.mockRestore();
       }
     });
+  });
+});
+
+describe('粗网格（L1）补拉', () => {
+  it('关着时不发请求；开着时只拉够大的原网格，404 负缓存，补完 recompile 一次', async () => {
+    const { BufferAttribute, BufferGeometry, Matrix4 } = await import('three');
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    mod.invalidateDtxLoaderCaches();
+
+    const big = (tris: number) => {
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(new Float32Array(tris * 9), 3));
+      return g;
+    };
+    const layer = new DTXLayer({ maxVertices: 4096, maxIndices: 4096, maxObjects: 8 });
+    layer.addGeometry('big', big(300));
+    layer.addGeometry('nolod', big(300));
+    layer.addGeometry('small', big(10));
+    layer.addObject('a', 'big', new Matrix4());
+    layer.addObject('b', 'nolod', new Matrix4());
+    layer.addObject('c', 'small', new Matrix4());
+    layer.compile();
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/v1/meshes/big.mesh?lod=1')) {
+        return { ok: true, status: 200, arrayBuffer: async () => meshFixture('3.mesh') } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      mod.configureDtxLod1Backfill({ enabled: false });
+      expect(await mod.backfillDtxLod1Geometries(layer)).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const applied = vi.fn();
+      mod.configureDtxLod1Backfill({ enabled: true, onApplied: applied });
+      const recompile = vi.spyOn(layer, 'recompile');
+      const stats = await mod.backfillDtxLod1Geometries(layer);
+      expect(stats).toMatchObject({ candidates: 2, installed: 1, missing: 1 });
+      expect(fetchMock.mock.calls.map((c) => String(c[0])).sort()).toEqual([
+        '/api/v1/meshes/big.mesh?lod=1',
+        '/api/v1/meshes/nolod.mesh?lod=1',
+      ]);
+      expect(recompile).toHaveBeenCalledTimes(1);
+      expect(applied).toHaveBeenCalledTimes(1);
+      expect(layer.hasLod1Geometry('big')).toBe(true);
+
+      // 再跑一轮：big 已装、nolod 负缓存，不再发请求
+      fetchMock.mockClear();
+      expect(await mod.backfillDtxLod1Geometries(layer)).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      mod.configureDtxLod1Backfill({ enabled: false });
+      vi.unstubAllGlobals();
+    }
   });
 });

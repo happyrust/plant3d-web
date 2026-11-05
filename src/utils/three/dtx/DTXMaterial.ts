@@ -47,7 +47,8 @@ uniform sampler2D normalsTexture;         // 法线 (RGBA32F)
 // === 实例数据纹理 ===
 uniform sampler2D matricesTexture;        // 变换矩阵 (RGBA32F)
 uniform highp usampler2D colorsAndFlagsTexture; // 标志/材质索引 (RGBA8UI, 4 pixels/object)
-uniform highp usampler2D primitiveToObjectTexture; // 图元→对象映射
+uniform highp usampler2D primitiveToObjectTexture; // 图元→对象映射（第 31 位 = 粗网格区）
+uniform highp usampler2D lodTexture;      // 粗网格区段 (RGBA32UI, 1 pixel/object)
 
 // === 材质调色板纹理 ===
 uniform sampler2D materialPaletteTexture; // 材质调色板 (RGBA32F, 256x2)
@@ -94,7 +95,9 @@ void main() {
 
   // 2. 获取对象 ID (每图元 1 像素)
   ivec2 objTexCoord = getTexCoord(primitiveIndex, primitiveToObjectTextureWidth);
-  uint objectIndex = texelFetch(primitiveToObjectTexture, objTexCoord, 0).r;
+  uint objectEntry = texelFetch(primitiveToObjectTexture, objTexCoord, 0).r;
+  bool isLodPrimitive = (objectEntry & 0x80000000u) != 0u;
+  uint objectIndex = objectEntry & 0x7fffffffu;
 
   // 3. 获取对象属性
   int objX = int(objectIndex) % objectsTextureWidth;
@@ -120,6 +123,14 @@ void main() {
   // pixel 3: indexOffset (packed as 4 bytes)
   uvec4 indexOffsetData = texelFetch(colorsAndFlagsTexture, ivec2(flagsBaseX + 3, objY), 0);
   uint indexOffset = unpack32(indexOffsetData);
+
+  // 粗网格区的图元：几何偏移换成这个构件粗网格的那一份，其余（颜色、矩阵、标志）不变
+  if (isLodPrimitive) {
+    uvec4 lodData = texelFetch(lodTexture, ivec2(objX, objY), 0);
+    primitiveOffset = lodData.r;
+    vertexBase = lodData.g;
+    indexOffset = lodData.b;
+  }
 
   // 3.2 从材质调色板获取颜色和 PBR 参数
   // row 0: [r, g, b, metalness]
@@ -396,6 +407,8 @@ export type DTXMaterialOptions = {
   matricesTexture: DataTexture | null;
   colorsAndFlagsTexture: DataTexture | null;
   primitiveToObjectTexture: DataTexture | null;
+  /** 粗网格区段纹理（DTXLayer 有粗网格时才有内容） */
+  lodTexture?: DataTexture | null;
   /** 全局模型变换（用于统一应用整体旋转/平移） */
   globalModelMatrix?: Matrix4;
   /** 材质调色板纹理 (新增) */
@@ -436,6 +449,7 @@ export class DTXMaterial extends ShaderMaterial {
         matricesTexture: { value: options.matricesTexture },
         colorsAndFlagsTexture: { value: options.colorsAndFlagsTexture },
         primitiveToObjectTexture: { value: options.primitiveToObjectTexture },
+        lodTexture: { value: options.lodTexture ?? null },
 
         // 材质调色板纹理 (新增)
         materialPaletteTexture: { value: options.materialPaletteTexture || null },
@@ -518,7 +532,8 @@ export class DTXMaterial extends ShaderMaterial {
     // v15: 法线/深度输出加「参与边线」标记（法线长度 1 / 0.5）
     // v16: 标记扩成两位（sglEffectFlag：边线 + 伪阴影，法线长度 1 / 0.75 / 0.5 / 0.25）
     // v17: 绘制样式 uniforms（specularScale / flatness / opacityScale）
-    return 'DTXMaterial_v17';
+    // v18: 图元映射第 31 位标记粗网格区，lodTexture 给粗网格几何偏移
+    return 'DTXMaterial_v18';
   }
 
   // ========== SGL（E3D）口径 ==========

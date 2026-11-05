@@ -17,10 +17,10 @@ function makeMaterial(transparent = false): DTXMaterial {
 }
 
 describe('DTXMaterial —— SGL 法线/深度输出的「参与边线」标记', () => {
-  it('是 SglNormalDepthProvider，program key 随着色器结构升级（v17 = SGL 分支 + 绘制样式 uniforms 合并版）', () => {
+  it('是 SglNormalDepthProvider，program key 随着色器结构升级（v18 = v17 + 粗网格区段）', () => {
     const m = makeMaterial();
     expect(isSglNormalDepthProvider(m)).toBe(true);
-    expect(m.customProgramCacheKey()).toBe('DTXMaterial_v17');
+    expect(m.customProgramCacheKey()).toBe('DTXMaterial_v18');
   });
 
   it('默认边线 + 伪阴影都参与（sglEffectFlag = 1）；两位标记编码进法线长度；片元着色器里法线乘该标记', () => {

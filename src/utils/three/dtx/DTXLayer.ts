@@ -36,11 +36,20 @@ import {
   Box3,
   Sphere,
   Camera,
-  Triangle
+  Triangle,
+  Vector2,
+  Vector4
 } from 'three';
 
+import {
+  createDrawRangeView,
+  drawRangeViewFromCamera,
+  selectDrawRanges,
+  type DrawRangeView
+} from './culling/drawRangeSelector';
 import { DTXGeometry } from './DTXGeometry';
 import { DTXMaterial } from './DTXMaterial';
+import { DTXMultiDrawMesh, type DTXDrawRangeBuffers } from './DTXMultiDrawMesh';
 import { DTXPickingMaterial } from './DTXPickingMaterial';
 
 import type { SglSceneLightParams } from '@/viewer/e3dLook/sglLookMaterial';
@@ -150,6 +159,13 @@ export type DTXLayerOptions = {
 
 // ========== 常量 ==========
 
+function arraysEqual16(a: Float64Array, b: Float64Array): boolean {
+  for (let i = 0; i < 16; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 /** 位置纹理宽度 */
 const POSITIONS_TEXTURE_WIDTH = 1024;
 /** 索引纹理宽度 */
@@ -188,8 +204,10 @@ export class DTXLayer {
   private _matricesTexture: DataTexture | null = null;
   /** 颜色和标志纹理 (RGBA8UI, 4像素/对象) */
   private _colorsAndFlagsTexture: DataTexture | null = null;
-  /** 图元到对象映射纹理 (R32UI, 8个三角形共享) */
+  /** 图元到对象映射纹理 (R32UI, 每图元 1 像素；第 31 位 = 这是粗网格区的图元) */
   private _primitiveToObjectTexture: DataTexture | null = null;
+  /** 粗网格区段纹理 (RGBA32UI, 1 像素/对象: primitiveOffset, vertexBase, indexOffset, 0) */
+  private _lodTexture: DataTexture | null = null;
   /** 材质调色板纹理 (RGBA32F, 每材质2行: row0=color+metalness, row1=roughness+opacity+padding) */
   private _materialPaletteTexture: DataTexture | null = null;
   /** 颜色覆盖纹理 (RGBA8, 用于独立颜色覆盖) */
@@ -229,6 +247,8 @@ export class DTXLayer {
   /** Outline 几何体缓存（LRU），避免反复从缓冲区拷贝 */
   private _outlineGeometryCache = new Map<string, BufferGeometry>();
   private _outlineGeometryCacheLimit = 128;
+  /** 显示用粗网格（L1）：geoHash -> 句柄 + 追加时那份原网格的 vertexBase（替换后的旧构件不会误用新粗网格） */
+  private _lod1Geometries = new Map<string, { handle: GeometryHandle; l0VertexBase: number }>();
   /** 已记录过的无效 outline 几何，避免控制台刷屏 */
   private _invalidOutlineGeoHashes = new Set<string>();
   /** 当前顶点偏移 */
@@ -264,9 +284,9 @@ export class DTXLayer {
   /** Three.js 几何体 */
   private _geometry: DTXGeometry | null = null;
   /** Three.js 网格（不透明通道） */
-  private _mesh: Mesh | null = null;
+  private _mesh: DTXMultiDrawMesh | null = null;
   /** Three.js 网格（透明通道） */
-  private _transparentMesh: Mesh | null = null;
+  private _transparentMesh: DTXMultiDrawMesh | null = null;
   /** GPU Picking 材质 */
   private _pickingMaterial: DTXPickingMaterial | null = null;
   /** GPU Picking 网格 */
@@ -309,6 +329,39 @@ export class DTXLayer {
 
   /** 全局模型变换（用于整体旋转/平移，默认 identity） */
   private _globalModelMatrix: Matrix4 = new Matrix4();
+
+  // ========== 按构件选段绘制 ==========
+
+  /** 两条通道共用的段表；compile 后默认一段画全部 */
+  private _drawRanges: DTXDrawRangeBuffers = { starts: new Int32Array(1), counts: new Int32Array(1), count: 0 };
+  /** 每构件世界包围球（cx, cy, cz, r，含全局矩阵）；r < 0 表示总是画 */
+  private _objSpheres: Float32Array = new Float32Array(0);
+  private _objTriStart: Uint32Array = new Uint32Array(0);
+  private _objTriCount: Uint32Array = new Uint32Array(0);
+  private _objSpheresDirty = true;
+  /** 每构件粗网格区段（compile 时排在全部原网格三角形之后）；count = 0 表示没有粗网格 */
+  private _objLodStart: Uint32Array = new Uint32Array(0);
+  private _objLodCount: Uint32Array = new Uint32Array(0);
+  /** 每构件上一次是否画的粗网格（滞回用） */
+  private _objLodState: Uint8Array = new Uint8Array(0);
+  private _lodTriangleCount = 0;
+  /** compile 时的原网格顶点数（编译后再 addObject 而未 recompile 时，_drawIndexCount 会超出 GPU 侧几何） */
+  private _compiledDrawIndexCount = 0;
+  private _lodObjectCount = 0;
+  private _cullEnabled = true;
+  private _cullMinPx = 0;
+  /** 投影直径小于它（px）且有粗网格的构件改画粗网格；0 = 不用 */
+  private _cullLodPx = 0;
+  private _multiDrawSupported: boolean | null = null;
+  /** 上一次选段的输入快照：相机 viewProjection、像素换算、可见性修订、minPx */
+  private _cullKeyView = new Float64Array(16);
+  private _cullKeyScale = Number.NaN;
+  private _cullKeyRevision = -1;
+  private _cullKeyMinPx = -1;
+  private _cullKeyLodPx = -1;
+  private _cullKeyValid = false;
+  private _cullView: DrawRangeView = createDrawRangeView();
+  private _cullStats = { segments: 0, triangles: 0, lastSelectMs: 0, selectCount: 0, lodObjects: 0 };
 
   // ========== 包围盒 ==========
 
@@ -367,6 +420,56 @@ export class DTXLayer {
       return this._geometries.get(geoHash)!;
     }
 
+    const handle = this._appendGeometryData(geoHash, geometry);
+    const { vertexBase, vertexCount } = handle;
+
+    // 计算并缓存几何体局部包围盒（用于对象 world bbox、诊断等）
+    const localBBox = new Box3();
+    for (let i = 0; i < vertexCount; i++) {
+      localBBox.expandByPoint(new Vector3(
+        this._positionsBuffer[(vertexBase + i) * 3],
+        this._positionsBuffer[(vertexBase + i) * 3 + 1],
+        this._positionsBuffer[(vertexBase + i) * 3 + 2]
+      ));
+    }
+    this._geometryLocalBBoxes.set(geoHash, localBBox);
+
+    this._geometries.set(geoHash, handle);
+
+    return handle;
+  }
+
+  /**
+   * 给已登记的几何追加一份显示用粗网格（L1）。只进位置 / 索引缓冲，不进几何注册表：拾取、描边、测量
+   * 读到的仍是原网格。下次 compile 时，引用这份原网格的构件在屏幕上小于 `lodPx` 就改画粗网格。
+   * 原网格没登记、已经有粗网格时返回 false。
+   */
+  addLod1Geometry(geoHash: string, geometry: BufferGeometry): boolean {
+    const l0 = this._geometries.get(geoHash);
+    if (!l0 || this._lod1Geometries.has(geoHash)) return false;
+    const handle = this._appendGeometryData(geoHash, geometry);
+    this._lod1Geometries.set(geoHash, { handle, l0VertexBase: l0.vertexBase });
+    return true;
+  }
+
+  hasLod1Geometry(geoHash: string): boolean {
+    return this._lod1Geometries.has(geoHash);
+  }
+
+  /** 原网格三角形数不少于 `minTriangles`、还没有粗网格、且有构件在用的几何 */
+  listLod1Candidates(minTriangles: number): string[] {
+    const used = new Set<string>();
+    for (const obj of this._objectsArray) used.add(obj.geoHash);
+    const out: string[] = [];
+    for (const [geoHash, handle] of this._geometries) {
+      if (this._lod1Geometries.has(geoHash) || !used.has(geoHash)) continue;
+      if (Math.floor(handle.indexCount / 3) >= minTriangles) out.push(geoHash);
+    }
+    return out;
+  }
+
+  /** 把几何的顶点 / 法线 / 索引追加进缓冲，返回句柄（不登记） */
+  private _appendGeometryData(geoHash: string, geometry: BufferGeometry): GeometryHandle {
     // 获取顶点数据
     const positionAttr = geometry.getAttribute('position');
     let normalAttr = geometry.getAttribute('normal');
@@ -451,38 +554,13 @@ export class DTXLayer {
     this._currentVertexOffset += vertexCount;
     this._currentIndexOffset += indexCount;
 
-    // 创建句柄
-    const handle: GeometryHandle = {
+    return {
       geoHash,
       vertexBase,
       vertexCount,
       indexBase,
       indexCount
     };
-
-    // 计算并缓存几何体局部包围盒（用于对象 world bbox、诊断等）
-    const localBBox = new Box3();
-    for (let i = 0; i < vertexCount; i++) {
-      localBBox.expandByPoint(new Vector3(
-        this._positionsBuffer[(vertexBase + i) * 3],
-        this._positionsBuffer[(vertexBase + i) * 3 + 1],
-        this._positionsBuffer[(vertexBase + i) * 3 + 2]
-      ));
-    }
-    this._geometryLocalBBoxes.set(geoHash, localBBox);
-
-    this._geometries.set(geoHash, handle);
-
-    if (this._debug) {
-      // console.log(`📐 添加几何体 ${geoHash}:`, {
-      //   vertexBase,
-      //   vertexCount,
-      //   indexBase,
-      //   indexCount
-      // });
-    }
-
-    return handle;
   }
 
   /**
@@ -491,6 +569,8 @@ export class DTXLayer {
    */
   replaceGeometry(geoHash: string, geometry: BufferGeometry): GeometryHandle {
     this._geometries.delete(geoHash);
+    // 粗网格跟着旧的原网格走；新原网格的粗网格由调用方重新补
+    this._lod1Geometries.delete(geoHash);
     return this.addGeometry(geoHash, geometry);
   }
 
@@ -832,9 +912,14 @@ export class DTXLayer {
     this._createColorsAndFlagsTexture();
     this._createColorOverrideTexture();
     this._createMaterialPaletteTexture();
+    this._rebuildLodLayout();
     this._createPrimitiveToObjectTexture();
+    this._createLodTexture();
 
-    // 4. 创建渲染对象
+    // 4. 按构件选段的区段表（在建网格之前，网格引用同一份段表）
+    this._rebuildCullTables();
+
+    // 5. 创建渲染对象
     this._createRenderObjects();
 
     this._compiled = true;
@@ -867,9 +952,11 @@ export class DTXLayer {
     this._matricesTexture?.dispose();
     this._colorsAndFlagsTexture?.dispose();
     this._primitiveToObjectTexture?.dispose();
+    this._lodTexture?.dispose();
     this._materialPaletteTexture?.dispose();
     this._colorOverrideTexture?.dispose();
 
+    this._lodTexture = null;
     this._positionsTexture = null;
     this._indicesTexture = null;
     this._normalsTexture = null;
@@ -923,6 +1010,7 @@ export class DTXLayer {
    */
   setGlobalModelMatrix(matrix: Matrix4): void {
     this._globalModelMatrix.copy(matrix);
+    this._markObjectSpheresDirty();
 
     if (this._material) {
       (this._material.uniforms as any).globalModelMatrix.value = this._globalModelMatrix;
@@ -1231,10 +1319,10 @@ export class DTXLayer {
    * 创建图元到对象映射纹理
    */
   private _createPrimitiveToObjectTexture(): void {
-    // 按照 drawTriangleCount 生成，每图元 1 像素，不进行压缩以简化 shader 并支持复用
-    const totalTriangles = this._drawTriangleCount;
+    // 按照 drawTriangleCount 生成，每图元 1 像素，不进行压缩以简化 shader 并支持复用；粗网格区接在后面
+    const totalTriangles = this._drawTriangleCount + this._lodTriangleCount;
     const width = INDICES_TEXTURE_WIDTH;
-    const height = Math.ceil(totalTriangles / width);
+    const height = Math.max(1, Math.ceil(totalTriangles / width));
 
     const data = new Uint32Array(width * height);
 
@@ -1247,6 +1335,14 @@ export class DTXLayer {
       for (let p = start; p < end && p < data.length; p++) {
         data[p] = obj.objectIndex;
       }
+    }
+    // 粗网格区：第 31 位告诉着色器去 lodTexture 取这个构件的粗网格偏移
+    for (let i = 0; i < this._totalObjects; i++) {
+      const count = this._objLodCount[i]!;
+      if (count === 0) continue;
+      const start = this._objLodStart[i]!;
+      const tagged = (i | 0x80000000) >>> 0;
+      data.fill(tagged, start, Math.min(start + count, data.length));
     }
 
     this._primitiveToObjectTexture = new DataTexture(
@@ -1268,6 +1364,54 @@ export class DTXLayer {
   }
 
   /**
+   * 粗网格区段排布：引用的原网格有粗网格的构件，按构件顺序把粗网格三角形接在全部原网格三角形之后。
+   * 构件实例化的是哪一份原网格看 vertexBase：replaceGeometry 之后，旧构件不该拿新原网格的粗网格。
+   */
+  private _rebuildLodLayout(): void {
+    const n = this._totalObjects;
+    this._objLodStart = new Uint32Array(n);
+    this._objLodCount = new Uint32Array(n);
+    this._objLodState = new Uint8Array(n);
+    let cursor = this._drawTriangleCount;
+    let objects = 0;
+    if (this._lod1Geometries.size > 0) {
+      for (let i = 0; i < n; i++) {
+        const obj = this._objectsArray[i]!;
+        const lod = this._lod1Geometries.get(obj.geoHash);
+        if (!lod || lod.l0VertexBase !== obj.vertexBase) continue;
+        const count = Math.floor(lod.handle.indexCount / 3);
+        if (count === 0) continue;
+        this._objLodStart[i] = cursor;
+        this._objLodCount[i] = count;
+        cursor += count;
+        objects++;
+      }
+    }
+    this._lodTriangleCount = cursor - this._drawTriangleCount;
+    this._lodObjectCount = objects;
+  }
+
+  /** 每构件 1 像素 RGBA32UI：粗网格的 primitiveOffset / vertexBase / indexOffset */
+  private _createLodTexture(): void {
+    const width = OBJECTS_TEXTURE_WIDTH;
+    const height = Math.max(1, Math.ceil(this._totalObjects / width));
+    const data = new Uint32Array(width * height * 4);
+    for (let i = 0; i < this._totalObjects; i++) {
+      if (this._objLodCount[i] === 0) continue;
+      const lod = this._lod1Geometries.get(this._objectsArray[i]!.geoHash)!;
+      data[i * 4] = this._objLodStart[i]!;
+      data[i * 4 + 1] = lod.handle.vertexBase;
+      data[i * 4 + 2] = lod.handle.indexBase;
+    }
+    this._lodTexture = new DataTexture(data, width, height, RGBAIntegerFormat, UnsignedIntType);
+    this._lodTexture.internalFormat = 'RGBA32UI';
+    this._lodTexture.minFilter = NearestFilter;
+    this._lodTexture.magFilter = NearestFilter;
+    this._lodTexture.generateMipmaps = false;
+    this._lodTexture.needsUpdate = true;
+  }
+
+  /**
    * 创建渲染对象 (Material, Geometry, Mesh)
    */
   private _createRenderObjects(): void {
@@ -1279,6 +1423,7 @@ export class DTXLayer {
       matricesTexture: this._matricesTexture,
       colorsAndFlagsTexture: this._colorsAndFlagsTexture,
       primitiveToObjectTexture: this._primitiveToObjectTexture,
+      lodTexture: this._lodTexture,
       materialPaletteTexture: this._materialPaletteTexture,
       colorOverrideTexture: this._colorOverrideTexture,
       globalModelMatrix: this._globalModelMatrix,
@@ -1301,6 +1446,7 @@ export class DTXLayer {
       matricesTexture: this._matricesTexture,
       colorsAndFlagsTexture: this._colorsAndFlagsTexture,
       primitiveToObjectTexture: this._primitiveToObjectTexture,
+      lodTexture: this._lodTexture,
       materialPaletteTexture: this._materialPaletteTexture,
       colorOverrideTexture: this._colorOverrideTexture,
       globalModelMatrix: this._globalModelMatrix,
@@ -1315,20 +1461,31 @@ export class DTXLayer {
       depthTest: true
     });
 
-    // 创建几何体 (不再是 totalIndices，而是 drawIndexCount)
-    this._geometry = new DTXGeometry(this._drawIndexCount);
+    // 创建几何体：顶点数 = 原网格 + 粗网格三角形 × 3。drawRange 只盖原网格——拾取网格和不支持 multi_draw 时的
+    // 主网格都按它画，粗网格只经多段绘制的段表画到
+    this._geometry = new DTXGeometry(this._drawIndexCount + this._lodTriangleCount * 3);
+    this._geometry.setDrawRange(0, this._drawIndexCount);
+    this._compiledDrawIndexCount = this._drawIndexCount;
 
-    // 创建不透明通道网格
-    this._mesh = new Mesh(this._geometry, this._material);
+    // 创建不透明通道网格（按构件选段，多段绘制）
+    this._mesh = new DTXMultiDrawMesh(this._geometry, this._material, this._drawRanges);
     this._mesh.frustumCulled = false; // DTX 自己管理裁剪
     this._mesh.name = 'DTXLayer';
     this._mesh.renderOrder = 0;
 
-    // 创建透明通道网格（与不透明通道共享同一几何）
-    this._transparentMesh = new Mesh(this._geometry, this._transparentMaterial);
+    // 创建透明通道网格（与不透明通道共享同一几何与段表）
+    this._transparentMesh = new DTXMultiDrawMesh(this._geometry, this._transparentMaterial, this._drawRanges);
     this._transparentMesh.frustumCulled = false;
     this._transparentMesh.name = 'DTXLayerTransparent';
     this._transparentMesh.renderOrder = 1;
+
+    // 段表按「实际渲染这一趟的相机」选：分屏 / 描边合成 / E3D 管线各趟 / 截图用的相机或宽高比可能和主相机不同，
+    // 输入没变时命中缓存，开销只是比一次矩阵
+    const onBeforeRender = (renderer: WebGLRenderer, _scene: Scene, camera: Camera) => {
+      this._beforeMeshRender(renderer, camera);
+    };
+    this._mesh.onBeforeRender = onBeforeRender as Mesh['onBeforeRender'];
+    this._transparentMesh.onBeforeRender = onBeforeRender as Mesh['onBeforeRender'];
 
     // 重建材质后保持已应用的绘制样式参数
     this._applyRenderStyleToMaterials();
@@ -1414,6 +1571,195 @@ export class DTXLayer {
       if (uniforms.opacityScale) uniforms.opacityScale.value = this._styleOpacityScale;
     }
   }
+
+  // ========== 按构件选段绘制 ==========
+
+  /**
+   * 选段开关与像素阈值。`enabled = false` 时一段画全部（等同改动前）；`minPx > 0` 时跳过屏幕投影直径小于它的构件。
+   */
+  setCullOptions(options: { enabled?: boolean; minPx?: number; lodPx?: number }): void {
+    if (typeof options.enabled === 'boolean') this._cullEnabled = options.enabled;
+    if (typeof options.minPx === 'number' && Number.isFinite(options.minPx)) {
+      this._cullMinPx = Math.max(0, options.minPx);
+    }
+    if (typeof options.lodPx === 'number' && Number.isFinite(options.lodPx)) {
+      this._cullLodPx = Math.max(0, options.lodPx);
+    }
+  }
+
+  getCullOptions(): { enabled: boolean; minPx: number; lodPx: number } {
+    return { enabled: this._cullEnabled, minPx: this._cullMinPx, lodPx: this._cullLodPx };
+  }
+
+  /** 最近一次选段的结果（段数、三角形数、改画粗网格的构件数）与耗时，供调试面板 / 性能脚本读 */
+  getCullStats(): {
+    segments: number;
+    triangles: number;
+    lastSelectMs: number;
+    selectCount: number;
+    lodObjects: number;
+    totalTriangles: number;
+    /** 有粗网格的构件数 / 粗网格三角形总数（已编译的） */
+    lodCapableObjects: number;
+    lodTriangles: number;
+    } {
+    return {
+      ...this._cullStats,
+      totalTriangles: this._drawTriangleCount,
+      lodCapableObjects: this._lodObjectCount,
+      lodTriangles: this._lodTriangleCount,
+    };
+  }
+
+  /**
+   * 按相机与视口高度（CSS px）重算段表；输入与上次相同则直接返回。网格渲染前也会按当趟相机自动调用，
+   * 这里给需要提前算好（或读统计）的调用方用。`minPx` 不传则沿用 `setCullOptions` 的值。
+   */
+  updateDrawRanges(camera: Camera, viewportHeightPx: number, minPx: number = this._cullMinPx): void {
+    if (!this._compiled) return;
+    const ranges = this._drawRanges;
+    // 编译后又 addObject 但还没 recompile 时，_drawIndexCount 已超出 GPU 侧几何，按已编译的总数画
+    const total = this._compiled ? this._compiledDrawIndexCount : 0;
+    if (!this._cullEnabled || this._totalObjects === 0) {
+      ranges.starts[0] = 0;
+      ranges.counts[0] = total;
+      ranges.count = total > 0 ? 1 : 0;
+      this._cullKeyValid = false;
+      this._cullStats.segments = ranges.count;
+      this._cullStats.triangles = total / 3;
+      this._cullStats.lodObjects = 0;
+      return;
+    }
+
+    if (this._objSpheresDirty) this._rebuildObjectSpheres();
+
+    const view = drawRangeViewFromCamera(camera, this._cullView);
+    // 像素阈值关着时结果与视口高度无关；分屏 / 离屏各趟视口不同也能命中缓存
+    const lodPx = this._lodObjectCount > 0 ? this._cullLodPx : 0;
+    const pxScale = minPx > 0 || lodPx > 0 ? view.projScaleY * viewportHeightPx : 0;
+    if (
+      this._cullKeyValid
+      && this._cullKeyRevision === this._visibilityRevision
+      && this._cullKeyMinPx === minPx
+      && this._cullKeyLodPx === lodPx
+      && this._cullKeyScale === pxScale
+      && arraysEqual16(this._cullKeyView, view.viewProjection)
+    ) {
+      return;
+    }
+
+    const t0 = performance.now();
+    const result = selectDrawRanges(
+      {
+        objectCount: this._totalObjects,
+        spheres: this._objSpheres,
+        triStart: this._objTriStart,
+        triCount: this._objTriCount,
+        visibleFlags: this._colorsAndFlagsBuffer,
+        visibleStride: 16,
+        visibleOffset: 2,
+        view,
+        viewportHeightPx,
+        minPx,
+        lod: lodPx > 0
+          ? { triStart: this._objLodStart, triCount: this._objLodCount, minPx: lodPx, state: this._objLodState }
+          : undefined,
+      },
+      ranges,
+    );
+    ranges.count = result.segmentCount;
+
+    this._cullKeyView.set(view.viewProjection);
+    this._cullKeyScale = pxScale;
+    this._cullKeyRevision = this._visibilityRevision;
+    this._cullKeyMinPx = minPx;
+    this._cullKeyLodPx = lodPx;
+    this._cullKeyValid = true;
+    this._cullStats.lodObjects = result.lodObjectCount;
+    this._cullStats.segments = result.segmentCount;
+    this._cullStats.triangles = result.triangleCount;
+    this._cullStats.lastSelectMs = performance.now() - t0;
+    this._cullStats.selectCount++;
+  }
+
+  private _beforeMeshRender(renderer: WebGLRenderer, camera: Camera): void {
+    if (this._multiDrawSupported === null) {
+      this._multiDrawSupported = renderer.extensions.has('WEBGL_multi_draw');
+      if (this._mesh) this._mesh.multiDrawEnabled = this._multiDrawSupported;
+      if (this._transparentMesh) this._transparentMesh.multiDrawEnabled = this._multiDrawSupported;
+    }
+    if (!this._multiDrawSupported) return;
+    let heightPx: number;
+    if (renderer.getRenderTarget() !== null) {
+      // 离屏趟（描边合成 / E3D 管线）都是整幅画布大小，按画布 CSS 高度算，和直出时同一个像素阈值
+      heightPx = renderer.getSize(this._tmpViewportSize).y;
+    } else {
+      // 当前视口是物理像素（分屏时是那一格），换成 CSS px
+      renderer.getCurrentViewport(this._tmpViewport);
+      heightPx = this._tmpViewport.w / (renderer.getPixelRatio() || 1);
+    }
+    this.updateDrawRanges(camera, heightPx);
+  }
+
+  private _markObjectSpheresDirty(): void {
+    this._objSpheresDirty = true;
+    this._cullKeyValid = false;
+  }
+
+  /** compile 时按对象表重建区段与段表容量；包围球留到第一次选段时再算 */
+  private _rebuildCullTables(): void {
+    const n = this._totalObjects;
+    this._objTriStart = new Uint32Array(n);
+    this._objTriCount = new Uint32Array(n);
+    for (let i = 0; i < n; i++) {
+      const obj = this._objectsArray[i]!;
+      this._objTriStart[i] = obj.primitiveOffset;
+      this._objTriCount[i] = Math.floor(obj.indexCount / 3);
+    }
+    this._objSpheres = new Float32Array(n * 4);
+    const capacity = Math.max(1, n);
+    this._drawRanges = {
+      starts: new Int32Array(capacity),
+      counts: new Int32Array(capacity),
+      count: this._drawIndexCount > 0 ? 1 : 0,
+    };
+    this._drawRanges.starts[0] = 0;
+    this._drawRanges.counts[0] = this._drawIndexCount;
+    this._multiDrawSupported = null;
+    this._markObjectSpheresDirty();
+  }
+
+  private _rebuildObjectSpheres(): void {
+    const n = this._totalObjects;
+    const spheres = this._objSpheres;
+    const g = this._globalModelMatrix;
+    const scale = g.getMaxScaleOnAxis();
+    const center = this._tmpSphereCenter;
+    const size = this._tmpSphereSize;
+    for (let i = 0; i < n; i++) {
+      const box = this._objectsArray[i]!.boundingBox;
+      const s = i * 4;
+      if (box.isEmpty()) {
+        spheres[s] = 0;
+        spheres[s + 1] = 0;
+        spheres[s + 2] = 0;
+        spheres[s + 3] = -1;
+        continue;
+      }
+      box.getCenter(center).applyMatrix4(g);
+      const r = box.getSize(size).length() * 0.5 * scale;
+      spheres[s] = center.x;
+      spheres[s + 1] = center.y;
+      spheres[s + 2] = center.z;
+      spheres[s + 3] = Number.isFinite(r) ? r : -1;
+    }
+    this._objSpheresDirty = false;
+  }
+
+  private _tmpViewport = new Vector4();
+  private _tmpViewportSize = new Vector2();
+  private _tmpSphereCenter = new Vector3();
+  private _tmpSphereSize = new Vector3();
 
   // ========== 渲染 ==========
 
@@ -1964,6 +2310,7 @@ export class DTXLayer {
     if (geoHandle) {
       obj.boundingBox.copy(this._computeDynamicObjectBoundingBox(geoHandle, matrix));
     }
+    this._markObjectSpheresDirty();
 
     if (this._matricesTexture) {
       const data = this._matricesTexture.image ? textureData<Float32Array>(this._matricesTexture) : undefined;
@@ -2699,6 +3046,7 @@ export class DTXLayer {
     this._matricesTexture?.dispose();
     this._colorsAndFlagsTexture?.dispose();
     this._primitiveToObjectTexture?.dispose();
+    this._lodTexture?.dispose();
     this._materialPaletteTexture?.dispose();
     this._colorOverrideTexture?.dispose();
 
@@ -2710,6 +3058,7 @@ export class DTXLayer {
 
     // 清理引用
     this._geometries.clear();
+    this._lod1Geometries.clear();
     this._objects.clear();
     this._objectsArray = [];
     this._materialPalette.clear();

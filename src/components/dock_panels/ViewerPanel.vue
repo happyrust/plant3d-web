@@ -73,6 +73,7 @@ import {
   loadDbnoInstancesForVisibleRefnosDtx,
   applyMaterialConfigToLoadedDtx,
   evictDtxRefnos,
+  configureDtxLod1Backfill,
   invalidateDtxLoaderCaches,
   resolveDtxNounByRefno,
   resolveDtxObjectIdsByRefno,
@@ -163,7 +164,7 @@ import {
 import { toRefnoKey } from '@/utils/refnoKey';
 import { parseRefnoList, SHOW_REFNO_PARAM } from '@/utils/refnoListParam';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
-import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
+import { DTXLayer, DTXSelectionController, DTXViewCullController, readViewCullOptions } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
@@ -1223,6 +1224,9 @@ let dragDowngradeState = createDragDowngradeState();
 let orbitControlsHeld = false;
 let gizmoHeld = false;
 let dragDowngradeTimer: ReturnType<typeof setTimeout> | null = null;
+// 拖动中裁掉小构件（?dtx_cull_drag_px=），和 E3D 降画质共用判定、各自一份状态
+let cullDragState = createDragDowngradeState();
+let cullDragTimer: ReturnType<typeof setTimeout> | null = null;
 let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
@@ -3320,7 +3324,8 @@ function renderFrameImmediate() {
   updateShowDbnumExtraLayers(dtxViewer);
 
   // resize 会改变 aspect/projectionMatrix，需更新视锥裁剪与 LOD（避免“旧裁剪状态”）
-  viewCullControllerRef.value?.update(dtxViewer.camera);
+  dtxViewer.camera.updateMatrixWorld();
+  viewCullControllerRef.value?.update(dtxViewer.camera, viewportCssHeight());
   tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
 
   // 更新动态 pivot 控制器
@@ -3384,8 +3389,6 @@ function requestRender() {
  * 停稳后按需出帧会停在最后那一帧低画质上，所以还没到恢复时刻时挂一个定时器，到点补一帧全画质。
  */
 function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean): boolean {
-  const pipeline = sglPipelineRef.value;
-  if (!pipeline) return false;
   const viewDist = Math.max(1e-9, viewer.camera.position.distanceTo(viewer.controls.target));
   const motion = Math.max(
     dragPosePos.distanceTo(viewer.camera.position),
@@ -3396,6 +3399,9 @@ function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean): boolean {
   dragPosePos.copy(viewer.camera.position);
   dragPoseTarget.copy(viewer.controls.target);
   dragPoseValid = true;
+  const cullRestored = updateCullDrag(moved);
+  const pipeline = sglPipelineRef.value;
+  if (!pipeline) return cullRestored;
   const step = stepDragDowngrade(dragDowngradeState, {
     enabled: dragDowngradeEnabled,
     pipelineActive: useSglLookRenderPath(),
@@ -3411,13 +3417,47 @@ function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean): boolean {
       requestRender();
     }, Math.max(0, step.restoreAt - performance.now()) + 1);
   }
+  return step.restored || cullRestored;
+}
+
+/**
+ * 拖动中跳过屏幕上很小的构件（所有样式都生效，判定同 E3D 降画质，另开一份状态）；停稳宽限期后恢复，
+ * 恢复那一帧返回 true 让宿主补画，静止帧完整显示。
+ */
+function updateCullDrag(moved: boolean): boolean {
+  const ctl = viewCullControllerRef.value;
+  if (!ctl) return false;
+  const step = stepDragDowngrade(cullDragState, {
+    enabled: ctl.getOptions().enabled && ctl.getOptions().dragMinPx > 0,
+    pipelineActive: true,
+    held: orbitControlsHeld || gizmoHeld,
+    cameraMoving: moved,
+    now: performance.now(),
+  });
+  cullDragState = step.state;
+  ctl.setDragging(step.state.downgraded);
+  if (step.restoreAt !== null && cullDragTimer === null) {
+    cullDragTimer = setTimeout(() => {
+      cullDragTimer = null;
+      requestRender();
+    }, Math.max(0, step.restoreAt - performance.now()) + 1);
+  }
   return step.restored;
 }
 
 function clearDragDowngradeTimer(): void {
-  if (dragDowngradeTimer === null) return;
-  clearTimeout(dragDowngradeTimer);
-  dragDowngradeTimer = null;
+  if (dragDowngradeTimer !== null) {
+    clearTimeout(dragDowngradeTimer);
+    dragDowngradeTimer = null;
+  }
+  if (cullDragTimer !== null) {
+    clearTimeout(cullDragTimer);
+    cullDragTimer = null;
+  }
+}
+
+function viewportCssHeight(): number {
+  return containerRef.value?.getBoundingClientRect().height ?? 0;
 }
 
 function renderFrame() {
@@ -3456,8 +3496,10 @@ function renderFrame() {
     ensureLayerAttached();
     dtxLayer.update(dtxViewer.camera);
     updateShowDbnumExtraLayers(dtxViewer);
+    // 选段每帧都要按本帧相机 / 可见性 / 拖动阈值下发（层内有缓存，输入没变时只比一次矩阵）
+    dtxViewer.camera.updateMatrixWorld();
+    viewCullControllerRef.value?.update(dtxViewer.camera, viewportCssHeight());
     if (cameraChanged) {
-      viewCullControllerRef.value?.update(dtxViewer.camera);
       tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
       dimensionSystem?.notifyViewerChanged();
     }
@@ -3828,8 +3870,18 @@ onMounted(async () => {
     }
   }
 
-  // 显示加速：View Frustum Culling（按对象 AABB）
-  viewCullControllerRef.value = new DTXViewCullController({ dtxLayer });
+  // 显示加速：按构件选段绘制（视锥外 / 隐藏 / 拖动中的小构件不画）；?dtx_cull=0 关闭、?dtx_cull_drag_px= 调拖动阈值
+  const viewCullOptions = readViewCullOptions(new URLSearchParams(window.location.search), { getItem: safeLsGet });
+  viewCullControllerRef.value = new DTXViewCullController({
+    dtxLayer,
+    getExtraLayers: () => showDbnumExtraDtxLayers,
+    options: viewCullOptions,
+  });
+  // 粗网格：装载停下后补拉 ?lod=1，补完 recompile 一次；?dtx_lod=0 关闭
+  configureDtxLod1Backfill({
+    enabled: viewCullOptions.enabled && viewCullOptions.lod && viewCullOptions.lodPx > 0,
+    onApplied: () => requestRender(),
+  });
 
   // 显示加速：Tile LOD（manifest.groups）
   tileLodControllerRef.value = new DTXTileLodController({
@@ -3985,7 +4037,7 @@ onMounted(async () => {
     xeokitMeasurementToolsRef.value?.refreshReadyState();
     try {
       viewCullControllerRef.value?.refreshSpatialIndex();
-      viewCullControllerRef.value?.update(dtxViewer.camera);
+      viewCullControllerRef.value?.update(dtxViewer.camera, viewportCssHeight());
     } catch {
       // ignore
     }
@@ -4246,6 +4298,7 @@ onMounted(async () => {
   if (typeof window !== 'undefined') {
     (window as any).__xeokitViewer = compat;
     (window as any).__dtxViewer = dtxViewer;
+    (window as any).__dtxViewCull = viewCullControllerRef.value;
     (window as any).__viewerContext = viewerContext;
     (window as any).__viewerToolStore = store;
     (window as any).__xeokitMeasurementTools = xeokitMeasurementTools;
@@ -5359,6 +5412,7 @@ onUnmounted(() => {
   }
   clearDragDowngradeTimer();
   dragDowngradeState = createDragDowngradeState();
+  cullDragState = createDragDowngradeState();
   dragPoseValid = false;
   orbitControlsHeld = false;
   gizmoHeld = false;
@@ -5531,6 +5585,7 @@ onUnmounted(() => {
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;
+    delete (window as any).__dtxViewCull;
     delete (window as any).__dtxLayer;
     delete (window as any).__viewerContext;
     delete (window as any).__viewerToolStore;

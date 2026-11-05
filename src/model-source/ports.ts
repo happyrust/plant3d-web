@@ -136,6 +136,8 @@ export type ModelRecordSource = {
 export type MeshSource = {
   /** `lodAssetKey`：legacy 的 LOD 档位（`L1`…）；gen-model 只有一档，适配器忽略它。 */
   meshUrl(geoHash: string, lodAssetKey: string): string;
+  /** 显示用粗网格（L1）的 URL；源不提供粗网格时不实现。 */
+  lod1MeshUrl?(geoHash: string): string;
 };
 
 /** 属性面板与类型查询。 */

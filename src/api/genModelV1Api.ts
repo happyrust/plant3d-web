@@ -2873,12 +2873,12 @@ export function genModelV1SurfaceClearance(
 }
 
 /**
- * `GET /api/v1/meshes/{geo_hash}.mesh` 的 URL（spec §4.11）。不发请求——网格由现有 DTX
+ * `GET /api/v1/meshes/{geo_hash}.mesh[?lod=1]` 的 URL（spec §4.11）。不发请求——网格由现有 DTX
  * 加载链自己 fetch + `parseMeshGeometry`（rkyv 原样直连，2026-09-09 拍板：不再经服务端
  * 转 GLB；`.glb` 口径服务端保留一个发布周期）。字符集不合法直接抛（服务端也会 400，
  * 这里省一次往返）。
  */
-export function genModelV1MeshUrl(geoHash: string, baseUrl?: string): string {
+export function genModelV1MeshUrl(geoHash: string, baseUrl?: string, lod: 0 | 1 = 0): string {
   if (!isValidGeoHash(geoHash)) {
     throw new GenModelV1ApiError({
       code: 'bad_request',
@@ -2888,5 +2888,7 @@ export function genModelV1MeshUrl(geoHash: string, baseUrl?: string): string {
     });
   }
   const path = `/api/v1/meshes/${geoHash}.mesh`;
-  return baseUrl !== undefined ? joinUrl(baseUrl, path) : buildGenModelV1Url(path);
+  const url = baseUrl !== undefined ? joinUrl(baseUrl, path) : buildGenModelV1Url(path);
+  // lod=1：生成时多产的显示用粗网格，没有就 404（前端负缓存，继续用原网格）
+  return lod === 1 ? `${url}${url.includes('?') ? '&' : '?'}lod=1` : url;
 }

@@ -288,6 +288,153 @@ function installTimeoutBox(dtxLayer: DTXLayer, geoHash: string): void {
   boxes.add(geoHash);
 }
 
+// ========== 显示用粗网格（L1）补拉 ==========
+
+/** 原网格少于这么多三角形不拉粗网格（与 gen-model 的 LOD1_MIN_SOURCE_TRIANGLES 同值：服务端也不产） */
+export const DTX_LOD1_MIN_SOURCE_TRIANGLES = 256;
+const LOD1_FETCH_CONCURRENCY = 6;
+/** 装载停下来这么久才补拉：装载是一批批来的，每批都补会让图层反复 recompile */
+const LOD1_BACKFILL_IDLE_MS = 300;
+
+/** 粗网格按内容键跨图层共用；null = 服务端没有（404 / 解析失败），负缓存到下次 invalidate */
+const lod1GeometryByGeoHash = new Map<string, BufferGeometry | null>();
+const lod1Loading = new Map<string, Promise<BufferGeometry | null>>();
+const lod1Backfill = new WeakMap<DTXLayer, { timer: ReturnType<typeof setTimeout> | null; running: boolean; again: boolean }>();
+let lod1Config: { enabled: boolean; onApplied?: (layer: DTXLayer, stats: DtxLod1BackfillStats) => void } = { enabled: false };
+
+export type DtxLod1BackfillStats = {
+  candidates: number;
+  installed: number;
+  missing: number;
+  fetchMs: number;
+  recompileMs: number;
+};
+
+/** 开关粗网格补拉（默认关）；`onApplied` 在某个图层补完并 recompile 后调用，调用方据此重绘 */
+export function configureDtxLod1Backfill(config: {
+  enabled: boolean;
+  onApplied?: (layer: DTXLayer, stats: DtxLod1BackfillStats) => void;
+}): void {
+  lod1Config = { ...config };
+}
+
+function fetchLod1Geometry(geoHash: string, url: string): Promise<BufferGeometry | null> {
+  if (lod1GeometryByGeoHash.has(geoHash)) return Promise.resolve(lod1GeometryByGeoHash.get(geoHash)!);
+  const pending = lod1Loading.get(geoHash);
+  if (pending) return pending;
+  const task = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
+    try {
+      const resp = await fetch(url, { signal: controller.signal });
+      if (!resp.ok) {
+        // 404 = 这个键没有粗网格（太小或省不够）；其他错误同样回落原网格，不重试
+        lod1GeometryByGeoHash.set(geoHash, null);
+        return null;
+      }
+      const parsed = parseMeshGeometryResult(await resp.arrayBuffer(), url);
+      if (!parsed.ok) {
+        lod1GeometryByGeoHash.set(geoHash, null);
+        return null;
+      }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.data.positions), 3));
+      if (parsed.data.normals && parsed.data.normals.length > 0) {
+        g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.data.normals), 3));
+      }
+      g.setIndex(new BufferAttribute(new Uint32Array(parsed.data.indices), 1));
+      lod1GeometryByGeoHash.set(geoHash, g);
+      return g;
+    } catch {
+      // 超时 / 网络错误：不记负缓存，下次补拉再试
+      return null;
+    } finally {
+      clearTimeout(timer);
+      lod1Loading.delete(geoHash);
+    }
+  })();
+  lod1Loading.set(geoHash, task);
+  return task;
+}
+
+/**
+ * 给图层里够大的原网格补拉粗网格，全部到齐后 recompile 一次。没有粗网格接口的源、或开关关着时什么都不做。
+ * 返回 null 表示没跑（关着 / 没候选）。
+ */
+export async function backfillDtxLod1Geometries(dtxLayer: DTXLayer): Promise<DtxLod1BackfillStats | null> {
+  const urlOf = getModelSource().meshes.lod1MeshUrl;
+  if (!lod1Config.enabled || !urlOf) return null;
+  const candidates = dtxLayer.listLod1Candidates(DTX_LOD1_MIN_SOURCE_TRIANGLES)
+    .filter((h) => lod1GeometryByGeoHash.get(h) !== null);
+  if (candidates.length === 0) return null;
+
+  const t0 = performance.now();
+  const queue = candidates.slice();
+  const fetched = new Map<string, BufferGeometry>();
+  let missing = 0;
+  await Promise.all(Array.from({ length: Math.min(LOD1_FETCH_CONCURRENCY, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const geoHash = queue.pop()!;
+      let url: string;
+      try {
+        url = urlOf(geoHash);
+      } catch {
+        lod1GeometryByGeoHash.set(geoHash, null);
+        missing++;
+        continue;
+      }
+      const g = await fetchLod1Geometry(geoHash, url);
+      if (g) fetched.set(geoHash, g);
+      else missing++;
+    }
+  }));
+  const fetchMs = performance.now() - t0;
+
+  let installed = 0;
+  for (const [geoHash, g] of fetched) {
+    // 拉的这段时间里原网格可能被替换 / 图层被清：addLod1Geometry 自己会拒
+    if (dtxLayer.addLod1Geometry(geoHash, g)) installed++;
+  }
+  let recompileMs = 0;
+  if (installed > 0) {
+    const t1 = performance.now();
+    dtxLayer.recompile();
+    recompileMs = performance.now() - t1;
+  }
+  const stats = { candidates: candidates.length, installed, missing, fetchMs, recompileMs };
+  if (installed > 0) lod1Config.onApplied?.(dtxLayer, stats);
+  return stats;
+}
+
+/** 装载停下 {@link LOD1_BACKFILL_IDLE_MS} 后补拉；补拉进行中又来了新装载，补完再跑一轮 */
+function scheduleLod1Backfill(dtxLayer: DTXLayer): void {
+  if (!lod1Config.enabled || !getModelSource().meshes.lod1MeshUrl) return;
+  let state = lod1Backfill.get(dtxLayer);
+  if (!state) {
+    state = { timer: null, running: false, again: false };
+    lod1Backfill.set(dtxLayer, state);
+  }
+  const s = state;
+  if (s.running) {
+    s.again = true;
+    return;
+  }
+  if (s.timer) clearTimeout(s.timer);
+  s.timer = setTimeout(() => {
+    s.timer = null;
+    s.running = true;
+    backfillDtxLod1Geometries(dtxLayer)
+      .catch((error) => console.warn('[dtx][lod1] 粗网格补拉失败，继续用原网格', error))
+      .finally(() => {
+        s.running = false;
+        if (s.again) {
+          s.again = false;
+          scheduleLod1Backfill(dtxLayer);
+        }
+      });
+  }, LOD1_BACKFILL_IDLE_MS);
+}
+
 /** 装入取到的几何；强制刷新、或图层里挂着超时盒子时替换 */
 function installGeometry(dtxLayer: DTXLayer, geoHash: string, geometry: BufferGeometry, replace = false): void {
   const boxes = timeoutBoxesByLayer.get(dtxLayer);
@@ -354,6 +501,7 @@ export function isDtxRefnoKnownAcrossAllDbnos(refno: string): boolean {
  */
 export function invalidateDtxLoaderCaches(): void {
   cachesByDbno.clear();
+  lod1GeometryByGeoHash.clear();
   hiddenTubeKeys.value = new Set();
   bumpDtxLoaderRevision();
 }
@@ -1530,6 +1678,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     // 增量追加后重建 GPU 资源（1000 objects 级别可接受）
     if (loadedObjects > 0) {
       dtxLayer.recompile();
+      scheduleLod1Backfill(dtxLayer);
     }
   } catch (error) {
     if (replacementSnapshot) {

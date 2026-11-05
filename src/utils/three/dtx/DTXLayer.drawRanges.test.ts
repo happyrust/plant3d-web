@@ -1,0 +1,151 @@
+import { describe, expect, it } from 'vitest';
+
+import { BufferAttribute, BufferGeometry, Matrix4, PerspectiveCamera } from 'three';
+
+import { DTXLayer } from './DTXLayer';
+
+import type { DTXMultiDrawMesh } from './DTXMultiDrawMesh';
+
+function tri(): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3));
+  g.setIndex([0, 1, 2]);
+  return g;
+}
+
+function camera(): PerspectiveCamera {
+  const cam = new PerspectiveCamera(90, 1, 0.1, 1000);
+  cam.lookAt(0, 0, -1);
+  cam.updateMatrixWorld();
+  return cam;
+}
+
+function setup(): { layer: DTXLayer; mesh: DTXMultiDrawMesh } {
+  const layer = new DTXLayer({ maxVertices: 64, maxIndices: 64, maxObjects: 8 });
+  layer.addGeometry('tri', tri());
+  // 两个在视野里、一个在身后，中间隔开避免并段
+  layer.addObject('a', 'tri', new Matrix4().makeTranslation(0, 0, -10));
+  layer.addObject('behind', 'tri', new Matrix4().makeTranslation(0, 0, 10));
+  layer.addObject('b', 'tri', new Matrix4().makeTranslation(0, 0, -20));
+  layer.compile();
+  const mesh = (layer as unknown as { _mesh: DTXMultiDrawMesh })._mesh;
+  return { layer, mesh };
+}
+
+describe('DTXLayer.updateDrawRanges', () => {
+  it('编译后默认一段画全部，选段后跳过视锥外构件', () => {
+    const { layer, mesh } = setup();
+    expect(mesh._multiDrawCount).toBe(1);
+    expect(mesh._multiDrawCounts[0]).toBe(9);
+    layer.updateDrawRanges(camera(), 800, 0);
+    // 三个构件各 1 个三角形，间隙 1 ≤ 默认 20：并成一段但统计照实
+    expect(layer.getCullStats().segments).toBe(1);
+    expect(layer.getCullStats().triangles).toBe(3);
+  });
+
+  it('输入不变命中缓存；可见性变化后重算', () => {
+    const { layer } = setup();
+    const cam = camera();
+    layer.updateDrawRanges(cam, 800, 0);
+    const n = layer.getCullStats().selectCount;
+    layer.updateDrawRanges(cam, 800, 0);
+    expect(layer.getCullStats().selectCount).toBe(n);
+    layer.setObjectVisible('a', false);
+    layer.updateDrawRanges(cam, 800, 0);
+    expect(layer.getCullStats().selectCount).toBe(n + 1);
+    expect(layer.getCullStats().triangles).toBe(1);
+  });
+
+  it('改全局矩阵后按新包围球重算', () => {
+    const { layer, mesh } = setup();
+    const cam = camera();
+    layer.updateDrawRanges(cam, 800, 0);
+    // 整体往 +Z 挪 100：全部到了相机身后
+    layer.setGlobalModelMatrix(new Matrix4().makeTranslation(0, 0, 100));
+    layer.updateDrawRanges(cam, 800, 0);
+    expect(mesh._multiDrawCount).toBe(0);
+  });
+
+  it('关掉选段时一段画全部', () => {
+    const { layer, mesh } = setup();
+    layer.setCullOptions({ enabled: false });
+    layer.updateDrawRanges(camera(), 800, 0);
+    expect(mesh._multiDrawCount).toBe(1);
+    expect(mesh._multiDrawStarts[0]).toBe(0);
+    expect(mesh._multiDrawCounts[0]).toBe(9);
+  });
+
+  it('拾取网格不受选段影响', () => {
+    const { layer } = setup();
+    layer.setGlobalModelMatrix(new Matrix4().makeTranslation(0, 0, 100));
+    layer.updateDrawRanges(camera(), 800, 0);
+    const picking = layer.getPickingMesh()!;
+    expect((picking as unknown as { isBatchedMesh?: boolean }).isBatchedMesh).not.toBe(true);
+    expect(picking.geometry.drawRange.count).toBe(9);
+  });
+});
+
+function quad(): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]), 3));
+  g.setIndex([0, 1, 2, 2, 1, 3]);
+  return g;
+}
+
+describe('DTXLayer 粗网格（L1）', () => {
+  function lodSetup(): { layer: DTXLayer; mesh: DTXMultiDrawMesh } {
+    const layer = new DTXLayer({ maxVertices: 64, maxIndices: 64, maxObjects: 8 });
+    layer.addGeometry('quad', quad());
+    layer.addGeometry('tri', tri());
+    layer.addObject('near', 'quad', new Matrix4().makeTranslation(0, 0, -2));
+    layer.addObject('far', 'quad', new Matrix4().makeTranslation(0, 0, -500));
+    layer.addObject('tri', 'tri', new Matrix4().makeTranslation(0, 0, -500));
+    // 原网格 quad 两个三角形，粗网格一个
+    expect(layer.addLod1Geometry('quad', tri())).toBe(true);
+    expect(layer.addLod1Geometry('quad', tri())).toBe(false);
+    expect(layer.addLod1Geometry('missing', tri())).toBe(false);
+    layer.compile();
+    return { layer, mesh: (layer as unknown as { _mesh: DTXMultiDrawMesh })._mesh };
+  }
+
+  it('粗网格三角形排在原网格之后，图元映射第 31 位做标记，drawRange 只盖原网格', () => {
+    const { layer, mesh } = lodSetup();
+    const stats = layer.getCullStats();
+    expect(stats.totalTriangles).toBe(5);
+    expect(stats.lodCapableObjects).toBe(2);
+    expect(stats.lodTriangles).toBe(2);
+    expect(mesh.geometry.drawRange.count).toBe(15);
+    expect(layer.getPickingMesh()!.geometry.drawRange.count).toBe(15);
+    const p2o = (layer as unknown as { _primitiveToObjectTexture: { image: { data: Uint32Array } } })
+      ._primitiveToObjectTexture.image.data;
+    expect(Array.from(p2o.subarray(0, 7))).toEqual([0, 0, 1, 1, 2, 0x80000000, 0x80000001]);
+  });
+
+  it('远处的构件改画粗网格，近处的仍画原网格；lodPx = 0 时不用粗网格', () => {
+    const { layer, mesh } = lodSetup();
+    layer.setCullOptions({ lodPx: 48 });
+    layer.updateDrawRanges(camera(), 800, 0);
+    expect(layer.getCullStats().lodObjects).toBe(1);
+    // 近处 quad [0,2) + 远处 tri 原网格 [4,5) 夹带间隙并一段；远处 quad 粗网格 [6,7) 另起一段
+    expect(mesh._multiDrawCount).toBe(2);
+    expect([mesh._multiDrawStarts[1], mesh._multiDrawCounts[1]]).toEqual([18, 3]);
+
+    layer.setCullOptions({ lodPx: 0 });
+    layer.updateDrawRanges(camera(), 800, 0);
+    expect(layer.getCullStats().lodObjects).toBe(0);
+  });
+
+  it('替换原网格后旧构件不再用粗网格', () => {
+    const layer = new DTXLayer({ maxVertices: 64, maxIndices: 64, maxObjects: 8 });
+    layer.addGeometry('quad', quad());
+    layer.addObject('old', 'quad', new Matrix4());
+    layer.addLod1Geometry('quad', tri());
+    layer.replaceGeometry('quad', quad());
+    expect(layer.hasLod1Geometry('quad')).toBe(false);
+    layer.addLod1Geometry('quad', tri());
+    layer.addObject('new', 'quad', new Matrix4());
+    layer.compile();
+    expect(layer.getCullStats().lodCapableObjects).toBe(1);
+    expect(layer.listLod1Candidates(1)).toEqual([]);
+  });
+});

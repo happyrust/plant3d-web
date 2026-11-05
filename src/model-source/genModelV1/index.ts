@@ -42,9 +42,10 @@ import {
 } from '@/model-source/genModelV1/serviceLifecycle';
 
 const meshes: MeshSource = {
-  // gen-model 只有一档网格，legacy 的 LOD 键在这里没有意义。
+  // legacy 的 LOD 键在这里没有意义；粗网格是同一个键加 ?lod=1（生成时开 AIOS_MESH_LOD1 才有）。
   // URL 以 .mesh 收尾，DTX 加载链据此选 parseMeshGeometry（legacy 的 .glb 仍走 parseGlbGeometry）。
   meshUrl: (geoHash) => genModelV1MeshUrl(geoHash),
+  lod1MeshUrl: (geoHash) => genModelV1MeshUrl(geoHash, undefined, 1),
 };
 
 /** v1 源在四个端口之外多出来的能力：记录源的缓存 / 进度，以及 `show_dbnum` 整库收集（P3-c）。 */
