@@ -1,4 +1,4 @@
-/** 库边界行行尾的「模型生成状态」圆点：非边界行 / 幽灵行不画，也不占探测。 */
+/** 行尾合并状态图标的生成一侧：没核对过时退回生成状态圆点；非边界行 / 幽灵行不画，也不占探测。 */
 import { describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 
@@ -39,7 +39,7 @@ describe('ModelTreeRow 库状态圆点', () => {
     viewMock.mockReturnValue({ kind: 'current', title: 'DB 7997 · 模型已生成且为最新' });
     const { host, unmount } = await mountRow(SITE_BOUNDARY);
     try {
-      const dot = host.querySelector('[data-testid="model-tree-db-status"]');
+      const dot = host.querySelector('[data-testid="model-tree-status"]');
       expect(dot).not.toBeNull();
       expect(dot?.getAttribute('data-db-status')).toBe('current');
       expect(dot?.getAttribute('title')).toContain('DB 7997');
@@ -55,7 +55,7 @@ describe('ModelTreeRow 库状态圆点', () => {
     viewMock.mockReturnValue({ kind, title: `DB 7997 · ${kind}` });
     const { host, unmount } = await mountRow(SITE_BOUNDARY);
     try {
-      expect(host.querySelector('[data-testid="model-tree-db-status"]')?.getAttribute('data-db-status')).toBe(kind);
+      expect(host.querySelector('[data-testid="model-tree-status"]')?.getAttribute('data-db-status')).toBe(kind);
     } finally {
       unmount();
     }
@@ -65,16 +65,29 @@ describe('ModelTreeRow 库状态圆点', () => {
     acquireMock.mockClear();
     const inside = await mountRow(ZONE_INSIDE);
     try {
-      expect(inside.host.querySelector('[data-testid="model-tree-db-status"]')).toBeNull();
+      expect(inside.host.querySelector('[data-testid="model-tree-status"]')).toBeNull();
     } finally {
       inside.unmount();
     }
     const ghost = await mountRow(SITE_BOUNDARY, { ghost: true });
     try {
-      expect(ghost.host.querySelector('[data-testid="model-tree-db-status"]')).toBeNull();
+      expect(ghost.host.querySelector('[data-testid="model-tree-status"]')).toBeNull();
     } finally {
       ghost.unmount();
     }
     expect(acquireMock).not.toHaveBeenCalled();
+  });
+
+  it('库内节点核对过时，按这一行的 dbnum 查生成状态', async () => {
+    acquireMock.mockClear();
+    viewMock.mockReturnValue({ kind: 'current', title: 'DB 1112 · 模型已生成且为最新' });
+    const rvmStatus = { refno: '17496_8518', verdict: 'pass', taskId: 't', at: null, sesno: null, message: '', name: null, stage: null, reasons: '' };
+    const { host, unmount } = await mountRow(ZONE_INSIDE, { rvmStatus });
+    try {
+      expect(acquireMock).toHaveBeenCalledWith(1112);
+      expect(host.querySelector('[data-testid="model-tree-status"]')?.getAttribute('data-db-status')).toBe('current');
+    } finally {
+      unmount();
+    }
   });
 });
