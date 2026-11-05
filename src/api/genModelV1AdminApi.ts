@@ -3,12 +3,19 @@
  *
  * - `POST /api/v1/update/execute`（ADR-011 §12 / ADR-020）：库级「扫描 + 入队」，与服务端
  *   `setup.html` 第⑤步同一条管线——数据摄入 → 模型生成 → 发布 → 空间树 → 房间归属一次跑完。
+ * - `POST /api/v1/storage-version/upgrade` / `dbnums/{dbnum}/data/reinitialize`：「项目 → 一键完全重新部署」。
  * - `POST /api/v1/query` 的 `e3d.element.identity`：节点名片（noun / name），给目标 chip 用。
  *
  * 单独成文件、只 import `genModelV1Api.ts` 的基座：与 `genModelV1RoomApi.ts` 同一约定，
  * 不往基座文件上加东西。
  */
-import { fromV1Refno, genModelV1Fetch, toV1Refno, type GenModelV1RequestOptions } from '@/api/genModelV1Api';
+import {
+  fromV1Refno,
+  genModelV1Fetch,
+  isGenModelV1ApiError,
+  toV1Refno,
+  type GenModelV1RequestOptions,
+} from '@/api/genModelV1Api';
 
 /** `e3d.element.identity` 的 `result` 形状（query_service.rs::identity）。 */
 export type ElementIdentity = {
@@ -119,4 +126,59 @@ export function genModelV1UpdateExecute(
     method: 'POST',
     body: { dbnums },
   });
+}
+
+/**
+ * `POST /api/v1/storage-version/upgrade` 的 202 回执（handlers.rs::storage_version_upgrade）。
+ * 逐库排 `intent=reinitialize` 批次（清库 → 重新解析 → 生成 → 房间），进度在 `/health.storage_version.upgrade`。
+ */
+export type StorageVersionUpgradeReceipt = {
+  target_version?: number;
+  requested?: number[];
+  full_scope?: boolean;
+  upgrade?: { state?: string; started_at?: string };
+  receipt?: UpdateExecuteReceipt;
+  [key: string]: unknown;
+};
+
+/**
+ * 一键完全重新部署：不传 `dbnums` = 当前 MDB 全部设计库（∩ 监听范围）；传了必须是其子集。
+ * 已有升级在跑时服务端回 409 `conflict`。
+ */
+export function genModelV1StorageVersionUpgrade(
+  dbnums?: number[],
+  options?: GenModelV1RequestOptions,
+): Promise<StorageVersionUpgradeReceipt> {
+  return genModelV1Fetch<StorageVersionUpgradeReceipt>('/api/v1/storage-version/upgrade', {
+    ...options,
+    method: 'POST',
+    body: dbnums && dbnums.length > 0 ? { dbnums } : {},
+  });
+}
+
+/** 单库「重新解析」：整库清空 → 首次导入 → 整库模型 → 房间。回执形状同 `update/execute`。 */
+export function genModelV1DbnumReinitialize(
+  dbnum: number,
+  options?: GenModelV1RequestOptions,
+): Promise<UpdateExecuteReceipt> {
+  return genModelV1Fetch<UpdateExecuteReceipt>(`/api/v1/dbnums/${dbnum}/data/reinitialize`, {
+    ...options,
+    method: 'POST',
+    body: {},
+  });
+}
+
+/** 重新部署相关错误 → 面向用户的文案。 */
+export function redeployErrorText(error: unknown): string {
+  if (isGenModelV1ApiError(error)) {
+    switch (error.code) {
+      case 'conflict':
+        return '已有重新部署在运行';
+      case 'initialization_not_ready':
+        return '库尚未初始化';
+      default:
+        return error.message;
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
 }

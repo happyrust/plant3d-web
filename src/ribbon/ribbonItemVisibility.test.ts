@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterRibbonItemsForUser, isRibbonButtonVisibleForRole } from './ribbonItemVisibility';
+import { filterRibbonItemsForUser, filterRibbonTabsForUser, isRibbonButtonVisibleForRole } from './ribbonItemVisibility';
 
-import type { RibbonButtonItem, RibbonItem } from './ribbonTypes';
+import type { RibbonButtonItem, RibbonItem, RibbonTabConfig } from './ribbonTypes';
 
 import { UserRole } from '@/types/auth';
 
@@ -81,5 +81,27 @@ describe('filterRibbonItemsForUser', () => {
 
     const filteredForAnon = filterRibbonItemsForUser(items, undefined);
     expect(filteredForAnon.map((i) => i.id)).toEqual(['btn.public', 'sep.1', 'stack.1']);
+  });
+});
+
+describe('filterRibbonTabsForUser', () => {
+  const tabs: RibbonTabConfig[] = [
+    { id: 'view', label: '视图', groups: [{ id: 'g', label: 'g', items: [buildButton({ id: 'btn.public' })] }] },
+    {
+      id: 'project',
+      label: '项目',
+      groups: [{ id: 'g2', label: 'g2', items: [buildButton({ id: 'btn.admin', roles: [UserRole.ADMIN, UserRole.MANAGER] })] }],
+    },
+    { id: 'empty', label: '空', groups: [] },
+  ];
+
+  it('页签里的按钮全被角色过滤掉时整页签隐藏', () => {
+    expect(filterRibbonTabsForUser(tabs, UserRole.DESIGNER).map((t) => t.id)).toEqual(['view', 'empty']);
+    expect(filterRibbonTabsForUser(tabs, undefined).map((t) => t.id)).toEqual(['view', 'empty']);
+  });
+
+  it('命中角色时页签可见', () => {
+    expect(filterRibbonTabsForUser(tabs, UserRole.ADMIN).map((t) => t.id)).toEqual(['view', 'project', 'empty']);
+    expect(filterRibbonTabsForUser(tabs, UserRole.MANAGER).map((t) => t.id)).toEqual(['view', 'project', 'empty']);
   });
 });

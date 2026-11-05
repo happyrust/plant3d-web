@@ -20,6 +20,9 @@ const DISPLAY_THEME_RIBBON_ICONS: Record<DisplayTheme, string> = {
   design3d: 'component',
 };
 
+/** 「项目」页签（清库重建 / E3D 登录配置）只给管理员与项目管理员 */
+const PROJECT_ADMIN_ROLES = [UserRole.ADMIN, UserRole.MANAGER];
+
 const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   {
     id: 'view',
@@ -228,6 +231,28 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
           { kind: 'button', id: 'task.incrementRecords', label: '增量记录', icon: 'history', commandId: 'panel.incrementRecords' },
           { kind: 'button', id: 'task.rvmCheck', label: 'RVM 核对', icon: 'compare', commandId: 'panel.rvmCheck' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'project',
+    label: '项目',
+    groups: [
+      {
+        id: 'project.deploy',
+        label: '部署',
+        items: [
+          { kind: 'button', id: 'project.redeploy', label: '一键重新部署', icon: 'database', commandId: 'project.redeploy', roles: PROJECT_ADMIN_ROLES },
+          { kind: 'button', id: 'project.redeployStatus', label: '部署状态', icon: 'activity', commandId: 'project.redeployStatus', roles: PROJECT_ADMIN_ROLES },
+        ],
+      },
+      {
+        id: 'project.e3d',
+        label: 'E3D 连接',
+        items: [
+          { kind: 'button', id: 'project.settings', label: '项目设置', icon: 'settings', commandId: 'project.settings', roles: PROJECT_ADMIN_ROLES },
+          { kind: 'button', id: 'project.testConnection', label: '测试连接', icon: 'link', commandId: 'project.testConnection', roles: PROJECT_ADMIN_ROLES },
         ],
       },
     ],

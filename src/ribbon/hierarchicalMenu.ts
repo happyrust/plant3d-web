@@ -1,4 +1,7 @@
 import type { RibbonButtonItem, RibbonTabConfig } from '@/ribbon/ribbonTypes';
+import type { UserRole } from '@/types/auth';
+
+import { isRibbonButtonVisibleForRole } from '@/ribbon/ribbonItemVisibility';
 
 export type HierarchicalMenuCommand = RibbonButtonItem;
 
@@ -14,7 +17,7 @@ export type HierarchicalMenuTab = {
   groups: HierarchicalMenuGroup[];
 };
 
-function flattenGroupCommands(tab: RibbonTabConfig): HierarchicalMenuTab {
+function flattenGroupCommands(tab: RibbonTabConfig, userRole: UserRole | undefined): HierarchicalMenuTab {
   return {
     id: tab.id,
     label: tab.label,
@@ -26,12 +29,15 @@ function flattenGroupCommands(tab: RibbonTabConfig): HierarchicalMenuTab {
           if (item.kind === 'button') return [item];
           if (item.kind === 'stack') return item.items;
           return [];
-        }),
+        }).filter((command) => isRibbonButtonVisibleForRole(command, userRole)),
       }))
       .filter((group) => group.commands.length > 0),
   };
 }
 
-export function buildHierarchicalMenuTabs(tabs: RibbonTabConfig[]): HierarchicalMenuTab[] {
-  return tabs.map(flattenGroupCommands).filter((tab) => tab.groups.length > 0);
+export function buildHierarchicalMenuTabs(
+  tabs: RibbonTabConfig[],
+  userRole: UserRole | undefined,
+): HierarchicalMenuTab[] {
+  return tabs.map((tab) => flattenGroupCommands(tab, userRole)).filter((tab) => tab.groups.length > 0);
 }

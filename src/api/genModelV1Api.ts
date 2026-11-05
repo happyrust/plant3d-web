@@ -746,6 +746,31 @@ export type HealthResponse = {
   static_assets?: boolean;
   /** 只报读数、不参与 health gate；`realtime_history` 是拖动浏览的并发上限来源（spec §4.15.4）。 */
   model_cache?: GenModelV1ModelCacheHealth;
+  /** 数据库架构版本（顶层，handlers.rs::storage_version_health）。`null` = 启动核对未跑；缺省 = 旧后端，不支持一键重新部署。 */
+  storage_version?: StorageVersionHealth | null;
+  [key: string]: unknown;
+};
+
+/** `/health.storage_version.upgrade`：最近一次架构升级 / 重新部署的进度（`storage_upgrade:current`）。 */
+export type StorageVersionUpgradeHealth = {
+  /** `idle` = 没有记录；`running` / `done` / `failed` */
+  state: 'idle' | 'running' | 'done' | 'failed' | (string & {});
+  requested?: number[];
+  done?: number;
+  done_dbnums?: number[];
+  failed?: { dbnum: number; reason: string }[];
+  started_at?: string;
+  finished_at?: string | null;
+  full_scope?: boolean;
+  [key: string]: unknown;
+};
+
+export type StorageVersionHealth = {
+  expected?: number;
+  stored?: number | null;
+  caught_up?: boolean;
+  upgrade_required?: boolean;
+  upgrade?: StorageVersionUpgradeHealth;
   [key: string]: unknown;
 };
 

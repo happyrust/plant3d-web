@@ -3,6 +3,8 @@
  *
  * 两条粒度：
  * - 按节点 / SITE：`generateThenCollect`（与模型树右键「重新生成模型」同一条路，容器逐层展开到生成根）；
+ * - 一键完全重新部署：`POST /api/v1/storage-version/upgrade`（进度读 `/health.storage_version.upgrade`），
+ *   失败库逐个 `dbnums/{dbnum}/data/reinitialize` 重试；
  * - 按库：`POST /api/v1/update/execute { dbnums }`（与 setup.html 第⑤步同一条摄入管线，
  *   数据 → 生成 → 发布 → 空间 → 房间），任务轮询只跟踪回执里的 `task_id`（d-195，不列表全量任务）。
  *
@@ -10,16 +12,26 @@
  */
 import { computed, reactive, ref, watch } from 'vue';
 
-import { genModelV1UpdateExecute, type UpdateExecuteReceipt } from '@/api/genModelV1AdminApi';
+import {
+  genModelV1DbnumReinitialize,
+  genModelV1StorageVersionUpgrade,
+  genModelV1UpdateExecute,
+  redeployErrorText,
+  type UpdateExecuteReceipt,
+} from '@/api/genModelV1AdminApi';
 import {
   fromV1Refno,
   genModelV1ElementAttributes,
   genModelV1Dbnums,
+  genModelV1Health,
+  isGenModelV1ApiError,
   genModelV1ModelBounds,
   genModelV1ModelRecords,
   genModelV1TaskGet,
   isRefnoLike,
   type DbnumRow,
+  type StorageVersionHealth,
+  type StorageVersionUpgradeHealth,
   type TaskEntryDto,
 } from '@/api/genModelV1Api';
 import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -692,6 +704,169 @@ async function executeSelected(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// 一键完全重新部署（项目页签）：storage-version/upgrade + 逐库 reinitialize 重试
+// ---------------------------------------------------------------------------
+
+export type RedeploySupport = 'ok' | 'outdated' | 'running';
+export type RedeployOutcome = 'accepted' | 'conflict' | 'error';
+
+const REDEPLOY_HEALTH_POLL_MS = 5_000;
+
+const redeployBusy = ref(false);
+const redeployError = ref<string | null>(null);
+/** `/health.storage_version.upgrade` 最近一拍；null = 还没读过 */
+const upgradeProgress = ref<StorageVersionUpgradeHealth | null>(null);
+/** 本会话重新部署 / 重试登记的 task_id（任务卡只显示这些） */
+const redeployTaskIds = ref<string[]>([]);
+/** 最近一次探测读到的 `/health.version`（「后端版本过低」视图复制用） */
+const backendVersion = ref<string | null>(null);
+/** `/health.storage_version` 的 expected / stored（进度视图显示「v旧 → v新」） */
+const storageVersionInfo = ref<{ expected: number | null; stored: number | null } | null>(null);
+
+function noteStorageVersion(sv: StorageVersionHealth | null | undefined): void {
+  storageVersionInfo.value = sv
+    ? { expected: typeof sv.expected === 'number' ? sv.expected : null, stored: typeof sv.stored === 'number' ? sv.stored : null }
+    : null;
+}
+let healthTimer: ReturnType<typeof setInterval> | null = null;
+
+function rememberRedeployTasks(receipt: UpdateExecuteReceipt | undefined): number {
+  const batches = [...(receipt?.enqueued ?? []), ...(receipt?.merged ?? [])];
+  const ids = new Set(redeployTaskIds.value);
+  for (const info of batches) {
+    if (!info.task_id) continue;
+    registerTask(info.task_id, info.dbnum ?? null, info.intent ?? null);
+    ids.add(info.task_id);
+  }
+  redeployTaskIds.value = [...ids];
+  if (batches.length > 0) ensurePolling();
+  return batches.length;
+}
+
+async function pollUpgradeHealthOnce(): Promise<void> {
+  try {
+    const health = await genModelV1Health({ identity: requestIdentity() });
+    noteStorageVersion(health.storage_version);
+    const upgrade = health.storage_version?.upgrade ?? null;
+    upgradeProgress.value = upgrade;
+    if (!upgrade || upgrade.state !== 'running') {
+      stopUpgradeHealthPolling();
+      void refreshDbnums();
+    }
+  } catch {
+    // 单拍失败不停轮询；后端重启期间 /health 会短暂不可达
+  }
+}
+
+function ensureUpgradeHealthPolling(): void {
+  if (healthTimer) return;
+  healthTimer = setInterval(() => {
+    void pollUpgradeHealthOnce();
+  }, REDEPLOY_HEALTH_POLL_MS);
+}
+
+function stopUpgradeHealthPolling(): void {
+  if (healthTimer) {
+    clearInterval(healthTimer);
+    healthTimer = null;
+  }
+}
+
+/**
+ * 打开重新部署弹窗时探一次后端：`/health` 没有 `storage_version` 键 = 旧后端（不做降级兼容）；
+ * 升级正在跑 = 直接进进度视图（刷新页面后也能接上）。
+ */
+async function probeRedeploySupport(): Promise<RedeploySupport> {
+  const health = await genModelV1Health({ identity: requestIdentity() });
+  backendVersion.value = typeof health.version === 'string' ? health.version : null;
+  if (!('storage_version' in health)) return 'outdated';
+  noteStorageVersion(health.storage_version);
+  const upgrade = health.storage_version?.upgrade ?? null;
+  upgradeProgress.value = upgrade;
+  if (upgrade?.state === 'running') {
+    ensureUpgradeHealthPolling();
+    return 'running';
+  }
+  return 'ok';
+}
+
+/**
+ * 清空所选库并重跑「解析 → 生成 → 房间」。全选（`all`）时不传 dbnums，让服务端按全范围登记，
+ * 只有全范围完成才写 `storage_version:current`。409 = 已有升级在跑，返回 `conflict` 让弹窗转「查看进度」。
+ */
+async function redeploy(dbnums: number[], options?: { all?: boolean }): Promise<RedeployOutcome> {
+  if (redeployBusy.value) return 'error';
+  const all = options?.all === true;
+  if (!all && dbnums.length === 0) return 'error';
+  redeployBusy.value = true;
+  redeployError.value = null;
+  try {
+    const resp = await genModelV1StorageVersionUpgrade(all ? undefined : [...dbnums].sort((a, b) => a - b), {
+      identity: requestIdentity(),
+    });
+    redeployTaskIds.value = [];
+    upgradeProgress.value = {
+      state: resp.upgrade?.state ?? 'running',
+      requested: resp.requested ?? dbnums,
+      done: 0,
+      done_dbnums: [],
+      failed: [],
+      started_at: resp.upgrade?.started_at,
+      finished_at: null,
+      full_scope: resp.full_scope,
+    };
+    if (resp.receipt) lastReceipt.value = resp.receipt;
+    rememberRedeployTasks(resp.receipt);
+    ensureUpgradeHealthPolling();
+    void pollUpgradeHealthOnce();
+    return 'accepted';
+  } catch (error) {
+    redeployError.value = redeployErrorText(error);
+    if (isGenModelV1ApiError(error) && error.code === 'conflict') {
+      ensureUpgradeHealthPolling();
+      void pollUpgradeHealthOnce();
+      return 'conflict';
+    }
+    return 'error';
+  } finally {
+    redeployBusy.value = false;
+  }
+}
+
+/**
+ * 结果页「重试失败的库」：逐库 `dbnums/{dbnum}/data/reinitialize`（不改 `storage_upgrade:current`），
+ * 进度只看登记的任务。返回各库的失败原因（成功入队的不在表里）。
+ */
+async function retryDbnums(dbnums: number[]): Promise<Map<number, string>> {
+  const failures = new Map<number, string>();
+  if (redeployBusy.value || dbnums.length === 0) return failures;
+  redeployBusy.value = true;
+  redeployError.value = null;
+  redeployTaskIds.value = [];
+  try {
+    for (const dbnum of dbnums) {
+      try {
+        const receipt = await genModelV1DbnumReinitialize(dbnum, { identity: requestIdentity() });
+        const blocked = receipt.blocked?.find((b) => b.dbnum === dbnum);
+        if (blocked) failures.set(dbnum, blocked.reason);
+        else rememberRedeployTasks(receipt);
+      } catch (error) {
+        failures.set(dbnum, redeployErrorText(error));
+      }
+    }
+    if (failures.size > 0) {
+      redeployError.value = [...failures].map(([dbnum, reason]) => `${dbnum}: ${reason}`).join('；');
+    }
+  } finally {
+    redeployBusy.value = false;
+  }
+  return failures;
+}
+
+const redeployTasks = computed(() =>
+  redeployTaskIds.value.map((id) => tasks.value.get(id)).filter((t): t is AdminTaskView => !!t),
+);
+// ---------------------------------------------------------------------------
 // 节点生成目标
 // ---------------------------------------------------------------------------
 
@@ -922,6 +1097,18 @@ export function useModelGenerationAdmin() {
     // WS 任务事件状态（`live` 实时；其余为 REST 轮询兜底）
     taskFeedStatus,
     taskFeedMissed,
+    // 一键完全重新部署
+    redeployBusy,
+    redeployError,
+    upgradeProgress,
+    redeployTaskIds,
+    redeployTasks,
+    backendVersion,
+    storageVersionInfo,
+    redeploy,
+    retryDbnums,
+    probeRedeploySupport,
+    stopUpgradeHealthPolling,
     // 节点
     nodeInput,
     nodeError,

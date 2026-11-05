@@ -47,6 +47,7 @@ import {
 import { RENDER_STYLE_PRESETS, useRenderStyleStore, type RenderStyle } from '@/composables/useRenderStyleStore';
 import { clearReviewAttachmentPreview, openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -1197,6 +1198,25 @@ function handleZoneToggle(zone: ZoneName) {
   togglePanelZone(zone);
 }
 
+/** 「项目 → 测试连接」：用已保存的 E3D 配置直接试登录，结果走 toast（成功 toast 由 store 自己发）。 */
+async function testE3dConnection(): Promise<void> {
+  const rvm = useRvmCheckStore();
+  if (!rvm.config.username.trim() || !rvm.password.value) {
+    emitToast({ message: '还没有 E3D 用户名或密码，先在「项目设置」里填写', level: 'warning' });
+    ensurePanelAndActivate('viewer');
+    window.dispatchEvent(new CustomEvent('openProjectSettings'));
+    return;
+  }
+  emitToast({ message: '正在测试 E3D TTY 连接，首次约 1–2 分钟…' });
+  const report = await rvm.runPreflight(true);
+  if (!report || report.login_ok !== true) {
+    const reason = rvm.formError.value
+      ?? report?.checks.filter((c) => !c.ok).map((c) => c.name).join('、')
+      ?? '';
+    emitToast({ message: `E3D TTY 连接失败${reason ? `：${reason}` : ''}`, level: 'error' });
+  }
+}
+
 function handleRibbonCommand(commandId: string) {
   console.log('[DockLayout] handleRibbonCommand:', commandId);
   switch (commandId) {
@@ -1250,6 +1270,18 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.modelGeneration':
       ensurePanelAndActivate('viewer');
       window.dispatchEvent(new CustomEvent('openModelGeneration'));
+      return;
+    case 'project.redeploy':
+    case 'project.redeployStatus':
+      ensurePanelAndActivate('viewer');
+      window.dispatchEvent(new CustomEvent('openProjectRedeploy'));
+      return;
+    case 'project.settings':
+      ensurePanelAndActivate('viewer');
+      window.dispatchEvent(new CustomEvent('openProjectSettings'));
+      return;
+    case 'project.testConnection':
+      void testE3dConnection();
       return;
     case 'panel.spatialCompute':
       openPanel('spatialCompute');

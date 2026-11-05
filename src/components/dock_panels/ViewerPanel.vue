@@ -51,6 +51,8 @@ import {
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import ModelGenerationDialog from '@/components/model-generation/ModelGenerationDialog.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
+import ProjectSettingsDialog from '@/components/project/ProjectSettingsDialog.vue';
+import RedeployDialog from '@/components/project/RedeployDialog.vue';
 import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import { reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
@@ -757,6 +759,8 @@ const toolbarSettingsOpen = ref(false);
 const spatialQueryOpen = ref(false);
 const pipeDistDrawerOpen = ref(false);
 const modelGenerationOpen = ref(false);
+const projectRedeployOpen = ref(false);
+const projectSettingsOpen = ref(false);
 
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
@@ -1246,6 +1250,7 @@ let offVersionBrowse: (() => void) | null = null;
 let pendingVersionBrowseApi: VersionBrowseApi | null = null;
 let offOpenSpatialQuery: (() => void) | null = null;
 let offOpenModelGeneration: (() => void) | null = null;
+let offOpenProjectDialogs: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
@@ -3570,6 +3575,23 @@ function handleOpenModelGenerationEvent(): void {
   toolbarSettingsOpen.value = false;
 }
 
+function handleOpenProjectRedeployEvent(): void {
+  projectRedeployOpen.value = true;
+  toolbarSettingsOpen.value = false;
+}
+
+function handleOpenProjectSettingsEvent(): void {
+  projectSettingsOpen.value = true;
+  toolbarSettingsOpen.value = false;
+}
+
+/** 重新部署完成后把场景里已装的根按最新记录重装一遍（与「数据已更新 → 重载」同一条 showModelByRefnos 路）。 */
+function reloadLoadedModelsAfterRedeploy(): void {
+  const refnos = modelGenerationRef.value?.listLoadedRoots() ?? [];
+  if (refnos.length === 0) return;
+  window.dispatchEvent(new CustomEvent('showModelByRefnos', { detail: { refnos, refreshModel: true, flyTo: false } }));
+}
+
 onMounted(async () => {
   const canvas = mainCanvas.value;
   const container = containerRef.value;
@@ -5148,6 +5170,12 @@ onMounted(async () => {
   offOpenSpatialQuery = () => window.removeEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
   window.addEventListener('openModelGeneration', handleOpenModelGenerationEvent as EventListener);
   offOpenModelGeneration = () => window.removeEventListener('openModelGeneration', handleOpenModelGenerationEvent as EventListener);
+  window.addEventListener('openProjectRedeploy', handleOpenProjectRedeployEvent);
+  window.addEventListener('openProjectSettings', handleOpenProjectSettingsEvent);
+  offOpenProjectDialogs = () => {
+    window.removeEventListener('openProjectRedeploy', handleOpenProjectRedeployEvent);
+    window.removeEventListener('openProjectSettings', handleOpenProjectSettingsEvent);
+  };
   initializeSpatialQueryFromUrl(window.location.search, spatialQueryStore, openSpatialQueryDrawer);
 
   // 点击工具栏外部时关闭“测量”下拉菜单（不影响当前工具模式）
@@ -5368,6 +5396,8 @@ onUnmounted(() => {
   offOpenSpatialQuery = null;
   offOpenModelGeneration?.();
   offOpenModelGeneration = null;
+  offOpenProjectDialogs?.();
+  offOpenProjectDialogs = null;
 
   offPtsetWatch?.();
   offPtsetWatch = null;
@@ -6091,6 +6121,10 @@ onUnmounted(() => {
 
     <!-- 模型生成 / 库初始化弹窗 -->
     <ModelGenerationDialog v-model:open="modelGenerationOpen" />
+
+    <!-- 项目：一键完全重新部署 / E3D 连接设置 -->
+    <RedeployDialog v-model:open="projectRedeployOpen" @refresh-models="reloadLoadedModelsAfterRedeploy" />
+    <ProjectSettingsDialog v-model:open="projectSettingsOpen" />
 
     <div v-if="initError"
       class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur"

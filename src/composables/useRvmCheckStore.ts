@@ -2,10 +2,12 @@
  * RVM 核对的共享状态：E3D TTY 登录、各节点最新结论、串行队列。模块级单例，
  * 模型树、停靠面板、独立页和登录弹窗看到的是同一份。
  *
- * 密码只放在这个模块的内存里，不进 localStorage；刷新页面后要重新登录。
+ * 密码默认只放在这个模块的内存里，刷新页面后要重新登录。用户勾选「记住密码」后，
+ * 密码以明文写进本机 localStorage（单独的 key），取消勾选立即清除。
+ * 「项目 → E3D 连接」设置与 RVM 核对共用这一份配置。
  */
 
-import { computed, reactive, ref, shallowRef } from 'vue';
+import { computed, reactive, ref, shallowRef, watch } from 'vue';
 
 import {
   genModelV1Fetch,
@@ -42,6 +44,8 @@ import { classifyReport, parseE3dLog, type E3dLogInfo } from '@/components/rvm-c
 import { emitToast } from '@/ribbon/toastBus';
 
 const STORAGE_KEY = 'rvm-check-config';
+const REMEMBER_KEY = 'rvm-check-remember-password';
+const PASSWORD_KEY = 'rvm-check-password';
 const POLL_MS = 2_000;
 const BUSY_RETRY_MS = 5_000;
 const HISTORY_LIMIT = 160;
@@ -127,8 +131,41 @@ function toRun(entry: TaskEntryDto | TaskListEntryDto): RvmCheckRun {
   };
 }
 
+function readRemember(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(REMEMBER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function readStoredPassword(): string {
+  try {
+    return globalThis.localStorage?.getItem(PASSWORD_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 const config = reactive<RvmCheckConfig>(readStored());
-const password = ref('');
+const rememberPassword = ref(readRemember());
+const password = ref(rememberPassword.value ? readStoredPassword() : '');
+
+watch([rememberPassword, password], ([remember, value]) => {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return;
+    if (remember) {
+      storage.setItem(REMEMBER_KEY, '1');
+      storage.setItem(PASSWORD_KEY, value);
+    } else {
+      storage.removeItem(REMEMBER_KEY);
+      storage.removeItem(PASSWORD_KEY);
+    }
+  } catch {
+    // 存不下只影响下次预填
+  }
+}, { flush: 'sync' });
 const loggedIn = ref(false);
 const defaults = ref<RvmCheckDefaults | null>(null);
 const checking = ref<'env' | 'login' | null>(null);
@@ -435,16 +472,17 @@ function clearFinished(): void {
   queue.value = queue.value.filter((item) => item.state === 'queued' || item.state === 'running');
 }
 
-async function collectSites(): Promise<RvmNodeTarget[]> {
+/** 模型树里所有 SITE（带所在库号；库号答不出时为 null）。 */
+async function collectSites(): Promise<(RvmNodeTarget & { dbnum: number | null })[]> {
   const roots = (await genModelV1TreeRoots()).nodes ?? [];
-  const sites: RvmNodeTarget[] = [];
+  const sites: (RvmNodeTarget & { dbnum: number | null })[] = [];
   const seen = new Set<string>();
   const add = (node: EleTreeNodeDto) => {
     if (String(node.noun).toUpperCase() !== 'SITE') return;
     const refno = rvmRefnoKey(node.refno);
     if (seen.has(refno)) return;
     seen.add(refno);
-    sites.push({ refno, name: node.short_name || node.name, noun: node.noun });
+    sites.push({ refno, name: node.short_name || node.name, noun: node.noun, dbnum: node.dbnum ?? null });
   };
   for (const root of roots) {
     if (String(root.noun).toUpperCase() === 'SITE') {
@@ -579,6 +617,7 @@ export function useRvmCheckStore() {
   return {
     config,
     password,
+    rememberPassword,
     loggedIn,
     defaults,
     checking,
@@ -609,6 +648,7 @@ export function useRvmCheckStore() {
     cancelQueue,
     clearFinished,
     runAllSites,
+    collectSites,
     restoreFromHistory,
     openRun,
     loadE3dLog,

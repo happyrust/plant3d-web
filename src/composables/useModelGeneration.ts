@@ -274,6 +274,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
+  listLoadedRoots: () => string[]
 } {
   const { viewer } = options;
   const consoleStore = useConsoleStore();
@@ -1277,5 +1278,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     showModelByRefno,
     isModelActuallyLoaded,
     checkRefnoExists,
+    listLoadedRoots: () => [...loadedRoots],
   };
 }

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
+import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { buildHierarchicalMenuTabs } from '@/ribbon/hierarchicalMenu';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
 import { onToast, type ToastLevel } from '@/ribbon/toastBus';
 
-const menuTabs = computed(() => buildHierarchicalMenuTabs(RIBBON_TABS));
+const userStore = useUserStore();
+const menuTabs = computed(() => buildHierarchicalMenuTabs(RIBBON_TABS, userStore.currentUser.value?.role));
 const activeTabId = ref(menuTabs.value[0]?.id ?? '');
 const openTabId = ref<string | null>(null);
 const openMode = ref<'hover' | 'pinned' | null>(null);

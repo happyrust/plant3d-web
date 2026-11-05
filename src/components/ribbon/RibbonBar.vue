@@ -5,7 +5,7 @@ import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
-import { filterRibbonItemsForUser } from '@/ribbon/ribbonItemVisibility';
+import { filterRibbonItemsForUser, filterRibbonTabsForUser } from '@/ribbon/ribbonItemVisibility';
 import { onToast, type ToastLevel } from '@/ribbon/toastBus';
 
 const activeTabId = ref(RIBBON_TABS[0]?.id ?? '');
@@ -13,8 +13,10 @@ const collapsed = ref(false);
 
 const userStore = useUserStore();
 
+const visibleTabs = computed(() => filterRibbonTabsForUser(RIBBON_TABS, userStore.currentUser.value?.role));
+
 const activeTab = computed(() => {
-  return RIBBON_TABS.find((t) => t.id === activeTabId.value) ?? RIBBON_TABS[0];
+  return visibleTabs.value.find((t) => t.id === activeTabId.value) ?? visibleTabs.value[0];
 });
 
 const activeTabVisibleGroups = computed(() => {
@@ -98,7 +100,7 @@ function onTabClick(tabId: string) {
   <div class="ribbon-root">
     <!-- Tab Header -->
     <div class="ribbon-tab-header">
-      <button v-for="tab in RIBBON_TABS"
+      <button v-for="tab in visibleTabs"
         :key="tab.id"
         type="button"
         class="ribbon-tab-btn"
