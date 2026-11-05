@@ -861,6 +861,8 @@ export class SglLookPipeline {
   private _colorSamples = 0;
   /** 法线/深度与 HLR 通道当前的超采样倍数 */
   private readonly _hlrSupersample = new Vector2(1, 1);
+  /** 交互中（拖动 / 飞行）：跳过 AO 与模糊，HLR 超采样降到 1×1；颜色图的 MSAA 不动，免得反复重建 */
+  private _interacting = false;
 
   private readonly _aoUniforms: AoUniforms = {
     tND: { value: null },
@@ -1042,7 +1044,8 @@ export class SglLookPipeline {
     } else {
       this._colorRT.setSize(w, h);
     }
-    sglHlrSupersampleGrid(sglHlrSamplesFor(this.params), this._hlrSupersample);
+    if (this._interacting) this._hlrSupersample.set(1, 1);
+    else sglHlrSupersampleGrid(sglHlrSamplesFor(this.params), this._hlrSupersample);
     this._ndRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
     this._hlrRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
     this._declutterRT.setSize(w, h);
@@ -1074,7 +1077,19 @@ export class SglLookPipeline {
     return this._colorSamples;
   }
 
-  /** HLR 通道实际用的超采样倍数 (kx, ky)，kx·ky = HLR 采样档位 */
+  /**
+   * 拖动时临时降画质：开着时跳过 AO 和模糊，HLR 超采样降到 1×1，边线与渐变背景照画。
+   * 切换时法线/深度与 HLR 离屏图按新倍数重建一次（下一帧 render 里）。
+   */
+  setInteracting(on: boolean): void {
+    this._interacting = on;
+  }
+
+  get interacting(): boolean {
+    return this._interacting;
+  }
+
+  /** HLR 通道实际用的超采样倍数 (kx, ky)，交互中为 1×1，否则 kx·ky = HLR 采样档位 */
   get hlrSupersample(): Vector2 {
     return this._hlrSupersample.clone();
   }
@@ -1084,7 +1099,7 @@ export class SglLookPipeline {
     const renderer = this._renderer;
     const p = this.params;
     const effectsOn = !p.legacyMode;
-    const useAo = effectsOn && p.ao.enabled;
+    const useAo = effectsOn && p.ao.enabled && !this._interacting;
     const useHlr = effectsOn && p.hlr.enabled;
     const useGradient = effectsOn && p.background.gradient;
     const useFxaa = p.aa.mode === 'fxaa';

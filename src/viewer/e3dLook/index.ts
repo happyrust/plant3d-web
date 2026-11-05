@@ -65,6 +65,15 @@ export {
   type PdmsColourEntry
 } from './pdmsColourTable';
 export {
+  DRAG_DOWNGRADE_GRACE_MS,
+  createDragDowngradeState,
+  isDragDowngradeEnabled,
+  stepDragDowngrade,
+  type DragDowngradeInput,
+  type DragDowngradeState,
+  type DragDowngradeStep
+} from './dragDowngrade';
+export {
   DEFAULT_SGL_LOOK_PRESET,
   SGL_LOOK_PRESETS,
   applySglLookPresetToPipelineParams,

@@ -183,7 +183,10 @@ import {
   SGL_LOOK_PRESETS,
   SglLookPipeline,
   applySglLookPresetToPipelineParams,
+  createDragDowngradeState,
+  isDragDowngradeEnabled,
   loadSgl31EnvCube,
+  stepDragDowngrade,
   pdmsColourHex,
   type SglLookPresetId,
 } from '@/viewer/e3dLook';
@@ -1210,15 +1213,26 @@ let attachedToScene = false;
 let shaderPrecompiled = false;
 let lastGlobalEdgeRevision = -1;
 let continuousRender = false;
+// 拖动时临时降画质（E3D 外观管线跳过 AO / HLR 超采样）；?dtx_drag_downgrade=0 或同名 localStorage 项关闭
+let dragDowngradeEnabled = true;
+let dragDowngradeState = createDragDowngradeState();
+let orbitControlsHeld = false;
+let gizmoHeld = false;
+let dragDowngradeTimer: ReturnType<typeof setTimeout> | null = null;
 let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
 
+let dragPoseValid = false;
+const dragPosePos = new Vector3();
+const dragPoseTarget = new Vector3();
 const tmpCameraPos = new Vector3();
 const tmpCameraTarget = new Vector3();
 const tmpProjMatrix = new Matrix4();
 let hasLastProjMatrix = false;
 const CAMERA_EPS_SQ = 1e-12;
+/** 一帧位移 / 视距低于它就算停稳：FOV 30°、800 px 高时约半个像素 */
+const DRAG_MOTION_EPS = 3e-4;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
@@ -3356,6 +3370,51 @@ function requestRender() {
   scheduleFrame();
 }
 
+/**
+ * 每帧出画前定这一帧降不降画质，返回 true 表示本帧刚恢复全画质、必须出画。
+ * 「相机在动」要和上一次走到这里时的位姿比：拖动、滚轮、flyTo 都在帧外改相机，
+ * renderFrame 自己的 controls.update() 只看得见阻尼那一段。
+ * 位移按视距归一后和 DRAG_MOTION_EPS 比，不用 CAMERA_EPS_SQ：阻尼是指数衰减，
+ * 松手后约 3 秒位移平方才落到 1e-12 以下，那样宽限期会被看不见的尾巴一直续着。
+ * 停稳后按需出帧会停在最后那一帧低画质上，所以还没到恢复时刻时挂一个定时器，到点补一帧全画质。
+ */
+function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean): boolean {
+  const pipeline = sglPipelineRef.value;
+  if (!pipeline) return false;
+  const viewDist = Math.max(1e-9, viewer.camera.position.distanceTo(viewer.controls.target));
+  const motion = Math.max(
+    dragPosePos.distanceTo(viewer.camera.position),
+    dragPoseTarget.distanceTo(viewer.controls.target),
+  ) / viewDist;
+  // 首帧没有上一次位姿可比，不算在动（否则一打开就先出 200ms 低画质）
+  const moved = dragPoseValid && (projChanged || motion > DRAG_MOTION_EPS);
+  dragPosePos.copy(viewer.camera.position);
+  dragPoseTarget.copy(viewer.controls.target);
+  dragPoseValid = true;
+  const step = stepDragDowngrade(dragDowngradeState, {
+    enabled: dragDowngradeEnabled,
+    pipelineActive: useSglLookRenderPath(),
+    held: orbitControlsHeld || gizmoHeld,
+    cameraMoving: moved,
+    now: performance.now(),
+  });
+  dragDowngradeState = step.state;
+  pipeline.setInteracting(step.state.downgraded);
+  if (step.restoreAt !== null && dragDowngradeTimer === null) {
+    dragDowngradeTimer = setTimeout(() => {
+      dragDowngradeTimer = null;
+      requestRender();
+    }, Math.max(0, step.restoreAt - performance.now()) + 1);
+  }
+  return step.restored;
+}
+
+function clearDragDowngradeTimer(): void {
+  if (dragDowngradeTimer === null) return;
+  clearTimeout(dragDowngradeTimer);
+  dragDowngradeTimer = null;
+}
+
 function renderFrame() {
   if (isRendering) return;
   isRendering = true;
@@ -3383,7 +3442,8 @@ function renderFrame() {
             posDeltaSq > CAMERA_EPS_SQ || targetDeltaSq > CAMERA_EPS_SQ || projChanged;
     if (projChanged) tmpProjMatrix.copy(dtxViewer.camera.projectionMatrix);
 
-    if (!needsRender && !cameraChanged && !continuousRender) return;
+    const qualityRestored = updateDragDowngrade(dtxViewer, projChanged);
+    if (!needsRender && !cameraChanged && !continuousRender && !qualityRestored) return;
 
     // CAD Grid（跟随 target 进行 snapping，模拟“无限地面网格”）
     cadGridRef.value?.update(dtxViewer.controls.target);
@@ -3545,6 +3605,7 @@ onMounted(async () => {
             isDev && localStorage.getItem('dtx_continuous_render') === '1';
 
     const q = new URLSearchParams(window.location.search);
+    dragDowngradeEnabled = isDragDowngradeEnabled(q, localStorage.getItem('dtx_drag_downgrade'));
     const demo = String(
       q.get('dtx_demo') || localStorage.getItem('dtx_demo') || '',
     ).toLowerCase();
@@ -4686,15 +4747,32 @@ onMounted(async () => {
     }
     requestRender();
   };
+  const onControlsStart = () => {
+    orbitControlsHeld = true;
+  };
+  const onControlsEnd = () => {
+    orbitControlsHeld = false;
+  };
   dtxViewer.controls.addEventListener('change', onControlsChange);
-  offControlsChange = () =>
+  dtxViewer.controls.addEventListener('start', onControlsStart);
+  dtxViewer.controls.addEventListener('end', onControlsEnd);
+  offControlsChange = () => {
     dtxViewer.controls.removeEventListener('change', onControlsChange);
+    dtxViewer.controls.removeEventListener('start', onControlsStart);
+    dtxViewer.controls.removeEventListener('end', onControlsEnd);
+  };
 
   // gizmo 交互/动画期间需要持续触发渲染（否则按需渲染会"停帧"）
   if (dtxViewer.gizmo) {
     const onGizmoChange = () => requestRender();
-    const onGizmoStart = () => requestRender();
-    const onGizmoEnd = () => requestRender();
+    const onGizmoStart = () => {
+      gizmoHeld = true;
+      requestRender();
+    };
+    const onGizmoEnd = () => {
+      gizmoHeld = false;
+      requestRender();
+    };
     dtxViewer.gizmo.addEventListener('change', onGizmoChange);
     dtxViewer.gizmo.addEventListener('start', onGizmoStart);
     dtxViewer.gizmo.addEventListener('end', onGizmoEnd);
@@ -5251,6 +5329,11 @@ onUnmounted(() => {
     window.cancelAnimationFrame(rafId);
     rafId = null;
   }
+  clearDragDowngradeTimer();
+  dragDowngradeState = createDragDowngradeState();
+  dragPoseValid = false;
+  orbitControlsHeld = false;
+  gizmoHeld = false;
   detachPicking();
   detachToolsInput();
   offXeokitToolsInput?.();
