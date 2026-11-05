@@ -39,6 +39,7 @@ import {
   type RvmNodeStatus,
 } from '@/components/rvm-check/rvmCheckFormat';
 import { classifyReport, parseE3dLog, type E3dLogInfo } from '@/components/rvm-check/rvmMismatchReason';
+import { emitToast } from '@/ribbon/toastBus';
 
 const STORAGE_KEY = 'rvm-check-config';
 const POLL_MS = 2_000;
@@ -216,7 +217,12 @@ async function runPreflight(tryLogin: boolean): Promise<PreflightReport | null> 
   try {
     const report = await preflightRvmCheck(connection(), tryLogin);
     preflight.value = report;
-    if (tryLogin) loggedIn.value = report.login_ok === true;
+    if (tryLogin) {
+      loggedIn.value = report.login_ok === true;
+      if (loggedIn.value) {
+        emitToast({ message: `已登录 E3D TTY：${config.username.trim().toUpperCase()} · ${config.e3dProject.trim() || '未填项目码'} · ${config.e3dMdb.trim()}`, level: 'success' });
+      }
+    }
     return report;
   } catch (cause) {
     formError.value = errorText(cause);
