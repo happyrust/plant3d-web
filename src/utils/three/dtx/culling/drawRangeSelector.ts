@@ -7,6 +7,8 @@
  * - 输入的区段必须按 `triStart` 升序（DTXLayer 的 primitiveOffset 是按追加顺序递增的）。
  * - 给了 `lod` 时，投影直径小于 `lod.minPx` 且有粗网格的构件改画粗网格区段。粗网格区段排在全部原网格之后、
  *   同样按构件顺序升序，所以两类段各自并段，粗网格段整体接在原网格段后面输出。
+ * - 给了 `passFlags` 时只选 `passFlags[i] === pass` 的构件（不透明 / 透明通道各选一张表）。并段夹带进来的
+ *   别的通道构件由片元着色器按 renderPass 丢弃，画面不变。
  */
 
 import { Matrix4 } from 'three';
@@ -42,6 +44,10 @@ export type DrawRangeInput = {
   minPx: number;
   mergeGapTriangles?: number;
   lod?: DrawRangeLodInput;
+  /** 每构件 1 字节的通道号；不传 = 不按通道筛 */
+  passFlags?: Uint8Array;
+  /** 本次选的通道号，和 `passFlags` 一起给 */
+  pass?: number;
 };
 
 export type DrawRangeLodInput = {
@@ -137,6 +143,8 @@ export function selectDrawRanges(input: DrawRangeInput, out: DrawRangeOutput): D
   const lod = input.lod && input.lod.minPx > 0 && viewportHeightPx > 0 ? input.lod : null;
   const lodPx = lod ? lod.minPx : 0;
   const lodKeepPx = lodPx * (1 + (lod?.hysteresis ?? DEFAULT_LOD_HYSTERESIS));
+  const passFlags = input.passFlags ?? null;
+  const pass = input.pass ?? 0;
   if (lod && _lodStarts.length < starts0(out)) {
     _lodStarts = new Int32Array(starts0(out));
     _lodCounts = new Int32Array(starts0(out));
@@ -165,6 +173,7 @@ export function selectDrawRanges(input: DrawRangeInput, out: DrawRangeOutput): D
     const count = triCount[i]!;
     if (count === 0) continue;
     if (visibleFlags[i * visibleStride + visibleOffset] === 0) continue;
+    if (passFlags !== null && passFlags[i] !== pass) continue;
 
     const s = i * 4;
     const r = spheres[s + 3]!;

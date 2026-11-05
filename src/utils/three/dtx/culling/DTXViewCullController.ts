@@ -121,11 +121,23 @@ export class DTXViewCullController {
     lastSelectMs: number;
     lodObjects: number;
     lodCapableObjects: number;
+    /** 分通道的段数 / 三角形数（顶层 segments / triangles 是两者之和） */
+    opaqueSegments: number;
+    opaqueTriangles: number;
+    transparentSegments: number;
+    transparentTriangles: number;
     } {
-    const total = { layers: 0, segments: 0, triangles: 0, totalTriangles: 0, lastSelectMs: 0, lodObjects: 0, lodCapableObjects: 0 };
+    const total = {
+      layers: 0, segments: 0, triangles: 0, totalTriangles: 0, lastSelectMs: 0, lodObjects: 0, lodCapableObjects: 0,
+      opaqueSegments: 0, opaqueTriangles: 0, transparentSegments: 0, transparentTriangles: 0,
+    };
     for (const layer of this._layers()) {
       const s = layer.getCullStats();
       total.layers++;
+      total.opaqueSegments += s.passes.opaque.segments;
+      total.opaqueTriangles += s.passes.opaque.triangles;
+      total.transparentSegments += s.passes.transparent.segments;
+      total.transparentTriangles += s.passes.transparent.triangles;
       total.segments += s.segments;
       total.triangles += s.triangles;
       total.totalTriangles += s.totalTriangles;

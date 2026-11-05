@@ -166,6 +166,44 @@ function arraysEqual16(a: Float64Array, b: Float64Array): boolean {
   return true;
 }
 
+/** 构件所属渲染通道：与 DTXMaterial 片元着色器的 renderPass 丢弃判据一致（alphaCutoff 0.999、全透明 0.001） */
+export const DTX_PASS_OPAQUE = 0;
+export const DTX_PASS_TRANSPARENT = 1;
+/** 两条通道都不画（a ≤ 0.001） */
+export const DTX_PASS_NONE = 2;
+type DtxRenderPass = typeof DTX_PASS_OPAQUE | typeof DTX_PASS_TRANSPARENT;
+
+/** `alpha = opacity × opacityScale` */
+export function dtxRenderPassOf(alpha: number): number {
+  if (alpha >= 0.999) return DTX_PASS_OPAQUE;
+  if (alpha > 0.001) return DTX_PASS_TRANSPARENT;
+  return DTX_PASS_NONE;
+}
+
+type DrawRangeCacheKey = {
+  view: Float64Array;
+  scale: number;
+  visibilityRevision: number;
+  passRevision: number;
+  minPx: number;
+  lodPx: number;
+  valid: boolean;
+};
+
+function createDrawRangeCacheKey(): DrawRangeCacheKey {
+  return { view: new Float64Array(16), scale: Number.NaN, visibilityRevision: -1, passRevision: -1, minPx: -1, lodPx: -1, valid: false };
+}
+
+export type DrawRangePassStats = { segments: number; triangles: number; lodObjects: number; lastSelectMs: number };
+
+function createDrawRangePassStats(): DrawRangePassStats {
+  return { segments: 0, triangles: 0, lodObjects: 0, lastSelectMs: 0 };
+}
+
+function emptyDrawRanges(): DTXDrawRangeBuffers {
+  return { starts: new Int32Array(1), counts: new Int32Array(1), count: 0 };
+}
+
 /** 位置纹理宽度 */
 const POSITIONS_TEXTURE_WIDTH = 1024;
 /** 索引纹理宽度 */
@@ -332,8 +370,13 @@ export class DTXLayer {
 
   // ========== 按构件选段绘制 ==========
 
-  /** 两条通道共用的段表；compile 后默认一段画全部 */
-  private _drawRanges: DTXDrawRangeBuffers = { starts: new Int32Array(1), counts: new Int32Array(1), count: 0 };
+  /** 不透明 / 透明通道各一张段表（下标 = DTX_PASS_*）；compile 后默认一段画全部 */
+  private _passRanges: [DTXDrawRangeBuffers, DTXDrawRangeBuffers] = [emptyDrawRanges(), emptyDrawRanges()];
+  /** 每构件所属通道（DTX_PASS_*），和片元着色器的 renderPass 判据一致；按 _passRevision 懒重建 */
+  private _passFlags: Uint8Array = new Uint8Array(0);
+  /** 透明度 / opacityScale / 对象表变化时递增 */
+  private _passRevision = 0;
+  private _passFlagsRevision = -1;
   /** 每构件世界包围球（cx, cy, cz, r，含全局矩阵）；r < 0 表示总是画 */
   private _objSpheres: Float32Array = new Float32Array(0);
   private _objTriStart: Uint32Array = new Uint32Array(0);
@@ -353,15 +396,11 @@ export class DTXLayer {
   /** 投影直径小于它（px）且有粗网格的构件改画粗网格；0 = 不用 */
   private _cullLodPx = 0;
   private _multiDrawSupported: boolean | null = null;
-  /** 上一次选段的输入快照：相机 viewProjection、像素换算、可见性修订、minPx */
-  private _cullKeyView = new Float64Array(16);
-  private _cullKeyScale = Number.NaN;
-  private _cullKeyRevision = -1;
-  private _cullKeyMinPx = -1;
-  private _cullKeyLodPx = -1;
-  private _cullKeyValid = false;
+  /** 每张段表上一次选段的输入快照（相机、像素换算、可见性 / 通道修订、阈值）与结果统计 */
+  private _cullKeys: [DrawRangeCacheKey, DrawRangeCacheKey] = [createDrawRangeCacheKey(), createDrawRangeCacheKey()];
+  private _cullStatsByPass: [DrawRangePassStats, DrawRangePassStats] = [createDrawRangePassStats(), createDrawRangePassStats()];
   private _cullView: DrawRangeView = createDrawRangeView();
-  private _cullStats = { segments: 0, triangles: 0, lastSelectMs: 0, selectCount: 0, lodObjects: 0 };
+  private _cullSelectCount = 0;
 
   // ========== 包围盒 ==========
 
@@ -770,6 +809,7 @@ export class DTXLayer {
     this._objectsArray.push(obj);
     this._objectCount++;
     this._visibilityRevision++;
+    this._passRevision++;
 
     // 累计 drawIndexCount / drawTriangleCount
     this._drawTriangleCount += triangleCount;
@@ -1468,24 +1508,24 @@ export class DTXLayer {
     this._compiledDrawIndexCount = this._drawIndexCount;
 
     // 创建不透明通道网格（按构件选段，多段绘制）
-    this._mesh = new DTXMultiDrawMesh(this._geometry, this._material, this._drawRanges);
+    this._mesh = new DTXMultiDrawMesh(this._geometry, this._material, this._passRanges[DTX_PASS_OPAQUE]);
     this._mesh.frustumCulled = false; // DTX 自己管理裁剪
     this._mesh.name = 'DTXLayer';
     this._mesh.renderOrder = 0;
 
-    // 创建透明通道网格（与不透明通道共享同一几何与段表）
-    this._transparentMesh = new DTXMultiDrawMesh(this._geometry, this._transparentMaterial, this._drawRanges);
+    // 创建透明通道网格（与不透明通道共享同一几何，段表只含透明构件）
+    this._transparentMesh = new DTXMultiDrawMesh(this._geometry, this._transparentMaterial, this._passRanges[DTX_PASS_TRANSPARENT]);
     this._transparentMesh.frustumCulled = false;
     this._transparentMesh.name = 'DTXLayerTransparent';
     this._transparentMesh.renderOrder = 1;
 
     // 段表按「实际渲染这一趟的相机」选：分屏 / 描边合成 / E3D 管线各趟 / 截图用的相机或宽高比可能和主相机不同，
     // 输入没变时命中缓存，开销只是比一次矩阵
-    const onBeforeRender = (renderer: WebGLRenderer, _scene: Scene, camera: Camera) => {
-      this._beforeMeshRender(renderer, camera);
+    const onBeforeRender = (pass: DtxRenderPass) => (renderer: WebGLRenderer, _scene: Scene, camera: Camera) => {
+      this._beforeMeshRender(renderer, camera, pass);
     };
-    this._mesh.onBeforeRender = onBeforeRender as Mesh['onBeforeRender'];
-    this._transparentMesh.onBeforeRender = onBeforeRender as Mesh['onBeforeRender'];
+    this._mesh.onBeforeRender = onBeforeRender(DTX_PASS_OPAQUE) as Mesh['onBeforeRender'];
+    this._transparentMesh.onBeforeRender = onBeforeRender(DTX_PASS_TRANSPARENT) as Mesh['onBeforeRender'];
 
     // 重建材质后保持已应用的绘制样式参数
     this._applyRenderStyleToMaterials();
@@ -1512,19 +1552,32 @@ export class DTXLayer {
     this._pickingMesh.name = 'DTXLayerPicking';
   }
 
+  private _markPassDirty(): void {
+    this._passRevision++;
+  }
+
+  /**
+   * 按当前透明度重建每构件的通道号，并同步两条通道网格的 visible（没有构件的通道整趟不画）。
+   * 透明度取调色板里的值：着色器读的就是它（调色板键按百分比量化，可能和 obj.opacity 有出入）。
+   */
   private _syncRenderPassVisibility(): void {
+    if (this._passFlagsRevision === this._passRevision && this._passFlags.length === this._objectsArray.length) return;
+    const n = this._objectsArray.length;
+    if (this._passFlags.length !== n) this._passFlags = new Uint8Array(n);
+    const flags = this._passFlags;
     const scale = this._styleOpacityScale;
-    if (this._mesh) {
-      this._mesh.visible =
-        scale > 0.001 && this._objectsArray.some((obj) => obj.opacity * scale >= 0.999);
+    const palette = this._materialPaletteBuffer;
+    let opaque = 0;
+    let transparent = 0;
+    for (let i = 0; i < n; i++) {
+      const pass = dtxRenderPassOf(palette[this._objectsArray[i]!.materialIndex * 8 + 5]! * scale);
+      flags[i] = pass;
+      if (pass === DTX_PASS_OPAQUE) opaque++;
+      else if (pass === DTX_PASS_TRANSPARENT) transparent++;
     }
-    if (this._transparentMesh) {
-      this._transparentMesh.visible =
-        scale > 0.001
-        && this._objectsArray.some(
-          (obj) => obj.opacity * scale > 0.001 && obj.opacity * scale < 0.999,
-        );
-    }
+    if (this._mesh) this._mesh.visible = opaque > 0;
+    if (this._transparentMesh) this._transparentMesh.visible = transparent > 0;
+    this._passFlagsRevision = this._passRevision;
   }
 
   /** 绘制样式参数（哑光/平涂/透明度缩放）；opacityScale<1 全走透明通道，=0 填充全隐（线框） */
@@ -1544,7 +1597,9 @@ export class DTXLayer {
       this._styleFlatness = Math.min(1, Math.max(0, params.flatness));
     }
     if (typeof params.opacityScale === 'number' && Number.isFinite(params.opacityScale)) {
-      this._styleOpacityScale = Math.min(1, Math.max(0, params.opacityScale));
+      const next = Math.min(1, Math.max(0, params.opacityScale));
+      if (next !== this._styleOpacityScale) this._markPassDirty();
+      this._styleOpacityScale = next;
     }
     this._applyRenderStyleToMaterials();
     this._syncRenderPassVisibility();
@@ -1591,7 +1646,10 @@ export class DTXLayer {
     return { enabled: this._cullEnabled, minPx: this._cullMinPx, lodPx: this._cullLodPx };
   }
 
-  /** 最近一次选段的结果（段数、三角形数、改画粗网格的构件数）与耗时，供调试面板 / 性能脚本读 */
+  /**
+   * 最近一次选段的结果与耗时，供调试面板 / 性能脚本读。顶层的段数 / 三角形数 / 粗网格构件数是两条通道之和
+   * （= 这一层实际提交绘制的量），`passes` 里是分通道的值；网格整趟不画的通道记 0。
+   */
   getCullStats(): {
     segments: number;
     triangles: number;
@@ -1602,32 +1660,61 @@ export class DTXLayer {
     /** 有粗网格的构件数 / 粗网格三角形总数（已编译的） */
     lodCapableObjects: number;
     lodTriangles: number;
+    passes: { opaque: DrawRangePassStats; transparent: DrawRangePassStats };
     } {
+    // 网格整趟不画时 three 不调 onBeforeRender，那条通道留着的是旧统计
+    const live = (stats: DrawRangePassStats, mesh: DTXMultiDrawMesh | null): DrawRangePassStats =>
+      mesh && !mesh.visible ? createDrawRangePassStats() : stats;
+    const opaque = live(this._cullStatsByPass[DTX_PASS_OPAQUE], this._mesh);
+    const transparent = live(this._cullStatsByPass[DTX_PASS_TRANSPARENT], this._transparentMesh);
     return {
-      ...this._cullStats,
+      segments: opaque.segments + transparent.segments,
+      triangles: opaque.triangles + transparent.triangles,
+      lastSelectMs: opaque.lastSelectMs + transparent.lastSelectMs,
+      selectCount: this._cullSelectCount,
+      lodObjects: opaque.lodObjects + transparent.lodObjects,
       totalTriangles: this._drawTriangleCount,
       lodCapableObjects: this._lodObjectCount,
       lodTriangles: this._lodTriangleCount,
+      passes: { opaque: { ...opaque }, transparent: { ...transparent } },
     };
   }
 
   /**
-   * 按相机与视口高度（CSS px）重算段表；输入与上次相同则直接返回。网格渲染前也会按当趟相机自动调用，
+   * 按相机与视口高度（CSS px）重算两条通道的段表；输入与上次相同则直接返回。网格渲染前也会按当趟相机自动调用，
    * 这里给需要提前算好（或读统计）的调用方用。`minPx` 不传则沿用 `setCullOptions` 的值。
    */
   updateDrawRanges(camera: Camera, viewportHeightPx: number, minPx: number = this._cullMinPx): void {
     if (!this._compiled) return;
-    const ranges = this._drawRanges;
+    this._updatePassRanges(DTX_PASS_OPAQUE, camera, viewportHeightPx, minPx);
+    this._updatePassRanges(DTX_PASS_TRANSPARENT, camera, viewportHeightPx, minPx);
+  }
+
+  private _updatePassRanges(pass: DtxRenderPass, camera: Camera, viewportHeightPx: number, minPx: number): void {
+    const ranges = this._passRanges[pass];
+    const key = this._cullKeys[pass];
+    const stats = this._cullStatsByPass[pass];
+    this._syncRenderPassVisibility();
+    const mesh = pass === DTX_PASS_OPAQUE ? this._mesh : this._transparentMesh;
+    if (mesh && !mesh.visible) {
+      // 这条通道没有构件，网格整趟跳过；统计记 0，下次有构件时重新选
+      ranges.count = 0;
+      key.valid = false;
+      stats.segments = 0;
+      stats.triangles = 0;
+      stats.lodObjects = 0;
+      return;
+    }
     // 编译后又 addObject 但还没 recompile 时，_drawIndexCount 已超出 GPU 侧几何，按已编译的总数画
-    const total = this._compiled ? this._compiledDrawIndexCount : 0;
+    const total = this._compiledDrawIndexCount;
     if (!this._cullEnabled || this._totalObjects === 0) {
       ranges.starts[0] = 0;
       ranges.counts[0] = total;
       ranges.count = total > 0 ? 1 : 0;
-      this._cullKeyValid = false;
-      this._cullStats.segments = ranges.count;
-      this._cullStats.triangles = total / 3;
-      this._cullStats.lodObjects = 0;
+      key.valid = false;
+      stats.segments = ranges.count;
+      stats.triangles = total / 3;
+      stats.lodObjects = 0;
       return;
     }
 
@@ -1638,12 +1725,13 @@ export class DTXLayer {
     const lodPx = this._lodObjectCount > 0 ? this._cullLodPx : 0;
     const pxScale = minPx > 0 || lodPx > 0 ? view.projScaleY * viewportHeightPx : 0;
     if (
-      this._cullKeyValid
-      && this._cullKeyRevision === this._visibilityRevision
-      && this._cullKeyMinPx === minPx
-      && this._cullKeyLodPx === lodPx
-      && this._cullKeyScale === pxScale
-      && arraysEqual16(this._cullKeyView, view.viewProjection)
+      key.valid
+      && key.visibilityRevision === this._visibilityRevision
+      && key.passRevision === this._passRevision
+      && key.minPx === minPx
+      && key.lodPx === lodPx
+      && key.scale === pxScale
+      && arraysEqual16(key.view, view.viewProjection)
     ) {
       return;
     }
@@ -1664,46 +1752,50 @@ export class DTXLayer {
         lod: lodPx > 0
           ? { triStart: this._objLodStart, triCount: this._objLodCount, minPx: lodPx, state: this._objLodState }
           : undefined,
+        passFlags: this._passFlags,
+        pass,
       },
       ranges,
     );
     ranges.count = result.segmentCount;
 
-    this._cullKeyView.set(view.viewProjection);
-    this._cullKeyScale = pxScale;
-    this._cullKeyRevision = this._visibilityRevision;
-    this._cullKeyMinPx = minPx;
-    this._cullKeyLodPx = lodPx;
-    this._cullKeyValid = true;
-    this._cullStats.lodObjects = result.lodObjectCount;
-    this._cullStats.segments = result.segmentCount;
-    this._cullStats.triangles = result.triangleCount;
-    this._cullStats.lastSelectMs = performance.now() - t0;
-    this._cullStats.selectCount++;
+    key.view.set(view.viewProjection);
+    key.scale = pxScale;
+    key.visibilityRevision = this._visibilityRevision;
+    key.passRevision = this._passRevision;
+    key.minPx = minPx;
+    key.lodPx = lodPx;
+    key.valid = true;
+    stats.lodObjects = result.lodObjectCount;
+    stats.segments = result.segmentCount;
+    stats.triangles = result.triangleCount;
+    stats.lastSelectMs = performance.now() - t0;
+    this._cullSelectCount++;
   }
 
-  private _beforeMeshRender(renderer: WebGLRenderer, camera: Camera): void {
+  private _beforeMeshRender(renderer: WebGLRenderer, camera: Camera, pass: DtxRenderPass): void {
     if (this._multiDrawSupported === null) {
       this._multiDrawSupported = renderer.extensions.has('WEBGL_multi_draw');
       if (this._mesh) this._mesh.multiDrawEnabled = this._multiDrawSupported;
       if (this._transparentMesh) this._transparentMesh.multiDrawEnabled = this._multiDrawSupported;
     }
     if (!this._multiDrawSupported) return;
-    let heightPx: number;
-    if (renderer.getRenderTarget() !== null) {
-      // 离屏趟（描边合成 / E3D 管线）都是整幅画布大小，按画布 CSS 高度算，和直出时同一个像素阈值
-      heightPx = renderer.getSize(this._tmpViewportSize).y;
-    } else {
-      // 当前视口是物理像素（分屏时是那一格），换成 CSS px
-      renderer.getCurrentViewport(this._tmpViewport);
-      heightPx = this._tmpViewport.w / (renderer.getPixelRatio() || 1);
-    }
-    this.updateDrawRanges(camera, heightPx);
+    this._updatePassRanges(pass, camera, this._renderHeightPx(renderer), this._cullMinPx);
   }
 
+  /** 当前这一趟渲染的视口高度（CSS px） */
+  private _renderHeightPx(renderer: WebGLRenderer): number {
+    if (renderer.getRenderTarget() !== null) {
+      // 离屏趟（描边合成 / E3D 管线）都是整幅画布大小，按画布 CSS 高度算，和直出时同一个像素阈值
+      return renderer.getSize(this._tmpViewportSize).y;
+    }
+    // 当前视口是物理像素（分屏时是那一格），换成 CSS px
+    renderer.getCurrentViewport(this._tmpViewport);
+    return this._tmpViewport.w / (renderer.getPixelRatio() || 1);
+  }
   private _markObjectSpheresDirty(): void {
     this._objSpheresDirty = true;
-    this._cullKeyValid = false;
+    for (const key of this._cullKeys) key.valid = false;
   }
 
   /** compile 时按对象表重建区段与段表容量；包围球留到第一次选段时再算 */
@@ -1718,14 +1810,18 @@ export class DTXLayer {
     }
     this._objSpheres = new Float32Array(n * 4);
     const capacity = Math.max(1, n);
-    this._drawRanges = {
-      starts: new Int32Array(capacity),
-      counts: new Int32Array(capacity),
-      count: this._drawIndexCount > 0 ? 1 : 0,
+    const full = (): DTXDrawRangeBuffers => {
+      const ranges: DTXDrawRangeBuffers = {
+        starts: new Int32Array(capacity),
+        counts: new Int32Array(capacity),
+        count: this._drawIndexCount > 0 ? 1 : 0,
+      };
+      ranges.counts[0] = this._drawIndexCount;
+      return ranges;
     };
-    this._drawRanges.starts[0] = 0;
-    this._drawRanges.counts[0] = this._drawIndexCount;
+    this._passRanges = [full(), full()];
     this._multiDrawSupported = null;
+    this._markPassDirty();
     this._markObjectSpheresDirty();
   }
 
@@ -1814,6 +1910,8 @@ export class DTXLayer {
     // DTX 的自定义 ShaderMaterial 不接入 three.js lights 系统，需要显式同步场景灯光。
     void camera;
     this._syncLighting();
+    // setObjectMaterial 只标脏：在出帧前把网格 visible 补齐（three 在 onBeforeRender 之前就按 visible 剔掉网格）
+    this._syncRenderPassVisibility();
   }
 
   private _syncLighting(): void {
@@ -2015,6 +2113,8 @@ export class DTXLayer {
     }
 
     obj.opacity = nextOpacity;
+    // 逐构件调用的热路径：只标脏，通道号和网格 visible 在下一次选段 / update 时统一重建
+    this._markPassDirty();
 
     if (!options.keepColorOverride) {
       obj.hasColorOverride = false;
@@ -2255,6 +2355,7 @@ export class DTXLayer {
     for (const materialIndex of updatedMaterialIndices) {
       this._syncMaterialPaletteTexture(materialIndex);
     }
+    if (updatedMaterialIndices.size > 0) this._markPassDirty();
     this._syncRenderPassVisibility();
   }
 
@@ -2429,6 +2530,7 @@ export class DTXLayer {
       this._sceneBoundingBox.union(object.boundingBox);
     }
     this._visibilityRevision++;
+    this._markPassDirty();
   }
 
   /**

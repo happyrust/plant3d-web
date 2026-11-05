@@ -207,6 +207,59 @@ describe('selectDrawRanges', () => {
     expect(segments(sticky.out, 1)).toEqual([[300, 30]]);
   });
 
+});
+
+describe('selectDrawRanges —— 按通道选段', () => {
+  // 五个构件首尾相接、各 10 个三角形，全在视野里
+  const objs: Obj[] = Array.from({ length: 5 }, () => ({ x: 0, y: 0, z: -10, r: 1, tris: 10 }));
+
+  function run(passFlags: number[] | undefined, pass: number | undefined, gap = 0) {
+    const { input, out } = build(objs, perspective(), { gap });
+    if (passFlags) input.passFlags = new Uint8Array(passFlags);
+    input.pass = pass;
+    const res = selectDrawRanges(input, out);
+    return { res, segs: segments(out, res.segmentCount) };
+  }
+
+  it('不传 passFlags 时和改动前一致（pass 被忽略）', () => {
+    expect(run(undefined, undefined)).toEqual(run(undefined, 1));
+    expect(run(undefined, undefined).segs).toEqual([[0, 150]]);
+  });
+
+  it('混合场景：两张表各自只含本通道构件，合起来不重不漏', () => {
+    const flags = [0, 1, 0, 0, 1];
+    const opaque = run(flags, 0);
+    const transparent = run(flags, 1);
+    expect(opaque.segs).toEqual([[0, 30], [60, 60]]);
+    expect(transparent.segs).toEqual([[30, 30], [120, 30]]);
+    expect(opaque.res.triangleCount + transparent.res.triangleCount).toBe(50);
+  });
+
+  it('全不透明 / 全透明：另一通道为空', () => {
+    expect(run([0, 0, 0, 0, 0], 0).segs).toEqual([[0, 150]]);
+    expect(run([0, 0, 0, 0, 0], 1).res).toEqual({ segmentCount: 0, triangleCount: 0, lodObjectCount: 0 });
+    expect(run([1, 1, 1, 1, 1], 1).segs).toEqual([[0, 150]]);
+    expect(run([1, 1, 1, 1, 1], 0).res.segmentCount).toBe(0);
+  });
+
+  it('两张表都不进的构件（通道号 2）哪张表都不选', () => {
+    const flags = [2, 0, 2, 1, 2];
+    expect(run(flags, 0).segs).toEqual([[30, 30]]);
+    expect(run(flags, 1).segs).toEqual([[90, 30]]);
+  });
+
+  it('合并间隙夹带另一通道构件：不超过间隙时并段，三角形数含夹带', () => {
+    const flags = [0, 1, 0, 1, 1];
+    const merged = run(flags, 0, 10);
+    expect(merged.segs).toEqual([[0, 90]]);
+    expect(merged.res.triangleCount).toBe(30);
+    const split = run(flags, 0, 9);
+    expect(split.segs).toEqual([[0, 30], [60, 30]]);
+    expect(split.res.triangleCount).toBe(20);
+  });
+});
+
+describe('selectDrawRanges —— 粗网格补充', () => {
   it('粗网格与拖动阈值同时开：先按 minPx 跳过，再按 lodPx 选档', () => {
     const objs: Obj[] = [
       { x: 0, y: 0, z: -100, r: 0.5, tris: 100 }, // 5 px：被 minPx 8 跳过
