@@ -175,7 +175,7 @@ import { CadGrid } from '@/viewer/dtx/dtxCadGrid';
 import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
 import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
-import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
+import { clampViewerPixelRatio, DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 import {
   E3D31_HBAO,
@@ -1119,6 +1119,8 @@ const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
   getCamera: () => dtxViewerRef.value?.camera,
   getMillimetresToScene: () => dtxLayerRef.value?.getGlobalModelMatrix(),
   getContainer: () => containerRef.value,
+  // 描边羽化按画布的实际像素比算；画布像素比有上限（clampViewerPixelRatio），不能直接读 window.devicePixelRatio
+  getDpr: () => dtxViewerRef.value?.renderer.getPixelRatio() ?? clampViewerPixelRatio(window.devicePixelRatio),
   requestRender,
   // 标签 billboard 避让管件包围盒：把标签周围的已加载构件交给尺寸内核。
   getDtxLayer: () => dtxLayerRef.value,

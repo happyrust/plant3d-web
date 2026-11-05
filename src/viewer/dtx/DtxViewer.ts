@@ -52,6 +52,14 @@ export type ViewportGizmoOptions = {
  */
 export const DTX_VIEWPORT_GIZMO_CLASS = 'dtx-viewport-gizmo';
 
+/**
+ * 画布像素比上限 2：E3D 外观管线的离屏图（颜色 4× MSAA、法线深度和 HLR 2×2 超采样、全分辨率 AO）
+ * 都按像素比放大，DPR 3 的屏上像素量是 DPR 2 的 2.25 倍，观感差别却很小。与 e3dLookDemo 一致。
+ */
+export function clampViewerPixelRatio(devicePixelRatio: number | undefined): number {
+  return Math.min(2, Math.max(1, devicePixelRatio || 1));
+}
+
 export class DtxViewer {
   readonly canvas: HTMLCanvasElement;
   readonly renderer: WebGLRenderer;
@@ -106,7 +114,7 @@ export class DtxViewer {
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.3;
-    this.renderer.setPixelRatio(Math.max(1, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(clampViewerPixelRatio(window.devicePixelRatio));
 
     this.scene = new Scene();
     this.scene.background = new Color(options.background ?? 0xe5e7eb);
@@ -222,9 +230,7 @@ export class DtxViewer {
   setSize(cssWidth: number, cssHeight: number): void {
     const w = Math.max(1, Math.floor(cssWidth));
     const h = Math.max(1, Math.floor(cssHeight));
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-
-    this.renderer.setPixelRatio(dpr);
+    this.renderer.setPixelRatio(clampViewerPixelRatio(window.devicePixelRatio));
     this.renderer.setSize(w, h, false);
 
     this.camera.aspect = w / h;
