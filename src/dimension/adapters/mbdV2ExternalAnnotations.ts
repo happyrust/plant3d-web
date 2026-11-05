@@ -19,6 +19,7 @@ import type {
   MbdV2AidCircle,
   MbdV2AngleDim,
   MbdV2ArcFrame,
+  MbdV2Isoline,
   MbdV2Label,
   MbdV2LeaderLine,
   MbdV2LinearDim,
@@ -37,6 +38,7 @@ import type {
   ExplicitLayoutInput,
   ExplicitLodInput,
   ExplicitMarkerInput,
+  ExplicitPolarInput,
   ExplicitTagInput,
   ExplicitTagStyle,
   ExplicitTextInput,
@@ -294,6 +296,8 @@ type ExplicitParts = Readonly<{
   subject?: string;
   /** Q6 presentation mode, forwarded verbatim when the caller asked for one. */
   labelPresentation?: 'interrupted' | 'above';
+  /** T3.6a opt-in; see `polarInputForLabel`. */
+  polar?: ExplicitPolarInput;
 }>;
 
 function explicitRecord(
@@ -329,6 +333,7 @@ function explicitRecord(
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
     ...(parts.tag ? { tag: parts.tag } : {}),
     ...(parts.subject ? { subject: parts.subject } : {}),
+    ...(parts.polar ? { polar: parts.polar } : {}),
   };
   return {
     id: primitive.id,
@@ -505,6 +510,62 @@ function awayFromPipe(
 }
 
 /**
+ * Half the `disRange` window around a label's axial position (T3.6a plan
+ * point 3): named so the 3× factor reads as a choice, not a stray literal.
+ */
+const POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS = 3;
+
+/**
+ * T3.6a: builds the polar placement input for a `label` (plan point 3),
+ * or `undefined` when any required fact is missing — isoline membership,
+ * a same-isoline `linear_dim` to read the pipe axis from, or that
+ * isoline's declared outer diameter — in which case the record keeps its
+ * solver anchor untouched (the flag only ever adds a field, never changes
+ * one the kernel already draws from).
+ *
+ * Pipe axis: the first same-isoline `linear_dim`'s `start`/`end` (same
+ * source → Design Space path as everywhere else, `transform.point`).
+ * `basicRadiusM`: `od_mm / 2` through the same mm → Design-metre
+ * conversion the text heights take (`textHeightToDesignM`). `disRange`:
+ * the label's own projection onto the axis, padded
+ * `POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS` text heights each way — the solver
+ * does not give this record an explicit axial span, so the window is
+ * sized off the one length already available at this call site.
+ */
+function polarInputForLabel(
+  primitive: MbdV2Label,
+  dimensions: readonly MbdV2LinearDim[],
+  isolines: readonly MbdV2Isoline[],
+  data: MbdV2PipeData,
+  transform: FrameTransform,
+  position: Vec3,
+  textHeightM: number | undefined,
+): ExplicitPolarInput | undefined {
+  if (primitive.isoline_idx === undefined || textHeightM === undefined) return undefined;
+  const axisDim = dimensions.find(dimension => dimension.isoline_idx === primitive.isoline_idx);
+  if (!axisDim) return undefined;
+  const isoline = isolines.find(entry => entry.index === primitive.isoline_idx);
+  if (!isoline) return undefined;
+  const odM = textHeightToDesignM(data, transform, isoline.od_mm);
+  if (odM === undefined) return undefined;
+  const origin = transform.point(axisDim.start);
+  const end = transform.point(axisDim.end);
+  const axis = tryNormalize3(sub3(end, origin));
+  if (!axis) return undefined;
+  const span = sub3(end, origin);
+  const spanLength = dot3(span, span);
+  const dis = spanLength > 0 ? dot3(sub3(position, origin), span) / Math.sqrt(spanLength) : 0;
+  const halfSpanM = POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS * textHeightM;
+  return {
+    origin,
+    axis,
+    disRange: [dis - halfSpanM, dis + halfSpanM],
+    basicRadiusM: odM / 2,
+    textHeightM,
+  };
+}
+
+/**
  * Tag (`label`, optionally with its `leader_line`): the flat presentation is
  * the solver's text at its position (along its `text_dir` when declared)
  * plus the leader as drawn; with `tag` the kernel presents it as a billboard
@@ -516,7 +577,10 @@ function mapLabel(
   primitive: MbdV2Label,
   leader: MbdV2LeaderLine | undefined,
   dimensions: readonly MbdV2LinearDim[],
+  isolines: readonly MbdV2Isoline[],
+  data: MbdV2PipeData,
   transform: FrameTransform,
+  textHeightM: number | undefined,
 ): ExternalDimensionRecord {
   const transformPoint = transform.point;
   const position = transformPoint(primitive.position);
@@ -540,6 +604,7 @@ function mapLabel(
     ...(tagClass.dot ? { dot: true } : {}),
     ...(tagClass.subject ? { subject: tagClass.subject } : {}),
   };
+  const polar = polarInputForLabel(primitive, dimensions, isolines, data, transform, position, textHeightM);
   return explicitRecord(primitive, 'annotation', {
     formattedLabel,
     labelAnchor: position,
@@ -548,6 +613,7 @@ function mapLabel(
     ...(target ? { lines: [{ from: position, to: target, part: 'leader' as const }] } : {}),
     ...(tagClass.lod ? { lod: tagClass.lod } : {}),
     tag,
+    ...(polar ? { polar } : {}),
   });
 }
 
@@ -958,7 +1024,10 @@ export function mbdV2ToExternalRecords(
           primitive,
           leaderByLabel.get(primitive.id),
           linearDims,
+          data.meta.isolines ?? [],
+          data,
           transform,
+          groupHeightM,
         );
         break;
       case 'aid_text': {

@@ -1074,4 +1074,100 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(ownSurface, 'outer-unplaced').dimension3d!.surfaceM).toBeCloseTo(0.5, 12);
     expect(explicitLayout(ownSurface, 'outer-unplaced').dimension3d!.row).toBe(1);
   });
+
+  describe('polar placement opt-in (T3.6a)', () => {
+    // `cliLinearFixture`: source_mm, S(0.001). The one `linear_dim` runs
+    // start=[0,-500,0] end=[80,-500,0] mm -> Design [0,-0.5,0]..[0.08,-0.5,0],
+    // a 0.08 m axis along +X.
+    function fixture() {
+      const parsed = parseMbdV2PipeData(cliLinearFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const source = parsed.data.primitives[0]!;
+      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+      return { data: parsed.data, source };
+    }
+
+    it('attaches polar when the label shares an isoline with a linear_dim and the table has od_mm', () => {
+      const { data, source } = fixture();
+      const meta = {
+        ...data.meta,
+        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          {
+            kind: 'label', id: 'tag-on-isoline', text: 'X 1',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+
+      const polar = explicitLayout(result, 'tag-on-isoline').polar;
+      expect(polar).toBeDefined();
+      // Axis through Design Space start/end (×0.001), basicRadius = od/2 = 0.25 m.
+      expect(polar!.origin).toEqual([0, -0.5, 0]);
+      expect(polar!.axis).toEqual([1, 0, 0]);
+      expect(polar!.basicRadiusM).toBeCloseTo(0.25, 12);
+      // The label sits at the axis midpoint (x=40mm -> 0.04m of the 0.08m span).
+      expect(polar!.disRange[0]).toBeLessThan(0.04);
+      expect(polar!.disRange[1]).toBeGreaterThan(0.04);
+      expect(polar!.textHeightM).toBeCloseTo(0.0135, 12);
+    });
+
+    it('omits polar when the label has no isoline_idx', () => {
+      const { data, source } = fixture();
+      const meta = {
+        ...data.meta,
+        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          { kind: 'label', id: 'tag-unplaced', text: 'X 1', position: [40, -500, 0] },
+        ],
+      });
+      expect(explicitLayout(result, 'tag-unplaced').polar).toBeUndefined();
+    });
+
+    it('omits polar when no linear_dim shares the label\'s isoline', () => {
+      const { data, source } = fixture();
+      const meta = {
+        ...data.meta,
+        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 1 },
+          {
+            kind: 'label', id: 'tag-no-axis', text: 'X 1',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+      expect(explicitLayout(result, 'tag-no-axis').polar).toBeUndefined();
+    });
+
+    it('omits polar when the isoline table has no od_mm for that index', () => {
+      const { data, source } = fixture();
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta: { ...data.meta, isolines: [] },
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          {
+            kind: 'label', id: 'tag-no-od', text: 'X 1',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+      expect(explicitLayout(result, 'tag-no-od').polar).toBeUndefined();
+    });
+  });
 });

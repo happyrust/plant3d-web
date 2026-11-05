@@ -4,7 +4,7 @@ import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensi
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
 import { buildHitIndex, type HitIndex, type HitTarget } from '../kernel/hit/hitIndex';
 import { resolveDimensionStyleRole } from '../kernel/theme';
-import { layoutViewport } from '../kernel/viewport/layoutViewport';
+import { layoutViewport, type PolarFrameState } from '../kernel/viewport/layoutViewport';
 
 import {
   DimensionViewportScheduler,
@@ -232,6 +232,14 @@ export class DimensionViewport {
   // 上一次真正跑 layoutViewport 时使用的 projector；projector 在构造时
   // 快照了相机与 designToWorld，实例相同即投影未变，纯 camera 失效可复用布局。
   private lastLayoutProjector: ViewportProjector | null = null;
+  /**
+   * 上一帧 `layoutViewport` 返回的极坐标放置状态（T3.6a），keyed by record id；
+   * 下一帧原样传回 `polarPrevious`，让 `cameraReference` 的滞回与
+   * `screenGuard` 的候选稳定性跨帧生效。`layoutViewport` 跳过整帧重排时
+   * （见下方 camera-only 早退分支）这张表也不更新——与那条分支本身一致：
+   * 候选本就没有重新计算，沿用旧表正是「未变」的含义。
+   */
+  private polarPrevious: ReadonlyMap<string, PolarFrameState> = new Map();
   private theme: DimensionTheme;
   private format: DimensionFormatPolicy;
   private displayMode: DimensionDisplayMode = 'engineering';
@@ -749,11 +757,13 @@ export class DimensionViewport {
       obstacles: this.input.obstacles,
       occlusion: this.input.occlusion,
       displayMode: this.displayMode,
+      polarPrevious: this.polarPrevious,
     });
     const layoutCompletedAt = performance.now();
     this.layouts = batch.layouts;
     this.lastLayoutProjector = this.projector;
     this.pendingHitIndex = batch.hitIndex;
+    this.polarPrevious = batch.polarNext;
     this.pendingStyleIds.clear();
     this.startBatchedPaint(startedAt, layoutCompletedAt);
     this.layoutListeners.forEach(listener => listener(this.layouts));

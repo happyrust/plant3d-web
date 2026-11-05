@@ -581,6 +581,27 @@ export type ExplicitTagInput = Readonly<{
   dot?: boolean;
 }>;
 
+/**
+ * Design-space inputs for the polar placement layer (T3.6a), carried on
+ * `ExplicitLayoutInput.polar`. Everything here is plain geometry the mapper
+ * can read off the contract; the camera-derived parts of a
+ * `PolarReference` (`showDir`, `horiDir`, `up`) are built fresh every frame
+ * by `cameraReference()` inside the viewport, not stored here — a cached
+ * `showDir` would go stale as the camera moves.
+ */
+export type ExplicitPolarInput = Readonly<{
+  /** Pipe axis origin (PML `polarsystem.pos`), Design Space metres. */
+  origin: Vec3;
+  /** Pipe axis direction (PML `polarsystem.dir`); normalised by the viewport. */
+  axis: Vec3;
+  /** Placement range along the axis (PML `limitMinDis`..`limitMaxDis`), metres. */
+  disRange: readonly [min: number, max: number];
+  /** Basic radius (PML `basicRadius`), usually the pipe's outer radius, metres. */
+  basicRadiusM: number;
+  /** Text height (Design Space metres) feeding `needs` (`needDis`/`needRadius`). */
+  textHeightM: number;
+}>;
+
 export type ExplicitLayoutInput = Readonly<{
   id: string;
   role: DimensionSemanticRole;
@@ -655,4 +676,14 @@ export type ExplicitLayoutInput = Readonly<{
    * flat text and leader, kept for the legacy presentation.
    */
   tag?: ExplicitTagInput;
+  /**
+   * Opt into the polar placement layer (T3.6a): the viewport builds a
+   * `PolarReference` from this plus the current camera, runs `polarPlace` +
+   * `screenGuard`, and — when a candidate clears the screen — substitutes
+   * `labelAnchor`/`labelAlong` with it before drawing. Absent = unchanged
+   * behaviour (the solver's own anchor stands as-is); a degenerate
+   * reference or an all-rejected screen guard also falls back to the
+   * original anchor, never hides the record.
+   */
+  polar?: ExplicitPolarInput;
 }>;

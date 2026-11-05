@@ -163,6 +163,41 @@ function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensi
 }
 
 /**
+ * 调试开关 `?mbd_polar=1`（T3.6a）：接入极坐标放置层——标签锚点改由
+ * `polarPlace` + 屏幕净空校验挑选，而不是求解器原位 `label_anchor`。
+ * **默认关闭**：mapper 给带同直段 `linear_dim` + 外径的 `label` 打的
+ * `polar` 字段在这里被剥掉，内核回到原位呈现；缺省 / 其它值 = 剥掉。
+ */
+function isMbdPolarEnabled(raw: string | null): boolean {
+  return raw?.trim() === '1';
+}
+
+function withoutPolar(record: ExternalDimensionRecord): ExternalDimensionRecord {
+  const layout = record.layout;
+  // Only explicit layouts carry the polar opt-in.
+  if (!('lines' in layout)) return record;
+  if (layout.polar === undefined) return record;
+  const { polar: _polar, ...rest } = layout;
+  return { ...record, layout: rest };
+}
+
+/**
+ * `mbd_polar=1` 下，带 `polar` 的记录还需剥掉 `tag`：`layoutViewport` 先查
+ * `'tag' in input && input.tag`，命中就直接走 billboard 分支（不读
+ * `labelAnchor`），polar 解出的锚点永远用不上。mapper 不分场景地给 label
+ * 打 `tag`，所以这里按「带 polar 就改走平面文字路径」做场景裁剪：只剥
+ * `tag` 这一个字段，`dimension3d` 等其它呈现提示不动；不带 `polar` 的记录
+ * （billboard 仍是唯一呈现方式）原样保留。
+ */
+function polarReplacesTag(record: ExternalDimensionRecord): ExternalDimensionRecord {
+  const layout = record.layout;
+  if (!('lines' in layout)) return record;
+  if (layout.polar === undefined || layout.tag === undefined) return record;
+  const { tag: _tag, ...rest } = layout;
+  return { ...record, layout: rest };
+}
+
+/**
  * MBD 外部图元双通道同步（从 ViewerPanel 抽出以获得可测缝）：
  * 通道选择、竞态守卫、诊断写入、error toast 集中在此。
  */
@@ -210,6 +245,7 @@ export function createMbdExternalSync(
       const kindFilter = parseMbdKindFilter(params.get('mbd_kinds'));
       const lodDisabled = isMbdLodDisabled(params.get('mbd_lod'));
       const presentation3dDisabled = isMbd3dDisabled(params.get('mbd_3d'));
+      const polarEnabled = isMbdPolarEnabled(params.get('mbd_polar'));
       /**
        * 多 BRAN 同屏时给记录 id 加 `refno:` 前缀：各包的图元 id 编号空间各自
        * 独立（两个 BRAN 都能叫 dim-1），`replaceSource` 又是整槽校验、遇重复
@@ -253,7 +289,10 @@ export function createMbdExternalSync(
             ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
             : mapped.records;
           const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
-          const stripped = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
+          const withPresentation3d = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
+          const stripped = polarEnabled
+            ? withPresentation3d.map(polarReplacesTag)
+            : withPresentation3d.map(withoutPolar);
           // 真实后端的图元 id 已经带 refno 前缀（`24381_145018:isoline:0:...`），
           // 跨 BRAN 天然不冲突；只有那些不带前缀的 id 才需要补，否则会得到
           // `24381_145018:24381_145018:isoline:...` 这种重复噪声。
@@ -287,6 +326,12 @@ export function createMbdExternalSync(
               ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
               ...(presentation3dDisabled
                 ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
+                : []),
+              ...(polarEnabled
+                ? [
+                  'mbd_polar=1：已接入极坐标放置层，标签锚点改由屏幕净空校验挑选（试验开关）；'
+                    + '带极坐标的标签改用平面文字呈现，不再画卡片',
+                ]
                 : []),
               ...(labelPresentation === 'above'
                 ? ['mbd_label=above：长度尺寸的数字浮在线上方、尺寸线不切段（ISO 读法，试验开关）']

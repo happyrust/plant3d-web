@@ -373,6 +373,81 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
+  it('mbd_polar=1 opts a label into polar placement; default strips it', async () => {
+    // Same isoline on a linear_dim (pipe axis) and a label (consumer), plus
+    // the isoline's od_mm: the mapper attaches `polar` to the label only.
+    const payload = contractPayload({
+      primitives: [
+        {
+          kind: 'linear_dim',
+          id: 'dim-1',
+          start: [0, 0, 0],
+          end: [1, 0, 0],
+          text: '1000',
+          extension_lines: [
+            { from: [0, 0, 0], to: [0, 0.1, 0] },
+            { from: [1, 0, 0], to: [1, 0.1, 0] },
+          ],
+          arrow_lines: [],
+          label_anchor: [0.5, 0.1, 0],
+          isoline_idx: 0,
+        },
+        {
+          kind: 'label',
+          id: 'tag-1',
+          text: 'X 1',
+          position: [0.5, 0, 0],
+          isoline_idx: 0,
+        },
+      ],
+      meta: {
+        geometry_space: 'source_mm',
+        source_to_design: IDENTITY,
+        notes: [],
+        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 0.5 }],
+      },
+    });
+    const fetchPipeData = vi.fn(async () => ({ ok: true as const, data: payload, diagnostics: [] }));
+
+    const byDefault = createHarness({ search: '?mbd_refno=A', fetchPipeData });
+    await byDefault.sync.sync(byDefault.target);
+    const [, plain] = (byDefault.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    const plainTag = plain.find((record: { id: string }) => record.id === 'tag-1');
+    expect(plainTag.layout.polar).toBeUndefined();
+
+    const enabled = createHarness({ search: '?mbd_refno=A&mbd_polar=1', fetchPipeData });
+    await enabled.sync.sync(enabled.target);
+    const [, opted] = (enabled.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    const optedTag = opted.find((record: { id: string }) => record.id === 'tag-1');
+    expect(optedTag.layout.polar).toBeDefined();
+    expect(optedTag.layout.polar.basicRadiusM).toBeCloseTo(0.25, 9);
+    // Everything else about the record is untouched, except `tag`: a
+    // polar-opted label must lose it, or `layoutViewport` takes the billboard
+    // branch before ever looking at the polar-resolved `labelAnchor` (T3.6a 补).
+    expect(optedTag.layout.labelAnchor).toEqual(plainTag.layout.labelAnchor);
+    expect(plainTag.layout.tag).toBeDefined();
+    expect(optedTag.layout.tag).toBeUndefined();
+    expect(enabled.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: [expect.stringContaining('mbd_polar=1')],
+    }));
+
+    // A record without `polar` keeps its `tag` even when the mode is on.
+    const otherOpted = opted.find((record: { id: string }) => record.id === 'dim-1');
+    expect(otherOpted.layout.polar).toBeUndefined();
+
+    // Any other value is not the mode — stripped stays the default: `tag`
+    // kept, `polar` stripped.
+    const bogus = createHarness({ search: '?mbd_refno=A&mbd_polar=0', fetchPipeData });
+    await bogus.sync.sync(bogus.target);
+    const [, other] = (bogus.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    const bogusTag = other.find((record: { id: string }) => record.id === 'tag-1');
+    expect(bogusTag.layout.polar).toBeUndefined();
+    expect(bogusTag.layout.tag).toBeDefined();
+  });
+
   /**
    * W3-2 / W3-6 消费侧：`meta.source_version`（数据时点）与 `meta.isolines`（直段表）
    * 原样进诊断 store，面板据此显示 dbnum@sesno、按直段分组；缺省时分别是 null / []。
