@@ -75,12 +75,13 @@ describe('DTXLayer.updateDrawRanges', () => {
     expect(mesh._multiDrawCounts[0]).toBe(9);
   });
 
-  it('拾取网格不受选段影响', () => {
+  it('主网格选段不影响拾取段表', () => {
     const { layer } = setup();
     layer.setGlobalModelMatrix(new Matrix4().makeTranslation(0, 0, 100));
     layer.updateDrawRanges(camera(), 800, 0);
-    const picking = layer.getPickingMesh()!;
-    expect((picking as unknown as { isBatchedMesh?: boolean }).isBatchedMesh).not.toBe(true);
+    const picking = layer.getPickingMesh() as DTXMultiDrawMesh;
+    expect(picking._multiDrawCount).toBe(1);
+    expect(picking._multiDrawCounts[0]).toBe(9);
     expect(picking.geometry.drawRange.count).toBe(9);
   });
 });
@@ -260,5 +261,70 @@ describe('DTXLayer 不透明 / 透明分表选段', () => {
     select(layer);
     // 两张表各重算一次
     expect(layer.getCullStats().selectCount).toBe(n + 2);
+  });
+});
+
+describe('DTXLayer 拾取段表', () => {
+  /** 一排 1 个三角形的构件，x = 0, 10, 20 …，都在 z = -10 */
+  function rowSetup(n: number): { layer: DTXLayer; picking: DTXMultiDrawMesh } {
+    const layer = new DTXLayer({ maxVertices: 64, maxIndices: 256, maxObjects: 64 });
+    layer.addGeometry('tri', tri());
+    for (let i = 0; i < n; i++) layer.addObject(`o${i}`, 'tri', new Matrix4().makeTranslation(i * 10, 0, -10));
+    layer.compile();
+    return { layer, picking: layer.getPickingMesh() as DTXMultiDrawMesh };
+  }
+
+  /** GPUPicker 同款：主相机 setViewOffset 出一个对准 (px, py) 的 3×3 像素窄视锥 */
+  function pickCamera(px: number, py: number): PerspectiveCamera {
+    const cam = new PerspectiveCamera(90, 1, 0.1, 1000);
+    cam.lookAt(0, 0, -1);
+    cam.setViewOffset(800, 800, px - 1, py - 1, 3, 3);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    return cam;
+  }
+
+  it('窄视锥下只保留与视锥相交的构件', () => {
+    const { layer, picking } = rowSetup(3);
+    // 画面中心：只有 x = 0 的构件
+    layer.updatePickRanges(pickCamera(400, 400));
+    expect(layer.getPickCullStats().triangles).toBe(1);
+    expect([picking._multiDrawStarts[0], picking._multiDrawCounts[0], picking._multiDrawCount]).toEqual([0, 3, 1]);
+    // FOV 90°、z = -10：x = 10 的构件落在画面右边缘附近（NDC x ≈ 1），对准它只剩它
+    layer.updatePickRanges(pickCamera(799, 400));
+    expect(layer.getPickCullStats().triangles).toBe(1);
+    expect(picking._multiDrawStarts[0]).toBe(3);
+  });
+
+  it('不受 minPx / 拖动阈值影响：投影很小的构件也留着', () => {
+    const { layer } = rowSetup(1);
+    layer.setCullOptions({ minPx: 1e6 });
+    layer.updateDrawRanges(camera(), 800);
+    expect(layer.getCullStats().triangles).toBe(0);
+    layer.updatePickRanges(pickCamera(400, 400));
+    expect(layer.getPickCullStats().triangles).toBe(1);
+  });
+
+  it('隐藏构件不进拾取段表；改可见性后重算', () => {
+    const { layer } = rowSetup(1);
+    layer.updatePickRanges(pickCamera(400, 400));
+    expect(layer.getPickCullStats().triangles).toBe(1);
+    layer.setObjectVisible('o0', false);
+    layer.updatePickRanges(pickCamera(400, 400));
+    expect(layer.getPickCullStats().triangles).toBe(0);
+  });
+
+  it('不按透明通道筛：半透明 / opacityScale = 0 的构件照样能拾取', () => {
+    const { layer } = rowSetup(1);
+    layer.setObjectsOpacity(['o0'], 0.5);
+    layer.updatePickRanges(pickCamera(400, 400));
+    expect(layer.getPickCullStats().triangles).toBe(1);
+  });
+
+  it('关闭选段时拾取段表等于整层', () => {
+    const { layer, picking } = rowSetup(3);
+    layer.setCullOptions({ enabled: false });
+    layer.updatePickRanges(pickCamera(400, 400));
+    expect([picking._multiDrawStarts[0], picking._multiDrawCounts[0], picking._multiDrawCount]).toEqual([0, 9, 1]);
   });
 });

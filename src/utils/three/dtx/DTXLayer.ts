@@ -327,8 +327,8 @@ export class DTXLayer {
   private _transparentMesh: DTXMultiDrawMesh | null = null;
   /** GPU Picking 材质 */
   private _pickingMaterial: DTXPickingMaterial | null = null;
-  /** GPU Picking 网格 */
-  private _pickingMesh: Mesh | null = null;
+  /** GPU Picking 网格（按拾取相机的窄视锥选段） */
+  private _pickingMesh: DTXMultiDrawMesh | null = null;
   /** WebGL 渲染器引用 */
   private _renderer: WebGLRenderer | null = null;
   /** 场景引用 */
@@ -401,6 +401,10 @@ export class DTXLayer {
   private _cullStatsByPass: [DrawRangePassStats, DrawRangePassStats] = [createDrawRangePassStats(), createDrawRangePassStats()];
   private _cullView: DrawRangeView = createDrawRangeView();
   private _cullSelectCount = 0;
+  /** 拾取网格的段表：只按视锥和可见性裁，不裁小构件、不分通道、不用粗网格 */
+  private _pickRanges: DTXDrawRangeBuffers = emptyDrawRanges();
+  private _pickKey: DrawRangeCacheKey = createDrawRangeCacheKey();
+  private _pickStats: DrawRangePassStats = createDrawRangePassStats();
 
   // ========== 包围盒 ==========
 
@@ -1547,9 +1551,12 @@ export class DTXLayer {
       primitiveToObjectTextureWidth: INDICES_TEXTURE_WIDTH
     });
 
-    this._pickingMesh = new Mesh(this._geometry, this._pickingMaterial);
+    this._pickingMesh = new DTXMultiDrawMesh(this._geometry, this._pickingMaterial, this._pickRanges);
     this._pickingMesh.frustumCulled = false;
     this._pickingMesh.name = 'DTXLayerPicking';
+    this._pickingMesh.onBeforeRender = ((renderer: WebGLRenderer, _scene: Scene, camera: Camera) => {
+      this._beforePickRender(renderer, camera);
+    }) as Mesh['onBeforeRender'];
   }
 
   private _markPassDirty(): void {
@@ -1773,14 +1780,82 @@ export class DTXLayer {
     this._cullSelectCount++;
   }
 
-  private _beforeMeshRender(renderer: WebGLRenderer, camera: Camera, pass: DtxRenderPass): void {
+  private _detectMultiDraw(renderer: WebGLRenderer): boolean {
     if (this._multiDrawSupported === null) {
       this._multiDrawSupported = renderer.extensions.has('WEBGL_multi_draw');
-      if (this._mesh) this._mesh.multiDrawEnabled = this._multiDrawSupported;
-      if (this._transparentMesh) this._transparentMesh.multiDrawEnabled = this._multiDrawSupported;
+      for (const mesh of [this._mesh, this._transparentMesh, this._pickingMesh]) {
+        if (mesh) mesh.multiDrawEnabled = this._multiDrawSupported;
+      }
     }
-    if (!this._multiDrawSupported) return;
+    return this._multiDrawSupported;
+  }
+
+  private _beforeMeshRender(renderer: WebGLRenderer, camera: Camera, pass: DtxRenderPass): void {
+    if (!this._detectMultiDraw(renderer)) return;
     this._updatePassRanges(pass, camera, this._renderHeightPx(renderer), this._cullMinPx);
+  }
+
+  private _beforePickRender(renderer: WebGLRenderer, camera: Camera): void {
+    if (!this._detectMultiDraw(renderer)) return;
+    this.updatePickRanges(camera);
+  }
+
+  /**
+   * 按拾取相机重算拾取段表（GPUPicker 每次拾取都新建一个 setViewOffset 窄视锥相机，缓存基本命中不了）。
+   * 只裁视锥外和隐藏的构件：拖动中也不裁小构件，不分透明通道（拾取着色器本来就不区分），不画粗网格。
+   */
+  updatePickRanges(camera: Camera): void {
+    if (!this._compiled) return;
+    const ranges = this._pickRanges;
+    const key = this._pickKey;
+    const stats = this._pickStats;
+    const total = this._compiledDrawIndexCount;
+    if (!this._cullEnabled || this._totalObjects === 0) {
+      ranges.starts[0] = 0;
+      ranges.counts[0] = total;
+      ranges.count = total > 0 ? 1 : 0;
+      key.valid = false;
+      stats.segments = ranges.count;
+      stats.triangles = total / 3;
+      return;
+    }
+    if (this._objSpheresDirty) this._rebuildObjectSpheres();
+    const view = drawRangeViewFromCamera(camera, this._cullView);
+    if (
+      key.valid
+      && key.visibilityRevision === this._visibilityRevision
+      && arraysEqual16(key.view, view.viewProjection)
+    ) {
+      return;
+    }
+    const t0 = performance.now();
+    const result = selectDrawRanges(
+      {
+        objectCount: this._totalObjects,
+        spheres: this._objSpheres,
+        triStart: this._objTriStart,
+        triCount: this._objTriCount,
+        visibleFlags: this._colorsAndFlagsBuffer,
+        visibleStride: 16,
+        visibleOffset: 2,
+        view,
+        viewportHeightPx: 0,
+        minPx: 0,
+      },
+      ranges,
+    );
+    ranges.count = result.segmentCount;
+    key.view.set(view.viewProjection);
+    key.visibilityRevision = this._visibilityRevision;
+    key.valid = true;
+    stats.segments = result.segmentCount;
+    stats.triangles = result.triangleCount;
+    stats.lastSelectMs = performance.now() - t0;
+  }
+
+  /** 最近一次拾取选段的段数 / 三角形数 / 耗时 */
+  getPickCullStats(): DrawRangePassStats {
+    return { ...this._pickStats };
   }
 
   /** 当前这一趟渲染的视口高度（CSS px） */
@@ -1796,6 +1871,7 @@ export class DTXLayer {
   private _markObjectSpheresDirty(): void {
     this._objSpheresDirty = true;
     for (const key of this._cullKeys) key.valid = false;
+    this._pickKey.valid = false;
   }
 
   /** compile 时按对象表重建区段与段表容量；包围球留到第一次选段时再算 */
@@ -1820,6 +1896,7 @@ export class DTXLayer {
       return ranges;
     };
     this._passRanges = [full(), full()];
+    this._pickRanges = full();
     this._multiDrawSupported = null;
     this._markPassDirty();
     this._markObjectSpheresDirty();
