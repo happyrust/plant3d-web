@@ -242,11 +242,12 @@ function nodeVerdictOf(
   externalRows: number,
 ): RvmClassifiedVerdict {
   const raw = report?.verdict === 'pass' || report?.verdict === 'kind_differ' ? report.verdict : 'fail';
-  if (raw === 'pass') return 'pass';
   // 比对工具没跑通时计数也是 0，先认工具故障
-  if (report?.stage === 'compare' && TOOL_ERROR.test(String(report?.message ?? ''))) return 'tool_error';
+  if (raw !== 'pass' && report?.stage === 'compare' && TOOL_ERROR.test(String(report?.message ?? ''))) return 'tool_error';
   const total = Object.values(counts).reduce<number>((sum, value) => sum + (typeof value === 'number' ? value : 0), 0);
+  // 后端对两侧都没几何的节点也报 pass，这里要先认出来，别显示成绿勾
   if (report?.counts && total === 0) return 'empty';
+  if (raw === 'pass') return 'pass';
   // 清单被截断时看不到全部行，不下「不是我们的问题」的结论
   if (rowCount > 0 && externalRows === rowCount && !report?.mismatches_truncated) return 'external';
   return raw;

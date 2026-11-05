@@ -107,6 +107,16 @@ describe('classifyReport', () => {
     expect(result.nodeVerdict).toBe('empty');
   });
 
+  it('empty: backend reports pass but both sides have nothing to compare', () => {
+    const result = classifyReport({ verdict: 'pass', stage: 'compare', message: '通过：两侧都没有可比几何', counts: ZERO_COUNTS, mismatches: [] });
+    expect(result.nodeVerdict).toBe('empty');
+  });
+
+  it('pass stays pass when anything was matched', () => {
+    const result = classifyReport({ verdict: 'pass', stage: 'compare', message: '通过', counts: { ...ZERO_COUNTS, both: 32, exact: 32 }, mismatches: [] });
+    expect(result.nodeVerdict).toBe('pass');
+  });
+
   it('tool_error: rvm_compare failed (1PTU)', () => {
     const result = classifyReport({
       verdict: 'fail',

@@ -207,16 +207,16 @@ const btnBase = 'inline-flex items-center gap-1 rounded border border-border bg-
 <template>
   <section class="flex min-h-0 flex-col gap-2" data-testid="rvm-check-result">
     <div class="flex flex-wrap items-start gap-x-2 gap-y-1 text-xs">
-      <div class="min-w-0" data-testid="rvm-check-title">
+      <div class="min-w-0 flex-1" data-testid="rvm-check-title">
         <div class="flex items-baseline gap-1.5">
-          <span class="text-[11px] text-muted-foreground">{{ report.noun }}</span>
-          <span class="truncate text-sm font-semibold">{{ report.name || report.refno }}</span>
+          <span class="shrink-0 text-[11px] text-muted-foreground">{{ report.noun }}</span>
+          <span class="truncate text-sm font-semibold" :title="report.name || report.refno">{{ report.name || report.refno }}</span>
         </div>
-        <div class="font-mono text-[11px] text-muted-foreground">
+        <div class="truncate font-mono text-[11px] text-muted-foreground">
           {{ report.refno }}<template v-if="report.sesno != null"> · 会话 {{ report.sesno }}</template><template v-if="at"> · {{ formatAt(at) }}</template><template v-if="duration"> · {{ duration }}</template>
         </div>
       </div>
-      <span class="ml-auto flex flex-wrap items-center gap-1.5">
+      <span class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
         <button type="button" :class="btnBase" :disabled="rechecking" data-testid="rvm-check-recheck" @click="recheck">
           <RefreshCw class="h-3 w-3" :class="rechecking ? 'animate-spin' : ''" />
           {{ rechecking ? '已排进队列' : '重新核对' }}
