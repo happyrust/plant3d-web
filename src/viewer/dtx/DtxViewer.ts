@@ -81,9 +81,12 @@ export class DtxViewer {
       // ignore
     }
 
+    // 画布不开 MSAA：主场景都先画进离屏图再贴上来——E3D 外观走 SglLookPipeline（颜色图自带 4× MSAA），
+    // 其它样式走选中描边的 EffectComposer（离屏图 + FXAA）——画布这层的多重采样一直用不上，只白占显存带宽。
+    // 直接画在画布上的只剩尺寸叠层（自带羽化）、ViewportGizmo，以及软渲染下分屏对比的直出那一路。
     const gl = this.canvas.getContext('webgl2', {
       alpha: false,
-      antialias: true,
+      antialias: false,
       depth: true,
       stencil: false,
       preserveDrawingBuffer: false,
@@ -96,7 +99,7 @@ export class DtxViewer {
     this.renderer = new WebGLRenderer({
       canvas: this.canvas,
       context: gl,
-      antialias: true,
+      antialias: false,
       alpha: false,
       logarithmicDepthBuffer: true,
     });
