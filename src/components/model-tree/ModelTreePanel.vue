@@ -12,6 +12,7 @@ import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/compon
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
@@ -1121,6 +1122,19 @@ function rvmStatusOf(row: { id: string; refno?: string; ghost?: boolean }) {
   return refno ? rvmCheck.statusByRefno.value[refno] ?? null : null;
 }
 
+// 订阅 `/tasks` 轮询：增量重算过的根带「待校验」角标，别处发起的核对结论也会吸收到树上
+useIncrementalRvmCheck();
+
+function rvmIncrementalOf(row: { id: string; refno?: string; ghost?: boolean }) {
+  if (row.ghost) return null;
+  return rvmNodeBadge(treeNodeRefno(row.refno || row.id)).root;
+}
+
+const contextRvmPending = computed(() => {
+  const id = contextNodeId.value;
+  return !!id && rvmNodeBadge(treeNodeRefno(id)).outdated;
+});
+
 /** 「核对 RVM」：没登录过 E3D TTY 先弹登录窗，再排进核对队列，打开 RVM 核对面板看进度。 */
 async function checkRvm() {
   const id = contextNodeId.value;
@@ -1495,6 +1509,7 @@ function onSearchEnter(value: string) {
             :ghost-unplaced="rowAt(vr.index)!.ghostUnplaced"
             :full-names="showFullNames"
             :rvm-status="rvmStatusOf(rowAt(vr.index)!)"
+            :rvm-incremental="rvmIncrementalOf(rowAt(vr.index)!)"
             @toggle-expand="toggleExpand"
             @toggle-visible="setVisible"
             @select="selectByRowIndex"
@@ -1588,6 +1603,9 @@ function onSearchEnter(value: string) {
           data-testid="model-tree-check-rvm"
           @click="checkRvm">
           核对 RVM
+          <span v-if="contextRvmPending"
+            class="ml-2 rounded border border-blue-200 bg-blue-50 px-1 text-[10px] text-blue-700"
+            data-testid="model-tree-check-rvm-pending">增量待校验</span>
         </button>
         <button v-if="contextNodeIsBran" type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"

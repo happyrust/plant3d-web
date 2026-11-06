@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
-import { ExternalLink, ListChecks, Play, Square, Trash2 } from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, ExternalLink, ListChecks, ListPlus, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
 
-import { stageLabel, verdictTone, type RvmNodeVerdict } from './rvmCheckFormat';
+import { formatAt as formatStamp, stageLabel, verdictTone, type RvmNodeVerdict } from './rvmCheckFormat';
 import RvmCheckResult from './RvmCheckResult.vue';
 import RvmStatusIcon from './RvmStatusIcon.vue';
 
+import type { IncrementalRoot } from './incrementalRvmTargets';
+import type { IncrementalGroup } from '@/composables/useIncrementalRvmCheck';
+
+import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { useRvmCheckStore, type RvmQueueItem } from '@/composables/useRvmCheckStore';
 
 /** 独立页没有三维视图，不给定位 */
@@ -14,6 +18,43 @@ withDefaults(defineProps<{ locatable?: boolean }>(), { locatable: true });
 
 const store = useRvmCheckStore();
 const { config, loggedIn, statusByRefno, statusCounts, queue, queueActive, queueNotice, collecting, viewedRun, viewError, historyError } = store;
+
+const incremental = useIncrementalRvmCheck();
+const { pendingSet, pendingByTask, loaded: incrementalLoaded, error: incrementalError } = incremental;
+const leftTab = ref<'queue' | 'incremental'>('queue');
+const collapsed = ref(new Set<string>());
+
+/** 一次全量重建能出上千根，每组只画前面这些，整组入队不受影响 */
+const GROUP_RENDER_LIMIT = 200;
+
+function toggleGroup(taskId: string): void {
+  const next = new Set(collapsed.value);
+  if (next.has(taskId)) next.delete(taskId);
+  else next.add(taskId);
+  collapsed.value = next;
+}
+
+function groupTitle(group: IncrementalGroup): string {
+  const round = group.sesno != null ? `第 ${group.sesno} 轮` : (group.taskKind === 'model_rebuild' ? '模型重建' : '数据批次');
+  return `${round} · ${formatStamp(group.finishedAt)}`;
+}
+
+function rootNote(root: IncrementalRoot): string {
+  const badge = rvmNodeBadge(root.refno);
+  if (badge.verdict === 'queued') return '排队中';
+  if (badge.verdict === 'running') return '核对中';
+  if (!badge.status) return '从未校验';
+  return `上次 ${verdictTone(badge.verdict).label}`;
+}
+
+function rootName(root: IncrementalRoot): string {
+  return rvmNodeBadge(root.refno).status?.name || displayRefno(root.refno);
+}
+
+function openRoot(root: IncrementalRoot): void {
+  const taskId = rvmNodeBadge(root.refno).status?.taskId;
+  if (taskId) void store.openRun(taskId);
+}
 
 const report = computed(() => viewedRun.value?.result ?? null);
 const viewedStatus = computed(() => {
@@ -49,6 +90,7 @@ const countChips = computed<CountChip[]>(() => [
   { verdict: 'running', label: '核对中', count: liveCounts.value.running, chip: verdictTone(null).chip },
   { verdict: 'queued', label: '待跑', count: liveCounts.value.queued, chip: 'border-border bg-background text-muted-foreground' },
 ]);
+const incrementalPending = computed(() => pendingSet.value.size);
 
 function itemVerdict(item: RvmQueueItem): RvmNodeVerdict {
   if (item.state === 'done') {
@@ -145,6 +187,13 @@ onMounted(() => {
             {{ chip.label }} {{ chip.count }}
           </span>
         </template>
+        <button v-if="incrementalPending > 0" type="button"
+          class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-blue-700 hover:bg-blue-100"
+          data-testid="rvm-check-incremental-count"
+          @click="leftTab = 'incremental'">
+          <RvmStatusIcon :verdict="null" :outdated="true" />
+          待校验 {{ incrementalPending }}
+        </button>
         <button v-if="locatable" type="button" class="ml-1 inline-flex items-center gap-0.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" @click="openStandalone">
           独立页
           <ExternalLink class="h-3 w-3" />
@@ -155,14 +204,80 @@ onMounted(() => {
     <p v-if="historyError" class="border-b border-border px-3 py-1 text-[11px] text-red-700">{{ historyError }}</p>
     <div class="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)]">
       <aside class="flex min-h-0 flex-col border-r border-border bg-muted/30">
-        <div class="flex items-center justify-between px-3 pb-1 pt-2 text-[11px] text-muted-foreground">
-          <span class="font-medium">队列</span>
-          <span v-if="queue.length" data-testid="rvm-check-queue-summary">{{ queue.length }} 项 · 剩 {{ remainingCount }}</span>
+        <div class="flex items-center gap-3 border-b border-border px-3 text-[11px]" role="tablist">
+          <button type="button" role="tab"
+            class="-mb-px border-b-2 py-1.5"
+            :class="leftTab === 'queue' ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            :aria-selected="leftTab === 'queue'"
+            data-testid="rvm-check-tab-queue"
+            @click="leftTab = 'queue'">
+            队列
+          </button>
+          <button type="button" role="tab"
+            class="-mb-px border-b-2 py-1.5"
+            :class="leftTab === 'incremental' ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            :aria-selected="leftTab === 'incremental'"
+            data-testid="rvm-check-tab-incremental"
+            @click="leftTab = 'incremental'">
+            增量待校验 ({{ incrementalPending }})
+          </button>
+          <span v-if="leftTab === 'queue' && queue.length" class="ml-auto text-muted-foreground" data-testid="rvm-check-queue-summary">{{ queue.length }} 项 · 剩 {{ remainingCount }}</span>
         </div>
-        <p v-if="queue.length === 0" class="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+        <template v-if="leftTab === 'incremental'">
+          <p v-if="incrementalError" class="px-3 py-1 text-[11px] text-amber-700">任务表暂时读不到，下面是上一次的快照：{{ incrementalError }}</p>
+          <p v-if="!incrementalLoaded" class="px-3 py-2 text-[11px] text-muted-foreground">正在读 /api/v1/tasks…</p>
+          <p v-else-if="pendingByTask.length === 0" class="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            最近的增量重算过的根都已校验过。
+          </p>
+          <ul v-else class="min-h-0 flex-1 overflow-auto pb-1 text-xs" data-testid="rvm-check-incremental">
+            <li v-for="group in pendingByTask" :key="group.taskId">
+              <div class="flex items-center gap-1.5 bg-muted/60 px-2 py-1 text-[11px]">
+                <button type="button" class="inline-flex min-w-0 flex-1 items-center gap-1 text-left" @click="toggleGroup(group.taskId)">
+                  <ChevronRight v-if="collapsed.has(group.taskId)" class="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <ChevronDown v-else class="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span class="truncate font-medium">{{ groupTitle(group) }}</span>
+                  <span class="shrink-0 rounded bg-blue-50 px-1 text-[10px] text-blue-700">{{ group.pending.length }} 根</span>
+                </button>
+                <button type="button"
+                  :class="btnBase"
+                  class="text-[10px]"
+                  :disabled="group.pending.length === 0"
+                  data-testid="rvm-check-incremental-group"
+                  @click="incremental.checkRoots(group.pending)">
+                  <ListPlus class="h-3 w-3" />
+                  整组入队
+                </button>
+              </div>
+              <ul v-if="!collapsed.has(group.taskId)">
+                <li v-for="root in group.roots.slice(0, GROUP_RENDER_LIMIT)" :key="root.refno"
+                  class="flex items-center gap-2 py-1 pl-6 pr-2 hover:bg-muted"
+                  :title="rvmNodeBadge(root.refno).title">
+                  <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="openRoot(root)">
+                    <RvmStatusIcon :verdict="rvmNodeBadge(root.refno).verdict" :outdated="rvmNodeBadge(root.refno).outdated" />
+                    <span class="shrink-0 text-[10px] text-muted-foreground">{{ root.noun }}</span>
+                    <span class="truncate font-medium">{{ rootName(root) }}</span>
+                    <span class="ml-auto shrink-0 text-[10px] text-muted-foreground">{{ rootNote(root) }}</span>
+                  </button>
+                  <button v-if="rvmNodeBadge(root.refno).outdated" type="button"
+                    class="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                    title="单根入队"
+                    data-testid="rvm-check-incremental-root"
+                    @click="incremental.checkRoots([root])">
+                    <Plus class="h-3 w-3" />
+                  </button>
+                </li>
+                <li v-if="group.roots.length > GROUP_RENDER_LIMIT" class="py-1 pl-6 text-[10px] text-muted-foreground">
+                  还有 {{ group.roots.length - GROUP_RENDER_LIMIT }} 根未列出，「整组入队」会一并排进去
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p class="mt-auto border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">按 /api/v1/tasks 最近 200 条推导；更早的批次不在这里</p>
+        </template>
+        <p v-else-if="queue.length === 0" class="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           在模型树里右键一个节点选「核对 RVM」，或点上面的「全部 SITE 依次核对」。核对过的节点在树上会带一个状态图标，点图标看结果。
         </p>
-        <ul v-else class="min-h-0 flex-1 overflow-auto pb-1 text-xs" data-testid="rvm-check-queue">
+        <ul v-else-if="leftTab === 'queue'" class="min-h-0 flex-1 overflow-auto pb-1 text-xs" data-testid="rvm-check-queue">
           <li v-for="item in queue" :key="`${item.refno}-${item.taskId ?? 'pending'}`" class="relative">
             <span v-if="isViewed(item)" class="absolute inset-y-0 left-0 w-0.5" :class="itemAccent(item)" />
             <button type="button"

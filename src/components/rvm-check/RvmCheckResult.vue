@@ -31,6 +31,7 @@ import RvmStatusIcon from './RvmStatusIcon.vue';
 import { useRvmMismatchLocate } from './useRvmMismatchLocate';
 
 import { downloadRvmCheckFile, RVM_CHECK_E3D_LOG, type RvmCheckReport, type RvmMismatch } from '@/api/rvmCheckApi';
+import { useRvmNodeBadge } from '@/composables/useIncrementalRvmCheck';
 import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 
 const props = defineProps<{
@@ -130,6 +131,26 @@ const rechecking = computed(() => {
   return store.queue.value.some((item) => item.refno === refno && (item.state === 'queued' || item.state === 'running'));
 });
 
+/**
+ * 这次结论之后该根又被增量重算过。看的是旧任务时按这次的完成时刻判，不按树上最新的结论判：
+ * 树上最新结论可能已经是新的，但这一份确实早于那一轮。
+ */
+const badge = useRvmNodeBadge(() => props.report.refno);
+const outdatedRound = computed(() => {
+  const root = badge.value.root;
+  if (!root || rechecking.value) return null;
+  const finished = new Date(root.finishedAt).getTime();
+  const at = props.at ? new Date(props.at).getTime() : Number.NaN;
+  if (!Number.isNaN(at) && at >= finished) return null;
+  return root;
+});
+const outdatedHint = computed(() => {
+  const root = outdatedRound.value;
+  if (!root) return '';
+  const round = root.sesno != null ? `第 ${root.sesno} 轮增量` : '一轮增量';
+  return `这个结论早于${round}（${formatAt(root.finishedAt)} 落地），该根之后又被重算过，结论可能已不适用`;
+});
+
 async function recheck(): Promise<void> {
   await store.recheck({ refno: props.report.refno, name: props.report.name ?? '', noun: props.report.noun ?? '' });
 }
@@ -211,15 +232,23 @@ const btnBase = 'inline-flex items-center gap-1 rounded border border-border bg-
         <div class="flex items-baseline gap-1.5">
           <span class="shrink-0 text-[11px] text-muted-foreground">{{ report.noun }}</span>
           <span class="truncate text-sm font-semibold" :title="report.name || report.refno">{{ report.name || report.refno }}</span>
+          <span v-if="outdatedRound"
+            class="shrink-0 self-center rounded border border-blue-200 bg-blue-50 px-1.5 text-[10px] leading-4 text-blue-700"
+            :title="outdatedHint"
+            data-testid="rvm-check-outdated">增量后过期</span>
         </div>
         <div class="truncate font-mono text-[11px] text-muted-foreground">
           {{ report.refno }}<template v-if="report.sesno != null"> · 会话 {{ report.sesno }}</template><template v-if="at"> · {{ formatAt(at) }}</template><template v-if="duration"> · {{ duration }}</template>
         </div>
       </div>
       <span class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-        <button type="button" :class="btnBase" :disabled="rechecking" data-testid="rvm-check-recheck" @click="recheck">
+        <button type="button"
+          :class="outdatedRound ? 'inline-flex items-center gap-1 rounded bg-foreground px-2 py-0.5 text-[11px] text-background disabled:opacity-40' : btnBase"
+          :disabled="rechecking"
+          data-testid="rvm-check-recheck"
+          @click="recheck">
           <RefreshCw class="h-3 w-3" :class="rechecking ? 'animate-spin' : ''" />
-          {{ rechecking ? '已排进队列' : '重新核对' }}
+          {{ rechecking ? '已排进队列' : outdatedRound ? '重新校验' : '重新核对' }}
         </button>
         <template v-if="locatable && total">
           <button type="button"
@@ -256,6 +285,11 @@ const btnBase = 'inline-flex items-center gap-1 rounded border border-border bg-
         </span>
       </span>
     </div>
+
+    <p v-if="outdatedRound" class="flex items-start gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-[11px] text-blue-800" data-testid="rvm-check-outdated-hint">
+      <RefreshCw class="mt-0.5 h-3 w-3 shrink-0" />
+      {{ outdatedHint }}
+    </p>
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border px-3 py-2" :class="tone.banner" data-testid="rvm-check-banner">
       <span class="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full" :class="tone.iconBg">

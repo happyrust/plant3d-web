@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { rvmRefnoKey, rvmStatusTitle } from './rvmCheckFormat';
 import RvmCheckTreeNode from './RvmCheckTreeNode.vue';
 import RvmStatusIcon from './RvmStatusIcon.vue';
 
-import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
-
-const { statusByRefno } = useRvmCheckStore();
+import { rvmNodeBadge } from '@/composables/useIncrementalRvmCheck';
 
 export type RvmTreeRow = {
   refnoSlash: string;
@@ -43,12 +40,12 @@ const emit = defineEmits<{
         {{ row.shortName || row.name }}
         <span class="ml-1 text-muted-foreground">{{ row.refnoSlash }}</span>
       </button>
-      <span v-if="statusByRefno[rvmRefnoKey(row.refnoSlash)]"
+      <span v-if="!rvmNodeBadge(row.refnoSlash).empty"
         class="shrink-0"
-        :title="rvmStatusTitle(statusByRefno[rvmRefnoKey(row.refnoSlash)]!)"
-        :data-rvm-status="statusByRefno[rvmRefnoKey(row.refnoSlash)]!.verdict"
+        :title="rvmNodeBadge(row.refnoSlash).title"
+        :data-rvm-status="rvmNodeBadge(row.refnoSlash).verdict ?? undefined"
         data-testid="rvm-check-tree-status">
-        <RvmStatusIcon :verdict="statusByRefno[rvmRefnoKey(row.refnoSlash)]!.verdict" />
+        <RvmStatusIcon :verdict="rvmNodeBadge(row.refnoSlash).verdict" :outdated="rvmNodeBadge(row.refnoSlash).outdated" />
       </span>
     </div>
     <ul v-if="row.expanded && row.children.length">

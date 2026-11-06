@@ -535,6 +535,30 @@ async function follow(taskId: string): Promise<void> {
   }
 }
 
+/**
+ * 吸收一份任务列表里的 `rvm_check` 条目：别的标签页、别的用户、自动入队发起的核对，结论也落到树上。
+ * 只在结论比现有的新时覆盖；本页队列里排着或跑着的节点不动，没跑完的任务接着盯。
+ */
+function absorbTasks(list: TaskListEntryDto[]): void {
+  const runs = list.filter((entry) => entry.kind === 'rvm_check').map(toRun);
+  if (!runs.length) return;
+  for (const run of runs) runCache.set(run.task_id, run);
+  const latest = latestStatusByRefno(runs);
+  const active = new Set(
+    queue.value.filter((item) => item.state === 'queued' || item.state === 'running').map((item) => item.refno),
+  );
+  const next = { ...statusByRefno.value };
+  for (const [refno, status] of Object.entries(latest)) {
+    if (active.has(refno)) continue;
+    const current = next[refno];
+    if (!current || (current.at ?? '') <= (status.at ?? '')) next[refno] = status;
+  }
+  statusByRefno.value = next;
+  for (const run of runs) {
+    if (!isTerminalState(run.state)) void follow(run.task_id);
+  }
+}
+
 /** 从服务端任务历史（含落盘归档）还原每个节点最新的结论。`force` 时重拉。 */
 function restoreFromHistory(force = false): Promise<void> {
   if (historyRequest && !force) return historyRequest;
@@ -543,23 +567,8 @@ function restoreFromHistory(force = false): Promise<void> {
       const response = await genModelV1Fetch<{ tasks?: TaskListEntryDto[] }>('/api/v1/tasks', {
         query: { kind: 'rvm_check', limit: HISTORY_LIMIT },
       });
-      const runs = (response.tasks ?? []).filter((entry) => entry.kind === 'rvm_check').map(toRun);
-      for (const run of runs) runCache.set(run.task_id, run);
-      const latest = latestStatusByRefno(runs);
-      const active = new Set(
-        queue.value.filter((item) => item.state === 'queued' || item.state === 'running').map((item) => item.refno),
-      );
-      const next = { ...statusByRefno.value };
-      for (const [refno, status] of Object.entries(latest)) {
-        if (active.has(refno)) continue;
-        const current = next[refno];
-        if (!current || (current.at ?? '') <= (status.at ?? '')) next[refno] = status;
-      }
-      statusByRefno.value = next;
+      absorbTasks(response.tasks ?? []);
       historyError.value = null;
-      for (const run of runs) {
-        if (!isTerminalState(run.state)) void follow(run.task_id);
-      }
     } catch (cause) {
       historyRequest = null;
       historyError.value = `读核对历史失败：${errorText(cause)}`;
@@ -650,6 +659,7 @@ export function useRvmCheckStore() {
     runAllSites,
     collectSites,
     restoreFromHistory,
+    absorbTasks,
     openRun,
     loadE3dLog,
   };

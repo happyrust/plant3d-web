@@ -7,7 +7,8 @@ import ModelTreeStatusIcon from './ModelTreeStatusIcon.vue';
 
 import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 
-import { rvmStatusTitle, type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
+import { rvmBadgeTitle, type IncrementalRoot } from '@/components/rvm-check/incrementalRvmTargets';
+import { type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { type CheckState, type FlatRow } from '@/composables/useModelTree';
 import { getPdmsTypeIconUrl } from '@/lib/pdmsTypeIcon';
@@ -37,6 +38,8 @@ const props = defineProps<{
   rowTitle?: string;
   /** RVM 核对最新结论；没核对过不传 */
   rvmStatus?: RvmNodeStatus | null;
+  /** 增量待校验 / 增量后过期时，对应的那一轮增量；不在增量里不传 */
+  rvmIncremental?: IncrementalRoot | null;
 }>();
 
 const emit = defineEmits<{
@@ -176,7 +179,7 @@ function onContext(ev: MouseEvent) {
 // ---------------------------------------------------------------------------
 const dbStatusStore = useGenModelV1DbnumStatus();
 const statusDbnum = computed(() =>
-  !props.ghost && (props.row.dbBoundary === true || !!props.rvmStatus) && typeof props.row.dbnum === 'number'
+  !props.ghost && (props.row.dbBoundary === true || !!props.rvmStatus || !!props.rvmIncremental) && typeof props.row.dbnum === 'number'
     ? props.row.dbnum
     : null
 );
@@ -188,9 +191,10 @@ watch(statusDbnum, (dbnum) => {
 const dbStatus = computed(() => (statusDbnum.value === null ? null : dbStatusStore.view(statusDbnum.value)));
 const statusTitle = computed(() => {
   const gen = dbStatus.value?.title;
-  if (!props.rvmStatus) return gen ? `${gen}（点击重查）` : undefined;
-  const rvm = rvmStatusTitle(props.rvmStatus).replace(/\n点击查看结果$/, '');
-  return [rvm, gen, '点击查看结果'].filter(Boolean).join('\n');
+  if (!props.rvmStatus && !props.rvmIncremental) return gen ? `${gen}（点击重查）` : undefined;
+  const rvm = rvmBadgeTitle(props.rvmStatus, props.rvmIncremental).replace(/\n(点击查看结果|右键「核对 RVM」校验)$/, '');
+  const action = props.rvmStatus ? '点击查看结果' : '右键「核对 RVM」校验';
+  return [rvm, gen, action].filter(Boolean).join('\n');
 });
 /** 核对过就打开结果，没核对过就重查生成状态 */
 function onStatusClick() {
@@ -262,15 +266,16 @@ onUnmounted(() => {
         {{ diffCount }}
       </span>
 
-      <button v-if="!ghost && (rvmStatus || dbStatus)" type="button"
+      <button v-if="!ghost && (rvmStatus || rvmIncremental || dbStatus)" type="button"
         class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
         :title="statusTitle"
         data-testid="model-tree-status"
         :data-rvm-status="rvmStatus?.verdict"
         :data-db-status="dbStatus?.kind"
+        :data-rvm-outdated="rvmIncremental ? 'true' : undefined"
         @mousedown.stop
         @click.stop="onStatusClick">
-        <ModelTreeStatusIcon :verdict="rvmStatus?.verdict ?? null" :generation="dbStatus?.kind ?? null" />
+        <ModelTreeStatusIcon :verdict="rvmStatus?.verdict ?? null" :generation="dbStatus?.kind ?? null" :outdated="!!rvmIncremental" />
       </button>
       <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
         <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />

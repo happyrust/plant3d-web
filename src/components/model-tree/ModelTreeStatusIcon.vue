@@ -2,6 +2,7 @@
 /**
  * 模型树行尾的合并状态图标：颜色和符号是 RVM 核对结论，实心 / 空心 / 角标是模型生成状态。
  * 没核对过时退回生成状态圆点；核对排队或进行中只画时钟 / 转圈，不叠生成状态。
+ * `outdated`（增量待校验 / 增量后过期）在右下角叠蓝色刷新角标，从没核对过时画灰色空心圆。
  */
 import { computed } from 'vue';
 
@@ -10,11 +11,13 @@ import { Check, Circle, CircleDashed, LoaderCircle, Minus, Slash, X } from 'luci
 import type { RvmNodeVerdict } from '@/components/rvm-check/rvmCheckFormat';
 import type { DbnumModelStatusKind } from '@/composables/useGenModelV1DbnumStatus';
 
+import RvmOutdatedBadge from '@/components/rvm-check/RvmOutdatedBadge.vue';
 import RvmStatusIcon from '@/components/rvm-check/RvmStatusIcon.vue';
 
 const props = defineProps<{
   verdict: RvmNodeVerdict | null;
   generation: DbnumModelStatusKind | null;
+  outdated?: boolean;
 }>();
 
 const SOLID_BG: Partial<Record<RvmNodeVerdict, string>> = {
@@ -27,6 +30,7 @@ const SOLID_BG: Partial<Record<RvmNodeVerdict, string>> = {
 };
 
 const inFlight = computed(() => props.verdict === 'running' || props.verdict === 'queued');
+const outdated = computed(() => props.outdated === true && !inFlight.value);
 /** 有已生成的模型（最新或滞后）才画实心 */
 const solid = computed(() =>
   !!props.verdict && !inFlight.value && (props.generation === 'current' || props.generation === 'stale'));
@@ -39,9 +43,10 @@ const dim = computed(() =>
 <template>
   <span class="relative inline-flex h-3.5 w-3.5 items-center justify-center"
     data-testid="model-tree-status-icon"
-    :data-fill="verdict && !inFlight ? (solid ? 'solid' : 'outline') : undefined">
-    <template v-if="verdict">
-      <span v-if="solid" class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-white" :class="SOLID_BG[verdict]">
+    :data-fill="verdict && !inFlight ? (solid ? 'solid' : 'outline') : undefined"
+    :data-rvm-outdated="outdated ? 'true' : undefined">
+    <template v-if="verdict || outdated">
+      <span v-if="solid" class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-white" :class="SOLID_BG[verdict!]">
         <Check v-if="verdict === 'pass'" class="h-2.5 w-2.5" :stroke-width="3" />
         <X v-else-if="verdict === 'fail'" class="h-2.5 w-2.5" :stroke-width="3" />
         <Slash v-else-if="verdict === 'external'" class="h-2.5 w-2.5" :stroke-width="3" />
@@ -49,6 +54,7 @@ const dim = computed(() =>
         <span v-else class="text-[9px] font-bold leading-none">{{ verdict === 'kind_differ' ? '!' : '?' }}</span>
       </span>
       <RvmStatusIcon v-else :verdict="verdict" :class="dim ? 'opacity-60' : ''" />
+      <RvmOutdatedBadge v-if="outdated" />
       <span v-if="stale"
         class="absolute -right-0.5 -top-0.5 h-[5px] w-[5px] rounded-full bg-amber-500 ring-1 ring-white"
         data-testid="model-tree-status-stale" />

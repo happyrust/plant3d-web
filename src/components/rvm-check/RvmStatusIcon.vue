@@ -1,22 +1,24 @@
 <script setup lang="ts">
-/** 树行尾的 RVM 核对结论图标。模型树和核对页的树共用，颜色和形状只在这里定。 */
-import { CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleSlash, CircleX, Clock, LoaderCircle } from 'lucide-vue-next';
+/**
+ * 树行尾的 RVM 核对结论图标。模型树和核对页的树共用，颜色和形状只在这里定。
+ * `verdict` 为 null 表示从没核对过，只在增量待校验时出现，画灰色空心圆；
+ * `outdated` 在右下角叠蓝色刷新角标（增量待校验 / 增量后过期）。
+ */
+import { Circle, CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleSlash, CircleX, Clock, LoaderCircle } from 'lucide-vue-next';
+
+import RvmOutdatedBadge from './RvmOutdatedBadge.vue';
+import RvmStatusIconBase from './RvmStatusIconBase.vue';
 
 import type { RvmNodeVerdict } from './rvmCheckFormat';
 
-defineProps<{ verdict: RvmNodeVerdict }>();
+defineProps<{ verdict: RvmNodeVerdict | null; outdated?: boolean }>();
 </script>
 
 <template>
-  <CircleCheck v-if="verdict === 'pass'" class="h-3.5 w-3.5 text-emerald-600" />
-  <CircleAlert v-else-if="verdict === 'kind_differ'" class="h-3.5 w-3.5 text-amber-500" />
-  <CircleX v-else-if="verdict === 'fail'" class="h-3.5 w-3.5 text-red-600" />
-  <CircleMinus v-else-if="verdict === 'empty'" class="h-3.5 w-3.5 text-zinc-400" />
-  <span v-else-if="verdict === 'tool_error'" class="relative inline-flex h-3.5 w-3.5 items-center justify-center text-stone-500">
-    <CircleDashed class="h-3.5 w-3.5" />
-    <span class="absolute text-[8px] font-bold leading-none">!</span>
+  <!-- 带角标时根节点换成定位容器；不带时根节点仍是图标本身，外面传的 class 落在 svg 上 -->
+  <span v-if="outdated" class="relative inline-flex h-3.5 w-3.5 shrink-0" data-rvm-outdated="true">
+    <RvmStatusIconBase :verdict="verdict" />
+    <RvmOutdatedBadge />
   </span>
-  <CircleSlash v-else-if="verdict === 'external'" class="h-3.5 w-3.5 text-slate-500" />
-  <Clock v-else-if="verdict === 'queued'" class="h-3.5 w-3.5 text-muted-foreground" />
-  <LoaderCircle v-else class="h-3.5 w-3.5 animate-spin text-sky-600" />
+  <RvmStatusIconBase v-else :verdict="verdict" />
 </template>

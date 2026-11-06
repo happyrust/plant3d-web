@@ -7,10 +7,11 @@
  * 面板 / 成员 / 死信计数。d-195 的口径没松——纯展示，不订阅、不反推、不据此
  * 重载任何已加载的根。
  *
- * 轮询节拍 5s，只在面板活着的时候打；`/tasks` 服务端是 200 条窗口，更早的批次
- * 看不到了就照实说，不猜。
+ * 轮询走 `useIncrementalRvmCheck` 的共享订阅（5s，面板活着或自动校验打开时才打）；`/tasks` 服务端是
+ * 200 条窗口，更早的批次看不到了就照实说，不猜。数据批次 / 模型重建落地后，可以对本轮重算过的
+ * 生成根发起 RVM 校验：单条、勾选批量，或打开自动校验。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import {
   ChevronDown,
@@ -23,7 +24,9 @@ import {
   LoaderCircle,
   Package,
   RefreshCw,
+  ScanSearch,
   TriangleAlert,
+  X,
 } from 'lucide-vue-next';
 
 import {
@@ -45,19 +48,18 @@ import {
   type RecordKind,
 } from './incrementRecordFormat';
 
-import {
-  genModelV1Tasks,
-  isGenModelV1ApiError,
-  type TaskListEntryDto,
-} from '@/api/genModelV1Api';
+import type { TaskListEntryDto } from '@/api/genModelV1Api';
 
-const POLL_MS = 5000;
+import { batchCheckSummary, rootsOfTask, taskPendingRoots } from '@/components/rvm-check/incrementalRvmTargets';
+import RvmStatusIcon from '@/components/rvm-check/RvmStatusIcon.vue';
+import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
+import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 
-const tasks = ref<TaskListEntryDto[]>([]);
-/** 还没成功取到过一次时为 false（画「还没连上」而不是空账本） */
-const loaded = ref(false);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const incremental = useIncrementalRvmCheck();
+/** `loaded` 还没成功取到过一次时为 false（画「还没连上」而不是空账本） */
+const { tasks, loaded, loading, error, autoEnabled, autoQueued, waitingLogin, refresh } = incremental;
+const rvm = useRvmCheckStore();
+const selected = ref(new Set<string>());
 const expanded = ref(new Set<string>());
 const filter = ref<RecordKind | 'all'>('all');
 
@@ -73,37 +75,84 @@ const entries = computed(() =>
     && (filter.value === 'all' || recordKindLabel(entry.kind).key === filter.value)),
 );
 
-let timer: ReturnType<typeof setInterval> | null = null;
-let inFlight = false;
-
-async function refresh(): Promise<void> {
-  if (inFlight) return;
-  inFlight = true;
-  loading.value = true;
-  try {
-    const list = await genModelV1Tasks();
-    tasks.value = Array.isArray(list.tasks) ? list.tasks : [];
-    loaded.value = true;
-    error.value = null;
-  } catch (cause) {
-    // 失败不作废上一份快照：账本停在旧数据，条幅照实说为什么没换代。
-    error.value = isGenModelV1ApiError(cause)
-      ? cause.message
-      : (cause instanceof Error ? cause.message : String(cause));
-  } finally {
-    inFlight = false;
-    loading.value = false;
+/** 一次全量重建能有上千根，模板里每行要读好几次，按任务缓存一份 */
+const summaries = computed(() => {
+  const statuses = rvm.statusByRefno.value;
+  const map = new Map<string, ReturnType<typeof batchCheckSummary>>();
+  for (const entry of tasks.value) {
+    if (rootsOfTask(entry).length > 0) map.set(entry.task_id, batchCheckSummary(entry, statuses));
   }
+  return map;
+});
+
+const EMPTY_SUMMARY = { total: 0, pending: 0, running: 0, pass: 0, mismatch: 0, failed: 0, other: 0 };
+
+function summaryOf(entry: TaskListEntryDto) {
+  return summaries.value.get(entry.task_id) ?? EMPTY_SUMMARY;
 }
 
-onMounted(() => {
-  void refresh();
-  timer = setInterval(() => void refresh(), POLL_MS);
+function pendingCount(entry: TaskListEntryDto): number {
+  return summaryOf(entry).pending;
+}
+
+/** 能勾选的：落地后有生成根的记录 */
+function checkable(entry: TaskListEntryDto): boolean {
+  return summaries.value.has(entry.task_id);
+}
+
+function toggleSelected(id: string): void {
+  const next = new Set(selected.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selected.value = next;
+}
+
+const selectedEntries = computed(() => entries.value.filter((entry) => selected.value.has(entry.task_id)));
+const selectedPending = computed(() => {
+  const seen = new Set<string>();
+  for (const entry of selectedEntries.value) {
+    for (const root of taskPendingRoots(entry, rvm.statusByRefno.value)) seen.add(root.refno);
+  }
+  return seen.size;
+});
+const checkableEntries = computed(() => entries.value.filter(checkable));
+const allSelected = computed(() => checkableEntries.value.length > 0
+  && checkableEntries.value.every((entry) => selected.value.has(entry.task_id)));
+
+function toggleAll(): void {
+  selected.value = allSelected.value ? new Set() : new Set(checkableEntries.value.map((entry) => entry.task_id));
+}
+
+async function checkSelected(): Promise<void> {
+  await incremental.checkTasks(selectedEntries.value);
+  selected.value = new Set();
+}
+
+function checkOne(entry: TaskListEntryDto): void {
+  void incremental.checkTasks([entry]);
+}
+
+/**
+ * 只给展开记录的前 UNIT_BADGE_LIMIT 根画核对图标：一次全量重建展开有几千行，每行一个图标组件，
+ * 6772 行实测展开从 1s 拖到 4s+。整批状态看汇总标签和 RVM 核对面板。
+ */
+const UNIT_BADGE_LIMIT = 300;
+const unitBadges = computed(() => {
+  const map = new Map<string, (ReturnType<typeof rvmNodeBadge> | null)[]>();
+  for (const entry of tasks.value) {
+    if (!expanded.value.has(entry.task_id)) continue;
+    map.set(entry.task_id, unitsOf(entry).slice(0, UNIT_BADGE_LIMIT).map((unit) => {
+      if (unit.status !== 'generated') return null;
+      const badge = rvmNodeBadge(unit.root_refno);
+      return badge.empty ? null : badge;
+    }));
+  }
+  return map;
 });
 
-onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
-});
+function unitBadge(entry: TaskListEntryDto, index: number) {
+  return unitBadges.value.get(entry.task_id)?.[index] ?? null;
+}
 
 function toggle(id: string): void {
   const next = new Set(expanded.value);
@@ -142,6 +191,14 @@ const chipTone: Record<string, string> = {
       </div>
       <div class="flex items-center gap-2">
         <LoaderCircle v-if="loading" class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        <label class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-700"
+          title="增量落地后自动把本轮重算过的生成根排进 RVM 核对队列；只处理打开之后落地的批次">
+          自动校验
+          <input v-model="autoEnabled" type="checkbox" role="switch" class="peer sr-only" data-testid="increment-rvm-auto" />
+          <span class="relative inline-flex h-3.5 w-6 items-center rounded-full bg-gray-300 transition-colors peer-checked:bg-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-brand">
+            <span class="absolute left-0.5 h-2.5 w-2.5 rounded-full bg-white transition-transform" :class="autoEnabled ? 'translate-x-2.5' : ''" />
+          </span>
+        </label>
         <button type="button"
           class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-white"
           @click="refresh">
@@ -158,8 +215,37 @@ const chipTone: Record<string, string> = {
       </div>
     </div>
 
+    <div v-if="autoEnabled && waitingLogin > 0" class="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-1.5 text-[11px] text-amber-800" role="status" data-testid="increment-rvm-waiting-login">
+      <TriangleAlert class="h-3.5 w-3.5 shrink-0 text-amber-600" />
+      自动校验等待登录 · 已累计 {{ waitingLogin }} 根
+      <button type="button" class="ml-auto rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold hover:bg-amber-100" @click="rvm.openLogin()">登录 E3D</button>
+    </div>
+    <div v-else-if="autoEnabled" class="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-5 py-1.5 text-[11px] text-sky-800" role="status">
+      增量落地后自动入队 · 本次已入队 {{ autoQueued }} 根
+      <button v-if="rvm.queueActive.value" type="button" class="ml-auto rounded border border-sky-300 bg-white px-2 py-0.5 font-semibold hover:bg-sky-100" @click="rvm.cancelQueue()">停止队列</button>
+    </div>
+
+    <!-- 批量栏 -->
+    <div v-if="selected.size > 0" class="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-5 py-1.5 text-[11px]" data-testid="increment-rvm-batch">
+      <span class="text-sky-800">已选 {{ selected.size }} 条 · 共 {{ selectedPending }} 根待校验</span>
+      <button type="button" class="ml-auto inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-0.5 text-gray-700 hover:bg-gray-50" @click="selected = new Set()">
+        <X class="h-3 w-3" /> 取消选择
+      </button>
+      <button type="button"
+        class="inline-flex items-center gap-1 rounded-lg bg-foreground px-2 py-0.5 font-semibold text-background disabled:opacity-40"
+        :disabled="selectedPending === 0"
+        data-testid="increment-rvm-batch-check"
+        @click="checkSelected">
+        <ScanSearch class="h-3 w-3" /> RVM 校验 {{ selectedPending }} 根
+      </button>
+    </div>
+
     <!-- 类型筛 -->
     <div class="flex items-center gap-1.5 border-b border-border px-5 py-2">
+      <input v-if="checkableEntries.length > 0" type="checkbox" class="mr-1 h-3 w-3"
+        :checked="allSelected"
+        aria-label="全选可校验的记录"
+        @change="toggleAll" />
       <button v-for="item in filters" :key="item.key"
         type="button"
         class="rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors"
@@ -184,29 +270,54 @@ const chipTone: Record<string, string> = {
       </div>
 
       <div v-for="entry in entries" :key="entry.task_id"
-        class="mb-1 rounded-lg border border-gray-200 bg-white">
-        <button type="button" class="flex w-full flex-col gap-1 px-3 py-2 text-left" @click="toggle(entry.task_id)">
-          <!-- 主行：类型 + 库号 + 保存窗口 + 状态芯片 -->
-          <div class="flex items-center gap-2">
-            <component :is="kindIcon(recordKindLabel(entry.kind).key)" class="h-3.5 w-3.5 shrink-0 text-brand" />
-            <span class="text-xs font-bold text-foreground">{{ recordKindLabel(entry.kind).label }}</span>
-            <span v-if="entry.dbnum != null" class="text-[11px] text-muted-foreground">库 {{ entry.dbnum }}</span>
-            <span v-if="saveWindowLabel(entry)" class="font-mono text-[11px] text-muted-foreground">{{ saveWindowLabel(entry) }}</span>
-            <span class="ml-auto flex items-center gap-1.5">
-              <span class="rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="chipTone[recordStateChip(entry.state).tone]">
-                {{ recordStateChip(entry.state).text }}
+        class="mb-1 rounded-lg border bg-white"
+        :class="selected.has(entry.task_id) ? 'border-sky-400' : 'border-gray-200'">
+        <div class="flex items-start">
+          <input v-if="checkable(entry)" type="checkbox" class="ml-3 mt-2.5 h-3 w-3 shrink-0"
+            :checked="selected.has(entry.task_id)"
+            :aria-label="`选择${recordKindLabel(entry.kind).label} ${entry.task_id}`"
+            data-testid="increment-rvm-select"
+            @change="toggleSelected(entry.task_id)" />
+          <button type="button" class="flex min-w-0 flex-1 flex-col gap-1 px-3 py-2 text-left" @click="toggle(entry.task_id)">
+            <!-- 主行：类型 + 库号 + 保存窗口 + 状态芯片 -->
+            <div class="flex items-center gap-2">
+              <component :is="kindIcon(recordKindLabel(entry.kind).key)" class="h-3.5 w-3.5 shrink-0 text-brand" />
+              <span class="text-xs font-bold text-foreground">{{ recordKindLabel(entry.kind).label }}</span>
+              <span v-if="entry.dbnum != null" class="text-[11px] text-muted-foreground">库 {{ entry.dbnum }}</span>
+              <span v-if="saveWindowLabel(entry)" class="font-mono text-[11px] text-muted-foreground">{{ saveWindowLabel(entry) }}</span>
+              <span class="ml-auto flex items-center gap-1.5">
+                <span class="rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="chipTone[recordStateChip(entry.state).tone]">
+                  {{ recordStateChip(entry.state).text }}
+                </span>
+                <ChevronDown class="h-3.5 w-3.5 text-muted-foreground transition-transform" :class="expanded.has(entry.task_id) && 'rotate-180'" />
               </span>
-              <ChevronDown class="h-3.5 w-3.5 text-muted-foreground transition-transform" :class="expanded.has(entry.task_id) && 'rotate-180'" />
-            </span>
-          </div>
-          <!-- 次行：会话区间 + 变化摘要 + 单元进度 + 耗时 -->
-          <div class="flex items-center gap-3 pl-5 text-[11px] text-muted-foreground">
-            <span v-if="sesnoRangeLabel(entry)" class="font-mono">{{ sesnoRangeLabel(entry) }}</span>
-            <span v-if="changeSummary(batchOf(entry))" class="text-gray-600">{{ changeSummary(batchOf(entry)) }}</span>
-            <span v-if="entry.total_units != null">单元 {{ entry.units_done ?? 0 }}/{{ entry.total_units }}</span>
-            <span v-if="elapsedLabel(entry)" class="ml-auto font-mono">{{ elapsedLabel(entry) }}</span>
-          </div>
-        </button>
+            </div>
+            <!-- 次行：会话区间 + 变化摘要 + 单元进度 + 耗时 -->
+            <div class="flex items-center gap-3 pl-5 text-[11px] text-muted-foreground">
+              <span v-if="sesnoRangeLabel(entry)" class="font-mono">{{ sesnoRangeLabel(entry) }}</span>
+              <span v-if="changeSummary(batchOf(entry))" class="text-gray-600">{{ changeSummary(batchOf(entry)) }}</span>
+              <span v-if="entry.total_units != null">单元 {{ entry.units_done ?? 0 }}/{{ entry.total_units }}</span>
+              <span v-if="elapsedLabel(entry)" class="ml-auto font-mono">{{ elapsedLabel(entry) }}</span>
+            </div>
+            <!-- RVM 校验汇总：只有落地后有生成根的记录才有 -->
+            <div v-if="checkable(entry)" class="flex flex-wrap items-center gap-1.5 pl-5 text-[11px]" data-testid="increment-rvm-summary">
+              <span v-if="summaryOf(entry).pending" class="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-700">待校验 {{ summaryOf(entry).pending }}</span>
+              <span v-if="summaryOf(entry).running" class="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-gray-600">运行中 {{ summaryOf(entry).running }}</span>
+              <span v-if="summaryOf(entry).pass" class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">通过 {{ summaryOf(entry).pass }}</span>
+              <span v-if="summaryOf(entry).mismatch" class="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700">不一致 {{ summaryOf(entry).mismatch }}</span>
+              <span v-if="summaryOf(entry).failed" class="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-gray-600">失败 {{ summaryOf(entry).failed }}</span>
+              <span v-if="summaryOf(entry).other" class="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-gray-600">其它 {{ summaryOf(entry).other }}</span>
+            </div>
+          </button>
+          <button v-if="checkable(entry)" type="button"
+            class="mr-3 mt-2 inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            :disabled="pendingCount(entry) === 0"
+            data-testid="increment-rvm-check"
+            @click="checkOne(entry)">
+            <ScanSearch class="h-3 w-3" />
+            {{ pendingCount(entry) > 0 ? `RVM 校验 ${pendingCount(entry)} 根` : '已全部校验' }}
+          </button>
+        </div>
 
         <!-- 展开明细：批次判定 + 并入保存 + 逐单元 + 房间计数 + 告警 -->
         <div v-if="expanded.has(entry.task_id)" class="border-t border-gray-100 px-3 py-2 text-[11px]">
@@ -243,8 +354,16 @@ const chipTone: Record<string, string> = {
             <CircleCheck v-if="unit.status === 'generated'" class="h-3.5 w-3.5 text-emerald-600" />
             <CircleX v-else class="h-3.5 w-3.5 text-red-600" />
             <span class="text-foreground">{{ unit.noun }} {{ unit.root_refno }}</span>
+            <span v-if="unitBadge(entry, ui)"
+              :title="unitBadge(entry, ui)!.title"
+              data-testid="increment-rvm-unit-status">
+              <RvmStatusIcon :verdict="unitBadge(entry, ui)!.verdict" :outdated="unitBadge(entry, ui)!.outdated" />
+            </span>
             <span class="text-muted-foreground">{{ unitKindLabel(unit.kind) }}</span>
             <span v-if="unit.message" class="truncate" :class="unit.status === 'failed' ? 'text-red-700' : 'text-muted-foreground'">{{ unit.message }}</span>
+          </div>
+          <div v-if="checkable(entry) && unitsOf(entry).length > UNIT_BADGE_LIMIT" class="py-0.5 pl-5 text-muted-foreground" data-testid="increment-rvm-unit-limit">
+            只有前 {{ UNIT_BADGE_LIMIT }} 根显示核对状态，整批看上面的汇总
           </div>
           <div v-if="transformRoots(entry) > 0" class="py-0.5 pl-5 text-muted-foreground">
             其中 {{ transformRoots(entry) }} 根走刚体前移便宜路（只动方位，网格未重算）

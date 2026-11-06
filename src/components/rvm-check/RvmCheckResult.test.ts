@@ -13,6 +13,10 @@ const queue = ref<{ refno: string; state: string }[]>([]);
 vi.mock('@/composables/useRvmCheckStore', () => ({
   useRvmCheckStore: () => ({ loadE3dLog, recheck, queue }),
 }));
+vi.mock('@/composables/useIncrementalRvmCheck', async () => {
+  const { computed } = await import('vue');
+  return { useRvmNodeBadge: () => computed(() => ({ verdict: null, outdated: false, title: '', status: null, root: null, empty: true })) };
+});
 vi.mock('./useRvmMismatchLocate', () => ({
   useRvmMismatchLocate: () => ({ resolved: {}, locateRow: vi.fn(), showProblems: vi.fn(), clear: vi.fn() }),
 }));

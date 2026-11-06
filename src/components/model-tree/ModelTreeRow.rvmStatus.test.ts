@@ -153,6 +153,61 @@ describe('ModelTreeRow RVM 核对图标', () => {
     }
   });
 
+  it('增量后过期：原结论上叠蓝色刷新角标，悬停写之后哪一轮重算过', async () => {
+    viewMock.mockReturnValue({ kind: 'current', title: 'DB 7997 · 模型已生成且为最新' });
+    const root = {
+      refno: '24383_42520', noun: 'SITE', taskId: 'batch-1', taskKind: 'data_batch',
+      dbnum: 7997, sesno: 1416, finishedAt: '2026-11-04T09:00:00Z', unitKind: 'regen',
+    };
+    const { host, unmount } = await mountRow({ row: SITE_DB, rvmStatus: status('pass'), rvmIncremental: root });
+    try {
+      const button = host.querySelector('[data-testid="model-tree-status"]')!;
+      expect(button.getAttribute('data-rvm-outdated')).toBe('true');
+      const icon = button.querySelector('[data-testid="model-tree-status-icon"]');
+      expect(icon?.getAttribute('data-fill')).toBe('solid');
+      expect(icon?.getAttribute('data-rvm-outdated')).toBe('true');
+      expect(button.querySelector('[data-testid="rvm-status-outdated"]')).not.toBeNull();
+      expect(button.getAttribute('title')).toContain('上次结论 通过');
+      expect(button.getAttribute('title')).toContain('之后第 1416 轮增量重算过，待重新校验');
+    } finally {
+      unmount();
+      viewMock.mockReturnValue(null);
+    }
+  });
+
+  it('从没核对过、但在增量里：灰色空心圆 + 角标，提示右键校验', async () => {
+    const root = {
+      refno: '24383_42520', noun: 'SITE', taskId: 'batch-1', taskKind: 'data_batch',
+      dbnum: 7997, sesno: 1416, finishedAt: '2026-11-04T09:00:00Z', unitKind: 'regen',
+    };
+    const { host, onRvmStatus, unmount } = await mountRow({ rvmIncremental: root });
+    try {
+      const button = host.querySelector('[data-testid="model-tree-status"]') as HTMLElement;
+      expect(button).not.toBeNull();
+      expect(button.querySelector('[data-rvm-never="true"]')).not.toBeNull();
+      expect(button.querySelector('[data-testid="rvm-status-outdated"]')).not.toBeNull();
+      expect(button.getAttribute('title')).toContain('增量待校验');
+      expect(button.getAttribute('title')).toContain('右键「核对 RVM」校验');
+      button.click();
+      expect(onRvmStatus).not.toHaveBeenCalled();
+    } finally {
+      unmount();
+    }
+  });
+
+  it('核对进行中不叠过期角标', async () => {
+    const root = {
+      refno: '24383_42520', noun: 'SITE', taskId: 'batch-1', taskKind: 'data_batch',
+      dbnum: 7997, sesno: 1416, finishedAt: '2026-11-04T09:00:00Z', unitKind: 'regen',
+    };
+    const { host, unmount } = await mountRow({ rvmStatus: status('running'), rvmIncremental: root });
+    try {
+      expect(host.querySelector('[data-testid="rvm-status-outdated"]')).toBeNull();
+    } finally {
+      unmount();
+    }
+  });
+
   it('核对进行中只画转圈，不叠生成状态', async () => {
     viewMock.mockReturnValue({ kind: 'current', title: 'DB 7997 · 模型已生成且为最新' });
     const { host, unmount } = await mountRow({ row: SITE_DB, rvmStatus: status('running') });
