@@ -18,6 +18,11 @@ import {
 } from './dimensionBoundActions';
 import DimensionSemanticList from './DimensionSemanticList.vue';
 import DimensionToolbar from './DimensionToolbar.vue';
+import {
+  groupMbdRecordsByFunction,
+  mbdFunctionGroupVisibility,
+  mbdFunctionOf,
+} from './mbdFunctionGroups';
 import PipeInformationPanel from './PipeInformationPanel.vue';
 
 import type { DimensionBoundAction } from './dimensionBoundActions';
@@ -180,13 +185,24 @@ function byCategory(
 }
 
 /**
+ * #103 M1-3：声明了 PML FUNCTION 类别（`mbdFunction`）的 MBD 记录按类别成组、排在列表最后，组头可
+ * 整组临时显隐（`mbdFunctionGroups.ts`）；下面原有的分组只排其余记录，没有类别的负载（今天全部）
+ * 列表一行不变。
+ */
+const mbdFunctionGrouping = computed(() => groupMbdRecordsByFunction(externalRecords.value));
+const mbdFunctionGroupToggle = mbdFunctionGroupVisibility(
+  () => hiddenExternalIds.value,
+  () => viewerContext.dimensionSystem.value?.externalRegistry,
+);
+
+/**
  * MBD 按直段分组（W3-6）：任一 MBD 记录带 `isolineIndex`，MBD 记录就按直段编号升序
  * 成组，没有归属的殿后归「未分段」；其它来源照旧按类别两分。`meta.isolines` 表只供
  * 组头取成员数 / 字高 / OD，本身不触发分组：producer 只发表、图元还没带下标（或
  * `mbd_kinds` 过滤后只剩无归属图元）时，全部记录落进唯一的「未分段」组只是多一层
  * 空组头，不如一行不变。今天的负载（两者都没有）列表一行不变。
  */
-const mbdIsolineGrouping = computed(() => externalRecords.value.some(
+const mbdIsolineGrouping = computed(() => mbdFunctionGrouping.value.rest.some(
   record => record.source === 'mbd' && record.isolineIndex !== undefined,
 ));
 
@@ -216,8 +232,10 @@ const isolineGroupKey = (record: ExternalDimensionRecord): string =>
 
 const items = computed<readonly DimensionListItem[]>(() => {
   const user = documentState.value?.records ?? [];
-  if (!mbdIsolineGrouping.value) return [...user, ...byCategory(externalRecords.value)];
-  const mbd = externalRecords.value.filter(record => record.source === 'mbd');
+  const { groups, rest } = mbdFunctionGrouping.value;
+  const byFunction = groups.flatMap(group => group.records);
+  if (!mbdIsolineGrouping.value) return [...user, ...byCategory(rest), ...byFunction];
+  const mbd = rest.filter(record => record.source === 'mbd');
   // 按复合键分组，键顺序沿用首次出现的顺序，再按 (refno, index) 排序：
   // refno 顺序与 `mbd_refno` 一致，同源内按直段编号升序。
   const buckets = new Map<string, ExternalDimensionRecord[]>();
@@ -236,9 +254,10 @@ const items = computed<readonly DimensionListItem[]>(() => {
   });
   return [
     ...user,
-    ...byCategory(externalRecords.value.filter(record => record.source !== 'mbd')),
+    ...byCategory(rest.filter(record => record.source !== 'mbd')),
     ...keys.flatMap(key => byCategory(buckets.get(key) ?? [])),
     ...byCategory(mbd.filter(record => record.isolineIndex === undefined)),
+    ...byFunction,
   ];
 });
 
@@ -273,6 +292,8 @@ function isolineGroupLabel(index: number, refno = ''): string {
 }
 
 function listGroupLabel(item: DimensionListItem): string | null {
+  const mbdFunction = isExternalDimensionRecord(item) ? mbdFunctionOf(item) : undefined;
+  if (mbdFunction !== undefined) return mbdFunction;
   if (!mbdIsolineGrouping.value || !isExternalDimensionRecord(item) || item.source !== 'mbd') {
     return null;
   }
@@ -1331,8 +1352,10 @@ function act(
         :format-policy="DEFAULT_DIMENSION_FORMAT"
         :hidden-external-ids="hiddenExternalIds"
         :group-label="listGroupLabel"
+        :group-visibility="mbdFunctionGroupToggle.visibility"
         :on-select="select"
-        :on-action="act" />
+        :on-action="act"
+        :on-toggle-group-visibility="mbdFunctionGroupToggle.toggle" />
     </div>
   </div>
 </template>
