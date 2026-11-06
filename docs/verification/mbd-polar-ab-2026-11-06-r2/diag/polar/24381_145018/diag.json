@@ -1,0 +1,1836 @@
+{
+  "refno": "24381_145018",
+  "variant": "polar",
+  "mbd": "http://127.0.0.1:8023",
+  "gm": "http://127.0.0.1:8022",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          17.813905273437495,
+          13.360428955078117,
+          17.81390527343747
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          1.7763568394002505e-15
+        ]
+      },
+      "canvas": {
+        "W": 1220,
+        "H": 778
+      },
+      "records": 63,
+      "layouts": 63,
+      "drawn": 21,
+      "lodHidden": 42,
+      "polarCount": 12,
+      "polarIds": [
+        "24381_145018:isoline:0:tag:connection:Head",
+        "24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:4:tag:elbo:24381_145025",
+        "24381_145018:isoline:6:tag:elbo:24381_145026",
+        "24381_145018:isoline:6:tag:elbo:24381_145028",
+        "24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:9:tag:elbo:24381_145031",
+        "24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:tag:connection:Tail"
+      ],
+      "obstacleCount": 18,
+      "tagCount": 2,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 39,
+      "polarOverlaps": 37,
+      "overlapPairs": [
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:2:main:24381_145021--24381_145023",
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:6:tag:elbo:24381_145026",
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:2:main:24381_145021--24381_145023 x 24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:2:main:24381_145021--24381_145023 x 24381_145018:isoline:6:tag:elbo:24381_145026",
+        "24381_145018:isoline:2:main:24381_145021--24381_145023 x 24381_145018:isoline:6:tag:elbo:24381_145028",
+        "24381_145018:isoline:6:main:24381_145026--24381_145028 x 24381_145018:isoline:6:tag:elbo:24381_145028",
+        "24381_145018:isoline:7:main:24381_145028--24381_145029 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:7:main:24381_145028--24381_145029 x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:8:main:24381_145029--24381_145031 x 24381_145018:isoline:10:atta:24381_145033--24381_145034",
+        "24381_145018:isoline:8:main:24381_145029--24381_145031 x 24381_145018:isoline:9:tag:elbo:24381_145031",
+        "24381_145018:isoline:8:main:24381_145029--24381_145031 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:8:main:24381_145029--24381_145031 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:9:main:24381_145031--24381_145032 x 24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:9:main:24381_145031--24381_145032 x 24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:9:main:24381_145031--24381_145032 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:9:main:24381_145031--24381_145032 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034 x 24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:0:tag:connection:Head x 24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:0:tag:connection:Head x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:0:tag:connection:Head x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:0:tag:elbo:24381_145019 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:0:tag:elbo:24381_145019 x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:0:tag:elbo:24381_145019 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:2:tag:elbo:24381_145021 x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:2:tag:elbo:24381_145021 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:6:tag:elbo:24381_145026 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:9:tag:elbo:24381_145031 x 24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:9:tag:elbo:24381_145031 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:9:tag:connection:24381_145032 x 24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:9:tag:connection:24381_145032 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:9:tag:connection:24381_145032 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:10:tag:elbo:24381_145033 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:tag:elbo:24381_145033 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:10:tag:name:24381_145035 x 24381_145018:isoline:10:tag:connection:Tail"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 2,
+        "polarNextSize": 10
+      },
+      "labels": {
+        "24381_145018:isoline:0:slope:mark:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:slope:rise:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:slope:base:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:main:Head--24381_145019": {
+          "cx": 573.0823610408936,
+          "cy": 428.23400384204194,
+          "w": 51.94383409796376,
+          "h": 52.30800496194547,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:1:main:24381_145019--24381_145021": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_145018:isoline:1:atta:24381_145019--24381_145020": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:2:slope:mark:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:slope:rise:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:slope:base:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:main:24381_145021--24381_145023": {
+          "cx": 585.824560791787,
+          "cy": 447.1207879282807,
+          "w": 49.073270795158464,
+          "h": 49.52756264720796,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:atta:24381_145021--24381_145022": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:4:slope:mark:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:slope:rise:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:slope:base:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-rightangle:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-rightangle:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:x-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:x-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:y-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:y-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:xy-rightangle:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:xy-rightangle:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:main:24381_145023--24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:4:atta:24381_145023--24381_145024": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:5:main:24381_145025--24381_145026": {
+          "cx": 565.6895071021074,
+          "cy": 505.6089526665967,
+          "w": 26.248101684960716,
+          "h": 35.07433490919726,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:slope:mark:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:slope:rise:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:slope:base:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:main:24381_145026--24381_145028": {
+          "cx": 643.5331753665565,
+          "cy": 506.47534807565876,
+          "w": 66.67926992275989,
+          "h": 49.83250213119527,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:atta:24381_145026--24381_145027": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:7:main:24381_145028--24381_145029": {
+          "cx": 606.4118511022151,
+          "cy": 362.2563793594031,
+          "w": 26.313762940633296,
+          "h": 56.640636050990736,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:slope:mark:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:slope:rise:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:slope:base:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:main:24381_145029--24381_145031": {
+          "cx": 544.4581445581217,
+          "cy": 374.649325549857,
+          "w": 65.19842551675947,
+          "h": 47.76296101195328,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:atta:24381_145029--24381_145030": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:9:slope:mark:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:rise:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:base:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:mark:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:rise:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:base:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:main:24381_145031--24381_145032": {
+          "cx": 435.690296560545,
+          "cy": 397.50235198862947,
+          "w": 41.478763762927485,
+          "h": 39.0993425650484,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:main:24381_145032--24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_145018:isoline:10:main:24381_145033--24381_145035": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:10:main:24381_145035--Tail": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034": {
+          "cx": 496.0095995257434,
+          "cy": 402.9407541774028,
+          "w": 36.83462831044568,
+          "h": 33.97063326408562,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:0:tag:connection:Head": {
+          "cx": 659.2427995262576,
+          "cy": 373.9754829776436,
+          "w": 49.6109938421738,
+          "h": 50.62871639533887,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:0:tag:elbo:24381_145019": {
+          "cx": 619.0211872476218,
+          "cy": 416.1580204850422,
+          "w": 47.29154215680421,
+          "h": 48.1961844262845,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:tag:elbo:24381_145021": {
+          "cx": 623.448894134046,
+          "cy": 396.90636894126715,
+          "w": 47.62893550102797,
+          "h": 47.87956667299079,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:3:tag:elbo:24381_145023": {
+          "cx": 710.2336241713972,
+          "cy": 449.3900309878282,
+          "w": 86.25,
+          "h": 28.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:tag:elbo:24381_145025": {
+          "cx": 575.0349771321328,
+          "cy": 548.2022201425452,
+          "w": 28.191713980863938,
+          "h": 51.16633414917999,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:tag:elbo:24381_145026": {
+          "cx": 562.7450869485389,
+          "cy": 449.9662543006759,
+          "w": 49.547577461764604,
+          "h": 38.56733656536079,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:tag:elbo:24381_145028": {
+          "cx": 624.2370597285143,
+          "cy": 471.5477148247455,
+          "w": 49.56004542485721,
+          "h": 38.48370106356339,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:tag:elbo:24381_145029": {
+          "cx": 632.264706855357,
+          "cy": 385.21140075206887,
+          "w": 47.111111111111114,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:tag:elbo:24381_145031": {
+          "cx": 513.8260486012584,
+          "cy": 341.03692771172405,
+          "w": 74.41209201176537,
+          "h": 62.55425579808974,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:tag:connection:24381_145032": {
+          "cx": 464.701645419035,
+          "cy": 377.4690710762844,
+          "w": 54.7779394531114,
+          "h": 47.99297434689055,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:elbo:24381_145033": {
+          "cx": 446.32063099907407,
+          "cy": 384.2857797731282,
+          "w": 33.14214171061184,
+          "h": 30.406600154992873,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:name:24381_145035": {
+          "cx": 485.5290540872767,
+          "cy": 403.8746327649046,
+          "w": 143.56495130566515,
+          "h": 85.57475061160392,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:connection:Tail": {
+          "cx": 484.17935063699184,
+          "cy": 408.0617485698447,
+          "w": 235.99822750512237,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:tag:branch-name": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          7.125562109375,
+          5.344171582031245,
+          7.12556210937498
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          1.7763568394002505e-15
+        ]
+      },
+      "canvas": {
+        "W": 1220,
+        "H": 778
+      },
+      "records": 63,
+      "layouts": 63,
+      "drawn": 29,
+      "lodHidden": 34,
+      "polarCount": 12,
+      "polarIds": [
+        "24381_145018:isoline:0:tag:connection:Head",
+        "24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:4:tag:elbo:24381_145025",
+        "24381_145018:isoline:6:tag:elbo:24381_145026",
+        "24381_145018:isoline:6:tag:elbo:24381_145028",
+        "24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:9:tag:elbo:24381_145031",
+        "24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:tag:connection:Tail"
+      ],
+      "obstacleCount": 18,
+      "tagCount": 2,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 20,
+      "polarOverlaps": 17,
+      "overlapPairs": [
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:1:main:24381_145019--24381_145021 x 24381_145018:isoline:1:atta:24381_145019--24381_145020",
+        "24381_145018:isoline:1:atta:24381_145019--24381_145020 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:2:atta:24381_145021--24381_145022 x 24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:2:atta:24381_145021--24381_145022 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:4:main:24381_145023--24381_145025 x 24381_145018:isoline:5:main:24381_145025--24381_145026",
+        "24381_145018:isoline:6:main:24381_145026--24381_145028 x 24381_145018:isoline:6:atta:24381_145026--24381_145027",
+        "24381_145018:isoline:6:atta:24381_145026--24381_145027 x 24381_145018:isoline:6:tag:elbo:24381_145026",
+        "24381_145018:isoline:9:main:24381_145032--24381_145033 x 24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:9:main:24381_145032--24381_145033 x 24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:9:main:24381_145032--24381_145033 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:main:24381_145033--24381_145035 x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:main:24381_145033--24381_145035 x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:10:main:24381_145035--Tail x 24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:main:24381_145035--Tail x 24381_145018:isoline:10:tag:connection:Tail",
+        "24381_145018:isoline:0:tag:elbo:24381_145019 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:0:tag:elbo:24381_145019 x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:2:tag:elbo:24381_145021 x 24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:10:tag:name:24381_145035 x 24381_145018:isoline:10:tag:connection:Tail"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 12
+      },
+      "labels": {
+        "24381_145018:isoline:0:slope:mark:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:slope:rise:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:slope:base:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:main:Head--24381_145019": {
+          "cx": 646.9424727653097,
+          "cy": 386.1984672999713,
+          "w": 48.47613776959781,
+          "h": 49.26102990856759,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:1:main:24381_145019--24381_145021": {
+          "cx": 603.6344749672764,
+          "cy": 338.8550791372269,
+          "w": 25.881481499023835,
+          "h": 49.19852521563638,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:1:atta:24381_145019--24381_145020": {
+          "cx": 604.8001698333929,
+          "cy": 377.08611543733923,
+          "w": 25.593640732200356,
+          "h": 30.03848579587242,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:slope:mark:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:slope:rise:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:slope:base:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:main:24381_145021--24381_145023": {
+          "cx": 564.4053744778307,
+          "cy": 487.79289178271085,
+          "w": 49.566114767452405,
+          "h": 50.34202695688731,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:atta:24381_145021--24381_145022": {
+          "cx": 597.1073846595174,
+          "cy": 437.6943704640159,
+          "w": 50.602438720400414,
+          "h": 51.125366903156646,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:slope:mark:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:slope:rise:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:slope:base:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-rightangle:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-rightangle:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:x-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:x-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:y-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:y-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:xy-rightangle:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:xy-rightangle:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:main:24381_145023--24381_145025": {
+          "cx": 515.5580090990607,
+          "cy": 674.3688935783521,
+          "w": 28.495250593655726,
+          "h": 53.50064965452691,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:atta:24381_145023--24381_145024": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:5:main:24381_145025--24381_145026": {
+          "cx": 496.31086830763616,
+          "cy": 680.276131620036,
+          "w": 27.395490356410562,
+          "h": 33.58965409449172,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:slope:mark:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:slope:rise:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:slope:base:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:main:24381_145026--24381_145028": {
+          "cx": 546.8982179551738,
+          "cy": 600.2038831015761,
+          "w": 64.19182118285278,
+          "h": 50.47795864907346,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:atta:24381_145026--24381_145027": {
+          "cx": 535.0686221041965,
+          "cy": 572.6563581249154,
+          "w": 56.50264830167134,
+          "h": 45.720930863012086,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:7:main:24381_145028--24381_145029": {
+          "cx": 634.997077915064,
+          "cy": 531.0098561244275,
+          "w": 26.337274027675335,
+          "h": 50.846771835914296,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:slope:mark:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:slope:rise:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:slope:base:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:main:24381_145029--24381_145031": {
+          "cx": 452.66675756028957,
+          "cy": 323.049744630594,
+          "w": 63.60926844118114,
+          "h": 46.94311670407359,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:atta:24381_145029--24381_145030": {
+          "cx": 532.9333350177196,
+          "cy": 343.1763345307105,
+          "w": 41.757127075490075,
+          "h": 36.25835371694615,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:slope:mark:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:rise:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:base:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:mark:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:rise:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:base:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:main:24381_145031--24381_145032": {
+          "cx": 251.1431782997331,
+          "cy": 299.77904789467823,
+          "w": 42.09051505974102,
+          "h": 37.522309810105355,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:main:24381_145032--24381_145033": {
+          "cx": 125.9238065677633,
+          "cy": 375.4108209771647,
+          "w": 57.80950086706784,
+          "h": 46.77816230878585,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:main:24381_145033--24381_145035": {
+          "cx": 179.08839082793975,
+          "cy": 413.31402144050367,
+          "w": 47.62660171802756,
+          "h": 40.00579055996798,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:main:24381_145035--Tail": {
+          "cx": 273.11275960099096,
+          "cy": 468.3167979869372,
+          "w": 32.755505368985155,
+          "h": 31.697932503303775,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:0:tag:connection:Head": {
+          "cx": 708.4609910420663,
+          "cy": 358.9584741285729,
+          "w": 49.233877294958006,
+          "h": 50.96098283211114,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:0:tag:elbo:24381_145019": {
+          "cx": 628.7343138842234,
+          "cy": 445.39910427256484,
+          "w": 46.95510077848087,
+          "h": 48.490305700394686,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:tag:elbo:24381_145021": {
+          "cx": 638.3315828543967,
+          "cy": 405.6556405682377,
+          "w": 47.4273205300417,
+          "h": 48.07149928411269,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:3:tag:elbo:24381_145023": {
+          "cx": 492.03318756036265,
+          "cy": 430.98573977660084,
+          "w": 86.25,
+          "h": 28.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:tag:elbo:24381_145025": {
+          "cx": 523.6380978129205,
+          "cy": 782.2217237744667,
+          "w": 26.073957624353056,
+          "h": 50.631943572939576,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:tag:elbo:24381_145026": {
+          "cx": 489.3877101830798,
+          "cy": 536.691617824805,
+          "w": 49.33416018772317,
+          "h": 39.71655237726475,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:tag:elbo:24381_145028": {
+          "cx": 650.8072347847956,
+          "cy": 625.6039086747064,
+          "w": 49.334160187723114,
+          "h": 39.71655237726475,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:tag:elbo:24381_145029": {
+          "cx": 662.1683025398997,
+          "cy": 417.191945959147,
+          "w": 49.62170432410767,
+          "h": 38.02332849224837,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:tag:elbo:24381_145031": {
+          "cx": 338.2357163183204,
+          "cy": 253.46797917708955,
+          "w": 76.9302382926304,
+          "h": 57.932125578192796,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:tag:connection:24381_145032": {
+          "cx": 173.02493170912223,
+          "cy": 354.3215036850951,
+          "w": 56.0661367510649,
+          "h": 45.19555888772362,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:elbo:24381_145033": {
+          "cx": 105.85095517604336,
+          "cy": 374.47972393238126,
+          "w": 33.33327533485094,
+          "h": 31.117908734177888,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:name:24381_145035": {
+          "cx": 212.61840355656727,
+          "cy": 436.48823326828654,
+          "w": 140.0740306580732,
+          "h": 93.11091524859592,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:connection:Tail": {
+          "cx": 222.76516165460163,
+          "cy": 474.1502378863785,
+          "w": 211.36283669888883,
+          "h": 137.32207171333715,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:tag:branch-name": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          3.5627810546875,
+          2.672085791015623,
+          3.5627810546874907
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          1.7763568394002505e-15
+        ]
+      },
+      "canvas": {
+        "W": 1220,
+        "H": 778
+      },
+      "records": 63,
+      "layouts": 63,
+      "drawn": 30,
+      "lodHidden": 33,
+      "polarCount": 12,
+      "polarIds": [
+        "24381_145018:isoline:0:tag:connection:Head",
+        "24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:4:tag:elbo:24381_145025",
+        "24381_145018:isoline:6:tag:elbo:24381_145026",
+        "24381_145018:isoline:6:tag:elbo:24381_145028",
+        "24381_145018:isoline:8:tag:elbo:24381_145029",
+        "24381_145018:isoline:9:tag:elbo:24381_145031",
+        "24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:tag:connection:Tail"
+      ],
+      "obstacleCount": 18,
+      "tagCount": 2,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "polarOverlaps": 2,
+      "overlapPairs": [
+        "24381_145018:isoline:0:main:Head--24381_145019 x 24381_145018:isoline:2:tag:elbo:24381_145021",
+        "24381_145018:isoline:2:atta:24381_145021--24381_145022 x 24381_145018:isoline:0:tag:elbo:24381_145019",
+        "24381_145018:isoline:4:main:24381_145023--24381_145025 x 24381_145018:isoline:6:atta:24381_145026--24381_145027"
+      ],
+      "offscreen": [
+        "24381_145018:isoline:4:main:24381_145023--24381_145025",
+        "24381_145018:isoline:5:main:24381_145025--24381_145026",
+        "24381_145018:isoline:6:main:24381_145026--24381_145028",
+        "24381_145018:isoline:6:atta:24381_145026--24381_145027",
+        "24381_145018:isoline:9:main:24381_145031--24381_145032",
+        "24381_145018:isoline:9:main:24381_145032--24381_145033",
+        "24381_145018:isoline:10:main:24381_145033--24381_145035",
+        "24381_145018:isoline:10:main:24381_145035--Tail",
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034",
+        "24381_145018:isoline:4:tag:elbo:24381_145025",
+        "24381_145018:isoline:6:tag:elbo:24381_145028",
+        "24381_145018:isoline:9:tag:elbo:24381_145031",
+        "24381_145018:isoline:9:tag:connection:24381_145032",
+        "24381_145018:isoline:10:tag:elbo:24381_145033",
+        "24381_145018:isoline:10:tag:name:24381_145035",
+        "24381_145018:isoline:10:tag:connection:Tail"
+      ],
+      "polarDiag": {
+        "polarFallbacks": 7,
+        "polarNextSize": 5
+      },
+      "labels": {
+        "24381_145018:isoline:0:slope:mark:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:slope:rise:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:slope:base:Head~24381_145019": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:0:main:Head--24381_145019": {
+          "cx": 676.5029797264783,
+          "cy": 390.45669796367326,
+          "w": 47.85248807090704,
+          "h": 49.10389047669429,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:1:main:24381_145019--24381_145021": {
+          "cx": 612.7260058788108,
+          "cy": 414.4764287994597,
+          "w": 25.065700468783234,
+          "h": 46.09324514067396,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:1:atta:24381_145019--24381_145020": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "overlap"
+        },
+        "24381_145018:isoline:2:slope:mark:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:slope:rise:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:slope:base:24381_145021~24381_145023": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:2:main:24381_145021--24381_145023": {
+          "cx": 538.9689881085945,
+          "cy": 536.0978866722965,
+          "w": 50.13522969164751,
+          "h": 51.31695064435689,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:atta:24381_145021--24381_145022": {
+          "cx": 592.796533264,
+          "cy": 463.5889359786746,
+          "w": 50.6871671901099,
+          "h": 51.575396865654,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:slope:mark:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:slope:rise:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:slope:base:24381_145023~24381_145025": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-rightangle:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:z-rightangle:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:x-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:x-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:y-leg": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:y-text": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:xy-rightangle:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:skew:xy-rightangle:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:4:main:24381_145023--24381_145025": {
+          "cx": 431.93044222435503,
+          "cy": 884.4412442807268,
+          "w": 25.99927700524273,
+          "h": 59.122947374360706,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:atta:24381_145023--24381_145024": {
+          "cx": 427.9740678034793,
+          "cy": 730.5336725878042,
+          "w": 26.021638124309106,
+          "h": 52.38324948341858,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:5:main:24381_145025--24381_145026": {
+          "cx": 366.4105695221,
+          "cy": 1006.3851898464727,
+          "w": 29.388031862172113,
+          "h": 32.26552091998508,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:slope:mark:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:slope:rise:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:slope:base:24381_145026~24381_145028": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:6:main:24381_145026--24381_145028": {
+          "cx": 481.1966319935858,
+          "cy": 899.5139703120914,
+          "w": 64.95929671266623,
+          "h": 56.96416041784801,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:atta:24381_145026--24381_145027": {
+          "cx": 434.175841067172,
+          "cy": 840.3305699426646,
+          "w": 56.929927047490935,
+          "h": 50.49515369885751,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:7:main:24381_145028--24381_145029": {
+          "cx": 718.97178117784,
+          "cy": 795.5349135786171,
+          "w": 29.15238658885255,
+          "h": 47.00299179818069,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:slope:mark:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:slope:rise:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:slope:base:24381_145029~24381_145031": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:8:main:24381_145029--24381_145031": {
+          "cx": 181.84506288789254,
+          "cy": 171.07079266433135,
+          "w": 59.26966211236666,
+          "h": 44.91959635865524,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:atta:24381_145029--24381_145030": {
+          "cx": 380.65082384743806,
+          "cy": 244.8161328650229,
+          "w": 43.61921844760582,
+          "h": 38.46694384636416,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:slope:mark:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:rise:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:base:24381_145031~24381_145032": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:mark:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:rise:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:slope:base:24381_145032~24381_145033": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_145018:isoline:9:main:24381_145031--24381_145032": {
+          "cx": -371.96643387060203,
+          "cy": 133.13886067213357,
+          "w": 50.706549554448145,
+          "h": 36.22701671580461,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:main:24381_145032--24381_145033": {
+          "cx": -909.5927878764398,
+          "cy": 335.30826035680025,
+          "w": 93.65664176618509,
+          "h": 52.442427236307196,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:main:24381_145033--24381_145035": {
+          "cx": -920.8795517619506,
+          "cy": 476.3689751754084,
+          "w": 55.29531389480769,
+          "h": 43.48206787100031,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:main:24381_145035--Tail": {
+          "cx": -772.5711886779586,
+          "cy": 671.7374380961201,
+          "w": 51.51326099988637,
+          "h": 38.760128587733675,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:atta:24381_145033--24381_145034": {
+          "cx": -1003.1613312718562,
+          "cy": 412.78467308316885,
+          "w": 46.3410118609105,
+          "h": 30.482876446844045,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:0:tag:connection:Head": {
+          "cx": 757.6545929887893,
+          "cy": 343.9489678261249,
+          "w": 48.821929077490836,
+          "h": 51.30012606222937,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:0:tag:elbo:24381_145019": {
+          "cx": 639.2221640212847,
+          "cy": 476.9724705100802,
+          "w": 46.5869333376595,
+          "h": 48.78977510187144,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:2:tag:elbo:24381_145021": {
+          "cx": 654.8902630773816,
+          "cy": 415.39019819940864,
+          "w": 47.19680901497179,
+          "h": 48.2810913030313,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:3:tag:elbo:24381_145023": {
+          "cx": 358.4193688054215,
+          "cy": 550.3400857764897,
+          "w": 86.25,
+          "h": 28.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:4:tag:elbo:24381_145025": {
+          "cx": 421.14184953495305,
+          "cy": 1133.446897814957,
+          "w": 49.55555555555556,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:tag:elbo:24381_145026": {
+          "cx": 321.4807755502369,
+          "cy": 742.2962610794054,
+          "w": 48.534934241042436,
+          "h": 42.25146999373669,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:6:tag:elbo:24381_145028": {
+          "cx": 765.0635098240404,
+          "cy": 957.4234697712718,
+          "w": 47.111111111111114,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:8:tag:elbo:24381_145029": {
+          "cx": 795.5437304033259,
+          "cy": 489.26852640237655,
+          "w": 74.47168711707423,
+          "h": 56.08284945516226,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:tag:elbo:24381_145031": {
+          "cx": -127.38732629063733,
+          "cy": -62.64286606269008,
+          "w": 80.53069379625792,
+          "h": 22.814780009448427,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:9:tag:connection:24381_145032": {
+          "cx": -828.406898574433,
+          "cy": 116.80470026737429,
+          "w": 72.24366141106727,
+          "h": 27.89481127568535,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:elbo:24381_145033": {
+          "cx": -1282.657012743905,
+          "cy": 338.8081480550484,
+          "w": 40.26997417772389,
+          "h": 30.778805301922745,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:name:24381_145035": {
+          "cx": -1150.5877300509344,
+          "cy": 589.1971056327253,
+          "w": 243.98800864474566,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:isoline:10:tag:connection:Tail": {
+          "cx": -1118.087499425839,
+          "cy": 650.8041600286955,
+          "w": 381.0880086447457,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_145018:tag:branch-name": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    }
+  },
+  "perf": [
+    {
+      "frames": 121,
+      "layoutFrames": 121,
+      "frameKinds": {
+        "layout": 121,
+        "style": 0,
+        "camera": 0
+      },
+      "frameMs": {
+        "p50": 20,
+        "p95": 28.699999928474426,
+        "max": 31.600000023841858
+      },
+      "layoutMs": {
+        "p50": 1.5999999046325684,
+        "p95": 3.8000000715255737,
+        "max": 6.600000023841858
+      },
+      "paintMs": {
+        "p50": 18.40000009536743,
+        "p95": 25,
+        "max": 28.100000023841858
+      },
+      "fallbackMax": 12,
+      "fallbackMean": 10.091666666666667
+    },
+    {
+      "frames": 121,
+      "layoutFrames": 121,
+      "frameKinds": {
+        "layout": 121,
+        "style": 0,
+        "camera": 0
+      },
+      "frameMs": {
+        "p50": 19.59999990463257,
+        "p95": 24.299999952316284,
+        "max": 31
+      },
+      "layoutMs": {
+        "p50": 1.1999999284744263,
+        "p95": 2.700000047683716,
+        "max": 3.299999952316284
+      },
+      "paintMs": {
+        "p50": 18.300000071525574,
+        "p95": 22.100000023841858,
+        "max": 29.300000071525574
+      },
+      "fallbackMax": 12,
+      "fallbackMean": 10.066666666666666
+    },
+    {
+      "frames": 121,
+      "layoutFrames": 121,
+      "frameKinds": {
+        "layout": 121,
+        "style": 0,
+        "camera": 0
+      },
+      "frameMs": {
+        "p50": 20.799999952316284,
+        "p95": 23.699999928474426,
+        "max": 27
+      },
+      "layoutMs": {
+        "p50": 1.9000000953674316,
+        "p95": 3.5,
+        "max": 5.199999928474426
+      },
+      "paintMs": {
+        "p50": 18.800000071525574,
+        "p95": 21.199999928474426,
+        "max": 24.399999976158142
+      },
+      "fallbackMax": 12,
+      "fallbackMean": 10.091666666666667
+    }
+  ]
+}

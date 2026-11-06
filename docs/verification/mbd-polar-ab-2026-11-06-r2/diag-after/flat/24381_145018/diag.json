@@ -1,0 +1,82 @@
+{
+  "refno": "24381_145018",
+  "variant": "flat",
+  "mbd": "http://127.0.0.1:8023",
+  "gm": "http://127.0.0.1:8022",
+  "pageErrors": [],
+  "notes": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          17.813905273437495,
+          13.360428955078117,
+          17.81390527343747
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          1.7763568394002505e-15
+        ]
+      },
+      "drawn": 28,
+      "lodHidden": 35,
+      "polarCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "overlaps": 71,
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          7.125562109375,
+          5.344171582031245,
+          7.12556210937498
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          1.7763568394002505e-15
+        ]
+      },
+      "drawn": 31,
+      "lodHidden": 32,
+      "polarCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "overlaps": 21,
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          3.5627810546875,
+          2.672085791015623,
+          3.5627810546874907
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          1.7763568394002505e-15
+        ]
+      },
+      "drawn": 31,
+      "lodHidden": 32,
+      "polarCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "overlaps": 5,
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      }
+    }
+  }
+}
