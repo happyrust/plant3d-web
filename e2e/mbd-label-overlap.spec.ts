@@ -5,7 +5,8 @@
  * polar 记录、有没有非有限值、屏上还剩多少对标签重叠、绕轨时 layout / paint
  * 的 P95 多少。读数口径与 `docs/verification/mbd-polar-ab-2026-11-06-r2/` 一致：
  *
- * - 重叠：已绘制、未被 LOD 隐藏的布局两两比 `labelBounds`，交叠宽高都 > 1 px 记一对
+ * - 重叠：已绘制、未被 LOD 隐藏、带文字（`derived.formattedLabel` 非空）的布局两两比 `labelBounds`，交叠宽高都
+ *   > 1 px 记一对；流向箭头这类没有文字的线不算（2026-11-07 起，之前的统计含它们）
  *   （AABB 口径，旋转文字会偏多，只作同口径横比）。
  * - 相机：far = 加载后的自动 fit，mid / near 沿视线缩到 0.4 / 0.2，同
  *   `dimension-camera-baseline.spec.ts`。
@@ -201,6 +202,7 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
       layout => layout.primitives.length > 0 && layout.derived?.lodHidden === undefined,
     );
     const rects = drawn
+      .filter(layout => String(layout.derived?.formattedLabel ?? '').trim().length > 0)
       .map(layout => ({ id: layout.dimensionId as string, r: layout.labelBounds }))
       .filter(entry => entry.r && entry.r.width > 0 && entry.r.height > 0);
     let overlaps = 0;

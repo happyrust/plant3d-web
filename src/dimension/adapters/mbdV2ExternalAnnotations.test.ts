@@ -838,8 +838,11 @@ describe('mbdV2ToExternalRecords', () => {
     });
     for (const id of ['b:isoline:0:angle:m:0', 'b:isoline:0:angle:m:0:dirtext1', 'b:isoline:0:angle:m:0:dirtext2']) {
       expect(explicitLayout(result, id).declutter).toEqual({ rank: 500, group: 'b:isoline:0:angle:m:0' });
+      // The value and its notes only stand apart near true scale: the whole group is close-up detail.
+      expect(explicitLayout(result, id).lod).toEqual({ tier: 'detail' });
     }
     expect(explicitLayout(result, 'plain-text').declutter).toBeUndefined();
+    expect(explicitLayout(result, 'plain-text').lod).toBeUndefined();
   });
 
   it('assembles weld and slope symbols from kernel primitives (ADR 0042)', () => {

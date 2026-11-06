@@ -707,9 +707,13 @@ function mapLabel(
   });
 }
 
-/** Slope marks and skew aids are close-up detail in the reference drawing style. */
+/**
+ * Slope marks, skew aids and the two direction notes of an installation angle
+ * are close-up detail in the reference drawing style (the angle's own record
+ * takes the same tier in `mapAngleDim`).
+ */
 function isDetailAid(id: string): boolean {
-  return id.includes(':slope:') || id.includes(':skew:');
+  return id.includes(':slope:') || id.includes(':skew:') || ANGLE_DIRECTION_NOTE_SUFFIX.test(id);
 }
 
 /**
@@ -1026,6 +1030,12 @@ function angleDeclutter(primitive: MbdPrimitive): ExplicitLayoutInput['declutter
  * PML `isoline.drawangle`: arc + two legs + the value text. The value runs
  * along the arc, so its baseline is the tangent at mid-sweep (the same
  * 「工程文字朝向」 rule `mapLinearDim` applies along its dimension line).
+ *
+ * Detail tier: PML sizes the arc from the text length (a few millimetres), so
+ * the value and its two direction notes only stand apart near true scale —
+ * from further away the legibility floor enlarges all three into one clump the
+ * group declutter cannot split (it only reacts to labels outside the group).
+ * A non-pipe package replaces the tier with its FUNCTION's (`mbdFunctionLodTier`).
  */
 function mapAngleDim(
   primitive: MbdV2AngleDim,
@@ -1045,6 +1055,7 @@ function mapAngleDim(
     labelAlong: arcTangent(mapped, midAngle),
     lines,
     arcs: [mapped.arc],
+    lod: { tier: 'detail' },
     declutter: angleDeclutter(primitive),
   });
 }
