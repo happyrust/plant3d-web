@@ -1074,7 +1074,14 @@ export class ThreeSceneDimensionPainter {
   private readonly viewportCssPx = new Vector2(1, 1);
   private readonly featherPx: IUniform<number> = { value: 1 };
   private readonly pixelRatio: IUniform<number> = { value: 1 };
-  private readonly lineBuffers = new ReusableGeometry(STROKE_ATTRIBUTES, true);
+  /**
+   * The line geometry on screen. A batched paint writes `lineBackBuffers`
+   * instead and swaps the two on `finish()`, so the host can render at any
+   * point of a batch window and get the last complete frame — never a
+   * half-written one, never an empty stroke layer.
+   */
+  private lineBuffers = new ReusableGeometry(STROKE_ATTRIBUTES, true);
+  private lineBackBuffers = new ReusableGeometry(STROKE_ATTRIBUTES, true);
   private readonly triangleBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
   private readonly fillBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
   private readonly lineMaterial = createStrokeMaterial(
@@ -1244,6 +1251,7 @@ export class ThreeSceneDimensionPainter {
 
     const ranges = new Map<string, DimensionVertexRange>();
     const lineWrite = this.writeLineVertices(
+      this.lineBuffers,
       layouts,
       0,
       layouts.length,
@@ -1365,18 +1373,13 @@ export class ThreeSceneDimensionPainter {
    * cost, while arrows and tag fills together are under 4%.
    *
    * The caller drives it, one `advance()` per animation frame, and calls
-   * `finish()` once `advance()` reports completion. **Nothing is published
-   * before `finish()`**, so a partially written buffer must never be
-   * rendered — the caller has to hold off `requestRender()` until then.
-   * That is safe here because the host renders on demand rather than on a
-   * loop; see plan §11.3.5.
+   * `finish()` once `advance()` reports completion. The batches write the
+   * back line buffer; **nothing is published before `finish()`**, which
+   * swaps it in. Until then every buffer on screen still holds the previous
+   * frame, complete, so the host may render at any time.
    *
-   * `cancel()` leaves the line `drawRange` cleared (done unconditionally at
-   * job start) and whatever vertex prefix the job managed to write — all
-   * unpublished, since `finish()` becomes a no-op. The triangle and fill
-   * buffers still hold the previous frame's complete geometry. An
-   * abandoned job therefore blanks the stroke layer instead of corrupting
-   * it; the next paint restores a complete frame.
+   * `cancel()` drops whatever the job wrote into the back buffer —
+   * `finish()` becomes a no-op and the frame on screen is untouched.
    */
   paintAsync(
     layouts: readonly LayoutResult[],
@@ -1404,17 +1407,10 @@ export class ThreeSceneDimensionPainter {
       }
     }
     const lineVertexCount = segmentCount * 4;
-    if (this.lineBuffers.ensureCapacity(lineVertexCount)) {
-      this.lines.geometry = this.lineBuffers.geometry;
-      this.lineEdges.geometry = this.lineBuffers.geometry;
-    }
-    // `ensureCapacity` only zeroes `drawRange` when it swaps in a fresh
-    // geometry; on the common no-growth path the range still publishes the
-    // previous `finish()`'s indices while this job overwrites the buffer
-    // from index 0 — a render inside the batch window would draw new
-    // heads over stale tails. Clear unconditionally: in-progress writes
-    // may render as nothing, never as mixed vertices.
-    this.lineBuffers.clear();
+    // The back buffer is not attached to any mesh, so growing it (a fresh
+    // geometry) needs no re-attachment until `finish()` swaps it in.
+    const target = this.lineBackBuffers;
+    target.ensureCapacity(lineVertexCount);
 
     const ranges = new Map<string, DimensionVertexRange>();
     let written = 0;
@@ -1430,6 +1426,7 @@ export class ThreeSceneDimensionPainter {
         const count = Math.max(1, Math.floor(batchLayouts));
         const to = Math.min(layouts.length, written + count);
         const lineWrite = this.writeLineVertices(
+          target,
           layouts,
           written,
           to,
@@ -1451,8 +1448,9 @@ export class ThreeSceneDimensionPainter {
         }
         // Publish what the batches actually wrote, not the count pass's
         // budget: after a truncation the budget would extend `drawRange`
-        // over tail vertices still holding the previous frame's bytes.
+        // over tail vertices still holding an older frame's bytes.
         this.publishLineBatch(
+          target,
           layouts,
           lineVertexIndex,
           ranges,
@@ -1467,18 +1465,24 @@ export class ThreeSceneDimensionPainter {
   }
 
   /**
-   * Ends a batched paint: finishes the line buffer, then writes the two cheap
-   * passes (arrows, tag fills) and publishes the ranges. Split out of
-   * `paintAsync` only to keep that method readable.
+   * Ends a batched paint: swaps the written back line buffer onto the
+   * screen, then writes the two cheap passes (arrows, tag fills) and
+   * publishes the ranges. Split out of `paintAsync` only to keep that
+   * method readable.
    */
   private publishLineBatch(
+    written: ReusableGeometry,
     layouts: readonly LayoutResult[],
     writtenLineVertexCount: number,
     ranges: Map<string, DimensionVertexRange>,
     theme: DimensionTheme,
     displayMode: DimensionDisplayMode,
   ): void {
-    this.lineBuffers.finish(writtenLineVertexCount);
+    this.lineBackBuffers = this.lineBuffers;
+    this.lineBuffers = written;
+    this.lines.geometry = written.geometry;
+    this.lineEdges.geometry = written.geometry;
+    written.finish(writtenLineVertexCount);
     this.lineVertexCount = writtenLineVertexCount;
 
     const resolveColor = createColorResolver(theme);
@@ -1591,6 +1595,7 @@ export class ThreeSceneDimensionPainter {
    * degrading style-only updates to full `paint()`s: correct, just slower.
    */
   private writeLineVertices(
+    target: ReusableGeometry,
     layouts: readonly LayoutResult[],
     from: number,
     to: number,
@@ -1599,21 +1604,21 @@ export class ThreeSceneDimensionPainter {
     displayMode: DimensionDisplayMode,
     ranges: Map<string, DimensionVertexRange>,
   ): { vertexIndex: number; overflowed: boolean } {
-    const linePosition = this.lineBuffers.array('position');
-    const lineOffset = this.lineBuffers.array('offsetPx');
-    const lineOtherAnchor = this.lineBuffers.array('otherAnchor');
-    const lineOtherOffset = this.lineBuffers.array('otherOffsetPx');
-    const lineSegmentT = this.lineBuffers.array('segmentT');
-    const lineSide = this.lineBuffers.array('side');
-    const lineStrokeWidth = this.lineBuffers.array('strokeWidthPx');
-    const lineStrokeLayer = this.lineBuffers.array('strokeLayer');
-    const linePixelSnap = this.lineBuffers.array('pixelSnap');
-    const lineColor = this.lineBuffers.array('batchColor');
-    const lineAlpha = this.lineBuffers.array('batchAlpha');
-    const lineDashCode = this.lineBuffers.array('dashCode');
+    const linePosition = target.array('position');
+    const lineOffset = target.array('offsetPx');
+    const lineOtherAnchor = target.array('otherAnchor');
+    const lineOtherOffset = target.array('otherOffsetPx');
+    const lineSegmentT = target.array('segmentT');
+    const lineSide = target.array('side');
+    const lineStrokeWidth = target.array('strokeWidthPx');
+    const lineStrokeLayer = target.array('strokeLayer');
+    const linePixelSnap = target.array('pixelSnap');
+    const lineColor = target.array('batchColor');
+    const lineAlpha = target.array('batchAlpha');
+    const lineDashCode = target.array('dashCode');
     const resolveColor = createColorResolver(theme);
     const pixelRatio = this.pixelRatio.value;
-    const capacityVertices = this.lineBuffers.vertexCapacity;
+    const capacityVertices = target.vertexCapacity;
     const writeStrokeVertex = (
       vertexIndex: number,
       own: SceneVertex,
@@ -1905,6 +1910,7 @@ export class ThreeSceneDimensionPainter {
     this.parent.remove(this.group);
     this.group.clear();
     this.lineBuffers.dispose();
+    this.lineBackBuffers.dispose();
     this.triangleBuffers.dispose();
     this.fillBuffers.dispose();
     this.lineMaterial.dispose();

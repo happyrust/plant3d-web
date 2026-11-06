@@ -277,11 +277,11 @@ describe('ThreeSceneDimensionPainter', () => {
     job.cancel();
     job.finish();
 
-    // The cancelled job never published: stats and vertex bytes keep the
-    // last good frame, while `paintAsync`'s opening `clear()` already
-    // blanked the line `drawRange` — cancel leaves the layer invisible,
-    // not corrupt.
-    expect(publishedVertexCount(painter, 'dimension-scene-lines')).toBe(0);
+    // The cancelled job wrote only the back buffer and never swapped it in:
+    // the frame on screen — draw range, stats, vertex bytes — is the last
+    // complete one.
+    expect(publishedVertexCount(painter, 'dimension-scene-lines'))
+      .toBe((publishedStats.lineVertexCount / 4) * 6);
     expect(painter.getStats()).toEqual(publishedStats);
     expect(snapshotAttributes(painter, 'dimension-scene-lines')).toEqual(publishedLines);
   });
@@ -881,27 +881,42 @@ describe('ThreeSceneDimensionPainter', () => {
    * `drawRange` 仍指着上一帧发布的索引数，而顶点缓冲正被从头部覆写——
    * 画出来是「新前缀 + 旧尾巴」的混合顶点。
    */
-  it('clears the line drawRange when a batched paint starts without capacity growth', () => {
+  it('keeps the published line geometry on screen while a batched paint writes the back buffer', () => {
     const painter = new ThreeSceneDimensionPainter(new Group(), createTestFont());
     painter.resize(800, 600);
-    const layouts = Array.from({ length: 30 }, (_, index) =>
+    const before = Array.from({ length: 30 }, (_, index) =>
       layout(`dimension-${index}`, primitives));
-    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    painter.paint(before, SOLVESPACE_DIMENSION_THEME);
     const lines = painter.group.getObjectByName('dimension-scene-lines') as any;
-    const expectedCount = (painter.getStats().lineVertexCount / 4) * 6;
-    expect(lines.geometry.drawRange.count).toBe(expectedCount);
+    const edges = painter.group.getObjectByName('dimension-scene-line-edges') as any;
+    const shownGeometry = lines.geometry;
+    const shownCount = (painter.getStats().lineVertexCount / 4) * 6;
+    const shownBytes = snapshotAttributes(painter, 'dimension-scene-lines');
 
-    // Same layouts → same vertex count → `ensureCapacity` keeps both the
-    // geometry object and its `drawRange`, so this exercises the
-    // no-growth path the clear exists for.
-    const job = painter.paintAsync(layouts, SOLVESPACE_DIMENSION_THEME);
-    expect(lines.geometry.drawRange.count).toBe(0);
+    // A smaller next frame: every batch goes to the back buffer, so the
+    // mesh keeps drawing the published geometry, count and bytes alike.
+    const after = before.slice(0, 10);
+    const job = painter.paintAsync(after, SOLVESPACE_DIMENSION_THEME);
     job.advance(1);
-    expect(lines.geometry.drawRange.count).toBe(0);
     while (!job.advance(4)) { /* drain the rest of the batches */ }
-    expect(lines.geometry.drawRange.count).toBe(0);
+    expect(lines.geometry).toBe(shownGeometry);
+    expect(lines.geometry.drawRange.count).toBe(shownCount);
+    expect(snapshotAttributes(painter, 'dimension-scene-lines')).toEqual(shownBytes);
+
+    // `finish()` swaps the written buffer in for both stroke passes.
     job.finish();
-    expect(lines.geometry.drawRange.count).toBe(expectedCount);
+    expect(lines.geometry).not.toBe(shownGeometry);
+    expect(edges.geometry).toBe(lines.geometry);
+    expect(lines.geometry.drawRange.count).toBe((painter.getStats().lineVertexCount / 4) * 6);
+    expect(painter.getStats().lineVertexCount).toBeLessThan((shownCount / 6) * 4);
+
+    // And the next batched paint writes the other buffer, not the one on screen.
+    const nextShown = lines.geometry;
+    const again = painter.paintAsync(before, SOLVESPACE_DIMENSION_THEME);
+    while (!again.advance(8)) { /* drain */ }
+    expect(lines.geometry).toBe(nextShown);
+    again.finish();
+    expect(lines.geometry).toBe(shownGeometry);
   });
 
   /**

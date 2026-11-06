@@ -259,18 +259,20 @@ describe('DimensionViewport', () => {
    * 待跑的绘制帧。用「剩余帧数」而不是「画了什么」来判，是因为 jsdom 里没有
    * 真 GPU，`render()` 只是个桩——真正能观察到的是作业是否被同步收尾。
    */
-  it('finishes the batched paint before drawing when the host renders mid-batch', () => {
+  it('draws the last complete frame when the host renders mid-batch, without finishing the batch', () => {
     const records = Array.from({ length: 12 }, (_, index) => linearRecord({
       id: `linear-${index + 1}`,
       b: exactAnchor([1, index * 0.5, 0]),
     }));
-    const harness = createViewport();
+    // One record per batch, so the paint spans many frames.
+    const harness = createViewport(undefined, 1);
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.setDocument(emptyDimensionDocument(records));
 
-    // One frame only: the first batch is written, the paint is still in flight.
-    harness.flush(1);
-    expect(harness.callbacks.length).toBeGreaterThan(0);
+    // Layout, then the first batch: the paint is still in flight.
+    harness.flush(2);
+    expect((harness.viewport as any).painting).toBe(true);
+    const job = (harness.viewport as any).pendingPaint.job;
 
     const camera = new PerspectiveCamera();
     const renderer = {
@@ -280,14 +282,17 @@ describe('DimensionViewport', () => {
     };
     harness.viewport.renderOverlay(renderer as never, camera);
 
-    // The overlay pass ran, and the queued paint frame was cancelled before it
-    // — the remaining batches were written synchronously instead.
+    // The overlay pass ran on the frame already on screen; the batch window
+    // is untouched — nothing was cancelled or written synchronously.
     expect(renderer.render).toHaveBeenCalledTimes(1);
-    expect(harness.cancelled).toHaveLength(1);
-    expect(harness.cancelled[0]).toBe(1);
+    expect(harness.cancelled).toHaveLength(0);
+    expect((harness.viewport as any).painting).toBe(true);
+    expect((harness.viewport as any).pendingPaint.job).toBe(job);
+    expect(job.remaining()).toBeGreaterThan(0);
 
-    // And the geometry is now complete: a hit test answers against the frame
-    // that was just drawn, not against a half-written one.
+    // Draining publishes the new frame; hit tests then answer against it.
+    harness.flush();
+    expect((harness.viewport as any).painting).toBe(false);
     const region = harness.viewport.getLayouts()[0]!.hitRegions[0]!;
     const probe: [number, number] = region.kind === 'segment'
       ? [region.from[0], region.from[1]]
@@ -314,82 +319,91 @@ describe('DimensionViewport', () => {
   });
 
   /**
-   * W5-5 分帧的硬约束：写一半的缓冲绝不能被渲染。这里只跑第一帧，然后
-   * 在分帧进行中触发一次相机失效，确认 `render()` 早退、不调 `requestRender`
-   * ——否则那一帧会画出只画了一部分的尺寸线。
+   * 分帧中途相机给了新投影：不再等这一轮写完、也不同步写完，而是作废在飞的
+   * 作业、按新相机重新布局分帧；期间宿主照常重绘（屏幕上是上一次完整的一帧）。
    */
-  it('does not render while a batched paint is only partly written', () => {
+  it('restarts the batched paint for a new camera instead of finishing the stale one', () => {
+    const records = Array.from({ length: 12 }, (_, index) => linearRecord({
+      id: `linear-${index + 1}`,
+      b: exactAnchor([1, index * 0.5, 0]),
+    }));
     vi.mocked(layoutViewport).mockClear();
-    const harness = createViewport();
+    const harness = createViewport(undefined, 1);
     harness.viewport.setProjector(createTestProjector());
-    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
+    harness.viewport.setDocument(emptyDimensionDocument(records));
     harness.flush();
 
-    const rendersAfterFirstPaint = harness.requestRender.mock.calls.length;
-    expect(rendersAfterFirstPaint).toBeGreaterThan(0);
+    harness.viewport.setDocument(emptyDimensionDocument(records));
+    harness.flush(2);
+    expect((harness.viewport as any).painting).toBe(true);
+    const staleJob = (harness.viewport as any).pendingPaint.job;
+    const layoutsMidPaint = vi.mocked(layoutViewport).mock.calls.length;
+    const rendersMidPaint = harness.requestRender.mock.calls.length;
 
-    // Start a fresh paint and stop after its first batch.
-    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
-    harness.flush(1);
-
-    // Mid-paint: a camera invalidation must not reach the renderer.
+    // Mid-paint: the camera moves to a new projector and the layout is granted.
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.flushProjection();
 
-    expect(harness.requestRender.mock.calls.length).toBe(rendersAfterFirstPaint);
+    expect(vi.mocked(layoutViewport).mock.calls.length).toBe(layoutsMidPaint + 1);
+    expect((harness.viewport as any).pendingPaint.job).not.toBe(staleJob);
+    expect(staleJob.remaining()).toBeGreaterThan(0);
+    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(rendersMidPaint);
 
-    // Draining the remaining batches publishes and renders again.
     harness.flush();
-    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(
-      rendersAfterFirstPaint,
-    );
+    expect((harness.viewport as any).painting).toBe(false);
   });
 
   /**
-   * W5-5 分帧的第二个硬约束：`render()` 在分帧期间早退，而 scheduler 已经把
-   * 失效原因 `consume()` 掉了。若早退时直接丢，那次失效就永久消失。
-   *
-   * 必须用**足够多的记录**让 paint 真的跨帧：批大小是 `ceil(n / 3)`，只有一
-   * 条记录时一批就写完，早退分支根本走不到。这里 12 条 → 每批 4 条 → 3 帧。
+   * 分帧期间到达的失效原因（scheduler 已经 `consume()` 掉）不能丢：
+   * - 主题 / 文档这类改变布局的原因当场生效——作废在飞的作业，按新状态重排；
+   * - 悬停 / 选中的样式增量改的是屏幕上那份顶点，与还没换上的新布局对不上，
+   *   先攒着，收尾时重放。
    */
-  it('keeps invalidations that arrive while a batched paint is in flight', () => {
+  it('acts on invalidations that arrive while a batched paint is in flight', () => {
     const records = Array.from({ length: 12 }, (_, index) => linearRecord({
       id: `linear-${index + 1}`,
       b: exactAnchor([1, index * 0.5, 0]),
     }));
 
     vi.mocked(layoutViewport).mockClear();
-    const harness = createViewport();
+    const harness = createViewport(undefined, 1);
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.setDocument(emptyDimensionDocument(records));
     harness.flush();
-    const layoutsAfterFirstPaint = vi.mocked(layoutViewport).mock.calls.length;
-    expect(layoutsAfterFirstPaint).toBe(1);
+    expect(vi.mocked(layoutViewport).mock.calls.length).toBe(1);
 
-    // Start a fresh paint and stop after its first batch: painting === true.
+    // Mid-paint theme change: the next scheduler frame lays out with it right away.
     harness.viewport.setDocument(emptyDimensionDocument(records));
-    harness.flush(1);
+    harness.flush(2);
+    expect((harness.viewport as any).painting).toBe(true);
     const layoutsMidPaint = vi.mocked(layoutViewport).mock.calls.length;
-
-    // This invalidation is consumed by the scheduler and delivered to render()
-    // while the batch is still being written, so render() must early-return.
     const themed = {
       ...SOLVESPACE_DIMENSION_THEME,
       textHeightPx: SOLVESPACE_DIMENSION_THEME.textHeightPx + 4,
     };
     harness.viewport.setTheme(themed);
-    harness.flush(1);
-    // The early-returned frame did not lay out — proof the guard was hit.
-    expect(vi.mocked(layoutViewport).mock.calls.length).toBe(layoutsMidPaint);
-
-    // Draining replays the kept reason: one more full layout with the new theme.
-    harness.flush();
-    expect(vi.mocked(layoutViewport).mock.calls.length).toBeGreaterThan(
-      layoutsMidPaint,
-    );
+    while ((harness.viewport as any).painting
+      && vi.mocked(layoutViewport).mock.calls.length === layoutsMidPaint) {
+      harness.flush(1);
+    }
+    expect(vi.mocked(layoutViewport).mock.calls.length).toBe(layoutsMidPaint + 1);
     const lastCall = vi.mocked(layoutViewport).mock.calls.at(-1)!;
     expect((lastCall[1] as { theme: { textHeightPx: number } }).theme.textHeightPx)
       .toBe(themed.textHeightPx);
+    expect((harness.viewport as any).painting).toBe(true);
+
+    // Mid-paint hover: kept, not laid out now, replayed once the paint lands.
+    const layoutsBeforeHover = vi.mocked(layoutViewport).mock.calls.length;
+    harness.viewport.setHover('linear-1');
+    // Run every frame queued so far — the hover's scheduler frame among them —
+    // but not the batches those frames queue next.
+    harness.flush(harness.callbacks.length);
+    expect((harness.viewport as any).painting).toBe(true);
+    expect(vi.mocked(layoutViewport).mock.calls.length).toBe(layoutsBeforeHover);
+    expect((harness.viewport as any).deferredReasons.has('interaction')).toBe(true);
+    harness.flush();
+    expect((harness.viewport as any).painting).toBe(false);
+    expect((harness.viewport as any).deferredReasons.size).toBe(0);
   });
 
   /**
@@ -1001,41 +1015,29 @@ describe('DimensionViewport', () => {
   });
 
   /**
-   * 计划 §11.5 风险 4 的另一半：`painting === true` 但 `pendingPaint ===
-   * null`（作业刚被新布局取消）时，`renderOverlay` → `finishBatchedPaintNow`
-   * 不能只复位 `painting` 就 return——攒下的 `deferredReasons` 会永久丢失，
-   * 也没人替这一帧请求重绘。
-   *
-   * 契约：即使没有作业要补完，也要重放失效原因并发出一次重绘请求。
+   * 宿主随时可能渲染（相机在动时四处 `renderDimensionOverlay` 无条件执行）。
+   * 前台缓冲始终完整，所以 `renderOverlay` 只是画，不碰分帧状态机——哪怕状态机
+   * 处在「painting 但作业已被新布局清掉」的半状态。
    */
-  it('still requests a render when the overlay draws in a painting state without a job', () => {
+  it('only draws in renderOverlay, leaving the paint state machine alone', () => {
     const harness = createViewport();
     harness.viewport.setProjector(createTestProjector());
     harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
     harness.flush();
 
-    const rendersSoFar = harness.requestRender.mock.calls.length;
-    const framesSoFar = harness.callbacks.length;
-
-    // 直接构造半状态：painting 仍 true，作业已经清掉，还攒了一条失效原因。
     (harness.viewport as any).painting = true;
     (harness.viewport as any).pendingPaint = null;
-    (harness.viewport as any).deferredReasons.add('theme');
+    const framesSoFar = harness.callbacks.length;
 
     const camera = new PerspectiveCamera();
     const renderer = { autoClear: true, clearDepth: vi.fn(), render: vi.fn() };
     harness.viewport.renderOverlay(renderer as never, camera);
 
     expect(renderer.render).toHaveBeenCalledTimes(1);
-    // 没有作业要补完也要请求一次重绘，并把攒下的原因重新排进 scheduler。
-    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(rendersSoFar);
-    expect(harness.callbacks.length).toBeGreaterThan(framesSoFar);
-
-    // 回放的原因排到一个真实帧：跑完不再卡住，且再次请求重绘。
-    harness.flush();
-    expect(harness.requestRender.mock.calls.length).toBeGreaterThan(
-      rendersSoFar + 1,
-    );
+    expect(renderer.clearDepth).toHaveBeenCalledTimes(1);
+    expect(renderer.autoClear).toBe(true);
+    expect(harness.callbacks.length).toBe(framesSoFar);
+    expect((harness.viewport as any).painting).toBe(true);
   });
 
   /**

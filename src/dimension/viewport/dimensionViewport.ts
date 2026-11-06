@@ -274,24 +274,22 @@ export class DimensionViewport {
   private lastCameraLayoutGrantedAtMs = 0;
   private readonly pendingStyleIds = new Set<string>();
   /**
-   * 分帧 paint 进行中（W5-5）。为真时几何只写了一半，**任何一帧都不能渲染**
-   * ——否则会画出只画了一部分的尺寸线。见 `render()` 入口的早退与计划 §11.3.5。
+   * 分帧 paint 进行中（W5-5）。新几何写在画家的后台线缓冲里，屏幕上始终是
+   * 上一次完整的一帧，所以这期间宿主照常渲染；`finish()` 时才换上新帧。
    */
   private painting = false;
   private paintFrameId: number | null = null;
-  /**
-   * 在飞的分帧作业（W5-5）。留着它是为了让宿主提前要求渲染时能把剩余批次
-   * 一次写完（`finishBatchedPaintNow`），而不是画出写了一半的几何。
-   */
+  /** 在飞的分帧作业（W5-5）；新布局到来时作废它、按新布局重新分帧。 */
   private pendingPaint: Readonly<{
     job: SceneDimensionPaintJob;
     batchLayouts: number;
     finish: () => void;
   }> | null = null;
   /**
-   * 分帧期间到达的失效原因（W5-5）。scheduler 已经把原因 `consume()` 掉了，
-   * `render()` 早退时若不收下就永久丢失，分帧结束后会停在旧内容上。收尾时
-   * 逐个 `invalidate()` 放回，让它们真正生效。
+   * 分帧期间到达、但不值得打断这次分帧的失效原因：只有悬停 / 选中的样式
+   * 更新。样式增量改的是屏幕上那份顶点，而 `layouts` 已经是还没换上的新布局，
+   * 两边对不上，只能等收尾再放回。scheduler 已经把原因 `consume()` 掉了，
+   * 不收下就永久丢失。
    */
   private readonly deferredReasons = new Set<DimensionViewportDirtyReason>();
   private disposed = false;
@@ -318,18 +316,8 @@ export class DimensionViewport {
    */
   renderOverlay(renderer: WebGLRenderer, camera: Camera): void {
     if (this.disposed) return;
-    // 分帧写入中，宿主却要渲染这一帧（`ViewerPanel.vue:3301/3304` 与 `:3394/3397`
-    // 四处都无条件调本方法）——多半是相机在动。此时几何只写了一半：`paintAsync`
-    // 起手无条件把线缓冲的 `drawRange` 归零（容量增长时换上的新 `BufferGeometry`
-    // 本来就是空的；容量不变时若不清零，`drawRange` 仍指向上一次 `finish()`
-    // 发布的索引数，而顶点缓冲已被本批从头部覆写——那样画出的是「新前缀 +
-    // 旧尾巴」的混合顶点，归零正是为了杜绝它），三角形/填充缓冲在 `finish()`
-    // 之前则仍发布着上一帧。两种情况都不能上屏：一个整层空白，一个是错的。
-    //
-    // 直接 `return` 不行：宿主这帧已经重绘了主场景，尺寸层这个 pass 不执行就是
-    // **整层消失**（空白闪烁），比半成品更刺眼。所以把剩下的批次一次写完再画，
-    // 代价只是这一次分帧退化成同步（只有用户在分帧窗口内动了相机才会走到）。
-    if (this.painting) this.finishBatchedPaintNow();
+    // 分帧写入中也照画：新几何在后台缓冲，屏幕上的是上一次完整的一帧。以前
+    // 这里要把剩余批次同步写完（310 BRAN 的房间一卡约 460 ms），现在不用了。
     const autoClear = renderer.autoClear;
     renderer.autoClear = false;
     try {
@@ -382,8 +370,8 @@ export class DimensionViewport {
     // 按旧投影摆放，帧耗时也完全不可观测。折中：按实测成本降频。
     //
     // 间隔取 `max(下限, 上次成本 × 2)`：保证一次重排至少占有它自己耗时两倍
-    // 的时间窗口，成本高的场景自动降到接近「只在静止时重排」。分帧进行中不
-    // 打断——`render()` 会把这条 `camera` 收进 `deferredReasons`，收尾时重放。
+    // 的时间窗口，成本高的场景自动降到接近「只在静止时重排」。分帧进行中放行
+    // 的这次重排会作废在飞的作业、按新相机重新分帧（屏幕上一直是上一帧）。
     const intervalMs = Math.max(
       this.input.cameraMotionLayoutIntervalMs ?? CAMERA_MOTION_LAYOUT_INTERVAL_MS,
       this.lastFullLayoutCostMs * 2,
@@ -392,7 +380,7 @@ export class DimensionViewport {
       this.grantCameraLayout();
       return;
     }
-    this.requestRenderWhenPainted();
+    this.input.requestRender?.();
     if (this.cameraSettleTimer !== null) {
       clearTimeout(this.cameraSettleTimer);
     }
@@ -415,19 +403,9 @@ export class DimensionViewport {
     this.invalidate('camera');
   }
 
-  /**
-   * 请求重绘，但**分帧写入期间一律不发**（W5-5）：那时几何只写了一半，
-   * 任何一帧都会画出半成品。分帧收尾时会自己发一次，所以这里丢掉不会
-   * 造成画面停在旧内容上。
-   */
-  private requestRenderWhenPainted(): void {
-    if (this.painting) return;
-    this.input.requestRender?.();
-  }
-
   setDesignToWorld(matrix: Matrix4): void {
     this.scenePainter.setDesignToWorld(matrix);
-    this.requestRenderWhenPainted();
+    this.input.requestRender?.();
   }
 
   setTheme(theme: DimensionTheme): void {
@@ -682,10 +660,10 @@ export class DimensionViewport {
 
   private render(reasons: ReadonlySet<DimensionViewportDirtyReason>): void {
     if (!this.projector) return;
-    // 分帧写入中：几何只写了一半，这一帧不能动（W5-5）。但 scheduler 已经把
-    // 这批失效原因 `consume()` 掉了，直接返回就等于丢掉它们——分帧结束后
-    // 画面会停在旧内容上。所以先把原因存下来，收尾时重新放回队列。
-    if (this.painting) {
+    // 分帧写入中只攒样式更新（见 `deferredReasons`），收尾时重放。其它原因——
+    // 相机放行了新布局、文档 / 主题 / 尺寸变了——直接往下走：全量布局会作废
+    // 在飞的作业、按新状态重新分帧，屏幕上一直是上一次完整的一帧。
+    if (this.painting && [...reasons].every(reason => reason === 'interaction')) {
       for (const reason of reasons) this.deferredReasons.add(reason);
       return;
     }
@@ -794,9 +772,9 @@ export class DimensionViewport {
   }
 
   /**
-   * 把这一批布局的绘制拆到若干帧（W5-5）。每帧写一批线顶点，写完才
-   * `finish()` 发布几何并 `requestRender()`；期间 `painting` 为真，`render()`
-   * 直接早退，所以不会有半成品上屏。
+   * 把这一批布局的绘制拆到若干帧（W5-5）。每帧往画家的后台线缓冲写一批，
+   * 写完才 `finish()` 换上屏幕并 `requestRender()`；期间屏幕上是上一次完整的
+   * 一帧，宿主照常渲染，不会有半成品上屏。
    *
    * 批大小按**段数预算**算，不按记录数（§11.17）。旧实现取 `ceil(layouts / 3)`，
    * 那个常数是在「2k 记录」口径下试出来的；真实房间里有 MBD 的 BRAN 数中位数
@@ -910,38 +888,6 @@ export class DimensionViewport {
       finish();
     };
     this.paintFrameId = this.input.requestFrame(step);
-  }
-
-  /**
-   * 宿主在分帧窗口内要求渲染：把剩下的批次一次写完再画（W5-5）。
-   *
-   * 触发路径是相机在动——`ViewerPanel.vue:3301/3304` 与 `:3394/3397` 的四处
-   * `renderDimensionOverlay` 都在宿主帧之后无条件执行。若此时直接跳过尺寸层，
-   * 那一帧就是整层消失；若照旧画，画出的是写了一半的顶点（`paintAsync` 起手
-   * 已把 `drawRange` 归零）。两个都不能接受，所以退化成同步：这一次多花一帧的
-   * 时间，画面与几何始终一致。
-   *
-   * 只影响「用户在分帧的 1～2 帧窗口里动了相机」这一种情况；正常浏览时
-   * `advance()` 早已把队列排空，走不到这里。
-   */
-  private finishBatchedPaintNow(): void {
-    const pending = this.pendingPaint;
-    if (!pending) {
-      // 没有作业却在 painting：作业刚被新布局取消，几何已归新布局管，不必
-      // 补救；但攒下的失效原因不能跟着丢，也没人替这一帧请求重绘。
-      this.painting = false;
-      this.replayDeferredReasons();
-      this.input.requestRender();
-      return;
-    }
-    if (this.paintFrameId !== null) {
-      this.input.cancelFrame(this.paintFrameId);
-      this.paintFrameId = null;
-    }
-    while (!pending.job.advance(pending.batchLayouts)) {
-      // 一次写完，不再让出帧。
-    }
-    pending.finish();
   }
 
   /**
