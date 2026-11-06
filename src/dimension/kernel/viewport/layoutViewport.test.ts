@@ -254,3 +254,96 @@ describe('layoutViewport — polar placement (T3.6a)', () => {
     expect(secondCandidate.radiusIndex).toBe(firstCandidate.radiusIndex);
   });
 });
+
+describe('layoutViewport — same-pipe polar obstacles (T3.6b)', () => {
+  it('without a `groupKey`, two same-position labels only separate along `dis` '
+    + '(v1: no cross-record obstacle, just independent screenGuard occupancy)', () => {
+    const a = polarLabel('a');
+    const b = polarLabel('b');
+    const batch = layoutViewport([a, b], baseContext, new Map());
+
+    const stateA = present(batch.polarNext.get('a'), 'a state').candidate;
+    const stateB = present(batch.polarNext.get('b'), 'b state').candidate;
+    expect(stateA.angle).toBe(stateB.angle);
+    expect(stateA.dis).not.toBe(stateB.dis);
+  });
+
+  it('with a shared `groupKey`, the second label is pushed to a disjoint angle at '
+    + 'the polar level — not merely nudged in screen space', () => {
+    const a = polarLabel('a', { polar: { ...polarLabel('a').polar!, groupKey: 'g1' } });
+    const b = polarLabel('b', { polar: { ...polarLabel('b').polar!, groupKey: 'g1' } });
+    const batch = layoutViewport([a, b], baseContext, new Map());
+
+    expect(batch.polarFallbacks).toBe(0);
+    const stateA = present(batch.polarNext.get('a'), 'a state').candidate;
+    const stateB = present(batch.polarNext.get('b'), 'b state').candidate;
+    // Same `dis` slot as each other (unlike the ungrouped case above) but a
+    // genuinely different angle: `b`'s candidate steers clear of `a`'s own
+    // `polarCandidateObstacle`, registered into `groupObstacles` after `a`
+    // resolves, rather than sliding along `dis` to dodge `screenGuard`.
+    expect(stateA.dis).toBe(stateB.dis);
+    expect(stateA.angle).not.toBe(stateB.angle);
+  });
+
+  it('a non-polar sibling (`polarObstacle`) fences off its own anchor: the polar '
+    + 'label in the same group does not land on it', () => {
+    const label = polarLabel('lbl', { polar: { ...polarLabel('lbl').polar!, groupKey: 'g2' } });
+    const sibling: ExplicitLayoutInput = {
+      id: 'sib',
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: 'Y',
+      lines: [],
+      labelAnchor: [0, 0.07, 0],
+      arrowLines: [],
+      textHeightM: 0.02,
+      polarObstacle: { groupKey: 'g2' },
+    };
+    // Sibling sorts first in `inputs`; `seedSiblingObstacles` fences its
+    // anchor off before the main loop resolves `lbl`, so ordering does not
+    // matter here (unlike the candidate-obstacle case above).
+    const batch = layoutViewport([sibling, label], baseContext, new Map());
+
+    expect(batch.polarFallbacks).toBe(0);
+    const chosen = present(batch.polarNext.get('lbl'), 'lbl state').candidate;
+    // The sibling's anchor [0, 0.07, 0] sits at angle 90 (north) from the
+    // `polarLabel` fixture's axis; the label's candidate avoids that angle.
+    expect(chosen.angle).not.toBe(90);
+  });
+
+  it('different `groupKey`s do not obstruct each other at the polar level: both '
+    + 'keep the solo angle, exactly as if the other group did not exist', () => {
+    const alone = layoutViewport(
+      [polarLabel('solo', { polar: { ...polarLabel('solo').polar!, groupKey: 'solo-group' } })],
+      baseContext,
+      new Map(),
+    );
+    const soloCandidate = present(alone.polarNext.get('solo'), 'solo state').candidate;
+
+    const a = polarLabel('a', { polar: { ...polarLabel('a').polar!, groupKey: 'group-a' } });
+    const b = polarLabel('b', { polar: { ...polarLabel('b').polar!, groupKey: 'group-b' } });
+    const batch = layoutViewport([a, b], baseContext, new Map());
+
+    expect(batch.polarFallbacks).toBe(0);
+    const stateA = present(batch.polarNext.get('a'), 'a state').candidate;
+    const stateB = present(batch.polarNext.get('b'), 'b state').candidate;
+    // Neither group's `groupObstacles` entry has anything from the other
+    // group in it, so both resolve the same angle the solo record did — the
+    // same ungrouped `screenGuard`/`polarOccupancy` still slides `b` along
+    // `dis` to avoid sharing `a`'s screen slot (v1's existing behaviour,
+    // orthogonal to T3.6b and covered by the ungrouped test above).
+    expect(stateA.angle).toBe(soloCandidate.angle);
+    expect(stateB.angle).toBe(soloCandidate.angle);
+    expect(stateA.dis).toBe(soloCandidate.dis);
+    expect(stateB.dis).not.toBe(soloCandidate.dis);
+  });
+
+  it('is a no-op for inputs without `groupKey` / `polarObstacle` — identical to '
+    + 'T3.6a output (no groupObstacles seeded, no candidate obstacle registered)', () => {
+    const input = polarLabel('p');
+    const batch = layoutViewport([input], baseContext, new Map());
+    const chosen = present(batch.polarNext.get('p'), 'p state').candidate;
+    expect(chosen.dis).toBe(0);
+    expect(chosen.angle).toBe(90);
+  });
+});

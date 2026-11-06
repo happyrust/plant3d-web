@@ -240,6 +240,17 @@ export class DimensionViewport {
    * 候选本就没有重新计算，沿用旧表正是「未变」的含义。
    */
   private polarPrevious: ReadonlyMap<string, PolarFrameState> = new Map();
+  /**
+   * 极坐标放置层最后一帧的诊断信号（T3.6b dev 诊断）：`polarFallbacks` 是
+   * `layoutViewport`本帧退回求解器原位锚点的记录数，`polarNextSize` 是本帧
+   * 成功走极坐标的记录数（`polarNext.size`）。只读、不画、不抛，供 e2e /
+   * 开发态查验；camera-only 早退跳过整帧重排时（同 `polarPrevious`）也不
+   * 更新——那帧没有重新跑 `layoutViewport`，上一次的诊断仍然成立。
+   */
+  private polarDiagnostics: Readonly<{ polarFallbacks: number; polarNextSize: number }> = {
+    polarFallbacks: 0,
+    polarNextSize: 0,
+  };
   private theme: DimensionTheme;
   private format: DimensionFormatPolicy;
   private displayMode: DimensionDisplayMode = 'engineering';
@@ -530,6 +541,15 @@ export class DimensionViewport {
     return this.layouts;
   }
 
+  /**
+   * 极坐标放置层最后一帧的诊断信号（T3.6b dev 诊断），见 `polarDiagnostics`
+   * 字段注释。0/0 既可能是「这帧没有任何记录带 `polar`」也可能是「还没跑过
+   * 一帧」——与 `layoutViewport` 本身的约定一致（`ViewportLayoutBatch`）。
+   */
+  getPolarDiagnostics(): Readonly<{ polarFallbacks: number; polarNextSize: number }> {
+    return this.polarDiagnostics;
+  }
+
   getCanvas(): HTMLCanvasElement | null {
     return null;
   }
@@ -764,6 +784,10 @@ export class DimensionViewport {
     this.lastLayoutProjector = this.projector;
     this.pendingHitIndex = batch.hitIndex;
     this.polarPrevious = batch.polarNext;
+    this.polarDiagnostics = {
+      polarFallbacks: batch.polarFallbacks,
+      polarNextSize: batch.polarNext.size,
+    };
     this.pendingStyleIds.clear();
     this.startBatchedPaint(startedAt, layoutCompletedAt);
     this.layoutListeners.forEach(listener => listener(this.layouts));

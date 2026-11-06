@@ -415,6 +415,13 @@ describe('createMbdExternalSync', () => {
       .mock.calls[0]!;
     const plainTag = plain.find((record: { id: string }) => record.id === 'tag-1');
     expect(plainTag.layout.polar).toBeUndefined();
+    // T3.6b (default off): `dim-1` names the same isoline as `tag-1`, so the
+    // mapper gives it `polarObstacle` too — `withoutPolar` must strip that
+    // field as well, or a `polarObstacle`-only record would still seed
+    // `layoutViewport`'s `groupObstacles` with zero `polar`-opted labels to
+    // key off, but still diverge from a payload that never carried it.
+    const plainDim = plain.find((record: { id: string }) => record.id === 'dim-1');
+    expect(plainDim.layout.polarObstacle).toBeUndefined();
 
     const enabled = createHarness({ search: '?mbd_refno=A&mbd_polar=1', fetchPipeData });
     await enabled.sync.sync(enabled.target);
@@ -423,6 +430,7 @@ describe('createMbdExternalSync', () => {
     const optedTag = opted.find((record: { id: string }) => record.id === 'tag-1');
     expect(optedTag.layout.polar).toBeDefined();
     expect(optedTag.layout.polar.basicRadiusM).toBeCloseTo(0.25, 9);
+    expect(optedTag.layout.polar.groupKey).toBe('isoline:0');
     // Everything else about the record is untouched, except `tag`: a
     // polar-opted label must lose it, or `layoutViewport` takes the billboard
     // branch before ever looking at the polar-resolved `labelAnchor` (T3.6a 补).
@@ -436,6 +444,10 @@ describe('createMbdExternalSync', () => {
     // A record without `polar` keeps its `tag` even when the mode is on.
     const otherOpted = opted.find((record: { id: string }) => record.id === 'dim-1');
     expect(otherOpted.layout.polar).toBeUndefined();
+    // `dim-1`'s `polarObstacle` survives `mbd_polar=1` (only `withoutPolar`
+    // strips it; `polarReplacesTag` only touches `tag`), and names the same
+    // group `tag-1`'s `polar.groupKey` does.
+    expect(otherOpted.layout.polarObstacle).toEqual({ groupKey: 'isoline:0' });
 
     // Any other value is not the mode — stripped stays the default: `tag`
     // kept, `polar` stripped.
@@ -446,6 +458,8 @@ describe('createMbdExternalSync', () => {
     const bogusTag = other.find((record: { id: string }) => record.id === 'tag-1');
     expect(bogusTag.layout.polar).toBeUndefined();
     expect(bogusTag.layout.tag).toBeDefined();
+    const bogusDim = other.find((record: { id: string }) => record.id === 'dim-1');
+    expect(bogusDim.layout.polarObstacle).toBeUndefined();
   });
 
   /**

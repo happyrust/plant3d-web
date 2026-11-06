@@ -166,7 +166,8 @@ function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensi
  * 调试开关 `?mbd_polar=1`（T3.6a）：接入极坐标放置层——标签锚点改由
  * `polarPlace` + 屏幕净空校验挑选，而不是求解器原位 `label_anchor`。
  * **默认关闭**：mapper 给带同直段 `linear_dim` + 外径的 `label` 打的
- * `polar` 字段在这里被剥掉，内核回到原位呈现；缺省 / 其它值 = 剥掉。
+ * `polar` 字段、以及给同 isoline 的 `linear_dim` 打的 `polarObstacle`
+ * 字段（T3.6b），在这里一并被剥掉，内核回到原位呈现；缺省 / 其它值 = 剥掉。
  */
 function isMbdPolarEnabled(raw: string | null): boolean {
   return raw?.trim() === '1';
@@ -176,8 +177,8 @@ function withoutPolar(record: ExternalDimensionRecord): ExternalDimensionRecord 
   const layout = record.layout;
   // Only explicit layouts carry the polar opt-in.
   if (!('lines' in layout)) return record;
-  if (layout.polar === undefined) return record;
-  const { polar: _polar, ...rest } = layout;
+  if (layout.polar === undefined && layout.polarObstacle === undefined) return record;
+  const { polar: _polar, polarObstacle: _polarObstacle, ...rest } = layout;
   return { ...record, layout: rest };
 }
 

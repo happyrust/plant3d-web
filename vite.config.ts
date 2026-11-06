@@ -108,8 +108,9 @@ export default defineConfig(({ mode }) => {
       port: 3101,
       strictPort: true,
       watch: {
-        // tmp/ 是本地验收产物目录（gitignored），里面跑着后端的 .gen-model.instance.lock 会让 watcher EBUSY 崩掉
-        ignored: ['**/tmp/**'],
+        // tmp/、.scratch/ 是本地验收 / 联调目录（gitignored），里面跑着后端（.gen-model.instance.lock）和 Chrome profile，
+        // 文件被锁会让 watcher EBUSY 崩掉；.scratch/redeploy-sandbox/run/*.lock 同理（独占锁）。
+        ignored: ['**/tmp/**', '**/.scratch/**'],
       },
       proxy: {
         '/api': {

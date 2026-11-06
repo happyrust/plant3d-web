@@ -600,6 +600,17 @@ export type ExplicitPolarInput = Readonly<{
   basicRadiusM: number;
   /** Text height (Design Space metres) feeding `needs` (`needDis`/`needRadius`). */
   textHeightM: number;
+  /**
+   * Same-pipe placement group (T3.6b), e.g. `isoline:<idx>`: every record
+   * sharing a `groupKey` is assumed to share one `PolarReference` axis
+   * (same `origin`/`axis` up to floating-point noise), so records later in
+   * input order can avoid the polar real estate records earlier in the
+   * group already claimed — not just claim screen space, but steer
+   * `polarPlace` itself away from the (dis, angle, radius) box the first
+   * record landed in. Omitted = v1 behaviour: no cross-record obstacle,
+   * only the pipe body. See `kernel/viewport/polarObstacles.ts`.
+   */
+  groupKey?: string;
 }>;
 
 export type ExplicitLayoutInput = Readonly<{
@@ -686,4 +697,17 @@ export type ExplicitLayoutInput = Readonly<{
    * original anchor, never hides the record.
    */
   polar?: ExplicitPolarInput;
+  /**
+   * Marks a record that keeps its flat, solver-placed anchor (no `polar`)
+   * but still shares a pipe with records that do opt in (T3.6b plan point
+   * 1, second bullet): e.g. a `linear_dim`'s own `labelAnchor`, placed by
+   * the solver, that a same-isoline `label` reads its axis from in
+   * `polarInputForLabel`. `groupKey` must match the `polar.groupKey` of the
+   * records it should be an obstacle for — same string, same
+   * `PolarReference` axis (`kernel/viewport/polarObstacles.ts`'s
+   * `siblingAnchorObstacle`). Absent = this record never becomes a polar
+   * obstacle (v1 behaviour, and the default for every record that is not
+   * part of a polar group).
+   */
+  polarObstacle?: Readonly<{ groupKey: string }>;
 }>;

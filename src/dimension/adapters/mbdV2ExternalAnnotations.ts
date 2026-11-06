@@ -298,6 +298,8 @@ type ExplicitParts = Readonly<{
   labelPresentation?: 'interrupted' | 'above';
   /** T3.6a opt-in; see `polarInputForLabel`. */
   polar?: ExplicitPolarInput;
+  /** T3.6b opt-in for a non-polar sibling; see `mapLinearDim`. */
+  polarObstacle?: Readonly<{ groupKey: string }>;
 }>;
 
 function explicitRecord(
@@ -334,6 +336,7 @@ function explicitRecord(
     ...(parts.tag ? { tag: parts.tag } : {}),
     ...(parts.subject ? { subject: parts.subject } : {}),
     ...(parts.polar ? { polar: parts.polar } : {}),
+    ...(parts.polarObstacle ? { polarObstacle: parts.polarObstacle } : {}),
   };
   return {
     id: primitive.id,
@@ -562,6 +565,11 @@ function polarInputForLabel(
     disRange: [dis - halfSpanM, dis + halfSpanM],
     basicRadiusM: odM / 2,
     textHeightM,
+    // T3.6b: every record on this isoline shares one group, so
+    // `layoutViewport` fences off candidates and `polarObstacle` anchors
+    // across labels — and against `mapLinearDim`'s own anchor below —
+    // instead of only the pipe body (plan point 1).
+    groupKey: `isoline:${primitive.isoline_idx}`,
   };
 }
 
@@ -781,6 +789,15 @@ function mapLinearDim(
       hideShort: !outside,
     },
     labelAnchor,
+    // T3.6b: this dimension does not opt into polar itself (its own
+    // `label_anchor` stands, same as always), but when it names an
+    // isoline it fences that anchor off as an obstacle for any same-isoline
+    // `label` that does opt in — `groupKey` matches `polarInputForLabel`'s
+    // own `isoline:<idx>`. No `isoline_idx` (plain running dimension, no
+    // isoline membership) = this field is omitted, v1 behaviour.
+    ...(primitive.isoline_idx !== undefined
+      ? { polarObstacle: { groupKey: `isoline:${primitive.isoline_idx}` } }
+      : {}),
     // 「工程文字朝向」: a dimension value runs along its dimension line, which
     // is the direction itself, so a linear dim needs no field for it. Tag /
     // aid / slope text takes the contract's `text_dir` (`textBaseline`) and
@@ -1038,6 +1055,25 @@ export function mbdV2ToExternalRecords(
           position,
           along,
         );
+        // T3.6b ruling: `aid_text` never gets `polar` or `polarObstacle`,
+        // even when its `isoline_idx` matches a same-isoline `label`'s
+        // polar group. In PML, every `aidtext` placement the producer draws
+        // either sits off a leg/skew frame that is not the pipe's own axis
+        // — `isoposAidtext`'s skew-leg X:/Y:/Z: text builds a throwaway
+        // `polarsystem` off the leg's own two endpoints and explicitly
+        // comments `--!this.polarsystem.add(!aidtext.name) $*no need to
+        // add` (`markpipe/object/isoline.pmlobj:2480-2521`, call sites
+        // `:2388`/`:2431`) — or is a fixed offset with no polar call at all
+        // (`drawslope`, `:2568-2591`; the weld-length adjustment text,
+        // `:2141-2147`). plant-mbd's Rust producer matches: every `AidText`
+        // sets `isoline_idx: None` (`slope.rs:295-303`, `angle.rs:524-532`,
+        // `adjust_weld.rs:205-211`; the field is optional in
+        // `contract.rs:283`), so in real payloads this case never even
+        // reaches the `axisDim`/`isoline` lookups `polarInputForLabel`
+        // would need. The fixture at `mbdV2ExternalAnnotations.test.ts`
+        // that gives an `aid_text` an `isoline_idx` does so only to
+        // exercise `groupTextHeightM`'s isoline-height lookup, not to
+        // imply a pipe axis for it.
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel,
           labelAnchor: position,

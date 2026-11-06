@@ -17,6 +17,8 @@ import {
   type PlannedTag,
 } from '../layout/tagBillboard';
 
+import { polarCandidateObstacle, siblingAnchorObstacle } from './polarObstacles';
+
 import type { LayoutContext } from '../layout/context';
 import type { PolarCandidate } from '../layout/polar/place/types';
 import type { PolarReference, PolarElement } from '../layout/polar/reference/types';
@@ -94,11 +96,96 @@ function polarPipeBodyElement(basicRadiusM: number, disRange: readonly [number, 
 }
 
 /**
+ * T3.6b: seeds `groupObstacles` with every non-polar sibling's anchor
+ * (`ExplicitLayoutInput.polarObstacle`, plan point 1's second bullet) before
+ * the main loop runs, so a sibling's position in `inputs` relative to its
+ * group's polar records does not matter — unlike the polar-candidate
+ * obstacles the main loop adds as it goes (those are genuinely
+ * input-order-dependent: a record can only avoid what was placed before
+ * it), a sibling's anchor is a fact the solver already settled, independent
+ * of where in the array it happens to sort.
+ *
+ * One `PolarReference` per `groupKey`, built once from the group's first
+ * `polar`-opted input (every member of a group shares the same
+ * `origin`/`axis` by `ExplicitPolarInput.groupKey`'s own contract, so the
+ * `plane`/`showDir` {@link siblingAnchorObstacle} needs are the same
+ * regardless of which member's `polar` fields built it); a group with no
+ * polar-opted input yet this frame contributes nothing (nothing to avoid
+ * relative to — v1 behaviour for that group this frame).
+ */
+function seedSiblingObstacles(
+  inputs: readonly (NormalizedDimensionInput | ExplicitLayoutInput)[],
+  baseContext: Omit<LayoutContext, 'interaction'>,
+  polarPrevious: ReadonlyMap<string, PolarFrameState> | undefined,
+  groupObstacles: Map<string, PolarElement[]>,
+): void {
+  const referenceByGroup = new Map<string, PolarReference>();
+  const defaultTextHeightByGroup = new Map<string, number>();
+  for (const input of inputs) {
+    if (!('polar' in input) || !input.polar?.groupKey) continue;
+    const { groupKey, origin, axis, disRange, basicRadiusM, textHeightM } = input.polar;
+    if (referenceByGroup.has(groupKey)) continue;
+    try {
+      // Hysteresis consistency: this representative's own previous-frame
+      // reference, same as `resolvePolarAnchor` will use for it a few lines
+      // down in the main loop — so the seed reference's `showDir` matches
+      // what that record resolves with, not an independent `previous: null`
+      // recompute that could disagree with it by up to the hysteresis band.
+      referenceByGroup.set(groupKey, cameraReference({
+        projector: baseContext.projector,
+        origin,
+        axis,
+        disRange,
+        basicRadius: basicRadiusM,
+        isInstPipe: false,
+        previous: polarPrevious?.get(input.id)?.reference ?? null,
+      }));
+      defaultTextHeightByGroup.set(groupKey, textHeightM);
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      // Degenerate axis: `resolvePolarAnchor` will hit the same RangeError
+      // for every polar-opted member of this group and fall back to its
+      // solver anchor, so there is nothing to seed obstacles against either.
+    }
+  }
+  if (referenceByGroup.size === 0) return;
+
+  for (const input of inputs) {
+    if (!('polarObstacle' in input) || !input.polarObstacle) continue;
+    const { groupKey } = input.polarObstacle;
+    const reference = referenceByGroup.get(groupKey);
+    if (!reference) continue;
+    const textHeightM = input.textHeightM ?? defaultTextHeightByGroup.get(groupKey)!;
+    const obstacle = siblingAnchorObstacle(
+      input.id,
+      reference,
+      input.labelAnchor,
+      textHeightM,
+      POLAR_NEED_ANGLE_DEG,
+    );
+    if (!obstacle) continue;
+    const existing = groupObstacles.get(groupKey);
+    if (existing) existing.push(obstacle);
+    else groupObstacles.set(groupKey, [obstacle]);
+  }
+}
+
+/**
  * Builds the polar reference + placement + screen guard for one record and
- * returns the anchor/along override to draw with, or `null` when the input
- * did not opt in, the reference is degenerate, or every candidate was
- * rejected on screen — all of which keep the solver's original anchor
- * (point 6 of the plan: never hide a label over a failed polar placement).
+ * returns the anchor/along override to draw with plus the reference and
+ * obstacle the caller should feed forward within the record's `groupKey`
+ * (T3.6b), or `null` when the input did not opt in, the reference is
+ * degenerate, or every candidate was rejected on screen — all of which keep
+ * the solver's original anchor (point 6 of the plan: never hide a label
+ * over a failed polar placement).
+ *
+ * `groupElements` (T3.6b plan point 1): extra `PolarElement`s ahead of the
+ * pipe body, built by the caller from records earlier in input order that
+ * share this record's `polar.groupKey` — both already-placed polar
+ * candidates ({@link polarCandidateObstacle}) and non-polar siblings'
+ * anchors ({@link siblingAnchorObstacle}). Empty when the record has no
+ * `groupKey` (v1 behaviour: only the pipe body) or is the first in its
+ * group this frame.
  */
 function resolvePolarAnchor(
   input: ExplicitLayoutInput,
@@ -107,7 +194,8 @@ function resolvePolarAnchor(
   previous: PolarFrameState | undefined,
   diagnostics: { fallbacks: number },
   nextState: Map<string, PolarFrameState>,
-): Readonly<{ labelAnchor: Vec3; labelAlong: Vec3 }> | null {
+  groupElements: readonly PolarElement[],
+): Readonly<{ labelAnchor: Vec3; labelAlong: Vec3; reference: PolarReference; needDis: number }> | null {
   const polar = input.polar;
   if (!polar) return null;
   try {
@@ -123,7 +211,7 @@ function resolvePolarAnchor(
     const needDis = mbdTextLen(input.formattedLabel) * polar.textHeightM;
     const result = polarPlace({
       reference,
-      elements: [polarPipeBodyElement(polar.basicRadiusM, polar.disRange)],
+      elements: [polarPipeBodyElement(polar.basicRadiusM, polar.disRange), ...groupElements],
       needs: [needDis, POLAR_NEED_ANGLE_DEG, polar.textHeightM],
       isDim: false,
     });
@@ -140,7 +228,7 @@ function resolvePolarAnchor(
     }
     registerChosen(occupancy, guard);
     nextState.set(input.id, { reference, candidate: guard.chosen });
-    return { labelAnchor: guard.chosen.pos, labelAlong: guard.chosen.textOri.x };
+    return { labelAnchor: guard.chosen.pos, labelAlong: guard.chosen.textOri.x, reference, needDis };
   } catch (error) {
     if (error instanceof RangeError) {
       diagnostics.fallbacks += 1;
@@ -170,6 +258,13 @@ export function layoutViewport(
   const polarOccupancy = new LabelOccupancy();
   const polarDiagnostics = { fallbacks: 0 };
   const polarNext = new Map<string, PolarFrameState>();
+  // T3.6b: same-pipe obstacles accumulated per `groupKey`, seeded below with
+  // every non-polar sibling's anchor before the main loop runs (so a
+  // `linear_dim` that happens to sort after its `label` in `inputs` still
+  // fences off its own anchor), then grown in input order as each polar
+  // record in the loop below resolves its own candidate.
+  const groupObstacles = new Map<string, PolarElement[]>();
+  seedSiblingObstacles(inputs, baseContext, options.polarPrevious, groupObstacles);
   for (const [index, input] of inputs.entries()) {
     const interaction = interactionById.get(input.id) ?? 'normal';
     const context = interaction === 'normal'
@@ -189,6 +284,7 @@ export function layoutViewport(
       }
       continue;
     }
+    const groupKey = 'polar' in input ? input.polar?.groupKey : undefined;
     const polarAnchor = 'polar' in input && input.polar
       ? resolvePolarAnchor(
         input,
@@ -197,8 +293,23 @@ export function layoutViewport(
         options.polarPrevious?.get(input.id),
         polarDiagnostics,
         polarNext,
+        groupKey ? groupObstacles.get(groupKey) ?? [] : [],
       )
       : null;
+    if (polarAnchor && groupKey) {
+      const polar = (input as ExplicitLayoutInput).polar!;
+      const chosen = polarNext.get(input.id)!.candidate;
+      const obstacle = polarCandidateObstacle(
+        input.id,
+        chosen,
+        polarAnchor.needDis,
+        POLAR_NEED_ANGLE_DEG,
+        polar.textHeightM,
+      );
+      const existing = groupObstacles.get(groupKey);
+      if (existing) existing.push(obstacle);
+      else groupObstacles.set(groupKey, [obstacle]);
+    }
     const resolvedInput = polarAnchor
       ? { ...input, labelAnchor: polarAnchor.labelAnchor, labelAlong: polarAnchor.labelAlong }
       : input;

@@ -1115,6 +1115,9 @@ describe('mbdV2ToExternalRecords', () => {
       expect(polar!.disRange[0]).toBeLessThan(0.04);
       expect(polar!.disRange[1]).toBeGreaterThan(0.04);
       expect(polar!.textHeightM).toBeCloseTo(0.0135, 12);
+      // T3.6b: the group key names the isoline, matching the `linear_dim`'s
+      // own `polarObstacle.groupKey` below (same isoline -> same group).
+      expect(polar!.groupKey).toBe('isoline:0');
     });
 
     it('omits polar when the label has no isoline_idx', () => {
@@ -1168,6 +1171,110 @@ describe('mbdV2ToExternalRecords', () => {
         ],
       });
       expect(explicitLayout(result, 'tag-no-od').polar).toBeUndefined();
+    });
+  });
+
+  describe('same-pipe polar obstacles (T3.6b)', () => {
+    function fixture() {
+      const parsed = parseMbdV2PipeData(cliLinearFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const source = parsed.data.primitives[0]!;
+      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+      return { data: parsed.data, source };
+    }
+
+    it('a linear_dim with an isoline_idx carries polarObstacle naming that isoline', () => {
+      const { data, source } = fixture();
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        primitives: [{ ...source, isoline_idx: 0 }],
+      });
+      expect(explicitLayout(result, source.id).polarObstacle).toEqual({ groupKey: 'isoline:0' });
+    });
+
+    it('a linear_dim without an isoline_idx carries no polarObstacle (v1 behaviour)', () => {
+      const { data, source } = fixture();
+      const result = mbdV2ToExternalRecords({ ...data, primitives: [source] });
+      expect(explicitLayout(result, source.id).polarObstacle).toBeUndefined();
+    });
+
+    it('a label\'s polar.groupKey and its same-isoline linear_dim\'s '
+      + 'polarObstacle.groupKey agree, so layoutViewport treats them as one group', () => {
+      const { data, source } = fixture();
+      const meta = {
+        ...data.meta,
+        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          {
+            kind: 'label', id: 'tag-on-isoline', text: 'X 1',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+      const label = explicitLayout(result, 'tag-on-isoline');
+      const dim = explicitLayout(result, source.id);
+      expect(label.polar?.groupKey).toBe(dim.polarObstacle?.groupKey);
+    });
+  });
+
+  describe('aid_text never opts into polar (T3.6b ruling)', () => {
+    // PML: every producer call site either builds a throwaway leg-frame
+    // `polarsystem` that explicitly skips `this.polarsystem.add` (skew-leg
+    // X:/Y:/Z: text, `isoline.pmlobj:2480-2521`, call sites `:2388`/`:2431`)
+    // or places the text at a fixed offset with no polar call at all
+    // (`drawslope`, `:2568-2591`; weld-length adjustment, `:2141-2147`).
+    // plant-mbd mirrors this: every `AidText` the Rust producer emits sets
+    // `isoline_idx: None` (`slope.rs:295-303`, `angle.rs:524-532`,
+    // `adjust_weld.rs:205-211`).
+    function fixture() {
+      const parsed = parseMbdV2PipeData(cliLinearFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const source = parsed.data.primitives[0]!;
+      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+      return { data: parsed.data, source };
+    }
+
+    it('an aid_text with no isoline_idx (the real-world shape) gets no polar', () => {
+      const { data, source } = fixture();
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        primitives: [
+          source,
+          { kind: 'aid_text', id: 'aid-no-isoline', text: 'X: 12', position: [40, -500, 0] },
+        ],
+      });
+      const layout = explicitLayout(result, 'aid-no-isoline');
+      expect(layout.polar).toBeUndefined();
+      expect(layout.polarObstacle).toBeUndefined();
+    });
+
+    it('an aid_text with an isoline_idx that does share a linear_dim + od_mm '
+      + 'still gets no polar — the ruling holds even when every other fact '
+      + 'a `label` would need is present', () => {
+      const { data, source } = fixture();
+      const meta = {
+        ...data.meta,
+        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          {
+            kind: 'aid_text', id: 'aid-on-isoline', text: 'X: 12',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+      const layout = explicitLayout(result, 'aid-on-isoline');
+      expect(layout.polar).toBeUndefined();
+      expect(layout.polarObstacle).toBeUndefined();
     });
   });
 });
