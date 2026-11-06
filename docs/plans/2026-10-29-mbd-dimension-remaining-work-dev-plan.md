@@ -1,6 +1,7 @@
 # MBD 三维尺寸标注：剩余工作开发计划（2026-10-29）
 
-- 性质：开发计划（现行）。**本文件只是计划，不改代码。**
+- 性质：开发计划。**本文件只是计划，不改代码。**
+- **状态（2026-11-06）：已不再是现行计划。** 剩余工作移交 [`2026-11-06-mbd-dimension-remaining-work-dev-plan.md`](2026-11-06-mbd-dimension-remaining-work-dev-plan.md)（工作包 N0–N6）。本文件保留为 W0–W5 的执行记录与设计依据：W0 / W1 / W2 前三件 / W3 前三步 / W4 / W5-2 / W5-3 / W5-4 / W5-5 数值部分已完成；**仍未做**的只有 W3-1 的消费侧、W3-2 的 producer 第三步、W5-1 的 G9 裁决、W5-5 的真实 2k 确认，以及新增的 polar 平面呈现收尾（见新文件）。D5 已由实测否掉「转默认」，结论见新文件 §5 与 `docs/verification/mbd-polar-ab-2026-11-06-r2/README.md`。
 - 取代关系：合并 [`2026-10-28-mbd-3d-dimension-annotation-audit-and-plan.md`](2026-10-28-mbd-3d-dimension-annotation-audit-and-plan.md)（下称「审计计划」）与 [`2026-10-29-mbd-dimension-robustness-dev-plan.md`](2026-10-29-mbd-dimension-robustness-dev-plan.md)（下称「健壮性计划」）的**剩余工作**；两份旧文件已冻结为审计结论 + 执行日志，状态表见审计计划 §12.4，门禁数字只记审计计划 §14。
 - 对照口径：plant3d-web `12f4bb1e`（T7.6 入库后）、`vendor/plant-mbd` `63d566e`、gen-model `src/mbd` `1caf3a84`；任务编号沿用审计计划 §7（T0–T6）、§13.2（T3.3a–T3.6）、§13.3（T5.x）与 §13.10（T7.x），本文只给工作包编号 W0–W5。
 - 2026-10-29 已拍板的四条裁决见 §5 D1–D4；待拍板的 D5–D7 在对应工作包动手前定。
@@ -129,7 +130,7 @@ W0 收口与基线（小，先做）
 | D2 | 原 T4.1–T4.6 契约扩展保留，作为后置工作包 W3 | **已定**（2026-10-29） |
 | D3 | 审计计划不拆文件，顶部加冻结指针、只修状态；本文为现行计划 | **已定**（2026-10-29） |
 | D4 | 一份现行计划合并两份旧计划的剩余工作 | **已定**（2026-10-29） |
-| D5 | `mbd_polar` 何时改为默认开：建议条件 = W1-3 的 A/B 截图通过 + 3D 模式无 NaN / 越界 + W4-1 口径下 P95 不退化 ≥ 10 % | 待定，W1-3 完成后拍板 |
+| D5 | `mbd_polar` 何时改为默认开：建议条件 = W1-3 的 A/B 截图通过 + 3D 模式无 NaN / 越界 + W4-1 口径下 P95 不退化 ≥ 10 % | **已否决（2026-11-06）**：真实载荷 A/B 下非有限值 0、paint P95 +4.5～4.7%（在 10 % 线内），但 `24381_145018` 远景标签重叠 2 → 39 对、`24383_91813` 三档全部降级。结论：**保持默认关，且只在 `mbd_3d=0` 生效**。证据 `docs/verification/mbd-polar-ab-2026-11-06-r2/README.md`；后续见新计划 N2-1 / N2-2 |
 | D6 | T5.3 occupancy 与 T3.4 的算法口径谁先定：建议**前端 T3.4 先**（PML 原 case 金样已在 TS 侧），Rust 侧照金样对齐 | 待定，W1-1 动手前拍板 |
 | D7 | W3-3 `cheight_mm` 与 T7.1 的 `AidText.text_height_mm` 的关系：三层取法——primitive 级 `text_height_mm`（给了即覆盖）> 所在直段 `meta.isolines[isoline_idx].cheight_mm`（直段级 `isoline_cheight_mm`）> 全局 `meta.cheight_mm`（仍是各直段主尺寸字高的最大值）；直段级与 W3-6 共用 `meta.isolines[]` 一张表，图元用共有的 `isoline_idx` 关联 | **已定**（2026-10-29） |
 
