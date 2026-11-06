@@ -4,6 +4,7 @@
 - 承接关系：接 [`2026-10-29-mbd-dimension-remaining-work-dev-plan.md`](2026-10-29-mbd-dimension-remaining-work-dev-plan.md)（下称「10-29 计划」）的**剩余工作**。10-29 计划的 W0 / W1 / W2 前三件 / W3 前三步 / W4 / W5-2 / W5-3 / W5-4 已完成，本文件不再重述其过程细节，只写仍未做完的部分。
 - 对照口径：plant3d-web `d10aae8d`（`6417dbd6` T3.6b 之后）、`vendor/plant-mbd` `cb046f7`、gen-model `68a78ea7f`（`refactor`）。
 - 编号：本文件用 N0–N6 表示工作包，避免与 10-29 计划的 W0–W5 混淆。引用旧编号时写全（如「W3-1」）。
+- 并行计划（2026-11-07）：[`2026-11-07-mbd-all-annotation-types-port-dev-plan.md`](2026-11-07-mbd-all-annotation-types-port-dev-plan.md)（#103，工作包 M0–M8）负责支架 / 土建 / 设备与管道缺失尺寸，并**接管 N2-2 / N4-1 的极坐标口径**：摆位改为求解器唯一实现（M2a），前端 `polar/place/**` 视复测结果退役。其余工作包不重叠。
 
 ## 0. 一句话
 
