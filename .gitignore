@@ -93,6 +93,7 @@ e2e/*
 !e2e/dtx-camera-focus-intent.spec.ts
 !e2e/dimension-camera-baseline.spec.ts
 !e2e/multi-bran-show-refno.spec.ts
+!e2e/mbd-label-overlap.spec.ts
 scripts/*
 !scripts/p0-live-smoke.mjs
 !scripts/run-dimension-browser-perf.mjs
