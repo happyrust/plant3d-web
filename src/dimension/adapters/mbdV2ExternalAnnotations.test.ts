@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import envelopeFieldsFixture from '../../fixtures/mbd-v2/envelope-fields.json';
 import fullCoverageFixture from '../../fixtures/mbd-v2/full-coverage.json';
+import liveIsodimFixture from '../../fixtures/mbd-v2/live-isodim-24381-145018.json';
 import cliLinearFixture from '../../fixtures/mbd-v2/rs-mbd-cli-linear.json';
 import translationFixture
   from '../../fixtures/mbd-v2/source-to-design-translation.json';
@@ -777,6 +779,114 @@ describe('mbdV2ToExternalRecords', () => {
       meta: { ...parsed.data.meta, cheight_mm: null },
     });
     expect(explicitLayout(withoutGroup, 'plain-text').textHeightM).toBeUndefined();
+  });
+
+  describe('envelope fields (#103 M1-3)', () => {
+    function envelopeData(): MbdV2PipeData {
+      const parsed = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!parsed.ok) throw new Error(parsed.error);
+      return parsed.data;
+    }
+    const SEG_0 = '24383_91813:chain:0:seg:0';
+    const SEG_1 = '24383_91813:chain:0:seg:1';
+    const PIPE_TAG = '24383_91813:tag:pipe:24383_91816';
+    const PLATE_TEXT = '24383_91813:plate:24383_91817:thickness';
+    const ANGLE = '24383_91813:angle:24383_91818';
+    const SLOPE = '24383_91813:slope:24383_91816';
+
+    it('carries function and chain_id onto the record as mbdFunction / chainId', () => {
+      const result = mbdV2ToExternalRecords(envelopeData());
+
+      // The leader travels inside its label's record, as on pipe payloads.
+      expect(result.records.map(record => record.id)).toEqual([SEG_0, SEG_1, PIPE_TAG, PLATE_TEXT, ANGLE, SLOPE]);
+      expect(result.skipped).toEqual([]);
+      const record = (id: string) => result.records.find(item => item.id === id)!;
+      expect(record(SEG_0)).toMatchObject({ mbdFunction: '一级尺寸', chainId: '24383_91813:chain:0' });
+      expect(record(PIPE_TAG)).toMatchObject({ mbdFunction: '管道信息' });
+      expect(record(ANGLE)).toMatchObject({ mbdFunction: '二级尺寸' });
+      // Both segments of the chain share its id; the second declares no category.
+      expect(record(SEG_1).chainId).toBe('24383_91813:chain:0');
+      // Nothing undeclared shows up, not even as an `undefined` key.
+      for (const id of [SEG_1, PLATE_TEXT, SLOPE]) expect(record(id)).not.toHaveProperty('mbdFunction');
+      for (const id of [PIPE_TAG, PLATE_TEXT, ANGLE, SLOPE]) expect(record(id)).not.toHaveProperty('chainId');
+    });
+
+    it('takes a declared text_height_mm before the payload-wide group height', () => {
+      // source_mm with S(0.001); meta.cheight_mm 25 → 0.025 m for every record without its own height.
+      const result = mbdV2ToExternalRecords(envelopeData());
+      const height = (id: string) => explicitLayout(result, id).textHeightM;
+
+      expect(height(SEG_0)).toBeCloseTo(0.02, 12);
+      expect(height(PIPE_TAG)).toBeCloseTo(0.018, 12);
+      expect(height(ANGLE)).toBeCloseTo(0.015, 12);
+      expect(height(SLOPE)).toBeCloseTo(0.0125, 12);
+      expect(height(SEG_1)).toBeCloseTo(0.025, 12);
+      expect(height(PLATE_TEXT)).toBeCloseTo(0.025, 12);
+    });
+
+    it('puts a declared text_height_mm above the isoline height without moving the 3D rows', () => {
+      const parsed = parseMbdV2PipeData(cliLinearFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const source = parsed.data.primitives[0]!;
+      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+      // 532.4 mm extension lines over isoline 0's 500 mm surface: two 1.2·13.5 mm
+      // row steps out (the T4.2 / T4.6 case above). Read with a 40 mm step it
+      // would round to row 1.
+      const outerRow = {
+        ...source,
+        sub_kind: 'main',
+        isoline_idx: 0,
+        start: [0, -532.4, 0] as const,
+        end: [80, -532.4, 0] as const,
+        label_anchor: [40, -532.4, 0] as const,
+        extension_lines: [
+          { from: [0, 0, 0] as const, to: [0, -532.4, 0] as const },
+          { from: [80, 0, 0] as const, to: [80, -532.4, 0] as const },
+        ],
+      };
+      const tag = { kind: 'label' as const, text: 'X 1', position: [40, -500, 0] as const, isoline_idx: 0 };
+      const result = mbdV2ToExternalRecords({
+        ...parsed.data,
+        meta: {
+          ...parsed.data.meta,
+          cheight_mm: 27,
+          isolines: [{ index: 0, members: ['24381_145018'], cheight_mm: 13.5, od_mm: 500 }],
+        },
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          { ...outerRow, id: 'outer-group' },
+          { ...outerRow, id: 'outer-own', text_height_mm: 40 },
+          { ...tag, id: 'tag-group' },
+          { ...tag, id: 'tag-own', text_height_mm: 40 },
+        ],
+      });
+
+      expect(explicitLayout(result, 'outer-group').textHeightM).toBeCloseTo(0.0135, 12);
+      expect(explicitLayout(result, 'outer-own').textHeightM).toBeCloseTo(0.04, 12);
+      // The rows are the solver's group spacing, whatever the text declares.
+      expect(explicitLayout(result, 'outer-group').dimension3d!.row).toBe(2);
+      expect(explicitLayout(result, 'outer-own').dimension3d!.row).toBe(2);
+      expect(explicitLayout(result, 'tag-group').textHeightM).toBeCloseTo(0.0135, 12);
+      expect(explicitLayout(result, 'tag-own').textHeightM).toBeCloseTo(0.04, 12);
+      // Polar placement makes room for the label at the height it is drawn with.
+      expect(explicitLayout(result, 'tag-group').polar!.textHeightM).toBeCloseTo(0.0135, 12);
+      expect(explicitLayout(result, 'tag-own').polar!.textHeightM).toBeCloseTo(0.04, 12);
+    });
+
+    it('leaves a live pipe payload without the new record fields and on its group height', () => {
+      const parsed = parseMbdV2PipeData(liveIsodimFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const result = mbdV2ToExternalRecords(parsed.data);
+
+      expect(result.skipped).toEqual([]);
+      expect(result.records).toHaveLength(63);
+      for (const record of result.records) {
+        expect(record).not.toHaveProperty('mbdFunction');
+        expect(record).not.toHaveProperty('chainId');
+        // meta.cheight_mm 27 through S(0.001); no primitive declares its own height.
+        expect((record.layout as ExplicitLayoutInput).textHeightM).toBeCloseTo(0.027, 12);
+      }
+    });
   });
 
   it('tags linear dimensions with level-of-detail hints from sub_kind', () => {

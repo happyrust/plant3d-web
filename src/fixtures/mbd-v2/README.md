@@ -50,7 +50,8 @@ rs-mbd CLI 真实生成物（勿手改；契约漂移守卫 `mbdV2Contract.test.
   `text_height_mm` + `text_up`。
 - `meta`：`geometry_space=source_mm`，`source_to_design` 为列主序 0.001 对角缩放，`cheight_mm=25`，
   `layout_mode=em9_pipe_supp`，`coverage` 列出本包产出的 6 种 kind。
-- 用途：`mbdV2Contract.test.ts` 在默认与 strict 模式下都必须解析通过。
+- 用途：`mbdV2Contract.test.ts` 在默认与 strict 模式下都必须解析通过；`mbdV2ExternalAnnotations.test.ts`
+  用它测 `mbdFunction` / `chainId` 透传与 D7 三层字高。
 
 ## `source-to-design-translation.json`
 

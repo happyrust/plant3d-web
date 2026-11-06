@@ -213,6 +213,36 @@ function groupTextHeightM(
   return payloadHeightM;
 }
 
+/**
+ * Primitive layer of the D7 text-height order: the height a primitive
+ * declares for its own text (`text_height_mm`) in Design Space. `aid_text`
+ * has carried it from the start — the solver draws the installation-angle
+ * direction labels at `cheight / 2` so they stay subordinate to the value
+ * text — and #103 M1-3 extends it to `linear_dim`, `label`, `angle_dim` and
+ * `slope_mark`. Only the kinds the contract defines it on are read: the
+ * default parse ignores a stray `text_height_mm` on any other kind, and so
+ * does this. Undefined when the primitive declares none (every pipe producer
+ * today), so the record keeps following its group.
+ */
+function primitiveTextHeightM(
+  primitive: MbdPrimitive,
+  data: MbdV2PipeData,
+  transform: FrameTransform,
+): number | undefined {
+  switch (primitive.kind) {
+    case 'linear_dim':
+    case 'angle_dim':
+    case 'label':
+    case 'aid_text':
+    case 'slope_mark':
+      return primitive.text_height_mm === undefined
+        ? undefined
+        : textHeightToDesignM(data, transform, primitive.text_height_mm);
+    default:
+      return undefined;
+  }
+}
+
 function lineStyleFrom(style: string | undefined): DimensionLineStyle | undefined {
   switch (style) {
     case 'solid':
@@ -352,6 +382,8 @@ function explicitRecord(
     ...(primitive.isoline_idx !== undefined
       ? { isolineIndex: primitive.isoline_idx }
       : {}),
+    ...(primitive.function !== undefined ? { mbdFunction: primitive.function } : {}),
+    ...(primitive.chain_id !== undefined ? { chainId: primitive.chain_id } : {}),
     layout,
   };
 }
@@ -1069,8 +1101,10 @@ export function mbdV2ToExternalRecords(
       continue;
     }
     let record: ExternalDimensionRecord | null = null;
-    // D7 group layer for this record; a linear dim also spaces its 3D rows by it.
+    // D7 group layer for this record; a linear dim also spaces its 3D rows by
+    // it, whatever height its own text declares.
     const groupHeightM = groupTextHeightM(primitive, isolineHeightsM, payloadHeightM);
+    const textHeightM = primitiveTextHeightM(primitive, data, transform) ?? groupHeightM;
     switch (primitive.kind) {
       case 'linear_dim':
         record = mapLinearDim(primitive, transformPoint, presentation3d, groupHeightM, options);
@@ -1092,7 +1126,7 @@ export function mbdV2ToExternalRecords(
           data.meta.isolines ?? [],
           data,
           transform,
-          groupHeightM,
+          textHeightM,
         );
         break;
       case 'aid_text': {
@@ -1130,21 +1164,6 @@ export function mbdV2ToExternalRecords(
           ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
           declutter: angleDeclutter(primitive),
         });
-        // A per-primitive height wins over the group height: the solver draws
-        // the installation-angle direction labels at `cheight / 2` so they stay
-        // subordinate to the value text. Absent = keep following the group.
-        const ownTextHeightM = primitive.text_height_mm === undefined
-          ? undefined
-          : textHeightToDesignM(data, transform, primitive.text_height_mm);
-        if (ownTextHeightM !== undefined) {
-          record = {
-            ...record,
-            layout: {
-              ...(record.layout as ExplicitLayoutInput),
-              textHeightM: ownTextHeightM,
-            },
-          };
-        }
         break;
       }
       case 'leader_line': {
@@ -1228,18 +1247,15 @@ export function mbdV2ToExternalRecords(
     if (record) {
       seenIds.add(primitive.id);
       // Every record here comes from `explicitRecord`, so the layout is an
-      // `ExplicitLayoutInput`; the group text height rides along with it so
-      // the kernel can scale labels and the arrow floor with the model (S2).
-      // D7 order: a record that already declared its own height (`aid_text`
-      // `text_height_mm`, e.g. the half-height direction labels) keeps it,
-      // otherwise it takes its isoline's, otherwise the payload-wide one.
-      const hasOwnTextHeightM
-        = (record.layout as ExplicitLayoutInput).textHeightM !== undefined;
-      records.push(groupHeightM === undefined || hasOwnTextHeightM
+      // `ExplicitLayoutInput`; the text height rides along with it so the
+      // kernel can scale labels and the arrow floor with the model (S2).
+      // D7 order: the primitive's own `text_height_mm` (e.g. the half-height
+      // direction labels), otherwise its isoline's, otherwise the payload-wide one.
+      records.push(textHeightM === undefined
         ? record
         : {
           ...record,
-          layout: { ...(record.layout as ExplicitLayoutInput), textHeightM: groupHeightM },
+          layout: { ...(record.layout as ExplicitLayoutInput), textHeightM },
         });
     } else {
       // Parse already checked structure, so the arc kinds are the only ones

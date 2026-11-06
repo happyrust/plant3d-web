@@ -45,6 +45,16 @@ export type ExternalDimensionRecord = Readonly<{
    * 只有 MBD 生产者写，面板据它分组；缺省 = 不按直段归类。
    */
   isolineIndex?: number;
+  /**
+   * PML FUNCTION 类别（MBD `function`，#103 M1-3），如「一级尺寸」「定位尺寸」，原样是求解器给的
+   * 文本。只有 MBD 生产者写，面板据它按类别成组、整组临时显隐；缺省 = 未声明，回落到原有分组。
+   */
+  mbdFunction?: string;
+  /**
+   * 尺寸链 id（MBD `chain_id`，#103 M1-3）：PML 的 N 点尺寸链拆成 N−1 条线性尺寸后同链各段共用它。
+   * 只有 MBD 生产者写；缺省 = 不属于任何链。
+   */
+  chainId?: string;
   layout: NormalizedDimensionInput | ExplicitLayoutInput;
 }>;
 
