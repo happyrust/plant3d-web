@@ -21,7 +21,7 @@ import {
 } from '../geometry/screenGeometry';
 import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
-import { add3, EPSILON, scale3, tryNormalize3 } from '../vec';
+import { add3, EPSILON, length3, scale3, sub3, tryNormalize3 } from '../vec';
 
 import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
@@ -245,11 +245,30 @@ function lodHiddenReason(
 }
 
 /**
+ * A leader that starts on its own label: the MBD contract puts
+ * `leader_line.start` at the label's `position`, the centre of the whole text
+ * block (plant-mbd field dictionary ruling 8), so drawn as given it would run
+ * out of the middle of the text.
+ */
+function leaderFromLabel(line: ExplicitLine, input: ExplicitLayoutInput): boolean {
+  return line.part === 'leader' && length3(sub3(line.from, input.labelAnchor)) <= EPSILON;
+}
+
+/**
+ * Lines the label box cuts: a dimension line breaks around its value, a leader
+ * from the label starts at the box edge. Any other line draws as given.
+ */
+function cutByLabel(line: ExplicitLine, input: ExplicitLayoutInput): boolean {
+  return line.part === 'dimension' || leaderFromLabel(line, input);
+}
+
+/**
  * External sources anchor a dimension label on its own dimension line (rs-mbd
  * emits `label_anchor` at the line midpoint), so the line has to be broken
  * around the label box the same way the native linear layout does — the
- * whole block when the label is one (`blockRows`). Returns null when nothing
- * can overlap and the extra projection would be wasted.
+ * whole block when the label is one (`blockRows`). The same box clips a
+ * leader that starts on the label (`leaderFromLabel`). Returns null when
+ * nothing can overlap and the extra projection would be wasted.
  */
 function labelClearance(
   input: ExplicitLayoutInput,
@@ -260,7 +279,7 @@ function labelClearance(
   blockRows: readonly LabelRow[] | null,
 ): LabelClearance | null {
   if (input.formattedLabel.length === 0) return null;
-  if (!input.lines.some(line => line.part === 'dimension')) return null;
+  if (!input.lines.some(line => cutByLabel(line, input))) return null;
   const center = projectSceneVertex(
     sceneVertex(input.labelAnchor),
     context.projector,
@@ -493,6 +512,13 @@ function samePoint(a: Vec2, b: Vec2): boolean {
   return a[0] === b[0] && a[1] === b[1];
 }
 
+/**
+ * One input line as drawn. With a `clearance` (only lines `cutByLabel`) the
+ * line is trimmed against the label box on screen, after the label's rotation:
+ * a dimension line keeps its pieces on both sides of the value; a leader from
+ * the label starts where it leaves the box and still ends exactly on its
+ * target, and is dropped when the target lies inside the box too.
+ */
 function explicitSceneLines(
   line: ExplicitLine,
   clearance: LabelClearance | null,
@@ -501,7 +527,7 @@ function explicitSceneLines(
 ): SceneLine[] {
   const withStyle = (sceneLine: SceneLine): SceneLine =>
     line.style ? { ...sceneLine, lineStyle: line.style } : sceneLine;
-  if (!clearance || line.part !== 'dimension') {
+  if (!clearance) {
     return [withStyle(makeSceneLine(
       sceneVertex(line.from),
       sceneVertex(line.to),
@@ -537,6 +563,19 @@ function explicitSceneLines(
     fromScreen,
     [toScreen[0] - fromScreen[0], toScreen[1] - fromScreen[1]],
   );
+  if (line.part === 'leader') {
+    // It starts inside the box, so all that is left is the piece from the box
+    // edge to the target, and the target vertex is kept as given.
+    const piece = segments[segments.length - 1];
+    return piece
+      ? [withStyle(makeSceneLine(
+        sceneVertexOnSegment(trimmedLine, piece.from, context.projector, true),
+        sceneVertex(line.to),
+        line.part,
+        styleRole,
+      ))]
+      : [];
+  }
   return segments.map(segment => withStyle(makeSceneLine(
     sceneVertexOnSegment(trimmedLine, segment.from, context.projector, true),
     sceneVertexOnSegment(trimmedLine, segment.to, context.projector, true),
@@ -691,7 +730,7 @@ export function layoutExplicit(
     );
   const buildSceneLines = (trim: LabelClearance | null): SceneLine[] => [
     ...input.lines.flatMap(line =>
-      explicitSceneLines(line, trim, styleRole, context)),
+      explicitSceneLines(line, cutByLabel(line, input) ? trim : null, styleRole, context)),
     ...input.arrowLines.flatMap(line =>
       explicitArrowLine(line, styleRole, arrowMinLengthPx, context)),
   ];

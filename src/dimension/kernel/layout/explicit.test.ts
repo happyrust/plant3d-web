@@ -9,6 +9,7 @@ import { layoutExplicit } from './explicit';
 
 import type {
   ExplicitLayoutInput,
+  SceneLine,
   SceneTriangle,
   ScreenGlyphRun,
   ScreenLine,
@@ -1090,5 +1091,121 @@ describe('label block', () => {
     expect(turnedBroken).toHaveLength(2);
     expect((turnedBroken[0]!.to[0] + turnedBroken[1]!.from[0]) / 2).toBeCloseTo(lastRow[0], 6);
     expect((turnedBroken[0]!.to[1] + turnedBroken[1]!.from[1]) / 2).toBeCloseTo(lastRow[1], 6);
+  });
+});
+
+// 平贴标签的引线（#103）：契约里引线起点是标签的 position（整块文字的中心），照画会从字中间穿出。
+// 内核按尺寸线断开用的同一个补钉框（随文字旋转、多行时是整块）在屏幕上截掉框内那段：引线从出框处起、
+// 终点仍是目标；目标也在框里就不画。测试相机 100 px/m：锚点 [0.5, 0.5, 0] 投到 (250, 150)。
+describe('leader from its label', () => {
+  const context = (): LayoutContext => ({
+    projector: createTestProjector(),
+    font: createTestFont(),
+    theme: SOLVESPACE_DIMENSION_THEME,
+    format: DEFAULT_DIMENSION_FORMAT,
+    interaction: 'normal',
+  });
+  const tagged = (overrides: Partial<ExplicitLayoutInput> = {}): ExplicitLayoutInput => ({
+    id: 'tagged',
+    role: 'external',
+    labelPinned: true,
+    formattedLabel: 'AhA',
+    // Straight down from the label to (250, 250).
+    lines: [{ from: [0.5, 0.5, 0], to: [0.5, -0.5, 0], part: 'leader' }],
+    labelAnchor: [0.5, 0.5, 0],
+    arrowLines: [],
+    ...overrides,
+  });
+  const leaderLines = (result: ReturnType<typeof layoutExplicit>): ScreenLine[] =>
+    result.primitives.filter(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+    );
+  const halfPadding = SOLVESPACE_DIMENSION_THEME.labelPaddingPx / 2;
+
+  it('starts the leader where it leaves a one-line label and keeps its end on the target', () => {
+    const result = layoutExplicit(tagged(), context());
+    const leaders = leaderLines(result);
+    expect(leaders).toHaveLength(1);
+    // Out through the bottom of the padded text box — the label's own claimed box.
+    expect(leaders[0]!.from[0]).toBeCloseTo(250, 9);
+    expect(leaders[0]!.from[1]).toBeCloseTo(result.labelBounds.y + result.labelBounds.height, 9);
+    expect(leaders[0]!.from[1]).toBeGreaterThan(150);
+    expect(leaders[0]!.to).toEqual([250, 250]);
+    // The target vertex is the source's own; only the drawn piece is hit-testable.
+    const sceneLeader = result.scenePrimitives.find(
+      (primitive): primitive is SceneLine => primitive.kind === 'scene-line' && primitive.part === 'leader',
+    )!;
+    expect(sceneLeader.to).toEqual({ anchor: [0.5, -0.5, 0], offsetPx: [0, 0] });
+    expect(result.hitRegions.filter(region => region.part === 'leader'))
+      .toMatchObject([{ kind: 'segment', from: leaders[0]!.from, to: [250, 250] }]);
+  });
+
+  it('clips at the turned box of a rotated label', () => {
+    // Baseline 30° up from +X (−30° on screen); target (310, 180).
+    const result = layoutExplicit(tagged({
+      labelAlong: [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0],
+      lines: [{ from: [0.5, 0.5, 0], to: [1.1, 0.2, 0], part: 'leader' }],
+    }), context());
+    const [leader] = leaderLines(result);
+    const glyph = result.primitives.find(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    )!;
+    expect(glyph.rotationRad).toBeCloseTo(-Math.PI / 6, 9);
+    // In the label's own frame the start sits on the edge of the padded, unrotated text box.
+    const back = -glyph.rotationRad!;
+    const dx = leader!.from[0] - 250;
+    const dy = leader!.from[1] - 150;
+    const local = [dx * Math.cos(back) - dy * Math.sin(back), dx * Math.sin(back) + dy * Math.cos(back)];
+    const font = createTestFont();
+    const halfWidth = font.getWidth(13, 'AhA') / 2 + halfPadding;
+    const halfHeight = font.getHeight(13) / 2 + halfPadding;
+    const onSide = Math.abs(Math.abs(local[0]!) - halfWidth) < 1e-6 && Math.abs(local[1]!) <= halfHeight + 1e-6;
+    const onTopOrBottom = Math.abs(Math.abs(local[1]!) - halfHeight) < 1e-6 && Math.abs(local[0]!) <= halfWidth + 1e-6;
+    expect(onSide || onTopOrBottom).toBe(true);
+    // Still on the line from the anchor to the target, and still ending there.
+    expect(dx * 30 - dy * 60).toBeCloseTo(0, 6);
+    expect(dx).toBeGreaterThan(0);
+    expect(roundNumbers(leader!.to)).toEqual([310, 180]);
+  });
+
+  it('clips at the box of the whole block, below its last row', () => {
+    const block = tagged({
+      labelAlong: [1, 0, 0],
+      labelBlock: { rows: ['hh', 'AAA'], lineAdvance: 1.2, up: [0, 1, 0] },
+    });
+    const result = layoutExplicit(block, context());
+    const [leader] = leaderLines(result);
+    expect(leader!.from[0]).toBeCloseTo(250, 9);
+    expect(leader!.from[1]).toBeCloseTo(result.labelBounds.y + result.labelBounds.height, 9);
+    const rows = result.primitives.filter(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    );
+    expect(rows).toHaveLength(3);
+    for (const { bounds } of rows) expect(leader!.from[1]).toBeGreaterThan(bounds.y + bounds.height);
+    expect(leader!.to).toEqual([250, 250]);
+    // Clipped at a one-row box it would still run across the bottom row.
+    const oneRow = leaderLines(layoutExplicit({ ...block, labelBlock: undefined }, context()))[0]!;
+    expect(oneRow.from[1]).toBeGreaterThan(rows[2]!.bounds.y);
+    expect(oneRow.from[1]).toBeLessThan(rows[2]!.bounds.y + rows[2]!.bounds.height);
+  });
+
+  it('drops the leader when its target lies inside the label box', () => {
+    // Two pixels right of the anchor, inside the text.
+    const result = layoutExplicit(tagged({
+      lines: [{ from: [0.5, 0.5, 0], to: [0.52, 0.5, 0], part: 'leader' }],
+    }), context());
+    expect(leaderLines(result)).toEqual([]);
+    expect(result.scenePrimitives.some(primitive => primitive.kind === 'scene-line')).toBe(false);
+    expect(result.hitRegions.some(region => region.part === 'leader')).toBe(false);
+    expect(result.labelBounds).toEqual(layoutExplicit(tagged(), context()).labelBounds);
+  });
+
+  it('draws a leader that does not start on the label as given', () => {
+    // Across the label, but from elsewhere: some other line, not this label's leader.
+    const through = layoutExplicit(tagged({
+      lines: [{ from: [0.2, 0.5, 0], to: [0.8, 0.5, 0], part: 'leader' }],
+    }), context());
+    expect(leaderLines(through).map(line => roundNumbers([line.from, line.to])))
+      .toEqual([[[220, 150], [280, 150]]]);
   });
 });
