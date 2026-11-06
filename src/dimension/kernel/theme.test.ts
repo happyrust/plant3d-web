@@ -31,6 +31,8 @@ describe('dimension theme', () => {
       // T1.5 收口：原来散在 layout/explicit.ts（标记半径 4、行距 1.5）与 layout/angular.ts（弧步 4°、射线外伸 5 px）的字面量。
       markerRadiusPx: 4,
       labelLineAdvance: 1.5,
+      // 多行文字块（MBD 裁定 8）的文字平面侧到这个比例以下就退回屏幕堆叠，与三维尺寸文字同一判据。
+      labelBlockForeshortenRatio: 0.35,
       // Q6 `above` 回落守卫的净空（2026-10-30）：抬起标签的补钉盒与同一布局画出的
       // 其它图元小于此值就退回 interrupted。屏幕像素口径。
       aboveRowClearancePx: 2,

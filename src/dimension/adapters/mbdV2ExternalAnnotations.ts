@@ -36,13 +36,13 @@ import type {
   DimensionLineStyle,
   ExplicitArcInput,
   ExplicitArrowInput,
+  ExplicitLabelBlockInput,
   ExplicitLayoutInput,
   ExplicitLodInput,
   ExplicitMarkerInput,
   ExplicitPolarInput,
   ExplicitTagInput,
   ExplicitTagStyle,
-  ExplicitTextInput,
   ScreenLinePart,
 } from '../kernel/types';
 
@@ -122,6 +122,26 @@ function textBaseline(
 ): Vec3 | undefined {
   if (!primitive.text_dir) return undefined;
   return transform.direction(primitive.text_dir) ?? undefined;
+}
+
+/**
+ * Up of the text plane of a `label` / `aid_text` (`text_up`, #103 M1-3) in
+ * Design Space, re-orthogonalised against the baseline: the contract leaves
+ * that to the consumer, as with an arc frame (ADR 0055). Undefined when the
+ * primitive declares none, when the transform collapses it, or when it runs
+ * along the baseline; the block then stacks on screen, so a lost plane costs
+ * the stacking direction only, never the primitive.
+ */
+function textUp(
+  primitive: Readonly<{ text_up?: MbdV2Vec3 }>,
+  transform: FrameTransform,
+  baseline: Vec3 | undefined,
+): Vec3 | undefined {
+  if (!primitive.text_up) return undefined;
+  const up = transform.direction(primitive.text_up);
+  if (!up) return undefined;
+  if (!baseline) return up;
+  return tryNormalize3(sub3(up, scale3(baseline, dot3(up, baseline)))) ?? undefined;
 }
 
 /**
@@ -289,24 +309,27 @@ function splitTextLines(text: string): readonly string[] {
 }
 
 /**
- * First line as the primary label, the rest as glyph runs stacked under the
- * same anchor; every run shares the label's baseline (`along`) when the
- * primitive declares one.
+ * PML stacks the lines of a multi-line text as MLABELs one `1.2 · text
+ * height` apart along −`text_up` (plant-mbd field dictionary ruling 8).
  */
-function multiLineTexts(
+const TEXT_LINE_PITCH_CHEIGHT = 1.2;
+
+/**
+ * First line as the primary label; with more lines, the whole text is one
+ * block centred on the primitive's `position` — the solver's ruling 8 puts
+ * the position at the centre of the block — stacking along the text plane's
+ * `up` when the primitive declares one. Single-line text stays a plain label.
+ */
+function multiLineLabel(
   text: string,
-  anchor: MbdV2Vec3,
-  along?: Vec3,
-): Readonly<{ formattedLabel: string; texts: readonly ExplicitTextInput[] }> {
-  const [first, ...rest] = splitTextLines(text);
+  up: Vec3 | undefined,
+): Readonly<{ formattedLabel: string; labelBlock?: ExplicitLabelBlockInput }> {
+  const [first, ...rows] = splitTextLines(text);
   return {
     formattedLabel: first ?? '',
-    texts: rest.map((line, index) => ({
-      text: line,
-      anchor: [anchor[0], anchor[1], anchor[2]] as Vec3,
-      stackIndex: index + 1,
-      ...(along ? { along } : {}),
-    })),
+    ...(rows.length > 0
+      ? { labelBlock: { rows, lineAdvance: TEXT_LINE_PITCH_CHEIGHT, ...(up ? { up } : {}) } }
+      : {}),
   };
 }
 
@@ -319,7 +342,7 @@ type ExplicitParts = Readonly<{
   arrows?: readonly ExplicitArrowInput[];
   arcs?: readonly ExplicitArcInput[];
   markers?: readonly ExplicitMarkerInput[];
-  texts?: readonly ExplicitTextInput[];
+  labelBlock?: ExplicitLabelBlockInput;
   lod?: ExplicitLodInput;
   dimension3d?: ExplicitLayoutInput['dimension3d'];
   tag?: ExplicitTagInput;
@@ -362,7 +385,7 @@ function explicitRecord(
     ...(parts.markers && parts.markers.length > 0
       ? { markers: parts.markers }
       : {}),
-    ...(parts.texts && parts.texts.length > 0 ? { texts: parts.texts } : {}),
+    ...(parts.labelBlock ? { labelBlock: parts.labelBlock } : {}),
     ...(parts.lod ? { lod: parts.lod } : {}),
     ...(parts.labelPresentation ? { labelPresentation: parts.labelPresentation } : {}),
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
@@ -628,11 +651,11 @@ function polarInputForLabel(
 
 /**
  * Tag (`label`, optionally with its `leader_line`): the flat presentation is
- * the solver's text at its position (along its `text_dir` when declared)
- * plus the leader as drawn; with `tag` the kernel presents it as a billboard
- * call-out (card / frame / pill) that keeps its leader on the pipe point
- * (reference drawing style, 2026-09-12). The `mbd_3d=0` switch strips `tag`
- * and gets the flat presentation back.
+ * the solver's text centred on its position (along its `text_dir`, stacked
+ * along its `text_up`, when declared) plus the leader as drawn; with `tag`
+ * the kernel presents it as a billboard call-out (card / frame / pill) that
+ * keeps its leader on the pipe point (reference drawing style, 2026-09-12).
+ * The `mbd_3d=0` switch strips `tag` and gets the flat presentation back.
  */
 function mapLabel(
   primitive: MbdV2Label,
@@ -646,7 +669,10 @@ function mapLabel(
   const transformPoint = transform.point;
   const position = transformPoint(primitive.position);
   const along = textBaseline(primitive, transform);
-  const { formattedLabel, texts } = multiLineTexts(primitive.text, position, along);
+  const { formattedLabel, labelBlock } = multiLineLabel(
+    primitive.text,
+    textUp(primitive, transform, along),
+  );
   const target = leader ? transformPoint(leader.end) : undefined;
   const tagClass = classifyTag(primitive);
   const tag: ExplicitTagInput = {
@@ -670,7 +696,7 @@ function mapLabel(
     formattedLabel,
     labelAnchor: position,
     ...(along ? { labelAlong: along } : {}),
-    texts,
+    ...(labelBlock ? { labelBlock } : {}),
     ...(target ? { lines: [{ from: position, to: target, part: 'leader' as const }] } : {}),
     ...(tagClass.lod ? { lod: tagClass.lod } : {}),
     tag,
@@ -1132,10 +1158,9 @@ export function mbdV2ToExternalRecords(
       case 'aid_text': {
         const position = transformPoint(primitive.position);
         const along = textBaseline(primitive, transform);
-        const { formattedLabel, texts } = multiLineTexts(
+        const { formattedLabel, labelBlock } = multiLineLabel(
           primitive.text,
-          position,
-          along,
+          textUp(primitive, transform, along),
         );
         // T3.6b ruling: `aid_text` never gets `polar` or `polarObstacle`,
         // even when its `isoline_idx` matches a same-isoline `label`'s
@@ -1160,7 +1185,7 @@ export function mbdV2ToExternalRecords(
           formattedLabel,
           labelAnchor: position,
           ...(along ? { labelAlong: along } : {}),
-          texts,
+          ...(labelBlock ? { labelBlock } : {}),
           ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
           declutter: angleDeclutter(primitive),
         });

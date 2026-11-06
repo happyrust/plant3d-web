@@ -142,6 +142,41 @@ describe('layoutViewport', () => {
     expect(batch.hitIndex.hitTest([300, 100], 8)).toBeNull();
   });
 
+  it('keeps an automatic label off every row of a solver-placed block, not just its first', () => {
+    // Three 13 px rows centred on (250, 150), 15.6 px apart: the first row's
+    // padded box ends at y = 148.15, the last row sits at y = 165.6.
+    const block: ExplicitLayoutInput = {
+      id: 'block',
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: 'A',
+      lines: [],
+      labelAnchor: [0.5, 0.5, 0],
+      arrowLines: [],
+      labelBlock: { rows: ['A', 'A'], lineAdvance: 1.2 },
+    };
+    const automatic: ExplicitLayoutInput = {
+      id: 'automatic',
+      role: 'external',
+      labelPinned: false,
+      formattedLabel: 'A',
+      lines: [],
+      labelAnchor: [0.5, 0.344, 0],
+      arrowLines: [],
+    };
+    const alone = present(layoutViewport([automatic], baseContext, new Map()).layouts[0], 'alone');
+    const batch = layoutViewport([block, automatic], baseContext, new Map());
+    const blockLayout = present(batch.layouts[0], 'block layout');
+    const placed = present(batch.layouts[1], 'automatic layout');
+
+    // Left where it is, it would sit on the block's last row …
+    expect(boxesIntersect(alone.labelBounds, blockLayout.labelBounds)).toBe(true);
+    // … so the declutter moves it clear of the whole block; the block stays put.
+    expect(placed.labelBounds).not.toEqual(alone.labelBounds);
+    expect(boxesIntersect(placed.labelBounds, blockLayout.labelBounds)).toBe(false);
+    expect(blockLayout.labelBounds.y + blockLayout.labelBounds.height / 2).toBeCloseTo(150, 9);
+  });
+
   it('defaults missing interaction state to normal', () => {
     const batch = layoutViewport([linear('linear')], baseContext, new Map());
 
