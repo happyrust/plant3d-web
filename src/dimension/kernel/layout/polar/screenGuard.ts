@@ -52,6 +52,8 @@ export type ScreenGuardInput = Readonly<{
   clearancePx?: number;
   /** 上一帧选中的候选，用于稳定性：未被否决时优先沿用，避免逐帧跳动。 */
   previous?: PolarCandidate | null;
+  /** 网格里本记录自己的旧占位（按对象身份），比对时忽略——不让标签被自己的原位挡住。 */
+  exclude?: ScreenRect;
 }>;
 
 export type ScreenGuardResult = Readonly<{
@@ -189,9 +191,11 @@ function overlapsOccupancy(
   box: ScreenRect,
   occupancy: LabelOccupancy,
   clearancePx: number,
+  exclude: ScreenRect | undefined,
 ): boolean {
   const expanded = expandRect(box, clearancePx);
-  if (!occupancy.overlaps(expanded)) return false;
+  const hit = exclude ? occupancy.overlapsExcluding(expanded, exclude) : occupancy.overlaps(expanded);
+  if (!hit) return false;
   // `LabelOccupancy` 只按矩形存取，这里只能拿扩张后的矩形粗筛；精确判重叠仍需
   // SAT，但没有已占用标签的原始四边形可用（occupancy 存的是矩形），所以精确
   // 判据退化为「扩张矩形 vs 扩张矩形的四角」——与 `declutterOverlaps` 同一算法，
@@ -217,6 +221,7 @@ function evaluate(
   textSize: Readonly<{ widthM: number; heightM: number }>,
   occupancy: LabelOccupancy,
   clearancePx: number,
+  exclude: ScreenRect | undefined,
 ): Verdict {
   if (isBackfacing(candidate, projector)) return { ok: false, reason: 'backfacing' };
 
@@ -226,7 +231,7 @@ function evaluate(
 
   if (isOffscreen(projected.box, projector)) return { ok: false, reason: 'offscreen' };
 
-  if (overlapsOccupancy(projected.quad, projected.box, occupancy, clearancePx)) {
+  if (overlapsOccupancy(projected.quad, projected.box, occupancy, clearancePx, exclude)) {
     return { ok: false, reason: 'overlap' };
   }
   return { ok: true, quad: projected.quad };
@@ -250,7 +255,7 @@ export function screenGuard(input: ScreenGuardInput): ScreenGuardResult {
 
   for (let index = 0; index < candidates.length; index += 1) {
     const candidate = candidates[index]!;
-    const verdict = evaluate(candidate, projector, textSize, occupancy, clearancePx);
+    const verdict = evaluate(candidate, projector, textSize, occupancy, clearancePx, input.exclude);
     if (!verdict.ok) {
       rejected.push({ index, reason: verdict.reason });
       continue;

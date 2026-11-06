@@ -8,7 +8,7 @@ import { markOcclusion } from '../layout/occlusionPolicy';
 import { mbdTextLen } from '../layout/polar/numeric/mbdTextLen';
 import { polarPlace } from '../layout/polar/place/place';
 import { cameraReference } from '../layout/polar/reference/camera';
-import { screenGuard, registerChosen } from '../layout/polar/screenGuard';
+import { screenGuard } from '../layout/polar/screenGuard';
 import {
   collectTagObstacles,
   isTagBillboardPlan,
@@ -170,9 +170,24 @@ function seedSiblingObstacles(
   }
 }
 
+function usableBox(box: ScreenRect): boolean {
+  return [box.x, box.y, box.width, box.height].every(Number.isFinite)
+    && box.width > 0 && box.height > 0;
+}
+
+/** Claims a laid-out record's text box in the polar grid; an empty or non-finite box claims nothing. */
+function occupyLabel(occupancy: LabelOccupancy, layout: LayoutResult): void {
+  if (usableBox(layout.labelBounds)) occupancy.insert(layout.labelBounds);
+}
+
+/** The box a moved polar label is drawn with touches no claim but its own solver box. */
+function drawnBoxIsClear(occupancy: LabelOccupancy, moved: LayoutResult, solverBox: ScreenRect): boolean {
+  return usableBox(moved.labelBounds) && !occupancy.overlapsExcluding(moved.labelBounds, solverBox);
+}
+
 /**
  * Builds the polar reference + placement + screen guard for one record and
- * returns the anchor/along override to draw with plus the reference and
+ * returns the anchor override to draw with plus the reference and
  * obstacle the caller should feed forward within the record's `groupKey`
  * (T3.6b), or `null` when the input did not opt in, the reference is
  * degenerate, or every candidate was rejected on screen — all of which keep
@@ -193,9 +208,14 @@ function resolvePolarAnchor(
   occupancy: LabelOccupancy,
   previous: PolarFrameState | undefined,
   diagnostics: { fallbacks: number },
-  nextState: Map<string, PolarFrameState>,
   groupElements: readonly PolarElement[],
-): Readonly<{ labelAnchor: Vec3; labelAlong: Vec3; reference: PolarReference; needDis: number }> | null {
+  solverBox: ScreenRect | undefined,
+): Readonly<{
+  labelAnchor: Vec3;
+  reference: PolarReference;
+  candidate: PolarCandidate;
+  needDis: number;
+}> | null {
   const polar = input.polar;
   if (!polar) return null;
   try {
@@ -221,14 +241,13 @@ function resolvePolarAnchor(
       textSize: { widthM: needDis, heightM: polar.textHeightM },
       occupancy,
       previous: previous?.candidate ?? null,
+      ...(solverBox ? { exclude: solverBox } : {}),
     });
     if (guard.allRejected) {
       diagnostics.fallbacks += 1;
       return null;
     }
-    registerChosen(occupancy, guard);
-    nextState.set(input.id, { reference, candidate: guard.chosen });
-    return { labelAnchor: guard.chosen.pos, labelAlong: guard.chosen.textOri.x, reference, needDis };
+    return { labelAnchor: guard.chosen.pos, reference, candidate: guard.chosen, needDis };
   } catch (error) {
     if (error instanceof RangeError) {
       diagnostics.fallbacks += 1;
@@ -250,12 +269,29 @@ export function layoutViewport(
   };
   const raw = new Array<LayoutResult>(inputs.length);
   const tags: PlannedTag[] = [];
-  // T3.6a: one occupancy grid for this frame's polar candidates only, kept
-  // apart from the label/tag declutter passes below — those run after every
-  // layout already has its final anchor, polar just decides what that
-  // anchor is for records that opted in. Records are resolved in input
-  // order, each `registerChosen` claiming its spot before the next looks.
-  const polarOccupancy = new LabelOccupancy();
+  // Both screen grids (label occupancy, hit index) and the polar grid only
+  // cover the viewport: what projects beyond it — a vertex near the camera
+  // plane lands at 1e5–1e9 px — is neither registered nor queried, so a
+  // close-up or a not-yet-framed camera cannot blow the grids up (all-pipes
+  // sweep, 2026-09-14).
+  const viewport: ScreenRect = {
+    x: 0,
+    y: 0,
+    width: baseContext.projector.widthCssPx,
+    height: baseContext.projector.heightCssPx,
+  };
+  // The polar records' own grid, kept apart from the label/tag declutter
+  // passes below. Every record — polar ones at their solver anchor — is laid
+  // out first and its text box claimed, then the polar records look for a
+  // better spot: a polar label used to see only the pipe body and land on
+  // the same-pipe lengths' value text (real BRAN, 2026-11-06: 71 -> 93
+  // overlapping pairs far away). A move is kept only when the box actually
+  // drawn there is clear of every claim but the record's own solver box;
+  // otherwise the record stays where the solver put it. So a moved label
+  // never lands on anything, and a label that stays is exactly where it is
+  // without polar.
+  const polarOccupancy = new LabelOccupancy(viewport);
+  const polarIndices: number[] = [];
   const polarDiagnostics = { fallbacks: 0 };
   const polarNext = new Map<string, PolarFrameState>();
   // T3.6b: same-pipe obstacles accumulated per `groupKey`, seeded below with
@@ -265,11 +301,12 @@ export function layoutViewport(
   // record in the loop below resolves its own candidate.
   const groupObstacles = new Map<string, PolarElement[]>();
   seedSiblingObstacles(inputs, baseContext, options.polarPrevious, groupObstacles);
-  for (const [index, input] of inputs.entries()) {
+  const contextOf = (input: NormalizedDimensionInput | ExplicitLayoutInput): LayoutContext => {
     const interaction = interactionById.get(input.id) ?? 'normal';
-    const context = interaction === 'normal'
-      ? normalContext
-      : { ...normalContext, interaction };
+    return interaction === 'normal' ? normalContext : { ...normalContext, interaction };
+  };
+  for (const [index, input] of inputs.entries()) {
+    const context = contextOf(input);
     // Billboard tags are placed after everything else is known (see below);
     // until then they hold their slot with an empty layout. Polar placement
     // does not reach a tag-presented label (T3.6a v1 scope): the billboard
@@ -284,24 +321,46 @@ export function layoutViewport(
       }
       continue;
     }
-    const groupKey = 'polar' in input ? input.polar?.groupKey : undefined;
-    const polarAnchor = 'polar' in input && input.polar
-      ? resolvePolarAnchor(
-        input,
-        context,
-        polarOccupancy,
-        options.polarPrevious?.get(input.id),
-        polarDiagnostics,
-        polarNext,
-        groupKey ? groupObstacles.get(groupKey) ?? [] : [],
-      )
-      : null;
-    if (polarAnchor && groupKey) {
-      const polar = (input as ExplicitLayoutInput).polar!;
-      const chosen = polarNext.get(input.id)!.candidate;
+    if ('polar' in input && input.polar) polarIndices.push(index);
+    raw[index] = layoutDimension(input, context);
+  }
+  if (polarIndices.length > 0) {
+    for (const layout of raw) {
+      if (layout && layout.primitives.length > 0) occupyLabel(polarOccupancy, layout);
+    }
+  }
+  for (const index of polarIndices) {
+    const input = inputs[index] as ExplicitLayoutInput;
+    const context = contextOf(input);
+    const polar = input.polar!;
+    const groupKey = polar.groupKey;
+    const solverBox = raw[index]!.labelBounds;
+    const polarAnchor = resolvePolarAnchor(
+      input,
+      context,
+      polarOccupancy,
+      options.polarPrevious?.get(input.id),
+      polarDiagnostics,
+      groupKey ? groupObstacles.get(groupKey) ?? [] : [],
+      raw[index]!.primitives.length > 0 ? solverBox : undefined,
+    );
+    if (!polarAnchor) continue;
+    // Only the anchor moves. The text keeps its own baseline: turning it to
+    // the candidate's `textOri` stacked multi-line tags along the screen
+    // vertical while their rows ran along the rotated baseline, so the rows
+    // landed on each other.
+    const moved = layoutDimension({ ...input, labelAnchor: polarAnchor.labelAnchor }, context);
+    if (moved.primitives.length === 0 || !drawnBoxIsClear(polarOccupancy, moved, solverBox)) {
+      polarDiagnostics.fallbacks += 1;
+      continue;
+    }
+    raw[index] = moved;
+    occupyLabel(polarOccupancy, moved);
+    polarNext.set(input.id, { reference: polarAnchor.reference, candidate: polarAnchor.candidate });
+    if (groupKey) {
       const obstacle = polarCandidateObstacle(
         input.id,
-        chosen,
+        polarAnchor.candidate,
         polarAnchor.needDis,
         POLAR_NEED_ANGLE_DEG,
         polar.textHeightM,
@@ -310,26 +369,12 @@ export function layoutViewport(
       if (existing) existing.push(obstacle);
       else groupObstacles.set(groupKey, [obstacle]);
     }
-    const resolvedInput = polarAnchor
-      ? { ...input, labelAnchor: polarAnchor.labelAnchor, labelAlong: polarAnchor.labelAlong }
-      : input;
-    raw[index] = layoutDimension(resolvedInput, context);
   }
   // Solver-placed 3D dimension labels are elided pairwise before the moving
   // declutter runs, so a hidden label neither moves anyone nor claims space;
   // billboard tags then take the first candidate position clear of the
   // surviving labels, of the dimension strokes, of the component boxes the
-  // host reports around them, and of each other. Both screen grids (label
-  // occupancy, hit index) only cover the viewport: what projects beyond it
-  // — a vertex near the camera plane lands at 1e5–1e9 px — is neither
-  // registered nor queried, so a close-up or a not-yet-framed camera cannot
-  // blow the grids up (all-pipes sweep, 2026-09-14).
-  const viewport: ScreenRect = {
-    x: 0,
-    y: 0,
-    width: baseContext.projector.widthCssPx,
-    height: baseContext.projector.heightCssPx,
-  };
+  // host reports around them, and of each other.
   const decluttered = declutterOverlaps(raw);
   const placed = resolveLabelCollisions(
     placeTagBillboards(

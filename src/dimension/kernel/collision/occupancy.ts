@@ -84,7 +84,12 @@ export class LabelOccupancy {
     return this.overlapsAt(rect, 0, 0);
   }
 
-  overlapsAt(rect: ScreenRect, offsetX: number, offsetY: number): boolean {
+  /** `overlaps`, ignoring one earlier claim by identity (a record's own previous box). */
+  overlapsExcluding(rect: ScreenRect, excluded: ScreenRect): boolean {
+    return this.overlapsAt(rect, 0, 0, excluded);
+  }
+
+  overlapsAt(rect: ScreenRect, offsetX: number, offsetY: number, excluded?: ScreenRect): boolean {
     const rectX = rect.x + offsetX;
     const rectY = rect.y + offsetY;
     const { minX, minY, maxX, maxY } = this.cellRange({
@@ -98,6 +103,7 @@ export class LabelOccupancy {
       if (!column) continue;
       for (let cellY = minY; cellY <= maxY; cellY += 1) {
         for (const occupied of column.get(cellY) ?? []) {
+          if (occupied === excluded) continue;
           if (
             rectX < occupied.x + occupied.width &&
             rectX + rect.width > occupied.x &&
