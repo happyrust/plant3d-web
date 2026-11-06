@@ -23,7 +23,8 @@ export type MbdExternalSyncDeps = Readonly<{
   /** 实时通道：按 refno 拉取契约数据（HTTP 层错误以 ok:false 或 reject 表达）。 */
   /**
    * 按 refno 拉取契约数据。`partial` 会传到契约解析层：只放宽「不认识的图元 kind」
-   * 一件事（其余非法一律整包失败），由 `?mbd_partial=1` 驱动。
+   * 一件事（其余非法一律整包失败），由 `?mbd_partial=1` 驱动。名字沿用管道时代：
+   * ViewerPanel 注入的是按对象取数的 `fetchMbdV2ObjectData`（#103 M7），任意可标注对象都走它。
    */
   fetchPipeData(
     refno: string,
@@ -308,7 +309,8 @@ export function createMbdExternalSync(
           const stripped = polarApplied ? withPresentation3d : withPresentation3d.map(withoutPolar);
           // 真实后端的图元 id 已经带 refno 前缀（`24381_145018:isoline:0:...`），
           // 跨 BRAN 天然不冲突；只有那些不带前缀的 id 才需要补，否则会得到
-          // `24381_145018:24381_145018:isoline:...` 这种重复噪声。
+          // `24381_145018:24381_145018:isoline:...` 这种重复噪声。尺寸链 `chainId`
+          // 同理：各包的链各自编号，不补前缀两个包的 `chain:0` 会被当成同一条链。
           const qualify = (id: string): string =>
             id.startsWith(`${refno}:`) ? id : `${refno}:${id}`;
           const records = multiRefnos
@@ -316,6 +318,7 @@ export function createMbdExternalSync(
               ...record,
               id: qualify(record.id),
               sourceLabel: `MBD: ${qualify(record.id)}`,
+              ...(record.chainId !== undefined ? { chainId: qualify(record.chainId) } : {}),
               layout: qualifyGroups({ ...record.layout, id: qualify(record.id) }, qualify),
             }))
             : stripped;
@@ -328,6 +331,8 @@ export function createMbdExternalSync(
             sourceVersion: payload.meta.source_version ?? null,
             isolines: payload.meta.isolines ?? [],
             coverage: payload.meta.coverage ?? null,
+            annotationType: payload.annotation_type ?? null,
+            subject: payload.subject ?? null,
             loadError: null,
             notes: [
               ...payload.meta.notes,
