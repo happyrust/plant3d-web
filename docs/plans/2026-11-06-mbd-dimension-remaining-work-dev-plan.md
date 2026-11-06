@@ -68,8 +68,8 @@ N0 收口（先做，无功能代码）
 
 | ID | 内容 | 验收 |
 | --- | --- | --- |
-| N0-1 | 提交 F8 的门禁改动：`useMbdExternalSync.ts`（`polarApplied` + 删 `polarReplacesTag` + 诊断文案）与 `useMbdExternalSync.test.ts`（三维呈现下 `mbd_polar=1` 与默认逐字段相等；`mbd_3d=0&mbd_polar=1` 才挂 polar）。**这是把「polar 不误伤三维呈现」这一结论钉进代码的唯一一刀** | `npx vitest run src/composables/useMbdExternalSync.test.ts` 27/27；S2 87 文件 / 858 通过；type-check 新增 0；eslint 0 |
-| N0-2 | 提交两轮 polar A/B 证据：`docs/verification/mbd-polar-ab-2026-11-06/`（6.3 MB / 33 文件，第一轮空转记录）与 `mbd-polar-ab-2026-11-06-r2/`（12.9 MB / 65 文件，第二轮真实触发 + 修正复测）。两轮都未进 `.gitignore` | 两个目录完整入库；README 保留原始结论（第一轮「零触发」的错判也留着，不删） |
+| N0-1 | 提交 F8 的门禁改动：`useMbdExternalSync.ts`（`polarApplied` + 删 `polarReplacesTag` + 诊断文案）与 `useMbdExternalSync.test.ts`（三维呈现下 `mbd_polar=1` 与默认逐字段相等；`mbd_3d=0&mbd_polar=1` 才挂 polar）。**这是把「polar 不误伤三维呈现」这一结论钉进代码的唯一一刀** | `npx vitest run src/composables/useMbdExternalSync.test.ts` 27/27；S2 87 文件 / 858 通过；type-check 新增 0；eslint 0。**已提交 `6f962666`** |
+| N0-2 | 提交两轮 polar A/B 证据：`docs/verification/mbd-polar-ab-2026-11-06/`（6.3 MB / 33 文件，第一轮空转记录）与 `mbd-polar-ab-2026-11-06-r2/`（12.9 MB / 65 文件，第二轮真实触发 + 修正复测）。两轮都未进 `.gitignore` | 两个目录完整入库；README 保留原始结论（第一轮「零触发」的错判也留着，不删）。**已提交 `1e878753`**：r2 的 `diag-after/` 删掉 15 张与 `diag/` 字节相同的截图，目录 8.7 MB |
 | N0-3 | 补登 10-29 计划的过时状态：W1-3（T3.6a / T3.6b）、W3①②③、D5 结论。只改状态不重写历史文字 | 10-29 计划 §4 W1-3 / W3 行、§5 D5 行各有一句指向本文件 |
 | N0-4 | 把 `docs/verification/w5-1-slope-symbol-web-2026-10-30/` 与 `docs/verification/multi-bran-e2e-2026-11-02/` 一并入库（都是已完成的取证，未提交） | `git status` 里这两目录不再出现 |
 
@@ -120,10 +120,10 @@ N0 收口（先做，无功能代码）
 
 | # | 问题 | 建议 | 归属 |
 | --- | --- | --- | --- |
-| Q1 | N1-1：老后端缺 `meta.coverage` 字段时，面板警示条怎么办 | 缺字段 = 不报（UI fail-open），契约仍 fail-closed | 本会话可自决，落地前记一句理由 |
-| Q2 | **N2-2 做不做**：polar 在平面呈现下继续修（占位网格 + 解冲突 + 行距旋转），还是就此冻结在「默认关、仅平面、有已知缺陷」 | 建议**先不做**。理由：`mbd_3d=0` 本身是调试呈现，不是生产路径；polar 已确认不进三维呈现；修这三条要动 kernel 的避让语义（`layoutAuthority` 的口子），风险大于收益。若要修，按 ①②③ 顺序，每项单独 A/B | **需人拍** |
+| Q1 | N1-1：老后端缺 `meta.coverage` 字段时，面板警示条怎么办 | 缺字段 = 不报（UI fail-open），契约仍 fail-closed | **已定（2026-11-06）**：分两刀。先接 coverage、缺字段时退回 `PARTIAL_LAYOUT_MODES` 兜底（部署窗口里老后端仍在跑）；宿主部署带 coverage 之后再删兜底，届时缺字段 = 不报。比对集合取管道应有的 8 种（不含按设计不产出的 `aid_arc` / `aid_circle` / `aid_point`，否则警示条永远亮着） |
+| Q2 | **N2-2 做不做**：polar 在平面呈现下继续修（占位网格 + 解冲突 + 行距旋转），还是就此冻结在「默认关、仅平面、有已知缺陷」 | 建议**先不做**。理由：`mbd_3d=0` 本身是调试呈现，不是生产路径；polar 已确认不进三维呈现；修这三条要动 kernel 的避让语义（`layoutAuthority` 的口子），风险大于收益。若要修，按 ①②③ 顺序，每项单独 A/B | **已裁决（2026-11-06，用户）：做**。做法不开 `layoutAuthority` 口子：① 两遍布局，先布局非 polar 记录、把其文字框装进 `polarOccupancy`，polar 选位就避开它们（同时覆盖 ② 的主要情形）；③ polar 只改锚点、不改 `labelAlong`，不旋转就不错行 |
 | Q3 | **N3-1 G9**：坡度符号是否必须与 PML 像素一致 | 取决于「语义对齐」的定义，需 rs-mbd 原文或人拍 | **需人 + PML 截图** |
-| Q4 | **N5-1**：310 BRAN 房间的分帧口径 | 需人拍产品行为 | **需人拍** |
+| Q4 | **N5-1**：310 BRAN 房间的分帧口径 | 需人拍产品行为 | **已裁决（2026-11-06，用户）：两条都做**。① 接受逐批画出，但分帧中途动相机不再同步写完：画家改前后台双缓冲，宿主渲染画上一帧完整结果，换相机就取消本轮按新相机重排；② 先只画前 32 个 BRAN（URL 顺序，`mbd_limit` 覆盖），面板「再加载 / 全部加载」 |
 | Q5 | N4-1 的算法口径来源：跟 N2-2 的 TS 实现，还是跟现有 `place/` + `screenGuard` | 若 Q2 选「不做」，跟现有实现（这也是 10-29 计划 D6 的结论） | 依赖 Q2 |
 
 ## 6. 风险

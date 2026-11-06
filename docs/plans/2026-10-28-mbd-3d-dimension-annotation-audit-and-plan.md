@@ -282,7 +282,7 @@ E3D .dat
 | T3.3 | 参考系层：`PolarReference` 接口 + 2D 轴测实现（与 PML 一致）+ 3D 相机实现 | `src/dimension/kernel/layout/polar/reference/` | 2D 实现跑 PML 原 case 逐值一致；3D 实现有单元测试（showDir 滞回） | ✅ 已落地（T3.3a/b/c），见 §13.11、§13.14 |
 | T3.4 | `getBestPosAndOri` 14 步 + `balance` + `getDirAndCha` + `getResult`，参考系可注入 | `src/dimension/kernel/layout/polar/place.ts` | 2D 模式与 PML 结果一致；3D 模式无 NaN、无越界 | **✅ 已提交 `1b4c86ab`**，见 §13.16 |
 | T3.5 | 屏幕空间校验层：投影 → 像素净空 → 降级候选 | `src/dimension/kernel/layout/polar/screenGuard.ts` | 构造重叠 case，断言降级后不重叠 | **✅ 已提交 `59554218`**，见 §13.16（§13.13 的落点预判已裁决，见该节末尾更新） |
-| T3.6 | 接入 `layoutViewport`：MBD 记录在 `authority='solver'` 且契约带 polar 结果时走 polar 布局，否则走现有路径 | `kernel/viewport/layoutViewport.ts`、`kernel/layout/explicit.ts` | A/B 开关（URL `mbd_polar=1`）对比；默认关闭 | **进行中（T3.6a）**，见 §13.17 |
+| T3.6 | 接入 `layoutViewport`：MBD 记录在 `authority='solver'` 且契约带 polar 结果时走 polar 布局，否则走现有路径 | `kernel/viewport/layoutViewport.ts`、`kernel/layout/explicit.ts` | A/B 开关（URL `mbd_polar=1`）对比；默认关闭 | **✅ 已落地**（T3.6a `9eafa763`、T3.6b `6417dbd6`）；真实数据 A/B 结论不转默认，`6f962666` 起只在 `mbd_3d=0` 生效，见 §13.17 末尾更新 |
 
 ### 阶段 4：契约扩展（跨仓，需与 plant-mbd 同步）
 
@@ -908,6 +908,8 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 - `easy` 模式（PML 术语，简化求解路径）无驱动输入，v1 不支持。
 - 3D 视锥换算下的径向上限与像素净空精细调参（v1 用固定近似值，不做自适应）。
 
+**更新（2026-11-06）**：T3.6a 已提交 `9eafa763`；T3.6b（同管累积障碍 `groupKey` / `polarObstacle`、`getPolarDiagnostics()`）已提交 `6417dbd6`。真实载荷（gen-model worktree + plant-mbd `cb046f7`）A/B：`24381_145018` 挂上 12 条、`24383_91813` 2 条，非有限值 0、paint P95 +4.5%，但默认三维呈现远景重叠 2 → 39 对、`24383_91813` 全程降级；结论不转默认，`6f962666` 起 polar 只在 `mbd_3d=0` 下生效。证据见 `docs/verification/mbd-polar-ab-2026-11-06-r2/`，后续工作见 `2026-11-06-mbd-dimension-remaining-work-dev-plan.md`。
+
 ### 13.18 T5.4 / T5.5 / T5.6 落地记录（plant-mbd，2026-10-29）
 
 **T5.4 + T5.5（同一提交）**：`plant-mbd` 提交 `5bef17f` —— 调整焊附加长度实现（`adjust_weld.rs`）。` +len` 串作为独立的 `aid_text` 图元下发，不拼进 `linear_dim` 的尺寸文本字符串本身；字高取 `cheight × 0.6`。T5.4（小尺寸拆行 + 逐级缩字）的剩余部分（§13.3 记录的 `pluslen` 项）随本提交一并补齐。
@@ -949,5 +951,6 @@ T3.5 不需要新造碰撞算法，两块现成件可直接复用：
 | 12 | T7.6 LOD / 去重叠 | — | 未单测，并入第 13 行（HEAD 已含 12f4bb1e 之后的提交，无法单独切出该时点的数字） | §13.15 | 12f4bb1e |
 | 13 | **当前 HEAD 的真实数字**（2026-10-29，W0-1 实测） | S2 | **81 / 709**（0 失败，6.49 s） | 现行计划 W0-1 | 120b1bec（工作区另含未提交的 W4-1 / W4-2 改动；W3 见 d7281249、6ee4e6bd） |
 | 14 | T3.4 + T3.5（polar 目录范围）+ 维度全量回归 | polar 子集 / S2 | polar 子集 **23 文件 / 268 通过**；S2 **86 文件全过** | §13.16 | be17e987（前置）、a1bf732d（T3.4a）、1b4c86ab（T3.4b）、59554218（T3.5） |
+| 15 | T3.6a + T3.6b + polar 限定 `mbd_3d=0` | S2 | **87 / 858** | §13.17 末尾更新 | 9eafa763、6417dbd6、6f962666 |
 
 **类型基线**：`npm run type-check` 自 §5.2 起到第 9 行（5b1bdfd0）始终是 440 条 / 127 文件，新增 0 / 已消失 0；2026-10-29 在当前 HEAD（120b1bec，与第 13 行同一次）实测 **439 条 / 126 文件，新增 0 / 已消失 1**——消失的是 `src/dimension/ui/DimensionSemanticList.vue` 的 TS2345（`Argument of type 'DimensionListItem | undefined' is not assignable to parameter of type 'DimensionListItem'.`），**归因更正（2026-10-29 复核）**：真正消掉它的不是补 `groupLabel` 默认值，而是 W3-6 的模板重构——旧版 `DimensionSemanticList.vue:188` 的 `:aria-activedescendant="items[activeIndex] ? optionId(items[activeIndex]) : undefined"` 里三元没收窄第二次索引，把 `DimensionListItem | undefined` 传给了 `optionId(item: DimensionListItem)`，是旧文件里唯一这样的调用点；新版改成 `activeDescendant` computed（`DimensionSemanticList.vue:121-124` 的 `row?.visible ? optionId(row.item) : undefined`）+ 模板引用。所以是真修、不是改基线掩盖；基线已同步收紧（`npm run type-check:update-baseline`，`scripts/type-check-baseline.txt` 现为 439 条 / 126 文件），之后仍按「新增 0 / 已消失 0」放行。
