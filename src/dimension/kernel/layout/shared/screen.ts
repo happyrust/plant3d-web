@@ -25,6 +25,16 @@ export function toScreen(point: Vec3, projector: ViewportProjector): Vec2 {
   return [projected.x, projected.y];
 }
 
+/** A screen rectangle's four corners, clockwise from its top-left (the declutter's quad shape). */
+export function rectCorners(rect: ScreenRect): readonly [Vec2, Vec2, Vec2, Vec2] {
+  return [
+    [rect.x, rect.y],
+    [rect.x + rect.width, rect.y],
+    [rect.x + rect.width, rect.y + rect.height],
+    [rect.x, rect.y + rect.height],
+  ];
+}
+
 /** The label box that claims space in the declutter: glyph bounds padded by half the theme padding. */
 export function labelBoundsOf(glyph: ScreenGlyphRun, theme: DimensionTheme): ScreenRect {
   return expandRect(glyph.bounds, theme.labelPaddingPx / 2);

@@ -736,6 +736,57 @@ describe('createMbdExternalSync', () => {
   });
 
   /**
+   * 跨记录的分组键在每包里各自编号（polar 的 `isoline:<idx>` 从 0 起），
+   * 多包时要和 id 一起加前缀，否则两个 BRAN 的 0 号直段会被当成同一根管。
+   */
+  it('prefixes polar group keys and declutter groups per refno', async () => {
+    const fetchPipeData = vi.fn(async (refno: string) => ({
+      ok: true as const,
+      data: contractPayload({
+        input_refno: refno,
+        branch_refno: refno,
+        primitives: [
+          {
+            kind: 'linear_dim',
+            id: 'dim-1',
+            start: [0, 0, 0],
+            end: [1, 0, 0],
+            text: '1000',
+            extension_lines: [
+              { from: [0, 0, 0], to: [0, 0.1, 0] },
+              { from: [1, 0, 0], to: [1, 0.1, 0] },
+            ],
+            arrow_lines: [],
+            label_anchor: [0.5, 0.1, 0],
+            isoline_idx: 0,
+          },
+          { kind: 'label', id: 'tag-1', text: 'X 1', position: [0.5, 0, 0], isoline_idx: 0 },
+          { kind: 'aid_text', id: 'ang-1:dirtext1', text: '-X', position: [0, 0, 0] },
+        ],
+        meta: {
+          geometry_space: 'source_mm',
+          source_to_design: IDENTITY,
+          notes: [],
+          isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 0.5 }],
+        },
+      }),
+      diagnostics: [],
+    }));
+    const harness = createHarness({ search: '?mbd_refno=A,B&mbd_3d=0&mbd_polar=1', fetchPipeData });
+
+    await harness.sync.sync(harness.target);
+
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    const layoutOf = (id: string) => records.find((record: { id: string }) => record.id === id).layout;
+    for (const refno of ['A', 'B']) {
+      expect(layoutOf(`${refno}:tag-1`).polar.groupKey).toBe(`${refno}:isoline:0`);
+      expect(layoutOf(`${refno}:dim-1`).polarObstacle).toEqual({ groupKey: `${refno}:isoline:0` });
+      expect(layoutOf(`${refno}:ang-1:dirtext1`).declutter).toEqual({ rank: 500, group: `${refno}:ang-1` });
+    }
+  });
+
+  /**
    * 2026-11-02 逐包拒绝：A 包映射失败（重复图元 id）只剔除 A 自己，
    * B 包照常提交；失败原因进逐源诊断与聚合 loadError，并按 refno 弹提示。
    */

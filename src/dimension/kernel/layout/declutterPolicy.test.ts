@@ -27,6 +27,7 @@ function layout(
   id: string,
   rect: ScreenRect,
   rank?: number,
+  group?: string,
 ): LayoutResult {
   const quad = quadOf(rect);
   return {
@@ -38,7 +39,9 @@ function layout(
     labelPinned: true,
     derived: {
       formattedLabel: id,
-      ...(rank !== undefined ? { declutter: { rank, quad } } : {}),
+      ...(rank !== undefined
+        ? { declutter: { rank, quad, ...(group !== undefined ? { group } : {}) } }
+        : {}),
     },
   };
 }
@@ -67,6 +70,36 @@ describe('declutterOverlaps', () => {
     expect(results[1]).toBe(main);
     expect(results[2]).toBe(apart);
     expect(results[3]).toBe(user);
+  });
+
+  it('hides a whole group when any one member overlaps a kept label', () => {
+    const main = layout('main', { x: 0, y: 0, width: 40, height: 20 }, 1001.5);
+    // The angle value lands on the pipe length; its direction note is far away.
+    const value = layout('angle', { x: 30, y: 10, width: 40, height: 20 }, 500, 'angle');
+    const note = layout('angle:dirtext1', { x: 300, y: 300, width: 40, height: 20 }, 500, 'angle');
+
+    const results = declutterOverlaps([value, main, note]);
+
+    expect(results.map(result => result.derived.lodHidden)).toEqual(['overlap', undefined, 'overlap']);
+    expect(results[1]).toBe(main);
+  });
+
+  it('never lets members of one group knock each other out, and breaks rank ties by group name', () => {
+    // `a` value and note overlap each other — same group, both stay.
+    const aValue = layout('a', { x: 0, y: 0, width: 40, height: 20 }, 500, 'a');
+    const aNote = layout('a:dirtext1', { x: 10, y: 5, width: 40, height: 20 }, 500, 'a');
+    // `b` ties on rank; its note overlaps `a`'s note, so all of `b` goes.
+    const bValue = layout('b', { x: 400, y: 0, width: 40, height: 20 }, 500, 'b');
+    const bNote = layout('b:dirtext1', { x: 20, y: 10, width: 40, height: 20 }, 500, 'b');
+
+    const results = declutterOverlaps([bNote, aNote, bValue, aValue]);
+
+    expect(results.map(result => [result.dimensionId, result.derived.lodHidden])).toEqual([
+      ['b:dirtext1', 'overlap'],
+      ['a:dirtext1', undefined],
+      ['b', 'overlap'],
+      ['a', undefined],
+    ]);
   });
 
   it('breaks rank ties by id and cascades so a hidden label frees its space', () => {

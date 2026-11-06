@@ -300,6 +300,8 @@ type ExplicitParts = Readonly<{
   polar?: ExplicitPolarInput;
   /** T3.6b opt-in for a non-polar sibling; see `mapLinearDim`. */
   polarObstacle?: Readonly<{ groupKey: string }>;
+  /** Pairwise declutter opt-in; see `angleDeclutter`. */
+  declutter?: ExplicitLayoutInput['declutter'];
 }>;
 
 function explicitRecord(
@@ -337,6 +339,7 @@ function explicitRecord(
     ...(parts.subject ? { subject: parts.subject } : {}),
     ...(parts.polar ? { polar: parts.polar } : {}),
     ...(parts.polarObstacle ? { polarObstacle: parts.polarObstacle } : {}),
+    ...(parts.declutter ? { declutter: parts.declutter } : {}),
   };
   return {
     id: primitive.id,
@@ -900,6 +903,32 @@ function arcTangent(mapped: MappedArc, angle: number): Vec3 {
 }
 
 /**
+ * Installation angles rank between the 3D running dimensions' main rows
+ * (1000 + length / width) and their atta rows (0 + the same ratio), so an
+ * angle never hides a pipe length but does win over an atta detail.
+ */
+const ANGLE_DECLUTTER_RANK = 500;
+const ANGLE_DIRECTION_NOTE_SUFFIX = /:dirtext\d+$/;
+
+/**
+ * An installation angle is three records — the `angle_dim` (arc, legs,
+ * value) and the two direction notes plant-mbd emits as `aid_text`
+ * `<angle id>:dirtext1/2` — and the solver stacks them without avoidance,
+ * so along a run of same-tilt members the groups pile up into one
+ * unreadable column. They join the pairwise declutter as one group: when any
+ * of the three overlaps a kept label, all three are hidden for this view.
+ */
+function angleDeclutter(primitive: MbdPrimitive): ExplicitLayoutInput['declutter'] | undefined {
+  if (primitive.kind === 'angle_dim') {
+    return { rank: ANGLE_DECLUTTER_RANK, group: primitive.id };
+  }
+  if (primitive.kind === 'aid_text' && ANGLE_DIRECTION_NOTE_SUFFIX.test(primitive.id)) {
+    return { rank: ANGLE_DECLUTTER_RANK, group: primitive.id.replace(ANGLE_DIRECTION_NOTE_SUFFIX, '') };
+  }
+  return undefined;
+}
+
+/**
  * PML `isoline.drawangle`: arc + two legs + the value text. The value runs
  * along the arc, so its baseline is the tangent at mid-sweep (the same
  * 「工程文字朝向」 rule `mapLinearDim` applies along its dimension line).
@@ -922,6 +951,7 @@ function mapAngleDim(
     labelAlong: arcTangent(mapped, midAngle),
     lines,
     arcs: [mapped.arc],
+    declutter: angleDeclutter(primitive),
   });
 }
 
@@ -1080,6 +1110,7 @@ export function mbdV2ToExternalRecords(
           ...(along ? { labelAlong: along } : {}),
           texts,
           ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
+          declutter: angleDeclutter(primitive),
         });
         // A per-primitive height wins over the group height: the solver draws
         // the installation-angle direction labels at `cheight / 2` so they stay

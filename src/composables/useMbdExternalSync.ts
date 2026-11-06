@@ -188,6 +188,30 @@ function withoutPolar(record: ExternalDimensionRecord): ExternalDimensionRecord 
 }
 
 /**
+ * 多 BRAN 时，跨记录的分组键也要和 id 一样加 `refno:` 前缀：polar 的
+ * `groupKey`（`isoline:<idx>`）在每个包里都从 0 编号，不加前缀两个 BRAN 的
+ * 0 号直段会被当成同一根管互相当障碍；去重的 `group` 同理。
+ */
+function qualifyGroups(
+  layout: ExternalDimensionRecord['layout'],
+  qualify: (key: string) => string,
+): ExternalDimensionRecord['layout'] {
+  if (!('lines' in layout)) return layout;
+  return {
+    ...layout,
+    ...(layout.polar?.groupKey !== undefined
+      ? { polar: { ...layout.polar, groupKey: qualify(layout.polar.groupKey) } }
+      : {}),
+    ...(layout.polarObstacle
+      ? { polarObstacle: { groupKey: qualify(layout.polarObstacle.groupKey) } }
+      : {}),
+    ...(layout.declutter?.group !== undefined
+      ? { declutter: { ...layout.declutter, group: qualify(layout.declutter.group) } }
+      : {}),
+  };
+}
+
+/**
  * MBD 外部图元双通道同步（从 ViewerPanel 抽出以获得可测缝）：
  * 通道选择、竞态守卫、诊断写入、error toast 集中在此。
  */
@@ -292,7 +316,7 @@ export function createMbdExternalSync(
               ...record,
               id: qualify(record.id),
               sourceLabel: `MBD: ${qualify(record.id)}`,
-              layout: { ...record.layout, id: qualify(record.id) },
+              layout: qualifyGroups({ ...record.layout, id: qualify(record.id) }, qualify),
             }))
             : stripped;
           return {

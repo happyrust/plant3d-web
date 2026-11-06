@@ -25,7 +25,12 @@ import { add3, EPSILON } from '../vec';
 import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
 import { lodShortLine, lodTierHiddenReason, projectedSourceTextHeightPx } from './shared/lod';
-import { backProjectedSegment, labelBoundsOf, sceneVertexOnSegment } from './shared/screen';
+import {
+  backProjectedSegment,
+  labelBoundsOf,
+  rectCorners,
+  sceneVertexOnSegment,
+} from './shared/screen';
 
 import type { ViewportProjector } from '../projector';
 import type {
@@ -747,6 +752,30 @@ export function layoutExplicit(
     derived: {
       formattedLabel: input.formattedLabel,
       ...(input.subject ? { subject: input.subject } : {}),
+      ...(input.declutter && input.formattedLabel.length > 0
+        ? {
+          declutter: {
+            rank: input.declutter.rank,
+            quad: rectCorners(glyphsBounds(glyphs)),
+            ...(input.declutter.group !== undefined ? { group: input.declutter.group } : {}),
+          },
+        }
+        : {}),
     },
   };
+}
+
+/** Axis-aligned union of every run's bounds: the stacked rows claim space together. */
+function glyphsBounds(glyphs: readonly ScreenGlyphRun[]): ScreenRect {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const { bounds } of glyphs) {
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.width);
+    maxY = Math.max(maxY, bounds.y + bounds.height);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }

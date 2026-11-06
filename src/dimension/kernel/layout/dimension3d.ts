@@ -26,7 +26,7 @@ import {
 
 import { emptyLayout } from './linear';
 import { lodSecondaryFar, lodShortLine } from './shared/lod';
-import { labelBoundsOf } from './shared/screen';
+import { labelBoundsOf, rectCorners } from './shared/screen';
 
 import type {
   ExplicitDimension3dInput,
@@ -41,7 +41,6 @@ import type {
   ScreenGlyphRun,
   ScreenLine,
   ScreenLinePart,
-  ScreenRect,
   Vec2,
   Vec3,
 } from '../types';
@@ -63,15 +62,6 @@ function viewDirectionAt(point: Vec3, context: LayoutContext): Vec3 {
   const ray = sub3(far, near);
   if (!ray.every(Number.isFinite)) return projector.forward;
   return tryNormalize3(ray) ?? projector.forward;
-}
-
-function rectCorners(rect: ScreenRect): Quad {
-  return [
-    [rect.x, rect.y],
-    [rect.x + rect.width, rect.y],
-    [rect.x + rect.width, rect.y + rect.height],
-    [rect.x, rect.y + rect.height],
-  ];
 }
 
 /**

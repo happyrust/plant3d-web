@@ -35,6 +35,42 @@ const WING_STRETCH = SOLVESPACE_DIMENSION_THEME.arrowLineMinLengthPx
   / Math.hypot(10, 5);
 
 describe('layoutExplicit', () => {
+  it('hands an opted-in record to the pairwise declutter with every text row in its quad', () => {
+    const context: LayoutContext = {
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    };
+    const stacked: ExplicitLayoutInput = {
+      ...input,
+      texts: [{ text: '25 REF', anchor: [0.5, 0.2, 0], stackIndex: 1 }],
+    };
+    expect(layoutExplicit(stacked, context).derived.declutter).toBeUndefined();
+
+    const result = layoutExplicit({ ...stacked, declutter: { rank: 500, group: 'angle' } }, context);
+    const declutter = result.derived.declutter!;
+    expect(declutter.rank).toBe(500);
+    expect(declutter.group).toBe('angle');
+    const glyphs = result.primitives.filter(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    );
+    expect(glyphs).toHaveLength(2);
+    const xs = declutter.quad.map(point => point[0]);
+    const ys = declutter.quad.map(point => point[1]);
+    for (const { bounds } of glyphs) {
+      expect(Math.min(...xs)).toBeLessThanOrEqual(bounds.x);
+      expect(Math.min(...ys)).toBeLessThanOrEqual(bounds.y);
+      expect(Math.max(...xs)).toBeGreaterThanOrEqual(bounds.x + bounds.width);
+      expect(Math.max(...ys)).toBeGreaterThanOrEqual(bounds.y + bounds.height);
+    }
+
+    // No text, nothing to compete with.
+    const blank = layoutExplicit({ ...input, formattedLabel: '', declutter: { rank: 500 } }, context);
+    expect(blank.derived.declutter).toBeUndefined();
+  });
+
   it('keeps a clear dimension line whole and adds LFF bounds and hits', () => {
     const projector = createTestProjector();
     const project = vi.spyOn(projector, 'project');

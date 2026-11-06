@@ -10,10 +10,18 @@ export type Quad = readonly [Vec2, Vec2, Vec2, Vec2];
 type Candidate = Readonly<{
   index: number;
   layout: LayoutResult;
-  rank: number;
   quad: Quad;
   box: ScreenRect;
 }>;
+
+/** Layouts that win or lose together; a layout without a group is one on its own. */
+type Group = {
+  /** Tie-break key: the group name, or the layout's id for a group of one. */
+  sortKey: string;
+  rank: number;
+  firstIndex: number;
+  members: Candidate[];
+};
 
 function boundsOf(quad: Quad): ScreenRect {
   const xs = quad.map(point => point[0]);
@@ -92,54 +100,81 @@ function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+function candidatesCollide(winner: Candidate, candidate: Candidate): boolean {
+  if (!boxesOverlap(winner.box, candidate.box)) return false;
+  // A degenerate quad cannot prove separation — fall back to the bounds.
+  return quadBracketsLabel(winner.quad, winner.box)
+    && quadBracketsLabel(candidate.quad, candidate.box)
+    ? convexQuadsOverlap(winner.quad, candidate.quad)
+    : true;
+}
+
 /**
- * Pairwise declutter for solver-placed labels (S1, 2026-09-12): when two 3D
- * dimension labels overlap on screen, the lower-ranked one is elided for this
- * view (`derived.lodHidden = 'overlap'`) — never moved, because the solver's
+ * Pairwise declutter for solver-placed labels (S1, 2026-09-12): when two
+ * labels overlap on screen, the lower-ranked one is elided for this view
+ * (`derived.lodHidden = 'overlap'`) — never moved, because the solver's
  * placement is authoritative. Rank comes from the layout (`derived.declutter`:
- * main row over atta row, then line length per label width); ties fall to the
- * lexically smaller id, so the outcome is the same on every frame with the
- * same camera. Layouts without declutter data (user dimensions, annotations,
- * flat presentations) are left alone and keep going through the moving
- * declutter in `resolveLabelCollisions`.
+ * 3D dimensions rank main row over atta row, then line length per label
+ * width; explicit records bring their own); ties fall to the lexically
+ * smaller id, so the outcome is the same on every frame with the same camera.
+ *
+ * Layouts that share `derived.declutter.group` compete as one: the group
+ * takes its best member's rank, loses when any member overlaps a kept layout
+ * of another group, and then every member is elided — an angle's value and
+ * its two direction notes never survive without each other. Members of one
+ * group never knock each other out. A layout without a group is a group of
+ * its own, which is exactly the pairwise rule above.
+ *
+ * Layouts without declutter data (user dimensions, annotations, flat
+ * presentations) are left alone and keep going through the moving declutter
+ * in `resolveLabelCollisions`.
  */
 export function declutterOverlaps(
   layouts: readonly LayoutResult[],
 ): readonly LayoutResult[] {
-  const candidates: Candidate[] = [];
+  const groups = new Map<string, Group>();
   for (const [index, layout] of layouts.entries()) {
     const declutter = layout.derived.declutter;
     if (!declutter || layout.primitives.length === 0) continue;
     const box = boundsOf(declutter.quad);
     if (box.width <= EPSILON || box.height <= EPSILON) continue;
-    candidates.push({ index, layout, rank: declutter.rank, quad: declutter.quad, box });
+    const key = declutter.group !== undefined ? `group:${declutter.group}` : `layout:${index}`;
+    const candidate: Candidate = { index, layout, quad: declutter.quad, box };
+    const group = groups.get(key);
+    if (group) {
+      group.rank = Math.max(group.rank, declutter.rank);
+      group.members.push(candidate);
+    } else {
+      groups.set(key, {
+        sortKey: declutter.group ?? layout.dimensionId,
+        rank: declutter.rank,
+        firstIndex: index,
+        members: [candidate],
+      });
+    }
   }
-  if (candidates.length < 2) return layouts;
+  if (groups.size < 2) return layouts;
 
-  candidates.sort((a, b) =>
+  const ordered = [...groups.values()].sort((a, b) =>
     b.rank - a.rank
-    || compareIds(a.layout.dimensionId, b.layout.dimensionId)
-    || a.index - b.index);
+    || compareIds(a.sortKey, b.sortKey)
+    || a.firstIndex - b.firstIndex);
   const results = [...layouts];
   const kept: Candidate[] = [];
-  for (const candidate of candidates) {
-    const collides = kept.some((winner) => {
-      if (!boxesOverlap(winner.box, candidate.box)) return false;
-      // A degenerate quad cannot prove separation — fall back to the bounds.
-      return quadBracketsLabel(winner.quad, winner.box)
-        && quadBracketsLabel(candidate.quad, candidate.box)
-        ? convexQuadsOverlap(winner.quad, candidate.quad)
-        : true;
-    });
+  for (const group of ordered) {
+    const collides = group.members.some(member =>
+      kept.some(winner => candidatesCollide(winner, member)));
     if (collides) {
-      results[candidate.index] = emptyLayout(
-        candidate.layout.dimensionId,
-        candidate.layout.labelPinned,
-        candidate.layout.derived.formattedLabel,
-        'overlap',
-      );
+      for (const member of group.members) {
+        results[member.index] = emptyLayout(
+          member.layout.dimensionId,
+          member.layout.labelPinned,
+          member.layout.derived.formattedLabel,
+          'overlap',
+        );
+      }
     } else {
-      kept.push(candidate);
+      kept.push(...group.members);
     }
   }
   return results;

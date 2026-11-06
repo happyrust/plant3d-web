@@ -632,6 +632,24 @@ describe('mbdV2ToExternalRecords', () => {
     }
   });
 
+  it('declutters an installation angle and its two direction notes as one group', () => {
+    const data = fixtureData();
+    const angle = data.primitives.find(primitive => primitive.kind === 'angle_dim')!;
+    const result = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [
+        { ...angle, id: 'b:isoline:0:angle:m:0' },
+        { kind: 'aid_text', id: 'b:isoline:0:angle:m:0:dirtext1', text: '-X', position: [0, 0, 0] },
+        { kind: 'aid_text', id: 'b:isoline:0:angle:m:0:dirtext2', text: '-X 44.5° Y', position: [0, 0, 0] },
+        { kind: 'aid_text', id: 'plain-text', text: 'EL +1', position: [0, 0, 0] },
+      ],
+    });
+    for (const id of ['b:isoline:0:angle:m:0', 'b:isoline:0:angle:m:0:dirtext1', 'b:isoline:0:angle:m:0:dirtext2']) {
+      expect(explicitLayout(result, id).declutter).toEqual({ rank: 500, group: 'b:isoline:0:angle:m:0' });
+    }
+    expect(explicitLayout(result, 'plain-text').declutter).toBeUndefined();
+  });
+
   it('assembles weld and slope symbols from kernel primitives (ADR 0042)', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
 

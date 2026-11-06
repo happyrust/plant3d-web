@@ -336,6 +336,11 @@ export type LayoutResult = Readonly<{
     declutter?: Readonly<{
       rank: number;
       quad: readonly [Vec2, Vec2, Vec2, Vec2];
+      /**
+       * Layouts sharing a group win or lose together (`ExplicitLayoutInput.declutter`);
+       * absent = the layout is a group of its own.
+       */
+      group?: string;
     }>;
     /**
      * Set by the billboard tag layout: the body rectangle on screen and the
@@ -710,4 +715,13 @@ export type ExplicitLayoutInput = Readonly<{
    * part of a polar group).
    */
   polarObstacle?: Readonly<{ groupKey: string }>;
+  /**
+   * Take part in the pairwise declutter (`declutterOverlaps`) that the 3D
+   * running dimensions go through: the text box competes by `rank` (higher
+   * wins) and a loser is elided for this view, never moved — the solver's
+   * placement stays authoritative. Records sharing a `group` win or lose
+   * together: an angle's value and its two direction notes are three records
+   * that only read as one. Absent = left to the moving declutter as before.
+   */
+  declutter?: Readonly<{ rank: number; group?: string }>;
 }>;
