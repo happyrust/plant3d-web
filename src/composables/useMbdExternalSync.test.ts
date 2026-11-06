@@ -373,7 +373,7 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
-  it('mbd_polar=1 opts a label into polar placement; default strips it', async () => {
+  it('mbd_polar=1 opts a label into polar placement only with mbd_3d=0; default strips it', async () => {
     // Same isoline on a linear_dim (pipe axis) and a label (consumer), plus
     // the isoline's od_mm: the mapper attaches `polar` to the label only.
     const payload = contractPayload({
@@ -423,7 +423,20 @@ describe('createMbdExternalSync', () => {
     const plainDim = plain.find((record: { id: string }) => record.id === 'dim-1');
     expect(plainDim.layout.polarObstacle).toBeUndefined();
 
-    const enabled = createHarness({ search: '?mbd_refno=A&mbd_polar=1', fetchPipeData });
+    // In the 3D presentation the switch is a no-op on the records: the label
+    // keeps its billboard `tag`, and both polar fields are stripped exactly as
+    // by default. Only the note tells the user why nothing moved.
+    const in3d = createHarness({ search: '?mbd_refno=A&mbd_polar=1', fetchPipeData });
+    await in3d.sync.sync(in3d.target);
+    const [, kept3d] = (in3d.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(kept3d).toEqual(plain);
+    expect(plainTag.layout.tag).toBeDefined();
+    expect(in3d.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: [expect.stringContaining('mbd_3d=0')],
+    }));
+
+    const enabled = createHarness({ search: '?mbd_refno=A&mbd_3d=0&mbd_polar=1', fetchPipeData });
     await enabled.sync.sync(enabled.target);
     const [, opted] = (enabled.target.replaceExternalSource as ReturnType<typeof vi.fn>)
       .mock.calls[0]!;
@@ -431,22 +444,18 @@ describe('createMbdExternalSync', () => {
     expect(optedTag.layout.polar).toBeDefined();
     expect(optedTag.layout.polar.basicRadiusM).toBeCloseTo(0.25, 9);
     expect(optedTag.layout.polar.groupKey).toBe('isoline:0');
-    // Everything else about the record is untouched, except `tag`: a
-    // polar-opted label must lose it, or `layoutViewport` takes the billboard
-    // branch before ever looking at the polar-resolved `labelAnchor` (T3.6a 补).
+    // `mbd_3d=0` already took `tag` off, so `layoutViewport` reaches the
+    // polar-resolved `labelAnchor`; the solver anchor itself is untouched.
     expect(optedTag.layout.labelAnchor).toEqual(plainTag.layout.labelAnchor);
-    expect(plainTag.layout.tag).toBeDefined();
     expect(optedTag.layout.tag).toBeUndefined();
     expect(enabled.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
-      notes: [expect.stringContaining('mbd_polar=1')],
+      notes: expect.arrayContaining([expect.stringContaining('mbd_polar=1：已接入')]),
     }));
 
-    // A record without `polar` keeps its `tag` even when the mode is on.
+    // `dim-1` carries no `polar` but keeps its `polarObstacle`, naming the
+    // same group `tag-1`'s `polar.groupKey` does.
     const otherOpted = opted.find((record: { id: string }) => record.id === 'dim-1');
     expect(otherOpted.layout.polar).toBeUndefined();
-    // `dim-1`'s `polarObstacle` survives `mbd_polar=1` (only `withoutPolar`
-    // strips it; `polarReplacesTag` only touches `tag`), and names the same
-    // group `tag-1`'s `polar.groupKey` does.
     expect(otherOpted.layout.polarObstacle).toEqual({ groupKey: 'isoline:0' });
 
     // Any other value is not the mode — stripped stays the default: `tag`
