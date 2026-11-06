@@ -23,7 +23,7 @@ _Avoid_: 外部尺寸、MBD 尺寸
 _Avoid_: 通用标注系统、测量系统
 
 **MBD 标注类型**:
-PML MBD 按对象出图的九种类型之一：EM4 管道、EM9 仪表管、EM4 支架、EM9 仪表支架、EM9 仪表管支架、土建结构、建筑、EM4 设备、EM9 设备；契约字段 `annotation_type`（`em4_pipe` … `em9_equi`，ADR 0070）。它决定服务端用哪套规则出外部尺寸，由服务端按项目配置从对象所在 SITE / ZONE 判定，与用户从哪个入口打开无关。
+PML MBD 按对象出图的九种类型之一：EM4 管道、EM9 仪表管、EM4 支架、EM9 仪表支架、EM9 仪表管支架、土建结构、建筑、EM4 设备、EM9 设备；契约字段 `annotation_type`（`em4_pipe` … `em9_equi`，ADR 0071）。它决定服务端用哪套规则出外部尺寸，由服务端按项目配置从对象所在 SITE / ZONE 判定，与用户从哪个入口打开无关。
 _Avoid_: 专业（专业是 SITE 派生的学科分类，同一专业下可有多种标注类型）、drawtype（只在引用 PML 原文时用）
 
 **直段（MBD）**:
