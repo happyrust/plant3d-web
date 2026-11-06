@@ -136,6 +136,14 @@ describe('DTXLayer 粗网格（L1）', () => {
     expect(layer.getCullStats().lodObjects).toBe(0);
   });
 
+  it('粗网格不比原网格小就拒收，不把原网格再存一份', () => {
+    const layer = new DTXLayer({ maxVertices: 64, maxIndices: 64, maxObjects: 8 });
+    layer.addGeometry('quad', quad());
+    expect(layer.addLod1Geometry('quad', quad())).toBe(false);
+    expect(layer.hasLod1Geometry('quad')).toBe(false);
+    expect(layer.addLod1Geometry('quad', tri())).toBe(true);
+  });
+
   it('替换原网格后旧构件不再用粗网格', () => {
     const layer = new DTXLayer({ maxVertices: 64, maxIndices: 64, maxObjects: 8 });
     layer.addGeometry('quad', quad());

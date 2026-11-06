@@ -485,11 +485,17 @@ export class DTXLayer {
   /**
    * 给已登记的几何追加一份显示用粗网格（L1）。只进位置 / 索引缓冲，不进几何注册表：拾取、描边、测量
    * 读到的仍是原网格。下次 compile 时，引用这份原网格的构件在屏幕上小于 `lodPx` 就改画粗网格。
-   * 原网格没登记、已经有粗网格时返回 false。
+   * 原网格没登记、已经有粗网格、或这份网格的索引数不少于原网格时返回 false。后一种是旧后端
+   * 不认 `?lod=`、把原网格原样返回的情况：收进来等于同一份网格存两遍。
    */
   addLod1Geometry(geoHash: string, geometry: BufferGeometry): boolean {
     const l0 = this._geometries.get(geoHash);
     if (!l0 || this._lod1Geometries.has(geoHash)) return false;
+    const indexAttr = geometry.getIndex();
+    const coarseIndexCount = indexAttr
+      ? indexAttr.count
+      : (geometry.getAttribute('position')?.count ?? 0);
+    if (coarseIndexCount >= l0.indexCount) return false;
     const handle = this._appendGeometryData(geoHash, geometry);
     this._lod1Geometries.set(geoHash, { handle, l0VertexBase: l0.vertexBase });
     return true;
