@@ -77,7 +77,7 @@ M1 共享内核（text / lindim / geom）+ 契约信封 + 统一入口 + PML 比
 | --- | --- | --- | --- |
 | M1-1 | `text`：完整 126 项字宽表（修 x/X 槽位）、D2 去尾零、`good_cheight`；`lindim`：PML LINDIM 链（去 < 1 mm 点、`changeCheightAuto` 0.7、`sepSmallDim` 0.8、外叠 1.2·ch、「+N」0.6）；管道改走它 | plant-mbd `src/{text,lindim}.rs`、`isodim.rs` | 6 条管道金样逐字节不变；表驱动单测（清单 §13） |
 | M1-2 | `geom`：投影 / 距离 / `wire` 去副本、容差化角度与范围区间、`PlaneFrame`（与点序无关的法向）、带倒圆的闭合轮廓、规整化、含边界的点在轮廓内、环形排序、象限外点、凸分解、包围盒中心 | plant-mbd `src/geom/**` | 表驱动单测；`direction.rs` 怪癖不动 |
-| M1-3 | 契约信封（ADR 0070）：前端先接受，再 mirror，再产出 | 本仓 `adapters/mbdV2Contract.ts`、`adapters/mbdV2ExternalAnnotations.ts`、`ui/` 新分组模块、`src/fixtures/mbd-v2/envelope-fields.json`；plant-mbd `contract.rs`、`tests/contract_guard.rs`、`fixtures/contract/envelope-fields.json` | 两侧往返；管道负载逐字段不变；面板按 FUNCTION 分组 |
+| M1-3 | 契约信封（ADR 0071）：前端先接受，再 mirror，再产出 | 本仓 `adapters/mbdV2Contract.ts`、`adapters/mbdV2ExternalAnnotations.ts`、`ui/` 新分组模块、`src/fixtures/mbd-v2/envelope-fields.json`；plant-mbd `contract.rs`、`tests/contract_guard.rs`、`fixtures/contract/envelope-fields.json` | 两侧往返；管道负载逐字段不变；面板按 FUNCTION 分组 |
 | M1-4 | `AnnotationType`、`ObjectLayoutRequest` + `LayoutParams::defaults_for`（PML 各窗体 setting 值）、`MbdDataSource` + `InMemoryMbdSource`、`layout_object` 分派；CLI / 金样能回放对象 fixture | plant-mbd `src/object.rs`、`support/` / `civil/` / `equipment/` 骨架、CLI 新模块 | 管道经 `layout_object` 的图元与 `layout_branch` 相同；桩类型各自信封正确 |
 | M1-5 | `plant-mbd-cli pml diff`：PML `content`（N 点 `dim`、`lableLine` + `line`、`text` / `line` / `arc` / `circle` / `point`）↔ 契约图元；语义精确、摆位 1 mm / 0.1°；`rulings.json` 有意偏差；`fixtures/pml/<type>/<case>/` | plant-mbd-cli 新模块、`fixtures/pml/**` | 手写自测样例覆盖通过 / 语义失败 / 摆位失败 / 裁决豁免 |
 
@@ -131,7 +131,7 @@ PML `object/polarsystem/**` 移入 plant-mbd 新模块 `polar/`：直段柱坐�
 | # | 决策 | 状态 |
 | --- | --- | --- |
 | D1 | 金样基准：PML 导出 JSON（plant-mbd ADR-0014）；导出到位前按过渡做法 | 已定 |
-| D2 | 契约承载：不开 V3，扩可选信封字段（ADR 0070）；`branch_refno` 仍必填，非管道包填归一化主体 refno | 已定 |
+| D2 | 契约承载：不开 V3，扩可选信封字段（ADR 0071）；`branch_refno` 仍必填，非管道包填归一化主体 refno | 已定 |
 | D3 | 数据源：`MbdDataSource: BranchDataSource` 多方法（plant-mbd ADR-0015） | 已定 |
 | D4 | 极坐标唯一实现在求解器；复测通过后前端 `polar/place/**` 退役，N2-2 / N4-1 由 M2a 取代 | 已定 |
 | D5 | PML 缺陷默认修正，每条带 PML 出处的裁决进清单 §11、plant-mbd `MIGRATION.md` 与 `fixtures/pml/rulings.json` | 已定 |
