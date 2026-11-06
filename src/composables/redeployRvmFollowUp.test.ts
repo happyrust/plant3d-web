@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
-import { createRedeployRvmFollowUp, type SiteTarget } from './redeployRvmFollowUp';
+import { createRedeployRvmFollowUp, isFollowUpFailure, type SiteTarget } from './redeployRvmFollowUp';
 
 import type { StorageVersionUpgradeHealth } from '@/api/genModelV1Api';
+import type { RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
 import type { AdminTaskView } from '@/composables/useModelGenerationAdmin';
+import type { RvmQueueItem } from '@/composables/useRvmCheckStore';
 
 const SITES: SiteTarget[] = [
   { refno: '24381_42520', name: '/1RB-CIVI', noun: 'SITE', dbnum: 7997 },
@@ -33,8 +35,18 @@ function setup(initial: StorageVersionUpgradeHealth | null = null, enabledValue 
   const enabled = ref(enabledValue);
   const collectSites = vi.fn(async () => SITES);
   const enqueue = vi.fn((targets: unknown[]) => targets.length);
-  const followUp = createRedeployRvmFollowUp({ progress, tasks, enabled, collectSites, enqueue });
-  return { progress, tasks, enabled, collectSites, enqueue, followUp };
+  const statusByRefno = ref<Record<string, RvmNodeStatus>>({});
+  const queue = ref<RvmQueueItem[]>([]);
+  const followUp = createRedeployRvmFollowUp({ progress, tasks, enabled, collectSites, enqueue, statusByRefno, queue });
+  return { progress, tasks, enabled, collectSites, enqueue, statusByRefno, queue, followUp };
+}
+
+function status(refno: string, verdict: RvmNodeStatus['verdict'], taskId: string | null = null): RvmNodeStatus {
+  return { refno, verdict, taskId, at: null, sesno: null, message: '', name: null, stage: null, reasons: '' };
+}
+
+function queueItem(refno: string, state: RvmQueueItem['state'], message = ''): RvmQueueItem {
+  return { refno, name: '', noun: 'SITE', state, taskId: null, stage: null, verdict: null, message, previous: null };
 }
 
 describe('createRedeployRvmFollowUp', () => {
@@ -100,6 +112,54 @@ describe('createRedeployRvmFollowUp', () => {
     await followUp.settled();
     expect(collectSites).not.toHaveBeenCalled();
     expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('lists each SITE of the run with its live verdict and a summary', async () => {
+    const { progress, statusByRefno, queue, followUp } = setup();
+    progress.value = upgrade({});
+    await nextTick();
+    progress.value = upgrade({ done: 1, done_dbnums: [8000] });
+    await nextTick();
+    await followUp.settled();
+    progress.value = upgrade({ state: 'done', done: 2, done_dbnums: [8000, 7997] });
+    await nextTick();
+    await followUp.settled();
+    // 按库完成先后排
+    expect(followUp.siteRows.value.map((row) => [row.refno, row.dbnum, row.state])).toEqual([
+      ['24383_1', 8000, 'queued'],
+      ['24381_42520', 7997, 'queued'],
+      ['24381_44873', 7997, 'queued'],
+    ]);
+    expect(followUp.summary.value).toEqual({ total: 3, passed: 0, failed: 0, pending: 3, stopped: 0 });
+
+    statusByRefno.value = {
+      '24383_1': status('24383_1', 'pass', 't-a'),
+      '24381_42520': status('24381_42520', 'fail', 't-b'),
+      '24381_44873': status('24381_44873', 'pass', 't-old'),
+    };
+    // 取消后树上放回旧结论，队列项才是本趟的真相
+    queue.value = [queueItem('24381_44873', 'cancelled', '已取消')];
+    const rows = followUp.siteRows.value;
+    expect(rows.map((row) => row.state)).toEqual(['pass', 'fail', 'cancelled']);
+    expect(rows[1]!.taskId).toBe('t-b');
+    expect(followUp.summary.value).toEqual({ total: 3, passed: 1, failed: 1, pending: 0, stopped: 1 });
+    expect(isFollowUpFailure('fail')).toBe(true);
+    expect(isFollowUpFailure('request_error')).toBe(true);
+    expect(isFollowUpFailure('empty')).toBe(false);
+    expect(isFollowUpFailure('cancelled')).toBe(false);
+  });
+
+  it('starts a fresh site list for a new run', async () => {
+    const { progress, followUp } = setup();
+    progress.value = upgrade({});
+    await nextTick();
+    progress.value = upgrade({ done: 1, done_dbnums: [8000] });
+    await nextTick();
+    await followUp.settled();
+    expect(followUp.siteRows.value).toHaveLength(1);
+    progress.value = upgrade({ started_at: '2026-11-06T10:00:00+08:00', done_dbnums: [] });
+    await nextTick();
+    expect(followUp.siteRows.value).toHaveLength(0);
   });
 
   it('reports tree errors without throwing', async () => {

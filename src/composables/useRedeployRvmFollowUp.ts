@@ -19,6 +19,8 @@ export function useRedeployRvmFollowUp() {
         enabled: autoRvmAfterRedeploy,
         collectSites: rvm.collectSites,
         enqueue: rvm.enqueue,
+        statusByRefno: rvm.statusByRefno,
+        queue: rvm.queue,
       });
     })!;
   }

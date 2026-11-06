@@ -4,8 +4,11 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldAlert, XCircle } from 'lucide-vue-next';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
+import type { FollowUpSiteRow } from '@/composables/redeployRvmFollowUp';
 
+import RedeployRvmSites from '@/components/project/RedeployRvmSites.vue';
 import Dialog from '@/components/ui/Dialog.vue';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import {
   DBNUM_STATUS_LABEL,
   PIPELINE_STAGE_LABEL,
@@ -14,6 +17,7 @@ import {
   type AdminTaskView,
 } from '@/composables/useModelGenerationAdmin';
 import { useRedeployRvmFollowUp } from '@/composables/useRedeployRvmFollowUp';
+import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 
 /**
  * 「项目 → 一键完全重新部署」：探测 → 选库 → 二次确认（3 s）→ 提交 → 进度 → 结果。
@@ -27,6 +31,14 @@ const emit = defineEmits<{ 'update:open': [value: boolean]; refreshModels: [] }>
 const admin = useModelGenerationAdmin();
 const rvmFollowUp = useRedeployRvmFollowUp();
 const autoRvm = rvmFollowUp.enabled;
+const rvmStore = useRvmCheckStore();
+
+/** 打开 RVM 核对面板；给了 SITE 就定位到它那次核对的结果。弹窗关掉，部署在后台继续。 */
+function openRvmResult(row: FollowUpSiteRow | null): void {
+  if (row?.taskId) void rvmStore.openRun(row.taskId);
+  ensurePanelAndActivate('rvmCheck');
+  emit('update:open', false);
+}
 
 const CONFIRM_SECONDS = 3;
 const TASK_TERMINAL = new Set(['succeeded', 'partial', 'yielded', 'failed']);
@@ -466,11 +478,12 @@ const resultDoneCount = computed(() => {
           任务由服务端逐库排队（{{ requested.join('、') || '—' }}），进度按 /health 每 5 秒刷新一次。
         </div>
 
-        <div v-if="autoRvm && (rvmFollowUp.queuedDbnums.value.length > 0 || rvmFollowUp.error.value)"
-          class="rounded-md border border-zinc-100 bg-zinc-50/60 px-3 py-2 text-zinc-600" data-testid="redeploy-rvm-followup">
-          RVM 校验：已排入 {{ rvmFollowUp.queuedSites.value }} 个 SITE（库 {{ rvmFollowUp.queuedDbnums.value.join('、') || '—' }}），在 RVM 核对面板查看结论
-          <div v-if="rvmFollowUp.error.value" class="text-red-600">{{ rvmFollowUp.error.value }}</div>
-        </div>
+        <RedeployRvmSites v-if="autoRvm && (rvmFollowUp.queuedDbnums.value.length > 0 || rvmFollowUp.error.value)"
+          :rows="rvmFollowUp.siteRows.value"
+          :summary="rvmFollowUp.summary.value"
+          :queued-dbnums="rvmFollowUp.queuedDbnums.value"
+          :error="rvmFollowUp.error.value"
+          @open="openRvmResult" />
 
         <div class="flex items-center gap-1 text-[10px] text-zinc-400">
           WS {{ admin.taskFeedStatus.value === 'live' ? '实时' : '未连接' }} · 2s 轮询兜底
@@ -505,11 +518,12 @@ const resultDoneCount = computed(() => {
           </ul>
           <p class="mt-1 text-red-700/80">已完成的阶段数据已写入，可单独重试失败的库。</p>
         </div>
-        <div v-if="autoRvm && (rvmFollowUp.queuedDbnums.value.length > 0 || rvmFollowUp.error.value)"
-          class="rounded-md border border-zinc-100 bg-zinc-50/60 px-3 py-2 text-zinc-600" data-testid="redeploy-rvm-followup">
-          RVM 校验：已排入 {{ rvmFollowUp.queuedSites.value }} 个 SITE（库 {{ rvmFollowUp.queuedDbnums.value.join('、') || '—' }}），在 RVM 核对面板查看结论
-          <div v-if="rvmFollowUp.error.value" class="text-red-600">{{ rvmFollowUp.error.value }}</div>
-        </div>
+        <RedeployRvmSites v-if="autoRvm && (rvmFollowUp.queuedDbnums.value.length > 0 || rvmFollowUp.error.value)"
+          :rows="rvmFollowUp.siteRows.value"
+          :summary="rvmFollowUp.summary.value"
+          :queued-dbnums="rvmFollowUp.queuedDbnums.value"
+          :error="rvmFollowUp.error.value"
+          @open="openRvmResult" />
         <p v-if="admin.redeployError.value" class="text-red-600">{{ admin.redeployError.value }}</p>
       </template>
     </div>
