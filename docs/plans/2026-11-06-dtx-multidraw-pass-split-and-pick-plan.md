@@ -123,3 +123,35 @@
 ### 待人工抽查
 
 选中描边、隔离显示、E3D 外观、分屏对比。
+
+## 追加：粗网格补拉推迟到整库装载结束（`8d3d13ef`）
+
+### 问题
+
+整库是一批批到的，批与批之间的空闲常超过 `scheduleLod1Backfill` 的 300ms 空闲阈值，粗网格补拉于是插进装载中间：和装载本身抢请求，还反复 `recompile`。实测补拉窗口 222.6s，几乎横跨整个装载。
+
+### 改动
+
+- `useDbnoInstancesDtxLoader.ts` 新增 `holdDtxLod1Backfill()`，返回幂等的释放函数。持有期间 `scheduleLod1Backfill` 不排定时器，只把图层登记进 `lod1DeferredLayers`；可嵌套计数，最后一个释放时对登记过的图层各排一次。
+- `useModelGeneration.ts` 的 `showModelByDbnum` 在 `modelLoadStatus.begin` 之后持有，`finally` 首行释放，抛错也释放。
+- `invalidateDtxLoaderCaches` 一并清空 `lod1DeferredLayers`。
+
+### 实测（AMS 全量 20 库，开 LOD，同一后端）
+
+| 指标 | 改动前 | 改动后 |
+|---|---|---|
+| 装载总耗时 | 223.3s | 213.2s |
+| lod1 补拉窗口（first → last） | 222.6s，贯穿整个装载 | 1.55s，装载结束后集中发完 |
+| 堆峰值 | 2422MB | 1967MB |
+| lod1 命中 | 1282 个 200 + 704 个 404 | 同上 |
+| lodSettle | 9.1s | 10.5s |
+
+帧时间与拾取基本不变：全景静止直出约 92ms / E3D 约 188ms，拖动约 14ms；拉近静止约 38 / 96ms，拖动约 20.5 / 22ms；三角形 828 万（全景静止）；拾取中位 1.1–1.6ms。
+
+### 数据可信度
+
+只有一对样本。第二对对照没跑成：before 侧的 `git worktree` 实例上 `__dtxViewCull` 始终为 `false`（junction 的 `node_modules` 加依赖预构建 reload 打断初始化），与本改动无关。装载快 4.5% 的波动范围没测，补拉窗口和堆峰值两项差异足够大，不受单样本影响。
+
+### 未做
+
+剩余 16 个库补 LOD 本轮未做。
