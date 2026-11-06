@@ -199,6 +199,38 @@ gen-model：`feat/rvm-check-inprocess`（含 #87）已合并进 `refactor`，合
 - 新增单测共 5 例，都通过：`redeployRvmFollowUp.test.ts` 2 例，`RedeployRvmSites.test.ts` 3 例。
 - 在只含本功能改动的干净 worktree 里跑全量 `npx vitest run`，443 个文件全部通过。
 - 主工作区全量跑时 `src/components/review/form-binding.test.ts` 超时。这个测试在 HEAD 和干净 worktree 里都能通过，失败来自主工作区里其他未提交的改动，与本功能无关。
+## 第六轮：refactor 最新版本只部署 8000，验收模型（2026-11-06 14:12）
+
+- 后端：`refactor` 的 `108f08fd9` 做 debug 构建，`build_id 0.1.44+g108f08fd96c3`，启动参数 `--watch-dbnum 8000`。
+- 库：`ams-8009` 当日热拷贝一份。端口用 8039/8042，vite 用 3113（3112 被别的工作流占着）。
+- 运行目录里要放一份 `resource/surreal`，否则连库时报 `Failed to define common functions (os error 3)`。
+
+| 检查项 | 结果 |
+|---|---|
+| 选库页默认状态 | 全选，18 / 18 个库 |
+| 只勾 8000 后提交 | `requested=[8000]`，`full_scope=false` |
+| 重建 | 46 秒完成（wipe_reinit → 解析 → 生成 → 发布 → 房间），清空 6643 行 PE；954 根，失败 0；记录 2815 条，房间边 4329 条 |
+| 模型对比 | 部署前后各取一次 `model/records` 快照，逐行比较 refno、owner、generic、insts、pts、world_aabb、world_trans。4 个 SITE（1 / 514 / 150 / 2019 件）完全一致，没有多出或缺少的件 |
+| 前端加载 | 4 个 SITE 都能加载：`mesh404=0`，`no_geo=0`，`invalid_tubi=0`，没有报错提示；截图 `.scratch/redeploy-verify-20261106/v-model-equi.png` |
+| 自动 RVM 核对 | 重建完成后自动排入 4 个 SITE。登录约 70 秒后串行核对，约 5.5 分钟后结果页显示「4 个 SITE：4 通过」 |
+| RVM 明细 | 2684 对全部 exact。没有只出现在一侧的件，也没有配不上的件；最大偏差 0 mm |
+| 收尾 | 没有残留的 des.exe |
+## 第七轮：删掉库备份后从零实跑一遍（2026-11-06 16:03）
+
+按用户要求不再保留库备份，`gen-model/.surreal` 下只留现库 `ams-8009` 和沙箱副本，然后完整跑一遍部署流程。
+
+| 检查项 | 结果 |
+|---|---|
+| 选库页默认 | 全选 18 / 18 |
+| 改选 8000 | 只勾 8000，「重新部署 1 个库…」，自动 RVM 保持开启 |
+| 重建 | 31 秒完成（`db-20261106-160311-000001`），清空 6643 行 PE，954 根、失败 0，记录 2815 条、房间边 4329 条 |
+| 阶段耗时 | wipe_reinit 4.5 s、数据摄入+生成 6.0 s、依赖闭包 12.6 s、刷盘 4.0 s、校验 0.5 s |
+| 模型数据 | 重建前后各取一次 `model/records` 快照，4 个 SITE（1 / 514 / 150 / 2019 件）逐行哈希完全一致 |
+| 自动 RVM | 重建后自动排入 4 个 SITE；登录约 70 秒后串行核对，约 5 分钟到「4 个 SITE：4 通过」 |
+| RVM 明细 | 2684 对全部 exact，最大偏差 0 mm，没有单侧多出或缺失的件 |
+| 收尾 | 没有残留的 des.exe |
+
+另外清理了 D 盘：删掉 `.scratch/rvm-fix/b39`、`ams-equiv`、`nine`、`target/upgrade-rehearsal`、`verification` 下三个历史验证目录，以及 `.surreal` 里全部旧库备份（含 `ams-8009.bak-20261027`）。可用空间从 9.33 GB 涨到 92 GB。
 ## 收尾
 
 四轮结束后沙箱进程（8019 / 8032 / 3111，第四轮的 8039 / 8042 / 3112）均已停。真实 8009 / 8022 仍在原 PID 上运行。沙箱库副本 `gen-model/.surreal/sandbox-redeploy-20261105` 与 `plant3d-web/.scratch/redeploy-sandbox/` 保留，待确认后删除。
