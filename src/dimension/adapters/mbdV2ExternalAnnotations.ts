@@ -23,6 +23,7 @@ import type {
   MbdV2Label,
   MbdV2LeaderLine,
   MbdV2LinearDim,
+  MbdV2LineSegment,
   MbdV2PipeData,
   MbdV2Vec3,
 } from './mbdV2Contract';
@@ -522,15 +523,32 @@ function awayFromPipe(
 const POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS = 3;
 
 /**
+ * The pipe axis of an isoline for polar placement: the solver's own
+ * straight-segment axis (`meta.isolines[].axis`, PML `isoline.line`) when
+ * the payload declares it. Older payloads fall back to the first
+ * same-isoline `linear_dim`'s `start`/`end`; those points lie on the
+ * dimension line, roughly one outer diameter off the pipe, so the
+ * fallback puts the pipe-body obstacle around the dimension row (#103).
+ */
+function polarAxisLine(
+  isoline: MbdV2Isoline,
+  dimensions: readonly MbdV2LinearDim[],
+): MbdV2LineSegment | undefined {
+  if (isoline.axis) return isoline.axis;
+  const axisDim = dimensions.find(dimension => dimension.isoline_idx === isoline.index);
+  return axisDim ? { from: axisDim.start, to: axisDim.end } : undefined;
+}
+
+/**
  * T3.6a: builds the polar placement input for a `label` (plan point 3),
  * or `undefined` when any required fact is missing — isoline membership,
- * a same-isoline `linear_dim` to read the pipe axis from, or that
- * isoline's declared outer diameter — in which case the record keeps its
- * solver anchor untouched (the flag only ever adds a field, never changes
- * one the kernel already draws from).
+ * a pipe axis for that isoline ({@link polarAxisLine}), or that isoline's
+ * declared outer diameter — in which case the record keeps its solver
+ * anchor untouched (the flag only ever adds a field, never changes one
+ * the kernel already draws from).
  *
- * Pipe axis: the first same-isoline `linear_dim`'s `start`/`end` (same
- * source → Design Space path as everywhere else, `transform.point`).
+ * The axis goes through the same source → Design Space path as
+ * everywhere else (`transform.point`).
  * `basicRadiusM`: `od_mm / 2` through the same mm → Design-metre
  * conversion the text heights take (`textHeightToDesignM`). `disRange`:
  * the label's own projection onto the axis, padded
@@ -548,14 +566,14 @@ function polarInputForLabel(
   textHeightM: number | undefined,
 ): ExplicitPolarInput | undefined {
   if (primitive.isoline_idx === undefined || textHeightM === undefined) return undefined;
-  const axisDim = dimensions.find(dimension => dimension.isoline_idx === primitive.isoline_idx);
-  if (!axisDim) return undefined;
   const isoline = isolines.find(entry => entry.index === primitive.isoline_idx);
   if (!isoline) return undefined;
+  const axisLine = polarAxisLine(isoline, dimensions);
+  if (!axisLine) return undefined;
   const odM = textHeightToDesignM(data, transform, isoline.od_mm);
   if (odM === undefined) return undefined;
-  const origin = transform.point(axisDim.start);
-  const end = transform.point(axisDim.end);
+  const origin = transform.point(axisLine.from);
+  const end = transform.point(axisLine.to);
   const axis = tryNormalize3(sub3(end, origin));
   if (!axis) return undefined;
   const span = sub3(end, origin);
@@ -1099,7 +1117,7 @@ export function mbdV2ToExternalRecords(
         // sets `isoline_idx: None` (`slope.rs:295-303`, `angle.rs:524-532`,
         // `adjust_weld.rs:205-211`; the field is optional in
         // `contract.rs:283`), so in real payloads this case never even
-        // reaches the `axisDim`/`isoline` lookups `polarInputForLabel`
+        // reaches the isoline / axis lookups `polarInputForLabel`
         // would need. The fixture at `mbdV2ExternalAnnotations.test.ts`
         // that gives an `aid_text` an `isoline_idx` does so only to
         // exercise `groupTextHeightM`'s isoline-height lookup, not to

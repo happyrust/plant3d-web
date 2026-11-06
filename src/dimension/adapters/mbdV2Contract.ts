@@ -76,12 +76,17 @@ export type MbdV2SourceVersion = Readonly<{
  * 校验）；`cheight_mm` 是直段级字高（plant-mbd `isoline_cheight_mm`：`changeCheightAuto` 之后，
  * 角度 / 焊点 / 标签都按它摆，没出尺寸的直段也有公式值），`od_mm` 是直段外径；两者都是
  * 源空间毫米，和 `meta.cheight_mm` 同口径。
+ *
+ * `axis`（#103 第 2 步）：直段轴线，PML `isoline.line`——`from` 是直段起点 `isoline.pos`，`to` 是
+ * 沿袋轴到最远成员的投影（`getisolineinfo`），与图元同在源空间毫米。极坐标放置以它为极轴；
+ * absent / `null` = 生产者未声明（ADR 0055 D7 同款顺序：前端先接受、后消费）。
  */
 export type MbdV2Isoline = Readonly<{
   index: number;
   members: readonly string[];
   cheight_mm: number;
   od_mm: number;
+  axis?: MbdV2LineSegment | null;
 }>;
 
 export type MbdV2Meta = Readonly<{
@@ -516,9 +521,22 @@ function isSourceVersion(value: unknown): value is MbdV2SourceVersion {
 }
 
 /**
+ * `meta.isolines[].axis`：缺省或 `null` 都是未声明；给了就得是两个有限、且不重合的端点——零长的
+ * 轴定不出方向（PML `getisolineinfo` 遇到起终点重合也要先偏 1 mm 才成线）。
+ */
+function isOptionalIsolineAxis(value: unknown): value is MbdV2LineSegment | null | undefined {
+  if (value === undefined || value === null) return true;
+  if (!isObject(value) || !isVec3(value.from) || !isVec3(value.to)) return false;
+  const [fromX, fromY, fromZ] = value.from;
+  const [toX, toY, toZ] = value.to;
+  return fromX !== toX || fromY !== toY || fromZ !== toZ;
+}
+
+/**
  * `meta.isolines`：每条 `index` 非负整数且全表唯一（查表用），`members` 是非空字符串数组
  * （允许空数组），`cheight_mm` / `od_mm` 是正的有限数（和半径 / `text_height_mm` 同一条规则：
- * 零或负的字高没有意义，NaN 会毒化投影）。不要求 `index` 连续或有序。
+ * 零或负的字高没有意义，NaN 会毒化投影），可选的 `axis` 见 {@link isOptionalIsolineAxis}。
+ * 不要求 `index` 连续或有序。
  */
 function isIsolineList(value: unknown): value is readonly MbdV2Isoline[] {
   if (!Array.isArray(value)) return false;
@@ -530,7 +548,8 @@ function isIsolineList(value: unknown): value is readonly MbdV2Isoline[] {
       || !Array.isArray(isoline.members)
       || !isoline.members.every(member => isNonEmptyString(member))
       || !isPositiveRadius(isoline.cheight_mm)
-      || !isPositiveRadius(isoline.od_mm)) {
+      || !isPositiveRadius(isoline.od_mm)
+      || !isOptionalIsolineAxis(isoline.axis)) {
       return false;
     }
     seen.add(isoline.index);

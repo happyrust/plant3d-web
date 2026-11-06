@@ -700,4 +700,42 @@ describe('parseMbdV2PipeData', () => {
       });
     }
   });
+
+  /**
+   * #103 第 2 步：`meta.isolines[].axis` 是直段轴线（PML `isoline.line`）。缺省 / `null` 放行；给了就得是
+   * `{ from, to }` 两个有限三维点且不重合（零长的轴定不出方向），其它形状整包拒绝 `invalid meta`。
+   */
+  it('accepts an optional isoline axis and rejects malformed or zero-length ones', () => {
+    const withIsolines = (isolines: unknown[]) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives: [],
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [], isolines },
+    });
+    const row = { index: 0, members: ['24381_145018'], cheight_mm: 25, od_mm: 114.3 };
+    const axis = { from: [0, 0, 0], to: [1200, 0, 0] };
+
+    const declared = withIsolines([{ ...row, axis }]);
+    expect(declared.ok).toBe(true);
+    if (declared.ok) expect(declared.data.meta.isolines?.[0]?.axis).toEqual(axis);
+    expect(withIsolines([{ ...row, axis: null }]).ok).toBe(true);
+    expect(withIsolines([row]).ok).toBe(true);
+
+    const malformed: unknown[] = [
+      'x',
+      [0, 0, 0],
+      { from: [0, 0, 0] },
+      { from: [0, 0, 0], to: [1, 2] },
+      { from: [0, 0, Number.NaN], to: [1, 0, 0] },
+      { from: [5, 5, 5], to: [5, 5, 5] },
+    ];
+    for (const candidate of malformed) {
+      expect(withIsolines([{ ...row, axis: candidate }])).toEqual({
+        ok: false,
+        error: 'MBD V2 payload has invalid meta',
+      });
+    }
+  });
 });

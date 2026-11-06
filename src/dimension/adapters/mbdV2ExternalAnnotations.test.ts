@@ -1175,6 +1175,66 @@ describe('mbdV2ToExternalRecords', () => {
       expect(explicitLayout(result, 'tag-no-axis').polar).toBeUndefined();
     });
 
+    it('reads the pipe axis from meta.isolines[].axis in preference to the linear_dim line', () => {
+      const { data, source } = fixture();
+      // The pipe runs along +X at y=0; the dimension row (y=-500mm) sits one
+      // outer diameter off it, which is what the linear_dim fallback used to
+      // hand over as the axis.
+      const meta = {
+        ...data.meta,
+        isolines: [{
+          index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500,
+          axis: { from: [0, 0, 0] as const, to: [80, 0, 0] as const },
+        }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          {
+            kind: 'label', id: 'tag-on-axis', text: 'X 1',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+
+      const polar = explicitLayout(result, 'tag-on-axis').polar;
+      expect(polar).toBeDefined();
+      expect(polar!.origin).toEqual([0, 0, 0]);
+      expect(polar!.axis).toEqual([1, 0, 0]);
+      expect(polar!.basicRadiusM).toBeCloseTo(0.25, 12);
+      expect(polar!.disRange[0]).toBeLessThan(0.04);
+      expect(polar!.disRange[1]).toBeGreaterThan(0.04);
+    });
+
+    it('attaches polar from a declared axis even when no linear_dim shares the isoline', () => {
+      const { data, source } = fixture();
+      const meta = {
+        ...data.meta,
+        isolines: [{
+          index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500,
+          axis: { from: [0, 0, 0] as const, to: [80, 0, 0] as const },
+        }],
+      };
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        meta,
+        primitives: [
+          { ...source, isoline_idx: 1 },
+          {
+            kind: 'label', id: 'tag-axis-only', text: 'X 1',
+            position: [40, -500, 0], isoline_idx: 0,
+          },
+        ],
+      });
+
+      const polar = explicitLayout(result, 'tag-axis-only').polar;
+      expect(polar?.origin).toEqual([0, 0, 0]);
+      expect(polar?.axis).toEqual([1, 0, 0]);
+      expect(polar?.groupKey).toBe('isoline:0');
+    });
+
     it('omits polar when the isoline table has no od_mm for that index', () => {
       const { data, source } = fixture();
       const result = mbdV2ToExternalRecords({
