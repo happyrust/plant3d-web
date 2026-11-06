@@ -51,16 +51,26 @@ import {
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
 
 /**
- * rs-mbd 自报的阶段性排版模式。契约还没有「本次交付覆盖哪些图元类别」的显式
- * 声明，在它出现之前，用已知的阶段模式名兜住「标注不完整」这个事实——未移植
- * 的类别不会产生任何 issue，光看诊断列表看不出缺了什么。
- *
- * `isodim_main` 是当前生产路径恒报的值（`plant-mbd/src/layout.rs` 的
- * `LAYOUT_MODE_ISODIM_MAIN`，两条产出路径都写它），它同样只产出 11 种图元里的 8 种
- * （`aid_arc` / `aid_circle` / `aid_point` 仍无 live 产出方；`angle_dim` 自
- * 2026-10-29 起已由 `plant-mbd` 的 `angle.rs` 产出），所以必须一起列进来；
- * `linear_mvp` 保留是因为仓内 fixture 仍用它。待契约 `meta.coverage`
- * （开发计划 T4.1）到位后整段退休。
+ * 管道 MBD 应有的产出类别：求解器 `meta.coverage` 缺其中任何一种，面板就提示
+ * 「本分支标注不完整」——未产出的类别不会产生 issue，光看诊断列表看不出缺了什么。
+ * `aid_arc` / `aid_circle` / `aid_point` 不在里面：它们只属于支架 / 土建图，
+ * 管道路径按设计不产出，列进来警示条会永远亮着。
+ */
+const PIPE_EXPECTED_KINDS: readonly string[] = [
+  'linear_dim',
+  'angle_dim',
+  'label',
+  'leader_line',
+  'aid_line',
+  'aid_text',
+  'weld_mark',
+  'slope_mark',
+];
+
+/**
+ * 没有 `meta.coverage` 的老后端只能靠阶段性排版模式名兜住同一个事实：
+ * `isodim_main` 是 plant-mbd `cb046f7` 之前生产路径恒报的值（只产出 8 种里的一部分），
+ * `linear_mvp` 是仓内 fixture 用的。宿主部署带 coverage 之后整段退休。
  */
 const PARTIAL_LAYOUT_MODES: readonly string[] = ['linear_mvp', 'isodim_main'];
 
@@ -390,10 +400,47 @@ const diagnosticsVisible = computed(() =>
   diagnosticsCount.value > 0
   || mbdDiagnostics.value.loadError !== null
   || mbdDiagnostics.value.layoutMode !== null);
-const incompleteLayoutMode = computed(() => {
-  const mode = mbdDiagnostics.value.layoutMode;
-  return mode !== null && PARTIAL_LAYOUT_MODES.includes(mode) ? mode : null;
+/**
+ * 「本分支标注不完整」的逐包判断：声明了 `coverage` 的包按 `PIPE_EXPECTED_KINDS`
+ * 列缺失类别；没声明的包（老后端）退回按排版模式名兜底，`missing` 为 null。
+ * 装载失败的包另有失败提示，不在这里重复。
+ */
+type IncompleteSourceInput = Readonly<{
+  refno: string;
+  layoutMode: string | null;
+  coverage?: readonly string[] | null;
+  loadError: string | null;
+}>;
+type IncompleteSource = Readonly<{
+  refno: string;
+  missing: readonly string[] | null;
+  layoutMode: string | null;
+}>;
+
+const incompleteSources = computed((): readonly IncompleteSource[] => {
+  const snapshot = mbdDiagnostics.value;
+  const sources: readonly IncompleteSourceInput[] = snapshot.sources.length > 0
+    ? snapshot.sources
+    : snapshot.sourceId !== null
+      ? [{ refno: snapshot.sourceId, layoutMode: snapshot.layoutMode, loadError: snapshot.loadError }]
+      : [];
+  const flagged: IncompleteSource[] = [];
+  for (const source of sources) {
+    if (source.loadError !== null) continue;
+    const coverage = source.coverage ?? null;
+    if (coverage !== null) {
+      const missing = PIPE_EXPECTED_KINDS.filter(kind => !coverage.includes(kind));
+      if (missing.length > 0) flagged.push({ refno: source.refno, missing, layoutMode: null });
+      continue;
+    }
+    const mode = source.layoutMode;
+    if (mode !== null && PARTIAL_LAYOUT_MODES.includes(mode)) {
+      flagged.push({ refno: source.refno, missing: null, layoutMode: mode });
+    }
+  }
+  return flagged;
 });
+const multiSourceIncomplete = computed(() => mbdDiagnostics.value.sources.length > 1);
 
 function locateIssueRefno(refno: string): void {
   window.dispatchEvent(new CustomEvent('showModelByRefnos', {
@@ -1000,14 +1047,23 @@ function act(
         </span>
       </div>
     </div>
-    <div v-if="incompleteLayoutMode"
+    <div v-if="incompleteSources.length > 0"
       class="m-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
       data-testid="mbd-incomplete-annotation">
       <div class="font-semibold">本分支标注不完整</div>
-      <div class="mt-1">
-        求解器以 {{ incompleteLayoutMode }} 模式产出，只覆盖部分标注类别。
-        未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。
+      <div v-for="source in incompleteSources"
+        :key="source.refno"
+        class="mt-1"
+        :data-incomplete-refno="source.refno">
+        <template v-if="multiSourceIncomplete">{{ source.refno }}：</template>
+        <template v-if="source.missing">
+          求解器声明本次未产出：<span data-testid="mbd-incomplete-kinds">{{ source.missing.join('、') }}</span>。
+        </template>
+        <template v-else>
+          求解器以 {{ source.layoutMode }} 模式产出，只覆盖部分标注类别。
+        </template>
       </div>
+      <div class="mt-1">未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。</div>
     </div>
     <div v-if="mbdDiagnostics.channel"
       class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"

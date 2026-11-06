@@ -546,6 +546,61 @@ describe('DimensionPanelDock', () => {
   });
 
   /**
+   * `meta.coverage` 优先于排版模式名：声明齐了管道应有的 8 种就不报（哪怕模式名是
+   * `isodim_main`），缺哪种列哪种；没声明的老后端包照旧按模式名兜底；多包逐包归因。
+   */
+  it('reads the incomplete-annotation banner from meta.coverage per source', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/');
+    const full = ['linear_dim', 'angle_dim', 'label', 'leader_line', 'aid_line', 'aid_text', 'weld_mark', 'slope_mark'];
+    const source = (refno: string, coverage: readonly string[] | null) => ({
+      refno,
+      issues: [],
+      skipped: [],
+      layoutMode: 'isodim_main',
+      notes: [],
+      sourceVersion: null,
+      isolines: [],
+      coverage,
+      loadError: null,
+    });
+    const show = async (sources: ReturnType<typeof source>[]) => {
+      apps.splice(0).forEach(app => app.unmount());
+      document.body.innerHTML = '';
+      useMbdDiagnosticsStore().set({
+        channel: 'api',
+        sourceId: sources.map(entry => entry.refno).join(','),
+        issues: [],
+        skipped: [],
+        layoutMode: 'isodim_main',
+        sources,
+      });
+      const host = mountPanel();
+      await nextTick();
+      return host.querySelector('[data-testid="mbd-incomplete-annotation"]');
+    };
+
+    expect(await show([source('A', full)])).toBeNull();
+
+    const single = await show([source('A', full.filter(kind => kind !== 'angle_dim'))]);
+    expect(single).not.toBeNull();
+    expect(single!.querySelector('[data-testid="mbd-incomplete-kinds"]')!.textContent).toBe('angle_dim');
+    expect(single!.textContent).not.toContain('isodim_main');
+
+    const multi = await show([
+      source('A', full),
+      source('B', full.filter(kind => kind !== 'weld_mark')),
+      source('C', null),
+    ]);
+    const rows = [...multi!.querySelectorAll('[data-incomplete-refno]')];
+    expect(rows.map(row => row.getAttribute('data-incomplete-refno'))).toEqual(['B', 'C']);
+    expect(rows[0]!.textContent).toContain('B：');
+    expect(rows[0]!.textContent).toContain('weld_mark');
+    expect(rows[1]!.textContent).toContain('isodim_main');
+  });
+
+  /**
    * D3：后端一次能回上百条 issue，面板默认按组截断（50 条 / 组），标题仍报全量
    * 条数，并给一个「显示全部」的显式按钮——展开前节点数必须有上限。
    */

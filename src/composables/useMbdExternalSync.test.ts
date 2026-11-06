@@ -493,6 +493,7 @@ describe('createMbdExternalSync', () => {
             notes: [],
             source_version: version,
             isolines,
+            coverage: ['linear_dim', 'label'],
           },
         }),
         diagnostics: [],
@@ -502,6 +503,7 @@ describe('createMbdExternalSync', () => {
     expect(declared.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
       sourceVersion: version,
       isolines,
+      sources: [expect.objectContaining({ refno: 'A', coverage: ['linear_dim', 'label'] })],
     }));
 
     const bare = createHarness({ search: '?mbd_refno=A' });
@@ -509,6 +511,7 @@ describe('createMbdExternalSync', () => {
     expect(bare.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
       sourceVersion: null,
       isolines: [],
+      sources: [expect.objectContaining({ refno: 'A', coverage: null })],
     }));
   });
 
