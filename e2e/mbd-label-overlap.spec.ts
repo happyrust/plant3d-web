@@ -39,6 +39,18 @@ const OUT = resolve(
 );
 const REFNOS = (process.env.MBD_LABEL_OVERLAP_REFNOS || '24381_145018,24383_91813')
   .split(',').map(refno => refno.trim()).filter(Boolean);
+/**
+ * 标注对象之外一并装几何的构件：`<refno>=<a>+<b>;<refno>=…`。非管道对象的标注落在别的构件上（设备的定位墙与楼板、
+ * 支架挂的墙），只装对象本身时这些标签像悬在空中。
+ */
+const SHOW_EXTRA = new Map(
+  (process.env.MBD_LABEL_OVERLAP_SHOW_EXTRA || '')
+    .split(';').map(entry => entry.trim()).filter(Boolean)
+    .map((entry) => {
+      const [refno = '', extras = ''] = entry.split('=');
+      return [refno.trim(), extras.split('+').map(extra => extra.trim()).filter(Boolean)] as const;
+    }),
+);
 const PERF_RUNS = Number(process.env.MBD_LABEL_OVERLAP_PERF_RUNS || '0');
 const PERF_FRAMES = Number(process.env.MBD_LABEL_OVERLAP_PERF_FRAMES || '120');
 
@@ -64,7 +76,7 @@ type Camera = Readonly<{ position: number[]; target: number[] }>;
 function buildPath(refno: string, query: Readonly<Record<string, string>>): string {
   const params = new URLSearchParams({
     output_project: PROJECT,
-    show_refno: refno,
+    show_refno: [refno, ...(SHOW_EXTRA.get(refno) ?? [])].join(','),
     show_refno_select: '0',
     mbd_refno: refno,
     gm_backend: GM,
