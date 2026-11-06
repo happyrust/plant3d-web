@@ -17,6 +17,8 @@ const typeInfoMock = vi.fn();
 const evictMock = vi.fn((_layer: unknown, _dbno: number, _refnos: string[]): string[] => []);
 const unitRefnosMock = vi.fn((_dbno: number, _root: string): string[] => []);
 const { dbnumRootsMock } = vi.hoisted(() => ({ dbnumRootsMock: vi.fn() }));
+const releaseLod1Mock = vi.fn();
+const holdLod1Mock = vi.fn(() => releaseLod1Mock);
 
 type ProgressListener = (progress: { refno: string; root: string; done: number; total: number }) => void;
 const progressListeners = new Set<ProgressListener>();
@@ -72,6 +74,7 @@ vi.mock('@/composables/useDbMetaInfo', () => ({
 }));
 vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   evictDtxRefnos: evictMock,
+  holdDtxLod1Backfill: holdLod1Mock,
   isDtxRefnoLoaded: vi.fn(() => false),
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
   resolveDtxRefnosByUnitRefno: unitRefnosMock,
@@ -970,6 +973,28 @@ describe('showModelByDbnum（gen-model-v1 整库）', () => {
     expect(gen.error.value).toBe('network: down');
     expect(gen.showProgressModal.value).toBe(false);
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'error', message: expect.stringContaining('network: down') }));
+  });
+
+  it('整库装载期间持有粗网格补拉（成功、抛错都在收尾解除）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    let heldDuringCollect = 0;
+    collectDbnumMock.mockImplementation(async (dbnum: number) => {
+      heldDuringCollect = holdLod1Mock.mock.calls.length - releaseLod1Mock.mock.calls.length;
+      return {
+        dbnum, sites: [{ refno: '24381_1', name: '/S' }], refnos: ['24381_2'], generationRoots: ['24381_2'],
+        pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [],
+      };
+    });
+    await gen.showModelByDbnum(7997);
+    expect(heldDuringCollect).toBe(1);
+    expect(holdLod1Mock).toHaveBeenCalledTimes(1);
+    expect(releaseLod1Mock).toHaveBeenCalledTimes(1);
+
+    collectDbnumMock.mockRejectedValue(new Error('network: down'));
+    await gen.showModelByDbnum(7997);
+    expect(holdLod1Mock).toHaveBeenCalledTimes(2);
+    expect(releaseLod1Mock).toHaveBeenCalledTimes(2);
   });
 });
 

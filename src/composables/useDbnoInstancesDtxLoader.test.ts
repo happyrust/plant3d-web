@@ -908,4 +908,56 @@ describe('粗网格（L1）补拉', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('holdDtxLod1Backfill 期间装载不触发补拉，解除后补一次；嵌套时最后一个解除才补', async () => {
+    vi.useFakeTimers();
+    const { BufferAttribute, BufferGeometry, Matrix4 } = await import('three');
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    mod.invalidateDtxLoaderCaches();
+
+    const big = (tris: number) => {
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(new Float32Array(tris * 9), 3));
+      return g;
+    };
+    const layer = new DTXLayer({ maxVertices: 4096, maxIndices: 4096, maxObjects: 8 });
+    layer.addGeometry('big', big(300));
+    layer.addObject('seed', 'big', new Matrix4());
+    layer.compile();
+
+    recordSourceMocks.instanceEntriesByRefnos.mockImplementation(async (_dbno, refnos) => new Map(
+      refnos.map((r) => [r, [{ geo_hash: 'big', matrix: new Matrix4().toArray(), uniforms: null }]]),
+    ));
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/v1/meshes/big.mesh?lod=1')) {
+        return { ok: true, status: 200, arrayBuffer: async () => meshFixture('3.mesh') } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const lod1Calls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes('lod=1')).length;
+    try {
+      mod.configureDtxLod1Backfill({ enabled: true });
+      const outer = mod.holdDtxLod1Backfill();
+      const inner = mod.holdDtxLod1Backfill();
+      await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, 7997, ['24381_1']);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(lod1Calls()).toBe(0);
+
+      inner();
+      inner(); // 重复解除不算数
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(lod1Calls()).toBe(0);
+
+      outer();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(lod1Calls()).toBe(1);
+      expect(layer.hasLod1Geometry('big')).toBe(true);
+    } finally {
+      mod.configureDtxLod1Backfill({ enabled: false });
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
 });

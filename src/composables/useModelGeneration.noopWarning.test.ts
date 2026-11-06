@@ -45,6 +45,7 @@ vi.mock('@/composables/useDbMetaInfo', () => ({
 }));
 
 vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
+  holdDtxLod1Backfill: () => () => {},
   isDtxRefnoLoaded: isDtxRefnoLoadedMock,
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
 }));

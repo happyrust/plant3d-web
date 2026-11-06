@@ -9,6 +9,7 @@ import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   evictDtxRefnos,
+  holdDtxLod1Backfill,
   isDtxRefnoLoaded,
   loadDbnoInstancesForVisibleRefnosDtx,
   resolveDtxRefnosByUnitRefno,
@@ -1231,6 +1232,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       progress: progress.value,
       message: '准备按 dbnum 加载模型...',
     });
+    // 整库是一批批到的：粗网格等整库装完再补一次，不在批与批之间插进来抢请求、反复 recompile
+    const releaseLod1Backfill = holdDtxLod1Backfill();
 
     try {
       if (!Number.isFinite(dbno) || dbno <= 0) {
@@ -1248,6 +1251,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message: `[错误] 按 dbnum 加载失败：${msg}`, level: 'error' });
       return { loaded: false, instanceCount: 0, refnoCount: 0, refnos: [] };
     } finally {
+      releaseLod1Backfill();
       isGenerating.value = false;
       showProgressModal.value = false;
       modelLoadStatus.finish({

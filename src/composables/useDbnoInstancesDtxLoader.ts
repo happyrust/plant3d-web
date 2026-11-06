@@ -406,9 +406,34 @@ export async function backfillDtxLod1Geometries(dtxLayer: DTXLayer): Promise<Dtx
   return stats;
 }
 
+let lod1HoldCount = 0;
+const lod1DeferredLayers = new Set<DTXLayer>();
+
+/**
+ * 一段连续装载（如整库显示）期间暂停补拉，返回的函数解除。补拉的请求与 recompile 会和装载抢网络与主线程，
+ * 批与批之间的空闲又常常超过 {@link LOD1_BACKFILL_IDLE_MS}；整段装完再补一次更省。可嵌套，最后一个解除时补拉。
+ */
+export function holdDtxLod1Backfill(): () => void {
+  lod1HoldCount++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    lod1HoldCount--;
+    if (lod1HoldCount > 0) return;
+    const layers = Array.from(lod1DeferredLayers);
+    lod1DeferredLayers.clear();
+    for (const layer of layers) scheduleLod1Backfill(layer);
+  };
+}
+
 /** 装载停下 {@link LOD1_BACKFILL_IDLE_MS} 后补拉；补拉进行中又来了新装载，补完再跑一轮 */
 function scheduleLod1Backfill(dtxLayer: DTXLayer): void {
   if (!lod1Config.enabled || !getModelSource().meshes.lod1MeshUrl) return;
+  if (lod1HoldCount > 0) {
+    lod1DeferredLayers.add(dtxLayer);
+    return;
+  }
   let state = lod1Backfill.get(dtxLayer);
   if (!state) {
     state = { timer: null, running: false, again: false };
@@ -422,6 +447,10 @@ function scheduleLod1Backfill(dtxLayer: DTXLayer): void {
   if (s.timer) clearTimeout(s.timer);
   s.timer = setTimeout(() => {
     s.timer = null;
+    if (lod1HoldCount > 0) {
+      lod1DeferredLayers.add(dtxLayer);
+      return;
+    }
     s.running = true;
     backfillDtxLod1Geometries(dtxLayer)
       .catch((error) => console.warn('[dtx][lod1] 粗网格补拉失败，继续用原网格', error))
@@ -502,6 +531,7 @@ export function isDtxRefnoKnownAcrossAllDbnos(refno: string): boolean {
 export function invalidateDtxLoaderCaches(): void {
   cachesByDbno.clear();
   lod1GeometryByGeoHash.clear();
+  lod1DeferredLayers.clear();
   hiddenTubeKeys.value = new Set();
   bumpDtxLoaderRevision();
 }
