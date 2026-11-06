@@ -37,6 +37,21 @@ rs-mbd CLI 真实生成物（勿手改；契约漂移守卫 `mbdV2Contract.test.
   `angle_dim` 另带 `leg_lines` / `label_anchor` / `sub_kind`，`aid_circle` 只有 `center / normal / radius`。
   plant-mbd `fixtures/contract/` 的回环 fixture 以本文件为源。
 
+## `envelope-fields.json`
+
+手工编写的 #103 M1-3 契约信封字段样本，**权威副本**：plant-mbd 的契约 fixture 镜像本文件
+（ADR 0055 D7：前端先接受可选字段 → plant-mbd 契约镜像 → 生产者产出）。改它要同步 plant-mbd 那份。
+
+- 非管道包：`annotation_type=em9_pipe_supp`（EM9 仪表管支架）+ `subject`（`refno` / `noun`），
+  `branch_refno` 放归一化后的归属对象 refno。
+- 逐图元：两段 `linear_dim` 共用 `chain_id`（`chain_seq` 0 / 1，第一段另带 `function` / `node_refnos` /
+  `text_height_mm` / `text_up`）；`label` 带 `function` / `text_dir` / `text_up` / `text_height_mm` 与配对的
+  `leader_line`；`aid_text` 带 `text_up`；`angle_dim` 带 `function` + `text_height_mm`；`slope_mark` 带
+  `text_height_mm` + `text_up`。
+- `meta`：`geometry_space=source_mm`，`source_to_design` 为列主序 0.001 对角缩放，`cheight_mm=25`，
+  `layout_mode=em9_pipe_supp`，`coverage` 列出本包产出的 6 种 kind。
+- 用途：`mbdV2Contract.test.ts` 在默认与 strict 模式下都必须解析通过。
+
 ## `source-to-design-translation.json`
 
 手工编写的 `source_to_design` **列主序约定钉子**（`mbdV2ExternalAnnotations.test.ts` 加载）。
