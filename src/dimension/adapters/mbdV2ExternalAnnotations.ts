@@ -13,6 +13,9 @@ import {
   tryNormalize3,
 } from '../kernel/vec';
 
+import { mbdFunctionLodTier } from './mbdFunctionLod';
+
+import type { MbdLodTier } from './mbdFunctionLod';
 import type {
   MbdPrimitive,
   MbdV2AidArc,
@@ -710,6 +713,21 @@ function isDetailAid(id: string): boolean {
 }
 
 /**
+ * A non-pipe record's level of detail from its PML FUNCTION (`mbdFunctionLodTier`):
+ * the function's tier replaces the kind-level one and keeps the rest (a dimension's
+ * `hideShort`). `primary` on a record that carries no hint stays without one — that
+ * is already how the kernel draws it. No tier (a pipe package, an undeclared or
+ * unregistered function) leaves the hint as the mapper built it.
+ */
+function withFunctionTier(
+  lod: ExplicitLodInput | undefined,
+  tier: MbdLodTier | undefined,
+): ExplicitLodInput | undefined {
+  if (tier === undefined || (tier === 'primary' && lod === undefined)) return lod;
+  return { ...lod, tier };
+}
+
+/**
  * Facts the 3D presentation needs beyond one primitive. The solver's
  * innermost row sits `od` — the isoline's outside diameter — from the pipe
  * centre line (plant-mbd `isodim.rs` row offset `od + 1.2 · cheight · (row − 1)`),
@@ -1276,11 +1294,23 @@ export function mbdV2ToExternalRecords(
       // kernel can scale labels and the arrow floor with the model (S2).
       // D7 order: the primitive's own `text_height_mm` (e.g. the half-height
       // direction labels), otherwise its isoline's, otherwise the payload-wide one.
-      records.push(textHeightM === undefined
+      // A non-pipe record also takes its function's LOD tier here, whatever its
+      // kind; a paired leader travels inside its label's record and so follows it.
+      const layout = record.layout as ExplicitLayoutInput;
+      const lod = withFunctionTier(
+        layout.lod,
+        mbdFunctionLodTier(data.annotation_type, primitive.function, primitive.kind),
+      );
+      const retiered = lod !== undefined && lod !== layout.lod;
+      records.push(textHeightM === undefined && !retiered
         ? record
         : {
           ...record,
-          layout: { ...(record.layout as ExplicitLayoutInput), textHeightM },
+          layout: {
+            ...layout,
+            ...(retiered ? { lod } : {}),
+            ...(textHeightM !== undefined ? { textHeightM } : {}),
+          },
         });
     } else {
       // Parse already checked structure, so the arc kinds are the only ones

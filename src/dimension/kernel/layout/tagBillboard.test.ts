@@ -28,6 +28,7 @@ import type {
   SceneGlyphRun,
   SceneLine,
   ScenePath,
+  ScreenLine,
   ScreenPath,
   ScreenRect,
   Vec2,
@@ -354,15 +355,44 @@ describe('layoutTagBillboard', () => {
     expect(hovered.scenePrimitives.length).toBeGreaterThan(0);
     expect(hovered.scenePrimitives.every(primitive => primitive.styleRole === 'hovered')).toBe(true);
     // Without the tag the same record takes the flat path: text at the
-    // solver position, the leader as drawn.
+    // solver position, the leader from where it leaves the text box (it
+    // starts on the label) to the target.
     const { tag: _tag, ...flat } = input;
     const flatResult = layoutExplicit(flat, context());
     expect(flatResult.scenePrimitives.some(primitive => primitive.kind === 'scene-fill')).toBe(false);
-    const flatLeader = flatResult.scenePrimitives.find(
+    const flatLeader = flatResult.primitives.find(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+    )!;
+    // (190, 180) → (200, 200) leaves the padded box of the narrow 'A' through its right edge.
+    const box = flatResult.labelBounds;
+    expect(flatLeader.from[0]).toBeCloseTo(box.x + box.width, 9);
+    expect(flatLeader.from[1]).toBeCloseTo(180 + (box.x + box.width - 190) * 2, 9);
+    expect(flatLeader.to).toEqual([200, 200]);
+  });
+
+  it('keeps a billboard leader from the target to the body edge, outside the flat leader clipping', () => {
+    // The record carries the solver's leader from the label position, the
+    // shape the flat path now clips at the label box; the billboard draws its
+    // own leader instead and never takes that path.
+    expect(input.lines).toEqual([{ from: input.labelAnchor, to: spec.target, part: 'leader' }]);
+    const layout = layoutViewport([input], context(), new Map()).layouts[0]!;
+    const body = layout.derived.tag!.body;
+    const leaders = layout.primitives.filter(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+    );
+    expect(leaders).toHaveLength(1);
+    // From the target itself (the solver label position (190, 180) plays no part) …
+    expect(leaders[0]!.from).toEqual([200, 200]);
+    const sceneLeader = layout.scenePrimitives.find(
       (primitive): primitive is SceneLine => primitive.kind === 'scene-line' && primitive.part === 'leader',
     )!;
-    expect(flatLeader.from.anchor).toEqual([-0.1, 0.2, 0]);
-    expect(flatLeader.to.anchor).toEqual([0, 0, 0]);
+    expect(sceneLeader.from).toEqual({ anchor: [0, 0, 0], offsetPx: [0, 0] });
+    // … to the body's edge, exactly as the plan materializes it on its own.
+    const [x, y] = leaders[0]!.to;
+    const onSide = Math.abs(x - body.x) < 1e-6 || Math.abs(x - (body.x + body.width)) < 1e-6;
+    const onTopOrBottom = Math.abs(y - body.y) < 1e-6 || Math.abs(y - (body.y + body.height)) < 1e-6;
+    expect(onSide || onTopOrBottom).toBe(true);
+    expect(layout.primitives).toEqual(layoutTagBillboard(input, spec, context()).primitives);
   });
 });
 

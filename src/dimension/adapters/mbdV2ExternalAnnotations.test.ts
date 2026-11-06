@@ -21,7 +21,7 @@ import {
 } from './normalizeExternalDimensions';
 
 import type { MbdV2PipeData } from './mbdV2Contract';
-import type { ExplicitLayoutInput, ScreenGlyphRun } from '../kernel/types';
+import type { ExplicitLayoutInput, ScreenGlyphRun, ScreenLine } from '../kernel/types';
 
 function fixtureData(): MbdV2PipeData {
   // Mapper-only future-kind coverage. This hand-authored fixture is not a
@@ -1102,6 +1102,230 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(result, 'small-1').lod).toEqual({ tier: 'primary', hideShort: false });
     // Non-dimension primitives carry no LOD hint (the kind filter handles them).
     expect(explicitLayout(result, 'tag-1').lod).toBeUndefined();
+  });
+
+  describe('non-pipe level of detail from the PML function (#103)', () => {
+    const kernelContext = (pixelsPerMetre = 100) => ({
+      projector: createTestProjector(pixelsPerMetre),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+    });
+    const dimension = (id: string, mbdFunction: string) => ({
+      kind: 'linear_dim' as const,
+      id,
+      function: mbdFunction,
+      start: [0, 0, 0] as const,
+      end: [1, 0, 0] as const,
+      text: '1000',
+      extension_lines: [],
+      arrow_lines: [],
+      label_anchor: [0.5, 0, 0] as const,
+    });
+
+    it('gives equipment records the tier of their function, the leader travelling with its label', () => {
+      const data = fixtureData();
+      const angle = data.primitives.find(primitive => primitive.kind === 'angle_dim')!;
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        annotation_type: 'em4_equi',
+        primitives: [
+          { kind: 'label', id: 'e:equi:name', function: '设备信息', text: 'P-101', position: [0, 1, 0] },
+          { kind: 'leader_line', id: 'e:equi:name:leader', function: '设备信息', start: [0, 1, 0], end: [0, 0, 0] },
+          { kind: 'label', id: 'e:equi:coords', function: '设备坐标', text: 'X +2000\nY +3000\nPE +1000', position: [0, 2, 0] },
+          { kind: 'label', id: 'e:locate:ns:civil', function: '定位墙体', text: 'W101', position: [3, 0, 0] },
+          { kind: 'label', id: 'e:locate:floor:civil:el', function: '楼板标高', text: 'EL. 0.500m', position: [0, -1, 0] },
+          { ...dimension('e:locate:ns', '定位尺寸'), end: [3, 0, 0], label_anchor: [1.5, 0, 0] },
+          { kind: 'aid_text', id: 'e:locate:ns:dirtext', function: '标注方向', text: 'N 2.00453 W', position: [1.5, 0.2, 0] },
+          { ...angle, id: 'e:equi:rotation', function: '偏转角度' },
+          { kind: 'aid_text', id: 'e:equi:rotation:dirtext1', function: '偏转角度', text: 'Y84.3°X', position: [0.2, 0.2, 0] },
+          { kind: 'aid_line', id: 'e:equi:rotation:axis', function: '偏转角度', start: [0, 0, 0], end: [0, 0.5, 0] },
+          // Outside this type's vocabulary (a pipe value), and no function at all: primary, as before.
+          { kind: 'label', id: 'e:manual', function: '连接信息', text: 'PE +1', position: [5, 0, 0] },
+          { kind: 'label', id: 'e:plain', text: 'NOTE', position: [6, 0, 0] },
+        ],
+      });
+      expect(result.skipped).toEqual([]);
+      const lod = (id: string) => explicitLayout(result, id).lod;
+
+      // Identity: always drawn; the leader travels inside its label's record.
+      expect(lod('e:equi:name')).toBeUndefined();
+      expect(result.records.some(record => record.id === 'e:equi:name:leader')).toBe(false);
+      expect(explicitLayout(result, 'e:equi:name').lines).toEqual([{ from: [0, 1, 0], to: [0, 0, 0], part: 'leader' }]);
+      // Mid range: the coordinate block, the wall name, the floor elevation.
+      for (const id of ['e:equi:coords', 'e:locate:ns:civil', 'e:locate:floor:civil:el']) {
+        expect(lod(id), id).toEqual({ tier: 'secondary' });
+      }
+      // The locating dimension stays a primary chain and keeps its short-line rule.
+      expect(lod('e:locate:ns')).toEqual({ tier: 'primary', hideShort: true });
+      // Close-up: the direction note and the whole rotation group, still one declutter group.
+      for (const id of ['e:locate:ns:dirtext', 'e:equi:rotation', 'e:equi:rotation:dirtext1', 'e:equi:rotation:axis']) {
+        expect(lod(id), id).toEqual({ tier: 'detail' });
+      }
+      expect(explicitLayout(result, 'e:equi:rotation:dirtext1').declutter)
+        .toEqual({ rank: 500, group: 'e:equi:rotation' });
+      expect(lod('e:manual')).toBeUndefined();
+      expect(lod('e:plain')).toBeUndefined();
+    });
+
+    it('splits the civil 尺寸标注 by kind and gives support, wall and floor records their tiers', () => {
+      const data = fixtureData();
+      const angle = data.primitives.find(primitive => primitive.kind === 'angle_dim')!;
+      const civil = mbdV2ToExternalRecords({
+        ...data,
+        annotation_type: 'civil',
+        primitives: [
+          dimension('c:edge:0:g0:0', '尺寸标注'),
+          { kind: 'label', id: 'c:member:m1:xdis:A', function: '尺寸标注', text: '315', position: [0, 1, 0] },
+          { kind: 'leader_line', id: 'c:member:m1:xdis:A:leader', function: '尺寸标注', start: [0, 1, 0], end: [0, 0.5, 0] },
+          dimension('c:member:m1:dim:A:0:g0:0', '孔洞尺寸'),
+          { kind: 'label', id: 'c:name:A', function: '名称', text: 'W41', position: [2, 0, 0] },
+          { kind: 'label', id: 'c:thick:A', function: '厚度', text: '300', position: [3, 0, 0] },
+          { kind: 'aid_circle', id: 'c:thick:A:circle1', function: '厚度', center: [3, 0, 0], normal: [0, 0, 1], radius: 0.1 },
+          { kind: 'aid_line', id: 'c:origin:A:x', function: '局部坐标系', start: [4, 0, 0], end: [4.5, 0, 0] },
+          // A leader with no label of its own in the payload: its own record, its function's tier.
+          { kind: 'leader_line', id: 'c:el:A:bottom:leader', function: '标高', start: [5, 1, 0], end: [5, 0, 0] },
+        ],
+      });
+      expect(civil.skipped).toEqual([]);
+      const lod = (id: string) => explicitLayout(civil, id).lod;
+      expect(lod('c:edge:0:g0:0')).toEqual({ tier: 'primary', hideShort: true });
+      expect(lod('c:member:m1:xdis:A')).toEqual({ tier: 'detail' });
+      expect(civil.records.some(record => record.id === 'c:member:m1:xdis:A:leader')).toBe(false);
+      expect(lod('c:member:m1:dim:A:0:g0:0')).toEqual({ tier: 'detail', hideShort: true });
+      expect(lod('c:name:A')).toBeUndefined();
+      expect(lod('c:thick:A')).toEqual({ tier: 'secondary' });
+      expect(lod('c:thick:A:circle1')).toEqual({ tier: 'secondary' });
+      expect(lod('c:origin:A:x')).toEqual({ tier: 'detail' });
+      expect(lod('c:el:A:bottom:leader')).toEqual({ tier: 'secondary' });
+
+      const support = mbdV2ToExternalRecords({
+        ...data,
+        annotation_type: 'em4_supp',
+        primitives: [
+          dimension('s:dim:0:0:0', '二级尺寸'),
+          { ...dimension('s:dim:1:0:0', '一级尺寸'), sub_kind: 'small' },
+          { ...angle, id: 's:angle:0', function: '螺栓孔角度' },
+          { kind: 'aid_text', id: 's:dim:7:0:0:plus', function: '调整焊附加长度', text: ' +50', position: [0.5, 0.1, 0] },
+        ],
+      });
+      expect(explicitLayout(support, 's:dim:0:0:0').lod).toEqual({ tier: 'secondary', hideShort: true });
+      expect(explicitLayout(support, 's:dim:1:0:0').lod).toEqual({ tier: 'primary', hideShort: false });
+      expect(explicitLayout(support, 's:angle:0').lod).toEqual({ tier: 'secondary' });
+      expect(explicitLayout(support, 's:dim:7:0:0:plus').lod).toBeUndefined();
+
+      // The hand-authored envelope fixture (em9_pipe_supp): 二级尺寸 is registered for that type,
+      // 管道信息 (an EM4 support value) is not and stays primary.
+      const envelope = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!envelope.ok) throw new Error(envelope.error);
+      const mapped = mbdV2ToExternalRecords(envelope.data);
+      expect(explicitLayout(mapped, '24383_91813:angle:24383_91818').lod).toEqual({ tier: 'secondary' });
+      expect(explicitLayout(mapped, '24383_91813:tag:pipe:24383_91816').lod).toBeUndefined();
+      expect(explicitLayout(mapped, '24383_91813:chain:0:seg:0').lod).toEqual({ tier: 'primary', hideShort: true });
+    });
+
+    it('keeps pipe records on their own tiers byte for byte, whatever function they declare', () => {
+      const parsed = parseMbdV2PipeData(liveIsodimFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const live = parsed.data;
+      const layouts = (payload: MbdV2PipeData) =>
+        mbdV2ToExternalRecords(payload).records.map(record => record.layout);
+      const baseline = layouts(live);
+      // The live BRAN has every pipe tier: cards and frames without one, main and ATTA rows,
+      // elbow pills, the branch name and the slopes.
+      const tiers = new Set(baseline.map(layout => (layout as ExplicitLayoutInput).lod?.tier ?? 'none'));
+      expect([...tiers].sort()).toEqual(['detail', 'none', 'primary', 'secondary']);
+      for (const stamp of ['偏转角度', '名称', '设备坐标']) {
+        const primitives = live.primitives.map(primitive => ({ ...primitive, function: stamp }));
+        for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+          expect(
+            layouts({ ...live, primitives, ...(annotationType ? { annotation_type: annotationType } : {}) }),
+            `${stamp} / ${annotationType}`,
+          ).toStrictEqual(baseline);
+        }
+      }
+      // The same stamp does take effect in a non-pipe package, so the comparison is not vacuous.
+      const asEquipment = mbdV2ToExternalRecords({
+        ...live,
+        annotation_type: 'em4_equi',
+        primitives: live.primitives.map(primitive => ({ ...primitive, function: '偏转角度' })),
+      });
+      expect(asEquipment.records.every(record => (record.layout as ExplicitLayoutInput).lod?.tier === 'detail'))
+        .toBe(true);
+    });
+
+    it('hides a close-up note on a far view and draws it once its own text reads full size', () => {
+      const records = mbdV2ToExternalRecords({
+        ...fixtureData(),
+        annotation_type: 'em4_equi',
+        primitives: [
+          { kind: 'label', id: 'e:equi:name', function: '设备信息', text: 'P-101', position: [0, 0.5, 0], text_height_mm: 350 },
+          { kind: 'leader_line', id: 'e:equi:name:leader', function: '设备信息', start: [0, 0.5, 0], end: [0, 0, 0] },
+          {
+            kind: 'label', id: 'e:equi:coords', function: '设备坐标', text: 'X +2000\nY +3000\nPE +1000',
+            position: [0.5, 0.5, 0], text_height_mm: 350,
+          },
+          { kind: 'aid_text', id: 'e:locate:ns:dirtext', function: '标注方向', text: 'N 2 W', position: [-0.5, 0, 0], text_height_mm: 70 },
+        ],
+      }).records.map(normalizeExternalDimension);
+      const layoutAt = (pixelsPerMetre: number) => {
+        const { layouts } = layoutViewport(records, kernelContext(pixelsPerMetre), new Map());
+        return (id: string) => layouts.find(layout => layout.dimensionId === id)!;
+      };
+      // 100 px/m: the 70 mm note projects to 7 px and is not drawn blown up to the 11 px floor.
+      // The name stays, and so does the coordinate block: the default theme gates `secondary` at 0 px.
+      const far = layoutAt(100);
+      expect(far('e:locate:ns:dirtext').derived.lodHidden).toBe('detail-far');
+      expect(far('e:locate:ns:dirtext').primitives).toEqual([]);
+      for (const id of ['e:equi:name', 'e:equi:coords']) {
+        expect(far(id).derived.lodHidden, id).toBeUndefined();
+        expect(far(id).primitives.length, id).toBeGreaterThan(0);
+      }
+      // 300 px/m: 21 px, at or above the 18 px close-up gate.
+      const near = layoutAt(300);
+      expect(near('e:locate:ns:dirtext').derived.lodHidden).toBeUndefined();
+      expect(near('e:locate:ns:dirtext').primitives.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('starts a flat multi-line label\'s leader at the edge of its text block (mbd_3d=0)', () => {
+    const result = mbdV2ToExternalRecords({
+      ...fixtureData(),
+      annotation_type: 'em4_supp',
+      primitives: [
+        {
+          kind: 'label', id: 's:support:label:0', function: '管道信息', text: 'A\nhp\nAhA',
+          position: [0, 0.5, 0], text_dir: [1, 0, 0], text_up: [0, 1, 0],
+        },
+        { kind: 'leader_line', id: 's:support:label:0:leader', function: '管道信息', start: [0, 0.5, 0], end: [0, -0.5, 0] },
+      ],
+    });
+    // `mbd_3d=0` strips the billboard spec; the record keeps the solver's leader from the block centre.
+    const { tag: _tag, ...flat } = explicitLayout(result, 's:support:label:0');
+    expect(flat.lines).toEqual([{ from: [0, 0.5, 0], to: [0, -0.5, 0], part: 'leader' }]);
+    const [layout] = layoutViewport(
+      [flat],
+      {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      },
+      new Map(),
+    ).layouts;
+    const leader = layout!.primitives.find(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+    )!;
+    // Block centre (200, 150) straight down to the target (200, 250): the drawn leader starts on
+    // the block's box, below the last of the three rows, and still ends on the target.
+    const rows = layout!.primitives.filter(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    );
+    expect(rows).toHaveLength(3);
+    expect(leader.from[0]).toBeCloseTo(200, 9);
+    expect(leader.from[1]).toBeCloseTo(layout!.labelBounds.y + layout!.labelBounds.height, 9);
+    for (const { bounds } of rows) expect(leader.from[1]).toBeGreaterThan(bounds.y + bounds.height);
+    expect(leader.to).toEqual([200, 250]);
   });
 
   it('produces records the shared kernel can lay out end to end', () => {
