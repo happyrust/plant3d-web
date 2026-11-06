@@ -12,6 +12,7 @@ import {
   sceneVertex,
 } from '../geometry/sceneGeometry';
 import {
+  expandRect,
   makeCenteredGlyphRun,
   makeGlyphHitRegion,
   makeLineHitRegion,
@@ -20,7 +21,7 @@ import {
 } from '../geometry/screenGeometry';
 import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
-import { add3, EPSILON } from '../vec';
+import { add3, EPSILON, scale3, tryNormalize3 } from '../vec';
 
 import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
@@ -36,6 +37,7 @@ import type { ViewportProjector } from '../projector';
 import type {
   ExplicitArcInput,
   ExplicitArrowInput,
+  ExplicitLabelBlockInput,
   ExplicitLayoutInput,
   ExplicitLodHiddenReason,
   HitRegion,
@@ -83,6 +85,95 @@ type LabelClearance = Readonly<{
   center: Vec2;
   rotationRad: number;
 }>;
+
+/** One row of a label block (`formattedLabel` first) and its screen offset from `labelAnchor`. */
+type LabelRow = Readonly<{ text: string; offsetPx: Vec2 }>;
+
+/**
+ * Screen step from one row of a label block to the next, down the block
+ * (`ExplicitLayoutInput.labelBlock`). Rows sit `lineAdvance` cap heights
+ * apart across the drawn baseline. With a text plane the step follows the
+ * plane's `up` as it projects at the anchor (an oblique view shears the block
+ * with its plane), turned into the run's readable sense like the baseline so
+ * the first row stays on top; a plane seen edge-on (theme
+ * `labelBlockForeshortenRatio`), or no plane, steps along the run's own
+ * screen down. The pitch keeps to the drawn cap height, not the projected
+ * source one: the two agree on a face-on view of an unclamped source, which
+ * puts the rows on the points `ExplicitLabelBlockInput` names, and elsewhere
+ * the rows keep their proportion to the glyphs instead of running together.
+ */
+function labelBlockStep(
+  anchor: Vec3,
+  block: ExplicitLabelBlockInput,
+  rotationRad: number,
+  textHeightPx: number,
+  context: LayoutContext,
+): Vec2 {
+  const pitchPx = block.lineAdvance * textHeightPx;
+  const down: Vec2 = [-Math.sin(rotationRad), Math.cos(rotationRad)];
+  const acrossBaseline: Vec2 = [down[0] * pitchPx, down[1] * pitchPx];
+  const up = block.up ? tryNormalize3(block.up) : null;
+  if (!up) return acrossBaseline;
+  const metresPerPixel = context.projector.worldPerPixelAt(anchor);
+  if (!Number.isFinite(metresPerPixel) || metresPerPixel <= EPSILON) return acrossBaseline;
+  const from = projectSceneVertex(sceneVertex(anchor), context.projector);
+  const to = projectSceneVertex(
+    sceneVertex(add3(anchor, scale3(up, -textHeightPx * metresPerPixel))),
+    context.projector,
+  );
+  const planeDown: Vec2 = [to[0] - from[0], to[1] - from[1]];
+  const sense = planeDown[0] * down[0] + planeDown[1] * down[1] < 0 ? -1 : 1;
+  const step: Vec2 = [planeDown[0] * sense, planeDown[1] * sense];
+  const across = step[0] * down[0] + step[1] * down[1];
+  if (!(across >= context.theme.labelBlockForeshortenRatio * textHeightPx)) {
+    return acrossBaseline;
+  }
+  return [(step[0] * pitchPx) / across, (step[1] * pitchPx) / across];
+}
+
+/**
+ * The rows of a label block centred on the anchor, first row first; null when
+ * the input draws its label as a single run.
+ */
+function labelBlockRows(
+  input: ExplicitLayoutInput,
+  rotationRad: number,
+  textHeightPx: number,
+  context: LayoutContext,
+): readonly LabelRow[] | null {
+  const block = input.labelBlock;
+  if (!block || block.rows.length === 0) return null;
+  const texts = [input.formattedLabel, ...block.rows];
+  const step = labelBlockStep(input.labelAnchor, block, rotationRad, textHeightPx, context);
+  const middle = (texts.length - 1) / 2;
+  return texts.map((text, row) => ({
+    text,
+    offsetPx: [step[0] * (row - middle), step[1] * (row - middle)],
+  }));
+}
+
+/**
+ * A label block's rows as one box in the label's unrotated frame about
+ * `center`, the frame the line trim rotates back by `rotationRad`.
+ */
+function unrotatedBlockBounds(
+  rows: readonly LabelRow[],
+  center: Vec2,
+  rotationRad: number,
+  textHeightPx: number,
+  styleRole: string,
+  context: LayoutContext,
+): ScreenRect {
+  const cos = Math.cos(rotationRad);
+  const sin = Math.sin(rotationRad);
+  return glyphsBounds(rows.map(({ text, offsetPx: [dx, dy] }) => makeCenteredGlyphRun(
+    context.font,
+    text,
+    [center[0] + dx * cos + dy * sin, center[1] - dx * sin + dy * cos],
+    textHeightPx,
+    styleRole,
+  )));
+}
 
 /**
  * Screen cap height for this input. A source that declares a design-space
@@ -156,8 +247,9 @@ function lodHiddenReason(
 /**
  * External sources anchor a dimension label on its own dimension line (rs-mbd
  * emits `label_anchor` at the line midpoint), so the line has to be broken
- * around the label box the same way the native linear layout does. Returns
- * null when nothing can overlap and the extra projection would be wasted.
+ * around the label box the same way the native linear layout does — the
+ * whole block when the label is one (`blockRows`). Returns null when nothing
+ * can overlap and the extra projection would be wasted.
  */
 function labelClearance(
   input: ExplicitLayoutInput,
@@ -165,6 +257,7 @@ function labelClearance(
   styleRole: string,
   textHeightPx: number,
   context: LayoutContext,
+  blockRows: readonly LabelRow[] | null,
 ): LabelClearance | null {
   if (input.formattedLabel.length === 0) return null;
   if (!input.lines.some(line => line.part === 'dimension')) return null;
@@ -172,6 +265,16 @@ function labelClearance(
     sceneVertex(input.labelAnchor),
     context.projector,
   );
+  if (blockRows) {
+    return {
+      rect: expandRect(
+        unrotatedBlockBounds(blockRows, center, rotationRad, textHeightPx, styleRole, context),
+        context.theme.labelPaddingPx / 2,
+      ),
+      center,
+      rotationRad,
+    };
+  }
   const glyph = makeCenteredGlyphRun(
     context.font,
     input.formattedLabel,
@@ -227,11 +330,13 @@ function labelLiftOffset(
 
 /**
  * Q6: whether this input draws its value text above the line with the line left
- * whole. Only single-line labels qualify — a stack (`texts`) would put its lower
- * rows back onto the line, so it keeps the interrupted presentation.
+ * whole. Only single-line labels qualify — a stack (`texts`, `labelBlock`) would
+ * put its lower rows back onto the line, so it keeps the interrupted presentation.
  */
 function drawsLabelAbove(input: ExplicitLayoutInput): boolean {
-  return input.labelPresentation === 'above' && (input.texts ?? []).length === 0;
+  return input.labelPresentation === 'above'
+    && (input.texts ?? []).length === 0
+    && (input.labelBlock?.rows ?? []).length === 0;
 }
 
 /**
@@ -566,6 +671,7 @@ export function layoutExplicit(
     input.labelAlong,
     context,
   );
+  const blockRows = labelBlockRows(input, labelRotationRad, textHeightPx, context);
   // Q6: `above` lifts the text off the line and leaves the line whole, so there
   // is nothing to trim — the clearance pass is skipped, which is also what makes
   // the line draw as one untouched segment (see `explicitSceneLines`).
@@ -581,6 +687,7 @@ export function layoutExplicit(
       styleRole,
       textHeightPx,
       context,
+      blockRows,
     );
   const buildSceneLines = (trim: LabelClearance | null): SceneLine[] => [
     ...input.lines.flatMap(line =>
@@ -679,17 +786,27 @@ export function layoutExplicit(
         styleRole,
         textHeightPx,
         context,
+        blockRows,
       );
       sceneLines = buildSceneLines(clearance);
     }
   }
-  const glyphScene = sceneGlyph(
-    input.formattedLabel,
-    sceneVertex(input.labelAnchor, liftOffsetPx),
-    textHeightPx,
-    styleRole,
-    labelRotationRad,
-  );
+  // A block never goes `above`, so its rows hang off the anchor unlifted.
+  const labelGlyphScenes = blockRows
+    ? blockRows.map(row => sceneGlyph(
+      row.text,
+      sceneVertex(input.labelAnchor, row.offsetPx),
+      textHeightPx,
+      styleRole,
+      labelRotationRad,
+    ))
+    : [sceneGlyph(
+      input.formattedLabel,
+      sceneVertex(input.labelAnchor, liftOffsetPx),
+      textHeightPx,
+      styleRole,
+      labelRotationRad,
+    )];
   const lineAdvancePx = textHeightPx * context.theme.labelLineAdvance;
   const extraGlyphScenes = (input.texts ?? []).map((text) =>
     sceneGlyph(
@@ -707,7 +824,7 @@ export function layoutExplicit(
     ...sceneArrows,
     ...scenePaths,
     ...sceneMarkers,
-    glyphScene,
+    ...labelGlyphScenes,
     ...extraGlyphScenes,
   ];
   const primitives = projectScenePrimitives(
@@ -730,7 +847,12 @@ export function layoutExplicit(
   );
   const glyph = glyphs[0]!;
   const extraGlyphs = glyphs.slice(1);
-  const labelBounds = labelBoundsOf(glyph, context.theme);
+  const labelBounds = blockRows
+    ? expandRect(
+      glyphsBounds(glyphs.slice(0, labelGlyphScenes.length)),
+      context.theme.labelPaddingPx / 2,
+    )
+    : labelBoundsOf(glyph, context.theme);
   const hitRegions: HitRegion[] = [
     ...lines.map((line) =>
       makeLineHitRegion(line, context.theme.dimensionStrokeWidthPx)),

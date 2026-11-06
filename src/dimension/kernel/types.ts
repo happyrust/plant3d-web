@@ -504,6 +504,27 @@ export type ExplicitTextInput = Readonly<{
 }>;
 
 /**
+ * A multi-line label drawn as one block centred on `labelAnchor` (MBD
+ * `label` / `aid_text`: the solver puts `position` at the centre of the whole
+ * text block, plant-mbd field dictionary ruling 8). `formattedLabel` is the
+ * first row and `rows` the rest, top to bottom; every row runs along the
+ * label's baseline (`labelAlong`). Rows sit `lineAdvance` cap heights apart
+ * across that baseline: along the text plane's `up` as it projects at the
+ * anchor when the source declares one (PML stacks MLABEL rows along
+ * −`text_up`), else along the run's own screen up. The pitch follows the cap
+ * height the rows are drawn at, so on a face-on view of an unclamped source
+ * text height row k lands exactly on
+ * `labelAnchor + up · ((n − 1) / 2 − k) · lineAdvance · textHeightM`.
+ */
+export type ExplicitLabelBlockInput = Readonly<{
+  rows: readonly string[];
+  /** Row pitch as a multiple of the cap height. */
+  lineAdvance: number;
+  /** Design-space up of the text plane; omitted = no text plane, rows stack on screen. */
+  up?: Vec3;
+}>;
+
+/**
  * A solver-authored running dimension presented as true 3D annotation
  * (reference drawing style, 2026-09-12; design target in
  * `docs/design/mbd-annotation-mockup-2026-09-12/README.md`). The kernel
@@ -645,6 +666,12 @@ export type ExplicitLayoutInput = Readonly<{
   /** Additional glyph runs, e.g. extra lines of a multi-line label. */
   texts?: readonly ExplicitTextInput[];
   /**
+   * Lay the label out as a block of rows centred on `labelAnchor` (see
+   * `ExplicitLabelBlockInput`); its padded bounds are the label's bounds.
+   * Omitted = `formattedLabel` alone at the anchor, `texts` on their own.
+   */
+  labelBlock?: ExplicitLabelBlockInput;
+  /**
    * Design-space text height (metres) declared by the source, e.g. the MBD
    * group `cheight_mm` after `source_to_design`. When present, the label cap
    * height and the arrow-stroke legibility floor follow its projection at the
@@ -664,9 +691,9 @@ export type ExplicitLayoutInput = Readonly<{
    * offered as a mode because GB / ASME both accept the interrupted one.
    *
    * Only single-line labels qualify: a label that carries extra rows
-   * (`texts`) falls back to `interrupted`, because lifting a stack would push
-   * its lower rows back onto the line. Omitted means `interrupted`, so every
-   * existing caller keeps its exact pixels.
+   * (`texts`, `labelBlock`) falls back to `interrupted`, because lifting a
+   * stack would push its lower rows back onto the line. Omitted means
+   * `interrupted`, so every existing caller keeps its exact pixels.
    */
   labelPresentation?: 'interrupted' | 'above';
   /**

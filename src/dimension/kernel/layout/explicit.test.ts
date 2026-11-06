@@ -14,6 +14,7 @@ import type {
   ScreenLine,
   ScreenMarker,
   ScreenPath,
+  Vec2,
   Vec3,
 } from '../types';
 import type { LayoutContext } from './context';
@@ -894,5 +895,200 @@ describe('above row guard', () => {
     // 15.25 px of clearance passes the 2 px default but fails a 30 px
     // requirement, so the same row now falls back.
     expect(dimensionLines(result)).toHaveLength(2);
+  });
+});
+
+// 多行文字整块居中（plant-mbd 字段字典裁定 8）：`labelBlock` 的各行以 `labelAnchor` 为块中心，
+// 第 k 行（共 n 行）在 `up · ((n − 1)/2 − k) · lineAdvance · 字高` 处。测试相机 100 px/m、
+// 正对 XY 平面：锚点 [0.5, 0.5, 0] 投到 (250, 150)，屏幕 y 向下。
+describe('label block', () => {
+  const context = (): LayoutContext => ({
+    projector: createTestProjector(),
+    font: createTestFont(),
+    theme: SOLVESPACE_DIMENSION_THEME,
+    format: DEFAULT_DIMENSION_FORMAT,
+    interaction: 'normal',
+  });
+  const block = (
+    rows: readonly string[],
+    overrides: Partial<ExplicitLayoutInput> = {},
+    up?: Vec3,
+  ): ExplicitLayoutInput => ({
+    id: 'block',
+    role: 'external',
+    labelPinned: true,
+    formattedLabel: 'A',
+    lines: [],
+    labelAnchor: [0.5, 0.5, 0],
+    arrowLines: [],
+    labelBlock: { rows, lineAdvance: 1.2, ...(up ? { up } : {}) },
+    ...overrides,
+  });
+  const glyphRuns = (result: ReturnType<typeof layoutExplicit>): ScreenGlyphRun[] =>
+    result.primitives.filter(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    );
+  // Centre of every drawn row on screen, first row first.
+  const rowCentres = (result: ReturnType<typeof layoutExplicit>): Vec2[] =>
+    glyphRuns(result).map(({ bounds }): Vec2 => [bounds.x + bounds.width / 2, bounds.y + bounds.height / 2]);
+  const expectCentres = (actual: readonly Vec2[], expected: readonly Vec2[]): void => {
+    expect(actual).toHaveLength(expected.length);
+    actual.forEach((centre, index) => {
+      expect(centre[0]).toBeCloseTo(expected[index]![0], 6);
+      expect(centre[1]).toBeCloseTo(expected[index]![1], 6);
+    });
+  };
+  const screen = (point: Vec3): Vec2 => [200 + point[0] * 100, 200 - point[1] * 100];
+  const cos30 = Math.cos(Math.PI / 6);
+  const sin30 = Math.sin(Math.PI / 6);
+
+  it('leaves a one-line label exactly as it was', () => {
+    const { labelBlock: _labelBlock, ...plain } = block([]);
+    expect(layoutExplicit(block([]), context())).toEqual(layoutExplicit(plain, context()));
+    expect(layoutExplicit(block([], {}, [0, 1, 0]), context())).toEqual(layoutExplicit(plain, context()));
+  });
+
+  it('centres two and three rows on the anchor, stacked on screen without a text plane', () => {
+    // 13 px theme height, 1.2 pitch = 15.6 px.
+    expectCentres(rowCentres(layoutExplicit(block(['h']), context())), [[250, 142.2], [250, 157.8]]);
+    expectCentres(
+      rowCentres(layoutExplicit(block(['h', 'p']), context())),
+      [[250, 134.4], [250, 150], [250, 165.6]],
+    );
+    // Every row hangs off the anchor itself, so a moved anchor takes the block along.
+    const atAnchor = layoutExplicit(block(['h']), context()).scenePrimitives
+      .filter(primitive => primitive.kind === 'scene-glyph-run');
+    expect(atAnchor.map(primitive => primitive.kind === 'scene-glyph-run' && primitive.at.anchor))
+      .toEqual([[0.5, 0.5, 0], [0.5, 0.5, 0]]);
+  });
+
+  it('stacks across a turned baseline when there is no text plane', () => {
+    // Baseline 30° up from +X runs at −30° on screen; its "down" is (0.5, 0.866).
+    const result = layoutExplicit(block(['h'], { labelAlong: [cos30, sin30, 0] }), context());
+    expectCentres(rowCentres(result), [
+      [250 - 7.8 * 0.5, 150 - 7.8 * cos30],
+      [250 + 7.8 * 0.5, 150 + 7.8 * cos30],
+    ]);
+    expect(glyphRuns(result).every(glyph => Math.abs(glyph.rotationRad! + Math.PI / 6) < 1e-9)).toBe(true);
+  });
+
+  it('puts the rows on the text plane at position + up · ((n − 1)/2 − k) · 1.2 · textHeightM', () => {
+    // 0.15 m projects to 15 px, inside the 11–18 px clamp: pitch 0.18 m = 18 px.
+    const rowsOn = (up: Vec3, count: number): Vec2[] => Array.from({ length: count }, (_, k) => {
+      const along = ((count - 1) / 2 - k) * 1.2 * 0.15;
+      return screen([0.5 + up[0] * along, 0.5 + up[1] * along, up[2] * along]);
+    });
+    const upright: Partial<ExplicitLayoutInput> = { textHeightM: 0.15, labelAlong: [1, 0, 0] };
+    expectCentres(rowCentres(layoutExplicit(block(['h'], upright, [0, 1, 0]), context())), rowsOn([0, 1, 0], 2));
+    expectCentres(rowCentres(layoutExplicit(block(['h', 'p'], upright, [0, 1, 0]), context())), rowsOn([0, 1, 0], 3));
+
+    // A planar label turned 30° (a wall name seen face-on): text_up is not
+    // screen-up, and the rows still step along it, symmetric about the anchor.
+    const up: Vec3 = [-sin30, cos30, 0];
+    const turned: Partial<ExplicitLayoutInput> = { textHeightM: 0.15, labelAlong: [cos30, sin30, 0] };
+    expectCentres(rowCentres(layoutExplicit(block(['h'], turned, up), context())), rowsOn(up, 2));
+    expectCentres(rowCentres(layoutExplicit(block(['h', 'p'], turned, up), context())), rowsOn(up, 3));
+  });
+
+  it('keeps the first row on top when text_up points down the screen', () => {
+    const result = layoutExplicit(
+      block(['h', 'p'], { textHeightM: 0.15, labelAlong: [1, 0, 0] }, [0, -1, 0]),
+      context(),
+    );
+    expectCentres(rowCentres(result), [[250, 132], [250, 150], [250, 168]]);
+  });
+
+  it('keeps the pitch at the drawn cap height while the source height is clamped', () => {
+    // 0.02 m projects to 2 px and draws at the 11 px floor: rows 13.2 px apart,
+    // not the 2.4 px the source height alone would give.
+    const result = layoutExplicit(
+      block(['h'], { textHeightM: 0.02, labelAlong: [1, 0, 0] }, [0, 1, 0]),
+      context(),
+    );
+    expect(glyphRuns(result)[0]!.capHeightPx).toBe(SOLVESPACE_DIMENSION_THEME.sourceTextHeightMinPx);
+    expectCentres(rowCentres(result), [[250, 143.4], [250, 156.6]]);
+  });
+
+  it('follows an oblique text plane at the drawn pitch across the baseline', () => {
+    // Tilted 60° away from the camera: up projects at half length, the rows
+    // still keep a full 15.6 px pitch.
+    expectCentres(
+      rowCentres(layoutExplicit(block(['h', 'p'], { labelAlong: [1, 0, 0] }, [0, 0.5, Math.sqrt(0.75)]), context())),
+      [[250, 134.4], [250, 150], [250, 165.6]],
+    );
+    // A wall seen at an angle: its baseline runs into the screen, its up leans
+    // left on screen, so the block shears with the plane. The rows sit on the
+    // anchor's line along the projected up (−0.5, 1), 15.6 px apart across
+    // the baseline.
+    expectCentres(
+      rowCentres(layoutExplicit(block(['h', 'p'], { labelAlong: [1, 0, 1] }, [-0.5, 1, 0.5]), context())),
+      [[242.2, 134.4], [250, 150], [257.8, 165.6]],
+    );
+  });
+
+  it('stacks across the baseline when the text plane is seen edge-on', () => {
+    const flat = rowCentres(layoutExplicit(block(['h', 'p'], { labelAlong: [1, 0, 0] }), context()));
+    // Up along the view ray, and up all but along the baseline (0.29 < 0.35).
+    for (const up of [[0, 0, 1], [0.9578, 0.2873, 0]] as const) {
+      expectCentres(rowCentres(layoutExplicit(block(['h', 'p'], { labelAlong: [1, 0, 0] }, up), context())), flat);
+    }
+  });
+
+  it('claims the whole block as its label bounds', () => {
+    const font = createTestFont();
+    const result = layoutExplicit(block(['hh', 'AAA']), context());
+    const single = layoutExplicit({ ...block([]), formattedLabel: 'AAA' }, context());
+    for (const { bounds } of glyphRuns(result)) {
+      expect(result.labelBounds.x).toBeLessThanOrEqual(bounds.x);
+      expect(result.labelBounds.y).toBeLessThanOrEqual(bounds.y);
+      expect(result.labelBounds.x + result.labelBounds.width).toBeGreaterThanOrEqual(bounds.x + bounds.width);
+      expect(result.labelBounds.y + result.labelBounds.height).toBeGreaterThanOrEqual(bounds.y + bounds.height);
+    }
+    // As wide as the widest row plus the padding, as tall as one row plus two pitches.
+    expect(result.labelBounds.width)
+      .toBeCloseTo(font.getWidth(13, 'AAA') + SOLVESPACE_DIMENSION_THEME.labelPaddingPx, 9);
+    expect(result.labelBounds.width).toBeCloseTo(single.labelBounds.width, 9);
+    expect(result.labelBounds.height).toBeCloseTo(single.labelBounds.height + 2 * 15.6, 9);
+    expect(result.labelBounds.y + result.labelBounds.height / 2).toBeCloseTo(150, 9);
+    // Every row is hit-testable.
+    expect(result.hitRegions.filter(region => region.part === 'label')).toHaveLength(3);
+  });
+
+  it('breaks a dimension line around every row of the block, not just the first', () => {
+    const dimensionLines = (result: ReturnType<typeof layoutExplicit>): ScreenLine[] =>
+      result.primitives.filter(
+        (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'dimension',
+      );
+    // A line through the last row (y = 165.6 px), clear of the first row's
+    // box (136.25..163.75 px when the label stood alone at the anchor).
+    const throughLastRow = block(['hp', 'A'], {
+      lines: [{ from: [0, 0.344, 0], to: [1, 0.344, 0], part: 'dimension' }],
+    });
+    expect(dimensionLines(layoutExplicit({ ...throughLastRow, labelBlock: undefined }, context())))
+      .toHaveLength(1);
+    const broken = dimensionLines(layoutExplicit(throughLastRow, context()));
+    expect(broken).toHaveLength(2);
+    expect((broken[0]!.to[0] + broken[1]!.from[0]) / 2).toBeCloseTo(250, 6);
+    // A stack never goes `above`; it stays interrupted.
+    expect(layoutExplicit({ ...throughLastRow, labelPresentation: 'above' }, context()))
+      .toEqual(layoutExplicit(throughLastRow, context()));
+
+    // Turned 30°: the trim box turns with the block, so a line along the
+    // baseline through the last row is cut around that row's centre.
+    const lastRow: Vec2 = [250 + 15.6 * 0.5, 150 + 15.6 * cos30];
+    const centre: Vec3 = [(lastRow[0] - 200) / 100, (200 - lastRow[1]) / 100, 0];
+    const turned = block(['hp', 'A'], {
+      labelAlong: [cos30, sin30, 0],
+      lines: [{
+        from: [centre[0] - 0.5 * cos30, centre[1] - 0.5 * sin30, 0],
+        to: [centre[0] + 0.5 * cos30, centre[1] + 0.5 * sin30, 0],
+        part: 'dimension',
+      }],
+    });
+    expect(dimensionLines(layoutExplicit({ ...turned, labelBlock: undefined }, context()))).toHaveLength(1);
+    const turnedBroken = dimensionLines(layoutExplicit(turned, context()));
+    expect(turnedBroken).toHaveLength(2);
+    expect((turnedBroken[0]!.to[0] + turnedBroken[1]!.from[0]) / 2).toBeCloseTo(lastRow[0], 6);
+    expect((turnedBroken[0]!.to[1] + turnedBroken[1]!.from[1]) / 2).toBeCloseTo(lastRow[1], 6);
   });
 });

@@ -21,7 +21,7 @@ import {
 } from './normalizeExternalDimensions';
 
 import type { MbdV2PipeData } from './mbdV2Contract';
-import type { ExplicitLayoutInput } from '../kernel/types';
+import type { ExplicitLayoutInput, ScreenGlyphRun } from '../kernel/types';
 
 function fixtureData(): MbdV2PipeData {
   // Mapper-only future-kind coverage. This hand-authored fixture is not a
@@ -292,11 +292,13 @@ describe('mbdV2ToExternalRecords', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
 
     // Every producer before T4.3 omits `text_dir`: no baseline reaches the
-    // kernel, neither on the primary label nor on the stacked lines.
+    // kernel. The lines after the first are rows of the label's own block,
+    // not runs with a baseline of their own, and no text plane comes along.
     for (const id of ['label-1', 'aid-text-1', 'slope-1']) {
       const layout = explicitLayout(result, id);
       expect(layout.labelAlong).toBeUndefined();
-      for (const text of layout.texts ?? []) expect(text.along).toBeUndefined();
+      expect(layout.texts).toBeUndefined();
+      expect(layout.labelBlock?.up).toBeUndefined();
     }
   });
 
@@ -335,15 +337,16 @@ describe('mbdV2ToExternalRecords', () => {
 
     const tag = explicitLayout(result, 'tag');
     expectVec3Close(tag.labelAlong, [0, 1, 0]);
-    // The stacked lines read the same way as the first one.
-    expect(tag.texts).toHaveLength(1);
-    expectVec3Close(tag.texts![0]!.along, [0, 1, 0]);
+    // The second line is a row of the same block, so it reads along the
+    // label's own baseline and carries none of its own (no `text_up`: no plane).
+    expect(tag.labelBlock).toEqual({ rows: ['Y 2'], lineAdvance: 1.2 });
+    expect(tag.texts).toBeUndefined();
     // The billboard spec is untouched: a tag body is always screen-facing.
     expect(tag.tag).toMatchObject({ style: 'card', lines: [{ text: 'X 1' }, { text: 'Y 2' }] });
 
     const aid = explicitLayout(result, 'aid');
     expectVec3Close(aid.labelAlong, [0, 0, 1]);
-    expectVec3Close(aid.texts![0]!.along, [0, 0, 1]);
+    expect(aid.labelBlock).toEqual({ rows: ['B:1'], lineAdvance: 1.2 });
 
     const slope = explicitLayout(result, 'slope');
     expectVec3Close(slope.labelAlong, [-1, 0, 0]);
@@ -377,17 +380,204 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(flattened, 'aid').labelAlong).toBeUndefined();
   });
 
-  it('splits multi-line labels into stacked texts', () => {
+  it('lays a multi-line label out as one block centred on its position (ruling 8)', () => {
     const layout = explicitLayout(mbdV2ToExternalRecords(fixtureData()), 'label-1');
 
+    // The first line is the label's text and the anchor stays the solver's
+    // position — the centre of the whole block under ruling 8, no longer the
+    // first line's spot. No text plane declared: the kernel stacks on screen.
     expect(layout.formattedLabel).toBe('BRAN /24381-145712');
-    expect(layout.texts).toEqual([
-      {
-        text: 'DN100 PSPEC A1A',
-        anchor: [1.4, 0.3, 0],
-        stackIndex: 1,
-      },
-    ]);
+    expect(layout.labelAnchor).toEqual([1.4, 0.3, 0]);
+    expect(layout.labelBlock).toEqual({ rows: ['DN100 PSPEC A1A'], lineAdvance: 1.2 });
+    expect(layout.texts).toBeUndefined();
+  });
+
+  describe('multi-line text blocks (ruling 8)', () => {
+    const expectVec3Close = (
+      actual: readonly [number, number, number] | undefined,
+      expected: readonly [number, number, number],
+    ): void => {
+      expect(actual).toBeDefined();
+      expect(actual![0]).toBeCloseTo(expected[0], 9);
+      expect(actual![1]).toBeCloseTo(expected[1], 9);
+      expect(actual![2]).toBeCloseTo(expected[2], 9);
+    };
+    const designSpace = (primitives: MbdV2PipeData['primitives']): MbdV2PipeData => ({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [] },
+      primitives,
+    });
+
+    it('keeps single-line text a plain label, text plane or not', () => {
+      const result = mbdV2ToExternalRecords(designSpace([
+        { kind: 'label', id: 'name', text: 'V-101', position: [0, 0, 0], text_dir: [1, 0, 0], text_up: [0, 0, 1] },
+        { kind: 'aid_text', id: 'plate', text: 't=10', position: [0, 0, 0], text_dir: [1, 0, 0], text_up: [0, 0, 1] },
+        { kind: 'aid_text', id: 'trailing', text: 'EL +1\n', position: [0, 0, 0] },
+      ]));
+
+      for (const id of ['name', 'plate', 'trailing']) {
+        const layout = explicitLayout(result, id);
+        expect(layout).not.toHaveProperty('labelBlock');
+        expect(layout.texts).toBeUndefined();
+      }
+      expect(explicitLayout(result, 'trailing').formattedLabel).toBe('EL +1');
+    });
+
+    it('stacks two and three lines along the declared text plane (envelope fixture)', () => {
+      const parsed = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!parsed.ok) throw new Error(parsed.error);
+      const pipeTag = parsed.data.primitives.find(primitive => primitive.kind === 'label');
+      if (!pipeTag || pipeTag.kind !== 'label') throw new Error('label fixture missing');
+      const result = mbdV2ToExternalRecords({
+        ...parsed.data,
+        primitives: [
+          pipeTag,
+          { ...pipeTag, id: 'three-lines', text: 'DN25\nPE +3050\n1RHR0008' },
+          { kind: 'aid_text', id: 'aid-three', text: 'X 1\nY 2\nPE 3', position: [10600, 5000, 3060], text_dir: [1, 0, 0], text_up: [0, 0, 1] },
+        ],
+      });
+
+      // 「管道信息」 on a support: text in the vertical XZ plane, 18 mm high.
+      const twoLines = explicitLayout(result, pipeTag.id);
+      expect(twoLines.formattedLabel).toBe('DN25');
+      expectVec3Close(twoLines.labelAnchor, [10.25, 5, 3.4]);
+      expectVec3Close(twoLines.labelAlong, [1, 0, 0]);
+      expect(twoLines.textHeightM).toBeCloseTo(0.018, 12);
+      expect(twoLines.labelBlock?.rows).toEqual(['PE +3050']);
+      expect(twoLines.labelBlock?.lineAdvance).toBe(1.2);
+      expectVec3Close(twoLines.labelBlock?.up, [0, 0, 1]);
+
+      const threeLines = explicitLayout(result, 'three-lines');
+      expect(threeLines.formattedLabel).toBe('DN25');
+      expect(threeLines.labelBlock?.rows).toEqual(['PE +3050', '1RHR0008']);
+      expectVec3Close(threeLines.labelAnchor, [10.25, 5, 3.4]);
+
+      // `aid_text` takes the same path; it has no height of its own, so the
+      // payload-wide 25 mm.
+      const aid = explicitLayout(result, 'aid-three');
+      expect(aid.labelBlock?.rows).toEqual(['Y 2', 'PE 3']);
+      expectVec3Close(aid.labelBlock?.up, [0, 0, 1]);
+      expect(aid.textHeightM).toBeCloseTo(0.025, 12);
+    });
+
+    it('takes text_up through source_to_design and squares it against text_dir', () => {
+      // T(10,20,30)·Rz(90°)·S(0.001): a direction is rotated only (E → N).
+      const parsed = parseMbdV2PipeData(translationFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const block = (id: string, frame: Readonly<{ text_dir?: [number, number, number]; text_up: [number, number, number] }>) => ({
+        kind: 'label' as const, id, text: 'X 1\nY 2', position: [0, 0, 0] as const, ...frame,
+      });
+      const result = mbdV2ToExternalRecords({
+        ...parsed.data,
+        primitives: [
+          block('square', { text_dir: [1, 0, 0], text_up: [0, 0, 1] }),
+          block('rotated-up', { text_dir: [0, 0, 1], text_up: [0, 1, 0] }),
+          // Leaning 45° towards the baseline: only the part across it counts.
+          block('leaning', { text_dir: [1, 0, 0], text_up: [1, 0, 1] }),
+          // Along the baseline: no plane left, the block stacks on screen.
+          block('parallel', { text_dir: [1, 0, 0], text_up: [2, 0, 0] }),
+          // No baseline to square against: the up as declared, unit length.
+          block('up-only', { text_up: [0, 3, 0] }),
+        ],
+      });
+      expect(result.skipped).toEqual([]);
+
+      expectVec3Close(explicitLayout(result, 'square').labelBlock?.up, [0, 0, 1]);
+      expectVec3Close(explicitLayout(result, 'rotated-up').labelBlock?.up, [-1, 0, 0]);
+      expectVec3Close(explicitLayout(result, 'leaning').labelBlock?.up, [0, 0, 1]);
+      expect(explicitLayout(result, 'parallel').labelBlock).toEqual({ rows: ['Y 2'], lineAdvance: 1.2 });
+      expectVec3Close(explicitLayout(result, 'up-only').labelBlock?.up, [-1, 0, 0]);
+      // The block's centre is the position, translated like any point.
+      expectVec3Close(explicitLayout(result, 'square').labelAnchor, [10, 20, 30]);
+    });
+
+    it('draws a planar block centred on its position with its rows along text_up', () => {
+      // A wall label turned 30° in the XY plane, facing the test camera:
+      // 150 mm text projects to 15 px at 100 px/m (inside the 11–18 px clamp),
+      // so the kernel lands every row on the solver's own point.
+      const cos30 = Math.cos(Math.PI / 6);
+      const sin30 = Math.sin(Math.PI / 6);
+      const position = [0.5, 0.5, 0] as const;
+      const up = [-sin30, cos30, 0] as const;
+      const result = mbdV2ToExternalRecords(designSpace([
+        {
+          kind: 'aid_text', id: 'wall', text: 'X 1\nY 2\nPE 3', position,
+          text_dir: [cos30, sin30, 0], text_up: up, text_height_mm: 150,
+        },
+        {
+          kind: 'aid_text', id: 'wall-two', text: 'X 1\nY 2', position: [1, 1, 0],
+          text_dir: [cos30, sin30, 0], text_up: up, text_height_mm: 150,
+        },
+      ]));
+      const batch = layoutViewport(
+        result.records.map(normalizeExternalDimension),
+        {
+          projector: createTestProjector(),
+          font: createTestFont(),
+          theme: SOLVESPACE_DIMENSION_THEME,
+          format: DEFAULT_DIMENSION_FORMAT,
+        },
+        new Map(),
+      );
+      const screen = (point: readonly [number, number, number]): readonly [number, number] =>
+        [200 + point[0] * 100, 200 - point[1] * 100];
+      const glyphRuns = (id: string): ScreenGlyphRun[] => batch.layouts
+        .find(layout => layout.dimensionId === id)!
+        .primitives
+        .filter((primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run');
+      const expectRows = (id: string, centre: readonly [number, number, number], count: number): void => {
+        const rows = glyphRuns(id).map(({ bounds }) =>
+          [bounds.x + bounds.width / 2, bounds.y + bounds.height / 2] as const);
+        expect(rows).toHaveLength(count);
+        rows.forEach((row, k) => {
+          // position + up · ((n − 1)/2 − k) · 1.2 · 0.15 m
+          const along = ((count - 1) / 2 - k) * 1.2 * 0.15;
+          const expected = screen([centre[0] + up[0] * along, centre[1] + up[1] * along, 0]);
+          expect(row[0]).toBeCloseTo(expected[0], 6);
+          expect(row[1]).toBeCloseTo(expected[1], 6);
+        });
+        // Symmetric about the position: the first and last rows mirror each other.
+        const centreScreen = screen(centre);
+        expect(rows[0]![0] + rows[count - 1]![0]).toBeCloseTo(2 * centreScreen[0], 6);
+        expect(rows[0]![1] + rows[count - 1]![1]).toBeCloseTo(2 * centreScreen[1], 6);
+      };
+      expectRows('wall', position, 3);
+      expectRows('wall-two', [1, 1, 0], 2);
+
+      // The label box covers every row, not just the first.
+      const wall = batch.layouts.find(layout => layout.dimensionId === 'wall')!;
+      for (const { bounds } of glyphRuns('wall')) {
+        expect(wall.labelBounds.x).toBeLessThanOrEqual(bounds.x);
+        expect(wall.labelBounds.y).toBeLessThanOrEqual(bounds.y);
+        expect(wall.labelBounds.x + wall.labelBounds.width).toBeGreaterThanOrEqual(bounds.x + bounds.width);
+        expect(wall.labelBounds.y + wall.labelBounds.height).toBeGreaterThanOrEqual(bounds.y + bounds.height);
+      }
+    });
+
+    it('leaves a billboard tag to lay its card rows out itself', () => {
+      // The default 3D presentation turns a label into a screen-facing card
+      // whose rows are body-local: the flat block changes nothing there.
+      const label = {
+        kind: 'label' as const, id: 'card', text: 'X 1\nY 2\nPE 3', position: [0.5, 0.5, 0] as const,
+        text_dir: [1, 0, 0] as const, text_up: [0, 1, 0] as const,
+      };
+      const records = mbdV2ToExternalRecords(designSpace([label])).records;
+      const context = {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      };
+      const withBlock = records.map(normalizeExternalDimension);
+      expect((withBlock[0] as ExplicitLayoutInput).labelBlock).toBeDefined();
+      const withoutBlock = withBlock.map((input) => {
+        const { labelBlock: _labelBlock, ...rest } = input as ExplicitLayoutInput;
+        return rest;
+      });
+      const card = layoutViewport(withBlock, context, new Map()).layouts;
+      expect(card[0]!.derived.tag).toBeDefined();
+      expect(card).toEqual(layoutViewport(withoutBlock, context, new Map()).layouts);
+    });
   });
 
   it('pairs a label with the leader that starts on it and presents the pair as a billboard tag', () => {
