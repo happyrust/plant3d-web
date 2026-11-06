@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldAlert, XCircle }
 import type { DbnumRow } from '@/api/genModelV1Api';
 import type { FollowUpSiteRow } from '@/composables/redeployRvmFollowUp';
 
-import { mergePickedAfterRefresh } from '@/components/project/redeployPick';
+import { reconcilePicks } from '@/components/project/redeployPick';
 import RedeployRvmSites from '@/components/project/RedeployRvmSites.vue';
 import Dialog from '@/components/ui/Dialog.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
@@ -47,8 +47,13 @@ const TASK_TERMINAL = new Set(['succeeded', 'partial', 'yielded', 'failed']);
 const step = ref<Step>('probing');
 const probeError = ref<string | null>(null);
 const picked = ref<Set<number>>(new Set());
-/** 选库页上次见到的候选库；刷新后新冒出来的库按打开时的默认，同样勾上。 */
+/** 选库页上次对过账的候选库；之后冒出来的库才算「新出现」。 */
 let seenCandidates = new Set<number>();
+/**
+ * 用户的意图是不是「全都要」。打开时默认全选；点掉任何一个库就不再是。
+ * 不能拿 allPicked 现算：后台刷新先把新库塞进列表，allPicked 就已经是 false 了。
+ */
+let wantAll = true;
 const countdown = ref(CONFIRM_SECONDS);
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -133,24 +138,25 @@ function togglePick(dbnum: number): void {
   if (next.has(dbnum)) next.delete(dbnum);
   else next.add(dbnum);
   picked.value = next;
+  wantAll = allPicked.value;
 }
 
 function toggleAll(): void {
-  picked.value = allPicked.value ? new Set() : new Set(candidateRows.value.map((row) => row.dbnum));
+  wantAll = !allPicked.value;
+  picked.value = wantAll ? new Set(candidateRows.value.map((row) => row.dbnum)) : new Set();
   seenCandidates = new Set(candidateRows.value.map((row) => row.dbnum));
 }
 
-/**
- * 刷新选库列表。和打开弹窗时一样默认全选：刷新前已勾的保持，刷新后新出现的库也勾上——
- * 只刷新列表不碰勾选，会让新库悄悄漏出这次部署。
- */
-async function refreshCandidates(): Promise<void> {
-  const before = new Set(picked.value);
-  const wasAll = allPicked.value;
-  await admin.refreshDbnums();
-  const merged = mergePickedAfterRefresh(before, wasAll, candidateRows.value.map((row) => row.dbnum), seenCandidates);
-  picked.value = merged.picked;
-  seenCandidates = merged.seen;
+/** 候选库变了（手动刷新、任务结束、别的客户端触发的后台刷新都算）就把勾选对一次账。 */
+function reconcileCandidates(): void {
+  const next = reconcilePicks({
+    picked: picked.value,
+    seen: seenCandidates,
+    wantAll,
+    candidates: candidateRows.value.map((row) => row.dbnum),
+  });
+  seenCandidates = next.seen;
+  if (next.picked !== picked.value) picked.value = next.picked;
 }
 
 function stopCountdown(): void {
@@ -174,6 +180,8 @@ function goConfirm(): void {
 function backToPicking(): void {
   stopCountdown();
   step.value = 'picking';
+  // 确认页上不动勾选，免得提交的库和页面列出的对不上；回到选库页再补这段时间的变化
+  reconcileCandidates();
 }
 
 async function submit(): Promise<void> {
@@ -227,6 +235,7 @@ async function probe(): Promise<void> {
     }
     picked.value = new Set(candidateRows.value.map((row) => row.dbnum));
     seenCandidates = new Set(picked.value);
+    wantAll = true;
     step.value = 'picking';
   } catch (error) {
     probeError.value = error instanceof Error ? error.message : String(error);
@@ -241,6 +250,13 @@ async function copyText(value: string): Promise<void> {
     // 剪贴板不可用时不打扰
   }
 }
+
+watch(
+  () => candidateRows.value.map((row) => row.dbnum).join(','),
+  () => {
+    if (step.value === 'picking') reconcileCandidates();
+  },
+);
 
 // 升级跑完 → 结果页；重试跑完（没有新的 upgrade 记录）同样落结果页
 watch(
@@ -362,7 +378,8 @@ const resultDoneCount = computed(() => {
           <button type="button"
             class="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
             :disabled="admin.dbLoading.value"
-            @click="refreshCandidates">
+            data-testid="redeploy-refresh"
+            @click="admin.refreshDbnums">
             <RefreshCw class="h-3 w-3" :class="admin.dbLoading.value ? 'animate-spin' : ''" />
             刷新
           </button>

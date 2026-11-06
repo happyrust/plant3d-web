@@ -1,34 +1,42 @@
 /**
- * 「一键完全重新部署」选库页的勾选合并。
+ * 「一键完全重新部署」选库页的勾选对账。
  *
- * 打开弹窗时默认全选；点「刷新」重新拉一次 /dbnums 后，新冒出来的库要跟打开时一致地勾上，
- * 否则新库会悄悄漏出这次部署。刷新前已经取消勾选的库保持不勾，不因为刷新被重新选上。
+ * 打开弹窗时默认全选。候选库会在选库页开着的时候变化：点「刷新」、任务结束、别的客户端触发的
+ * 后台刷新都会改写同一份库列表。新冒出来的库要跟打开时一致地勾上，否则会悄悄漏出这次部署；
+ * 用户点掉过的库保持不勾。
  */
-export type PickMergeResult = {
+export type PickState = {
+  /** 当前勾选 */
   picked: Set<number>;
-  /** 这次刷新后见到的候选库，供下次刷新判断「新出现」。 */
+  /** 上次对过账的候选库，之后冒出来的才算新库 */
   seen: Set<number>;
-}
+  /** 用户的意图是不是「全都要」；点掉任何一个库就不再是 */
+  wantAll: boolean;
+  /** 现在的候选库 */
+  candidates: number[];
+};
 
-/**
- * @param before 刷新前的勾选
- * @param wasAll 刷新前是不是全选状态
- * @param dbnums 刷新后的候选库
- * @param seen 刷新前见到的候选库
- */
-export function mergePickedAfterRefresh(
-  before: Set<number>,
-  wasAll: boolean,
-  dbnums: number[],
-  seen: Set<number>,
-): PickMergeResult {
-  const alive = new Set(dbnums);
-  const next = new Set([...before].filter((dbnum) => alive.has(dbnum)));
-  // 只有本来就在全选状态时才把新库一并勾上；用户主动点掉全选的，刷新不该擅自加回来
-  if (wasAll) {
-    for (const dbnum of dbnums) {
-      if (!seen.has(dbnum)) next.add(dbnum);
+export type PickReconcile = {
+  /** 没有变化时原样返回传入的集合（同一个引用），调用方据此跳过写回 */
+  picked: Set<number>;
+  seen: Set<number>;
+};
+
+export function reconcilePicks({ picked, seen, wantAll, candidates }: PickState): PickReconcile {
+  const alive = new Set(candidates);
+  let changed = false;
+  const next = new Set<number>();
+  for (const dbnum of picked) {
+    if (alive.has(dbnum)) next.add(dbnum);
+    else changed = true;
+  }
+  if (wantAll) {
+    for (const dbnum of candidates) {
+      if (!seen.has(dbnum) && !next.has(dbnum)) {
+        next.add(dbnum);
+        changed = true;
+      }
     }
   }
-  return { picked: next, seen: alive };
+  return { picked: changed ? next : picked, seen: alive };
 }
