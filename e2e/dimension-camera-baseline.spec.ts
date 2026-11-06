@@ -279,7 +279,7 @@ test.describe('dimension camera baseline', () => {
       await page.goto(gotoUrl, { waitUntil: 'domcontentloaded' });
       test.skip(!(await waitForModel(page)), `refno ${refno} 在 ${BACKEND} 上没加载出几何`);
 
-      // 尺寸记录来自 MBD 通道（`mbd_refno` → `/api/mbd/v2/pipe`），比几何晚一步到位。
+      // 尺寸记录来自 MBD 通道（`mbd_refno` → `/api/mbd/v2/object`，老后端回退 `/pipe`），比几何晚一步到位。
       // 等不到就说明这个 refno 在后端没有 MBD 数据——那是数据问题，不是相机基线的回归。
       let ready = true;
       try {

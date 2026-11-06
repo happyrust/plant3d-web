@@ -39,10 +39,11 @@ const invalidAngleDimPayload = {
   issues: [],
 };
 
+/** 页面先打通用端点 `/object`（#103 M7），老后端才回退 `/pipe`；两条路由答同一份 mock。 */
 async function routeMbdPipeApi(page: Page): Promise<void> {
-  await page.route('**/api/mbd/v2/pipe/**', async (route) => {
-    const url = route.request().url();
-    const body = url.includes(`/api/mbd/v2/pipe/${INVALID_REFNO}`)
+  await page.route(/\/api\/mbd\/v2\/(?:pipe|object)\//, async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const body = pathname.endsWith(`/${INVALID_REFNO}`)
       ? invalidAngleDimPayload
       : fixturePayload;
     await route.fulfill({
@@ -84,7 +85,7 @@ async function mbdRecords(page: Page): Promise<readonly any[]> {
 test('CLI linear fixture loads through contract, registry, scene painter, and SVG export', async ({ page }, testInfo) => {
   await routeMbdPipeApi(page);
   const response = page.waitForResponse(candidate => (
-    candidate.url().includes(`/api/mbd/v2/pipe/${FIXTURE_REFNO}`)
+    candidate.url().includes(`/api/mbd/v2/object/${FIXTURE_REFNO}`)
   ));
   await page.goto(FIXTURE_PAGE_URL);
   expect((await response).status()).toBe(200);
@@ -215,7 +216,7 @@ test('an invalid injected payload atomically clears the mbd source and surfaces 
 
   // 200 + 含 angle_dim 的负载：契约整包拒绝，不保留旧记录、不显示部分新记录。
   const invalidResponse = page.waitForResponse(candidate => (
-    candidate.url().includes(`/api/mbd/v2/pipe/${INVALID_REFNO}`)
+    candidate.url().includes(`/api/mbd/v2/object/${INVALID_REFNO}`)
   ));
   await switchMbdBranch(page, INVALID_REFNO);
   expect((await invalidResponse).status()).toBe(200);

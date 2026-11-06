@@ -104,8 +104,9 @@ function pageUrl(refno: string, options: Readonly<{ partial?: boolean }> = {}): 
   return `/?${params.toString()}`;
 }
 
+/** 页面先打通用端点 `/object`（#103 M7），老后端才回退 `/pipe`；两条路由答同一份 mock。 */
 async function routeMbdPipeApi(page: Page): Promise<void> {
-  await page.route('**/api/mbd/v2/pipe/**', async (route) => {
+  await page.route(/\/api\/mbd\/v2\/(?:pipe|object)\//, async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     const refno = decodeURIComponent(pathname.slice(pathname.lastIndexOf('/') + 1));
     const body = payloadsByRefno[refno];
@@ -202,7 +203,7 @@ test('unknown kind: rejected atomically by default; the in-panel partial toggle 
   test.setTimeout(120_000);
   await routeMbdPipeApi(page);
   const response = page.waitForResponse(candidate => (
-    candidate.url().includes(`/api/mbd/v2/pipe/${MIXED_REFNO}`)
+    candidate.url().includes(`/api/mbd/v2/object/${MIXED_REFNO}`)
   ));
   await page.goto(pageUrl(MIXED_REFNO));
   expect((await response).status()).toBe(200);

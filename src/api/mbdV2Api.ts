@@ -121,27 +121,33 @@ export function describeMbdV2HttpFailure(status: number, bodyText: string): stri
 export const MBD_FETCH_TIMEOUT_MS = 15_000;
 export const MBD_RESPONSE_MAX_BYTES = 20 * 1024 * 1024;
 
+/** `partial` 只放宽「不认识的图元 kind」一件事（面板「允许部分显示」）。 */
+export type MbdV2FetchOptions = Readonly<{ signal?: AbortSignal; partial?: boolean }>;
+
 /**
- * Live MBD V2 channel: fetch one branch's MbdV2PipeData by refno from
- * plant-web-server. HTTP status and contract-shape problems come back as an
- * `ok: false` parse result; transport failures reject like any fetch.
- *
- * 两道护栏：
+ * 一次受护栏请求的结局：拿到了契约解析结果（超时、超限、契约错误也在这里，是 `ok: false`），
+ * 或者是一个非 2xx 答复——状态码与正文原样交回，由调用方决定怎么报、要不要换端点再试。
+ */
+type MbdV2GuardedOutcome =
+  | Readonly<{ kind: 'result'; result: MbdV2ParseResult }>
+  | Readonly<{ kind: 'http_error'; status: number; bodyText: string }>;
+
+function mbdV2Path(route: 'pipe' | 'object', refno: string): string {
+  return `/api/mbd/v2/${route}/${encodeURIComponent(refno)}`;
+}
+
+/**
+ * 管道端点与通用端点共用的单次取数。两道护栏：
  * - 超时：`MBD_FETCH_TIMEOUT_MS` 内整条请求不 settle 就内部 abort，收敛成
  *   `ok: false`（中文原因），不把裸 AbortError 抛给调用方；
  * - 体积：2xx 后先看 `Content-Length`，超 `MBD_RESPONSE_MAX_BYTES` 直接拒收
  *   不读正文；header 缺失（chunked）或不可解析时放行。
  * 调用方 `options.signal` 主动取消不在护栏范围：原样抛出 AbortError。
  */
-export async function fetchMbdV2PipeData(
-  refno: string,
-  options: Readonly<{ signal?: AbortSignal; partial?: boolean }> = {},
-): Promise<MbdV2ParseResult> {
-  const normalized = refno.trim();
-  if (!normalized) {
-    return { ok: false, error: 'MBD V2 refno must not be empty' };
-  }
-  const path = `/api/mbd/v2/pipe/${encodeURIComponent(normalized)}`;
+async function fetchMbdV2Guarded(
+  path: string,
+  options: MbdV2FetchOptions,
+): Promise<MbdV2GuardedOutcome> {
   const mbdApiBase = getMbdApiBaseUrl();
   const url = mbdApiBase ? `${mbdApiBase}${path}` : buildBackendUrl(path);
 
@@ -173,7 +179,7 @@ export async function fetchMbdV2PipeData(
     callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
   }
 
-  const load = async (): Promise<MbdV2ParseResult> => {
+  const load = async (): Promise<MbdV2GuardedOutcome> => {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
       let bodyText = '';
@@ -182,7 +188,7 @@ export async function fetchMbdV2PipeData(
       } catch {
         // 正文读不出来就只剩状态码，照旧兜底
       }
-      return { ok: false, error: describeMbdV2HttpFailure(response.status, bodyText) };
+      return { kind: 'http_error', status: response.status, bodyText };
     }
     // 体积护栏：能解析出 Content-Length 且超限就直接拒收，不读正文；
     // header 缺失（chunked 传输）或不可解析时放行，照常走 parseJsonResponse。
@@ -190,13 +196,15 @@ export async function fetchMbdV2PipeData(
     const declaredBytes = contentLengthHeader === null ? NaN : Number(contentLengthHeader);
     if (Number.isFinite(declaredBytes) && declaredBytes > MBD_RESPONSE_MAX_BYTES) {
       return {
-        ok: false,
-        error: `MBD V2 API 响应过大：${declaredBytes} 字节，超过上限 ${MBD_RESPONSE_MAX_BYTES} 字节`,
+        kind: 'result',
+        result: {
+          ok: false,
+          error: `MBD V2 API 响应过大：${declaredBytes} 字节，超过上限 ${MBD_RESPONSE_MAX_BYTES} 字节`,
+        },
       };
     }
     const payload = await parseJsonResponse<unknown>(response, url);
-    // `partial` 只放宽「不认识的图元 kind」一件事（面板「允许部分显示」）。
-    return parseMbdV2PipeData(payload, { partial: options.partial === true });
+    return { kind: 'result', result: parseMbdV2PipeData(payload, { partial: options.partial === true }) };
   };
 
   try {
@@ -204,8 +212,11 @@ export async function fetchMbdV2PipeData(
   } catch (error) {
     if (timedOut) {
       return {
-        ok: false,
-        error: `MBD V2 API 请求超时（${MBD_FETCH_TIMEOUT_MS / 1000} 秒）：${url}`,
+        kind: 'result',
+        result: {
+          ok: false,
+          error: `MBD V2 API 请求超时（${MBD_FETCH_TIMEOUT_MS / 1000} 秒）：${url}`,
+        },
       };
     }
     throw error;
@@ -213,4 +224,89 @@ export async function fetchMbdV2PipeData(
     clearTimeout(timeoutTimer);
     callerSignal?.removeEventListener('abort', onCallerAbort);
   }
+}
+
+function toParseResult(outcome: MbdV2GuardedOutcome): MbdV2ParseResult {
+  return outcome.kind === 'result'
+    ? outcome.result
+    : { ok: false, error: describeMbdV2HttpFailure(outcome.status, outcome.bodyText) };
+}
+
+/**
+ * Live MBD V2 channel: fetch one branch's MbdV2PipeData by refno from
+ * plant-web-server. HTTP status and contract-shape problems come back as an
+ * `ok: false` parse result; transport failures reject like any fetch.
+ * 护栏（超时、体积、调用方取消原样抛出）见 {@link fetchMbdV2Guarded}。
+ */
+export async function fetchMbdV2PipeData(
+  refno: string,
+  options: MbdV2FetchOptions = {},
+): Promise<MbdV2ParseResult> {
+  const normalized = refno.trim();
+  if (!normalized) {
+    return { ok: false, error: 'MBD V2 refno must not be empty' };
+  }
+  return toParseResult(await fetchMbdV2Guarded(mbdV2Path('pipe', normalized), options));
+}
+
+/**
+ * 正文是不是后端的错误信封（`web_service::mbd::api_error` 的 `{ code, message, detail }`）：
+ * 能解析成 JSON 对象，且带非空字符串 `code` 或 `message`。这种答复出自 MBD 处理函数本身，
+ * 它的 404 是「库里没有这个对象」这样的真结论，不是路由不存在。
+ */
+function isMbdV2ErrorEnvelope(bodyText: string): boolean {
+  const text = bodyText.trim();
+  if (!text) return false;
+  try {
+    const envelope = JSON.parse(text) as unknown;
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return false;
+    const { code, message } = envelope as { code?: unknown; message?: unknown };
+    return (typeof code === 'string' && code.trim() !== '')
+      || (typeof message === 'string' && message.trim() !== '');
+  } catch {
+    return false;
+  }
+}
+
+export const MBD_OBJECT_ROUTE_FALLBACK_NOTE =
+  '后端未部署通用端点 /api/mbd/v2/object（404 且正文不是错误信封），已改走管道端点 /api/mbd/v2/pipe';
+
+/**
+ * 按对象取 MBD V2 数据（#103 M7）：`GET /api/mbd/v2/object/{refno}`。服务端按项目配置判定
+ * 标注类型（管道 / 支架 / 设备 / 土建 / 建筑），负载形状同管道包，另带 `annotation_type` 与
+ * `subject`；标不了的对象回 422 `not_annotatable`，信封里那句话照常透给面板。护栏与
+ * {@link fetchMbdV2PipeData} 相同。
+ *
+ * 灰度回退：通用端点答 404 且正文**不是**错误信封（axum 未知路由的 404 正文为空，前置代理的
+ * 404 页同理），说明后端还是只有 `/pipe` 的版本——改用 `/pipe/{refno}` 重试一次，成功时在
+ * `meta.notes` 记一句 {@link MBD_OBJECT_ROUTE_FALLBACK_NOTE}，失败时把它接在原因后面（不然
+ * 一台设备在老后端上拿到「不是派生隐式管身的路由容器」会被当成数据问题）。正文是信封的 404
+ * （`not_found`）与其它状态码都不回退。
+ */
+export async function fetchMbdV2ObjectData(
+  refno: string,
+  options: MbdV2FetchOptions = {},
+): Promise<MbdV2ParseResult> {
+  const normalized = refno.trim();
+  if (!normalized) {
+    return { ok: false, error: 'MBD V2 refno must not be empty' };
+  }
+  const outcome = await fetchMbdV2Guarded(mbdV2Path('object', normalized), options);
+  if (outcome.kind !== 'http_error'
+    || outcome.status !== 404
+    || isMbdV2ErrorEnvelope(outcome.bodyText)) {
+    return toParseResult(outcome);
+  }
+  const fallback = toParseResult(await fetchMbdV2Guarded(mbdV2Path('pipe', normalized), options));
+  if (!fallback.ok) {
+    return { ok: false, error: `${fallback.error}；${MBD_OBJECT_ROUTE_FALLBACK_NOTE}` };
+  }
+  const { meta } = fallback.data;
+  return {
+    ...fallback,
+    data: {
+      ...fallback.data,
+      meta: { ...meta, notes: [...meta.notes, MBD_OBJECT_ROUTE_FALLBACK_NOTE] },
+    },
+  };
 }
