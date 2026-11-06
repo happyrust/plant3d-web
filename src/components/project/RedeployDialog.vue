@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldAlert, XCircle }
 import type { DbnumRow } from '@/api/genModelV1Api';
 import type { FollowUpSiteRow } from '@/composables/redeployRvmFollowUp';
 
+import { mergePickedAfterRefresh } from '@/components/project/redeployPick';
 import RedeployRvmSites from '@/components/project/RedeployRvmSites.vue';
 import Dialog from '@/components/ui/Dialog.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
@@ -46,6 +47,8 @@ const TASK_TERMINAL = new Set(['succeeded', 'partial', 'yielded', 'failed']);
 const step = ref<Step>('probing');
 const probeError = ref<string | null>(null);
 const picked = ref<Set<number>>(new Set());
+/** 选库页上次见到的候选库；刷新后新冒出来的库按打开时的默认，同样勾上。 */
+let seenCandidates = new Set<number>();
 const countdown = ref(CONFIRM_SECONDS);
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -134,6 +137,20 @@ function togglePick(dbnum: number): void {
 
 function toggleAll(): void {
   picked.value = allPicked.value ? new Set() : new Set(candidateRows.value.map((row) => row.dbnum));
+  seenCandidates = new Set(candidateRows.value.map((row) => row.dbnum));
+}
+
+/**
+ * 刷新选库列表。和打开弹窗时一样默认全选：刷新前已勾的保持，刷新后新出现的库也勾上——
+ * 只刷新列表不碰勾选，会让新库悄悄漏出这次部署。
+ */
+async function refreshCandidates(): Promise<void> {
+  const before = new Set(picked.value);
+  const wasAll = allPicked.value;
+  await admin.refreshDbnums();
+  const merged = mergePickedAfterRefresh(before, wasAll, candidateRows.value.map((row) => row.dbnum), seenCandidates);
+  picked.value = merged.picked;
+  seenCandidates = merged.seen;
 }
 
 function stopCountdown(): void {
@@ -209,6 +226,7 @@ async function probe(): Promise<void> {
       return;
     }
     picked.value = new Set(candidateRows.value.map((row) => row.dbnum));
+    seenCandidates = new Set(picked.value);
     step.value = 'picking';
   } catch (error) {
     probeError.value = error instanceof Error ? error.message : String(error);
@@ -344,7 +362,7 @@ const resultDoneCount = computed(() => {
           <button type="button"
             class="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
             :disabled="admin.dbLoading.value"
-            @click="admin.refreshDbnums">
+            @click="refreshCandidates">
             <RefreshCw class="h-3 w-3" :class="admin.dbLoading.value ? 'animate-spin' : ''" />
             刷新
           </button>
