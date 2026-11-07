@@ -22,11 +22,9 @@ import type {
   MbdV2AidCircle,
   MbdV2AngleDim,
   MbdV2ArcFrame,
-  MbdV2Isoline,
   MbdV2Label,
   MbdV2LeaderLine,
   MbdV2LinearDim,
-  MbdV2LineSegment,
   MbdV2PipeData,
   MbdV2Vec3,
 } from './mbdV2Contract';
@@ -43,7 +41,6 @@ import type {
   ExplicitLayoutInput,
   ExplicitLodInput,
   ExplicitMarkerInput,
-  ExplicitPolarInput,
   ExplicitTagInput,
   ExplicitTagStyle,
   ScreenLinePart,
@@ -353,10 +350,6 @@ type ExplicitParts = Readonly<{
   subject?: string;
   /** Q6 presentation mode, forwarded verbatim when the caller asked for one. */
   labelPresentation?: 'interrupted' | 'above';
-  /** T3.6a opt-in; see `polarInputForLabel`. */
-  polar?: ExplicitPolarInput;
-  /** T3.6b opt-in for a non-polar sibling; see `mapLinearDim`. */
-  polarObstacle?: Readonly<{ groupKey: string }>;
   /** Pairwise declutter opt-in; see `angleDeclutter`. */
   declutter?: ExplicitLayoutInput['declutter'];
 }>;
@@ -394,8 +387,6 @@ function explicitRecord(
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
     ...(parts.tag ? { tag: parts.tag } : {}),
     ...(parts.subject ? { subject: parts.subject } : {}),
-    ...(parts.polar ? { polar: parts.polar } : {}),
-    ...(parts.polarObstacle ? { polarObstacle: parts.polarObstacle } : {}),
     ...(parts.declutter ? { declutter: parts.declutter } : {}),
   };
   return {
@@ -575,84 +566,6 @@ function awayFromPipe(
 }
 
 /**
- * Half the `disRange` window around a label's axial position (T3.6a plan
- * point 3): named so the 3× factor reads as a choice, not a stray literal.
- */
-const POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS = 3;
-
-/**
- * The pipe axis of an isoline for polar placement: the solver's own
- * straight-segment axis (`meta.isolines[].axis`, PML `isoline.line`) when
- * the payload declares it. Older payloads fall back to the first
- * same-isoline `linear_dim`'s `start`/`end`; those points lie on the
- * dimension line, roughly one outer diameter off the pipe, so the
- * fallback puts the pipe-body obstacle around the dimension row (#103).
- */
-function polarAxisLine(
-  isoline: MbdV2Isoline,
-  dimensions: readonly MbdV2LinearDim[],
-): MbdV2LineSegment | undefined {
-  if (isoline.axis) return isoline.axis;
-  const axisDim = dimensions.find(dimension => dimension.isoline_idx === isoline.index);
-  return axisDim ? { from: axisDim.start, to: axisDim.end } : undefined;
-}
-
-/**
- * T3.6a: builds the polar placement input for a `label` (plan point 3),
- * or `undefined` when any required fact is missing — isoline membership,
- * a pipe axis for that isoline ({@link polarAxisLine}), or that isoline's
- * declared outer diameter — in which case the record keeps its solver
- * anchor untouched (the flag only ever adds a field, never changes one
- * the kernel already draws from).
- *
- * The axis goes through the same source → Design Space path as
- * everywhere else (`transform.point`).
- * `basicRadiusM`: `od_mm / 2` through the same mm → Design-metre
- * conversion the text heights take (`textHeightToDesignM`). `disRange`:
- * the label's own projection onto the axis, padded
- * `POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS` text heights each way — the solver
- * does not give this record an explicit axial span, so the window is
- * sized off the one length already available at this call site.
- */
-function polarInputForLabel(
-  primitive: MbdV2Label,
-  dimensions: readonly MbdV2LinearDim[],
-  isolines: readonly MbdV2Isoline[],
-  data: MbdV2PipeData,
-  transform: FrameTransform,
-  position: Vec3,
-  textHeightM: number | undefined,
-): ExplicitPolarInput | undefined {
-  if (primitive.isoline_idx === undefined || textHeightM === undefined) return undefined;
-  const isoline = isolines.find(entry => entry.index === primitive.isoline_idx);
-  if (!isoline) return undefined;
-  const axisLine = polarAxisLine(isoline, dimensions);
-  if (!axisLine) return undefined;
-  const odM = textHeightToDesignM(data, transform, isoline.od_mm);
-  if (odM === undefined) return undefined;
-  const origin = transform.point(axisLine.from);
-  const end = transform.point(axisLine.to);
-  const axis = tryNormalize3(sub3(end, origin));
-  if (!axis) return undefined;
-  const span = sub3(end, origin);
-  const spanLength = dot3(span, span);
-  const dis = spanLength > 0 ? dot3(sub3(position, origin), span) / Math.sqrt(spanLength) : 0;
-  const halfSpanM = POLAR_DIS_RANGE_HALF_SPAN_CHEIGHTS * textHeightM;
-  return {
-    origin,
-    axis,
-    disRange: [dis - halfSpanM, dis + halfSpanM],
-    basicRadiusM: odM / 2,
-    textHeightM,
-    // T3.6b: every record on this isoline shares one group, so
-    // `layoutViewport` fences off candidates and `polarObstacle` anchors
-    // across labels — and against `mapLinearDim`'s own anchor below —
-    // instead of only the pipe body (plan point 1).
-    groupKey: `isoline:${primitive.isoline_idx}`,
-  };
-}
-
-/**
  * Tag (`label`, optionally with its `leader_line`): the flat presentation is
  * the solver's text centred on its position (along its `text_dir`, stacked
  * along its `text_up`, when declared) plus the leader as drawn; with `tag`
@@ -664,10 +577,7 @@ function mapLabel(
   primitive: MbdV2Label,
   leader: MbdV2LeaderLine | undefined,
   dimensions: readonly MbdV2LinearDim[],
-  isolines: readonly MbdV2Isoline[],
-  data: MbdV2PipeData,
   transform: FrameTransform,
-  textHeightM: number | undefined,
 ): ExternalDimensionRecord {
   const transformPoint = transform.point;
   const position = transformPoint(primitive.position);
@@ -694,7 +604,6 @@ function mapLabel(
     ...(tagClass.dot ? { dot: true } : {}),
     ...(tagClass.subject ? { subject: tagClass.subject } : {}),
   };
-  const polar = polarInputForLabel(primitive, dimensions, isolines, data, transform, position, textHeightM);
   return explicitRecord(primitive, 'annotation', {
     formattedLabel,
     labelAnchor: position,
@@ -703,7 +612,6 @@ function mapLabel(
     ...(target ? { lines: [{ from: position, to: target, part: 'leader' as const }] } : {}),
     ...(tagClass.lod ? { lod: tagClass.lod } : {}),
     tag,
-    ...(polar ? { polar } : {}),
   });
 }
 
@@ -890,15 +798,6 @@ function mapLinearDim(
       hideShort: !outside,
     },
     labelAnchor,
-    // T3.6b: this dimension does not opt into polar itself (its own
-    // `label_anchor` stands, same as always), but when it names an
-    // isoline it fences that anchor off as an obstacle for any same-isoline
-    // `label` that does opt in — `groupKey` matches `polarInputForLabel`'s
-    // own `isoline:<idx>`. No `isoline_idx` (plain running dimension, no
-    // isoline membership) = this field is omitted, v1 behaviour.
-    ...(primitive.isoline_idx !== undefined
-      ? { polarObstacle: { groupKey: `isoline:${primitive.isoline_idx}` } }
-      : {}),
     // 「工程文字朝向」: a dimension value runs along its dimension line, which
     // is the direction itself, so a linear dim needs no field for it. Tag /
     // aid / slope text takes the contract's `text_dir` (`textBaseline`) and
@@ -1178,10 +1077,7 @@ export function mbdV2ToExternalRecords(
           primitive,
           leaderByLabel.get(primitive.id),
           linearDims,
-          data.meta.isolines ?? [],
-          data,
           transform,
-          textHeightM,
         );
         break;
       case 'aid_text': {
@@ -1191,25 +1087,6 @@ export function mbdV2ToExternalRecords(
           primitive.text,
           textUp(primitive, transform, along),
         );
-        // T3.6b ruling: `aid_text` never gets `polar` or `polarObstacle`,
-        // even when its `isoline_idx` matches a same-isoline `label`'s
-        // polar group. In PML, every `aidtext` placement the producer draws
-        // either sits off a leg/skew frame that is not the pipe's own axis
-        // — `isoposAidtext`'s skew-leg X:/Y:/Z: text builds a throwaway
-        // `polarsystem` off the leg's own two endpoints and explicitly
-        // comments `--!this.polarsystem.add(!aidtext.name) $*no need to
-        // add` (`markpipe/object/isoline.pmlobj:2480-2521`, call sites
-        // `:2388`/`:2431`) — or is a fixed offset with no polar call at all
-        // (`drawslope`, `:2568-2591`; the weld-length adjustment text,
-        // `:2141-2147`). plant-mbd's Rust producer matches: every `AidText`
-        // sets `isoline_idx: None` (`slope.rs:295-303`, `angle.rs:524-532`,
-        // `adjust_weld.rs:205-211`; the field is optional in
-        // `contract.rs:283`), so in real payloads this case never even
-        // reaches the isoline / axis lookups `polarInputForLabel`
-        // would need. The fixture at `mbdV2ExternalAnnotations.test.ts`
-        // that gives an `aid_text` an `isoline_idx` does so only to
-        // exercise `groupTextHeightM`'s isoline-height lookup, not to
-        // imply a pipe axis for it.
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel,
           labelAnchor: position,

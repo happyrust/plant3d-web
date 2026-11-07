@@ -1061,9 +1061,6 @@ describe('mbdV2ToExternalRecords', () => {
       expect(explicitLayout(result, 'outer-own').dimension3d!.row).toBe(2);
       expect(explicitLayout(result, 'tag-group').textHeightM).toBeCloseTo(0.0135, 12);
       expect(explicitLayout(result, 'tag-own').textHeightM).toBeCloseTo(0.04, 12);
-      // Polar placement makes room for the label at the height it is drawn with.
-      expect(explicitLayout(result, 'tag-group').polar!.textHeightM).toBeCloseTo(0.0135, 12);
-      expect(explicitLayout(result, 'tag-own').polar!.textHeightM).toBeCloseTo(0.04, 12);
     });
 
     it('leaves a live pipe payload without the new record fields and on its group height', () => {
@@ -1620,266 +1617,33 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(ownSurface, 'outer-unplaced').dimension3d!.row).toBe(1);
   });
 
-  describe('polar placement opt-in (T3.6a)', () => {
-    // `cliLinearFixture`: source_mm, S(0.001). The one `linear_dim` runs
-    // start=[0,-500,0] end=[80,-500,0] mm -> Design [0,-0.5,0]..[0.08,-0.5,0],
-    // a 0.08 m axis along +X.
-    function fixture() {
-      const parsed = parseMbdV2PipeData(cliLinearFixture);
-      if (!parsed.ok) throw new Error(parsed.error);
-      const source = parsed.data.primitives[0]!;
-      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
-      return { data: parsed.data, source };
-    }
-
-    it('attaches polar when the label shares an isoline with a linear_dim and the table has od_mm', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-on-isoline', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-
-      const polar = explicitLayout(result, 'tag-on-isoline').polar;
-      expect(polar).toBeDefined();
-      // Axis through Design Space start/end (×0.001), basicRadius = od/2 = 0.25 m.
-      expect(polar!.origin).toEqual([0, -0.5, 0]);
-      expect(polar!.axis).toEqual([1, 0, 0]);
-      expect(polar!.basicRadiusM).toBeCloseTo(0.25, 12);
-      // The label sits at the axis midpoint (x=40mm -> 0.04m of the 0.08m span).
-      expect(polar!.disRange[0]).toBeLessThan(0.04);
-      expect(polar!.disRange[1]).toBeGreaterThan(0.04);
-      expect(polar!.textHeightM).toBeCloseTo(0.0135, 12);
-      // T3.6b: the group key names the isoline, matching the `linear_dim`'s
-      // own `polarObstacle.groupKey` below (same isoline -> same group).
-      expect(polar!.groupKey).toBe('isoline:0');
-    });
-
-    it('omits polar when the label has no isoline_idx', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          { kind: 'label', id: 'tag-unplaced', text: 'X 1', position: [40, -500, 0] },
-        ],
-      });
-      expect(explicitLayout(result, 'tag-unplaced').polar).toBeUndefined();
-    });
-
-    it('omits polar when no linear_dim shares the label\'s isoline', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 1 },
-          {
-            kind: 'label', id: 'tag-no-axis', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      expect(explicitLayout(result, 'tag-no-axis').polar).toBeUndefined();
-    });
-
-    it('reads the pipe axis from meta.isolines[].axis in preference to the linear_dim line', () => {
-      const { data, source } = fixture();
-      // The pipe runs along +X at y=0; the dimension row (y=-500mm) sits one
-      // outer diameter off it, which is what the linear_dim fallback used to
-      // hand over as the axis.
-      const meta = {
-        ...data.meta,
+  it('attaches neither polar nor polarObstacle: pipe labels arrive already placed by the solver', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const source = parsed.data.primitives[0]!;
+    if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+    // Every fact the retired front-end opt-in read is here: one isoline shared by a
+    // linear_dim, a label and an aid_text, with its od_mm and its declared axis.
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: {
+        ...parsed.data.meta,
         isolines: [{
           index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500,
           axis: { from: [0, 0, 0] as const, to: [80, 0, 0] as const },
         }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-on-axis', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-
-      const polar = explicitLayout(result, 'tag-on-axis').polar;
-      expect(polar).toBeDefined();
-      expect(polar!.origin).toEqual([0, 0, 0]);
-      expect(polar!.axis).toEqual([1, 0, 0]);
-      expect(polar!.basicRadiusM).toBeCloseTo(0.25, 12);
-      expect(polar!.disRange[0]).toBeLessThan(0.04);
-      expect(polar!.disRange[1]).toBeGreaterThan(0.04);
+      },
+      primitives: [
+        { ...source, isoline_idx: 0 },
+        { kind: 'label', id: 'tag-on-isoline', text: 'X 1', position: [40, -500, 0], isoline_idx: 0 },
+        { kind: 'aid_text', id: 'aid-on-isoline', text: 'X: 12', position: [40, -500, 0], isoline_idx: 0 },
+      ],
     });
 
-    it('attaches polar from a declared axis even when no linear_dim shares the isoline', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{
-          index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500,
-          axis: { from: [0, 0, 0] as const, to: [80, 0, 0] as const },
-        }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 1 },
-          {
-            kind: 'label', id: 'tag-axis-only', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-
-      const polar = explicitLayout(result, 'tag-axis-only').polar;
-      expect(polar?.origin).toEqual([0, 0, 0]);
-      expect(polar?.axis).toEqual([1, 0, 0]);
-      expect(polar?.groupKey).toBe('isoline:0');
-    });
-
-    it('omits polar when the isoline table has no od_mm for that index', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta: { ...data.meta, isolines: [] },
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-no-od', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      expect(explicitLayout(result, 'tag-no-od').polar).toBeUndefined();
-    });
-  });
-
-  describe('same-pipe polar obstacles (T3.6b)', () => {
-    function fixture() {
-      const parsed = parseMbdV2PipeData(cliLinearFixture);
-      if (!parsed.ok) throw new Error(parsed.error);
-      const source = parsed.data.primitives[0]!;
-      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
-      return { data: parsed.data, source };
+    expect(result.records.map(record => record.id)).toEqual([source.id, 'tag-on-isoline', 'aid-on-isoline']);
+    for (const record of result.records) {
+      expect(record.layout).not.toHaveProperty('polar');
+      expect(record.layout).not.toHaveProperty('polarObstacle');
     }
-
-    it('a linear_dim with an isoline_idx carries polarObstacle naming that isoline', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        primitives: [{ ...source, isoline_idx: 0 }],
-      });
-      expect(explicitLayout(result, source.id).polarObstacle).toEqual({ groupKey: 'isoline:0' });
-    });
-
-    it('a linear_dim without an isoline_idx carries no polarObstacle (v1 behaviour)', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({ ...data, primitives: [source] });
-      expect(explicitLayout(result, source.id).polarObstacle).toBeUndefined();
-    });
-
-    it('a label\'s polar.groupKey and its same-isoline linear_dim\'s '
-      + 'polarObstacle.groupKey agree, so layoutViewport treats them as one group', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-on-isoline', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      const label = explicitLayout(result, 'tag-on-isoline');
-      const dim = explicitLayout(result, source.id);
-      expect(label.polar?.groupKey).toBe(dim.polarObstacle?.groupKey);
-    });
-  });
-
-  describe('aid_text never opts into polar (T3.6b ruling)', () => {
-    // PML: every producer call site either builds a throwaway leg-frame
-    // `polarsystem` that explicitly skips `this.polarsystem.add` (skew-leg
-    // X:/Y:/Z: text, `isoline.pmlobj:2480-2521`, call sites `:2388`/`:2431`)
-    // or places the text at a fixed offset with no polar call at all
-    // (`drawslope`, `:2568-2591`; weld-length adjustment, `:2141-2147`).
-    // plant-mbd mirrors this: every `AidText` the Rust producer emits sets
-    // `isoline_idx: None` (`slope.rs:295-303`, `angle.rs:524-532`,
-    // `adjust_weld.rs:205-211`).
-    function fixture() {
-      const parsed = parseMbdV2PipeData(cliLinearFixture);
-      if (!parsed.ok) throw new Error(parsed.error);
-      const source = parsed.data.primitives[0]!;
-      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
-      return { data: parsed.data, source };
-    }
-
-    it('an aid_text with no isoline_idx (the real-world shape) gets no polar', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        primitives: [
-          source,
-          { kind: 'aid_text', id: 'aid-no-isoline', text: 'X: 12', position: [40, -500, 0] },
-        ],
-      });
-      const layout = explicitLayout(result, 'aid-no-isoline');
-      expect(layout.polar).toBeUndefined();
-      expect(layout.polarObstacle).toBeUndefined();
-    });
-
-    it('an aid_text with an isoline_idx that does share a linear_dim + od_mm '
-      + 'still gets no polar — the ruling holds even when every other fact '
-      + 'a `label` would need is present', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'aid_text', id: 'aid-on-isoline', text: 'X: 12',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      const layout = explicitLayout(result, 'aid-on-isoline');
-      expect(layout.polar).toBeUndefined();
-      expect(layout.polarObstacle).toBeUndefined();
-    });
   });
 });

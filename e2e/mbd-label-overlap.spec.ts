@@ -1,9 +1,9 @@
 /**
  * MBD 标签重叠生成器：真实 BRAN × 呈现模式 × 三档相机，落截图与 `diag.json`。
  *
- * 用途：polar / 去重 / 分帧这类改动的前后对比都要回答同一组问题——挂上了多少
- * polar 记录、有没有非有限值、屏上还剩多少对标签重叠、绕轨时 layout / paint
- * 的 P95 多少。读数口径与 `docs/verification/mbd-polar-ab-2026-11-06-r2/` 一致：
+ * 用途：去重 / 分帧这类改动的前后对比都要回答同一组问题——有没有非有限值、屏上还剩
+ * 多少对标签重叠、绕轨时 layout / paint 的 P95 多少。读数口径与
+ * `docs/verification/mbd-polar-ab-2026-11-06-r2/` 一致：
  *
  * - 重叠：已绘制、未被 LOD 隐藏、带文字（`derived.formattedLabel` 非空）的布局两两比 `labelBounds`，交叠宽高都
  *   > 1 px 记一对；流向箭头这类没有文字的线不算（2026-11-07 起，之前的统计含它们）
@@ -12,6 +12,8 @@
  *   `dimension-camera-baseline.spec.ts`。
  * - 性能（可选）：far 档绕 target 竖直轴转一圈，每步 `flushProjection()` 强制全量布局，
  *   读 `window.__dimensionFrameStats.summary()`（dev 构建才有）。
+ * - 模式：`polar` / `flat-polar` 只是多加 `mbd_polar=1`。前端极坐标放置层已退役（2026-11-07），
+ *   这个开关只多一条诊断提示，两种模式的读数应分别与 `off` / `flat` 相同，留作对照。
  *
  * 门控：`MBD_LABEL_OVERLAP=1` 才跑。
  *
@@ -172,7 +174,6 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
 
     const records = system.externalRegistry.snapshot.visibleRecords as any[];
     const explicit = records.filter(record => record.layout && 'lines' in record.layout);
-    const polarIds = explicit.filter(record => record.layout.polar).map(record => record.id as string);
     const layouts = viewport.getLayouts() as any[];
 
     let nonFinite = 0;
@@ -197,7 +198,6 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
     const canvas = document.querySelector<HTMLCanvasElement>('canvas.viewer');
     const width = canvas?.clientWidth ?? 0;
     const height = canvas?.clientHeight ?? 0;
-    const polarSet = new Set(polarIds);
     const drawn = layouts.filter(
       layout => layout.primitives.length > 0 && layout.derived?.lodHidden === undefined,
     );
@@ -206,7 +206,6 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
       .map(layout => ({ id: layout.dimensionId as string, r: layout.labelBounds }))
       .filter(entry => entry.r && entry.r.width > 0 && entry.r.height > 0);
     let overlaps = 0;
-    let polarOverlaps = 0;
     const overlapPairs: string[] = [];
     for (let i = 0; i < rects.length; i += 1) {
       for (let j = i + 1; j < rects.length; j += 1) {
@@ -216,7 +215,6 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
         const h = Math.min(a.r.y + a.r.height, b.r.y + b.r.height) - Math.max(a.r.y, b.r.y);
         if (w > 1 && h > 1) {
           overlaps += 1;
-          if (polarSet.has(a.id) || polarSet.has(b.id)) polarOverlaps += 1;
           if (overlapPairs.length < 60) overlapPairs.push(`${a.id} x ${b.id}`);
         }
       }
@@ -249,17 +247,12 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
       drawn: drawn.length,
       lodHidden: layouts.filter(layout => layout.derived?.lodHidden !== undefined).length,
       overlapHidden: layouts.filter(layout => layout.derived?.lodHidden === 'overlap').length,
-      polarCount: polarIds.length,
-      polarIds,
-      obstacleCount: explicit.filter(record => record.layout.polarObstacle).length,
       tagCount: explicit.filter(record => record.layout.tag).length,
       nonFinite,
       nonFiniteIds: [...nonFiniteIds],
       overlaps,
-      polarOverlaps,
       overlapPairs,
       offscreen,
-      polarDiag: viewport.getPolarDiagnostics?.() ?? null,
       labels,
     };
   }, { scale, position: base?.position ?? null, target: base?.target ?? null });
@@ -281,7 +274,6 @@ async function orbitPerf(page: Page, frames: number): Promise<any> {
     const settlePainted = async () => {
       for (let i = 0; i < 400 && viewport.painting; i += 1) await next();
     };
-    let fallbackMax = 0;
     stats.reset();
     for (let i = 1; i <= count; i += 1) {
       await next();
@@ -298,14 +290,13 @@ async function orbitPerf(page: Page, frames: number): Promise<any> {
       system.notifyViewerChanged();
       viewport.flushProjection();
       await settlePainted();
-      fallbackMax = Math.max(fallbackMax, viewport.getPolarDiagnostics?.()?.polarFallbacks ?? 0);
     }
     await next();
     viewer.flyTo(home, target, { duration: 0 });
     system.notifyViewerChanged();
     viewport.flushProjection();
     await settlePainted();
-    return { ...stats.summary(), fallbackMax };
+    return stats.summary();
   }, frames);
 }
 
@@ -351,16 +342,13 @@ test.describe('mbd label overlap', () => {
         const brief = Object.fromEntries(Object.entries(tiers).map(([name, tier]) => [name, {
           drawn: tier.drawn,
           overlapHidden: tier.overlapHidden,
-          polar: tier.polarCount,
           nonFinite: tier.nonFinite,
           overlaps: tier.overlaps,
-          fallbacks: tier.polarDiag?.polarFallbacks ?? null,
         }]));
         console.log(`[mbd-label-overlap] ${refno} ${mode} ${JSON.stringify(brief)} perf=${JSON.stringify(perf.map(entry => entry && ({
           layoutP95: entry.layoutMs?.p95,
           paintP95: entry.paintMs?.p95,
           frameP95: entry.frameMs?.p95,
-          fallbackMax: entry.fallbackMax,
         })))} errors=${pageErrors.length}`);
 
         for (const tier of Object.values(tiers)) {

@@ -17,9 +17,8 @@ import type {
 } from '../types';
 
 // Candidate step / count and the extended-search batch size live in
-// `theme.declutter` (T1.5); the occupancy grid (moved to `occupancy.ts` so the
-// polar screen guard can share it) and the direction cycle are algorithm
-// structure and stay here.
+// `theme.declutter` (T1.5); the occupancy grid (`occupancy.ts`) and the
+// direction cycle are algorithm structure and stay in code.
 const DIRECTIONS: readonly Vec2[] = [
   [0, -1],
   [1, 0],

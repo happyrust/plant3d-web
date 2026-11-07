@@ -373,9 +373,9 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
-  it('mbd_polar=1 opts a label into polar placement only with mbd_3d=0; default strips it', async () => {
-    // Same isoline on a linear_dim (pipe axis) and a label (consumer), plus
-    // the isoline's od_mm: the mapper attaches `polar` to the label only.
+  it('mbd_polar=1 is retired: records match the switch-off ones in both presentations, only a note is added', async () => {
+    // Same isoline on a linear_dim and a label, plus the isoline's od_mm:
+    // every fact the retired front-end polar layer used to read.
     const payload = contractPayload({
       primitives: [
         {
@@ -408,67 +408,40 @@ describe('createMbdExternalSync', () => {
       },
     });
     const fetchPipeData = vi.fn(async () => ({ ok: true as const, data: payload, diagnostics: [] }));
+    const run = async (search: string) => {
+      const harness = createHarness({ search, fetchPipeData });
+      await harness.sync.sync(harness.target);
+      const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+        .mock.calls[0]!;
+      return { records, diagnostics: harness.diagnostics };
+    };
 
-    const byDefault = createHarness({ search: '?mbd_refno=A', fetchPipeData });
-    await byDefault.sync.sync(byDefault.target);
-    const [, plain] = (byDefault.target.replaceExternalSource as ReturnType<typeof vi.fn>)
-      .mock.calls[0]!;
-    const plainTag = plain.find((record: { id: string }) => record.id === 'tag-1');
-    expect(plainTag.layout.polar).toBeUndefined();
-    // T3.6b (default off): `dim-1` names the same isoline as `tag-1`, so the
-    // mapper gives it `polarObstacle` too — `withoutPolar` must strip that
-    // field as well, or a `polarObstacle`-only record would still seed
-    // `layoutViewport`'s `groupObstacles` with zero `polar`-opted labels to
-    // key off, but still diverge from a payload that never carried it.
-    const plainDim = plain.find((record: { id: string }) => record.id === 'dim-1');
-    expect(plainDim.layout.polarObstacle).toBeUndefined();
+    const byDefault = await run('?mbd_refno=A');
+    for (const record of byDefault.records) {
+      expect(record.layout).not.toHaveProperty('polar');
+      expect(record.layout).not.toHaveProperty('polarObstacle');
+    }
 
-    // In the 3D presentation the switch is a no-op on the records: the label
-    // keeps its billboard `tag`, and both polar fields are stripped exactly as
-    // by default. Only the note tells the user why nothing moved.
-    const in3d = createHarness({ search: '?mbd_refno=A&mbd_polar=1', fetchPipeData });
-    await in3d.sync.sync(in3d.target);
-    const [, kept3d] = (in3d.target.replaceExternalSource as ReturnType<typeof vi.fn>)
-      .mock.calls[0]!;
-    expect(kept3d).toEqual(plain);
-    expect(plainTag.layout.tag).toBeDefined();
+    // 3D presentation: the label keeps its billboard `tag`.
+    const in3d = await run('?mbd_refno=A&mbd_polar=1');
+    expect(in3d.records).toEqual(byDefault.records);
+    expect(in3d.records.find((record: { id: string }) => record.id === 'tag-1').layout.tag).toBeDefined();
     expect(in3d.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
-      notes: [expect.stringContaining('mbd_3d=0')],
+      notes: [expect.stringContaining('mbd_polar=1 已退役')],
     }));
 
-    const enabled = createHarness({ search: '?mbd_refno=A&mbd_3d=0&mbd_polar=1', fetchPipeData });
-    await enabled.sync.sync(enabled.target);
-    const [, opted] = (enabled.target.replaceExternalSource as ReturnType<typeof vi.fn>)
-      .mock.calls[0]!;
-    const optedTag = opted.find((record: { id: string }) => record.id === 'tag-1');
-    expect(optedTag.layout.polar).toBeDefined();
-    expect(optedTag.layout.polar.basicRadiusM).toBeCloseTo(0.25, 9);
-    expect(optedTag.layout.polar.groupKey).toBe('isoline:0');
-    // `mbd_3d=0` already took `tag` off, so `layoutViewport` reaches the
-    // polar-resolved `labelAnchor`; the solver anchor itself is untouched.
-    expect(optedTag.layout.labelAnchor).toEqual(plainTag.layout.labelAnchor);
-    expect(optedTag.layout.tag).toBeUndefined();
-    expect(enabled.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
-      notes: expect.arrayContaining([expect.stringContaining('mbd_polar=1：已接入')]),
+    // The flat presentation the retired layer used to act on.
+    const flat = await run('?mbd_refno=A&mbd_3d=0');
+    const flatPolar = await run('?mbd_refno=A&mbd_3d=0&mbd_polar=1');
+    expect(flatPolar.records).toEqual(flat.records);
+    expect(flatPolar.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: expect.arrayContaining([expect.stringContaining('mbd_polar=1 已退役')]),
     }));
 
-    // `dim-1` carries no `polar` but keeps its `polarObstacle`, naming the
-    // same group `tag-1`'s `polar.groupKey` does.
-    const otherOpted = opted.find((record: { id: string }) => record.id === 'dim-1');
-    expect(otherOpted.layout.polar).toBeUndefined();
-    expect(otherOpted.layout.polarObstacle).toEqual({ groupKey: 'isoline:0' });
-
-    // Any other value is not the mode — stripped stays the default: `tag`
-    // kept, `polar` stripped.
-    const bogus = createHarness({ search: '?mbd_refno=A&mbd_polar=0', fetchPipeData });
-    await bogus.sync.sync(bogus.target);
-    const [, other] = (bogus.target.replaceExternalSource as ReturnType<typeof vi.fn>)
-      .mock.calls[0]!;
-    const bogusTag = other.find((record: { id: string }) => record.id === 'tag-1');
-    expect(bogusTag.layout.polar).toBeUndefined();
-    expect(bogusTag.layout.tag).toBeDefined();
-    const bogusDim = other.find((record: { id: string }) => record.id === 'dim-1');
-    expect(bogusDim.layout.polarObstacle).toBeUndefined();
+    // Any other value is not the switch: no note either.
+    const bogus = await run('?mbd_refno=A&mbd_polar=0');
+    expect(bogus.records).toEqual(byDefault.records);
+    expect(bogus.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({ notes: [] }));
   });
 
   /**
@@ -739,43 +712,22 @@ describe('createMbdExternalSync', () => {
   });
 
   /**
-   * 跨记录的分组键在每包里各自编号（polar 的 `isoline:<idx>` 从 0 起），
-   * 多包时要和 id 一起加前缀，否则两个 BRAN 的 0 号直段会被当成同一根管。
+   * 去重分组键在每包里各自编号（安装角度 `ang-1` 与它的方向小字同组），
+   * 多包时要和 id 一起加前缀，否则两个 BRAN 的同名组会被当成一组同进同退。
    */
-  it('prefixes polar group keys and declutter groups per refno', async () => {
+  it('prefixes declutter groups per refno', async () => {
     const fetchPipeData = vi.fn(async (refno: string) => ({
       ok: true as const,
       data: contractPayload({
         input_refno: refno,
         branch_refno: refno,
         primitives: [
-          {
-            kind: 'linear_dim',
-            id: 'dim-1',
-            start: [0, 0, 0],
-            end: [1, 0, 0],
-            text: '1000',
-            extension_lines: [
-              { from: [0, 0, 0], to: [0, 0.1, 0] },
-              { from: [1, 0, 0], to: [1, 0.1, 0] },
-            ],
-            arrow_lines: [],
-            label_anchor: [0.5, 0.1, 0],
-            isoline_idx: 0,
-          },
-          { kind: 'label', id: 'tag-1', text: 'X 1', position: [0.5, 0, 0], isoline_idx: 0 },
           { kind: 'aid_text', id: 'ang-1:dirtext1', text: '-X', position: [0, 0, 0] },
         ],
-        meta: {
-          geometry_space: 'source_mm',
-          source_to_design: IDENTITY,
-          notes: [],
-          isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 0.5 }],
-        },
       }),
       diagnostics: [],
     }));
-    const harness = createHarness({ search: '?mbd_refno=A,B&mbd_3d=0&mbd_polar=1', fetchPipeData });
+    const harness = createHarness({ search: '?mbd_refno=A,B', fetchPipeData });
 
     await harness.sync.sync(harness.target);
 
@@ -783,8 +735,6 @@ describe('createMbdExternalSync', () => {
       .mock.calls[0]!;
     const layoutOf = (id: string) => records.find((record: { id: string }) => record.id === id).layout;
     for (const refno of ['A', 'B']) {
-      expect(layoutOf(`${refno}:tag-1`).polar.groupKey).toBe(`${refno}:isoline:0`);
-      expect(layoutOf(`${refno}:dim-1`).polarObstacle).toEqual({ groupKey: `${refno}:isoline:0` });
       expect(layoutOf(`${refno}:ang-1:dirtext1`).declutter).toEqual({ rank: 500, group: `${refno}:ang-1` });
     }
   });

@@ -6,7 +6,7 @@ import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { layoutViewport } from './layoutViewport';
 
-import type { ExplicitLayoutInput, NormalizedDimensionInput, ScreenGlyphRun, ScreenRect } from '../types';
+import type { ExplicitLayoutInput, NormalizedDimensionInput, ScreenRect } from '../types';
 
 import { present } from '@/testing/present';
 
@@ -26,35 +26,6 @@ function linear(id: string): Extract<NormalizedDimensionInput, { kind: 'linear' 
     a: [0, 0, 0],
     b: [1, 0, 0],
     placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
-  };
-}
-
-/**
- * A `label` opted into polar placement: pipe along +X, the solver's own
- * anchor sitting on the axis (what every pre-T3.6a anchor looks like),
- * small enough `basicRadiusM` / `textHeightM` that its placement stays
- * on screen at `createTestProjector()`'s 100 px/m.
- */
-function polarLabel(
-  id: string,
-  overrides: Partial<ExplicitLayoutInput> = {},
-): ExplicitLayoutInput {
-  return {
-    id,
-    role: 'external',
-    labelPinned: true,
-    formattedLabel: 'X',
-    lines: [],
-    labelAnchor: [0.5, 0, 0],
-    arrowLines: [],
-    polar: {
-      origin: [0, 0, 0],
-      axis: [1, 0, 0],
-      disRange: [-1, 1],
-      basicRadiusM: 0.05,
-      textHeightM: 0.02,
-    },
-    ...overrides,
   };
 }
 
@@ -186,83 +157,10 @@ describe('layoutViewport', () => {
       ),
     ).toBe(true);
   });
-});
 
-describe('layoutViewport — polar placement (T3.6a)', () => {
-  it('moves a polar-opted label off the pipe body (anchor distance >= basicRadius)', () => {
-    const input = polarLabel('p');
-    const batch = layoutViewport([input], baseContext, new Map());
-
-    present(batch.layouts[0], 'layout');
-    expect(batch.polarFallbacks).toBe(0);
-    expect(batch.polarNext.has('p')).toBe(true);
-    const chosen = present(batch.polarNext.get('p'), 'polar state').candidate;
-    // Radial distance from the axis is exactly the candidate's `radius`
-    // field (`polarPlace`'s own accounting), which must clear the pipe body.
-    expect(chosen.radius).toBeGreaterThanOrEqual(input.polar!.basicRadiusM);
-  });
-
-  it('separates two same-position labels in one frame (the second does not take the first slot)', () => {
-    const a = polarLabel('a');
-    const b = polarLabel('b');
-    const batch = layoutViewport([a, b], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(0);
-    const stateA = present(batch.polarNext.get('a'), 'a state');
-    const stateB = present(batch.polarNext.get('b'), 'b state');
-    // Different slots: not the same (disIndex, radiusIndex, angle) triple.
-    const sameSlot = stateA.candidate.disIndex === stateB.candidate.disIndex
-      && stateA.candidate.radiusIndex === stateB.candidate.radiusIndex
-      && stateA.candidate.angle === stateB.candidate.angle;
-    expect(sameSlot).toBe(false);
-  });
-
-  it('keeps the solver anchor when the polar reference is degenerate (RangeError)', () => {
-    // A zero-length axis makes `cameraReference` throw (normalises to null).
-    const input = polarLabel('degenerate', {
-      polar: {
-        origin: [0, 0, 0],
-        axis: [0, 0, 0],
-        disRange: [-1, 1],
-        basicRadiusM: 0.05,
-        textHeightM: 0.02,
-      },
-    });
-    const batch = layoutViewport([input], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(1);
-    expect(batch.polarNext.has('degenerate')).toBe(false);
-    const layout = present(batch.layouts[0], 'layout');
-    // Falls back to the solver's own anchor: label bounds centre on [0.5,0,0]
-    // at the test projector's 100 px/m, i.e. (250, 200).
-    expect(layout.labelBounds.x + layout.labelBounds.width / 2).toBeCloseTo(250, 0);
-  });
-
-  it('keeps the solver anchor when every screen candidate projects off screen (allRejected)', () => {
-    // A 1000 m basic radius pushes every candidate's position ~1000 m off
-    // the axis; at the test projector's 100 px/m that is ~1e5 px off
-    // screen, so `screenGuard` rejects all of them as `offscreen`.
-    const input = polarLabel('far', {
-      polar: {
-        origin: [0, 0, 0],
-        axis: [1, 0, 0],
-        disRange: [-1, 1],
-        basicRadiusM: 1000,
-        textHeightM: 0.02,
-      },
-    });
-    const batch = layoutViewport([input], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(1);
-    expect(batch.polarNext.has('far')).toBe(false);
-    const layout = present(batch.layouts[0], 'layout');
-    // Falls back to the solver's own anchor, same as the degenerate case.
-    expect(layout.labelBounds.x + layout.labelBounds.width / 2).toBeCloseTo(250, 0);
-  });
-
-  it('is a no-op for inputs without `polar` — output identical to pre-T3.6a behaviour', () => {
-    const withoutPolar: ExplicitLayoutInput = {
-      id: 'plain',
+  it('ignores the retired `polar` / `polarObstacle` fields: every label stays on its solver anchor', () => {
+    const label: ExplicitLayoutInput = {
+      id: 'label',
       role: 'external',
       labelPinned: true,
       formattedLabel: 'X',
@@ -270,154 +168,26 @@ describe('layoutViewport — polar placement (T3.6a)', () => {
       labelAnchor: [0.5, 0, 0],
       arrowLines: [],
     };
-    const batch = layoutViewport([withoutPolar], baseContext, new Map());
+    const sibling: ExplicitLayoutInput = { ...label, id: 'sibling', formattedLabel: 'Y', labelAnchor: [0, 0.07, 0] };
+    const plain = layoutViewport([label, sibling], baseContext, new Map()).layouts;
+    const tagged = layoutViewport([
+      {
+        ...label,
+        polar: {
+          origin: [0, 0, 0],
+          axis: [1, 0, 0],
+          disRange: [-1, 1],
+          basicRadiusM: 0.05,
+          textHeightM: 0.02,
+          groupKey: 'isoline:0',
+        },
+      },
+      { ...sibling, polarObstacle: { groupKey: 'isoline:0' } },
+    ], baseContext, new Map()).layouts;
 
-    expect(batch.polarFallbacks).toBe(0);
-    expect(batch.polarNext.size).toBe(0);
-    const layout = present(batch.layouts[0], 'layout');
-    expect(layout.labelBounds.x + layout.labelBounds.width / 2).toBeCloseTo(250, 0);
-  });
-
-  it('feeds `polarPrevious` back for hysteresis / candidate stability across frames', () => {
-    const input = polarLabel('p');
-    const first = layoutViewport([input], baseContext, new Map());
-    expect(first.polarNext.has('p')).toBe(true);
-
-    const second = layoutViewport([input], baseContext, new Map(), {
-      polarPrevious: first.polarNext,
-    });
-    expect(second.polarFallbacks).toBe(0);
-    const firstCandidate = present(first.polarNext.get('p'), 'first').candidate;
-    const secondCandidate = present(second.polarNext.get('p'), 'second').candidate;
-    // Same camera, same geometry, previous fed back: the chosen slot repeats.
-    expect(secondCandidate.disIndex).toBe(firstCandidate.disIndex);
-    expect(secondCandidate.radiusIndex).toBe(firstCandidate.radiusIndex);
-  });
-
-  it('resolves polar records after the rest, so a polar label keeps off a later record\'s text', () => {
-    const solo = layoutViewport([polarLabel('p')], baseContext, new Map());
-    const preferred = present(solo.polarNext.get('p'), 'solo state').candidate.pos;
-    // A plain record sorted *after* the polar label, sitting on its preferred spot.
-    const blocker: ExplicitLayoutInput = {
-      id: 'blocker',
-      role: 'external',
-      labelPinned: true,
-      formattedLabel: 'BLOCK',
-      lines: [],
-      labelAnchor: preferred,
-      arrowLines: [],
-    };
-    const batch = layoutViewport([polarLabel('p'), blocker], baseContext, new Map());
-
-    const placed = present(batch.layouts[0], 'polar layout');
-    const block = present(batch.layouts[1], 'blocker layout');
-    expect(boxesIntersect(placed.labelBounds, block.labelBounds)).toBe(false);
-  });
-
-  it('moves only the anchor: the label keeps its own baseline', () => {
-    const batch = layoutViewport([polarLabel('p')], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(0);
-    const glyph = present(batch.layouts[0], 'layout').primitives.find(
-      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
-    );
-    expect(glyph?.rotationRad ?? 0).toBe(0);
-  });
-});
-
-describe('layoutViewport — same-pipe polar obstacles (T3.6b)', () => {
-  it('without a `groupKey`, two same-position labels only separate along `dis` '
-    + '(v1: no cross-record obstacle, just independent screenGuard occupancy)', () => {
-    const a = polarLabel('a');
-    const b = polarLabel('b');
-    const batch = layoutViewport([a, b], baseContext, new Map());
-
-    const stateA = present(batch.polarNext.get('a'), 'a state').candidate;
-    const stateB = present(batch.polarNext.get('b'), 'b state').candidate;
-    expect(stateA.angle).toBe(stateB.angle);
-    expect(stateA.dis).not.toBe(stateB.dis);
-  });
-
-  it('with a shared `groupKey`, the second label takes a different slot and '
-    + 'does not land on the first one\'s drawn text', () => {
-    const a = polarLabel('a', { polar: { ...polarLabel('a').polar!, groupKey: 'g1' } });
-    const b = polarLabel('b', { polar: { ...polarLabel('b').polar!, groupKey: 'g1' } });
-    const batch = layoutViewport([a, b], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(0);
-    const stateA = present(batch.polarNext.get('a'), 'a state').candidate;
-    const stateB = present(batch.polarNext.get('b'), 'b state').candidate;
-    // `b` steers clear of `a`'s `polarCandidateObstacle` in polar terms and of
-    // the box `a` was actually drawn with on screen.
-    expect(stateA.dis === stateB.dis && stateA.angle === stateB.angle).toBe(false);
-    expect(boxesIntersect(
-      present(batch.layouts[0], 'a layout').labelBounds,
-      present(batch.layouts[1], 'b layout').labelBounds,
-    )).toBe(false);
-  });
-
-  it('a non-polar sibling (`polarObstacle`) fences off its own anchor: the polar '
-    + 'label in the same group does not land on it', () => {
-    const label = polarLabel('lbl', { polar: { ...polarLabel('lbl').polar!, groupKey: 'g2' } });
-    const sibling: ExplicitLayoutInput = {
-      id: 'sib',
-      role: 'external',
-      labelPinned: true,
-      formattedLabel: 'Y',
-      lines: [],
-      labelAnchor: [0, 0.07, 0],
-      arrowLines: [],
-      textHeightM: 0.02,
-      polarObstacle: { groupKey: 'g2' },
-    };
-    // Sibling sorts first in `inputs`; `seedSiblingObstacles` fences its
-    // anchor off before the main loop resolves `lbl`, so ordering does not
-    // matter here (unlike the candidate-obstacle case above).
-    const batch = layoutViewport([sibling, label], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(0);
-    // The sibling's anchor [0, 0.07, 0] sits at angle 90 (north) from the
-    // `polarLabel` fixture's axis; whichever slot the label takes, it is not
-    // drawn on the sibling's text.
-    expect(boxesIntersect(
-      present(batch.layouts[0], 'sibling layout').labelBounds,
-      present(batch.layouts[1], 'label layout').labelBounds,
-    )).toBe(false);
-  });
-
-  it('different `groupKey`s do not obstruct each other at the polar level: both '
-    + 'keep the solo angle, exactly as if the other group did not exist', () => {
-    const alone = layoutViewport(
-      [polarLabel('solo', { polar: { ...polarLabel('solo').polar!, groupKey: 'solo-group' } })],
-      baseContext,
-      new Map(),
-    );
-    const soloCandidate = present(alone.polarNext.get('solo'), 'solo state').candidate;
-
-    const a = polarLabel('a', { polar: { ...polarLabel('a').polar!, groupKey: 'group-a' } });
-    const b = polarLabel('b', { polar: { ...polarLabel('b').polar!, groupKey: 'group-b' } });
-    const batch = layoutViewport([a, b], baseContext, new Map());
-
-    expect(batch.polarFallbacks).toBe(0);
-    const stateA = present(batch.polarNext.get('a'), 'a state').candidate;
-    const stateB = present(batch.polarNext.get('b'), 'b state').candidate;
-    // Neither group's `groupObstacles` entry has anything from the other
-    // group in it, so both resolve the same angle the solo record did — the
-    // same ungrouped `screenGuard`/`polarOccupancy` still slides `b` along
-    // `dis` to avoid sharing `a`'s screen slot (v1's existing behaviour,
-    // orthogonal to T3.6b and covered by the ungrouped test above).
-    expect(stateA.angle).toBe(soloCandidate.angle);
-    expect(stateB.angle).toBe(soloCandidate.angle);
-    expect(stateA.dis).toBe(soloCandidate.dis);
-    expect(stateB.dis).not.toBe(soloCandidate.dis);
-  });
-
-  it('is a no-op for inputs without `groupKey` / `polarObstacle` — identical to '
-    + 'T3.6a output (no groupObstacles seeded, no candidate obstacle registered)', () => {
-    const input = polarLabel('p');
-    const batch = layoutViewport([input], baseContext, new Map());
-    const chosen = present(batch.polarNext.get('p'), 'p state').candidate;
-    expect(chosen.dis).toBe(0);
-    expect(chosen.angle).toBe(90);
+    expect(tagged).toEqual(plain);
+    // The test projector's 100 px/m puts the solver anchor [0.5, 0, 0] at x = 250.
+    const labelBounds = present(tagged[0], 'label layout').labelBounds;
+    expect(labelBounds.x + labelBounds.width / 2).toBeCloseTo(250, 0);
   });
 });
