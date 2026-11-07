@@ -608,34 +608,21 @@ export type ExplicitTagInput = Readonly<{
 }>;
 
 /**
- * Design-space inputs for the polar placement layer (T3.6a), carried on
- * `ExplicitLayoutInput.polar`. Everything here is plain geometry the mapper
- * can read off the contract; the camera-derived parts of a
- * `PolarReference` (`showDir`, `horiDir`, `up`) are built fresh every frame
- * by `cameraReference()` inside the viewport, not stored here — a cached
- * `showDir` would go stale as the camera moves.
+ * @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。管道标签的
+ * 极坐标摆位由求解器完成（plant-mbd ADR-0016），前端不再二次放置。
  */
 export type ExplicitPolarInput = Readonly<{
   /** Pipe axis origin (PML `polarsystem.pos`), Design Space metres. */
   origin: Vec3;
-  /** Pipe axis direction (PML `polarsystem.dir`); normalised by the viewport. */
+  /** Pipe axis direction (PML `polarsystem.dir`). */
   axis: Vec3;
   /** Placement range along the axis (PML `limitMinDis`..`limitMaxDis`), metres. */
   disRange: readonly [min: number, max: number];
   /** Basic radius (PML `basicRadius`), usually the pipe's outer radius, metres. */
   basicRadiusM: number;
-  /** Text height (Design Space metres) feeding `needs` (`needDis`/`needRadius`). */
+  /** Text height, Design Space metres. */
   textHeightM: number;
-  /**
-   * Same-pipe placement group (T3.6b), e.g. `isoline:<idx>`: every record
-   * sharing a `groupKey` is assumed to share one `PolarReference` axis
-   * (same `origin`/`axis` up to floating-point noise), so records later in
-   * input order can avoid the polar real estate records earlier in the
-   * group already claimed — not just claim screen space, but steer
-   * `polarPlace` itself away from the (dis, angle, radius) box the first
-   * record landed in. Omitted = v1 behaviour: no cross-record obstacle,
-   * only the pipe body. See `kernel/viewport/polarObstacles.ts`.
-   */
+  /** Same-pipe placement group, e.g. `isoline:<idx>`. */
   groupKey?: string;
 }>;
 
@@ -719,28 +706,9 @@ export type ExplicitLayoutInput = Readonly<{
    * flat text and leader, kept for the legacy presentation.
    */
   tag?: ExplicitTagInput;
-  /**
-   * Opt into the polar placement layer (T3.6a): the viewport builds a
-   * `PolarReference` from this plus the current camera, runs `polarPlace` +
-   * `screenGuard`, and — when a candidate clears the screen — substitutes
-   * `labelAnchor`/`labelAlong` with it before drawing. Absent = unchanged
-   * behaviour (the solver's own anchor stands as-is); a degenerate
-   * reference or an all-rejected screen guard also falls back to the
-   * original anchor, never hides the record.
-   */
+  /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
   polar?: ExplicitPolarInput;
-  /**
-   * Marks a record that keeps its flat, solver-placed anchor (no `polar`)
-   * but still shares a pipe with records that do opt in (T3.6b plan point
-   * 1, second bullet): e.g. a `linear_dim`'s own `labelAnchor`, placed by
-   * the solver, that a same-isoline `label` reads its axis from in
-   * `polarInputForLabel`. `groupKey` must match the `polar.groupKey` of the
-   * records it should be an obstacle for — same string, same
-   * `PolarReference` axis (`kernel/viewport/polarObstacles.ts`'s
-   * `siblingAnchorObstacle`). Absent = this record never becomes a polar
-   * obstacle (v1 behaviour, and the default for every record that is not
-   * part of a polar group).
-   */
+  /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
   polarObstacle?: Readonly<{ groupKey: string }>;
   /**
    * Take part in the pairwise declutter (`declutterOverlaps`) that the 3D

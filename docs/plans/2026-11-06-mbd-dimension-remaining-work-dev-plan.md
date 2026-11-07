@@ -86,7 +86,7 @@ N0 收口（先做，无功能代码）
 | ID | 任务 | 验收 |
 | --- | --- | --- |
 | N2-1 | **D5 结论落地为文档 + ADR**：`mbd_polar` **保持默认关**，且**只在 `mbd_3d=0` 下生效**。理由写清三条：远景重叠 2 → 39（屏幕校验看不到 `dimension3d` 文字框）、`24383_91813` 全程降级（摆完不解冲突）、多行行距未随旋转。同时记录「polar 不进入三维呈现」的取舍：三维呈现里标签是 billboard 卡片，有自己的避让轮，polar 接进来只会把卡片换成压在数值上的平面文字 | 新 ADR（编号顺延）或 10-29 计划 §5 D5 行的正式结论；`?mbd_polar=1` 的行为与 N0-1 的代码一致 |
-| N2-2 | **平面呈现的三个根因**（**需先裁决做不做**，见 §5 Q2）：<br>① 占用网格预先装入已布局的 `dimension3d` 文字框与已摆好的卡片——`layoutViewport.ts:258` 的 `polarOccupancy` 除了 polar 候选，还要吃本帧非 polar 记录的 `labelBounds`；<br>② 摆完之后补一轮解冲突：`layoutAuthority='solver'` 下 `resolveLabelCollisions` 只占位不移动，需要给 polar 记录开一个「允许移动」的口子；<br>③ 多行文字旋转时同步旋转行距方向（与 F6 的 `explicit.ts:694` 是同一处） | ①+② 合并后 `mbd_3d=0&mbd_polar=1` 的重叠对数不高于 `mbd_3d=0`（r2 现状 far 71 → 93，目标 ≤ 71）；③ 的多行标签旋转后行距沿文字基线，A/B 截图证明不再错位堆叠；三项各自有单测 |
+| N2-2 | **已被 M2a 取代（2026-11-07，前端极坐标放置层退役）**。原任务：**平面呈现的三个根因**（**需先裁决做不做**，见 §5 Q2）：<br>① 占用网格预先装入已布局的 `dimension3d` 文字框与已摆好的卡片——`layoutViewport.ts:258` 的 `polarOccupancy` 除了 polar 候选，还要吃本帧非 polar 记录的 `labelBounds`；<br>② 摆完之后补一轮解冲突：`layoutAuthority='solver'` 下 `resolveLabelCollisions` 只占位不移动，需要给 polar 记录开一个「允许移动」的口子；<br>③ 多行文字旋转时同步旋转行距方向（与 F6 的 `explicit.ts:694` 是同一处） | ①+② 合并后 `mbd_3d=0&mbd_polar=1` 的重叠对数不高于 `mbd_3d=0`（r2 现状 far 71 → 93，目标 ≤ 71）；③ 的多行标签旋转后行距沿文字基线，A/B 截图证明不再错位堆叠；三项各自有单测 |
 
 ### N3 视觉裁决与真实验证（F13 / F14）
 
@@ -99,7 +99,7 @@ N0 收口（先做，无功能代码）
 
 | ID | 任务 | 依据 | 验收 |
 | --- | --- | --- | --- |
-| N4-1 | **T5.3** Polar 避让 `occupancy.rs`。算法口径以 N2-2 的 TS 实现为准；若 N2-2 裁决为不做，则以前端 `kernel/layout/polar/place/` + `screenGuard` 的现有实现为准。两边共用 PML 原 case 金样 | `layout.rs:237` 的 `carried_occupancy`、PML `polarsystem.pmlobj:1028-1296` | `IssueCategory::Avoidance` 开始产出；密集簇金样（`24383_91813`）差异逐条审阅；金样只新增 `issues` 条目，图元不动 |
+| N4-1 | **已被 M2a 取代（2026-11-07，前端极坐标放置层退役）**。原任务：**T5.3** Polar 避让 `occupancy.rs`。算法口径以 N2-2 的 TS 实现为准；若 N2-2 裁决为不做，则以前端 `kernel/layout/polar/place/` + `screenGuard` 的现有实现为准。两边共用 PML 原 case 金样 | `layout.rs:237` 的 `carried_occupancy`、PML `polarsystem.pmlobj:1028-1296` | `IssueCategory::Avoidance` 开始产出；密集簇金样（`24383_91813`）差异逐条审阅；金样只新增 `issues` 条目，图元不动 |
 | N4-2 | **T5.7** 跨段让位的另一半 `addtopreornextpolarsystem`：pre / next 双向 + `angle>160 && dis<od*15` 三跳。现有只实现单向（`isodim.rs:541-560` 的 `carried_occupancy` 把上一段的方向传给下一段） | `isobran.pmlobj:3184-3235` | 相邻直段尺寸不互相压；依赖 N4-1 的 polarsystem 概念 |
 
 ### N5 多 BRAN 规模化（F12）

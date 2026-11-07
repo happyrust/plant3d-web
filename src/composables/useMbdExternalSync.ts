@@ -346,11 +346,8 @@ export function createMbdExternalSync(
               ...(presentation3dDisabled
                 ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
                 : []),
-              ...(polarApplied
-                ? ['mbd_polar=1：已接入极坐标放置层，标签锚点改由屏幕净空校验挑选（试验开关，仅平面呈现）']
-                : []),
-              ...(polarEnabled && !polarApplied
-                ? ['mbd_polar=1：三维呈现下不生效，标签保留卡片；需同时加 mbd_3d=0 才走极坐标放置']
+              ...(polarEnabled
+                ? ['mbd_polar=1 已退役：管道极坐标摆位由求解器完成，前端不再二次放置']
                 : []),
               ...(labelPresentation === 'above'
                 ? ['mbd_label=above：长度尺寸的数字浮在线上方、尺寸线不切段（ISO 读法，试验开关）']
