@@ -866,7 +866,8 @@ describe('粗网格（L1）补拉', () => {
       return g;
     };
     const layer = new DTXLayer({ maxVertices: 4096, maxIndices: 4096, maxObjects: 8 });
-    layer.addGeometry('big', big(300));
+    // 原网格要比粗网格夹具（3.mesh，1080 三角）大，`addLod1Geometry` 才收
+    layer.addGeometry('big', big(3000));
     layer.addGeometry('nolod', big(300));
     layer.addGeometry('small', big(10));
     layer.addObject('a', 'big', new Matrix4());
@@ -922,7 +923,7 @@ describe('粗网格（L1）补拉', () => {
       return g;
     };
     const layer = new DTXLayer({ maxVertices: 4096, maxIndices: 4096, maxObjects: 8 });
-    layer.addGeometry('big', big(300));
+    layer.addGeometry('big', big(3000));
     layer.addObject('seed', 'big', new Matrix4());
     layer.compile();
 
@@ -958,6 +959,53 @@ describe('粗网格（L1）补拉', () => {
       mod.configureDtxLod1Backfill({ enabled: false });
       vi.unstubAllGlobals();
       vi.useRealTimers();
+    }
+  });
+
+  it('服务端对 ?lod=1 回原网格：响应头等大就不读正文、负缓存，攒够几块后本会话不再补拉', async () => {
+    const { Matrix4 } = await import('three');
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    mod.invalidateDtxLoaderCaches();
+
+    const sphere = meshFixture('3.mesh');
+    const hashes = Array.from({ length: 12 }, (_, i) => `m${i + 1}`);
+    recordSourceMocks.instanceEntriesByRefnos.mockImplementation(async (_dbno, refnos) => new Map(
+      refnos.map((r, i) => [r, [{ geo_hash: hashes[i]!, matrix: new Matrix4().toArray(), uniforms: null }]]),
+    ));
+    const lod1BodyReads: string[] = [];
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-length': String(sphere.byteLength) }),
+      arrayBuffer: async () => {
+        if (String(url).includes('lod=1')) lod1BodyReads.push(String(url));
+        return sphere.slice(0);
+      },
+    }) as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const lod1Calls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes('lod=1')).length;
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const layer = new DTXLayer({ maxVertices: 4096, maxIndices: 4096, maxObjects: 16 });
+      await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, 7997, hashes.map((_, i) => `24381_${i + 1}`));
+      mod.configureDtxLod1Backfill({ enabled: true });
+
+      const stats = await mod.backfillDtxLod1Geometries(layer);
+      expect(stats).toMatchObject({ candidates: 12, installed: 0 });
+      expect(lod1Calls()).toBeLessThan(hashes.length);
+      expect(lod1BodyReads).toEqual([]);
+      expect(hashes.some((h) => layer.hasLod1Geometry(h))).toBe(false);
+      expect(info).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockClear();
+      expect(await mod.backfillDtxLod1Geometries(layer)).toBeNull();
+      expect(lod1Calls()).toBe(0);
+    } finally {
+      mod.configureDtxLod1Backfill({ enabled: false });
+      mod.invalidateDtxLoaderCaches();
+      vi.unstubAllGlobals();
+      info.mockRestore();
     }
   });
 });

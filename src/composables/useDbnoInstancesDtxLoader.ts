@@ -296,11 +296,23 @@ const LOD1_FETCH_CONCURRENCY = 6;
 /** 装载停下来这么久才补拉：装载是一批批来的，每批都补会让图层反复 recompile */
 const LOD1_BACKFILL_IDLE_MS = 300;
 
-/** 粗网格按内容键跨图层共用；null = 服务端没有（404 / 解析失败），负缓存到下次 invalidate */
+/** 粗网格按内容键跨图层共用；null = 服务端没有（404 / 解析失败 / 不比原网格小），负缓存到下次 invalidate */
 const lod1GeometryByGeoHash = new Map<string, BufferGeometry | null>();
-const lod1Loading = new Map<string, Promise<BufferGeometry | null>>();
+const lod1Loading = new Map<string, Promise<Lod1FetchOutcome>>();
 const lod1Backfill = new WeakMap<DTXLayer, { timer: ReturnType<typeof setTimeout> | null; running: boolean; again: boolean }>();
 let lod1Config: { enabled: boolean; onApplied?: (layer: DTXLayer, stats: DtxLod1BackfillStats) => void } = { enabled: false };
+
+/** 原网格的体积（取回时记下），粗网格回来时据此判断是不是真的更小；内容键，跨库 / 跨图层共用 */
+const originalMeshSizeByGeoHash = new Map<string, { bytes: number; indexCount: number }>();
+
+/**
+ * 不认 `?lod=1` 的服务端照样 200 回原网格：一块都没装上、却已有这么多块与原网格逐字节等大时，
+ * 本会话不再补拉（直到 `invalidateDtxLoaderCaches`），免得把场景里每块大网格再下载一遍。
+ */
+const LOD1_SAME_AS_ORIGINAL_LIMIT = 4;
+let lod1ServedAsOriginal = false;
+
+type Lod1FetchOutcome = { geometry: BufferGeometry | null; sameAsOriginal: boolean };
 
 export type DtxLod1BackfillStats = {
   candidates: number;
@@ -318,24 +330,35 @@ export function configureDtxLod1Backfill(config: {
   lod1Config = { ...config };
 }
 
-function fetchLod1Geometry(geoHash: string, url: string): Promise<BufferGeometry | null> {
-  if (lod1GeometryByGeoHash.has(geoHash)) return Promise.resolve(lod1GeometryByGeoHash.get(geoHash)!);
+function fetchLod1Geometry(geoHash: string, url: string): Promise<Lod1FetchOutcome> {
+  if (lod1GeometryByGeoHash.has(geoHash)) {
+    return Promise.resolve({ geometry: lod1GeometryByGeoHash.get(geoHash)!, sameAsOriginal: false });
+  }
   const pending = lod1Loading.get(geoHash);
   if (pending) return pending;
-  const task = (async () => {
+  const task = (async (): Promise<Lod1FetchOutcome> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
+    const original = originalMeshSizeByGeoHash.get(geoHash);
+    const absent = (sameAsOriginal = false): Lod1FetchOutcome => {
+      lod1GeometryByGeoHash.set(geoHash, null);
+      return { geometry: null, sameAsOriginal };
+    };
     try {
       const resp = await fetch(url, { signal: controller.signal });
-      if (!resp.ok) {
-        // 404 = 这个键没有粗网格（太小或省不够）；其他错误同样回落原网格，不重试
-        lod1GeometryByGeoHash.set(geoHash, null);
-        return null;
+      // 404 = 这个键没有粗网格（太小或省不够）；其他错误同样回落原网格，不重试
+      if (!resp.ok) return absent();
+      const declaredBytes = Number(resp.headers?.get?.('content-length') ?? Number.NaN);
+      if (original && Number.isFinite(declaredBytes) && declaredBytes >= original.bytes) {
+        // 响应头已经说明不比原网格小：正文不下载
+        controller.abort();
+        return absent(declaredBytes === original.bytes);
       }
-      const parsed = parseMeshGeometryResult(await resp.arrayBuffer(), url);
-      if (!parsed.ok) {
-        lod1GeometryByGeoHash.set(geoHash, null);
-        return null;
+      const buffer = await resp.arrayBuffer();
+      const parsed = parseMeshGeometryResult(buffer, url);
+      if (!parsed.ok) return absent();
+      if (original && parsed.data.indices.length >= original.indexCount) {
+        return absent(buffer.byteLength === original.bytes);
       }
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.data.positions), 3));
@@ -344,10 +367,10 @@ function fetchLod1Geometry(geoHash: string, url: string): Promise<BufferGeometry
       }
       g.setIndex(new BufferAttribute(new Uint32Array(parsed.data.indices), 1));
       lod1GeometryByGeoHash.set(geoHash, g);
-      return g;
+      return { geometry: g, sameAsOriginal: false };
     } catch {
       // 超时 / 网络错误：不记负缓存，下次补拉再试
-      return null;
+      return { geometry: null, sameAsOriginal: false };
     } finally {
       clearTimeout(timer);
       lod1Loading.delete(geoHash);
@@ -363,7 +386,7 @@ function fetchLod1Geometry(geoHash: string, url: string): Promise<BufferGeometry
  */
 export async function backfillDtxLod1Geometries(dtxLayer: DTXLayer): Promise<DtxLod1BackfillStats | null> {
   const urlOf = getModelSource().meshes.lod1MeshUrl;
-  if (!lod1Config.enabled || !urlOf) return null;
+  if (!lod1Config.enabled || !urlOf || lod1ServedAsOriginal) return null;
   const candidates = dtxLayer.listLod1Candidates(DTX_LOD1_MIN_SOURCE_TRIANGLES)
     .filter((h) => lod1GeometryByGeoHash.get(h) !== null);
   if (candidates.length === 0) return null;
@@ -372,8 +395,9 @@ export async function backfillDtxLod1Geometries(dtxLayer: DTXLayer): Promise<Dtx
   const queue = candidates.slice();
   const fetched = new Map<string, BufferGeometry>();
   let missing = 0;
+  let sameAsOriginal = 0;
   await Promise.all(Array.from({ length: Math.min(LOD1_FETCH_CONCURRENCY, queue.length) }, async () => {
-    while (queue.length > 0) {
+    while (queue.length > 0 && !lod1ServedAsOriginal) {
       const geoHash = queue.pop()!;
       let url: string;
       try {
@@ -383,9 +407,17 @@ export async function backfillDtxLod1Geometries(dtxLayer: DTXLayer): Promise<Dtx
         missing++;
         continue;
       }
-      const g = await fetchLod1Geometry(geoHash, url);
-      if (g) fetched.set(geoHash, g);
-      else missing++;
+      const outcome = await fetchLod1Geometry(geoHash, url);
+      if (outcome.geometry) {
+        fetched.set(geoHash, outcome.geometry);
+        continue;
+      }
+      missing++;
+      if (outcome.sameAsOriginal) sameAsOriginal++;
+      if (!lod1ServedAsOriginal && fetched.size === 0 && sameAsOriginal >= LOD1_SAME_AS_ORIGINAL_LIMIT) {
+        lod1ServedAsOriginal = true;
+        console.info(`[dtx][lod1] 服务端对 ?lod=1 回的是原网格（${sameAsOriginal} 块逐字节等大），本会话不再补拉粗网格`);
+      }
     }
   }));
   const fetchMs = performance.now() - t0;
@@ -429,7 +461,7 @@ export function holdDtxLod1Backfill(): () => void {
 
 /** 装载停下 {@link LOD1_BACKFILL_IDLE_MS} 后补拉；补拉进行中又来了新装载，补完再跑一轮 */
 function scheduleLod1Backfill(dtxLayer: DTXLayer): void {
-  if (!lod1Config.enabled || !getModelSource().meshes.lod1MeshUrl) return;
+  if (!lod1Config.enabled || lod1ServedAsOriginal || !getModelSource().meshes.lod1MeshUrl) return;
   if (lod1HoldCount > 0) {
     lod1DeferredLayers.add(dtxLayer);
     return;
@@ -532,6 +564,8 @@ export function invalidateDtxLoaderCaches(): void {
   cachesByDbno.clear();
   lod1GeometryByGeoHash.clear();
   lod1DeferredLayers.clear();
+  originalMeshSizeByGeoHash.clear();
+  lod1ServedAsOriginal = false;
   hiddenTubeKeys.value = new Set();
   bumpDtxLoaderRevision();
 }
@@ -784,6 +818,7 @@ async function ensureGeometryForGeoHash(
         const parseResult = parseMeshGeometryResult(meshData, meshUrl);
         if (parseResult.ok) {
           const parsed = parseResult.data;
+          originalMeshSizeByGeoHash.set(geoHash, { bytes: meshData.byteLength, indexCount: parsed.indices.length });
           const g = new BufferGeometry();
           g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
           if (parsed.normals && parsed.normals.length > 0) {
