@@ -180,6 +180,9 @@ npx playwright test --config=playwright.novideo.config.ts e2e/dimension-mbd-v2-f
 | --- | --- | --- |
 | plant-mbd `3db2d92` | `cargo test --workspace` | lib 140、adjust_weld 3、contract_guard 7、golden_regression 1、isodim_rj_pcom 10、pcom_split 7 |
 | plant3d-web `48fed2d9` | `src/dimension` + `useMbdExternalSync` | 86 文件 / 844 通过；type-check 0 / 新增 0 |
+| plant-mbd `47eb83e`（2026-11-08 落主线） | `cargo test --workspace -j 2` / `golden diff` | 628 全过（lib 490）/ 45 条一致 |
+| gen-model `e6dc8bbf4`（落地分支） | 8 个 MBD 测试目标 | 75 条全过 |
+| plant3d-web `e2f3ba99`（落地分支） | `npm run test:mbd` / `npm run type-check` | 70 文件 658 条 / 0。比 `48fed2d9` 少的文件全部来自 `c52d7b67`：按 D4 退役前端极坐标放置层，删掉 23 个测试文件，用例改在 plant-mbd `polar_frame` / `polar_obstacles` / `polar_place` |
 
 ## 10. 提交记录
 
@@ -188,3 +191,5 @@ npx playwright test --config=playwright.novideo.config.ts e2e/dimension-mbd-v2-f
 | 1 | plant3d-web `48fed2d9` | 契约接受 `meta.isolines[].axis`，极轴改用它 |
 | 2 | plant-mbd `3db2d92` | 直段表产出 `axis`；六条金样仅新增 `axis` |
 | 3 | plant-mbd `1863a19`（`feat/mbd-all-types`） | ADR-0013 / 0014 / 0015、两份词条、`AGENTS.md` |
+| 4 | 三仓 `feat/mbd-all-types`：plant-mbd `47eb83e`、gen-model `46bda93de`、plant3d-web `d36003c3` | M1–M7 与收口轮 CT-1…CT-20 做完并验收（`docs/verification/mbd-all-types-final-2026-11-07/`）；M8 只剩 PML 真实导出金样 |
+| 5 | plant3d-web `e2f3ba99`、gen-model `e6dc8bbf4`（`land/mbd-all-types`）；plant-mbd main 快进到 `47eb83e` | 落主线：合入远端主线并联调重验（`docs/verification/mbd-all-types-mainline-2026-11-08/`），见 `2026-11-08-mbd-all-types-mainline-landing-dev-plan.md` |

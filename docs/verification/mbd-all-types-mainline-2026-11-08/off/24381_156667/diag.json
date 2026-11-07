@@ -1,0 +1,274 @@
+{
+  "refno": "24381_156667",
+  "mode": "off",
+  "gm": "http://127.0.0.1:8024",
+  "mbd": "http://127.0.0.1:8023",
+  "generatedAt": "2026-11-07T18:33:53.481Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          43.53201953125,
+          32.6490146484375,
+          43.532019531249986
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 7,
+      "layouts": 7,
+      "drawn": 4,
+      "lodHidden": 3,
+      "overlapHidden": 0,
+      "tagCount": 4,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 0,
+      "overlapPairs": [],
+      "offscreen": [],
+      "labels": {
+        "24381_156667:equi:name": {
+          "cx": 439.52219333439393,
+          "cy": 99.24524107243474,
+          "w": 360.94822750512236,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:coords": {
+          "cx": 654.8015779420562,
+          "cy": 41.782860812467234,
+          "w": 94.69444444444446,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:equi:rotation:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:equi:rotation:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:locate:floor:civil:el": {
+          "cx": 740.717736775591,
+          "cy": 280.3726557722313,
+          "w": 98.36111111111111,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:thick": {
+          "cx": 498.65287986636497,
+          "cy": 292.7369601582617,
+          "w": 48.25,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          17.412807812499995,
+          13.05960585937498,
+          17.412807812499963
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 7,
+      "layouts": 7,
+      "drawn": 4,
+      "lodHidden": 3,
+      "overlapHidden": 0,
+      "tagCount": 4,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 0,
+      "overlapPairs": [],
+      "offscreen": [],
+      "labels": {
+        "24381_156667:equi:name": {
+          "cx": 203.26147849029127,
+          "cy": 87.57444379628492,
+          "w": 360.94822750512236,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:coords": {
+          "cx": 1044.7266197955619,
+          "cy": 70.9716686884008,
+          "w": 94.69444444444446,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:equi:rotation:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:equi:rotation:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:locate:floor:civil:el": {
+          "cx": 367.5799396868389,
+          "cy": 309.4722548678932,
+          "w": 98.36111111111111,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:thick": {
+          "cx": 840.9631165865121,
+          "cy": 170.24560086210465,
+          "w": 48.25,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          8.706403906249998,
+          6.529802929687491,
+          8.706403906249982
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 7,
+      "layouts": 7,
+      "drawn": 4,
+      "lodHidden": 3,
+      "overlapHidden": 0,
+      "tagCount": 4,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 0,
+      "overlapPairs": [],
+      "offscreen": [
+        "24381_156667:equi:coords"
+      ],
+      "labels": {
+        "24381_156667:equi:name": {
+          "cx": 194.14377962525015,
+          "cy": 650.8423542146703,
+          "w": 360.94822750512236,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:coords": {
+          "cx": 1006.299965512681,
+          "cy": -1350.1300050277437,
+          "w": 94.69444444444446,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:equi:rotation:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:equi:rotation:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_156667:locate:floor:civil:el": {
+          "cx": 356.7549762274392,
+          "cy": 456.01928177600746,
+          "w": 98.36111111111111,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:thick": {
+          "cx": 333.3141515771111,
+          "cy": 214.8440564569278,
+          "w": 48.25,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    }
+  },
+  "perf": []
+}
