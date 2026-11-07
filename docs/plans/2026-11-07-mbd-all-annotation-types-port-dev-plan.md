@@ -133,7 +133,7 @@ PML `object/polarsystem/**` 移入 plant-mbd 新模块 `polar/`：直段柱坐�
 | D1 | 金样基准：PML 导出 JSON（plant-mbd ADR-0014）；导出到位前按过渡做法 | 已定 |
 | D2 | 契约承载：不开 V3，扩可选信封字段（ADR 0071）；`branch_refno` 仍必填，非管道包填归一化主体 refno | 已定 |
 | D3 | 数据源：`MbdDataSource: BranchDataSource` 多方法（plant-mbd ADR-0015） | 已定 |
-| D4 | 极坐标唯一实现在求解器；复测通过后前端 `polar/place/**` 退役，N2-2 / N4-1 由 M2a 取代 | 已定 |
+| D4 | 极坐标唯一实现在求解器；复测通过后前端 `polar/place/**` 退役，N2-2 / N4-1 由 M2a 取代 | 已执行（`c52d7b67`，2026-11-07）：前端 `kernel/layout/polar/**` 整目录退役；`mbd_polar` 开关解析与 `ExplicitLayoutInput.polar` / `polarObstacle` 类型字段留到 `useMbdExternalSync` 的开关清理 |
 | D5 | PML 缺陷默认修正，每条带 PML 出处的裁决进清单 §11、plant-mbd `MIGRATION.md` 与 `fixtures/pml/rulings.json` | 已定 |
 | D6 | 标注类型判定走项目配置 `mbd_type_rules`，缺省表复刻 PML `getmbdtype` | 已定 |
 | D7 | 找墙候选由宿主从 `DbSet` 直读土建元素并解析面，不依赖已生成 AABB 树 | 已定 |
