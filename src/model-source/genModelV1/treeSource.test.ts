@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createGenModelV1TreeSource, eleTreeNodeToDto, isVirtualRootId, makeVirtualRootId, SUBTREE_CONCURRENCY, type GenModelV1TreeApi } from './treeSource';
+import { createGenModelV1TreeSource, eleTreeNodeToDto, isGroupRootId, isVirtualRootId, makeGroupRootId, makeVirtualRootId, SUBTREE_CONCURRENCY, type GenModelV1TreeApi } from './treeSource';
 
 import type { ModelRecordsApi } from './modelRecords';
 
@@ -238,6 +238,97 @@ describe('createGenModelV1TreeSource', () => {
     expect(api.children).toHaveBeenCalledTimes(21);
     expect(maxInFlight).toBeGreaterThan(1);
     expect(maxInFlight).toBeLessThanOrEqual(SUBTREE_CONCURRENCY);
+  });
+
+  it('children 要解析视图（resolved=1）：分组成员行带 via / secondary，坏槽 refno 归一后透传', async () => {
+    const api = fakeApi({
+      children: vi.fn(async (raw: string) => ({
+        source: 'direct',
+        parent: toV1Refno(raw),
+        view: 'resolved' as const,
+        nodes: [
+          { ...ZONE_A1, via: '2013286748_12', secondary: true, rule: false },
+          { refno: '2013286748_13', noun: 'GPSET', name: '/NESTED', owner: '2013286748_11', order: 1, children_count: 0, dbnum: 250204 },
+        ],
+        unresolved: [{ via: '2013286748/14', target: '9999/1', reason: 'db_not_in_mdb' as const }],
+      })),
+    });
+    const tree = createGenModelV1TreeSource({ api });
+    const resp = await tree.children('2013286748_11');
+    expect(api.children).toHaveBeenLastCalledWith('2013286748_11', expect.objectContaining({ resolved: true }));
+    expect(resp.children[0]).toMatchObject({ refno: '17496_8518', owner: '2013286748_11', via: '2013286748_12', secondary: true });
+    expect(resp.children[0]).not.toHaveProperty('rule');
+    expect(resp.children[1]).not.toHaveProperty('via');
+    expect(resp.children[1]).not.toHaveProperty('secondary');
+    expect(resp.unresolved).toEqual([{ via: '2013286748_14', target: '9999_1', reason: 'db_not_in_mdb' }]);
+  });
+
+  it('subtreeRefnos：映射时见过的分组（GPWL / GPSET）不走 BFS，直接拒绝', async () => {
+    const GPSET: EleTreeNodeDto = { refno: '2013286748_11', noun: 'GPSET', name: '/AREA01_PIPE', owner: '2013286748_1', order: 0, children_count: 2, dbnum: 250204 };
+    const api = fakeApi({
+      children: vi.fn(async (raw: string) => ({ source: 'direct', parent: toV1Refno(raw), nodes: toV1Refno(raw) === '2013286748/1' ? [GPSET] : [] })),
+    });
+    const tree = createGenModelV1TreeSource({ api });
+    await tree.children('2013286748_1');
+    const resp = await tree.subtreeRefnos('2013286748_11');
+    expect(resp.success).toBe(false);
+    expect(resp.error_message).toMatch(/generation_roots/);
+    expect(api.children).toHaveBeenCalledTimes(1);
+  });
+
+  it('groupRoot：tree/roots?nouns=GPWL 有分组才出「分组」根；children(分组根) 列 GPWL；分组层级里的祖先链挂分组根', async () => {
+    const GPWL: EleTreeNodeDto = { refno: '2013286748_1', noun: 'GPWL', name: '/GROUPS', owner: '2013286748_0', order: 0, children_count: 1, dbnum: 250204 };
+    const roots = vi.fn(async (options?: { nouns?: string }) => (options?.nouns === 'GPWL' ? { ...ROOTS, nodes: [GPWL, SITE_A] } : ROOTS));
+    const api = fakeApi({
+      roots,
+      ancestors: vi.fn(async (raw: string) => {
+        if (toV1Refno(raw) === '2013286748/11') {
+          return { source: 'direct' as const, refnos: ['2013286748_11', '2013286748_1', '2013286748_0'] };
+        }
+        return {
+          source: 'direct' as const,
+          refnos: ['17496_8518', '9304_2', '9304_0'],
+          secondary_parents: [{ member: '17496/8518', group: '2013286748/11', group_noun: 'GPSET', group_name: '/HVAC', via: '2013286748/12' }],
+        };
+      }),
+    });
+    const tree = createGenModelV1TreeSource({ api });
+    const GROUP_ROOT_ID = makeGroupRootId('AvevaMarineSample', '/ALL');
+    expect(isGroupRootId(GROUP_ROOT_ID)).toBe(true);
+    expect(isVirtualRootId(GROUP_ROOT_ID)).toBe(true);
+    expect(isGroupRootId(ROOT_ID)).toBe(false);
+
+    const root = await tree.groupRoot?.();
+    expect(roots).toHaveBeenCalledWith(expect.objectContaining({ nouns: 'GPWL' }));
+    expect(root).toEqual({ success: true, node: expect.objectContaining({ refno: GROUP_ROOT_ID, name: '分组', children_count: 1 }) });
+
+    const kids = await tree.children(GROUP_ROOT_ID);
+    expect(kids.children.map((child) => [child.refno, child.owner])).toEqual([['2013286748_1', GROUP_ROOT_ID]]);
+    expect((await tree.node(GROUP_ROOT_ID)).node?.refno).toBe(GROUP_ROOT_ID);
+
+    expect((await tree.ancestors('2013286748_11')).refnos.at(-1)).toBe(GROUP_ROOT_ID);
+    const design = await tree.ancestors('17496_8518');
+    expect(design.refnos.at(-1)).toBe(ROOT_ID);
+    expect(design.secondary_parents).toEqual([
+      { member: '17496_8518', group: '2013286748_11', group_noun: 'GPSET', group_name: '/HVAC', via: '2013286748_12' },
+    ]);
+  });
+
+  it('groupRoot：没有分组 → node: null；老服务端不认 nouns=GPWL（400）→ node: null，不记请求失败', async () => {
+    const empty = createGenModelV1TreeSource({ api: fakeApi({ roots: vi.fn(async () => ({ ...ROOTS, nodes: [] })) }) });
+    expect(await empty.groupRoot?.()).toEqual({ success: true, node: null });
+
+    const noteRequestFailure = vi.fn();
+    const old = createGenModelV1TreeSource({
+      api: fakeApi({
+        roots: vi.fn(async () => {
+          throw new GenModelV1ApiError({ code: 'bad_request', status: 400, path: '/api/v1/tree/roots', message: 'nouns 只接受 SITE / APPLDW' });
+        }),
+      }),
+      noteRequestFailure,
+    });
+    expect(await old.groupRoot?.()).toEqual({ success: true, node: null });
+    expect(noteRequestFailure).not.toHaveBeenCalled();
   });
 
   it('visibleInsts = 按祖先查 records → 构件 refno 去重，不 generate', async () => {

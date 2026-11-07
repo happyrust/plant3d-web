@@ -18,6 +18,7 @@ import {
   genModelV1TaskGet,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
+  isResolvedTreeView,
   isValidGeoHash,
   MAX_MODEL_RECORDS_ROOTS,
   toV1Refno,
@@ -69,6 +70,41 @@ describe('refno 双向转换（本仓 a_b ⇄ gen-model a/b）', () => {
   it('不是 refno 形状的值原样返回，交给服务端 400', () => {
     expect(toV1Refno('root:AvevaMarineSample:/ALL')).toBe('root:AvevaMarineSample:/ALL');
     expect(fromV1Refno('abc')).toBe('abc');
+  });
+});
+
+describe('树的解析视图（GPWL / GPSET 分组）', () => {
+  it('resolved: true 时查询串带 resolved=1，并认出解析视图', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, {
+      source: 'direct',
+      parent: '2013286748/11',
+      view: 'resolved',
+      nodes: [{ refno: '24381_7', noun: 'ZONE', name: '/Z1', owner: '24381_2', order: 0, children_count: 3, via: '2013286748_12', secondary: true, rule: false }],
+    }));
+    const resp = await genModelV1TreeChildren('2013286748_11', {
+      baseUrl: BASE,
+      fetchImpl,
+      identity: { project: 'AvevaPlantSample', mdb: 'ALL' },
+      resolved: true,
+    });
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.searchParams.get('refno')).toBe('2013286748/11');
+    expect(parsed.searchParams.get('resolved')).toBe('1');
+    expect(isResolvedTreeView(resp)).toBe(true);
+    expect(resp.nodes[0]?.via).toBe('2013286748_12');
+  });
+
+  it('不要解析视图时不带 resolved；老服务端不回 view 时按存储视图处理', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { source: 'direct', parent: '24381/2', nodes: [] }));
+    const resp = await genModelV1TreeChildren('24381_2', {
+      baseUrl: BASE,
+      fetchImpl,
+      identity: { project: 'AvevaMarineSample', mdb: 'ALL' },
+    });
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.searchParams.has('resolved')).toBe(false);
+    expect(isResolvedTreeView(resp)).toBe(false);
+    expect(isResolvedTreeView({ view: 'stored' })).toBe(false);
   });
 });
 

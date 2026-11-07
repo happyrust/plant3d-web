@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 
-import { ChevronDown, ChevronRight, CircleMinus, Eye, EyeOff, LoaderCircle } from 'lucide-vue-next';
+import { Boxes, ChevronDown, ChevronRight, CircleMinus, Eye, EyeOff, Layers, LoaderCircle } from 'lucide-vue-next';
 
 import ModelTreeStatusIcon from './ModelTreeStatusIcon.vue';
 
@@ -59,6 +59,16 @@ const safeDepth = computed(() => {
 
 const isVisible = computed(() => props.checkState !== 'unchecked');
 const typeIconUrl = computed(() => getPdmsTypeIconUrl(props.row.type));
+/** 分组节点没有 PDMS 类型图标：GPWL 用「图层」、GPSET 用「盒组」。 */
+const groupIcon = computed(() => {
+  const type = String(props.row.type || '').trim().toUpperCase();
+  if (type === 'GPWL') return Layers;
+  if (type === 'GPSET') return Boxes;
+  return null;
+});
+const secondaryTitle = computed(() => (props.row.via
+  ? `分组引用（经 GPITEM ${fallbackRefnoLabel(props.row.via)}），主位置不在这里；右键「定位到原位置」`
+  : '分组引用，主位置不在这里；右键「定位到原位置」'));
 
 function normalizePdmsName(value: string | undefined): string {
   return String(value || '').trim().replace(/^\/+/, '');
@@ -242,6 +252,10 @@ onUnmounted(() => {
       <span v-else class="h-5 w-5 shrink-0" />
 
       <CircleMinus v-if="ghost" class="h-4 w-4 shrink-0 text-muted-foreground/60" />
+      <component :is="groupIcon"
+        v-else-if="groupIcon"
+        class="h-4 w-4 shrink-0 text-muted-foreground"
+        data-testid="model-tree-group-icon" />
       <img v-else-if="typeIconUrl" :src="typeIconUrl" class="h-4 w-4 shrink-0 opacity-80" :alt="row.type" />
       <span v-else class="h-4 w-4 shrink-0" />
 
@@ -251,6 +265,20 @@ onUnmounted(() => {
         </div>
         <div v-else class="truncate" :class="isNameFallback ? 'text-muted-foreground text-xs' : 'font-medium'">{{ displayName }}</div>
       </div>
+
+      <span v-if="row.secondary && !ghost"
+        class="inline-flex shrink-0 items-center rounded border border-sky-500/40 px-1 text-[10px] leading-4 text-sky-600 dark:text-sky-400"
+        data-testid="model-tree-secondary-badge"
+        :title="secondaryTitle">
+        引用
+      </span>
+
+      <span v-if="(row.unresolvedCount ?? 0) > 0"
+        class="inline-flex shrink-0 items-center rounded border border-amber-500/40 px-1 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
+        data-testid="model-tree-unresolved-badge"
+        :title="`${row.unresolvedCount} 个成员的 GPREF 解析不到（引用丢失 / 所在库不在本 MDB / 目标已删除），不在树里显示`">
+        {{ row.unresolvedCount }} 个成员不可解析
+      </span>
 
       <span v-if="diffBadge"
         class="inline-flex shrink-0 items-center rounded border px-1 text-[10px] leading-4"

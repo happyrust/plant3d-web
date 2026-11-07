@@ -11,6 +11,26 @@ export type TreeNodeDto = {
   short_name?: string | null;
   /** 文件里存的 NAME，无名构件为 `null`；只有 gen-model-v1 数据源给 */
   stored_name?: string | null;
+  /** 解析视图里经由的 GPITEM（`a_b`）；只有分组下的二级成员行带 */
+  via?: string | null;
+  /** 二级成员：属主在别处、只是被分组（GPSET）收录；同一元素在主位置那一行不带 */
+  secondary?: boolean;
+  /** SCOSEL 规则组求值出的成员；gen-model 支持规则组之前恒为 `false` */
+  rule?: boolean;
+};
+
+/** E3D 分组节点：GPWL（分组世界）/ GPSET（分组）。成员由 GPITEM.GPREF 引用，不是属主关系。 */
+export function isGroupNoun(noun: string | null | undefined): boolean {
+  const upper = (noun ?? '').trim().toUpperCase();
+  return upper === 'GPWL' || upper === 'GPSET';
+}
+
+/** 分组里解析不出的 GPITEM 槽（refno 已归一为 `a_b`）；只有 gen-model-v1 的解析视图给 */
+export type UnresolvedGroupSlot = {
+  via: string;
+  /** GPREF 原值；GPITEM 没有 GPREF 时为 `null` */
+  target: string | null;
+  reason: string;
 };
 
 export type NodeResponse = {
@@ -24,12 +44,27 @@ export type ChildrenResponse = {
   parent_refno: string;
   children: TreeNodeDto[];
   truncated: boolean;
+  /** 分组节点解析不出的成员槽；只有 gen-model-v1 的解析视图、且有坏槽时给 */
+  unresolved?: UnresolvedGroupSlot[];
   error_message?: string | null;
+};
+
+/** 主链上的某一级被分组经 GPITEM 收录（refno 一律 `a_b`）。 */
+export type SecondaryParentDto = {
+  /** 被收录的那一级：构件自己，或它主链上的某个祖先 */
+  member: string;
+  group: string;
+  group_noun: string;
+  /** 分组的 `NAME`；服务端没给或无名时为 null */
+  group_name: string | null;
+  via: string;
 };
 
 export type AncestorsResponse = {
   success: boolean;
   refnos: string[];
+  /** 缺省 = 不知道（老服务端 / 反查不可用），不等于「不在任何分组里」。 */
+  secondary_parents?: SecondaryParentDto[];
   error_message?: string | null;
 };
 

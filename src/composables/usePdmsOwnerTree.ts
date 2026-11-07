@@ -4,6 +4,7 @@ import type { TreeNodeDto } from '@/api/genModelE3dTypes';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
+import { aggregateCheckState, recomputeViewAncestors } from '@/composables/useModelTree';
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 import { getModelSource } from '@/model-source';
 import { flyToScope } from '@/viewer/camera/focusScope';
@@ -110,6 +111,27 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const childrenLoadedById = new Set<string>();
   const childrenLoadingById = new Set<string>();
 
+  // 当前视图里的父节点：refno → 父 refno 集。解析视图下一个元素可以同时挂在主位置和收录它的 GPSET 下，
+  // `parentId` 只记主位置；勾选聚合要沿这里的全部父节点上推。
+  const viewParentsById = new Map<string, Set<string>>();
+
+  function linkViewParent(childId: string, parentId: string) {
+    let parents = viewParentsById.get(childId);
+    if (!parents) {
+      parents = new Set();
+      viewParentsById.set(childId, parents);
+    }
+    parents.add(parentId);
+  }
+
+  function viewParentsOf(id: string): string[] {
+    const parentId = nodesById.value[id]?.parentId;
+    const linked = viewParentsById.get(id);
+    if (!linked || linked.size === 0) return parentId ? [parentId] : [];
+    if (!parentId || linked.has(parentId)) return [...linked];
+    return [parentId, ...linked];
+  }
+
   // 空闲预取：用户展开一层后，把「下一层」的 children 也拉进树——钻取式浏览的
   // 下一次展开直接命中 childrenLoadedById，不再等后端往返。只挂用户主动展开
   // （toggleExpand）：批量路径（setVisible 级联 / 祖先链定位）不预取，免得一次
@@ -145,6 +167,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     childrenCountById.value = new Map();
     childrenLoadedById.clear();
     childrenLoadingById.clear();
+    viewParentsById.clear();
     prefetchSeq++;
     prefetchQueue.length = 0;
     visibleInstCache.clear();
@@ -156,6 +179,11 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       next.set(id, 'checked');
     }
     checkStateById.value = next;
+  }
+
+  /** 定位从哪个根往下找：祖先链落在「分组」分区（链尾是分组根）就从分组根走，否则从世界根走。 */
+  function pickStartRoot(ancestorSet: ReadonlySet<string>, fallback: string): string {
+    return rootIds.value.find((id) => ancestorSet.has(id)) ?? fallback;
   }
 
   function matchesFilter(node: TreeNode) {
@@ -232,13 +260,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       return typeof cnt === 'number' && cnt > 0;
     };
 
-    const visited = new Set<string>();
+    // 解析视图下同一元素可以同时挂在主位置和收录它的 GPSET 下，两处都出行：防环只看当前祖先链。
+    const onPath = new Set<string>();
     const MAX_DEPTH = 256;
 
-    const build = (id: string, depth: number) => {
+    const build = (id: string, depth: number, viewParentId: string | null) => {
       if (depth > MAX_DEPTH) return;
-      if (visited.has(id)) return;
-      visited.add(id);
+      if (onPath.has(id)) return;
 
       const node = nodes[id];
       if (!node) return;
@@ -254,21 +282,30 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       };
       if (node.dbnum !== undefined) {
         row.dbnum = node.dbnum;
-        const parentDbnum = node.parentId ? nodes[node.parentId]?.dbnum : undefined;
+        const parentId = viewParentId ?? node.parentId;
+        const parentDbnum = parentId ? nodes[parentId]?.dbnum : undefined;
         if (parentDbnum !== node.dbnum) row.dbBoundary = true;
       }
       if (node.shortName !== undefined) row.shortName = node.shortName;
+      const via = viewParentId ? nodes[viewParentId]?.groupMemberVia?.[id] : undefined;
+      if (via !== undefined) {
+        row.secondary = true;
+        if (via) row.via = via;
+      }
+      if (node.unresolvedCount) row.unresolvedCount = node.unresolvedCount;
       out.push(row);
 
       const shouldExpand = filterActive || expandedIds.value.has(id);
       if (!shouldExpand) return;
 
+      onPath.add(id);
       for (const childId of node.childrenIds) {
-        build(childId, depth + 1);
+        build(childId, depth + 1, id);
       }
+      onPath.delete(id);
     };
 
-    for (const rootId of roots) build(rootId, 0);
+    for (const rootId of roots) build(rootId, 0, null);
     return out;
   });
 
@@ -296,6 +333,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       const forceInherit = parentCheck !== 'indeterminate';
 
       const childrenIds: string[] = [];
+      const inheritedIds: string[] = [];
+      const memberVia: Record<string, string | null> = {};
+      let keptOwnState = false;
       for (const dto of resp.children) {
         const id = normalizeRefnoKey(dto.refno);
         // 后端若返回“子列表包含自身”，会污染树结构（self-parent / 环），导致 recomputeParents 死循环卡死。
@@ -304,29 +344,52 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
           continue;
         }
         childrenIds.push(id);
+        linkViewParent(id, parentKey);
 
+        // 分组在解析视图下收录的二级成员：主位置在别处，不改它的 parentId，也不动它已有的勾选态。
+        const secondary = dto.secondary === true;
+        if (secondary) memberVia[id] = dto.via ? normalizeRefnoKey(dto.via) : null;
         const existing = nextNodes[id];
         if (!existing) {
-          nextNodes[id] = dtoToTreeNode(dto, parentKey);
-        } else {
+          nextNodes[id] = dtoToTreeNode(dto, secondary ? null : parentKey);
+        } else if (!secondary) {
           nextNodes[id] = { ...existing, parentId: parentKey };
         }
 
         nextChildrenCount.set(id, dto.children_count ?? null);
+
+        if (secondary && checkStateById.value.has(id)) {
+          keptOwnState = true;
+          continue;
+        }
+        inheritedIds.push(id);
 
         // 若父节点处于确定态（checked/unchecked），则子节点显隐应与父保持一致；
         // 若父为 indeterminate，则仅在子节点无状态时才继承，避免覆盖“局部子树”显隐差异。
         if (forceInherit || !checkStateById.value.has(id)) checkStateById.value.set(id, inheritState);
       }
 
-      nextNodes[parentKey] = { ...parent, childrenIds };
+      const kept = new Set(childrenIds);
+      for (const staleId of parent.childrenIds) {
+        if (!kept.has(staleId)) viewParentsById.get(staleId)?.delete(parentKey);
+      }
+      const nextParent: TreeNode = { ...parent, childrenIds };
+      delete nextParent.groupMemberVia;
+      delete nextParent.unresolvedCount;
+      if (Object.keys(memberVia).length > 0) nextParent.groupMemberVia = memberVia;
+      if (resp.unresolved && resp.unresolved.length > 0) nextParent.unresolvedCount = resp.unresolved.length;
+      nextNodes[parentKey] = nextParent;
 
       nodesById.value = nextNodes;
       childrenCountById.value = nextChildrenCount;
       childrenLoadedById.add(parentKey);
 
       // 按需加载：新加载到树里的节点也需要继承可见性状态，以便后续实例加载时能回放状态
-      sceneGraph.setVisible(childrenIds, inheritState !== 'unchecked');
+      sceneGraph.setVisible(inheritedIds, inheritState !== 'unchecked');
+      if (keptOwnState) {
+        checkStateById.value.set(parentKey, aggregateCheckState(childrenIds, (key) => checkStateById.value.get(key)));
+        recomputeParents(parentKey);
+      }
     } finally {
       childrenLoadingById.delete(parentKey);
     }
@@ -556,18 +619,21 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   }
 
   /**
-   * 批量设置状态，只处理已加载到树中的节点，避免遍历大量未加载节点
+   * 批量设置状态，只处理已加载到树中的节点，避免遍历大量未加载节点；返回改到的节点（中途取消回空表）
    */
-  async function setCheckStateDeep(id: string, state: CheckState, guard?: () => boolean) {
+  async function setCheckStateDeep(id: string, state: CheckState, guard?: () => boolean): Promise<string[]> {
     const nodes = nodesById.value;
     const stack: string[] = [id];
     const toUpdate: string[] = [];
+    // 解析视图下同一节点可以经多个父节点到达（分组成员），只收一次。
+    const seen = new Set<string>();
     
     // 先收集所有需要更新的节点（只处理已加载的）
     while (stack.length > 0) {
-      if (guard && !guard()) return;
+      if (guard && !guard()) return [];
       const cur = stack.pop();
-      if (!cur) continue;
+      if (!cur || seen.has(cur)) continue;
+      seen.add(cur);
       
       // 只处理已加载到树中的节点
       if (nodes[cur]) {
@@ -587,7 +653,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     if (toUpdate.length > 0) {
       const batchSize = 1000;
       for (let i = 0; i < toUpdate.length; i += batchSize) {
-        if (guard && !guard()) return;
+        if (guard && !guard()) return [];
         const batch = toUpdate.slice(i, i + batchSize);
         for (const cur of batch) {
           checkStateById.value.set(cur, state);
@@ -595,7 +661,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         
         // 让出控制权
         if (i + batchSize < toUpdate.length) {
-          if (guard && !guard()) return;
+          if (guard && !guard()) return [];
           await new Promise(resolve => {
             if ('requestIdleCallback' in window) {
               requestIdleCallback(() => resolve(undefined), { timeout: 10 });
@@ -606,61 +672,19 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         }
       }
     }
+    return toUpdate;
   }
 
   function recomputeParents(id: string) {
     const nodes = nodesById.value;
-    let cur: string | null = id;
-    const visited = new Set<string>();
-
-    while (cur) {
-      // 防御：若树数据出现 parentId 环（例如 A->B->A 或 self-parent），会导致死循环卡死 UI。
-      // 这里直接中断并给出诊断日志。
-      if (visited.has(cur)) {
-        console.warn('[pdms-tree] recomputeParents detected cycle, aborting:', { start: id, at: cur });
-        return;
-      }
-      visited.add(cur);
-
-      const node: TreeNode | undefined = nodes[cur];
-      const parentId: string | null = node?.parentId ?? null;
-      if (!parentId) break;
-      if (parentId === cur) {
-        console.warn('[pdms-tree] recomputeParents detected self-parent, aborting:', { start: id, at: cur });
-        return;
-      }
-
-      const parent = nodes[parentId];
-      if (!parent) break;
-
-      let checkedCount = 0;
-      let uncheckedCount = 0;
-      let indeterminate = false;
-
-      for (const childId of parent.childrenIds) {
-        const state = checkStateById.value.get(childId) || 'checked';
-        if (state === 'indeterminate') {
-          indeterminate = true;
-          break;
-        }
-        if (state === 'checked') checkedCount++;
-        if (state === 'unchecked') uncheckedCount++;
-      }
-
-      let parentState: CheckState;
-      if (indeterminate) {
-        parentState = 'indeterminate';
-      } else if (uncheckedCount === 0 && checkedCount > 0) {
-        parentState = 'checked';
-      } else if (checkedCount === 0 && uncheckedCount > 0) {
-        parentState = 'unchecked';
-      } else {
-        parentState = 'indeterminate';
-      }
-
-      checkStateById.value.set(parentId, parentState);
-      cur = parentId;
-    }
+    recomputeViewAncestors(id, {
+      parentsOf: viewParentsOf,
+      childrenOf: (parentId) => nodes[parentId]?.childrenIds,
+      stateOf: (key) => checkStateById.value.get(key),
+      setState: (key, state) => {
+        checkStateById.value.set(key, state);
+      },
+    });
   }
 
   let setVisibleSeq = 0;
@@ -687,12 +711,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     const seq = ++setVisibleSeq;
     // 先更新当前节点的 eye（提升响应感）；子孙节点由 setCheckStateDeep 批量更新
     checkStateById.value.set(rootId, desiredState);
+    let updated: string[] = [];
 
     // 先同步树侧 eye（子节点应跟随父节点变化），再异步应用到三维与 instances.json
     if (!DEBUG.skipTreeCascade) {
       const t2 = DEBUG.logTiming ? performance.now() : 0;
       await ensureDescendantStateLoaded(rootId, desiredState, () => seq === setVisibleSeq);
-      await setCheckStateDeep(rootId, desiredState, () => seq === setVisibleSeq);
+      updated = await setCheckStateDeep(rootId, desiredState, () => seq === setVisibleSeq);
       if (DEBUG.logTiming) {
         console.log('[pdms-tree][perf] apply tree checkState', { refno: rootId, ms: performance.now() - t2 });
       }
@@ -701,6 +726,10 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     if (!DEBUG.skipTreeCascade) {
       const t3 = DEBUG.logTiming ? performance.now() : 0;
       recomputeParents(rootId);
+      // 级联改到的节点若还挂在别处（主位置 ↔ 收录它的 GPSET），那些位置的父节点也要重算。
+      for (const id of updated) {
+        if (id !== rootId && viewParentsOf(id).length > 1) recomputeParents(id);
+      }
       if (DEBUG.logTiming) {
         // recomputeParents 可能会遍历父节点的所有 childrenIds（子数很大时可能阻塞）
         console.log('[pdms-tree][perf] recomputeParents', { refno: rootId, ms: performance.now() - t3 });
@@ -905,6 +934,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     parent = nodesById.value[parentId];
     if (!parent) return;
 
+    linkViewParent(childId, parentId);
     if (!parent.childrenIds.includes(childId)) {
       nodesById.value = {
         ...nodesById.value,
@@ -958,12 +988,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
       const ancestorSet = new Set(ancestors);
       ancestorSet.add(key);
+      const startRoot = pickStartRoot(ancestorSet, rootId);
 
       const nextExpanded = new Set(expandedIds.value);
-      nextExpanded.add(rootId);
+      nextExpanded.add(startRoot);
 
       // 与 focusNodeById 相同的“从根向下逐层查找”策略（不依赖祖先链返回顺序）
-      let curParent = rootId;
+      let curParent = startRoot;
       const maxSteps = ancestors.length + 2;
       for (let step = 0; step < maxSteps; step++) {
         await ensureChildrenLoaded(curParent);
@@ -1028,12 +1059,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     // 改用"从根向下逐层查找"策略，完全不依赖返回顺序。
     const ancestorSet = new Set(ancestors);
     ancestorSet.add(key);
+    const startRoot = pickStartRoot(ancestorSet, rootId);
 
     const nextExpanded = new Set(expandedIds.value);
-    nextExpanded.add(rootId);
+    nextExpanded.add(startRoot);
 
     // 从树根向下逐层查找：在每层子节点中找到属于祖先集合的节点，依次展开
-    let curParent = rootId;
+    let curParent = startRoot;
     const maxSteps = ancestors.length + 2;
     for (let step = 0; step < maxSteps; step++) {
       await ensureChildrenLoaded(curParent);
@@ -1099,6 +1131,30 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }, delayMs);
   }
 
+  /**
+   * 「分组」分区（D5-b）：GPWL 挂在单独的虚拟根下，排在世界根之后、默认收起。
+   * 数据源不给（项目里没有分组 / 服务端不支持）就不出现；失败不影响世界根那棵树。
+   */
+  async function attachGroupRoot(seq: number) {
+    if (!treeSource.groupRoot) return;
+    try {
+      const resp = await treeSource.groupRoot();
+      if (seq !== initSeq || !resp.success || !resp.node) return;
+      const root = dtoToTreeNode(resp.node, null);
+      if (nodesById.value[root.id]) return;
+      nodesById.value = { ...nodesById.value, [root.id]: root };
+      rootIds.value = [...rootIds.value, root.id];
+      const nextChildrenCount = new Map(childrenCountById.value);
+      nextChildrenCount.set(root.id, resp.node.children_count ?? null);
+      childrenCountById.value = nextChildrenCount;
+      const nextChecks = new Map(checkStateById.value);
+      nextChecks.set(root.id, 'checked');
+      checkStateById.value = nextChecks;
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[pdms-tree] group root unavailable', e);
+    }
+  }
+
   async function initTree(seq: number) {
     try {
       const resp = await treeSource.worldRoot();
@@ -1119,6 +1175,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
       void ensureChildrenLoaded(root.id);
       expandedIds.value = new Set([root.id]);
+      void attachGroupRoot(seq);
     } catch (e) {
       if (import.meta.env.DEV) {
         console.error('[pdms-tree] initTree failed', e);

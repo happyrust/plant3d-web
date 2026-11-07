@@ -13,13 +13,14 @@ import { MODEL_VERSION_INSPECT_EVENT, takePendingModelVersionInspect } from '@/u
 // 再把「节点版本」面板拉起来。没选中就没有这颗按钮；已删除的幽灵行也能查。
 // -----------------------------------------------------------------------------------------------
 
-const { uiAttr, ensurePanelAndActivate } = vi.hoisted(() => ({
+const { uiAttr, ancestors, ensurePanelAndActivate } = vi.hoisted(() => ({
   uiAttr: vi.fn<(refno: string) => Promise<unknown>>(),
+  ancestors: vi.fn<(refno: string) => Promise<unknown>>(),
   ensurePanelAndActivate: vi.fn<(panelId: string) => void>(),
 }));
 
 vi.mock('@/model-source', () => ({
-  getModelSource: () => ({ attributes: { uiAttr } }),
+  getModelSource: () => ({ attributes: { uiAttr }, tree: { ancestors } }),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
@@ -112,5 +113,61 @@ describe('PropertiesPanel 标题栏「历史」', () => {
     button!.click();
     expect(takePendingModelVersionInspect()).toBe(DELETED);
     expect(ensurePanelAndActivate).toHaveBeenCalledWith('modelVersionCompare');
+  });
+});
+
+describe('PropertiesPanel「所属分组」', () => {
+  let mounted: { host: HTMLElement; app: App } | null = null;
+
+  beforeEach(() => {
+    uiAttr.mockReset();
+    uiAttr.mockResolvedValue({ success: true, attrs: { NAME: `/N-${REFNO}`, TYPE: 'FTUB' }, full_name: `/N-${REFNO}` });
+    ancestors.mockReset();
+    setGlobalSelectedRefno(null);
+  });
+
+  afterEach(() => {
+    mounted?.app.unmount();
+    mounted = null;
+    document.body.innerHTML = '';
+    setGlobalSelectedRefno(null);
+  });
+
+  it('列出收录选中构件（或它的祖先）的分组：有名字显示名字，没名字显示类型 + 参考号', async () => {
+    ancestors.mockResolvedValue({
+      success: true,
+      refnos: [REFNO, '24384_100', 'gm-root:P:M'],
+      secondary_parents: [
+        { member: REFNO, group: '2013286748_11', group_noun: 'GPSET', group_name: '/HVAC-GROUP', via: '2013286748_12' },
+        { member: '24384_100', group: '2013286748_20', group_noun: 'GPSET', group_name: null, via: '2013286748_21' },
+      ],
+    });
+    mounted = mountPanel();
+    const { host } = mounted;
+
+    setGlobalSelectedRefno(REFNO);
+    await flushUi();
+    await vi.waitFor(() => expect(host.textContent).toContain('所属分组'));
+    expect(ancestors).toHaveBeenCalledWith(REFNO);
+    expect(host.textContent).toContain('/HVAC-GROUP');
+    expect(host.textContent).toContain('GPITEM 2013286748/12');
+    expect(host.textContent).toContain('GPSET 2013286748/20');
+    expect(host.textContent).toContain('经祖先 24384/100');
+  });
+
+  it('服务端不给 secondary_parents 不出这一组；已删除的幽灵行不查', async () => {
+    ancestors.mockResolvedValue({ success: true, refnos: [REFNO] });
+    mounted = mountPanel();
+    const { host } = mounted;
+
+    setGlobalSelectedRefno(REFNO);
+    await flushUi();
+    await vi.waitFor(() => expect(host.textContent).toContain(`/N-${REFNO}`));
+    expect(ancestors).toHaveBeenCalledTimes(1);
+    expect(host.textContent).not.toContain('所属分组');
+
+    setGlobalSelectedDeletedRefno(DELETED);
+    await flushUi();
+    expect(ancestors).toHaveBeenCalledTimes(1);
   });
 });

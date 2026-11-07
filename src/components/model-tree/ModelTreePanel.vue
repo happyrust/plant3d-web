@@ -402,6 +402,8 @@ const contextMenuOpen = ref(false);
 const contextMenuPos = ref({ x: 0, y: 0 });
 const contextMenuRef = ref<HTMLElement | null>(null);
 const contextNodeId = ref<string | null>(null);
+/** 右键的那一行：同一 refno 可能有主位置与分组引用两行，「定位到原位置」只给引用行。 */
+const contextRow = ref<DiffFlatRow | null>(null);
 
 const searchPopoverOpen = ref(false);
 const typePopoverOpen = ref(false);
@@ -618,6 +620,7 @@ async function focusPdmsTreeRefnoForE2E(rawRefno: string) {
 function closeContextMenu() {
   contextMenuOpen.value = false;
   contextNodeId.value = null;
+  contextRow.value = null;
 }
 
 function clampContextMenuPosition(x: number, y: number, width: number, height: number) {
@@ -631,7 +634,7 @@ function clampContextMenuPosition(x: number, y: number, width: number, height: n
   };
 }
 
-function openContextMenu(nodeId: string, ev: MouseEvent) {
+function openContextMenu(nodeId: string, ev: MouseEvent, row?: DiffFlatRow) {
   ev.preventDefault();
   ev.stopPropagation();
   // 幽灵节点（已删除、不在当前树中）仅展示，不提供右键操作
@@ -640,6 +643,7 @@ function openContextMenu(nodeId: string, ev: MouseEvent) {
     return;
   }
   contextNodeId.value = nodeId;
+  contextRow.value = row ?? null;
 
   // 先用预估尺寸定位，再在 DOM 渲染后按真实尺寸二次夹紧。
   const menuWidth = 176; // w-44 = 11rem = 176px
@@ -1038,6 +1042,18 @@ function focus() {
   if (!contextNodeId.value) return;
   flyTo(contextNodeId.value);
   closeContextMenu();
+}
+
+/** 分组引用行的右键「定位到原位置」：沿主链展开到它的物理位置并选中（同一 refno 的两行一起高亮）。 */
+async function locatePrimary() {
+  const id = contextNodeId.value;
+  closeContextMenu();
+  if (!id) return;
+  try {
+    await pdmsTree.focusNodeById(id, { flyTo: false, syncSceneSelection: false, clearSearch: false });
+  } catch (e) {
+    console.warn('[model-tree] 定位到原位置失败', e);
+  }
 }
 
 async function showNode() {
@@ -1513,7 +1529,7 @@ function onSearchEnter(value: string) {
             @toggle-expand="toggleExpand"
             @toggle-visible="setVisible"
             @select="selectByRowIndex"
-            @context="openContextMenu"
+            @context="(id, ev) => openContextMenu(id, ev, rowAt(vr.index))"
             @rvm-status="openRvmStatus" />
         </div>
       </div>
@@ -1542,6 +1558,13 @@ function onSearchEnter(value: string) {
         data-model-tree-context-menu="true"
         :class="cn('fixed z-[9999] w-44 rounded-md border border-border bg-background p-1 shadow-md')"
         :style="{ left: `${contextMenuPos.x}px`, top: `${contextMenuPos.y}px` }">
+        <button v-if="contextRow?.secondary"
+          type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          data-testid="model-tree-locate-primary"
+          @click="locatePrimary">
+          定位到原位置
+        </button>
         <button type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           @click="focus">

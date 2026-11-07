@@ -43,7 +43,7 @@ export const DESIGN_POINT_SET_NOUN = 'DPSE';
  * administrative levels (ZONE / SITE / WORL, template worlds / areas, group worlds).
  */
 export const DESIGN_POINT_HOST_STOP_NOUNS: ReadonlySet<string> = new Set([
-  'ZONE', 'SITE', 'WORL', 'TPWL', 'TMAR', 'GPWL', 'GPSE', 'REGI', 'REGION', 'DB',
+  'ZONE', 'SITE', 'WORL', 'TPWL', 'TMAR', 'GPWL', 'GPSET', 'REGI', 'REGION', 'DB',
 ]);
 
 export type DesignPointAttributes = Readonly<{

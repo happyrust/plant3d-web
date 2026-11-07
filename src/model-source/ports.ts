@@ -102,6 +102,11 @@ export type SubtreeRefnosParams = {
 export type TreeSource = {
   /** 单根。gen-model 没有单一 WORL，适配器合成虚拟根（D4-A）。 */
   worldRoot(): Promise<NodeResponse>;
+  /**
+   * 「分组」分区的根（GPWL 挂在它下面，D5-b）。`node: null` = 没有这个分区（项目里没有分组 / 服务端不支持）；
+   * 不支持分组的数据源不实现。
+   */
+  groupRoot?(): Promise<NodeResponse>;
   node(refno: string): Promise<NodeResponse>;
   /** 直接成员，按存储顺序；`limit` 由适配器自己截（gen-model 服务端不截断）。 */
   children(refno: string, limit?: number): Promise<ChildrenResponse>;

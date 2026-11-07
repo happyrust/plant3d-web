@@ -44,3 +44,26 @@ describe('ModelTreeRow dbnum 隐藏', () => {
     }
   });
 });
+
+describe('ModelTreeRow 分组行（GPWL / GPSET）', () => {
+  it('分组节点用分组图标、坏槽显示「N 个成员不可解析」；引用行带「引用」角标，悬停说明经由的 GPITEM', async () => {
+    const group = await mountRow({ id: '2013286748_11', name: '/HVAC', type: 'GPSET', depth: 2, hasChildren: true, unresolvedCount: 2 });
+    try {
+      expect(group.host.querySelector('[data-testid="model-tree-group-icon"]')).not.toBeNull();
+      expect(group.host.querySelector('[data-testid="model-tree-unresolved-badge"]')?.textContent).toContain('2 个成员不可解析');
+      expect(group.host.querySelector('[data-testid="model-tree-secondary-badge"]')).toBeNull();
+    } finally {
+      group.unmount();
+    }
+    const member = await mountRow({ id: '17496_8518', name: '/1RS-WF05', type: 'ZONE', depth: 3, hasChildren: true, secondary: true, via: '2013286748_12' });
+    try {
+      const badge = member.host.querySelector<HTMLElement>('[data-testid="model-tree-secondary-badge"]');
+      expect(badge?.textContent).toContain('引用');
+      expect(badge?.title).toContain('2013286748/12');
+      expect(member.host.querySelector('[data-testid="model-tree-group-icon"]')).toBeNull();
+      expect(member.host.querySelector('[data-testid="model-tree-unresolved-badge"]')).toBeNull();
+    } finally {
+      member.unmount();
+    }
+  });
+});

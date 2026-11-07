@@ -10,6 +10,8 @@
  * - **搜索**：服务端只做 NAME 子串；`nouns` 过滤在这里做（靠 P0-2 的 `noun`），不够一页就翻下一页，
  *   扫描上限 `SEARCH_SCAN_CAP`。
  * - **subtreeRefnos / visibleInsts**：见各方法注释；后者是 ADR 0069 的「显示 = 以节点为祖先查已生成的记录」，不生成。
+ * - **分组（GPWL / GPSET）**：`children` 一律要解析视图（`resolved=1`）：分组下的 GPITEM 由服务端换成 GPREF
+ *   指向的元素（行上带 `via` / `secondary`），非分组节点后端原样直通，老服务端忽略这个参数。分组的子树不走 BFS。
  * - 一切 `GenModelV1ApiError` 都折成 `{ success:false, error_message }`——现有调用方按 `success` 分支，
  *   抛错反而会绕开它们的重试 / 提示逻辑。
  */
@@ -24,9 +26,11 @@ import type {
   SearchResponse,
   SubtreeRefnosResponse,
   TreeNodeDto,
+  UnresolvedGroupSlot,
   VisibleInstsResponse,
 } from '@/api/genModelE3dTypes';
 
+import { isGroupNoun } from '@/api/genModelE3dTypes';
 import {
   fromV1Refno,
   genModelV1Search,
@@ -62,11 +66,25 @@ export function isVirtualRootId(id: string): boolean {
   return typeof id === 'string' && id.startsWith(GEN_MODEL_V1_ROOT_PREFIX);
 }
 
+const GROUP_ROOT_SUFFIX = ':groups';
+
+/**
+ * 「分组」分区的虚拟根（D5-b）：世界虚拟根 id 加 `:groups`。它也是虚拟根（`isVirtualRootId` 认），
+ * 子树遍历、整体显示照虚拟根拒绝。
+ */
+export function makeGroupRootId(project: string, mdb: string): string {
+  return `${makeVirtualRootId(project, mdb)}${GROUP_ROOT_SUFFIX}`;
+}
+
+export function isGroupRootId(id: string): boolean {
+  return isVirtualRootId(id) && id.endsWith(GROUP_ROOT_SUFFIX);
+}
+
 /**
  * `EleTreeNode`（+ 外包的 `dbnum` / `short_name` / `stored_name`）→ 现有树 DTO。
  * 名称空时退回 noun（服务端已这么做，这里再兜一次）。`short_name` 只在服务端给了、且与
- * `name` 不同（即无名构件）时带上；`stored_name` 只在服务端给了这一格时带上——老服务端的
- * 回包转出来的 DTO 与从前逐字段相同。
+ * `name` 不同（即无名构件）时带上；`stored_name` 只在服务端给了这一格时带上；`via` / `secondary` / `rule`
+ * 只在解析视图的分组成员行上有值时带上——老服务端的回包转出来的 DTO 与从前逐字段相同。
  */
 export function eleTreeNodeToDto(node: EleTreeNodeDto, parentId?: string | null): TreeNodeDto {
   const noun = (node.noun ?? '').trim();
@@ -82,6 +100,9 @@ export function eleTreeNodeToDto(node: EleTreeNodeDto, parentId?: string | null)
   const shortName = typeof node.short_name === 'string' ? node.short_name.trim() : '';
   if (shortName && shortName !== name) dto.short_name = shortName;
   if (node.stored_name !== undefined) dto.stored_name = node.stored_name ?? null;
+  if (typeof node.via === 'string' && node.via) dto.via = fromV1Refno(node.via);
+  if (node.secondary === true) dto.secondary = true;
+  if (node.rule === true) dto.rule = true;
   return dto;
 }
 
@@ -93,6 +114,18 @@ export function virtualRootDto(roots: TreeRootsResponse): TreeNodeDto {
     noun: 'WORL',
     owner: null,
     children_count: roots.nodes.length,
+    dbnum: null,
+  };
+}
+
+/** 「分组」分区根的 DTO；`groups` 是只留了 GPWL 的 `tree/roots?nouns=GPWL` 回包。 */
+export function groupRootDto(groups: TreeRootsResponse): TreeNodeDto {
+  return {
+    refno: makeGroupRootId(groups.project, groups.mdb),
+    name: '分组',
+    noun: 'WORL',
+    owner: null,
+    children_count: groups.nodes.length,
     dbnum: null,
   };
 }
@@ -152,6 +185,15 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
   const noteRequestFailure = options.noteRequestFailure ?? ((error: unknown) => { void error; });
 
   let rootsCache: { at: number; generation: number; value: Promise<TreeRootsResponse> } | null = null;
+  let groupRootsCache: { at: number; generation: number; value: Promise<TreeRootsResponse> } | null = null;
+  /** 映射 children / node / search 时见过的分组节点（`a_b`）：`subtreeRefnos` 靠它认出分组根。refno 是不是分组不随服务代次变，只增不减。 */
+  const groupRefnos = new Set<string>();
+
+  function rememberGroups(dtos: readonly TreeNodeDto[]): void {
+    for (const dto of dtos) {
+      if (isGroupNoun(dto.noun)) groupRefnos.add(dto.refno);
+    }
+  }
 
   function loadRoots(guard: GenModelV1GenerationGuard): Promise<TreeRootsResponse> {
     const at = now();
@@ -174,6 +216,29 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     return value;
   }
 
+  /** `tree/roots?nouns=GPWL`，只留分组世界（老服务端若忽略 `nouns` 回的是 SITE，一并滤掉）；缓存口径同 `loadRoots`。 */
+  function loadGroupRoots(guard: GenModelV1GenerationGuard): Promise<TreeRootsResponse> {
+    const at = now();
+    if (
+      groupRootsCache
+      && groupRootsCache.generation === guard.generation
+      && at - groupRootsCache.at < rootsCacheMs
+    ) return groupRootsCache.value;
+    const value = api.roots({ signal: guard.signal, nouns: 'GPWL' })
+      .then((response) => {
+        guard.assertCurrent();
+        const nodes = response.nodes.filter((node) => isGroupNoun(node.noun));
+        for (const node of nodes) groupRefnos.add(fromV1Refno(node.refno));
+        return { ...response, nodes };
+      })
+      .catch((error: unknown) => {
+        if (groupRootsCache?.value === value) groupRootsCache = null;
+        throw error;
+      });
+    groupRootsCache = { at, generation: guard.generation, value };
+    return value;
+  }
+
   async function worldRoot(): Promise<NodeResponse> {
     let guard: GenModelV1GenerationGuard | null = null;
     try {
@@ -190,6 +255,27 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     }
   }
 
+  /**
+   * 「分组」分区的根：项目里没有分组、或服务端不认 `nouns=GPWL`（老服务端回 400）时回 `node: null`，
+   * 树就不出这个分区——这两种都不算服务故障，不记请求失败。
+   */
+  async function groupRoot(): Promise<NodeResponse> {
+    let guard: GenModelV1GenerationGuard | null = null;
+    try {
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
+      const groups = await loadGroupRoots(guard);
+      guard.assertCurrent();
+      return { success: true, node: groups.nodes.length > 0 ? groupRootDto(groups) : null };
+    } catch (error) {
+      if (isGenModelV1ApiError(error) && error.status === 400) return { success: true, node: null };
+      noteRequestFailure(error);
+      return { success: false, node: null, error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
+    }
+  }
+
   async function children(refno: string, limit?: number): Promise<ChildrenResponse> {
     let guard: GenModelV1GenerationGuard | null = null;
     try {
@@ -197,23 +283,33 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       guard = createGenModelV1GenerationGuard();
       let parentId: string;
       let nodes: EleTreeNodeDto[];
-      if (isVirtualRootId(refno)) {
+      let unresolved: UnresolvedGroupSlot[] = [];
+      if (isGroupRootId(refno)) {
+        const groups = await loadGroupRoots(guard);
+        parentId = makeGroupRootId(groups.project, groups.mdb);
+        nodes = groups.nodes;
+      } else if (isVirtualRootId(refno)) {
         const roots = await loadRoots(guard);
         parentId = makeVirtualRootId(roots.project, roots.mdb);
         nodes = roots.nodes;
       } else {
         parentId = fromV1Refno(refno);
-        nodes = (await api.children(parentId, { signal: guard.signal })).nodes;
+        const resp = await api.children(parentId, { signal: guard.signal, resolved: true });
+        nodes = resp.nodes;
+        unresolved = (resp.unresolved ?? []).map((slot) => ({
+          via: fromV1Refno(slot.via),
+          target: slot.target ? fromV1Refno(slot.target) : null,
+          reason: slot.reason,
+        }));
       }
       guard.assertCurrent();
       const truncated = typeof limit === 'number' && limit >= 0 && nodes.length > limit;
       const page = truncated ? nodes.slice(0, limit) : nodes;
-      return {
-        success: true,
-        parent_refno: parentId,
-        children: page.map((node) => eleTreeNodeToDto(node, parentId)),
-        truncated,
-      };
+      const rows = page.map((node) => eleTreeNodeToDto(node, parentId));
+      rememberGroups(rows);
+      const response: ChildrenResponse = { success: true, parent_refno: parentId, children: rows, truncated };
+      if (unresolved.length > 0) response.unresolved = unresolved;
+      return response;
     } catch (error) {
       noteRequestFailure(error);
       return { success: false, parent_refno: fromV1Refno(refno), children: [], truncated: false, error_message: errorMessage(error) };
@@ -236,8 +332,20 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       const chain = resp.refnos.map((item) => fromV1Refno(String(item))).filter(Boolean);
       const self = fromV1Refno(refno);
       if (!chain.includes(self)) chain.unshift(self);
-      chain.push(makeVirtualRootId(roots.project, roots.mdb));
-      return { success: true, refnos: chain };
+      // 链上有见过的 GPWL / GPSET = 落在分组层级里，链尾挂「分组」根；设计层级的主链挂世界根
+      const inGroups = chain.some((item) => groupRefnos.has(item));
+      chain.push(inGroups ? makeGroupRootId(roots.project, roots.mdb) : makeVirtualRootId(roots.project, roots.mdb));
+      const response: AncestorsResponse = { success: true, refnos: chain };
+      if (resp.secondary_parents) {
+        response.secondary_parents = resp.secondary_parents.map((item) => ({
+          member: fromV1Refno(String(item.member)),
+          group: fromV1Refno(String(item.group)),
+          group_noun: item.group_noun,
+          group_name: item.group_name ?? null,
+          via: fromV1Refno(String(item.via)),
+        }));
+      }
+      return response;
     } catch (error) {
       noteRequestFailure(error);
       return { success: false, refnos: [], error_message: errorMessage(error) };
@@ -251,6 +359,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
    * 顶层 SITE 的属主是 WORL（`9304_0` 一类），`tree/children` 对 WORL 同样可用。
    */
   async function node(refno: string): Promise<NodeResponse> {
+    if (isGroupRootId(refno)) return groupRoot();
     if (isVirtualRootId(refno)) return worldRoot();
     let guard: GenModelV1GenerationGuard | null = null;
     try {
@@ -264,7 +373,9 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       guard.assertCurrent();
       const hit = siblings.nodes.find((item) => fromV1Refno(item.refno) === self);
       if (!hit) return { success: false, node: null, error_message: `${owner} 的成员表里没有 ${self}` };
-      return { success: true, node: eleTreeNodeToDto(hit, owner) };
+      const dto = eleTreeNodeToDto(hit, owner);
+      rememberGroups([dto]);
+      return { success: true, node: dto };
     } catch (error) {
       noteRequestFailure(error);
       return { success: false, node: null, error_message: errorMessage(error) };
@@ -309,6 +420,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         if (!resp.truncated || resp.next_cursor === null || resp.next_cursor === undefined) break;
         cursor = resp.next_cursor;
       }
+      rememberGroups(items);
       return { success: true, items };
     } catch (error) {
       noteRequestFailure(error);
@@ -321,11 +433,20 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
   /**
    * 纯树遍历的子树 refno 集：BFS `tree/children`，一个节点一次请求，上限 `SUBTREE_MAX_REQUESTS`。
    * 大容器（整 SITE）会撞上限并置 `truncated`——那是「有几何的构件集」该走 `visibleInsts` 的场景（plan §3）。
-   * 虚拟根不展开（那等于整个 MDB）。
+   * 虚拟根不展开（那等于整个 MDB）。分组（GPWL / GPSET）也不展开：成员多是整片 ZONE、还跨库，逐节点 BFS 必撞上限；
+   * 分组的显示范围以 generate / records 回执的 generation_roots 为准。
    */
   async function subtreeRefnos(refno: string, params?: SubtreeRefnosParams): Promise<SubtreeRefnosResponse> {
     if (isVirtualRootId(refno)) {
       return { success: false, refnos: [], truncated: true, error_message: '虚拟根不支持子树遍历：请按 SITE 操作' };
+    }
+    if (groupRefnos.has(fromV1Refno(refno))) {
+      return {
+        success: false,
+        refnos: [],
+        truncated: true,
+        error_message: '分组（GPWL / GPSET）不做子树遍历：成员范围以 generate / records 回执的 generation_roots 为准',
+      };
     }
     let guard: GenModelV1GenerationGuard | null = null;
     const root = fromV1Refno(refno);
@@ -439,7 +560,8 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
 
   function invalidate(): void {
     rootsCache = null;
+    groupRootsCache = null;
   }
 
-  return { worldRoot, node, children, ancestors, search, subtreeRefnos, visibleInsts, invalidate };
+  return { worldRoot, groupRoot, node, children, ancestors, search, subtreeRefnos, visibleInsts, invalidate };
 }

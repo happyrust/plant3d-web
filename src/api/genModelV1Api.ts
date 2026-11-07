@@ -519,6 +519,12 @@ export type EleTreeNodeDto = {
   short_name?: string | null;
   /** 文件里存的 NAME；无名构件为 `null`。老服务端不给。 */
   stored_name?: string | null;
+  /** 解析视图（`resolved=1`）里经由的 GPITEM（`a_b`）；只有分组下的二级成员行带。 */
+  via?: string | null;
+  /** 二级成员：属主不是这个分组。只有解析视图的二级成员行带。 */
+  secondary?: boolean;
+  /** SCOSEL 规则组求值出的成员；gen-model 支持规则组之前恒为 `false`。 */
+  rule?: boolean;
   op?: unknown;
   mod_cnt?: number | null;
   children_updated?: unknown;
@@ -532,17 +538,49 @@ export type TreeRootsResponse = {
   nodes: EleTreeNodeDto[];
 };
 
+/** `/tree/children` 回的是哪种视图；老服务端不回这一格，按 `stored` 处理。 */
+export type TreeView = 'stored' | 'resolved';
+
 export type TreeChildrenResponse = {
   source: string;
   /** `a/b` */
   parent: string;
+  /**
+   * `resolved`：服务端认了 `resolved=1`，分组（GPWL / GPSET）下的 GPITEM 已换成 GPREF 指向的元素，
+   * 非分组父节点与存储视图逐行相同。见 {@link isResolvedTreeView}。
+   */
+  view?: TreeView;
   nodes: EleTreeNodeDto[];
+  /** 解析不出的 GPITEM 槽；只在解析视图且有坏槽时出现。 */
+  unresolved?: TreeUnresolvedSlot[];
+};
+
+export type TreeUnresolvedSlot = {
+  /** GPITEM（`a_b`） */
+  via: string;
+  /** GPREF 原值（`a_b`）；GPITEM 没有 GPREF 时为 `null` */
+  target: string | null;
+  reason: 'gpref_missing' | 'db_not_in_mdb' | 'target_missing' | (string & {});
 };
 
 export type TreeAncestorsResponse = {
   source: string;
   /** 自己在前、向上到库顶；`a_b` */
   refnos: string[];
+  /** 主链上各级被哪些分组经 GPITEM 收录；老服务端或分组反查不可用时缺省（缺省不等于「不在任何分组里」）。 */
+  secondary_parents?: TreeSecondaryParent[];
+};
+
+export type TreeSecondaryParent = {
+  /** 主链上被收录的那一级（`a_b`） */
+  member: string;
+  /** 收录它的分组（`a_b`） */
+  group: string;
+  group_noun: string;
+  /** 分组的 `NAME`；无名为 null，老服务端不给这一格 */
+  group_name?: string | null;
+  /** 经由的 GPITEM（`a_b`） */
+  via: string;
 };
 
 export type SearchItem = {
@@ -593,8 +631,12 @@ export type ModelGenerateResponse = {
   status: ModelGenerateStatus | (string & {});
   /** `a/b` */
   generation_root?: string;
-  /** 读透形态对容器节点解出的全部生成根（`a/b`）；空 / 缺省时用请求的 refno 自己 */
+  /** 读透形态对容器节点解出的全部生成根（`a/b`）；空 / 缺省时用请求的 refno 自己（分组除外，见 `scope_kind`） */
   generation_roots?: string[];
+  /** 请求的是分组（GPWL / GPSET）时为 `group`：`generation_roots` 是解析成员的生成根，空表即空组，不得回退为请求的 refno。 */
+  scope_kind?: 'group' | (string & {});
+  /** 分组里解析不出的 GPITEM 槽数；只在 `scope_kind: 'group'` 时有。 */
+  unresolved_count?: number;
   model_available?: boolean;
   model_instance_count?: number;
   generated_instance_count?: number;
@@ -803,15 +845,32 @@ export function genModelV1Health(options?: GenModelV1RequestOptions): Promise<He
   return genModelV1Fetch<HealthResponse>('/api/v1/health', { ...options, timeoutMs: options?.timeoutMs ?? 10_000 });
 }
 
-export function genModelV1TreeRoots(options?: GenModelV1RequestOptions): Promise<TreeRootsResponse> {
-  return genModelV1Fetch<TreeRootsResponse>('/api/v1/tree/roots', options);
+export type GenModelV1TreeRootsOptions = GenModelV1RequestOptions & {
+  /** 只列这些类型的 WORLD 直接成员（逗号分隔，服务端缺省 `SITE`）；`GPWL` 是分组入口，老服务端不认、回 400。 */
+  nouns?: string;
+};
+
+export function genModelV1TreeRoots(options?: GenModelV1TreeRootsOptions): Promise<TreeRootsResponse> {
+  const { nouns, ...requestOptions }: GenModelV1TreeRootsOptions = options ?? {};
+  return genModelV1Fetch<TreeRootsResponse>('/api/v1/tree/roots', nouns ? { ...requestOptions, query: { nouns } } : requestOptions);
 }
 
-export function genModelV1TreeChildren(refno: string, options?: GenModelV1RequestOptions): Promise<TreeChildrenResponse> {
+export type GenModelV1TreeChildrenOptions = GenModelV1RequestOptions & {
+  /** 要解析视图（`resolved=1`）：分组节点的 GPITEM 换成真实成员；非分组节点后端原样直通。 */
+  resolved?: boolean;
+};
+
+export function genModelV1TreeChildren(refno: string, options?: GenModelV1TreeChildrenOptions): Promise<TreeChildrenResponse> {
+  const { resolved, ...requestOptions }: GenModelV1TreeChildrenOptions = options ?? {};
   return genModelV1Fetch<TreeChildrenResponse>('/api/v1/tree/children', {
-    ...options,
-    query: { refno: toV1Refno(refno) },
+    ...requestOptions,
+    query: resolved ? { refno: toV1Refno(refno), resolved: '1' } : { refno: toV1Refno(refno) },
   });
+}
+
+/** 服务端真的回了解析视图；老服务端忽略 `resolved`、不回 `view`，按存储视图处理。 */
+export function isResolvedTreeView(response: Pick<TreeChildrenResponse, 'view'>): boolean {
+  return response.view === 'resolved';
 }
 
 export function genModelV1TreeAncestors(refno: string, options?: GenModelV1RequestOptions): Promise<TreeAncestorsResponse> {

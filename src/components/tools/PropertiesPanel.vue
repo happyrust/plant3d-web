@@ -11,6 +11,7 @@ import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { cn } from '@/lib/utils';
+import { getModelSource } from '@/model-source';
 import { requestModelVersionInspect } from '@/utils/modelUnitVersionCompare';
 
 const sel = useSelectionStore();
@@ -143,6 +144,70 @@ function classifyProperty(key: string): 'general' | 'component' | 'uda' {
 // 响应直接给出（键为属性名），前端只读不再逐个回查。
 const refFullNames = sel.refFullNames;
 
+const GROUP_MEMBERSHIP_GROUP_ID = 'group-membership';
+
+type GroupMembership = {
+  /** 被收录的是选中构件自己（否则是它主链上的某个祖先） */
+  direct: boolean;
+  member: string;
+  group: string;
+  groupNoun: string;
+  groupName: string | null;
+  via: string;
+};
+
+/**
+ * 「所属分组」：选中构件（或它主链上的某一级）被哪些分组经 GPITEM 收录，来自 `tree/ancestors` 的 `secondary_parents`。
+ * 服务端不给这一格（老服务端 / 反查不可用）就不出这一组；已删除的幽灵行不查。
+ */
+const groupMemberships = ref<GroupMembership[]>([]);
+let groupMembershipSeq = 0;
+
+watch(
+  () => [sel.selectedRefno.value, sel.selectedIsDeleted.value] as const,
+  async ([refno, deleted]) => {
+    const seq = ++groupMembershipSeq;
+    groupMemberships.value = [];
+    if (!refno || deleted) return;
+    try {
+      const resp = await getModelSource().tree.ancestors(refno);
+      if (seq !== groupMembershipSeq || !resp.success) return;
+      const self = resp.refnos[0];
+      groupMemberships.value = (resp.secondary_parents ?? []).map((item) => ({
+        direct: item.member === self,
+        member: item.member,
+        group: item.group,
+        groupNoun: item.group_noun,
+        groupName: item.group_name,
+        via: item.via,
+      }));
+    } catch {
+      // 分组归属只是附加信息，取不到不影响属性展示
+    }
+  },
+  { immediate: true },
+);
+
+function slashRefno(refno: string): string {
+  return refno.replace('_', '/');
+}
+
+const groupMembershipRows = computed<PropertyRow[]>(() => {
+  const seen = new Set<string>();
+  return groupMemberships.value.map((item): PropertyRow => {
+    const label = item.groupName || `${item.groupNoun} ${slashRefno(item.group)}`;
+    const key = seen.has(label) ? `${label}（${slashRefno(item.via)}）` : label;
+    seen.add(key);
+    return {
+      key,
+      value: item.group,
+      type: 'string',
+      displayValue: item.direct ? `GPITEM ${slashRefno(item.via)}` : `经祖先 ${slashRefno(item.member)}`,
+      title: `${item.groupNoun} ${slashRefno(item.group)} 经 GPITEM ${slashRefno(item.via)} 收录 ${slashRefno(item.member)}`,
+    };
+  });
+});
+
 const groups = computed<PropertyGroup[]>(() => {
   const data = sel.propertiesData.value;
   if (!data) return [];
@@ -204,6 +269,14 @@ const groups = computed<PropertyGroup[]>(() => {
       result.push({ id: 'uda', name: 'UDA属性', rows: uda });
     }
   }
+  if (displayMode === 'all' || displayMode === 'general') {
+    const memberships = groupMembershipRows.value.filter((row) => !query
+      || row.key.toLowerCase().includes(query)
+      || row.displayValue.toLowerCase().includes(query));
+    if (memberships.length > 0) {
+      result.push({ id: GROUP_MEMBERSHIP_GROUP_ID, name: '所属分组', rows: memberships });
+    }
+  }
 
   return result;
 });
@@ -212,7 +285,7 @@ const stats = computed(() => {
   const data = sel.propertiesData.value;
   if (!data) return { total: 0, filtered: 0 };
   const total = Object.keys(data).length;
-  const filtered = groups.value.reduce((sum, g) => sum + g.rows.length, 0);
+  const filtered = groups.value.reduce((sum, g) => (g.id === GROUP_MEMBERSHIP_GROUP_ID ? sum : sum + g.rows.length), 0);
   return { total, filtered };
 });
 
