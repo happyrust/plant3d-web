@@ -69,7 +69,8 @@ $candidates = @()
 $bundled = Join-Path $backend 'bin\surreal.exe'
 if (Test-Path -LiteralPath $bundled) { $candidates += $bundled }
 $onPath = Get-Command surreal.exe -ErrorAction SilentlyContinue
-if ($onPath -and $onPath.Source) { $candidates += $onPath.Source }
+# 取路径用 .Path：CommandInfo.Source 是 PowerShell 5.0 才有的属性，2012 R2 自带的 4.0 上取到的是空值。
+if ($onPath -and $onPath.Path) { $candidates += $onPath.Path }
 $exe = $null
 foreach ($candidate in $candidates) {
     try { $verText = (& $candidate version 2>&1 | Out-String) } catch { continue }
