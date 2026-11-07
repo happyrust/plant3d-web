@@ -305,7 +305,9 @@ export function planTagBillboard(
     height,
   });
   // A leaderless tag's own position counts as the nearest ring.
-  const centres: { centre: Vec2; ring: number }[] = spec.target ? [] : [{ centre: anchor, ring: 0 }];
+  const centres: { centre: Vec2; ring: number; own: boolean }[] = spec.target
+    ? []
+    : [{ centre: anchor, ring: 0, own: true }];
   for (const [ring, scale] of rules.candidateDistanceScales.entries()) {
     for (const degrees of rules.candidateAnglesDeg) {
       const turned = rotate2(direction, degrees);
@@ -315,10 +317,11 @@ export function planTagBillboard(
           anchor[1] + turned[1] * standoff * scale,
         ],
         ring,
+        own: false,
       });
     }
   }
-  const bodies = centres.map(({ centre, ring }) => ({ body: bodyAt(centre), ring }));
+  const bodies = centres.map(({ centre, ring, own }) => ({ body: bodyAt(centre), ring, own }));
   // Stable partition: positions that keep the whole body — margin included,
   // since that is the rectangle the placement pass reasons about — on
   // screen first.
@@ -350,7 +353,7 @@ export function planTagBillboard(
 
   const materialize = (candidate: number): LayoutResult => {
     const index = Math.min(Math.max(0, candidate), ordered.length - 1);
-    const { body } = ordered[index]!;
+    const { body, own } = ordered[index]!;
     // Every vertex hangs off the 3D anchor with a screen offset, so the whole
     // tag follows the anchor rigidly as the camera moves between layouts.
     const at = (screen: Vec2): SceneVertex =>
@@ -362,7 +365,9 @@ export function planTagBillboard(
     if (borderTone) {
       primitives.push(scenePath(outlineVertices, true, 'tag', styleRole, undefined, borderTone));
     }
-    if (spec.target) {
+    // A leaderless tag pushed off its own position leads back to it, or a
+    // displaced room number reads as belonging somewhere else.
+    if (spec.target || !own) {
       const centre: Vec2 = [body.x + width / 2, body.y + height / 2];
       const edge = rectEdgeTowards(anchor, centre, width / 2, height / 2);
       if (edge && Math.hypot(edge[0] - anchor[0], edge[1] - anchor[1]) > rules.bodyMarginPx) {

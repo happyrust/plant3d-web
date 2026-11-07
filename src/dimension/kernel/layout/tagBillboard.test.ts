@@ -768,6 +768,32 @@ describe('placeTagBillboards', () => {
       expect(gridded[tag.index]!.derived.tag!.candidate, tag.id).toBe(expected.get(tag.id));
     }
   });
+
+  it('leads a leaderless tag pushed off its own position back to it', () => {
+    const pillSpec: ExplicitTagInput = { style: 'pill', lines: [{ text: 'R230' }] };
+    const plan = planTagBillboard({ ...input, id: 'room', tag: pillSpec, labelAnchor: [0, 0, 0] }, pillSpec, context());
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    const leaders = (layout: LayoutResult) => layout.primitives.filter(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+    );
+
+    const [free] = placeTagBillboards([placeholder('room')], [{ index: 0, id: 'room', plan }]);
+    expect(free!.derived.tag!.candidate).toBe(0);
+    expect(leaders(free!)).toEqual([]);
+
+    // A value label on the room point itself pushes the pill to a ring.
+    const value: LayoutResult = {
+      ...placeholder('dim'),
+      primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'dimension', styleRole: 'external' }],
+      labelBounds: plan.candidates[0]!,
+    };
+    const [, moved] = placeTagBillboards([value, placeholder('room')], [{ index: 1, id: 'room', plan }]);
+    expect(moved!.derived.tag!.candidate).toBeGreaterThan(0);
+    const [leader] = leaders(moved!);
+    expect(leader).toBeDefined();
+    expect(leader!.from[0]).toBeCloseTo(200, 6);
+    expect(leader!.from[1]).toBeCloseTo(200, 6);
+  });
 });
 
 describe('tag obstacles', () => {
