@@ -1,0 +1,7182 @@
+{
+  "refno": "17496_118364",
+  "mode": "flat",
+  "gm": "http://127.0.0.1:8022",
+  "mbd": "http://127.0.0.1:8023",
+  "generatedAt": "2026-11-07T01:03:45.459Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          20.13416796875,
+          15.10062597656248,
+          20.134167968749964
+        ],
+        "target": [
+          0,
+          4.440892098500626e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 292,
+      "layouts": 292,
+      "drawn": 16,
+      "lodHidden": 276,
+      "overlapHidden": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "overlapPairs": [
+        "17496_118364:name:A x 17496_118364:thick:A",
+        "17496_118364:name:B x 17496_118364:thick:B",
+        "17496_118364:name:top x 17496_118364:thick:top"
+      ],
+      "offscreen": [],
+      "labels": {
+        "17496_118364:name:A": {
+          "cx": 586.5407136880765,
+          "cy": 371.8925780252147,
+          "w": 26.644179618690373,
+          "h": 28.563191313935818,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A": {
+          "cx": 586.1099890969504,
+          "cy": 382.1815980198843,
+          "w": 39.00282797700356,
+          "h": 37.23075869240091,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A:circle1": {
+          "cx": 586.1153306155404,
+          "cy": 382.5888697572674,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A:circle2": {
+          "cx": 586.1153306155404,
+          "cy": 382.5888697572674,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:name:B": {
+          "cx": 634.0662388150008,
+          "cy": 393.83678373761893,
+          "w": 27.311270229190768,
+          "h": 28.73751690212538,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B": {
+          "cx": 634.4821686638028,
+          "cy": 403.25329247998934,
+          "w": 38.81683254272275,
+          "h": 37.544469402627044,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B:circle1": {
+          "cx": 634.4765948680927,
+          "cy": 403.66319800622045,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B:circle2": {
+          "cx": 634.4765948680927,
+          "cy": 403.66319800622045,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:name:top": {
+          "cx": 615.6645680264869,
+          "cy": 275.47387565070983,
+          "w": 27.464754142739025,
+          "h": 30.190986848378486,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top": {
+          "cx": 606.3600711061641,
+          "cy": 281.0212302307531,
+          "w": 39.23048179839225,
+          "h": 36.74896312880031,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top:circle1": {
+          "cx": 605.9099247430854,
+          "cy": 280.83312562870685,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top:circle2": {
+          "cx": 605.9099247430854,
+          "cy": 280.83312562870685,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:A:bottom": {
+          "cx": 453.9563597898354,
+          "cy": 595.0147295207482,
+          "w": 73.07526331315694,
+          "h": 68.4851900108498,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:A:top": {
+          "cx": 434.0515837282469,
+          "cy": 382.0129574225392,
+          "w": 82.1348865408878,
+          "h": 68.5795355050414,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:B:bottom": {
+          "cx": 743.0435485159467,
+          "cy": 393.4349449192895,
+          "w": 72.07919741141654,
+          "h": 69.61413948861986,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:B:top": {
+          "cx": 757.27281071941,
+          "cy": 193.84470837315519,
+          "w": 81.09023692853452,
+          "h": 70.10816218143415,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:A:x": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:x:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:x:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:X": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:Y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:x": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:x:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:x:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:y:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:y:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:label:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:label:X": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:label:Y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:B:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:B:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          8.053667187499999,
+          6.0402503906249745,
+          8.053667187499972
+        ],
+        "target": [
+          0,
+          4.440892098500626e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 292,
+      "layouts": 292,
+      "drawn": 19,
+      "lodHidden": 273,
+      "overlapHidden": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 6,
+      "overlapPairs": [
+        "17496_118364:name:A x 17496_118364:thick:A",
+        "17496_118364:name:B x 17496_118364:thick:B",
+        "17496_118364:name:top x 17496_118364:thick:top",
+        "17496_118364:origin:B:label:0 x 17496_118364:origin:B:label:X",
+        "17496_118364:origin:B:label:0 x 17496_118364:origin:B:label:Y",
+        "17496_118364:origin:B:label:X x 17496_118364:origin:B:label:Y"
+      ],
+      "offscreen": [
+        "17496_118364:el:A:bottom",
+        "17496_118364:el:B:top",
+        "17496_118364:origin:B:label:0",
+        "17496_118364:origin:B:label:X",
+        "17496_118364:origin:B:label:Y"
+      ],
+      "labels": {
+        "17496_118364:name:A": {
+          "cx": 551.8827782124896,
+          "cy": 346.6186664887671,
+          "w": 29.103615811240388,
+          "h": 31.823170149883822,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A": {
+          "cx": 551.2468911993241,
+          "cy": 372.23138842379706,
+          "w": 39.1073002465273,
+          "h": 37.02609774228705,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A:circle1": {
+          "cx": 551.2791874472288,
+          "cy": 373.2381415804794,
+          "w": 8,
+          "h": 25.519071671837505,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A:circle2": {
+          "cx": 551.2791874472288,
+          "cy": 373.2381415804794,
+          "w": 8,
+          "h": 25.519071671837505,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:name:B": {
+          "cx": 671.3592472182904,
+          "cy": 401.33185673005835,
+          "w": 29.984041284324803,
+          "h": 31.20487605051153,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B": {
+          "cx": 671.8568419823025,
+          "cy": 425.0124820954189,
+          "w": 38.63612459143678,
+          "h": 37.802632238739534,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B:circle1": {
+          "cx": 671.8212726390194,
+          "cy": 426.03528070745506,
+          "w": 8,
+          "h": 26.326434273790227,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B:circle2": {
+          "cx": 671.8212726390194,
+          "cy": 426.03528070745506,
+          "w": 8,
+          "h": 26.326434273790227,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:name:top": {
+          "cx": 625.5598626227801,
+          "cy": 77.1578805812132,
+          "w": 27.53429773661651,
+          "h": 32.580717662984426,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top": {
+          "cx": 599.9082434558597,
+          "cy": 89.6272682160432,
+          "w": 39.611505591198465,
+          "h": 35.33608101697506,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top:circle1": {
+          "cx": 598.6637939972392,
+          "cy": 89.20063360087005,
+          "w": 8,
+          "h": 29.280171498471613,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top:circle2": {
+          "cx": 598.6637939972392,
+          "cy": 89.20063360087005,
+          "w": 8,
+          "h": 29.280171498471613,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:A:bottom": {
+          "cx": 202.62377823482046,
+          "cy": 926.8335318703434,
+          "w": 71.79501849335074,
+          "h": 69.92103651610933,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:A:top": {
+          "cx": 27.152875432920666,
+          "cy": 365.85470684083305,
+          "w": 94.02542668039442,
+          "h": 67.40119145904254,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:B:bottom": {
+          "cx": 890.6861545166277,
+          "cy": 398.3565426416685,
+          "w": 69.29883304173018,
+          "h": 72.36504370642325,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:B:top": {
+          "cx": 964.3027480763276,
+          "cy": -80.49641136926748,
+          "w": 83.66982774613973,
+          "h": 66.07484574212899,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:A:x": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:x:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:x:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:X": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:Y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:x": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:x:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:x:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:y:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:y:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:B:label:0": {
+          "cx": 297.7744102176773,
+          "cy": 1034.620616139915,
+          "w": 31.019900154444485,
+          "h": 30.205621406775208,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:label:X": {
+          "cx": 318.23171940653367,
+          "cy": 1009.0241667799545,
+          "w": 33.73705890337055,
+          "h": 33.14347711969867,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:label:Y": {
+          "cx": 299.019830714911,
+          "cy": 1014.8734247002654,
+          "w": 33.70570775686559,
+          "h": 33.18170513980044,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_157306:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:B:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:B:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146880:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146820:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          4.026833593749999,
+          3.0201251953124877,
+          4.026833593749986
+        ],
+        "target": [
+          0,
+          4.440892098500626e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 292,
+      "layouts": 292,
+      "drawn": 62,
+      "lodHidden": 230,
+      "overlapHidden": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 17,
+      "overlapPairs": [
+        "17496_118364:name:A x 17496_118364:member:17496_132549:no:B",
+        "17496_118364:name:A x 17496_118364:member:17496_132549:mark:B",
+        "17496_118364:thick:A x 17496_118364:member:17496_132549:no:B",
+        "17496_118364:thick:A x 17496_118364:member:17496_132549:mark:B",
+        "17496_118364:origin:A:label:0 x 17496_118364:origin:A:label:X",
+        "17496_118364:origin:A:label:0 x 17496_118364:origin:A:label:Y",
+        "17496_118364:origin:A:label:X x 17496_118364:origin:A:label:Y",
+        "17496_118364:origin:B:label:0 x 17496_118364:origin:B:label:Y",
+        "17496_118364:member:17496_146952:no:A x 17496_118364:member:17496_146952:mark:A",
+        "17496_118364:member:17496_146946:no:A x 17496_118364:member:17496_146946:mark:A",
+        "17496_118364:member:17496_146880:ydis:A x 17496_118364:member:17496_146820:dim:A:1:g0:0",
+        "17496_118364:member:17496_134584:no:A x 17496_118364:member:17496_134584:mark:A",
+        "17496_118364:member:17496_134578:no:A x 17496_118364:member:17496_134578:mark:A",
+        "17496_118364:member:17496_134572:no:A x 17496_118364:member:17496_134572:mark:A",
+        "17496_118364:member:17496_134566:no:A x 17496_118364:member:17496_134566:mark:A",
+        "17496_118364:member:17496_132555:no:B x 17496_118364:member:17496_132555:mark:B",
+        "17496_118364:member:17496_132549:no:B x 17496_118364:member:17496_132549:mark:B"
+      ],
+      "offscreen": [
+        "17496_118364:name:top",
+        "17496_118364:thick:top",
+        "17496_118364:el:A:bottom",
+        "17496_118364:el:A:top",
+        "17496_118364:el:B:top",
+        "17496_118364:origin:B:label:0",
+        "17496_118364:origin:B:label:X",
+        "17496_118364:origin:B:label:Y",
+        "17496_118364:member:17496_146958:dim:A:0:g0:0",
+        "17496_118364:member:17496_146958:dim:A:1:g0:0",
+        "17496_118364:member:17496_146958:no:A",
+        "17496_118364:member:17496_146958:mark:A",
+        "17496_118364:member:17496_146952:no:A",
+        "17496_118364:member:17496_146952:mark:A",
+        "17496_118364:member:17496_146946:no:A",
+        "17496_118364:member:17496_146946:mark:A",
+        "17496_118364:member:17496_146880:dim:A:0:g0:0",
+        "17496_118364:member:17496_146880:dim:A:1:g0:0",
+        "17496_118364:member:17496_146880:xdis:A",
+        "17496_118364:member:17496_146880:ydis:A",
+        "17496_118364:member:17496_146880:no:A",
+        "17496_118364:member:17496_146880:mark:A",
+        "17496_118364:member:17496_146820:dim:A:0:g0:0",
+        "17496_118364:member:17496_146820:dim:A:1:g0:0",
+        "17496_118364:member:17496_146820:xdis:A",
+        "17496_118364:member:17496_146820:ydis:A",
+        "17496_118364:member:17496_146820:no:A",
+        "17496_118364:member:17496_146820:mark:A",
+        "17496_118364:member:17496_143097:no:A",
+        "17496_118364:member:17496_143097:mark:A",
+        "17496_118364:member:17496_134584:no:A",
+        "17496_118364:member:17496_134584:mark:A",
+        "17496_118364:member:17496_134578:no:A",
+        "17496_118364:member:17496_134578:mark:A"
+      ],
+      "labels": {
+        "17496_118364:name:A": {
+          "cx": 495.49343782162606,
+          "cy": 305.49737114671706,
+          "w": 28.57860618857228,
+          "h": 32.11888487424892,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A": {
+          "cx": 495.59663413780373,
+          "cy": 356.348355783833,
+          "w": 50.4259388975853,
+          "h": 46.95200523114056,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A:circle1": {
+          "cx": 495.71902300321244,
+          "cy": 358.32466529053744,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:A:circle2": {
+          "cx": 495.71902300321244,
+          "cy": 358.32466529053744,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:name:B": {
+          "cx": 736.9150273616617,
+          "cy": 414.50712411362343,
+          "w": 30.363802909745573,
+          "h": 30.87928615473504,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B": {
+          "cx": 735.9478262848239,
+          "cy": 462.3256612152429,
+          "w": 52.96606475334852,
+          "h": 52.869177242489116,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B:circle1": {
+          "cx": 735.8004515494442,
+          "cy": 464.3632987056565,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:B:circle2": {
+          "cx": 735.8004515494442,
+          "cy": 464.3632987056565,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:name:top": {
+          "cx": 647.2505561359333,
+          "cy": -357.5549443830802,
+          "w": 22.7751673020382,
+          "h": 33.2932602284468,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top": {
+          "cx": 585.3355328609538,
+          "cy": -342.6733091128039,
+          "w": 59.02920380061323,
+          "h": 44.48749271770532,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top:circle1": {
+          "cx": 582.3138582474605,
+          "cy": -343.1927418596979,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:thick:top:circle2": {
+          "cx": 582.3138582474605,
+          "cy": -343.1927418596979,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:A:bottom": {
+          "cx": -269.64421937527595,
+          "cy": 1550.3396463003235,
+          "w": 109.75599096031124,
+          "h": 111.9851896464611,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:A:top": {
+          "cx": -1933.7113303597487,
+          "cy": 287.98732965835285,
+          "w": 143.12985465673046,
+          "h": 66.0835769431684,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:B:bottom": {
+          "cx": 1055.4702746511903,
+          "cy": 403.8495447791057,
+          "w": 65.39330503769816,
+          "h": 75.45429841946765,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:el:B:top": {
+          "cx": 1276.7170160825117,
+          "cy": -494.48523444738066,
+          "w": 110.68960411738158,
+          "h": 63.165713904029815,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:A:x": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:x:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:x:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y:head1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:y:head2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:origin:A:label:0": {
+          "cx": 911.6707675974529,
+          "cy": 328.73574265812726,
+          "w": 30.80011755070518,
+          "h": 30.44927627503739,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:A:label:X": {
+          "cx": 899.0853207200331,
+          "cy": 338.0103525399425,
+          "w": 33.57083823591984,
+          "h": 33.335974175157844,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:A:label:Y": {
+          "cx": 912.1308057323603,
+          "cy": 309.7258054320403,
+          "w": 33.51475233829456,
+          "h": 33.39568276022135,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:x": {
+          "cx": -124.74417995330981,
+          "cy": 1917.8470179859266,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:x:head1": {
+          "cx": -33.40785906393709,
+          "cy": 1801.057073984312,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:x:head2": {
+          "cx": -33.40785906393709,
+          "cy": 1801.057073984312,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:y": {
+          "cx": -124.74417995330981,
+          "cy": 1917.8470179859266,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:y:head1": {
+          "cx": -159.43731563782487,
+          "cy": 1904.349159459702,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:y:head2": {
+          "cx": -159.43731563782487,
+          "cy": 1904.349159459702,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:label:0": {
+          "cx": -119.24861004673028,
+          "cy": 1896.941540812818,
+          "w": 31.81205916905151,
+          "h": 29.12177545690247,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:label:X": {
+          "cx": -62.29725075641175,
+          "cy": 1817.669839918276,
+          "w": 34.27721145086939,
+          "h": 32.28105390000064,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:origin:B:label:Y": {
+          "cx": -125.39798622213726,
+          "cy": 1869.0495388906352,
+          "w": 34.248295928627655,
+          "h": 32.34074773799921,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_157306:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:B:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:dim:B:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157306:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_118388:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158424:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158418:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158412:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_158406:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157269:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157263:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_157245:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147097:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147091:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_147085:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146995:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:dim:A:0:g0:0": {
+          "cx": -30.802368349927395,
+          "cy": -111.78304766945531,
+          "w": 40.73250305942492,
+          "h": 49.09714888337831,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146958:dim:A:1:g0:0": {
+          "cx": -12.292025976654273,
+          "cy": -243.99313050182096,
+          "w": 48.95109445689593,
+          "h": 40.43004043186471,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146958:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146958:no:A": {
+          "cx": -82.01853086230412,
+          "cy": -241.30793555983627,
+          "w": 33.355822815520185,
+          "h": 36.231234765594536,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146958:mark:A": {
+          "cx": -167.74938588671802,
+          "cy": -219.21790011170157,
+          "w": 132.12959646679286,
+          "h": 61.682003679640275,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146952:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146952:no:A": {
+          "cx": 364.9640624673388,
+          "cy": -188.44348622813922,
+          "w": 33.09095116340643,
+          "h": 36.69196542792463,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146952:mark:A": {
+          "cx": 315.7535164429256,
+          "cy": -170.6408352269091,
+          "w": 134.6495437123742,
+          "h": 73.43230134782362,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146946:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_146946:no:A": {
+          "cx": 412.8396235173614,
+          "cy": -368.8324077492863,
+          "w": 31.41890568748306,
+          "h": 35.73209238746597,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146946:mark:A": {
+          "cx": 363.8248232945247,
+          "cy": -356.20340480080324,
+          "w": 132.1296642905569,
+          "h": 61.68094714953577,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146880:dim:A:0:g0:0": {
+          "cx": -601.9594528188671,
+          "cy": 102.13374058955326,
+          "w": 46.77511680798693,
+          "h": 51.17553151395734,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146880:dim:A:1:g0:0": {
+          "cx": -596.3728680909813,
+          "cy": -61.05616248205217,
+          "w": 49.09022265815406,
+          "h": 40.71802412561485,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146880:xdis:A": {
+          "cx": -417.4489940280293,
+          "cy": 27.489584433946277,
+          "w": 83.89465823694923,
+          "h": 53.56013379118059,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146880:ydis:A": {
+          "cx": -459.0455577777249,
+          "cy": 223.06171040974388,
+          "w": 52.868748152919125,
+          "h": 63.39936324464168,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146880:no:A": {
+          "cx": -716.8014599584754,
+          "cy": -48.24604999084841,
+          "w": 31.609720642216644,
+          "h": 35.84783676585552,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146880:mark:A": {
+          "cx": -864.530759172292,
+          "cy": -8.56459980603006,
+          "w": 139.77554762086288,
+          "h": 64.90216341949494,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146820:dim:A:0:g0:0": {
+          "cx": -436.37681725228396,
+          "cy": 363.01120824873874,
+          "w": 46.65549022011987,
+          "h": 51.15732591615415,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146820:dim:A:1:g0:0": {
+          "cx": -426.97241105946046,
+          "cy": 228.99355545320662,
+          "w": 50.45811875530353,
+          "h": 43.99012817566228,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146820:xdis:A": {
+          "cx": -284.6106486633254,
+          "cy": 281.7997314986459,
+          "w": 77.96229501558273,
+          "h": 57.618691357355715,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146820:ydis:A": {
+          "cx": -323.9571918303664,
+          "cy": 448.4581409209273,
+          "w": 53.61362180147523,
+          "h": 65.17962635487606,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146820:no:A": {
+          "cx": -523.0593918920513,
+          "cy": 252.7028219687968,
+          "w": 33.754772756986085,
+          "h": 37.03232229043155,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_146820:mark:A": {
+          "cx": -639.9592208193674,
+          "cy": 300.5941573313279,
+          "w": 131.8425560655412,
+          "h": 77.21673244454996,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_145953:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_145953:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144984:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144774:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144768:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_144762:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143801:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143329:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_143097:no:A": {
+          "cx": -539.0657104932912,
+          "cy": 1231.8835083768506,
+          "w": 40.159196209094034,
+          "h": 40.478572956943026,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_143097:mark:A": {
+          "cx": -630.690268602734,
+          "cy": 1304.8080682944344,
+          "w": 121.53177485706897,
+          "h": 105.24355911177372,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_142516:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_142516:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134602:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134596:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134590:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134584:no:A": {
+          "cx": -92.12674432152795,
+          "cy": 1186.1100478702504,
+          "w": 37.56815520798679,
+          "h": 37.8055617721775,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134584:mark:A": {
+          "cx": -144.90578228597317,
+          "cy": 1236.0149727782018,
+          "w": 107.32308472833476,
+          "h": 103.76198530826832,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134578:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134578:no:A": {
+          "cx": -385.51065348397225,
+          "cy": 1463.2914412013788,
+          "w": 40.474493133522856,
+          "h": 40.55377151091261,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134578:mark:A": {
+          "cx": -454.565619636163,
+          "cy": 1528.5793951852017,
+          "w": 107.32616066015271,
+          "h": 103.75863325498176,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134572:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134572:no:A": {
+          "cx": 218.34345131113884,
+          "cy": 357.06139612478216,
+          "w": 39.475764587354604,
+          "h": 40.079382112820554,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134572:mark:A": {
+          "cx": 170.66743090946153,
+          "cy": 387.64263027206954,
+          "w": 116.91411443398503,
+          "h": 89.75132560535849,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134566:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134566:no:A": {
+          "cx": 42.98902683435358,
+          "cy": 469.3863432419532,
+          "w": 41.15879835073778,
+          "h": 41.15879835073781,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134566:mark:A": {
+          "cx": -14.787862656743144,
+          "cy": 506.441995827488,
+          "w": 113.54944093367848,
+          "h": 87.58718214798364,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_134470:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134470:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134458:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:xdis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:ydis:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_134446:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132573:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132567:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132561:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132555:no:B": {
+          "cx": 711.0111767302637,
+          "cy": 127.78501786039294,
+          "w": 38.20091186485979,
+          "h": 39.14736593175371,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_132555:mark:B": {
+          "cx": 745.9539545570735,
+          "cy": 102.98125642205207,
+          "w": 119.7455433832315,
+          "h": 97.03063601021489,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_132549:dim:B:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:dim:B:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:xdis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:ydis:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "17496_118364:member:17496_132549:no:B": {
+          "cx": 507.47891773970974,
+          "cy": 324.2826450911305,
+          "w": 41.58501167063889,
+          "h": 41.58501167063889,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "17496_118364:member:17496_132549:mark:B": {
+          "cx": 553.2559753779226,
+          "cy": 290.1702797281678,
+          "w": 116.95888240877315,
+          "h": 97.75243637700885,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    }
+  },
+  "perf": []
+}
