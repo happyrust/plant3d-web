@@ -7,6 +7,7 @@ import {
   type ScreenPolygon,
   type ScreenSegment,
 } from '../geometry/obstacleGeometry';
+import { createRectGrid } from '../geometry/rectGrid';
 import {
   isSceneVertexVisible,
   makeSceneLine,
@@ -88,6 +89,11 @@ export type TagObstacles = Readonly<{
   polygons?: readonly ScreenPolygon[];
   segments?: readonly ScreenSegment[];
   overlays?: readonly ScreenRect[];
+  /**
+   * The view's screen rectangle. With it labels and strokes are looked up on
+   * a screen grid instead of scanned per candidate; the placement is the same.
+   */
+  viewport?: ScreenRect;
 }>;
 
 // Candidate angles / rings, the `away` probe length, the body margin and the
@@ -520,17 +526,6 @@ export function projectObstacleOutline(
   return hull.length >= 3 ? hull : null;
 }
 
-function segmentBounds(segment: ScreenSegment): ScreenRect {
-  const minX = Math.min(segment.from[0], segment.to[0]);
-  const minY = Math.min(segment.from[1], segment.to[1]);
-  return {
-    x: minX,
-    y: minY,
-    width: Math.max(segment.from[0], segment.to[0]) - minX,
-    height: Math.max(segment.from[1], segment.to[1]) - minY,
-  };
-}
-
 /**
  * The strokes of the given layouts on screen — every projected line and
  * path: dimension / extension / projection lines, leaders, arcs, arrowhead
@@ -582,7 +577,8 @@ export function collectTagObstacles(
     }
   }
   const overlays = (source?.overlays?.() ?? []).filter(rect => rect.width > 0 && rect.height > 0);
-  return { polygons, segments, overlays };
+  const viewport = { x: 0, y: 0, width: projector.widthCssPx, height: projector.heightCssPx };
+  return { polygons, segments, overlays, viewport };
 }
 
 /**
@@ -607,14 +603,34 @@ export function placeTagBillboards(
 ): readonly LayoutResult[] {
   if (planned.length === 0) return layouts;
   const plannedIndices = new Set(planned.map(tag => tag.index));
+  // A dense view has hundreds of tags, dozens of candidates each and
+  // thousands of stroke segments, so labels and strokes are looked up per
+  // candidate on the grid. A lookup answers in input order and whatever it
+  // leaves out covers nothing, so every score adds up as a full scan would.
+  // Extents go in as the overlap tests compute them: a rectangle's far edge
+  // as `x + width`, a segment's from its end points.
+  const viewport = obstacles.viewport ?? null;
   const labels: ScreenRect[] = [];
+  const labelGrid = createRectGrid(viewport);
+  const addLabel = (rect: ScreenRect): void => {
+    labelGrid.insert(labels.length, rect.x, rect.y, rect.x + rect.width, rect.y + rect.height);
+    labels.push(rect);
+  };
   for (const [index, layout] of layouts.entries()) {
     if (plannedIndices.has(index)) continue;
     if (layout.primitives.length === 0 || layout.derived.formattedLabel.length === 0) continue;
-    labels.push(layout.labelBounds);
+    addLabel(layout.labelBounds);
   }
   const boxes = (obstacles.polygons ?? []).map(polygon => ({ polygon, bounds: polygonBounds(polygon) }));
-  const strokes = (obstacles.segments ?? []).map(segment => ({ segment, bounds: segmentBounds(segment) }));
+  const segments = obstacles.segments ?? [];
+  const strokeExtents = segments.map(({ from, to }) => [
+    Math.min(from[0], to[0]),
+    Math.min(from[1], to[1]),
+    Math.max(from[0], to[0]),
+    Math.max(from[1], to[1]),
+  ] as const);
+  const strokeGrid = createRectGrid(viewport);
+  strokeExtents.forEach(([minX, minY, maxX, maxY], index) => strokeGrid.insert(index, minX, minY, maxX, maxY));
   const overlays = obstacles.overlays ?? [];
   const results = [...layouts];
   const order = [...planned].sort((a, b) =>
@@ -624,24 +640,32 @@ export function placeTagBillboards(
   for (const tag of order) {
     const { envelope } = tag.plan;
     const nearBoxes = boxes.filter(box => rectsOverlap(box.bounds, envelope));
-    // A stroke's bounds have no area when it is axis-aligned; pad them so the
-    // overlap test still sees it.
-    const nearStrokes = strokes.filter(stroke => rectsOverlap(expandRect(stroke.bounds, 1), envelope));
     const nearOverlays = overlays.filter(overlay => rectsOverlap(overlay, envelope));
-    const intrusion = (candidate: ScreenRect): number => {
+    // Every term is non-negative, so a positive running score at or past
+    // `cutoff` can no longer change the choice and the rest is skipped.
+    const intrusion = (candidate: ScreenRect, cutoff: number): number => {
+      const settled = (score: number): boolean => score > 0 && score >= cutoff;
+      const right = candidate.x + candidate.width;
+      const bottom = candidate.y + candidate.height;
       let score = 0;
-      for (const label of labels) {
-        score += rules.intrusionWeights.label * rectsOverlapArea(candidate, label);
+      for (const index of labelGrid.query(candidate.x, candidate.y, right, bottom)) {
+        score += rules.intrusionWeights.label * rectsOverlapArea(candidate, labels[index]!);
       }
+      if (settled(score)) return score;
       for (const overlay of nearOverlays) {
         score += rules.intrusionWeights.overlay * rectsOverlapArea(candidate, overlay);
       }
-      for (const stroke of nearStrokes) {
+      if (settled(score)) return score;
+      for (const index of strokeGrid.query(candidate.x, candidate.y, right, bottom)) {
+        const [minX, minY, maxX, maxY] = strokeExtents[index]!;
+        if (minX > right || maxX < candidate.x || minY > bottom || maxY < candidate.y) continue;
         score += rules.intrusionWeights.stroke * rules.strokeBandPx
-          * segmentLengthInsideRect(stroke.segment, candidate);
+          * segmentLengthInsideRect(segments[index]!, candidate);
+        if (settled(score)) return score;
       }
       for (const box of nearBoxes) {
         score += rules.intrusionWeights.box * rectPolygonOverlapArea(candidate, box.polygon);
+        if (settled(score)) return score;
       }
       return score;
     };
@@ -653,7 +677,11 @@ export function placeTagBillboards(
     let bestNear = -1;
     let bestNearScore = Number.POSITIVE_INFINITY;
     for (const [index, candidate] of considered.entries()) {
-      const score = intrusion(candidate);
+      const cutoff = Math.max(
+        bestScore,
+        tag.plan.rings[index] === 0 ? bestNearScore : Number.NEGATIVE_INFINITY,
+      ) - rules.intrusionTiePx2;
+      const score = intrusion(candidate, cutoff);
       if (score === 0) {
         best = index;
         bestScore = 0;
@@ -676,7 +704,7 @@ export function placeTagBillboards(
     }
     const result = tag.plan.materialize(Math.max(0, best));
     results[tag.index] = result;
-    labels.push(result.labelBounds);
+    addLabel(result.labelBounds);
   }
   return results;
 }

@@ -32,6 +32,7 @@ import type {
   ScreenPath,
   ScreenRect,
   Vec2,
+  Vec3,
 } from '../types';
 import type { LayoutContext } from './context';
 
@@ -677,6 +678,96 @@ describe('placeTagBillboards', () => {
     const [clear] = placeTagBillboards([placeholder('tag')], [{ index: 0, id: 'tag', plan: nearOnly }]);
     expect(clear!.derived.tag!.candidate).toBe(0);
   });
+
+  it('places a dense view on the screen grid exactly as a full scan does', () => {
+    let state = 11;
+    const next = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+    const ctx = context();
+    const styles: ExplicitTagInput['style'][] = ['card', 'frame', 'pill'];
+    const values: LayoutResult[] = Array.from({ length: 120 }, (_, index) => ({
+      ...placeholder(`dim${index}`),
+      primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'dimension', styleRole: 'external' }],
+      labelBounds: { x: next() * 440 - 20, y: next() * 440 - 20, width: 10 + next() * 50, height: 8 + next() * 10 },
+    }));
+    const planned = Array.from({ length: 60 }, (_, index) => {
+      const target: Vec3 = [next() * 4 - 2, next() * 4 - 2, 0];
+      const style = styles[index % styles.length]!;
+      const tagSpec: ExplicitTagInput = style === 'card'
+        ? { ...spec, target }
+        : { style, lines: [{ text: `T${index}` }] };
+      const plan = planTagBillboard(
+        { ...input, id: `t${index}`, tag: tagSpec, labelAnchor: [target[0] - 0.1, target[1] + 0.2, 0] },
+        tagSpec,
+        ctx,
+      );
+      if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+      return { index: values.length + index, id: `t${index}`, plan };
+    });
+    const segments = Array.from({ length: 400 }, () => {
+      const from: Vec2 = [next() * 500 - 50, next() * 500 - 50];
+      const long = next() < 0.05;
+      const to: Vec2 = long
+        ? [from[0] + (next() - 0.5) * 1e7, from[1] + (next() - 0.5) * 1e7]
+        : [from[0] + (next() - 0.5) * 80, from[1] + (next() - 0.5) * 80];
+      return { from, to };
+    });
+    const obstacles = {
+      segments,
+      polygons: [rectPolygon({ x: 150, y: 150, width: 60, height: 40 })],
+      overlays: [{ x: 300, y: 0, width: 100, height: 100 }],
+    };
+    const layouts = [...values, ...planned.map(tag => placeholder(tag.id))];
+
+    const scanned = placeTagBillboards(layouts, planned, obstacles);
+    const gridded = placeTagBillboards(layouts, planned, { ...obstacles, viewport: { x: 0, y: 0, width: 400, height: 400 } });
+    expect(gridded).toEqual(scanned);
+    // Dense enough that most tags had to move off their preferred position.
+    const moved = scanned.filter(layout => (layout.derived.tag?.candidate ?? 0) > 0);
+    expect(moved.length).toBeGreaterThan(planned.length / 2);
+
+    // Reference: every score summed in full over everything, same choice rules.
+    const labels = values.map(value => value.labelBounds);
+    const expected = new Map<string, number>();
+    const order = [...planned].sort((a, b) => a.plan.priority - b.plan.priority || (a.id < b.id ? -1 : 1));
+    for (const tag of order) {
+      const full = (candidate: ScreenRect): number => {
+        let score = 0;
+        for (const label of labels) score += rules.intrusionWeights.label * rectsOverlapArea(candidate, label);
+        for (const overlay of obstacles.overlays) score += rules.intrusionWeights.overlay * rectsOverlapArea(candidate, overlay);
+        for (const segment of segments) {
+          score += rules.intrusionWeights.stroke * rules.strokeBandPx * segmentLengthInsideRect(segment, candidate);
+        }
+        for (const box of obstacles.polygons) score += rules.intrusionWeights.box * rectPolygonOverlapArea(candidate, box);
+        return score;
+      };
+      const considered = tag.plan.candidates.slice(0, tag.plan.onScreen || tag.plan.candidates.length);
+      let best = -1;
+      let bestScore = Number.POSITIVE_INFINITY;
+      let bestNear = -1;
+      let bestNearScore = Number.POSITIVE_INFINITY;
+      for (const [index, candidate] of considered.entries()) {
+        const score = full(candidate);
+        if (score === 0) {
+          best = index;
+          bestScore = 0;
+          break;
+        }
+        if (score < bestScore - rules.intrusionTiePx2) [best, bestScore] = [index, score];
+        if (tag.plan.rings[index] === 0 && score < bestNearScore - rules.intrusionTiePx2) {
+          [bestNear, bestNearScore] = [index, score];
+        }
+      }
+      if (bestScore !== 0 && tag.plan.blockedFallback === 'first-ring' && bestNear >= 0) best = bestNear;
+      expected.set(tag.id, Math.max(0, best));
+      labels.push(tag.plan.candidates[Math.max(0, best)]!);
+    }
+    for (const tag of planned) {
+      expect(gridded[tag.index]!.derived.tag!.candidate, tag.id).toBe(expected.get(tag.id));
+    }
+  });
 });
 
 describe('tag obstacles', () => {
@@ -761,6 +852,8 @@ describe('tag obstacles', () => {
     expect(obstacles.segments).toHaveLength(6);
     expect(obstacles.polygons).toHaveLength(1);
     expect(obstacles.overlays).toEqual([gizmo]);
+    const viewport = { x: 0, y: 0, width: 400, height: 400 };
+    expect(obstacles.viewport).toEqual(viewport);
     expect(source.query).toHaveBeenCalledTimes(1);
     expect(source.query).toHaveBeenCalledWith(tagObstacleRegion([plan], projector));
 
@@ -770,6 +863,7 @@ describe('tag obstacles', () => {
       polygons: [],
       segments: dimensionStrokes([strokes]),
       overlays: [gizmo],
+      viewport,
     });
 
     // Without a host source: strokes only. Nothing planned: nothing to collect.
@@ -777,6 +871,7 @@ describe('tag obstacles', () => {
       polygons: [],
       segments: dimensionStrokes([strokes]),
       overlays: [],
+      viewport,
     });
     expect(collectTagObstacles([strokes], [], projector, source)).toEqual({});
   });
