@@ -1,7 +1,8 @@
 import { sampleArcToDesignAndScreenPath } from '../geometry/arcProjection';
-import { segmentLengthInsideRect } from '../geometry/obstacleGeometry';
+import { polygonBounds, segmentLengthInsideRect } from '../geometry/obstacleGeometry';
 import {
   engineeringTextRotation,
+  isSceneVertexVisible,
   makeFilledSceneArrow,
   makeSceneLine,
   projectSceneVertex,
@@ -43,6 +44,7 @@ import type {
   HitRegion,
   LayoutResult,
   SceneLine,
+  ScenePath,
   ScenePrimitive,
   SceneTriangle,
   SceneVertex,
@@ -176,6 +178,98 @@ function unrotatedBlockBounds(
 }
 
 /**
+ * How far a label frame stands off its row's glyph box, in drawn cap heights.
+ * PML `drawframe` keeps the left, right and bottom edges ch/10 off the text
+ * box and puts the top edge ch/10 under the box top. The glyph box a row is
+ * drawn in ends at the ascender, which the capitals reach in the LFF font, so
+ * a top edge under it would cut through the text: it stands the same tenth
+ * outside instead.
+ */
+const LABEL_FRAME_CLEARANCE_CAP = 0.1;
+
+/**
+ * The row `input.labelFrame` wraps where it is drawn: one of the block's rows,
+ * else the single run at `offsetPx`. Null without a frame, or for a row that
+ * does not exist or draws no text.
+ */
+function framedRow(
+  input: ExplicitLayoutInput,
+  blockRows: readonly LabelRow[] | null,
+  offsetPx: Vec2,
+): LabelRow | null {
+  if (!input.labelFrame) return null;
+  const rows = blockRows ?? [{ text: input.formattedLabel, offsetPx }];
+  const row = rows[input.labelFrame.row];
+  return row && row.text.length > 0 ? row : null;
+}
+
+/** Half width and half height of the frame around `text` drawn at `textHeightPx`. */
+function labelFrameHalfExtents(
+  text: string,
+  textHeightPx: number,
+  context: LayoutContext,
+): Vec2 {
+  const clearancePx = LABEL_FRAME_CLEARANCE_CAP * textHeightPx;
+  return [
+    context.font.getWidth(textHeightPx, text) / 2 + clearancePx,
+    context.font.getHeight(textHeightPx) / 2 + clearancePx,
+  ];
+}
+
+/**
+ * The frame around a row as a closed path. Like the row's glyphs it hangs off
+ * the anchor at a screen offset, turned with the run, so it goes wherever and
+ * at whatever size the row is drawn.
+ */
+function labelFramePath(
+  anchor: Vec3,
+  row: LabelRow,
+  rotationRad: number,
+  textHeightPx: number,
+  styleRole: string,
+  context: LayoutContext,
+): ScenePath {
+  const [halfWidth, halfHeight] = labelFrameHalfExtents(row.text, textHeightPx, context);
+  const cos = Math.cos(rotationRad);
+  const sin = Math.sin(rotationRad);
+  const corners: readonly Vec2[] = [
+    [-halfWidth, -halfHeight],
+    [halfWidth, -halfHeight],
+    [halfWidth, halfHeight],
+    [-halfWidth, halfHeight],
+  ];
+  return scenePath(
+    corners.map(([x, y]) => sceneVertex(anchor, [
+      row.offsetPx[0] + x * cos - y * sin,
+      row.offsetPx[1] + x * sin + y * cos,
+    ])),
+    true,
+    'tag',
+    styleRole,
+  );
+}
+
+/** The frame around a row as a box in the label's unrotated frame about `center`. */
+function unrotatedFrameBounds(
+  row: LabelRow,
+  center: Vec2,
+  rotationRad: number,
+  textHeightPx: number,
+  context: LayoutContext,
+): ScreenRect {
+  const [halfWidth, halfHeight] = labelFrameHalfExtents(row.text, textHeightPx, context);
+  const cos = Math.cos(rotationRad);
+  const sin = Math.sin(rotationRad);
+  const [dx, dy] = row.offsetPx;
+  return {
+    x: center[0] + dx * cos + dy * sin - halfWidth,
+    y: center[1] - dx * sin + dy * cos - halfHeight,
+    width: 2 * halfWidth,
+    height: 2 * halfHeight,
+  };
+}
+
+/**
  * Screen cap height for this input. A source that declares a design-space
  * text height (`textHeightM`, e.g. the MBD group `cheight_mm`) gets it
  * projected at the label anchor — depth-based and orientation-independent,
@@ -266,9 +360,11 @@ function cutByLabel(line: ExplicitLine, input: ExplicitLayoutInput): boolean {
  * External sources anchor a dimension label on its own dimension line (rs-mbd
  * emits `label_anchor` at the line midpoint), so the line has to be broken
  * around the label box the same way the native linear layout does — the
- * whole block when the label is one (`blockRows`). The same box clips a
- * leader that starts on the label (`leaderFromLabel`). Returns null when
- * nothing can overlap and the extra projection would be wasted.
+ * whole block when the label is one (`blockRows`), taking in its frame
+ * (`labelFrame`); a one-row label's box is its frame. The same box clips a
+ * leader that starts on the label (`leaderFromLabel`), so such a leader
+ * starts on the frame. Returns null when nothing can overlap and the extra
+ * projection would be wasted.
  */
 function labelClearance(
   input: ExplicitLayoutInput,
@@ -284,16 +380,19 @@ function labelClearance(
     sceneVertex(input.labelAnchor),
     context.projector,
   );
+  // A lifted (`above`) label has no clearance, so the row sits on the anchor.
+  const frameRow = framedRow(input, blockRows, [0, 0]);
+  const frame = frameRow
+    ? unrotatedFrameBounds(frameRow, center, rotationRad, textHeightPx, context)
+    : null;
   if (blockRows) {
-    return {
-      rect: expandRect(
-        unrotatedBlockBounds(blockRows, center, rotationRad, textHeightPx, styleRole, context),
-        context.theme.labelPaddingPx / 2,
-      ),
-      center,
-      rotationRad,
-    };
+    const block = expandRect(
+      unrotatedBlockBounds(blockRows, center, rotationRad, textHeightPx, styleRole, context),
+      context.theme.labelPaddingPx / 2,
+    );
+    return { rect: frame ? unionRect(block, frame) : block, center, rotationRad };
   }
+  if (frame) return { rect: frame, center, rotationRad };
   const glyph = makeCenteredGlyphRun(
     context.font,
     input.formattedLabel,
@@ -858,10 +957,17 @@ export function layoutExplicit(
       styleRole,
       textRotation(text.anchor, text.along, context),
     ));
+  // Built after the `above` guard: the frame goes round the row where it ends
+  // up, and is no obstacle to the row it wraps.
+  const frameRow = framedRow(input, blockRows, liftOffsetPx);
+  const frameScene = frameRow
+    ? labelFramePath(input.labelAnchor, frameRow, labelRotationRad, textHeightPx, styleRole, context)
+    : null;
   const scenePrimitives: ScenePrimitive[] = [
     ...sceneLines,
     ...sceneArrows,
     ...scenePaths,
+    ...(frameScene ? [frameScene] : []),
     ...sceneMarkers,
     ...labelGlyphScenes,
     ...extraGlyphScenes,
@@ -886,12 +992,19 @@ export function layoutExplicit(
   );
   const glyph = glyphs[0]!;
   const extraGlyphs = glyphs.slice(1);
-  const labelBounds = blockRows
+  const textBounds = blockRows
     ? expandRect(
       glyphsBounds(glyphs.slice(0, labelGlyphScenes.length)),
       context.theme.labelPaddingPx / 2,
     )
     : labelBoundsOf(glyph, context.theme);
+  // Every frame vertex hangs off the anchor: either all are drawn or none is.
+  const labelBounds = frameScene && isSceneVertexVisible(sceneVertex(input.labelAnchor), context.projector)
+    ? unionRect(
+      textBounds,
+      polygonBounds(frameScene.points.map(point => projectSceneVertex(point, context.projector))),
+    )
+    : textBounds;
   const hitRegions: HitRegion[] = [
     ...lines.map((line) =>
       makeLineHitRegion(line, context.theme.dimensionStrokeWidthPx)),
@@ -923,6 +1036,17 @@ export function layoutExplicit(
         }
         : {}),
     },
+  };
+}
+
+function unionRect(a: ScreenRect, b: ScreenRect): ScreenRect {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
   };
 }
 

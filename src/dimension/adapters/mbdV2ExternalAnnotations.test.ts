@@ -21,7 +21,14 @@ import {
 } from './normalizeExternalDimensions';
 
 import type { MbdV2PipeData } from './mbdV2Contract';
-import type { ExplicitLayoutInput, ScreenGlyphRun, ScreenLine } from '../kernel/types';
+import type {
+  ExplicitLayoutInput,
+  SceneLine,
+  ScenePath,
+  ScreenGlyphRun,
+  ScreenLine,
+  ScreenPath,
+} from '../kernel/types';
 
 function fixtureData(): MbdV2PipeData {
   // Mapper-only future-kind coverage. This hand-authored fixture is not a
@@ -1326,6 +1333,143 @@ describe('mbdV2ToExternalRecords', () => {
     expect(leader.from[1]).toBeCloseTo(layout!.labelBounds.y + layout!.labelBounds.height, 9);
     for (const { bounds } of rows) expect(leader.from[1]).toBeGreaterThan(bounds.y + bounds.height);
     expect(leader.to).toEqual([200, 250]);
+  });
+
+  // plant-mbd 给具名元件名标签的名字行画 PML 位号方框：四条 aid_line `<标签 id>:frame:0..3`
+  // （类别「位号」），按 drawframe 在世界坐标里围住求解器字高的名字行。测试相机 100 px/m：
+  // 标签位置 [0.5, 0.5, 0] 投到 (250, 150)，引线终点 [0.5, −0.5, 0] 投到 (250, 250)。
+  describe('位号 frame (#103)', () => {
+    const NAME = 'b:isoline:2:tag:name:V1';
+    const CHEIGHT_M = 0.017;
+    const position = [0.5, 0.5, 0] as const;
+    const payload = (primitives: MbdV2PipeData['primitives']): MbdV2PipeData => ({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [], cheight_mm: CHEIGHT_M * 1000 },
+      primitives,
+    });
+    const nameTag = {
+      kind: 'label' as const, id: NAME, object_refno: 'V1', isoline_idx: 2, text: 'V-1001',
+      position, text_dir: [1, 0, 0] as const, text_up: [0, 1, 0] as const,
+    };
+    const leader = {
+      kind: 'leader_line' as const, id: `${NAME}:leader`, object_refno: 'V1', isoline_idx: 2,
+      start: position, end: [0.5, -0.5, 0] as const,
+    };
+    /**
+     * The solver's frame round a one-row label at `centre` (plant-mbd `line_frame`): bottom,
+     * right, top, left; left / right / bottom ch/10 off the text box, top ch/10 under it.
+     */
+    const frameLines = (labelId: string, centre: readonly [number, number, number], halfWidth: number) => {
+      const left = centre[0] - halfWidth - CHEIGHT_M / 10;
+      const right = centre[0] + halfWidth + CHEIGHT_M / 10;
+      const bottom = centre[1] - CHEIGHT_M / 2 - CHEIGHT_M / 10;
+      const top = bottom + CHEIGHT_M;
+      const corners = [[left, bottom], [right, bottom], [right, top], [left, top]] as const;
+      return corners.map((corner, k) => ({
+        kind: 'aid_line' as const,
+        id: `${labelId}:frame:${k}`,
+        object_refno: 'V1',
+        isoline_idx: 2,
+        function: '位号',
+        start: [corner[0], corner[1], centre[2]] as const,
+        end: [corners[(k + 1) % 4]![0], corners[(k + 1) % 4]![1], centre[2]] as const,
+      }));
+    };
+    const framedTag = [nameTag, leader, ...frameLines(NAME, position, 0.05)];
+    const inputsOf = (primitives: MbdV2PipeData['primitives']): ExplicitLayoutInput[] =>
+      mbdV2ToExternalRecords(payload(primitives)).records
+        .map(record => normalizeExternalDimension(record) as ExplicitLayoutInput);
+    const layoutsOf = (inputs: readonly ExplicitLayoutInput[]) => layoutViewport(
+      inputs,
+      {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      },
+      new Map(),
+    ).layouts;
+
+    it('folds the four frame lines into their name tag instead of keeping them as records', () => {
+      const result = mbdV2ToExternalRecords(payload([
+        ...framedTag,
+        // A frame line whose label is not in the payload, and an aid line framing nothing.
+        frameLines('b:isoline:3:tag:name:GONE', [2, 0.5, 0], 0.05)[0]!,
+        { kind: 'aid_line', id: 'b:isoline:2:flow:0', start: [0, 0, 0], end: [0.1, 0, 0] },
+        // A tag the solver does not frame.
+        { kind: 'label', id: 'b:isoline:2:tag:elevation:V1', text: 'PE +1500', position: [1, 0.5, 0] },
+      ]));
+      expect(result.skipped).toEqual([]);
+      expect(result.records.map(record => record.id)).toEqual([
+        NAME,
+        'b:isoline:3:tag:name:GONE:frame:0',
+        'b:isoline:2:flow:0',
+        'b:isoline:2:tag:elevation:V1',
+      ]);
+      const name = explicitLayout(result, NAME);
+      expect(name.labelFrame).toEqual({ row: 0 });
+      // The record keeps only the leader as its flat geometry; the frame is drawn round the text.
+      expect(name.lines).toEqual([{ from: [0.5, 0.5, 0], to: [0.5, -0.5, 0], part: 'leader' }]);
+      expect(name.tag).toMatchObject({ style: 'frame', subject: 'V1' });
+      expect(explicitLayout(result, 'b:isoline:2:tag:elevation:V1')).not.toHaveProperty('labelFrame');
+      expect(explicitLayout(result, 'b:isoline:3:tag:name:GONE:frame:0').lines).toHaveLength(1);
+
+      // A payload from before the frames maps as it did.
+      const live = parseMbdV2PipeData(liveIsodimFixture);
+      if (!live.ok) throw new Error(live.error);
+      expect(mbdV2ToExternalRecords(live.data).records.some(record => 'labelFrame' in record.layout))
+        .toBe(false);
+    });
+
+    it('draws no frame lines in the default 3D presentation: the framed body is the box', () => {
+      const [framed] = layoutsOf(inputsOf(framedTag));
+      const [unframed] = layoutsOf(inputsOf([nameTag, leader]));
+      expect(framed!.derived.tag).toBeDefined();
+      expect(framed).toEqual(unframed);
+      // One box, the billboard body's border; every other stroke is the leader.
+      expect(framed!.scenePrimitives.filter(
+        (primitive): primitive is ScenePath => primitive.kind === 'scene-path',
+      )).toMatchObject([{ part: 'tag', closed: true, tone: 'tag-frame' }]);
+      expect(framed!.scenePrimitives
+        .filter((primitive): primitive is SceneLine => primitive.kind === 'scene-line')
+        .map(primitive => primitive.part)).toEqual(['leader']);
+    });
+
+    it('draws the frame round the name row as drawn in the flat presentation (mbd_3d=0)', () => {
+      // `mbd_3d=0` strips the billboard spec. The 17 mm text projects to 1.7 px and draws at the
+      // 11 px floor, so a frame at the solver's size would be 1.7 px tall round 11 px text.
+      const [layout] = layoutsOf(inputsOf(framedTag).map(({ tag: _tag, ...flat }) => flat));
+      const glyph = layout!.primitives.find(
+        (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+      )!;
+      expect(glyph.capHeightPx).toBe(SOLVESPACE_DIMENSION_THEME.sourceTextHeightMinPx);
+      const frames = layout!.primitives.filter(
+        (primitive): primitive is ScreenPath => primitive.kind === 'path' && primitive.part === 'tag',
+      );
+      expect(frames).toHaveLength(1);
+      // A tenth of the drawn cap height clear of the drawn glyph box, on every side.
+      const clearance = glyph.capHeightPx / 10;
+      const { x, y, width, height } = glyph.bounds;
+      const expected = [
+        [x - clearance, y - clearance],
+        [x + width + clearance, y - clearance],
+        [x + width + clearance, y + height + clearance],
+        [x - clearance, y + height + clearance],
+      ];
+      frames[0]!.points.forEach((point, index) => {
+        expect(point[0]).toBeCloseTo(expected[index]![0]!, 9);
+        expect(point[1]).toBeCloseTo(expected[index]![1]!, 9);
+      });
+      // The leader leaves from the frame's bottom edge and still ends on the pipe; the
+      // solver's four lines are not drawn.
+      const lines = layout!.primitives.filter(
+        (primitive): primitive is ScreenLine => primitive.kind === 'line',
+      );
+      expect(lines.map(line => line.part)).toEqual(['leader']);
+      expect(lines[0]!.from[0]).toBeCloseTo(250, 9);
+      expect(lines[0]!.from[1]).toBeCloseTo(y + height + clearance, 9);
+      expect(lines[0]!.to).toEqual([250, 250]);
+    });
   });
 
   it('produces records the shared kernel can lay out end to end', () => {
