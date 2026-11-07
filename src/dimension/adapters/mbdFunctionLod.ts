@@ -26,6 +26,8 @@
  * （`classifyTag`、坡度 / 斜管辅助线）。非管道包里没声明 function、或 function 不在该类型登记表里的
  * 图元，本表也不发话，保留 mapper 的缺省——标签、辅助文字、引线都是主档：认不出的不藏。
  */
+import { isPipePackage } from './mbdV2Contract';
+
 import type { MbdPrimitiveKind, MbdV2AnnotationType } from './mbdV2Contract';
 import type { ExplicitLodInput } from '../kernel/types';
 
@@ -128,12 +130,6 @@ export const MBD_FUNCTION_LOD_TIERS: Readonly<Record<MbdNonPipeAnnotationType, M
   em4_equi: EQUIPMENT_TIERS,
   em9_equi: EQUIPMENT_TIERS,
 };
-
-function isPipePackage(
-  annotationType: MbdV2AnnotationType | undefined,
-): annotationType is 'em4_pipe' | 'em9_pipe' | undefined {
-  return annotationType === undefined || annotationType === 'em4_pipe' || annotationType === 'em9_pipe';
-}
 
 /**
  * 一条非管道图元按 function 取的档位。`undefined` = 本表不发话：管道包、没声明 function、或 function

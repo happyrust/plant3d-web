@@ -22,3 +22,10 @@ depends_on: ADR-0043, ADR-0046, ADR-0055
 - **让 `branch_refno` 在非管道包里缺省**：桌面端（plant-ui）与 gen-model 测试都按必填读它，改成可选是破坏性变更；有了 `subject` 之后它只是一个历史命名。
 
 依据：ADR 0043（只经冻结契约形状）、ADR 0046（先完整校验再原子替换）、ADR 0055 D7（三步引入顺序）；plant-mbd ADR-0013（范围扩到全部标注类型）、ADR-0015（`MbdDataSource`）；spec #103；计划 `docs/plans/2026-11-07-mbd-all-annotation-types-port-dev-plan.md` M1-3。
+
+## 后续
+
+- **2026-11-07，管道包带上信封字段后管道呈现不变（CT-9 前端）**：求解器给管道图元发 `function`、`chain_id` / `chain_seq` / `node_refnos` 与逐图元 `text_height_mm`（管道名称 3 倍直段字高、切管段号 2 倍）之后，管道包（`em4_pipe` / `em9_pipe` / 缺 `annotation_type`，`isPipePackage`）的缺省呈现完全不变：
+  - **字高**：管道包只认 `aid_text` 上的图元字高（安装角度方向小字的半字高，现状）；`linear_dim` / `label` / `angle_dim` / `slope_mark` 上的照收不用，记录仍跟直段 / 全局 `cheight_mm`。记录字高决定卡片的分级显示与近景行、三维尺寸的字高与外移、平贴字号，名称的 3 倍字高一进来，名字药丸就从三倍远处开始出现。PML 字高留在数据里，供以后出图 / 平贴用。非管道包照旧三层（图元 > 直段 > 数据包）。
+  - **面板分组**：`mbdFunction` 在记录上只有面板分组一个消费者，适配层不给管道记录写它，管道面板照旧按直段分组；M2b 起已带 function 的支管口尺寸、流向、伴热、支撑腿、焊点、调整焊符号也回到直段分组。function 分组只给非管道包；`chainId` 照常透传。
+  - **LOD**：`mbdFunctionLodTier` 对管道包本来就不发话，不变。

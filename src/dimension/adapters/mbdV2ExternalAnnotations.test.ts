@@ -20,7 +20,7 @@ import {
   normalizeExternalDimension,
 } from './normalizeExternalDimensions';
 
-import type { MbdV2PipeData } from './mbdV2Contract';
+import type { MbdPrimitive, MbdV2AnnotationType, MbdV2PipeData } from './mbdV2Contract';
 import type {
   ExplicitLayoutInput,
   SceneLine,
@@ -1027,6 +1027,7 @@ describe('mbdV2ToExternalRecords', () => {
     it('puts a declared text_height_mm above the isoline height without moving the 3D rows', () => {
       const parsed = parseMbdV2PipeData(cliLinearFixture);
       if (!parsed.ok) throw new Error(parsed.error);
+      // A support package: a pipe package reads the primitive layer from aid_text only (below).
       const source = parsed.data.primitives[0]!;
       if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
       // 532.4 mm extension lines over isoline 0's 500 mm surface: two 1.2·13.5 mm
@@ -1047,6 +1048,7 @@ describe('mbdV2ToExternalRecords', () => {
       const tag = { kind: 'label' as const, text: 'X 1', position: [40, -500, 0] as const, isoline_idx: 0 };
       const result = mbdV2ToExternalRecords({
         ...parsed.data,
+        annotation_type: 'em4_supp',
         meta: {
           ...parsed.data.meta,
           cheight_mm: 27,
@@ -1083,6 +1085,145 @@ describe('mbdV2ToExternalRecords', () => {
         // meta.cheight_mm 27 through S(0.001); no primitive declares its own height.
         expect((record.layout as ExplicitLayoutInput).textHeightM).toBeCloseTo(0.027, 12);
       }
+    });
+
+    /** The primitive with its own text height, on the kinds the contract defines one for. */
+    const withTextHeight = (primitive: MbdPrimitive, millimetres: number): MbdPrimitive => {
+      switch (primitive.kind) {
+        case 'linear_dim':
+        case 'angle_dim':
+        case 'label':
+        case 'aid_text':
+        case 'slope_mark':
+          return { ...primitive, text_height_mm: millimetres };
+        default:
+          return primitive;
+      }
+    };
+
+    it('reads a pipe package\'s own text heights from aid_text only (ADR 0071)', () => {
+      // design_m, meta.cheight_mm 100 → 0.1 m for the group; 40 mm → 0.04 m declared.
+      const data = fixtureData();
+      const primitives = data.primitives.map(primitive => withTextHeight(primitive, 40));
+      const heightsIn = (annotationType?: MbdV2AnnotationType) => {
+        const result = mbdV2ToExternalRecords({
+          ...data,
+          ...(annotationType ? { annotation_type: annotationType } : {}),
+          primitives,
+        });
+        expect(result.skipped).toEqual([]);
+        return (id: string) => explicitLayout(result, id).textHeightM;
+      };
+      const ownHeightIds = ['dim-segment-1', 'dim-ref-2', 'angle-1', 'label-1', 'slope-1'];
+
+      for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+        const height = heightsIn(annotationType);
+        // The installation-angle direction notes keep their half height.
+        expect(height('aid-text-1'), `${annotationType} aid-text-1`).toBeCloseTo(0.04, 12);
+        for (const id of ownHeightIds) expect(height(id), `${annotationType} ${id}`).toBeCloseTo(0.1, 12);
+      }
+      for (const annotationType of ['em4_supp', 'civil', 'em4_equi'] as const) {
+        const height = heightsIn(annotationType);
+        for (const id of [...ownHeightIds, 'aid-text-1']) {
+          expect(height(id), `${annotationType} ${id}`).toBeCloseTo(0.04, 12);
+        }
+      }
+    });
+
+    /**
+     * CT-9：求解器给管道图元补齐信封字段——PML FUNCTION、LINDIM 尺寸链与归属节点、逐图元字高（管道名称
+     * 3 倍直段字高，其余就是直段字高）——之后，管道包的记录除透传的 `chainId` 外逐条不变：字高、LOD、
+     * 摆位、文字都原样，类别也不进记录（面板照旧按直段分组）。
+     */
+    it('maps a pipe payload stamped with every envelope field exactly like the bare one (CT-9)', () => {
+      const parsed = parseMbdV2PipeData(liveIsodimFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const live = parsed.data;
+      const isolineOf = (id: string): number | undefined => {
+        const match = /:isoline:(\d+):/.exec(id);
+        return match ? Number(match[1]) : undefined;
+      };
+      // The capture predates the isoline table; the solver's current shape carries one,
+      // here with isoline heights apart from the payload-wide 27 mm.
+      const tabled: MbdV2PipeData = {
+        ...live,
+        meta: {
+          ...live.meta,
+          isolines: Array.from({ length: 11 }, (_, index) => ({
+            index, members: [], cheight_mm: 20 + index, od_mm: 114.3,
+          })),
+        },
+        primitives: live.primitives.map((primitive) => {
+          const index = isolineOf(primitive.id);
+          return index === undefined ? primitive : { ...primitive, isoline_idx: index };
+        }),
+      };
+      // EM4PIPE values of the plant-mbd field dictionary, by each primitive's plant-mbd id.
+      const functionRules: readonly (readonly [RegExp, string])[] = [
+        [/:(?:main|atta):/, '尺寸'],
+        [/:skew:/, '尺寸'],
+        [/:slope:/, '坡度'],
+        [/:tag:connection:/, '连接信息'],
+        [/:tag:elbo:/, '弯头信息'],
+        [/:tag:name:/, '位号'],
+        [/:tag:branch-name/, '管道名称'],
+      ];
+      const stamp = (data: MbdV2PipeData): MbdV2PipeData => {
+        const payloadHeight = data.meta.cheight_mm;
+        if (typeof payloadHeight !== 'number') throw new Error('payload cheight missing');
+        const isolineHeights = new Map((data.meta.isolines ?? []).map(isoline => [isoline.index, isoline.cheight_mm]));
+        const chainSeqs = new Map<string, number>();
+        return {
+          ...data,
+          primitives: data.primitives.map((primitive) => {
+            const rule = functionRules.find(([pattern]) => pattern.test(primitive.id));
+            if (!rule) throw new Error(`no pipe function for ${primitive.id}`);
+            const chainId = `${data.branch_refno}:chain:${isolineOf(primitive.id) ?? 'bran'}`;
+            const chainSeq = chainSeqs.get(chainId) ?? 0;
+            chainSeqs.set(chainId, chainSeq + 1);
+            const isolineHeight = (primitive.isoline_idx === undefined
+              ? undefined
+              : isolineHeights.get(primitive.isoline_idx)) ?? payloadHeight;
+            return withTextHeight({
+              ...primitive,
+              function: rule[1],
+              chain_id: chainId,
+              chain_seq: chainSeq,
+              node_refnos: (primitive.id.match(/\d+_\d+/g) ?? []).slice(1),
+            }, rule[1] === '管道名称' ? 3 * isolineHeight : isolineHeight);
+          }),
+        };
+      };
+
+      for (const base of [live, tabled]) {
+        const bare = mbdV2ToExternalRecords(base);
+        expect(bare.skipped).toEqual([]);
+        const stamped = stamp(base);
+        // Every stamped field is legal, strict mode included.
+        expect(parseMbdV2PipeData(stamped, { strict: true }).ok).toBe(true);
+        for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+          const result = mbdV2ToExternalRecords({
+            ...stamped,
+            ...(annotationType ? { annotation_type: annotationType } : {}),
+          });
+          expect(result.skipped).toEqual([]);
+          // `chain_id` is the one field that reaches the record; `function` stays out.
+          expect(result.records.every(record => record.chainId?.startsWith('24381_145018:chain:'))).toBe(true);
+          expect(result.records.some(record => 'mbdFunction' in record)).toBe(false);
+          expect(
+            result.records.map(({ chainId: _chainId, ...record }) => record),
+            `${base === tabled ? 'tabled' : 'live'} / ${annotationType}`,
+          ).toStrictEqual(bare.records);
+        }
+      }
+
+      // Not vacuous: the tabled records do follow their isoline (24 mm on isoline 4), and the
+      // same stamp in a support package takes the name's own height and the categories.
+      expect(explicitLayout(mbdV2ToExternalRecords(tabled), '24381_145018:isoline:4:main:24381_145023--24381_145025')
+        .textHeightM).toBeCloseTo(0.024, 12);
+      const asSupport = mbdV2ToExternalRecords({ ...stamp(live), annotation_type: 'em4_supp' });
+      expect(explicitLayout(asSupport, '24381_145018:tag:branch-name').textHeightM).toBeCloseTo(0.081, 12);
+      expect(asSupport.records.every(record => record.mbdFunction !== undefined)).toBe(true);
     });
   });
 

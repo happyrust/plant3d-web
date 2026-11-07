@@ -48,6 +48,7 @@ export type ExternalDimensionRecord = Readonly<{
   /**
    * PML FUNCTION 类别（MBD `function`，#103 M1-3），如「一级尺寸」「定位尺寸」，原样是求解器给的
    * 文本。只有 MBD 生产者写，面板据它按类别成组、整组临时显隐；缺省 = 未声明，回落到原有分组。
+   * 管道包的记录不写（管道面板照旧按直段分组，ADR 0071）。
    */
   mbdFunction?: string;
   /**

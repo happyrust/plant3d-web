@@ -14,6 +14,7 @@ import {
 } from '../kernel/vec';
 
 import { mbdFunctionLodTier } from './mbdFunctionLod';
+import { isPipePackage } from './mbdV2Contract';
 
 import type { MbdLodTier } from './mbdFunctionLod';
 import type {
@@ -243,8 +244,18 @@ function groupTextHeightM(
  * text — and #103 M1-3 extends it to `linear_dim`, `label`, `angle_dim` and
  * `slope_mark`. Only the kinds the contract defines it on are read: the
  * default parse ignores a stray `text_height_mm` on any other kind, and so
- * does this. Undefined when the primitive declares none (every pipe producer
- * today), so the record keeps following its group.
+ * does this. Undefined when the primitive declares none, so the record keeps
+ * following its group.
+ *
+ * A pipe package (`isPipePackage`) only takes it from `aid_text`, the
+ * direction labels' half height it has always drawn; on its other kinds the
+ * declared height is not read (ADR 0071), so the default pipe presentation
+ * stays as it is. The solver sends PML's heights there — the pipe name at
+ * three times the isoline height, a cut-pipe segment number at twice — and
+ * the record's height is what that presentation keys on: a billboard tag's
+ * level of detail and close-up lines (`planTagBillboard`), the text and
+ * standoff of a 3D running dimension, the flat text size. The heights stay in
+ * the payload for the drawing output and the flat presentation to read later.
  */
 function primitiveTextHeightM(
   primitive: MbdPrimitive,
@@ -255,14 +266,17 @@ function primitiveTextHeightM(
     case 'linear_dim':
     case 'angle_dim':
     case 'label':
-    case 'aid_text':
     case 'slope_mark':
-      return primitive.text_height_mm === undefined
-        ? undefined
-        : textHeightToDesignM(data, transform, primitive.text_height_mm);
+      if (isPipePackage(data.annotation_type)) return undefined;
+      break;
+    case 'aid_text':
+      break;
     default:
       return undefined;
   }
+  return primitive.text_height_mm === undefined
+    ? undefined
+    : textHeightToDesignM(data, transform, primitive.text_height_mm);
 }
 
 function lineStyleFrom(style: string | undefined): DimensionLineStyle | undefined {
@@ -403,7 +417,6 @@ function explicitRecord(
     ...(primitive.isoline_idx !== undefined
       ? { isolineIndex: primitive.isoline_idx }
       : {}),
-    ...(primitive.function !== undefined ? { mbdFunction: primitive.function } : {}),
     ...(primitive.chain_id !== undefined ? { chainId: primitive.chain_id } : {}),
     layout,
   };
@@ -1069,6 +1082,7 @@ export function mbdV2ToExternalRecords(
     };
   }
   const transformPoint = transform.point;
+  const pipePackage = isPipePackage(data.annotation_type);
   const payloadHeightM = payloadTextHeightM(data, transform);
   const isolineHeightsM = isolineTextHeightsM(data, transform);
   const presentation3d = presentation3dContext(data, transform, transformPoint);
@@ -1226,17 +1240,22 @@ export function mbdV2ToExternalRecords(
       // D7 order: the primitive's own `text_height_mm` (e.g. the half-height
       // direction labels), otherwise its isoline's, otherwise the payload-wide one.
       // A non-pipe record also takes its function's LOD tier here, whatever its
-      // kind; a paired leader or frame travels inside its label's record and so follows it.
+      // kind, and carries the function for the panel's category groups; a
+      // paired leader or frame travels inside its label's record and so follows
+      // it. A pipe record keeps neither, so its panel goes on grouping by
+      // isoline (ADR 0071).
       const layout = record.layout as ExplicitLayoutInput;
       const lod = withFunctionTier(
         layout.lod,
         mbdFunctionLodTier(data.annotation_type, primitive.function, primitive.kind),
       );
       const retiered = lod !== undefined && lod !== layout.lod;
-      records.push(textHeightM === undefined && !retiered
+      const mbdFunction = pipePackage ? undefined : primitive.function;
+      records.push(textHeightM === undefined && !retiered && mbdFunction === undefined
         ? record
         : {
           ...record,
+          ...(mbdFunction !== undefined ? { mbdFunction } : {}),
           layout: {
             ...layout,
             ...(retiered ? { lod } : {}),

@@ -170,8 +170,8 @@ function byCategory(
 
 /**
  * #103 M1-3：声明了 PML FUNCTION 类别（`mbdFunction`）的 MBD 记录按类别成组、排在列表最后，组头可
- * 整组临时显隐（`mbdFunctionGroups.ts`）；下面原有的分组只排其余记录，没有类别的负载（今天全部）
- * 列表一行不变。
+ * 整组临时显隐（`mbdFunctionGroups.ts`）；下面原有的分组只排其余记录，没有类别的负载列表一行不变。
+ * 管道包的记录不带类别（适配层不写，ADR 0071），所以管道照旧按直段分组。
  */
 const mbdFunctionGrouping = computed(() => groupMbdRecordsByFunction(externalRecords.value));
 const mbdFunctionGroupToggle = mbdFunctionGroupVisibility(
