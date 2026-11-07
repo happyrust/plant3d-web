@@ -1,0 +1,706 @@
+{
+  "refno": "24383_91813",
+  "mode": "polar",
+  "gm": "http://127.0.0.1:8022",
+  "mbd": "http://127.0.0.1:8023",
+  "generatedAt": "2026-11-06T23:56:09.579Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          26.999999999999996,
+          20.24999999999997,
+          26.99999999999994
+        ],
+        "target": [
+          0,
+          1.7763568394002505e-15,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 24,
+      "layouts": 24,
+      "drawn": 9,
+      "lodHidden": 15,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 2,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 0,
+      "polarOverlaps": 0,
+      "overlapPairs": [],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24383_91813:isoline:0:angle:24383_91818:4": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91818:4:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91818:4:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:main:Head--Tail": {
+          "cx": 400.46844165105813,
+          "cy": 408.72875101492764,
+          "w": 29.708754972325153,
+          "h": 43.981588824260314,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:0": {
+          "cx": 605.455159207746,
+          "cy": 474.25990773215983,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:1": {
+          "cx": 605.4536553546347,
+          "cy": 473.6876460012448,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:2": {
+          "cx": 605.4536553546347,
+          "cy": 473.6876460012448,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:3": {
+          "cx": 604.9880924565664,
+          "cy": 296.52683959057697,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:4": {
+          "cx": 604.9862635608606,
+          "cy": 295.83088929165154,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:5": {
+          "cx": 604.9862635608606,
+          "cy": 295.83088929165154,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:tag:connection:Head": {
+          "cx": 732.3236182368897,
+          "cy": 550.3566044737933,
+          "w": 82.47222222222223,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:tag:connection:Tail": {
+          "cx": 608.5785263132291,
+          "cy": 69.03087039831637,
+          "w": 83.69444444444444,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          10.799999999999995,
+          8.09999999999999,
+          10.799999999999974
+        ],
+        "target": [
+          0,
+          1.7763568394002505e-15,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 24,
+      "layouts": 24,
+      "drawn": 9,
+      "lodHidden": 15,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 2,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 0,
+      "polarOverlaps": 0,
+      "overlapPairs": [],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24383_91813:isoline:0:angle:24383_91818:4": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91818:4:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91818:4:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:main:Head--Tail": {
+          "cx": 397.2718091443513,
+          "cy": 408.99343890234366,
+          "w": 29.772847815716204,
+          "h": 44.01094202967414,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:0": {
+          "cx": 599.377463832001,
+          "cy": 588.2757271296924,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:1": {
+          "cx": 599.3692448747416,
+          "cy": 587.0258200819844,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:2": {
+          "cx": 599.3692448747416,
+          "cy": 587.0258200819844,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:3": {
+          "cx": 596.419427322924,
+          "cy": 138.42904178980592,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:4": {
+          "cx": 596.4059907029052,
+          "cy": 136.385652886708,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:5": {
+          "cx": 596.4059907029052,
+          "cy": 136.385652886708,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:tag:connection:Head": {
+          "cx": 714.3529834677161,
+          "cy": 683.2303105004738,
+          "w": 82.47222222222223,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:tag:connection:Tail": {
+          "cx": 903.993148156519,
+          "cy": 101.40922453660895,
+          "w": 83.69444444444444,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          5.399999999999998,
+          4.049999999999996,
+          5.399999999999987
+        ],
+        "target": [
+          0,
+          1.7763568394002505e-15,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 24,
+      "layouts": 24,
+      "drawn": 9,
+      "lodHidden": 15,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 2,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 0,
+      "polarOverlaps": 0,
+      "overlapPairs": [],
+      "offscreen": [
+        "24383_91813:isoline:0:tag:connection:Tail"
+      ],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24383_91813:isoline:0:angle:24383_91818:4": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91818:4:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91818:4:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91817:3:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91816:2:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91815:1:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0:dirtext1": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:angle:24383_91814:0:dirtext2": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24383_91813:isoline:0:main:Head--Tail": {
+          "cx": 391.9407617724237,
+          "cy": 409.43488594889857,
+          "w": 29.879834802175708,
+          "h": 44.05984437813504,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:0": {
+          "cx": 590.8341242877405,
+          "cy": 748.5463228587298,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:1": {
+          "cx": 590.8073518474737,
+          "cy": 746.5136333371889,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:2": {
+          "cx": 590.8073518474737,
+          "cy": 746.5136333371889,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:3": {
+          "cx": 578.4255592224663,
+          "cy": -193.5702692149767,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:4": {
+          "cx": 578.3528323512531,
+          "cy": -199.0920351644681,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:flow:5": {
+          "cx": 578.3528323512531,
+          "cy": -199.0920351644681,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:tag:connection:Head": {
+          "cx": 753.5070579444667,
+          "cy": 727.5579571492441,
+          "w": 82.47222222222223,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24383_91813:isoline:0:tag:connection:Tail": {
+          "cx": 597.6187919616135,
+          "cy": -1463.7509933988786,
+          "w": 83.69444444444444,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    }
+  },
+  "perf": []
+}

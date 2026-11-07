@@ -1,0 +1,146 @@
+{
+  "$comment": "Authoritative hand-authored fixture for the #103 M1-3 contract envelope fields: package annotation_type / subject, per-primitive function / node_refnos / chain_id / chain_seq, text_height_mm and text_up, plus an angle_dim text plane (text_dir / text_up, #103 CT-15). plant-mbd fixtures/contract/ mirrors this file; mbdV2Contract.test.ts parses it in default and strict mode (ADR 0055 D7: the front end accepts the optional fields first).",
+  "version": "v2",
+  "annotation_type": "em9_pipe_supp",
+  "subject": { "refno": "24383_91813", "noun": "SUPPO" },
+  "input_refno": "24383_91813",
+  "branch_refno": "24383_91813",
+  "primitives": [
+    {
+      "kind": "linear_dim",
+      "id": "24383_91813:chain:0:seg:0",
+      "object_refno": "24383_91814",
+      "function": "一级尺寸",
+      "node_refnos": ["24383_91814", "24383_91815"],
+      "chain_id": "24383_91813:chain:0",
+      "chain_seq": 0,
+      "start": [10000, 5000, 2800],
+      "end": [10250, 5000, 2800],
+      "text": "250",
+      "extension_lines": [
+        { "from": [10000, 5000, 3000], "to": [10000, 5000, 2800] },
+        { "from": [10250, 5000, 3000], "to": [10250, 5000, 2800] }
+      ],
+      "arrow_lines": [
+        { "from": [10000, 5000, 2800], "to": [10024, 5000, 2807] },
+        { "from": [10000, 5000, 2800], "to": [10024, 5000, 2793] },
+        { "from": [10250, 5000, 2800], "to": [10226, 5000, 2807] },
+        { "from": [10250, 5000, 2800], "to": [10226, 5000, 2793] }
+      ],
+      "label_anchor": [10125, 5000, 2815],
+      "text_height_mm": 20,
+      "text_up": [0, 0, 1]
+    },
+    {
+      "kind": "linear_dim",
+      "id": "24383_91813:chain:0:seg:1",
+      "chain_id": "24383_91813:chain:0",
+      "chain_seq": 1,
+      "start": [10250, 5000, 2800],
+      "end": [10600, 5000, 2800],
+      "text": "350",
+      "extension_lines": [
+        { "from": [10250, 5000, 3000], "to": [10250, 5000, 2800] },
+        { "from": [10600, 5000, 3000], "to": [10600, 5000, 2800] }
+      ],
+      "arrow_lines": [
+        { "from": [10250, 5000, 2800], "to": [10274, 5000, 2807] },
+        { "from": [10250, 5000, 2800], "to": [10274, 5000, 2793] },
+        { "from": [10600, 5000, 2800], "to": [10576, 5000, 2807] },
+        { "from": [10600, 5000, 2800], "to": [10576, 5000, 2793] }
+      ],
+      "label_anchor": [10425, 5000, 2815]
+    },
+    {
+      "kind": "label",
+      "id": "24383_91813:tag:pipe:24383_91816",
+      "object_refno": "24383_91816",
+      "function": "管道信息",
+      "text": "DN25\nPE +3050",
+      "position": [10250, 5000, 3400],
+      "text_dir": [1, 0, 0],
+      "text_up": [0, 0, 1],
+      "text_height_mm": 18
+    },
+    {
+      "kind": "leader_line",
+      "id": "24383_91813:tag:pipe:24383_91816:leader",
+      "start": [10250, 5000, 3400],
+      "end": [10250, 5000, 3050]
+    },
+    {
+      "kind": "aid_text",
+      "id": "24383_91813:plate:24383_91817:thickness",
+      "object_refno": "24383_91817",
+      "text": "t=10",
+      "position": [10600, 5000, 3060],
+      "text_dir": [1, 0, 0],
+      "text_up": [0, 0, 1]
+    },
+    {
+      "kind": "angle_dim",
+      "id": "24383_91813:angle:24383_91818",
+      "object_refno": "24383_91818",
+      "function": "二级尺寸",
+      "text": "45°",
+      "center": [10600, 5000, 3000],
+      "x_axis": [-1, 0, 0],
+      "normal": [0, -1, 0],
+      "radius": 150,
+      "start_angle_deg": 0,
+      "sweep_angle_deg": 45,
+      "leg_lines": [
+        { "from": [10600, 5000, 3000], "to": [10400, 5000, 3000] },
+        { "from": [10600, 5000, 3000], "to": [10458.58, 5000, 2858.58] }
+      ],
+      "label_anchor": [10433.7, 5000, 2931.12],
+      "text_height_mm": 15
+    },
+    {
+      "kind": "angle_dim",
+      "id": "24383_91813:angle:24383_91819",
+      "object_refno": "24383_91819",
+      "function": "二级尺寸",
+      "text": "30°",
+      "center": [10000, 5000, 3000],
+      "x_axis": [1, 0, 0],
+      "normal": [0, -1, 0],
+      "radius": 150,
+      "start_angle_deg": 0,
+      "sweep_angle_deg": 30,
+      "leg_lines": [
+        { "from": [10000, 5000, 3000], "to": [10200, 5000, 3000] },
+        { "from": [10000, 5000, 3000], "to": [10173.21, 5000, 3100] }
+      ],
+      "label_anchor": [10183.53, 5000, 3049.18],
+      "text_height_mm": 15,
+      "text_dir": [1, 0, 0],
+      "text_up": [0, 0, 1]
+    },
+    {
+      "kind": "slope_mark",
+      "id": "24383_91813:slope:24383_91816",
+      "object_refno": "24383_91816",
+      "text": "i=0.5%",
+      "start": [10000, 5000, 3200],
+      "end": [10400, 5000, 3202],
+      "text_dir": [1, 0, 0.005],
+      "text_height_mm": 12.5,
+      "text_up": [0, 0, 1]
+    }
+  ],
+  "meta": {
+    "geometry_space": "source_mm",
+    "source_to_design": [
+      0.001, 0, 0, 0,
+      0, 0.001, 0, 0,
+      0, 0, 0.001, 0,
+      0, 0, 0, 1
+    ],
+    "cheight_mm": 25,
+    "layout_mode": "em9_pipe_supp",
+    "coverage": ["linear_dim", "angle_dim", "label", "leader_line", "aid_text", "slope_mark"],
+    "notes": ["hand-authored envelope-field fixture (#103 M1-3)"]
+  },
+  "issues": []
+}

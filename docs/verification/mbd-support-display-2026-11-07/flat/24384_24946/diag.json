@@ -1,0 +1,398 @@
+{
+  "refno": "24384_24946",
+  "mode": "flat",
+  "gm": "http://127.0.0.1:8022",
+  "mbd": "http://127.0.0.1:8024",
+  "generatedAt": "2026-11-06T22:55:54.968Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          4.000000000000003,
+          2.9999999999999942,
+          3.999999999999991
+        ],
+        "target": [
+          1.7763568394002505e-15,
+          0,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 10,
+      "layouts": 10,
+      "drawn": 10,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 12,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24384_24946:support:pipe_center:0:0 x 24384_24946:support:pipe_center:0:1",
+        "24384_24946:support:pipe_center:0:0 x 24384_24946:support:label:0",
+        "24384_24946:support:pipe_center:0:1 x 24384_24946:support:label:0",
+        "24384_24946:support:dim:0:0:0 x 24384_24946:support:dim:0:0:1",
+        "24384_24946:support:dim:0:0:0 x 24384_24946:support:dim:2:0:0",
+        "24384_24946:support:dim:0:0:1 x 24384_24946:support:dim:2:0:0",
+        "24384_24946:support:dim:0:0:1 x 24384_24946:support:label:0",
+        "24384_24946:support:dim:1:0:0 x 24384_24946:support:dim:3:0:0",
+        "24384_24946:support:dim:1:0:0 x 24384_24946:support:dim:3:0:1",
+        "24384_24946:support:dim:2:0:0 x 24384_24946:support:label:0",
+        "24384_24946:support:dim:3:0:0 x 24384_24946:support:dim:3:0:1",
+        "24384_24946:support:dim:4:0:0 x 24384_24946:support:label:0"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24384_24946:support:pipe_center:0:0": {
+          "cx": 616.8876113105239,
+          "cy": 333.12749472993437,
+          "w": 8,
+          "h": 28.77388753176757,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:pipe_center:0:1": {
+          "cx": 616.8876113105239,
+          "cy": 333.12749472993437,
+          "w": 8,
+          "h": 28.77388753176757,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:0:0:0": {
+          "cx": 572.3120344795651,
+          "cy": 430.02697163536345,
+          "w": 46.63352884308847,
+          "h": 43.309577069687805,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:0:0:1": {
+          "cx": 555.5400518473144,
+          "cy": 416.35260776739324,
+          "w": 47.58085270394372,
+          "h": 44.08183270437638,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:1:0:0": {
+          "cx": 707.6779263288132,
+          "cy": 532.5883231625999,
+          "w": 43.60005546726097,
+          "h": 42.139749997292256,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:2:0:0": {
+          "cx": 583.1874453458875,
+          "cy": 412.3603083986934,
+          "w": 22.866235200930532,
+          "h": 21.662441791529034,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:3:0:0": {
+          "cx": 675.2631820514971,
+          "cy": 535.7107888750018,
+          "w": 50.19511552047322,
+          "h": 41.11197176978146,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:3:0:1": {
+          "cx": 698.3077668552958,
+          "cy": 522.1317370106843,
+          "w": 51.24809289569805,
+          "h": 41.73256369211305,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:4:0:0": {
+          "cx": 508.84755657071787,
+          "cy": 384.96658776864865,
+          "w": 40.29959121230195,
+          "h": 36.109486387542916,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:label:0": {
+          "cx": 616.9432611640951,
+          "cy": 318.0137460859838,
+          "w": 237.46222388631242,
+          "h": 179.4346078229121,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          1.6000000000000019,
+          1.1999999999999962,
+          1.5999999999999945
+        ],
+        "target": [
+          1.7763568394002505e-15,
+          0,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 10,
+      "layouts": 10,
+      "drawn": 10,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 7,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24384_24946:support:pipe_center:0:0 x 24384_24946:support:pipe_center:0:1",
+        "24384_24946:support:pipe_center:0:0 x 24384_24946:support:label:0",
+        "24384_24946:support:pipe_center:0:1 x 24384_24946:support:label:0",
+        "24384_24946:support:dim:0:0:0 x 24384_24946:support:dim:0:0:1",
+        "24384_24946:support:dim:0:0:0 x 24384_24946:support:dim:2:0:0",
+        "24384_24946:support:dim:1:0:0 x 24384_24946:support:dim:3:0:1",
+        "24384_24946:support:dim:3:0:0 x 24384_24946:support:dim:3:0:1"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24384_24946:support:pipe_center:0:0": {
+          "cx": 627.9845872614881,
+          "cy": 243.1084998492706,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:pipe_center:0:1": {
+          "cx": 627.9845872614881,
+          "cy": 243.1084998492706,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:0:0:0": {
+          "cx": 527.9931638609785,
+          "cy": 478.2723205861897,
+          "w": 59.52874696447333,
+          "h": 56.562799652967044,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:0:0:1": {
+          "cx": 493.062110360871,
+          "cy": 447.7322672338621,
+          "w": 59.482138381603875,
+          "h": 56.43615557984015,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:1:0:0": {
+          "cx": 847.7094797932782,
+          "cy": 738.4372463280104,
+          "w": 50.933779696689726,
+          "h": 49.69131858932042,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:2:0:0": {
+          "cx": 550.0365493483661,
+          "cy": 441.24286599849034,
+          "w": 23.115334010047945,
+          "h": 21.935377508268857,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:3:0:0": {
+          "cx": 775.5385529320945,
+          "cy": 761.1285252492013,
+          "w": 75.54096866507166,
+          "h": 66.13076098997931,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:3:0:1": {
+          "cx": 830.4741638105113,
+          "cy": 721.384222128149,
+          "w": 77.16128282565774,
+          "h": 67.3032437745926,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:4:0:0": {
+          "cx": 391.4568892489778,
+          "cy": 380.2856830137081,
+          "w": 50.73751508990745,
+          "h": 44.85550436609287,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:label:0": {
+          "cx": 628.5553554549762,
+          "cy": 180.8858426458068,
+          "w": 279.16043098787645,
+          "h": 187.31906691672737,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          0.8000000000000018,
+          0.5999999999999981,
+          0.7999999999999973
+        ],
+        "target": [
+          1.7763568394002505e-15,
+          0,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 10,
+      "layouts": 10,
+      "drawn": 10,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24384_24946:support:pipe_center:0:0 x 24384_24946:support:pipe_center:0:1",
+        "24384_24946:support:dim:0:0:0 x 24384_24946:support:dim:0:0:1",
+        "24384_24946:support:dim:1:0:0 x 24384_24946:support:dim:3:0:1"
+      ],
+      "offscreen": [
+        "24384_24946:support:dim:1:0:0",
+        "24384_24946:support:dim:3:0:0",
+        "24384_24946:support:dim:3:0:1",
+        "24384_24946:support:label:0"
+      ],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24384_24946:support:pipe_center:0:0": {
+          "cx": 648.8478002355204,
+          "cy": 73.8655033606279,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:pipe_center:0:1": {
+          "cx": 648.8478002355204,
+          "cy": 73.8655033606279,
+          "w": 8,
+          "h": 32,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:0:0:0": {
+          "cx": 475.12460630579903,
+          "cy": 535.8248252456104,
+          "w": 69.48482509918165,
+          "h": 68.09697710373143,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:0:0:1": {
+          "cx": 420.6547680684563,
+          "cy": 484.0989862702283,
+          "w": 70.93519266158387,
+          "h": 69.47408085565178,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:1:0:0": {
+          "cx": 1065.2672807672377,
+          "cy": 1058.251159326475,
+          "w": 50.70493617991815,
+          "h": 50.09262855024417,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:2:0:0": {
+          "cx": 507.9985289515425,
+          "cy": 477.8682876939845,
+          "w": 26.628889020511792,
+          "h": 25.2433001000025,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:3:0:0": {
+          "cx": 949.3288803123277,
+          "cy": 1151.8069326961438,
+          "w": 71.80527397909827,
+          "h": 71.47194236849464,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:3:0:1": {
+          "cx": 1049.96765198348,
+          "cy": 1052.2899893511471,
+          "w": 73.22724640984734,
+          "h": 72.87835621017803,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:dim:4:0:0": {
+          "cx": 253.5766198838819,
+          "cy": 374.7877637735466,
+          "w": 50.58064836134437,
+          "h": 44.353722795439126,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24384_24946:support:label:0": {
+          "cx": 651.9862684841327,
+          "cy": -98.20211337382608,
+          "w": 296.6127695618345,
+          "h": 149.0641782286727,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    }
+  },
+  "perf": []
+}

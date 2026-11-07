@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import envelopeFieldsFixture from '../../fixtures/mbd-v2/envelope-fields.json';
 import fullCoverageFixture from '../../fixtures/mbd-v2/full-coverage.json';
 import liveIsodimFixture from '../../fixtures/mbd-v2/live-isodim-24381-145018.json';
 import cliLinearFixture from '../../fixtures/mbd-v2/rs-mbd-cli-linear.json';
@@ -737,5 +738,271 @@ describe('parseMbdV2PipeData', () => {
         error: 'MBD V2 payload has invalid meta',
       });
     }
+  });
+
+  describe('envelope fields (#103 M1-3)', () => {
+    const withPackage = (
+      fields: Record<string, unknown>,
+      primitives: unknown[] = [],
+      options?: { strict?: boolean },
+    ) => parseMbdV2PipeData({
+      version: 'v2',
+      input_refno: 'x',
+      branch_refno: 'y',
+      primitives,
+      issues: [],
+      meta: { geometry_space: 'design_m', notes: [] },
+      ...fields,
+    }, options);
+    const withPrimitives = (primitives: unknown[], options?: { strict?: boolean }) =>
+      withPackage({}, primitives, options);
+    const frame = {
+      center: [0, 0, 0], x_axis: [1, 0, 0], normal: [0, 0, 1], radius: 1, start_angle_deg: 0, sweep_angle_deg: 90,
+    };
+    // 契约里的 11 种 kind 各一条最小形状。
+    const everyKind: readonly Record<string, unknown>[] = [
+      {
+        kind: 'linear_dim', id: 'd', start: [0, 0, 0], end: [1, 0, 0], text: '1000',
+        extension_lines: [], arrow_lines: [], label_anchor: [0.5, 0, 0],
+      },
+      { kind: 'angle_dim', id: 'a', text: '90°', leg_lines: [], label_anchor: [0, 0, 0], ...frame },
+      { kind: 'label', id: 'l', text: 'P-101', position: [0, 0, 0] },
+      { kind: 'leader_line', id: 'ld', start: [0, 0, 0], end: [1, 0, 0] },
+      { kind: 'aid_line', id: 'al', start: [0, 0, 0], end: [1, 0, 0] },
+      { kind: 'aid_arc', id: 'aa', ...frame },
+      { kind: 'aid_circle', id: 'ac', center: [0, 0, 0], normal: [0, 0, 1], radius: 1 },
+      { kind: 'aid_point', id: 'ap', position: [0, 0, 0] },
+      { kind: 'aid_text', id: 'at', text: 'EL +1', position: [0, 0, 0] },
+      { kind: 'weld_mark', id: 'w', position: [0, 0, 0] },
+      { kind: 'slope_mark', id: 's', text: '1:100', start: [0, 0, 0], end: [1, 0, 0.01] },
+    ];
+    const byKind = (kind: string) => everyKind.find(primitive => primitive.kind === kind)!;
+    const expectRejected = (primitive: Record<string, unknown>, label: string) => {
+      const result = withPrimitives([primitive]);
+      expect(result, label).toMatchObject({ ok: false });
+      if (result.ok) return;
+      expect(result.error).toContain(
+        `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
+      );
+    };
+
+    /**
+     * 权威 fixture（plant-mbd 镜像它）：非管道包 `em9_pipe_supp` + 归属对象，两段共用 `chain_id` 的
+     * 线性尺寸、带类别 / 字高 / 文字向上方向的标签与角度、坡度、辅助文字——默认与 strict 都得吃下。
+     */
+    it('parses the authoritative envelope-fields fixture in default and strict mode', () => {
+      for (const strict of [false, true]) {
+        const result = parseMbdV2PipeData(envelopeFieldsFixture, { strict });
+        expect(result.ok, `strict ${String(strict)}`).toBe(true);
+        if (!result.ok) return;
+        expect(result.diagnostics).toEqual([]);
+        expect(result.data.annotation_type).toBe('em9_pipe_supp');
+        expect(result.data.subject).toEqual({ refno: '24383_91813', noun: 'SUPPO' });
+        expect(result.data.branch_refno).toBe('24383_91813');
+        expect(result.data.meta.layout_mode).toBe('em9_pipe_supp');
+        expect(result.data.primitives).toEqual(envelopeFieldsFixture.primitives);
+        const chain = result.data.primitives.filter(primitive => primitive.chain_id === '24383_91813:chain:0');
+        expect(chain.map(primitive => [primitive.kind, primitive.chain_seq])).toEqual([
+          ['linear_dim', 0],
+          ['linear_dim', 1],
+        ]);
+      }
+    });
+
+    it('accepts every annotation_type of the closed vocabulary and rejects anything else', () => {
+      const vocabulary = [
+        'em4_pipe', 'em9_pipe', 'em4_supp', 'em9_inst_supp', 'em9_pipe_supp',
+        'civil', 'arch', 'em4_equi', 'em9_equi',
+      ];
+      for (const annotationType of vocabulary) {
+        const result = withPackage({ annotation_type: annotationType }, [], { strict: true });
+        expect(result.ok, annotationType).toBe(true);
+        if (result.ok) expect(result.data.annotation_type).toBe(annotationType);
+      }
+
+      // 缺省 = 老的管道包：不凭空出现字段。
+      const legacy = withPackage({});
+      expect(legacy.ok).toBe(true);
+      if (legacy.ok) {
+        expect(legacy.data).not.toHaveProperty('annotation_type');
+        expect(legacy.data).not.toHaveProperty('subject');
+      }
+
+      // 词表外（拼错、大小写、空串）与 null / 非字符串都整包拒绝；null 不等于缺省。
+      for (const annotationType of ['em9_supp', 'EM4_PIPE', 'pipe', '']) {
+        expect(withPackage({ annotation_type: annotationType })).toEqual({
+          ok: false,
+          error: `MBD V2 payload has an invalid annotation_type "${annotationType}"`,
+        });
+      }
+      for (const annotationType of [null, 4, ['civil']]) {
+        expect(withPackage({ annotation_type: annotationType })).toEqual({
+          ok: false,
+          error: 'MBD V2 payload has an invalid annotation_type',
+        });
+      }
+    });
+
+    it('accepts a subject with a refno and a noun and rejects malformed ones', () => {
+      const subject = { refno: '24383_91813', noun: 'SUPPO' };
+      const declared = withPackage({ subject }, [], { strict: true });
+      expect(declared.ok).toBe(true);
+      if (declared.ok) expect(declared.data.subject).toEqual(subject);
+
+      for (const malformed of [
+        { refno: '24383_91813' },
+        { noun: 'SUPPO' },
+        { refno: '', noun: 'SUPPO' },
+        { refno: '24383_91813', noun: '' },
+        { refno: 24383, noun: 'SUPPO' },
+        '24383_91813',
+        null,
+      ]) {
+        expect(withPackage({ subject: malformed }), JSON.stringify(malformed)).toEqual({
+          ok: false,
+          error: 'MBD V2 payload has an invalid subject',
+        });
+      }
+    });
+
+    /**
+     * 11 种 kind 共有的 `function` / `node_refnos` / `chain_id` / `chain_seq`：给了合法值原样透传（strict
+     * 下是共有白名单字段），缺省不凭空出现，形状不对点名整包拒绝。
+     */
+    it('accepts function / node_refnos / chain_id / chain_seq on every primitive kind', () => {
+      expect(new Set(everyKind.map(primitive => primitive.kind)).size).toBe(11);
+      const tagged = everyKind.map((primitive, index) => ({
+        ...primitive,
+        function: '定位尺寸',
+        node_refnos: index % 2 === 0 ? ['24383_91814', '24383_91815'] : [],
+        chain_id: `chain:${index}`,
+        chain_seq: index,
+      }));
+      for (const strict of [false, true]) {
+        const result = withPrimitives(tagged, { strict });
+        expect(result.ok, `strict ${String(strict)}`).toBe(true);
+        if (result.ok) expect(result.data.primitives).toEqual(tagged);
+      }
+
+      // 链 id 可以不带段序。
+      expect(withPrimitives([{ ...byKind('linear_dim'), chain_id: 'chain:0' }], { strict: true }))
+        .toMatchObject({ ok: true });
+
+      const bare = withPrimitives([...everyKind]);
+      expect(bare.ok).toBe(true);
+      if (bare.ok) {
+        for (const field of ['function', 'node_refnos', 'chain_id', 'chain_seq']) {
+          expect(bare.data.primitives.every(primitive => !(field in primitive)), field).toBe(true);
+        }
+      }
+    });
+
+    it('rejects malformed function / node_refnos / chain fields, naming the primitive', () => {
+      for (const primitive of everyKind) {
+        const kind = primitive.kind as string;
+        for (const fn of ['', 7, null, ['一级尺寸']]) {
+          expectRejected({ ...primitive, function: fn }, `${kind} function ${JSON.stringify(fn)}`);
+        }
+        for (const nodes of ['24383_91814', [''], [24383], ['24383_91814', null], null]) {
+          expectRejected({ ...primitive, node_refnos: nodes }, `${kind} node_refnos ${JSON.stringify(nodes)}`);
+        }
+        for (const chainId of ['', 3, null]) {
+          expectRejected({ ...primitive, chain_id: chainId, chain_seq: 0 }, `${kind} chain_id ${JSON.stringify(chainId)}`);
+        }
+        for (const chainSeq of [-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, '0', null]) {
+          expectRejected({ ...primitive, chain_id: 'chain:0', chain_seq: chainSeq }, `${kind} chain_seq ${String(chainSeq)}`);
+        }
+        // 段序不能脱离链 id 单独出现。
+        expectRejected({ ...primitive, chain_seq: 0 }, `${kind} chain_seq without chain_id`);
+      }
+    });
+
+    /**
+     * `text_height_mm` 扩到 `linear_dim` / `label` / `angle_dim` / `slope_mark`（`aid_text` 早已有），规则同
+     * `aid_text`：有限正数；`text_up` 加在 `linear_dim` / `label` / `aid_text` / `slope_mark` 上（CT-15 起还有
+     * `angle_dim`）：有限、非零三维向量。别的 kind 上出现时默认当契约外字段忽略，strict 才拒。
+     */
+    it('accepts text_height_mm and text_up on their kinds and rejects degenerate values', () => {
+      const heightKinds = ['linear_dim', 'label', 'angle_dim', 'slope_mark', 'aid_text'];
+      const upKinds = ['linear_dim', 'label', 'aid_text', 'slope_mark', 'angle_dim'];
+
+      const declared = everyKind
+        .filter(primitive => heightKinds.includes(primitive.kind as string) || upKinds.includes(primitive.kind as string))
+        .map(primitive => ({
+          ...primitive,
+          ...(heightKinds.includes(primitive.kind as string) ? { text_height_mm: 12.5 } : {}),
+          ...(upKinds.includes(primitive.kind as string) ? { text_up: [0, 0, 1] } : {}),
+        }));
+      for (const strict of [false, true]) {
+        const result = withPrimitives(declared, { strict });
+        expect(result.ok, `strict ${String(strict)}`).toBe(true);
+        if (result.ok) expect(result.data.primitives).toEqual(declared);
+      }
+      const bare = withPrimitives([...everyKind]);
+      expect(bare.ok).toBe(true);
+      if (bare.ok) {
+        expect(bare.data.primitives.some(primitive => 'text_up' in primitive)).toBe(false);
+        expect(bare.data.primitives.some(primitive => 'text_height_mm' in primitive)).toBe(false);
+      }
+
+      for (const kind of heightKinds) {
+        for (const height of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '12.5', null]) {
+          expectRejected({ ...byKind(kind), text_height_mm: height }, `${kind} text_height_mm ${String(height)}`);
+        }
+      }
+      for (const kind of upKinds) {
+        for (const up of [[0, 0, 0], [Number.NaN, 0, 1], [0, 1], 'up', null]) {
+          expectRejected({ ...byKind(kind), text_up: up }, `${kind} text_up ${JSON.stringify(up)}`);
+        }
+      }
+
+      // 只属于各自那几种 kind：落在别的 kind 上，默认忽略，strict 拒。
+      const strays: readonly Record<string, unknown>[] = [
+        { ...byKind('weld_mark'), text_height_mm: 12.5 },
+        { ...byKind('aid_arc'), text_up: [0, 0, 1] },
+        { ...byKind('aid_line'), text_up: [0, 0, 1] },
+      ];
+      for (const stray of strays) {
+        expect(withPrimitives([stray]).ok, `${stray.kind as string} default`).toBe(true);
+        expect(withPrimitives([stray], { strict: true }), `${stray.kind as string} strict`)
+          .toMatchObject({ ok: false });
+      }
+    });
+
+    /**
+     * #103 CT-15：`angle_dim` 加文字平面 `text_dir` / `text_up`，规则同 `label` / `aid_text`：有限、非零三维
+     * 向量，strict 下是 `angle_dim` 的白名单字段；旧数据（不带）照读，缺省不凭空出现。
+     */
+    it('accepts a text plane on angle_dim and rejects degenerate ones (CT-15)', () => {
+      const angle = byKind('angle_dim');
+      const planes = [
+        { ...angle, id: 'a-plane', text_dir: [1, 0, 0], text_up: [0, 1, 0] },
+        { ...angle, id: 'a-dir', text_dir: [0, 2, 0] },
+        { ...angle, id: 'a-up', text_up: [0, 0, 3] },
+      ];
+      for (const strict of [false, true]) {
+        const result = withPrimitives(planes, { strict });
+        expect(result.ok, `strict ${String(strict)}`).toBe(true);
+        if (result.ok) expect(result.data.primitives).toEqual(planes);
+      }
+      const bare = withPrimitives([angle], { strict: true });
+      expect(bare.ok).toBe(true);
+      if (bare.ok) {
+        expect(bare.data.primitives[0]).not.toHaveProperty('text_dir');
+        expect(bare.data.primitives[0]).not.toHaveProperty('text_up');
+      }
+
+      for (const field of ['text_dir', 'text_up']) {
+        for (const vector of [[0, 0, 0], [Number.NaN, 0, 1], [1, 0], 'x', null]) {
+          expectRejected({ ...angle, [field]: vector }, `angle_dim ${field} ${JSON.stringify(vector)}`);
+        }
+      }
+      // Still only on the kinds with text: the textless arc kinds keep rejecting it under strict.
+      for (const kind of ['aid_arc', 'aid_circle']) {
+        const stray = { ...byKind(kind), text_dir: [1, 0, 0] };
+        expect(withPrimitives([stray]).ok, `${kind} default`).toBe(true);
+        expect(withPrimitives([stray], { strict: true }), `${kind} strict`).toMatchObject({ ok: false });
+      }
+    });
   });
 });

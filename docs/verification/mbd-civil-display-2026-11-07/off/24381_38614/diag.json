@@ -1,0 +1,2772 @@
+{
+  "refno": "24381_38614",
+  "mode": "off",
+  "gm": "http://127.0.0.1:8022",
+  "mbd": "http://127.0.0.1:8023",
+  "generatedAt": "2026-11-06T23:31:44.383Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          36.15298632812499,
+          27.11473974609371,
+          36.152986328124925
+        ],
+        "target": [
+          -8.881784197001252e-16,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 109,
+      "layouts": 109,
+      "drawn": 18,
+      "lodHidden": 91,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 54,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 2,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_38614:room:0:0:el:down:letter x 24381_38614:room:0:0:el:up:letter",
+        "24381_38614:room:1:0:el:down:letter x 24381_38614:room:1:0:el:up:letter"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_38614:wall:17496_105828:name": {
+          "cx": 667.1801205198304,
+          "cy": 179.98600118868342,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_105935:name": {
+          "cx": 930.7194279348939,
+          "cy": 240.4346911698634,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_105940:name": {
+          "cx": 747.3113484704631,
+          "cy": 210.14487412827583,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_116530:name": {
+          "cx": 687.9396552259185,
+          "cy": 548.8460929616849,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0": {
+          "cx": 725.1624614533774,
+          "cy": 445.8571077839197,
+          "w": 49.77777777777778,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down": {
+          "cx": 791.454249245824,
+          "cy": 382.18152205102774,
+          "w": 40,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down:circle": {
+          "cx": 668.65560346865,
+          "cy": 382.0729473946622,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down:letter": {
+          "cx": 667.3589892541124,
+          "cy": 382.71588914777146,
+          "w": 20.363054149655568,
+          "h": 21.495415252345197,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up": {
+          "cx": 667.0540331800131,
+          "cy": 503.2524860486185,
+          "w": 31.444444444444446,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up:circle": {
+          "cx": 666.6372010169873,
+          "cy": 383.8174870968849,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up:letter": {
+          "cx": 665.3649592444765,
+          "cy": 384.43865082445757,
+          "w": 20.363054149655568,
+          "h": 21.495415252345197,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0": {
+          "cx": 567.5750843262689,
+          "cy": 271.58187275820956,
+          "w": 49.77777777777778,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down": {
+          "cx": 502.14007710887375,
+          "cy": 306.6638806812232,
+          "w": 40,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down:circle": {
+          "cx": 568.2558076683702,
+          "cy": 344.8621925684177,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down:letter": {
+          "cx": 566.9468982439356,
+          "cy": 345.46434501533577,
+          "w": 19.898256738062173,
+          "h": 21.828607065197446,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up": {
+          "cx": 491.88790287386433,
+          "cy": 346.45386375207426,
+          "w": 31.444444444444446,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up:circle": {
+          "cx": 566.1557396388592,
+          "cy": 346.4960071858404,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up:letter": {
+          "cx": 564.872347066886,
+          "cy": 347.0777073769252,
+          "w": 19.89825673806206,
+          "h": 21.828607065197446,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38615:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:5:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38682:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38682:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38682:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38682:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          14.461194531249987,
+          10.845895898437476,
+          14.461194531249957
+        ],
+        "target": [
+          -8.881784197001252e-16,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 109,
+      "layouts": 109,
+      "drawn": 22,
+      "lodHidden": 87,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 54,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_38614:room:0:0:el:down:letter x 24381_38614:room:0:0:el:up:letter",
+        "24381_38614:room:1:0:el:down:letter x 24381_38614:room:1:0:el:up:letter",
+        "24381_38614:member:24381_38682:dim:A:0:g0:0 x 24381_38614:member:24381_38682:dim:A:2:g0:0"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_38614:wall:17496_105828:name": {
+          "cx": 905.6498235668105,
+          "cy": 488.7052513459414,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_105935:name": {
+          "cx": 1179.3643311652704,
+          "cy": 230.18046648475755,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_105940:name": {
+          "cx": 962.005075186357,
+          "cy": 138.92639562544102,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_116530:name": {
+          "cx": 654.4104837297429,
+          "cy": 710.8205382872792,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0": {
+          "cx": 892.6657812077851,
+          "cy": 525.4862911144991,
+          "w": 49.77777777777778,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down": {
+          "cx": 1016.7498706345202,
+          "cy": 372.06098406188266,
+          "w": 40,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down:circle": {
+          "cx": 755.6966714968698,
+          "cy": 371.7936557089408,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down:letter": {
+          "cx": 752.5938082399798,
+          "cy": 373.3777704336515,
+          "w": 20.607454537015315,
+          "h": 21.294495952267198,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up": {
+          "cx": 752.0287410224122,
+          "cy": 629.881770543473,
+          "w": 31.444444444444446,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up:circle": {
+          "cx": 750.9992641274824,
+          "cy": 376.09804699827504,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up:letter": {
+          "cx": 747.9423803916732,
+          "cy": 377.6353503794063,
+          "w": 20.607454537015315,
+          "h": 21.294495952267255,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0": {
+          "cx": 468.57972097277747,
+          "cy": 230.31050467343994,
+          "w": 49.77777777777778,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down": {
+          "cx": 511.55674471796607,
+          "cy": 162.03704301670206,
+          "w": 40,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down:circle": {
+          "cx": 511.0431995296015,
+          "cy": 284.36900921428327,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down:letter": {
+          "cx": 507.8649184244157,
+          "cy": 285.72015506574166,
+          "w": 19.461362288098996,
+          "h": 22.09237989966897,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up": {
+          "cx": 447.08863893546,
+          "cy": 184.4721251076387,
+          "w": 31.444444444444446,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up:circle": {
+          "cx": 505.85615441691465,
+          "cy": 288.0397094661533,
+          "w": 8,
+          "h": 22.666666666666668,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up:letter": {
+          "cx": 502.73099799197223,
+          "cy": 289.3501800053526,
+          "w": 19.461362288098996,
+          "h": 22.09237989966897,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38615:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38621:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38638:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38644:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38658:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:dim:A:0:g0:0": {
+          "cx": 401.2841389750836,
+          "cy": 303.83832909024864,
+          "w": 57.68317594370325,
+          "h": 51.4432994071625,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38664:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:3:g0:0": {
+          "cx": 461.6209365873049,
+          "cy": 329.2212357719552,
+          "w": 39.55222502995571,
+          "h": 38.09253589879171,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38664:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:5:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:dim:A:0:g0:0": {
+          "cx": 471.4075044072449,
+          "cy": 574.7985158553079,
+          "w": 35.110992545108445,
+          "h": 36.0185666744718,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38682:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38682:dim:A:2:g0:0": {
+          "cx": 438.3788560237019,
+          "cy": 564.3014150644199,
+          "w": 35.38207177956241,
+          "h": 36.133957632417946,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38682:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38682:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          7.230597265624998,
+          5.4229479492187345,
+          7.230597265624979
+        ],
+        "target": [
+          -8.881784197001252e-16,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 109,
+      "layouts": 109,
+      "drawn": 48,
+      "lodHidden": 61,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 54,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 2,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_38614:room:0:0:el:down:letter x 24381_38614:room:0:0:el:up:letter",
+        "24381_38614:room:1:0:el:down:letter x 24381_38614:room:1:0:el:up:letter"
+      ],
+      "offscreen": [
+        "24381_38614:wall:17496_105935:name",
+        "24381_38614:wall:17496_116530:name",
+        "24381_38614:member:24381_38615:dim:A:2:g0:0",
+        "24381_38614:member:24381_38638:dim:A:0:g0:0",
+        "24381_38614:member:24381_38638:dim:A:1:g0:0",
+        "24381_38614:member:24381_38638:dim:A:2:g0:0",
+        "24381_38614:member:24381_38638:dim:A:3:g0:0",
+        "24381_38614:member:24381_38644:dim:A:0:g0:0",
+        "24381_38614:member:24381_38644:dim:A:1:g0:0",
+        "24381_38614:member:24381_38644:dim:A:2:g0:0",
+        "24381_38614:member:24381_38644:dim:A:3:g0:0",
+        "24381_38614:member:24381_38652:dim:A:0:g0:0",
+        "24381_38614:member:24381_38652:dim:A:2:g0:0",
+        "24381_38614:member:24381_38652:dim:A:3:g0:0",
+        "24381_38614:member:24381_38658:dim:A:1:g0:0",
+        "24381_38614:member:24381_38658:dim:A:2:g0:0",
+        "24381_38614:member:24381_38676:dim:A:4:g0:0"
+      ],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_38614:wall:17496_105828:name": {
+          "cx": 1186.139383076514,
+          "cy": 492.06348723206304,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_105935:name": {
+          "cx": 2030.5296982438547,
+          "cy": -269.02509901215285,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_105940:name": {
+          "cx": 1149.686574505369,
+          "cy": 62.19608256973143,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:wall:17496_116530:name": {
+          "cx": 507.28510941238716,
+          "cy": 1513.6404658316555,
+          "w": 53.44444444444445,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0": {
+          "cx": 1097.5177733540502,
+          "cy": 582.7611643478408,
+          "w": 49.77777777777778,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down": {
+          "cx": 1083.743992942078,
+          "cy": 539.63219328536,
+          "w": 40,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down:circle": {
+          "cx": 898.3054769581339,
+          "cy": 354.9519792279787,
+          "w": 8,
+          "h": 27.64299625148553,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:down:letter": {
+          "cx": 892.5483994733697,
+          "cy": 358.04468704034633,
+          "w": 21.027799101263668,
+          "h": 20.898554709265,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up": {
+          "cx": 892.0590927465115,
+          "cy": 288.4816413404236,
+          "w": 31.444444444444446,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up:circle": {
+          "cx": 890.0413773537332,
+          "cy": 363.3751805265482,
+          "w": 8,
+          "h": 27.789760375502045,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:0:0:el:up:letter": {
+          "cx": 884.3321425474307,
+          "cy": 366.39861621304453,
+          "w": 21.027799101263668,
+          "h": 20.898554709265,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0": {
+          "cx": 421.00113223726316,
+          "cy": 94.36932939422135,
+          "w": 49.77777777777778,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down": {
+          "cx": 390.42175618405247,
+          "cy": 130.4097229215693,
+          "w": 40,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down:circle": {
+          "cx": 427.809161890525,
+          "cy": 196.36232565262756,
+          "w": 8,
+          "h": 24.879762798307638,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:down:letter": {
+          "cx": 421.75514197563587,
+          "cy": 198.64523211312041,
+          "w": 18.795625768942443,
+          "h": 22.41865797242741,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up": {
+          "cx": 316.0348004270339,
+          "cy": 142.67480603724476,
+          "w": 31.444444444444446,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up:circle": {
+          "cx": 417.6973877614049,
+          "cy": 202.57585277051092,
+          "w": 8,
+          "h": 24.988026014357843,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:room:1:0:el:up:letter": {
+          "cx": 411.7193377652426,
+          "cy": 204.8029632956368,
+          "w": 18.795625768942443,
+          "h": 22.41865797242741,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38615:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:dim:A:2:g0:0": {
+          "cx": 362.3058536396915,
+          "cy": 1530.542137595678,
+          "w": 38.223672650069716,
+          "h": 36.14397483275161,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38615:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38615:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38615:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:dim:A:0:g0:0": {
+          "cx": 1033.4867878082362,
+          "cy": 215.01078439987043,
+          "w": 36.79609028498771,
+          "h": 34.67381268215735,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38621:dim:A:1:g0:0": {
+          "cx": 1040.5002557938346,
+          "cy": 252.0940521371719,
+          "w": 38.825559689462125,
+          "h": 34.44040381596781,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38621:dim:A:2:g0:0": {
+          "cx": 1098.7635962661193,
+          "cy": 245.90127180146587,
+          "w": 36.79023718819167,
+          "h": 34.5854050583859,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38621:dim:A:3:g0:0": {
+          "cx": 1106.8392256063767,
+          "cy": 207.84516908339475,
+          "w": 39.4045625934898,
+          "h": 34.2446584911431,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38621:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38621:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:dim:A:3:g0:0": {
+          "cx": 1144.5805166214918,
+          "cy": 191.30137026883125,
+          "w": 32.34359353870809,
+          "h": 31.61684551697047,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38627:dim:A:4:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38627:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38627:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:dim:A:0:g0:0": {
+          "cx": -361.7691835035126,
+          "cy": 1364.1805685744662,
+          "w": 43.00965883592062,
+          "h": 34.8844216491118,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38638:dim:A:1:g0:0": {
+          "cx": -296.86074269954804,
+          "cy": 1321.925521948337,
+          "w": 60.20335003458507,
+          "h": 72.33974111189377,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38638:dim:A:2:g0:0": {
+          "cx": -288.84990505029793,
+          "cy": 1248.8988861694525,
+          "w": 42.12957846626199,
+          "h": 33.9158035905823,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38638:dim:A:3:g0:0": {
+          "cx": -377.112768139501,
+          "cy": 1300.4579529052985,
+          "w": 55.16764996782143,
+          "h": 60.90358253007912,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38638:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38638:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:dim:A:0:g0:0": {
+          "cx": -699.1967752198127,
+          "cy": 1171.7123188439973,
+          "w": 42.51799156320203,
+          "h": 33.022729515703986,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38644:dim:A:1:g0:0": {
+          "cx": -590.1283767976781,
+          "cy": 1145.0583242212315,
+          "w": 47.10840167137633,
+          "h": 42.53636995863985,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38644:dim:A:2:g0:0": {
+          "cx": -608.1552187893165,
+          "cy": 1067.2883797505992,
+          "w": 41.342310668945856,
+          "h": 32.21844986098881,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38644:dim:A:3:g0:0": {
+          "cx": -642.1031353009801,
+          "cy": 1129.9062736907229,
+          "w": 47.93214282407928,
+          "h": 42.459180311258024,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38644:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38644:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:dim:A:0:g0:0": {
+          "cx": -117.26994886100991,
+          "cy": 965.1402398734494,
+          "w": 50.16917497837561,
+          "h": 53.38780697630375,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38652:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38652:dim:A:2:g0:0": {
+          "cx": -181.21572848200003,
+          "cy": 944.1622989578068,
+          "w": 51.496323784682914,
+          "h": 53.18809310288327,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38652:dim:A:3:g0:0": {
+          "cx": -88.60789775515858,
+          "cy": 884.974317210535,
+          "w": 39.64715621326961,
+          "h": 32.78810373833528,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38652:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38652:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:dim:A:0:g0:0": {
+          "cx": 24.953672258705527,
+          "cy": 780.834711514394,
+          "w": 54.79862815662487,
+          "h": 57.99378672754062,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38658:dim:A:1:g0:0": {
+          "cx": -38.47191182381046,
+          "cy": 823.1399567608682,
+          "w": 39.21244728782677,
+          "h": 33.30982959099708,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38658:dim:A:2:g0:0": {
+          "cx": -31.352995797731914,
+          "cy": 760.8596249934114,
+          "w": 56.16654050223653,
+          "h": 57.738971824309715,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38658:dim:A:3:g0:0": {
+          "cx": -2.543191450314538,
+          "cy": 698.3332115742955,
+          "w": 38.0448200890013,
+          "h": 32.15154112430207,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38658:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38658:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:dim:A:0:g0:0": {
+          "cx": 218.53854884320305,
+          "cy": 243.82038029703037,
+          "w": 62.08521178145622,
+          "h": 50.676117036806374,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38664:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38664:dim:A:2:g0:0": {
+          "cx": 190.90965094991236,
+          "cy": 327.54029584678415,
+          "w": 57.278336549615204,
+          "h": 42.73233284758686,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38664:dim:A:3:g0:0": {
+          "cx": 327.5251778920021,
+          "cy": 290.33214439164755,
+          "w": 41.00670905488448,
+          "h": 38.18682828261717,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38664:dim:A:4:g0:0": {
+          "cx": 360.0593535727267,
+          "cy": 210.65254715777021,
+          "w": 58.63094807905679,
+          "h": 41.387544944041,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38664:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38664:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:2:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38670:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38670:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:dim:A:0:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:1:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:3:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:dim:A:4:g0:0": {
+          "cx": 869.9647686500764,
+          "cy": -61.54737852183624,
+          "w": 32.98802749900767,
+          "h": 32.4395704273412,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38676:dim:A:5:g0:0": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "short-line"
+        },
+        "24381_38614:member:24381_38676:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38676:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:dim:A:0:g0:0": {
+          "cx": 359.7483081449009,
+          "cy": 751.7957561631063,
+          "w": 35.77859503215103,
+          "h": 37.433928381727924,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38682:dim:A:1:g0:0": {
+          "cx": 295.82656159703345,
+          "cy": 789.1807595815001,
+          "w": 37.55903851615841,
+          "h": 33.525250058498045,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38682:dim:A:2:g0:0": {
+          "cx": 287.75917751748705,
+          "cy": 724.9305357563787,
+          "w": 36.44966118285146,
+          "h": 37.50347682709764,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38682:dim:A:3:g0:0": {
+          "cx": 368.5851514764048,
+          "cy": 684.3120890912517,
+          "w": 37.159345294719685,
+          "h": 32.8190417155588,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_38614:member:24381_38682:no:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:mark:A": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:no:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        },
+        "24381_38614:member:24381_38682:mark:B": {
+          "cx": 0,
+          "cy": 0,
+          "w": 0,
+          "h": 0,
+          "drawn": false,
+          "lodHidden": "detail-far"
+        }
+      }
+    }
+  },
+  "perf": []
+}

@@ -18,6 +18,12 @@ import {
 } from './dimensionBoundActions';
 import DimensionSemanticList from './DimensionSemanticList.vue';
 import DimensionToolbar from './DimensionToolbar.vue';
+import { expectedKindsFor, mbdAnnotationTypeLabel } from './mbdAnnotationTypes';
+import {
+  groupMbdRecordsByFunction,
+  mbdFunctionGroupVisibility,
+  mbdFunctionOf,
+} from './mbdFunctionGroups';
 import PipeInformationPanel from './PipeInformationPanel.vue';
 
 import type { DimensionBoundAction } from './dimensionBoundActions';
@@ -49,23 +55,6 @@ import {
 } from '@/utils/refnoListParam';
 
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
-
-/**
- * 管道 MBD 应有的产出类别：求解器 `meta.coverage` 缺其中任何一种，面板就提示
- * 「本分支标注不完整」——未产出的类别不会产生 issue，光看诊断列表看不出缺了什么。
- * `aid_arc` / `aid_circle` / `aid_point` 不在里面：它们只属于支架 / 土建图，
- * 管道路径按设计不产出，列进来警示条会永远亮着。
- */
-const PIPE_EXPECTED_KINDS: readonly string[] = [
-  'linear_dim',
-  'angle_dim',
-  'label',
-  'leader_line',
-  'aid_line',
-  'aid_text',
-  'weld_mark',
-  'slope_mark',
-];
 
 /**
  * 没有 `meta.coverage` 的老后端只能靠阶段性排版模式名兜住同一个事实：
@@ -180,13 +169,24 @@ function byCategory(
 }
 
 /**
+ * #103 M1-3：声明了 PML FUNCTION 类别（`mbdFunction`）的 MBD 记录按类别成组、排在列表最后，组头可
+ * 整组临时显隐（`mbdFunctionGroups.ts`）；下面原有的分组只排其余记录，没有类别的负载列表一行不变。
+ * 管道包的记录不带类别（适配层不写，ADR 0071），所以管道照旧按直段分组。
+ */
+const mbdFunctionGrouping = computed(() => groupMbdRecordsByFunction(externalRecords.value));
+const mbdFunctionGroupToggle = mbdFunctionGroupVisibility(
+  () => hiddenExternalIds.value,
+  () => viewerContext.dimensionSystem.value?.externalRegistry,
+);
+
+/**
  * MBD 按直段分组（W3-6）：任一 MBD 记录带 `isolineIndex`，MBD 记录就按直段编号升序
  * 成组，没有归属的殿后归「未分段」；其它来源照旧按类别两分。`meta.isolines` 表只供
  * 组头取成员数 / 字高 / OD，本身不触发分组：producer 只发表、图元还没带下标（或
  * `mbd_kinds` 过滤后只剩无归属图元）时，全部记录落进唯一的「未分段」组只是多一层
  * 空组头，不如一行不变。今天的负载（两者都没有）列表一行不变。
  */
-const mbdIsolineGrouping = computed(() => externalRecords.value.some(
+const mbdIsolineGrouping = computed(() => mbdFunctionGrouping.value.rest.some(
   record => record.source === 'mbd' && record.isolineIndex !== undefined,
 ));
 
@@ -216,8 +216,10 @@ const isolineGroupKey = (record: ExternalDimensionRecord): string =>
 
 const items = computed<readonly DimensionListItem[]>(() => {
   const user = documentState.value?.records ?? [];
-  if (!mbdIsolineGrouping.value) return [...user, ...byCategory(externalRecords.value)];
-  const mbd = externalRecords.value.filter(record => record.source === 'mbd');
+  const { groups, rest } = mbdFunctionGrouping.value;
+  const byFunction = groups.flatMap(group => group.records);
+  if (!mbdIsolineGrouping.value) return [...user, ...byCategory(rest), ...byFunction];
+  const mbd = rest.filter(record => record.source === 'mbd');
   // 按复合键分组，键顺序沿用首次出现的顺序，再按 (refno, index) 排序：
   // refno 顺序与 `mbd_refno` 一致，同源内按直段编号升序。
   const buckets = new Map<string, ExternalDimensionRecord[]>();
@@ -236,9 +238,10 @@ const items = computed<readonly DimensionListItem[]>(() => {
   });
   return [
     ...user,
-    ...byCategory(externalRecords.value.filter(record => record.source !== 'mbd')),
+    ...byCategory(rest.filter(record => record.source !== 'mbd')),
     ...keys.flatMap(key => byCategory(buckets.get(key) ?? [])),
     ...byCategory(mbd.filter(record => record.isolineIndex === undefined)),
+    ...byFunction,
   ];
 });
 
@@ -273,6 +276,8 @@ function isolineGroupLabel(index: number, refno = ''): string {
 }
 
 function listGroupLabel(item: DimensionListItem): string | null {
+  const mbdFunction = isExternalDimensionRecord(item) ? mbdFunctionOf(item) : undefined;
+  if (mbdFunction !== undefined) return mbdFunction;
   if (!mbdIsolineGrouping.value || !isExternalDimensionRecord(item) || item.source !== 'mbd') {
     return null;
   }
@@ -343,6 +348,7 @@ type DiagnosticsSkipped = MbdDiagnosticsSnapshot['skipped'][number];
  */
 const diagnosticsSourceGroups = computed<readonly {
   refno: string;
+  annotationTypeLabel: string | null;
   total: number;
   hidden: number;
   failed: boolean;
@@ -377,6 +383,7 @@ const diagnosticsSourceGroups = computed<readonly {
       + visibleSkipped.length;
     return {
       refno: source.refno,
+      annotationTypeLabel: mbdAnnotationTypeLabel(source.annotationType),
       total,
       hidden: total - shown,
       failed: source.loadError !== null,
@@ -386,6 +393,12 @@ const diagnosticsSourceGroups = computed<readonly {
       visibleSkipped,
     };
   });
+});
+
+/** 单源时标在诊断标题上的标注类型名（多源时标在各包组头上）；老后端没声明类型就不标。 */
+const singleSourceAnnotationTypeLabel = computed(() => {
+  const sources = mbdDiagnostics.value.sources;
+  return sources.length === 1 ? mbdAnnotationTypeLabel(sources[0]?.annotationType) : null;
 });
 
 const hiddenDiagnosticsCount = computed(() => {
@@ -401,14 +414,15 @@ const diagnosticsVisible = computed(() =>
   || mbdDiagnostics.value.loadError !== null
   || mbdDiagnostics.value.layoutMode !== null);
 /**
- * 「本分支标注不完整」的逐包判断：声明了 `coverage` 的包按 `PIPE_EXPECTED_KINDS`
- * 列缺失类别；没声明的包（老后端）退回按排版模式名兜底，`missing` 为 null。
- * 装载失败的包另有失败提示，不在这里重复。
+ * 「本分支标注不完整」的逐包判断，期望集按标注类型取（`expectedKindsFor`，#103 M7）：管道包和
+ * 没声明类型的老后端包照旧——声明了 `coverage` 的列缺失类别，没声明的退回按排版模式名兜底，
+ * `missing` 为 null；其它类型暂不判。装载失败的包另有失败提示，不在这里重复。
  */
 type IncompleteSourceInput = Readonly<{
   refno: string;
   layoutMode: string | null;
   coverage?: readonly string[] | null;
+  annotationType?: string | null;
   loadError: string | null;
 }>;
 type IncompleteSource = Readonly<{
@@ -427,9 +441,11 @@ const incompleteSources = computed((): readonly IncompleteSource[] => {
   const flagged: IncompleteSource[] = [];
   for (const source of sources) {
     if (source.loadError !== null) continue;
+    const expected = expectedKindsFor(source.annotationType);
+    if (expected === null) continue;
     const coverage = source.coverage ?? null;
     if (coverage !== null) {
-      const missing = PIPE_EXPECTED_KINDS.filter(kind => !coverage.includes(kind));
+      const missing = expected.filter(kind => !coverage.includes(kind));
       if (missing.length > 0) flagged.push({ refno: source.refno, missing, layoutMode: null });
       continue;
     }
@@ -673,7 +689,7 @@ const mbdLodHidden = computed(() => {
 /**
  * 三维标注呈现（2026-09-12 参考图风格：尺寸线沿 dim_dir 外移、数字在三维平面里置于线上方、
  * 实心箭头；标签按卡片 / 方框 / 药丸式 billboard 带引线出图）的面板开关。同样只改 URL
- * （`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉 mapper 打的 `dimension3d` / `tag`，
+ * （`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉 mapper 打的 `dimension3d` / `tag` / `label3d`，
  * 内核回到求解器原位几何的平面呈现。
  */
 function readMbd3dDisabled(): boolean {
@@ -1190,7 +1206,8 @@ function act(
         MBD 诊断（{{ diagnosticsCount }}）
         <span v-if="mbdDiagnostics.channel" class="font-normal opacity-70">
           实时
-          · {{ mbdDiagnostics.sourceId }}
+          · {{ mbdDiagnostics.sourceId }}<span v-if="singleSourceAnnotationTypeLabel"
+            data-testid="mbd-annotation-type"> · {{ singleSourceAnnotationTypeLabel }}</span>
         </span>
       </summary>
       <div v-if="mbdDiagnostics.loadError"
@@ -1210,7 +1227,9 @@ function act(
           data-testid="mbd-diagnostics-source"
           :data-refno="group.refno">
           <summary class="cursor-pointer font-semibold">
-            {{ group.refno }} · {{ group.total }} 条诊断 ·
+            {{ group.refno }}<span v-if="group.annotationTypeLabel"
+              class="font-normal"
+              data-testid="mbd-annotation-type"> · {{ group.annotationTypeLabel }}</span> · {{ group.total }} 条诊断 ·
             <span :class="group.failed ? 'text-red-700' : 'text-emerald-700'">
               {{ group.failed ? '失败' : '正常' }}
             </span>
@@ -1331,8 +1350,10 @@ function act(
         :format-policy="DEFAULT_DIMENSION_FORMAT"
         :hidden-external-ids="hiddenExternalIds"
         :group-label="listGroupLabel"
+        :group-visibility="mbdFunctionGroupToggle.visibility"
         :on-select="select"
-        :on-action="act" />
+        :on-action="act"
+        :on-toggle-group-visibility="mbdFunctionGroupToggle.toggle" />
     </div>
   </div>
 </template>

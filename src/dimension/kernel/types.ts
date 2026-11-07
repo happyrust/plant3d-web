@@ -105,7 +105,10 @@ export type ScreenLinePart =
   | 'leader'
   | 'arc'
   | 'arrow'
-  /** Billboard tag body (card / frame / pill) and its fill. */
+  /**
+   * Tag body: a billboard tag's card / frame / pill and its fill, or the frame
+   * a flat label draws around one of its rows (`ExplicitLayoutInput.labelFrame`).
+   */
   | 'tag';
 
 /**
@@ -504,6 +507,55 @@ export type ExplicitTextInput = Readonly<{
 }>;
 
 /**
+ * A multi-line label drawn as one block centred on `labelAnchor` (MBD
+ * `label` / `aid_text`: the solver puts `position` at the centre of the whole
+ * text block, plant-mbd field dictionary ruling 8). `formattedLabel` is the
+ * first row and `rows` the rest, top to bottom; every row runs along the
+ * label's baseline (`labelAlong`). Rows sit `lineAdvance` cap heights apart
+ * across that baseline: along the text plane's `up` as it projects at the
+ * anchor when the source declares one (PML stacks MLABEL rows along
+ * −`text_up`), else along the run's own screen up. The pitch follows the cap
+ * height the rows are drawn at, so on a face-on view of an unclamped source
+ * text height row k lands exactly on
+ * `labelAnchor + up · ((n − 1) / 2 − k) · lineAdvance · textHeightM`.
+ */
+export type ExplicitLabelBlockInput = Readonly<{
+  rows: readonly string[];
+  /** Row pitch as a multiple of the cap height. */
+  lineAdvance: number;
+  /** Design-space up of the text plane; omitted = no text plane, rows stack on screen. */
+  up?: Vec3;
+}>;
+
+/**
+ * A frame around one row of a label as the row is drawn: PML `drawframe`, the
+ * 位号 box around the name of a component name tag (plant-mbd draws it as four
+ * `aid_line`s `<label id>:frame:0..3`, which the adapter folds into this).
+ * PML keeps the box ch/10 clear of the text; the kernel keeps it a tenth of
+ * the drawn cap height clear of the row's glyph box on every side, so the
+ * frame grows with text lifted to the legibility floor, turns with the
+ * baseline and never comes out smaller than the text. A leader from the label
+ * starts on it.
+ */
+export type ExplicitLabelFrameInput = Readonly<{
+  /** The row it wraps: 0 = `formattedLabel`, k = `labelBlock.rows[k − 1]`. */
+  row: number;
+}>;
+
+/**
+ * The label of the 3D presentation, for an input whose flat label lies in a
+ * text plane the source declares (MBD `angle_dim` `text_dir` / `text_up`):
+ * one run of `text` along `along`, standing in for `formattedLabel`,
+ * `labelAlong` and `labelBlock`, so the 3D presentation draws the label as if
+ * no plane were declared.
+ */
+export type ExplicitLabel3dInput = Readonly<{
+  text: string;
+  /** Design-space baseline, projected like `labelAlong`. */
+  along: Vec3;
+}>;
+
+/**
  * A solver-authored running dimension presented as true 3D annotation
  * (reference drawing style, 2026-09-12; design target in
  * `docs/design/mbd-annotation-mockup-2026-09-12/README.md`). The kernel
@@ -587,34 +639,21 @@ export type ExplicitTagInput = Readonly<{
 }>;
 
 /**
- * Design-space inputs for the polar placement layer (T3.6a), carried on
- * `ExplicitLayoutInput.polar`. Everything here is plain geometry the mapper
- * can read off the contract; the camera-derived parts of a
- * `PolarReference` (`showDir`, `horiDir`, `up`) are built fresh every frame
- * by `cameraReference()` inside the viewport, not stored here — a cached
- * `showDir` would go stale as the camera moves.
+ * @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。管道标签的
+ * 极坐标摆位由求解器完成（plant-mbd ADR-0016），前端不再二次放置。
  */
 export type ExplicitPolarInput = Readonly<{
   /** Pipe axis origin (PML `polarsystem.pos`), Design Space metres. */
   origin: Vec3;
-  /** Pipe axis direction (PML `polarsystem.dir`); normalised by the viewport. */
+  /** Pipe axis direction (PML `polarsystem.dir`). */
   axis: Vec3;
   /** Placement range along the axis (PML `limitMinDis`..`limitMaxDis`), metres. */
   disRange: readonly [min: number, max: number];
   /** Basic radius (PML `basicRadius`), usually the pipe's outer radius, metres. */
   basicRadiusM: number;
-  /** Text height (Design Space metres) feeding `needs` (`needDis`/`needRadius`). */
+  /** Text height, Design Space metres. */
   textHeightM: number;
-  /**
-   * Same-pipe placement group (T3.6b), e.g. `isoline:<idx>`: every record
-   * sharing a `groupKey` is assumed to share one `PolarReference` axis
-   * (same `origin`/`axis` up to floating-point noise), so records later in
-   * input order can avoid the polar real estate records earlier in the
-   * group already claimed — not just claim screen space, but steer
-   * `polarPlace` itself away from the (dis, angle, radius) box the first
-   * record landed in. Omitted = v1 behaviour: no cross-record obstacle,
-   * only the pipe body. See `kernel/viewport/polarObstacles.ts`.
-   */
+  /** Same-pipe placement group, e.g. `isoline:<idx>`. */
   groupKey?: string;
 }>;
 
@@ -645,6 +684,18 @@ export type ExplicitLayoutInput = Readonly<{
   /** Additional glyph runs, e.g. extra lines of a multi-line label. */
   texts?: readonly ExplicitTextInput[];
   /**
+   * Lay the label out as a block of rows centred on `labelAnchor` (see
+   * `ExplicitLabelBlockInput`); its padded bounds are the label's bounds.
+   * Omitted = `formattedLabel` alone at the anchor, `texts` on their own.
+   */
+  labelBlock?: ExplicitLabelBlockInput;
+  /**
+   * Frame one row of the label (see `ExplicitLabelFrameInput`). Flat
+   * presentation only: a billboard tag (`tag`) ignores it, its body being the
+   * frame.
+   */
+  labelFrame?: ExplicitLabelFrameInput;
+  /**
    * Design-space text height (metres) declared by the source, e.g. the MBD
    * group `cheight_mm` after `source_to_design`. When present, the label cap
    * height and the arrow-stroke legibility floor follow its projection at the
@@ -664,9 +715,9 @@ export type ExplicitLayoutInput = Readonly<{
    * offered as a mode because GB / ASME both accept the interrupted one.
    *
    * Only single-line labels qualify: a label that carries extra rows
-   * (`texts`) falls back to `interrupted`, because lifting a stack would push
-   * its lower rows back onto the line. Omitted means `interrupted`, so every
-   * existing caller keeps its exact pixels.
+   * (`texts`, `labelBlock`) falls back to `interrupted`, because lifting a
+   * stack would push its lower rows back onto the line. Omitted means
+   * `interrupted`, so every existing caller keeps its exact pixels.
    */
   labelPresentation?: 'interrupted' | 'above';
   /**
@@ -693,27 +744,14 @@ export type ExplicitLayoutInput = Readonly<{
    */
   tag?: ExplicitTagInput;
   /**
-   * Opt into the polar placement layer (T3.6a): the viewport builds a
-   * `PolarReference` from this plus the current camera, runs `polarPlace` +
-   * `screenGuard`, and — when a candidate clears the screen — substitutes
-   * `labelAnchor`/`labelAlong` with it before drawing. Absent = unchanged
-   * behaviour (the solver's own anchor stands as-is); a degenerate
-   * reference or an all-rejected screen guard also falls back to the
-   * original anchor, never hides the record.
+   * Draw the label as the 3D presentation's run (see `ExplicitLabel3dInput`);
+   * `formattedLabel` / `labelAlong` / `labelBlock` are then the flat label in
+   * the source's text plane, kept for the legacy presentation.
    */
+  label3d?: ExplicitLabel3dInput;
+  /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
   polar?: ExplicitPolarInput;
-  /**
-   * Marks a record that keeps its flat, solver-placed anchor (no `polar`)
-   * but still shares a pipe with records that do opt in (T3.6b plan point
-   * 1, second bullet): e.g. a `linear_dim`'s own `labelAnchor`, placed by
-   * the solver, that a same-isoline `label` reads its axis from in
-   * `polarInputForLabel`. `groupKey` must match the `polar.groupKey` of the
-   * records it should be an obstacle for — same string, same
-   * `PolarReference` axis (`kernel/viewport/polarObstacles.ts`'s
-   * `siblingAnchorObstacle`). Absent = this record never becomes a polar
-   * obstacle (v1 behaviour, and the default for every record that is not
-   * part of a polar group).
-   */
+  /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
   polarObstacle?: Readonly<{ groupKey: string }>;
   /**
    * Take part in the pairwise declutter (`declutterOverlaps`) that the 3D

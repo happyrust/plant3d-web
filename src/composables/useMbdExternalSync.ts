@@ -23,7 +23,8 @@ export type MbdExternalSyncDeps = Readonly<{
   /** 实时通道：按 refno 拉取契约数据（HTTP 层错误以 ok:false 或 reject 表达）。 */
   /**
    * 按 refno 拉取契约数据。`partial` 会传到契约解析层：只放宽「不认识的图元 kind」
-   * 一件事（其余非法一律整包失败），由 `?mbd_partial=1` 驱动。
+   * 一件事（其余非法一律整包失败），由 `?mbd_partial=1` 驱动。名字沿用管道时代：
+   * ViewerPanel 注入的是按对象取数的 `fetchMbdV2ObjectData`（#103 M7），任意可标注对象都走它。
    */
   fetchPipeData(
     refno: string,
@@ -125,7 +126,8 @@ function withoutLod(record: ExternalDimensionRecord): ExternalDimensionRecord {
 /**
  * 调试开关 `?mbd_3d=0`：关掉三维标注呈现（长度尺寸：尺寸线沿 dim_dir 外移、数字在线上方、
  * 实心箭头；标签：卡片 / 方框 / 药丸式 billboard 带引线；2026-09-12 参考图风格）。mapper 打的
- * `dimension3d` 与 `tag` 在这里被剥掉，内核回到求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
+ * `dimension3d`、`tag` 与 `label3d`（带文字平面的角度字在三维里仍沿弧写，CT-15）在这里被剥掉，
+ * 内核回到求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
  */
 function isMbd3dDisabled(raw: string | null): boolean {
   return raw?.trim() === '0';
@@ -157,8 +159,10 @@ function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensi
   const layout = record.layout;
   // Only explicit layouts carry the presentation hints.
   if (!('lines' in layout)) return record;
-  if (layout.dimension3d === undefined && layout.tag === undefined) return record;
-  const { dimension3d: _dimension3d, tag: _tag, ...rest } = layout;
+  if (layout.dimension3d === undefined && layout.tag === undefined && layout.label3d === undefined) {
+    return record;
+  }
+  const { dimension3d: _dimension3d, tag: _tag, label3d: _label3d, ...rest } = layout;
   return { ...record, layout: rest };
 }
 
@@ -308,7 +312,8 @@ export function createMbdExternalSync(
           const stripped = polarApplied ? withPresentation3d : withPresentation3d.map(withoutPolar);
           // 真实后端的图元 id 已经带 refno 前缀（`24381_145018:isoline:0:...`），
           // 跨 BRAN 天然不冲突；只有那些不带前缀的 id 才需要补，否则会得到
-          // `24381_145018:24381_145018:isoline:...` 这种重复噪声。
+          // `24381_145018:24381_145018:isoline:...` 这种重复噪声。尺寸链 `chainId`
+          // 同理：各包的链各自编号，不补前缀两个包的 `chain:0` 会被当成同一条链。
           const qualify = (id: string): string =>
             id.startsWith(`${refno}:`) ? id : `${refno}:${id}`;
           const records = multiRefnos
@@ -316,6 +321,7 @@ export function createMbdExternalSync(
               ...record,
               id: qualify(record.id),
               sourceLabel: `MBD: ${qualify(record.id)}`,
+              ...(record.chainId !== undefined ? { chainId: qualify(record.chainId) } : {}),
               layout: qualifyGroups({ ...record.layout, id: qualify(record.id) }, qualify),
             }))
             : stripped;
@@ -328,6 +334,8 @@ export function createMbdExternalSync(
             sourceVersion: payload.meta.source_version ?? null,
             isolines: payload.meta.isolines ?? [],
             coverage: payload.meta.coverage ?? null,
+            annotationType: payload.annotation_type ?? null,
+            subject: payload.subject ?? null,
             loadError: null,
             notes: [
               ...payload.meta.notes,
@@ -341,11 +349,8 @@ export function createMbdExternalSync(
               ...(presentation3dDisabled
                 ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
                 : []),
-              ...(polarApplied
-                ? ['mbd_polar=1：已接入极坐标放置层，标签锚点改由屏幕净空校验挑选（试验开关，仅平面呈现）']
-                : []),
-              ...(polarEnabled && !polarApplied
-                ? ['mbd_polar=1：三维呈现下不生效，标签保留卡片；需同时加 mbd_3d=0 才走极坐标放置']
+              ...(polarEnabled
+                ? ['mbd_polar=1 已退役：管道极坐标摆位由求解器完成，前端不再二次放置']
                 : []),
               ...(labelPresentation === 'above'
                 ? ['mbd_label=above：长度尺寸的数字浮在线上方、尺寸线不切段（ISO 读法，试验开关）']

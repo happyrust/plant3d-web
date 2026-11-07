@@ -22,6 +22,7 @@
     "perf:dimensions:kernel": "npx tsx test/perf/dimensions/benchKernel.ts",
     "perf:dimensions:browser": "node scripts/run-dimension-browser-perf.mjs",
     "test": "vitest run",
+    "test:mbd": "vitest run src/dimension src/composables/useMbdExternalSync.test.ts src/api/mbdV2Api.test.ts --maxWorkers=2",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npx @playwright/test test",

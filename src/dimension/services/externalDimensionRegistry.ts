@@ -83,6 +83,15 @@ export class ExternalDimensionRegistry {
     this.publish();
   }
 
+  /** 整组临时隐藏 / 显示（面板按 MBD 类别成组，#103 M1-3）：同一套 hiddenIds，改完只发布一次快照。 */
+  setHiddenMany(dimensionIds: readonly string[], hidden: boolean): void {
+    for (const dimensionId of dimensionIds) {
+      if (hidden) this.hiddenIds.add(dimensionId);
+      else this.hiddenIds.delete(dimensionId);
+    }
+    this.publish();
+  }
+
   isHidden(dimensionId: string): boolean {
     return this.hiddenIds.has(dimensionId);
   }
