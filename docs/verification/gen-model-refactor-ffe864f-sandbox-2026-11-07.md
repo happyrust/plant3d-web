@@ -219,6 +219,113 @@ off 0   only_baseline 0   only_generated 0   kind_differ 0   unkeyable 0/0
 增加的原因指向 #74 修复（按根回读 + `ready_source`，失败的根不再让整库归零）与 #27 的目录库解析。
 RVM 对这 10 站全部判 pass，说明增加的行与 E3D 侧一致。
 
+### 5.2b P1 — `tree/roots` 只返回 SITE，13 个 APPLDW 根从未被核对
+
+这是本轮追加核实「是否还有模型问题」时发现的，比 §5.1 影响面更大。
+
+**事实**：`GET /api/v1/tree/roots` 只返回 39 个 `SITE`，`noun` 分布 `SITE: 39`，没有任何 `APPLDW`。
+库里 `pe` 表 `noun='APPLDW'` 有 13 个，分布：
+
+| dbnum | APPLDW 根 |
+|---|---|
+| 7324 | `23708_41188` |
+| 7326 | `23710_22444` |
+| 7327 | `23711_44092` |
+| 7329 | `23713_17282` |
+| 7330 | `23714_1218` |
+| 7331 | `23715_997` |
+| 7332 | `23716_997` |
+| 7333 | `23717_188132` |
+| 7350 | `23734_17126` |
+| 7352 | `23736_82` |
+| 7353 | `23737_2` |
+| 7354 | `23738_1200` |
+| 7741 | `15933_59` |
+
+**两类根的构件集合互不重叠**。以 7326 为例：
+
+```
+inst_relate WHERE anc CONTAINS <23710_1>      → 14328 行
+inst_relate WHERE anc CONTAINS <23710_22444>  → 14328 行
+该库 inst_relate 合计                          → 28656 行
+```
+
+两边 `model/records` 的 `refno` 交集为 0（SITE 侧是 `23710_100`、`23710_10002`…，
+APPLDW 侧是 `23710_22450`、`23710_22451`…，各自 `owner` 是自己的根）。
+
+**两处硬编码都只收 SITE**：
+
+- 后端 `src/data_interface/direct_tree.rs::roots()`：
+  ```rust
+  if node.noun.eq_ignore_ascii_case("SITE") { out.push(node); }
+  ```
+- 前端 `src/composables/useRvmCheckStore.ts::collectSites()`：
+  ```ts
+  if (String(node.noun).toUpperCase() !== 'SITE') return;
+  ```
+
+**与设计文档矛盾**：`docs/guides/rvm-check-batch.md` 写的是
+「枚举根：该库 WORLD 的直接成员里 noun 为 `SITE` / `APPLDW` 的元素（`--site-only` 只取 SITE）。
+**两类根件集合互不重叠，合起来才是整库**」。
+
+新子命令 `rvm-check` 自己遵守了这个口径（`DirectTreeService::children(world)` 过滤 SITE/APPLDW），
+但页面 `runAllSites()` 走 `tree/roots`，因此只核对了约一半构件。
+
+**后果**：此前记的「39 站 RVM 全通过」只覆盖 SITE 那半边。39 站合计 220746 对，
+补上 13 个 APPLDW 根后整库构件数会接近翻倍。
+
+**已补验**：用 `rvm-check --dbnum 7324,7327,7329,7330,7331,7332,7333,7350,7352,7353,7354,7741`
+把 13 个 APPLDW 根全部补跑（默认不带 `--site-only`，同库的 SITE 一起跑了，共 23 个根）：
+
+```
+合计 23 个根：empty 3, pass 20
+both 209558  exact 209552  chord 0  reference_artifact 0  film 6
+off 0  only_baseline 0  only_generated 0  unkeyable 0/0  kind_differ 0
+生成 442.4s  导出 374.5s  比对 13.8s  → CLEAN
+```
+
+逐库：
+
+| dbnum | roots | both | exact | 判定 | 生成 | 峰值 |
+|---|---|---|---|---|---|---|
+| 7324 | 2 | 4132 | 4130 | pass 2 | 14.0 s | 310 MB |
+| 7327 | 2 | 34152 | 34152 | pass 2 | 60.5 s | 1721 MB |
+| 7329 | 2 | 3822 | 3820 | pass 2 | 20.0 s | 294 MB |
+| 7330 | 2 | 962 | 962 | pass 2 | 5.1 s | 141 MB |
+| 7331 | 2 | 844 | 844 | pass 2 | 4.5 s | 130 MB |
+| 7332 | 2 | 844 | 844 | pass 2 | 4.0 s | 136 MB |
+| **7333** | **2** | **159876** | **159876** | **pass 2** | **311.7 s** | **9105 MB** |
+| 7350 | 2 | 4118 | 4116 | pass 2 | 12.0 s | 312 MB |
+| 7352 | 2 | 48 | 48 | pass 2 | 3.0 s | 115 MB |
+| 7353 | 2 | 0 | 0 | empty 2 | 2.6 s | 116 MB |
+| 7354 | 2 | 760 | 760 | pass 2 | 4.0 s | 139 MB |
+| 7741 | 1 | 0 | 0 | empty 1 | 1.0 s | 107 MB |
+
+单跑的 `23710/22444`（7326）另算：14328 对全 exact，`batch_id accept-sandbox/rvm-batch-appldw`。
+
+**结论**：APPLDW 这半边的几何也是对的（`off` / `only_*` / `kind_differ` 全 0，
+只有 6 条 film 与 2 条 reference_artifact 这类已知可接受残差），
+问题纯粹是「页面从未把它们纳入核对范围」，不是几何缺陷。
+
+**SITE + APPLDW 合并口径**（`rvm_check_run` 全表 67 条 run 聚合）：
+
+```
+both 458960   exact 458939   chord 5   reference_artifact 6   film 10
+off 0   only_baseline 0   only_generated 0   kind_differ 0   unkeyable 0/0
+```
+
+对比只算 SITE 的 42 条 run（both 220746 / exact 220731），
+补上 APPLDW 后构件对数翻了一倍多（220746 → 458960），判定不变：
+`off`、`only_*`、`kind_differ`、`unkeyable` 仍全部为 0。
+
+**顺带发现的内存热点**：`ams7333` 两个根（`23717/2` 159876 对里的绝大部分）生成峰值 **9105 MB**。
+`docs/guides/rvm-check-batch.md` 里记的「ams7333 一个根要 9 GB」在这里复现，
+是下一步压内存的目标（上一轮把比对段从 7.2 GB 压到 3.77 GB，生成段还没动）。
+
+**方向**：`tree/roots` 要么按 `noun IN (SITE, APPLDW)` 返回，要么加个 `nouns=` 过滤参数；
+前端 `collectSites()` 同步放开。改之前要先确认其他消费 `tree/roots` 的地方（模型树面板、
+`snap_all.py`、dashboard）不会因为多出 13 个根而重复计数。
+
 ### 5.3 P3 — 7997 的 `equip_derived` 到期留下 845 个未算
 
 `[设备派生量] 根=6772 口径=整库 重算 630 台 / … / 失败 0 / 到期未算 845 301786ms`。
@@ -239,7 +346,32 @@ RVM 对这 10 站全部判 pass，说明增加的行与 E3D 侧一致。
 SurrealDB 侧日志也只打印了 `Write buffer size` / `Maximum write buffers`（RocksDB 写缓冲，与 ws 无关）。
 说明这个变量名对当前 `bin/surreal.exe`（2.1.x fork）不起作用，此前的「经验」是无效的。
 
-### 5.5 待推送状态
+### 5.5 P3 — `geom_error` 里 805 条「设备/阀门挂不上楼板」
+
+`/health.geom_errors` 报 `total 805`、`occurrences 4923`，全部是 `kind=equip_floor_miss`、
+`last_error=no_floor_below`：
+
+| noun | 条数 |
+|---|---|
+| EQUI | 726 |
+| VALV | 79 |
+
+按目标件所属库分布：`24381/…`（7997）668 条、`24384/…`（8000）79 条、
+`2013287639/…`（251095）56 条、`4000000001/…` 2 条。
+
+**判定**：这不是几何错误，是「射线向下打不中楼板」的记录账。
+`equip_model.rs::note_floor_miss` 的注释写明「射线打不中不是错误，但必须能查出来为什么」，
+成功挂边时由 `clear_floor_miss` 销账。805 条的 `last_seen_at` 集中在
+`2026-11-07T10:50:03Z`（本轮 `equip_derived` 那几轮），说明是当前仍在发生、不是历史残留。
+
+`equip_derived` 只影响房间归属与楼板派生边，**不影响几何**，所以 39 站 RVM 仍全 pass。
+但 7997 有 668 台设备/阀门挂不上楼板，会体现在房间查询里。
+
+**待确认**：`24381`（7997）的 668 条是否与 §5.3 的 `deferred=845` 有重叠——
+到期未算的 845 台里如果有这 668 台，那它们下一轮还是挂不上，需要先看是不是真的没有楼板。
+另 `4000000001/…` 两条的目标件在 `pe` 表里查不到（`SELECT` 返回空），属于脏账，值得单独查。
+
+### 5.6 待推送状态
 
 | 项 | 状态 |
 |---|---|
