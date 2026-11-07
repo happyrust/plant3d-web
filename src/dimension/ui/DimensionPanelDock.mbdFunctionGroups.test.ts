@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 
+import { mbdV2ToExternalRecords } from '../adapters/mbdV2ExternalAnnotations';
 import { emptyDimensionDocument } from '../domain/testFixtures';
 import { ExternalDimensionRegistry } from '../services/externalDimensionRegistry';
 
 import DimensionPanelDock from './DimensionPanelDock.vue';
 
+import type { MbdV2AnnotationType, MbdV2PipeData } from '../adapters/mbdV2Contract';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
 const mocks = vi.hoisted(() => ({
@@ -162,5 +164,62 @@ describe('DimensionPanelDock MBD category groups', () => {
     expect([...host.querySelectorAll('[data-group]')].map(node => node.textContent?.trim()))
       .toEqual(['外部尺寸', '外部标注图元']);
     expect(host.querySelector('[data-group-visibility]')).toBeNull();
+  });
+
+  /**
+   * ADR 0071（CT-9 前端）：管道图元全带上 function 之后，管道包照旧按直段分组——适配层不给管道记录写
+   * 类别；同样的图元放进非管道包才按类别成组。两种包同屏时各走各的。
+   */
+  it('keeps a pipe package in its isoline groups whatever function its primitives declare', async () => {
+    const payload = (prefix: string, annotationType?: MbdV2AnnotationType): MbdV2PipeData => ({
+      version: 'v2',
+      ...(annotationType ? { annotation_type: annotationType } : {}),
+      input_refno: prefix,
+      branch_refno: prefix,
+      primitives: [
+        {
+          kind: 'linear_dim', id: `${prefix}:isoline:0:main:a`, isoline_idx: 0, function: '尺寸',
+          start: [0, 0, 0], end: [1, 0, 0], text: '1000', extension_lines: [], arrow_lines: [], label_anchor: [0.5, 0, 0],
+        },
+        { kind: 'weld_mark', id: `${prefix}:isoline:0:weld:mark:w`, isoline_idx: 0, function: '焊点', position: [0.5, 0, 0] },
+        { kind: 'aid_line', id: `${prefix}:isoline:1:flow:0`, isoline_idx: 1, function: '流向', start: [1, 0, 0], end: [1, 1, 0] },
+        {
+          kind: 'linear_dim', id: `${prefix}:isoline:1:main:b`, isoline_idx: 1, function: '尺寸',
+          start: [1, 0, 0], end: [1, 1, 0], text: '1000', extension_lines: [], arrow_lines: [], label_anchor: [1, 0.5, 0],
+        },
+      ],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    });
+    const recordsOf = (data: MbdV2PipeData) => mbdV2ToExternalRecords(data).records;
+    const show = async (records: readonly ExternalDimensionRecord[]) => {
+      apps.splice(0).forEach(app => app.unmount());
+      document.body.innerHTML = '';
+      mocks.dimensionSystem.value = createSystem(records);
+      const host = mountPanel();
+      await nextTick();
+      return {
+        headers: [...host.querySelectorAll('[data-group]')].map(node => node.textContent?.trim()),
+        rowIds: [...host.querySelectorAll('[data-dimension-id]')].map(node => node.getAttribute('data-dimension-id')),
+        toggles: [...host.querySelectorAll('[data-group-visibility]')]
+          .map(node => node.getAttribute('data-group-visibility')),
+      };
+    };
+
+    for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+      const pipe = await show(recordsOf(payload('P', annotationType)));
+      expect(pipe.headers, `${annotationType}`).toEqual(['直段 0', '直段 1']);
+      expect(pipe.rowIds).toEqual(['P:isoline:0:main:a', 'P:isoline:0:weld:mark:w', 'P:isoline:1:main:b', 'P:isoline:1:flow:0']);
+      expect(pipe.toggles).toEqual([]);
+    }
+
+    const support = await show(recordsOf(payload('S', 'em4_supp')));
+    expect(support.headers).toEqual(['尺寸', '焊点', '流向']);
+    expect(support.toggles).toEqual(['尺寸', '焊点', '流向']);
+
+    const both = await show([...recordsOf(payload('P', 'em4_pipe')), ...recordsOf(payload('S', 'em4_supp'))]);
+    expect(both.headers).toEqual(['直段 0', '直段 1', '尺寸', '焊点', '流向']);
+    expect(both.rowIds.slice(0, 4)).toEqual(['P:isoline:0:main:a', 'P:isoline:0:weld:mark:w', 'P:isoline:1:main:b', 'P:isoline:1:flow:0']);
+    expect(both.toggles).toEqual(['尺寸', '焊点', '流向']);
   });
 });

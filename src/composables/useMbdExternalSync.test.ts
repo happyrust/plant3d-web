@@ -373,6 +373,46 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
+  it('mbd_3d=0 strips label3d: an angle with a text plane goes flat into its plane (CT-15)', async () => {
+    const payload = contractPayload({
+      primitives: [{
+        kind: 'angle_dim',
+        id: 'angle-1',
+        text: '30°',
+        center: [0, 0, 0],
+        x_axis: [1, 0, 0],
+        normal: [0, 0, 1],
+        radius: 1,
+        start_angle_deg: 0,
+        sweep_angle_deg: 90,
+        leg_lines: [],
+        label_anchor: [0.7, 0.7, 0],
+        text_dir: [1, 0, 0],
+        text_up: [0, 1, 0],
+      }],
+    });
+    const fetchPipeData = vi.fn(async () => ({ ok: true as const, data: payload, diagnostics: [] }));
+    const committed = async (search: string) => {
+      const harness = createHarness({ search, fetchPipeData });
+      await harness.sync.sync(harness.target);
+      const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+        .mock.calls[0]!;
+      return records;
+    };
+
+    // Default: the 3D run along the arc rides along with the flat label.
+    const kept = await committed('?mbd_refno=A');
+    expect(kept[0].layout.label3d.text).toBe('30°');
+    expect(kept[0].layout.label3d.along[0]).toBeCloseTo(-Math.SQRT1_2, 12);
+    expect(kept[0].layout.label3d.along[1]).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(kept[0].layout.labelAlong).toEqual([1, 0, 0]);
+
+    const flat = await committed('?mbd_refno=A&mbd_3d=0');
+    expect(flat[0].layout).not.toHaveProperty('label3d');
+    const { label3d: _label3d, ...flatPart } = kept[0].layout;
+    expect(flat[0].layout).toEqual(flatPart);
+  });
+
   it('mbd_polar=1 is retired: records match the switch-off ones in both presentations, only a note is added', async () => {
     // Same isoline on a linear_dim and a label, plus the isoline's od_mm:
     // every fact the retired front-end polar layer used to read.

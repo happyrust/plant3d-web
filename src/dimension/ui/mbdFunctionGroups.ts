@@ -1,8 +1,9 @@
 /**
  * #103 M1-3：面板按 PML FUNCTION 类别（记录的 `mbdFunction`）给 MBD 记录成组，组头上可整组临时
  * 显隐。显隐复用外部记录逐条的临时隐藏（`ExternalDimensionRegistry` 的同一套 hiddenIds，ADR 0028：
- * 只在当前视口会话里隐藏，来源不变），所以整组隐藏后单条仍能各自「临时显示」。没声明类别的记录
- * （今天的管道包全部如此）交回面板原有的分组（按直段 / 按类别两分），列表一行不变。
+ * 只在当前视口会话里隐藏，来源不变），所以整组隐藏后单条仍能各自「临时显示」。没有类别的记录交回
+ * 面板原有的分组（按直段 / 按类别两分），列表一行不变；管道包的记录一律如此——图元带了 function，
+ * 适配层也不给管道记录写类别（ADR 0071）。
  */
 import { externalDimensionCategory } from '../adapters/normalizeExternalDimensions';
 

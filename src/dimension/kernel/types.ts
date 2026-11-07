@@ -543,6 +543,19 @@ export type ExplicitLabelFrameInput = Readonly<{
 }>;
 
 /**
+ * The label of the 3D presentation, for an input whose flat label lies in a
+ * text plane the source declares (MBD `angle_dim` `text_dir` / `text_up`):
+ * one run of `text` along `along`, standing in for `formattedLabel`,
+ * `labelAlong` and `labelBlock`, so the 3D presentation draws the label as if
+ * no plane were declared.
+ */
+export type ExplicitLabel3dInput = Readonly<{
+  text: string;
+  /** Design-space baseline, projected like `labelAlong`. */
+  along: Vec3;
+}>;
+
+/**
  * A solver-authored running dimension presented as true 3D annotation
  * (reference drawing style, 2026-09-12; design target in
  * `docs/design/mbd-annotation-mockup-2026-09-12/README.md`). The kernel
@@ -730,6 +743,12 @@ export type ExplicitLayoutInput = Readonly<{
    * flat text and leader, kept for the legacy presentation.
    */
   tag?: ExplicitTagInput;
+  /**
+   * Draw the label as the 3D presentation's run (see `ExplicitLabel3dInput`);
+   * `formattedLabel` / `labelAlong` / `labelBlock` are then the flat label in
+   * the source's text plane, kept for the legacy presentation.
+   */
+  label3d?: ExplicitLabel3dInput;
   /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
   polar?: ExplicitPolarInput;
   /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */

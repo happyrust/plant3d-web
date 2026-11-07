@@ -131,7 +131,8 @@ export type MbdV2PrimitiveCommon = Readonly<{
   /**
    * PML FUNCTION 类别文本（一级尺寸 / 定位尺寸 / 材料 / 坐标信息 ……）。每种标注类型一张封闭
    * 词表，维护在契约字段字典里；前端不按词表校验，只要求非空字符串，原样带进记录
-   * （`mbdFunction`），面板据它按类别成组显隐。
+   * （`mbdFunction`），面板据它按类别成组显隐。管道包（{@link isPipePackage}）不带进记录：
+   * 管道面板照旧按直段分组（ADR 0071）。
    */
   function?: string;
   /**
@@ -190,7 +191,8 @@ export type MbdV2LinearDim = Readonly<{
   reference?: boolean;
   /**
    * #103 M1-3：这条图元自己的字高（源空间毫米），含义与规则同 `MbdV2AidText.text_height_mm`：
-   * D7 三层字高的最上层，缺省 = 跟随所在直段 / 全局 `cheight_mm`；给了就得是有限正数。
+   * D7 三层字高的最上层，缺省 = 跟随所在直段 / 全局 `cheight_mm`；给了就得是有限正数。管道包
+   * （{@link isPipePackage}）的呈现只认 `aid_text` 上的这一层，别的 kind 照收不用（ADR 0071）。
    */
   text_height_mm?: number;
   /**
@@ -239,6 +241,13 @@ export type MbdV2AngleDim = Readonly<{
   sub_kind?: string;
   /** 自己的字高（#103 M1-3），见 `MbdV2LinearDim.text_height_mm`。 */
   text_height_mm?: number;
+  /**
+   * 角度字的基线方向（#103 CT-15），含义与校验同 `MbdV2AidText.text_dir`；缺省 = 沿弧（弧中点切向），
+   * 即今天的画法。
+   */
+  text_dir?: MbdV2Vec3;
+  /** 文字平面的「向上」方向（#103 CT-15），见 `MbdV2LinearDim.text_up`；与 `text_dir` 一起定出角度字的平面。 */
+  text_up?: MbdV2Vec3;
 }> & MbdV2ArcFrame & MbdV2PrimitiveCommon;
 
 export type MbdV2Label = Readonly<{
@@ -540,6 +549,17 @@ function isOptionalAnnotationType(value: unknown): value is MbdV2AnnotationType 
   return value === undefined || ANNOTATION_TYPES.includes(value as MbdV2AnnotationType);
 }
 
+/**
+ * 管道包：`em4_pipe` / `em9_pipe`，或没声明 `annotation_type` 的老包（今天所有管道生产者）。管道包的
+ * 信封字段（`function`、图元自己的 `text_height_mm`）不改呈现，见 `mbdFunctionLodTier` 与
+ * `mbdV2ExternalAnnotations.ts`（ADR 0071）。
+ */
+export function isPipePackage(
+  annotationType: MbdV2AnnotationType | undefined,
+): annotationType is 'em4_pipe' | 'em9_pipe' | undefined {
+  return annotationType === undefined || annotationType === 'em4_pipe' || annotationType === 'em9_pipe';
+}
+
 /** 可选的归属对象（#103 M1-3）：缺省可以，给了就得是 `refno` / `noun` 两个非空字符串。 */
 function isOptionalSubject(value: unknown): value is MbdV2Subject | undefined {
   return value === undefined
@@ -714,7 +734,9 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isLineSegmentArray(value.leg_lines)
         && isVec3(value.label_anchor)
         && isOptionalString(value.sub_kind)
-        && isOptionalPositiveNumber(value.text_height_mm);
+        && isOptionalPositiveNumber(value.text_height_mm)
+        && isOptionalAxisVec3(value.text_dir)
+        && isOptionalAxisVec3(value.text_up);
     case 'label':
       return typeof value.text === 'string'
         && isVec3(value.position)
@@ -769,7 +791,7 @@ const COMMON_PRIMITIVE_FIELDS: readonly string[] = [
 const PRIMITIVE_FIELDS: Readonly<Record<MbdPrimitiveKind, readonly string[]>> = {
   linear_dim: ['start', 'end', 'text', 'sub_kind',
     'extension_lines', 'arrow_lines', 'label_anchor', 'reference', 'text_height_mm', 'text_up'],
-  angle_dim: ['text', 'leg_lines', 'label_anchor', 'sub_kind', 'text_height_mm',
+  angle_dim: ['text', 'leg_lines', 'label_anchor', 'sub_kind', 'text_height_mm', 'text_dir', 'text_up',
     'center', 'x_axis', 'normal', 'radius', 'start_angle_deg', 'sweep_angle_deg'],
   label: ['text', 'position', 'text_dir', 'text_height_mm', 'text_up'],
   leader_line: ['start', 'end'],

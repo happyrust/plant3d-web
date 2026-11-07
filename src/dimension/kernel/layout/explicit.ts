@@ -38,6 +38,7 @@ import type { ViewportProjector } from '../projector';
 import type {
   ExplicitArcInput,
   ExplicitArrowInput,
+  ExplicitLabel3dInput,
   ExplicitLabelBlockInput,
   ExplicitLayoutInput,
   ExplicitLodHiddenReason,
@@ -785,6 +786,12 @@ function explicitArc(
   );
 }
 
+/** The input with its 3D label (`ExplicitLayoutInput.label3d`) in place of the flat one. */
+function withLabel3d(input: ExplicitLayoutInput, label3d: ExplicitLabel3dInput): ExplicitLayoutInput {
+  const { label3d: _label3d, labelBlock: _labelBlock, ...rest } = input;
+  return { ...rest, formattedLabel: label3d.text, labelAlong: label3d.along };
+}
+
 export function layoutExplicit(
   input: ExplicitLayoutInput,
   context: LayoutContext,
@@ -794,6 +801,7 @@ export function layoutExplicit(
   // Billboard tags never arrive here: `layoutViewport` plans and places them
   // before dispatching the rest to `layoutDimension`.
   if (input.dimension3d) return layoutDimension3d(input, input.dimension3d, context);
+  if (input.label3d) return layoutExplicit(withLabel3d(input, input.label3d), context);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
   const projectedTextHeightPx = sourceTextHeightPx(input, context);
   const textHeightPx = resolveTextHeightPx(projectedTextHeightPx, context);

@@ -170,8 +170,8 @@ function byCategory(
 
 /**
  * #103 M1-3：声明了 PML FUNCTION 类别（`mbdFunction`）的 MBD 记录按类别成组、排在列表最后，组头可
- * 整组临时显隐（`mbdFunctionGroups.ts`）；下面原有的分组只排其余记录，没有类别的负载（今天全部）
- * 列表一行不变。
+ * 整组临时显隐（`mbdFunctionGroups.ts`）；下面原有的分组只排其余记录，没有类别的负载列表一行不变。
+ * 管道包的记录不带类别（适配层不写，ADR 0071），所以管道照旧按直段分组。
  */
 const mbdFunctionGrouping = computed(() => groupMbdRecordsByFunction(externalRecords.value));
 const mbdFunctionGroupToggle = mbdFunctionGroupVisibility(
@@ -689,7 +689,7 @@ const mbdLodHidden = computed(() => {
 /**
  * 三维标注呈现（2026-09-12 参考图风格：尺寸线沿 dim_dir 外移、数字在三维平面里置于线上方、
  * 实心箭头；标签按卡片 / 方框 / 药丸式 billboard 带引线出图）的面板开关。同样只改 URL
- * （`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉 mapper 打的 `dimension3d` / `tag`，
+ * （`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉 mapper 打的 `dimension3d` / `tag` / `label3d`，
  * 内核回到求解器原位几何的平面呈现。
  */
 function readMbd3dDisabled(): boolean {
