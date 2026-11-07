@@ -121,6 +121,7 @@ scripts/*
 !scripts/build-offline-patch-maker.ps1
 !scripts/OfflinePatch.cs
 !scripts/offline-release-manifest.mjs
+!scripts/offline-powershell-compat.mjs
 !scripts/pipe-row-browser-verify.mjs
 !scripts/OfflinePatchRules.cs
 !scripts/OfflinePatchMaker.cs

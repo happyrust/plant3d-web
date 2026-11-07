@@ -43,6 +43,7 @@ import https from 'node:https';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { findPowerShell4Incompatibilities } from './offline-powershell-compat.mjs';
 import { assertBackendNotDirty, rebuildBackendManifest, validateOfflinePackage } from './offline-release-manifest.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -163,8 +164,10 @@ function normalizeWindowsScripts(dir) {
       normalizeWindowsScripts(path);
     } else if (name.toLowerCase().endsWith('.ps1')) {
       const content = readFileSync(path, 'utf-8').replace(/^\uFEFF/, '');
-      if (/::new\s*\(/i.test(content)) {
-        throw new Error(`运行脚本包含 PowerShell 5 构造语法，不兼容 Server 2012 R2: ${path}`);
+      const problems = findPowerShell4Incompatibilities(content);
+      if (problems.length) {
+        const details = problems.map((p) => `  第 ${p.line} 行：${p.reason}\n    ${p.text}`).join('\n');
+        throw new Error(`运行脚本包含 PowerShell 4.0 不支持的写法，不兼容 Server 2012 R2: ${path}\n${details}`);
       }
       writeFileSync(path, '\uFEFF' + content.replace(/\r?\n/g, '\r\n'));
     } else if (/\.(bat|cmd)$/i.test(name)) {
