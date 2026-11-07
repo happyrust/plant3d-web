@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative hand-authored fixture for the #103 M1-3 contract envelope fields: package annotation_type / subject, per-primitive function / node_refnos / chain_id / chain_seq, text_height_mm and text_up. plant-mbd fixtures/contract/ mirrors this file; mbdV2Contract.test.ts parses it in default and strict mode (ADR 0055 D7: the front end accepts the optional fields first).",
+  "$comment": "Authoritative hand-authored fixture for the #103 M1-3 contract envelope fields: package annotation_type / subject, per-primitive function / node_refnos / chain_id / chain_seq, text_height_mm and text_up, plus an angle_dim text plane (text_dir / text_up, #103 CT-15). plant-mbd fixtures/contract/ mirrors this file; mbdV2Contract.test.ts parses it in default and strict mode (ADR 0055 D7: the front end accepts the optional fields first).",
   "version": "v2",
   "annotation_type": "em9_pipe_supp",
   "subject": { "refno": "24383_91813", "noun": "SUPPO" },
@@ -95,6 +95,27 @@
       ],
       "label_anchor": [10433.7, 5000, 2931.12],
       "text_height_mm": 15
+    },
+    {
+      "kind": "angle_dim",
+      "id": "24383_91813:angle:24383_91819",
+      "object_refno": "24383_91819",
+      "function": "二级尺寸",
+      "text": "30°",
+      "center": [10000, 5000, 3000],
+      "x_axis": [1, 0, 0],
+      "normal": [0, -1, 0],
+      "radius": 150,
+      "start_angle_deg": 0,
+      "sweep_angle_deg": 30,
+      "leg_lines": [
+        { "from": [10000, 5000, 3000], "to": [10200, 5000, 3000] },
+        { "from": [10000, 5000, 3000], "to": [10173.21, 5000, 3100] }
+      ],
+      "label_anchor": [10183.53, 5000, 3049.18],
+      "text_height_mm": 15,
+      "text_dir": [1, 0, 0],
+      "text_up": [0, 0, 1]
     },
     {
       "kind": "slope_mark",

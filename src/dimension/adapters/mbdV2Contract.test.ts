@@ -919,12 +919,12 @@ describe('parseMbdV2PipeData', () => {
 
     /**
      * `text_height_mm` 扩到 `linear_dim` / `label` / `angle_dim` / `slope_mark`（`aid_text` 早已有），规则同
-     * `aid_text`：有限正数；`text_up` 加在 `linear_dim` / `label` / `aid_text` / `slope_mark` 上：有限、非零
-     * 三维向量。别的 kind 上出现时默认当契约外字段忽略，strict 才拒。
+     * `aid_text`：有限正数；`text_up` 加在 `linear_dim` / `label` / `aid_text` / `slope_mark` 上（CT-15 起还有
+     * `angle_dim`）：有限、非零三维向量。别的 kind 上出现时默认当契约外字段忽略，strict 才拒。
      */
     it('accepts text_height_mm and text_up on their kinds and rejects degenerate values', () => {
       const heightKinds = ['linear_dim', 'label', 'angle_dim', 'slope_mark', 'aid_text'];
-      const upKinds = ['linear_dim', 'label', 'aid_text', 'slope_mark'];
+      const upKinds = ['linear_dim', 'label', 'aid_text', 'slope_mark', 'angle_dim'];
 
       const declared = everyKind
         .filter(primitive => heightKinds.includes(primitive.kind as string) || upKinds.includes(primitive.kind as string))
@@ -959,13 +959,49 @@ describe('parseMbdV2PipeData', () => {
       // 只属于各自那几种 kind：落在别的 kind 上，默认忽略，strict 拒。
       const strays: readonly Record<string, unknown>[] = [
         { ...byKind('weld_mark'), text_height_mm: 12.5 },
-        { ...byKind('angle_dim'), text_up: [0, 0, 1] },
+        { ...byKind('aid_arc'), text_up: [0, 0, 1] },
         { ...byKind('aid_line'), text_up: [0, 0, 1] },
       ];
       for (const stray of strays) {
         expect(withPrimitives([stray]).ok, `${stray.kind as string} default`).toBe(true);
         expect(withPrimitives([stray], { strict: true }), `${stray.kind as string} strict`)
           .toMatchObject({ ok: false });
+      }
+    });
+
+    /**
+     * #103 CT-15：`angle_dim` 加文字平面 `text_dir` / `text_up`，规则同 `label` / `aid_text`：有限、非零三维
+     * 向量，strict 下是 `angle_dim` 的白名单字段；旧数据（不带）照读，缺省不凭空出现。
+     */
+    it('accepts a text plane on angle_dim and rejects degenerate ones (CT-15)', () => {
+      const angle = byKind('angle_dim');
+      const planes = [
+        { ...angle, id: 'a-plane', text_dir: [1, 0, 0], text_up: [0, 1, 0] },
+        { ...angle, id: 'a-dir', text_dir: [0, 2, 0] },
+        { ...angle, id: 'a-up', text_up: [0, 0, 3] },
+      ];
+      for (const strict of [false, true]) {
+        const result = withPrimitives(planes, { strict });
+        expect(result.ok, `strict ${String(strict)}`).toBe(true);
+        if (result.ok) expect(result.data.primitives).toEqual(planes);
+      }
+      const bare = withPrimitives([angle], { strict: true });
+      expect(bare.ok).toBe(true);
+      if (bare.ok) {
+        expect(bare.data.primitives[0]).not.toHaveProperty('text_dir');
+        expect(bare.data.primitives[0]).not.toHaveProperty('text_up');
+      }
+
+      for (const field of ['text_dir', 'text_up']) {
+        for (const vector of [[0, 0, 0], [Number.NaN, 0, 1], [1, 0], 'x', null]) {
+          expectRejected({ ...angle, [field]: vector }, `angle_dim ${field} ${JSON.stringify(vector)}`);
+        }
+      }
+      // Still only on the kinds with text: the textless arc kinds keep rejecting it under strict.
+      for (const kind of ['aid_arc', 'aid_circle']) {
+        const stray = { ...byKind(kind), text_dir: [1, 0, 0] };
+        expect(withPrimitives([stray]).ok, `${kind} default`).toBe(true);
+        expect(withPrimitives([stray], { strict: true }), `${kind} strict`).toMatchObject({ ok: false });
       }
     });
   });

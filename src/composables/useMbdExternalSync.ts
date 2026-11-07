@@ -126,7 +126,8 @@ function withoutLod(record: ExternalDimensionRecord): ExternalDimensionRecord {
 /**
  * 调试开关 `?mbd_3d=0`：关掉三维标注呈现（长度尺寸：尺寸线沿 dim_dir 外移、数字在线上方、
  * 实心箭头；标签：卡片 / 方框 / 药丸式 billboard 带引线；2026-09-12 参考图风格）。mapper 打的
- * `dimension3d` 与 `tag` 在这里被剥掉，内核回到求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
+ * `dimension3d`、`tag` 与 `label3d`（带文字平面的角度字在三维里仍沿弧写，CT-15）在这里被剥掉，
+ * 内核回到求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
  */
 function isMbd3dDisabled(raw: string | null): boolean {
   return raw?.trim() === '0';
@@ -158,8 +159,10 @@ function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensi
   const layout = record.layout;
   // Only explicit layouts carry the presentation hints.
   if (!('lines' in layout)) return record;
-  if (layout.dimension3d === undefined && layout.tag === undefined) return record;
-  const { dimension3d: _dimension3d, tag: _tag, ...rest } = layout;
+  if (layout.dimension3d === undefined && layout.tag === undefined && layout.label3d === undefined) {
+    return record;
+  }
+  const { dimension3d: _dimension3d, tag: _tag, label3d: _label3d, ...rest } = layout;
   return { ...record, layout: rest };
 }
 

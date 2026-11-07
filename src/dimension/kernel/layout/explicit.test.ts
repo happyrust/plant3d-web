@@ -950,6 +950,20 @@ describe('label block', () => {
     expect(layoutExplicit(block([], {}, [0, 1, 0]), context())).toEqual(layoutExplicit(plain, context()));
   });
 
+  it('draws the 3D label in place of the flat block when the input carries one', () => {
+    // An angle whose value lies flat in its text plane (#103 CT-15): the 3D
+    // presentation keeps one run along the arc.
+    const run = { text: '30°\nA', along: [-Math.SQRT1_2, Math.SQRT1_2, 0] as Vec3 };
+    const flat = block(['A'], { formattedLabel: '30°', labelAlong: [1, 0, 0] }, [0, 1, 0]);
+    const { labelBlock: _labelBlock, ...single } = flat;
+
+    const in3d = layoutExplicit({ ...flat, label3d: run }, context());
+    expect(in3d).toEqual(layoutExplicit({ ...single, formattedLabel: run.text, labelAlong: run.along }, context()));
+    expect(glyphRuns(in3d).map(glyph => glyph.text)).toEqual(['30°\nA']);
+    expect(in3d.derived.formattedLabel).toBe('30°\nA');
+    expect(glyphRuns(layoutExplicit(flat, context())).map(glyph => glyph.text)).toEqual(['30°', 'A']);
+  });
+
   it('centres two and three rows on the anchor, stacked on screen without a text plane', () => {
     // 13 px theme height, 1.2 pitch = 15.6 px.
     expectCentres(rowCentres(layoutExplicit(block(['h']), context())), [[250, 142.2], [250, 157.8]]);

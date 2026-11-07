@@ -39,6 +39,7 @@ import type {
   DimensionLineStyle,
   ExplicitArcInput,
   ExplicitArrowInput,
+  ExplicitLabel3dInput,
   ExplicitLabelBlockInput,
   ExplicitLabelFrameInput,
   ExplicitLayoutInput,
@@ -110,14 +111,16 @@ function frameTransformer(data: MbdV2PipeData): FrameTransform | null {
 }
 
 /**
- * Text baseline of a `label` / `aid_text` / `slope_mark` from its `text_dir`
- * (PML AIDTXT `ori` X axis, T4.3), through the direction part of the
- * transform like an arc axis: unit length in Design Space. Undefined when the
- * primitive declares none — every producer before the field — or when the
- * transform collapses it: the kernel then keeps viewport-horizontal text, so
- * a lost direction costs orientation only, never the primitive (parse already
- * rejected a zero or non-finite vector). A billboard tag never reads it (its
- * body is screen-facing); the `mbd_3d=0` flat presentation does.
+ * Text baseline of a `label` / `aid_text` / `slope_mark` / `angle_dim` from
+ * its `text_dir` (PML AIDTXT `ori` X axis, T4.3), through the direction part
+ * of the transform like an arc axis: unit length in Design Space. Undefined
+ * when the primitive declares none — every producer before the field — or
+ * when the transform collapses it: the record then keeps its default baseline
+ * (viewport-horizontal text, an angle's arc), so a lost direction costs
+ * orientation only, never the primitive (parse already rejected a zero or
+ * non-finite vector). A billboard tag never reads it (its body is
+ * screen-facing), nor does an angle's 3D run; the `mbd_3d=0` flat
+ * presentation does.
  */
 function textBaseline(
   primitive: Readonly<{ text_dir?: MbdV2Vec3 }>,
@@ -128,12 +131,12 @@ function textBaseline(
 }
 
 /**
- * Up of the text plane of a `label` / `aid_text` (`text_up`, #103 M1-3) in
- * Design Space, re-orthogonalised against the baseline: the contract leaves
- * that to the consumer, as with an arc frame (ADR 0055). Undefined when the
- * primitive declares none, when the transform collapses it, or when it runs
- * along the baseline; the block then stacks on screen, so a lost plane costs
- * the stacking direction only, never the primitive.
+ * Up of the text plane of a `label` / `aid_text` / `angle_dim` (`text_up`,
+ * #103 M1-3 / CT-15) in Design Space, re-orthogonalised against the baseline:
+ * the contract leaves that to the consumer, as with an arc frame (ADR 0055).
+ * Undefined when the primitive declares none, when the transform collapses
+ * it, or when it runs along the baseline; the block then stacks on screen, so
+ * a lost plane costs the stacking direction only, never the primitive.
  */
 function textUp(
   primitive: Readonly<{ text_up?: MbdV2Vec3 }>,
@@ -363,6 +366,7 @@ type ExplicitParts = Readonly<{
   lod?: ExplicitLodInput;
   dimension3d?: ExplicitLayoutInput['dimension3d'];
   tag?: ExplicitTagInput;
+  label3d?: ExplicitLabel3dInput;
   /** The model object the record sits on (its refno), for the inspection pass. */
   subject?: string;
   /** Q6 presentation mode, forwarded verbatim when the caller asked for one. */
@@ -404,6 +408,7 @@ function explicitRecord(
     ...(parts.labelPresentation ? { labelPresentation: parts.labelPresentation } : {}),
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
     ...(parts.tag ? { tag: parts.tag } : {}),
+    ...(parts.label3d ? { label3d: parts.label3d } : {}),
     ...(parts.subject ? { subject: parts.subject } : {}),
     ...(parts.declutter ? { declutter: parts.declutter } : {}),
   };
@@ -976,9 +981,41 @@ function angleDeclutter(primitive: MbdPrimitive): ExplicitLayoutInput['declutter
 }
 
 /**
+ * The value text of an angle. Without a text plane it is one run along the
+ * arc. With one (`text_dir` / `text_up`, #103 CT-15) the flat presentation
+ * lays it out in that plane like a `label`: along `text_dir` (the arc while
+ * only `text_up` is declared or the baseline collapses), lines stacked along
+ * `text_up`. `label3d` keeps the run along the arc for the default 3D
+ * presentation, which therefore reads as before; the `mbd_3d=0` switch strips
+ * it.
+ */
+function angleLabel(
+  primitive: MbdV2AngleDim,
+  transform: FrameTransform,
+  arcBaseline: Vec3,
+): Pick<ExplicitParts, 'formattedLabel' | 'labelAlong' | 'labelBlock' | 'label3d'> {
+  if (!primitive.text_dir && !primitive.text_up) {
+    return { formattedLabel: primitive.text, labelAlong: arcBaseline };
+  }
+  const along = textBaseline(primitive, transform) ?? arcBaseline;
+  const { formattedLabel, labelBlock } = multiLineLabel(
+    primitive.text,
+    textUp(primitive, transform, along),
+  );
+  return {
+    formattedLabel,
+    labelAlong: along,
+    ...(labelBlock ? { labelBlock } : {}),
+    label3d: { text: primitive.text, along: arcBaseline },
+  };
+}
+
+/**
  * PML `isoline.drawangle`: arc + two legs + the value text. The value runs
  * along the arc, so its baseline is the tangent at mid-sweep (the same
- * 「工程文字朝向」 rule `mapLinearDim` applies along its dimension line).
+ * 「工程文字朝向」 rule `mapLinearDim` applies along its dimension line); a
+ * declared text plane moves it into that plane in the flat presentation
+ * (`angleLabel`).
  *
  * Detail tier: PML sizes the arc from the text length (a few millimetres), so
  * the value and its two direction notes only stand apart near true scale —
@@ -999,9 +1036,8 @@ function mapAngleDim(
   }));
   const midAngle = (mapped.arc.startAngle + mapped.arc.endAngle) / 2;
   return explicitRecord(primitive, 'dimension', {
-    formattedLabel: primitive.text,
+    ...angleLabel(primitive, transform, arcTangent(mapped, midAngle)),
     labelAnchor: transform.point(primitive.label_anchor),
-    labelAlong: arcTangent(mapped, midAngle),
     lines,
     arcs: [mapped.arc],
     lod: { tier: 'detail' },

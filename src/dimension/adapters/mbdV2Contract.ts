@@ -241,6 +241,13 @@ export type MbdV2AngleDim = Readonly<{
   sub_kind?: string;
   /** 自己的字高（#103 M1-3），见 `MbdV2LinearDim.text_height_mm`。 */
   text_height_mm?: number;
+  /**
+   * 角度字的基线方向（#103 CT-15），含义与校验同 `MbdV2AidText.text_dir`；缺省 = 沿弧（弧中点切向），
+   * 即今天的画法。
+   */
+  text_dir?: MbdV2Vec3;
+  /** 文字平面的「向上」方向（#103 CT-15），见 `MbdV2LinearDim.text_up`；与 `text_dir` 一起定出角度字的平面。 */
+  text_up?: MbdV2Vec3;
 }> & MbdV2ArcFrame & MbdV2PrimitiveCommon;
 
 export type MbdV2Label = Readonly<{
@@ -727,7 +734,9 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isLineSegmentArray(value.leg_lines)
         && isVec3(value.label_anchor)
         && isOptionalString(value.sub_kind)
-        && isOptionalPositiveNumber(value.text_height_mm);
+        && isOptionalPositiveNumber(value.text_height_mm)
+        && isOptionalAxisVec3(value.text_dir)
+        && isOptionalAxisVec3(value.text_up);
     case 'label':
       return typeof value.text === 'string'
         && isVec3(value.position)
@@ -782,7 +791,7 @@ const COMMON_PRIMITIVE_FIELDS: readonly string[] = [
 const PRIMITIVE_FIELDS: Readonly<Record<MbdPrimitiveKind, readonly string[]>> = {
   linear_dim: ['start', 'end', 'text', 'sub_kind',
     'extension_lines', 'arrow_lines', 'label_anchor', 'reference', 'text_height_mm', 'text_up'],
-  angle_dim: ['text', 'leg_lines', 'label_anchor', 'sub_kind', 'text_height_mm',
+  angle_dim: ['text', 'leg_lines', 'label_anchor', 'sub_kind', 'text_height_mm', 'text_dir', 'text_up',
     'center', 'x_axis', 'normal', 'radius', 'start_angle_deg', 'sweep_angle_deg'],
   label: ['text', 'position', 'text_dir', 'text_height_mm', 'text_up'],
   leader_line: ['start', 'end'],
