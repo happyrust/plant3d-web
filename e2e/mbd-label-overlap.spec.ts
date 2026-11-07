@@ -151,11 +151,16 @@ async function collectTier(page: Page, scale: number | null, base: Camera | null
       viewer.camera.far = radius * 40;
       viewer.camera.updateProjectionMatrix();
     } else {
-      let last = viewer.camera.position.clone();
-      for (let attempt = 0; attempt < 40; attempt += 1) {
+      // The fit to `show_refno` may not have started yet: a camera that has
+      // not moved only counts as settled after 40 frame pairs.
+      const start = viewer.camera.position.clone();
+      let last = start.clone();
+      for (let attempt = 0; attempt < 160; attempt += 1) {
         await twoFrames();
         const current = viewer.camera.position;
-        if (current.distanceTo(last) < 1e-6) break;
+        const moved = current.distanceTo(start) > 1e-6;
+        const flying = viewer._flyRafId !== null && viewer._flyRafId !== undefined;
+        if ((moved || attempt >= 40) && !flying && current.distanceTo(last) < 1e-6) break;
         last = current.clone();
       }
     }
