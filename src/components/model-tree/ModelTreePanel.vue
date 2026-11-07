@@ -6,6 +6,7 @@ import { Filter, GitCompare, Plus, Search, X } from 'lucide-vue-next';
 
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
+import { isGroupNoun } from '@/api/genModelE3dTypes';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
@@ -404,6 +405,11 @@ const contextMenuRef = ref<HTMLElement | null>(null);
 const contextNodeId = ref<string | null>(null);
 /** 右键的那一行：同一 refno 可能有主位置与分组引用两行，「定位到原位置」只给引用行。 */
 const contextRow = ref<DiffFlatRow | null>(null);
+/** 分组（GPWL / GPSET）只登记成员、不拥有模型：服务端拒绝对它 force 重新生成（422 `group_scope`），右键不给这一项。 */
+const contextNodeIsGroup = computed(() => {
+  const id = contextNodeId.value;
+  return isGroupNoun(contextRow.value?.type ?? (id ? pdmsTree.nodesById.value[normalizeRefnoKeyLike(id)]?.type : undefined));
+});
 
 const searchPopoverOpen = ref(false);
 const typePopoverOpen = ref(false);
@@ -1591,7 +1597,7 @@ function onSearchEnter(value: string) {
           @click="hideNode">
           隐藏
         </button>
-        <button v-if="contextNodeId && isRefnoLike(contextNodeId)" type="button"
+        <button v-if="contextNodeId && isRefnoLike(contextNodeId) && !contextNodeIsGroup" type="button"
           data-testid="model-tree-regenerate-model"
           :data-refno="contextNodeId"
           class="w-full rounded px-2 py-1 text-left text-sm text-warning hover:bg-muted"

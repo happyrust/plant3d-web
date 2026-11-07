@@ -263,6 +263,18 @@ describe('createGenModelV1TreeSource', () => {
     expect(resp.unresolved).toEqual([{ via: '2013286748_14', target: '9999_1', reason: 'db_not_in_mdb' }]);
   });
 
+  it('children 记下服务端的视图：老服务端不回 view（没认 resolved=1）记 stored，认了记 resolved，虚拟根不带', async () => {
+    let view: 'resolved' | undefined;
+    const api = fakeApi({
+      children: vi.fn(async (raw: string) => ({ source: 'direct', parent: toV1Refno(raw), ...(view ? { view } : {}), nodes: [] })),
+    });
+    const tree = createGenModelV1TreeSource({ api });
+    expect((await tree.children('2013286748_11')).view).toBe('stored');
+    view = 'resolved';
+    expect((await tree.children('2013286748_11')).view).toBe('resolved');
+    expect((await tree.children(ROOT_ID)).view).toBeUndefined();
+  });
+
   it('subtreeRefnos：映射时见过的分组（GPWL / GPSET）不走 BFS，直接拒绝', async () => {
     const GPSET: EleTreeNodeDto = { refno: '2013286748_11', noun: 'GPSET', name: '/AREA01_PIPE', owner: '2013286748_1', order: 0, children_count: 2, dbnum: 250204 };
     const api = fakeApi({

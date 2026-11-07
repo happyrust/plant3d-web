@@ -75,6 +75,9 @@ export type GenerateThenCollectOptions = CollectRecordsOptions & {
   onRootStart?: (progress: { done: number; total: number; root: string }) => void;
 };
 
+/** 分组（GPWL / GPSET）为空或成员全都解析不出：generate 回执 `scope_kind: 'group'` 且 `generation_roots: []`。 */
+export const EMPTY_GROUP_HINT = '分组为空或成员不可解析';
+
 /**
  * 显示与重新生成共用的结果形状。
  * - 显示：`generationRoots` 是记录里出现过的 `owner`（生成根）；`pending` 只有 409 `conflict`（该库正被整库任务占用）；
@@ -94,6 +97,8 @@ export type CollectRecordsResult = {
   /** 其它错误（`a_b` → 错误信息），调用方决定要不要报 */
   errors: Record<string, string>;
   statuses: Record<string, string>;
+  /** 没有记录时直接给人看的说明（`a_b` → 文案）；目前只有空分组的 {@link EMPTY_GROUP_HINT} */
+  hints?: Record<string, string>;
 };
 
 /** 多个祖先一起查的结果（整库显示逐 SITE 用）。 */
@@ -152,8 +157,12 @@ export async function mapWithConcurrency<T, R>(items: T[], concurrency: number, 
   return out;
 }
 
-/** generate 回执里的根（`a_b`）：读透形态给 `generation_roots`，否则 `generation_root`，都没有就是请求的节点自己。 */
+/**
+ * generate 回执里的根（`a_b`）：读透形态给 `generation_roots`，否则 `generation_root`，都没有就是请求的节点自己。
+ * 分组（`scope_kind: 'group'`）只认 `generation_roots`：空表就是空组，不回退为分组自己（它的 `generation_root` 回显的就是请求）。
+ */
 function rootsOf(generated: ModelGenerateResponse, fallback: string): string[] {
+  if (generated.scope_kind === 'group') return (generated.generation_roots ?? []).map((root) => fromV1Refno(String(root)));
   const roots = Array.isArray(generated.generation_roots) && generated.generation_roots.length > 0
     ? generated.generation_roots
     : generated.generation_root
@@ -273,6 +282,7 @@ export async function collectRecordsByAncestor(
 /**
  * 右键「重新生成模型」：`model/generate(force)` → 容器按契约展开一层递归（上限在 options 里）→ 对请求的节点按祖先查一次记录。
  * 全部根都回了 pending / 都没产物时不查记录（`items` 为空），由调用方按 `pending` 提示「服务端后台继续生成，完成后再点眼睛」。
+ * 分组（GPWL / GPSET）：`force` 回 422 `group_scope` 时不带 force 按成员生成一次；空组记 `empty` 并给 `hints`，不回退为分组自己。
  */
 export async function generateThenCollect(
   refno: string,
@@ -297,6 +307,18 @@ export async function generateThenCollect(
   const seen = new Set<string>();
   let generateCalls = 0;
   let generatedRoots = 0;
+  // 分组不接受 force（先清后生成会清掉别处主链拥有的模型）：改不带 force 按成员生成——显示时「没有模型就默认生成」对分组照样成立
+  const generateRoot = async (target: string): Promise<ModelGenerateResponse> => {
+    if (!force) return api.generate({ refno: target }, requestOptions);
+    try {
+      return await api.generate({ refno: target, force: true }, requestOptions);
+    } catch (error) {
+      if (!isGenModelV1ApiError(error) || !error.isGroupScope) throw error;
+      reportRequestFailure(onRequestFailure, error);
+      throwIfAborted(requestOptions.signal);
+      return api.generate({ refno: target }, requestOptions);
+    }
+  };
 
   // 队列元素：待 generate 的节点 + 它是第几层容器展开出来的
   const queue: { refno: string; depth: number }[] = [{ refno: start, depth: 0 }];
@@ -314,7 +336,7 @@ export async function generateThenCollect(
 
     let generated: ModelGenerateResponse;
     try {
-      generated = await api.generate(force ? { refno: current, force: true } : { refno: current }, requestOptions);
+      generated = await generateRoot(current);
     } catch (error) {
       reportRequestFailure(onRequestFailure, error);
       // 取消 / 换代不能折进 errors 当成「这根出错」——整次一起停
@@ -352,6 +374,11 @@ export async function generateThenCollect(
     }
 
     result.statuses[current] = String(generated.status ?? '');
+    if (generated.scope_kind === 'group' && rootsOf(generated, current).length === 0) {
+      pushUnique(result.empty, current);
+      result.hints = { ...result.hints, [current]: EMPTY_GROUP_HINT };
+      continue;
+    }
     if (generated.status === 'NoRenderableGeometry' || generated.model_available === false) {
       pushUnique(result.empty, current);
       continue;

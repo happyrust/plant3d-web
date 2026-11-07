@@ -46,6 +46,11 @@ export type ChildrenResponse = {
   truncated: boolean;
   /** 分组节点解析不出的成员槽；只有 gen-model-v1 的解析视图、且有坏槽时给 */
   unresolved?: UnresolvedGroupSlot[];
+  /**
+   * gen-model-v1 实体父节点回的视图：`resolved` = 服务端认了 `resolved=1`；没回这一格的老服务端记 `stored`，
+   * 分组下列的就是 GPITEM 槽本身（GPSET 行提示「后端未支持分组解析」）。虚拟根与 legacy 源没有这一格。
+   */
+  view?: 'stored' | 'resolved';
   error_message?: string | null;
 };
 

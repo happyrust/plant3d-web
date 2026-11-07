@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   collectRecordsByAncestor,
   collectRecordsForAncestors,
+  EMPTY_GROUP_HINT,
   generateThenCollect,
   isLegacyNotGenerated,
   mapWithConcurrency,
@@ -226,6 +227,36 @@ describe('generateThenCollect', () => {
     expect(generate).toHaveBeenCalledTimes(2);
     expect(result.truncatedRoots.length).toBeGreaterThan(0);
     expect(result.items).toEqual([]);
+  });
+
+  it('分组 force 回 422 group_scope：不带 force 按成员生成一次，再按分组查记录；生成根是成员的，不含分组自己', async () => {
+    const generate = vi.fn(async (params: { refno: string; force?: boolean }) => {
+      if (params.force) {
+        throw new GenModelV1ApiError({ code: 'group_scope', status: 422, path: '/api/v1/model/generate', message: 'GPSET' });
+      }
+      return { status: 'Generated', generation_root: v1(params.refno), generation_roots: ['1/10', '2/20'], scope_kind: 'group' };
+    });
+    const records = vi.fn(async () => page([item('1_11', '1_10'), item('2_21', '2_20')]));
+    const result = await generateThenCollect('9_1', {}, api({ generate: generate as never, records: records as never }));
+    expect(generate.mock.calls.map(([params]) => params)).toEqual([{ refno: '9_1', force: true }, { refno: '9_1' }]);
+    expect(records).toHaveBeenCalledTimes(1);
+    expect(records).toHaveBeenCalledWith(expect.objectContaining({ generationRoot: '9_1' }), expect.anything());
+    expect(result.generationRoots).toEqual(['1_10', '2_20']);
+    expect(result.items).toHaveLength(2);
+    expect(result.errors).toEqual({});
+  });
+
+  it('空分组（generation_roots: []）记 empty 并给提示：不回退为分组自己、不查记录', async () => {
+    const generate = vi.fn(async ({ refno }: { refno: string }) => ({
+      status: 'NoRenderableGeometry', model_available: false, generation_root: v1(refno), generation_roots: [], scope_kind: 'group', unresolved_count: 2,
+    }));
+    const client = api({ generate: generate as never });
+    const result = await generateThenCollect('9_1', { force: false }, client);
+    expect(generate).toHaveBeenCalledWith({ refno: '9_1' }, expect.anything());
+    expect(result.empty).toEqual(['9_1']);
+    expect(result.generationRoots).toEqual([]);
+    expect(result.hints).toEqual({ '9_1': EMPTY_GROUP_HINT });
+    expect(client.records).not.toHaveBeenCalled();
   });
 });
 

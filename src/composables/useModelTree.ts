@@ -19,6 +19,8 @@ export type TreeNode = {
   groupMemberVia?: Record<string, string | null>
   /** 分组里解析不出的成员槽数（GPREF 缺失 / 目标库不在 MDB / 目标不存在） */
   unresolvedCount?: number
+  /** GPSET 的子节点仍是存储视图（老 gen-model 没认 `resolved=1`）：列的是 GPITEM 槽本身，行上提示「后端未支持分组解析」 */
+  groupViewUnsupported?: boolean
 }
 
 export type FlatRow = {
@@ -40,6 +42,8 @@ export type FlatRow = {
   via?: string
   /** 见 `TreeNode.unresolvedCount` */
   unresolvedCount?: number
+  /** 见 `TreeNode.groupViewUnsupported` */
+  groupViewUnsupported?: boolean
 }
 
 /** 一个父节点在 `recomputeViewAncestors` 里最多重算几次；正常的树 / 分组图一两次就收敛，超过即视为数据成环。 */

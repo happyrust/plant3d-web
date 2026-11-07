@@ -38,6 +38,8 @@ export type GenModelV1ErrorCode =
   | 'not_found'
   | 'conflict'
   | 'container'
+  /** 分组（GPWL / GPSET）只登记成员、不拥有模型：清理与 `force` 重新生成回 422（gen-model 分组节点 M3） */
+  | 'group_scope'
   | 'precondition'
   | 'identity_mismatch'
   | 'initialization_not_ready'
@@ -110,6 +112,11 @@ export class GenModelV1ApiError extends Error {
   /** 摄入形态下 WORL / SITE / ZONE 不能做生成根——不是失败；只有右键的 generate 会展开一层对子节点逐个生成（ADR 0069）。 */
   get isContainer(): boolean {
     return this.code === 'container';
+  }
+
+  /** 对分组（GPWL / GPSET）做清理或 `force` 重新生成：改对成员做，或不带 force 生成（服务端按成员展开）。 */
+  get isGroupScope(): boolean {
+    return this.code === 'group_scope';
   }
 
   /** 生成还在后台跑（202 `generation_pending` 或 504 `timeout`）；别对同一 refno 立刻重发。 */
@@ -710,6 +717,12 @@ export type ModelRecordsResponse = {
   generation_roots?: string[];
   /** 批量请求：整批逐根总数（每页都带），`total: 0` 的根显式在列 */
   roots?: { generation_root: string; total: number }[];
+  /** 单根请求的是分组（GPWL / GPSET）：服务端按解析成员展开后回答（D4-a）；`source` 各库不一致时为 `mixed`，空组为 `none` */
+  expanded_from_group?: boolean;
+  /** 分组展开出的成员（`a/b`，成员顺序） */
+  scope_refnos?: string[];
+  /** 分组里解析不出的 GPITEM 槽数 */
+  unresolved_count?: number;
 };
 
 export type DbnumRow = {

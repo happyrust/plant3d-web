@@ -66,4 +66,21 @@ describe('ModelTreeRow 分组行（GPWL / GPSET）', () => {
       member.unmount();
     }
   });
+
+  it('老 gen-model 没认解析视图时 GPSET 行提示「后端未支持分组解析」（是提示不是错误）；认了的不提示', async () => {
+    const stored = await mountRow({ id: '2013286748_11', name: '/HVAC', type: 'GPSET', depth: 2, hasChildren: true, groupViewUnsupported: true });
+    try {
+      const badge = stored.host.querySelector<HTMLElement>('[data-testid="model-tree-group-view-unsupported-badge"]');
+      expect(badge?.textContent).toContain('后端未支持分组解析');
+      expect(badge?.title).toContain('GPITEM');
+    } finally {
+      stored.unmount();
+    }
+    const resolved = await mountRow({ id: '2013286748_11', name: '/HVAC', type: 'GPSET', depth: 2, hasChildren: true });
+    try {
+      expect(resolved.host.querySelector('[data-testid="model-tree-group-view-unsupported-badge"]')).toBeNull();
+    } finally {
+      resolved.unmount();
+    }
+  });
 });

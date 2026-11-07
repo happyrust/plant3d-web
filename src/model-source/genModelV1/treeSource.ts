@@ -38,6 +38,7 @@ import {
   genModelV1TreeChildren,
   genModelV1TreeRoots,
   isGenModelV1ApiError,
+  isResolvedTreeView,
   type EleTreeNodeDto,
   type TreeRootsResponse,
 } from '@/api/genModelV1Api';
@@ -284,6 +285,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       let parentId: string;
       let nodes: EleTreeNodeDto[];
       let unresolved: UnresolvedGroupSlot[] = [];
+      let view: ChildrenResponse['view'];
       if (isGroupRootId(refno)) {
         const groups = await loadGroupRoots(guard);
         parentId = makeGroupRootId(groups.project, groups.mdb);
@@ -296,6 +298,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         parentId = fromV1Refno(refno);
         const resp = await api.children(parentId, { signal: guard.signal, resolved: true });
         nodes = resp.nodes;
+        view = isResolvedTreeView(resp) ? 'resolved' : 'stored';
         unresolved = (resp.unresolved ?? []).map((slot) => ({
           via: fromV1Refno(slot.via),
           target: slot.target ? fromV1Refno(slot.target) : null,
@@ -309,6 +312,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       rememberGroups(rows);
       const response: ChildrenResponse = { success: true, parent_refno: parentId, children: rows, truncated };
       if (unresolved.length > 0) response.unresolved = unresolved;
+      if (view) response.view = view;
       return response;
     } catch (error) {
       noteRequestFailure(error);

@@ -293,6 +293,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         if (via) row.via = via;
       }
       if (node.unresolvedCount) row.unresolvedCount = node.unresolvedCount;
+      if (node.groupViewUnsupported) row.groupViewUnsupported = true;
       out.push(row);
 
       const shouldExpand = filterActive || expandedIds.value.has(id);
@@ -376,8 +377,11 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       const nextParent: TreeNode = { ...parent, childrenIds };
       delete nextParent.groupMemberVia;
       delete nextParent.unresolvedCount;
+      delete nextParent.groupViewUnsupported;
       if (Object.keys(memberVia).length > 0) nextParent.groupMemberVia = memberVia;
       if (resp.unresolved && resp.unresolved.length > 0) nextParent.unresolvedCount = resp.unresolved.length;
+      // 新前端 × 老服务端：GPSET 下仍是存储视图（GPITEM 槽本身），照物理视图显示、行上提示
+      if (resp.view === 'stored' && parent.type.toUpperCase() === 'GPSET') nextParent.groupViewUnsupported = true;
       nextNodes[parentKey] = nextParent;
 
       nodesById.value = nextNodes;

@@ -296,6 +296,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   /** 已尝试自动生成的 refno（防重复触发）：库无模型 / 节点查空时每个 refno 每会话只自动一发 generateThenCollect */
   const autoGenerateAttempted = new Set<string>();
+  /** 自动生成回过的说明（目前只有空分组）：同一 refno 再点眼睛时照样给它，不提示「右键重新生成」——分组没有这一项 */
+  const autoGenerateHints = new Map<string, string>();
   /**
    * dbnum 级「现在有没有读得到的模型」的会话内结论：`true` = `model/roots` 有就绪根，或本实例刚生成 / 查到过记录；
    * `false` = 就绪根为零。`true` 随时盖，`false` 只写第一次——别让过期的空结论压住刚产出的模型。
@@ -644,7 +646,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const failed = Object.entries(generated.errors).map(([root, message]) => `${root}: ${message}`).join('; ');
           const hint = timedOut
             ? '服务端后台继续生成，完成后再点眼睛'
-            : (failed || '没有可显示的新产物');
+            : (failed || generated.hints?.[generated.refno] || '没有可显示的新产物');
           statusMessage.value = hint;
           progress.value = 100;
           syncGlobalLoadStatus();
@@ -737,7 +739,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const timedOut = generated.pending.length > 0;
           if (timedOut) scheduleDbnumModelReprobe(dbno);
           const failed = Object.entries(generated.errors).map(([root, msg]) => `${root}: ${msg}`).join('; ');
-          const hint = timedOut ? '服务端后台继续生成，完成后再点眼睛' : (failed || '生成未产出可显示模型');
+          const groupHint = generated.hints?.[generated.refno];
+          if (groupHint) autoGenerateHints.set(normalizedRoot, groupHint);
+          const hint = timedOut ? '服务端后台继续生成，完成后再点眼睛' : (failed || groupHint || '生成未产出可显示模型');
           consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成未产出：${hint}`);
           emitToast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
           return false;
@@ -787,7 +791,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const tail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
           const emptyHint = scopeIncomplete
             ? `${normalizedRoot} 尚未取得可见实例（${tail}）`
-            : `${normalizedRoot}：范围内没有已生成的模型；右键「重新生成模型」可生成`;
+            : `${normalizedRoot}：${autoGenerateHints.get(normalizedRoot) ?? '范围内没有已生成的模型；右键「重新生成模型」可生成'}`;
           consoleStore.addLog('info', `[model-load] ${emptyHint}`);
           emitToast({ message: `[提示] ${emptyHint}`, level: 'info' });
           statusMessage.value = scopeIncomplete

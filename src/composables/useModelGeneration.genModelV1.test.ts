@@ -462,6 +462,40 @@ describe('showModelByRefno（gen-model-v1）', () => {
     }));
   });
 
+  it('空分组：自动生成回了「分组为空或成员不可解析」——两次显示都提示它，不指向分组没有的「右键重新生成」', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_145900', refnos: [] });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_145900', noun: 'GPSET', owner_refno: null, owner_noun: null });
+    v1Source.records.generateThenCollect.mockResolvedValueOnce({
+      refno: '24381_145900',
+      generationRoots: [],
+      items: [],
+      pending: [],
+      empty: ['24381_145900'],
+      truncatedRoots: [],
+      errors: {},
+      statuses: { '24381_145900': 'NoRenderableGeometry' },
+      hints: { '24381_145900': '分组为空或成员不可解析' },
+    } as never);
+
+    expect(await gen.showModelByRefno('24381_145900')).toBe(false);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('自动生成未完成：分组为空或成员不可解析'),
+    }));
+
+    emitToastMock.mockClear();
+    expect(await gen.showModelByRefno('24381_145900')).toBe(false);
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('24381_145900：分组为空或成员不可解析'),
+    }));
+    expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('右键「重新生成模型」可生成'),
+    }));
+  });
+
   it('dbnum 预检查无就绪模型：默认重新生成当前节点，生成出构件后正常装载', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });

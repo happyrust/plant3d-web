@@ -280,6 +280,13 @@ onUnmounted(() => {
         {{ row.unresolvedCount }} 个成员不可解析
       </span>
 
+      <span v-if="row.groupViewUnsupported"
+        class="inline-flex shrink-0 items-center rounded border border-amber-500/40 px-1 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
+        data-testid="model-tree-group-view-unsupported-badge"
+        title="当前 gen-model 不支持分组解析视图（resolved=1）：下面列的是 GPITEM 槽本身，不是它引用的元素；升级 gen-model 后显示成员">
+        后端未支持分组解析
+      </span>
+
       <span v-if="diffBadge"
         class="inline-flex shrink-0 items-center rounded border px-1 text-[10px] leading-4"
         :class="diffBadge.cls"
