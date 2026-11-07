@@ -63,6 +63,9 @@ BRAN 上「宿主没给字段」的 Info 归零。四种模式：`off`（缺省�
 
 ### EM9 仪表管（`r2-host-fields/{off,flat}/24381_177376/`）
 
+> 更正（2026-11-07）：这一节拍摄时统一端点对管道一律走 `layout_pipe`，`annotation_type` 虽是 `em9_pipe`，出图用的其实是 EM4 规则。
+> gen-model ff8d6ac5f 接上 EM9 仪表管规则后的重拍见 `../mbd-all-types-final-2026-11-07/off/24381_177376/`（45 个图元，字高 20–34 mm）。
+
 `/1TTU-INST23` 走 EM9 仪表管求解器（`annotation_type = em9_pipe`）：16 段尺寸、16 个坐标 / 标高标签及引线、48 条辅助线；
 Issue 三条（`adapter.implied_tube_not_drawn`、`isodim.atta_before_first_point`、`linear.point_off_axis`），都是数据本身的情况。
 缺省呈现三档各一对重叠（底部短 ATTA 段尺寸与主尺寸），远景全路由尺寸（1580 / 550 / 3340 / 650…）、坐标卡与标高标签清楚；
