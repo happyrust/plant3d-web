@@ -48,6 +48,8 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
+import type { SglDowngradeLevel } from './dragDowngrade';
+
 export interface SglHlrParams {
   /** SGL_ENHANCED_EDGES（E3D 默认 ON） */
   enabled: boolean;
@@ -294,8 +296,14 @@ export interface SglFramePasses {
 }
 
 /**
- * 本帧跑哪几趟。交互中（拖动 / 飞行）只画颜色：法线/深度趟连同依赖它的 AO、HLR、去杂全跳过，
- * 几何只画一遍；渐变背景与 FXAA 照旧。非交互时法线/深度趟始终画（调试面板要看它）。
+ * 本帧跑哪几趟，按降画质档位（见 `dragDowngrade.ts` 的表）：
+ *
+ * - L0 全画质：法线/深度趟 + AO + HLR + 去杂全开，渐变与 FXAA 照旧。
+ * - L1：只关 HLR 与去杂。**必须保留 normalDepth**——它是 AO / HLR / 去杂的共同前置，
+ *   HLR 直接读 `_ndRT`，关掉等于 HLR 也画不了，这一档就失去意义。
+ * - L2：只画颜色，法线/深度趟连同依赖它的 AO、HLR、去杂全跳过，几何只画一遍。
+ *
+ * 渐变背景与 FXAA 与档位无关。非交互时法线/深度趟始终画（调试面板要看它）。
  */
 export function sglFramePasses(
   params: Pick<SglLookPipelineParams, 'legacyMode'> & {
@@ -304,13 +312,14 @@ export function sglFramePasses(
     background: Pick<SglBackgroundParams, 'gradient'>;
     aa: Pick<SglAaParams, 'mode'>;
   },
-  interacting: boolean,
+  level: SglDowngradeLevel = 0,
 ): SglFramePasses {
   const effectsOn = !params.legacyMode;
-  const hlr = !interacting && effectsOn && params.hlr.enabled;
+  const normalDepth = level < 2;
+  const hlr = normalDepth && level < 1 && effectsOn && params.hlr.enabled;
   return {
-    normalDepth: !interacting,
-    ao: !interacting && effectsOn && params.ao.enabled,
+    normalDepth,
+    ao: normalDepth && effectsOn && params.ao.enabled,
     hlr,
     declutter: hlr && params.hlr.declutter,
     gradient: effectsOn && params.background.gradient,
@@ -903,7 +912,7 @@ export class SglLookPipeline {
   /** 法线/深度与 HLR 通道当前的超采样倍数 */
   private readonly _hlrSupersample = new Vector2(1, 1);
   /** 交互中（拖动 / 飞行）：只画颜色，见 `sglFramePasses`；离屏图尺寸不动，免得反复重建 */
-  private _interacting = false;
+  private _downgradeLevel: SglDowngradeLevel = 0;
 
   private readonly _aoUniforms: AoUniforms = {
     tND: { value: null },
@@ -1118,15 +1127,25 @@ export class SglLookPipeline {
   }
 
   /**
-   * 拖动时临时降画质：开着时只画颜色趟，跳过法线/深度、AO、模糊、HLR 与去杂，没有边线和伪阴影；
-   * 渐变背景、MSAA、FXAA 照旧。离屏图不重建，关掉后下一帧即恢复全画质。
+   * 交互降画质档位：0 = 全画质，1 = 关 HLR/去杂（保留法线/深度与 AO），2 = 只画颜色。
+   * 各档决定哪些趟跑见 `sglFramePasses`。离屏图不重建，档位变了下一帧即生效。
    */
-  setInteracting(on: boolean): void {
-    this._interacting = on;
+  setDowngradeLevel(level: SglDowngradeLevel): void {
+    this._downgradeLevel = level;
   }
 
+  /** 兼容旧调用：`on` 等价于 L2（只画颜色），`off` 等价于 L0（全画质） */
+  setInteracting(on: boolean): void {
+    this._downgradeLevel = on ? 2 : 0;
+  }
+
+  get downgradeLevel(): SglDowngradeLevel {
+    return this._downgradeLevel;
+  }
+
+  /** 是否在降画质（L1 / L2） */
   get interacting(): boolean {
-    return this._interacting;
+    return this._downgradeLevel > 0;
   }
 
   /** HLR 通道的超采样倍数 (kx, ky)，kx·ky = HLR 采样档位（交互中 HLR 不跑，倍数不变） */
@@ -1138,7 +1157,7 @@ export class SglLookPipeline {
   render(scene: Scene, camera: Camera, target: WebGLRenderTarget | null = null): void {
     const renderer = this._renderer;
     const p = this.params;
-    const passes = sglFramePasses(p, this._interacting);
+    const passes = sglFramePasses(p, this._downgradeLevel);
     const useAo = passes.ao;
     const useHlr = passes.hlr;
     const useGradient = passes.gradient;

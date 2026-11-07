@@ -1,0 +1,63 @@
+{
+  "url": "http://localhost:3101/?show_dbnum=7997&dtx_look=sgl&dtx_look_preset=factory",
+  "dbnum": "7997",
+  "canvas": {
+    "x": 350,
+    "y": 83,
+    "w": 900,
+    "h": 600
+  },
+  "runs": {
+    "lightDrag5s": {
+      "requestedMs": 5000,
+      "frames": 340,
+      "levelHistogram": {
+        "0": 340
+      },
+      "transitions": [],
+      "oscillationCount": 0,
+      "intervalMs": {
+        "p50": 16.7,
+        "p90": 16.9,
+        "p99": 17.1,
+        "max": 18
+      }
+    },
+    "lightDrag5sRepeat": {
+      "requestedMs": 5000,
+      "frames": 342,
+      "levelHistogram": {
+        "0": 342
+      },
+      "transitions": [],
+      "oscillationCount": 0,
+      "intervalMs": {
+        "p50": 16.7,
+        "p90": 16.9,
+        "p99": 17.1,
+        "max": 17.4
+      }
+    },
+    "heavyDrag5s": {
+      "requestedMs": 5000,
+      "frames": 23,
+      "levelHistogram": {
+        "0": 23
+      },
+      "transitions": [],
+      "oscillationCount": 0,
+      "intervalMs": {
+        "p50": 334.7,
+        "p90": 336.1,
+        "p99": 337.2,
+        "max": 367.1
+      }
+    }
+  },
+  "canvasHeavy": {
+    "x": 350,
+    "y": 83,
+    "w": 900,
+    "h": 600
+  }
+}

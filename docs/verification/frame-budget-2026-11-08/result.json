@@ -1,0 +1,612 @@
+{
+  "baseUrl": "http://localhost:3101",
+  "heavyCount": 100000,
+  "startedAt": "2026-11-07T17:32:14.698Z",
+  "scenarios": {
+    "light": {
+      "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=sgl&dtx_look_preset=factory&dtx_demo_count=500",
+      "idle": {
+        "refreshMs": 16.699999999999818,
+        "level": 0,
+        "sgl": true
+      },
+      "drag5s": {
+        "frames": 351,
+        "startLevel": 0,
+        "maxLevel": 0,
+        "levels": "L0x351",
+        "transitions": [],
+        "onlyUp": true,
+        "flipsAtEnd": 0,
+        "framesToL1": null,
+        "framesToL2": null,
+        "restoreAfterLastMoveMs": 16.8,
+        "restoreAfterMouseUpMs": 815.1,
+        "cullDuringDrag": false,
+        "cpuMs": {
+          "p50": 0.6,
+          "p90": 0.9
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 16.9
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 16.9
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.699999999999818,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.699999999999818
+        }
+      }
+    },
+    "heavy": {
+      "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=sgl&dtx_look_preset=factory&dtx_demo_count=100000",
+      "idle": {
+        "refreshMs": null,
+        "level": 0,
+        "sgl": true
+      },
+      "drag5s": {
+        "frames": 273,
+        "startLevel": 0,
+        "maxLevel": 2,
+        "levels": "L0x4 L1x5 L2x264",
+        "transitions": [
+          {
+            "frame": 4,
+            "from": 0,
+            "to": 1
+          },
+          {
+            "frame": 9,
+            "from": 1,
+            "to": 2
+          }
+        ],
+        "onlyUp": true,
+        "flipsAtEnd": 2,
+        "framesToL1": 4,
+        "framesToL2": 9,
+        "restoreAfterLastMoveMs": 200.2,
+        "restoreAfterMouseUpMs": 1255.8,
+        "cullDuringDrag": true,
+        "cpuMs": {
+          "p50": 1.8,
+          "p90": 2.3
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 16.9
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 16.9
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.699999999999818,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.699999999999818
+        }
+      },
+      "warmDrag2s": {
+        "frames": 86,
+        "startLevel": 2,
+        "maxLevel": 2,
+        "levels": "L2x86",
+        "transitions": [],
+        "onlyUp": true,
+        "flipsAtEnd": 0,
+        "framesToL1": 0,
+        "framesToL2": 0,
+        "restoreAfterLastMoveMs": 200.1,
+        "restoreAfterMouseUpMs": 1172.2,
+        "cullDuringDrag": true,
+        "cpuMs": {
+          "p50": 2,
+          "p90": 2.3
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 16.9
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 16.9
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.699999999999818,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.699999999999818
+        }
+      },
+      "coldDrag2s": {
+        "frames": 74,
+        "startLevel": 0,
+        "maxLevel": 2,
+        "levels": "L0x4 L1x5 L2x65",
+        "transitions": [
+          {
+            "frame": 4,
+            "from": 0,
+            "to": 1
+          },
+          {
+            "frame": 9,
+            "from": 1,
+            "to": 2
+          }
+        ],
+        "onlyUp": true,
+        "flipsAtEnd": 2,
+        "framesToL1": 4,
+        "framesToL2": 9,
+        "restoreAfterLastMoveMs": 200.2,
+        "restoreAfterMouseUpMs": 2224.1,
+        "cullDuringDrag": true,
+        "cpuMs": {
+          "p50": 1.6,
+          "p90": 1.9
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 331.6
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 331.6
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.699999999999818,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.699999999999818
+        }
+      }
+    },
+    "gpu": {
+      "interval": {
+        "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=sgl&dtx_look_preset=factory&dtx_demo_count=20000",
+        "idle": {
+          "refreshMs": 16.699999999999818,
+          "level": 0,
+          "sgl": true
+        },
+        "drag5s": {
+          "frames": 323,
+          "startLevel": 0,
+          "maxLevel": 2,
+          "levels": "L0x5 L1x5 L2x313",
+          "transitions": [
+            {
+              "frame": 5,
+              "from": 0,
+              "to": 1
+            },
+            {
+              "frame": 10,
+              "from": 1,
+              "to": 2
+            }
+          ],
+          "onlyUp": true,
+          "flipsAtEnd": 2,
+          "framesToL1": 5,
+          "framesToL2": 10,
+          "restoreAfterLastMoveMs": 200,
+          "restoreAfterMouseUpMs": 898.6,
+          "cullDuringDrag": true,
+          "cpuMs": {
+            "p50": 1,
+            "p90": 1.4
+          },
+          "intervalMs": {
+            "p50": 16.7,
+            "p90": 17
+          },
+          "sampleMs": {
+            "p50": 16.7,
+            "p90": 17
+          },
+          "metric": "interval",
+          "enabledSeen": [
+            true
+          ],
+          "refreshMs": 16.699999999999818,
+          "after": {
+            "level": 0,
+            "pipelineLevel": 0,
+            "cull": false,
+            "refreshMs": 16.699999999999818
+          }
+        }
+      },
+      "cpu": {
+        "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=sgl&dtx_look_preset=factory&dtx_demo_count=20000&dtx_frame_metric=cpu",
+        "idle": {
+          "refreshMs": 16.699999999999818,
+          "level": 0,
+          "sgl": true
+        },
+        "drag5s": {
+          "frames": 138,
+          "startLevel": 0,
+          "maxLevel": 0,
+          "levels": "L0x138",
+          "transitions": [],
+          "onlyUp": true,
+          "flipsAtEnd": 0,
+          "framesToL1": null,
+          "framesToL2": null,
+          "restoreAfterLastMoveMs": 76.1,
+          "restoreAfterMouseUpMs": 5441.2,
+          "cullDuringDrag": false,
+          "cpuMs": {
+            "p50": 1.1,
+            "p90": 1.9
+          },
+          "intervalMs": {
+            "p50": 76.8,
+            "p90": 78.1
+          },
+          "sampleMs": {
+            "p50": 1.1,
+            "p90": 1.9
+          },
+          "metric": "cpu",
+          "enabledSeen": [
+            true
+          ],
+          "refreshMs": 16.699999999999818,
+          "after": {
+            "level": 0,
+            "pipelineLevel": 0,
+            "cull": false,
+            "refreshMs": 16.699999999999818
+          }
+        }
+      }
+    },
+    "nonE3d": {
+      "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=pbr&dtx_demo_count=500",
+      "idle": {
+        "refreshMs": 16.699999999999818,
+        "level": 0,
+        "sgl": true
+      },
+      "drag3s": {
+        "frames": 239,
+        "startLevel": 1,
+        "maxLevel": 1,
+        "levels": "L1x239",
+        "transitions": [],
+        "onlyUp": true,
+        "flipsAtEnd": 0,
+        "framesToL1": 0,
+        "framesToL2": null,
+        "restoreAfterLastMoveMs": 200.1,
+        "restoreAfterMouseUpMs": 1117.9,
+        "cullDuringDrag": true,
+        "cpuMs": {
+          "p50": 2.3,
+          "p90": 3
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 17
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 17
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.699999999999818,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.699999999999818
+        }
+      }
+    },
+    "flagOff": {
+      "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=sgl&dtx_look_preset=factory&dtx_demo_count=100000&dtx_drag_downgrade=0",
+      "idle": {
+        "refreshMs": null,
+        "level": 0,
+        "sgl": true
+      },
+      "drag3s": {
+        "frames": 73,
+        "startLevel": 0,
+        "maxLevel": 0,
+        "levels": "L0x73",
+        "transitions": [],
+        "onlyUp": true,
+        "flipsAtEnd": 0,
+        "framesToL1": null,
+        "framesToL2": null,
+        "restoreAfterLastMoveMs": null,
+        "restoreAfterMouseUpMs": null,
+        "cullDuringDrag": false,
+        "cpuMs": {
+          "p50": 2.7,
+          "p90": 4.2
+        },
+        "intervalMs": {
+          "p50": 332.8,
+          "p90": 334.8
+        },
+        "sampleMs": {
+          "p50": 332.8,
+          "p90": 334.8
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          false
+        ],
+        "refreshMs": null,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": null
+        }
+      }
+    },
+    "warmOff": {
+      "url": "http://localhost:3101/?dtx_demo=primitives&dtx_look=sgl&dtx_look_preset=factory&dtx_demo_count=100000&dtx_downgrade_warm_ms=0",
+      "idle": {
+        "refreshMs": null,
+        "level": 0,
+        "sgl": true
+      },
+      "drag5s": {
+        "frames": 262,
+        "startLevel": 0,
+        "maxLevel": 2,
+        "levels": "L0x4 L1x5 L2x253",
+        "transitions": [
+          {
+            "frame": 4,
+            "from": 0,
+            "to": 1
+          },
+          {
+            "frame": 9,
+            "from": 1,
+            "to": 2
+          }
+        ],
+        "onlyUp": true,
+        "flipsAtEnd": 2,
+        "framesToL1": 4,
+        "framesToL2": 9,
+        "restoreAfterLastMoveMs": 216.6,
+        "restoreAfterMouseUpMs": 1140.7,
+        "cullDuringDrag": true,
+        "cpuMs": {
+          "p50": 3.1,
+          "p90": 4
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 17.4
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 17.3
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.700000000000728,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.700000000000728
+        }
+      },
+      "drag2s": {
+        "frames": 73,
+        "startLevel": 0,
+        "maxLevel": 2,
+        "levels": "L0x4 L1x5 L2x64",
+        "transitions": [
+          {
+            "frame": 4,
+            "from": 0,
+            "to": 1
+          },
+          {
+            "frame": 9,
+            "from": 1,
+            "to": 2
+          }
+        ],
+        "onlyUp": true,
+        "flipsAtEnd": 2,
+        "framesToL1": 4,
+        "framesToL2": 9,
+        "restoreAfterLastMoveMs": 200.1,
+        "restoreAfterMouseUpMs": 2218.5,
+        "cullDuringDrag": true,
+        "cpuMs": {
+          "p50": 3.1,
+          "p90": 4
+        },
+        "intervalMs": {
+          "p50": 16.7,
+          "p90": 330.5
+        },
+        "sampleMs": {
+          "p50": 16.7,
+          "p90": 330.5
+        },
+        "metric": "interval",
+        "enabledSeen": [
+          true
+        ],
+        "refreshMs": 16.700000000000728,
+        "after": {
+          "level": 0,
+          "pipelineLevel": 0,
+          "cull": false,
+          "refreshMs": 16.700000000000728
+        }
+      }
+    },
+    "stepAndHold": {
+      "pbrStep": {
+        "pbrMoved": true,
+        "pbrRestore": {
+          "ok": true,
+          "ms": 218,
+          "level": 0,
+          "cull": false
+        }
+      },
+      "warmStep": {
+        "maxLevel": 2,
+        "warmMoved": true,
+        "warmRestore": {
+          "ok": true,
+          "ms": 335,
+          "level": 0,
+          "cull": false
+        }
+      },
+      "hold": {
+        "held": {
+          "level": 2,
+          "moved": false,
+          "held": true
+        },
+        "holdRestore": {
+          "ok": true,
+          "ms": 191,
+          "level": 0,
+          "cull": false
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "name": "标准 2 轻场景全程 L0、flips=0",
+      "ok": true,
+      "detail": "maxLevel=0 flips=0 frames=351"
+    },
+    {
+      "name": "标准 3 重场景会升档",
+      "ok": true,
+      "detail": "maxLevel=2 levels=L0x4 L1x5 L2x264"
+    },
+    {
+      "name": "标准 3 到 L1 ≤ 6 帧",
+      "ok": true,
+      "detail": "framesToL1=4"
+    },
+    {
+      "name": "标准 3 到 L2 ≤ 12 帧",
+      "ok": true,
+      "detail": "framesToL2=9"
+    },
+    {
+      "name": "标准 3 松手前只升不降、flips ≤ 2",
+      "ok": true,
+      "detail": "onlyUp=true flips=2"
+    },
+    {
+      "name": "标准 3 停稳后约 200ms 回 L0",
+      "ok": true,
+      "detail": "restoreAfterLastMoveMs=200.2 after={\"level\":0,\"pipelineLevel\":0,\"cull\":false,\"refreshMs\":16.699999999999818}"
+    },
+    {
+      "name": "标准 3 3 秒内再拖从上次档位起步",
+      "ok": true,
+      "detail": "上次 maxLevel=2 本次 startLevel=2"
+    },
+    {
+      "name": "超过 3 秒再拖从 L0 起步",
+      "ok": true,
+      "detail": "startLevel=0"
+    },
+    {
+      "name": "标准 4 出现 GPU 瓶颈（L0 帧 cpu p90 < 21.7 且 interval p90 > 21.7）",
+      "ok": true,
+      "detail": "CPU 口径一轮 levels=L0x138 cpu={\"p50\":1.1,\"p90\":1.9} interval={\"p50\":76.8,\"p90\":78.1}"
+    },
+    {
+      "name": "标准 4 间隔口径升档、CPU 口径不升档",
+      "ok": true,
+      "detail": "interval maxLevel=2（interval，升档后 interval={\"p50\":16.7,\"p90\":17}） cpu maxLevel=0（cpu）"
+    },
+    {
+      "name": "标准 6 非 E3D 一动就到 L1",
+      "ok": true,
+      "detail": "startLevel=1 sgl=true levels=L1x239"
+    },
+    {
+      "name": "标准 6 拖动中裁小构件、松手后恢复",
+      "ok": true,
+      "detail": "cullDuringDrag=true after={\"level\":0,\"pipelineLevel\":0,\"cull\":false,\"refreshMs\":16.699999999999818} restoreAfterLastMoveMs=200.1"
+    },
+    {
+      "name": "标准 7 dtx_drag_downgrade=0 全程 L0",
+      "ok": true,
+      "detail": "maxLevel=0 enabled=[false]"
+    },
+    {
+      "name": "标准 7 dtx_downgrade_warm_ms=0 不沿用起步档",
+      "ok": true,
+      "detail": "上次 maxLevel=2 本次 startLevel=0"
+    },
+    {
+      "name": "一步到位的相机变化（非 E3D）：先到 L1，随后自己回 L0、裁剪关闭",
+      "ok": true,
+      "detail": "{\"pbrMoved\":true,\"ok\":true,\"ms\":218,\"level\":0,\"cull\":false}"
+    },
+    {
+      "name": "一步到位的相机变化（3 秒内）：先按起步档出画，随后自己回 L0",
+      "ok": true,
+      "detail": "{\"maxLevel\":2,\"warmMoved\":true,\"ok\":true,\"ms\":335,\"level\":0,\"cull\":false}"
+    },
+    {
+      "name": "按住不动后松手：松手后自己回 L0",
+      "ok": true,
+      "detail": "{\"held\":{\"level\":2,\"moved\":false,\"held\":true},\"ok\":true,\"ms\":191,\"level\":0,\"cull\":false}"
+    }
+  ],
+  "finishedAt": "2026-11-07T17:35:05.052Z"
+}

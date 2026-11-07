@@ -1,0 +1,215 @@
+{
+  "newBase": "http://localhost:3101",
+  "oldBase": "http://localhost:3111",
+  "count": 2000,
+  "startedAt": "2026-11-07T17:30:27.770Z",
+  "looks": {
+    "e3d": {
+      "levels": {
+        "new": {
+          "afterRotate": 0,
+          "afterSettle": 0
+        },
+        "newRepeat": {
+          "afterRotate": 0,
+          "afterSettle": 0
+        }
+      },
+      "rotatedVsSettled": {
+        "new": {
+          "width": 900,
+          "height": 600,
+          "diffPixels": 0,
+          "maxDiff": 0
+        },
+        "old": {
+          "width": 900,
+          "height": 600,
+          "diffPixels": 53015,
+          "maxDiff": 221
+        }
+      },
+      "shots": {
+        "initial": {
+          "stable": {
+            "new": true,
+            "newRepeat": true,
+            "old": true
+          },
+          "clip": {
+            "x": 350,
+            "y": 83,
+            "width": 900,
+            "height": 600
+          },
+          "noise": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          },
+          "vsOld": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          }
+        },
+        "rotated": {
+          "stable": {
+            "new": true,
+            "newRepeat": true,
+            "old": true
+          },
+          "clip": {
+            "x": 350,
+            "y": 83,
+            "width": 900,
+            "height": 600
+          },
+          "noise": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          },
+          "vsOld": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 53015,
+            "maxDiff": 221
+          }
+        },
+        "settled": {
+          "stable": {
+            "new": true,
+            "newRepeat": true,
+            "old": true
+          },
+          "clip": {
+            "x": 350,
+            "y": 83,
+            "width": 900,
+            "height": 600
+          },
+          "noise": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          },
+          "vsOld": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          }
+        }
+      }
+    },
+    "pbr": {
+      "levels": {
+        "new": {
+          "afterRotate": 0,
+          "afterSettle": 0
+        },
+        "newRepeat": {
+          "afterRotate": 0,
+          "afterSettle": 0
+        }
+      },
+      "rotatedVsSettled": {
+        "new": {
+          "width": 900,
+          "height": 600,
+          "diffPixels": 0,
+          "maxDiff": 0
+        },
+        "old": {
+          "width": 900,
+          "height": 600,
+          "diffPixels": 45764,
+          "maxDiff": 221
+        }
+      },
+      "shots": {
+        "initial": {
+          "stable": {
+            "new": true,
+            "newRepeat": true,
+            "old": true
+          },
+          "clip": {
+            "x": 350,
+            "y": 83,
+            "width": 900,
+            "height": 600
+          },
+          "noise": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          },
+          "vsOld": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          }
+        },
+        "rotated": {
+          "stable": {
+            "new": true,
+            "newRepeat": true,
+            "old": true
+          },
+          "clip": {
+            "x": 350,
+            "y": 83,
+            "width": 900,
+            "height": 600
+          },
+          "noise": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          },
+          "vsOld": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 45764,
+            "maxDiff": 221
+          }
+        },
+        "settled": {
+          "stable": {
+            "new": true,
+            "newRepeat": true,
+            "old": true
+          },
+          "clip": {
+            "x": 350,
+            "y": 83,
+            "width": 900,
+            "height": 600
+          },
+          "noise": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          },
+          "vsOld": {
+            "width": 900,
+            "height": 600,
+            "diffPixels": 0,
+            "maxDiff": 0
+          }
+        }
+      }
+    }
+  },
+  "finishedAt": "2026-11-07T17:32:00.187Z"
+}

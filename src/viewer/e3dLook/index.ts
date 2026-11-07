@@ -65,14 +65,39 @@ export {
   type PdmsColourEntry
 } from './pdmsColourTable';
 export {
+  DEFAULT_DRAG_DOWNGRADE_OPTIONS,
+  DEFAULT_DOWNGRADE_RATIO,
+  DEFAULT_FRAME_BUDGET_MS,
+  DEFAULT_WARM_START_MS,
   DRAG_DOWNGRADE_GRACE_MS,
   createDragDowngradeState,
+  effectiveBudgetMs,
   isDragDowngradeEnabled,
+  readDragDowngradeOptions,
+  readFrameMetric,
   stepDragDowngrade,
   type DragDowngradeInput,
+  type DragDowngradeOptions,
   type DragDowngradeState,
-  type DragDowngradeStep
+  type DragDowngradeStep,
+  type FrameMetric,
+  type SglDowngradeLevel
 } from './dragDowngrade';
+export {
+  FRAME_BUDGET_MIN_SAMPLES,
+  FRAME_BUDGET_WINDOW,
+  createFrameBudgetState,
+  frameBudgetP90,
+  frameSampleMs,
+  medianRefreshMs,
+  probeRefreshMs,
+  resetFrameBudget,
+  stepFrameBudget,
+  type FrameBudgetSample,
+  type FrameBudgetState,
+  type FrameBudgetStep,
+  type FrameTiming
+} from './frameBudget';
 export {
   DEFAULT_SGL_LOOK_PRESET,
   SGL_LOOK_PRESETS,

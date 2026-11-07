@@ -181,16 +181,25 @@ import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
 import { clampViewerPixelRatio, DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 import {
+  DEFAULT_DRAG_DOWNGRADE_OPTIONS,
   E3D31_HBAO,
   E3D_GRAPHICS_COLOUR_DEFAULTS,
   SGL_LOOK_PRESETS,
   SglLookPipeline,
   applySglLookPresetToPipelineParams,
   createDragDowngradeState,
+  frameSampleMs,
   isDragDowngradeEnabled,
   loadSgl31EnvCube,
+  probeRefreshMs,
+  readDragDowngradeOptions,
+  readFrameMetric,
   stepDragDowngrade,
   pdmsColourHex,
+  type DragDowngradeOptions,
+  type FrameMetric,
+  type FrameTiming,
+  type SglDowngradeLevel,
   type SglLookPresetId,
 } from '@/viewer/e3dLook';
 import { createModelUnitCompareController } from '@/viewer/modelUnitCompareController';
@@ -1218,15 +1227,29 @@ let attachedToScene = false;
 let shaderPrecompiled = false;
 let lastGlobalEdgeRevision = -1;
 let continuousRender = false;
-// 拖动时临时降画质（E3D 外观管线跳过 AO / HLR 超采样）；?dtx_drag_downgrade=0 或同名 localStorage 项关闭
+// 交互降画质（E3D 外观管线按实测帧耗时逐级关效果 + 拖动中裁小构件）：
+// ?dtx_drag_downgrade=0 或同名 localStorage 项整体关闭；预算 / 倍数 / 起步档 / 样本口径见
+// dtx_frame_budget_ms / dtx_downgrade_ratio / dtx_downgrade_warm_ms / dtx_frame_metric
 let dragDowngradeEnabled = true;
+let dragDowngradeOptions: DragDowngradeOptions = { ...DEFAULT_DRAG_DOWNGRADE_OPTIONS };
 let dragDowngradeState = createDragDowngradeState();
+/** 当前生效的档位（0 全画质 / 1 关 HLR 与去杂 / 2 只画颜色） */
+let dragDowngradeLevel: SglDowngradeLevel = 0;
+let frameMetric: FrameMetric = 'interval';
+/** 上一帧的出帧记录（见 `frameSampleMs`）；早退、resize 同步出帧、场景重置时清掉，链条断开 */
+let lastFrameTiming: FrameTiming | null = null;
+/** 已画完的帧数：刷新周期探测期间变了说明出了帧，结果作废 */
+let renderedFrameCount = 0;
+/** 显示器刷新周期（ms，见 `probeRefreshMs`）；没量到为 null，预算按 dtx_frame_budget_ms 算 */
+let displayRefreshMs: number | null = null;
+let lastRefreshProbeAt = -Infinity;
+let refreshProbeTimer: ReturnType<typeof setTimeout> | null = null;
+const REFRESH_PROBE_INTERVAL_MS = 30000;
+/** 小构件裁剪当前是否已下发（用于判断恢复的那一帧要不要补画） */
+let cullDragApplied = false;
 let orbitControlsHeld = false;
 let gizmoHeld = false;
 let dragDowngradeTimer: ReturnType<typeof setTimeout> | null = null;
-// 拖动中裁掉小构件（?dtx_cull_drag_px=），和 E3D 降画质共用判定、各自一份状态
-let cullDragState = createDragDowngradeState();
-let cullDragTimer: ReturnType<typeof setTimeout> | null = null;
 let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
@@ -3317,6 +3340,9 @@ function renderFrameImmediate() {
   const dtxViewer = dtxViewerRef.value;
   const dtxLayer = dtxLayerRef.value;
   if (!dtxViewer || !dtxLayer) return;
+  // 同步出帧插在 rAF 链中间：下一帧的出帧间隔不再代表上一帧的耗时
+  lastFrameTiming = null;
+  renderedFrameCount += 1;
 
   cadGridRef.value?.update(dtxViewer.controls.target);
   ensureLayerAttached();
@@ -3381,78 +3407,132 @@ function requestRender() {
 }
 
 /**
- * 每帧出画前定这一帧降不降画质，返回 true 表示本帧刚恢复全画质、必须出画。
+ * 每帧出画前定这一帧的降画质档位，返回 true 表示本帧刚恢复全画质、必须出画。
+ *
  * 「相机在动」要和上一次走到这里时的位姿比：拖动、滚轮、flyTo 都在帧外改相机，
  * renderFrame 自己的 controls.update() 只看得见阻尼那一段。
  * 位移按视距归一后和 DRAG_MOTION_EPS 比，不用 CAMERA_EPS_SQ：阻尼是指数衰减，
  * 松手后约 3 秒位移平方才落到 1e-12 以下，那样宽限期会被看不见的尾巴一直续着。
- * 停稳后按需出帧会停在最后那一帧低画质上，所以还没到恢复时刻时挂一个定时器，到点补一帧全画质。
+ *
+ * 档位由实测帧耗时驱动（见 `stepDragDowngrade`）：样本是**上一帧**的耗时（`frameSampleMs`：
+ * CPU 耗时与出帧间隔取大），所以相机刚动起来的第一帧仍按起步档出画，下一帧才可能升档。
+ * 按需出帧时停下之后未必还有下一帧（视图立方体、定位构件这类一步到位的相机变化，或按住不动后松手），
+ * 状态机看不到「已停」就会停在降画质那一帧上，所以交互期间一直挂着定时器，到点补一帧让它重新判断。
  */
-function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean): boolean {
+function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean, frameStart: number): boolean {
   const viewDist = Math.max(1e-9, viewer.camera.position.distanceTo(viewer.controls.target));
   const motion = Math.max(
     dragPosePos.distanceTo(viewer.camera.position),
     dragPoseTarget.distanceTo(viewer.controls.target),
   ) / viewDist;
-  // 首帧没有上一次位姿可比，不算在动（否则一打开就先出 200ms 低画质）
+  // 首帧没有上一次位姿可比，不算在动（否则一打开就先出 200ms 降画质）
   const moved = dragPoseValid && (projChanged || motion > DRAG_MOTION_EPS);
   dragPosePos.copy(viewer.camera.position);
   dragPoseTarget.copy(viewer.controls.target);
   dragPoseValid = true;
-  const cullRestored = updateCullDrag(moved);
-  const pipeline = sglPipelineRef.value;
-  if (!pipeline) return cullRestored;
+
+  const now = performance.now();
+  const timing = lastFrameTiming;
+  lastFrameTiming = null;
+  const frameMs = frameSampleMs(timing, frameStart, frameMetric === 'interval');
+  // 不走 SGL 管线时档位只用于小构件裁剪；两者都关就整体停摆
+  const sglActive = useSglLookRenderPath();
+  const pipelineActive = sglActive || cullDragEnabled();
+  const wasInGesture = dragDowngradeState.inGesture;
   const step = stepDragDowngrade(dragDowngradeState, {
     enabled: dragDowngradeEnabled,
-    pipelineActive: useSglLookRenderPath(),
+    pipelineActive,
     held: orbitControlsHeld || gizmoHeld,
     cameraMoving: moved,
-    now: performance.now(),
-  });
+    frameMs,
+    // 非 E3D 样式没有别的效果可关，相机一动就裁小构件
+    floorLevel: sglActive ? 0 : 1,
+    refreshMs: displayRefreshMs,
+    now,
+  }, dragDowngradeOptions);
   dragDowngradeState = step.state;
-  pipeline.setInteracting(step.state.downgraded);
-  if (step.restoreAt !== null && dragDowngradeTimer === null) {
+  dragDowngradeLevel = step.level;
+  // 每帧下发（就是赋一个数，成本可忽略）；管线晚建时也不会漏掉当前档位
+  sglPipelineRef.value?.setDowngradeLevel(step.level);
+  if (isDev) {
+    (window as any).__dtxDowngrade = {
+      level: step.level,
+      p90: step.p90,
+      samples: step.state.budget.count,
+      flips: step.state.flips,
+      warmLevel: step.state.warmLevel,
+      sampleMs: frameMs,
+      cpuMs: timing?.cpuMs ?? null,
+      intervalMs: timing?.scheduledNext ? frameStart - timing.start : null,
+      refreshMs: displayRefreshMs,
+      metric: frameMetric,
+      moved,
+      held: orbitControlsHeld || gizmoHeld,
+      pipelineActive,
+      enabled: dragDowngradeEnabled,
+      options: dragDowngradeOptions,
+    };
+  }
+  const cullRestored = updateCullDrag(dragDowngradeLevel);
+  const wakeAt = step.restoreAt
+    ?? (step.state.inGesture ? step.state.lastActiveAt + dragDowngradeOptions.graceMs : null);
+  if (wakeAt !== null && dragDowngradeTimer === null) {
     dragDowngradeTimer = setTimeout(() => {
       dragDowngradeTimer = null;
-      requestRender();
-    }, Math.max(0, step.restoreAt - performance.now()) + 1);
+      // 只要一帧重新判断：真恢复时 restored 为真会自己出画，仍在交互（按住不动）就不重画
+      scheduleFrame();
+    }, Math.max(0, wakeAt - performance.now()) + 1);
   }
+  if (wasInGesture && !step.state.inGesture) scheduleRefreshProbe(500);
   return step.restored || cullRestored;
 }
 
 /**
- * 拖动中跳过屏幕上很小的构件（所有样式都生效，判定同 E3D 降画质，另开一份状态）；停稳宽限期后恢复，
- * 恢复那一帧返回 true 让宿主补画，静止帧完整显示。
+ * 视口空闲时量一次显示器刷新周期（见 `probeRefreshMs`），结果参与降档预算；量到后 30 秒内不再量。
+ * 探测期间出了帧就作废，等下一次交互结束再试。
  */
-function updateCullDrag(moved: boolean): boolean {
+function scheduleRefreshProbe(delayMs: number): void {
+  if (refreshProbeTimer !== null) return;
+  if (performance.now() - lastRefreshProbeAt < REFRESH_PROBE_INTERVAL_MS) return;
+  refreshProbeTimer = setTimeout(() => {
+    const renderedAtStart = renderedFrameCount;
+    void probeRefreshMs(callback => window.requestAnimationFrame(callback), {
+      busy: () => renderedFrameCount !== renderedAtStart,
+    }).then((ms) => {
+      refreshProbeTimer = null;
+      if (ms === null) return;
+      displayRefreshMs = ms;
+      lastRefreshProbeAt = performance.now();
+    });
+  }, delayMs);
+}
+
+/** 小构件裁剪是否可用（`?dtx_cull_drag_px=` 且 > 0） */
+function cullDragEnabled(): boolean {
   const ctl = viewCullControllerRef.value;
   if (!ctl) return false;
-  const step = stepDragDowngrade(cullDragState, {
-    enabled: ctl.getOptions().enabled && ctl.getOptions().dragMinPx > 0,
-    pipelineActive: true,
-    held: orbitControlsHeld || gizmoHeld,
-    cameraMoving: moved,
-    now: performance.now(),
-  });
-  cullDragState = step.state;
-  ctl.setDragging(step.state.downgraded);
-  if (step.restoreAt !== null && cullDragTimer === null) {
-    cullDragTimer = setTimeout(() => {
-      cullDragTimer = null;
-      requestRender();
-    }, Math.max(0, step.restoreAt - performance.now()) + 1);
-  }
-  return step.restored;
+  const options = ctl.getOptions();
+  return options.enabled && options.dragMinPx > 0;
+}
+
+/**
+ * 拖动中跳过屏幕上很小的构件（所有样式都生效）：读同一份档位，`level >= 1` 就裁；
+ * 档位回到 0 时恢复，恢复那一帧返回 true 让宿主补画，静止帧完整显示。
+ */
+function updateCullDrag(level: SglDowngradeLevel): boolean {
+  const ctl = viewCullControllerRef.value;
+  if (!ctl) return false;
+  const dragging = level >= 1 && cullDragEnabled();
+  ctl.setDragging(dragging);
+  const restored = cullDragApplied && !dragging;
+  cullDragApplied = dragging;
+  return restored;
 }
 
 function clearDragDowngradeTimer(): void {
   if (dragDowngradeTimer !== null) {
     clearTimeout(dragDowngradeTimer);
     dragDowngradeTimer = null;
-  }
-  if (cullDragTimer !== null) {
-    clearTimeout(cullDragTimer);
-    cullDragTimer = null;
   }
 }
 
@@ -3463,6 +3543,8 @@ function viewportCssHeight(): number {
 function renderFrame() {
   if (isRendering) return;
   isRendering = true;
+  // 帧耗时打点：从进入函数到本帧画完（finally 之前）。早退的帧不写样本
+  const frameStart = performance.now();
   try {
     const dtxViewer = dtxViewerRef.value;
     const dtxLayer = dtxLayerRef.value;
@@ -3487,7 +3569,8 @@ function renderFrame() {
             posDeltaSq > CAMERA_EPS_SQ || targetDeltaSq > CAMERA_EPS_SQ || projChanged;
     if (projChanged) tmpProjMatrix.copy(dtxViewer.camera.projectionMatrix);
 
-    const qualityRestored = updateDragDowngrade(dtxViewer, projChanged);
+    const qualityRestored = updateDragDowngrade(dtxViewer, projChanged, frameStart);
+    // 这一帧不画：不留出帧记录，下一帧按当前档位继续判断
     if (!needsRender && !cameraChanged && !continuousRender && !qualityRestored) return;
 
     // CAD Grid（跟随 target 进行 snapping，模拟“无限地面网格”）
@@ -3550,6 +3633,15 @@ function renderFrame() {
     if (continuousRender || cameraChanged || needsRender) {
       scheduleFrame();
     }
+
+    // 真正画完这一帧才留出帧记录（早退分支在上面已 return，不计入）；
+    // 只有画完时已经排上了下一帧，下一帧的出帧间隔才代表这一帧的耗时
+    renderedFrameCount += 1;
+    lastFrameTiming = {
+      start: frameStart,
+      cpuMs: performance.now() - frameStart,
+      scheduledNext: rafId !== null,
+    };
   } finally {
     isRendering = false;
   }
@@ -3670,6 +3762,10 @@ onMounted(async () => {
 
     const q = new URLSearchParams(window.location.search);
     dragDowngradeEnabled = isDragDowngradeEnabled(q, localStorage.getItem('dtx_drag_downgrade'));
+    dragDowngradeOptions = readDragDowngradeOptions(q, (key) => localStorage.getItem(key));
+    frameMetric = readFrameMetric(q, (key) => localStorage.getItem(key));
+    // 等首屏和加载带来的连续出帧安静下来再量；量不到就按预算走，交互结束后再试
+    scheduleRefreshProbe(1500);
     const demo = String(
       q.get('dtx_demo') || localStorage.getItem('dtx_demo') || '',
     ).toLowerCase();
@@ -5412,7 +5508,13 @@ onUnmounted(() => {
   }
   clearDragDowngradeTimer();
   dragDowngradeState = createDragDowngradeState();
-  cullDragState = createDragDowngradeState();
+  dragDowngradeLevel = 0;
+  lastFrameTiming = null;
+  if (refreshProbeTimer !== null) {
+    clearTimeout(refreshProbeTimer);
+    refreshProbeTimer = null;
+  }
+  cullDragApplied = false;
   dragPoseValid = false;
   orbitControlsHeld = false;
   gizmoHeld = false;
