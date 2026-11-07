@@ -1,0 +1,346 @@
+{
+  "url": "http://127.0.0.1:3121/?output_project=AvevaMarineSample&show_dbnum_full=1&dtx_lod=0",
+  "cullOptions": {
+    "enabled": true,
+    "dragMinPx": 8,
+    "lod": false,
+    "lodPx": 48
+  },
+  "loads": [
+    {
+      "db": 7997,
+      "ms": 26486,
+      "loaded": true,
+      "instanceCount": 53703,
+      "budgetLimited": false
+    },
+    {
+      "db": 7998,
+      "ms": 251,
+      "loaded": true,
+      "instanceCount": 0,
+      "budgetLimited": null
+    },
+    {
+      "db": 8000,
+      "ms": 3700,
+      "loaded": true,
+      "instanceCount": 2684,
+      "budgetLimited": false
+    },
+    {
+      "db": 7999,
+      "ms": 12770,
+      "loaded": true,
+      "instanceCount": 15845,
+      "budgetLimited": false
+    },
+    {
+      "db": 7356,
+      "ms": 1339,
+      "loaded": true,
+      "instanceCount": 894,
+      "budgetLimited": false
+    },
+    {
+      "db": 7354,
+      "ms": 1131,
+      "loaded": true,
+      "instanceCount": 380,
+      "budgetLimited": false
+    },
+    {
+      "db": 7353,
+      "ms": 388,
+      "loaded": true,
+      "instanceCount": 0,
+      "budgetLimited": null
+    },
+    {
+      "db": 7352,
+      "ms": 494,
+      "loaded": true,
+      "instanceCount": 24,
+      "budgetLimited": false
+    },
+    {
+      "db": 7350,
+      "ms": 3582,
+      "loaded": true,
+      "instanceCount": 2026,
+      "budgetLimited": false
+    },
+    {
+      "db": 7333,
+      "ms": 33457,
+      "loaded": true,
+      "instanceCount": 79409,
+      "budgetLimited": false
+    },
+    {
+      "db": 7331,
+      "ms": 1731,
+      "loaded": true,
+      "instanceCount": 422,
+      "budgetLimited": false
+    },
+    {
+      "db": 7330,
+      "ms": 1727,
+      "loaded": true,
+      "instanceCount": 478,
+      "budgetLimited": false
+    },
+    {
+      "db": 7329,
+      "ms": 3994,
+      "loaded": true,
+      "instanceCount": 1875,
+      "budgetLimited": false
+    },
+    {
+      "db": 7327,
+      "ms": 12663,
+      "loaded": true,
+      "instanceCount": 17076,
+      "budgetLimited": false
+    },
+    {
+      "db": 7326,
+      "ms": 11000,
+      "loaded": true,
+      "instanceCount": 14328,
+      "budgetLimited": false
+    },
+    {
+      "db": 7324,
+      "ms": 4373,
+      "loaded": true,
+      "instanceCount": 2091,
+      "budgetLimited": false
+    },
+    {
+      "db": 7332,
+      "ms": 1779,
+      "loaded": true,
+      "instanceCount": 422,
+      "budgetLimited": false
+    },
+    {
+      "db": 1112,
+      "ms": 8884,
+      "loaded": true,
+      "instanceCount": 5135,
+      "budgetLimited": false
+    }
+  ],
+  "loadTotalMs": 129750,
+  "loadEndAt": 1794032123570,
+  "heap": {
+    "peak": 4406560120,
+    "afterLoad": 1979760377,
+    "afterLod": 1965766630
+  },
+  "lod": {
+    "lodCapableObjects": 0,
+    "lodTriangles": 0,
+    "lod1Geometries": 0,
+    "totalTriangles": 31629642,
+    "layers": 1
+  },
+  "lodSettleMs": 9084,
+  "lod1Window": null,
+  "recompile": {
+    "count": 69,
+    "ms": 7705.600000023842
+  },
+  "net": {
+    "hosts": {
+      "127.0.0.1:8052": 31129
+    },
+    "meshes": {
+      "count": 29643,
+      "bytes": 343267476
+    },
+    "lod1": {
+      "ok": 0,
+      "notFound": 0,
+      "other": 0,
+      "okBytes": 0,
+      "first": 0,
+      "last": 0,
+      "cacheControl": null,
+      "etag": null
+    }
+  },
+  "consoleLod": [],
+  "bench": {
+    "canvas": [
+      1220,
+      778
+    ],
+    "box": [
+      [
+        -51.7,
+        -68.444068359375,
+        -50.565
+      ],
+      [
+        51.7,
+        68.444068359375,
+        50.565
+      ]
+    ],
+    "frames": {
+      "overview/still/direct": {
+        "medianMs": 339.8,
+        "minMs": 339.1,
+        "maxMs": 341.1,
+        "triangles": 31599516,
+        "segments": 29,
+        "segmentsSeen": [
+          29
+        ],
+        "lodObjects": 0
+      },
+      "overview/still/e3d": {
+        "medianMs": 684,
+        "minMs": 682.8,
+        "maxMs": 685.3,
+        "triangles": 31599516,
+        "segments": 29,
+        "segmentsSeen": [
+          29
+        ],
+        "lodObjects": 0
+      },
+      "overview/drag/direct": {
+        "medianMs": 39.5,
+        "minMs": 39,
+        "maxMs": 40.3,
+        "triangles": 3555201,
+        "segments": 5934,
+        "segmentsSeen": [
+          5934
+        ],
+        "lodObjects": 0
+      },
+      "overview/drag/e3d": {
+        "medianMs": 40.5,
+        "minMs": 39.7,
+        "maxMs": 41,
+        "triangles": 3555201,
+        "segments": 5934,
+        "segmentsSeen": [
+          5934
+        ],
+        "lodObjects": 0
+      },
+      "mid/still/direct": {
+        "medianMs": 188.5,
+        "minMs": 187.1,
+        "maxMs": 190.6,
+        "triangles": 17144755,
+        "segments": 2874,
+        "segmentsSeen": [
+          2874
+        ],
+        "lodObjects": 0
+      },
+      "mid/still/e3d": {
+        "medianMs": 397.2,
+        "minMs": 395.2,
+        "maxMs": 400.3,
+        "triangles": 17144755,
+        "segments": 2874,
+        "segmentsSeen": [
+          2874
+        ],
+        "lodObjects": 0
+      },
+      "mid/drag/direct": {
+        "medianMs": 67,
+        "minMs": 66.2,
+        "maxMs": 67.7,
+        "triangles": 6146975,
+        "segments": 19670,
+        "segmentsSeen": [
+          19670
+        ],
+        "lodObjects": 0
+      },
+      "mid/drag/e3d": {
+        "medianMs": 68.4,
+        "minMs": 67.9,
+        "maxMs": 69.9,
+        "triangles": 6146975,
+        "segments": 19670,
+        "segmentsSeen": [
+          19670
+        ],
+        "lodObjects": 0
+      },
+      "near/still/direct": {
+        "medianMs": 15.9,
+        "minMs": 15.7,
+        "maxMs": 16.5,
+        "triangles": 1179810,
+        "segments": 633,
+        "segmentsSeen": [
+          633
+        ],
+        "lodObjects": 0
+      },
+      "near/still/e3d": {
+        "medianMs": 62.8,
+        "minMs": 62,
+        "maxMs": 63.8,
+        "triangles": 1179810,
+        "segments": 633,
+        "segmentsSeen": [
+          633
+        ],
+        "lodObjects": 0
+      },
+      "near/drag/direct": {
+        "medianMs": 11.3,
+        "minMs": 10.9,
+        "maxMs": 11.7,
+        "triangles": 749430,
+        "segments": 2116,
+        "segmentsSeen": [
+          2116
+        ],
+        "lodObjects": 0
+      },
+      "near/drag/e3d": {
+        "medianMs": 13,
+        "minMs": 12.9,
+        "maxMs": 13.4,
+        "triangles": 749430,
+        "segments": 2116,
+        "segmentsSeen": [
+          2116
+        ],
+        "lodObjects": 0
+      }
+    },
+    "pick": {
+      "overview": {
+        "medianMs": 1.3,
+        "maxMs": 28.6,
+        "hits": 41
+      },
+      "mid": {
+        "medianMs": 1.4,
+        "maxMs": 2,
+        "hits": 99
+      },
+      "near": {
+        "medianMs": 1.6,
+        "maxMs": 3.6,
+        "hits": 100
+      }
+    }
+  }
+}
