@@ -105,7 +105,10 @@ export type ScreenLinePart =
   | 'leader'
   | 'arc'
   | 'arrow'
-  /** Billboard tag body (card / frame / pill) and its fill. */
+  /**
+   * Tag body: a billboard tag's card / frame / pill and its fill, or the frame
+   * a flat label draws around one of its rows (`ExplicitLayoutInput.labelFrame`).
+   */
   | 'tag';
 
 /**
@@ -525,6 +528,21 @@ export type ExplicitLabelBlockInput = Readonly<{
 }>;
 
 /**
+ * A frame around one row of a label as the row is drawn: PML `drawframe`, the
+ * 位号 box around the name of a component name tag (plant-mbd draws it as four
+ * `aid_line`s `<label id>:frame:0..3`, which the adapter folds into this).
+ * PML keeps the box ch/10 clear of the text; the kernel keeps it a tenth of
+ * the drawn cap height clear of the row's glyph box on every side, so the
+ * frame grows with text lifted to the legibility floor, turns with the
+ * baseline and never comes out smaller than the text. A leader from the label
+ * starts on it.
+ */
+export type ExplicitLabelFrameInput = Readonly<{
+  /** The row it wraps: 0 = `formattedLabel`, k = `labelBlock.rows[k − 1]`. */
+  row: number;
+}>;
+
+/**
  * A solver-authored running dimension presented as true 3D annotation
  * (reference drawing style, 2026-09-12; design target in
  * `docs/design/mbd-annotation-mockup-2026-09-12/README.md`). The kernel
@@ -658,6 +676,12 @@ export type ExplicitLayoutInput = Readonly<{
    * Omitted = `formattedLabel` alone at the anchor, `texts` on their own.
    */
   labelBlock?: ExplicitLabelBlockInput;
+  /**
+   * Frame one row of the label (see `ExplicitLabelFrameInput`). Flat
+   * presentation only: a billboard tag (`tag`) ignores it, its body being the
+   * frame.
+   */
+  labelFrame?: ExplicitLabelFrameInput;
   /**
    * Design-space text height (metres) declared by the source, e.g. the MBD
    * group `cheight_mm` after `source_to_design`. When present, the label cap

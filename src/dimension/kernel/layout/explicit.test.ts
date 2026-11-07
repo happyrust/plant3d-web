@@ -10,6 +10,7 @@ import { layoutExplicit } from './explicit';
 import type {
   ExplicitLayoutInput,
   SceneLine,
+  ScenePath,
   SceneTriangle,
   ScreenGlyphRun,
   ScreenLine,
@@ -1207,5 +1208,159 @@ describe('leader from its label', () => {
     }), context());
     expect(leaderLines(through).map(line => roundNumbers([line.from, line.to])))
       .toEqual([[[220, 150], [280, 150]]]);
+  });
+});
+
+// 位号方框（#103）：`labelFrame` 让平贴标签在它实际画出的那一行外画一个闭合方框——那一行的字形框
+// 四边各让出画出字高的 1/10（PML drawframe 的 ch/10），随文字放大到最小可读字号、随基线旋转；
+// 从标签出发的引线从方框边起。测试字体：字帽 10、升部 12、降部 −3，字形框高 1.5 倍字帽；
+// 相机 100 px/m，锚点 [0.5, 0.5, 0] 投到 (250, 150)。
+describe('label frame', () => {
+  const context = (): LayoutContext => ({
+    projector: createTestProjector(),
+    font: createTestFont(),
+    theme: SOLVESPACE_DIMENSION_THEME,
+    format: DEFAULT_DIMENSION_FORMAT,
+    interaction: 'normal',
+  });
+  const framed = (overrides: Partial<ExplicitLayoutInput> = {}): ExplicitLayoutInput => ({
+    id: 'framed',
+    role: 'external',
+    labelPinned: true,
+    formattedLabel: 'AhA',
+    lines: [],
+    labelAnchor: [0.5, 0.5, 0],
+    arrowLines: [],
+    labelFrame: { row: 0 },
+    ...overrides,
+  });
+  const frames = (result: ReturnType<typeof layoutExplicit>): ScreenPath[] =>
+    result.primitives.filter(
+      (primitive): primitive is ScreenPath => primitive.kind === 'path' && primitive.part === 'tag',
+    );
+  const glyphRuns = (result: ReturnType<typeof layoutExplicit>): ScreenGlyphRun[] =>
+    result.primitives.filter(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    );
+  /** The run's unrotated glyph box grown by a tenth of its cap height, corner by corner, turned with the run. */
+  const expectFrameAround = (frame: ScreenPath, glyph: ScreenGlyphRun): void => {
+    const box = glyph.unrotatedBounds ?? glyph.bounds;
+    const centre: Vec2 = [box.x + box.width / 2, box.y + box.height / 2];
+    const clearance = glyph.capHeightPx / 10;
+    const halfWidth = box.width / 2 + clearance;
+    const halfHeight = box.height / 2 + clearance;
+    const cos = Math.cos(glyph.rotationRad ?? 0);
+    const sin = Math.sin(glyph.rotationRad ?? 0);
+    expect(frame.closed).toBe(true);
+    expect(frame.points).toHaveLength(4);
+    const corners: readonly Vec2[] = [
+      [-halfWidth, -halfHeight],
+      [halfWidth, -halfHeight],
+      [halfWidth, halfHeight],
+      [-halfWidth, halfHeight],
+    ];
+    frame.points.forEach((point, index) => {
+      const dx = point[0] - centre[0];
+      const dy = point[1] - centre[1];
+      expect(dx * cos + dy * sin).toBeCloseTo(corners[index]![0], 6);
+      expect(-dx * sin + dy * cos).toBeCloseTo(corners[index]![1], 6);
+    });
+  };
+  const extent = (points: readonly Vec2[], axis: 0 | 1): number =>
+    Math.max(...points.map(point => point[axis])) - Math.min(...points.map(point => point[axis]));
+
+  it('draws the frame a tenth of the cap height clear of the row\'s glyph box', () => {
+    const result = layoutExplicit(framed(), context());
+    const [glyph] = glyphRuns(result);
+    expect(glyph!.capHeightPx).toBe(SOLVESPACE_DIMENSION_THEME.textHeightPx);
+    const [frame, ...others] = frames(result);
+    expect(others).toEqual([]);
+    expectFrameAround(frame!, glyph!);
+    // Every corner hangs off the anchor like the glyphs, so the frame moves with the label.
+    const scenePaths = result.scenePrimitives.filter(
+      (primitive): primitive is ScenePath => primitive.kind === 'scene-path',
+    );
+    expect(scenePaths.flatMap(path => path.points.map(point => point.anchor)))
+      .toEqual(Array.from({ length: 4 }, () => [0.5, 0.5, 0]));
+    // It claims its space with the text and answers hits like the label's other strokes.
+    const xs = frame!.points.map(point => point[0]);
+    const ys = frame!.points.map(point => point[1]);
+    expect(result.labelBounds.x).toBeLessThanOrEqual(Math.min(...xs));
+    expect(result.labelBounds.y).toBeLessThanOrEqual(Math.min(...ys));
+    expect(result.labelBounds.x + result.labelBounds.width).toBeGreaterThanOrEqual(Math.max(...xs));
+    expect(result.labelBounds.y + result.labelBounds.height).toBeGreaterThanOrEqual(Math.max(...ys));
+    expect(result.hitRegions.filter(region => region.part === 'tag')).toHaveLength(4);
+    // Without the field nothing changes.
+    const { labelFrame: _labelFrame, ...plain } = framed();
+    expect(frames(layoutExplicit(plain, context()))).toEqual([]);
+  });
+
+  it('grows with text lifted to the legibility floor and shrinks with text clamped at the ceiling', () => {
+    // 0.02 m projects to 2 px and draws at the 11 px floor, 0.15 m draws as is,
+    // 0.5 m (50 px) is held at the 18 px ceiling.
+    for (const [textHeightM, drawnPx] of [[0.02, 11], [0.15, 15], [0.5, 18]] as const) {
+      const result = layoutExplicit(framed({ textHeightM }), context());
+      const [glyph] = glyphRuns(result);
+      expect(glyph!.capHeightPx).toBeCloseTo(drawnPx, 9);
+      expectFrameAround(frames(result)[0]!, glyph!);
+    }
+    // At the floor the source height would make the frame 2 px tall round 11 px text;
+    // it is the drawn glyph box (1.5 · 11 px) plus two tenths of 11 px.
+    const floor = frames(layoutExplicit(framed({ textHeightM: 0.02 }), context()))[0]!;
+    expect(extent(floor.points, 1)).toBeCloseTo(1.5 * 11 + 2.2, 9);
+    expect(extent(floor.points, 0)).toBeCloseTo(createTestFont().getWidth(11, 'AhA') + 2.2, 9);
+  });
+
+  it('turns with the baseline', () => {
+    const result = layoutExplicit(
+      framed({ labelAlong: [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0] }),
+      context(),
+    );
+    const [glyph] = glyphRuns(result);
+    expect(glyph!.rotationRad).toBeCloseTo(-Math.PI / 6, 9);
+    expectFrameAround(frames(result)[0]!, glyph!);
+  });
+
+  it('wraps only its own row of a block', () => {
+    const block = framed({ labelBlock: { rows: ['hh', 'AAA'], lineAdvance: 1.2 } });
+    const first = layoutExplicit(block, context());
+    const rows = glyphRuns(first);
+    expect(rows).toHaveLength(3);
+    expect(frames(first)).toHaveLength(1);
+    expectFrameAround(frames(first)[0]!, rows[0]!);
+    const second = layoutExplicit({ ...block, labelFrame: { row: 1 } }, context());
+    expectFrameAround(frames(second)[0]!, glyphRuns(second)[1]!);
+    // A row the label does not have, or one that draws no text, gets no frame.
+    expect(frames(layoutExplicit({ ...block, labelFrame: { row: 3 } }, context()))).toEqual([]);
+    expect(frames(layoutExplicit(framed({ formattedLabel: '' }), context()))).toEqual([]);
+  });
+
+  it('starts a leader from the label on the frame', () => {
+    const leaderDown: Partial<ExplicitLayoutInput> = {
+      lines: [{ from: [0.5, 0.5, 0], to: [0.5, -0.5, 0], part: 'leader' }],
+    };
+    const leaderOf = (result: ReturnType<typeof layoutExplicit>): ScreenLine =>
+      result.primitives.find(
+        (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+      )!;
+    const result = layoutExplicit(framed(leaderDown), context());
+    const frameBottom = Math.max(...frames(result)[0]!.points.map(point => point[1]));
+    const leader = leaderOf(result);
+    expect(leader.from[0]).toBeCloseTo(250, 9);
+    expect(leader.from[1]).toBeCloseTo(frameBottom, 9);
+    expect(leader.to).toEqual([250, 250]);
+    // Unframed it starts lower, on the padded text box.
+    const plain = leaderOf(layoutExplicit({ ...framed(leaderDown), labelFrame: undefined }, context()));
+    expect(plain.from[1]).toBeGreaterThan(frameBottom);
+  });
+
+  it('follows a row lifted above its dimension line', () => {
+    const result = layoutExplicit(framed({
+      labelPresentation: 'above',
+      lines: [{ from: [0, 0.5, 0], to: [1, 0.5, 0], part: 'dimension' }],
+    }), context());
+    const [glyph] = glyphRuns(result);
+    expect(glyph!.bounds.y + glyph!.bounds.height).toBeLessThan(150);
+    expectFrameAround(frames(result)[0]!, glyph!);
   });
 });

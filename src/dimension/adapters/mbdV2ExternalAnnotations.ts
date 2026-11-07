@@ -20,6 +20,7 @@ import type {
   MbdPrimitive,
   MbdV2AidArc,
   MbdV2AidCircle,
+  MbdV2AidLine,
   MbdV2AngleDim,
   MbdV2ArcFrame,
   MbdV2Label,
@@ -38,6 +39,7 @@ import type {
   ExplicitArcInput,
   ExplicitArrowInput,
   ExplicitLabelBlockInput,
+  ExplicitLabelFrameInput,
   ExplicitLayoutInput,
   ExplicitLodInput,
   ExplicitMarkerInput,
@@ -343,6 +345,7 @@ type ExplicitParts = Readonly<{
   arcs?: readonly ExplicitArcInput[];
   markers?: readonly ExplicitMarkerInput[];
   labelBlock?: ExplicitLabelBlockInput;
+  labelFrame?: ExplicitLabelFrameInput;
   lod?: ExplicitLodInput;
   dimension3d?: ExplicitLayoutInput['dimension3d'];
   tag?: ExplicitTagInput;
@@ -382,6 +385,7 @@ function explicitRecord(
       ? { markers: parts.markers }
       : {}),
     ...(parts.labelBlock ? { labelBlock: parts.labelBlock } : {}),
+    ...(parts.labelFrame ? { labelFrame: parts.labelFrame } : {}),
     ...(parts.lod ? { lod: parts.lod } : {}),
     ...(parts.labelPresentation ? { labelPresentation: parts.labelPresentation } : {}),
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
@@ -442,6 +446,33 @@ function pairLeaders(
     if (!leader) continue;
     spent.add(leader.id);
     byLabel.set(label.id, leader);
+  }
+  return byLabel;
+}
+
+const FRAME_LINE_ID = /^(.+):frame:\d+$/;
+
+/**
+ * Pair every `label` with the `aid_line`s that frame it: plant-mbd draws the
+ * PML `drawframe` box round the name of a component name tag as four lines
+ * `<label id>:frame:0..3` (function 位号). Only by that id convention — loose
+ * lines have no tie to one label the way a leader starts on it; a frame line
+ * whose label is not in the payload stays a line of its own. Like a leader,
+ * the frame then travels in its label's record (`labelFrame`), and the solver's
+ * world-space lines are not drawn: the flat presentation draws the frame round
+ * the name row at the size the text is drawn, and a billboard's framed body
+ * stands in for it.
+ */
+function pairFrames(data: MbdV2PipeData): ReadonlyMap<string, readonly MbdV2AidLine[]> {
+  const labelIds = new Set(data.primitives
+    .filter(primitive => primitive.kind === 'label')
+    .map(primitive => primitive.id));
+  const byLabel = new Map<string, MbdV2AidLine[]>();
+  for (const primitive of data.primitives) {
+    if (primitive.kind !== 'aid_line') continue;
+    const labelId = FRAME_LINE_ID.exec(primitive.id)?.[1];
+    if (labelId === undefined || !labelIds.has(labelId)) continue;
+    byLabel.set(labelId, [...(byLabel.get(labelId) ?? []), primitive]);
   }
   return byLabel;
 }
@@ -566,16 +597,19 @@ function awayFromPipe(
 }
 
 /**
- * Tag (`label`, optionally with its `leader_line`): the flat presentation is
- * the solver's text centred on its position (along its `text_dir`, stacked
- * along its `text_up`, when declared) plus the leader as drawn; with `tag`
- * the kernel presents it as a billboard call-out (card / frame / pill) that
- * keeps its leader on the pipe point (reference drawing style, 2026-09-12).
- * The `mbd_3d=0` switch strips `tag` and gets the flat presentation back.
+ * Tag (`label`, optionally with its `leader_line` and its frame): the flat
+ * presentation is the solver's text centred on its position (along its
+ * `text_dir`, stacked along its `text_up`, when declared) plus the leader as
+ * drawn and the frame round the name row (`framed`, see `pairFrames`); with
+ * `tag` the kernel presents it as a billboard call-out (card / frame / pill)
+ * that keeps its leader on the pipe point (reference drawing style,
+ * 2026-09-12). The `mbd_3d=0` switch strips `tag` and gets the flat
+ * presentation back.
  */
 function mapLabel(
   primitive: MbdV2Label,
   leader: MbdV2LeaderLine | undefined,
+  framed: boolean,
   dimensions: readonly MbdV2LinearDim[],
   transform: FrameTransform,
 ): ExternalDimensionRecord {
@@ -609,6 +643,9 @@ function mapLabel(
     labelAnchor: position,
     ...(along ? { labelAlong: along } : {}),
     ...(labelBlock ? { labelBlock } : {}),
+    // plant-mbd puts the name, the row PML frames, first: PML's own first row
+    // (the material number) is not drawn.
+    ...(framed ? { labelFrame: { row: 0 } } : {}),
     ...(target ? { lines: [{ from: position, to: target, part: 'leader' as const }] } : {}),
     ...(tagClass.lod ? { lod: tagClass.lod } : {}),
     tag,
@@ -1037,6 +1074,8 @@ export function mbdV2ToExternalRecords(
   const presentation3d = presentation3dContext(data, transform, transformPoint);
   const leaderByLabel = pairLeaders(data, transformPoint);
   const pairedLeaderIds = new Set([...leaderByLabel.values()].map(leader => leader.id));
+  const framesByLabel = pairFrames(data);
+  const pairedFrameIds = new Set([...framesByLabel.values()].flat().map(line => line.id));
   const linearDims = data.primitives.filter(
     (primitive): primitive is MbdV2LinearDim => primitive.kind === 'linear_dim',
   );
@@ -1049,8 +1088,11 @@ export function mbdV2ToExternalRecords(
       });
       continue;
     }
-    if (primitive.kind === 'leader_line' && pairedLeaderIds.has(primitive.id)) {
-      // Drawn as part of its label's record (see `pairLeaders`).
+    if (
+      (primitive.kind === 'leader_line' && pairedLeaderIds.has(primitive.id))
+      || (primitive.kind === 'aid_line' && pairedFrameIds.has(primitive.id))
+    ) {
+      // Drawn as part of its label's record (see `pairLeaders` / `pairFrames`).
       seenIds.add(primitive.id);
       continue;
     }
@@ -1076,6 +1118,7 @@ export function mbdV2ToExternalRecords(
         record = mapLabel(
           primitive,
           leaderByLabel.get(primitive.id),
+          framesByLabel.has(primitive.id),
           linearDims,
           transform,
         );
@@ -1183,7 +1226,7 @@ export function mbdV2ToExternalRecords(
       // D7 order: the primitive's own `text_height_mm` (e.g. the half-height
       // direction labels), otherwise its isoline's, otherwise the payload-wide one.
       // A non-pipe record also takes its function's LOD tier here, whatever its
-      // kind; a paired leader travels inside its label's record and so follows it.
+      // kind; a paired leader or frame travels inside its label's record and so follows it.
       const layout = record.layout as ExplicitLayoutInput;
       const lod = withFunctionTier(
         layout.lod,
