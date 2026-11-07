@@ -193,3 +193,4 @@ npx playwright test --config=playwright.novideo.config.ts e2e/dimension-mbd-v2-f
 | 3 | plant-mbd `1863a19`（`feat/mbd-all-types`） | ADR-0013 / 0014 / 0015、两份词条、`AGENTS.md` |
 | 4 | 三仓 `feat/mbd-all-types`：plant-mbd `47eb83e`、gen-model `46bda93de`、plant3d-web `d36003c3` | M1–M7 与收口轮 CT-1…CT-20 做完并验收（`docs/verification/mbd-all-types-final-2026-11-07/`）；M8 只剩 PML 真实导出金样 |
 | 5 | plant3d-web `e2f3ba99`、gen-model `e6dc8bbf4`（`land/mbd-all-types`）；plant-mbd main 快进到 `47eb83e` | 落主线：合入远端主线并联调重验（`docs/verification/mbd-all-types-mainline-2026-11-08/`），见 `2026-11-08-mbd-all-types-mainline-landing-dev-plan.md` |
+| 6 | 三仓主线：plant3d-web `main` `6ec53e62`（`36568f2f..6ec53e62`，44 个提交）、plant-mbd `main` `47eb83e`（`3db2d92..47eb83e`，120 个，快进）、gen-model `refactor` `e6dc8bbf4`（`5eaddfcda..e6dc8bbf4`，29 个） | 推送落主线（2026-11-08，落地计划 L2）；gen-model 推送前在最终路径 `../vendor/plant-mbd` 上补验：`cargo build --bin aios-database` 通过，8 个 MBD 测试目标 75 例全过。M8 余项 PML 真实导出金样等 E3D 环境（落地计划 L4） |

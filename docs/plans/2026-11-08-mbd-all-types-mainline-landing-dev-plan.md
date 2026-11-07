@@ -219,7 +219,9 @@ npx playwright test e2e/mbd-label-overlap.spec.ts --config=playwright.novideo.co
 |---|---|---|
 | 1 | plant3d-web `e2f3ba99`（`land/mbd-all-types`） | L0-2：`feat/mbd-all-types` d36003c3 合入 origin/main 36568f2f（`--no-ff`，无冲突） |
 | 2 | gen-model `e6dc8bbf4`（`land/mbd-all-types`） | L0-4：`feat/mbd-all-types` 46bda93de 合入 origin/refactor 5eaddfcda（`--no-ff`，无冲突） |
-| 3 | plant3d-web 本计划所在提交 | L1-6：联调重验记录 `docs/verification/mbd-all-types-mainline-2026-11-08/`（36/36 与 11-07 一致、性能无回退），回写原计划 §9 / §10 |
+| 3 | plant3d-web `6ec53e62` | L1-6：联调重验记录 `docs/verification/mbd-all-types-mainline-2026-11-08/`（36/36 与 11-07 一致、性能无回退），回写原计划 §9 / §10 |
 | — | plant-mbd | 不建合并提交：main 3db2d92 快进到 47eb83e（L2-2） |
+| 4 | 三仓推送（L2） | plant3d-web `origin/main` 36568f2f..6ec53e62（44 个）；plant-mbd `github/main` 3db2d92..47eb83e（120 个，快进，共享主检出 `vendor\plant-mbd` 同步快进）；gen-model `origin/refactor` 5eaddfcda..e6dc8bbf4（29 个；推送前在最终路径补验 build 与 8 个测试目标 75 例） |
+| 5 | plant3d-web 本计划所在提交 | L5-2：原计划 §10 补落主线提交号，本节与进度回写；Cursor 计划 todos 另改（`m8-golden-docs` completed，新增 `m8-pml-export` pending） |
 
-进度：L0、L1 完成（2026-11-08；L1-5 可选未做）；L2 起按 E4 逐仓确认推送清单后执行。
+进度：L0–L2 完成（2026-11-08；L1-5 可选未做）。L3-1 远端核对通过（`origin/main` 含 `d36003c3`，`origin/refactor` 含 `46bda93de`，`github/main` = `47eb83e`）。L3-2 两个主检出按 E3 未动，用 merge-tree 与逐文件三方合并模拟 `git pull`：plant3d-web 已提交部分和与进来改动重叠的 6 个未提交文件都能自动合并（预计的 `useMbdExternalSync.test.ts` 冲突按当前工作区不会出现），合入后仍按 R4 补跑 `useMbdExternalSync` 测试与几例联调；gen-model 已提交部分无冲突，未提交的 `src/mbd/branch_query.rs`（3 处）与 `src/web_service/mbd.rs`（1 处）会冲突。L5-1 评论、L5-3 清理待确认后执行；L4 按 E7 挂起，等 E3D 环境。
