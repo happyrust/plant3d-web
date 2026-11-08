@@ -31,6 +31,13 @@ export type MbdDiagnosticsSourceSnapshot = Readonly<{
    */
   coverage?: readonly string[] | null;
   /**
+   * 该包的 MBD 标注类型（契约 `annotation_type`，#103 M7）；`null` = 负载没声明（老后端的管道包），
+   * 装载失败的包缺省。面板据它挑「标注不完整」的期望集、在诊断里标类型名。
+   */
+  annotationType?: string | null;
+  /** 该包的归属对象（契约 `subject`）；`null` = 负载没声明，装载失败的包缺省。 */
+  subject?: Readonly<{ refno: string; noun: string }> | null;
+  /**
    * 该包通道级装载失败原因（API 传输、契约错误或单包原子拒绝）；成功时为 null。
    * 逐包拒绝（2026-11-02）下一包失败只记在这里，不掀翻其它包。
    */

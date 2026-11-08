@@ -27,7 +27,7 @@ import {
 
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
-import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
+import { fetchMbdV2ObjectData } from '@/api/mbdV2Api';
 import {
   reviewRecordCreate,
   reviewRecordGetByTaskId,
@@ -2924,7 +2924,7 @@ function bindLocalDimensionAutosave(system: DimensionSystem): void {
 }
 
 const mbdExternalSync = createMbdExternalSync({
-  fetchPipeData: fetchMbdV2PipeData,
+  fetchPipeData: fetchMbdV2ObjectData,
   diagnostics: mbdDiagnosticsStore,
   getSearch: () => window.location.search,
   emitToast,

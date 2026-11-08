@@ -80,6 +80,13 @@ export type DimensionTheme = Readonly<{
   /** Line advance of stacked explicit texts as a multiple of the cap height (was the literal `1.5` in `layout/explicit.ts`). */
   labelLineAdvance: number;
   /**
+   * A label block with a text plane (`ExplicitLayoutInput.labelBlock.up`)
+   * whose `up`, one cap height long, projects shorter than this fraction of
+   * the cap height across the drawn baseline is seen edge-on: its rows stack
+   * across the baseline on screen instead, like a block without a plane.
+   */
+  labelBlockForeshortenRatio: number;
+  /**
    * Minimum clearance (CSS px) the Q6 `above` presentation demands between the
    * lifted label's padded box and every other primitive the same layout call
    * draws. Below it the record falls back to `interrupted`, which at least
@@ -297,6 +304,8 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   minArcRadiusPx: 15,
   markerRadiusPx: 4,
   labelLineAdvance: 1.5,
+  // 与三维尺寸文字的 `dimension3d.foreshortenRatio` 同一判据：文字平面侧到这个程度就退回屏幕堆叠。
+  labelBlockForeshortenRatio: 0.35,
   // Q6 `above` 回落守卫的净空（2026-10-30）：抬起的标签补钉盒与同一次布局画出的
   // 其它图元之间小于此值就退回 interrupted。屏幕像素口径（抬升量本身是 px）。
   // 2 px = 两条 ~1 px 描边仍读成一笔的距离。

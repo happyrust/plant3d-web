@@ -50,4 +50,23 @@ describe('ExternalDimensionRegistry', () => {
       visibleRecords: [],
     }));
   });
+
+  it('hides and shows a group of records with one published snapshot', () => {
+    const registry = new ExternalDimensionRegistry();
+    registry.replaceSource('mbd', ['mbd-1', 'mbd-2', 'mbd-3'].map(id => external(id, 'mbd')));
+    const listener = vi.fn();
+    registry.subscribe(listener);
+    listener.mockClear();
+
+    registry.setHiddenMany(['mbd-1', 'mbd-3'], true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(registry.snapshot.visibleRecords.map(record => record.id)).toEqual(['mbd-2']);
+    expect([...registry.snapshot.hiddenIds]).toEqual(['mbd-1', 'mbd-3']);
+
+    // Same hidden set as the per-row toggle: one row can come back on its own.
+    registry.setHidden('mbd-3', false);
+    registry.setHiddenMany(['mbd-1', 'mbd-2', 'mbd-3'], false);
+    expect(registry.snapshot.visibleRecords.map(record => record.id)).toEqual(['mbd-1', 'mbd-2', 'mbd-3']);
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
 });

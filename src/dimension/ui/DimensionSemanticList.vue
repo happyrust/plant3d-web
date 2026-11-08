@@ -35,12 +35,21 @@ const props = withDefaults(defineProps<{
    * 「用户尺寸 / 外部尺寸 / 外部标注图元」三分。列表顺序仍由父组件按组排好。
    */
   groupLabel?: (item: DimensionListItem) => string | null;
+  /**
+   * 组头上的整组临时显隐（ADR 0028；MBD 按类别成组，#103 M1-3）：父组件按组内条目给出状态，列表在
+   * 组头渲染「临时隐藏本组 / 临时显示本组」并把点击交回 `onToggleGroupVisibility`；返回 null 的组
+   * 不出按钮。状态与切换都在父组件，列表只渲染。
+   */
+  groupVisibility?: (items: readonly DimensionListItem[]) => 'visible' | 'hidden' | 'mixed' | null;
+  onToggleGroupVisibility?: (items: readonly DimensionListItem[]) => void;
   onSelect: (item: DimensionListItem) => void;
   onAction: (action: DimensionBoundAction, item: DimensionListItem) => void;
 }>(), {
   hiddenExternalIds: () => [],
   // 函数型 prop 的默认值本身就是那个函数，不再套工厂：返回 null = 这一行没有自定义组名。
   groupLabel: () => null,
+  groupVisibility: () => null,
+  onToggleGroupVisibility: () => undefined,
 });
 
 const activeIndex = ref(0);
@@ -92,6 +101,31 @@ function toggleGroup(group: string): void {
   const next = new Set(collapsedGroups.value);
   if (!next.delete(group)) next.add(group);
   collapsedGroups.value = next;
+}
+
+/** 每组的条目（与 `groupSizes` 同一个分组口径），交给组头整组显隐的两个回调。 */
+const groupItems = computed(() => {
+  const byGroup = new Map<string, DimensionListItem[]>();
+  for (const row of rows.value) {
+    const members = byGroup.get(row.group);
+    if (members) members.push(row.item);
+    else byGroup.set(row.group, [row.item]);
+  }
+  return byGroup;
+});
+
+/** 出整组显隐按钮的组及其状态；父组件对某组返回 null 就不出按钮。 */
+const groupVisibilities = computed(() => {
+  const states = new Map<string, 'visible' | 'hidden' | 'mixed'>();
+  for (const [group, members] of groupItems.value) {
+    const state = props.groupVisibility(members);
+    if (state) states.set(group, state);
+  }
+  return states;
+});
+
+function toggleGroupVisibility(group: string): void {
+  props.onToggleGroupVisibility(groupItems.value.get(group) ?? []);
 }
 
 function isRowVisible(index: number): boolean {
@@ -260,6 +294,15 @@ function onKeydown(event: KeyboardEvent): void {
           :data-group-count="row.group">
           {{ groupSizes.get(row.group) }}
         </span>
+        <button v-if="groupVisibilities.has(row.group)"
+          type="button"
+          class="dimension-semantic-list__group-visibility"
+          :data-group-visibility="row.group"
+          :data-visibility="groupVisibilities.get(row.group)"
+          :title="groupVisibilities.get(row.group) === 'mixed' ? '本组已有条目临时隐藏' : undefined"
+          @click="toggleGroupVisibility(row.group)">
+          {{ groupVisibilities.get(row.group) === 'hidden' ? '临时显示本组' : '临时隐藏本组' }}
+        </button>
       </div>
       <div v-if="row.visible"
         :id="optionId(row.item)"
@@ -338,6 +381,19 @@ function onKeydown(event: KeyboardEvent): void {
 
 .dimension-semantic-list__group-count {
   font-weight: 400;
+}
+
+.dimension-semantic-list__group-visibility {
+  margin-left: auto;
+  border: 1px solid currentcolor;
+  border-radius: 3px;
+  padding: 0 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  cursor: pointer;
 }
 
 .dimension-semantic-list__row {

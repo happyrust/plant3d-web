@@ -33,6 +33,10 @@ function mountList(input: {
   selectedId?: string | null;
   user?: { id: string; role: string } | null;
   groupLabel?: (item: UserDimensionRecord | ExternalDimensionRecord) => string | null;
+  groupVisibility?: (
+    items: readonly (UserDimensionRecord | ExternalDimensionRecord)[],
+  ) => 'visible' | 'hidden' | 'mixed' | null;
+  onToggleGroupVisibility?: ReturnType<typeof vi.fn>;
   onSelect?: ReturnType<typeof vi.fn>;
   onAction?: ReturnType<typeof vi.fn>;
 } = {}) {
@@ -44,6 +48,8 @@ function mountList(input: {
     user: input.user ?? { id: 'owner', role: 'designer' },
     formatPolicy: DEFAULT_DIMENSION_FORMAT,
     ...(input.groupLabel ? { groupLabel: input.groupLabel } : {}),
+    ...(input.groupVisibility ? { groupVisibility: input.groupVisibility } : {}),
+    ...(input.onToggleGroupVisibility ? { onToggleGroupVisibility: input.onToggleGroupVisibility } : {}),
     onSelect: input.onSelect ?? vi.fn(),
     onAction: input.onAction ?? vi.fn(),
   });
@@ -247,5 +253,35 @@ describe('DimensionSemanticList', () => {
     toggle().click();
     await nextTick();
     expect(rowIds()).toEqual(['linear-1', 'seg0-a', 'seg0-b', 'seg3', 'loose']);
+  });
+
+  it('renders a group visibility toggle only where the parent reports a state (#103 M1-3)', async () => {
+    const categorised = (id: string): ExternalDimensionRecord => ({
+      ...external,
+      id,
+      layout: { ...external.layout, id },
+      mbdFunction: '一级尺寸',
+    });
+    const onToggleGroupVisibility = vi.fn();
+    const host = mountList({
+      items: [linearRecord(), categorised('seg-0'), categorised('seg-1')],
+      groupLabel: item => (isExternalDimensionRecord(item) ? item.mbdFunction ?? null : null),
+      groupVisibility: items => (items.every(isExternalDimensionRecord) ? 'mixed' : null),
+      onToggleGroupVisibility,
+    });
+    const toggles = [...host.querySelectorAll<HTMLButtonElement>('[data-group-visibility]')];
+
+    expect(toggles.map(node => node.getAttribute('data-group-visibility'))).toEqual(['一级尺寸']);
+    expect(toggles[0]!.getAttribute('data-visibility')).toBe('mixed');
+    expect(toggles[0]!.textContent?.trim()).toBe('临时隐藏本组');
+    // The collapse toggle is still the only `[data-group]` node of the header.
+    expect([...host.querySelectorAll('[data-group]')].map(node => node.textContent?.trim()))
+      .toEqual(['用户尺寸', '一级尺寸']);
+
+    toggles[0]!.click();
+    await nextTick();
+    expect(onToggleGroupVisibility).toHaveBeenCalledTimes(1);
+    expect(onToggleGroupVisibility.mock.calls[0]![0].map((item: ExternalDimensionRecord) => item.id))
+      .toEqual(['seg-0', 'seg-1']);
   });
 });

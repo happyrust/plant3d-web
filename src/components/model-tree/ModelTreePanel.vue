@@ -7,6 +7,7 @@ import { Filter, GitCompare, Plus, Search, X } from 'lucide-vue-next';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import { isGroupNoun } from '@/api/genModelE3dTypes';
+import { isMbdAnnotatableNoun } from '@/components/model-tree/mbdAnnotatableNouns';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
@@ -1192,14 +1193,15 @@ function viewVersionHistory() {
 }
 
 /**
- * 「查看尺寸标注」（仅 BRAN）：写 URL `mbd_refno` 并派发 popstate，走 ViewerPanel 的
- * MBD 实时同步链路（`handleMbdLocationChange`）；同时选中构件并打开尺寸标注面板看诊断。
+ * 「查看尺寸标注」（BRAN、设备、支架、墙 / 楼板等可出 MBD 标注的对象，类型表见 `mbdAnnotatableNouns.ts`）：
+ * 写 URL `mbd_refno` 并派发 popstate，走 ViewerPanel 的 MBD 实时同步链路（`handleMbdLocationChange`）；
+ * 同时选中构件并打开尺寸标注面板看诊断。服务端标不了的对象回 422，原因显示在面板上。
  */
-const contextNodeIsBran = computed(() => {
+const contextNodeIsMbdAnnotatable = computed(() => {
   const id = contextNodeId.value;
   if (!id) return false;
   const node = pdmsTree.nodesById.value[normalizeRefnoKeyLike(id)];
-  return String(node?.type ?? '').toUpperCase() === 'BRAN';
+  return isMbdAnnotatableNoun(node?.type);
 });
 
 function viewMbdDimensions() {
@@ -1217,30 +1219,30 @@ function viewMbdDimensions() {
 }
 
 /**
- * 右键菜单是否给「加入尺寸标注视图」：当前节点是 BRAN、视图里**已经有** BRAN、且当前这个
- * BRAN **还不在**视图里（已在里面就没得加，`appendMbdRefno` 会原样返回，点了没反应）。
+ * 右键菜单是否给「加入尺寸标注视图」：当前节点可出 MBD 标注、视图里**已经有**标注对象、且当前这个
+ * 对象**还不在**视图里（已在里面就没得加，`appendMbdRefno` 会原样返回，点了没反应）。
  *
  * 为什么把 `window.location.search` 的读取挂在 `contextNodeId` 上：`window.location` 不是响应式的，
  * 直接写 `computed(() => parseMbdRefnos(window.location.search))` 会永远返回首次求值的缓存。
- * 这里让它依赖 `contextNodeId`（`contextNodeIsBran` 与 `treeNodeRefno(id)` 都依赖它），而
+ * 这里让它依赖 `contextNodeId`（`contextNodeIsMbdAnnotatable` 与 `treeNodeRefno(id)` 都依赖它），而
  * `closeContextMenu()` 会把 `contextNodeId` 清成 `null`，所以**每次右键打开菜单都会重算一次**，
  * 读到的是当次 URL 的真实状态。菜单开着的时候 URL 不会被别处改（改 URL 的入口都伴随关菜单），
  * 这个取值时机够用。
  */
 const contextNodeCanJoinMbdView = computed(() => {
-  if (!contextNodeIsBran.value) return false;
+  if (!contextNodeIsMbdAnnotatable.value) return false;
   const id = contextNodeId.value;
   const refno = id ? treeNodeRefno(id) : '';
   if (!refno) return false;
   const existing = parseMbdRefnos(window.location.search);
-  // 视图里一个 BRAN 都没有时，「加入」和「查看」效果一样，多一项只会让用户以为两个按钮有区别。
+  // 视图里一个标注对象都没有时，「加入」和「查看」效果一样，多一项只会让用户以为两个按钮有区别。
   if (existing.length === 0) return false;
   return !existing.includes(normalizeRefnoKeyLike(refno));
 });
 
 /**
- * 「加入尺寸标注视图」（多 BRAN 同屏）：把当前 BRAN **追加**到 URL 的 `mbd_refno` 列表末尾，
- * 保留已有的 BRAN。与「查看尺寸标注」的覆盖语义分开：那个是「只看这一个」，这个是「一起看」。
+ * 「加入尺寸标注视图」（多对象同屏）：把当前对象**追加**到 URL 的 `mbd_refno` 列表末尾，
+ * 保留已有的对象。与「查看尺寸标注」的覆盖语义分开：那个是「只看这一个」，这个是「一起看」。
  *
  * 链路与 `viewMbdDimensions()` 相同：改 URL → 派发 `popstate` → ViewerPanel 的
  * `handleMbdLocationChange` 重新拉取；同时选中该构件并打开尺寸标注面板看诊断。
@@ -1636,13 +1638,13 @@ function onSearchEnter(value: string) {
             class="ml-2 rounded border border-blue-200 bg-blue-50 px-1 text-[10px] text-blue-700"
             data-testid="model-tree-check-rvm-pending">增量待校验</span>
         </button>
-        <button v-if="contextNodeIsBran" type="button"
+        <button v-if="contextNodeIsMbdAnnotatable" type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           data-testid="model-tree-view-mbd-dimensions"
           @click="viewMbdDimensions">
           查看尺寸标注
         </button>
-        <!-- 「加入」只在视图里已有 BRAN 时才出现：没有任何 mbd_refno 时，加入与「查看」效果相同，
+        <!-- 「加入」只在视图里已有标注对象时才出现：没有任何 mbd_refno 时，加入与「查看」效果相同，
              多一项只会让用户以为两个按钮有区别。 -->
         <button v-if="contextNodeCanJoinMbdView" type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"

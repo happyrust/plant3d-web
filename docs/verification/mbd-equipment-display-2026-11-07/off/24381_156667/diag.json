@@ -1,0 +1,313 @@
+{
+  "refno": "24381_156667",
+  "mode": "off",
+  "gm": "http://127.0.0.1:8022",
+  "mbd": "http://127.0.0.1:8023",
+  "generatedAt": "2026-11-06T21:39:18.722Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          43.53201953125,
+          32.6490146484375,
+          43.532019531249986
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 7,
+      "layouts": 7,
+      "drawn": 7,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 4,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_156667:equi:rotation x 24381_156667:equi:rotation:dirtext1",
+        "24381_156667:equi:rotation x 24381_156667:equi:rotation:dirtext2",
+        "24381_156667:equi:rotation:dirtext1 x 24381_156667:equi:rotation:dirtext2"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_156667:equi:name": {
+          "cx": 439.52219333439393,
+          "cy": 99.24524107243474,
+          "w": 360.94822750512236,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:coords": {
+          "cx": 654.8015779420562,
+          "cy": 41.782860812467234,
+          "w": 94.69444444444446,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation": {
+          "cx": 636.286681260957,
+          "cy": 524.9152062352144,
+          "w": 24.151529596474916,
+          "h": 29.797822024126617,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation:dirtext1": {
+          "cx": 635.4109144700307,
+          "cy": 521.5313971663501,
+          "w": 57.438499373247396,
+          "h": 51.227669950491475,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation:dirtext2": {
+          "cx": 635.7741050166338,
+          "cy": 527.6130553426177,
+          "w": 23.418008506994283,
+          "h": 23.68442246588279,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:el": {
+          "cx": 740.717736775591,
+          "cy": 280.3726557722313,
+          "w": 98.36111111111111,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:thick": {
+          "cx": 498.65287986636497,
+          "cy": 292.7369601582617,
+          "w": 48.25,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          17.412807812499995,
+          13.05960585937498,
+          17.412807812499963
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 7,
+      "layouts": 7,
+      "drawn": 7,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 4,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_156667:equi:rotation x 24381_156667:equi:rotation:dirtext1",
+        "24381_156667:equi:rotation x 24381_156667:equi:rotation:dirtext2",
+        "24381_156667:equi:rotation:dirtext1 x 24381_156667:equi:rotation:dirtext2"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_156667:equi:name": {
+          "cx": 203.26147849029127,
+          "cy": 87.57444379628492,
+          "w": 360.94822750512236,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:coords": {
+          "cx": 1044.7266197955619,
+          "cy": 70.9716686884008,
+          "w": 94.69444444444446,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation": {
+          "cx": 667.9701271437966,
+          "cy": 688.7343676827437,
+          "w": 24.412350833443384,
+          "h": 29.97079459099473,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation:dirtext1": {
+          "cx": 665.8631734469448,
+          "cy": 680.3560799160368,
+          "w": 56.41872263788798,
+          "h": 52.67591839556712,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation:dirtext2": {
+          "cx": 666.982566223078,
+          "cy": 695.4520611034413,
+          "w": 23.780463682237155,
+          "h": 23.29863864938534,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:el": {
+          "cx": 367.5799396868389,
+          "cy": 309.4722548678932,
+          "w": 98.36111111111111,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:thick": {
+          "cx": 840.9631165865121,
+          "cy": 170.24560086210465,
+          "w": 48.25,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          8.706403906249998,
+          6.529802929687491,
+          8.706403906249982
+        ],
+        "target": [
+          0,
+          8.881784197001252e-16,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 7,
+      "layouts": 7,
+      "drawn": 7,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 4,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 3,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_156667:equi:rotation x 24381_156667:equi:rotation:dirtext1",
+        "24381_156667:equi:rotation x 24381_156667:equi:rotation:dirtext2",
+        "24381_156667:equi:rotation:dirtext1 x 24381_156667:equi:rotation:dirtext2"
+      ],
+      "offscreen": [
+        "24381_156667:equi:coords",
+        "24381_156667:equi:rotation",
+        "24381_156667:equi:rotation:dirtext1",
+        "24381_156667:equi:rotation:dirtext2"
+      ],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_156667:equi:name": {
+          "cx": 194.14377962525015,
+          "cy": 650.8423542146703,
+          "w": 360.94822750512236,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:coords": {
+          "cx": 1006.299965512681,
+          "cy": -1350.1300050277437,
+          "w": 94.69444444444446,
+          "h": 67.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation": {
+          "cx": 706.9024255277081,
+          "cy": 890.0336991399859,
+          "w": 24.659152282606897,
+          "h": 30.13262002623935,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation:dirtext1": {
+          "cx": 703.0222346963235,
+          "cy": 874.1602938721453,
+          "w": 55.198658323115865,
+          "h": 54.119210976943464,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:equi:rotation:dirtext2": {
+          "cx": 705.546643158689,
+          "cy": 902.8495450146409,
+          "w": 24.084350061189298,
+          "h": 22.78208860405698,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:el": {
+          "cx": 356.7549762274392,
+          "cy": 456.01928177600746,
+          "w": 98.36111111111111,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_156667:locate:floor:civil:thick": {
+          "cx": 333.3141515771111,
+          "cy": 214.8440564569278,
+          "w": 48.25,
+          "h": 34.5,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    }
+  },
+  "perf": []
+}

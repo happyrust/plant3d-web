@@ -1,0 +1,232 @@
+{
+  "refno": "24381_37054",
+  "mode": "flat",
+  "gm": "http://127.0.0.1:8022",
+  "mbd": "http://127.0.0.1:8023",
+  "generatedAt": "2026-11-06T23:31:40.763Z",
+  "pageErrors": [],
+  "tiers": {
+    "far": {
+      "camera": {
+        "position": [
+          100.81052343749997,
+          75.60789257812489,
+          100.8105234374998
+        ],
+        "target": [
+          0,
+          1.7763568394002505e-15,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 4,
+      "layouts": 4,
+      "drawn": 4,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 2,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_37054:wall:24381_37115:name x 24381_37054:door:24381_37118",
+        "24381_37054:wall:24381_37119:name x 24381_37054:door:24381_37122"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_37054:wall:24381_37115:name": {
+          "cx": 522.6821253408926,
+          "cy": 417.83212149786993,
+          "w": 42.89417158647734,
+          "h": 36.310726297492636,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:door:24381_37118": {
+          "cx": 520.0668268805937,
+          "cy": 426.76465143238727,
+          "w": 73.30949255071278,
+          "h": 64.72586580581327,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:wall:24381_37119:name": {
+          "cx": 485.78606766945984,
+          "cy": 287.23093423411115,
+          "w": 41.823170488635526,
+          "h": 27.902056144664073,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:door:24381_37122": {
+          "cx": 481.00687592805093,
+          "cy": 293.6662727740778,
+          "w": 77.49284865984902,
+          "h": 62.76373312726656,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "mid": {
+      "camera": {
+        "position": [
+          40.32420937499997,
+          30.243157031249943,
+          40.32420937499987
+        ],
+        "target": [
+          0,
+          1.7763568394002505e-15,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 4,
+      "layouts": 4,
+      "drawn": 4,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 2,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_37054:wall:24381_37115:name x 24381_37054:door:24381_37118",
+        "24381_37054:wall:24381_37119:name x 24381_37054:door:24381_37122"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_37054:wall:24381_37115:name": {
+          "cx": 378.73491502924924,
+          "cy": 465.36309351462774,
+          "w": 42.92212567306734,
+          "h": 36.080197835844274,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:door:24381_37118": {
+          "cx": 371.24881259923654,
+          "cy": 489.25616864743836,
+          "w": 74.0319819040476,
+          "h": 63.6922757385405,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:wall:24381_37119:name": {
+          "cx": 331.40814071465456,
+          "cy": 160.74836415286177,
+          "w": 41.6715948497104,
+          "h": 27.428785558130897,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:door:24381_37122": {
+          "cx": 320.6898364785659,
+          "cy": 175.18227590599878,
+          "w": 80.16569495982276,
+          "h": 57.34842030476969,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    },
+    "near": {
+      "camera": {
+        "position": [
+          20.162104687499983,
+          15.121578515624973,
+          20.162104687499934
+        ],
+        "target": [
+          0,
+          1.7763568394002505e-15,
+          0
+        ]
+      },
+      "canvas": {
+        "width": 1220,
+        "height": 778
+      },
+      "records": 4,
+      "layouts": 4,
+      "drawn": 4,
+      "lodHidden": 0,
+      "overlapHidden": 0,
+      "polarCount": 0,
+      "polarIds": [],
+      "obstacleCount": 0,
+      "tagCount": 0,
+      "nonFinite": 0,
+      "nonFiniteIds": [],
+      "overlaps": 1,
+      "polarOverlaps": 0,
+      "overlapPairs": [
+        "24381_37054:wall:24381_37119:name x 24381_37054:door:24381_37122"
+      ],
+      "offscreen": [],
+      "polarDiag": {
+        "polarFallbacks": 0,
+        "polarNextSize": 0
+      },
+      "labels": {
+        "24381_37054:wall:24381_37115:name": {
+          "cx": 96.63191071002845,
+          "cy": 558.5127278500938,
+          "w": 42.958983788021456,
+          "h": 35.69004777219345,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:door:24381_37118": {
+          "cx": 77.56361176027676,
+          "cy": 612.5801753052301,
+          "w": 75.11432459807381,
+          "h": 61.997861725714415,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:wall:24381_37119:name": {
+          "cx": 134.36025690455796,
+          "cy": -0.6939046027541753,
+          "w": 41.45054823100543,
+          "h": 26.775475917068878,
+          "drawn": true,
+          "lodHidden": null
+        },
+        "24381_37054:door:24381_37122": {
+          "cx": 116.06232588900764,
+          "cy": 23.950158552337193,
+          "w": 82.39562446818502,
+          "h": 50.48551737813335,
+          "drawn": true,
+          "lodHidden": null
+        }
+      }
+    }
+  },
+  "perf": []
+}

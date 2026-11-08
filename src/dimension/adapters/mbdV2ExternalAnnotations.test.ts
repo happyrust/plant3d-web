@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import envelopeFieldsFixture from '../../fixtures/mbd-v2/envelope-fields.json';
 import fullCoverageFixture from '../../fixtures/mbd-v2/full-coverage.json';
+import liveIsodimFixture from '../../fixtures/mbd-v2/live-isodim-24381-145018.json';
 import cliLinearFixture from '../../fixtures/mbd-v2/rs-mbd-cli-linear.json';
 import translationFixture
   from '../../fixtures/mbd-v2/source-to-design-translation.json';
@@ -18,8 +20,17 @@ import {
   normalizeExternalDimension,
 } from './normalizeExternalDimensions';
 
-import type { MbdV2PipeData } from './mbdV2Contract';
-import type { ExplicitLayoutInput } from '../kernel/types';
+import type { MbdPrimitive, MbdV2AngleDim, MbdV2AnnotationType, MbdV2PipeData } from './mbdV2Contract';
+import type { ExternalDimensionRecord } from './normalizeExternalDimensions';
+import type {
+  ExplicitLayoutInput,
+  LayoutResult,
+  SceneLine,
+  ScenePath,
+  ScreenGlyphRun,
+  ScreenLine,
+  ScreenPath,
+} from '../kernel/types';
 
 function fixtureData(): MbdV2PipeData {
   // Mapper-only future-kind coverage. This hand-authored fixture is not a
@@ -130,6 +141,9 @@ describe('mbdV2ToExternalRecords', () => {
     expect(arc.endAngle! - arc.startAngle!).toBeCloseTo(Math.PI / 2, 12);
     // Counter-clockwise tangent at the 45° midpoint.
     expectVec3Close(angle.labelAlong, [-Math.SQRT1_2, Math.SQRT1_2, 0]);
+    // No text plane: one run, the same in both presentations (CT-15 keeps it so).
+    expect(angle).not.toHaveProperty('labelBlock');
+    expect(angle).not.toHaveProperty('label3d');
 
     // aid_arc: x_axis +Y is not the kernel's u, so the start angle is re-based; style survives.
     const aidArc = explicitLayout(result, 'aid-arc-1');
@@ -290,11 +304,13 @@ describe('mbdV2ToExternalRecords', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
 
     // Every producer before T4.3 omits `text_dir`: no baseline reaches the
-    // kernel, neither on the primary label nor on the stacked lines.
+    // kernel. The lines after the first are rows of the label's own block,
+    // not runs with a baseline of their own, and no text plane comes along.
     for (const id of ['label-1', 'aid-text-1', 'slope-1']) {
       const layout = explicitLayout(result, id);
       expect(layout.labelAlong).toBeUndefined();
-      for (const text of layout.texts ?? []) expect(text.along).toBeUndefined();
+      expect(layout.texts).toBeUndefined();
+      expect(layout.labelBlock?.up).toBeUndefined();
     }
   });
 
@@ -333,15 +349,16 @@ describe('mbdV2ToExternalRecords', () => {
 
     const tag = explicitLayout(result, 'tag');
     expectVec3Close(tag.labelAlong, [0, 1, 0]);
-    // The stacked lines read the same way as the first one.
-    expect(tag.texts).toHaveLength(1);
-    expectVec3Close(tag.texts![0]!.along, [0, 1, 0]);
+    // The second line is a row of the same block, so it reads along the
+    // label's own baseline and carries none of its own (no `text_up`: no plane).
+    expect(tag.labelBlock).toEqual({ rows: ['Y 2'], lineAdvance: 1.2 });
+    expect(tag.texts).toBeUndefined();
     // The billboard spec is untouched: a tag body is always screen-facing.
     expect(tag.tag).toMatchObject({ style: 'card', lines: [{ text: 'X 1' }, { text: 'Y 2' }] });
 
     const aid = explicitLayout(result, 'aid');
     expectVec3Close(aid.labelAlong, [0, 0, 1]);
-    expectVec3Close(aid.texts![0]!.along, [0, 0, 1]);
+    expect(aid.labelBlock).toEqual({ rows: ['B:1'], lineAdvance: 1.2 });
 
     const slope = explicitLayout(result, 'slope');
     expectVec3Close(slope.labelAlong, [-1, 0, 0]);
@@ -375,17 +392,204 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(flattened, 'aid').labelAlong).toBeUndefined();
   });
 
-  it('splits multi-line labels into stacked texts', () => {
+  it('lays a multi-line label out as one block centred on its position (ruling 8)', () => {
     const layout = explicitLayout(mbdV2ToExternalRecords(fixtureData()), 'label-1');
 
+    // The first line is the label's text and the anchor stays the solver's
+    // position — the centre of the whole block under ruling 8, no longer the
+    // first line's spot. No text plane declared: the kernel stacks on screen.
     expect(layout.formattedLabel).toBe('BRAN /24381-145712');
-    expect(layout.texts).toEqual([
-      {
-        text: 'DN100 PSPEC A1A',
-        anchor: [1.4, 0.3, 0],
-        stackIndex: 1,
-      },
-    ]);
+    expect(layout.labelAnchor).toEqual([1.4, 0.3, 0]);
+    expect(layout.labelBlock).toEqual({ rows: ['DN100 PSPEC A1A'], lineAdvance: 1.2 });
+    expect(layout.texts).toBeUndefined();
+  });
+
+  describe('multi-line text blocks (ruling 8)', () => {
+    const expectVec3Close = (
+      actual: readonly [number, number, number] | undefined,
+      expected: readonly [number, number, number],
+    ): void => {
+      expect(actual).toBeDefined();
+      expect(actual![0]).toBeCloseTo(expected[0], 9);
+      expect(actual![1]).toBeCloseTo(expected[1], 9);
+      expect(actual![2]).toBeCloseTo(expected[2], 9);
+    };
+    const designSpace = (primitives: MbdV2PipeData['primitives']): MbdV2PipeData => ({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [] },
+      primitives,
+    });
+
+    it('keeps single-line text a plain label, text plane or not', () => {
+      const result = mbdV2ToExternalRecords(designSpace([
+        { kind: 'label', id: 'name', text: 'V-101', position: [0, 0, 0], text_dir: [1, 0, 0], text_up: [0, 0, 1] },
+        { kind: 'aid_text', id: 'plate', text: 't=10', position: [0, 0, 0], text_dir: [1, 0, 0], text_up: [0, 0, 1] },
+        { kind: 'aid_text', id: 'trailing', text: 'EL +1\n', position: [0, 0, 0] },
+      ]));
+
+      for (const id of ['name', 'plate', 'trailing']) {
+        const layout = explicitLayout(result, id);
+        expect(layout).not.toHaveProperty('labelBlock');
+        expect(layout.texts).toBeUndefined();
+      }
+      expect(explicitLayout(result, 'trailing').formattedLabel).toBe('EL +1');
+    });
+
+    it('stacks two and three lines along the declared text plane (envelope fixture)', () => {
+      const parsed = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!parsed.ok) throw new Error(parsed.error);
+      const pipeTag = parsed.data.primitives.find(primitive => primitive.kind === 'label');
+      if (!pipeTag || pipeTag.kind !== 'label') throw new Error('label fixture missing');
+      const result = mbdV2ToExternalRecords({
+        ...parsed.data,
+        primitives: [
+          pipeTag,
+          { ...pipeTag, id: 'three-lines', text: 'DN25\nPE +3050\n1RHR0008' },
+          { kind: 'aid_text', id: 'aid-three', text: 'X 1\nY 2\nPE 3', position: [10600, 5000, 3060], text_dir: [1, 0, 0], text_up: [0, 0, 1] },
+        ],
+      });
+
+      // 「管道信息」 on a support: text in the vertical XZ plane, 18 mm high.
+      const twoLines = explicitLayout(result, pipeTag.id);
+      expect(twoLines.formattedLabel).toBe('DN25');
+      expectVec3Close(twoLines.labelAnchor, [10.25, 5, 3.4]);
+      expectVec3Close(twoLines.labelAlong, [1, 0, 0]);
+      expect(twoLines.textHeightM).toBeCloseTo(0.018, 12);
+      expect(twoLines.labelBlock?.rows).toEqual(['PE +3050']);
+      expect(twoLines.labelBlock?.lineAdvance).toBe(1.2);
+      expectVec3Close(twoLines.labelBlock?.up, [0, 0, 1]);
+
+      const threeLines = explicitLayout(result, 'three-lines');
+      expect(threeLines.formattedLabel).toBe('DN25');
+      expect(threeLines.labelBlock?.rows).toEqual(['PE +3050', '1RHR0008']);
+      expectVec3Close(threeLines.labelAnchor, [10.25, 5, 3.4]);
+
+      // `aid_text` takes the same path; it has no height of its own, so the
+      // payload-wide 25 mm.
+      const aid = explicitLayout(result, 'aid-three');
+      expect(aid.labelBlock?.rows).toEqual(['Y 2', 'PE 3']);
+      expectVec3Close(aid.labelBlock?.up, [0, 0, 1]);
+      expect(aid.textHeightM).toBeCloseTo(0.025, 12);
+    });
+
+    it('takes text_up through source_to_design and squares it against text_dir', () => {
+      // T(10,20,30)·Rz(90°)·S(0.001): a direction is rotated only (E → N).
+      const parsed = parseMbdV2PipeData(translationFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const block = (id: string, frame: Readonly<{ text_dir?: [number, number, number]; text_up: [number, number, number] }>) => ({
+        kind: 'label' as const, id, text: 'X 1\nY 2', position: [0, 0, 0] as const, ...frame,
+      });
+      const result = mbdV2ToExternalRecords({
+        ...parsed.data,
+        primitives: [
+          block('square', { text_dir: [1, 0, 0], text_up: [0, 0, 1] }),
+          block('rotated-up', { text_dir: [0, 0, 1], text_up: [0, 1, 0] }),
+          // Leaning 45° towards the baseline: only the part across it counts.
+          block('leaning', { text_dir: [1, 0, 0], text_up: [1, 0, 1] }),
+          // Along the baseline: no plane left, the block stacks on screen.
+          block('parallel', { text_dir: [1, 0, 0], text_up: [2, 0, 0] }),
+          // No baseline to square against: the up as declared, unit length.
+          block('up-only', { text_up: [0, 3, 0] }),
+        ],
+      });
+      expect(result.skipped).toEqual([]);
+
+      expectVec3Close(explicitLayout(result, 'square').labelBlock?.up, [0, 0, 1]);
+      expectVec3Close(explicitLayout(result, 'rotated-up').labelBlock?.up, [-1, 0, 0]);
+      expectVec3Close(explicitLayout(result, 'leaning').labelBlock?.up, [0, 0, 1]);
+      expect(explicitLayout(result, 'parallel').labelBlock).toEqual({ rows: ['Y 2'], lineAdvance: 1.2 });
+      expectVec3Close(explicitLayout(result, 'up-only').labelBlock?.up, [-1, 0, 0]);
+      // The block's centre is the position, translated like any point.
+      expectVec3Close(explicitLayout(result, 'square').labelAnchor, [10, 20, 30]);
+    });
+
+    it('draws a planar block centred on its position with its rows along text_up', () => {
+      // A wall label turned 30° in the XY plane, facing the test camera:
+      // 150 mm text projects to 15 px at 100 px/m (inside the 11–18 px clamp),
+      // so the kernel lands every row on the solver's own point.
+      const cos30 = Math.cos(Math.PI / 6);
+      const sin30 = Math.sin(Math.PI / 6);
+      const position = [0.5, 0.5, 0] as const;
+      const up = [-sin30, cos30, 0] as const;
+      const result = mbdV2ToExternalRecords(designSpace([
+        {
+          kind: 'aid_text', id: 'wall', text: 'X 1\nY 2\nPE 3', position,
+          text_dir: [cos30, sin30, 0], text_up: up, text_height_mm: 150,
+        },
+        {
+          kind: 'aid_text', id: 'wall-two', text: 'X 1\nY 2', position: [1, 1, 0],
+          text_dir: [cos30, sin30, 0], text_up: up, text_height_mm: 150,
+        },
+      ]));
+      const batch = layoutViewport(
+        result.records.map(normalizeExternalDimension),
+        {
+          projector: createTestProjector(),
+          font: createTestFont(),
+          theme: SOLVESPACE_DIMENSION_THEME,
+          format: DEFAULT_DIMENSION_FORMAT,
+        },
+        new Map(),
+      );
+      const screen = (point: readonly [number, number, number]): readonly [number, number] =>
+        [200 + point[0] * 100, 200 - point[1] * 100];
+      const glyphRuns = (id: string): ScreenGlyphRun[] => batch.layouts
+        .find(layout => layout.dimensionId === id)!
+        .primitives
+        .filter((primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run');
+      const expectRows = (id: string, centre: readonly [number, number, number], count: number): void => {
+        const rows = glyphRuns(id).map(({ bounds }) =>
+          [bounds.x + bounds.width / 2, bounds.y + bounds.height / 2] as const);
+        expect(rows).toHaveLength(count);
+        rows.forEach((row, k) => {
+          // position + up · ((n − 1)/2 − k) · 1.2 · 0.15 m
+          const along = ((count - 1) / 2 - k) * 1.2 * 0.15;
+          const expected = screen([centre[0] + up[0] * along, centre[1] + up[1] * along, 0]);
+          expect(row[0]).toBeCloseTo(expected[0], 6);
+          expect(row[1]).toBeCloseTo(expected[1], 6);
+        });
+        // Symmetric about the position: the first and last rows mirror each other.
+        const centreScreen = screen(centre);
+        expect(rows[0]![0] + rows[count - 1]![0]).toBeCloseTo(2 * centreScreen[0], 6);
+        expect(rows[0]![1] + rows[count - 1]![1]).toBeCloseTo(2 * centreScreen[1], 6);
+      };
+      expectRows('wall', position, 3);
+      expectRows('wall-two', [1, 1, 0], 2);
+
+      // The label box covers every row, not just the first.
+      const wall = batch.layouts.find(layout => layout.dimensionId === 'wall')!;
+      for (const { bounds } of glyphRuns('wall')) {
+        expect(wall.labelBounds.x).toBeLessThanOrEqual(bounds.x);
+        expect(wall.labelBounds.y).toBeLessThanOrEqual(bounds.y);
+        expect(wall.labelBounds.x + wall.labelBounds.width).toBeGreaterThanOrEqual(bounds.x + bounds.width);
+        expect(wall.labelBounds.y + wall.labelBounds.height).toBeGreaterThanOrEqual(bounds.y + bounds.height);
+      }
+    });
+
+    it('leaves a billboard tag to lay its card rows out itself', () => {
+      // The default 3D presentation turns a label into a screen-facing card
+      // whose rows are body-local: the flat block changes nothing there.
+      const label = {
+        kind: 'label' as const, id: 'card', text: 'X 1\nY 2\nPE 3', position: [0.5, 0.5, 0] as const,
+        text_dir: [1, 0, 0] as const, text_up: [0, 1, 0] as const,
+      };
+      const records = mbdV2ToExternalRecords(designSpace([label])).records;
+      const context = {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      };
+      const withBlock = records.map(normalizeExternalDimension);
+      expect((withBlock[0] as ExplicitLayoutInput).labelBlock).toBeDefined();
+      const withoutBlock = withBlock.map((input) => {
+        const { labelBlock: _labelBlock, ...rest } = input as ExplicitLayoutInput;
+        return rest;
+      });
+      const card = layoutViewport(withBlock, context, new Map()).layouts;
+      expect(card[0]!.derived.tag).toBeDefined();
+      expect(card).toEqual(layoutViewport(withoutBlock, context, new Map()).layouts);
+    });
   });
 
   it('pairs a label with the leader that starts on it and presents the pair as a billboard tag', () => {
@@ -646,8 +850,11 @@ describe('mbdV2ToExternalRecords', () => {
     });
     for (const id of ['b:isoline:0:angle:m:0', 'b:isoline:0:angle:m:0:dirtext1', 'b:isoline:0:angle:m:0:dirtext2']) {
       expect(explicitLayout(result, id).declutter).toEqual({ rank: 500, group: 'b:isoline:0:angle:m:0' });
+      // The value and its notes only stand apart near true scale: the whole group is close-up detail.
+      expect(explicitLayout(result, id).lod).toEqual({ tier: 'detail' });
     }
     expect(explicitLayout(result, 'plain-text').declutter).toBeUndefined();
+    expect(explicitLayout(result, 'plain-text').lod).toBeUndefined();
   });
 
   it('assembles weld and slope symbols from kernel primitives (ADR 0042)', () => {
@@ -779,6 +986,375 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(withoutGroup, 'plain-text').textHeightM).toBeUndefined();
   });
 
+  describe('envelope fields (#103 M1-3)', () => {
+    function envelopeData(): MbdV2PipeData {
+      const parsed = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!parsed.ok) throw new Error(parsed.error);
+      return parsed.data;
+    }
+    const SEG_0 = '24383_91813:chain:0:seg:0';
+    const SEG_1 = '24383_91813:chain:0:seg:1';
+    const PIPE_TAG = '24383_91813:tag:pipe:24383_91816';
+    const PLATE_TEXT = '24383_91813:plate:24383_91817:thickness';
+    const ANGLE = '24383_91813:angle:24383_91818';
+    const ANGLE_IN_PLANE = '24383_91813:angle:24383_91819';
+    const SLOPE = '24383_91813:slope:24383_91816';
+
+    it('carries function and chain_id onto the record as mbdFunction / chainId', () => {
+      const result = mbdV2ToExternalRecords(envelopeData());
+
+      // The leader travels inside its label's record, as on pipe payloads.
+      expect(result.records.map(record => record.id))
+        .toEqual([SEG_0, SEG_1, PIPE_TAG, PLATE_TEXT, ANGLE, ANGLE_IN_PLANE, SLOPE]);
+      expect(result.skipped).toEqual([]);
+      const record = (id: string) => result.records.find(item => item.id === id)!;
+      expect(record(SEG_0)).toMatchObject({ mbdFunction: '一级尺寸', chainId: '24383_91813:chain:0' });
+      expect(record(PIPE_TAG)).toMatchObject({ mbdFunction: '管道信息' });
+      expect(record(ANGLE)).toMatchObject({ mbdFunction: '二级尺寸' });
+      expect(record(ANGLE_IN_PLANE)).toMatchObject({ mbdFunction: '二级尺寸' });
+      // Both segments of the chain share its id; the second declares no category.
+      expect(record(SEG_1).chainId).toBe('24383_91813:chain:0');
+      // Nothing undeclared shows up, not even as an `undefined` key.
+      for (const id of [SEG_1, PLATE_TEXT, SLOPE]) expect(record(id)).not.toHaveProperty('mbdFunction');
+      for (const id of [PIPE_TAG, PLATE_TEXT, ANGLE, ANGLE_IN_PLANE, SLOPE]) {
+        expect(record(id)).not.toHaveProperty('chainId');
+      }
+    });
+
+    it('takes a declared text_height_mm before the payload-wide group height', () => {
+      // source_mm with S(0.001); meta.cheight_mm 25 → 0.025 m for every record without its own height.
+      const result = mbdV2ToExternalRecords(envelopeData());
+      const height = (id: string) => explicitLayout(result, id).textHeightM;
+
+      expect(height(SEG_0)).toBeCloseTo(0.02, 12);
+      expect(height(PIPE_TAG)).toBeCloseTo(0.018, 12);
+      expect(height(ANGLE)).toBeCloseTo(0.015, 12);
+      expect(height(ANGLE_IN_PLANE)).toBeCloseTo(0.015, 12);
+      expect(height(SLOPE)).toBeCloseTo(0.0125, 12);
+      expect(height(SEG_1)).toBeCloseTo(0.025, 12);
+      expect(height(PLATE_TEXT)).toBeCloseTo(0.025, 12);
+    });
+
+    it('puts a declared text_height_mm above the isoline height without moving the 3D rows', () => {
+      const parsed = parseMbdV2PipeData(cliLinearFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      // A support package: a pipe package reads the primitive layer from aid_text only (below).
+      const source = parsed.data.primitives[0]!;
+      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+      // 532.4 mm extension lines over isoline 0's 500 mm surface: two 1.2·13.5 mm
+      // row steps out (the T4.2 / T4.6 case above). Read with a 40 mm step it
+      // would round to row 1.
+      const outerRow = {
+        ...source,
+        sub_kind: 'main',
+        isoline_idx: 0,
+        start: [0, -532.4, 0] as const,
+        end: [80, -532.4, 0] as const,
+        label_anchor: [40, -532.4, 0] as const,
+        extension_lines: [
+          { from: [0, 0, 0] as const, to: [0, -532.4, 0] as const },
+          { from: [80, 0, 0] as const, to: [80, -532.4, 0] as const },
+        ],
+      };
+      const tag = { kind: 'label' as const, text: 'X 1', position: [40, -500, 0] as const, isoline_idx: 0 };
+      const result = mbdV2ToExternalRecords({
+        ...parsed.data,
+        annotation_type: 'em4_supp',
+        meta: {
+          ...parsed.data.meta,
+          cheight_mm: 27,
+          isolines: [{ index: 0, members: ['24381_145018'], cheight_mm: 13.5, od_mm: 500 }],
+        },
+        primitives: [
+          { ...source, isoline_idx: 0 },
+          { ...outerRow, id: 'outer-group' },
+          { ...outerRow, id: 'outer-own', text_height_mm: 40 },
+          { ...tag, id: 'tag-group' },
+          { ...tag, id: 'tag-own', text_height_mm: 40 },
+        ],
+      });
+
+      expect(explicitLayout(result, 'outer-group').textHeightM).toBeCloseTo(0.0135, 12);
+      expect(explicitLayout(result, 'outer-own').textHeightM).toBeCloseTo(0.04, 12);
+      // The rows are the solver's group spacing, whatever the text declares.
+      expect(explicitLayout(result, 'outer-group').dimension3d!.row).toBe(2);
+      expect(explicitLayout(result, 'outer-own').dimension3d!.row).toBe(2);
+      expect(explicitLayout(result, 'tag-group').textHeightM).toBeCloseTo(0.0135, 12);
+      expect(explicitLayout(result, 'tag-own').textHeightM).toBeCloseTo(0.04, 12);
+    });
+
+    it('leaves a live pipe payload without the new record fields and on its group height', () => {
+      const parsed = parseMbdV2PipeData(liveIsodimFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const result = mbdV2ToExternalRecords(parsed.data);
+
+      expect(result.skipped).toEqual([]);
+      expect(result.records).toHaveLength(63);
+      for (const record of result.records) {
+        expect(record).not.toHaveProperty('mbdFunction');
+        expect(record).not.toHaveProperty('chainId');
+        // meta.cheight_mm 27 through S(0.001); no primitive declares its own height.
+        expect((record.layout as ExplicitLayoutInput).textHeightM).toBeCloseTo(0.027, 12);
+      }
+    });
+
+    /** The primitive with its own text height, on the kinds the contract defines one for. */
+    const withTextHeight = (primitive: MbdPrimitive, millimetres: number): MbdPrimitive => {
+      switch (primitive.kind) {
+        case 'linear_dim':
+        case 'angle_dim':
+        case 'label':
+        case 'aid_text':
+        case 'slope_mark':
+          return { ...primitive, text_height_mm: millimetres };
+        default:
+          return primitive;
+      }
+    };
+
+    it('reads a pipe package\'s own text heights from aid_text only (ADR 0071)', () => {
+      // design_m, meta.cheight_mm 100 → 0.1 m for the group; 40 mm → 0.04 m declared.
+      const data = fixtureData();
+      const primitives = data.primitives.map(primitive => withTextHeight(primitive, 40));
+      const heightsIn = (annotationType?: MbdV2AnnotationType) => {
+        const result = mbdV2ToExternalRecords({
+          ...data,
+          ...(annotationType ? { annotation_type: annotationType } : {}),
+          primitives,
+        });
+        expect(result.skipped).toEqual([]);
+        return (id: string) => explicitLayout(result, id).textHeightM;
+      };
+      const ownHeightIds = ['dim-segment-1', 'dim-ref-2', 'angle-1', 'label-1', 'slope-1'];
+
+      for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+        const height = heightsIn(annotationType);
+        // The installation-angle direction notes keep their half height.
+        expect(height('aid-text-1'), `${annotationType} aid-text-1`).toBeCloseTo(0.04, 12);
+        for (const id of ownHeightIds) expect(height(id), `${annotationType} ${id}`).toBeCloseTo(0.1, 12);
+      }
+      for (const annotationType of ['em4_supp', 'civil', 'em4_equi'] as const) {
+        const height = heightsIn(annotationType);
+        for (const id of [...ownHeightIds, 'aid-text-1']) {
+          expect(height(id), `${annotationType} ${id}`).toBeCloseTo(0.04, 12);
+        }
+      }
+    });
+
+    /**
+     * CT-9：求解器给管道图元补齐信封字段——PML FUNCTION、LINDIM 尺寸链与归属节点、逐图元字高（管道名称
+     * 3 倍直段字高，其余就是直段字高）——之后，管道包的记录除透传的 `chainId` 外逐条不变：字高、LOD、
+     * 摆位、文字都原样，类别也不进记录（面板照旧按直段分组）。
+     */
+    it('maps a pipe payload stamped with every envelope field exactly like the bare one (CT-9)', () => {
+      const parsed = parseMbdV2PipeData(liveIsodimFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const live = parsed.data;
+      const isolineOf = (id: string): number | undefined => {
+        const match = /:isoline:(\d+):/.exec(id);
+        return match ? Number(match[1]) : undefined;
+      };
+      // The capture predates the isoline table; the solver's current shape carries one,
+      // here with isoline heights apart from the payload-wide 27 mm.
+      const tabled: MbdV2PipeData = {
+        ...live,
+        meta: {
+          ...live.meta,
+          isolines: Array.from({ length: 11 }, (_, index) => ({
+            index, members: [], cheight_mm: 20 + index, od_mm: 114.3,
+          })),
+        },
+        primitives: live.primitives.map((primitive) => {
+          const index = isolineOf(primitive.id);
+          return index === undefined ? primitive : { ...primitive, isoline_idx: index };
+        }),
+      };
+      // EM4PIPE values of the plant-mbd field dictionary, by each primitive's plant-mbd id.
+      const functionRules: readonly (readonly [RegExp, string])[] = [
+        [/:(?:main|atta):/, '尺寸'],
+        [/:skew:/, '尺寸'],
+        [/:slope:/, '坡度'],
+        [/:tag:connection:/, '连接信息'],
+        [/:tag:elbo:/, '弯头信息'],
+        [/:tag:name:/, '位号'],
+        [/:tag:branch-name/, '管道名称'],
+      ];
+      const stamp = (data: MbdV2PipeData): MbdV2PipeData => {
+        const payloadHeight = data.meta.cheight_mm;
+        if (typeof payloadHeight !== 'number') throw new Error('payload cheight missing');
+        const isolineHeights = new Map((data.meta.isolines ?? []).map(isoline => [isoline.index, isoline.cheight_mm]));
+        const chainSeqs = new Map<string, number>();
+        return {
+          ...data,
+          primitives: data.primitives.map((primitive) => {
+            const rule = functionRules.find(([pattern]) => pattern.test(primitive.id));
+            if (!rule) throw new Error(`no pipe function for ${primitive.id}`);
+            const chainId = `${data.branch_refno}:chain:${isolineOf(primitive.id) ?? 'bran'}`;
+            const chainSeq = chainSeqs.get(chainId) ?? 0;
+            chainSeqs.set(chainId, chainSeq + 1);
+            const isolineHeight = (primitive.isoline_idx === undefined
+              ? undefined
+              : isolineHeights.get(primitive.isoline_idx)) ?? payloadHeight;
+            return withTextHeight({
+              ...primitive,
+              function: rule[1],
+              chain_id: chainId,
+              chain_seq: chainSeq,
+              node_refnos: (primitive.id.match(/\d+_\d+/g) ?? []).slice(1),
+            }, rule[1] === '管道名称' ? 3 * isolineHeight : isolineHeight);
+          }),
+        };
+      };
+
+      for (const base of [live, tabled]) {
+        const bare = mbdV2ToExternalRecords(base);
+        expect(bare.skipped).toEqual([]);
+        const stamped = stamp(base);
+        // Every stamped field is legal, strict mode included.
+        expect(parseMbdV2PipeData(stamped, { strict: true }).ok).toBe(true);
+        for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+          const result = mbdV2ToExternalRecords({
+            ...stamped,
+            ...(annotationType ? { annotation_type: annotationType } : {}),
+          });
+          expect(result.skipped).toEqual([]);
+          // `chain_id` is the one field that reaches the record; `function` stays out.
+          expect(result.records.every(record => record.chainId?.startsWith('24381_145018:chain:'))).toBe(true);
+          expect(result.records.some(record => 'mbdFunction' in record)).toBe(false);
+          expect(
+            result.records.map(({ chainId: _chainId, ...record }) => record),
+            `${base === tabled ? 'tabled' : 'live'} / ${annotationType}`,
+          ).toStrictEqual(bare.records);
+        }
+      }
+
+      // Not vacuous: the tabled records do follow their isoline (24 mm on isoline 4), and the
+      // same stamp in a support package takes the name's own height and the categories.
+      expect(explicitLayout(mbdV2ToExternalRecords(tabled), '24381_145018:isoline:4:main:24381_145023--24381_145025')
+        .textHeightM).toBeCloseTo(0.024, 12);
+      const asSupport = mbdV2ToExternalRecords({ ...stamp(live), annotation_type: 'em4_supp' });
+      expect(explicitLayout(asSupport, '24381_145018:tag:branch-name').textHeightM).toBeCloseTo(0.081, 12);
+      expect(asSupport.records.every(record => record.mbdFunction !== undefined)).toBe(true);
+    });
+  });
+
+  /**
+   * #103 CT-15：`angle_dim` 带文字平面（`text_dir` / `text_up`）时，平贴呈现（`mbd_3d=0`）按它排角度字——
+   * 沿 `text_dir`、多行沿 `text_up` 叠放；缺省三维呈现靠 `label3d` 仍沿弧写一整行，与不带文字平面时相同。
+   */
+  describe('angle text plane (#103 CT-15)', () => {
+    const expectVec3Close = (
+      actual: readonly [number, number, number] | undefined,
+      expected: readonly [number, number, number],
+    ): void => {
+      expect(actual).toBeDefined();
+      expect(actual![0]).toBeCloseTo(expected[0], 9);
+      expect(actual![1]).toBeCloseTo(expected[1], 9);
+      expect(actual![2]).toBeCloseTo(expected[2], 9);
+    };
+    // In the XY plane the test camera faces: +X sweeping 90° towards +Y, so the
+    // arc runs along (−1, 1, 0)/√2 at mid-sweep.
+    const angle = (
+      id: string,
+      overrides: Partial<Pick<MbdV2AngleDim, 'text' | 'text_dir' | 'text_up'>> = {},
+    ): MbdV2AngleDim => ({
+      kind: 'angle_dim',
+      id,
+      text: '30°',
+      center: [0.5, 0.5, 0],
+      x_axis: [1, 0, 0],
+      normal: [0, 0, 1],
+      radius: 0.2,
+      start_angle_deg: 0,
+      sweep_angle_deg: 90,
+      leg_lines: [],
+      label_anchor: [0.6, 0.6, 0],
+      ...overrides,
+    });
+    const ALONG_ARC = [-Math.SQRT1_2, Math.SQRT1_2, 0] as const;
+    const mapped = (primitives: MbdV2PipeData['primitives']) => mbdV2ToExternalRecords({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [] },
+      primitives,
+    });
+
+    it('lays the value out along text_dir, stacks it along text_up and keeps the arc run for 3D', () => {
+      const result = mapped([
+        angle('both', { text: '30°\nA', text_dir: [1, 0, 0], text_up: [0, 1, 0] }),
+        angle('dir-only', { text_dir: [2, 0, 0] }),
+        angle('up-only', { text: '30°\nA', text_up: [0, 1, 0] }),
+      ]);
+      expect(result.skipped).toEqual([]);
+
+      const both = explicitLayout(result, 'both');
+      expect(both.formattedLabel).toBe('30°');
+      expectVec3Close(both.labelAlong, [1, 0, 0]);
+      expect(both.labelBlock?.rows).toEqual(['A']);
+      expectVec3Close(both.labelBlock?.up, [0, 1, 0]);
+      // The 3D run is the label as it was before the plane: the whole text along the arc.
+      expect(both.label3d?.text).toBe('30°\nA');
+      expectVec3Close(both.label3d?.along, ALONG_ARC);
+
+      const dirOnly = explicitLayout(result, 'dir-only');
+      expect(dirOnly.formattedLabel).toBe('30°');
+      expectVec3Close(dirOnly.labelAlong, [1, 0, 0]);
+      expect(dirOnly).not.toHaveProperty('labelBlock');
+      expect(dirOnly.label3d?.text).toBe('30°');
+
+      // No baseline declared: the value keeps running along the arc, and the
+      // rows step along text_up squared against it (radially out at mid-sweep).
+      const upOnly = explicitLayout(result, 'up-only');
+      expectVec3Close(upOnly.labelAlong, ALONG_ARC);
+      expectVec3Close(upOnly.labelBlock?.up, [Math.SQRT1_2, Math.SQRT1_2, 0]);
+      expectVec3Close(upOnly.label3d?.along, ALONG_ARC);
+    });
+
+    it('reads the fixture angle\'s text plane in the vertical XZ plane (envelope-fields.json)', () => {
+      const parsed = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!parsed.ok) throw new Error(parsed.error);
+      const result = mbdV2ToExternalRecords(parsed.data);
+      const inPlane = explicitLayout(result, '24383_91813:angle:24383_91819');
+
+      expect(inPlane.formattedLabel).toBe('30°');
+      expectVec3Close(inPlane.labelAlong, [1, 0, 0]);
+      expect(inPlane).not.toHaveProperty('labelBlock');
+      // 30° from +X towards +Z about −Y: the arc runs along (−sin 15°, 0, cos 15°) at mid-sweep.
+      expect(inPlane.label3d?.text).toBe('30°');
+      expectVec3Close(inPlane.label3d?.along, [-Math.sin(Math.PI / 12), 0, Math.cos(Math.PI / 12)]);
+      // The fixture's other angle declares no plane: one run along its arc, as before.
+      expect(explicitLayout(result, '24383_91813:angle:24383_91818')).not.toHaveProperty('label3d');
+    });
+
+    it('draws the default 3D value as without a plane, and in the plane once mbd_3d=0 strips label3d', () => {
+      const context = {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      };
+      const layoutOf = (record: ExternalDimensionRecord): LayoutResult =>
+        layoutViewport([normalizeExternalDimension(record)], context, new Map()).layouts[0]!;
+      const glyphRuns = (layout: LayoutResult): ScreenGlyphRun[] => layout.primitives.filter(
+        (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+      );
+      const plain = mapped([angle('angle')]).records[0]!;
+      const planar = mapped([angle('angle', { text_dir: [1, 0, 0], text_up: [0, 1, 0] })]).records[0]!;
+
+      // Default presentation: the very layout of the angle without a plane, its
+      // value along the arc (45° on screen).
+      expect(layoutOf(planar)).toEqual(layoutOf(plain));
+      const arcRuns = glyphRuns(layoutOf(planar));
+      expect(arcRuns.map(run => run.text)).toEqual(['30°']);
+      expect(Math.abs(Math.abs(arcRuns[0]!.rotationRad ?? 0) - Math.PI / 4)).toBeLessThan(1e-9);
+
+      // `mbd_3d=0` strips `label3d` (useMbdExternalSync): the value reads level, along text_dir.
+      const { label3d: _label3d, ...flat } = planar.layout as ExplicitLayoutInput;
+      const flatRuns = glyphRuns(layoutOf({ ...planar, layout: flat }));
+      expect(flatRuns.map(run => run.text)).toEqual(['30°']);
+      expect(Math.abs(flatRuns[0]!.rotationRad ?? 0)).toBeLessThan(1e-9);
+    });
+  });
+
   it('tags linear dimensions with level-of-detail hints from sub_kind', () => {
     const parsed = parseMbdV2PipeData(cliLinearFixture);
     if (!parsed.ok) throw new Error(parsed.error);
@@ -802,6 +1378,367 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(result, 'small-1').lod).toEqual({ tier: 'primary', hideShort: false });
     // Non-dimension primitives carry no LOD hint (the kind filter handles them).
     expect(explicitLayout(result, 'tag-1').lod).toBeUndefined();
+  });
+
+  describe('non-pipe level of detail from the PML function (#103)', () => {
+    const kernelContext = (pixelsPerMetre = 100) => ({
+      projector: createTestProjector(pixelsPerMetre),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+    });
+    const dimension = (id: string, mbdFunction: string) => ({
+      kind: 'linear_dim' as const,
+      id,
+      function: mbdFunction,
+      start: [0, 0, 0] as const,
+      end: [1, 0, 0] as const,
+      text: '1000',
+      extension_lines: [],
+      arrow_lines: [],
+      label_anchor: [0.5, 0, 0] as const,
+    });
+
+    it('gives equipment records the tier of their function, the leader travelling with its label', () => {
+      const data = fixtureData();
+      const angle = data.primitives.find(primitive => primitive.kind === 'angle_dim')!;
+      const result = mbdV2ToExternalRecords({
+        ...data,
+        annotation_type: 'em4_equi',
+        primitives: [
+          { kind: 'label', id: 'e:equi:name', function: '设备信息', text: 'P-101', position: [0, 1, 0] },
+          { kind: 'leader_line', id: 'e:equi:name:leader', function: '设备信息', start: [0, 1, 0], end: [0, 0, 0] },
+          { kind: 'label', id: 'e:equi:coords', function: '设备坐标', text: 'X +2000\nY +3000\nPE +1000', position: [0, 2, 0] },
+          { kind: 'label', id: 'e:locate:ns:civil', function: '定位墙体', text: 'W101', position: [3, 0, 0] },
+          { kind: 'label', id: 'e:locate:floor:civil:el', function: '楼板标高', text: 'EL. 0.500m', position: [0, -1, 0] },
+          { ...dimension('e:locate:ns', '定位尺寸'), end: [3, 0, 0], label_anchor: [1.5, 0, 0] },
+          { kind: 'aid_text', id: 'e:locate:ns:dirtext', function: '标注方向', text: 'N 2.00453 W', position: [1.5, 0.2, 0] },
+          { ...angle, id: 'e:equi:rotation', function: '偏转角度' },
+          { kind: 'aid_text', id: 'e:equi:rotation:dirtext1', function: '偏转角度', text: 'Y84.3°X', position: [0.2, 0.2, 0] },
+          { kind: 'aid_line', id: 'e:equi:rotation:axis', function: '偏转角度', start: [0, 0, 0], end: [0, 0.5, 0] },
+          // Outside this type's vocabulary (a pipe value), and no function at all: primary, as before.
+          { kind: 'label', id: 'e:manual', function: '连接信息', text: 'PE +1', position: [5, 0, 0] },
+          { kind: 'label', id: 'e:plain', text: 'NOTE', position: [6, 0, 0] },
+        ],
+      });
+      expect(result.skipped).toEqual([]);
+      const lod = (id: string) => explicitLayout(result, id).lod;
+
+      // Identity: always drawn; the leader travels inside its label's record.
+      expect(lod('e:equi:name')).toBeUndefined();
+      expect(result.records.some(record => record.id === 'e:equi:name:leader')).toBe(false);
+      expect(explicitLayout(result, 'e:equi:name').lines).toEqual([{ from: [0, 1, 0], to: [0, 0, 0], part: 'leader' }]);
+      // Mid range: the coordinate block, the wall name, the floor elevation.
+      for (const id of ['e:equi:coords', 'e:locate:ns:civil', 'e:locate:floor:civil:el']) {
+        expect(lod(id), id).toEqual({ tier: 'secondary' });
+      }
+      // The locating dimension stays a primary chain and keeps its short-line rule.
+      expect(lod('e:locate:ns')).toEqual({ tier: 'primary', hideShort: true });
+      // Close-up: the direction note and the whole rotation group, still one declutter group.
+      for (const id of ['e:locate:ns:dirtext', 'e:equi:rotation', 'e:equi:rotation:dirtext1', 'e:equi:rotation:axis']) {
+        expect(lod(id), id).toEqual({ tier: 'detail' });
+      }
+      expect(explicitLayout(result, 'e:equi:rotation:dirtext1').declutter)
+        .toEqual({ rank: 500, group: 'e:equi:rotation' });
+      expect(lod('e:manual')).toBeUndefined();
+      expect(lod('e:plain')).toBeUndefined();
+    });
+
+    it('splits the civil 尺寸标注 by kind and gives support, wall and floor records their tiers', () => {
+      const data = fixtureData();
+      const angle = data.primitives.find(primitive => primitive.kind === 'angle_dim')!;
+      const civil = mbdV2ToExternalRecords({
+        ...data,
+        annotation_type: 'civil',
+        primitives: [
+          dimension('c:edge:0:g0:0', '尺寸标注'),
+          { kind: 'label', id: 'c:member:m1:xdis:A', function: '尺寸标注', text: '315', position: [0, 1, 0] },
+          { kind: 'leader_line', id: 'c:member:m1:xdis:A:leader', function: '尺寸标注', start: [0, 1, 0], end: [0, 0.5, 0] },
+          dimension('c:member:m1:dim:A:0:g0:0', '孔洞尺寸'),
+          { kind: 'label', id: 'c:name:A', function: '名称', text: 'W41', position: [2, 0, 0] },
+          { kind: 'label', id: 'c:thick:A', function: '厚度', text: '300', position: [3, 0, 0] },
+          { kind: 'aid_circle', id: 'c:thick:A:circle1', function: '厚度', center: [3, 0, 0], normal: [0, 0, 1], radius: 0.1 },
+          { kind: 'aid_line', id: 'c:origin:A:x', function: '局部坐标系', start: [4, 0, 0], end: [4.5, 0, 0] },
+          // A leader with no label of its own in the payload: its own record, its function's tier.
+          { kind: 'leader_line', id: 'c:el:A:bottom:leader', function: '标高', start: [5, 1, 0], end: [5, 0, 0] },
+        ],
+      });
+      expect(civil.skipped).toEqual([]);
+      const lod = (id: string) => explicitLayout(civil, id).lod;
+      expect(lod('c:edge:0:g0:0')).toEqual({ tier: 'primary', hideShort: true });
+      expect(lod('c:member:m1:xdis:A')).toEqual({ tier: 'detail' });
+      expect(civil.records.some(record => record.id === 'c:member:m1:xdis:A:leader')).toBe(false);
+      expect(lod('c:member:m1:dim:A:0:g0:0')).toEqual({ tier: 'detail', hideShort: true });
+      expect(lod('c:name:A')).toBeUndefined();
+      expect(lod('c:thick:A')).toEqual({ tier: 'secondary' });
+      expect(lod('c:thick:A:circle1')).toEqual({ tier: 'secondary' });
+      expect(lod('c:origin:A:x')).toEqual({ tier: 'detail' });
+      expect(lod('c:el:A:bottom:leader')).toEqual({ tier: 'secondary' });
+
+      const support = mbdV2ToExternalRecords({
+        ...data,
+        annotation_type: 'em4_supp',
+        primitives: [
+          dimension('s:dim:0:0:0', '二级尺寸'),
+          { ...dimension('s:dim:1:0:0', '一级尺寸'), sub_kind: 'small' },
+          { ...angle, id: 's:angle:0', function: '螺栓孔角度' },
+          { kind: 'aid_text', id: 's:dim:7:0:0:plus', function: '调整焊附加长度', text: ' +50', position: [0.5, 0.1, 0] },
+        ],
+      });
+      expect(explicitLayout(support, 's:dim:0:0:0').lod).toEqual({ tier: 'secondary', hideShort: true });
+      expect(explicitLayout(support, 's:dim:1:0:0').lod).toEqual({ tier: 'primary', hideShort: false });
+      expect(explicitLayout(support, 's:angle:0').lod).toEqual({ tier: 'secondary' });
+      expect(explicitLayout(support, 's:dim:7:0:0:plus').lod).toBeUndefined();
+
+      // The hand-authored envelope fixture (em9_pipe_supp): 二级尺寸 is registered for that type,
+      // 管道信息 (an EM4 support value) is not and stays primary.
+      const envelope = parseMbdV2PipeData(envelopeFieldsFixture, { strict: true });
+      if (!envelope.ok) throw new Error(envelope.error);
+      const mapped = mbdV2ToExternalRecords(envelope.data);
+      expect(explicitLayout(mapped, '24383_91813:angle:24383_91818').lod).toEqual({ tier: 'secondary' });
+      expect(explicitLayout(mapped, '24383_91813:tag:pipe:24383_91816').lod).toBeUndefined();
+      expect(explicitLayout(mapped, '24383_91813:chain:0:seg:0').lod).toEqual({ tier: 'primary', hideShort: true });
+    });
+
+    it('keeps pipe records on their own tiers byte for byte, whatever function they declare', () => {
+      const parsed = parseMbdV2PipeData(liveIsodimFixture);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const live = parsed.data;
+      const layouts = (payload: MbdV2PipeData) =>
+        mbdV2ToExternalRecords(payload).records.map(record => record.layout);
+      const baseline = layouts(live);
+      // The live BRAN has every pipe tier: cards and frames without one, main and ATTA rows,
+      // elbow pills, the branch name and the slopes.
+      const tiers = new Set(baseline.map(layout => (layout as ExplicitLayoutInput).lod?.tier ?? 'none'));
+      expect([...tiers].sort()).toEqual(['detail', 'none', 'primary', 'secondary']);
+      for (const stamp of ['偏转角度', '名称', '设备坐标']) {
+        const primitives = live.primitives.map(primitive => ({ ...primitive, function: stamp }));
+        for (const annotationType of [undefined, 'em4_pipe', 'em9_pipe'] as const) {
+          expect(
+            layouts({ ...live, primitives, ...(annotationType ? { annotation_type: annotationType } : {}) }),
+            `${stamp} / ${annotationType}`,
+          ).toStrictEqual(baseline);
+        }
+      }
+      // The same stamp does take effect in a non-pipe package, so the comparison is not vacuous.
+      const asEquipment = mbdV2ToExternalRecords({
+        ...live,
+        annotation_type: 'em4_equi',
+        primitives: live.primitives.map(primitive => ({ ...primitive, function: '偏转角度' })),
+      });
+      expect(asEquipment.records.every(record => (record.layout as ExplicitLayoutInput).lod?.tier === 'detail'))
+        .toBe(true);
+    });
+
+    it('hides a close-up note on a far view and draws it once its own text reads full size', () => {
+      const records = mbdV2ToExternalRecords({
+        ...fixtureData(),
+        annotation_type: 'em4_equi',
+        primitives: [
+          { kind: 'label', id: 'e:equi:name', function: '设备信息', text: 'P-101', position: [0, 0.5, 0], text_height_mm: 350 },
+          { kind: 'leader_line', id: 'e:equi:name:leader', function: '设备信息', start: [0, 0.5, 0], end: [0, 0, 0] },
+          {
+            kind: 'label', id: 'e:equi:coords', function: '设备坐标', text: 'X +2000\nY +3000\nPE +1000',
+            position: [0.5, 0.5, 0], text_height_mm: 350,
+          },
+          { kind: 'aid_text', id: 'e:locate:ns:dirtext', function: '标注方向', text: 'N 2 W', position: [-0.5, 0, 0], text_height_mm: 70 },
+        ],
+      }).records.map(normalizeExternalDimension);
+      const layoutAt = (pixelsPerMetre: number) => {
+        const { layouts } = layoutViewport(records, kernelContext(pixelsPerMetre), new Map());
+        return (id: string) => layouts.find(layout => layout.dimensionId === id)!;
+      };
+      // 100 px/m: the 70 mm note projects to 7 px and is not drawn blown up to the 11 px floor.
+      // The name stays, and so does the coordinate block: the default theme gates `secondary` at 0 px.
+      const far = layoutAt(100);
+      expect(far('e:locate:ns:dirtext').derived.lodHidden).toBe('detail-far');
+      expect(far('e:locate:ns:dirtext').primitives).toEqual([]);
+      for (const id of ['e:equi:name', 'e:equi:coords']) {
+        expect(far(id).derived.lodHidden, id).toBeUndefined();
+        expect(far(id).primitives.length, id).toBeGreaterThan(0);
+      }
+      // 300 px/m: 21 px, at or above the 18 px close-up gate.
+      const near = layoutAt(300);
+      expect(near('e:locate:ns:dirtext').derived.lodHidden).toBeUndefined();
+      expect(near('e:locate:ns:dirtext').primitives.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('starts a flat multi-line label\'s leader at the edge of its text block (mbd_3d=0)', () => {
+    const result = mbdV2ToExternalRecords({
+      ...fixtureData(),
+      annotation_type: 'em4_supp',
+      primitives: [
+        {
+          kind: 'label', id: 's:support:label:0', function: '管道信息', text: 'A\nhp\nAhA',
+          position: [0, 0.5, 0], text_dir: [1, 0, 0], text_up: [0, 1, 0],
+        },
+        { kind: 'leader_line', id: 's:support:label:0:leader', function: '管道信息', start: [0, 0.5, 0], end: [0, -0.5, 0] },
+      ],
+    });
+    // `mbd_3d=0` strips the billboard spec; the record keeps the solver's leader from the block centre.
+    const { tag: _tag, ...flat } = explicitLayout(result, 's:support:label:0');
+    expect(flat.lines).toEqual([{ from: [0, 0.5, 0], to: [0, -0.5, 0], part: 'leader' }]);
+    const [layout] = layoutViewport(
+      [flat],
+      {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      },
+      new Map(),
+    ).layouts;
+    const leader = layout!.primitives.find(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'leader',
+    )!;
+    // Block centre (200, 150) straight down to the target (200, 250): the drawn leader starts on
+    // the block's box, below the last of the three rows, and still ends on the target.
+    const rows = layout!.primitives.filter(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    );
+    expect(rows).toHaveLength(3);
+    expect(leader.from[0]).toBeCloseTo(200, 9);
+    expect(leader.from[1]).toBeCloseTo(layout!.labelBounds.y + layout!.labelBounds.height, 9);
+    for (const { bounds } of rows) expect(leader.from[1]).toBeGreaterThan(bounds.y + bounds.height);
+    expect(leader.to).toEqual([200, 250]);
+  });
+
+  // plant-mbd 给具名元件名标签的名字行画 PML 位号方框：四条 aid_line `<标签 id>:frame:0..3`
+  // （类别「位号」），按 drawframe 在世界坐标里围住求解器字高的名字行。测试相机 100 px/m：
+  // 标签位置 [0.5, 0.5, 0] 投到 (250, 150)，引线终点 [0.5, −0.5, 0] 投到 (250, 250)。
+  describe('位号 frame (#103)', () => {
+    const NAME = 'b:isoline:2:tag:name:V1';
+    const CHEIGHT_M = 0.017;
+    const position = [0.5, 0.5, 0] as const;
+    const payload = (primitives: MbdV2PipeData['primitives']): MbdV2PipeData => ({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [], cheight_mm: CHEIGHT_M * 1000 },
+      primitives,
+    });
+    const nameTag = {
+      kind: 'label' as const, id: NAME, object_refno: 'V1', isoline_idx: 2, text: 'V-1001',
+      position, text_dir: [1, 0, 0] as const, text_up: [0, 1, 0] as const,
+    };
+    const leader = {
+      kind: 'leader_line' as const, id: `${NAME}:leader`, object_refno: 'V1', isoline_idx: 2,
+      start: position, end: [0.5, -0.5, 0] as const,
+    };
+    /**
+     * The solver's frame round a one-row label at `centre` (plant-mbd `line_frame`): bottom,
+     * right, top, left; left / right / bottom ch/10 off the text box, top ch/10 under it.
+     */
+    const frameLines = (labelId: string, centre: readonly [number, number, number], halfWidth: number) => {
+      const left = centre[0] - halfWidth - CHEIGHT_M / 10;
+      const right = centre[0] + halfWidth + CHEIGHT_M / 10;
+      const bottom = centre[1] - CHEIGHT_M / 2 - CHEIGHT_M / 10;
+      const top = bottom + CHEIGHT_M;
+      const corners = [[left, bottom], [right, bottom], [right, top], [left, top]] as const;
+      return corners.map((corner, k) => ({
+        kind: 'aid_line' as const,
+        id: `${labelId}:frame:${k}`,
+        object_refno: 'V1',
+        isoline_idx: 2,
+        function: '位号',
+        start: [corner[0], corner[1], centre[2]] as const,
+        end: [corners[(k + 1) % 4]![0], corners[(k + 1) % 4]![1], centre[2]] as const,
+      }));
+    };
+    const framedTag = [nameTag, leader, ...frameLines(NAME, position, 0.05)];
+    const inputsOf = (primitives: MbdV2PipeData['primitives']): ExplicitLayoutInput[] =>
+      mbdV2ToExternalRecords(payload(primitives)).records
+        .map(record => normalizeExternalDimension(record) as ExplicitLayoutInput);
+    const layoutsOf = (inputs: readonly ExplicitLayoutInput[]) => layoutViewport(
+      inputs,
+      {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      },
+      new Map(),
+    ).layouts;
+
+    it('folds the four frame lines into their name tag instead of keeping them as records', () => {
+      const result = mbdV2ToExternalRecords(payload([
+        ...framedTag,
+        // A frame line whose label is not in the payload, and an aid line framing nothing.
+        frameLines('b:isoline:3:tag:name:GONE', [2, 0.5, 0], 0.05)[0]!,
+        { kind: 'aid_line', id: 'b:isoline:2:flow:0', start: [0, 0, 0], end: [0.1, 0, 0] },
+        // A tag the solver does not frame.
+        { kind: 'label', id: 'b:isoline:2:tag:elevation:V1', text: 'PE +1500', position: [1, 0.5, 0] },
+      ]));
+      expect(result.skipped).toEqual([]);
+      expect(result.records.map(record => record.id)).toEqual([
+        NAME,
+        'b:isoline:3:tag:name:GONE:frame:0',
+        'b:isoline:2:flow:0',
+        'b:isoline:2:tag:elevation:V1',
+      ]);
+      const name = explicitLayout(result, NAME);
+      expect(name.labelFrame).toEqual({ row: 0 });
+      // The record keeps only the leader as its flat geometry; the frame is drawn round the text.
+      expect(name.lines).toEqual([{ from: [0.5, 0.5, 0], to: [0.5, -0.5, 0], part: 'leader' }]);
+      expect(name.tag).toMatchObject({ style: 'frame', subject: 'V1' });
+      expect(explicitLayout(result, 'b:isoline:2:tag:elevation:V1')).not.toHaveProperty('labelFrame');
+      expect(explicitLayout(result, 'b:isoline:3:tag:name:GONE:frame:0').lines).toHaveLength(1);
+
+      // A payload from before the frames maps as it did.
+      const live = parseMbdV2PipeData(liveIsodimFixture);
+      if (!live.ok) throw new Error(live.error);
+      expect(mbdV2ToExternalRecords(live.data).records.some(record => 'labelFrame' in record.layout))
+        .toBe(false);
+    });
+
+    it('draws no frame lines in the default 3D presentation: the framed body is the box', () => {
+      const [framed] = layoutsOf(inputsOf(framedTag));
+      const [unframed] = layoutsOf(inputsOf([nameTag, leader]));
+      expect(framed!.derived.tag).toBeDefined();
+      expect(framed).toEqual(unframed);
+      // One box, the billboard body's border; every other stroke is the leader.
+      expect(framed!.scenePrimitives.filter(
+        (primitive): primitive is ScenePath => primitive.kind === 'scene-path',
+      )).toMatchObject([{ part: 'tag', closed: true, tone: 'tag-frame' }]);
+      expect(framed!.scenePrimitives
+        .filter((primitive): primitive is SceneLine => primitive.kind === 'scene-line')
+        .map(primitive => primitive.part)).toEqual(['leader']);
+    });
+
+    it('draws the frame round the name row as drawn in the flat presentation (mbd_3d=0)', () => {
+      // `mbd_3d=0` strips the billboard spec. The 17 mm text projects to 1.7 px and draws at the
+      // 11 px floor, so a frame at the solver's size would be 1.7 px tall round 11 px text.
+      const [layout] = layoutsOf(inputsOf(framedTag).map(({ tag: _tag, ...flat }) => flat));
+      const glyph = layout!.primitives.find(
+        (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+      )!;
+      expect(glyph.capHeightPx).toBe(SOLVESPACE_DIMENSION_THEME.sourceTextHeightMinPx);
+      const frames = layout!.primitives.filter(
+        (primitive): primitive is ScreenPath => primitive.kind === 'path' && primitive.part === 'tag',
+      );
+      expect(frames).toHaveLength(1);
+      // A tenth of the drawn cap height clear of the drawn glyph box, on every side.
+      const clearance = glyph.capHeightPx / 10;
+      const { x, y, width, height } = glyph.bounds;
+      const expected = [
+        [x - clearance, y - clearance],
+        [x + width + clearance, y - clearance],
+        [x + width + clearance, y + height + clearance],
+        [x - clearance, y + height + clearance],
+      ];
+      frames[0]!.points.forEach((point, index) => {
+        expect(point[0]).toBeCloseTo(expected[index]![0]!, 9);
+        expect(point[1]).toBeCloseTo(expected[index]![1]!, 9);
+      });
+      // The leader leaves from the frame's bottom edge and still ends on the pipe; the
+      // solver's four lines are not drawn.
+      const lines = layout!.primitives.filter(
+        (primitive): primitive is ScreenLine => primitive.kind === 'line',
+      );
+      expect(lines.map(line => line.part)).toEqual(['leader']);
+      expect(lines[0]!.from[0]).toBeCloseTo(250, 9);
+      expect(lines[0]!.from[1]).toBeCloseTo(y + height + clearance, 9);
+      expect(lines[0]!.to).toEqual([250, 250]);
+    });
   });
 
   it('produces records the shared kernel can lay out end to end', () => {
@@ -1093,266 +2030,33 @@ describe('mbdV2ToExternalRecords', () => {
     expect(explicitLayout(ownSurface, 'outer-unplaced').dimension3d!.row).toBe(1);
   });
 
-  describe('polar placement opt-in (T3.6a)', () => {
-    // `cliLinearFixture`: source_mm, S(0.001). The one `linear_dim` runs
-    // start=[0,-500,0] end=[80,-500,0] mm -> Design [0,-0.5,0]..[0.08,-0.5,0],
-    // a 0.08 m axis along +X.
-    function fixture() {
-      const parsed = parseMbdV2PipeData(cliLinearFixture);
-      if (!parsed.ok) throw new Error(parsed.error);
-      const source = parsed.data.primitives[0]!;
-      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
-      return { data: parsed.data, source };
-    }
-
-    it('attaches polar when the label shares an isoline with a linear_dim and the table has od_mm', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-on-isoline', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-
-      const polar = explicitLayout(result, 'tag-on-isoline').polar;
-      expect(polar).toBeDefined();
-      // Axis through Design Space start/end (×0.001), basicRadius = od/2 = 0.25 m.
-      expect(polar!.origin).toEqual([0, -0.5, 0]);
-      expect(polar!.axis).toEqual([1, 0, 0]);
-      expect(polar!.basicRadiusM).toBeCloseTo(0.25, 12);
-      // The label sits at the axis midpoint (x=40mm -> 0.04m of the 0.08m span).
-      expect(polar!.disRange[0]).toBeLessThan(0.04);
-      expect(polar!.disRange[1]).toBeGreaterThan(0.04);
-      expect(polar!.textHeightM).toBeCloseTo(0.0135, 12);
-      // T3.6b: the group key names the isoline, matching the `linear_dim`'s
-      // own `polarObstacle.groupKey` below (same isoline -> same group).
-      expect(polar!.groupKey).toBe('isoline:0');
-    });
-
-    it('omits polar when the label has no isoline_idx', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          { kind: 'label', id: 'tag-unplaced', text: 'X 1', position: [40, -500, 0] },
-        ],
-      });
-      expect(explicitLayout(result, 'tag-unplaced').polar).toBeUndefined();
-    });
-
-    it('omits polar when no linear_dim shares the label\'s isoline', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 1 },
-          {
-            kind: 'label', id: 'tag-no-axis', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      expect(explicitLayout(result, 'tag-no-axis').polar).toBeUndefined();
-    });
-
-    it('reads the pipe axis from meta.isolines[].axis in preference to the linear_dim line', () => {
-      const { data, source } = fixture();
-      // The pipe runs along +X at y=0; the dimension row (y=-500mm) sits one
-      // outer diameter off it, which is what the linear_dim fallback used to
-      // hand over as the axis.
-      const meta = {
-        ...data.meta,
+  it('attaches neither polar nor polarObstacle: pipe labels arrive already placed by the solver', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const source = parsed.data.primitives[0]!;
+    if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+    // Every fact the retired front-end opt-in read is here: one isoline shared by a
+    // linear_dim, a label and an aid_text, with its od_mm and its declared axis.
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: {
+        ...parsed.data.meta,
         isolines: [{
           index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500,
           axis: { from: [0, 0, 0] as const, to: [80, 0, 0] as const },
         }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-on-axis', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-
-      const polar = explicitLayout(result, 'tag-on-axis').polar;
-      expect(polar).toBeDefined();
-      expect(polar!.origin).toEqual([0, 0, 0]);
-      expect(polar!.axis).toEqual([1, 0, 0]);
-      expect(polar!.basicRadiusM).toBeCloseTo(0.25, 12);
-      expect(polar!.disRange[0]).toBeLessThan(0.04);
-      expect(polar!.disRange[1]).toBeGreaterThan(0.04);
+      },
+      primitives: [
+        { ...source, isoline_idx: 0 },
+        { kind: 'label', id: 'tag-on-isoline', text: 'X 1', position: [40, -500, 0], isoline_idx: 0 },
+        { kind: 'aid_text', id: 'aid-on-isoline', text: 'X: 12', position: [40, -500, 0], isoline_idx: 0 },
+      ],
     });
 
-    it('attaches polar from a declared axis even when no linear_dim shares the isoline', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{
-          index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500,
-          axis: { from: [0, 0, 0] as const, to: [80, 0, 0] as const },
-        }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 1 },
-          {
-            kind: 'label', id: 'tag-axis-only', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-
-      const polar = explicitLayout(result, 'tag-axis-only').polar;
-      expect(polar?.origin).toEqual([0, 0, 0]);
-      expect(polar?.axis).toEqual([1, 0, 0]);
-      expect(polar?.groupKey).toBe('isoline:0');
-    });
-
-    it('omits polar when the isoline table has no od_mm for that index', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta: { ...data.meta, isolines: [] },
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-no-od', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      expect(explicitLayout(result, 'tag-no-od').polar).toBeUndefined();
-    });
-  });
-
-  describe('same-pipe polar obstacles (T3.6b)', () => {
-    function fixture() {
-      const parsed = parseMbdV2PipeData(cliLinearFixture);
-      if (!parsed.ok) throw new Error(parsed.error);
-      const source = parsed.data.primitives[0]!;
-      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
-      return { data: parsed.data, source };
+    expect(result.records.map(record => record.id)).toEqual([source.id, 'tag-on-isoline', 'aid-on-isoline']);
+    for (const record of result.records) {
+      expect(record.layout).not.toHaveProperty('polar');
+      expect(record.layout).not.toHaveProperty('polarObstacle');
     }
-
-    it('a linear_dim with an isoline_idx carries polarObstacle naming that isoline', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        primitives: [{ ...source, isoline_idx: 0 }],
-      });
-      expect(explicitLayout(result, source.id).polarObstacle).toEqual({ groupKey: 'isoline:0' });
-    });
-
-    it('a linear_dim without an isoline_idx carries no polarObstacle (v1 behaviour)', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({ ...data, primitives: [source] });
-      expect(explicitLayout(result, source.id).polarObstacle).toBeUndefined();
-    });
-
-    it('a label\'s polar.groupKey and its same-isoline linear_dim\'s '
-      + 'polarObstacle.groupKey agree, so layoutViewport treats them as one group', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'label', id: 'tag-on-isoline', text: 'X 1',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      const label = explicitLayout(result, 'tag-on-isoline');
-      const dim = explicitLayout(result, source.id);
-      expect(label.polar?.groupKey).toBe(dim.polarObstacle?.groupKey);
-    });
-  });
-
-  describe('aid_text never opts into polar (T3.6b ruling)', () => {
-    // PML: every producer call site either builds a throwaway leg-frame
-    // `polarsystem` that explicitly skips `this.polarsystem.add` (skew-leg
-    // X:/Y:/Z: text, `isoline.pmlobj:2480-2521`, call sites `:2388`/`:2431`)
-    // or places the text at a fixed offset with no polar call at all
-    // (`drawslope`, `:2568-2591`; weld-length adjustment, `:2141-2147`).
-    // plant-mbd mirrors this: every `AidText` the Rust producer emits sets
-    // `isoline_idx: None` (`slope.rs:295-303`, `angle.rs:524-532`,
-    // `adjust_weld.rs:205-211`).
-    function fixture() {
-      const parsed = parseMbdV2PipeData(cliLinearFixture);
-      if (!parsed.ok) throw new Error(parsed.error);
-      const source = parsed.data.primitives[0]!;
-      if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
-      return { data: parsed.data, source };
-    }
-
-    it('an aid_text with no isoline_idx (the real-world shape) gets no polar', () => {
-      const { data, source } = fixture();
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        primitives: [
-          source,
-          { kind: 'aid_text', id: 'aid-no-isoline', text: 'X: 12', position: [40, -500, 0] },
-        ],
-      });
-      const layout = explicitLayout(result, 'aid-no-isoline');
-      expect(layout.polar).toBeUndefined();
-      expect(layout.polarObstacle).toBeUndefined();
-    });
-
-    it('an aid_text with an isoline_idx that does share a linear_dim + od_mm '
-      + 'still gets no polar — the ruling holds even when every other fact '
-      + 'a `label` would need is present', () => {
-      const { data, source } = fixture();
-      const meta = {
-        ...data.meta,
-        isolines: [{ index: 0, members: ['m'], cheight_mm: 13.5, od_mm: 500 }],
-      };
-      const result = mbdV2ToExternalRecords({
-        ...data,
-        meta,
-        primitives: [
-          { ...source, isoline_idx: 0 },
-          {
-            kind: 'aid_text', id: 'aid-on-isoline', text: 'X: 12',
-            position: [40, -500, 0], isoline_idx: 0,
-          },
-        ],
-      });
-      const layout = explicitLayout(result, 'aid-on-isoline');
-      expect(layout.polar).toBeUndefined();
-      expect(layout.polarObstacle).toBeUndefined();
-    });
   });
 });
