@@ -17,6 +17,12 @@ export type TreeNode = {
    * 成员自己的 `parentId` 仍是主位置；只有 gen-model-v1 的解析视图给这一格。
    */
   groupMemberVia?: Record<string, string | null>
+  /**
+   * 分组里由 SCOSEL 规则命中的成员：子 id → `true`。与 `groupMemberVia` 并列——
+   * 规则成员同样「主位置在别处」，但没有经由的 GPITEM，所以 `groupMemberVia[id]` 是 `null`。
+   * 只有 gen-model-v1 的解析视图在后端回 `rule: true` 时才给这一格。
+   */
+  groupRule?: Record<string, boolean>
   /** 分组里解析不出的成员槽数（GPREF 缺失 / 目标库不在 MDB / 目标不存在） */
   unresolvedCount?: number
   /** GPSET 的子节点仍是存储视图（老 gen-model 没认 `resolved=1`）：列的是 GPITEM 槽本身，行上提示「后端未支持分组解析」 */
@@ -40,6 +46,11 @@ export type FlatRow = {
   secondary?: boolean
   /** 二级成员行经由的 GPITEM（`a_b`）；规则成员没有 */
   via?: string
+  /**
+   * 分组规则（SCOSEL）命中的成员行：主位置在别处，且没有经由的 GPITEM（见 `TreeNode.groupRule`）。
+   * 这一行只画「规则」角标，不再重复画「引用」角标。
+   */
+  rule?: boolean
   /** 见 `TreeNode.unresolvedCount` */
   unresolvedCount?: number
   /** 见 `TreeNode.groupViewUnsupported` */

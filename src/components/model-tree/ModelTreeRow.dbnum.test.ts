@@ -67,6 +67,63 @@ describe('ModelTreeRow 分组行（GPWL / GPSET）', () => {
     }
   });
 
+  it('规则成员行带「规则」角标，悬停说明由分组规则命中', async () => {
+    const wrapper = await mountRow({
+      id: '2013286676_490',
+      name: '/ZONE-PIPING-AREA01',
+      type: 'ZONE',
+      depth: 3,
+      hasChildren: true,
+      secondary: true,
+      rule: true,
+      // 规则成员没有经由的 GPITEM
+    });
+    try {
+      const badge = wrapper.host.querySelector<HTMLElement>('[data-testid="model-tree-rule-badge"]');
+      expect(badge).not.toBeNull();
+      expect(badge?.textContent).toContain('规则');
+      expect(badge?.title).toContain('分组规则');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('规则成员行不显示「引用」角标（不重复显示两个角标）', async () => {
+    const wrapper = await mountRow({
+      id: '2013286676_490',
+      name: '/ZONE-PIPING-AREA01',
+      type: 'ZONE',
+      depth: 3,
+      hasChildren: true,
+      secondary: true,
+      rule: true,
+    });
+    try {
+      expect(wrapper.host.querySelector('[data-testid="model-tree-secondary-badge"]')).toBeNull();
+      expect(wrapper.host.querySelector('[data-testid="model-tree-rule-badge"]')).not.toBeNull();
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('普通二级成员行仍只显示「引用」角标（既有行为不回归）', async () => {
+    const wrapper = await mountRow({
+      id: '17496_8518',
+      name: '/1RS-WF05',
+      type: 'ZONE',
+      depth: 3,
+      hasChildren: true,
+      secondary: true,
+      via: '2013286748_12',
+    });
+    try {
+      expect(wrapper.host.querySelector('[data-testid="model-tree-secondary-badge"]')).not.toBeNull();
+      expect(wrapper.host.querySelector('[data-testid="model-tree-rule-badge"]')).toBeNull();
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it('老 gen-model 没认解析视图时 GPSET 行提示「后端未支持分组解析」（是提示不是错误）；认了的不提示', async () => {
     const stored = await mountRow({ id: '2013286748_11', name: '/HVAC', type: 'GPSET', depth: 2, hasChildren: true, groupViewUnsupported: true });
     try {

@@ -292,6 +292,10 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         row.secondary = true;
         if (via) row.via = via;
       }
+      // 规则成员：`groupMemberVia[id]` 是 null（没有经由的 GPITEM），所以 `secondary` 为真而 `via` 不出现；
+      // `groupRule` 是独立的承载位，两者同时为真时行只画「规则」角标。
+      const rule = viewParentId ? nodes[viewParentId]?.groupRule?.[id] : undefined;
+      if (rule === true) row.rule = true;
       if (node.unresolvedCount) row.unresolvedCount = node.unresolvedCount;
       if (node.groupViewUnsupported) row.groupViewUnsupported = true;
       out.push(row);
@@ -336,6 +340,8 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       const childrenIds: string[] = [];
       const inheritedIds: string[] = [];
       const memberVia: Record<string, string | null> = {};
+      // 规则成员（后端 `rule: true`）：与 `memberVia` 并列，`groupMemberVia[id]` 为 null 但这一格为 true。
+      const memberRule: Record<string, boolean> = {};
       let keptOwnState = false;
       for (const dto of resp.children) {
         const id = normalizeRefnoKey(dto.refno);
@@ -350,6 +356,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         // 分组在解析视图下收录的二级成员：主位置在别处，不改它的 parentId，也不动它已有的勾选态。
         const secondary = dto.secondary === true;
         if (secondary) memberVia[id] = dto.via ? normalizeRefnoKey(dto.via) : null;
+        // 规则成员：后端给 `rule: true` + `via: null` + `secondary: true`。形状与普通二级成员一样落在
+        // `memberVia` 里（null 表示没有经由的 GPITEM），另外在 `memberRule` 记一笔供行渲染选角标。
+        if (dto.rule === true) memberRule[id] = true;
         const existing = nextNodes[id];
         if (!existing) {
           nextNodes[id] = dtoToTreeNode(dto, secondary ? null : parentKey);
@@ -376,9 +385,11 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       }
       const nextParent: TreeNode = { ...parent, childrenIds };
       delete nextParent.groupMemberVia;
+      delete nextParent.groupRule;
       delete nextParent.unresolvedCount;
       delete nextParent.groupViewUnsupported;
       if (Object.keys(memberVia).length > 0) nextParent.groupMemberVia = memberVia;
+      if (Object.keys(memberRule).length > 0) nextParent.groupRule = memberRule;
       if (resp.unresolved && resp.unresolved.length > 0) nextParent.unresolvedCount = resp.unresolved.length;
       // 新前端 × 老服务端：GPSET 下仍是存储视图（GPITEM 槽本身），照物理视图显示、行上提示
       if (resp.view === 'stored' && parent.type.toUpperCase() === 'GPSET') nextParent.groupViewUnsupported = true;

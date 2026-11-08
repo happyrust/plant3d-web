@@ -69,6 +69,8 @@ const groupIcon = computed(() => {
 const secondaryTitle = computed(() => (props.row.via
   ? `分组引用（经 GPITEM ${fallbackRefnoLabel(props.row.via)}），主位置不在这里；右键「定位到原位置」`
   : '分组引用，主位置不在这里；右键「定位到原位置」'));
+/** 规则成员没有经由的 GPITEM，说明命中它的是一条分组规则（SCOSEL）。 */
+const ruleTitle = computed(() => '分组规则命中，主位置在别处；右键「定位到原位置」');
 
 function normalizePdmsName(value: string | undefined): string {
   return String(value || '').trim().replace(/^\/+/, '');
@@ -266,7 +268,15 @@ onUnmounted(() => {
         <div v-else class="truncate" :class="isNameFallback ? 'text-muted-foreground text-xs' : 'font-medium'">{{ displayName }}</div>
       </div>
 
-      <span v-if="row.secondary && !ghost"
+      <!-- 规则成员行只画「规则」角标：它同样是二级成员（secondary），但没有经由的 GPITEM，两者不重复显示 -->
+      <span v-if="row.rule && !ghost"
+        class="inline-flex shrink-0 items-center rounded border border-amber-500/40 px-1 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
+        data-testid="model-tree-rule-badge"
+        :title="ruleTitle">
+        规则
+      </span>
+
+      <span v-if="row.secondary && !row.rule && !ghost"
         class="inline-flex shrink-0 items-center rounded border border-sky-500/40 px-1 text-[10px] leading-4 text-sky-600 dark:text-sky-400"
         data-testid="model-tree-secondary-badge"
         :title="secondaryTitle">
