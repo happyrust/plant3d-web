@@ -34,6 +34,64 @@ Tests:
 - `npm run type-check` — must exit 0.
 - The three component cases for the badge live in `src/components/model-tree/ModelTreeRow.dbnum.test.ts`.
 
+### Group context action: load the models a group references
+
+A group row (`GPSET`) has no geometry of its own — its members may be GPITEM slots or an `SCOSEL` rule, and none of them are loaded just because the group row exists. Right-clicking a group row now offers **「显示分组引用的模型」** (`data-testid="model-tree-show-group-models"`).
+
+What the user sees:
+
+- The action appears on group rows only, gated by `v-if="contextNodeIsGroup"`.
+- It reuses the already-verified `showModelByRefno(id, { flyTo: true })` chain end to end: member resolution → `generate` → `records` → DTX load → `flyTo`. On success it calls `pdmsTree.setVisible(id, true)` so the tree reflects the newly loaded subtree.
+
+Mutual exclusion with 「重新生成模型」:
+
+| Context row | 「重新生成模型」 | 「显示分组引用的模型」 |
+|---|---|---|
+| Non-group node | shown (`v-if="!contextNodeIsGroup"`) | hidden |
+| Group node (`GPSET`) | hidden | shown |
+
+So a group row offers exactly one of the two actions — never both, never neither.
+
+The group path deliberately does **not** pass `regenerate: true`. A group carrying `force` hits the backend's pre-existing `group_scope` 422 (the G2 semantics for group-scoped generation). Loading the referenced models and regenerating them are therefore two different actions, not one action with a flag.
+
+### Empty-group messages by reason code
+
+An empty group used to be indistinguishable from a rule that matched nothing. Both cases produced a byte-identical `generate` receipt — same `status`, `generation_roots`, `generation_root_count`, `scope_refnos`, `unresolved_count`, `dbnum`, `routes` — so the UI could only show one generic sentence and the user had no way to tell "this group is genuinely empty" from "this rule hit zero elements".
+
+The backend now reports *why* a member failed to resolve, and `src/model-source/genModelV1/modelRecords.ts` maps the reason to a message via `emptyGroupHintFor(unresolved)`:
+
+| Backend `unresolved[].reason` | Message shown |
+|---|---|
+| `group_empty` | 「分组为空」 (`GROUP_EMPTY_HINT`) |
+| `scosel_no_match` | 「规则没有命中任何构件」 (`GROUP_RULE_NO_MATCH_HINT`) |
+| `scosel_unsupported`, `scosel_eval_failed` | 「规则无法求值（成员不可解析）」 (`GROUP_RULE_UNEVALUABLE_HINT`) |
+| key absent (switch off / older backend) | falls back to the original `EMPTY_GROUP_HINT` verbatim: 「分组为空或成员不可解析」 |
+
+Wire shape — `POST /api/v1/model/generate` and `POST /api/v1/model/records` now carry `unresolved[]` on group receipts:
+
+| Field | Type | Notes |
+|---|---|---|
+| `via` | `RefnoEnum` | underscore form, e.g. `"2_15"` |
+| `target` | `RefnoEnum` | underscore form, e.g. `"2_15"` |
+| `reason` | string | one of the seven codes below |
+
+- `via` / `target` use the same underscore form as `/api/v1/tree/children?refno=<GPSET>&resolved=1`'s `unresolved[]`, so the two endpoints agree element by element.
+- The key is **omitted entirely** when the array is empty — it is not `[]`.
+- When `unresolved` is present, `unresolved_count == unresolved.length`.
+- Seven reason codes, in two families:
+  - GPREF family (broken reference chain): `gpref_missing`, `db_not_in_mdb`, `target_missing`
+  - SCOSEL family (rule evaluation): `scosel_eval_failed`, `scosel_unsupported`, `scosel_no_match`, `group_empty`
+
+Read `reason`, never `via`, when picking the message. For a rule-family broken slot and for the `group_empty` slot there is no GPITEM to route through, so the backend fills `via` with the group's own refno. Rendering anything member-level off that value produces misleading text ("member X failed" when the group itself is the subject).
+
+Acceptance samples (all `GPSET`, checked against a live backend):
+
+| Path | Refno | Expected |
+|---|---|---|
+| `/ACCEPT-GROUP` | `2013286764_3` | `reason: group_empty` → 「分组为空」 |
+| `/AREA01_HVAC` | `2013286748_7` | `reason: scosel_no_match` → 「规则没有命中任何构件」 |
+| `/AREA01_PIPE` | `2013286748_2` | normal match, no `unresolved` key at all |
+
 ## Recommended IDE Setup
 
 [VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
