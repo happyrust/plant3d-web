@@ -1081,6 +1081,34 @@ async function showNode() {
   closeContextMenu();
 }
 
+/**
+ * 分组行右键「显示分组引用的模型」（M4）：走已验证可用的 `showModelByRefno` 全链路
+ * （成员解析 → generate → records → DTX 装载 → flyTo），成功后同步树勾选。
+ *
+ * 与 {@link showNode} 同构，但**不传 `regenerate: true`**：分组带 force 会撞 422 `group_scope`
+ * （G2 既有语义，`handlers.rs` 的 group_scope 分支），多打一发请求没有意义。
+ * 复用现成的 `setNodeLoading`，行尾 eye 会自动转圈，不新增状态。
+ */
+async function showGroupModels() {
+  // 必须先取 id：`closeContextMenu()` 会把 `contextNodeId` 清 null（惯例见 focus() / regenerateNode()），顺序反了拿不到 refno
+  const id = contextNodeId.value;
+  closeContextMenu();
+  if (!id || !isRefnoLike(id)) return;
+  if (!modelGenerationState.value) {
+    emitToast({ message: '三维视图尚未就绪，稍后再试', level: 'info' });
+    return;
+  }
+  const target = normalizeRefnoKeyLike(id);
+
+  setNodeLoading(target, true);
+  try {
+    const ok = await modelGenerationState.value.showModelByRefno(target, { flyTo: true });
+    if (ok) await pdmsTree.setVisible(target, true);
+  } finally {
+    setNodeLoading(target, false);
+  }
+}
+
 async function regenerateNode() {
   if (!contextNodeId.value || !modelGenerationState.value) return;
   const id = normalizeRefnoKeyLike(contextNodeId.value);
@@ -1605,6 +1633,14 @@ function onSearchEnter(value: string) {
           class="w-full rounded px-2 py-1 text-left text-sm text-warning hover:bg-muted"
           @click="regenerateNode">
           重新生成模型
+        </button>
+        <!-- 分组只登记成员、不拥有模型：它与「重新生成模型」是同一维度的互斥操作（后者被 !contextNodeIsGroup 挡掉） -->
+        <button v-if="contextNodeIsGroup" type="button"
+          data-testid="model-tree-show-group-models"
+          :data-refno="contextNodeId"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          @click="showGroupModels">
+          显示分组引用的模型
         </button>
         <div class="my-1 h-px bg-border" />
         <button type="button"

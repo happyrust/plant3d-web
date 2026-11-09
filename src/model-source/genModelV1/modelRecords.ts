@@ -21,6 +21,7 @@ import {
   type GenModelV1RequestOptions,
   type ModelGenerateResponse,
   type ModelRecordsResponse,
+  type ModelUnresolvedSlot,
   type TreeChildrenResponse,
 } from '@/api/genModelV1Api';
 import {
@@ -75,8 +76,38 @@ export type GenerateThenCollectOptions = CollectRecordsOptions & {
   onRootStart?: (progress: { done: number; total: number; root: string }) => void;
 };
 
-/** 分组（GPWL / GPSET）为空或成员全都解析不出：generate 回执 `scope_kind: 'group'` 且 `generation_roots: []`。 */
+/**
+ * 分组（GPWL / GPSET）为空或成员全都解析不出：generate 回执 `scope_kind: 'group'` 且 `generation_roots: []`。
+ *
+ * 这是**兜底文案**：拿不到 `unresolved[].reason`（开关关、旧后端、或只有 GPREF 族坏槽）时用它，
+ * 逐字保持不变——开关关时用户看到的东西一个字都不能变。
+ */
 export const EMPTY_GROUP_HINT = '分组为空或成员不可解析';
+
+/** 后端 `group_empty`：分组既没有 GPITEM 成员也没有 SCOSEL 规则。 */
+export const GROUP_EMPTY_HINT = '分组为空';
+/** 后端 `scosel_no_match`：规则完整解出、一个构件都没命中。 */
+export const GROUP_RULE_NO_MATCH_HINT = '规则没有命中任何构件';
+/** 后端 `scosel_unsupported` / `scosel_eval_failed`：规则解不出或求值器认不出它的形状。 */
+export const GROUP_RULE_UNEVALUABLE_HINT = '规则无法求值（成员不可解析）';
+
+/**
+ * 空分组的提示文案按后端原因码分流（M4，VAL-WEB-007）。
+ *
+ * 只读 `reason`，**不读 `via`**：规则族与 `group_empty` 槽没有经由的 GPITEM，后端把 `via` 填成分组自己的 refno，
+ * 拿它做成员级渲染会得到「成员经由分组自己」的误导文案。
+ *
+ * 优先级按「越具体越先」排：`group_empty` 说明连规则都没有；`scosel_no_match` 说明规则求值成功但零命中；
+ * `scosel_unsupported` / `scosel_eval_failed` 说明规则本身不可用。三者之外（含 `gpref_missing` /
+ * `db_not_in_mdb` / `target_missing` 这三个 GPREF 族码）一律回落到 {@link EMPTY_GROUP_HINT} 的原文。
+ */
+export function emptyGroupHintFor(unresolved?: readonly ModelUnresolvedSlot[] | null): string {
+  const reasons = new Set((unresolved ?? []).map((slot) => slot.reason));
+  if (reasons.has('group_empty')) return GROUP_EMPTY_HINT;
+  if (reasons.has('scosel_no_match')) return GROUP_RULE_NO_MATCH_HINT;
+  if (reasons.has('scosel_unsupported') || reasons.has('scosel_eval_failed')) return GROUP_RULE_UNEVALUABLE_HINT;
+  return EMPTY_GROUP_HINT;
+}
 
 /**
  * 显示与重新生成共用的结果形状。
@@ -97,7 +128,7 @@ export type CollectRecordsResult = {
   /** 其它错误（`a_b` → 错误信息），调用方决定要不要报 */
   errors: Record<string, string>;
   statuses: Record<string, string>;
-  /** 没有记录时直接给人看的说明（`a_b` → 文案）；目前只有空分组的 {@link EMPTY_GROUP_HINT} */
+  /** 没有记录时直接给人看的说明（`a_b` → 文案）；目前只有空分组，文案按 {@link emptyGroupHintFor} 分流 */
   hints?: Record<string, string>;
 };
 
@@ -376,7 +407,8 @@ export async function generateThenCollect(
     result.statuses[current] = String(generated.status ?? '');
     if (generated.scope_kind === 'group' && rootsOf(generated, current).length === 0) {
       pushUnique(result.empty, current);
-      result.hints = { ...result.hints, [current]: EMPTY_GROUP_HINT };
+      // 唯一写入点（M4）：原因码只有 generate 回执带，上层拿不到，所以分流必须在这里定稿
+      result.hints = { ...result.hints, [current]: emptyGroupHintFor(generated.unresolved) };
       continue;
     }
     if (generated.status === 'NoRenderableGeometry' || generated.model_available === false) {

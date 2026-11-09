@@ -7,7 +7,11 @@ import {
   collectRecordsByAncestor,
   collectRecordsForAncestors,
   EMPTY_GROUP_HINT,
+  emptyGroupHintFor,
   generateThenCollect,
+  GROUP_EMPTY_HINT,
+  GROUP_RULE_NO_MATCH_HINT,
+  GROUP_RULE_UNEVALUABLE_HINT,
   isLegacyNotGenerated,
   mapWithConcurrency,
   MAX_MODEL_RECORD_PAGES,
@@ -255,8 +259,81 @@ describe('generateThenCollect', () => {
     expect(generate).toHaveBeenCalledWith({ refno: '9_1' }, expect.anything());
     expect(result.empty).toEqual(['9_1']);
     expect(result.generationRoots).toEqual([]);
+    // 回执没有 `unresolved` 键（开关关 / 旧后端）→ 逐字回落原文案
     expect(result.hints).toEqual({ '9_1': EMPTY_GROUP_HINT });
     expect(client.records).not.toHaveBeenCalled();
+  });
+
+  /** 空分组回执只换 `unresolved`，其余字段与真后端一致（见 gen-model 的 model-generate-gpset-empty.json）。 */
+  const emptyGroupReceipt = (unresolved?: { via: string; target: string | null; reason: string }[]) => vi.fn(async ({ refno }: { refno: string }) => ({
+    status: 'NoRenderableGeometry',
+    model_available: false,
+    generation_root: v1(refno),
+    generation_roots: [],
+    scope_kind: 'group',
+    unresolved_count: unresolved?.length ?? 1,
+    ...(unresolved ? { unresolved } : {}),
+  }));
+
+  it('group_empty 回执：提示「分组为空」，且不含「规则」字样', async () => {
+    const client = api({ generate: emptyGroupReceipt([{ via: '2013286764_3', target: null, reason: 'group_empty' }]) as never });
+    const result = await generateThenCollect('2013286764_3', { force: false }, client);
+    expect(result.hints?.['2013286764_3']).toBe(GROUP_EMPTY_HINT);
+    expect(result.hints?.['2013286764_3']).toContain('分组为空');
+    expect(result.hints?.['2013286764_3']).not.toContain('规则');
+  });
+
+  it('scosel_no_match 回执：提示「规则没有命中任何构件」', async () => {
+    const client = api({ generate: emptyGroupReceipt([{ via: '2013286748_7', target: null, reason: 'scosel_no_match' }]) as never });
+    const result = await generateThenCollect('2013286748_7', { force: false }, client);
+    expect(result.hints?.['2013286748_7']).toBe(GROUP_RULE_NO_MATCH_HINT);
+    expect(result.hints?.['2013286748_7']).toContain('规则没有命中');
+  });
+
+  it.each(['scosel_unsupported', 'scosel_eval_failed'])('%s 回执：提示规则无法求值（成员不可解析）', async (reason) => {
+    const client = api({ generate: emptyGroupReceipt([{ via: '2013286748_7', target: null, reason }]) as never });
+    const result = await generateThenCollect('2013286748_7', { force: false }, client);
+    expect(result.hints?.['2013286748_7']).toBe(GROUP_RULE_UNEVALUABLE_HINT);
+    expect(result.hints?.['2013286748_7']).toMatch(/不可解析|无法求值/);
+  });
+});
+
+describe('emptyGroupHintFor（空态文案按后端原因码分流）', () => {
+  it('group_empty → 「分组为空」，不含「规则」', () => {
+    expect(emptyGroupHintFor([{ via: '1_1', target: null, reason: 'group_empty' }])).toBe(GROUP_EMPTY_HINT);
+    expect(emptyGroupHintFor([{ via: '1_1', target: null, reason: 'group_empty' }])).not.toContain('规则');
+  });
+
+  it('scosel_no_match → 「规则没有命中任何构件」', () => {
+    expect(emptyGroupHintFor([{ via: '1_1', target: null, reason: 'scosel_no_match' }])).toBe(GROUP_RULE_NO_MATCH_HINT);
+  });
+
+  it('scosel_unsupported / scosel_eval_failed → 「规则无法求值（成员不可解析）」', () => {
+    expect(emptyGroupHintFor([{ via: '1_1', target: null, reason: 'scosel_unsupported' }])).toBe(GROUP_RULE_UNEVALUABLE_HINT);
+    expect(emptyGroupHintFor([{ via: '1_1', target: null, reason: 'scosel_eval_failed' }])).toBe(GROUP_RULE_UNEVALUABLE_HINT);
+  });
+
+  it('键缺失 / 空表 / 只有 GPREF 族码 → 逐字回落 EMPTY_GROUP_HINT', () => {
+    expect(emptyGroupHintFor(undefined)).toBe(EMPTY_GROUP_HINT);
+    expect(emptyGroupHintFor(null)).toBe(EMPTY_GROUP_HINT);
+    expect(emptyGroupHintFor([])).toBe(EMPTY_GROUP_HINT);
+    expect(emptyGroupHintFor([
+      { via: '1_1', target: null, reason: 'gpref_missing' },
+      { via: '1_2', target: '9_1', reason: 'db_not_in_mdb' },
+      { via: '1_3', target: '1_99', reason: 'target_missing' },
+    ])).toBe(EMPTY_GROUP_HINT);
+    expect(EMPTY_GROUP_HINT).toBe('分组为空或成员不可解析');
+  });
+
+  it('多种原因码并存时按「越具体越先」定序，不串味', () => {
+    expect(emptyGroupHintFor([
+      { via: '1_1', target: null, reason: 'gpref_missing' },
+      { via: '1_1', target: null, reason: 'group_empty' },
+    ])).toBe(GROUP_EMPTY_HINT);
+    expect(emptyGroupHintFor([
+      { via: '1_1', target: null, reason: 'scosel_eval_failed' },
+      { via: '1_1', target: null, reason: 'scosel_no_match' },
+    ])).toBe(GROUP_RULE_NO_MATCH_HINT);
   });
 });
 

@@ -633,6 +633,30 @@ export type ElementAttributesResponse = {
 
 export type ModelGenerateStatus = 'Generated' | 'AlreadyAvailable' | 'NoRenderableGeometry';
 
+/**
+ * 分组回执里解析不出的成员槽：`/model/generate`、`/model/records` 与 `/tree/children?resolved=1` 的 `unresolved[]` 同形状
+ * （gen-model 的 `unresolved_slots_json` 一个 helper 出三处）。`via` / `target` 都是下划线形 `a_b`。
+ *
+ * ⚠️ 规则族（`scosel_*`）与空分组（`group_empty`）槽**没有经由的 GPITEM**，后端把 `via` 填成**分组自己的 refno**
+ * （`/ACCEPT-GROUP` 的 `via` 就是 `2013286764_3`）。所以只能拿 `reason` 分流文案，**不能**用 `via` 做成员级渲染。
+ */
+export type ModelUnresolvedSlot = {
+  /** 槽的归属 refno（`a_b`）；规则族与空分组槽是分组自己 */
+  via: string;
+  /** GPREF 原值（`a_b`）；GPITEM 没写引用时为 `null` */
+  target: string | null;
+  /** `UnresolvedReason::as_str()` 的取值域，见 gen-model `group_membership.rs` */
+  reason:
+    | 'gpref_missing'
+    | 'db_not_in_mdb'
+    | 'target_missing'
+    | 'scosel_eval_failed'
+    | 'scosel_unsupported'
+    | 'scosel_no_match'
+    | 'group_empty'
+    | (string & {});
+};
+
 /** `POST /model/generate` 的回执（旧名 `/model/ensure`，gen-model ADR-086 D4；形状没变）。 */
 export type ModelGenerateResponse = {
   status: ModelGenerateStatus | (string & {});
@@ -642,8 +666,13 @@ export type ModelGenerateResponse = {
   generation_roots?: string[];
   /** 请求的是分组（GPWL / GPSET）时为 `group`：`generation_roots` 是解析成员的生成根，空表即空组，不得回退为请求的 refno。 */
   scope_kind?: 'group' | (string & {});
-  /** 分组里解析不出的 GPITEM 槽数；只在 `scope_kind: 'group'` 时有。 */
+  /** 分组里解析不出的 GPITEM 槽数；只在 `scope_kind: 'group'` 时有。空表时与 `unresolved` 一致。 */
   unresolved_count?: number;
+  /**
+   * 分组里解析不出的槽明细（M4）。空表时**整个键省略**（开关关 / 旧后端都没有这一格）。
+   * 它与 `unresolved_count` 同源：键在时 `unresolved_count === unresolved.length`。
+   */
+  unresolved?: ModelUnresolvedSlot[];
   model_available?: boolean;
   model_instance_count?: number;
   generated_instance_count?: number;
@@ -721,8 +750,13 @@ export type ModelRecordsResponse = {
   expanded_from_group?: boolean;
   /** 分组展开出的成员（`a/b`，成员顺序） */
   scope_refnos?: string[];
-  /** 分组里解析不出的 GPITEM 槽数 */
+  /** 分组里解析不出的 GPITEM 槽数；空表时与 `unresolved` 一致。 */
   unresolved_count?: number;
+  /**
+   * 分组里解析不出的槽明细（M4）：与 `/model/generate` **逐字段同形状**（同一套原因码、同一套 `via`/`target` 形式、
+   * 空表时整个键省略）。前端只用 generate 回执的那份定文案，这里保留同形状以便两个端点共用解析。
+   */
+  unresolved?: ModelUnresolvedSlot[];
 };
 
 export type DbnumRow = {

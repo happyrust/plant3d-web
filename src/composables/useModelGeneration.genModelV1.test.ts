@@ -496,6 +496,41 @@ describe('showModelByRefno（gen-model-v1）', () => {
     }));
   });
 
+  it('空分组的规则零命中文案走同一条 toast / statusMessage 通道（M4 原因码分流）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_145901', refnos: [] });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_145901', noun: 'GPSET', owner_refno: null, owner_noun: null });
+    // modelRecords 已按后端 `scosel_no_match` 定稿成这句；这里只验它照旧经 autoGenerateHints → toast / statusMessage 出去
+    v1Source.records.generateThenCollect.mockResolvedValueOnce({
+      refno: '24381_145901',
+      generationRoots: [],
+      items: [],
+      pending: [],
+      empty: ['24381_145901'],
+      truncatedRoots: [],
+      errors: {},
+      statuses: { '24381_145901': 'NoRenderableGeometry' },
+      hints: { '24381_145901': '规则没有命中任何构件' },
+    } as never);
+
+    expect(await gen.showModelByRefno('24381_145901')).toBe(false);
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('自动生成未完成：规则没有命中任何构件'),
+    }));
+
+    emitToastMock.mockClear();
+    expect(await gen.showModelByRefno('24381_145901')).toBe(false);
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('24381_145901：规则没有命中任何构件'),
+    }));
+    // 不再回落到含糊的兜底文案，也不指向分组没有的「右键重新生成」
+    expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('分组为空或成员不可解析'),
+    }));
+  });
+
   it('dbnum 预检查无就绪模型：默认重新生成当前节点，生成出构件后正常装载', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
