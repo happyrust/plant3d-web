@@ -337,6 +337,44 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining('恢复可见'));
   });
 
+  it('已加载的 SITE 再显示并定位：包围盒用显示时查到的那份记录定范围，不去逐节点问子树（原来要发 512 个 tree 请求）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_535', noun: 'SITE' });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: ['24381_573', '24381_574'] });
+    expect(await gen.showModelByRefno('24381_535')).toBe(true);
+    expect(gen.isModelActuallyLoaded('24381_535')).toBe(true);
+
+    // SITE 自己没有对象：按它自己问包围盒是空的，要按名下的构件问
+    viewer.scene.getAABB = vi.fn((ids: string[]) => (ids.includes('24381_573') ? { min: [0, 0, 0], max: [5, 5, 5] } : null));
+    visibleInstsMock.mockClear();
+    viewer.cameraFlight.flyTo.mockClear();
+
+    expect(await gen.showModelByRefno('24381_535', { flyTo: true })).toBe(true);
+    expect(visibleInstsMock).toHaveBeenCalledTimes(1);
+    expect(v1Source.tree.subtreeRefnos).not.toHaveBeenCalled();
+    expect(viewer.scene.getAABB).toHaveBeenLastCalledWith(['24381_573', '24381_574']);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledWith(expect.objectContaining({ aabb: { min: [0, 0, 0], max: [5, 5, 5] } }));
+    expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('已加载节点再显示并定位时记录查不通：照旧退到子树查询定范围', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: '24381_535', refnos: ['24381_573'] });
+    expect(await gen.showModelByRefno('24381_535')).toBe(true);
+
+    viewer.scene.getAABB = vi.fn((ids: string[]) => (ids.includes('24381_573') ? { min: [0, 0, 0], max: [5, 5, 5] } : null));
+    visibleInstsMock.mockResolvedValue({ success: false, refno: '24381_535', refnos: [], error_message: 'network(0): fetch failed' });
+    v1Source.tree.subtreeRefnos.mockResolvedValue({ success: true, refnos: ['24381_535', '24381_573'], truncated: false });
+
+    expect(await gen.showModelByRefno('24381_535', { flyTo: true })).toBe(true);
+    expect(v1Source.tree.subtreeRefnos).toHaveBeenCalledTimes(1);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledWith(expect.objectContaining({ aabb: { min: [0, 0, 0], max: [5, 5, 5] } }));
+  });
+
   it('装载前把范围内的 refno 级可见态拉回 true：先前隐藏的构件不会被加载后回放再藏掉', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const viewer = makeViewer();

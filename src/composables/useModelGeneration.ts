@@ -795,7 +795,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const subtreeLookupWorthIt = genuinelyLoaded;
           if (!aabb && subtreeLookupWorthIt) {
             try {
-              const { refnos } = await querySubtreeRefnos(normalizedRoot);
+              // 先用显示时查到的那份记录定范围（记录源里有备忘，通常一个请求都不发；备忘被清了也只是按成员再查一遍记录）。
+              // 2026-11-11 之前这里直接逐节点 BFS 子树：已加载的 SITE 隐藏后再显示要发 512 个 `tree` 请求，只为算一个包围盒。
+              // 记录查不通时 `queryLoadScopeRefnos` 自己会退到子树查询；查通了却是空的（不该发生）再退一次。
+              const scope = await queryLoadScopeRefnos(normalizedRoot);
+              const refnos = scope.refnos.length > 0 ? scope.refnos : (await querySubtreeRefnos(normalizedRoot)).refnos;
               if (refnos && refnos.length > 0) {
                 aabb = anyViewer?.scene?.getAABB?.(refnos) ?? null;
               }
