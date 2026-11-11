@@ -162,6 +162,57 @@ describe('collectRecordsByAncestor', () => {
     expect(maxInFlight).toBeLessThanOrEqual(2);
     expect(maxInFlight).toBeGreaterThan(1);
   });
+
+  it('onAncestorRecords：每收完一个祖先就交出它的记录，不等还没回来的祖先（边取边画）', async () => {
+    let releaseSlow!: () => void;
+    const slow = new Promise<void>((resolve) => { releaseSlow = resolve; });
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => {
+      if (generationRoot === '1_2') await slow;
+      return page([item(`${generationRoot}_9`, generationRoot)]);
+    });
+    const heard: string[] = [];
+    const pending = collectRecordsForAncestors(['1_1', '1_2', '1_3'], {
+      concurrency: 3,
+      onAncestorRecords: ({ ancestor, items, done, total }) => {
+        heard.push(`${ancestor}:${items.map((record) => record.refno).join(',')}:${done}/${total}`);
+      },
+    }, api({ records: records as never }));
+
+    await vi.waitFor(() => expect(heard).toHaveLength(2));
+    // 1_2 还没回来，另外两个已经交出来了
+    expect(heard).toEqual(['1_1:1_1_9:1/3', '1_3:1_3_9:2/3']);
+    releaseSlow();
+    const result = await pending;
+    expect(heard[2]).toBe('1_2:1_2_9:3/3');
+    // 最终结果照旧按传入顺序拼
+    expect(result.items.map((record) => record.refno)).toEqual(['1_1_9', '1_2_9', '1_3_9']);
+  });
+
+  it('onAncestorRecords：查空、出错、409 的祖先不交；回调自己抛错不影响读取；选项不漏进请求参数', async () => {
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }, _options?: unknown) => {
+      if (generationRoot === '1_2') return page([]);
+      if (generationRoot === '1_3') throw new GenModelV1ApiError({ code: 'conflict', status: 409, path: '/x', message: 'busy' });
+      if (generationRoot === '1_4') throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '/x', message: 'boom' });
+      return page([item(`${generationRoot}_9`, generationRoot)]);
+    });
+    const heard: string[] = [];
+    const result = await collectRecordsForAncestors(['1_1', '1_2', '1_3', '1_4', '1_5'], {
+      concurrency: 1,
+      onAncestorRecords: ({ ancestor }) => {
+        heard.push(ancestor);
+        throw new Error('listener failed');
+      },
+    }, api({ records: records as never }));
+
+    expect(heard).toEqual(['1_1', '1_5']);
+    expect(result.items).toHaveLength(2);
+    expect(result.empty).toEqual(['1_2']);
+    expect(result.pending).toEqual(['1_3']);
+    expect(Object.keys(result.errors)).toEqual(['1_4']);
+    for (const call of records.mock.calls) {
+      expect(call[1]).not.toHaveProperty('onAncestorRecords');
+    }
+  });
 });
 
 describe('generateThenCollect', () => {

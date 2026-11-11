@@ -23,8 +23,22 @@ const { dbnumRootsMock, dbnumRowsMock } = vi.hoisted(() => ({
 const releaseLod1Mock = vi.fn();
 const holdLod1Mock = vi.fn(() => releaseLod1Mock);
 
-type ProgressListener = (progress: { refno: string; root: string; done: number; total: number }) => void;
+type ProgressListener = (progress: { refno: string; root: string; done: number; total: number; stage?: string }) => void;
 const progressListeners = new Set<ProgressListener>();
+type MemberBatch = { refno: string; member: string; entries: Map<string, unknown[]>; done: number; total: number };
+type MemberListener = (batch: MemberBatch) => void;
+const memberListeners = new Set<MemberListener>();
+
+/** 记录源「一个成员收完」的那一批（边取边画）：给当前订阅方各送一份 */
+function emitMember(refno: string, member: string, refnos: string[], done: number, total: number): void {
+  const entries = new Map<string, unknown[]>(refnos.map((key) => [key, [{ geo_hash: 'g' }]]));
+  for (const listener of [...memberListeners]) listener({ refno, member, entries, done, total });
+}
+
+/** 让出一轮：微任务与零延时定时器都跑完 */
+function tick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 const v1Source = {
   kind: 'gen-model-v1' as const,
@@ -35,6 +49,10 @@ const v1Source = {
     subscribeProgress: (listener: ProgressListener) => {
       progressListeners.add(listener);
       return () => progressListeners.delete(listener);
+    },
+    subscribeMemberRecords: (listener: MemberListener) => {
+      memberListeners.add(listener);
+      return () => memberListeners.delete(listener);
     },
     generateThenCollect: vi.fn(async (refno: string) => ({
       refno,
@@ -125,13 +143,14 @@ const DBNUM_ROWS_UNINITIALIZED = [
 beforeEach(() => {
   vi.clearAllMocks();
   progressListeners.clear();
+  memberListeners.clear();
   dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
   loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => loaderResult(refnos.length, refnos.length * 2));
   typeInfoMock.mockResolvedValue({ success: true, refno: '24381_101410', noun: 'ZONE' });
 });
 
 describe('showModelByRefno（gen-model-v1）', () => {
-  it('容器展开出多根：visibleInsts 期间的逐根进度驱动 totalCount / currentIndex / currentRefno，并弹进度窗；结束后关掉、退订', async () => {
+  it('容器展开出多根：visibleInsts 期间的逐根进度驱动 totalCount / currentIndex / currentRefno；读记录不弹遮罩；结束后退订', async () => {
     const seen: { modal: boolean; total: number; index: number; refno: string; status: string }[] = [];
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
@@ -151,10 +170,11 @@ describe('showModelByRefno（gen-model-v1）', () => {
     const ok = await gen.showModelByRefno('24381_101410', { flyTo: false });
 
     expect(ok).toBe(true);
+    // 读记录（collect 阶段）只走查看器左下角的状态条：整屏遮罩会把边取边画出来的模型挡在后面（方案 A3）
     expect(seen.map((s) => `${s.modal ? 'modal' : 'no-modal'} ${s.index}/${s.total} ${s.refno}`)).toEqual([
-      'modal 2/3 24381_145018',
-      'modal 3/3 24381_145019',
-      'modal 3/3 24381_145020',
+      'no-modal 2/3 24381_145018',
+      'no-modal 3/3 24381_145019',
+      'no-modal 3/3 24381_145020',
     ]);
     expect(seen[0]!.status).toContain('1/3 个生成根');
     expect(gen.showProgressModal.value).toBe(false);
@@ -754,6 +774,281 @@ describe('queryLoadScopeRefnos（gen-model-v1）', () => {
       success: true, refno: '1_2', refnos: ['1_10'], incomplete: { pending: [], truncated_roots: [], errors: {} },
     });
     expect((await queryLoadScopeRefnos('1_2')).incomplete).toBeNull();
+  });
+});
+
+describe('showModelByRefno 边取边画（方案 2026-11-10 A3）', () => {
+  const SITE = '24381_535';
+  const ALL = ['24381_1', '24381_2', '24381_3', '24381_4', '24381_5', '24381_6'];
+
+  beforeEach(() => {
+    typeInfoMock.mockResolvedValue({ success: true, refno: SITE, noun: 'SITE' });
+  });
+
+  /** 三个成员先后到：第一个立刻装；第二个攒不够翻倍先留着；第三个到了一起装；`24381_6` 没经批次，收齐后兜底 */
+  function threeMembersThenAll(after?: () => void | Promise<void>) {
+    visibleInstsMock.mockImplementation(async () => {
+      emitMember(SITE, '24381_536', ['24381_1', '24381_2'], 1, 3);
+      await tick();
+      await after?.();
+      emitMember(SITE, '24381_571', ['24381_3'], 2, 3);
+      emitMember(SITE, '24381_621', ['24381_4', '24381_5'], 3, 3);
+      await tick();
+      return { success: true, refno: SITE, refnos: ALL };
+    });
+  }
+
+  it('成员一到就装第一批，不等全部记录；之后按翻倍攒批；收齐后只装剩下的；合计照算、记为已加载', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    let loadsBeforeAllRecordsArrived = -1;
+    threeMembersThenAll(() => { loadsBeforeAllRecordsArrived = loadInstancesMock.mock.calls.length; });
+
+    const ok = await gen.showModelByRefno(SITE, { flyTo: false });
+
+    expect(ok).toBe(true);
+    expect(loadsBeforeAllRecordsArrived).toBe(1);
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([
+      ['24381_1', '24381_2'],
+      ['24381_3', '24381_4', '24381_5'],
+      ['24381_6'],
+    ]);
+    // 边取边画的批：实例表直接带过去（不回头查缓存）、每批都重建，装完照样走回放钩子
+    const firstOptions = loadInstancesMock.mock.calls[0]![3] as { instanceEntriesByRefno?: Map<string, unknown>; recompile?: boolean };
+    expect([...firstOptions.instanceEntriesByRefno!.keys()]).toEqual(['24381_1', '24381_2']);
+    expect(firstOptions.recompile).toBe(true);
+    expect(loadInstancesMock.mock.calls[2]![3]).not.toHaveProperty('instanceEntriesByRefno');
+    expect(viewer.__dtxAfterInstancesLoaded.mock.calls.map((call: unknown[]) => call[1])).toEqual([
+      ['24381_1', '24381_2'],
+      ['24381_3', '24381_4', '24381_5'],
+      ['24381_6'],
+    ]);
+    // 每个构件只在装它的那一批之前被置为可见一次（根在第一批）
+    expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([
+      [[SITE, '24381_1', '24381_2'], true],
+      [['24381_3', '24381_4', '24381_5'], true],
+      [[SITE, '24381_6'], true],
+    ]);
+    expect(gen.lastLoadDebug.value?.result).toEqual({ loadedRefnos: 6, skippedRefnos: 0, loadedObjects: 12 });
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'success', message: expect.stringContaining('12 个几何实例') }));
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+    expect(memberListeners.size).toBe(0);
+  });
+
+  it('全部构件都经批次装完时，收齐后不再空跑一遍装载', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    visibleInstsMock.mockImplementation(async () => {
+      emitMember(SITE, '24381_536', ['24381_1', '24381_2'], 1, 2);
+      await tick();
+      emitMember(SITE, '24381_571', ['24381_3', '24381_4'], 2, 2);
+      await tick();
+      return { success: true, refno: SITE, refnos: ['24381_1', '24381_2', '24381_3', '24381_4'] };
+    });
+
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(loadInstancesMock).toHaveBeenCalledTimes(2);
+    expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenCalledTimes(2);
+    expect(gen.lastLoadDebug.value?.result).toEqual({ loadedRefnos: 4, skippedRefnos: 0, loadedObjects: 8 });
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+  });
+
+  it('记录还没收齐时，最后到的那些攒着不装也不丢：收齐后由收尾装', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    visibleInstsMock.mockImplementation(async () => {
+      emitMember(SITE, '24381_536', ['24381_1', '24381_2', '24381_3'], 1, 2);
+      await tick();
+      // 只来了 1 个，不够翻倍、离上一批也不到 0.5 秒：攒着
+      emitMember(SITE, '24381_571', ['24381_4'], 2, 2);
+      await tick();
+      return { success: true, refno: SITE, refnos: ['24381_1', '24381_2', '24381_3', '24381_4'] };
+    });
+
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([['24381_1', '24381_2', '24381_3'], ['24381_4']]);
+  });
+
+  it('边取边画之后的收尾一批装完，不再按「首批 1000、之后翻倍」分批（场景里已经有东西了）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    const rest = Array.from({ length: 2500 }, (_, i) => `24381_${i + 100}`);
+    visibleInstsMock.mockImplementation(async () => {
+      emitMember(SITE, '24381_536', ['24381_1', '24381_2'], 1, 2);
+      await tick();
+      return { success: true, refno: SITE, refnos: ['24381_1', '24381_2', ...rest] };
+    });
+
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(loadInstancesMock.mock.calls.map((call) => (call[2] as string[]).length)).toEqual([2, 2500]);
+    expect(loadInstancesMock.mock.calls[1]![3]).toMatchObject({ recompile: true });
+    expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenCalledTimes(2);
+  });
+
+  it('同一个节点已有一路在边取边画时，第二路（别的实例 / 别的入口）不再开，免得两路同时装同一批构件', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const treeSide = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const viewerSide = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    visibleInstsMock.mockImplementation(async () => {
+      await gate;
+      return { success: true, refno: SITE, refnos: ['24381_1'] };
+    });
+
+    const first = treeSide.showModelByRefno(SITE);
+    await tick();
+    expect(memberListeners.size).toBe(1);
+    const second = viewerSide.showModelByRefno(SITE);
+    await tick();
+    expect(memberListeners.size).toBe(1);
+
+    release();
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(memberListeners.size).toBe(0);
+
+    // 两路都收尾之后占位已撤：再显示时又可以边取边画
+    let releaseAgain!: () => void;
+    const gateAgain = new Promise<void>((resolve) => { releaseAgain = resolve; });
+    visibleInstsMock.mockImplementation(async () => {
+      await gateAgain;
+      return { success: true, refno: SITE, refnos: ['24381_2'] };
+    });
+    // 换一份没装过这个节点的实例（装过的那两份会按「已在场景中」直接返回，走不到查询）
+    const again = useModelGeneration({ viewer: makeViewer(), db_num: 7997 }).showModelByRefno(SITE);
+    await tick();
+    expect(memberListeners.size).toBe(1);
+    releaseAgain();
+    await again;
+    expect(memberListeners.size).toBe(0);
+  });
+
+  it('相机：第一批到就飞一次，收齐后再对整体对一次焦', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    viewer.__dtxViewer = { canvas: new EventTarget() };
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    let fliesBeforeAllRecordsArrived = -1;
+    threeMembersThenAll(() => { fliesBeforeAllRecordsArrived = viewer.cameraFlight.flyTo.mock.calls.length; });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: true })).toBe(true);
+    expect(fliesBeforeAllRecordsArrived).toBe(1);
+    expect(viewer.scene.getAABB.mock.calls[0]![0]).toEqual(['24381_1', '24381_2']);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledTimes(2);
+    expect(viewer.scene.getAABB.mock.calls.at(-1)![0]).toEqual(ALL);
+  });
+
+  it.each(['pointerdown', 'wheel', 'touchstart'])('相机：第一批飞过之后用户在视口里动过（%s），收齐后不再把相机拽走', async (eventName) => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const canvas = new EventTarget();
+    viewer.__dtxViewer = { canvas };
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    threeMembersThenAll(() => { canvas.dispatchEvent(new Event(eventName)); });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: true })).toBe(true);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledTimes(1);
+
+    // 监听只挂在这一次装载期间：结束后再动视口不影响下一次显示
+    canvas.dispatchEvent(new Event(eventName));
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_776', refnos: ['24381_900'] });
+    expect(await gen.showModelByRefno('24381_776', { flyTo: true })).toBe(true);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledTimes(2);
+  });
+
+  it('没经过边取边画的显示（一发查完的节点）：相机照旧只在装完后飞一次，用户动过视口也飞', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const canvas = new EventTarget();
+    viewer.__dtxViewer = { canvas };
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    visibleInstsMock.mockImplementation(async () => {
+      canvas.dispatchEvent(new Event('pointerdown'));
+      return { success: true, refno: SITE, refnos: ['24381_1'] };
+    });
+    expect(await gen.showModelByRefno(SITE, { flyTo: true })).toBe(true);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('收集没完成（有成员 409）：到了的照画，但不记为已加载，下次还要再查', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    visibleInstsMock.mockImplementation(async () => {
+      emitMember(SITE, '24381_536', ['24381_1', '24381_2'], 1, 2);
+      await tick();
+      return {
+        success: true, refno: SITE, refnos: ['24381_1', '24381_2'],
+        incomplete: { pending: ['24381_571'], truncated_roots: [], errors: {} },
+      };
+    });
+
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(false);
+    expect(gen.statusMessage.value).toContain('部分加载');
+  });
+
+  it('别的节点的批次不理会', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    visibleInstsMock.mockImplementation(async () => {
+      emitMember('24381_776', '24381_777', ['24381_900', '24381_901'], 1, 1);
+      await tick();
+      return { success: true, refno: SITE, refnos: ['24381_1'] };
+    });
+
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([['24381_1']]);
+  });
+
+  it('某一批装载出错：停止边取边画，那一批连同后面的都由收尾兜底，不丢构件', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    loadInstancesMock
+      .mockRejectedValueOnce(new Error('texture upload failed'))
+      .mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => loaderResult(refnos.length, refnos.length * 2));
+    threeMembersThenAll();
+
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([['24381_1', '24381_2'], ALL]);
+    expect(gen.lastLoadDebug.value?.result).toEqual({ loadedRefnos: 6, skippedRefnos: 0, loadedObjects: 12 });
+    expect(addLogMock).toHaveBeenCalledWith('warning', expect.stringContaining('texture upload failed'));
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+  });
+
+  it.each([
+    ['右键重新生成', { regenerate: true }],
+    ['重载', { refresh: true }],
+  ])('%s 不走边取边画：整套替换，一次装完', async (_name, loadOptions) => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    threeMembersThenAll();
+
+    expect(await gen.showModelByRefno(SITE, loadOptions)).toBe(true);
+    expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+    expect(loadInstancesMock.mock.calls[0]![2]).toEqual(ALL);
+    expect(loadInstancesMock.mock.calls[0]![3]).toMatchObject({ replaceExistingObjects: true });
+    expect(loadInstancesMock.mock.calls[0]![3]).not.toHaveProperty('instanceEntriesByRefno');
+  });
+
+  it('遮罩只在生成阶段弹：边取边画期间读记录的进度不弹，自动补齐 / 重新生成的逐根进度照旧弹', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const seen: string[] = [];
+    visibleInstsMock.mockImplementation(async () => {
+      for (const listener of progressListeners) listener({ refno: SITE, root: '24381_536', done: 1, total: 3, stage: 'collect' });
+      seen.push(`collect:${gen.showProgressModal.value}`);
+      for (const listener of progressListeners) listener({ refno: SITE, root: '24381_536', done: 1, total: 3, stage: 'generate-start' });
+      seen.push(`generate-start:${gen.showProgressModal.value}`);
+      return { success: true, refno: SITE, refnos: ['24381_1'] };
+    });
+    await gen.showModelByRefno(SITE);
+    expect(seen).toEqual(['collect:false', 'generate-start:true']);
+    expect(gen.showProgressModal.value).toBe(false);
   });
 });
 

@@ -278,6 +278,124 @@ describe('createGenModelV1ModelRecordSource', () => {
     expect(records.mock.calls.at(-1)![0].generationRoot).toBe('9_1');
   });
 
+  describe('subscribeMemberRecords（边取边画：按成员拆开查时，每个成员收完就交一批）', () => {
+    /** SITE 9_0 → 成员 9_1 / 9_2 / 9_3；`gates[member]` 存在时那个成员要等放行才回 */
+    function siteSource(extra: { ensureFreshness?: () => Promise<unknown> } = {}) {
+      const gates: Record<string, { open: () => void; wait: Promise<void> }> = {};
+      const gate = (member: string) => {
+        let open!: () => void;
+        const wait = new Promise<void>((resolve) => { open = resolve; });
+        gates[member] = { open, wait };
+      };
+      const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => {
+        await gates[generationRoot]?.wait;
+        return generationRoot === '9_3' ? page([]) : page([item(`${generationRoot}1`, `${generationRoot}0`), item(`${generationRoot}2`, `${generationRoot}0`)]);
+      });
+      const source = createGenModelV1ModelRecordSource({
+        api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never },
+        expandAncestor: async (refno) => (refno === '9_0' ? ['9_1', '9_2', '9_3'] : null),
+        ...extra,
+      });
+      return { source, records, gate, gates };
+    }
+
+    it('成员收完就交出它的实例并进缓存，不等还没回来的成员；查空的成员不交；最终结果照旧', async () => {
+      const { source, gate, gates } = siteSource();
+      gate('9_2');
+      const heard: string[] = [];
+      source.subscribeMemberRecords(({ refno, member, entries, done, total }) => {
+        heard.push(`${refno}<-${member}:${[...entries.keys()].join(',')}:${done}/${total}`);
+      });
+
+      const pending = source.collectByAncestor('9_0');
+      await vi.waitFor(() => expect(heard).toHaveLength(1));
+      expect(heard).toEqual(['9_0<-9_1:9_11,9_12:1/3']);
+      // 9_2 还没回来，9_1 的构件已经能从缓存里拿到（装载器按它装第一批）
+      expect(source.peek('9_11')).toHaveLength(1);
+      expect(source.peek('9_21')).toBeUndefined();
+
+      gates['9_2']!.open();
+      const result = await pending;
+      expect(heard).toEqual(['9_0<-9_1:9_11,9_12:1/3', '9_0<-9_2:9_21,9_22:3/3']);
+      expect(result.items.map((record) => record.refno)).toEqual(['9_11', '9_12', '9_21', '9_22']);
+      expect(result.empty).toEqual(['9_3']);
+      expect(source.peek('9_22')).toHaveLength(1);
+      expect(source.leavesOfRoot('9_10').sort()).toEqual(['9_10', '9_11', '9_12']);
+    });
+
+    it('交出去的实例和最后留在缓存里的是同一份：收尾时不把已交的成员重新映射一遍', async () => {
+      const { source } = siteSource();
+      const handed = new Map<string, unknown>();
+      source.subscribeMemberRecords(({ entries }) => { for (const [key, value] of entries) handed.set(key, value); });
+      await source.collectByAncestor('9_0');
+      expect([...handed.keys()].sort()).toEqual(['9_11', '9_12', '9_21', '9_22']);
+      for (const [key, value] of handed) expect(source.peek(key)).toBe(value);
+    });
+
+    it('不拆成员的节点（一发查完）不发批次', async () => {
+      const { source } = siteSource();
+      const heard: string[] = [];
+      source.subscribeMemberRecords(({ member }) => heard.push(member));
+      await source.collectByAncestor('9_1');
+      expect(heard).toEqual([]);
+      expect(source.peek('9_11')).toHaveLength(1);
+    });
+
+    it('health 还没确认服务代次之前不交、不进缓存；确认之后把攒着的补交', async () => {
+      let confirm!: () => void;
+      const ensureFreshness = vi.fn(() => new Promise<void>((resolve) => { confirm = resolve; }));
+      const { source } = siteSource({ ensureFreshness });
+      const heard: string[] = [];
+      source.subscribeMemberRecords(({ member }) => heard.push(member));
+
+      const pending = source.collectByAncestor('9_0');
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(heard).toEqual([]);
+      expect(source.peek('9_11')).toBeUndefined();
+
+      confirm();
+      await pending;
+      expect(heard.sort()).toEqual(['9_1', '9_2']);
+      expect(source.peek('9_11')).toHaveLength(1);
+    });
+
+    it('服务换代之后才回来的成员不交、不进缓存', async () => {
+      observeGenModelV1Health({ status: 'ok', started_at: 'old' }, '/gm');
+      const { source, gate, gates } = siteSource();
+      gate('9_1');
+      gate('9_2');
+      const heard: string[] = [];
+      source.subscribeMemberRecords(({ member }) => heard.push(member));
+
+      const pending = source.collectByAncestor('9_0');
+      pending.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
+      gates['9_1']!.open();
+      gates['9_2']!.open();
+      await expect(pending).rejects.toBeInstanceOf(GenModelV1ServiceGenerationChangedError);
+      expect(heard).toEqual([]);
+      expect(source.peek('9_11')).toBeUndefined();
+    });
+
+    it('订阅方抛错不影响取数；退订之后不再收', async () => {
+      const { source } = siteSource();
+      const heard: string[] = [];
+      const unsubscribe = source.subscribeMemberRecords(({ member }) => {
+        heard.push(member);
+        throw new Error('listener failed');
+      });
+      const result = await source.collectByAncestor('9_0');
+      expect(result.items).toHaveLength(4);
+      expect(heard.sort()).toEqual(['9_1', '9_2']);
+
+      unsubscribe();
+      source.invalidate();
+      await source.collectByAncestor('9_0');
+      expect(heard).toHaveLength(2);
+    });
+  });
+
   it('instanceEntriesByRefnos：缓存没有的构件第一个单独查，其余有界并发', async () => {
     let inFlight = 0;
     let maxInFlight = 0;

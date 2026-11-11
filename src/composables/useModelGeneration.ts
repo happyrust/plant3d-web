@@ -4,7 +4,9 @@ import type { Ref } from 'vue';
 import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
 import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
 import type { DbnumRow } from '@/api/genModelV1Api';
+import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
+import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -77,6 +79,9 @@ export function isAutoGenerationEnabled(): boolean {
 
 export const AUTO_GENERATION_ENABLED = shouldEnableAutoGeneration();
 const VISIBLE_REFNOS_PAGE_SIZE = 1000;
+
+/** 正在边取边画的节点（`a_b`）。跨 `useModelGeneration` 实例共用：模型树和查看器各有一份实例，装的是同一个场景。 */
+const progressiveRoots = new Set<string>();
 
 /**
  * 分批装入的每批大小：首批 `first` 个先出画，之后逐批翻倍。每批装完 DTX 层都要整层 recompile（全量重建 GPU 纹理），
@@ -379,6 +384,192 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     noGeoRefnos: string[]
   }
 
+  type DtxLoadResult = Awaited<ReturnType<typeof loadDbnoInstancesForVisibleRefnosDtx>>;
+
+  function emptyLoadTotals(): GenModelV1LoadTotals {
+    return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0, noGeoRefnos: [] };
+  }
+
+  function addLoadResult(totals: GenModelV1LoadTotals, result: DtxLoadResult): void {
+    totals.loadedRefnos += result.loadedRefnos;
+    totals.skippedRefnos += result.skippedRefnos;
+    totals.loadedObjects += result.loadedObjects;
+    totals.invalidTubi += result.invalidTubiObjects ?? 0;
+    totals.mesh404 += result.missingBreakdown.mesh404Refnos.length;
+    totals.noGeo += result.missingBreakdown.noGeoRowsRefnos.length;
+    totals.noGeoRefnos.push(...result.missingBreakdown.noGeoRowsRefnos.map((r) => normalizeRefnoString(String(r ?? ''))));
+  }
+
+  type ProgressiveViewer = {
+    __dtxViewer?: { canvas?: unknown }
+    __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+    scene?: {
+      getAABB?: (ids: string[]) => unknown
+      setObjectsVisible?: (ids: string[], visible: boolean) => void
+    }
+    cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
+  };
+
+  /** 边取边画在记录收齐那一刻的交接：哪些构件已经装了、装出了什么。 */
+  type ProgressiveLoadOutcome = {
+    /** 已经装进场景的构件（`a_b`）；收尾只装不在这里面的 */
+    loadedRefnos: Set<string>
+    totals: GenModelV1LoadTotals
+  };
+
+  type ProgressiveLoad = {
+    /** 记录收齐了：不再开新批，等在装的那一批装完，交出已装的情况 */
+    finish: () => Promise<ProgressiveLoadOutcome>
+    /** 第一批到的时候飞过相机、之后用户又在视口里按过 / 滚过：收尾不该再把相机拽走。到收尾要飞的那一刻再问 */
+    cameraTakenOverByUser: () => boolean
+    /** 退订、停表、撤视口监听；可重复调 */
+    dispose: () => void
+  };
+
+  /** 用户「动过视口」的信号：按下、滚轮、触摸。只在一次装载期间监听。 */
+  const VIEW_TOUCH_EVENTS = ['pointerdown', 'wheel', 'touchstart'];
+
+  /**
+   * 边取边画（方案 2026-11-10 A3）：顶层 SITE 的记录是按 ZONE 拆开并行查的，记录源每收完一个成员就交一批
+   *（`subscribeMemberRecords`）。这里不等整个节点收齐，按 `progressiveLoadPolicy` 的节奏把到了的构件先装进场景：
+   * 第一批立刻装并重建，之后攒够翻倍、或离上一批够久再装。装载一次只跑一批（装载器对「已装」的判断不是并发安全的）。
+   *
+   * 这只是把装载**提前**：记录收齐后调用方 `finish()` 拿到「已装的构件」，剩下的仍由原来的收尾路径装完、对账、
+   * 决定记不记「已加载」。某一批装载出错就停掉边取边画，那一批退回给收尾。一发查完的节点没有批次，等于没开。
+   */
+  function startProgressiveLoad(params: {
+    root: string
+    dbno: number
+    dtxLayer: Parameters<typeof loadDbnoInstancesForVisibleRefnosDtx>[0]
+    anyViewer: ProgressiveViewer
+    flyTo: boolean
+    cameraStamp: number
+    onBatchLoaded: (shownRefnos: number) => void
+  }): ProgressiveLoad {
+    const { root, dbno, dtxLayer, anyViewer } = params;
+    const pending = new Map<string, InstanceEntry[]>();
+    const loaded = new Set<string>();
+    const totals = emptyLoadTotals();
+    let accepting = true;
+    let failed = false;
+    let running: Promise<void> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let batchesDone = 0;
+    let lastBatchEndedAt = 0;
+    let lastBatchMs = 0;
+    let flew = false;
+    let viewTouchedAfterFly = false;
+
+    progressiveRoots.add(root);
+    const canvas = anyViewer.__dtxViewer?.canvas as Partial<Pick<EventTarget, 'addEventListener' | 'removeEventListener'>> | undefined;
+    const onViewTouched = () => { if (flew) viewTouchedAfterFly = true; };
+    for (const name of VIEW_TOUCH_EVENTS) canvas?.addEventListener?.(name, onViewTouched, { capture: true, passive: true });
+
+    const clearTimer = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    };
+
+    async function loadBatch(): Promise<void> {
+      const batch = new Map(pending);
+      pending.clear();
+      const refnos = [...batch.keys()];
+      const first = batchesDone === 0;
+      const startedAt = performance.now();
+      for (const refno of refnos) loaded.add(refno);
+      try {
+        // 「显示」= 保证可见（同收尾路径）：先把这一批的 refno 级可见态拉回 true，装完的回放才不会把它们再藏掉
+        anyViewer.scene?.setObjectsVisible?.(first ? uniqStrings([root, ...refnos]) : refnos, true);
+        const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, refnos, {
+          lodAssetKey: 'L1',
+          debug: false,
+          dataSource: 'gen-model-v1',
+          // 这一批的实例记录源已经交到手里了，直接带过去：不回头查缓存，缓存中途被清也不会逐个构件去问服务端
+          instanceEntriesByRefno: batch,
+          recompile: true,
+        });
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
+        addLoadResult(totals, result);
+        batchesDone += 1;
+        if (first && params.flyTo) {
+          try {
+            const aabb = anyViewer.scene?.getAABB?.(refnos.length > 5000 ? refnos.slice(0, 5000) : refnos) ?? null;
+            if (aabb && isCameraIntentCurrent(params.cameraStamp)) {
+              anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+              flew = true;
+            }
+          } catch {
+            // ignore flyTo errors
+          }
+        }
+        params.onBatchLoaded(loaded.size);
+      } catch (e) {
+        // 这一批没装成：退回给收尾（装载器会跳过其中已经装上的），之后不再边取边画
+        failed = true;
+        for (const refno of refnos) loaded.delete(refno);
+        consoleStore.addLog(
+          'warning',
+          `[model-load] 边取边画 ${root}：一批 ${refnos.length} 个构件装载出错，改为收齐后一起装 err=${e instanceof Error ? e.message : String(e)}`,
+        );
+      } finally {
+        lastBatchEndedAt = performance.now();
+        lastBatchMs = lastBatchEndedAt - startedAt;
+      }
+    }
+
+    function pump(): void {
+      if (!accepting || failed || running) return;
+      clearTimer();
+      const state = {
+        pending: pending.size,
+        loaded: loaded.size,
+        sinceLastBatchMs: performance.now() - lastBatchEndedAt,
+        lastBatchMs,
+      };
+      if (shouldLoadProgressiveBatch(state)) {
+        running = loadBatch().finally(() => {
+          running = null;
+          pump();
+        });
+        return;
+      }
+      const wait = progressiveBatchWaitMs(state);
+      if (wait !== null) timer = setTimeout(pump, wait);
+    }
+
+    // 记录源没有这个能力（测试里的简化源）就等于没开：全部构件由收尾路径装
+    const unsubscribe = getModelSource().records.subscribeMemberRecords?.((batch) => {
+      if (!accepting || failed || batch.refno !== root) return;
+      for (const [refno, entries] of batch.entries) {
+        const key = normalizeRefnoString(refno);
+        if (key && !loaded.has(key)) pending.set(key, entries);
+      }
+      pump();
+    });
+
+    let disposed = false;
+    function dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      accepting = false;
+      clearTimer();
+      progressiveRoots.delete(root);
+      unsubscribe?.();
+      for (const name of VIEW_TOUCH_EVENTS) canvas?.removeEventListener?.(name, onViewTouched, { capture: true });
+    }
+
+    async function finish(): Promise<ProgressiveLoadOutcome> {
+      // 不再开新批；在装的那一批让它装完（装到一半停不下来，也不该和收尾并行装）
+      accepting = false;
+      clearTimer();
+      unsubscribe?.();
+      if (running) await running;
+      return { loadedRefnos: loaded, totals };
+    }
+
+    return { finish, cameraTakenOverByUser: () => flew && viewTouchedAfterFly, dispose };
+  }
+
   /**
    * gen-model-v1：把记录源缓存里的构件装进 DTX。超过一页（`VISIBLE_REFNOS_PAGE_SIZE`）就按 `planLoadBatchSizes` 分批，
    * 进度在 `progressRange` 里按已装 refno 数走，每批之间让出一帧（P3-c 分批 + 进度）。`replace`（右键重新生成之后的替换）
@@ -389,12 +580,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dbno: number,
     refnos: string[],
     anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void },
-    mode: { replace: boolean },
+    mode: {
+      replace: boolean
+      /** 不分批：边取边画之后的收尾用——场景里已经有东西了，不需要「先出 1000 个」，一批装完少跑几轮重建与回放钩子 */
+      singleBatch?: boolean
+    },
     progressRange: [number, number],
     label: string,
   ): Promise<GenModelV1LoadTotals> {
-    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0, noGeoRefnos: [] };
-    const sizes = mode.replace ? [refnos.length] : planLoadBatchSizes(refnos.length);
+    const totals = emptyLoadTotals();
+    const sizes = mode.replace || mode.singleBatch ? [refnos.length] : planLoadBatchSizes(refnos.length);
     if (sizes.length === 0) sizes.push(0);
     const batches = sizes.length;
     let offset = 0;
@@ -419,13 +614,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         recompile: batches === 1 || index === 0 || index + 1 === batches,
       });
       anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
-      totals.loadedRefnos += result.loadedRefnos;
-      totals.skippedRefnos += result.skippedRefnos;
-      totals.loadedObjects += result.loadedObjects;
-      totals.invalidTubi += result.invalidTubiObjects ?? 0;
-      totals.mesh404 += result.missingBreakdown.mesh404Refnos.length;
-      totals.noGeo += result.missingBreakdown.noGeoRowsRefnos.length;
-      totals.noGeoRefnos.push(...result.missingBreakdown.noGeoRowsRefnos.map((r) => normalizeRefnoString(String(r ?? ''))));
+      addLoadResult(totals, result);
       if (index + 1 < batches) await sleep(0);
     }
     return totals;
@@ -610,24 +799,29 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       currentRefno: currentRefno.value,
     });
 
+    // 边取边画已经装进场景的构件数（状态条上带一句，让人知道模型是一块块长出来的）
+    let shownEarly = 0;
     // gen-model-v1：范围查询里那次按祖先查 records 的进度只能从记录源听。
-    // 多个祖先时把进度弹窗挂出来，单根不弹。
+    // 整屏遮罩只在**生成**阶段弹（多根时）。读记录（collect）不弹：遮罩会把边取边画出来的模型挡在后面，
+    // 读记录的进度走查看器左下角的状态条就够了（方案 A3；词汇表「上下文生成进度」本来也不要阻塞式弹窗）。
     const unsubscribeProgress = subscribeModelSourceProgress(({ done, total, root, stage }) => {
       totalCount.value = total;
       currentIndex.value = Math.min(total, done + 1);
       currentRefno.value = root;
+      const generating = stage === 'generate-start' || stage === 'generate';
       statusMessage.value = stage === 'generate-start'
         ? `正在生成构件 ${root}（${done + 1}/${total}）`
         : stage === 'generate'
           ? `已生成 ${done}/${total} 个生成根`
-          : `gen-model 查询记录：${done}/${total} 个生成根`;
+          : `gen-model 查询记录：${done}/${total} 个生成根${shownEarly > 0 ? `，已显示 ${shownEarly} 个构件` : ''}`;
       progress.value = 10 + Math.floor((done / Math.max(1, total)) * 20);
-      if (total > 1) showProgressModal.value = true;
+      if (total > 1 && generating) showProgressModal.value = true;
       syncGlobalLoadStatus();
     });
     // 多批装载期间不补拉粗网格：补拉的请求与 recompile 会插进批与批之间，和本次装载抢连接与主线程
     const releaseLod1Backfill = holdDtxLod1Backfill();
     let stopRecordPageListener: (() => void) | null = null;
+    let progressiveLoad: ProgressiveLoad | null = null;
 
     try {
       const startedAt = Date.now();
@@ -711,6 +905,20 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 根的 typeInfo 只依赖根：与范围查询并行发出，定装载范围时再取
       const rootTypeInfo = Promise.resolve().then(() => getModelSource().attributes.typeInfo(normalizedRoot));
       rootTypeInfo.catch(() => undefined);
+      // 边取边画：普通显示才开（重新生成 / 重载是整套替换，要等记录收齐才知道换成什么）。
+      // 同一个节点已经有一路在边取边画（别的入口 / 别的 useModelGeneration 实例）时不再开第二路：两路会同时去装同一批构件。
+      if (!regenerate && !refresh && prefetchLayer && !progressiveRoots.has(normalizedRoot)) {
+        progressiveLoad = startProgressiveLoad({
+          root: normalizedRoot,
+          dbno,
+          dtxLayer: prefetchLayer,
+          anyViewer: viewer as ProgressiveViewer,
+          flyTo: loadOptions?.flyTo === true,
+          cameraStamp,
+          onBatchLoaded: (shown) => { shownEarly = shown; },
+        });
+      }
+      let earlyLoad: ProgressiveLoadOutcome | null = null;
       statusMessage.value = '查询可见实例范围...';
       progress.value = 10;
       syncGlobalLoadStatus();
@@ -742,6 +950,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         visibleErr = e instanceof Error ? e.message : String(e);
         visibleRefnos = [];
       }
+      // 记录收齐（或查询失败）：边取边画到此为止，等在装的那一批装完；剩下的由下面的收尾路径装
+      if (progressiveLoad) earlyLoad = await progressiveLoad.finish();
       const incompleteTail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
       consoleStore.addLog(
         'info',
@@ -904,29 +1114,49 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 生成在上面已经收口：右键是显式重新生成；库无模型 / 节点查空走 tryAutoGenerate（各一发）。
       // 这里替换或新装场景里的对象，不再 generate。
       const loadRefnos = loadScope.actualLoadRefnos;
+      // 边取边画已经装过的构件不再过一遍：它们在装的那一批之前已置为可见，装载器也会跳过，再过一遍只是白跑回放钩子
+      const shownEarlyRefnos = earlyLoad && earlyLoad.loadedRefnos.size > 0 ? earlyLoad.loadedRefnos : null;
+      const remainingRefnos = shownEarlyRefnos ? loadRefnos.filter((r) => !shownEarlyRefnos.has(r)) : loadRefnos;
       // 「显示」= 保证可见：先把本次范围的 refno 级可见态拉回 true（权威在 scene.objects 状态表）。
       // 否则先前「隐藏」写过 false 的 refno，装完会被 __dtxAfterInstancesLoaded 的 applyStateToRefnos 立刻再藏掉；
       // 已在层里、被 loader 跳过的旧对象也一并恢复可见。
-      anyViewer.scene?.setObjectsVisible?.(uniqStrings([normalizedRoot, ...loadRefnos]), true);
+      if (remainingRefnos.length > 0 || !shownEarlyRefnos) {
+        anyViewer.scene?.setObjectsVisible?.(uniqStrings([normalizedRoot, ...remainingRefnos]), true);
+      }
       statusMessage.value = regenerate
         ? `正在重新生成 ${normalizedRoot}（gen-model）...`
-        : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
+        : shownEarlyRefnos
+          ? `从 gen-model 加载剩下的 ${remainingRefnos.length} 个 refno（已显示 ${shownEarlyRefnos.size} 个）...`
+          : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
       progress.value = 30;
       syncGlobalLoadStatus();
-      const v1Result = await loadGenModelV1Refnos(
-        dtxLayer,
-        dbno,
-        loadRefnos,
-        anyViewer,
-        { replace: regenerate || refresh },
-        [30, 95],
-        `从 gen-model 加载 ${normalizedRoot}`,
-      );
+      const v1Result = shownEarlyRefnos && remainingRefnos.length === 0
+        ? emptyLoadTotals()
+        : await loadGenModelV1Refnos(
+          dtxLayer,
+          dbno,
+          remainingRefnos,
+          anyViewer,
+          { replace: regenerate || refresh, singleBatch: shownEarlyRefnos !== null },
+          [30, 95],
+          `从 gen-model 加载 ${normalizedRoot}`,
+        );
+      if (earlyLoad) {
+        // 对账按整次显示算：边取边画装的 + 收尾装的
+        v1Result.loadedRefnos += earlyLoad.totals.loadedRefnos;
+        v1Result.skippedRefnos += earlyLoad.totals.skippedRefnos;
+        v1Result.loadedObjects += earlyLoad.totals.loadedObjects;
+        v1Result.invalidTubi += earlyLoad.totals.invalidTubi;
+        v1Result.mesh404 += earlyLoad.totals.mesh404;
+        v1Result.noGeo += earlyLoad.totals.noGeo;
+        v1Result.noGeoRefnos.push(...earlyLoad.totals.noGeoRefnos);
+      }
       if (refresh && !scopeIncomplete) evictMembersMissingFromRefresh(dbno, normalizedRoot, previousLeaves, loadRefnos);
       if (typeof anyViewer.scene?.ensureRefnos === 'function') {
         anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
       }
-      if (loadOptions?.flyTo) {
+      // 边取边画时第一批到就飞过一次；收齐后再对整体对一次焦——除非用户在这期间自己动过视口
+      if (loadOptions?.flyTo && !progressiveLoad?.cameraTakenOverByUser()) {
         try {
           const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
           const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
@@ -1024,6 +1254,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });
       return false;
     } finally {
+      progressiveLoad?.dispose();
       stopRecordPageListener?.();
       unsubscribeProgress();
       releaseLod1Backfill();

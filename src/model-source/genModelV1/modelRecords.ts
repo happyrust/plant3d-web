@@ -73,6 +73,12 @@ export type CollectRecordsOptions = GenModelV1RequestOptions & {
   concurrency?: number;
   /** 每收完一个祖先 / 生成根回调一次（进度） */
   onRootDone?: (progress: { done: number; total: number; root: string }) => void;
+  /**
+   * 每收完一个祖先就把它的记录交出来一次，不等还没回来的祖先（边取边画，方案 2026-11-10 A3）。只交**收齐且有记录**的祖先：
+   * 查空、409、出错的不交（它们的去向照旧在最终结果的 `empty` / `pending` / `errors` 里）。回调自己抛错不影响读取。
+   * 最终结果不变，仍按传入顺序拼接。
+   */
+  onAncestorRecords?: (batch: { ancestor: string; items: GeomInstQuery[]; done: number; total: number }) => void;
   /** 原始请求错误被折叠进结果前的观察器；用于让服务生命周期看见 network 断线。 */
   onRequestFailure?: (error: unknown) => void;
 };
@@ -261,7 +267,7 @@ export async function collectRecordsForAncestors(
   options: CollectRecordsOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<CollectAncestorsResult> {
-  const { pageSize = 5000, concurrency = 6, onRootDone, onRequestFailure, ...requestOptions } = options;
+  const { pageSize = 5000, concurrency = 6, onRootDone, onAncestorRecords, onRequestFailure, ...requestOptions } = options;
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const raw of ancestors) {
@@ -287,6 +293,13 @@ export async function collectRecordsForAncestors(
     }
     done++;
     onRootDone?.({ done, total: unique.length, root: ancestor });
+    if (!error && items.length > 0 && onAncestorRecords) {
+      try {
+        onAncestorRecords({ ancestor, items, done, total: unique.length });
+      } catch {
+        // 边取边画的消费方出错不能让这次读取失败：最终结果里这个祖先的记录照样在
+      }
+    }
     return { ancestor, items, error };
   });
   for (const { ancestor, items, error } of outcomes) {
@@ -339,8 +352,11 @@ export async function generateThenCollect(
 ): Promise<CollectRecordsResult> {
   const {
     force = true, maxContainerDepth = 3, maxRoots = 128, pageSize, concurrency, onRootDone, onRootStart, onRequestFailure,
+    // 生成之后那次按祖先查只有一个祖先，没有「分批交」可言；摘出来只为不让它混进发给接口的请求选项
+    onAncestorRecords: _onAncestorRecords,
     ...requestOptions
   } = options;
+  void _onAncestorRecords;
   const start = fromV1Refno(refno);
   const result: CollectRecordsResult = {
     refno: start,
