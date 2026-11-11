@@ -5880,12 +5880,17 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- 加载 / 分块生成的进度（方案 2026-11-10 A3、B3）。「加载中点一下停」定下来之后，停的按钮放在百分比旁边
+         （那时这个框要对按钮放开 pointer-events），点了调 `requestStopGenerationFill(节点)`。 -->
     <div v-if="modelLoadStatus.state.value.visible"
       class="pointer-events-none absolute bottom-2 left-2 w-[min(28rem,calc(100%-1rem))] rounded-md border border-border bg-background/90 px-3 py-2 text-xs text-foreground shadow-sm backdrop-blur"
-      style="z-index: 940">
+      style="z-index: 940"
+      data-testid="model-load-status">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
-          <div class="truncate font-medium">
+          <div class="truncate font-medium"
+            :title="modelLoadStatus.state.value.message"
+            data-testid="model-load-status-message">
             {{ modelLoadStatus.state.value.message || '正在加载模型...' }}
           </div>
           <div v-if="modelLoadStatus.state.value.currentRefno" class="truncate text-[11px] text-muted-foreground">

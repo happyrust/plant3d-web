@@ -661,6 +661,15 @@ export type ModelUnresolvedSlot = {
     | (string & {});
 };
 
+/** 范围生成里失败的一根（gen-model 规范 §4.5「逐根生成、逐根记错」）：一根失败不中止整片，200 回执里点名。 */
+export type ModelGenerateFailedRoot = {
+  /** `a/b` */
+  generation_root: string;
+  error: string;
+  /** `true`：根锁被占、初始化门、依赖库在入库一类——等一等用不带 `force` 的同一请求再发就能补上 */
+  retryable?: boolean;
+};
+
 /** `POST /model/generate` 的回执（旧名 `/model/ensure`，gen-model ADR-086 D4；形状没变）。 */
 export type ModelGenerateResponse = {
   status: ModelGenerateStatus | (string & {});
@@ -668,6 +677,14 @@ export type ModelGenerateResponse = {
   generation_root?: string;
   /** 读透形态对容器节点解出的全部生成根（`a/b`）；空 / 缺省时用请求的 refno 自己（分组除外，见 `scope_kind`） */
   generation_roots?: string[];
+  /** 与 `generation_roots` 逐项对应：这一根是按哪个会话生成的；此刻没有回执的记 `null`（gen-model ADR-099，分组回执没有这一格） */
+  generation_root_sesnos?: (number | null)[];
+  generation_root_count?: number;
+  cached_root_count?: number;
+  generated_root_count?: number;
+  failed_root_count?: number;
+  /** 范围内失败的根；全部失败时不走这里，整次按首错报错 */
+  failed_roots?: ModelGenerateFailedRoot[];
   /** 请求的是分组（GPWL / GPSET）时为 `group`：`generation_roots` 是解析成员的生成根，空表即空组，不得回退为请求的 refno。 */
   scope_kind?: 'group' | (string & {});
   /** 分组里解析不出的 GPITEM 槽数；只在 `scope_kind: 'group'` 时有。空表时与 `unresolved` 一致。 */

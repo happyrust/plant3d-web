@@ -366,8 +366,22 @@ describe('createGenModelV1TreeSource', () => {
     expect(records).toHaveBeenCalledWith({ generationRoot: '9304_2', limit: 5000, cursor: undefined }, expect.anything());
     expect(resp.debug?.source).toContain('roots=1');
     expect(resp.incomplete).toBeNull();
+    // 查到了记录：没有「一条记录都没有的范围」
+    expect(resp.empty_scopes).toEqual([]);
 
     expect((await tree.visibleInsts(ROOT_ID)).success).toBe(false);
+  });
+
+  it('visibleInsts 把「查过、一条记录都没有的范围」交出来（模型资产补齐按块做，方案 B3）', async () => {
+    const records = vi.fn(async () => ({ source: 'model-database', items: [], total: 0, truncated: false, next_cursor: null }));
+    const api = fakeApi();
+    const recordsApi: ModelRecordsApi = { generate: vi.fn() as never, records: records as never, children: api.children };
+    const tree = createGenModelV1TreeSource({ api, recordsApi });
+
+    const resp = await tree.visibleInsts('24381_571');
+    expect(resp.success).toBe(true);
+    expect(resp.refnos).toEqual([]);
+    expect(resp.empty_scopes).toEqual(['24381_571']);
   });
 
   it('visibleInsts 碰上 409 conflict 时把范围放进 incomplete.pending，不 generate', async () => {

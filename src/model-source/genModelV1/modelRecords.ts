@@ -152,6 +152,11 @@ export type CollectRecordsResult = {
   statuses: Record<string, string>;
   /** 没有记录时直接给人看的说明（`a_b` → 文案）；目前只有空分组，文案按 {@link emptyGroupHintFor} 分流 */
   hints?: Record<string, string>;
+  /**
+   * 只有生成入口填：范围生成的 200 回执里点名的失败根（`failed_roots`，gen-model 规范 §4.5）。一根失败不中止整片，
+   * 其余根的产物照样在 `items` 里。`retryable` 的等一等用不带 `force` 的同一请求再发就能补上（分块生成据此自动接着问）。
+   */
+  failedRoots?: { root: string; error: string; retryable: boolean }[];
 };
 
 /** 多个祖先一起查的结果（整库显示逐 SITE 用）。 */
@@ -438,6 +443,12 @@ export async function generateThenCollect(
     }
 
     result.statuses[current] = String(generated.status ?? '');
+    // 逐根记错（规范 §4.5）：回执点名的失败根带出去，调用方决定要不要接着问、怎么告诉人
+    for (const failed of generated.failed_roots ?? []) {
+      const root = fromV1Refno(String(failed?.generation_root ?? ''));
+      if (!root) continue;
+      (result.failedRoots ??= []).push({ root, error: String(failed.error ?? ''), retryable: failed.retryable === true });
+    }
     if (generated.scope_kind === 'group' && rootsOf(generated, current).length === 0) {
       pushUnique(result.empty, current);
       // 唯一写入点（M4）：原因码只有 generate 回执带，上层拿不到，所以分流必须在这里定稿

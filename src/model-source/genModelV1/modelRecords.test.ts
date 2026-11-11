@@ -246,6 +246,36 @@ describe('generateThenCollect', () => {
     expect(client.records).not.toHaveBeenCalled();
   });
 
+  it('逐根记错：200 回执里点名的失败根带进 failedRoots（a_b、可不可重试），其余根的产物照样查回来', async () => {
+    const records = vi.fn(async () => page([item('24381_550', '24381_549')]));
+    const client = api({
+      records: records as never,
+      generate: vi.fn(async () => ({
+        status: 'Generated',
+        generation_root: '24381/536',
+        generation_roots: ['24381/537', '24381/549'],
+        failed_root_count: 2,
+        failed_roots: [
+          { generation_root: '24381/537', error: 'generation_failed: 截面数据损坏', retryable: false },
+          { generation_root: '24381/553', error: '根锁被占', retryable: true },
+        ],
+      })) as never,
+    });
+    const result = await generateThenCollect('24381_536', { force: false }, client);
+    expect(client.generate).toHaveBeenCalledWith({ refno: '24381_536' }, expect.anything());
+    expect(result.failedRoots).toEqual([
+      { root: '24381_537', error: 'generation_failed: 截面数据损坏', retryable: false },
+      { root: '24381_553', error: '根锁被占', retryable: true },
+    ]);
+    expect(result.items).toHaveLength(1);
+    expect(records).toHaveBeenCalledTimes(1);
+  });
+
+  it('回执里没有失败根：failedRoots 不出现（老调用方看到的形状不变）', async () => {
+    const result = await generateThenCollect('1_1', { force: false }, api({ records: vi.fn(async () => page([item('1_10', '1_1')])) as never }));
+    expect(result).not.toHaveProperty('failedRoots');
+  });
+
   it('容器 422 时只在右键里展开一层，逐个 generate', async () => {
     const generate = vi.fn(async ({ refno }: { refno: string }) => {
       if (toV1Refno(refno) === '1/2') {

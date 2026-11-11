@@ -556,6 +556,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         refno: key,
         refnos,
         incomplete,
+        empty_scopes: [...result.empty],
         debug: {
           candidates_count: result.items.length,
           filtered_count: result.pending.length + result.truncatedRoots.length + failed.length,

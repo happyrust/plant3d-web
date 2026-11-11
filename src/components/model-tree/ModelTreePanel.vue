@@ -13,6 +13,7 @@ import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
+import { consumeGenerationFillWithdrawn } from '@/composables/generationFillState';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
@@ -254,6 +255,8 @@ async function setVisible(id: string, visible: boolean) {
       setNodeLoading(id, true);
       try {
         const success = await modelGenerationState.value!.showModelByRefno(id, { flyTo: true });
+        // 分块生成到一半，这个节点被隐藏了（方案 B3 的显示意图）：人已经不要它显示了，不再把它同步成可见
+        if (consumeGenerationFillWithdrawn(normalizeRefnoKeyLike(id))) return;
 
         if (success) {
           // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
@@ -1039,10 +1042,13 @@ async function showNode() {
 
   // 右键“显示”是显式操作：若是 PDMS refno，则优先触发加载并飞行聚焦。
   if (isRefnoLike(id) && modelGenerationState.value && !DEBUG_SKIP_EYE_AUTO_GENERATE) {
+    // 分块生成到一半这个节点被隐藏了（方案 B3）：不再把它同步成可见
+    let withdrawn = false;
     try {
       await modelGenerationState.value.showModelByRefno(id, { flyTo: true });
+      withdrawn = consumeGenerationFillWithdrawn(normalizeRefnoKeyLike(id));
     } finally {
-      await pdmsTree.setVisible(id, true);
+      if (!withdrawn) await pdmsTree.setVisible(id, true);
     }
   } else {
     await setVisible(id, true);
@@ -1131,9 +1137,28 @@ async function updateLoadedNodeToLatest(rowId: string) {
   await requestUpdateToLatest(dbnum);
 }
 
-/** 已加载节点行上的动作按钮（`ModelTreeRow` 的 `node-action`）。 */
-function onNodeAction(rowId: string, action: 'update' | 'reload') {
+/**
+ * 行上的「生成」（方案 2026-11-10 B3）：这个节点下还有没有模型的部分——上次选了「只显示已有的」、后端没做完、
+ * 或中途停了。接着补齐：不带 force，不重算已有的；单元多时照样先确认；做完一块显示一块。
+ */
+async function fillNodeModel(rowId: string) {
+  if (!modelGenerationState.value) return;
+  const id = normalizeRefnoKeyLike(rowId);
+  if (!isRefnoLike(id)) return;
+  setNodeLoading(id, true);
+  try {
+    await modelGenerationState.value.showModelByRefno(id, { flyTo: false, fill: true });
+    // 新装进来的构件由装载那一步置为可见；生成到一半被隐藏的，这里也不把它拉回来
+    consumeGenerationFillWithdrawn(id);
+  } finally {
+    setNodeLoading(id, false);
+  }
+}
+
+/** 节点行上的动作按钮（`ModelTreeRow` 的 `node-action`）。 */
+function onNodeAction(rowId: string, action: 'update' | 'reload' | 'generate') {
   if (action === 'reload') void reloadLoadedNode(rowId);
+  else if (action === 'generate') void fillNodeModel(rowId);
   else void updateLoadedNodeToLatest(rowId);
 }
 

@@ -100,6 +100,12 @@ export type VisibleInstsResponse = {
    * 「已完整加载」——否则后续普通显示会被短路，恢复的 pending 根永远补不上。只有 gen-model-v1 填。
    */
   incomplete?: VisibleInstsIncomplete | null;
+  /**
+   * 查过、一条记录都没有的范围（`a_b`）：节点自己，或按成员拆开查时（顶层 SITE → ZONE）没有记录的成员。
+   * 显示流程据此知道「哪一块没有模型」（模型资产补齐按块做，方案 2026-11-10 B3）。只有 gen-model-v1 填；
+   * 出错 / 409 的成员不在这里（它们在 `incomplete` 里，不知道是不是真空）。
+   */
+  empty_scopes?: string[];
   debug?: {
     candidates_count?: number;
     filtered_count?: number;

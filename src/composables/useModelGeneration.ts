@@ -6,6 +6,25 @@ import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
 import type { DbnumRow } from '@/api/genModelV1Api';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
+import {
+  chunkResultFromCollect,
+  describeGenerationConfirm,
+  describeGenerationFillSummary,
+  isWholeNodePlan,
+  planModelGeneration,
+  remainingGenerationChunks,
+  runGenerationFill,
+  type GenerationChunk,
+  type GenerationFillSummary,
+  type GenerationPlan,
+  type GenerationTreeNode,
+} from '@/composables/generationFill';
+import {
+  beginGenerationFill,
+  clearPendingGenerationFill,
+  noteGenerationFillWithdrawn,
+  notePendingGenerationFill,
+} from '@/composables/generationFillState';
 import { changedSessionsOfNodeVersions } from '@/composables/nodeModelStatus';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -21,6 +40,7 @@ import {
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
+import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import { forgetLoadedNode, noteLoadedNode, provideLoadedNodeChangeQuery } from '@/composables/useLoadedNodeStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
@@ -245,10 +265,15 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
    * visibleInsts 成功但查空时不退到 subtree——查空就是未加载。只有查询失败才退到 subtree-refnos，incomplete 照样带着。
    */
   incomplete: VisibleInstsIncomplete | null
+  /**
+   * gen-model-v1：查过、一条记录都没有的范围（`a_b`）——节点自己，或按成员拆开查时没有记录的成员（顶层 SITE 的 ZONE）。
+   * 模型资产补齐按它分块（方案 B3）。退到 subtree-refnos 时为空表：那不是「查空」。
+   */
+  emptyScopes: string[]
 }> {
   const normalized = normalizeRefnoString(refno);
   if (!normalized) {
-    return { refnos: [], source: 'visible-insts', truncated: false, incomplete: null };
+    return { refnos: [], source: 'visible-insts', truncated: false, incomplete: null, emptyScopes: [] };
   }
 
   let incomplete: VisibleInstsIncomplete | null = null;
@@ -260,8 +285,9 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
     incomplete = normalizeVisibleInstsIncomplete(resp.incomplete);
     const list = Array.isArray(resp.refnos) ? resp.refnos : [];
     const refnos = uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean);
+    const emptyScopes = uniqStrings((resp.empty_scopes ?? []).map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean);
     // 查成功就是查询结果：空也是空，不退到整棵子树去装没生成的构件。
-    return { refnos, source: 'visible-insts', truncated: false, incomplete };
+    return { refnos, source: 'visible-insts', truncated: false, incomplete, emptyScopes };
   } catch {
     // 继续使用同一 root 的受限 subtree 范围。
   }
@@ -271,6 +297,7 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
     source: 'subtree-refnos',
     truncated: subtree.truncated,
     incomplete,
+    emptyScopes: [],
   };
 }
 
@@ -330,7 +357,10 @@ export async function resolveActualModelLoadScope(
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
-  showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean }) => Promise<boolean>
+  showModelByRefno: (
+    refno: string,
+    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean },
+  ) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
   listLoadedRoots: () => string[]
@@ -352,8 +382,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   const loadedRoots = new Set<string>();
 
-  /** 已尝试自动生成的 refno（防重复触发）：库无模型 / 节点查空时每个 refno 每会话只自动一发 generateThenCollect */
-  const autoGenerateAttempted = new Set<string>();
+  /**
+   * 模型资产补齐试过、有了定论的范围（`a_b`，节点自己或它的一个 ZONE）：`empty` = 生成跑过了、没有可显示的东西（数据的终局，
+   * 再发只会把同样的生成再跑一遍）；`failed` = 有不可重试的失败。这两种在本页面里不再自动重发（防连环 generate），
+   * 照旧给提示；行上的「生成」（显式补齐）会重试 `failed` 的。后端还没做完（超时）的不记——下次显示接着问，
+   * 不带 `force` 的生成对已有的根只是确认一下。右键「重新生成模型」走显式 regenerate（带 force），不受这里限制。
+   */
+  const fillScopeStates = new Map<string, 'empty' | 'failed'>();
   /** 自动生成回过的说明（目前只有空分组）：同一 refno 再点眼睛时照样给它，不提示「右键重新生成」——分组没有这一项 */
   const autoGenerateHints = new Map<string, string>();
   function syncGlobalLoadStatus() {
@@ -396,6 +431,18 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   function emptyLoadTotals(): GenModelV1LoadTotals {
     return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0, noGeoRefnos: [] };
+  }
+
+  /** 把 `add` 的合计并进 `target`（就地改 `target` 并回它） */
+  function mergeLoadTotals(target: GenModelV1LoadTotals, add: GenModelV1LoadTotals): GenModelV1LoadTotals {
+    target.loadedRefnos += add.loadedRefnos;
+    target.skippedRefnos += add.skippedRefnos;
+    target.loadedObjects += add.loadedObjects;
+    target.invalidTubi += add.invalidTubi;
+    target.mesh404 += add.mesh404;
+    target.noGeo += add.noGeo;
+    target.noGeoRefnos.push(...add.noGeoRefnos);
+    return target;
   }
 
   function addLoadResult(totals: GenModelV1LoadTotals, result: DtxLoadResult): void {
@@ -718,16 +765,22 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       regenerate?: boolean
       /** 轻量联动的「重载」：后端增量批次已把记录换掉，清本地缓存重查并替换场景里的实例；不重新生成 */
       refresh?: boolean
+      /**
+       * 行上的「生成」（显式补齐，方案 B3）：节点已经显示了，但它下面还有没有模型的部分——不走「已在场景就跳过」的捷径，
+       * 重新查一遍范围，把没有模型的块生成并显示。不带 force，不动已有的模型。
+       */
+      fill?: boolean
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
     const refresh = loadOptions?.refresh === true;
+    const explicitFill = loadOptions?.fill === true;
     // 相机意图戳：本次加载要飞的话，加载前盖一次；落地时核对，期间用户点了别处就不动相机。
     const cameraStamp = loadOptions?.flyTo ? beginCameraIntent() : 0;
 
     const genuinelyLoaded = loadedRoots.has(normalizedRoot);
-    if (!loadOptions?.regenerate && !refresh && checkRefnoExists(normalizedRoot)) {
+    if (!loadOptions?.regenerate && !refresh && !explicitFill && checkRefnoExists(normalizedRoot)) {
       if (loadOptions?.flyTo) {
         try {
           const anyViewer = viewer as any;
@@ -810,10 +863,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
     // 边取边画已经装进场景的构件数（状态条上带一句，让人知道模型是一块块长出来的）
     let shownEarly = 0;
+    // 模型资产补齐在跑（方案 B3）：进度由分块执行自己写状态条，记录源的逐根进度不理会，也不弹整屏遮罩——
+    // 遮罩会把「做完一块显示一块」的模型挡在后面
+    let fillRunning = false;
     // gen-model-v1：范围查询里那次按祖先查 records 的进度只能从记录源听。
     // 整屏遮罩只在**生成**阶段弹（多根时）。读记录（collect）不弹：遮罩会把边取边画出来的模型挡在后面，
     // 读记录的进度走查看器左下角的状态条就够了（方案 A3；词汇表「上下文生成进度」本来也不要阻塞式弹窗）。
     const unsubscribeProgress = subscribeModelSourceProgress(({ done, total, root, stage }) => {
+      if (fillRunning) return;
       totalCount.value = total;
       currentIndex.value = Math.min(total, done + 1);
       currentRefno.value = root;
@@ -945,11 +1002,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let visibleSource: 'visible-insts' | 'subtree-refnos' = 'visible-insts';
       // gen-model-v1：这次按祖先查询有没有收齐。没收齐的节点不进 loadedRoots：下一次普通显示还要能再查
       let scopeIncomplete: VisibleInstsIncomplete | null = null;
+      // 查过、一条记录都没有的范围（节点自己，或它没有记录的 ZONE）：模型资产补齐按它分块
+      let emptyScopes: string[] = [];
       try {
-        const { refnos, source, truncated, incomplete } = await queryLoadScopeRefnos(normalizedRoot);
+        const { refnos, source, truncated, incomplete, emptyScopes: empty } = await queryLoadScopeRefnos(normalizedRoot);
         visibleRefnos = refnos;
         visibleSource = source;
         scopeIncomplete = incomplete;
+        emptyScopes = empty;
         if (source === 'subtree-refnos' && truncated) {
           consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`);
           emitToast({
@@ -976,51 +1036,333 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (scopeIncomplete ? ` incomplete=${incompleteTail}` : '') +
           (visibleErr ? ` err=${visibleErr}` : '')
       );
-      // 模型资产补齐（方案 B1）：只有「记录查询成功、收齐、确实一条都没有」才对当前节点补齐，不按类型白名单过滤。
+      // ---------- 模型资产补齐（方案 B1 / B3；ADR 0072 第 3 条）----------
+      // 只有「记录查询成功、收齐」才补，而且只补查过、确实一条记录都没有的范围（节点自己，或它没有记录的 ZONE），
+      // 不按类型白名单过滤。记录查询失败、没收齐时一律不生成——那不是「没有模型」。
       // 补齐**不带 force**：服务端只生成缺的 / 落后的根，已有的回 `AlreadyAvailable`；带 force 会先把范围内已有的模型
-      // 连同网格清掉再算（gen-model 规范 §4.5「显示补齐不要传」）。记录查询失败、没收齐时一律不生成——那不是「没有模型」。
-      // 每个 refno 每会话只自动一发：真产不出（NoRenderableGeometry / 容器展开不到交付根）时重复点不再
-      // 连环 generate，照旧给提示；右键「重新生成模型」走显式 regenerate（带 force），不受这一次的限制。
-      const tryAutoGenerate = async (why: string): Promise<boolean> => {
-        if (autoGenerateAttempted.has(normalizedRoot)) return false;
-        autoGenerateAttempted.add(normalizedRoot);
-        statusMessage.value = `正在自动生成 ${normalizedRoot} 模型...`;
-        progress.value = 5;
-        syncGlobalLoadStatus();
-        consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} ${why}，自动补齐模型（不带 force）`);
-        emitToast({ message: `[提示] ${normalizedRoot} 尚未生成模型，正在自动生成...`, level: 'info' });
+      // 连同网格清掉再算（gen-model 规范 §4.5「显示补齐不要传」）。
+      // 先做生成预检（大约多少个单元）：超过阈值先让人确认；然后一块一块生成，回 504 / 409 自动接着问，做完一块显示一块。
+      // 真产不出（NoRenderableGeometry / 确定性的失败）的范围本页面里不再自动重发，照旧给提示。
+      const fillViewer = viewer as unknown as {
+        __dtxLayer?: unknown
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        scene?: {
+          objects?: Record<string, { visible?: boolean } | undefined>
+          ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
+          getAABB?: (ids: string[]) => unknown
+          setObjectsVisible?: (ids: string[], visible: boolean) => void
+        }
+        cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
+      };
+      /** 分块生成已经装进场景的构件与合计（一个模型都没有的节点：交给收尾路径对账） */
+      const fillLoaded = new Set<string>();
+      const fillTotals = emptyLoadTotals();
+      let fillRan = false;
+      let fillFlew = false;
+      const unitsLabel = (plan: Pick<GenerationPlan, 'units' | 'exact'>): string => `${plan.exact ? ' ' : '约 '}${plan.units} 个单元`;
+      const levelTag = { success: '成功', info: '提示', warning: '警告' } as const;
+
+      const listGenerationChildren = async (parent: string): Promise<GenerationTreeNode[]> => {
+        const resp = await getModelSource().tree.children(parent);
+        if (!resp.success) throw new Error(resp.error_message || 'tree children 查询失败');
+        return resp.children.map((child) => {
+          const key = normalizeRefnoString(String(child.refno ?? ''));
+          return {
+            refno: key,
+            noun: String(child.noun ?? ''),
+            name: String(child.name ?? '') || key,
+            childrenCount: typeof child.children_count === 'number' ? child.children_count : null,
+          };
+        });
+      };
+
+      /**
+       * 这次能不能补、补哪几块。`existingShown`：这个节点已经有一部分模型显示出来了。
+       * 回 `null` = 不补（不该补、没有可补的范围、或者数下来没有东西可生成）。
+       */
+      const prepareFill = async (existingShown: boolean): Promise<GenerationPlan | null> => {
+        if (regenerate || refresh || fillRan) return null;
+        if (!visibleOk || visibleSource !== 'visible-insts' || scopeIncomplete) return null;
+        const row = peekDbnumRow(dbno);
+        if (dbnumEmptyQueryCaveat(row)) return null;
+        const members = emptyScopes.filter((scope) => scope !== normalizedRoot);
+        // 已经有一部分模型的节点：只有「模型按需生成」的库（未初始化 / 模型水位没立过）才把没有记录的 ZONE 当成没生成过。
+        // 库里有成套模型时，没有记录的 ZONE 多半本来就没有几何，或者是模型水位之后才建的（那归「更新到最新」管）——
+        // 这要等后端的节点模型状态接口才分得清，过渡期不去生成它们。
+        const candidates = existingShown
+          ? (dbnumRowLacksModel(row) === true ? members : [])
+          : (members.length > 0 ? members : [normalizedRoot]);
+        const scopes = candidates.filter((scope) => (explicitFill ? fillScopeStates.get(scope) !== 'empty' : !fillScopeStates.has(scope)));
+        if (scopes.length === 0) return null;
+        let rootNoun: string | null = null;
         try {
-          const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot, { force: false });
-          if (generated.items.length > 0) {
-            noteDbnumModelGenerated(dbno);
-            // 生成成功，重新查询 records（generateThenCollect 清了这条请求名下的备忘并重查进缓存）
+          const info = await rootTypeInfo;
+          rootNoun = info.success ? String(info.noun || '').trim().toUpperCase() || null : null;
+        } catch {
+          rootNoun = null;
+        }
+        const plan = await planModelGeneration({
+          root: normalizedRoot,
+          rootNoun,
+          scopes,
+          listChildren: listGenerationChildren,
+          deliveryUnitTypes: useGenModelV1Health().state.deliveryUnitTypes,
+        });
+        // 没有子节点的容器没有东西可生成：记下来，下次不再数
+        for (const scope of plan.skipped) fillScopeStates.set(scope, 'empty');
+        return plan.chunks.length > 0 ? plan : null;
+      };
+
+      /** 需确认生成：单元数超过阈值先问。回 `true` = 生成 */
+      const confirmFill = async (plan: GenerationPlan, existingShown: boolean): Promise<boolean> => {
+        if (!plan.needsConfirm) return true;
+        const dialog = describeGenerationConfirm(plan, existingShown);
+        statusMessage.value = `等待确认：${normalizedRoot} 有${unitsLabel(plan)}要生成`;
+        syncGlobalLoadStatus();
+        const choice = await useConfirmDialogStore().openChoice({
+          title: dialog.title,
+          message: dialog.message,
+          choices: [{ id: 'generate', text: dialog.confirmText }],
+          cancelText: dialog.cancelText,
+        });
+        return choice === 'generate';
+      };
+
+      /** 把一块新生成的构件装进场景（做完一块显示一块） */
+      const loadFillChunk = async (chunk: GenerationChunk, refnos: string[], existingShown: boolean): Promise<void> => {
+        const layer = fillViewer.__dtxLayer;
+        if (!layer) throw new Error('DTXLayer 未初始化，无法加载模型');
+        const fresh = uniqStrings(refnos.map((r) => normalizeRefnoString(r))).filter((r) => r && !fillLoaded.has(r));
+        if (fresh.length === 0) return;
+        for (const key of fresh) fillLoaded.add(key);
+        // 「显示」= 保证可见（同收尾路径）：先把这一块的 refno 级可见态拉回 true，装完的回放才不会把它们再藏掉
+        fillViewer.scene?.setObjectsVisible?.(uniqStrings([normalizedRoot, ...fresh]), true);
+        const totals = await loadGenModelV1Refnos(
+          layer, dbno, fresh, fillViewer, { replace: false, singleBatch: true }, [30, 95], `从 gen-model 加载 ${chunk.name}`,
+        );
+        mergeLoadTotals(fillTotals, totals);
+        fillViewer.scene?.ensureRefnos?.(fresh, { computeAabb: false });
+        // 一个模型都没有的节点：第一块出来就飞一次（全部做完后收尾路径会对整体再对一次焦）
+        if (!existingShown && !fillFlew && loadOptions?.flyTo) {
+          fillFlew = true;
+          try {
+            const aabb = fillViewer.scene?.getAABB?.(fresh.length > 5000 ? fresh.slice(0, 5000) : fresh) ?? null;
+            if (aabb && isCameraIntentCurrent(cameraStamp)) fillViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+          } catch {
+            // ignore flyTo errors
+          }
+        }
+      };
+
+      /** 分块生成。`probeRefno`：已经显示出来的一个构件——它被隐藏了说明人不要这个节点了 */
+      const runFill = async (plan: GenerationPlan, existingShown: boolean, probeRefno: string | null): Promise<GenerationFillSummary> => {
+        fillRan = true;
+        const whole = isWholeNodePlan(plan);
+        const session = beginGenerationFill(normalizedRoot);
+        // 人点的是「显示」：先把这个节点的可见态立成 true，之后它被改成 false 就是人把它隐藏了
+        if (!existingShown) fillViewer.scene?.setObjectsVisible?.([normalizedRoot], true);
+        // 显示意图：这个节点（或它刚显示出来的构件）被隐藏了，就不再往下生成、装载
+        const hidden = (): boolean => {
+          const objects = fillViewer.scene?.objects;
+          if (!objects) return false;
+          if (objects[normalizedRoot]?.visible === false) return true;
+          const probe = probeRefno ?? (fillLoaded.values().next().value as string | undefined);
+          return probe ? objects[probe]?.visible === false : false;
+        };
+        let stoppedByHide = false;
+        fillRunning = true;
+        showProgressModal.value = false;
+        try {
+          return await runGenerationFill({
+            plan,
+            generateChunk: async (chunk) => chunkResultFromCollect(
+              chunk.refno,
+              await getGenModelV1ModelSource().records.generateThenCollect(chunk.refno, { force: false }),
+            ),
+            // 节点自己一块时不在这里装：生成完按原来的路重查、定范围（BRAN / HANG 要并上根自己）、一次装完
+            loadChunk: whole ? async () => {} : (chunk, refnos) => loadFillChunk(chunk, refnos, existingShown),
+            onProgress: (step) => {
+              // 状态条只有一行、会截断：要紧的（第几块、已生成多少）放前面，块的名字放第二行
+              const units = `已生成 ${step.unitsDone} / ${plan.exact ? '' : '约 '}${step.unitsTotal} 个单元`;
+              const where = whole ? '' : `第 ${step.chunkIndex + 1}/${step.chunkCount} 块`;
+              const reason = String(step.reason ?? '');
+              statusMessage.value = step.phase === 'waiting'
+                ? `${where || normalizedRoot}：${reason.length > 24 ? `${reason.slice(0, 24)}…` : reason}，`
+                  + `${Math.round((step.waitMs ?? 0) / 1000)} 秒后自动再问（已问 ${step.attempt} 次）· ${units}`
+                : step.phase === 'loading'
+                  ? `${where || `${normalizedRoot} `}已生成，正在显示 · ${units}`
+                  : whole
+                    ? `正在自动生成 ${normalizedRoot} 模型...（${units}）`
+                    : `正在生成${where} · ${units}`;
+              totalCount.value = step.chunkCount;
+              currentIndex.value = step.chunkIndex + 1;
+              currentRefno.value = step.chunk.name && step.chunk.name !== step.chunk.refno
+                ? `${step.chunk.name} · ${step.chunk.refno}`
+                : step.chunk.refno;
+              progress.value = Math.min(95, 5 + Math.floor((step.unitsDone / Math.max(1, step.unitsTotal)) * 90));
+              syncGlobalLoadStatus();
+            },
+            shouldStop: () => {
+              if (session.shouldStop()) return true;
+              if (!hidden()) return false;
+              stoppedByHide = true;
+              return true;
+            },
+            sleep,
+          });
+        } finally {
+          fillRunning = false;
+          session.end();
+          // 人把节点隐藏了：告诉发起显示的一方，收尾时别再把它置回可见
+          if (stoppedByHide) noteGenerationFillWithdrawn(normalizedRoot);
+        }
+      };
+
+      /** 分块生成之后记账：哪些范围有了定论、这个节点还剩什么没补齐（行上的「生成」据此出现 / 消失） */
+      const settleFill = (plan: GenerationPlan, summary: GenerationFillSummary): void => {
+        for (const outcome of summary.outcomes) {
+          if (outcome.state === 'empty' || outcome.state === 'failed') fillScopeStates.set(outcome.chunk.refno, outcome.state);
+          else fillScopeStates.delete(outcome.chunk.refno);
+        }
+        if (summary.outcomes.some((outcome) => outcome.refnos.length > 0)) noteDbnumModelGenerated(dbno);
+        if (summary.outcomes.some((outcome) => outcome.state === 'pending')) scheduleDbnumModelReprobe(dbno);
+        const remaining = remainingGenerationChunks(summary);
+        if (remaining.length === 0) {
+          clearPendingGenerationFill(normalizedRoot);
+          return;
+        }
+        notePendingGenerationFill({
+          root: normalizedRoot,
+          dbnum: dbno,
+          chunks: remaining.length,
+          units: remaining.reduce((sum, chunk) => sum + chunk.units, 0),
+          exact: plan.exact,
+          reason: summary.stopped ? 'stopped' : 'pending',
+        });
+      };
+
+      /**
+       * 一个模型都没有的节点：补齐。`ready` = 有东西可装了（`visibleRefnos` 已换成重查的结果，接着走装载）；
+       * 否则 `hint` 是要告诉人的原因（没有就用通用的那一句）。
+       */
+      const fillWhenNothingExists = async (why: string): Promise<{ ready: boolean; hint: string | null }> => {
+        try {
+          const plan = await prepareFill(false);
+          if (!plan) return { ready: false, hint: null };
+          const whole = isWholeNodePlan(plan);
+          if (!(await confirmFill(plan, false))) {
+            notePendingGenerationFill({
+              root: normalizedRoot, dbnum: dbno, chunks: plan.chunks.length, units: plan.units, exact: plan.exact, reason: 'declined',
+            });
+            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 有${unitsLabel(plan)}要生成，用户取消`);
+            return { ready: false, hint: `还没有模型（${unitsLabel(plan).trim()}要生成），已取消；再点眼睛或行上的「生成」可以再来` };
+          }
+          statusMessage.value = `正在自动生成 ${normalizedRoot} 模型...`;
+          progress.value = 5;
+          syncGlobalLoadStatus();
+          consoleStore.addLog(
+            'info',
+            `[model-load] refno=${normalizedRoot} ${why}，自动补齐模型（不带 force）` + (whole ? '' : `：分 ${plan.chunks.length} 块，${unitsLabel(plan).trim()}`),
+          );
+          emitToast({
+            message: whole
+              ? `[提示] ${normalizedRoot} 尚未生成模型，正在自动生成...`
+              : `[提示] ${normalizedRoot} 尚未生成模型，正在分 ${plan.chunks.length} 块生成（${unitsLabel(plan).trim()}），做完一块显示一块`,
+            level: 'info',
+          });
+          const summary = await runFill(plan, false, null);
+          settleFill(plan, summary);
+          if (summary.outcomes.some((outcome) => outcome.refnos.length > 0)) {
+            // 生成出东西了，重新查询 records（generateThenCollect 清了备忘并把新记录收进了缓存）
             const retry = await queryLoadScopeRefnos(normalizedRoot);
             visibleRefnos = uniqStrings(retry.refnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
             visibleSource = retry.source;
             scopeIncomplete = retry.incomplete;
+            emptyScopes = retry.emptyScopes;
             visibleOk = true;
             visibleErr = null;
-            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成成功，取得 ${visibleRefnos.length} 个构件`);
-            if (visibleRefnos.length > 0) {
-              emitToast({ message: `[成功] ${normalizedRoot} 模型已自动生成并加载`, level: 'success' });
-              return true;
+            // 分块时已经装进场景的构件交给收尾路径对账（同边取边画）：收尾只装剩下的
+            if (fillLoaded.size > 0) {
+              earlyLoad = {
+                loadedRefnos: new Set([...(earlyLoad?.loadedRefnos ?? []), ...fillLoaded]),
+                totals: mergeLoadTotals(earlyLoad?.totals ?? emptyLoadTotals(), fillTotals),
+              };
             }
-            return false;
+            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成成功，取得 ${visibleRefnos.length} 个构件`);
+            if (visibleRefnos.length === 0) return { ready: false, hint: null };
+            const report = describeGenerationFillSummary(summary);
+            emitToast(whole && report.level === 'success'
+              ? { message: `[成功] ${normalizedRoot} 模型已自动生成并加载`, level: 'success' }
+              : { message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}`, level: report.level });
+            return { ready: true, hint: null };
           }
-          const timedOut = generated.pending.length > 0;
-          if (timedOut) scheduleDbnumModelReprobe(dbno);
-          const failed = Object.entries(generated.errors).map(([root, msg]) => `${root}: ${msg}`).join('; ');
-          const groupHint = generated.hints?.[generated.refno];
+          const timedOut = summary.outcomes.some((outcome) => outcome.state === 'pending');
+          const failed = summary.outcomes
+            .flatMap((outcome) => outcome.failedRoots)
+            .map((item) => `${item.root}: ${item.error}`)
+            .join('; ');
+          const groupHint = whole ? summary.outcomes[0]?.hint ?? null : null;
           if (groupHint) autoGenerateHints.set(normalizedRoot, groupHint);
           const hint = timedOut ? '服务端后台继续生成，完成后再点眼睛' : (failed || groupHint || '生成未产出可显示模型');
           consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成未产出：${hint}`);
           emitToast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
-          return false;
+          return { ready: false, hint: timedOut ? '后端还在后台生成，稍后再点眼睛会接着问（不重算已有的）' : null };
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e);
           consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 自动生成异常：${em}`);
           emitToast({ message: `[警告] ${normalizedRoot} 自动生成失败：${em}`, level: 'warning' });
-          return false;
+          return { ready: false, hint: null };
+        }
+      };
+
+      /**
+       * 已有的模型显示出来之后：把没有模型的那几块补上（先显示已有的，再补没有的）。补不补得成都不影响这次显示的成败。
+       * `probeRefno`：已经显示出来的一个构件。
+       */
+      const fillAfterShown = async (probeRefno: string | null): Promise<void> => {
+        if (fillRan) return;
+        try {
+          const plan = await prepareFill(true);
+          if (!plan) {
+            if (explicitFill) {
+              clearPendingGenerationFill(normalizedRoot);
+              emitToast({ message: `[提示] ${normalizedRoot}：没有需要生成的部分`, level: 'info' });
+            }
+            return;
+          }
+          if (!(await confirmFill(plan, true))) {
+            notePendingGenerationFill({
+              root: normalizedRoot, dbnum: dbno, chunks: plan.chunks.length, units: plan.units, exact: plan.exact, reason: 'declined',
+            });
+            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 还有${unitsLabel(plan)}没有模型，用户选了只显示已有的`);
+            emitToast({
+              message: `[提示] ${normalizedRoot}：只显示了已有的模型，还有${unitsLabel(plan)}没有模型；行上点「生成」可以补齐`,
+              level: 'info',
+            });
+            statusMessage.value = '加载完成 (gen-model)；部分节点没有模型';
+            syncGlobalLoadStatus();
+            return;
+          }
+          consoleStore.addLog(
+            'info',
+            `[model-load] refno=${normalizedRoot} 下有 ${plan.chunks.length} 块没有模型（${unitsLabel(plan).trim()}），分块补齐（不带 force）`,
+          );
+          emitToast({
+            message: `[提示] ${normalizedRoot} 下还有${unitsLabel(plan)}没有模型，正在分 ${plan.chunks.length} 块生成，做完一块显示一块`,
+            level: 'info',
+          });
+          const summary = await runFill(plan, true, probeRefno);
+          settleFill(plan, summary);
+          const report = describeGenerationFillSummary(summary);
+          consoleStore.addLog(report.level === 'warning' ? 'warning' : 'info', `[model-load] refno=${normalizedRoot} 补齐结束：${report.message}`);
+          emitToast({ message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}`, level: report.level });
+          statusMessage.value = report.level === 'success' ? '加载完成 (gen-model)' : `加载完成 (gen-model)；${report.message}`;
+          progress.value = 100;
+          syncGlobalLoadStatus();
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e);
+          consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 补齐异常：${em}`);
+          emitToast({ message: `[警告] ${normalizedRoot} 补齐没有完成：${em}`, level: 'warning' });
         }
       };
 
@@ -1060,16 +1402,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
         // 没收齐（409 库正被整库任务占用 / 部分节点出错 / 预算外）时不发：不知道是不是真空，generate 也多半撞锁
         const caveat = scopeIncomplete ? null : dbnumEmptyQueryCaveat(peekDbnumRow(dbno));
-        const autoGenerated = !scopeIncomplete && !caveat && await tryAutoGenerate(
-          dbnumRowLacksModel(peekDbnumRow(dbno)) === true ? `dbnum=${dbno} 库里没有成套模型` : 'records 查空'
-        );
-        if (!autoGenerated) {
+        const filled = !scopeIncomplete && !caveat
+          ? await fillWhenNothingExists(dbnumRowLacksModel(peekDbnumRow(dbno)) === true ? `dbnum=${dbno} 库里没有成套模型` : 'records 查空')
+          : { ready: false, hint: null };
+        if (!filled.ready) {
           const tail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
           const emptyHint = scopeIncomplete
             ? `${normalizedRoot} 尚未取得可见实例（${tail}）`
             : caveat
               ? `${normalizedRoot}：${caveat}`
-              : `${normalizedRoot}：${autoGenerateHints.get(normalizedRoot) ?? '范围内没有已生成的模型；右键「重新生成模型」可生成'}`;
+              : `${normalizedRoot}：${filled.hint ?? autoGenerateHints.get(normalizedRoot) ?? '范围内没有已生成的模型；右键「重新生成模型」可生成'}`;
           consoleStore.addLog('info', `[model-load] ${emptyHint}`);
           emitToast({ message: `[提示] ${emptyHint}`, level: 'info' });
           statusMessage.value = scopeIncomplete
@@ -1079,7 +1421,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           syncGlobalLoadStatus();
           return false;
         }
-        // autoGenerated = true，继续往下走装载流程
+        // 补齐出东西了，继续往下走装载流程
       }
       // 查询真拿到了记录：行尾库状态圆点的提示里补一句「本页面已查到模型记录」
       if (visibleOk && visibleRefnos.length > 0) reconcileDbnumModelStatus(dbno);
@@ -1234,6 +1576,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
         syncGlobalLoadStatus();
         emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
+        // 已有的显示出来了，再把这个节点下没有模型的那几块补上（方案 B3）
+        await fillAfterShown(loadRefnos[0] ?? null);
         return true;
       }
       // 成员早在场景里（别的 useModelGeneration 实例 / 别的入口装的），这次只剩注入的根自己要装、而根本来就没有自己的几何
@@ -1255,6 +1599,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           noteLoadedNode(normalizedRoot, dbno, loadWatermark);
           consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 成员已在场景中，根自身无几何，按已加载收口`);
         }
+        // 已有的都在场景里了（行上的「生成」走到这里）：把没有模型的那几块补上
+        if (!collectionIncomplete) await fillAfterShown(loadRefnos[0] ?? null);
         return true;
       }
       statusMessage.value = collectionIncomplete ? `模型尚未就绪 (gen-model，${incompleteTail})` : '无可见几何实例 (gen-model)';

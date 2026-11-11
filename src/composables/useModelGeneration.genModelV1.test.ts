@@ -4,6 +4,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { generationResumeTiming } from '@/composables/generationFill';
+import {
+  __resetGenerationFillStateForTests,
+  consumeGenerationFillWithdrawn,
+  pendingGenerationFill,
+  requestStopGenerationFill,
+} from '@/composables/generationFillState';
 import { createGenModelV1ModelRecordSource } from '@/model-source/genModelV1/modelRecordSource';
 import { __resetGenModelV1ServiceLifecycleForTests } from '@/model-source/genModelV1/serviceLifecycle';
 import { createGenModelV1TreeSource } from '@/model-source/genModelV1/treeSource';
@@ -26,6 +33,10 @@ const noteLoadedNodeMock = vi.fn();
 const forgetLoadedNodeMock = vi.fn();
 const listNodeVersionsMock = vi.fn();
 const providedChangeQuery = vi.hoisted(() => ({ value: null as unknown }));
+/** 树的子节点（生成预检沿树数单元用）：缺省查不到 = 数不出来，按 1 个单元算 */
+const treeChildrenMock = vi.fn();
+/** 需确认生成的确认框：回 `'generate'` = 生成并显示，`null` = 取消 / 只显示已有的 */
+const openChoiceMock = vi.hoisted(() => vi.fn());
 
 type ProgressListener = (progress: { refno: string; root: string; done: number; total: number; stage?: string }) => void;
 const progressListeners = new Set<ProgressListener>();
@@ -46,7 +57,7 @@ function tick(): Promise<void> {
 
 const v1Source = {
   kind: 'gen-model-v1' as const,
-  tree: { visibleInsts: visibleInstsMock, subtreeRefnos: vi.fn() },
+  tree: { visibleInsts: visibleInstsMock, subtreeRefnos: vi.fn(), children: treeChildrenMock },
   attributes: { typeInfo: typeInfoMock },
   versions: { listNodeVersions: listNodeVersionsMock },
   records: {
@@ -96,7 +107,9 @@ vi.mock('@/composables/useGenModelV1Dbnums', async (importOriginal) => ({
 vi.mock('@/api/genModelRealtimeApi', () => ({ enqueueParquetIncremental: vi.fn(), getParquetVersion: vi.fn() }));
 vi.mock('@/api/genModelTaskApi', () => ({ modelRegenerateByRefno: vi.fn(), modelShowByRefno: vi.fn() }));
 vi.mock('@/api/genModelStreamGenerateApi', () => ({ triggerBatchGenerateSse: vi.fn() }));
-vi.mock('@/composables/useConfirmDialogStore', () => ({ useConfirmDialogStore: () => ({ confirm: vi.fn() }) }));
+vi.mock('@/composables/useConfirmDialogStore', () => ({
+  useConfirmDialogStore: () => ({ confirm: vi.fn(), openChoice: openChoiceMock }),
+}));
 vi.mock('@/composables/useConsoleStore', () => ({ useConsoleStore: () => ({ addLog: addLogMock }) }));
 vi.mock('@/composables/useDbMetaInfo', () => ({
   ensureDbMetaInfoLoaded: vi.fn(async () => {}),
@@ -155,6 +168,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   progressListeners.clear();
   memberListeners.clear();
+  __resetGenerationFillStateForTests();
+  // 缺省不自动接着问（一发定论）：要验「超时自动接续」的用例自己把预算放开、把间隔调成 0
+  generationResumeTiming.delaysMs = [0];
+  generationResumeTiming.budgetMs = -1;
+  treeChildrenMock.mockReset();
+  treeChildrenMock.mockRejectedValue(new Error('tree children not mocked'));
+  openChoiceMock.mockReset();
+  openChoiceMock.mockResolvedValue('generate');
   dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
   loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => loaderResult(refnos.length, refnos.length * 2));
   typeInfoMock.mockResolvedValue({ success: true, refno: '24381_101410', noun: 'ZONE' });
@@ -351,8 +372,13 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(loadInstancesMock).not.toHaveBeenCalled();
     expect(v1Source.tree.subtreeRefnos).not.toHaveBeenCalled();
     expect(gen.isModelActuallyLoaded('24384_24935')).toBe(false);
+    // 2026-11-11（方案 B3）起：后端还在后台算时最后那句不再说「范围内没有已生成的模型；右键可生成」（那会让人去强制重算），
+    // 改说稍后再点眼睛会接着问
     expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
-      level: 'info', message: expect.stringContaining('范围内没有已生成的模型；右键「重新生成模型」可生成'),
+      level: 'info', message: expect.stringContaining('后端还在后台生成，稍后再点眼睛会接着问'),
+    }));
+    expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('右键「重新生成模型」可生成'),
     }));
   });
 
@@ -476,29 +502,26 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(loadInstancesMock).toHaveBeenCalled();
   });
 
-  it('auto_generate_only_once：同一 refno 第二次显示不重复自动生成', async () => {
+  it.each([
+    ['生成跑过了、没有可显示的东西（NoRenderableGeometry）', { empty: ['24381_145018'], statuses: { '24381_145018': 'NoRenderableGeometry' } }],
+    ['确定性的生成失败', { errors: { '24381_145018': 'generation_failed: 数据损坏' } }],
+  ])('auto_generate_only_once：%s——同一 refno 第二次显示不重复自动生成', async (_name, outcome) => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
 
-    // 第一次：records 为空，BRAN 类型，自动生成失败（items 为空）
+    // 第一次：records 为空，BRAN 类型，自动生成有了定论、没有产出
     visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_145018', refnos: [] });
     typeInfoMock.mockResolvedValue({ success: true, refno: '24381_145018', noun: 'BRAN', owner_refno: null, owner_noun: null });
     v1Source.records.generateThenCollect.mockResolvedValueOnce({
-      refno: '24381_145018',
-      generationRoots: [],
-      items: [],
-      pending: ['24381_145018'],
-      empty: [],
-      truncatedRoots: [],
-      errors: {},
-      statuses: { '24381_145018': 'generation_pending' },
+      refno: '24381_145018', generationRoots: [], items: [], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {},
+      ...outcome,
     } as never);
 
     const first = await gen.showModelByRefno('24381_145018');
     expect(first).toBe(false);
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
 
-    // 第二次：records 仍为空，但已尝试过自动生成，不再自动生成
+    // 第二次：records 仍为空，但已经有定论，不再自动生成（再发只会把同样的生成再跑一遍）
     v1Source.records.generateThenCollect.mockClear();
     const second = await gen.showModelByRefno('24381_145018');
     expect(second).toBe(false);
@@ -506,6 +529,30 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
       level: 'info', message: expect.stringContaining('右键「重新生成模型」可生成'),
     }));
+  });
+
+  it('上一次后端没做完（超时）的：再点眼睛接着问，不算「试过了」——不带 force 的生成对已有的根只是确认一下', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_145018', noun: 'BRAN', owner_refno: null, owner_noun: null });
+    visibleInstsMock
+      .mockResolvedValueOnce({ success: true, refno: '24381_145018', refnos: [] })
+      .mockResolvedValueOnce({ success: true, refno: '24381_145018', refnos: [] })
+      .mockResolvedValue({ success: true, refno: '24381_145018', refnos: ['24381_145018'] });
+    v1Source.records.generateThenCollect.mockResolvedValueOnce({
+      refno: '24381_145018', generationRoots: [], items: [], pending: ['24381_145018'], empty: [], truncatedRoots: [], errors: {},
+      statuses: { '24381_145018': 'timeout' },
+    } as never);
+
+    expect(await gen.showModelByRefno('24381_145018')).toBe(false);
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('服务端后台继续生成，完成后再点眼睛') }));
+
+    // 第二次点眼睛：还是查空 → 接着问（这回后端做完了）→ 装载
+    expect(await gen.showModelByRefno('24381_145018')).toBe(true);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(2);
+    expect(v1Source.records.generateThenCollect).toHaveBeenLastCalledWith('24381_145018', { force: false });
+    expect(loadInstancesMock).toHaveBeenCalled();
   });
 
   it('空分组：自动生成回了「分组为空或成员不可解析」——两次显示都提示它，不指向分组没有的「右键重新生成」', async () => {
@@ -769,15 +816,19 @@ describe('queryLoadScopeRefnos（gen-model-v1）', () => {
     });
     expect(await queryLoadScopeRefnos('1_2')).toEqual({
       refnos: ['1_10'], source: 'visible-insts', truncated: false, incomplete: { pending: ['1_3'], truncated_roots: [], errors: {} },
+      emptyScopes: [],
     });
 
     visibleInstsMock.mockResolvedValueOnce({
       success: true, refno: '1_2', refnos: [], incomplete: { pending: [], truncated_roots: ['1/4'], errors: { '1/3': 'boom' } },
+      // 查过、一条记录都没有的范围（模型资产补齐按它分块）：同样归一成 a_b
+      empty_scopes: ['1/5', '1_6', '1/5'],
     });
     v1Source.tree.subtreeRefnos.mockResolvedValueOnce({ success: true, refnos: ['1_2', '1_3'], truncated: false });
     expect(await queryLoadScopeRefnos('1_2')).toEqual({
       refnos: [], source: 'visible-insts', truncated: false,
       incomplete: { pending: [], truncated_roots: ['1_4'], errors: { '1_3': 'boom' } },
+      emptyScopes: ['1_5', '1_6'],
     });
     expect(v1Source.tree.subtreeRefnos).not.toHaveBeenCalled();
 
@@ -1739,5 +1790,397 @@ describe('showModelByRefno 重载（refresh）', () => {
 
     expect(loadInstancesMock).not.toHaveBeenCalled();
     expect(evictMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('showModelByRefno 模型资产补齐：预检、确认、分块生成（方案 2026-11-10 B3）', () => {
+  /** 7997 的 SITE 24381_535（2026-11-11 实查）：ZONE 179300、571 有模型；536、621 没有；179753 没有子节点 */
+  const SITE = '24381_535';
+  const EXISTING = ['24381_179302', '24381_573', '24381_574'];
+  const child = (refno: string, noun: string, children_count: number, name = refno) => ({ refno, noun, name, children_count });
+  const TREE: Record<string, ReturnType<typeof child>[]> = {
+    [SITE]: [
+      child('24381_179753', 'ZONE', 0, 'ZONE'),
+      child('24381_179300', 'ZONE', 1, '/6ZBR-ITUB-NH'),
+      child('24381_536', 'ZONE', 4, '/1RCV-SUPP-XX'),
+      child('24381_571', 'ZONE', 1, '/1RCV-ITUB-XX'),
+      child('24381_621', 'ZONE', 2, '/1RCV-RACK-XX'),
+    ],
+    '24381_536': [child('24381_537', 'STRU', 3), child('24381_549', 'REST', 1), child('24381_553', 'STRU', 3), child('24381_567', 'REST', 1)],
+    '24381_621': [child('24381_622', 'REST', 4), child('24381_631', 'STRU', 3)],
+    '24381_571': [child('24381_572', 'PIPE', 5)],
+  };
+  const NEW_536 = ['24381_538', '24381_550'];
+  const NEW_621 = ['24381_623'];
+
+  function useTree(tree: Record<string, ReturnType<typeof child>[]> = TREE) {
+    treeChildrenMock.mockImplementation(async (refno: string) => {
+      const children = tree[refno];
+      if (!children) throw new Error(`no children for ${refno}`);
+      return { success: true, parent_refno: refno, children, truncated: false };
+    });
+  }
+
+  /** 生成成功：这一块名下出来这些构件 */
+  function generated(refno: string, refnos: string[], extra: Record<string, unknown> = {}) {
+    return {
+      refno, generationRoots: refnos.map((item) => `${item}0`), items: refnos.map((item) => ({ refno: item })),
+      pending: [] as string[], empty: [], truncatedRoots: [], errors: {}, statuses: {} as Record<string, string>, ...extra,
+    };
+  }
+  const timedOut = (refno: string) => ({
+    refno, generationRoots: [], items: [], pending: [refno], empty: [], truncatedRoots: [], errors: {}, statuses: { [refno]: 'timeout' },
+  });
+
+  /** SITE 已有一部分模型，三个 ZONE 没有记录 */
+  function partialSite() {
+    visibleInstsMock.mockResolvedValue({
+      success: true, refno: SITE, refnos: EXISTING, empty_scopes: ['24381_179753', '24381_536', '24381_621'],
+    });
+  }
+
+  beforeEach(() => {
+    typeInfoMock.mockResolvedValue({ success: true, refno: SITE, noun: 'SITE' });
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
+    useTree();
+    generationResumeTiming.delaysMs = [0];
+    generationResumeTiming.budgetMs = 60_000;
+  });
+
+  it('未生成的小 ZONE（5 个单元）：不弹确认，直接生成并显示', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_571', noun: 'ZONE' });
+    visibleInstsMock
+      .mockResolvedValueOnce({ success: true, refno: '24381_571', refnos: [], empty_scopes: ['24381_571'] })
+      .mockResolvedValue({ success: true, refno: '24381_571', refnos: ['24381_573', '24381_574'] });
+    v1Source.records.generateThenCollect.mockResolvedValueOnce(generated('24381_571', ['24381_573', '24381_574']) as never);
+
+    expect(await gen.showModelByRefno('24381_571')).toBe(true);
+    expect(openChoiceMock).not.toHaveBeenCalled();
+    expect(treeChildrenMock).toHaveBeenCalledWith('24381_571');
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_571', { force: false });
+    expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+    expect(gen.isModelActuallyLoaded('24381_571')).toBe(true);
+  });
+
+  it('查空的 ZONE 超过 20 个单元：先确认，写明约多少个单元；选「生成并显示」才生成', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_700', noun: 'ZONE' });
+    useTree({ '24381_700': [child('24381_701', 'PIPE', 18), child('24381_720', 'PIPE', 9)] });
+    visibleInstsMock
+      .mockResolvedValueOnce({ success: true, refno: '24381_700', refnos: [], empty_scopes: ['24381_700'] })
+      .mockResolvedValue({ success: true, refno: '24381_700', refnos: ['24381_702'] });
+    v1Source.records.generateThenCollect.mockResolvedValueOnce(generated('24381_700', ['24381_702']) as never);
+    let generatedBeforeAnswer = -1;
+    openChoiceMock.mockImplementation(async () => {
+      generatedBeforeAnswer = v1Source.records.generateThenCollect.mock.calls.length;
+      return 'generate';
+    });
+
+    expect(await gen.showModelByRefno('24381_700')).toBe(true);
+    expect(generatedBeforeAnswer).toBe(0);
+    expect(openChoiceMock).toHaveBeenCalledTimes(1);
+    expect(openChoiceMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: '生成模型',
+      message: expect.stringContaining('这个节点还没有模型，要生成约 27 个单元'),
+      choices: [{ id: 'generate', text: '生成并显示' }],
+      cancelText: '取消',
+    }));
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+  });
+
+  it('确认框里点了取消：不生成、不装载，提示里说明；行上留一个「生成」；再点眼睛会再问', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_700', noun: 'ZONE' });
+    useTree({ '24381_700': [child('24381_701', 'PIPE', 30)] });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_700', refnos: [], empty_scopes: ['24381_700'] });
+    openChoiceMock.mockResolvedValue(null);
+
+    expect(await gen.showModelByRefno('24381_700')).toBe(false);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(loadInstancesMock).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('还没有模型（约 30 个单元要生成），已取消'),
+    }));
+    expect(pendingGenerationFill('24381_700')).toMatchObject({ dbnum: 7997, chunks: 1, units: 30, reason: 'declined' });
+
+    expect(await gen.showModelByRefno('24381_700')).toBe(false);
+    expect(openChoiceMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('SITE 有一部分模型、有两个 ZONE 没有（模型按需生成的库）：先显示已有的，再一块一块生成，做完一块显示一块', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    partialSite();
+    const order: string[] = [];
+    loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => {
+      order.push(`load ${refnos.join(',')}`);
+      return loaderResult(refnos.length, refnos.length * 2);
+    });
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => {
+      order.push(`generate ${refno}`);
+      return generated(refno, refno === '24381_536' ? NEW_536 : NEW_621) as never;
+    });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+
+    expect(order).toEqual([
+      `load ${EXISTING.join(',')}`,
+      'generate 24381_536', `load ${NEW_536.join(',')}`,
+      'generate 24381_621', `load ${NEW_621.join(',')}`,
+    ]);
+    // 15 个单元（8 + 7），不到阈值：不问
+    expect(openChoiceMock).not.toHaveBeenCalled();
+    // 没有子节点的 ZONE 不发生成；每块都不带 force
+    expect(v1Source.records.generateThenCollect.mock.calls).toEqual([['24381_536', { force: false }], ['24381_621', { force: false }]]);
+    // 新生成的构件置为可见、不替换已有对象
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith([SITE, ...NEW_536], true);
+    expect(loadInstancesMock.mock.calls[1]![3]).toMatchObject({ dataSource: 'gen-model-v1', replaceExistingObjects: false });
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'success', message: expect.stringContaining('已从 gen-model 加载 6 个几何实例') }));
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'success', message: `[成功] ${SITE}：已生成并显示 2 块（3 个构件）`,
+    }));
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+    expect(pendingGenerationFill(SITE)).toBeNull();
+    expect(gen.statusMessage.value).toBe('加载完成 (gen-model)');
+  });
+
+  it('进度写在状态栏：第几块、已生成几个单元；补齐期间不弹整屏遮罩（遮罩会挡住一块块出来的模型）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    partialSite();
+    const seen: string[] = [];
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => {
+      // 记录源在生成期间发的逐根进度：补齐时不理会
+      for (const listener of progressListeners) listener({ refno, root: `${refno}_x`, done: 1, total: 3, stage: 'generate-start' });
+      seen.push(`${gen.statusMessage.value} | ${gen.currentRefno.value} | modal=${gen.showProgressModal.value} | ${gen.currentIndex.value}/${gen.totalCount.value}`);
+      return generated(refno, refno === '24381_536' ? NEW_536 : NEW_621, { generationRoots: Array.from({ length: refno === '24381_536' ? 8 : 7 }, (_, i) => `${refno}_${i}`) }) as never;
+    });
+
+    await gen.showModelByRefno(SITE, { flyTo: false });
+    // 状态条一行会截断：第几块、已生成多少在前；块的名字在第二行
+    expect(seen).toEqual([
+      '正在生成第 1/2 块 · 已生成 0 / 约 15 个单元 | /1RCV-SUPP-XX · 24381_536 | modal=false | 1/2',
+      '正在生成第 2/2 块 · 已生成 8 / 约 15 个单元 | /1RCV-RACK-XX · 24381_621 | modal=false | 2/2',
+    ]);
+  });
+
+  it('SITE 没有模型的部分超过 20 个单元：已有的先显示出来再问；选「只显示已有的」不生成，行上留「生成」；点「生成」再问一次后补齐', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    useTree({
+      ...TREE,
+      '24381_536': [child('24381_537', 'STRU', 12), child('24381_549', 'REST', 3)],
+      '24381_621': [child('24381_622', 'REST', 9), child('24381_631', 'STRU', 3)],
+    });
+    partialSite();
+    let loadsBeforeAsking = -1;
+    openChoiceMock.mockImplementationOnce(async () => {
+      loadsBeforeAsking = loadInstancesMock.mock.calls.length;
+      return null;
+    });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    expect(loadsBeforeAsking).toBe(1);
+    expect(openChoiceMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('还有约 27 个单元没有模型，分在 2 个 ZONE 里（已有的模型已经显示）'),
+      choices: [{ id: 'generate', text: '生成并显示' }],
+      cancelText: '只显示已有的',
+    }));
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+    expect(pendingGenerationFill(SITE)).toMatchObject({ chunks: 2, units: 27, exact: false, reason: 'declined' });
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('只显示了已有的模型，还有约 27 个单元没有模型；行上点「生成」可以补齐'),
+    }));
+
+    // 已加载的节点再点眼睛只是恢复可见，不会再问
+    expect(await gen.showModelByRefno(SITE)).toBe(true);
+    expect(openChoiceMock).toHaveBeenCalledTimes(1);
+
+    // 行上的「生成」：显式补齐，不走「已在场景就跳过」的捷径；同样先确认
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => generated(refno, refno === '24381_536' ? NEW_536 : NEW_621) as never);
+    expect(await gen.showModelByRefno(SITE, { flyTo: false, fill: true })).toBe(true);
+    expect(openChoiceMock).toHaveBeenCalledTimes(2);
+    expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual(['24381_536', '24381_621']);
+    expect(pendingGenerationFill(SITE)).toBeNull();
+  });
+
+  it('库里有成套模型（已初始化）时，SITE 下没有记录的 ZONE 不去生成：多半本来就没有几何，或归「更新到最新」管', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
+    partialSite();
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(openChoiceMock).not.toHaveBeenCalled();
+    expect(treeChildrenMock).not.toHaveBeenCalled();
+    expect(pendingGenerationFill(SITE)).toBeNull();
+  });
+
+  it('某一块先回 504 再成功：隔一会儿用同样的请求再问，不要人再点，最后装齐', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    partialSite();
+    const waits: string[] = [];
+    const { watch } = await import('vue');
+    const stopWatching = watch(gen.statusMessage, (message) => { if (message.includes('自动再问')) waits.push(message); }, { flush: 'sync' });
+    const answers: Record<string, unknown[]> = {
+      '24381_536': [timedOut('24381_536'), timedOut('24381_536'), generated('24381_536', NEW_536)],
+      '24381_621': [generated('24381_621', NEW_621)],
+    };
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => answers[refno]!.shift() as never);
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    stopWatching();
+    expect(waits).toHaveLength(2);
+    expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual(['24381_536', '24381_536', '24381_536', '24381_621']);
+    expect(v1Source.records.generateThenCollect.mock.calls.every((call) => ((call as unknown[])[1] as { force: boolean }).force === false)).toBe(true);
+    expect(waits[0]).toBe('第 1/2 块：后端还在后台生成，0 秒后自动再问（已问 1 次）· 已生成 0 / 约 15 个单元');
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([EXISTING, NEW_536, NEW_621]);
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({ level: 'success', message: expect.stringContaining('已生成并显示 2 块（3 个构件）') }));
+    expect(pendingGenerationFill(SITE)).toBeNull();
+  });
+
+  it('等到预算用完后端还没做完：这一块留着，其余照常；行上留「生成」，点了接着问那一块', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    generationResumeTiming.budgetMs = -1;
+    partialSite();
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => (
+      refno === '24381_536' ? timedOut(refno) : generated(refno, NEW_621)
+    ) as never);
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('已生成并显示 1 块（1 个构件）；1 块后端还没做完（/1RCV-SUPP-XX），稍后接着生成'),
+    }));
+    expect(pendingGenerationFill(SITE)).toMatchObject({ chunks: 1, units: 8, reason: 'pending' });
+
+    v1Source.records.generateThenCollect.mockClear();
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => generated(refno, NEW_536) as never);
+    // 上一次已经生成的 ZONE 这回有记录了，不在「没有记录的范围」里
+    visibleInstsMock.mockResolvedValue({
+      success: true, refno: SITE, refnos: [...EXISTING, ...NEW_621], empty_scopes: ['24381_179753', '24381_536'],
+    });
+    expect(await gen.showModelByRefno(SITE, { flyTo: false, fill: true })).toBe(true);
+    expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual(['24381_536']);
+    expect(pendingGenerationFill(SITE)).toBeNull();
+  });
+
+  it('一根失败：其余照常显示，失败的那根在结果里点名；这一块本页面里不再自动重发', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    partialSite();
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => (refno === '24381_536'
+      ? generated(refno, ['24381_550'], { failedRoots: [{ root: '24381_537', error: 'generation_failed: 截面数据损坏', retryable: false }] })
+      : generated(refno, NEW_621)) as never);
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([EXISTING, ['24381_550'], NEW_621]);
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'warning',
+      message: `[警告] ${SITE}：已生成并显示 2 块（2 个构件）；1 个生成根失败：24381_537（generation_failed: 截面数据损坏）`,
+    }));
+    expect(addLogMock).toHaveBeenCalledWith('warning', expect.stringContaining('补齐结束：已生成并显示 2 块（2 个构件）；1 个生成根失败：24381_537'));
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+    // 不可重试的失败不算「之后接着做」
+    expect(pendingGenerationFill(SITE)).toBeNull();
+  });
+
+  it('SITE 一个模型都没有（每个 ZONE 都查空）：分块生成，第一块出来就飞一次，全部做完记为已加载并对整体再对一次焦', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    visibleInstsMock
+      .mockResolvedValueOnce({ success: true, refno: SITE, refnos: [], empty_scopes: ['24381_179753', '24381_536', '24381_621', SITE] })
+      .mockResolvedValue({ success: true, refno: SITE, refnos: [...NEW_536, ...NEW_621], empty_scopes: ['24381_179753'] });
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => generated(refno, refno === '24381_536' ? NEW_536 : NEW_621) as never);
+    let flightsAfterFirstChunk = -1;
+    loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => {
+      if (refnos.join() === NEW_621.join()) flightsAfterFirstChunk = viewer.cameraFlight.flyTo.mock.calls.length;
+      return loaderResult(refnos.length, refnos.length * 2);
+    });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: true })).toBe(true);
+    // 节点自己不发生成：按 ZONE 分块
+    expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual(['24381_536', '24381_621']);
+    // 分块时已经装过的不再装第二遍
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([NEW_536, NEW_621]);
+    expect(flightsAfterFirstChunk).toBe(1);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledTimes(2);
+    expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+    expect(noteLoadedNodeMock).toHaveBeenCalledWith(SITE, 7997, expect.anything());
+    expect(gen.lastLoadDebug.value?.result).toEqual({ loadedRefnos: 3, skippedRefnos: 0, loadedObjects: 6 });
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'success', message: `[成功] ${SITE}：已生成并显示 2 块（3 个构件）` }));
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'success', message: expect.stringContaining('已从 gen-model 加载 6 个几何实例') }));
+  });
+
+  it('生成到一半这个节点被隐藏了：不再发后面的块，已经显示的留着；行上留「生成」', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    partialSite();
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => {
+      // 第一块生成期间，人把这个节点隐藏了（refno 级可见态被改成 false）
+      viewer.scene.objects[EXISTING[0]!] = { visible: false };
+      return generated(refno, NEW_536) as never;
+    });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('已停止，1 块没有生成'),
+    }));
+    expect(pendingGenerationFill(SITE)).toMatchObject({ chunks: 1, units: 7, reason: 'stopped' });
+    // 告诉发起显示的一方（模型树的眼睛）：这次显示被撤回了，收尾时别再把节点置回可见
+    expect(consumeGenerationFillWithdrawn(SITE)).toBe(true);
+  });
+
+  it('「停」的口子：分块生成进行中被叫停，后面的块不再发（界面上的按钮这一轮没有接）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    partialSite();
+    v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => {
+      expect(requestStopGenerationFill(SITE)).toBe(true);
+      return generated(refno, NEW_536) as never;
+    });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+    expect(pendingGenerationFill(SITE)).toMatchObject({ reason: 'stopped' });
+    // 结束之后不再算进行中；叫停不等于隐藏，节点照常显示
+    expect(requestStopGenerationFill(SITE)).toBe(false);
+    expect(consumeGenerationFillWithdrawn(SITE)).toBe(false);
+  });
+
+  it('点「生成」但已经没有可补的：说一声，撤掉行上的「生成」', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const { notePendingGenerationFill } = await import('@/composables/generationFillState');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    notePendingGenerationFill({ root: SITE, dbnum: 7997, chunks: 1, units: 8, exact: false, reason: 'pending' });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: SITE, refnos: EXISTING, empty_scopes: ['24381_179753'] });
+
+    expect(await gen.showModelByRefno(SITE, { flyTo: false, fill: true })).toBe(true);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({ level: 'info', message: `[提示] ${SITE}：没有需要生成的部分` }));
+    expect(pendingGenerationFill(SITE)).toBeNull();
+  });
+
+  it('重载 / 右键重新生成不走补齐', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    partialSite();
+    v1Source.records.invalidateRoot.mockReturnValue([]);
+
+    expect(await gen.showModelByRefno(SITE, { refresh: true })).toBe(true);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(treeChildrenMock).not.toHaveBeenCalled();
   });
 });

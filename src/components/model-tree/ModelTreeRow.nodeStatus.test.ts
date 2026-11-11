@@ -220,3 +220,71 @@ describe('ModelTreeRow 节点一级状态', () => {
     }
   });
 });
+
+describe('ModelTreeRow 行上的「生成」（方案 2026-11-10 B3：节点下还有没有模型的部分）', () => {
+  const fillButton = (host: HTMLElement) => host.querySelector('[data-testid="model-tree-node-fill"]') as HTMLButtonElement | null;
+
+  it('没有待补齐的部分：不出按钮', async () => {
+    const state = await import('@/composables/generationFillState');
+    state.__resetGenerationFillStateForTests();
+    const { host, unmount } = await mountRow(SITE);
+    try {
+      expect(fillButton(host)).toBeNull();
+    } finally {
+      unmount();
+    }
+  });
+
+  it('上次选了「只显示已有的」：行上有「生成」，提示写明还有多少；点了交出 node-action(generate)；和「重载」可以同时在', async () => {
+    const state = await import('@/composables/generationFillState');
+    state.__resetGenerationFillStateForTests();
+    state.notePendingGenerationFill({ root: '9304_2', dbnum: 1112, chunks: 2, units: 27, exact: false, reason: 'declined' });
+    nodeViewMock.mockReturnValue(RELOADABLE);
+    const { host, action, onNodeAction, unmount } = await mountRow(SITE);
+    try {
+      const button = fillButton(host)!;
+      expect(button.textContent?.trim()).toBe('生成');
+      expect(button.disabled).toBe(false);
+      expect(button.getAttribute('title')).toContain('还有约 27 个单元没有模型（分在 2 块里），上次选了先不生成');
+      button.click();
+      expect(onNodeAction).toHaveBeenCalledWith('9304_2', 'generate');
+      expect(action()?.textContent?.trim()).toBe('重载');
+    } finally {
+      unmount();
+      state.__resetGenerationFillStateForTests();
+    }
+  });
+
+  it('正在补齐：按钮写「生成中」并禁用；补齐完按钮消失', async () => {
+    const state = await import('@/composables/generationFillState');
+    state.__resetGenerationFillStateForTests();
+    state.notePendingGenerationFill({ root: '9304_2', dbnum: 1112, chunks: 1, units: 8, exact: false, reason: 'pending' });
+    const session = state.beginGenerationFill('9304_2');
+    const { host, unmount } = await mountRow(SITE);
+    try {
+      expect(fillButton(host)?.textContent?.trim()).toBe('生成中');
+      expect(fillButton(host)?.disabled).toBe(true);
+      expect(fillButton(host)?.getAttribute('data-busy')).toBe('true');
+      session.end();
+      state.clearPendingGenerationFill('9304_2');
+      await nextTick();
+      expect(fillButton(host)).toBeNull();
+    } finally {
+      unmount();
+      state.__resetGenerationFillStateForTests();
+    }
+  });
+
+  it('幽灵行不出「生成」', async () => {
+    const state = await import('@/composables/generationFillState');
+    state.__resetGenerationFillStateForTests();
+    state.notePendingGenerationFill({ root: '9304_2', dbnum: 1112, chunks: 1, units: 8, exact: false, reason: 'pending' });
+    const { host, unmount } = await mountRow(SITE, { ghost: true });
+    try {
+      expect(fillButton(host)).toBeNull();
+    } finally {
+      unmount();
+      state.__resetGenerationFillStateForTests();
+    }
+  });
+});

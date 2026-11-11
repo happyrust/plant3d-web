@@ -76,6 +76,9 @@ const FRONTEND_READS = {
     status: true, generation_root: true, generation_roots: true, scope_kind: true, unresolved_count: true,
     unresolved: true, model_available: true, model_instance_count: true, generated_instance_count: true,
     snapshot_epoch: true, publication_status: true,
+    // 范围生成的逐根账（分块补齐据此点名失败根，方案 2026-11-10 B3）
+    generation_root_sesnos: true, generation_root_count: true, cached_root_count: true, generated_root_count: true,
+    failed_root_count: true, failed_roots: true,
   } satisfies KeysOf<ModelGenerateResponse>,
   records: {
     source: true, items: true, total: true, truncated: true, next_cursor: true, snapshot_epoch: true,
@@ -99,6 +102,7 @@ const NOT_IN_SNAPSHOT: Partial<Record<Part, Record<string, string>>> = {
   },
   generate: {
     snapshot_epoch: 'read-through 形态下 handler 在拼好的回执上追加，快照只钉拼装那一段',
+    generation_root_sesnos: '2026-11-10 gen-model ADR-099 新加的一格（规范 §4.5），快照录在它之前；分组回执本来也不带',
   },
   records: {
     generation_roots: '批量请求才回显，分组快照是单根请求',

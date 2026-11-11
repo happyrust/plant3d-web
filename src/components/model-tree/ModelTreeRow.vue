@@ -9,6 +9,7 @@ import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 
 import { rvmBadgeTitle, type IncrementalRoot } from '@/components/rvm-check/incrementalRvmTargets';
 import { type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
+import { pendingGenerationFillView } from '@/composables/generationFillState';
 import { updateToLatestView } from '@/composables/updateToLatestState';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
@@ -51,7 +52,7 @@ const emit = defineEmits<{
   (e: 'context', id: string, ev: MouseEvent): void;
   (e: 'rvm-status', refno: string): void;
   /** 已加载节点行上的动作：`update` = 更新到最新（落后时），`reload` = 重载（库里的模型比本页装的新时） */
-  (e: 'node-action', id: string, action: 'update' | 'reload'): void;
+  (e: 'node-action', id: string, action: 'update' | 'reload' | 'generate'): void;
 }>();
 
 const INDENT_PX = 20;
@@ -227,6 +228,8 @@ function onStatusClick() {
   else if (nodeStatus.value) nodeStatusStore.recheck(props.row.id);
   else if (statusDbnum.value !== null) dbStatusStore.refresh(statusDbnum.value);
 }
+/** 这个节点下还有没有模型的部分（方案 B3：上次选了只显示已有的 / 后端没做完 / 中途停了）：行上给「生成」接着补齐 */
+const pendingFill = computed(() => (props.ghost ? null : pendingGenerationFillView(props.row.id)));
 /** 这个库的「更新到最新」走到哪了（方案 C3）：在排队 / 在跑时按钮写「更新中」并禁用，提示里是进度或上一次没成的原因 */
 const updateState = computed(() => (
   nodeStatus.value?.action === 'update' && statusDbnum.value !== null ? updateToLatestView(statusDbnum.value) : null
@@ -335,6 +338,16 @@ onUnmounted(() => {
         {{ diffCount }}
       </span>
 
+      <button v-if="!ghost && pendingFill" type="button"
+        class="inline-flex h-5 shrink-0 items-center rounded border border-emerald-600/50 px-1 text-[10px] leading-4 text-emerald-700 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-70"
+        :title="pendingFill.title"
+        :disabled="pendingFill.busy"
+        data-testid="model-tree-node-fill"
+        :data-busy="pendingFill.busy ? 'true' : undefined"
+        @mousedown.stop
+        @click.stop="emit('node-action', row.id, 'generate')">
+        {{ pendingFill.label }}
+      </button>
       <button v-if="!ghost && nodeStatus?.action" type="button"
         class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4 disabled:cursor-wait disabled:opacity-70"
         :class="nodeStatus.action === 'update'
