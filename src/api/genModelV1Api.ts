@@ -535,7 +535,11 @@ export type EleTreeNodeDto = {
   op?: unknown;
   mod_cnt?: number | null;
   children_updated?: unknown;
-  status_code?: number | null;
+  /**
+   * gen-model 的 `EleTreeNode.status_code` 是 `Option<String>`
+   * （`vendor/old-aios-core/src/pdms_types.rs`），不是数字。
+   */
+  status_code?: string | null;
 };
 
 export type TreeRootsResponse = {
@@ -1387,7 +1391,7 @@ export type TaskUnitDto = {
   message?: string | null;
   old_owner?: string | null;
   new_owner?: string | null;
-  /** `regen | transform`（ADR-066：整根重算 / 刚体前移便宜路） */
+  /** `regen | transform | unit`（整根重算 / ADR-066 刚体前移便宜路 / ADR-080 单元级发布） */
   kind?: string;
 };
 
