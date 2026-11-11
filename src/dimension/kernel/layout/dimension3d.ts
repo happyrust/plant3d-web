@@ -135,10 +135,22 @@ export function layoutDimension3d(
     endScreen[1] - startScreen[1],
   );
   const labelWidthPx = font.getWidth(idealHeightPx, label);
+  // The short-line rule measures the line against the value at the readable
+  // cap, as the flat presentation does (`resolveTextHeightPx`), not at the
+  // text's true size: 3D text grows with the zoom exactly like its line, so
+  // against the true-size width a dimension shorter than its own value (a
+  // 40 mm run under 35 mm text) fails the rule at every distance and can
+  // never be brought on screen — level of detail turns into deletion (live
+  // sweep, 2026-11-11). Below the cap the two widths are the same, so mid
+  // and far views are untouched; on a close-up the line outgrows the capped
+  // width and the dimension appears, heads and value outside (`fits` below).
+  const lodLabelWidthPx = idealHeightPx > theme.sourceTextHeightMaxPx
+    ? font.getWidth(theme.sourceTextHeightMaxPx, label)
+    : labelWidthPx;
   if (
     input.lod?.hideShort
     && label.length > 0
-    && lodShortLine(lineLengthPx, labelWidthPx, theme, input.lod.tier)
+    && lodShortLine(lineLengthPx, lodLabelWidthPx, theme, input.lod.tier)
   ) {
     return hidden('short-line');
   }

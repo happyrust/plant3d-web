@@ -244,6 +244,34 @@ describe('layoutDimension3d', () => {
       .toEqual({ formattedLabel: '1000', lodHidden: 'short-line' });
   });
 
+  it('keeps the short-line rule a matter of distance: a run shorter than its own true-size value appears on a close-up', () => {
+    // 10 mm run under 27 mm text: the value ('1000', 0.7 cap heights wide in the test font = 18.9 mm) is
+    // wider than the line at true size, so against the true-size width the 0.8 ratio fails at every zoom.
+    const short: ExplicitDimension3dInput = { ...spec, to: [0.01, 0, 0] };
+    const record: ExplicitLayoutInput = { ...input, dimension3d: short };
+    // Far (100 px/m): 1 px line against the 13 px floor text (9.1 px wide).
+    expect(layoutDimension3d(record, short, context()).derived.lodHidden).toBe('short-line');
+    // Text at true size above the 18 px cap (1000 px/m, 27 px): the line (10 px) is measured against the
+    // value at the cap (12.6 px wide, 0.8 of it = 10.08 px) — still too short, by a hair.
+    expect(layoutDimension3d(record, short, context(1000)).derived.lodHidden).toBe('short-line');
+    // Close-up (2000 px/m): 20 px line. Against the true-size value (37.8 px) it would stay hidden for good.
+    const near = layoutDimension3d(record, short, context(2000));
+    expect(near.derived.lodHidden).toBeUndefined();
+    expect(sceneGlyph(near).capHeightPx).toBeCloseTo(54, 6);
+    // It is drawn the way a run too short for its value is: heads and value outside.
+    expect(sceneLines(near, 'dimension')).toHaveLength(3);
+    expect(sceneGlyph(near).frame!.origin[0]).toBeGreaterThan(0.01);
+
+    // Every tier keeps its own ratio: a detail run needs 1.5 label widths (18.9 px at the cap).
+    const detail: ExplicitLayoutInput = { ...record, lod: { tier: 'detail', hideShort: true } };
+    expect(layoutDimension3d(detail, short, context(1800)).derived.lodHidden).toBe('short-line');
+    expect(layoutDimension3d(detail, short, context(2000)).derived.lodHidden).toBeUndefined();
+
+    // Below the cap nothing changes: text at true size (15 px at 555 px/m, 10.5 px wide) still hides a
+    // 5.55 px line, as before.
+    expect(layoutDimension3d(record, short, context(555)).derived.lodHidden).toBe('short-line');
+  });
+
   it('falls back to view-plane text when the text plane is edge-on', () => {
     // Pipe along the view ray: the baseline projects to a point.
     const edgeOn: ExplicitDimension3dInput = {
