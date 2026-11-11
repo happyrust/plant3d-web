@@ -207,12 +207,14 @@ const DBNUM_ROWS_UNINITIALIZED = [
   { dbnum: 7997, db_type: 'DESI', initialized: false, applied_sesno: 0, model_sesno: 0 },
 ];
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   progressListeners.clear();
   memberListeners.clear();
   __resetGenerationFillStateForTests();
   __resetModelLoadSessionsForTests();
+  // 「每个节点上一次装了哪些构件」是模块级的（跨实例共用）：每个用例从空的开始
+  (await import('./useModelGeneration')).__resetLoadedRefnosByRootForTests();
   // 缺省不自动接着问（一发定论）：要验「超时自动接续」的用例自己把预算放开、把间隔调成 0
   generationResumeTiming.delaysMs = [0];
   generationResumeTiming.budgetMs = -1;
@@ -1861,6 +1863,53 @@ describe('showModelByRefno 重载（refresh）', () => {
     expect(evictMock).toHaveBeenCalledTimes(1);
     expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, ['24384_24780'], { release: true });
     expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['24384_24780'], false);
+  });
+
+  it('重载容器节点（SITE / ZONE）：上一次装过、最新记录里已经没有的构件从场景撤下——记录缓存和场景索引的属主链都认不到容器，靠「这个节点上一次装了什么」来比', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    // 2026-11-11 真机：8000 的测试 SITE 下删掉一台设备（数据批次跑完）再重载，那台设备还留在屏幕上
+    const site = '24384_26547';
+    typeInfoMock.mockResolvedValue({ success: true, refno: site, noun: 'SITE', owner_refno: null, owner_noun: null });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: site, refnos: ['24384_26549', '24384_26716'] });
+    expect(await gen.showModelByRefno(site)).toBe(true);
+    expect(evictMock).not.toHaveBeenCalled();
+
+    // 记录缓存按生成根归档、场景索引的属主链只到生成根：两边对「SITE 下面有谁」都答空
+    v1Source.records.invalidateRoot.mockReturnValue([site]);
+    unitRefnosMock.mockReturnValue([]);
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: site, refnos: ['24384_26549'] });
+    expect(await gen.showModelByRefno(site, { refresh: true, flyTo: false })).toBe(true);
+
+    expect(evictMock).toHaveBeenCalledTimes(1);
+    expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, ['24384_26716'], { release: true });
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['24384_26716'], false);
+    expect(gen.isModelActuallyLoaded(site)).toBe(true);
+
+    // 再重载一次（记录没变）：没有要撤的了
+    evictMock.mockClear();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: site, refnos: ['24384_26549'] });
+    expect(await gen.showModelByRefno(site, { refresh: true, flyTo: false })).toBe(true);
+    expect(evictMock).not.toHaveBeenCalled();
+  });
+
+  it('节点在一份 useModelGeneration 里装、在另一份里重载（模型树装的，更新提示从查看器那一份重载）：照样撤下被删的构件', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const tree = useModelGeneration({ viewer, db_num: 8000 });
+    const viewerSide = useModelGeneration({ viewer, db_num: 8000 });
+    const zone = '24384_26548';
+    typeInfoMock.mockResolvedValue({ success: true, refno: zone, noun: 'ZONE', owner_refno: null, owner_noun: null });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: zone, refnos: ['24384_26549', '24384_26716'] });
+    expect(await tree.showModelByRefno(zone)).toBe(true);
+
+    v1Source.records.invalidateRoot.mockReturnValue([zone]);
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: zone, refnos: ['24384_26549'] });
+    expect(await viewerSide.showModelByRefno(zone, { refresh: true, flyTo: false })).toBe(true);
+    expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, ['24384_26716'], { release: true });
   });
 
   it('K09 收集没收齐时不对差集下结论，一个成员也不撤', async () => {

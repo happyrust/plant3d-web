@@ -114,6 +114,18 @@ const progressiveRoots = new Set<string>();
 /** 生成到一半被叫停之后，隔多久再问行上的状态（在飞的那一块后端照常算完，多数是几秒的事） */
 const STOPPED_FILL_RECHECK_DELAYS_MS: readonly number[] = [5_000, 20_000];
 
+/**
+ * 每个已显示的节点上一次装进场景的构件（`a_b`）。重载时拿它和最新记录比：上一次有、这一次没有的，就是数据批次删掉的，
+ * 要从场景撤下。装载器的属主链只到生成根（BRAN / EQUI），认不出一个构件在不在某个 SITE / ZONE 下面，所以容器节点的
+ * 重载要靠这一份（2026-11-11：真机上删掉一台设备再重载 SITE，那台设备还留在屏幕上）。
+ * 跨 `useModelGeneration` 实例共用：模型树和查看器各有一份实例，装的是同一个场景（节点可能在这一份里装、在另一份里重载）。
+ */
+const loadedRefnosByRoot = new Map<string, Set<string>>();
+
+export function __resetLoadedRefnosByRootForTests(): void {
+  loadedRefnosByRoot.clear();
+}
+
 // 已加载节点表判「模型水位之后谁改到了这个节点」要问节点版本表（`node/versions?since_sesno=`）：在这里接上数据源。
 provideLoadedNodeChangeQuery(async ({ dbnum, refno, sinceSesno, signal }) => {
   const table = await getModelSource().versions.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal });
@@ -838,6 +850,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     anyViewer?.scene?.setObjectsVisible?.(targets, false);
     if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     loadedRoots.delete(root);
+    loadedRefnosByRoot.delete(root);
     forgetLoadedNode(root);
     statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
     progress.value = 100;
@@ -1100,7 +1113,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         ).filter(Boolean);
         // `invalidateRoot` 连 `leavesByRoot` 一起删了，光靠它算差集，在「上一次重载没收齐」或「服务换代清了缓存」
         // 时会恒为空，被删成员就永远留在场景里。场景索引是另一份独立事实（DTX 运行时按属主链记得的 refno），并进来当基线。
-        previousLeaves = uniqStrings([...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, normalizedRoot)]);
+        // 这两份都只认得到生成根为止的属主链：节点是容器（SITE / ZONE）时，再并上「这个节点上一次装了哪些构件」。
+        previousLeaves = uniqStrings([
+          ...previousLeaves,
+          ...resolveDtxRefnosByUnitRefno(dbno, normalizedRoot),
+          ...(loadedRefnosByRoot.get(normalizedRoot) ?? []),
+        ]);
       }
       // 根的 typeInfo 只依赖根：与范围查询并行发出，定装载范围时再取
       const rootTypeInfo = Promise.resolve().then(() => getModelSource().attributes.typeInfo(normalizedRoot));
@@ -1567,6 +1585,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           });
           const summary = await runFill(plan, true, probeRefno);
           settleFill(plan, summary);
+          // 补出来的构件也算这个节点装过的（重载时比对用）
+          const known = loadedRefnosByRoot.get(normalizedRoot);
+          if (known) for (const key of fillLoaded) known.add(key);
           // 生成不动库的水位，行上的状态不会自己重问：补完叫一次（部分生成 → 最新）
           recheckLoadedNode(normalizedRoot);
           const report = describeGenerationFillSummary(summary);
@@ -1788,6 +1809,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 收集没完成（409 / 预算外 / 出错）：已取得的构件照画，但这个节点不记进 loadedRoots。
       // 记了就会被 genuinelyLoaded 短路。记录源同样不备忘未收齐的结果，下一次普通显示会再查。
       const collectionIncomplete = scopeIncomplete !== null;
+      // 记下这个节点这一次装了哪些构件（收齐了才记）：下一次重载拿它和最新记录比，找出数据批次删掉的
+      if (!collectionIncomplete && (v1Result.loadedObjects > 0 || v1Result.skippedRefnos > 0)) {
+        loadedRefnosByRoot.set(normalizedRoot, new Set(loadRefnos));
+      }
       if (v1Result.loadedObjects > 0) {
         if (collectionIncomplete) {
           statusMessage.value = regenerate ? `重新生成部分完成 (gen-model，${incompleteTail})` : `部分加载 (gen-model，${incompleteTail})`;
@@ -1858,6 +1883,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 这一次才记成「已加载」的（先显示已有的、再补齐时被叫停）一起撤掉；点之前就已加载的节点照旧算已加载
         if (markedLoadedHere && !genuinelyLoaded) {
           loadedRoots.delete(normalizedRoot);
+          loadedRefnosByRoot.delete(normalizedRoot);
           forgetLoadedNode(normalizedRoot);
         }
         // 生成到一半被叫停：已经生成的留在后端，行上的状态跟着重问一次（未生成 → 部分生成）。
