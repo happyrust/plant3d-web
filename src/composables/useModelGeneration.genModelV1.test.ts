@@ -202,6 +202,11 @@ const DBNUM_ROWS_WITH_MODEL = [
   { dbnum: 7997, db_type: 'DESI', initialized: true, applied_sesno: 447, model_sesno: 447 },
   { dbnum: 8000, db_type: 'DESI', initialized: true, applied_sesno: 1143, model_sesno: 1143 },
 ];
+/** `/dbnums` 行：有成套模型，但库文件比水位新（有人保存过、还没更新进来）——这种库里可能有水位之后才建的单元 */
+const DBNUM_ROWS_FILE_AHEAD = [
+  { dbnum: 7997, db_type: 'DESI', initialized: true, file_latest_sesno: 748, applied_sesno: 738, model_sesno: 738, model_verdict: 'in_sync' },
+  { dbnum: 8000, db_type: 'DESI', initialized: true, file_latest_sesno: 1146, applied_sesno: 1143, model_sesno: 1143, model_verdict: 'in_sync' },
+];
 /** `/dbnums` 行：未初始化（数据水位没立，模型按需生成） */
 const DBNUM_ROWS_UNINITIALIZED = [
   { dbnum: 7997, db_type: 'DESI', initialized: false, applied_sesno: 0, model_sesno: 0 },
@@ -2442,10 +2447,30 @@ describe('showModelByRefno 模型资产补齐：预检、确认、分块生成�
       }));
     });
 
-    it('库里有成套模型的库：SITE 下没有记录的 ZONE 补不补听后端的——说没有要生成的单元就不补，只问节点自己一次', async () => {
+    it('库的三枚水位对齐、节点已有模型显示出来：显示不为预检多等一发（缺单元只可能是上次失败的，行上的状态会说）；人点「生成」时照问', async () => {
       const { useModelGeneration } = await import('./useModelGeneration');
       const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
-      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
+      dbnumRowsMock.mockReturnValue([
+        { dbnum: 7997, db_type: 'DESI', initialized: true, file_latest_sesno: 447, applied_sesno: 447, model_sesno: 447, model_verdict: 'in_sync' },
+      ]);
+      useFacts({ [SITE]: facts(40, 2), '24381_179753': facts(0, 0), '24381_536': facts(7, 2), '24381_621': facts(6, 0) });
+      partialSite();
+
+      expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+      expect(generationFactsMock).not.toHaveBeenCalled();
+      expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+
+      // 行上的「生成」（显式补齐）：问预检，补上后端说缺的那一块
+      v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => generated(refno, NEW_536) as never);
+      expect(await gen.showModelByRefno(SITE, { flyTo: false, fill: true })).toBe(true);
+      expect(generationFactsMock).toHaveBeenCalledWith(SITE);
+      expect(v1Source.records.generateThenCollect.mock.calls).toEqual([['24381_536', FILL_REQUEST]]);
+    });
+
+    it('库里有成套模型、库文件比水位新的库：SITE 下没有记录的 ZONE 补不补听后端的——说没有要生成的单元就不补，只问节点自己一次', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
       useFacts({ [SITE]: facts(3362, 0) });
       partialSite();
 
@@ -2456,10 +2481,10 @@ describe('showModelByRefno 模型资产补齐：预检、确认、分块生成�
       expect(pendingGenerationFill(SITE)).toBeNull();
     });
 
-    it('库里有成套模型的库：后端说某个没有记录的 ZONE 确有单元没生成——照样补（原来分不清，一律不补）', async () => {
+    it('库里有成套模型、库文件比水位新的库：后端说某个没有记录的 ZONE 确有单元没生成——照样补（原来分不清，一律不补）', async () => {
       const { useModelGeneration } = await import('./useModelGeneration');
       const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
-      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
+      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
       useFacts({ [SITE]: facts(40, 7), '24381_179753': facts(0, 0), '24381_536': facts(7, 7), '24381_621': facts(6, 0) });
       partialSite();
       v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => generated(refno, NEW_536) as never);
@@ -2544,7 +2569,7 @@ describe('showModelByRefno 模型资产补齐：预检、确认、分块生成�
     it('缺的单元归「更新到最新」管（库有水位、在更新范围里、库文件比水位新）：已有的照常显示，不按需生成，说明点行上的「更新」', async () => {
       const { useModelGeneration } = await import('./useModelGeneration');
       const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
-      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
+      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
       useFacts({ [SITE]: facts(2, 1, { preferUpdate: true }) });
       visibleInstsMock.mockResolvedValue({ success: true, refno: SITE, refnos: EXISTING, empty_scopes: [] });
 
@@ -2562,7 +2587,7 @@ describe('showModelByRefno 模型资产补齐：预检、确认、分块生成�
     it('一个模型都没有、缺的又归「更新到最新」管：不生成，照实说，行上登记这个节点（给的是「更新」）', async () => {
       const { useModelGeneration } = await import('./useModelGeneration');
       const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
-      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
+      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
       typeInfoMock.mockResolvedValue({ success: true, refno: '24384_30000', noun: 'ZONE' });
       useFacts({ '24384_30000': facts(3, 3, { preferUpdate: true }) });
       visibleInstsMock.mockResolvedValue({ success: true, refno: '24384_30000', refnos: [], empty_scopes: ['24384_30000'] });
@@ -2573,6 +2598,59 @@ describe('showModelByRefno 模型资产补齐：预检、确认、分块生成�
         message: '[提示] 24384_30000：有 3 个单元还没有模型，是库的模型水位之后才有的：点行上的「更新」让后端把这个库更新到最新',
       }));
       expect(noteNodeWithoutModelMock).toHaveBeenCalledWith('24384_30000', 8000);
+    });
+
+    it('已有的模型画出来之后顺带问预检的那一会儿，行上的转圈不能点停（这时点停会把刚装好的收回去）；确有要补的、开始生成之后才又能停', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      partialSite();
+      const seen: { phase: string; stoppable: boolean | undefined; stopAccepted?: boolean }[] = [];
+      generationFactsMock.mockImplementation(async (refno: string) => {
+        if (refno === SITE) {
+          // 预检在路上：这时人去点行尾的转圈
+          seen.push({ phase: 'precheck', stoppable: modelLoadSessionView(SITE)?.stoppable, stopAccepted: requestStopModelLoad(SITE) });
+          return facts(21, 7);
+        }
+        return refno === '24381_536' ? facts(7, 7) : facts(0, 0);
+      });
+      v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => {
+        seen.push({ phase: 'generate', stoppable: modelLoadSessionView(SITE)?.stoppable });
+        return generated(refno, NEW_536) as never;
+      });
+
+      expect(await gen.showModelByRefno(SITE, { flyTo: false })).toBe(true);
+      expect(seen).toEqual([
+        { phase: 'precheck', stoppable: false, stopAccepted: false },
+        { phase: 'generate', stoppable: true },
+      ]);
+      // 那一下没有被当成「停」：已有的照常留着，缺的那一块也补上了
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+      expect(v1Source.records.generateThenCollect.mock.calls).toEqual([['24381_536', FILL_REQUEST]]);
+    });
+
+    it('预检迟迟不回来：已有的模型画出来之后最多等 3 秒就收口，不让显示一直挂着（这一次按过渡办法走）', async () => {
+      vi.useFakeTimers();
+      try {
+        const { useModelGeneration } = await import('./useModelGeneration');
+        const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+        dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
+        partialSite();
+        generationFactsMock.mockImplementation(() => new Promise(() => {}));
+        let settled: boolean | null = null;
+        const showing = gen.showModelByRefno(SITE, { flyTo: false }).then((ok) => { settled = ok; });
+        await vi.advanceTimersByTimeAsync(2_900);
+        expect(settled).toBeNull();
+        expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(200);
+        await showing;
+        expect(settled).toBe(true);
+        // 库里有成套模型：过渡办法不补没有记录的 ZONE
+        expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+        expect(gen.isModelActuallyLoaded(SITE)).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('服务端没有那个接口（回 null）：照旧沿树数、数字写「约」，不登记没有模型的节点', async () => {

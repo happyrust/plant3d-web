@@ -6,6 +6,7 @@ import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
 import type { DbnumRow } from '@/api/genModelV1Api';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
+import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
 import {
   chunkResultFromCollect,
   describeGenerationConfirm,
@@ -113,6 +114,22 @@ const progressiveRoots = new Set<string>();
 
 /** 生成到一半被叫停之后，隔多久再问行上的状态（在飞的那一块后端照常算完，多数是几秒的事） */
 const STOPPED_FILL_RECHECK_DELAYS_MS: readonly number[] = [5_000, 20_000];
+
+/** 已有的模型画出来之后顺带问一次后端的生成预检，最多等这么久（后端第一次算一个大 SITE 要一两秒；平时几毫秒） */
+const PRECHECK_AFTER_SHOWN_TIMEOUT_MS = 3_000;
+/** 一个模型都没有、要生成之前问预检，最多等这么久 */
+const PRECHECK_BEFORE_GENERATE_TIMEOUT_MS = 10_000;
+
+/** 等一个承诺，最多等 `ms` 毫秒；超时就抛（原来的请求不取消，回来了也没人要）。 */
+function withTimeout<T>(task: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${what} 超过 ${ms} 毫秒没有回来`)), ms);
+    task.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error: unknown) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
 
 /**
  * 每个已显示的节点上一次装进场景的构件（`a_b`）。重载时拿它和最新记录比：上一次有、这一次没有的，就是数据批次删掉的，
@@ -1240,6 +1257,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (!visibleOk || visibleSource !== 'visible-insts' || scopeIncomplete) return null;
         const row = peekDbnumRow(dbno);
         if (dbnumEmptyQueryCaveat(row)) return null;
+        // 库的三枚水位对齐（数据、模型都追到了库文件最新）、这个节点又已经有模型显示出来：缺单元只可能是上次生成失败的，
+        // 行上的状态会说出来并给「生成」。显示不为它多等一次后端的预检（一次显示几十个节点时每个都要多等一发）。
+        // 人点「生成」时照问。
+        if (existingShown && !explicitFill && row && judgeDbnumFreshness(row).kind === 'latest') return null;
         // 这一页里试过、有了定论的范围不再自动重发（真产不出的重发只会把同样的生成再跑一遍）；
         // 人点「生成」时只跳过确认没有东西可生成的
         const settled = (scope: string): boolean => (explicitFill ? fillScopeStates.get(scope) === 'empty' : fillScopeStates.has(scope));
@@ -1257,13 +1278,17 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         } catch {
           rootNoun = null;
         }
+        // 后端的预检不能把显示拖住：已有的模型已经画出来了、只是顺带看看有没有要补的，最多等 3 秒；
+        // 一个模型都没有、正等着生成的，最多等 10 秒。等不到就按没有这个接口处理（退回过渡办法），行上的状态之后照样会说。
+        const precheckTimeoutMs = existingShown && !explicitFill ? PRECHECK_AFTER_SHOWN_TIMEOUT_MS : PRECHECK_BEFORE_GENERATE_TIMEOUT_MS;
+        const precheck = (scope: string) => withTimeout(fetchGenerationFacts(scope), precheckTimeoutMs, `生成预检 ${scope}`);
         const plan = await planModelGeneration({
           root: normalizedRoot,
           rootNoun,
           scopes: legacyCandidates.filter((scope) => !settled(scope)),
           listChildren: listGenerationChildren,
           deliveryUnitTypes: useGenModelV1Health().state.deliveryUnitTypes,
-          facts: { fetch: fetchGenerationFacts, emptyMembers: members.filter((scope) => !settled(scope)) },
+          facts: { fetch: precheck, emptyMembers: members.filter((scope) => !settled(scope)) },
         });
         rootFacts = plan.rootFacts;
         // 没有东西可生成的范围（没有子节点的容器；接口说没有要生成的单元的成员）：记下来，下次不再问
@@ -1543,8 +1568,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 重载 / 重新生成不补齐；它们换完之后也不再看「停」（来不及了，换上去的不拿掉）
         if (fillRan || regenerate || refresh) return;
         try {
+          // 问预检的这一会儿不给「停」：模型已经全画出来了，这时点停会把刚装好的收回去。真要补齐（确认 / 开始生成）时再放开。
+          // 人点的「生成」本来就是为了补齐，一直能停。
+          if (!explicitFill) session.setStoppable(false);
           const plan = await prepareFill(true);
           session.throwIfStopped();
+          if (plan) session.setStoppable(true);
           if (!plan) {
             // 后端说这个节点已经没有要生成的单元（上次停下之后它在后台做完了、或别处生成过了）：行上那颗「生成」撤掉
             if (explicitFill || (rootFacts && rootFacts.unitsToGenerate === 0)) clearPendingGenerationFill(normalizedRoot);
