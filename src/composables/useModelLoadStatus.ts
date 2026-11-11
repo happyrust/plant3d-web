@@ -6,6 +6,11 @@ type ModelLoadStatusState = {
   message: string
   currentRefno: string
   error: string | null
+  /**
+   * 正在显示的是哪个节点（`a_b`）：状态条上的「停」拿它去叫停（`modelLoadSession.requestStopModelLoad`）。
+   * 不是按节点显示的加载（整库显示等）为 `null`，状态条不出「停」。
+   */
+  stopKey: string | null
 }
 
 const state = ref<ModelLoadStatusState>({
@@ -14,6 +19,7 @@ const state = ref<ModelLoadStatusState>({
   message: '',
   currentRefno: '',
   error: null,
+  stopKey: null,
 });
 
 function normalizeProgress(value: number): number {
@@ -24,13 +30,14 @@ function normalizeProgress(value: number): number {
 export function useModelLoadStatus() {
   const hasError = computed(() => !!state.value.error);
 
-  function begin(payload?: { message?: string; progress?: number; currentRefno?: string }) {
+  function begin(payload?: { message?: string; progress?: number; currentRefno?: string; stopKey?: string | null }) {
     state.value = {
       visible: true,
       progress: normalizeProgress(payload?.progress ?? 0),
       message: payload?.message ?? '',
       currentRefno: payload?.currentRefno ?? '',
       error: null,
+      stopKey: payload?.stopKey ?? null,
     };
   }
 
@@ -41,6 +48,7 @@ export function useModelLoadStatus() {
       message: payload.message ?? state.value.message,
       currentRefno: payload.currentRefno ?? state.value.currentRefno,
       error: payload.error !== undefined ? payload.error : state.value.error,
+      stopKey: state.value.stopKey,
     };
   }
 
@@ -51,6 +59,7 @@ export function useModelLoadStatus() {
       message: payload?.message ?? state.value.message,
       currentRefno: state.value.currentRefno,
       error: payload?.error ?? null,
+      stopKey: null,
     };
   }
 
@@ -61,6 +70,7 @@ export function useModelLoadStatus() {
       message: '',
       currentRefno: '',
       error: null,
+      stopKey: null,
     };
   }
 

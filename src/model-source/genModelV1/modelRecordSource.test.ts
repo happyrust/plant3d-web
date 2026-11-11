@@ -274,8 +274,173 @@ describe('createGenModelV1ModelRecordSource', () => {
 
     await source.collectByAncestor('9_0');
     expect(records).toHaveBeenCalledTimes(3);
-    await source.collectByAncestor('9_1');
-    expect(records.mock.calls.at(-1)![0].generationRoot).toBe('9_1');
+    // 2026-11-11 起：按成员查到的记录也记在成员自己名下，之后单独显示这个 ZONE 不再问服务端（原来会再发一次）
+    const member = await source.collectByAncestor('9_1');
+    expect(records).toHaveBeenCalledTimes(3);
+    expect(member.refno).toBe('9_1');
+    expect(member.items.map((record) => record.refno)).toEqual(['9_11']);
+    expect(member.generationRoots).toEqual(['9_1']);
+    // 查空的成员没有单独记：单独问它时照常去查
+    await source.collectByAncestor('9_2');
+    expect(records).toHaveBeenCalledTimes(4);
+    expect(records.mock.calls.at(-1)![0].generationRoot).toBe('9_2');
+  });
+
+  describe('cancelCollect 与成员备忘（加载中可以停：已经取到的留着，再点眼睛只取剩下的）', () => {
+    /** SITE 8_0 → 成员 8_1 … 8_5，各两条记录；`gate(member)` 之后那个成员要等放行（或被取消）才回 */
+    function siteSource() {
+      const gates: Record<string, { open: () => void; wait: Promise<void> }> = {};
+      const gate = (member: string) => {
+        let open!: () => void;
+        const wait = new Promise<void>((resolve) => { open = resolve; });
+        gates[member] = { open, wait };
+      };
+      const signals: AbortSignal[] = [];
+      const records = vi.fn(async ({ generationRoot }: { generationRoot: string }, requestOptions?: GenModelV1RequestOptions) => {
+        const signal = requestOptions?.signal;
+        if (signal) signals.push(signal);
+        if (gates[generationRoot]) {
+          await Promise.race([
+            gates[generationRoot]!.wait,
+            new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true })),
+          ]);
+        }
+        if (signal?.aborted) throw signal.reason;
+        return page([item(`${generationRoot}1`, `${generationRoot}0`), item(`${generationRoot}2`, `${generationRoot}0`)]);
+      });
+      const source = createGenModelV1ModelRecordSource({
+        api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never },
+        expandAncestor: async (refno) => (refno === '8_0' ? ['8_1', '8_2', '8_3', '8_4', '8_5'] : null),
+        // 一次只放两个成员在飞：叫停时后面的成员还没发
+        recordsOptions: { concurrency: 2 },
+      });
+      const asked = () => records.mock.calls.map(([req]) => req.generationRoot);
+      return { source, records, gate, gates, signals, asked };
+    }
+
+    it('叫停正在进行的读取：在飞的请求被取消，后面的成员不再发；这次读取以 cancelled 收口', async () => {
+      const { source, gate, gates, signals, asked } = siteSource();
+      gate('8_2');
+      gate('8_3');
+      const pending = source.collectByAncestor('8_0');
+      pending.catch(() => undefined);
+      await vi.waitFor(() => expect(asked()).toEqual(['8_1', '8_2', '8_3']));
+
+      expect(source.cancelCollect('8/0')).toBe(true);
+      await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+      // 8_4、8_5 没有发出去；放行也不会再有新请求
+      gates['8_2']!.open();
+      gates['8_3']!.open();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(asked()).toEqual(['8_1', '8_2', '8_3']);
+      // 没有在读的时候叫停无效
+      expect(source.cancelCollect('8_0')).toBe(false);
+    });
+
+    it('叫停之前收齐的成员留着：再读这个节点只问没收齐的；留着的成员先交给边取边画，实例还是缓存里那一份', async () => {
+      const { source, gate, asked } = siteSource();
+      gate('8_2');
+      gate('8_3');
+      const first = source.collectByAncestor('8_0');
+      first.catch(() => undefined);
+      await vi.waitFor(() => expect(source.peek('8_11')).toHaveLength(1));
+      source.cancelCollect('8_0');
+      await expect(first).rejects.toMatchObject({ code: 'cancelled' });
+      const kept = source.peek('8_11');
+      expect(source.peek('8_21')).toBeUndefined();
+
+      // 第二次：8_1 不重问；批次里先到的是留着的 8_1
+      const heard: string[] = [];
+      const handed = new Map<string, unknown>();
+      source.subscribeMemberRecords(({ refno, member, entries, done, total }) => {
+        heard.push(`${refno}<-${member}:${done}/${total}`);
+        for (const [key, value] of entries) handed.set(key, value);
+      });
+      const again = source.collectByAncestor('8_0');
+      // 8_2、8_3 还挡着（第一次的闸没放）：只有留着的成员先交
+      await vi.waitFor(() => expect(heard).toEqual(['8_0<-8_1:1/5']));
+      expect(handed.get('8_11')).toBe(kept);
+      expect(asked().slice(3)).toEqual(['8_2', '8_3']);
+      source.cancelCollect('8_0');
+      await expect(again).rejects.toMatchObject({ code: 'cancelled' });
+    });
+
+    it('第二次读完：结果里留着的成员和新取的成员都在，整个节点记进备忘；再问一次不发请求', async () => {
+      const { source, gate, gates, asked, records } = siteSource();
+      gate('8_3');
+      const first = source.collectByAncestor('8_0');
+      first.catch(() => undefined);
+      // 8_1、8_2 收齐，8_3 挡着，8_4 在飞或已回
+      await vi.waitFor(() => expect(source.peek('8_21')).toHaveLength(1));
+      source.cancelCollect('8_0');
+      await expect(first).rejects.toMatchObject({ code: 'cancelled' });
+      const askedBefore = asked().length;
+      const keptMembers = ['8_1', '8_2', '8_4', '8_5'].filter((member) => source.peek(`${member}1`) !== undefined);
+      expect(keptMembers).toContain('8_1');
+      expect(keptMembers).toContain('8_2');
+
+      gates['8_3']!.open();
+      const result = await source.collectByAncestor('8_0');
+      const askedAgain = asked().slice(askedBefore);
+      // 留着的成员一个都没重问
+      expect(askedAgain.filter((member) => keptMembers.includes(member))).toEqual([]);
+      expect(askedAgain).toContain('8_3');
+      expect(result.items.map((record) => record.refno).sort()).toEqual([
+        '8_11', '8_12', '8_21', '8_22', '8_31', '8_32', '8_41', '8_42', '8_51', '8_52',
+      ]);
+      expect(result.refno).toBe('8_0');
+      expect(result.generationRoots.sort()).toEqual(['8_10', '8_20', '8_30', '8_40', '8_50']);
+      expect(result.pending).toEqual([]);
+      expect(result.empty).toEqual([]);
+
+      const total = records.mock.calls.length;
+      expect(await source.collectByAncestor('8_0')).toBe(result);
+      expect(records).toHaveBeenCalledTimes(total);
+    });
+
+    it('叫停之后马上再读：开的是新的一次读取，不会拿到刚被取消的那一次', async () => {
+      const { source, gate, gates } = siteSource();
+      gate('8_1');
+      const first = source.collectByAncestor('8_0');
+      first.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      source.cancelCollect('8_0');
+      gates['8_1']!.open();
+      const second = source.collectByAncestor('8_0');
+      expect(second).not.toBe(first);
+      await expect(first).rejects.toMatchObject({ code: 'cancelled' });
+      expect((await second).items).toHaveLength(10);
+    });
+
+    it('invalidate 之后成员备忘也清掉：全部重问', async () => {
+      const { source, asked } = siteSource();
+      await source.collectByAncestor('8_0');
+      expect(asked()).toHaveLength(5);
+      source.invalidate();
+      await source.collectByAncestor('8_0');
+      expect(asked()).toHaveLength(10);
+    });
+
+    it('进度按整个节点的成员数报：留着的成员一上来就算完成', async () => {
+      const { source, gate, gates } = siteSource();
+      gate('8_2');
+      gate('8_3');
+      const first = source.collectByAncestor('8_0');
+      first.catch(() => undefined);
+      await vi.waitFor(() => expect(source.peek('8_11')).toHaveLength(1));
+      source.cancelCollect('8_0');
+      await expect(first).rejects.toMatchObject({ code: 'cancelled' });
+
+      const progress: string[] = [];
+      source.subscribeProgress(({ root, done, total }) => progress.push(`${root}:${done}/${total}`));
+      gates['8_2']!.open();
+      gates['8_3']!.open();
+      await source.collectByAncestor('8_0');
+      expect(progress[0]).toBe('8_1:1/5');
+      expect(progress).toHaveLength(5);
+      expect(progress.at(-1)!.endsWith(':5/5')).toBe(true);
+    });
   });
 
   describe('subscribeMemberRecords（边取边画：按成员拆开查时，每个成员收完就交一批）', () => {

@@ -45,7 +45,17 @@ type LoaderOptions = {
   recompile?: boolean
   /** 调用方已取好的实例表（版本对比的 A/B 几何，`ModelVersionGeometry.entries`），供多图层复用。 */
   instanceEntriesByRefno?: Map<string, InstanceEntry[]>
+  /**
+   * 叫停（加载中可以停，方案 2026-11-10 第三轮）：abort 之后不再发新的网格请求，已经发出去的让它回来；
+   * 对象还没开始往图层里加就收手——什么都不加、什么都不记，结果里 `cancelled: true`。对象已经在加的这一批加完为止。
+   */
+  signal?: AbortSignal
 }
+
+/** 取一个网格的结局。`cancelled` = 调用方叫停了、这一个没有去取：不是取不到，什么都不记。 */
+type GeometryOutcome = { status: 'ok' | 'not_found' | 'error' | 'cancelled'; notFoundNew: boolean };
+
+const CANCELLED_GEOMETRY: GeometryOutcome = { status: 'cancelled', notFoundNew: false };
 
 export type DtxMissingBreakdown = {
   noGeoRowsRefnos: string[]
@@ -734,8 +744,10 @@ async function ensureGeometryForGeoHash(
     forceRefresh?: boolean
     /** 原网格先向它要（打包取）；不给就按 `meshUrl` 逐个取 */
     viaBatch?: NonNullable<MeshSource['batch']> | null
+    /** 叫停：还没发出去的不再发 */
+    signal?: AbortSignal
   } = {}
-): Promise<{ status: 'ok' | 'not_found' | 'error'; notFoundNew: boolean }> {
+): Promise<GeometryOutcome> {
   const cache = getCache(dbno);
   const wasNotFound = cache.notFoundGeoHash.has(geoHash);
   const wasFailed = cache.failedGeoHash.has(geoHash);
@@ -763,7 +775,12 @@ async function ensureGeometryForGeoHash(
   }
   const pending = cache.loadingGeoHash.get(geoHash);
   if (pending) {
-    await pending;
+    const awaited = await pending as GeometryOutcome | undefined;
+    if (awaited?.status === 'cancelled') {
+      // 等的那一轮是被叫停的，不是没取到：自己没被叫停就自己取一遍（不拿兜底盒子顶）
+      if (options.signal?.aborted) return CANCELLED_GEOMETRY;
+      return ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug, options);
+    }
     const resolvedGeometry = cache.geometryByGeoHash.get(geoHash);
     if (!cache.loadedGeoHash.has(geoHash)) {
       // 等的那一轮超时了（其他结局都会记已加载）：这个图层同样先放盒子
@@ -780,8 +797,10 @@ async function ensureGeometryForGeoHash(
       notFoundNew: false,
     };
   }
+  // 已经叫停：不开新的一轮
+  if (options.signal?.aborted) return CANCELLED_GEOMETRY;
 
-  const task = (async () => {
+  const task = (async (): Promise<GeometryOutcome> => {
     // 基础几何体（后端约定 geo_hash = 1/2/3），直接在前端生成，避免无意义的 GLB 请求。
     const basic = String(geoHash).trim();
     if (basic === '1') {
@@ -862,7 +881,7 @@ async function ensureGeometryForGeoHash(
     let batched: Awaited<ReturnType<NonNullable<MeshSource['batch']>['request']>> | null = null;
     if (options.viaBatch) {
       try {
-        batched = await options.viaBatch.request(geoHash);
+        batched = await options.viaBatch.request(geoHash, options.signal ? { signal: options.signal } : undefined);
       } catch {
         batched = null;
       }
@@ -874,9 +893,15 @@ async function ensureGeometryForGeoHash(
       notFoundNew = !cache.notFoundGeoHash.has(geoHash);
       cache.notFoundGeoHash.add(geoHash);
     } else {
+      // 叫停了（打包取把还没发的键退了回来，或排队等并发闸的时候被叫停）：不逐个取，也不记「取不到」
+      if (options.signal?.aborted) return CANCELLED_GEOMETRY;
       // 逐个取。打包模式下退回来的键过一道并发闸：成百上千个键同时退回时不能一起发，
       // 否则排在浏览器连接队列里的请求会被下面的时限误杀。
       const releaseSlot = options.viaBatch ? await acquireSingleMeshFallbackSlot() : null;
+      if (options.signal?.aborted) {
+        releaseSlot?.();
+        return CANCELLED_GEOMETRY;
+      }
       // 必须带超时与 abort：裸 `fetch` 在连接挂住时**永久等待**，而这个 Promise 会挂在
       // `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死
       // ——表现为「浏览/对比一直在转、一帧都不出」，且没有任何错误可查。
@@ -962,11 +987,14 @@ async function ensureGeometriesForGeoHashes(
     forceRetryNotFound?: boolean
     forceRefresh?: boolean
     collectAllFailures?: boolean
+    /** 叫停：还没发出去的网格不再发；调用方回来之后自己看 `signal.aborted` */
+    signal?: AbortSignal
   } = {}
 ): Promise<string[]> {
   const cache = getCache(dbno);
   const forceRetryNotFound = options.forceRetryNotFound === true;
   const forceRefresh = options.forceRefresh === true;
+  const signal = options.signal;
   const unique = Array.from(new Set(geoHashes)).filter((h) => {
     if (!h) return false;
     if (forceRefresh) return true;
@@ -980,7 +1008,9 @@ async function ensureGeometriesForGeoHashes(
   if (unique.length === 0) return [];
 
   const missing = new Set<string>();
-  const noteOutcome = (geoHash: string, res: { status: 'ok' | 'not_found' | 'error'; notFoundNew: boolean }) => {
+  const noteOutcome = (geoHash: string, res: GeometryOutcome) => {
+    // 被叫停的不是取不到
+    if (res.status === 'cancelled') return;
     if (
       (options.collectAllFailures && res.status !== 'ok')
       || (res.status === 'not_found' && res.notFoundNew)
@@ -998,6 +1028,7 @@ async function ensureGeometriesForGeoHashes(
         forceRetryNotFound,
         forceRefresh,
         viaBatch: batch,
+        signal,
       }));
     }));
     return Array.from(missing);
@@ -1008,11 +1039,14 @@ async function ensureGeometriesForGeoHashes(
 
   const workers = Array.from({ length: concurrency }, async () => {
     while (queue.length > 0) {
+      // 叫停：手里这一个回来之后不再取下一个
+      if (signal?.aborted) return;
       const geoHash = queue.pop();
       if (!geoHash) continue;
       noteOutcome(geoHash, await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug, {
         forceRetryNotFound,
         forceRefresh,
+        signal,
       }));
     }
   });
@@ -1021,14 +1055,15 @@ async function ensureGeometriesForGeoHashes(
   return Array.from(missing);
 }
 
-/** 记录还在翻页时先把这一页的网格拉进图层缓存，装载阶段直接命中。 */
+/** 记录还在翻页时先把这一页的网格拉进图层缓存，装载阶段直接命中。`signal`：叫停之后不再发新的网格请求。 */
 export function prefetchDtxGeometries(
   dtxLayer: DTXLayer,
   dbno: number,
   geoHashes: string[],
   lodAssetKey = 'L1',
+  signal?: AbortSignal,
 ): Promise<string[]> {
-  return ensureGeometriesForGeoHashes(dtxLayer, dbno, geoHashes, lodAssetKey, false, { concurrency: 4 });
+  return ensureGeometriesForGeoHashes(dtxLayer, dbno, geoHashes, lodAssetKey, false, { concurrency: 4, signal });
 }
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
@@ -1086,10 +1121,21 @@ export function resolveDtxRefnosByUnitRefno(dbno: number, unitRefno: string): st
  * 和 replace 的区别：replace 紧接着会重新登记同一个 refno，残留会被覆盖；evict 没有后半段，所以这里必须把
  * refno 与这批对象在**所有**运行时索引里的痕迹一起清掉，否则 `isDtxRefnoKnownAcrossAllDbnos` 仍把它当成
  * 「认识的构件」，批注绑定会把它判成「在库未装」而不是缺失。
+ *
+ * `release`（2026-11-11）：不只是隐藏，把这些对象真的从图层里拿掉并重编一次（`DTXLayer.removeObjects`）。
+ * 加载中途叫停时把已经画出来的收回去、重载后撤掉被删的成员都用它——只隐藏的话对象槽只增不减。
+ * 调用方之后要让依赖对象表的派生索引（拾取用的空间索引等）跟着刷新（查看器的 `__dtxAfterInstancesLoaded`）。
  */
-export function evictDtxRefnos(dtxLayer: DTXLayer, dbno: number, refnos: Iterable<string>): string[] {
+export function evictDtxRefnos(
+  dtxLayer: DTXLayer,
+  dbno: number,
+  refnos: Iterable<string>,
+  options: { release?: boolean } = {},
+): string[] {
   const cache = cachesByDbno.get(dbno);
   if (!cache) return [];
+  const release = options.release === true;
+  const released: string[] = [];
   const evicted: string[] = [];
   const seen = new Set<string>();
   for (const raw of refnos) {
@@ -1098,7 +1144,8 @@ export function evictDtxRefnos(dtxLayer: DTXLayer, dbno: number, refnos: Iterabl
     seen.add(refno);
     const objectIds = cache.refnoToObjectIds.get(refno) ?? [];
     if (objectIds.length === 0 && !cache.loadedRefnos.has(refno)) continue;
-    if (objectIds.length > 0) dtxLayer.setObjectsVisible(objectIds, false);
+    if (release) released.push(...objectIds);
+    else if (objectIds.length > 0) dtxLayer.setObjectsVisible(objectIds, false);
     for (const objectId of objectIds) {
       const key = cache.objectIdToTubeKey.get(objectId);
       if (key !== undefined) {
@@ -1125,6 +1172,8 @@ export function evictDtxRefnos(dtxLayer: DTXLayer, dbno: number, refnos: Iterabl
     cache.refnoToOwnerRefno.delete(refno);
     evicted.push(refno);
   }
+  // 对象表变了（下标往前挪）：GPU 纹理按下标排，拿掉之后当场重编
+  if (released.length > 0 && dtxLayer.removeObjects(released) > 0) dtxLayer.recompile();
   if (evicted.length > 0) bumpDtxLoaderRevision();
   return evicted;
 }
@@ -1454,6 +1503,13 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   missingRefnos: string[]
   missingBreakdown: DtxMissingBreakdown
   sceneBoundingBox: Box3
+  /** 调用方叫停了（`options.signal`）：对象还没开始加就收手，这一次什么都没装 */
+  cancelled?: boolean
+  /**
+   * 这一次新装进场景的构件键（`a_b`）：请求里原来没装、这次装上的，以及对象被挂到名下的属主（直段挂到 BRAN）。
+   * 原来就在场景里、被跳过的不在这里。加载中途叫停时，调用方据此把这次画出来的收回去。
+   */
+  loadedRefnoKeys?: string[]
 }> {
   const debug = options.debug === true;
   const lodAssetKey = options.lodAssetKey || 'L1';
@@ -1501,7 +1557,22 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     };
   }
 
+  // 叫停：对象开始往图层里加之前的每一步之后都看一眼；收手时什么都没加、什么都没记
+  const signal = options.signal;
+  const cancelledResult = () => ({
+    loadedRefnos: 0,
+    skippedRefnos: 0,
+    loadedObjects: 0,
+    missingRefnos: [],
+    missingBreakdown: createEmptyMissingBreakdown(),
+    sceneBoundingBox: dtxLayer.getBoundingBox(),
+    cancelled: true,
+    loadedRefnoKeys: [],
+  });
+  if (signal?.aborted) return cancelledResult();
+
   const displayConfig = await loadModelDisplayConfig();
+  if (signal?.aborted) return cancelledResult();
   const hiddenNouns = buildHiddenNounSet(displayConfig);
   const hiddenRefnos = buildHiddenRefnoSet(displayConfig);
 
@@ -1521,6 +1592,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       expectedRootRefno: options.expectedRootRefno,
     });
     if (debug) console.log('[dtx][instances] using gen-model-v1', { dbno, refnos: toLoad.length, indexSize: index.size });
+    if (signal?.aborted) return cancelledResult();
   }
 
   const sourceStamp: DtxLoadSourceStamp = {
@@ -1561,7 +1633,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     forceRetryNotFound: normalizedForceReload !== null,
     forceRefresh: forceRefreshGeometries,
     collectAllFailures: replaceExistingObjects,
+    signal,
   });
+  // 取网格的时候被叫停：取到的留在图层里（下次不用再取），对象不加
+  if (signal?.aborted) return cancelledResult();
   if (missingGeoHashes.length > 0) {
     const extraMissing = new Set<string>();
     for (const gh of missingGeoHashes) {
@@ -1614,11 +1689,20 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       refnoLoadSource: new Map(cache.refnoLoadSource),
     }
     : null;
+  /** 整套替换时退场的旧对象：新对象都加上、重编过了之后从图层里拿掉（见下） */
+  const replacedObjectIds: string[] = [];
+  /** 这一次新装进来的构件键（含对象被挂到名下的属主） */
+  const newlyLoadedKeys = new Set<string>();
+  const markLoaded = (key: string): void => {
+    if (!cache.loadedRefnos.has(key)) newlyLoadedKeys.add(key);
+    cache.loadedRefnos.add(key);
+  };
   if (replaceExistingObjects) {
     for (const refno of toLoad) {
       const previousObjectIds = cache.refnoToObjectIds.get(refno) ?? [];
       if (previousObjectIds.length > 0) {
         dtxLayer.setObjectsVisible(previousObjectIds, false);
+        replacedObjectIds.push(...previousObjectIds);
       }
       // 旧对象退场，它们的直段身份键一起收掉（新对象登记时再建）
       for (const objectId of previousObjectIds) {
@@ -1636,7 +1720,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   try {
     for (const refnoKey of toLoad) {
       if (hiddenRefnos.has(refnoKey)) {
-        cache.loadedRefnos.add(refnoKey);
+        markLoaded(refnoKey);
         cache.refnoLoadSource.set(refnoKey, sourceStamp);
         cache.refnoToObjectIds.set(refnoKey, []);
         continue;
@@ -1799,7 +1883,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         if (!cache.refnoToSpecValue.has(mappedRefnoKey)) {
           cache.refnoToSpecValue.set(mappedRefnoKey, specValue);
         }
-        cache.loadedRefnos.add(mappedRefnoKey);
+        markLoaded(mappedRefnoKey);
         cache.refnoLoadSource.set(mappedRefnoKey, sourceStamp);
       }
 
@@ -1829,7 +1913,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       if (!cache.refnoToSpecValue.has(refnoKey)) {
         cache.refnoToSpecValue.set(refnoKey, firstSpecValue);
       }
-      cache.loadedRefnos.add(refnoKey);
+      markLoaded(refnoKey);
       cache.refnoLoadSource.set(refnoKey, sourceStamp);
     }
 
@@ -1872,6 +1956,22 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     throw error;
   }
 
+  // 整套替换：新对象已经加上、重编也过了（上面出错的话已经回滚成旧的那一套），这时候才把退场的旧对象真的从图层里
+  // 拿掉（2026-11-11）。原来只是隐藏，同一个节点每重载一次对象槽就多出一份。拿掉之后对象下标往前挪，要再重编一次——
+  // 放在回滚保护之外：旧对象拿掉之后就回不到旧快照了，所以先确认新的那一套立得住。
+  if (replacedObjectIds.length > 0) {
+    for (const objectId of replacedObjectIds) {
+      cache.objectIdToRefno.delete(objectId);
+      cache.objectIdToSpecValue.delete(objectId);
+      cache.invalidTubiObjectIds.delete(objectId);
+      cache.tubiObjectIds.delete(objectId);
+    }
+    if (dtxLayer.removeObjects(replacedObjectIds) > 0) {
+      dtxLayer.recompile();
+      scheduleLod1Backfill(dtxLayer);
+    }
+  }
+
   // 一批实例装完（含 replaceExistingObjects 的版本切换重载）→ 运行时索引修订 +1，
   // 批注关联解析等消费方据此重算；抛错路径不 bump（索引已回滚到旧快照）。
   // 版本对比的隔离图层（`isolated`）装进的是另一张独立索引，主模型没变，不该让批注重解析一遍。
@@ -1889,5 +1989,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       mesh404GeoHashes: Array.from(mesh404GeoHashes),
     },
     sceneBoundingBox: dtxLayer.getBoundingBox(),
+    loadedRefnoKeys: Array.from(newlyLoadedKeys),
   };
 }

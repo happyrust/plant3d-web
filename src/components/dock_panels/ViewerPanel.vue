@@ -13,6 +13,7 @@ import {
   ScanEye,
   Search,
   Settings,
+  Square,
   Waypoints,
   X,
 } from 'lucide-vue-next';
@@ -65,6 +66,7 @@ import MeasurementContextMenu from '@/components/tools/MeasurementContextMenu.vu
 import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
+import { modelLoadSessionView, requestStopModelLoad } from '@/composables/modelLoadSession';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { hasPersistedBackgroundMode, useBackgroundStore } from '@/composables/useBackgroundStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
@@ -229,6 +231,18 @@ const userStore = useUserStore();
 const reviewStore = useReviewStore();
 const consoleStore = useConsoleStore();
 const modelLoadStatus = useModelLoadStatus();
+/**
+ * 状态条上的「停」（加载中可以停，2026-11-11）：状态条显示的是按节点的加载（`stopKey`），而且那个节点的加载此刻能停。
+ * 整库显示、重新生成没有 / 不能停，不出按钮。
+ */
+const modelLoadStoppable = computed(() => {
+  const key = modelLoadStatus.state.value.stopKey;
+  return !!key && modelLoadSessionView(key)?.stoppable === true;
+});
+function stopCurrentModelLoad() {
+  const key = modelLoadStatus.state.value.stopKey;
+  if (key) requestStopModelLoad(key);
+}
 const unitSettings = useUnitSettingsStore();
 const measurementStyle = useXeokitMeasurementStyleStore();
 const selectionStore = useSelectionStore();
@@ -5880,8 +5894,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 加载 / 分块生成的进度（方案 2026-11-10 A3、B3）。「加载中点一下停」定下来之后，停的按钮放在百分比旁边
-         （那时这个框要对按钮放开 pointer-events），点了调 `requestStopGenerationFill(节点)`。 -->
+    <!-- 加载 / 分块生成的进度（方案 2026-11-10 A3、B3）。加载中可以停（2026-11-11 用户定）：按节点显示的加载此刻能停时，
+         百分比旁边有个「停」——整个框不挡视口的鼠标，只有这颗按钮接点击。 -->
     <div v-if="modelLoadStatus.state.value.visible"
       class="pointer-events-none absolute bottom-2 left-2 w-[min(28rem,calc(100%-1rem))] rounded-md border border-border bg-background/90 px-3 py-2 text-xs text-foreground shadow-sm backdrop-blur"
       style="z-index: 940"
@@ -5897,8 +5911,18 @@ onUnmounted(() => {
             {{ modelLoadStatus.state.value.currentRefno }}
           </div>
         </div>
-        <div class="shrink-0 tabular-nums text-muted-foreground">
-          {{ modelLoadStatus.state.value.progress }}%
+        <div class="flex shrink-0 items-center gap-2">
+          <span class="tabular-nums text-muted-foreground">{{ modelLoadStatus.state.value.progress }}%</span>
+          <button v-if="modelLoadStoppable"
+            type="button"
+            class="pointer-events-auto inline-flex h-5 items-center gap-1 rounded border border-border px-1.5 text-[11px] leading-4 text-foreground hover:bg-muted"
+            title="停：停掉剩下的批次，把这个节点这次画出来的收起来；已取到的数据留着，再点眼睛会更快"
+            data-testid="model-load-status-stop"
+            @mousedown.stop
+            @click.stop="stopCurrentModelLoad">
+            <Square class="h-2 w-2 fill-current" />
+            停
+          </button>
         </div>
       </div>
       <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/80">

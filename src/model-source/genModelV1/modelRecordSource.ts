@@ -19,6 +19,9 @@ import {
   defaultModelRecordsApi,
   generateThenCollect as generateThenCollectRecords,
   mapWithConcurrency,
+  ownersOfRecords,
+  refnosOfRecords,
+  type CollectAncestorsResult,
   type CollectRecordsOptions,
   type CollectRecordsResult,
   type GenerateThenCollectOptions,
@@ -92,6 +95,12 @@ export type GenModelV1ModelRecordSource = ModelRecordSource & {
    * 它们的去向在 `collectByAncestor` 的最终结果里。订阅之前已经交过的批次不补发——那些构件由最终结果兜底。返回退订函数。
    */
   subscribeMemberRecords(listener: (batch: GenModelV1MemberRecords) => void): () => void;
+  /**
+   * 叫停对这个节点正在进行的那次共用读取（加载中可以停，2026-11-11）：在飞的请求取消、后面的成员不再发，
+   * 那次读取以 `cancelled` 收口（在等它的调用方都收到）。叫停之前已经收齐的成员留在缓存里——再读这个节点时只问没收齐的。
+   * 没有在读回 `false`。带着自己 `signal` / 回调的读取不是共用的，由它们自己的 `signal` 管。
+   */
+  cancelCollect(refno: string): boolean;
   /** 缓存里某构件的实例（不发请求）。 */
   peek(refno: string): InstanceEntry[] | undefined;
   /** 清缓存：不传清全部，传了只清这些 refno。 */
@@ -257,21 +266,66 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     } as T;
   }
 
-  /** 同一节点、不带取消信号与回调的并发查询共用一发（树的可见性传播、选中联动与显示流程常同时问同一个节点）。 */
-  const inflightByRequested = new Map<string, Promise<CollectRecordsResult>>();
+  /**
+   * 同一节点、不带取消信号与回调的并发查询共用一发（树的可见性传播、选中联动与显示流程常同时问同一个节点）。
+   * 每一发带着自己的取消开关：`cancelCollect` 用它叫停。
+   */
+  const inflightByRequested = new Map<string, { task: Promise<CollectRecordsResult>; controller: AbortController }>();
 
   async function collectByAncestor(refno: string, extra: CollectRecordsOptions = {}): Promise<CollectRecordsResult> {
     const requested = fromV1Refno(refno);
     const shareable = !extra.signal && !extra.onRootDone && !extra.onRequestFailure;
     if (!shareable) return collectByAncestorOnce(requested, extra);
     const inflight = inflightByRequested.get(requested);
-    if (inflight) return inflight;
-    const task = collectByAncestorOnce(requested, extra).finally(() => {
-      if (inflightByRequested.get(requested) === task) inflightByRequested.delete(requested);
+    if (inflight) return inflight.task;
+    const controller = new AbortController();
+    const task = collectByAncestorOnce(requested, { ...extra, signal: controller.signal }).finally(() => {
+      if (inflightByRequested.get(requested)?.task === task) inflightByRequested.delete(requested);
     });
-    inflightByRequested.set(requested, task);
+    inflightByRequested.set(requested, { task, controller });
     return task;
   }
+
+  function cancelCollect(refno: string): boolean {
+    const requested = fromV1Refno(refno);
+    const inflight = inflightByRequested.get(requested);
+    if (!inflight) return false;
+    // 先摘掉再取消：叫停之后马上再读这个节点，开的是新的一次，不会拿到这一次
+    inflightByRequested.delete(requested);
+    inflight.controller.abort(new Error('已停止加载'));
+    return true;
+  }
+
+  /**
+   * 一个成员按祖先查到的记录记在它自己名下（与单独问它得到的结果相同）：读到一半被叫停、或之后单独显示这个成员时不用再问服务端。
+   * 只记收齐且有记录的成员；任何 invalidate 都会连它一起清掉。
+   */
+  function rememberMember(member: string, items: GeomInstQuery[]): void {
+    rememberResolved(member, {
+      refno: member,
+      generationRoots: ownersOfRecords(items),
+      items,
+      pending: [],
+      empty: [],
+      truncatedRoots: [],
+      errors: {},
+      statuses: {},
+    });
+  }
+
+  /** 这些记录在缓存里现成的实例（`refno → 实例`）；有一个构件不在缓存里就回 `null`（重新映射） */
+  function archivedEntriesOf(items: GeomInstQuery[]): Map<string, InstanceEntry[]> | null {
+    const out = new Map<string, InstanceEntry[]>();
+    for (const key of refnosOfRecords(items)) {
+      const entries = entriesByRefno.get(key);
+      if (!entries) return null;
+      out.set(key, entries);
+    }
+    return out;
+  }
+
+  /** 一个成员收完交出来的那一批；`archived` = 它是之前留着的成员，实例已经在缓存里 */
+  type MemberBatch = { ancestor: string; items: GeomInstQuery[]; done: number; total: number; archived?: boolean };
 
   /**
    * 按祖先查一次；节点能拆（`expandAncestor`）就换成它的成员有界并发查，结果形状不变、`refno` 仍是请求的节点。
@@ -281,27 +335,61 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     requested: string,
     extra: CollectRecordsOptions,
     guard: GenModelV1GenerationGuard,
-    onMemberRecords?: NonNullable<CollectRecordsOptions['onAncestorRecords']>,
+    onMemberRecords?: (batch: MemberBatch) => void,
   ): Promise<CollectRecordsResult> {
     const hooked = withLifecycleHooks(requested, { ...options.recordsOptions, ...extra }, guard, 'collect');
     const members = options.expandAncestor ? await options.expandAncestor(requested, guard.signal) : null;
     guard.assertCurrent();
     if (!members || members.length === 0) return collectRecordsByAncestor(requested, hooked, api);
+
+    // 已经收齐过的成员（上一次读到一半被叫停留下的、或这个成员自己单独显示过）不再问服务端，一上来就算完成
+    const total = members.length;
+    const known = new Map<string, CollectRecordsResult>();
+    for (const member of members) {
+      const remembered = resultsByRequested.get(member);
+      if (remembered) known.set(member, remembered);
+    }
     const callerOnAncestorRecords = hooked.onAncestorRecords;
-    const collected = await collectRecordsForAncestors(members, {
-      ...hooked,
-      onAncestorRecords: (batch) => {
-        callerOnAncestorRecords?.(batch);
-        onMemberRecords?.(batch);
-      },
-    }, api);
+    const items: GeomInstQuery[] = [];
+    const generationRoots: string[] = [];
+    const empty: string[] = [];
+    let done = 0;
+    for (const [member, remembered] of known) {
+      done += 1;
+      hooked.onRootDone?.({ done, total, root: member });
+      if (remembered.items.length === 0) {
+        empty.push(member);
+        continue;
+      }
+      items.push(...remembered.items);
+      for (const root of remembered.generationRoots) if (!generationRoots.includes(root)) generationRoots.push(root);
+      const batch = { ancestor: member, items: remembered.items, done, total };
+      try { callerOnAncestorRecords?.(batch); } catch { /* 同 collectRecordsForAncestors：消费方出错不影响读取 */ }
+      onMemberRecords?.({ ...batch, archived: true });
+    }
+
+    const unknown = known.size === 0 ? members : members.filter((member) => !known.has(member));
+    const collected: CollectAncestorsResult = unknown.length === 0
+      ? { ancestors: [], generationRoots: [], items: [], pending: [], empty: [], errors: {} }
+      : await collectRecordsForAncestors(unknown, {
+        ...hooked,
+        onRootDone: (progress) => hooked.onRootDone?.({ done: known.size + progress.done, total, root: progress.root }),
+        onAncestorRecords: (batch) => {
+          const merged = { ...batch, done: known.size + batch.done, total };
+          callerOnAncestorRecords?.(merged);
+          onMemberRecords?.(merged);
+        },
+      }, api);
+    items.push(...collected.items);
+    for (const root of collected.generationRoots) if (!generationRoots.includes(root)) generationRoots.push(root);
+    empty.push(...collected.empty);
     const settled = collected.pending.length === 0 && Object.keys(collected.errors).length === 0;
     return {
       refno: requested,
-      generationRoots: collected.generationRoots,
-      items: collected.items,
+      generationRoots,
+      items,
       pending: collected.pending,
-      empty: settled && collected.items.length === 0 ? [...collected.empty, requested] : collected.empty,
+      empty: settled && items.length === 0 ? [...empty, requested] : empty,
       truncatedRoots: [],
       errors: collected.errors,
       statuses: {},
@@ -326,12 +414,14 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
       // 边取边画：成员收完就归档并交给订阅方。归档与整次读取守同一条规矩——health 确认过服务代次之后才进缓存，
       // 没确认时先攒着；这次读取已经作废（取消 / 换代）就丢掉。
       const archivedEarly = new Set<string>();
-      const heldMembers: Parameters<NonNullable<CollectRecordsOptions['onAncestorRecords']>>[0][] = [];
+      const heldMembers: MemberBatch[] = [];
       let freshnessConfirmed = false;
-      const handOverMember = (batch: (typeof heldMembers)[number]): void => {
+      const handOverMember = (batch: MemberBatch): void => {
         if (guard.signal.aborted) return;
-        const entries = archiveRecords(batch.items);
+        // 留着的成员（`archived`）实例已经在缓存里，不重新映射；缓存里对不上才重来一遍
+        const entries = (batch.archived ? archivedEntriesOf(batch.items) : null) ?? archiveRecords(batch.items);
         for (const key of entries.keys()) archivedEarly.add(key);
+        if (!batch.archived) rememberMember(batch.ancestor, batch.items);
         emitMemberRecords({ refno: requested, member: batch.ancestor, entries, done: batch.done, total: batch.total });
       };
       void freshness.then(() => {
@@ -471,6 +561,6 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
 
   return {
     instanceEntriesByRefnos, collectByAncestor, generateThenCollect, subscribeProgress, subscribeMemberRecords,
-    peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot,
+    cancelCollect, peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot,
   };
 }

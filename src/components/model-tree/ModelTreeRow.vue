@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 
-import { Boxes, ChevronDown, ChevronRight, CircleMinus, Eye, EyeOff, Layers, LoaderCircle } from 'lucide-vue-next';
+import { Boxes, ChevronDown, ChevronRight, CircleMinus, Eye, EyeOff, Layers, LoaderCircle, Square } from 'lucide-vue-next';
 
 import ModelTreeStatusIcon from './ModelTreeStatusIcon.vue';
 
@@ -10,6 +10,7 @@ import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 import { rvmBadgeTitle, type IncrementalRoot } from '@/components/rvm-check/incrementalRvmTargets';
 import { type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
 import { pendingGenerationFillView } from '@/composables/generationFillState';
+import { modelLoadSessionView } from '@/composables/modelLoadSession';
 import { updateToLatestView } from '@/composables/updateToLatestState';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
@@ -53,6 +54,8 @@ const emit = defineEmits<{
   (e: 'rvm-status', refno: string): void;
   /** 已加载节点行上的动作：`update` = 更新到最新（落后时），`reload` = 重载（库里的模型比本页装的新时） */
   (e: 'node-action', id: string, action: 'update' | 'reload' | 'generate'): void;
+  /** 加载中点了行尾的转圈：停掉这个节点的加载 */
+  (e: 'stop-loading', id: string): void;
 }>();
 
 const INDENT_PX = 20;
@@ -175,8 +178,26 @@ function onToggleExpand(ev: MouseEvent) {
   emit('toggle-expand', props.row.id);
 }
 
+/**
+ * 加载中可以停（用户 2026-11-11 定）：这一行在转圈、而且转的是「显示这个节点」（有加载会话、此刻能停）时，
+ * 行尾这颗按钮就是「停」。重新生成、别的处理占着这一行时不能停，照旧是禁用的转圈。
+ */
+const loadSession = computed(() => (props.loading ? modelLoadSessionView(props.row.id) : null));
+const canStopLoading = computed(() => props.loading === true && loadSession.value?.stoppable === true);
+const loadingTitle = computed(() => {
+  if (!props.loading) return undefined;
+  if (canStopLoading.value) return '加载中，点一下停：停掉剩下的批次，把这次画出来的收起来；已取到的数据留着，再点眼睛会更快';
+  if (loadSession.value?.stopping) return '正在停…';
+  return '正在处理，这一步不能停';
+});
+
 function onToggleVisible(ev: MouseEvent) {
   ev.stopPropagation();
+  // 加载中：这颗按钮是「停」（不能停时按钮本来就是禁用的）
+  if (props.loading) {
+    if (canStopLoading.value) emit('stop-loading', props.row.id);
+    return;
+  }
   emit('toggle-visible', props.row.id, !isVisible.value);
 }
 
@@ -374,8 +395,20 @@ onUnmounted(() => {
         @click.stop="onStatusClick">
         <ModelTreeStatusIcon :verdict="rvmStatus?.verdict ?? null" :generation="generationKind" :outdated="!!rvmIncremental" />
       </button>
-      <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
-        <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />
+      <!-- 眼睛；加载中是转圈。这个节点的加载能停时转圈中间有个小方块，点一下 = 停（2026-11-11）。它保持是这一行最后一个按钮 -->
+      <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100"
+        :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'"
+        :disabled="props.loading && !canStopLoading"
+        :title="loadingTitle"
+        data-testid="model-tree-eye"
+        :data-loading="props.loading ? 'true' : undefined"
+        :data-stoppable="canStopLoading ? 'true' : undefined"
+        @mousedown.stop
+        @click="onToggleVisible">
+        <span v-if="props.loading" class="relative inline-flex h-3.5 w-3.5 items-center justify-center">
+          <LoaderCircle class="h-3.5 w-3.5 animate-spin" />
+          <Square v-if="canStopLoading" class="absolute h-1.5 w-1.5 fill-current" data-testid="model-tree-stop-icon" />
+        </span>
         <Eye v-if="isVisible" class="h-3.5 w-3.5" />
         <EyeOff v-else-if="!props.loading" class="h-3.5 w-3.5" />
       </button>

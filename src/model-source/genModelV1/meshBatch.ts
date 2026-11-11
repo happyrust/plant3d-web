@@ -278,8 +278,12 @@ export type GenModelV1MeshBatcher = {
    * `capabilities` 还没拿到时算可用——先试，试出来没有再退。
    */
   available(): boolean;
-  /** 要一个键。同一拍里要的键攒成批；同一个键同时被要多次共用一个结果。从不抛错。 */
-  request(geoHash: string): Promise<MeshBatchResult>;
+  /**
+   * 要一个键。同一拍里要的键攒成批；同一个键同时被要多次共用一个结果。从不抛错。
+   * `signal`（加载中可以停）：abort 之后，这个键要是还没发出去、也没有别的调用方在等，就不发了，当场回
+   * `{ kind: 'single', reason: 'cancelled' }`（调用方自己看 `signal.aborted`，不要再逐个取）；已经发出去的照常回来。
+   */
+  request(geoHash: string, options?: { signal?: AbortSignal }): Promise<MeshBatchResult>;
   /** 后端换了一代（重启 / 换地址）：之前试出来的「不可用」作废，重新探测。 */
   reset(): void;
   stats(): MeshBatchStats;
@@ -301,7 +305,18 @@ export function createGenModelV1MeshBatcher(options: GenModelV1MeshBatcherOption
   const parallel = options.parallel ?? MESH_BATCH_DEFAULT_PARALLEL;
   /** 试出来不可用的原因；`null` = 没试出问题 */
   let disabledReason: string | null = null;
-  const pending = new Map<string, { promise: Promise<MeshBatchResult>; resolve: (result: MeshBatchResult) => void }>();
+  type PendingKey = {
+    promise: Promise<MeshBatchResult>;
+    resolve: (result: MeshBatchResult) => void;
+    /** 还在等这个键的调用方数；不带 `signal` 的调用方一直算在等 */
+    interest: number;
+    /** 已经放进某一批发出去了（后端回「没读」重新排队时改回 false） */
+    sent: boolean;
+    /** 结果出来时要撤掉的 abort 监听 */
+    cleanups: (() => void)[];
+  };
+  const pending = new Map<string, PendingKey>();
+  /** 等着发的键。叫停时退掉的键不从这里摘（摘一个就要扫一遍），发的时候跳过不在 `pending` 里的 */
   const queue: string[] = [];
   let inFlight = 0;
   let pumpScheduled = false;
@@ -322,6 +337,7 @@ export function createGenModelV1MeshBatcher(options: GenModelV1MeshBatcherOption
     const entry = pending.get(key);
     if (!entry) return;
     pending.delete(key);
+    for (const cleanup of entry.cleanups.splice(0)) cleanup();
     if (result.kind === 'mesh') counters.meshes += 1;
     else if (result.kind === 'missing') counters.missing += 1;
     else counters.singles += 1;
@@ -332,23 +348,45 @@ export function createGenModelV1MeshBatcher(options: GenModelV1MeshBatcherOption
     for (const key of queue.splice(0)) settle(key, { kind: 'single', reason });
   }
 
-  function request(geoHash: string): Promise<MeshBatchResult> {
-    const existing = pending.get(geoHash);
-    if (existing) return existing.promise;
-    if (!available()) {
+  /** 一个带 `signal` 的调用方叫停了：没人再等、又还没发出去的键当场退掉 */
+  function release(key: string, entry: PendingKey): void {
+    if (pending.get(key) !== entry) return;
+    entry.interest -= 1;
+    if (entry.interest > 0 || entry.sent) return;
+    settle(key, { kind: 'single', reason: 'cancelled' });
+  }
+
+  function request(geoHash: string, requestOptions: { signal?: AbortSignal } = {}): Promise<MeshBatchResult> {
+    const signal = requestOptions.signal;
+    if (signal?.aborted) {
       counters.singles += 1;
-      return Promise.resolve({ kind: 'single', reason: disabledReason ?? 'no_capability' });
+      return Promise.resolve({ kind: 'single', reason: 'cancelled' });
     }
-    if (!VALID_KEY.test(geoHash)) {
-      counters.singles += 1;
-      return Promise.resolve({ kind: 'single', reason: 'invalid_key' });
+    let entry = pending.get(geoHash);
+    if (!entry) {
+      if (!available()) {
+        counters.singles += 1;
+        return Promise.resolve({ kind: 'single', reason: disabledReason ?? 'no_capability' });
+      }
+      if (!VALID_KEY.test(geoHash)) {
+        counters.singles += 1;
+        return Promise.resolve({ kind: 'single', reason: 'invalid_key' });
+      }
+      let resolve!: (result: MeshBatchResult) => void;
+      const promise = new Promise<MeshBatchResult>((done) => { resolve = done; });
+      entry = { promise, resolve, interest: 0, sent: false, cleanups: [] };
+      pending.set(geoHash, entry);
+      queue.push(geoHash);
+      schedulePump();
     }
-    let resolve!: (result: MeshBatchResult) => void;
-    const promise = new Promise<MeshBatchResult>((done) => { resolve = done; });
-    pending.set(geoHash, { promise, resolve });
-    queue.push(geoHash);
-    schedulePump();
-    return promise;
+    entry.interest += 1;
+    if (signal) {
+      const waiting = entry;
+      const onAbort = () => release(geoHash, waiting);
+      signal.addEventListener('abort', onAbort, { once: true });
+      entry.cleanups.push(() => signal.removeEventListener('abort', onAbort));
+    }
+    return entry.promise;
   }
 
   /** 推到微任务里再发：同一拍里连着要的键（装载器一次要上千个）才攒得成一批 */
@@ -368,7 +406,19 @@ export function createGenModelV1MeshBatcher(options: GenModelV1MeshBatcherOption
         return;
       }
       const limit = Math.max(1, Math.min(batchSize, declaredMaxKeys() ?? batchSize, MESH_BATCH_MAX_KEYS));
-      void runBatch(queue.splice(0, limit));
+      // 从队头取够一批：叫停时退掉的键（已经不在 `pending` 里）和重复排进来的键跳过
+      const keys: string[] = [];
+      let consumed = 0;
+      while (consumed < queue.length && keys.length < limit) {
+        const key = queue[consumed]!;
+        consumed += 1;
+        const entry = pending.get(key);
+        if (!entry || entry.sent) continue;
+        entry.sent = true;
+        keys.push(key);
+      }
+      queue.splice(0, consumed);
+      if (keys.length > 0) void runBatch(keys);
     }
   }
 
@@ -405,7 +455,19 @@ export function createGenModelV1MeshBatcher(options: GenModelV1MeshBatcherOption
         // 规范保证第 0 帧不会是「没读」；真遇到了就别再发同样的请求
         for (const key of deferred) settle(key, { kind: 'single', reason: 'deferred_all' });
       } else {
-        queue.unshift(...deferred);
+        const again: string[] = [];
+        for (const key of deferred) {
+          const entry = pending.get(key);
+          if (!entry) continue;
+          // 这一批在飞的时候调用方都叫停了：不再重发
+          if (entry.interest <= 0) {
+            settle(key, { kind: 'single', reason: 'cancelled' });
+            continue;
+          }
+          entry.sent = false;
+          again.push(key);
+        }
+        queue.unshift(...again);
       }
     }
     pump();

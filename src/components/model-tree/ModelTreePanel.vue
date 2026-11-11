@@ -13,7 +13,7 @@ import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
-import { consumeGenerationFillWithdrawn } from '@/composables/generationFillState';
+import { consumeModelLoadStopped, requestStopModelLoad } from '@/composables/modelLoadSession';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
@@ -255,8 +255,9 @@ async function setVisible(id: string, visible: boolean) {
       setNodeLoading(id, true);
       try {
         const success = await modelGenerationState.value!.showModelByRefno(id, { flyTo: true });
-        // 分块生成到一半，这个节点被隐藏了（方案 B3 的显示意图）：人已经不要它显示了，不再把它同步成可见
-        if (consumeGenerationFillWithdrawn(normalizeRefnoKeyLike(id))) return;
+        // 加载中被叫停了（或生成到一半这个节点被隐藏了）：这次画出来的已经收回去，人不要它显示——
+        // 不再把它同步成可见，也不去「显示部分加载的数据」
+        if (consumeModelLoadStopped(id)) return;
 
         if (success) {
           // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
@@ -1042,11 +1043,11 @@ async function showNode() {
 
   // 右键“显示”是显式操作：若是 PDMS refno，则优先触发加载并飞行聚焦。
   if (isRefnoLike(id) && modelGenerationState.value && !DEBUG_SKIP_EYE_AUTO_GENERATE) {
-    // 分块生成到一半这个节点被隐藏了（方案 B3）：不再把它同步成可见
+    // 加载中被叫停了（或生成到一半这个节点被隐藏了）：不再把它同步成可见
     let withdrawn = false;
     try {
       await modelGenerationState.value.showModelByRefno(id, { flyTo: true });
-      withdrawn = consumeGenerationFillWithdrawn(normalizeRefnoKeyLike(id));
+      withdrawn = consumeModelLoadStopped(id);
     } finally {
       if (!withdrawn) await pdmsTree.setVisible(id, true);
     }
@@ -1079,7 +1080,9 @@ async function showGroupModels() {
   setNodeLoading(target, true);
   try {
     const ok = await modelGenerationState.value.showModelByRefno(target, { flyTo: true });
-    if (ok) await pdmsTree.setVisible(target, true);
+    // 中途被叫停的：这次画出来的已经收回去，不再同步成可见
+    const stopped = consumeModelLoadStopped(target);
+    if (ok && !stopped) await pdmsTree.setVisible(target, true);
   } finally {
     setNodeLoading(target, false);
   }
@@ -1115,6 +1118,8 @@ async function reloadLoadedNode(rowId: string) {
   setNodeLoading(id, true);
   try {
     await modelGenerationState.value.showModelByRefno(id, { flyTo: false, refresh: true });
+    // 重载中途被叫停（还没开始换）：场景保持原样，这里没有要补做的
+    consumeModelLoadStopped(id);
   } finally {
     setNodeLoading(id, false);
   }
@@ -1148,11 +1153,19 @@ async function fillNodeModel(rowId: string) {
   setNodeLoading(id, true);
   try {
     await modelGenerationState.value.showModelByRefno(id, { flyTo: false, fill: true });
-    // 新装进来的构件由装载那一步置为可见；生成到一半被隐藏的，这里也不把它拉回来
-    consumeGenerationFillWithdrawn(id);
+    // 新装进来的构件由装载那一步置为可见；中途被叫停的，这一次装的已经收回去，这里不用再做什么
+    consumeModelLoadStopped(id);
   } finally {
     setNodeLoading(id, false);
   }
+}
+
+/**
+ * 行尾的转圈点一下 = 停（2026-11-11 用户定）：停掉剩下的批次，把这个节点这一次画出来的收起来，回到没显示的状态；
+ * 已经取到的数据留在缓存里，再点眼睛会更快。读记录、取网格、分块生成三个阶段都能停；重新生成不能停。
+ */
+function stopNodeLoading(rowId: string) {
+  requestStopModelLoad(normalizeRefnoKeyLike(rowId));
 }
 
 /** 节点行上的动作按钮（`ModelTreeRow` 的 `node-action`）。 */
@@ -1601,7 +1614,8 @@ function onSearchEnter(value: string) {
             @select="selectByRowIndex"
             @context="(id, ev) => openContextMenu(id, ev, rowAt(vr.index))"
             @rvm-status="openRvmStatus"
-            @node-action="onNodeAction" />
+            @node-action="onNodeAction"
+            @stop-loading="stopNodeLoading" />
         </div>
       </div>
     </div>

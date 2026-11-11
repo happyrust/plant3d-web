@@ -5,13 +5,10 @@ import {
   __resetGenerationFillStateForTests,
   beginGenerationFill,
   clearPendingGenerationFill,
-  consumeGenerationFillWithdrawn,
   isGenerationFillActive,
-  noteGenerationFillWithdrawn,
   notePendingGenerationFill,
   pendingGenerationFill,
   pendingGenerationFillView,
-  requestStopGenerationFill,
 } from './generationFillState';
 
 beforeEach(() => {
@@ -50,32 +47,17 @@ describe('还没补齐的节点', () => {
   });
 });
 
-describe('正在补齐的节点与「停」的口子', () => {
-  it('进行中：按钮写「生成中」；叫停之后分块执行问到的是「不要继续了」；结束后撤掉', () => {
+describe('正在补齐的节点', () => {
+  // 叫停不在这里：分块生成是「显示这个节点」的一段，停它走加载会话（modelLoadSession.test.ts）
+  it('进行中：按钮写「生成中」；结束后撤掉', () => {
     notePendingGenerationFill({ root: '24381_535', dbnum: 7997, chunks: 2, units: 26, exact: false, reason: 'declined' });
-    const session = beginGenerationFill('24381_535');
+    const fill = beginGenerationFill('24381_535');
     expect(isGenerationFillActive('24381_535')).toBe(true);
     expect(pendingGenerationFillView('24381_535')).toMatchObject({ busy: true, label: '生成中' });
-    expect(session.shouldStop()).toBe(false);
 
-    expect(requestStopGenerationFill('24381_535')).toBe(true);
-    expect(session.shouldStop()).toBe(true);
-
-    session.end();
+    fill.end();
     expect(isGenerationFillActive('24381_535')).toBe(false);
     expect(pendingGenerationFillView('24381_535')).toMatchObject({ busy: false, label: '生成' });
-  });
-
-  it('没有在进行的节点叫停无效', () => {
-    expect(requestStopGenerationFill('1_1')).toBe(false);
-  });
-
-  it('生成到一半节点被隐藏（显示意图撤回）：发起显示的一方问一次就清掉', () => {
-    expect(consumeGenerationFillWithdrawn('24381_535')).toBe(false);
-    noteGenerationFillWithdrawn('24381_535');
-    expect(consumeGenerationFillWithdrawn('24381_536')).toBe(false);
-    expect(consumeGenerationFillWithdrawn('24381_535')).toBe(true);
-    expect(consumeGenerationFillWithdrawn('24381_535')).toBe(false);
   });
 
   it('上一次的 end 晚到，不会把同一个节点新开的这一次撤掉', () => {

@@ -502,4 +502,104 @@ describe('createGenModelV1MeshBatcher（攒批、限并发、退回逐个取）'
     expect(server.calls).toEqual([['a'], ['a']]);
     expect(source.stats()).toMatchObject({ batches: 2, keysSent: 2, meshes: 2 });
   });
+
+  describe('叫停（加载中可以停）：调用方给 signal', () => {
+    it('叫停之后，还没发出去的键不再发，当场退给调用方；已经发出去的那一批照常回来', async () => {
+      const server = fakeServer({ gate: true });
+      const source = batcher(server, { batchSize: 2, parallel: 1 });
+      const controller = new AbortController();
+      const keys = ['a', 'b', 'c', 'd', 'e'];
+      const all = keys.map((key) => source.request(key, { signal: controller.signal }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(server.calls).toEqual([['a', 'b']]);
+
+      controller.abort();
+      // 没发的三个不用等后端：马上就有结果
+      const queued = await Promise.all(all.slice(2));
+      expect(queued).toEqual([
+        { kind: 'single', reason: 'cancelled' }, { kind: 'single', reason: 'cancelled' }, { kind: 'single', reason: 'cancelled' },
+      ]);
+
+      server.release();
+      const sent = await Promise.all(all.slice(0, 2));
+      expect(sent.map((result) => result.kind)).toEqual(['mesh', 'mesh']);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(server.calls).toEqual([['a', 'b']]);
+    });
+
+    it('同一个键还有别人在等（没叫停的那一方）：照常发', async () => {
+      const server = fakeServer({ gate: true });
+      const source = batcher(server, { batchSize: 1, parallel: 1 });
+      const controller = new AbortController();
+      const first = source.request('a', { signal: controller.signal });
+      const sharedByStopped = source.request('b', { signal: controller.signal });
+      const sharedByOther = source.request('b');
+      const onlyStopped = source.request('c', { signal: controller.signal });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(server.calls).toEqual([['a']]);
+
+      controller.abort();
+      expect(await onlyStopped).toEqual({ kind: 'single', reason: 'cancelled' });
+      server.release();
+      expect((await first).kind).toBe('mesh');
+      // b 有人还要：发出去了，两边拿到同一个结果
+      expect((await sharedByOther).kind).toBe('mesh');
+      expect(await sharedByStopped).toBe(await sharedByOther);
+      expect(server.calls).toEqual([['a'], ['b']]);
+    });
+
+    it('一上来就已经叫停：不进队列', async () => {
+      const server = fakeServer();
+      const source = batcher(server);
+      const controller = new AbortController();
+      controller.abort();
+      expect(await source.request('a', { signal: controller.signal })).toEqual({ kind: 'single', reason: 'cancelled' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(server.calls).toEqual([]);
+    });
+
+    it('叫停过的键之后再要（不带 signal）：照常发', async () => {
+      const server = fakeServer({ gate: true });
+      const source = batcher(server, { batchSize: 1, parallel: 1 });
+      const controller = new AbortController();
+      const first = source.request('a', { signal: controller.signal });
+      const stopped = source.request('b', { signal: controller.signal });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      controller.abort();
+      expect(await stopped).toEqual({ kind: 'single', reason: 'cancelled' });
+
+      const again = source.request('b');
+      server.release();
+      expect((await first).kind).toBe('mesh');
+      expect((await again).kind).toBe('mesh');
+      expect(server.calls).toEqual([['a'], ['b']]);
+    });
+
+    it('后端回「这一批没读」要重发的键，重发之前被叫停：不再重发', async () => {
+      const server = fakeServer({ gate: true, statusOf: (_key, callIndex, position) => (callIndex === 0 && position >= 1 ? 3 : 0) });
+      const source = batcher(server);
+      const controller = new AbortController();
+      const all = ['a', 'b', 'c'].map((key) => source.request(key, { signal: controller.signal }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(server.calls).toEqual([['a', 'b', 'c']]);
+
+      controller.abort();
+      server.release();
+      const results = await Promise.all(all);
+      expect(results[0]!.kind).toBe('mesh');
+      expect(results.slice(1)).toEqual([{ kind: 'single', reason: 'cancelled' }, { kind: 'single', reason: 'cancelled' }]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(server.calls).toHaveLength(1);
+    });
+
+    it('正常回来的键不留监听：signal 之后再 abort 没有任何影响', async () => {
+      const server = fakeServer();
+      const source = batcher(server);
+      const controller = new AbortController();
+      expect((await source.request('a', { signal: controller.signal })).kind).toBe('mesh');
+      controller.abort();
+      expect((await source.request('a')).kind).toBe('mesh');
+      expect(source.stats()).toMatchObject({ batches: 2, meshes: 2 });
+    });
+  });
 });

@@ -19,12 +19,8 @@ import {
   type GenerationPlan,
   type GenerationTreeNode,
 } from '@/composables/generationFill';
-import {
-  beginGenerationFill,
-  clearPendingGenerationFill,
-  noteGenerationFillWithdrawn,
-  notePendingGenerationFill,
-} from '@/composables/generationFillState';
+import { beginGenerationFill, clearPendingGenerationFill, notePendingGenerationFill } from '@/composables/generationFillState';
+import { beginModelLoadSession, ModelLoadStoppedError, type ModelLoadSession } from '@/composables/modelLoadSession';
 import { changedSessionsOfNodeVersions } from '@/composables/nodeModelStatus';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -256,7 +252,11 @@ export function describeVisibleInstsIncomplete(incomplete: VisibleInstsIncomplet
   ].filter(Boolean).join('、');
 }
 
-export async function queryLoadScopeRefnos(refno: string): Promise<{
+export async function queryLoadScopeRefnos(
+  refno: string,
+  /** `isStopped`：加载被叫停了——记录读取被取消不是「查询失败」，不要退到逐节点的子树查询（那要发几百个请求） */
+  options: { isStopped?: () => boolean } = {},
+): Promise<{
   refnos: string[]
   source: 'visible-insts' | 'subtree-refnos'
   truncated: boolean
@@ -289,6 +289,8 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
     // 查成功就是查询结果：空也是空，不退到整棵子树去装没生成的构件。
     return { refnos, source: 'visible-insts', truncated: false, incomplete, emptyScopes };
   } catch {
+    // 被叫停的：到此为止
+    if (options.isStopped?.()) throw new ModelLoadStoppedError(normalized);
     // 继续使用同一 root 的受限 subtree 范围。
   }
   const subtree = await querySubtreeRefnos(normalized);
@@ -459,11 +461,62 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     __dtxViewer?: { canvas?: unknown }
     __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
     scene?: {
+      objects?: Record<string, { visible?: boolean } | undefined>
       getAABB?: (ids: string[]) => unknown
       setObjectsVisible?: (ids: string[], visible: boolean) => void
     }
     cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
   };
+
+  /**
+   * 一次显示里「被叫停时要收回去」的账（加载中可以停，2026-11-11）：停 = 回到点之前的样子。
+   * - `loadedKeys`：这一次新装进场景的构件（装载器回的 `loadedRefnoKeys`）——叫停时从场景里拿掉；
+   * - `unhidden`：原来就装着、只是藏着，这一次改成显示的构件——叫停时藏回去。
+   * 点之前就在屏幕上的构件（比如它下面某个 ZONE 先前单独显示过）不在这两本账里，原样留着。
+   */
+  type LoadUndoLog = {
+    session: ModelLoadSession
+    dbno: number
+    loadedKeys: string[]
+    unhidden: string[]
+  };
+
+  /** 把这些构件置为可见（「显示」= 保证可见）；其中原来装着但藏着的记进 `unhidden` */
+  function showRefnosTracked(scene: ProgressiveViewer['scene'], ids: string[], undo: LoadUndoLog | null): void {
+    const objects = undo ? scene?.objects : undefined;
+    if (undo && objects) {
+      for (const id of ids) {
+        if (objects[id]?.visible === false && isDtxRefnoLoaded(undo.dbno, id)) undo.unhidden.push(id);
+      }
+    }
+    scene?.setObjectsVisible?.(ids, true);
+  }
+
+  /** 记下一次装载新装进来的构件；装载器说它被叫停了（什么都没装）就回 `true` */
+  function noteLoaderOutcome(undo: LoadUndoLog | null, result: DtxLoadResult): boolean {
+    if (undo && result.loadedRefnoKeys) {
+      for (const key of result.loadedRefnoKeys) undo.loadedKeys.push(key);
+    }
+    return result.cancelled === true;
+  }
+
+  /**
+   * 加载被叫停：把这一次画出来的收回去。新装的构件从场景里拿掉（对象槽一起释放），这一次从隐藏改成显示的藏回去；
+   * 记录和网格留在缓存里，再点眼睛只取没取完的。回拿掉了几个构件。
+   */
+  function withdrawStoppedLoad(undo: LoadUndoLog): number {
+    const anyViewer = viewer as ProgressiveViewer & { __dtxLayer?: Parameters<typeof evictDtxRefnos>[0] };
+    const layer = anyViewer?.__dtxLayer;
+    const evicted = layer && undo.loadedKeys.length > 0
+      ? evictDtxRefnos(layer, undo.dbno, undo.loadedKeys, { release: true })
+      : [];
+    if (undo.unhidden.length > 0) anyViewer?.scene?.setObjectsVisible?.(undo.unhidden, false);
+    // 对象表变了：让拾取用的空间索引等跟着刷新
+    if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(undo.dbno, []);
+    undo.loadedKeys = [];
+    undo.unhidden = [];
+    return evicted.length;
+  }
 
   /** 边取边画在记录收齐那一刻的交接：哪些构件已经装了、装出了什么。 */
   type ProgressiveLoadOutcome = {
@@ -500,8 +553,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     flyTo: boolean
     cameraStamp: number
     onBatchLoaded: (shownRefnos: number) => void
+    /** 被叫停时要收回去的账；装载带着会话的取消信号 */
+    undo: LoadUndoLog
   }): ProgressiveLoad {
-    const { root, dbno, dtxLayer, anyViewer } = params;
+    const { root, dbno, dtxLayer, anyViewer, undo } = params;
     const pending = new Map<string, InstanceEntry[]>();
     const loaded = new Set<string>();
     const totals = emptyLoadTotals();
@@ -534,7 +589,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       for (const refno of refnos) loaded.add(refno);
       try {
         // 「显示」= 保证可见（同收尾路径）：先把这一批的 refno 级可见态拉回 true，装完的回放才不会把它们再藏掉
-        anyViewer.scene?.setObjectsVisible?.(first ? uniqStrings([root, ...refnos]) : refnos, true);
+        showRefnosTracked(anyViewer.scene, first ? uniqStrings([root, ...refnos]) : refnos, undo);
         const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, refnos, {
           lodAssetKey: 'L1',
           debug: false,
@@ -542,7 +597,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           // 这一批的实例记录源已经交到手里了，直接带过去：不回头查缓存，缓存中途被清也不会逐个构件去问服务端
           instanceEntriesByRefno: batch,
           recompile: true,
+          signal: undo.session.signal,
         });
+        if (noteLoaderOutcome(undo, result)) {
+          // 被叫停：这一批什么都没装，不算已装；不再开新批（收回去由显示流程统一做）
+          for (const refno of refnos) loaded.delete(refno);
+          accepting = false;
+          return;
+        }
         anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
         addLoadResult(totals, result);
         batchesDone += 1;
@@ -573,7 +635,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
 
     function pump(): void {
-      if (!accepting || failed || running) return;
+      if (!accepting || failed || running || undo.session.stopped) return;
       clearTimer();
       const state = {
         pending: pending.size,
@@ -642,6 +704,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     },
     progressRange: [number, number],
     label: string,
+    /** 加载中可以停：装载带着会话的取消信号，新装的构件记进账；被叫停就抛 `ModelLoadStoppedError`。不给就是不能停的装载 */
+    undo: LoadUndoLog | null = null,
   ): Promise<GenModelV1LoadTotals> {
     const totals = emptyLoadTotals();
     const sizes = mode.replace || mode.singleBatch ? [refnos.length] : planLoadBatchSizes(refnos.length);
@@ -667,10 +731,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         replaceExistingObjects: mode.replace,
         forceRefreshGeometries: mode.replace,
         recompile: batches === 1 || index === 0 || index + 1 === batches,
+        ...(undo ? { signal: undo.session.signal } : {}),
       });
+      // 整套替换的那一次不进「新装的」账：被叫停时它要么还没开始换（什么都没动），要么已经换完了
+      if (noteLoaderOutcome(mode.replace ? null : undo, result)) throw new ModelLoadStoppedError(undo?.session.root ?? '');
       anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
       addLoadResult(totals, result);
-      if (index + 1 < batches) await sleep(0);
+      if (index + 1 < batches) {
+        await sleep(0);
+        undo?.session.throwIfStopped();
+      }
     }
     return totals;
   }
@@ -728,8 +798,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const anyViewer = viewer as any;
     const targets = uniqStrings([root, ...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, root)]);
     const dtxLayer = anyViewer?.__dtxLayer;
-    const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets) : [];
+    // 撤下的对象真的从图层里拿掉（2026-11-11，只隐藏的话对象槽只增不减）；对象表变了，派生索引跟着刷新
+    const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];
     anyViewer?.scene?.setObjectsVisible?.(targets, false);
+    if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     loadedRoots.delete(root);
     forgetLoadedNode(root);
     statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
@@ -750,8 +822,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     if (stale.length === 0) return;
     const anyViewer = viewer as any;
     const dtxLayer = anyViewer?.__dtxLayer;
-    const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, stale) : [];
+    // 同上：撤下的对象从图层里拿掉，派生索引跟着刷新
+    const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, stale, { release: true }) : [];
     anyViewer?.scene?.setObjectsVisible?.(stale, false);
+    if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     consoleStore.addLog(
       'info',
       `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里，从场景撤下（${evicted.length} 个有对象）`,
@@ -859,10 +933,17 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     currentRefno.value = normalizedRoot;
     totalCount.value = 1;
     currentIndex.value = 1;
+    // 加载会话（加载中可以停，2026-11-11）：行尾的转圈和状态条经它叫停这一次显示。右键「重新生成模型」不能停——
+    // 后端已经在清旧模型、算新模型，前端停下来只会留下一个对不上的场景。
+    const session = beginModelLoadSession(normalizedRoot, { stoppable: loadOptions?.regenerate !== true });
+    const undo: LoadUndoLog = { session, dbno: 0, loadedKeys: [], unhidden: [] };
+    /** 这一次显示里把节点记成了「已加载」（被叫停时要不要撤掉看它） */
+    let markedLoadedHere = false;
     modelLoadStatus.begin({
       progress: progress.value,
       message: statusMessage.value,
       currentRefno: currentRefno.value,
+      stopKey: normalizedRoot,
     });
 
     // 边取边画已经装进场景的构件数（状态条上带一句，让人知道模型是一块块长出来的）
@@ -918,6 +999,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno = mappedDbno;
       }
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
+      undo.dbno = dbno;
+      session.throwIfStopped();
 
       // 「装的时候是哪一版」：开始取数之前读到的库水位（已加载节点表按它判「有更新可重载」）。取早不取晚——
       // 装的过程中后端正好跑完一个批次时，宁可之后多提示一次，不能漏掉。
@@ -941,7 +1024,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               hashes.push(hash);
             }
           }
-          if (hashes.length > 0) meshPrefetches.push(prefetchDtxGeometries(prefetchLayer, dbno, hashes));
+          if (hashes.length > 0 && !session.stopped) {
+            meshPrefetches.push(prefetchDtxGeometries(prefetchLayer, dbno, hashes, 'L1', session.signal));
+          }
         })
         : null;
 
@@ -994,6 +1079,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           flyTo: loadOptions?.flyTo === true,
           cameraStamp,
           onBatchLoaded: (shown) => { shownEarly = shown; },
+          undo,
         });
       }
       let earlyLoad: ProgressiveLoadOutcome | null = null;
@@ -1008,8 +1094,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let scopeIncomplete: VisibleInstsIncomplete | null = null;
       // 查过、一条记录都没有的范围（节点自己，或它没有记录的 ZONE）：模型资产补齐按它分块
       let emptyScopes: string[] = [];
+      // 叫停时当场取消那次共用的记录读取（它不认会话的信号）；收齐的成员留在缓存里，再点眼睛只问没收齐的
+      const stopRecordsRead = session.onStop(() => { getModelSource().records.cancelCollect?.(normalizedRoot); });
       try {
-        const { refnos, source, truncated, incomplete, emptyScopes: empty } = await queryLoadScopeRefnos(normalizedRoot);
+        const { refnos, source, truncated, incomplete, emptyScopes: empty } = await queryLoadScopeRefnos(
+          normalizedRoot,
+          { isStopped: () => session.stopped },
+        );
         visibleRefnos = refnos;
         visibleSource = source;
         scopeIncomplete = incomplete;
@@ -1027,12 +1118,17 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         visibleErr = null;
         if (meshPrefetches.length > 0) await Promise.all(meshPrefetches);
       } catch (e) {
+        // 被叫停的不是查询失败：直接到收尾那里把已经画出来的收回去
+        if (session.stopped) throw e;
         visibleOk = false;
         visibleErr = e instanceof Error ? e.message : String(e);
         visibleRefnos = [];
+      } finally {
+        stopRecordsRead();
       }
       // 记录收齐（或查询失败）：边取边画到此为止，等在装的那一批装完；剩下的由下面的收尾路径装
       if (progressiveLoad) earlyLoad = await progressiveLoad.finish();
+      session.throwIfStopped();
       const incompleteTail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
       consoleStore.addLog(
         'info',
@@ -1140,9 +1236,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (fresh.length === 0) return;
         for (const key of fresh) fillLoaded.add(key);
         // 「显示」= 保证可见（同收尾路径）：先把这一块的 refno 级可见态拉回 true，装完的回放才不会把它们再藏掉
-        fillViewer.scene?.setObjectsVisible?.(uniqStrings([normalizedRoot, ...fresh]), true);
+        showRefnosTracked(fillViewer.scene, uniqStrings([normalizedRoot, ...fresh]), undo);
         const totals = await loadGenModelV1Refnos(
-          layer, dbno, fresh, fillViewer, { replace: false, singleBatch: true }, [30, 95], `从 gen-model 加载 ${chunk.name}`,
+          layer, dbno, fresh, fillViewer, { replace: false, singleBatch: true }, [30, 95], `从 gen-model 加载 ${chunk.name}`, undo,
         );
         mergeLoadTotals(fillTotals, totals);
         fillViewer.scene?.ensureRefnos?.(fresh, { computeAabb: false });
@@ -1158,13 +1254,17 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
       };
 
-      /** 分块生成。`probeRefno`：已经显示出来的一个构件——它被隐藏了说明人不要这个节点了 */
+      /**
+       * 分块生成。`probeRefno`：已经显示出来的一个构件——它被隐藏了说明人不要这个节点了。
+       * 被叫停（或节点被隐藏）时抛 `ModelLoadStoppedError`：已经发出去的那一块后端照常算完、留在后端；没发的不再发；
+       * 这一次画出来的由显示流程的收尾统一收回去。还没做完的块记一笔，行上留「生成」。
+       */
       const runFill = async (plan: GenerationPlan, existingShown: boolean, probeRefno: string | null): Promise<GenerationFillSummary> => {
         fillRan = true;
         const whole = isWholeNodePlan(plan);
-        const session = beginGenerationFill(normalizedRoot);
+        const fill = beginGenerationFill(normalizedRoot);
         // 人点的是「显示」：先把这个节点的可见态立成 true，之后它被改成 false 就是人把它隐藏了
-        if (!existingShown) fillViewer.scene?.setObjectsVisible?.([normalizedRoot], true);
+        if (!existingShown) showRefnosTracked(fillViewer.scene, [normalizedRoot], undo);
         // 显示意图：这个节点（或它刚显示出来的构件）被隐藏了，就不再往下生成、装载
         const hidden = (): boolean => {
           const objects = fillViewer.scene?.objects;
@@ -1173,19 +1273,23 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const probe = probeRefno ?? (fillLoaded.values().next().value as string | undefined);
           return probe ? objects[probe]?.visible === false : false;
         };
-        let stoppedByHide = false;
+        /** 做到第几块了（被叫停在一块中间时，从这一块起算没做完） */
+        let chunkIndexNow = 0;
+        let summary: GenerationFillSummary | null = null;
         fillRunning = true;
         showProgressModal.value = false;
         try {
-          return await runGenerationFill({
+          summary = await runGenerationFill({
             plan,
             generateChunk: async (chunk) => chunkResultFromCollect(
               chunk.refno,
-              await getGenModelV1ModelSource().records.generateThenCollect(chunk.refno, { force: false }),
+              // 带着会话的取消信号：叫停时这一发请求当场取消（后端那边照常算完）
+              await getGenModelV1ModelSource().records.generateThenCollect(chunk.refno, { force: false, signal: session.signal }),
             ),
             // 节点自己一块时不在这里装：生成完按原来的路重查、定范围（BRAN / HANG 要并上根自己）、一次装完
             loadChunk: whole ? async () => {} : (chunk, refnos) => loadFillChunk(chunk, refnos, existingShown),
             onProgress: (step) => {
+              chunkIndexNow = step.chunkIndex;
               // 状态条只有一行、会截断：要紧的（第几块、已生成多少）放前面，块的名字放第二行
               const units = `已生成 ${step.unitsDone} / ${plan.exact ? '' : '约 '}${step.unitsTotal} 个单元`;
               const where = whole ? '' : `第 ${step.chunkIndex + 1}/${step.chunkCount} 块`;
@@ -1207,18 +1311,43 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               syncGlobalLoadStatus();
             },
             shouldStop: () => {
-              if (session.shouldStop()) return true;
-              if (!hidden()) return false;
-              stoppedByHide = true;
-              return true;
+              // 这个节点被隐藏了 = 人不要它了：和叫停一样处理
+              if (!session.stopped && hidden()) session.stop();
+              return session.stopped;
             },
             sleep,
           });
+        } catch (e) {
+          // 叫停时在飞的那一发被取消会从这里抛出来；别的错原样往外抛
+          if (!session.stopped) throw e;
         } finally {
           fillRunning = false;
-          session.end();
-          // 人把节点隐藏了：告诉发起显示的一方，收尾时别再把它置回可见
-          if (stoppedByHide) noteGenerationFillWithdrawn(normalizedRoot);
+          fill.end();
+        }
+        if (session.stopped || !summary) {
+          const remaining = summary ? remainingGenerationChunks(summary) : plan.chunks.slice(chunkIndexNow);
+          if (remaining.length > 0) {
+            notePendingGenerationFill({
+              root: normalizedRoot,
+              dbnum: dbno,
+              chunks: remaining.length,
+              units: remaining.reduce((sum, chunk) => sum + chunk.units, 0),
+              exact: plan.exact,
+              reason: 'stopped',
+            });
+          }
+          throw new ModelLoadStoppedError(normalizedRoot);
+        }
+        return summary;
+      };
+
+      /** 按祖先查这个节点的范围；叫停时当场取消那次共用的记录读取 */
+      const queryScopeStoppable = async (): ReturnType<typeof queryLoadScopeRefnos> => {
+        const off = session.onStop(() => { getModelSource().records.cancelCollect?.(normalizedRoot); });
+        try {
+          return await queryLoadScopeRefnos(normalizedRoot, { isStopped: () => session.stopped });
+        } finally {
+          off();
         }
       };
 
@@ -1252,9 +1381,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const fillWhenNothingExists = async (why: string): Promise<{ ready: boolean; hint: string | null }> => {
         try {
           const plan = await prepareFill(false);
+          session.throwIfStopped();
           if (!plan) return { ready: false, hint: null };
           const whole = isWholeNodePlan(plan);
-          if (!(await confirmFill(plan, false))) {
+          const confirmed = await confirmFill(plan, false);
+          session.throwIfStopped();
+          if (!confirmed) {
             notePendingGenerationFill({
               root: normalizedRoot, dbnum: dbno, chunks: plan.chunks.length, units: plan.units, exact: plan.exact, reason: 'declined',
             });
@@ -1278,7 +1410,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           settleFill(plan, summary);
           if (summary.outcomes.some((outcome) => outcome.refnos.length > 0)) {
             // 生成出东西了，重新查询 records（generateThenCollect 清了备忘并把新记录收进了缓存）
-            const retry = await queryLoadScopeRefnos(normalizedRoot);
+            const retry = await queryScopeStoppable();
             visibleRefnos = uniqStrings(retry.refnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
             visibleSource = retry.source;
             scopeIncomplete = retry.incomplete;
@@ -1312,6 +1444,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           emitToast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
           return { ready: false, hint: timedOut ? '后端还在后台生成，稍后再点眼睛会接着问（不重算已有的）' : null };
         } catch (e) {
+          // 被叫停的不是生成失败：到显示流程的收尾那里统一收回去
+          if (session.stopped) throw e;
           const em = e instanceof Error ? e.message : String(e);
           consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 自动生成异常：${em}`);
           emitToast({ message: `[警告] ${normalizedRoot} 自动生成失败：${em}`, level: 'warning' });
@@ -1324,9 +1458,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
        * `probeRefno`：已经显示出来的一个构件。
        */
       const fillAfterShown = async (probeRefno: string | null): Promise<void> => {
-        if (fillRan) return;
+        // 重载 / 重新生成不补齐；它们换完之后也不再看「停」（来不及了，换上去的不拿掉）
+        if (fillRan || regenerate || refresh) return;
         try {
           const plan = await prepareFill(true);
+          session.throwIfStopped();
           if (!plan) {
             if (explicitFill) {
               clearPendingGenerationFill(normalizedRoot);
@@ -1334,7 +1470,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             }
             return;
           }
-          if (!(await confirmFill(plan, true))) {
+          const confirmed = await confirmFill(plan, true);
+          session.throwIfStopped();
+          if (!confirmed) {
             notePendingGenerationFill({
               root: normalizedRoot, dbnum: dbno, chunks: plan.chunks.length, units: plan.units, exact: plan.exact, reason: 'declined',
             });
@@ -1364,6 +1502,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           progress.value = 100;
           syncGlobalLoadStatus();
         } catch (e) {
+          // 被叫停的不是补齐失败：到显示流程的收尾那里统一收回去
+          if (session.stopped) throw e;
           const em = e instanceof Error ? e.message : String(e);
           consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 补齐异常：${em}`);
           emitToast({ message: `[警告] ${normalizedRoot} 补齐没有完成：${em}`, level: 'warning' });
@@ -1431,6 +1571,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (visibleOk && visibleRefnos.length > 0) reconcileDbnumModelStatus(dbno);
 
       const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos, rootTypeInfo);
+      session.throwIfStopped();
       if (loadScope.typeInfoError) {
         consoleStore.addLog(
           'warning',
@@ -1447,6 +1588,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         __dtxLayer?: unknown
         __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
         scene?: {
+          objects?: Record<string, { visible?: boolean } | undefined>
           ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
           getAABB?: (ids: string[]) => unknown
           setObjectsVisible?: (ids: string[], visible: boolean) => void
@@ -1484,7 +1626,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 否则先前「隐藏」写过 false 的 refno，装完会被 __dtxAfterInstancesLoaded 的 applyStateToRefnos 立刻再藏掉；
       // 已在层里、被 loader 跳过的旧对象也一并恢复可见。
       if (remainingRefnos.length > 0 || !shownEarlyRefnos) {
-        anyViewer.scene?.setObjectsVisible?.(uniqStrings([normalizedRoot, ...remainingRefnos]), true);
+        showRefnosTracked(anyViewer.scene, uniqStrings([normalizedRoot, ...remainingRefnos]), undo);
       }
       statusMessage.value = regenerate
         ? `正在重新生成 ${normalizedRoot}（gen-model）...`
@@ -1503,7 +1645,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           { replace: regenerate || refresh, singleBatch: shownEarlyRefnos !== null },
           [30, 95],
           `从 gen-model 加载 ${normalizedRoot}`,
+          regenerate ? null : undo,
         );
+      // 整套替换已经换完的（重载 / 重新生成）到这里就停不了了；普通显示在记成「已加载」之前再看一眼
+      if (regenerate || refresh) session.setStoppable(false);
+      else session.throwIfStopped();
       if (earlyLoad) {
         // 对账按整次显示算：边取边画装的 + 收尾装的
         v1Result.loadedRefnos += earlyLoad.totals.loadedRefnos;
@@ -1577,6 +1723,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
         loadedRoots.add(normalizedRoot);
         noteLoadedNode(normalizedRoot, dbno, loadWatermark);
+        markedLoadedHere = true;
         statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
         syncGlobalLoadStatus();
         emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
@@ -1601,6 +1748,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         } else if (onlyInjectedRootLacksGeometry) {
           loadedRoots.add(normalizedRoot);
           noteLoadedNode(normalizedRoot, dbno, loadWatermark);
+          markedLoadedHere = true;
           consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 成员已在场景中，根自身无几何，按已加载收口`);
         }
         // 已有的都在场景里了（行上的「生成」走到这里）：把没有模型的那几块补上
@@ -1616,6 +1764,37 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
       return false;
     } catch (e) {
+      if (session.stopped) {
+        // 加载中被叫停（或生成到一半这个节点被隐藏了）：不是失败。停 = 回到点之前的样子——
+        // 这一次新装的构件从场景里拿掉、这一次从隐藏改成显示的藏回去；已经取到的记录和网格留在缓存里。
+        try {
+          // 在装的那一批让它自己收尾（装载器见到取消信号就收手），免得和收回去撞在一起
+          await progressiveLoad?.finish();
+        } catch {
+          // 那一批出不出错都要收回去
+        }
+        const withdrawn = withdrawStoppedLoad(undo);
+        // 这一次才记成「已加载」的（先显示已有的、再补齐时被叫停）一起撤掉；点之前就已加载的节点照旧算已加载
+        if (markedLoadedHere && !genuinelyLoaded) {
+          loadedRoots.delete(normalizedRoot);
+          forgetLoadedNode(normalizedRoot);
+        }
+        session.markWithdrawn();
+        statusMessage.value = refresh ? '已停止重载，场景保持原样' : '已停止加载';
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        consoleStore.addLog(
+          'info',
+          `[model-load] refno=${normalizedRoot} 加载被叫停：收回 ${withdrawn} 个构件；已取到的记录和网格留在缓存里`,
+        );
+        emitToast({
+          message: refresh
+            ? `[提示] ${normalizedRoot}：已停止重载，场景保持原样`
+            : `[提示] ${normalizedRoot}：已停止加载，这次画出来的已收起；已取到的数据留着，再点眼睛会接着装`,
+          level: 'info',
+        });
+        return false;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       error.value = msg;
       statusMessage.value = '加载失败';
@@ -1633,6 +1812,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         message: statusMessage.value,
         error: error.value,
       });
+      session.end();
     }
   }
 

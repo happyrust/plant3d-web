@@ -2611,6 +2611,69 @@ export class DTXLayer {
   }
 
   /**
+   * 把指定对象从图层里拿掉：真的释放对象槽，不是隐藏。留下的对象按原来的先后往前挪——
+   * 下标、图元偏移重新连续，矩阵、颜色 / 标志、颜色覆盖跟着各自的对象走。
+   *
+   * 用处：整套替换（重载）时旧对象退场、加载中途叫停时把已经画出来的收回去。只隐藏的话，
+   * 同一个节点每重载一次对象槽就多出一份（1888 件的 ZONE 重载一次变成 3776 个槽）。
+   *
+   * 只改 CPU 侧的表：GPU 纹理是按对象下标排的，调用后要 `recompile()`，中间不要让出主线程。
+   * 不认识的 id 不理会。回真正拿掉的个数。
+   */
+  removeObjects(objectIds: Iterable<string>): number {
+    const doomed = new Set<DTXObject>();
+    for (const objectId of objectIds) {
+      const object = this._objects.get(objectId);
+      if (object) doomed.add(object);
+    }
+    if (doomed.size === 0) return 0;
+
+    const previousCount = this._objectCount;
+    const kept: DTXObject[] = [];
+    let triangleCursor = 0;
+    for (const object of this._objectsArray) {
+      if (doomed.has(object)) {
+        this._objects.delete(object.objectId);
+        continue;
+      }
+      const from = object.objectIndex;
+      const to = kept.length;
+      if (from !== to) {
+        // 往前挪一格以上：源和目的不重叠
+        this._matricesBuffer.copyWithin(to * 16, from * 16, from * 16 + 16);
+        this._colorsAndFlagsBuffer.copyWithin(to * 16, from * 16, from * 16 + 16);
+        this._colorOverrideBuffer.copyWithin(to * 4, from * 4, from * 4 + 4);
+        object.objectIndex = to;
+      }
+      if (object.primitiveOffset !== triangleCursor) {
+        object.primitiveOffset = triangleCursor;
+        // pixel 1：图元偏移（与 addObject 同一格）
+        this._packUint32(this._colorsAndFlagsBuffer, to * 16 + 4, triangleCursor);
+      }
+      triangleCursor += Math.floor(object.indexCount / 3);
+      kept.push(object);
+    }
+    this._objectsArray = kept;
+    this._objectCount = kept.length;
+    this._totalObjects = kept.length;
+    this._drawTriangleCount = triangleCursor;
+    this._drawIndexCount = triangleCursor * 3;
+
+    this._matricesBuffer.fill(0, kept.length * 16, previousCount * 16);
+    this._colorsAndFlagsBuffer.fill(0, kept.length * 16, previousCount * 16);
+    this._colorOverrideBuffer.fill(0, kept.length * 4, previousCount * 4);
+
+    this._sceneBoundingBox.makeEmpty();
+    for (const object of kept) {
+      this._sceneBoundingBox.union(object.boundingBox);
+    }
+    this._visibilityRevision++;
+    this._markPassDirty();
+    this._markObjectSpheresDirty();
+    return doomed.size;
+  }
+
+  /**
    * 获取当前可见对象 ID 列表（基于对象 visible 标志）。
    */
   getVisibleObjectIds(): string[] {

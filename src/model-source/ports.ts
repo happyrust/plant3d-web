@@ -159,7 +159,11 @@ export type MeshSource = {
    */
   batch?: {
     available(): boolean;
-    request(geoHash: string): Promise<MeshBatchResult>;
+    /**
+     * `signal`（加载中可以停）：abort 之后还没发出去、也没有别人在等的键不再发，回 `{ kind: 'single', reason: 'cancelled' }`；
+     * 调用方看 `signal.aborted` 收手，不要把它当成「退回逐个取」。
+     */
+    request(geoHash: string, options?: { signal?: AbortSignal }): Promise<MeshBatchResult>;
   };
 };
 
