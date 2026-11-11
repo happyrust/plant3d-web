@@ -591,6 +591,22 @@ describe('genModelV1 ModelVersionSource', () => {
     expect(await leaf.listNodeVersions(8000, '24384_23262', 'self')).toMatchObject({ refno: '24384_23262', unitRefno: '24384_23257', unitNoun: 'BRAN', scope: 'self' });
   });
 
+  it('listNodeVersions：调用方给了 sinceSesno 就从它之后列（节点新旧判定问「模型水位之后谁动过」），翻页接着往后', async () => {
+    const nodeVersions = vi.fn()
+      .mockResolvedValueOnce(nodeVersionsResponse({
+        truncated: true,
+        versions: [{ sesno: 740, session_time: null, impact: 'mesh', self_impact: null, units_changed: 2, units_touched: 2 }],
+      }))
+      .mockResolvedValueOnce(nodeVersionsResponse({ versions: [] }));
+    const source = createGenModelV1ModelVersionSource(api({ nodeVersions }));
+
+    const table = await source.listNodeVersions(1112, '9304_2', 'subtree', { sinceSesno: 738 });
+
+    expect(nodeVersions).toHaveBeenNthCalledWith(1, { dbnum: 1112, refno: '9304_2', scope: 'subtree', sinceSesno: 738 }, { signal: undefined });
+    expect(nodeVersions).toHaveBeenNthCalledWith(2, { dbnum: 1112, refno: '9304_2', scope: 'subtree', sinceSesno: 740 }, { signal: undefined });
+    expect(table.versions.map((row) => row.sesno)).toEqual([740]);
+  });
+
   it('listNodeVersions：旧服务端没有这条路由 → ModelVersionRouteUnavailableError(node/versions)，带信封的 404 原样抛', async () => {
     const missing = vi.fn(async () => {
       throw new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/node/versions', message: 'HTTP 404 Not Found' });

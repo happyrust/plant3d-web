@@ -89,6 +89,7 @@ import {
   setGenModelV1LoadedProbe,
   startGenModelV1UpdateNotice,
 } from '@/composables/useGenModelV1UpdateNotice';
+import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
@@ -5688,6 +5689,8 @@ onUnmounted(() => {
   }
   compatViewerRef.value = null;
   setGenModelV1LoadedProbe(null);
+  // 场景没了：已加载节点表（各节点「装的时候是哪一版」）跟着撤掉
+  resetLoadedNodes();
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;

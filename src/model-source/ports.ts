@@ -637,12 +637,13 @@ export type ModelVersionSource = {
   /**
    * 某节点按范围折叠的版本表（ADR 0066 / CONTEXT「节点版本表」）：`subtree` 下容器也列得出子树的时间线，每版附动了几个单元。
    * 服务端没有这条路由 → 抛 `ModelVersionRouteUnavailableError`，面板据此退回「手填会话号」。
+   * `sinceSesno`：只要这个会话**之后**的版本（它得在这个库的会话链上）；节点新旧判定用它问「模型水位之后谁动过」。
    */
   listNodeVersions(
     dbnum: number,
     refno: string,
     scope: ModelNodeDiffScope,
-    options?: ModelVersionLoadOptions,
+    options?: ModelVersionLoadOptions & { sinceSesno?: number },
   ): Promise<ModelNodeVersionTimeline>;
   /**
    * 节点 A→B 的差异摘要（ADR 0066）：按范围过滤、按单元分组、不生成几何。

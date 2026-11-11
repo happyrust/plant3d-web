@@ -6,6 +6,7 @@ import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
 import type { DbnumRow } from '@/api/genModelV1Api';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
+import { changedSessionsOfNodeVersions } from '@/composables/nodeModelStatus';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
@@ -20,6 +21,7 @@ import {
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
+import { forgetLoadedNode, noteLoadedNode, provideLoadedNodeChangeQuery } from '@/composables/useLoadedNodeStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { pushRecordPageListener } from '@/model-source/genModelV1/modelRecords';
@@ -82,6 +84,12 @@ const VISIBLE_REFNOS_PAGE_SIZE = 1000;
 
 /** 正在边取边画的节点（`a_b`）。跨 `useModelGeneration` 实例共用：模型树和查看器各有一份实例，装的是同一个场景。 */
 const progressiveRoots = new Set<string>();
+
+// 已加载节点表判「模型水位之后谁改到了这个节点」要问节点版本表（`node/versions?since_sesno=`）：在这里接上数据源。
+provideLoadedNodeChangeQuery(async ({ dbnum, refno, sinceSesno, signal }) => {
+  const table = await getModelSource().versions.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal });
+  return changedSessionsOfNodeVersions(table.versions);
+});
 
 /**
  * 分批装入的每批大小：首批 `first` 个先出画，之后逐批翻倍。每批装完 DTX 层都要整层 recompile（全量重建 GPU 纹理），
@@ -676,6 +684,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets) : [];
     anyViewer?.scene?.setObjectsVisible?.(targets, false);
     loadedRoots.delete(root);
+    forgetLoadedNode(root);
     statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
     progress.value = 100;
     syncGlobalLoadStatus();
@@ -848,6 +857,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno = mappedDbno;
       }
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
+
+      // 「装的时候是哪一版」：开始取数之前读到的库水位（已加载节点表按它判「有更新可重载」）。取早不取晚——
+      // 装的过程中后端正好跑完一个批次时，宁可之后多提示一次，不能漏掉。
+      const rowAtStart = peekDbnumRow(dbno);
+      const loadWatermark = {
+        modelSesno: typeof rowAtStart?.model_sesno === 'number' ? rowAtStart.model_sesno : null,
+        fileLatestSesno: typeof rowAtStart?.file_latest_sesno === 'number' ? rowAtStart.file_latest_sesno : null,
+      };
 
       const prefetchLayer = (viewer as { __dtxLayer?: Parameters<typeof prefetchDtxGeometries>[0] }).__dtxLayer ?? null;
       const meshPrefetches: Promise<unknown>[] = [];
@@ -1213,6 +1230,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           return true;
         }
         loadedRoots.add(normalizedRoot);
+        noteLoadedNode(normalizedRoot, dbno, loadWatermark);
         statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
         syncGlobalLoadStatus();
         emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
@@ -1234,6 +1252,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           consoleStore.addLog('warning', `[model-load] gen-model-v1 refno=${normalizedRoot} 已取得的构件都在场景中，但收集未完成（${incompleteTail}）`);
         } else if (onlyInjectedRootLacksGeometry) {
           loadedRoots.add(normalizedRoot);
+          noteLoadedNode(normalizedRoot, dbno, loadWatermark);
           consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 成员已在场景中，根自身无几何，按已加载收口`);
         }
         return true;

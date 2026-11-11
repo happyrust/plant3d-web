@@ -1096,6 +1096,27 @@ async function regenerateNode() {
   }
 }
 
+/**
+ * 已加载节点行上的「重载」（方案 2026-11-10 C2）：库里的模型已经比本页装的新、而且改到了这个节点。
+ * 按最新记录替换场景里的这个节点：不重新生成、不动相机；装完节点重新登记进已加载节点表（换成新的水位）。
+ */
+async function reloadLoadedNode(rowId: string) {
+  if (!modelGenerationState.value) return;
+  const id = normalizeRefnoKeyLike(rowId);
+  if (!isRefnoLike(id)) return;
+  setNodeLoading(id, true);
+  try {
+    await modelGenerationState.value.showModelByRefno(id, { flyTo: false, refresh: true });
+  } finally {
+    setNodeLoading(id, false);
+  }
+}
+
+/** 已加载节点行上的动作按钮（`ModelTreeRow` 的 `node-action`）。 */
+function onNodeAction(rowId: string, action: 'update' | 'reload') {
+  if (action === 'reload') void reloadLoadedNode(rowId);
+}
+
 function hideNode() {
   if (!contextNodeId.value) return;
   setVisible(contextNodeId.value, false);
@@ -1534,7 +1555,8 @@ function onSearchEnter(value: string) {
             @toggle-visible="setVisible"
             @select="selectByRowIndex"
             @context="(id, ev) => openContextMenu(id, ev, rowAt(vr.index))"
-            @rvm-status="openRvmStatus" />
+            @rvm-status="openRvmStatus"
+            @node-action="onNodeAction" />
         </div>
       </div>
     </div>

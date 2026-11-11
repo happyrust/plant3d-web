@@ -579,11 +579,12 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     dbnum: number,
     refno: string,
     scope: ModelNodeDiffScope,
-    options: ModelVersionLoadOptions = {},
+    options: ModelVersionLoadOptions & { sinceSesno?: number } = {},
   ): Promise<ModelNodeVersionTimeline> {
     const normalized = fromV1Refno(refno);
     const versions: ModelNodeVersion[] = [];
-    let sinceSesno: number | undefined;
+    // 调用方给了起点就从它之后列（节点新旧判定只关心模型水位之后的会话）；翻页时接着往后挪
+    let sinceSesno: number | undefined = options.sinceSesno;
     for (let page = 0; page < MAX_PAGES; page += 1) {
       let response: NodeVersionsResponse;
       try {

@@ -22,6 +22,10 @@ const { dbnumRootsMock, dbnumRowsMock } = vi.hoisted(() => ({
 }));
 const releaseLod1Mock = vi.fn();
 const holdLod1Mock = vi.fn(() => releaseLod1Mock);
+const noteLoadedNodeMock = vi.fn();
+const forgetLoadedNodeMock = vi.fn();
+const listNodeVersionsMock = vi.fn();
+const providedChangeQuery = vi.hoisted(() => ({ value: null as unknown }));
 
 type ProgressListener = (progress: { refno: string; root: string; done: number; total: number; stage?: string }) => void;
 const progressListeners = new Set<ProgressListener>();
@@ -44,6 +48,7 @@ const v1Source = {
   kind: 'gen-model-v1' as const,
   tree: { visibleInsts: visibleInstsMock, subtreeRefnos: vi.fn() },
   attributes: { typeInfo: typeInfoMock },
+  versions: { listNodeVersions: listNodeVersionsMock },
   records: {
     invalidateRoot: vi.fn((_root: string): string[] => []),
     subscribeProgress: (listener: ProgressListener) => {
@@ -110,6 +115,12 @@ vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
 }));
 vi.mock('@/composables/useModelLoadStatus', () => ({
   useModelLoadStatus: () => ({ begin: vi.fn(), update: vi.fn(), finish: vi.fn() }),
+}));
+// 已加载节点表（C2）：这里只看显示流程在什么时候登记 / 撤表、带的是哪一版的水位
+vi.mock('@/composables/useLoadedNodeStatus', () => ({
+  noteLoadedNode: (...args: unknown[]) => noteLoadedNodeMock(...args),
+  forgetLoadedNode: (...args: unknown[]) => forgetLoadedNodeMock(...args),
+  provideLoadedNodeChangeQuery: (query: unknown) => { providedChangeQuery.value = query; },
 }));
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: emitToastMock }));
 
@@ -774,6 +785,92 @@ describe('queryLoadScopeRefnos（gen-model-v1）', () => {
       success: true, refno: '1_2', refnos: ['1_10'], incomplete: { pending: [], truncated_roots: [], errors: {} },
     });
     expect((await queryLoadScopeRefnos('1_2')).incomplete).toBeNull();
+  });
+});
+
+describe('showModelByRefno 与已加载节点表（方案 2026-11-10 C2）', () => {
+  beforeEach(() => {
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24381_535', noun: 'SITE' });
+  });
+
+  it('节点装完登记进表，带的是开始取数之前读到的库水位（装的过程中水位变了也不跟着变）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    dbnumRowsMock.mockReturnValue([{ dbnum: 8000, db_type: 'DESI', initialized: true, applied_sesno: 1140, model_sesno: 1140, file_latest_sesno: 1143 }]);
+    visibleInstsMock.mockImplementation(async () => {
+      // 取数期间后端跑完了一个批次
+      dbnumRowsMock.mockReturnValue([{ dbnum: 8000, db_type: 'DESI', initialized: true, applied_sesno: 1143, model_sesno: 1143, file_latest_sesno: 1143 }]);
+      return { success: true, refno: '24381_535', refnos: ['24381_1'] };
+    });
+
+    expect(await gen.showModelByRefno('24381/535')).toBe(true);
+    expect(noteLoadedNodeMock).toHaveBeenCalledTimes(1);
+    expect(noteLoadedNodeMock).toHaveBeenCalledWith('24381_535', 8000, { modelSesno: 1140, fileLatestSesno: 1143 });
+  });
+
+  it('库状态当时没取到：照样登记，水位记空', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    dbnumRowsMock.mockReturnValue([]);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: ['24381_1'] });
+    expect(await gen.showModelByRefno('24381_535')).toBe(true);
+    expect(noteLoadedNodeMock).toHaveBeenCalledWith('24381_535', 8000, { modelSesno: null, fileLatestSesno: null });
+  });
+
+  it('没收齐（有成员 409）或没装出东西：不登记', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    visibleInstsMock.mockResolvedValue({
+      success: true, refno: '24381_535', refnos: ['24381_1'],
+      incomplete: { pending: ['24381_571'], truncated_roots: [], errors: {} },
+    });
+    expect(await gen.showModelByRefno('24381_535')).toBe(true);
+    expect(noteLoadedNodeMock).not.toHaveBeenCalled();
+
+    loadInstancesMock.mockResolvedValue(loaderResult(0, 0));
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_776', refnos: ['24381_2'] });
+    expect(await gen.showModelByRefno('24381_776')).toBe(false);
+    expect(noteLoadedNodeMock).not.toHaveBeenCalled();
+  });
+
+  it('重载：装完重新登记（换成新的水位）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    dbnumRowsMock.mockReturnValue([{ dbnum: 8000, initialized: true, model_sesno: 1140, file_latest_sesno: 1143 }]);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: ['24381_1'] });
+    await gen.showModelByRefno('24381_535');
+    dbnumRowsMock.mockReturnValue([{ dbnum: 8000, initialized: true, model_sesno: 1143, file_latest_sesno: 1143 }]);
+    expect(await gen.showModelByRefno('24381_535', { refresh: true })).toBe(true);
+    expect(noteLoadedNodeMock).toHaveBeenLastCalledWith('24381_535', 8000, { modelSesno: 1143, fileLatestSesno: 1143 });
+  });
+
+  it('给节点表接上的变化查询：问节点版本表（子树范围、从给定会话之后），不影响模型的会话不算', async () => {
+    await import('./useModelGeneration');
+    const query = providedChangeQuery.value as (input: { dbnum: number; refno: string; sinceSesno: number; signal?: AbortSignal }) => Promise<unknown>;
+    expect(typeof query).toBe('function');
+    listNodeVersionsMock.mockResolvedValue({
+      versions: [
+        { sesno: 740, sessionTime: null, impact: 'noop', selfImpact: null, unitsChanged: 0, unitsTouched: 1 },
+        { sesno: 742, sessionTime: 't742', impact: 'mesh', selfImpact: null, unitsChanged: 3, unitsTouched: 3 },
+        { sesno: 745, sessionTime: null, impact: 'tombstone', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+      ],
+    });
+    const signal = new AbortController().signal;
+    expect(await query({ dbnum: 1112, refno: '9304_2', sinceSesno: 738, signal })).toEqual([
+      { sesno: 742, time: 't742', unitsChanged: 3 },
+      { sesno: 745, time: null, unitsChanged: 1 },
+    ]);
+    expect(listNodeVersionsMock).toHaveBeenCalledWith(1112, '9304_2', 'subtree', { sinceSesno: 738, signal });
+  });
+
+  it('重载时发现这根已经没有几何（被删了）：从场景撤下，同时撤表', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: ['24381_1'] });
+    await gen.showModelByRefno('24381_535');
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: [] });
+    expect(await gen.showModelByRefno('24381_535', { refresh: true })).toBe(true);
+    expect(forgetLoadedNodeMock).toHaveBeenCalledWith('24381_535');
   });
 });
 

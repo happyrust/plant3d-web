@@ -10,6 +10,7 @@ import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 import { rvmBadgeTitle, type IncrementalRoot } from '@/components/rvm-check/incrementalRvmTargets';
 import { type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
+import { useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
 import { type CheckState, type FlatRow } from '@/composables/useModelTree';
 import { getPdmsTypeIconUrl } from '@/lib/pdmsTypeIcon';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,8 @@ const emit = defineEmits<{
   (e: 'select', index: number, ev: MouseEvent): void;
   (e: 'context', id: string, ev: MouseEvent): void;
   (e: 'rvm-status', refno: string): void;
+  /** 已加载节点行上的动作：`update` = 更新到最新（落后时），`reload` = 重载（库里的模型比本页装的新时） */
+  (e: 'node-action', id: string, action: 'update' | 'reload'): void;
 }>();
 
 const INDENT_PX = 20;
@@ -190,8 +193,13 @@ function onContext(ev: MouseEvent) {
 // 虚拟滚动复用组件实例，dbnum 变了要把旧库的「在看」计数放掉再挂新库。
 // ---------------------------------------------------------------------------
 const dbStatusStore = useGenModelV1DbnumStatus();
+// 节点一级（方案 C2）：这一行的节点装进过场景，就画它自己的新旧（已加载节点表），库一级的说法退到提示的后一行
+const nodeStatusStore = useLoadedNodeStatus();
+const nodeStatus = computed(() => (props.ghost ? null : nodeStatusStore.view(props.row.id)));
 const statusDbnum = computed(() =>
-  !props.ghost && (props.row.dbBoundary === true || !!props.rvmStatus || !!props.rvmIncremental) && typeof props.row.dbnum === 'number'
+  !props.ghost
+  && (props.row.dbBoundary === true || !!props.rvmStatus || !!props.rvmIncremental || !!nodeStatus.value)
+  && typeof props.row.dbnum === 'number'
     ? props.row.dbnum
     : null
 );
@@ -201,19 +209,26 @@ watch(statusDbnum, (dbnum) => {
   releaseDbStatus = dbnum === null ? null : dbStatusStore.acquire(dbnum);
 }, { immediate: true });
 const dbStatus = computed(() => (statusDbnum.value === null ? null : dbStatusStore.view(statusDbnum.value)));
+/** 图标按节点自己的结论画；节点说不出结论（没装过 / 核对中 / 未知 / 未跟踪）时沿用库一级的圆点 */
+const generationKind = computed(() => nodeStatus.value?.iconKind ?? dbStatus.value?.kind ?? null);
 const statusTitle = computed(() => {
-  const gen = dbStatus.value?.title;
-  // 库状态的提示可能分几行（结论 / 说明 / 三枚水位），「点击重查」另起一行
+  // 先写节点、再写库：各自可能分几行（结论 / 说明 / 三枚水位）
+  const gen = [nodeStatus.value?.title, dbStatus.value?.title].filter(Boolean).join('\n');
+  // 「点击重查」另起一行
   if (!props.rvmStatus && !props.rvmIncremental) return gen ? `${gen}\n点击重查` : undefined;
   const rvm = rvmBadgeTitle(props.rvmStatus, props.rvmIncremental).replace(/\n(点击查看结果|右键「核对 RVM」校验)$/, '');
   const action = props.rvmStatus ? '点击查看结果' : '右键「核对 RVM」校验';
   return [rvm, gen, action].filter(Boolean).join('\n');
 });
-/** 核对过就打开结果，没核对过就重查生成状态 */
+/** 核对过就打开结果；没核对过就重查——装过的节点重问它自己（会连带重拉库状态），没装过的只重查库 */
 function onStatusClick() {
   if (props.rvmStatus) emit('rvm-status', props.rvmStatus.refno);
+  else if (nodeStatus.value) nodeStatusStore.recheck(props.row.id);
   else if (statusDbnum.value !== null) dbStatusStore.refresh(statusDbnum.value);
 }
+const nodeActionTitle = computed(() => (nodeStatus.value?.action === 'update'
+  ? '更新到最新：让后端把这个库的新会话入库并重新生成受影响的模型；做完会提示重载'
+  : '重载：按库里最新的模型记录替换场景里的这个节点（不重新生成）'));
 
 // 组件卸载时清理定时器与库状态引用计数
 onUnmounted(() => {
@@ -312,16 +327,29 @@ onUnmounted(() => {
         {{ diffCount }}
       </span>
 
-      <button v-if="!ghost && (rvmStatus || rvmIncremental || dbStatus)" type="button"
+      <button v-if="!ghost && nodeStatus?.action" type="button"
+        class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4"
+        :class="nodeStatus.action === 'update'
+          ? 'border-amber-500/50 text-amber-700 hover:bg-amber-50'
+          : 'border-sky-500/50 text-sky-700 hover:bg-sky-50'"
+        :title="nodeActionTitle"
+        data-testid="model-tree-node-action"
+        :data-action="nodeStatus.action"
+        @mousedown.stop
+        @click.stop="emit('node-action', row.id, nodeStatus.action)">
+        {{ nodeStatus.action === 'update' ? '更新' : '重载' }}
+      </button>
+      <button v-if="!ghost && (rvmStatus || rvmIncremental || dbStatus || nodeStatus)" type="button"
         class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
         :title="statusTitle"
         data-testid="model-tree-status"
         :data-rvm-status="rvmStatus?.verdict"
         :data-db-status="dbStatus?.kind"
+        :data-node-status="nodeStatus ? (nodeStatus.verdict ?? 'checking') : undefined"
         :data-rvm-outdated="rvmIncremental ? 'true' : undefined"
         @mousedown.stop
         @click.stop="onStatusClick">
-        <ModelTreeStatusIcon :verdict="rvmStatus?.verdict ?? null" :generation="dbStatus?.kind ?? null" :outdated="!!rvmIncremental" />
+        <ModelTreeStatusIcon :verdict="rvmStatus?.verdict ?? null" :generation="generationKind" :outdated="!!rvmIncremental" />
       </button>
       <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
         <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />
