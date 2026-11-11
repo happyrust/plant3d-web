@@ -1016,4 +1016,123 @@ describe('createMbdExternalSync', () => {
     expect(records.map((record: { id: string }) => record.id))
       .toEqual(['A:dim-1', 'B:dim-1']);
   });
+
+  /**
+   * 2026-11-11 全量联调：7059 个归属对象里 261 个回 200 却一个图元都没有。取数成功、没有失败提示、
+   * 面板只写「显示 0 条」——现场分不清是没装上、标注在画面外，还是这个对象本来就没有可标的内容。
+   */
+  it('tells an empty package apart from a blank viewport: one warning toast and a note', async () => {
+    const harness = createHarness({
+      search: '?mbd_refno=24381_37090',
+      fetchPipeData: vi.fn(async () => ({
+        ok: true as const,
+        data: contractPayload({ primitives: [] }),
+        diagnostics: [],
+      })),
+    });
+
+    await harness.sync.sync(harness.target);
+    await harness.sync.sync(harness.target);
+
+    // 同一句只弹一次（popstate 很频繁）。
+    expect(harness.emitToast).toHaveBeenCalledTimes(1);
+    expect(harness.emitToast).toHaveBeenCalledWith({
+      message: 'MBD 标注：24381_37090 没有可显示的标注（后端返回 0 个图元），后端没有给出原因',
+      level: 'warning',
+    });
+    // 空包不是失败：照常提交（清空）、不写 loadError，面板上多一句说明。
+    expect(harness.target.replaceExternalSource).toHaveBeenLastCalledWith('mbd', []);
+    const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(diagnostics.loadError).toBeUndefined();
+    expect(diagnostics.notes).toEqual(['本对象没有可显示的标注：后端返回 0 个图元，也没有给出原因']);
+    expect(diagnostics.sources[0]).not.toHaveProperty('empty');
+  });
+
+  it('points an empty package with issues at the diagnostics and keeps the error toast last', async () => {
+    const harness = createHarness({
+      search: '?mbd_refno=17496_106456',
+      fetchPipeData: vi.fn(async () => ({
+        ok: true as const,
+        data: contractPayload({
+          primitives: [],
+          issues: [{
+            id: 'issue-1',
+            severity: 'error' as const,
+            category: 'data' as const,
+            message: 'GWALL needs at least two non-horizontal faces',
+          }],
+        }),
+        diagnostics: [],
+      })),
+    });
+
+    await harness.sync.sync(harness.target);
+
+    // 提示条只有一个槽位，后发的盖掉先发的：error 诊断那句必须排在空包那句后面。
+    expect(harness.emitToast.mock.calls.map(([payload]) => payload)).toEqual([
+      { message: 'MBD 标注：17496_106456 没有可显示的标注（后端返回 0 个图元），原因见尺寸面板的诊断', level: 'warning' },
+      { message: 'MBD 标注存在 1 条 error 诊断，详见尺寸面板', level: 'error' },
+    ]);
+    const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(diagnostics.notes).toEqual(['本对象没有可显示的标注：后端返回 0 个图元，原因见上面的诊断']);
+  });
+
+  it('sums empty packages up in one toast per sync, re-arms when the set changes and leaves the rest alone', async () => {
+    const emptyRefnos = new Set(['B', 'C', 'D', 'E']);
+    const fetchPipeData = vi.fn(async (refno: string) => ({
+      ok: true as const,
+      data: contractPayload(emptyRefnos.has(refno) ? { primitives: [] } : {}),
+      diagnostics: [],
+    }));
+    let search = '?mbd_refno=A,B,C,D,E';
+    const diagnostics = createDiagnostics();
+    const emitToast = vi.fn();
+    const sync = createMbdExternalSync({ fetchPipeData, diagnostics, getSearch: () => search, emitToast });
+    const target = { replaceExternalSource: vi.fn() };
+
+    await sync.sync(target);
+    expect(emitToast).toHaveBeenCalledTimes(1);
+    expect(emitToast).toHaveBeenLastCalledWith({
+      message: 'MBD 标注：4 个对象没有可显示的标注（B、C、D 等），详见尺寸面板的诊断',
+      level: 'warning',
+    });
+    // 有图元的那一包照常提交。
+    expect(target.replaceExternalSource.mock.calls[0]![1].map((record: { id: string }) => record.id))
+      .toEqual(['A:dim-1']);
+
+    // 换了一组：重新提示。
+    search = '?mbd_refno=A,B';
+    await sync.sync(target);
+    expect(emitToast).toHaveBeenCalledTimes(2);
+    expect(emitToast).toHaveBeenLastCalledWith({
+      message: 'MBD 标注：B 没有可显示的标注（后端返回 0 个图元），后端没有给出原因',
+      level: 'warning',
+    });
+
+    // 没有空包了：不提示，并且复位——同一个空包再回来还要看得见。
+    search = '?mbd_refno=A';
+    await sync.sync(target);
+    expect(emitToast).toHaveBeenCalledTimes(2);
+    search = '?mbd_refno=A,B';
+    await sync.sync(target);
+    expect(emitToast).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not call a package empty when a debug filter or a failure left it without records', async () => {
+    // `mbd_kinds` 把记录滤光：负载里有图元，不是空包。
+    const filtered = createHarness({ search: '?mbd_refno=A&mbd_kinds=weld_mark' });
+    await filtered.sync.sync(filtered.target);
+    expect(filtered.target.replaceExternalSource).toHaveBeenLastCalledWith('mbd', []);
+    expect(filtered.emitToast).not.toHaveBeenCalled();
+
+    // 取数失败：只有失败那一句。
+    const failed = createHarness({
+      search: '?mbd_refno=A',
+      fetchPipeData: vi.fn(async () => ({ ok: false as const, error: 'MBD V2 payload has invalid meta' })),
+    });
+    await failed.sync.sync(failed.target);
+    expect(failed.emitToast.mock.calls.map(([payload]) => payload)).toEqual([
+      { message: 'MBD 标注装载失败：MBD V2 payload has invalid meta', level: 'error' },
+    ]);
+  });
 });

@@ -90,6 +90,11 @@ class MbdAtomicRejectionError extends Error {
  */
 type MbdSourceLoadOutcome = MbdDiagnosticsSourceSnapshot & Readonly<{
   records: readonly ExternalDimensionRecord[];
+  /**
+   * 空包：取数、契约、映射都过了，负载里一个图元都没有（真实库里 7059 个归属对象有 261 个）。
+   * 按负载判，不按提交的记录数——`mbd_kinds` 把记录滤光不算空包。
+   */
+  empty: boolean;
 }>;
 
 /**
@@ -238,6 +243,8 @@ export function createMbdExternalSync(
     failureToasts.set(refno, message);
     deps.emitToast({ message: `MBD 标注装载失败：${message}`, level: 'error' });
   };
+  /** 上一次弹过的空包提示；同一句不重复弹，空包消失后复位。 */
+  let lastEmptyToast: string | null = null;
 
   return {
     async sync(target, options = {}) {
@@ -254,6 +261,7 @@ export function createMbdExternalSync(
         target.replaceExternalSource('mbd', []);
         deps.diagnostics.clear();
         failureToasts.clear();
+        lastEmptyToast = null;
         return;
       }
 
@@ -325,9 +333,11 @@ export function createMbdExternalSync(
               layout: qualifyGroups({ ...record.layout, id: qualify(record.id) }, qualify),
             }))
             : stripped;
+          const empty = payload.primitives.length === 0;
           return {
             refno,
             records,
+            empty,
             issues: payload.issues,
             skipped,
             layoutMode: payload.meta.layout_mode ?? null,
@@ -339,6 +349,12 @@ export function createMbdExternalSync(
             loadError: null,
             notes: [
               ...payload.meta.notes,
+              ...(empty
+                ? [
+                  '本对象没有可显示的标注：后端返回 0 个图元'
+                    + (payload.issues.length > 0 ? '，原因见上面的诊断' : '，也没有给出原因'),
+                ]
+                : []),
               ...(kindFilter
                 ? [
                   `mbd_kinds=${[...kindFilter].join(',')}：调试过滤，仅显示 `
@@ -376,6 +392,7 @@ export function createMbdExternalSync(
           return {
             refno,
             records: [],
+            empty: false,
             issues: rejection?.issues ?? [],
             skipped: rejection?.skipped ?? [],
             layoutMode: null,
@@ -411,7 +428,7 @@ export function createMbdExternalSync(
 
       const allRecords = results.flatMap(result => result.records);
       const sources: MbdDiagnosticsSourceSnapshot[] = results.map(
-        ({ records: _records, ...source }) => source,
+        ({ records: _records, empty: _empty, ...source }) => source,
       );
       const failed = sources.filter(source => source.loadError !== null);
 
@@ -470,6 +487,28 @@ export function createMbdExternalSync(
       if (commitError !== null) {
         console.warn('[dimension-v2] MBD annotations unavailable', commitError);
       }
+
+      // 空包也是「视口空白」：取数成功、没有失败提示、面板只写「显示 0 条」，现场分不清是没装上、
+      // 标注在画面外，还是这个对象本来就没有可标的内容（真实库里 261 个，其中 43 个连一条诊断都没有）。
+      // 每次同步合成一句；同一句不重复弹（popstate 很频繁），空包消失后复位。排在 error 诊断的提示
+      // 之前：提示条只有一个槽位，后发的盖掉先发的，更要紧的那句留到最后。
+      const emptySources = results.filter(result => result.empty);
+      const describeEmpty = (): string | null => {
+        if (emptySources.length === 0) return null;
+        if (emptySources.length === 1) {
+          const [only] = emptySources;
+          return `MBD 标注：${only!.refno} 没有可显示的标注（后端返回 0 个图元），`
+            + (only!.issues.length > 0 ? '原因见尺寸面板的诊断' : '后端没有给出原因');
+        }
+        const listed = emptySources.slice(0, 3).map(source => source.refno).join('、');
+        return `MBD 标注：${emptySources.length} 个对象没有可显示的标注（${listed}`
+          + `${emptySources.length > 3 ? ' 等' : ''}），详见尺寸面板的诊断`;
+      };
+      const emptyToast = describeEmpty();
+      if (emptyToast !== null && emptyToast !== lastEmptyToast) {
+        deps.emitToast({ message: emptyToast, level: 'warning' });
+      }
+      lastEmptyToast = emptyToast;
 
       const errorCount = sources
         .filter(source => source.loadError === null)
