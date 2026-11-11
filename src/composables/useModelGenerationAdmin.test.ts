@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   taskGet: vi.fn(),
   upgrade: vi.fn(),
   reinit: vi.fn(),
+  updateExecute: vi.fn(),
 }));
 
 vi.mock('@/composables/useGenModelV1TaskFeed', async () => {
@@ -33,7 +34,7 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
 }));
 vi.mock('@/api/genModelV1AdminApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/genModelV1AdminApi')>()),
-  genModelV1UpdateExecute: vi.fn(),
+  genModelV1UpdateExecute: h.updateExecute,
   genModelV1StorageVersionUpgrade: h.upgrade,
   genModelV1DbnumReinitialize: h.reinit,
 }));
@@ -79,10 +80,58 @@ beforeEach(() => {
   h.taskGet.mockReset();
   h.upgrade.mockReset();
   h.reinit.mockReset();
+  h.updateExecute.mockReset();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('executeUpdate：面板「更新所选」和模型树行上的「更新到最新」共用（方案 2026-11-10 C3）', () => {
+  it('点名这些库发一次 update/execute；回执里新排上的和并进去的批次都登记轮询；回执原样交回', async () => {
+    const admin = await loadAdmin();
+    const receipt = {
+      enqueued: [{ task_id: 'batch-1', dbnum: 1112, intent: 'apply_window', start_sesno: 738, end_sesno: 748 }],
+      merged: [{ task_id: 'batch-0', dbnum: 1112 }],
+    };
+    h.updateExecute.mockResolvedValue(receipt);
+    h.taskGet.mockResolvedValue({ state: 'running', current_stage: 'model_generate', units_done: 1, total_units: 4 });
+
+    await expect(admin.executeUpdate([1112])).resolves.toBe(receipt);
+    expect(h.updateExecute).toHaveBeenCalledTimes(1);
+    expect(h.updateExecute).toHaveBeenCalledWith([1112], expect.objectContaining({ identity: { project: 'AvevaMarineSample' } }));
+    expect(admin.lastReceipt.value).toEqual(receipt);
+    await flushMicrotasks();
+    expect([...admin.tasks.value.keys()].sort()).toEqual(['batch-0', 'batch-1']);
+    expect(admin.tasks.value.get('batch-1')).toMatchObject({ dbnum: 1112, state: 'running', currentStage: 'model_generate', unitsDone: 1, totalUnits: 4 });
+    // 2 秒一拍接着轮询
+    h.taskGet.mockResolvedValue({ state: 'succeeded', current_stage: 'task_end', units_done: 4, total_units: 4 });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(admin.tasks.value.get('batch-1')).toMatchObject({ state: 'succeeded' });
+  });
+
+  it('请求失败原样抛出，不登记任务', async () => {
+    const admin = await loadAdmin();
+    h.updateExecute.mockRejectedValue(new Error('HTTP 503'));
+    await expect(admin.executeUpdate([1112])).rejects.toThrow('HTTP 503');
+    expect(admin.tasks.value.size).toBe(0);
+  });
+
+  it('面板「更新所选」照旧：勾选的库排好序走同一条路，失败写到 executeError、不抛', async () => {
+    const admin = await loadAdmin();
+    admin.toggleDbnum(7997);
+    admin.toggleDbnum(1112);
+    h.updateExecute.mockResolvedValue({ up_to_date: 2 });
+    await admin.executeSelected();
+    expect(h.updateExecute).toHaveBeenCalledWith([1112, 7997], expect.anything());
+    expect(admin.executeError.value).toBeNull();
+    expect(admin.executeBusy.value).toBe(false);
+
+    h.updateExecute.mockRejectedValue(new Error('HTTP 500'));
+    await admin.executeSelected();
+    expect(admin.executeError.value).toBe('HTTP 500');
+    expect(admin.executeBusy.value).toBe(false);
+  });
 });
 
 describe('K06 按库水位行跟着非本会话的批次刷新', () => {

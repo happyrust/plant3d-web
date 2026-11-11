@@ -678,27 +678,36 @@ function registerTask(taskId: string, dbnum: number | null, intent: string | nul
   ensureTaskFeed();
 }
 
-/** `update/execute`：勾选库 → 摄入管线。回执里的 enqueued+merged task_id 全部登记轮询。 */
+/**
+ * `update/execute` 点名这些库走摄入管线：回执里的 enqueued + merged task_id 全部登记轮询。出错原样往外抛。
+ * 面板的「初始化 / 更新所选」和模型树行上的「更新到最新」（`useUpdateToLatest`）共用——任务在面板里同样看得到。
+ */
+async function executeUpdate(dbnums: number[]): Promise<UpdateExecuteReceipt> {
+  const receipt = await genModelV1UpdateExecute(dbnums, { identity: requestIdentity() });
+  lastReceipt.value = receipt;
+  const batches = [...(receipt.enqueued ?? []), ...(receipt.merged ?? [])];
+  for (const info of batches) {
+    registerTask(info.task_id, info.dbnum ?? null, info.intent ?? null);
+  }
+  if (batches.length > 0) {
+    ensurePolling();
+  } else if (typeof receipt.status === 'string' && receipt.status !== '') {
+    // 读透 / kv-mem 回执没有 task_id（`model_refresh_queued` 等）：改按模型水位追平文件水位判完成
+    armRefreshWatches(dbnums);
+  }
+  // 执行后库水位会动；等一拍再刷列表，让 running 行先立起来
+  void pollTasksOnce().then(() => refreshDbnums());
+  return receipt;
+}
+
+/** 面板「初始化 / 更新所选」：勾选的库 → `executeUpdate`。 */
 async function executeSelected(): Promise<void> {
   const dbnums = [...selectedDbnums.value].sort((a, b) => a - b);
   if (dbnums.length === 0 || executeBusy.value) return;
   executeBusy.value = true;
   executeError.value = null;
   try {
-    const receipt = await genModelV1UpdateExecute(dbnums, { identity: requestIdentity() });
-    lastReceipt.value = receipt;
-    const batches = [...(receipt.enqueued ?? []), ...(receipt.merged ?? [])];
-    for (const info of batches) {
-      registerTask(info.task_id, info.dbnum ?? null, info.intent ?? null);
-    }
-    if (batches.length > 0) {
-      ensurePolling();
-    } else if (typeof receipt.status === 'string' && receipt.status !== '') {
-      // 读透 / kv-mem 回执没有 task_id（`model_refresh_queued` 等）：改按模型水位追平文件水位判完成
-      armRefreshWatches(dbnums);
-    }
-    // 执行后库水位会动；等一拍再刷列表，让 running 行先立起来
-    void pollTasksOnce().then(() => refreshDbnums());
+    await executeUpdate(dbnums);
   } catch (error) {
     executeError.value = error instanceof Error ? error.message : String(error);
   } finally {
@@ -1091,6 +1100,7 @@ export function useModelGenerationAdmin() {
     executeError,
     lastReceipt,
     executeSelected,
+    executeUpdate,
     tasks,
     taskList,
     hasActiveTasks,

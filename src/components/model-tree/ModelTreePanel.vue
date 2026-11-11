@@ -15,6 +15,7 @@ import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrD
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
+import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
@@ -31,6 +32,7 @@ import {
   type TreeDiffFilter,
   type TreeDiffModel,
 } from '@/composables/useTreeVersionDiff';
+import { requestUpdateToLatest } from '@/composables/useUpdateToLatest';
 import { cn } from '@/lib/utils';
 import { emitToast } from '@/ribbon/toastBus';
 import { appendMbdRefno, formatMbdRefnos, parseMbdRefnos } from '@/utils/mbdRefnoParam';
@@ -1112,9 +1114,27 @@ async function reloadLoadedNode(rowId: string) {
   }
 }
 
+/**
+ * 已加载节点行上的「更新」（方案 2026-11-10 C3）：节点落后——库的模型水位之后有会话改到了它。
+ * 让后端把这个库更新到最新；做完不换场景，真被改到的节点会标出「重载」。能看模型的人都可以点。
+ */
+async function updateLoadedNodeToLatest(rowId: string) {
+  const id = normalizeRefnoKeyLike(rowId);
+  const dbnum = loadedNodeEntry(id)?.dbnum;
+  if (typeof dbnum !== 'number') return;
+  const confirmed = window.confirm(
+    `让后端把库 ${dbnum} 更新到最新？\n`
+    + '这个库还没入库的会话会全部入库，受影响的模型重新生成——是整个库的这一段，不只是这个节点。\n'
+    + '做完之后会提示；真被改到的节点点「重载」才换到场景里。',
+  );
+  if (!confirmed) return;
+  await requestUpdateToLatest(dbnum);
+}
+
 /** 已加载节点行上的动作按钮（`ModelTreeRow` 的 `node-action`）。 */
 function onNodeAction(rowId: string, action: 'update' | 'reload') {
   if (action === 'reload') void reloadLoadedNode(rowId);
+  else void updateLoadedNodeToLatest(rowId);
 }
 
 function hideNode() {

@@ -104,6 +104,44 @@ describe('ModelTreeRow 节点一级状态', () => {
     }
   });
 
+  it('这个库的「更新到最新」在排队 / 在跑：按钮写「更新中」并禁用，提示里是进度；没成时按钮恢复、提示里留着原因', async () => {
+    const state = await import('@/composables/updateToLatestState');
+    state.__resetUpdateToLatestStateForTests();
+    nodeViewMock.mockReturnValue(LAGGING);
+    state.setUpdateToLatestState(1112, { phase: 'running', message: '模型生成 3/10', taskIds: ['batch-1'] });
+    const busy = await mountRow(ZONE);
+    try {
+      expect(busy.action()?.textContent?.trim()).toBe('更新中');
+      expect((busy.action() as HTMLButtonElement).disabled).toBe(true);
+      expect(busy.action()?.getAttribute('data-busy')).toBe('true');
+      expect(busy.action()?.getAttribute('title')).toContain('库 1112 更新到最新：模型生成 3/10');
+    } finally {
+      busy.unmount();
+    }
+
+    state.setUpdateToLatestState(1112, { phase: 'rejected', message: '后端没有受理：库不在更新范围里' });
+    const rejected = await mountRow(ZONE);
+    try {
+      expect(rejected.action()?.textContent?.trim()).toBe('更新');
+      expect((rejected.action() as HTMLButtonElement).disabled).toBe(false);
+      expect(rejected.action()?.getAttribute('title')).toContain('上一次更新到最新：后端没有受理：库不在更新范围里');
+    } finally {
+      rejected.unmount();
+      state.__resetUpdateToLatestStateForTests();
+    }
+  });
+
+  it('节点状态正在重查（库的水位刚变）：动作按钮先禁用，免得按着旧结论再点一次', async () => {
+    nodeViewMock.mockReturnValue({ ...LAGGING, checking: true });
+    const { action, unmount } = await mountRow(ZONE);
+    try {
+      expect(action()?.textContent?.trim()).toBe('更新');
+      expect((action() as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      unmount();
+    }
+  });
+
   it('有更新可重载：蓝色刷新图标，行上给「重载」，点了交出 node-action(reload)', async () => {
     nodeViewMock.mockReturnValue(RELOADABLE);
     const { status, action, onNodeAction, unmount } = await mountRow(SITE);

@@ -9,6 +9,7 @@ import type { TreeDiffStatus } from '@/composables/useTreeVersionDiff';
 
 import { rvmBadgeTitle, type IncrementalRoot } from '@/components/rvm-check/incrementalRvmTargets';
 import { type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
+import { updateToLatestView } from '@/composables/updateToLatestState';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
 import { type CheckState, type FlatRow } from '@/composables/useModelTree';
@@ -226,9 +227,16 @@ function onStatusClick() {
   else if (nodeStatus.value) nodeStatusStore.recheck(props.row.id);
   else if (statusDbnum.value !== null) dbStatusStore.refresh(statusDbnum.value);
 }
-const nodeActionTitle = computed(() => (nodeStatus.value?.action === 'update'
-  ? '更新到最新：让后端把这个库的新会话入库并重新生成受影响的模型；做完会提示重载'
-  : '重载：按库里最新的模型记录替换场景里的这个节点（不重新生成）'));
+/** 这个库的「更新到最新」走到哪了（方案 C3）：在排队 / 在跑时按钮写「更新中」并禁用，提示里是进度或上一次没成的原因 */
+const updateState = computed(() => (
+  nodeStatus.value?.action === 'update' && statusDbnum.value !== null ? updateToLatestView(statusDbnum.value) : null
+));
+const nodeActionLabel = computed(() => (nodeStatus.value?.action === 'update' ? updateState.value?.label ?? '更新' : '重载'));
+const nodeActionTitle = computed(() => {
+  if (nodeStatus.value?.action !== 'update') return '重载：按库里最新的模型记录替换场景里的这个节点（不重新生成）';
+  const hint = '更新到最新：让后端把这个库的新会话入库并重新生成受影响的模型；做完会提示，点「重载」才换到场景里';
+  return updateState.value ? `${updateState.value.title}\n${hint}` : hint;
+});
 
 // 组件卸载时清理定时器与库状态引用计数
 onUnmounted(() => {
@@ -328,16 +336,18 @@ onUnmounted(() => {
       </span>
 
       <button v-if="!ghost && nodeStatus?.action" type="button"
-        class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4"
+        class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4 disabled:cursor-wait disabled:opacity-70"
         :class="nodeStatus.action === 'update'
           ? 'border-amber-500/50 text-amber-700 hover:bg-amber-50'
           : 'border-sky-500/50 text-sky-700 hover:bg-sky-50'"
         :title="nodeActionTitle"
+        :disabled="updateState?.busy === true || nodeStatus.checking"
         data-testid="model-tree-node-action"
         :data-action="nodeStatus.action"
+        :data-busy="updateState?.busy ? 'true' : undefined"
         @mousedown.stop
         @click.stop="emit('node-action', row.id, nodeStatus.action)">
-        {{ nodeStatus.action === 'update' ? '更新' : '重载' }}
+        {{ nodeActionLabel }}
       </button>
       <button v-if="!ghost && (rvmStatus || rvmIncremental || dbStatus || nodeStatus)" type="button"
         class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
