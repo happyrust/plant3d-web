@@ -179,6 +179,7 @@ import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
 import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
 import { clampViewerPixelRatio, DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
+import { appendUniqueRefnos } from '@/viewer/dtx/loadedRefnoList';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 import {
   DEFAULT_DRAG_DOWNGRADE_OPTIONS,
@@ -4094,9 +4095,12 @@ onMounted(async () => {
     const loadedRefnosAll: string[] = Array.isArray((compat as any).__dtxLoadedRefnosAll)
       ? (compat as any).__dtxLoadedRefnosAll
       : [];
-    for (const refno of loadedRefnos) {
-      if (!loadedRefnosAll.includes(refno)) loadedRefnosAll.push(refno);
-    }
+    // 去重走集合（`appendUniqueRefnos`）：原来的数组 `includes` 是平方复杂度，8 万件的 SITE 这里自耗时 3.2 s（方案 A2）
+    (compat as any).__dtxLoadedRefnosAllIndex = appendUniqueRefnos(
+      loadedRefnosAll,
+      (compat as any).__dtxLoadedRefnosAllIndex,
+      loadedRefnos,
+    );
     (compat as any).__dtxLoadedRefnosAll = loadedRefnosAll;
     // 按需实例加载：把树侧已有的可见/选中状态回放到新加载的对象（避免默认 visible=true 覆盖）
     compat.scene.applyStateToRefnos(loadedRefnos, { computeAabb: false });

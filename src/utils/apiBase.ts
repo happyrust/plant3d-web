@@ -234,13 +234,30 @@ export function resolveGenModelV1BaseUrl(options: ResolveGenModelV1BaseUrlOption
   return resolved;
 }
 
+let genModelV1BaseMemo: { href: string; envBase: string | undefined; isDev: boolean; value: string } | null = null;
+
+/**
+ * 当前页面要的 gen-model 基址。按页面地址（`location.href`）缓存结果：这个函数不只在发请求时调用，装载路径上还
+ * **按构件**调用（`useDbMetaInfo` 每次由 refno 查库号都先核对基址有没有换，而查看器逐个构件查库号）。每次重新读
+ * origin、解析 URL 和查询参数，8 万件的 SITE 装下来这条链合计约 1.2 s（2026-11-10 的 CPU 剖面，方案 A2）。
+ * 地址栏参数（`?gm_backend=`）一变 `href` 就变，缓存自然失效；取不到 `href`（非浏览器环境）时不缓存。
+ */
 export function getGenModelV1BaseUrl(): string {
-  return resolveGenModelV1BaseUrl({
+  const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_V1_BASE_URL?: string }).VITE_GEN_MODEL_V1_BASE_URL;
+  const isDev = import.meta.env.DEV;
+  const href = typeof window !== 'undefined' && typeof window.location?.href === 'string' ? window.location.href : null;
+  if (href !== null) {
+    const memo = genModelV1BaseMemo;
+    if (memo && memo.href === href && memo.envBase === envBase && memo.isDev === isDev) return memo.value;
+  }
+  const value = resolveGenModelV1BaseUrl({
     search: typeof window !== 'undefined' ? window.location?.search : null,
-    envBase: (import.meta.env as unknown as { VITE_GEN_MODEL_V1_BASE_URL?: string }).VITE_GEN_MODEL_V1_BASE_URL,
-    isDev: import.meta.env.DEV,
+    envBase,
+    isDev,
     browserOrigin: getBrowserOrigin(),
   });
+  if (href !== null) genModelV1BaseMemo = { href, envBase, isDev, value };
+  return value;
 }
 
 /** 拼 gen-model 的绝对（或同源相对）URL；`path` 形如 `/api/v1/tree/roots`。 */

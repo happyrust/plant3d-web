@@ -1,6 +1,43 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { isMixedContentBackendBase, resolveBackendApiBaseUrl, resolveGenModelV1BaseUrl } from './apiBase';
+import { getGenModelV1BaseUrl, isMixedContentBackendBase, resolveBackendApiBaseUrl, resolveGenModelV1BaseUrl } from './apiBase';
+
+describe('getGenModelV1BaseUrl（按页面地址缓存：装载路径上按构件调用，不能每次重新解析）', () => {
+  const originalUrl = `${window.location.pathname}${window.location.search}`;
+
+  afterEach(() => {
+    window.history.replaceState({}, '', originalUrl);
+    vi.restoreAllMocks();
+  });
+
+  it('页面地址不变时只解析一次；地址栏参数一变就重新解析', () => {
+    window.history.replaceState({}, '', '/?gm_backend=/gm-a');
+    const parse = vi.spyOn(URLSearchParams.prototype, 'get');
+
+    for (let i = 0; i < 1000; i++) expect(getGenModelV1BaseUrl()).toBe('/gm-a');
+    const callsForFirstAddress = parse.mock.calls.length;
+    expect(callsForFirstAddress).toBeLessThanOrEqual(2);
+
+    window.history.replaceState({}, '', '/?gm_backend=/gm-b');
+    expect(getGenModelV1BaseUrl()).toBe('/gm-b');
+    expect(parse.mock.calls.length).toBeGreaterThan(callsForFirstAddress);
+
+    window.history.replaceState({}, '', '/?gm_backend=/gm-a');
+    expect(getGenModelV1BaseUrl()).toBe('/gm-a');
+  });
+
+  it('缓存的结果与现算的一致（无参数时落到环境变量 / 默认值）', () => {
+    window.history.replaceState({}, '', '/');
+    const expected = resolveGenModelV1BaseUrl({
+      search: window.location.search,
+      envBase: (import.meta.env as unknown as { VITE_GEN_MODEL_V1_BASE_URL?: string }).VITE_GEN_MODEL_V1_BASE_URL,
+      isDev: import.meta.env.DEV,
+      browserOrigin: window.location.origin,
+    });
+    expect(getGenModelV1BaseUrl()).toBe(expected);
+    expect(getGenModelV1BaseUrl()).toBe(expected);
+  });
+});
 
 describe('resolveGenModelV1BaseUrl（gen-model /api/v1，与旧后端地址互不影响）', () => {
   it('开发环境默认直连 :8022（gen-model CORS 已放开，不绕代理）', () => {
