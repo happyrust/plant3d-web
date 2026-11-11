@@ -140,12 +140,14 @@ import {
   createRadialEditSession,
   DtxDimensionAnchorResolver,
   DtxDimensionSnapPort,
+  externalDimensionBounds,
   loadArchivedDimensionArchives,
   localDimensionDocumentId,
   LocalStorageDimensionCommandJournal,
   LocalStorageDimensionDocumentRepository,
   migrateLegacyDimensionArchives,
   ReviewDimensionRepository,
+  shouldFrameExternalDimensions,
   type DimensionDocumentState,
   type DimensionSystem,
 } from '@/dimension';
@@ -2949,7 +2951,52 @@ const mbdExternalSync = createMbdExternalSync({
 function syncMbdExternalDimensions(system: DimensionSystem): Promise<void> {
   return mbdExternalSync.sync(system, {
     isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
-  });
+  }).then(() => frameMbdAnnotationsWhenSceneEmpty(system));
+}
+
+/**
+ * 场景里一个模型都没有时，把相机对到刚装上的 MBD 标注上（2026-11-11 页面验证）。
+ *
+ * 标注对象没有几何——那个库的模型还没生成，或者支架的型钢读不出截面、生成不出网格——时，`show_refno` 那一轮
+ * 装不出东西、相机不动；而没有模型时全局矩阵还是恒等的，标注的世界坐标是毫米量级，离初始相机十几公里：
+ * 面板写着「显示 N 条」，视口里一条都看不到，也没有入口能把相机带过去。几何随后装上来时照常 fit 到几何
+ * （`fitDtxViewerToFocusBox`），这里摆的视角被它替掉。判据见 `shouldFrameExternalDimensions`。
+ */
+let framedMbdSourceKey: string | null = null;
+
+function frameMbdAnnotationsWhenSceneEmpty(system: DimensionSystem): void {
+  if (dimensionSystem !== system || dimensionMountDisposed) return;
+  const dtxViewer = dtxViewerRef.value;
+  const dtxLayer = dtxLayerRef.value;
+  if (!dtxViewer || !dtxLayer) return;
+  const records = system.externalRegistry.snapshot.records.filter(record => record.source === 'mbd');
+  if (records.length === 0) {
+    framedMbdSourceKey = null;
+    return;
+  }
+  const sourceKey = mbdDiagnosticsStore.snapshot.value.sourceId ?? '';
+  if (!shouldFrameExternalDimensions({
+    sceneObjectCount: Number(dtxLayer.getStats().totalObjects) || 0,
+    recordCount: records.length,
+    sourceKey,
+    framedSourceKey: framedMbdSourceKey,
+  })) return;
+  const bounds = externalDimensionBounds(records);
+  if (!bounds) return;
+  const designToWorld = dimensionViewerAdapter.getDesignToWorld();
+  const box = new Box3();
+  for (const x of [bounds.min[0], bounds.max[0]]) {
+    for (const y of [bounds.min[1], bounds.max[1]]) {
+      for (const z of [bounds.min[2], bounds.max[2]]) {
+        box.expandByPoint(new Vector3(x, y, z).applyMatrix4(designToWorld));
+      }
+    }
+  }
+  if (box.isEmpty()) return;
+  framedMbdSourceKey = sourceKey;
+  fitDtxViewerToBox(dtxViewer, box, 0);
+  requestRender();
+  system.notifyViewerChanged();
 }
 
 /**

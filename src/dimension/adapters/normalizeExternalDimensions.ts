@@ -1,6 +1,7 @@
 import type {
   ExplicitLayoutInput,
   NormalizedDimensionInput,
+  Vec3,
 } from '../kernel/types';
 
 /**
@@ -86,4 +87,75 @@ export function normalizeExternalDimension(
     role: record.role,
     labelPinned: externalLayoutAuthority(record) === 'solver',
   } as NormalizedDimensionInput | ExplicitLayoutInput;
+}
+
+/**
+ * Design Space 里把这批记录的几何包起来的轴对齐盒：线的端点、标签锚点、箭头、弧（按半径外扩）、标记、
+ * 附加文字、卡片引线指的点、三维尺寸的管道点。非有限的点不算；一个有限点都没有时返回 `null`。
+ * 给宿主摆相机用（把相机对到标注上），不参与排版。
+ */
+export function externalDimensionBounds(
+  records: readonly ExternalDimensionRecord[],
+): Readonly<{ min: Vec3; max: Vec3 }> | null {
+  const min: [number, number, number] = [
+    Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY,
+  ];
+  const max: [number, number, number] = [
+    Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY,
+  ];
+  let found = false;
+  const add = (point: Vec3 | undefined, padM = 0): void => {
+    if (!point || !point.every(Number.isFinite) || !Number.isFinite(padM)) return;
+    found = true;
+    for (let axis = 0; axis < 3; axis += 1) {
+      min[axis] = Math.min(min[axis]!, point[axis]! - padM);
+      max[axis] = Math.max(max[axis]!, point[axis]! + padM);
+    }
+  };
+  for (const record of records) {
+    const layout = record.layout;
+    if ('lines' in layout) {
+      add(layout.labelAnchor);
+      for (const line of layout.lines) {
+        add(line.from);
+        add(line.to);
+      }
+      for (const line of layout.arrowLines) {
+        add(line.from);
+        add(line.to);
+      }
+      for (const arc of layout.arcs ?? []) add(arc.center, Math.abs(arc.radiusM));
+      for (const marker of layout.markers ?? []) add(marker.at);
+      for (const text of layout.texts ?? []) add(text.anchor);
+      add(layout.tag?.target);
+      add(layout.dimension3d?.from);
+      add(layout.dimension3d?.to);
+    } else if (layout.kind === 'angular') {
+      add(layout.vertex);
+    } else if (layout.kind === 'radial') {
+      add(layout.center);
+      add(layout.rim);
+    } else {
+      add(layout.a);
+      add(layout.b);
+    }
+  }
+  return found ? { min, max } : null;
+}
+
+/**
+ * 宿主要不要把相机对到刚装上的外部标注上。只在三件事同时成立时：
+ * - 场景里一个模型对象都没有（有模型时相机跟模型走，不抢）；
+ * - 这批来源有记录（空包、整包失败没有东西可对）；
+ * - 这批来源还没对过（面板上的开关走 popstate 重新同步，同一批不该把用户拉近的视角弹回去）。
+ */
+export function shouldFrameExternalDimensions(input: Readonly<{
+  sceneObjectCount: number;
+  recordCount: number;
+  sourceKey: string;
+  framedSourceKey: string | null;
+}>): boolean {
+  return input.sceneObjectCount === 0
+    && input.recordCount > 0
+    && input.sourceKey !== input.framedSourceKey;
 }
