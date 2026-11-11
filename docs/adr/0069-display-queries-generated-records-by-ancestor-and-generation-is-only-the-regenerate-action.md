@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: amended
 date: 2026-10-12
 depends_on: ADR-0065
+amended_by: 0072-display-fills-missing-models-by-scale-draws-containers-progressively-and-judges-freshness-against-the-file-latest-session
 ---
 
 # 显示只按祖先查已生成的记录，生成只由右键「重新生成模型」直接调 `/model/generate`
@@ -66,3 +67,23 @@ ADR-0030（2026-10-09）把原则改成「显示只按 `inst_relate` 的 `anc` �
 - 单测：`auto_generate_on_empty_records`（BRAN 空 records 自动生成并装载）、`no_auto_generate_for_non_geometry_type`（SITE 不自动生成）、`auto_generate_only_once`（同一 refno 不重复生成）。
 - E2E：`scripts/verify-auto-generate-on-display.mjs` 通过 `showModelByRefnos` 事件触发显示 `24381_144976`（BRAN，records 空），观测到请求序列 `records(空) → tree/ancestors + tree/children(typeInfo) → model/generate → records(16 items) → meshes/*(8)`，确认自动生成正确触发并装载。
 - 回归：`useModelGeneration.genModelV1.test.ts` 33 tests、`model-source/genModelV1/` 全部、`model-tree/` 相关测试，共 181 tests 全绿；type-check 新增 0 错误。
+
+## Addendum (2026-11-10): 查空的补齐、边取边画与新旧判定改由 ADR 0072 规定
+
+2026-11-10 用户就「没生成过先生成再加载」「加载出来的是最新的」定了六条，记在 ADR 0072。本文哪些还作数、哪些被改了：
+
+**还作数的**：显示先按祖先查已生成的记录，客户端不解根、不展开容器；整库显示逐 SITE 查，不起整库生成任务；右键「重新生成模型」是唯一带 `force: true` 的入口，
+成功回执之后再查记录、替换场景里的旧几何；`pending` / `timeout` 的回执不显示。`modelRecordSource` / `treeSource` / `collectDbnum` 的显示路径不出现 `generate`
+（源码钉 `display_never_generates`）。
+
+**被 ADR 0072 改掉的**：
+
+- 正文（1）「查空就是空……右键可生成」和 Consequences 里「没生成过的节点点眼睛不再触发生成，要人右键」：现在查空会做模型资产补齐。
+- 上面 2026-10-14 追记的第 1 条「不是几何单元类型（如 SITE / ZONE 容器）不自动生成」：补齐不再按类型筛，SITE / ZONE 查空同样补齐；规模大的先确认（确认框与分块生成尚未实现）。
+- 同一追记的第 2 条写「（即 `POST /model/generate`，非 force）」，而实际发出去的请求带着 `force: true`（`generateThenCollect` 的缺省值；2026-11-10 在浏览器里抓到的请求体）
+  ——先把范围内已有的模型连同网格清掉再算。2026-11-10 起显示补齐显式传 `{ force: false }`，并且只在「记录查询成功、收齐、确实为空」时才发；记录查询失败时不再生成
+  （此前在「库级预检查说没有模型」时会自动发一次带 force 的生成）。
+- Considered Options 里否掉的「显示路径改调 `generate(force=false)` 当『确保有』」：现在查空之后正是这么做的。区别在于它排在查询之后、只对查空的节点、不带 `force`，
+  不是每次显示都先过一遍生成接口。
+- Considered Options 里否掉的「树行加『未生成 / 已过期』数据态」：ADR 0072 定了库一级与 SITE / ZONE 一级的新旧怎么判（库一级已实现，节点一级尚未实现）。
+- 库级预检查不再调 `dbnums/{库}/model/roots`（整库生成根枚举，一次 15–40 秒），改读已缓存的 `/dbnums` 那一行。
