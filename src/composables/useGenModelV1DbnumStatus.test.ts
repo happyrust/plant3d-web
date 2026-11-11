@@ -1,13 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useGenModelV1DbnumStatus } from './useGenModelV1DbnumStatus';
+import { DBNUM_STATUS_PENDING_RETRY_DELAYS_MS, useGenModelV1DbnumStatus } from './useGenModelV1DbnumStatus';
 
-import { GenModelV1ApiError } from '@/api/genModelV1Api';
+import type { DbnumRow } from '@/api/genModelV1Api';
+
 import { __resetGenModelV1ServiceLifecycleForTests } from '@/model-source/genModelV1/serviceLifecycle';
 
 const rootsMock = vi.hoisted(() => vi.fn());
+const refreshVerdictMock = vi.hoisted(() => vi.fn(async () => {}));
 const healthState = vi.hoisted(() => ({
-  verdict: { byDbnum: {} as Record<number, string>, lastCheckedAt: null as number | null },
+  verdict: {
+    rows: {} as Record<number, DbnumRow>,
+    error: null as string | null,
+    lastCheckedAt: null as number | null,
+  },
 }));
 
 vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
@@ -16,162 +25,105 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
 }));
 
 vi.mock('@/composables/useGenModelV1Health', () => ({
-  useGenModelV1Health: () => ({ state: healthState }),
+  useGenModelV1Health: () => ({ state: healthState, refreshVerdict: refreshVerdictMock }),
 }));
 
-function rootsReply(ready: number, total = 10) {
-  return { source: 'direct', dbnum: 7997, total, ready_total: ready, roots: [] };
-}
-
-function setVerdict(dbnum: number, verdict: string) {
-  healthState.verdict.byDbnum[dbnum] = verdict;
+function setRow(dbnum: number, row: Partial<DbnumRow>) {
+  healthState.verdict.rows[dbnum] = { dbnum, db_type: 'DESI', ...row };
   healthState.verdict.lastCheckedAt = Date.now();
 }
 
-async function flush() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
-describe('useGenModelV1DbnumStatus：verdict 表态优先，not_judged 落到 model/roots 探测', () => {
+describe('useGenModelV1DbnumStatus：库状态只读 /dbnums 那一行，不做整库根枚举', () => {
   afterEach(() => {
     useGenModelV1DbnumStatus().__reset();
     __resetGenModelV1ServiceLifecycleForTests();
-    healthState.verdict.byDbnum = {};
+    healthState.verdict.rows = {};
+    healthState.verdict.error = null;
     healthState.verdict.lastCheckedAt = null;
     rootsMock.mockReset();
+    refreshVerdictMock.mockClear();
     vi.useRealTimers();
   });
 
-  it('verdict in_sync / lagging 直接给 current / stale，不发 roots 探测', async () => {
+  it('verdict in_sync / lagging 直接给 current / stale', () => {
     const store = useGenModelV1DbnumStatus();
-    setVerdict(7997, 'in_sync');
-    setVerdict(7998, 'lagging');
-    const releaseA = store.acquire(7997);
-    const releaseB = store.acquire(7998);
-    await flush();
-    expect(store.view(7997).kind).toBe('current');
+    setRow(8000, { model_verdict: 'in_sync', initialized: true });
+    setRow(7998, { model_verdict: 'lagging', initialized: true });
+    expect(store.view(8000)).toEqual({ kind: 'current', title: 'DB 8000 · 模型已生成且为最新' });
     expect(store.view(7998).kind).toBe('stale');
-    expect(rootsMock).not.toHaveBeenCalled();
-    releaseA();
-    releaseB();
   });
 
-  it('not_judged 时探测 roots：ready_total>0 → current（title 带就绪根数），=0 → empty', async () => {
+  it('未初始化的库是 empty，提示写明按需生成；行还没取到是 unknown 并带上取数错误', () => {
     const store = useGenModelV1DbnumStatus();
-    rootsMock.mockImplementation(async (dbnum: number) => (
-      dbnum === 7999 ? rootsReply(0, 4435) : rootsReply(1, 6772)
-    ));
-    const releaseA = store.acquire(7997);
-    const releaseB = store.acquire(7999);
-    await flush();
-    expect(rootsMock).toHaveBeenCalledTimes(2);
-    expect(store.view(7997)).toMatchObject({ kind: 'current' });
-    expect(store.view(7997).title).toContain('就绪根 1/6772');
-    expect(store.view(7999).kind).toBe('empty');
-    releaseA();
-    releaseB();
+    setRow(7997, { model_verdict: 'not_judged', initialized: false, applied_sesno: 0, model_sesno: 0 });
+    expect(store.view(7997).kind).toBe('empty');
+    expect(store.view(7997).title).toContain('库未初始化，模型按需生成');
+
+    healthState.verdict.error = 'timeout: /dbnums';
+    expect(store.view(6890).kind).toBe('unknown');
+    expect(store.view(6890).title).toContain('timeout: /dbnums');
   });
 
-  it('旧构建没有 ready_total：逐根数 ready', async () => {
-    const store = useGenModelV1DbnumStatus();
-    rootsMock.mockResolvedValue({
-      source: 'direct', dbnum: 1, total: 2,
-      roots: [{ generation_root: '1/1', ready: true }, { generation_root: '1/2', ready: false }],
-    });
-    const release = store.acquire(1);
-    await flush();
-    expect(store.view(1).kind).toBe('current');
-    release();
-  });
-
-  it('探测失败 → unknown，title 带错误；30 s 内不自动重打', async () => {
+  it('挂载、在看、过了很久：一次 model/roots 都不发', async () => {
     vi.useFakeTimers();
     const store = useGenModelV1DbnumStatus();
-    rootsMock.mockRejectedValue(new GenModelV1ApiError({ code: 'network', status: 0, path: '/x', message: 'ECONNREFUSED' }));
-    const release = store.acquire(6890);
-    await vi.advanceTimersByTimeAsync(0);
-    const view = store.view(6890);
-    expect(view.kind).toBe('unknown');
-    expect(view.title).toContain('ECONNREFUSED');
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(rootsMock).toHaveBeenCalledTimes(1);
-    release();
-  });
-
-  it('在飞期间显示 probing；同库重复 acquire 只发一发', async () => {
-    const store = useGenModelV1DbnumStatus();
-    let resolve!: (v: unknown) => void;
-    rootsMock.mockImplementation(() => new Promise((done) => { resolve = done; }));
-    const releaseA = store.acquire(7997);
-    const releaseB = store.acquire(7997);
-    expect(store.view(7997).kind).toBe('probing');
-    resolve(rootsReply(3, 9));
-    await flush();
-    expect(rootsMock).toHaveBeenCalledTimes(1);
-    expect(store.view(7997).kind).toBe('current');
-    releaseA();
-    releaseB();
-  });
-
-  it('TTL 内重复 acquire 不重探；过期后 tick 自动补探在看的库', async () => {
-    vi.useFakeTimers();
-    const store = useGenModelV1DbnumStatus();
-    rootsMock.mockResolvedValue(rootsReply(1, 10));
+    setRow(7997, { model_verdict: 'not_judged', initialized: false });
     const release = store.acquire(7997);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(rootsMock).toHaveBeenCalledTimes(1);
-
-    // 60 s TTL 内再来一遍：不发
-    const release2 = store.acquire(7997);
-    release2();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(rootsMock).toHaveBeenCalledTimes(1);
-
-    // 过期后由 tick（15 s）发现该库仍被看 → 重探
-    await vi.advanceTimersByTimeAsync(61_000);
-    expect(rootsMock).toHaveBeenCalledTimes(2);
+    store.view(7997);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
     release();
+    expect(rootsMock).not.toHaveBeenCalled();
+    expect(refreshVerdictMock).not.toHaveBeenCalled();
   });
 
-  it('invalidate：还在看的库立刻丢结论重探；noteGenerated 乐观记绿', async () => {
+  it('源码钉：库状态仓不引用整库根枚举接口', () => {
+    const source = readFileSync(resolve(__dirname, 'useGenModelV1DbnumStatus.ts'), 'utf8');
+    const code = source.slice(source.indexOf('import { reactive }'));
+    expect(code).not.toMatch(/genModelV1DbnumModelRoots|model\/roots/);
+  });
+
+  it('noteGenerated / reconcile 只在提示里补一句本页面的证据，不改未初始化这个结论；已记「刚生成」的不被 records 降级', () => {
     const store = useGenModelV1DbnumStatus();
-    rootsMock.mockResolvedValue(rootsReply(0, 10));
-    const release = store.acquire(7999);
-    await flush();
-    expect(store.view(7999).kind).toBe('empty');
+    setRow(7997, { model_verdict: 'not_judged', initialized: false });
 
-    store.noteGenerated(7999);
-    expect(store.view(7999)).toMatchObject({ kind: 'current' });
-    expect(store.view(7999).title).toContain('模型刚生成');
+    store.reconcile(7997);
+    expect(store.view(7997)).toMatchObject({ kind: 'empty' });
+    expect(store.view(7997).title).toContain('本页面已查到模型记录');
 
-    rootsMock.mockResolvedValue(rootsReply(4, 10));
-    store.invalidate(7999);
-    await flush();
-    expect(rootsMock).toHaveBeenCalledTimes(2);
-    expect(store.view(7999).title).toContain('就绪根 4/10');
-    release();
+    store.noteGenerated(7997);
+    expect(store.view(7997).title).toContain('本页面已按需生成过模型');
+    store.reconcile(7997);
+    expect(store.view(7997).title).toContain('本页面已按需生成过模型');
   });
 
-  it('reconcile：records 证据推翻 empty 结论时重探；已是 current 就不动', async () => {
+  it('人点圆点（refresh）与 invalidate 都是重拉 /dbnums；invalidate 另外丢掉本页面的证据', () => {
     const store = useGenModelV1DbnumStatus();
-    rootsMock.mockResolvedValueOnce(rootsReply(0, 10));
-    const release = store.acquire(7998);
-    await flush();
-    expect(store.view(7998).kind).toBe('empty');
+    setRow(7997, { model_verdict: 'not_judged', initialized: false });
+    store.noteGenerated(7997);
 
-    rootsMock.mockResolvedValueOnce(rootsReply(2, 10));
-    store.reconcile(7998);
-    await flush();
-    expect(store.view(7998).kind).toBe('current');
+    store.refresh(7997);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(1);
+    expect(store.view(7997).title).toContain('本页面已按需生成过模型');
 
-    store.reconcile(7998);
-    await flush();
-    expect(rootsMock).toHaveBeenCalledTimes(2);
-    release();
+    store.invalidate(7997);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(2);
+    expect(store.view(7997).title).not.toContain('本页面');
+    expect(rootsMock).not.toHaveBeenCalled();
   });
 
-  it('服务换代后旧探测结论作废，再看会重探', async () => {
+  it('scheduleReprobe：按 10 s / 30 s / 60 s 各重拉一次 /dbnums，三次为止', async () => {
+    vi.useFakeTimers();
+    const store = useGenModelV1DbnumStatus();
+    store.scheduleReprobe(7997);
+    for (const [index, delay] of DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.entries()) {
+      await vi.advanceTimersByTimeAsync(delay);
+      expect(refreshVerdictMock).toHaveBeenCalledTimes(index + 1);
+    }
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length);
+  });
+
+  it('服务换代后本页面的证据作废（未初始化库按需生成的结果随后端重启就没了）', async () => {
     const { observeGenModelV1Health } = await import('@/model-source/genModelV1/serviceLifecycle');
     const { getGenModelV1BaseUrl } = await import('@/utils/apiBase');
     const baseUrl = getGenModelV1BaseUrl();
@@ -179,20 +131,12 @@ describe('useGenModelV1DbnumStatus：verdict 表态优先，not_judged 落到 mo
     observeGenModelV1Health({ status: 'ok', started_at: 'instance-a' }, baseUrl);
 
     const store = useGenModelV1DbnumStatus();
-    rootsMock.mockResolvedValue(rootsReply(0, 10));
-    const release = store.acquire(7999);
-    await flush();
-    expect(store.view(7999).kind).toBe('empty');
+    setRow(7997, { model_verdict: 'not_judged', initialized: false });
+    store.noteGenerated(7997);
+    expect(store.view(7997).title).toContain('本页面已按需生成过模型');
 
-    // 服务重启 → started_at 变 → 换代：旧结论立刻不认
+    // 服务重启 → started_at 变 → 换代
     observeGenModelV1Health({ status: 'ok', started_at: 'instance-b' }, baseUrl);
-    expect(store.view(7999).kind).toBe('unknown');
-
-    rootsMock.mockResolvedValue(rootsReply(2, 10));
-    store.refresh(7999);
-    await flush();
-    expect(rootsMock).toHaveBeenCalledTimes(2);
-    expect(store.view(7999).kind).toBe('current');
-    release();
+    expect(store.view(7997).title).not.toContain('本页面');
   });
 });

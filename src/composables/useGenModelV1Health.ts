@@ -40,6 +40,11 @@ export type GenModelV1VerdictSummary = {
   total: number;
   /** `dbnum → verdict` */
   byDbnum: Record<number, string>;
+  /**
+   * `dbnum → /dbnums 那一行`，收**全部**行（不只参与三态统计的那些）：模型树的库状态圆点按它读三枚水位，
+   * 不再为此另发 `dbnums/{n}/model/roots`（整库根枚举，大库 15–40 s）。
+   */
+  rows: Record<number, DbnumRow>;
   /** 滞后库的 dbnum（悬停列出来） */
   laggingDbnums: number[];
   lastCheckedAt: number | null;
@@ -96,7 +101,7 @@ export function dbnumModelCapabilityFromHealth(health: HealthResponse | null): G
 }
 
 function emptyVerdict(): GenModelV1VerdictSummary {
-  return { inSync: 0, lagging: 0, notJudged: 0, total: 0, byDbnum: {}, laggingDbnums: [], lastCheckedAt: null, error: null };
+  return { inSync: 0, lagging: 0, notJudged: 0, total: 0, byDbnum: {}, rows: {}, laggingDbnums: [], lastCheckedAt: null, error: null };
 }
 
 /**
@@ -109,6 +114,9 @@ export function summarizeVerdicts(rows: DbnumRow[], now = Date.now()): GenModelV
   const counted = scoped.length > 0 ? scoped : desi;
   const summary = emptyVerdict();
   summary.lastCheckedAt = now;
+  for (const row of rows) {
+    if (typeof row.dbnum === 'number') summary.rows[row.dbnum] = row;
+  }
   for (const row of counted) {
     const verdict = String(row.model_verdict ?? 'not_judged').toLowerCase();
     summary.byDbnum[row.dbnum] = verdict;

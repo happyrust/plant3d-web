@@ -1290,8 +1290,9 @@ export type GenModelV1DbnumModelRootsOptions = GenModelV1RequestOptions & {
 
 /**
  * 该库的全部生成根（只读，不生成）。每行的 `ready` 说这根的 `records` 现在读得到；`ready: true` 只回就绪的那些。
- * 两个用途：显示路径的库级预检查（`ready_total === 0` → 视为该库没有模型，默认重新生成，见
- * `useModelGeneration.probeDbnumHasModel`）；整库生成任务的进度 / 对账。
+ * 用途：整库生成任务的进度 / 对账。**显示路径与库状态圆点不许调它**（2026-11-10，方案 A1）：服务端要冻结源文件
+ * 并枚举整库生成根（大库 15–40 s），而 `ready` 只是后端本进程投影的判据，后端重启后恒为假；
+ * 「这个库有没有成套模型」读 `/dbnums` 那一行（`useModelGeneration.dbnumRowLacksModel`）。
  */
 export function genModelV1DbnumModelRoots(
   dbnum: number,

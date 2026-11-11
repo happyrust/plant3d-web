@@ -55,6 +55,17 @@ describe('summarizeVerdicts（/dbnums model_verdict 三态）', () => {
     expect(verdictSummaryText(summary)).toBe('库 同步 1 · 滞后 1 · 未判 3');
   });
 
+  it('rows 收全部行（含不参与三态统计的），库状态圆点按它读三枚水位', () => {
+    const summary = summarizeVerdicts([
+      row(7999, 'in_sync', { file_latest_sesno: 236, applied_sesno: 213, model_sesno: 213, initialized: true }),
+      row(1112, 'in_sync', { not_in_project: true }),
+      { dbnum: 7000, db_type: 'CATA' },
+    ]);
+    expect(Object.keys(summary.rows).map(Number).sort((a, b) => a - b)).toEqual([1112, 7000, 7999]);
+    expect(summary.rows[7999]).toMatchObject({ file_latest_sesno: 236, applied_sesno: 213, model_sesno: 213 });
+    expect(summary.total).toBe(1);
+  });
+
   it('本 MDB 内一行都不剩时退回全部 DESI 行；没有 DESI 行给空串', () => {
     const summary = summarizeVerdicts([row(1112, 'in_sync', { not_in_project: true }), row(1113, 'not_judged', { not_in_project: true })]);
     expect(summary.total).toBe(2);

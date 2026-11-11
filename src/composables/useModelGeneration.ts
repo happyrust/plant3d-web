@@ -3,8 +3,8 @@ import type { Ref } from 'vue';
 
 import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
 import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
+import type { DbnumRow } from '@/api/genModelV1Api';
 
-import { genModelV1DbnumModelRoots } from '@/api/genModelV1Api';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -16,11 +16,11 @@ import {
   prefetchDtxGeometries,
   resolveDtxRefnosByUnitRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { pushRecordPageListener } from '@/model-source/genModelV1/modelRecords';
-import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 import { emitToast } from '@/ribbon/toastBus';
 import { toRefnoKey } from '@/utils/refnoKey';
 import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
@@ -87,6 +87,18 @@ export function planLoadBatchSizes(total: number, first: number = VISIBLE_REFNOS
   let size = Math.max(1, first);
   for (let done = 0; done < total; done += size, size *= 2) sizes.push(Math.min(size, total - done));
   return sizes;
+}
+
+/**
+ * 这个库在库里有没有成套落过的模型，按 `/dbnums` 那一行判：未初始化（数据水位没立）或模型水位从没盖过 = 没有（`true`）；
+ * 行不在（缓存还没有 / 库不在清单里）或老服务端不带这两格 = 不知道（`null`）。
+ * 它不回答「某个节点有没有模型」——那是 `model/records` 的事。
+ */
+export function dbnumRowLacksModel(row: DbnumRow | null | undefined): boolean | null {
+  if (!row) return null;
+  if (row.initialized === false) return true;
+  if (typeof row.model_sesno === 'number') return row.model_sesno <= 0;
+  return null;
 }
 
 export type ModelGenerationOptions = {
@@ -316,11 +328,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const autoGenerateAttempted = new Set<string>();
   /** 自动生成回过的说明（目前只有空分组）：同一 refno 再点眼睛时照样给它，不提示「右键重新生成」——分组没有这一项 */
   const autoGenerateHints = new Map<string, string>();
-  /**
-   * dbnum 级「现在有没有读得到的模型」的会话内结论：`true` = `model/roots` 有就绪根，或本实例刚生成 / 查到过记录；
-   * `false` = 就绪根为零。`true` 随时盖，`false` 只写第一次——别让过期的空结论压住刚产出的模型。
-   */
-  const dbnumModelKnown = new Map<number, boolean>();
+  /** 本实例在这些库里生成过 / 查到过记录：`/dbnums` 说「库里没有成套模型」时，它是「其实已经有了」的会话内证据。 */
+  const dbnumsSeenWithModel = new Set<number>();
 
   function syncGlobalLoadStatus() {
     modelLoadStatus.update({
@@ -336,34 +345,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /**
-   * `dbnums/{dbnum}/model/roots`（诊断快照）的库级预检查：`ready_total > 0`（旧构建逐根看 `ready`）才算
-   * 「这个库有模型」——它与「records 现在读得到」同一条判据（投影回执 / 落库 ACK）。`model_sesno` 只在
-   * 整库任务收口时盖、按需生成不动它；`/dbnums` 骨架形态压根不带模型字段，所以库级只能问这里。
+   * 库级预检查：这个库在库里有没有成套的模型。只读 `/dbnums` 共享缓存里现成的那一行（`useDbMetaInfo` 把节点号映射成
+   * 库号时已经拉过），**不发请求、不等待**——`true` = 没有，`false` = 有，`null` = 不知道。
    *
-   * 枚举整库生成根要几秒：每库每实例只问一次（`dbnumModelKnown`）；查不出来回 `null`（按「不知道」
-   * 放行正常查询，不挡显示，也不写缓存——下次再问）。
+   * 2026-11-10 之前这里问的是 `dbnums/{dbnum}/model/roots`：要枚举整库生成根（7997 一次 21–24 s），查空的显示
+   * 要等它回来才决定生不生成；而它的「就绪根」只是后端本进程投影的判据，后端重启后恒为零，答不了这个问题（方案 A1）。
    */
-  async function probeDbnumHasModel(dbno: number): Promise<boolean | null> {
-    const known = dbnumModelKnown.get(dbno);
-    if (known !== undefined) return known;
-    const generation = getGenModelV1ServiceSnapshot().generation;
-    try {
-      const view = await genModelV1DbnumModelRoots(dbno);
-      if (getGenModelV1ServiceSnapshot().generation !== generation) return null;
-      const ready = typeof view.ready_total === 'number'
-        ? view.ready_total
-        : (view.roots ?? []).filter((root) => root.ready === true).length;
-      const has = ready > 0;
-      if (has || !dbnumModelKnown.get(dbno)) dbnumModelKnown.set(dbno, has);
-      consoleStore.addLog('info', `[model-load] dbnum=${dbno} 模型预检查：就绪根 ${ready}/${view.total ?? (view.roots ?? []).length}`);
-      return has;
-    } catch (probeError) {
-      consoleStore.addLog(
-        'info',
-        `[model-load] dbnum=${dbno} 模型预检查失败（按不知道处理，交给节点查询）：${probeError instanceof Error ? probeError.message : String(probeError)}`
-      );
-      return null;
-    }
+  function dbnumLacksModel(dbno: number): boolean | null {
+    if (dbnumsSeenWithModel.has(dbno)) return false;
+    const row = peekGenModelV1Dbnums()?.response.dbnums?.find((item) => item.dbnum === dbno) ?? null;
+    return dbnumRowLacksModel(row);
   }
 
   type GenModelV1LoadTotals = {
@@ -673,11 +664,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         : null;
 
       const regenerate = loadOptions?.regenerate === true;
-      // 库级预检查与下面的范围查询并行：`model/roots` 要枚举整库生成根（大库几秒），不能挡住常规显示。
-      // 结论在查询分支里才取。显式「重新生成」不问——它本来就不查库。
-      const dbnumProbe: Promise<boolean | null> = regenerate
-        ? Promise.resolve(true)
-        : probeDbnumHasModel(dbno);
       if (regenerate) {
         statusMessage.value = `正在重新生成 ${normalizedRoot}...`;
         progress.value = 5;
@@ -697,6 +683,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           emitToast({ message: `[提示] ${normalizedRoot}：${hint}`, level: 'info' });
           return false;
         }
+        dbnumsSeenWithModel.add(dbno);
         noteDbnumModelGenerated(dbno);
       }
 
@@ -752,7 +739,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (scopeIncomplete ? ` incomplete=${incompleteTail}` : '') +
           (visibleErr ? ` err=${visibleErr}` : '')
       );
-      // 「重新生成」统一收口：库级预检查确认无模型（hasModel===false）或节点名下一条 records 都没查到，
+      // 「重新生成」统一收口：库级预检查确认库里没有成套模型（`dbnumLacksModel`）或节点名下一条 records 都没查到，
       // 都默认重新生成当前节点——不再按类型白名单过滤，显示逻辑本身就是「没有模型就默认重新生成」。
       // 每个 refno 每会话只自动一发：真产不出（NoRenderableGeometry / 容器展开不到交付根）时重复点不再
       // 连环 generate，照旧给提示；右键「重新生成模型」走显式 regenerate，不受这一次的限制。
@@ -767,7 +754,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         try {
           const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot);
           if (generated.items.length > 0) {
-            dbnumModelKnown.set(dbno, true);
+            dbnumsSeenWithModel.add(dbno);
             noteDbnumModelGenerated(dbno);
             // 生成成功，重新查询 records（generateThenCollect 清了这条请求名下的备忘并重查进缓存）
             const retry = await queryLoadScopeRefnos(normalizedRoot);
@@ -820,7 +807,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           level: 'warning',
         });
         // 库级确认无模型：查询失败不改这个结论——照样默认重新生成一次；生成出了记录就落回正常装载
-        if ((await dbnumProbe) === false && !(await tryAutoGenerate(`dbnum=${dbno} 无就绪模型`))) {
+        if (dbnumLacksModel(dbno) === true && !(await tryAutoGenerate(`dbnum=${dbno} 库里没有成套模型`))) {
           statusMessage.value = `refno=${normalizedRoot} 未加载`;
           progress.value = 100;
           syncGlobalLoadStatus();
@@ -828,11 +815,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
       } else if (visibleOk && visibleRefnos.length === 0) {
         if (refresh) return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource);
-        const hasModel = await dbnumProbe;
         // pending（409，库正被整库任务占用）时不发：generate 同样撞锁，「稍后再显示」才是对的
         const pendingBusy = (scopeIncomplete?.pending.length ?? 0) > 0;
         const autoGenerated = !pendingBusy && await tryAutoGenerate(
-          hasModel === false ? `dbnum=${dbno} 无就绪模型` : 'records 查空'
+          dbnumLacksModel(dbno) === true ? `dbnum=${dbno} 库里没有成套模型` : 'records 查空'
         );
         if (!autoGenerated) {
           const tail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
@@ -850,10 +836,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
         // autoGenerated = true，继续往下走装载流程
       }
-      // 查询真拿到了记录 → 这个库就是有模型（与预检查同记正结论；探针回得晚也压不掉）
+      // 查询真拿到了记录 → 这个库就是有模型（会话内证据，压过 `/dbnums` 说的「未初始化」）
       if (visibleOk && visibleRefnos.length > 0) {
-        dbnumModelKnown.set(dbno, true);
-        // 行尾库状态圆点若还停在「无模型 / 未知」，records 证据推翻它 → 丢结论重探对齐
+        dbnumsSeenWithModel.add(dbno);
+        // 行尾库状态圆点的提示里补一句「本页面已查到模型记录」
         reconcileDbnumModelStatus(dbno);
       }
 
@@ -1184,7 +1170,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
 
     // 整库真收到了记录 → 库级结论与行尾圆点同记「有模型」
-    dbnumModelKnown.set(dbno, true);
+    dbnumsSeenWithModel.add(dbno);
     reconcileDbnumModelStatus(dbno);
 
     // 对账：还没进视口的构件在这里补装（逐 SITE 老路 = 全部；实时那一路正常为 0）

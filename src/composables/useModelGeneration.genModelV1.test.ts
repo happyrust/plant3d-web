@@ -16,7 +16,10 @@ const visibleInstsMock = vi.fn();
 const typeInfoMock = vi.fn();
 const evictMock = vi.fn((_layer: unknown, _dbno: number, _refnos: string[]): string[] => []);
 const unitRefnosMock = vi.fn((_dbno: number, _root: string): string[] => []);
-const { dbnumRootsMock } = vi.hoisted(() => ({ dbnumRootsMock: vi.fn() }));
+const { dbnumRootsMock, dbnumRowsMock } = vi.hoisted(() => ({
+  dbnumRootsMock: vi.fn(),
+  dbnumRowsMock: vi.fn((): Record<string, unknown>[] => []),
+}));
 const releaseLod1Mock = vi.fn();
 const holdLod1Mock = vi.fn(() => releaseLod1Mock);
 
@@ -58,10 +61,15 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/genModelV1Api')>();
   return {
     ...actual,
-    // 库级模型预检查（`dbnums/{n}/model/roots`）：缺省回「有就绪模型」，用例按需 mockResolvedValueOnce 覆盖
+    // 整库根枚举（`dbnums/{n}/model/roots`）：显示流程不许再调它（方案 A1），留着这个 mock 只为断言「一次都没调」
     genModelV1DbnumModelRoots: (dbnum: number, options?: unknown) => dbnumRootsMock(dbnum, options),
   };
 });
+// 库级预检查读的是 `/dbnums` 共享缓存里现成的那一行：缺省回「已初始化、模型水位盖过」，用例按需覆盖
+vi.mock('@/composables/useGenModelV1Dbnums', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/composables/useGenModelV1Dbnums')>()),
+  peekGenModelV1Dbnums: () => ({ fetchedAt: 0, response: { dbnums: dbnumRowsMock() } }),
+}));
 vi.mock('@/api/genModelRealtimeApi', () => ({ enqueueParquetIncremental: vi.fn(), getParquetVersion: vi.fn() }));
 vi.mock('@/api/genModelTaskApi', () => ({ modelRegenerateByRefno: vi.fn(), modelShowByRefno: vi.fn() }));
 vi.mock('@/api/genModelStreamGenerateApi', () => ({ triggerBatchGenerateSse: vi.fn() }));
@@ -104,19 +112,20 @@ function makeViewer() {
   } as any;
 }
 
-const DBNUM_ROOTS_WITH_MODEL = {
-  source: 'direct',
-  dbnum: 7997,
-  total: 3,
-  ready_total: 3,
-  only_ready: false,
-  roots: [{ generation_root: '24381_1', ready: true }],
-};
+/** `/dbnums` 行：已初始化、模型水位盖过 = 库里有成套模型 */
+const DBNUM_ROWS_WITH_MODEL = [
+  { dbnum: 7997, db_type: 'DESI', initialized: true, applied_sesno: 447, model_sesno: 447 },
+  { dbnum: 8000, db_type: 'DESI', initialized: true, applied_sesno: 1143, model_sesno: 1143 },
+];
+/** `/dbnums` 行：未初始化（数据水位没立，模型按需生成） */
+const DBNUM_ROWS_UNINITIALIZED = [
+  { dbnum: 7997, db_type: 'DESI', initialized: false, applied_sesno: 0, model_sesno: 0 },
+];
 
 beforeEach(() => {
   vi.clearAllMocks();
   progressListeners.clear();
-  dbnumRootsMock.mockResolvedValue(DBNUM_ROOTS_WITH_MODEL);
+  dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
   loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => loaderResult(refnos.length, refnos.length * 2));
   typeInfoMock.mockResolvedValue({ success: true, refno: '24381_101410', noun: 'ZONE' });
 });
@@ -535,15 +544,12 @@ describe('showModelByRefno（gen-model-v1）', () => {
     }));
   });
 
-  it('dbnum 预检查无就绪模型：默认重新生成当前节点，生成出构件后正常装载', async () => {
+  it('库未初始化（/dbnums 那一行）且节点查空：默认重新生成当前节点，生成出构件后正常装载；不做整库根枚举', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
 
-    // 库级：`model/roots` 没有任何就绪根 → 视为这个库没有模型
-    dbnumRootsMock.mockResolvedValueOnce({
-      source: 'direct', dbnum: 7997, total: 5, ready_total: 0, only_ready: false,
-      roots: [{ generation_root: '24381_1', ready: false }],
-    });
+    // 库级：`/dbnums` 说这个库没初始化 → 库里没有成套模型
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
     visibleInstsMock
       .mockResolvedValueOnce({ success: true, refno: '24381_101410', refnos: [] })
       .mockResolvedValue({ success: true, refno: '24381_101410', refnos: ['24381_101410'] });
@@ -561,53 +567,75 @@ describe('showModelByRefno（gen-model-v1）', () => {
     const ok = await gen.showModelByRefno('24381_101410');
 
     expect(ok).toBe(true);
-    expect(dbnumRootsMock).toHaveBeenCalledTimes(1);
-    expect(dbnumRootsMock).toHaveBeenCalledWith(7997, undefined);
+    expect(dbnumRootsMock).not.toHaveBeenCalled();
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410');
     expect(loadInstancesMock).toHaveBeenCalled();
+    expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining('dbnum=7997 库里没有成套模型'));
   });
 
-  it('dbnum 预检查无模型但节点查到了记录：照查照装，不重复生成；同库下一个节点不再问库', async () => {
+  it('库未初始化但节点查到了记录：照查照装，不生成；显示流程一次整库根枚举都不发', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
 
-    // 库级快照没就绪根（可能过期）；但 records 实际查得到 → 记录赢，直接装载
-    dbnumRootsMock.mockResolvedValueOnce({
-      source: 'direct', dbnum: 7997, total: 5, ready_total: 0, only_ready: false,
-      roots: [{ generation_root: '24381_1', ready: false }],
-    });
+    // `/dbnums` 说库里没有成套模型；但 records 实际查得到（按需生成过）→ 记录赢，直接装载
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
     visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_101410', refnos: ['24381_101410'] });
 
     expect(await gen.showModelByRefno('24381_101410')).toBe(true);
     expect(loadInstancesMock).toHaveBeenCalled();
     expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
 
-    // 记录把「这个库有模型」写成正结论：同库另一节点的显示不再打 model/roots
     expect(await gen.showModelByRefno('24381_101411')).toBe(true);
-    expect(dbnumRootsMock).toHaveBeenCalledTimes(1);
+    expect(dbnumRootsMock).not.toHaveBeenCalled();
   });
 
-  it('dbnum 预检查失败不挡显示：探针异常按不知道处理，交给节点查询', async () => {
-    const { useModelGeneration } = await import('./useModelGeneration');
+  it('/dbnums 缓存里没有这个库（不知道）：不挡显示，也不拿它当「没有模型」', async () => {
+    const { useModelGeneration, dbnumRowLacksModel } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
 
-    dbnumRootsMock.mockRejectedValueOnce(new Error('boom'));
+    dbnumRowsMock.mockReturnValue([]);
     visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_101410', refnos: ['24381_101410'] });
 
     expect(await gen.showModelByRefno('24381_101410')).toBe(true);
     expect(loadInstancesMock).toHaveBeenCalled();
     expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+
+    // 判据本身：未初始化 / 模型水位没盖过 = 没有；有水位 = 有；行不在或老服务端不带这两格 = 不知道
+    expect(dbnumRowLacksModel({ dbnum: 7997, initialized: false })).toBe(true);
+    expect(dbnumRowLacksModel({ dbnum: 7997, initialized: true, model_sesno: 0 })).toBe(true);
+    expect(dbnumRowLacksModel({ dbnum: 1112, initialized: true, model_sesno: 738 })).toBe(false);
+    expect(dbnumRowLacksModel({ dbnum: 1112 })).toBeNull();
+    expect(dbnumRowLacksModel(null)).toBeNull();
   });
 
-  it('dbnum 无就绪模型且自动生成未产出：提示、不装载、不记已加载', async () => {
+  it('查空之后不等任何库级请求：记录回空就直接进自动生成（预检查是同步读缓存）', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
 
-    dbnumRootsMock.mockResolvedValueOnce({
-      source: 'direct', dbnum: 7997, total: 5, ready_total: 0, only_ready: false,
-      roots: [{ generation_root: '24381_1', ready: false }],
-    });
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
+    // 假如还有人去枚举整库根，这个请求永远不回——显示流程不许被它挂住
+    dbnumRootsMock.mockImplementation(() => new Promise(() => {}));
+    visibleInstsMock
+      .mockResolvedValueOnce({ success: true, refno: '24381_571', refnos: [] })
+      .mockResolvedValue({ success: true, refno: '24381_571', refnos: ['24381_573'] });
+
+    expect(await gen.showModelByRefno('24381_571')).toBe(true);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+    expect(dbnumRootsMock).not.toHaveBeenCalled();
+
+    // 源码钉：显示流程不引用整库根枚举接口
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const source = readFileSync(resolve(__dirname, 'useModelGeneration.ts'), 'utf8');
+    expect(source).not.toMatch(/genModelV1DbnumModelRoots/);
+  });
+
+  it('库里没有成套模型且自动生成未产出：提示、不装载、不记已加载', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
     visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_101410', refnos: [] });
     v1Source.records.generateThenCollect.mockResolvedValueOnce({
       refno: '24381_101410',
