@@ -146,10 +146,12 @@ export function describeDbnumFreshness(freshness: DbnumFreshness): DbnumFreshnes
       return { headline: '库未初始化，模型按需生成', detail: '', watermarks };
     case 'awaiting':
       return { headline: '库未初始化，等人工初始化', detail: '', watermarks };
+    // 阻断 / 不参与的库不会被更新，但库文件照样在长：有几个新会话没入库照写出来（数据有就写，没有就不写），
+    // 免得面板写「不参与」、别处却按水位说「有 N 个新会话」，两边对不上（2026-11-11）
     case 'blocked':
-      return { headline: '库被阻断', detail: '', watermarks };
+      return { headline: '库被阻断', detail: pendingSessions, watermarks };
     case 'excluded':
-      return { headline: '库不参与（已排除或不在本项目）', detail: '', watermarks };
+      return { headline: '库不参与（已排除或不在本项目）', detail: pendingSessions, watermarks };
     default:
       return {
         headline: '模型状态未判定',

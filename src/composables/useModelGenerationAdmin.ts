@@ -93,6 +93,17 @@ export function dbnumPanelStatus(row: DbnumRow): DbnumPanelStatus {
   return PANEL_STATUS_OF[judgeDbnumFreshness(row).kind];
 }
 
+/**
+ * 徽标上的字。「不参与」「阻断」的库不会被更新，但库文件照样在长：有新会话没入库时在徽标上一并写出来
+ * （`不参与 · 3 个新会话`）；没有、或后端没给这两枚水位时只写状态。
+ */
+export function dbnumStatusLabel(row: DbnumRow): string {
+  const freshness = judgeDbnumFreshness(row);
+  const label = DBNUM_STATUS_LABEL[PANEL_STATUS_OF[freshness.kind]];
+  const sidelined = freshness.kind === 'excluded' || freshness.kind === 'blocked';
+  return sidelined && freshness.sessionsNotApplied > 0 ? `${label} · ${freshness.sessionsNotApplied} 个新会话` : label;
+}
+
 /** 徽标的提示文字：与模型树库状态圆点同一套说法（一句结论、补充说明、三枚水位，各占一行）。 */
 export function dbnumStatusTitle(row: DbnumRow): string {
   const text = describeDbnumFreshness(judgeDbnumFreshness(row));

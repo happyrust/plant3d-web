@@ -125,6 +125,20 @@ describe('describeDbnumFreshness（圆点提示与面板徽标共用的说法）
     expect(text.detail).toContain('库文件还有 10 个新会话未入库');
   });
 
+  it('不参与 / 阻断的库：照写「不参与」，库文件有新会话没入库时一并写出有几个；没有、或水位没给时不写', () => {
+    const excluded = describeDbnumFreshness(judgeDbnumFreshness({ ...ROW_1112, excluded: true }));
+    expect(excluded.headline).toBe('库不参与（已排除或不在本项目）');
+    expect(excluded.detail).toBe('库文件还有 10 个新会话未入库');
+    expect(excluded.watermarks).toBe('模型 738（2026-09-23 15:19 保存） · 数据 738 · 库文件最新 748');
+    expect(describeDbnumFreshness(judgeDbnumFreshness({ ...ROW_1112, blocked: true })).detail).toBe('库文件还有 10 个新会话未入库');
+
+    // 已经追平：没有新会话可说
+    expect(describeDbnumFreshness(judgeDbnumFreshness({ ...ROW_8000, excluded: true })).detail).toBe('');
+    // 后端没给水位（轻量行只带了 excluded）、或库没初始化过（数据水位是 0，谈不上「新会话」）：不写
+    expect(describeDbnumFreshness(judgeDbnumFreshness({ dbnum: 5, db_type: 'DESI', excluded: true })).detail).toBe('');
+    expect(describeDbnumFreshness(judgeDbnumFreshness({ ...ROW_7997, not_in_project: true })).detail).toBe('');
+  });
+
   it('未初始化的库不报水位（模型 0 / 数据 0 不是事实陈述），只报库文件最新会话', () => {
     expect(describeDbnumFreshness(judgeDbnumFreshness(ROW_7997)).watermarks).toBe('库文件最新 447');
   });

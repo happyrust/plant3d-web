@@ -227,6 +227,26 @@ describe('库状态徽标：与模型树圆点同一个判定函数（方案 202
     expect(dbnumStatusTitle({ ...base, model_verdict: 'lagging', file_latest_sesno: 9, applied_sesno: 9, model_sesno: 7 }))
       .toContain('模型落后于已入库数据');
   });
+
+  it('「不参与」「阻断」的库：徽标上在状态之外写出有几个新会话（数据有就写，没有就不写），提示里也有', async () => {
+    const { dbnumStatusLabel, dbnumStatusTitle } = await import('./useModelGenerationAdmin');
+    const lagging = { ...base, file_latest_sesno: 748, applied_sesno: 738, model_sesno: 738 };
+    expect(dbnumStatusLabel({ ...lagging, excluded: true })).toBe('不参与 · 10 个新会话');
+    expect(dbnumStatusLabel({ ...lagging, not_in_project: true })).toBe('不参与 · 10 个新会话');
+    expect(dbnumStatusLabel({ ...lagging, blocked: true })).toBe('阻断 · 10 个新会话');
+    expect(dbnumStatusTitle({ ...lagging, excluded: true })).toBe([
+      '库不参与（已排除或不在本项目）',
+      '库文件还有 10 个新会话未入库',
+      '模型 738 · 数据 738 · 库文件最新 748',
+    ].join('\n'));
+    // 追平了、后端没给水位、没初始化过：只写状态
+    expect(dbnumStatusLabel({ ...base, excluded: true, file_latest_sesno: 9, applied_sesno: 9, model_sesno: 9 })).toBe('不参与');
+    expect(dbnumStatusLabel({ dbnum: 5, db_type: 'DESI', excluded: true })).toBe('不参与');
+    expect(dbnumStatusLabel({ ...base, initialized: false, excluded: true, file_latest_sesno: 447, applied_sesno: 0, model_sesno: 0 })).toBe('不参与');
+    // 别的状态不加这半句
+    expect(dbnumStatusLabel(lagging)).toBe('待更新');
+    expect(dbnumStatusLabel({ ...base, file_latest_sesno: 9, applied_sesno: 9, model_sesno: 9 })).toBe('已同步');
+  });
 });
 
 describe('一键完全重新部署', () => {

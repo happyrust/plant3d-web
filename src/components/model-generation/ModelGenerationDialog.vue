@@ -20,6 +20,7 @@ import {
   PIPELINE_STAGES,
   PIPELINE_STAGE_LABEL,
   dbnumPanelStatus,
+  dbnumStatusLabel,
   dbnumStatusTitle,
   useModelGenerationAdmin,
   type AdminTaskView,
@@ -519,7 +520,7 @@ watch(
                       :class="statusBadgeClass[dbnumPanelStatus(row)]"
                       :title="dbnumStatusTitle(row)"
                       :data-testid="`model-generation-db-status-${row.dbnum}`">
-                      {{ DBNUM_STATUS_LABEL[dbnumPanelStatus(row)] }}
+                      {{ dbnumStatusLabel(row) }}
                     </span>
                   </td>
                 </tr>
