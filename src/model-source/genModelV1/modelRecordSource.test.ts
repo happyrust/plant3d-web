@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createGenModelV1ModelRecordSource } from './modelRecordSource';
+import { createGenModelV1ModelRecordSource, MISSING_REFNO_QUERY_CONCURRENCY } from './modelRecordSource';
 
 import type { ModelRecordsApi } from './modelRecords';
 
@@ -201,6 +201,102 @@ describe('createGenModelV1ModelRecordSource', () => {
       queueMicrotask(() => observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm'));
     }));
     await expect(source.collectByAncestor('1_0')).rejects.toBeInstanceOf(GenModelV1ServiceGenerationChangedError);
+  });
+
+  it('备忘没命中时 records 不等 health 先发；这一轮 health 查出换代就清掉重查一次，不报错', async () => {
+    observeGenModelV1Health({ status: 'ok', started_at: 'old' }, '/gm');
+    let finishHealth!: () => void;
+    const ensureFreshness = vi.fn(() => new Promise<void>((resolve) => { finishHealth = resolve; }));
+    const records = vi.fn()
+      .mockImplementationOnce((_req: unknown, options?: GenModelV1RequestOptions) => new Promise<never>((_, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true });
+      }))
+      .mockResolvedValueOnce(page([item('1_99', '1_1', 'fresh')]));
+    const source = createGenModelV1ModelRecordSource({
+      api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never },
+      ensureFreshness,
+    });
+
+    const pending = source.collectByAncestor('1_1');
+    await vi.waitFor(() => expect(records).toHaveBeenCalledTimes(1));
+    // health 探针先记下新代次（在飞的读取随之作废），再收口
+    observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
+    finishHealth();
+
+    const result = await pending;
+    expect(records).toHaveBeenCalledTimes(2);
+    expect(result.items.map((record) => record.refno)).toEqual(['1_99']);
+    expect(source.peek('1_99')).toHaveLength(1);
+  });
+
+  it('备忘命中前先等 health 收口', async () => {
+    const client = branApi();
+    const healthGates: (() => void)[] = [];
+    let gated = false;
+    const ensureFreshness = vi.fn(() => (gated ? new Promise<void>((resolve) => { healthGates.push(resolve); }) : Promise.resolve()));
+    const source = createGenModelV1ModelRecordSource({ api: client, ensureFreshness });
+    const first = await source.collectByAncestor('24381_145018');
+
+    gated = true;
+    let settled = false;
+    const second = source.collectByAncestor('24381_145018').then((value) => { settled = true; return value; });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    healthGates.forEach((open) => open());
+    expect(await second).toBe(first);
+    expect(client.records).toHaveBeenCalledTimes(1);
+  });
+
+  it('同一节点的并发查询共用一发 records', async () => {
+    const client = branApi();
+    const source = createGenModelV1ModelRecordSource({ api: client });
+    const [a, b] = await Promise.all([source.collectByAncestor('24381_145018'), source.collectByAncestor('24381/145018')]);
+    expect(b).toBe(a);
+    expect(client.records).toHaveBeenCalledTimes(1);
+  });
+
+  it('expandAncestor 给出成员时按成员并行查，结果仍记在请求的节点名下', async () => {
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => (
+      generationRoot === '9_2' ? page([]) : page([item(`${generationRoot}1`, generationRoot)])
+    ));
+    const expandAncestor = vi.fn(async (refno: string) => (refno === '9_0' ? ['9_1', '9_2', '9_3'] : null));
+    const source = createGenModelV1ModelRecordSource({
+      api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never },
+      expandAncestor,
+    });
+
+    const site = await source.collectByAncestor('9_0');
+    expect(records.mock.calls.map(([req]) => req.generationRoot).sort()).toEqual(['9_1', '9_2', '9_3']);
+    expect(site.refno).toBe('9_0');
+    expect(site.items.map((record) => record.refno).sort()).toEqual(['9_11', '9_31']);
+    expect(site.empty).toEqual(['9_2']);
+    expect(source.peek('9_31')).toHaveLength(1);
+
+    await source.collectByAncestor('9_0');
+    expect(records).toHaveBeenCalledTimes(3);
+    await source.collectByAncestor('9_1');
+    expect(records.mock.calls.at(-1)![0].generationRoot).toBe('9_1');
+  });
+
+  it('instanceEntriesByRefnos：缓存没有的构件第一个单独查，其余有界并发', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      inFlight--;
+      return page([item(generationRoot, generationRoot)]);
+    });
+    const source = createGenModelV1ModelRecordSource({
+      api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never },
+    });
+    const refnos = Array.from({ length: 20 }, (_, i) => `5_${i + 1}`);
+    const out = await source.instanceEntriesByRefnos(5, refnos);
+    expect(records).toHaveBeenCalledTimes(20);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(MISSING_REFNO_QUERY_CONCURRENCY);
+    expect([...out.values()].every((entries) => entries.length === 1)).toBe(true);
   });
 
   it('network 折进 errors 并上报；取消不进失败账', async () => {

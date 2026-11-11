@@ -45,6 +45,17 @@ export const defaultModelRecordsApi: ModelRecordsApi = {
 /** 防止异常服务端游标让一次读取无限翻页；达到上限仍 truncated 必须按未完成处理。 */
 export const MAX_MODEL_RECORD_PAGES = 10_000;
 
+const recordPageListeners: Array<(items: GeomInstQuery[]) => void> = [];
+
+/** 分页读记录时通知最内层监听者。用来在下一页回来之前先拉网格。 */
+export function pushRecordPageListener(listener: (items: GeomInstQuery[]) => void): () => void {
+  recordPageListeners.push(listener);
+  return () => {
+    const index = recordPageListeners.lastIndexOf(listener);
+    if (index >= 0) recordPageListeners.splice(index, 1);
+  };
+}
+
 class ModelRecordsPaginationIncompleteError extends Error {
   constructor(scope: string, detail: string) {
     super(`model/records 分页未完成（${scope}）：${detail}`);
@@ -215,6 +226,7 @@ async function collectAncestorRecords(
     throwIfAborted(requestOptions.signal);
     const resp: ModelRecordsResponse = await api.records({ generationRoot: ancestor, limit: pageSize, cursor }, requestOptions);
     out.push(...resp.items);
+    recordPageListeners[recordPageListeners.length - 1]?.(resp.items);
     if (!resp.truncated) return out;
     if (resp.next_cursor === null || resp.next_cursor === undefined) {
       throw new ModelRecordsPaginationIncompleteError(ancestor, 'truncated=true 但缺少 next_cursor');

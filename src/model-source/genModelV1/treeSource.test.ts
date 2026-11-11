@@ -390,6 +390,19 @@ describe('createGenModelV1TreeSource', () => {
     });
   });
 
+  it('topLevelSiteMembers：只有虚拟根下的 SITE 回成员；roots 已取过就不再为它打 tree/roots', async () => {
+    const api = fakeApi();
+    const tree = createGenModelV1TreeSource({ api });
+    await tree.children(ROOT_ID);
+    expect(api.calls.roots).toBe(1);
+
+    expect(await tree.topLevelSiteMembers('9304/2')).toEqual(['17496_8518', '17496_8517']);
+    expect(await tree.topLevelSiteMembers('17496_8518')).toBeNull();
+    expect(await tree.topLevelSiteMembers('24381_2')).toBeNull();
+    expect(await tree.topLevelSiteMembers(ROOT_ID)).toBeNull();
+    expect(api.calls.roots).toBe(1);
+  });
+
   it('invalidate 清 roots Promise；代次变化后才返回的旧 roots 不能回填或交给调用方', async () => {
     const freshRoots = { ...ROOTS, project: 'FreshProject' };
     let resolveOld!: (value: TreeRootsResponse) => void;

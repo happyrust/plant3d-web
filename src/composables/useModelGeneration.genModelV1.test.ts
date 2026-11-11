@@ -169,7 +169,7 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(modalDuringEnsure).toBe(false);
   });
 
-  it('超过一页的构件分批装入（每批 1000），进度 30 → 95 递增，结果按批累加', async () => {
+  it('超过一页的构件分批装入（首批 1000、之后翻倍），进度 30 → 95 按已装 refno 递增，结果按批累加', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
     const refnos = Array.from({ length: 2500 }, (_, i) => `24381_${i + 1}`);
@@ -183,9 +183,13 @@ describe('showModelByRefno（gen-model-v1）', () => {
     const ok = await gen.showModelByRefno('24381_101410');
 
     expect(ok).toBe(true);
-    expect(loadInstancesMock).toHaveBeenCalledTimes(3);
-    expect(loadInstancesMock.mock.calls.map((c) => (c[2] as string[]).length)).toEqual([1000, 1000, 500]);
-    expect(progressAtBatch).toEqual([30, 51, 73]);
+    expect(loadInstancesMock).toHaveBeenCalledTimes(2);
+    expect(loadInstancesMock.mock.calls.map((c) => (c[2] as string[]).length)).toEqual([1000, 1500]);
+    expect(progressAtBatch).toEqual([30, 56]);
+    const { planLoadBatchSizes } = await import('./useModelGeneration');
+    expect(planLoadBatchSizes(20_000)).toEqual([1000, 2000, 4000, 8000, 5000]);
+    expect(planLoadBatchSizes(800)).toEqual([800]);
+    expect(planLoadBatchSizes(0)).toEqual([]);
     expect(gen.lastLoadDebug.value?.result).toEqual({ loadedRefnos: 2500, skippedRefnos: 0, loadedObjects: 2500 });
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'success', message: expect.stringContaining('2500 个几何实例') }));
   });

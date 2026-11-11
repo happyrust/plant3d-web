@@ -63,6 +63,8 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
   const records = createGenModelV1ModelRecordSource({
     ensureFreshness: () => ensureGenModelV1Freshness(),
     noteRequestFailure: noteGenModelV1RequestFailure,
+    // 顶层 SITE 按它的 ZONE 并行查（SITE 只是容器，生成根都在 ZONE 之下）
+    expandAncestor: (refno, signal) => tree.topLevelSiteMembers(refno, signal),
   });
   // 树的 visibleInsts 与几何加载共用一份按祖先查询的缓存：一次显示只打一次 records
   const tree = createGenModelV1TreeSource({

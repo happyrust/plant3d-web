@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import type { Ref } from 'vue';
 
 import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
+import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
 
 import { genModelV1DbnumModelRoots } from '@/api/genModelV1Api';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -12,11 +13,13 @@ import {
   holdDtxLod1Backfill,
   isDtxRefnoLoaded,
   loadDbnoInstancesForVisibleRefnosDtx,
+  prefetchDtxGeometries,
   resolveDtxRefnosByUnitRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
+import { pushRecordPageListener } from '@/model-source/genModelV1/modelRecords';
 import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 import { emitToast } from '@/ribbon/toastBus';
 import { toRefnoKey } from '@/utils/refnoKey';
@@ -74,6 +77,17 @@ export function isAutoGenerationEnabled(): boolean {
 
 export const AUTO_GENERATION_ENABLED = shouldEnableAutoGeneration();
 const VISIBLE_REFNOS_PAGE_SIZE = 1000;
+
+/**
+ * 分批装入的每批大小：首批 `first` 个先出画，之后逐批翻倍。每批装完 DTX 层都要整层 recompile（全量重建 GPU 纹理），
+ * 等长分批的总重建量随批数平方增长，翻倍分批只有对数个批次。
+ */
+export function planLoadBatchSizes(total: number, first: number = VISIBLE_REFNOS_PAGE_SIZE): number[] {
+  const sizes: number[] = [];
+  let size = Math.max(1, first);
+  for (let done = 0; done < total; done += size, size *= 2) sizes.push(Math.min(size, total - done));
+  return sizes;
+}
 
 export type ModelGenerationOptions = {
   db_num?: number
@@ -220,9 +234,13 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
   };
 }
 
+/**
+ * `rootTypeInfo`：调用方已经发出的根节点 `typeInfo`（它只依赖根，显示流程与范围查询并行发出）；不给就在这里现查。
+ */
 export async function resolveActualModelLoadScope(
   rootRefno: string,
-  componentRefnos: string[]
+  componentRefnos: string[],
+  rootTypeInfo?: Promise<PdmsTypeInfoResponse>,
 ): Promise<ActualModelLoadScope> {
   const normalizedRoot = normalizeRefnoString(rootRefno);
   const normalizedComponents = uniqStrings(componentRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
@@ -237,7 +255,7 @@ export async function resolveActualModelLoadScope(
   }
 
   try {
-    const resp = await getModelSource().attributes.typeInfo(normalizedRoot);
+    const resp = await (rootTypeInfo ?? getModelSource().attributes.typeInfo(normalizedRoot));
     const noun = resp.success ? String(resp.noun || '').trim().toUpperCase() : '';
     const isBranHang = noun === 'BRAN' || noun === 'HANG';
     // 叶子构件的直接属主是 BRAN：TUBI 直管挂在生成根自己的 refno 上（`deliveryUnitScene.ts`），
@@ -361,9 +379,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /**
-   * gen-model-v1：把记录源缓存里的构件装进 DTX。超过一页（`VISIBLE_REFNOS_PAGE_SIZE`）就分批，进度在 `progressRange` 里走，
-   * 每批之间让出一帧（P3-c 分批 + 进度）。`replace`（右键重新生成之后的替换）**不分批**：它要 forceRefresh，
-   * 分了批每一批都会把同一个根再查一遍。生成已经在进这里之前做完，装载本身不再 generate。
+   * gen-model-v1：把记录源缓存里的构件装进 DTX。超过一页（`VISIBLE_REFNOS_PAGE_SIZE`）就按 `planLoadBatchSizes` 分批，
+   * 进度在 `progressRange` 里按已装 refno 数走，每批之间让出一帧（P3-c 分批 + 进度）。`replace`（右键重新生成之后的替换）
+   * **不分批**：它要 forceRefresh，分了批每一批都会把同一个根再查一遍。生成已经在进这里之前做完，装载本身不再 generate。
    */
   async function loadGenModelV1Refnos(
     dtxLayer: any,
@@ -375,18 +393,21 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     label: string,
   ): Promise<GenModelV1LoadTotals> {
     const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0, noGeoRefnos: [] };
-    const batchSize = mode.replace ? Math.max(1, refnos.length) : VISIBLE_REFNOS_PAGE_SIZE;
-    const batches = Math.max(1, Math.ceil(refnos.length / batchSize));
+    const sizes = mode.replace ? [refnos.length] : planLoadBatchSizes(refnos.length);
+    if (sizes.length === 0) sizes.push(0);
+    const batches = sizes.length;
+    let offset = 0;
     for (let index = 0; index < batches; index++) {
-      const batch = refnos.slice(index * batchSize, (index + 1) * batchSize);
+      const batch = refnos.slice(offset, offset + sizes[index]!);
       if (batches > 1) {
         totalCount.value = refnos.length;
-        currentIndex.value = Math.min(refnos.length, (index + 1) * batchSize);
+        currentIndex.value = Math.min(refnos.length, offset + batch.length);
         currentRefno.value = '';
         statusMessage.value = `${label}：装入第 ${index + 1}/${batches} 批（${currentIndex.value}/${refnos.length} 个 refno）...`;
-        progress.value = progressRange[0] + Math.floor((index / batches) * (progressRange[1] - progressRange[0]));
+        progress.value = progressRange[0] + Math.floor((offset / refnos.length) * (progressRange[1] - progressRange[0]));
         syncGlobalLoadStatus();
       }
+      offset += batch.length;
       const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
         lodAssetKey: 'L1',
         debug: false,
@@ -394,6 +415,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         forceReloadRefnos: mode.replace ? batch : undefined,
         replaceExistingObjects: mode.replace,
         forceRefreshGeometries: mode.replace,
+        recompile: batches === 1 || index === 0 || index + 1 === batches,
       });
       anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
       totals.loadedRefnos += result.loadedRefnos;
@@ -602,6 +624,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (total > 1) showProgressModal.value = true;
       syncGlobalLoadStatus();
     });
+    // 多批装载期间不补拉粗网格：补拉的请求与 recompile 会插进批与批之间，和本次装载抢连接与主线程
+    const releaseLod1Backfill = holdDtxLod1Backfill();
+    let stopRecordPageListener: (() => void) | null = null;
 
     try {
       const startedAt = Date.now();
@@ -628,6 +653,24 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno = mappedDbno;
       }
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
+
+      const prefetchLayer = (viewer as { __dtxLayer?: Parameters<typeof prefetchDtxGeometries>[0] }).__dtxLayer ?? null;
+      const meshPrefetches: Promise<unknown>[] = [];
+      stopRecordPageListener = prefetchLayer
+        ? pushRecordPageListener((items) => {
+          const hashes: string[] = [];
+          const seen = new Set<string>();
+          for (const item of items) {
+            for (const inst of item.insts ?? []) {
+              const hash = String(inst.geo_hash ?? '').trim();
+              if (!hash || seen.has(hash)) continue;
+              seen.add(hash);
+              hashes.push(hash);
+            }
+          }
+          if (hashes.length > 0) meshPrefetches.push(prefetchDtxGeometries(prefetchLayer, dbno, hashes));
+        })
+        : null;
 
       const regenerate = loadOptions?.regenerate === true;
       // 库级预检查与下面的范围查询并行：`model/roots` 要枚举整库生成根（大库几秒），不能挡住常规显示。
@@ -668,6 +711,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 时会恒为空，被删成员就永远留在场景里。场景索引是另一份独立事实（DTX 运行时按属主链记得的 refno），并进来当基线。
         previousLeaves = uniqStrings([...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, normalizedRoot)]);
       }
+      // 根的 typeInfo 只依赖根：与范围查询并行发出，定装载范围时再取
+      const rootTypeInfo = Promise.resolve().then(() => getModelSource().attributes.typeInfo(normalizedRoot));
+      rootTypeInfo.catch(() => undefined);
       statusMessage.value = '查询可见实例范围...';
       progress.value = 10;
       syncGlobalLoadStatus();
@@ -693,6 +739,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         visibleRefnos = uniqStrings(visibleRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
         visibleOk = true;
         visibleErr = null;
+        if (meshPrefetches.length > 0) await Promise.all(meshPrefetches);
       } catch (e) {
         visibleOk = false;
         visibleErr = e instanceof Error ? e.message : String(e);
@@ -810,7 +857,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         reconcileDbnumModelStatus(dbno);
       }
 
-      const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos);
+      const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos, rootTypeInfo);
       if (loadScope.typeInfoError) {
         consoleStore.addLog(
           'warning',
@@ -977,7 +1024,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });
       return false;
     } finally {
+      stopRecordPageListener?.();
       unsubscribeProgress();
+      releaseLod1Backfill();
       isGenerating.value = false;
       showProgressModal.value = false;
       modelLoadStatus.finish({

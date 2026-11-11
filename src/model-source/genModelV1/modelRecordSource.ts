@@ -15,8 +15,10 @@
 import { groupInstanceEntriesByRefno } from './instanceMapping';
 import {
   collectRecordsByAncestor,
+  collectRecordsForAncestors,
   defaultModelRecordsApi,
   generateThenCollect as generateThenCollectRecords,
+  mapWithConcurrency,
   type CollectRecordsOptions,
   type CollectRecordsResult,
   type GenerateThenCollectOptions,
@@ -27,7 +29,14 @@ import type { InstanceEntryQueryOptions, ModelRecordSource } from '../ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { fromV1Refno } from '@/api/genModelV1Api';
-import { createGenModelV1GenerationGuard, type GenModelV1GenerationGuard } from '@/model-source/genModelV1/serviceLifecycle';
+import {
+  createGenModelV1GenerationGuard,
+  getGenModelV1ServiceGeneration,
+  type GenModelV1GenerationGuard,
+} from '@/model-source/genModelV1/serviceLifecycle';
+
+/** `instanceEntriesByRefnos` 里缓存没有的构件同时在飞的按祖先查询数（浏览器对同一主机 HTTP/1.1 也只开 6 条连接）。 */
+export const MISSING_REFNO_QUERY_CONCURRENCY = 6;
 
 /** 一次取数里每处理完一个祖先 / 生成根发一条（右键重新生成的进度弹窗接它）。 */
 export type GenModelV1RecordsProgress = {
@@ -81,6 +90,12 @@ export type GenModelV1ModelRecordSourceOptions = {
   /** 生产组装点注入合并去重的 health freshness；低层单测缺省不发额外请求。 */
   ensureFreshness?: () => Promise<unknown>;
   noteRequestFailure?: (error: unknown) => void;
+  /**
+   * 按祖先查之前把节点换成它的成员逐个查（`collectRecordsForAncestors` 有界并发）：回 `null` / 空数组就照常整节点查。
+   * 组装点给顶层 SITE 用——整 SITE 一发 `model/records` 在服务端是串行的一条大查询（实测 50 个 ZONE 的 SITE 7.7 s 后 500），
+   * 拆成 ZONE 并行查既快又不撞服务端的单次上限。只能拆到生成根之上：BRAN 一类生成根自己就挂着隐式管身记录。
+   */
+  expandAncestor?: (refno: string, signal: AbortSignal) => Promise<string[] | null>;
 };
 
 export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecordSourceOptions = {}): GenModelV1ModelRecordSource {
@@ -185,31 +200,88 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     } as T;
   }
 
+  /** 同一节点、不带取消信号与回调的并发查询共用一发（树的可见性传播、选中联动与显示流程常同时问同一个节点）。 */
+  const inflightByRequested = new Map<string, Promise<CollectRecordsResult>>();
+
   async function collectByAncestor(refno: string, extra: CollectRecordsOptions = {}): Promise<CollectRecordsResult> {
-    await ensureFreshness();
     const requested = fromV1Refno(refno);
-    const guard = createGenModelV1GenerationGuard(extra.signal);
-    try {
-      // 取消要先于缓存命中：已经 abort 的 signal 不能拿着备忘结果「成功」返回
-      guard.assertCurrent();
-      const remembered = resultsByRequested.get(requested);
-      if (remembered) return remembered;
-      const result = await collectRecordsByAncestor(
-        requested,
-        withLifecycleHooks(requested, { ...options.recordsOptions, ...extra }, guard, 'collect'),
-        api,
-      );
-      guard.assertCurrent();
-      absorbRecords(result);
-      rememberResolved(requested, result);
-      return result;
-    } catch (error) {
-      noteRequestFailure(error);
-      // 取消 / 换代盖过途中先抛出来的那个错：调用方拿到的分型只看这次读取的收口原因
-      guard.assertCurrent();
-      throw error;
-    } finally {
-      guard.dispose();
+    const shareable = !extra.signal && !extra.onRootDone && !extra.onRequestFailure;
+    if (!shareable) return collectByAncestorOnce(requested, extra);
+    const inflight = inflightByRequested.get(requested);
+    if (inflight) return inflight;
+    const task = collectByAncestorOnce(requested, extra).finally(() => {
+      if (inflightByRequested.get(requested) === task) inflightByRequested.delete(requested);
+    });
+    inflightByRequested.set(requested, task);
+    return task;
+  }
+
+  /** 按祖先查一次；节点能拆（`expandAncestor`）就换成它的成员有界并发查，结果形状不变、`refno` 仍是请求的节点。 */
+  async function collectFresh(
+    requested: string,
+    extra: CollectRecordsOptions,
+    guard: GenModelV1GenerationGuard,
+  ): Promise<CollectRecordsResult> {
+    const hooked = withLifecycleHooks(requested, { ...options.recordsOptions, ...extra }, guard, 'collect');
+    const members = options.expandAncestor ? await options.expandAncestor(requested, guard.signal) : null;
+    guard.assertCurrent();
+    if (!members || members.length === 0) return collectRecordsByAncestor(requested, hooked, api);
+    const collected = await collectRecordsForAncestors(members, hooked, api);
+    const settled = collected.pending.length === 0 && Object.keys(collected.errors).length === 0;
+    return {
+      refno: requested,
+      generationRoots: collected.generationRoots,
+      items: collected.items,
+      pending: collected.pending,
+      empty: settled && collected.items.length === 0 ? [...collected.empty, requested] : collected.empty,
+      truncatedRoots: [],
+      errors: collected.errors,
+      statuses: {},
+    };
+  }
+
+  async function collectByAncestorOnce(requested: string, extra: CollectRecordsOptions): Promise<CollectRecordsResult> {
+    // 备忘是长期正缓存，只能在 health 确认服务代次之后命中；没命中时请求本来就打到当前服务，与 health 并行，
+    // 写回缓存前再等它收口。这一轮 health 若查出换代（旧流程里那是请求发出之前），缓存已随换代清掉，重查一次；
+    // 请求途中别处查出的换代仍按原样报错。
+    const generationAtStart = getGenModelV1ServiceGeneration();
+    let generationWhenFresh: number | null = null;
+    let freshnessError: unknown = null;
+    const freshness = ensureFreshness().then(
+      () => { generationWhenFresh = getGenModelV1ServiceGeneration(); },
+      (error: unknown) => { freshnessError = error; throw error; },
+    );
+    freshness.catch(() => undefined);
+    if (resultsByRequested.has(requested)) await freshness;
+    for (let attempt = 0; ; attempt++) {
+      const guard = createGenModelV1GenerationGuard(extra.signal);
+      try {
+        // 取消要先于缓存命中：已经 abort 的 signal 不能拿着备忘结果「成功」返回
+        guard.assertCurrent();
+        const remembered = resultsByRequested.get(requested);
+        if (remembered) {
+          await freshness;
+          guard.assertCurrent();
+          return remembered;
+        }
+        const result = await collectFresh(requested, extra, guard);
+        await freshness;
+        guard.assertCurrent();
+        absorbRecords(result);
+        rememberResolved(requested, result);
+        return result;
+      } catch (error) {
+        if (error !== freshnessError) noteRequestFailure(error);
+        if (attempt === 0 && !extra.signal?.aborted && getGenModelV1ServiceGeneration() !== guard.generation) {
+          await freshness.catch(() => undefined);
+          if (generationWhenFresh !== null && generationWhenFresh !== generationAtStart) continue;
+        }
+        // 取消 / 换代盖过途中先抛出来的那个错：调用方拿到的分型只看这次读取的收口原因
+        guard.assertCurrent();
+        throw error;
+      } finally {
+        guard.dispose();
+      }
     }
   }
 
@@ -253,19 +325,23 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     const keys = Array.from(new Set(refnos.map((r) => fromV1Refno(String(r ?? ''))).filter(Boolean)));
     try {
       if (queryOptions.forceRefresh) invalidate(keys);
-      const out = new Map<string, InstanceEntry[]>();
-      for (const key of keys) {
-        if (!entriesByRefno.has(key)) {
-          // 以这个 refno 为祖先查（ADR-086：generation_root 参数语义=祖先子树）。key 是生成根时整根记录一次进缓存，
-          // 同根的其它构件多半就命中了；key 是构件时只回它自己。只查，不生成。
-          const collected = await collectByAncestor(key);
-          guard.assertCurrent();
-          // 只有完整收口后才能把「记录里没有该构件」负缓存为 []。pending（库被整库任务占用）或临时错误
-          // 都必须保持未缓存，下一次显示才能重新查。
-          if (isResolved(collected) && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
-        }
-        out.set(key, entriesByRefno.get(key) ?? []);
+      // 以缺的 refno 为祖先查（ADR-086：generation_root 参数语义=祖先子树），只查，不生成。key 是生成根时整根记录一次进缓存，
+      // 同根的其它构件多半就命中了；key 是构件时只回它自己。所以第一个单独查，其余有界并发，轮到时再看一眼缓存。
+      const fillMissing = async (key: string): Promise<void> => {
+        if (entriesByRefno.has(key)) return;
+        const collected = await collectByAncestor(key);
+        guard.assertCurrent();
+        // 只有完整收口后才能把「记录里没有该构件」负缓存为 []。pending（库被整库任务占用）或临时错误
+        // 都必须保持未缓存，下一次显示才能重新查。
+        if (isResolved(collected) && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
+      };
+      const missing = keys.filter((key) => !entriesByRefno.has(key));
+      if (missing.length > 0) {
+        await fillMissing(missing[0]!);
+        await mapWithConcurrency(missing.slice(1), MISSING_REFNO_QUERY_CONCURRENCY, fillMissing);
       }
+      const out = new Map<string, InstanceEntry[]>();
+      for (const key of keys) out.set(key, entriesByRefno.get(key) ?? []);
       guard.assertCurrent();
       return out;
     } finally {
@@ -279,6 +355,7 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
 
   function invalidate(refnos?: string[]): void {
     resultsByRequested.clear();
+    inflightByRequested.clear();
     if (!refnos) {
       entriesByRefno.clear();
       leavesByRoot.clear();
@@ -297,6 +374,7 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
 
   function invalidateRoot(root: string): string[] {
     resultsByRequested.clear();
+    inflightByRequested.clear();
     const key = fromV1Refno(root);
     const leaves = leavesOfRoot(key);
     for (const leaf of leaves) entriesByRefno.delete(leaf);

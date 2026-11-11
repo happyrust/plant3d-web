@@ -167,6 +167,11 @@ export type GenModelV1TreeSourceOptions = {
 export type GenModelV1TreeSource = TreeSource & {
   /** 服务代次变化时清 roots Promise；已在飞请求由 generation guard 取消并拒绝回填。 */
   invalidate(): void;
+  /**
+   * `refno` 是顶层 SITE（虚拟根的直接成员）时回它的成员 refno（`a_b`），否则 / 取不到回 `null`。
+   * SITE 名单用已有的 `tree/roots` 结果判断，过了复用窗口也不为这个再打一次；取成员失败按「不拆」处理。
+   */
+  topLevelSiteMembers(refno: string, signal?: AbortSignal): Promise<string[] | null>;
 };
 
 function errorMessage(error: unknown): string {
@@ -524,9 +529,13 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     }
     let guard: GenModelV1GenerationGuard | null = null;
     try {
-      await ensureFreshness();
+      // records 与 health 并行：记录源自己负责「备忘命中前等 health、写回前核对代次」；这里只保留 health 失败即失败。
+      const freshness = ensureFreshness();
+      const pending = collectByAncestor(key, options.recordsOptions);
+      pending.catch(() => undefined);
+      await freshness;
       guard = createGenModelV1GenerationGuard();
-      const result = await collectByAncestor(key, options.recordsOptions);
+      const result = await pending;
       guard.assertCurrent();
       const refnos = refnosOfRecords(result.items);
       const failed = Object.keys(result.errors);
@@ -562,10 +571,32 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     }
   }
 
+  async function topLevelSiteMembers(refno: string, signal?: AbortSignal): Promise<string[] | null> {
+    const key = fromV1Refno(refno);
+    if (!key || isVirtualRootId(refno)) return null;
+    const guard = createGenModelV1GenerationGuard(signal);
+    try {
+      const roots = rootsCache && rootsCache.generation === guard.generation
+        ? await rootsCache.value
+        : await loadRoots(guard);
+      if (!roots.nodes.some((node) => fromV1Refno(node.refno) === key)) return null;
+      const resp = await api.children(key, { signal: guard.signal });
+      guard.assertCurrent();
+      const members = resp.nodes.map((node) => fromV1Refno(node.refno)).filter(Boolean);
+      return members.length > 0 ? members : null;
+    } catch (error) {
+      noteRequestFailure(error);
+      guard.assertCurrent();
+      return null;
+    } finally {
+      guard.dispose();
+    }
+  }
+
   function invalidate(): void {
     rootsCache = null;
     groupRootsCache = null;
   }
 
-  return { worldRoot, groupRoot, node, children, ancestors, search, subtreeRefnos, visibleInsts, invalidate };
+  return { worldRoot, groupRoot, node, children, ancestors, search, subtreeRefnos, visibleInsts, invalidate, topLevelSiteMembers };
 }

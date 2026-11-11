@@ -41,6 +41,8 @@ type LoaderOptions = {
   isolated?: boolean
   /** 隔离对象的 ID 前缀，用于区分版本侧。 */
   objectIdPrefix?: string
+  /** 本批不把 CPU 侧对象上传到 GPU。一次显示的中间批用它，避免每批都按整个场景重编。 */
+  recompile?: boolean
   /** 调用方已取好的实例表（版本对比的 A/B 几何，`ModelVersionGeometry.entries`），供多图层复用。 */
   instanceEntriesByRefno?: Map<string, InstanceEntry[]>
 }
@@ -817,14 +819,14 @@ async function ensureGeometryForGeoHash(
         const meshData = await resp.arrayBuffer();
         const parseResult = parseMeshGeometryResult(meshData, meshUrl);
         if (parseResult.ok) {
-          const parsed = parseResult.data;
-          originalMeshSizeByGeoHash.set(geoHash, { bytes: meshData.byteLength, indexCount: parsed.indices.length });
-          const g = new BufferGeometry();
-          g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
-          if (parsed.normals && parsed.normals.length > 0) {
-            g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
-          }
-          g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
+        const parsed = parseResult.data;
+        originalMeshSizeByGeoHash.set(geoHash, { bytes: meshData.byteLength, indexCount: parsed.indices.length });
+        const g = new BufferGeometry();
+        g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
+        if (parsed.normals && parsed.normals.length > 0) {
+          g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
+        }
+        g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
           g.computeBoundingBox();
           geometry = g;
         } else {
@@ -936,6 +938,16 @@ async function ensureGeometriesForGeoHashes(
 
   await Promise.all(workers);
   return Array.from(missing);
+}
+
+/** 记录还在翻页时先把这一页的网格拉进图层缓存，装载阶段直接命中。 */
+export function prefetchDtxGeometries(
+  dtxLayer: DTXLayer,
+  dbno: number,
+  geoHashes: string[],
+  lodAssetKey = 'L1',
+): Promise<string[]> {
+  return ensureGeometriesForGeoHashes(dtxLayer, dbno, geoHashes, lodAssetKey, false, { concurrency: 4 });
 }
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
@@ -1741,7 +1753,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     }
 
     // 增量追加后重建 GPU 资源（1000 objects 级别可接受）
-    if (loadedObjects > 0) {
+    if (loadedObjects > 0 && options.recompile !== false) {
       dtxLayer.recompile();
       scheduleLod1Backfill(dtxLayer);
     }
