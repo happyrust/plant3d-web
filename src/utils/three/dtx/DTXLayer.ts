@@ -844,6 +844,8 @@ export class DTXLayer {
 
   // ========== 编译 ==========
 
+  private _bboxPoint = new Vector3();
+
   /**
    * 计算几何体局部包围盒
    */
@@ -852,13 +854,15 @@ export class DTXLayer {
     if (cached) return cached;
 
     const bbox = new Box3();
+    const point = this._bboxPoint;
     for (let i = 0; i < handle.vertexCount; i++) {
       const idx = (handle.vertexBase + i) * 3;
-      bbox.expandByPoint(new Vector3(
-        this._positionsBuffer[idx],
-        this._positionsBuffer[idx + 1],
-        this._positionsBuffer[idx + 2]
-      ));
+      point.set(
+        this._positionsBuffer[idx]!,
+        this._positionsBuffer[idx + 1]!,
+        this._positionsBuffer[idx + 2]!,
+      );
+      bbox.expandByPoint(point);
     }
     this._geometryLocalBBoxes.set(handle.geoHash, bbox);
     return bbox;
@@ -868,56 +872,46 @@ export class DTXLayer {
     return this._computeGeometryLocalBBox(handle).clone().applyMatrix4(matrix);
   }
 
+  /**
+   * 服务端 world_aabb 有限、非空、尺寸在 1e-6..1e6 米内时直接用它。
+   * 否则才按网格顶点算动态盒。
+   */
+  private _trustedPrecomputedBox(
+    aabb?: { min: number[]; max: number[] } | null,
+  ): Box3 | null {
+    const min = aabb?.min;
+    const max = aabb?.max;
+    if (!min || !max || min.length < 3 || max.length < 3) return null;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const lower = min[axis];
+      const upper = max[axis];
+      if (typeof lower !== 'number' || typeof upper !== 'number') return null;
+      if (!Number.isFinite(lower) || !Number.isFinite(upper) || lower > upper) return null;
+    }
+    const maxDim = Math.max(max[0]! - min[0]!, max[1]! - min[1]!, max[2]! - min[2]!);
+    if (!(maxDim > 1e-6) || maxDim > 1_000_000) return null;
+    return new Box3(new Vector3(min[0], min[1], min[2]), new Vector3(max[0], max[1], max[2]));
+  }
+
   private _resolveObjectBoundingBox(
     handle: GeometryHandle,
     matrix: Matrix4,
     precomputedAabb?: { min: number[]; max: number[] } | null,
     objectId?: string
   ): Box3 {
-    const dynamicBox = this._computeDynamicObjectBoundingBox(handle, matrix);
-    if (!precomputedAabb?.min || !precomputedAabb?.max) {
-      return dynamicBox;
-    }
-
-    const precomputedBox = new Box3(
-      new Vector3(precomputedAabb.min[0], precomputedAabb.min[1], precomputedAabb.min[2]),
-      new Vector3(precomputedAabb.max[0], precomputedAabb.max[1], precomputedAabb.max[2]),
-    );
-
-    if (precomputedBox.isEmpty()) {
-      return dynamicBox;
-    }
-
-    const precomputedSize = precomputedBox.getSize(new Vector3());
-    const dynamicSize = dynamicBox.getSize(new Vector3());
-    const precomputedCenter = precomputedBox.getCenter(new Vector3());
-    const dynamicCenter = dynamicBox.getCenter(new Vector3());
-
-    const precomputedMaxDim = Math.max(precomputedSize.x, precomputedSize.y, precomputedSize.z);
-    const dynamicMaxDim = Math.max(dynamicSize.x, dynamicSize.y, dynamicSize.z);
-    const centerDistance = precomputedCenter.distanceTo(dynamicCenter);
-
-    const sizeRatio =
-      precomputedMaxDim > 1e-9 && dynamicMaxDim > 1e-9
-        ? Math.max(precomputedMaxDim, dynamicMaxDim) / Math.min(precomputedMaxDim, dynamicMaxDim)
-        : 1;
-
-    const suspiciousCenter = centerDistance > Math.max(precomputedMaxDim, dynamicMaxDim, 1) * 2;
-    const suspiciousScale = sizeRatio > 100;
-
-    if (suspiciousCenter || suspiciousScale) {
+    const trusted = this._trustedPrecomputedBox(precomputedAabb);
+    if (trusted) return trusted;
+    if (precomputedAabb?.min && precomputedAabb?.max) {
       this._aabbFallbackCount++;
       if (this._debug && this._aabbFallbackSamples.length < 3) {
         this._aabbFallbackSamples.push({
           objectId: objectId ?? '?',
-          sizeRatio,
-          centerDistance,
+          sizeRatio: 0,
+          centerDistance: 0,
         });
       }
-      return dynamicBox;
     }
-
-    return precomputedBox;
+    return this._computeDynamicObjectBoundingBox(handle, matrix);
   }
 
   /**
