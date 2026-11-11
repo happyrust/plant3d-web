@@ -34,6 +34,7 @@ import {
   type StorageVersionUpgradeHealth,
   type TaskEntryDto,
 } from '@/api/genModelV1Api';
+import { describeDbnumFreshness, judgeDbnumFreshness, type DbnumFreshnessKind } from '@/composables/dbnumFreshness';
 import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   invalidateDbnumModelStatus,
@@ -67,33 +68,35 @@ export const DBNUM_STATUS_LABEL: Record<DbnumPanelStatus, string> = {
   excluded: '不参与',
 };
 
+/** 统一判定（`judgeDbnumFreshness`）的每一档落到面板的哪个徽标。判不了的归「待更新」：宁可让人去更新一次，不画成已同步。 */
+const PANEL_STATUS_OF: Record<DbnumFreshnessKind, DbnumPanelStatus> = {
+  latest: 'synced',
+  file_ahead: 'pending',
+  model_behind: 'pending',
+  updating: 'running',
+  uninitialized: 'uninitialized',
+  awaiting: 'awaiting',
+  blocked: 'blocked',
+  excluded: 'excluded',
+  unknown: 'pending',
+};
+
 /**
  * `/api/v1/dbnums` 行 → 面板状态徽标（实测字段见 DbnumRow）。
  *
- * 模型段的判据就是「模型最近更新时间的对比」：`model_sesno`（模型最后一次生成对到的数据会话）对比
- * `applied_sesno`（数据已应用会话）。服务端 `model_verdict` 已做过同一比较，表态了直接用（
- * `in_sync`/`lagging`），`not_judged` / 读透形态缺省时退回两个水位自己比。非 DESI 行不生成模型，
- * 只比数据段，免得目录库永远「待更新」。
+ * 判定不在这里：`judgeDbnumFreshness`（`./dbnumFreshness`）比三枚水位——库文件最新会话、数据已入库、模型已生成——
+ * 模型树行尾的库状态圆点用的是同一个函数，两处对同一个库说法一致（方案 2026-11-10 C1）。服务端 `model_verdict`
+ * 表态了直接用（`in_sync` / `lagging`），没表态时退回两枚水位自己比；非 DESI 行不生成模型，只比数据段，免得目录库
+ * 永远「待更新」。
  */
 export function dbnumPanelStatus(row: DbnumRow): DbnumPanelStatus {
-  if (row.excluded || row.not_in_project) return 'excluded';
-  if (row.blocked) return 'blocked';
-  if (row.write_state?.status === 'running') return 'running';
-  if (!row.initialized) return row.awaiting_manual_initialization ? 'awaiting' : 'uninitialized';
-  const applied = row.applied_sesno ?? 0;
-  const file = row.file_latest_sesno ?? 0;
-  if (applied < file) return 'pending';
-  if (String(row.db_type ?? '').toUpperCase() !== 'DESI') return 'synced';
-  const verdict = String(row.model_verdict ?? '').toLowerCase();
-  if (verdict === 'lagging') return 'pending';
-  if (verdict === 'in_sync') return 'synced';
-  return (row.model_sesno ?? 0) < applied ? 'pending' : 'synced';
+  return PANEL_STATUS_OF[judgeDbnumFreshness(row).kind];
 }
 
-/** `pending` 行是哪一段滞后：`data` = 数据还没应用完；`model` = 模型水位落后于已应用数据。 */
-export function dbnumLagReason(row: DbnumRow): 'data' | 'model' | null {
-  if (dbnumPanelStatus(row) !== 'pending') return null;
-  return (row.applied_sesno ?? 0) < (row.file_latest_sesno ?? 0) ? 'data' : 'model';
+/** 徽标的提示文字：与模型树库状态圆点同一套说法（一句结论、补充说明、三枚水位，各占一行）。 */
+export function dbnumStatusTitle(row: DbnumRow): string {
+  const text = describeDbnumFreshness(judgeDbnumFreshness(row));
+  return [text.headline, text.detail, text.watermarks].filter(Boolean).join('\n');
 }
 
 // ---------------------------------------------------------------------------

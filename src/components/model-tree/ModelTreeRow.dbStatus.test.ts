@@ -51,11 +51,45 @@ describe('ModelTreeRow 库状态圆点', () => {
     }
   });
 
-  it.each(['empty', 'stale', 'probing', 'unknown'] as const)('状态 %s 落到 data-db-status', async (kind) => {
+  it.each(['empty', 'stale', 'probing', 'unknown', 'file_ahead', 'updating'] as const)('状态 %s 落到 data-db-status', async (kind) => {
     viewMock.mockReturnValue({ kind, title: `DB 7997 · ${kind}` });
     const { host, unmount } = await mountRow(SITE_BOUNDARY);
     try {
       expect(host.querySelector('[data-testid="model-tree-status"]')?.getAttribute('data-db-status')).toBe(kind);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('各状态的圆点画法不同：最新绿、库文件有新会话蓝、落后琥珀、更新中转圈', async () => {
+    const drawn: Record<string, string> = {};
+    for (const kind of ['current', 'file_ahead', 'stale', 'updating', 'empty', 'unknown'] as const) {
+      viewMock.mockReturnValue({ kind, title: `DB 7997 · ${kind}` });
+      const { host, unmount } = await mountRow(SITE_BOUNDARY);
+      try {
+        drawn[kind] = host.querySelector('[data-testid="model-tree-status-icon"] svg')?.getAttribute('class') ?? '';
+      } finally {
+        unmount();
+      }
+    }
+    expect(drawn.current).toContain('fill-success');
+    expect(drawn.file_ahead).toContain('fill-sky-500');
+    expect(drawn.stale).toContain('fill-warning');
+    expect(drawn.updating).toContain('animate-spin');
+    expect(new Set(Object.values(drawn)).size).toBe(6);
+  });
+
+  it('提示文字分行时「点击重查」单独一行，不接在水位那一行后面', async () => {
+    viewMock.mockReturnValue({
+      kind: 'file_ahead',
+      title: 'DB 1112 · 库有 10 个新会话未更新\n有新会话，尚未核对是否影响模型\n模型 738 · 数据 738 · 库文件最新 748',
+    });
+    const { host, unmount } = await mountRow(SITE_BOUNDARY);
+    try {
+      const lines = (host.querySelector('[data-testid="model-tree-status"]')?.getAttribute('title') ?? '').split('\n');
+      expect(lines[0]).toBe('DB 1112 · 库有 10 个新会话未更新');
+      expect(lines[2]).toBe('模型 738 · 数据 738 · 库文件最新 748');
+      expect(lines[lines.length - 1]).toBe('点击重查');
     } finally {
       unmount();
     }

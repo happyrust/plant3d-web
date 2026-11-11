@@ -121,12 +121,14 @@ describe('ModelTreeRow RVM 核对图标', () => {
     }
   });
 
-  it('同一个图标里叠生成状态：最新实心、滞后带角标、无模型空心、未知变淡', async () => {
+  it('同一个图标里叠生成状态：最新实心、库文件有新会话带蓝角标、滞后带琥珀角标、无模型空心、未知 / 更新中变淡', async () => {
     const cases = [
-      { kind: 'current', fill: 'solid', stale: false },
-      { kind: 'stale', fill: 'solid', stale: true },
-      { kind: 'empty', fill: 'outline', stale: false },
-      { kind: 'unknown', fill: 'outline', stale: false },
+      { kind: 'current', fill: 'solid', stale: false, fileAhead: false },
+      { kind: 'file_ahead', fill: 'solid', stale: false, fileAhead: true },
+      { kind: 'stale', fill: 'solid', stale: true, fileAhead: false },
+      { kind: 'empty', fill: 'outline', stale: false, fileAhead: false },
+      { kind: 'unknown', fill: 'outline', stale: false, fileAhead: false },
+      { kind: 'updating', fill: 'outline', stale: false, fileAhead: false },
     ] as const;
     try {
       for (const c of cases) {
@@ -140,10 +142,11 @@ describe('ModelTreeRow RVM 核对图标', () => {
           expect(button.getAttribute('data-db-status')).toBe(c.kind);
           expect(button.querySelector('[data-testid="model-tree-status-icon"]')?.getAttribute('data-fill')).toBe(c.fill);
           expect(!!button.querySelector('[data-testid="model-tree-status-stale"]')).toBe(c.stale);
+          expect(!!button.querySelector('[data-testid="model-tree-status-file-ahead"]')).toBe(c.fileAhead);
           expect(button.getAttribute('title')).toContain('RVM 核对：通过');
           expect(button.getAttribute('title')).toContain(`DB 7997 · ${c.kind}`);
           if (c.fill === 'solid') expect(button.querySelector('.bg-emerald-600')).not.toBeNull();
-          if (c.kind === 'unknown') expect(button.querySelector('svg')?.getAttribute('class')).toContain('opacity-60');
+          if (c.kind === 'unknown' || c.kind === 'updating') expect(button.querySelector('svg')?.getAttribute('class')).toContain('opacity-60');
         } finally {
           unmount();
         }

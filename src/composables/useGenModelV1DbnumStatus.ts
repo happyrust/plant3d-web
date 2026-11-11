@@ -1,28 +1,43 @@
 /**
  * 每库「模型生成状态」的进程内单例 store：模型树行尾的小圆点吃它（plan 收口「按库看生成状态」）。
  *
- * 判据只来自 `/dbnums` 那一行（`useGenModelV1Health` 已在轮询，首屏与 ref0→dbnum 共用同一次请求，零额外成本）：
- * - `model_verdict = in_sync` → 已生成且与已入库数据一致；`lagging` → 已生成但滞后；
- * - `not_judged` / 没表态：`initialized = false` 的库是「未初始化，模型按需生成」；本页面生成过或查到过记录的再补一句。
+ * 判据只来自 `/dbnums` 那一行（`useGenModelV1Health` 已在轮询，首屏与 ref0→dbnum 共用同一次请求，零额外成本），
+ * 判定与说法都交给 `judgeDbnumFreshness` / `describeDbnumFreshness`（`./dbnumFreshness`）——「模型生成」面板的状态徽标
+ * 用的是同一对函数，两处对同一个库说法一致（方案 `docs/plans/2026-11-10-model-load-speed-generate-and-freshness-plan.md` C1）。
+ * 库一级按**库文件最新会话**判：模型与已入库数据一致、但库文件还有新会话的库不再是「最新」。
  *
- * 2026-11-10 起**不再调用 `GET /dbnums/{n}/model/roots`**（方案 `docs/plans/2026-11-10-model-load-speed-generate-and-freshness-plan.md` A1）：
+ * 2026-11-10 起**不再调用 `GET /dbnums/{n}/model/roots`**（同一份方案的 A1）：
  * 那条接口要冻结源文件并枚举整库生成根（实测 7997 一次 21–24 s、7999 15–25 s、7333 40 s），而它的 `ready`
  * 只是后端本进程投影的判据——后端重启之后恒为假——既贵又答不了「这个库有没有模型」。
- * 未初始化库里「哪些节点按需生成过」是节点级的事，库级圆点不替它作答。
+ * 未初始化库里「哪些节点按需生成过」是节点级的事，库级圆点不替它作答；本页面生成过或查到过记录的只在提示里补一句。
  */
 import { reactive } from 'vue';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
 
+import { describeDbnumFreshness, judgeDbnumFreshness, type DbnumFreshnessKind } from '@/composables/dbnumFreshness';
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 
 /**
- * 单库状态：`current` 绿（存在且最新）；`stale` 琥珀（已生成但滞后）；`empty` 空心（未初始化，按需生成）；
+ * 单库状态（图标怎么画）：`current` 绿（三枚水位对齐）；`file_ahead` 蓝（模型与已入库数据一致，库文件还有新会话）；
+ * `stale` 琥珀（模型落后于已入库数据）；`updating` 转圈（库正在被写）；`empty` 空心（未初始化，按需生成）；
  * `unknown` 虚线灰（库状态还没取到 / 判不了）。`probing` 是旧的根级探测在飞时的状态，现在不再产生，
- * 留着只为不动图标组件的入参类型。
+ * 留着只为不动既有调用方。
  */
-export type DbnumModelStatusKind = 'current' | 'stale' | 'empty' | 'unknown' | 'probing';
+export type DbnumModelStatusKind = 'current' | 'file_ahead' | 'stale' | 'updating' | 'empty' | 'unknown' | 'probing';
+
+const STATUS_KIND_OF: Record<DbnumFreshnessKind, DbnumModelStatusKind> = {
+  latest: 'current',
+  file_ahead: 'file_ahead',
+  model_behind: 'stale',
+  updating: 'updating',
+  uninitialized: 'empty',
+  awaiting: 'empty',
+  blocked: 'unknown',
+  excluded: 'unknown',
+  unknown: 'unknown',
+};
 
 export type DbnumModelStatusView = {
   kind: DbnumModelStatusKind;
@@ -69,13 +84,12 @@ export function dbnumModelStatusView(dbnum: number): DbnumModelStatusView {
     const why = state.verdict.error ? `（${state.verdict.error}）` : '';
     return { kind: 'unknown', title: `${prefix}库状态还没取到${why}${seen}` };
   }
-  const verdict = String(row.model_verdict ?? '').toLowerCase();
-  if (verdict === 'in_sync') return { kind: 'current', title: `${prefix}模型已生成且为最新` };
-  if (verdict === 'lagging') return { kind: 'stale', title: `${prefix}模型已生成但滞后于最新数据` };
-  if (row.initialized === false) {
-    return { kind: 'empty', title: `${prefix}库未初始化，模型按需生成${seen}` };
-  }
-  return { kind: 'unknown', title: `${prefix}模型生成状态未判定${seen}` };
+  const freshness = judgeDbnumFreshness(row);
+  const text = describeDbnumFreshness(freshness);
+  const kind = STATUS_KIND_OF[freshness.kind];
+  // 「本页面见过模型」只对说不出模型水位的库有信息量（未初始化 / 判不了）；水位对得上的库不用补这一句
+  const headline = kind === 'empty' || kind === 'unknown' ? `${text.headline}${seen}` : text.headline;
+  return { kind, title: [`${prefix}${headline}`, text.detail, text.watermarks].filter(Boolean).join('\n') };
 }
 
 /**

@@ -19,8 +19,8 @@ import {
   DBNUM_STATUS_LABEL,
   PIPELINE_STAGES,
   PIPELINE_STAGE_LABEL,
-  dbnumLagReason,
   dbnumPanelStatus,
+  dbnumStatusTitle,
   useModelGenerationAdmin,
   type AdminTaskView,
   type DbnumPanelStatus,
@@ -100,13 +100,6 @@ const watchStateLabel: Record<DbnumRefreshWatch['state'], string> = {
   done: '已刷新',
   timeout: '超时未确认',
 };
-
-function statusBadgeTitle(row: DbnumRow): string {
-  const lag = dbnumLagReason(row);
-  if (lag === 'data') return '数据水位滞后于文件（待摄入）';
-  if (lag === 'model') return '模型水位滞后于已应用数据（待生成）';
-  return '';
-}
 
 const allSitesPicked = computed(
   () =>
@@ -524,7 +517,8 @@ watch(
                   <td class="px-1.5 py-1.5">
                     <span class="inline-flex items-center gap-0.5 rounded border px-1 py-0.5 text-[10px]"
                       :class="statusBadgeClass[dbnumPanelStatus(row)]"
-                      :title="statusBadgeTitle(row)">
+                      :title="dbnumStatusTitle(row)"
+                      :data-testid="`model-generation-db-status-${row.dbnum}`">
                       {{ DBNUM_STATUS_LABEL[dbnumPanelStatus(row)] }}
                     </span>
                   </td>

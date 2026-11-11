@@ -203,7 +203,8 @@ watch(statusDbnum, (dbnum) => {
 const dbStatus = computed(() => (statusDbnum.value === null ? null : dbStatusStore.view(statusDbnum.value)));
 const statusTitle = computed(() => {
   const gen = dbStatus.value?.title;
-  if (!props.rvmStatus && !props.rvmIncremental) return gen ? `${gen}（点击重查）` : undefined;
+  // 库状态的提示可能分几行（结论 / 说明 / 三枚水位），「点击重查」另起一行
+  if (!props.rvmStatus && !props.rvmIncremental) return gen ? `${gen}\n点击重查` : undefined;
   const rvm = rvmBadgeTitle(props.rvmStatus, props.rvmIncremental).replace(/\n(点击查看结果|右键「核对 RVM」校验)$/, '');
   const action = props.rvmStatus ? '点击查看结果' : '右键「核对 RVM」校验';
   return [rvm, gen, action].filter(Boolean).join('\n');

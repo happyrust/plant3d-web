@@ -774,6 +774,8 @@ export type DbnumRow = {
   file_latest_sesno?: number;
   applied_sesno?: number;
   model_sesno?: number;
+  /** 模型水位那个会话在 E3D 里的保存时刻（RFC3339）；模型水位没立过时是 `null` */
+  model_sesno_time?: string | null;
   /** 数据水位立过（首次导入完成）；`false` = 未初始化 */
   initialized?: boolean;
   /** 服务端发现它但故意没排：等人工初始化（`/update/execute` 那条路不看这个格） */
@@ -782,14 +784,18 @@ export type DbnumRow = {
   excluded?: boolean;
   /** 不在当前 MDB 声明范围（别的项目的库） */
   not_in_project?: boolean;
-  /** 在飞的写回批次（`status: running` 时是「进行中」） */
+  /**
+   * 这个库最近一次写库任务的标记（只在带身份参数的全量行上有）：`status` 是 `writing`（正在写，或上一次死在写库中途）
+   * / `finished`。「这个库是不是正在被写」统一由 `judgeDbnumFreshness`（`@/composables/dbnumFreshness`）回答。
+   */
   write_state?: { status?: string; intent?: string; start_sesno?: number; end_sesno?: number } | null;
   model_verdict?: string;
-  model_verdict_reason?: string;
+  model_verdict_reason?: string | null;
   /** 房间归属对齐：`current` = 该库房间边已对齐到常驻房间模型当前代 */
   room_alignment?: { generation?: string | null; resident_generation?: string | null; current?: boolean } | null;
   model_source?: string;
-  model_source_reason?: string;
+  /** `model_source = memory` 的原因；`database` 时是 `null` */
+  model_source_reason?: string | null;
   [key: string]: unknown;
 };
 

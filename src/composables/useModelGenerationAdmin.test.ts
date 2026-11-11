@@ -141,6 +141,45 @@ describe('K06 按库水位行跟着非本会话的批次刷新', () => {
   });
 });
 
+describe('库状态徽标：与模型树圆点同一个判定函数（方案 2026-11-10 C1）', () => {
+  const base = { dbnum: 8000, db_type: 'DESI', initialized: true, model_verdict: 'in_sync' };
+
+  it('各种行落到哪个徽标', async () => {
+    const { dbnumPanelStatus } = await import('./useModelGenerationAdmin');
+    expect(dbnumPanelStatus({ ...base, file_latest_sesno: 9, applied_sesno: 9, model_sesno: 9 })).toBe('synced');
+    // 库文件有新会话、数据没入库：待更新（模型树圆点同一行说「库有 2 个新会话未更新」）
+    expect(dbnumPanelStatus({ ...base, file_latest_sesno: 9, applied_sesno: 7, model_sesno: 7 })).toBe('pending');
+    expect(dbnumPanelStatus({ ...base, model_verdict: 'lagging', file_latest_sesno: 9, applied_sesno: 9, model_sesno: 7 })).toBe('pending');
+    expect(dbnumPanelStatus({ ...base, initialized: false, model_verdict: 'not_judged', file_latest_sesno: 9, applied_sesno: 0, model_sesno: 0 }))
+      .toBe('uninitialized');
+    expect(dbnumPanelStatus({ ...base, initialized: false, awaiting_manual_initialization: true })).toBe('awaiting');
+    expect(dbnumPanelStatus({ ...base, blocked: true })).toBe('blocked');
+    expect(dbnumPanelStatus({ ...base, excluded: true })).toBe('excluded');
+    expect(dbnumPanelStatus({ ...base, not_in_project: true })).toBe('excluded');
+    // 目录库不生成模型：只比数据与库文件
+    expect(dbnumPanelStatus({ dbnum: 1, db_type: 'CATA', initialized: true, file_latest_sesno: 9, applied_sesno: 9 })).toBe('synced');
+    expect(dbnumPanelStatus({ dbnum: 1, db_type: 'CATA', initialized: true, file_latest_sesno: 9, applied_sesno: 7 })).toBe('pending');
+  });
+
+  it('库正在被写是「进行中」：后端写的是 write_state.status = writing', async () => {
+    const { dbnumPanelStatus } = await import('./useModelGenerationAdmin');
+    const row = { ...base, file_latest_sesno: 9, applied_sesno: 7, model_sesno: 7 };
+    expect(dbnumPanelStatus({ ...row, write_state: { status: 'writing', intent: 'apply_window' } })).toBe('running');
+    expect(dbnumPanelStatus({ ...row, write_state: { status: 'finished' } })).toBe('pending');
+  });
+
+  it('徽标的提示文字与模型树圆点是同一句话，并带三枚水位', async () => {
+    const { dbnumStatusTitle } = await import('./useModelGenerationAdmin');
+    expect(dbnumStatusTitle({ ...base, file_latest_sesno: 748, applied_sesno: 738, model_sesno: 738 })).toBe([
+      '库有 10 个新会话未更新',
+      '有新会话，尚未核对是否影响模型（只登录不修改也会多一个会话）',
+      '模型 738 · 数据 738 · 库文件最新 748',
+    ].join('\n'));
+    expect(dbnumStatusTitle({ ...base, model_verdict: 'lagging', file_latest_sesno: 9, applied_sesno: 9, model_sesno: 7 }))
+      .toContain('模型落后于已入库数据');
+  });
+});
+
 describe('一键完全重新部署', () => {
   it('redeploy：全选不传 dbnums，回执 task 登记轮询，并轮询 health 直到升级结束', async () => {
     const admin = await loadAdmin();

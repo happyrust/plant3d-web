@@ -45,12 +45,55 @@ describe('useGenModelV1DbnumStatus：库状态只读 /dbnums 那一行，不做�
     vi.useRealTimers();
   });
 
-  it('verdict in_sync / lagging 直接给 current / stale', () => {
+  it('三枚水位对齐才是 current；后端判 lagging 是 stale', () => {
     const store = useGenModelV1DbnumStatus();
-    setRow(8000, { model_verdict: 'in_sync', initialized: true });
-    setRow(7998, { model_verdict: 'lagging', initialized: true });
-    expect(store.view(8000)).toEqual({ kind: 'current', title: 'DB 8000 · 模型已生成且为最新' });
+    setRow(8000, { model_verdict: 'in_sync', initialized: true, file_latest_sesno: 1143, applied_sesno: 1143, model_sesno: 1143 });
+    setRow(7998, { model_verdict: 'lagging', initialized: true, file_latest_sesno: 645, applied_sesno: 645, model_sesno: 640 });
+    expect(store.view(8000)).toEqual({
+      kind: 'current',
+      title: 'DB 8000 · 模型已是最新\n模型 1143 · 数据 1143 · 库文件最新 1143',
+    });
     expect(store.view(7998).kind).toBe('stale');
+    expect(store.view(7998).title).toContain('DB 7998 · 模型落后于已入库数据');
+  });
+
+  it('模型与已入库数据一致、库文件还有新会话：不再是 current，写明差几个会话和三枚水位（本机 1112 / 7999 / 7333 的实际数）', () => {
+    const store = useGenModelV1DbnumStatus();
+    setRow(1112, {
+      model_verdict: 'in_sync', initialized: true, file_latest_sesno: 748, applied_sesno: 738, model_sesno: 738,
+      model_sesno_time: '2026-09-23T15:19:54',
+    });
+    setRow(7999, { model_verdict: 'in_sync', initialized: true, file_latest_sesno: 236, applied_sesno: 213, model_sesno: 213 });
+    setRow(7333, { model_verdict: 'in_sync', initialized: true, file_latest_sesno: 1732, applied_sesno: 1724, model_sesno: 1724 });
+
+    expect(store.view(1112)).toEqual({
+      kind: 'file_ahead',
+      title: [
+        'DB 1112 · 库有 10 个新会话未更新',
+        '有新会话，尚未核对是否影响模型（只登录不修改也会多一个会话）',
+        '模型 738（2026-09-23 15:19 保存） · 数据 738 · 库文件最新 748',
+      ].join('\n'),
+    });
+    expect(store.view(7999)).toMatchObject({ kind: 'file_ahead' });
+    expect(store.view(7999).title).toContain('DB 7999 · 库有 23 个新会话未更新');
+    expect(store.view(7333).title).toContain('DB 7333 · 库有 8 个新会话未更新');
+  });
+
+  it('库正在被写是 updating（轻量行靠 model_source_reason 认）', () => {
+    const store = useGenModelV1DbnumStatus();
+    setRow(8000, {
+      model_verdict: 'lagging', initialized: true, file_latest_sesno: 1144, applied_sesno: 1143, model_sesno: 1143,
+      model_source: 'memory', model_source_reason: 'initialization_publishing',
+    });
+    expect(store.view(8000).kind).toBe('updating');
+    expect(store.view(8000).title).toContain('DB 8000 · 库正在更新');
+  });
+
+  it('源码钉：圆点的判定只走 judgeDbnumFreshness（与「模型生成」面板同一个函数），自己不再读 model_verdict', () => {
+    const source = readFileSync(resolve(__dirname, 'useGenModelV1DbnumStatus.ts'), 'utf8');
+    const code = source.slice(source.indexOf('import { reactive }'));
+    expect(code).toMatch(/judgeDbnumFreshness\(row\)/);
+    expect(code).not.toMatch(/model_verdict|applied_sesno|file_latest_sesno/);
   });
 
   it('未初始化的库是 empty，提示写明按需生成；行还没取到是 unknown 并带上取数错误', () => {
