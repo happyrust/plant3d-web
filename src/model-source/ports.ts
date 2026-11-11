@@ -137,12 +137,30 @@ export type ModelRecordSource = {
   ): Promise<Map<string, InstanceEntry[]>>;
 };
 
+/** 打包取一个原网格的结局（`MeshSource.batch`）。 */
+export type MeshBatchResult =
+  /** 拿到了：`.mesh` 的原样字节，与 `meshUrl` 那条路的响应体相同 */
+  | { kind: 'mesh'; data: ArrayBuffer }
+  /** 源里没有这个网格（同 `meshUrl` 的 404） */
+  | { kind: 'missing' }
+  /** 这个键请按 `meshUrl` 逐个取（这条路此刻不可用，或这一次没读出来）；`reason` 只给日志看 */
+  | { kind: 'single'; reason: string };
+
 /** 网格 URL 模板。`1/2/3`、`tubi_*`、`t_*` 由调用方本地造几何，不会走到这里。 */
 export type MeshSource = {
   /** `lodAssetKey`：legacy 的 LOD 档位（`L1`…）；gen-model 只有一档，适配器忽略它。 */
   meshUrl(geoHash: string, lodAssetKey: string): string;
   /** 显示用粗网格（L1）的 URL；源不提供粗网格时不实现。 */
   lod1MeshUrl?(geoHash: string): string;
+  /**
+   * 原网格的打包取（gen-model-v1 `POST /api/v1/meshes/batch`）：调用方一个键一个键地要，源自己攒批、限并发。
+   * 源不提供就不实现。实现了也可能此刻不可用（旧后端没有这条路由）：`available()` 为假时调用方照旧按 `meshUrl` 逐个取；
+   * 为真时 `request` 的结果里仍可能有 `single`，那个键退回 `meshUrl`。只给原网格，粗网格仍走 `lod1MeshUrl`。
+   */
+  batch?: {
+    available(): boolean;
+    request(geoHash: string): Promise<MeshBatchResult>;
+  };
 };
 
 /** 属性面板与类型查询。 */

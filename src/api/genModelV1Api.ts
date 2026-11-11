@@ -821,6 +821,10 @@ export type GenModelV1Capabilities = {
   dbnum_model_ready_roots?: boolean;
   model_records_batch_max_roots?: number;
   mesh_formats?: string[];
+  /** 网格打包取（`POST /api/v1/meshes/batch`，规范 §4.11.4）一次最多几个键。没有这一格的后端没有这条路由 */
+  mesh_batch_max_keys?: number;
+  /** 网格打包取一次响应的内容字节上限 */
+  mesh_batch_max_bytes?: number;
   [key: string]: unknown;
 };
 

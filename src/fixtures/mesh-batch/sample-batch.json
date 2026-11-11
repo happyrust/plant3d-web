@@ -1,0 +1,56 @@
+{
+  "what": "POST /api/v1/meshes/batch 的一份真实响应体（gen-model docs/specs/web-service-api.md §4.11.4）",
+  "request": {
+    "keys": [
+      "1",
+      "no_such_mesh",
+      "2",
+      "3"
+    ]
+  },
+  "body_bytes": 39760,
+  "body_sha256": "72c78a1b239b8dffd66f6bc56e29b99d6e3df069e14ed998b26d460415ba8784",
+  "header": {
+    "magic": "PMB1",
+    "frames": 4
+  },
+  "frames": [
+    {
+      "frame_offset": 8,
+      "status": 0,
+      "key": "1",
+      "payload_offset": 24,
+      "payload_len": 1068,
+      "payload_sha256": "662746d71670a1877946b400c5f19c2bf3540119bf34846abf2840c7c9405393"
+    },
+    {
+      "frame_offset": 1096,
+      "status": 1,
+      "key": "no_such_mesh",
+      "payload_offset": 1120,
+      "payload_len": 0,
+      "payload_sha256": null
+    },
+    {
+      "frame_offset": 1120,
+      "status": 0,
+      "key": "2",
+      "payload_offset": 1136,
+      "payload_len": 10476,
+      "payload_sha256": "63c24f50a91f25576b1875c3e0c05c6a1706d6cb3f7c9a08792a9cf49f398442"
+    },
+    {
+      "frame_offset": 11616,
+      "status": 0,
+      "key": "3",
+      "payload_offset": 11632,
+      "payload_len": 28116,
+      "payload_sha256": "3534642558f108f747f051a5b3213059f5b50fb2b843994c602987c4d4306461"
+    }
+  ],
+  "trailer": {
+    "offset": 39752,
+    "magic": "PMBE",
+    "frames": 4
+  }
+}

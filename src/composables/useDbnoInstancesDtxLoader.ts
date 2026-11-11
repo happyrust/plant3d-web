@@ -4,7 +4,7 @@ import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4
 
 import { tubeKey } from '@/composables/spatialTree';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
-import { getModelSource } from '@/model-source';
+import { getModelSource, type MeshSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
 import { parseMeshGeometryResult } from '@/utils/parseMeshGeometry';
 import { toRefnoKey } from '@/utils/refnoKey';
@@ -267,6 +267,41 @@ const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
  * 8 s 足够覆盖慢盘与首次解析。
  */
 const MESH_FETCH_TIMEOUT_MS = 8_000;
+
+/**
+ * 原网格的打包取（方案 2026-11-10 A4；gen-model 规范 §4.11.4）：数据源给了 `meshes.batch` 且此刻可用时回它，否则回 `null`
+ * ——旧后端没有那条路由，照旧按 `meshUrl` 逐个取。
+ */
+function availableMeshBatch(): NonNullable<MeshSource['batch']> | null {
+  try {
+    const batch = getModelSource().meshes?.batch;
+    return batch && batch.available() ? batch : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 打包模式下被源退回来逐个取的键，同时在飞的上限：与不打包时的并发数相同，单个网格的时限从真正发出请求起算。 */
+const SINGLE_MESH_FALLBACK_CONCURRENCY = 8;
+let singleMeshFallbackInFlight = 0;
+const singleMeshFallbackWaiters: (() => void)[] = [];
+
+async function acquireSingleMeshFallbackSlot(): Promise<() => void> {
+  if (singleMeshFallbackInFlight >= SINGLE_MESH_FALLBACK_CONCURRENCY) {
+    await new Promise<void>((resolve) => { singleMeshFallbackWaiters.push(resolve); });
+  } else {
+    singleMeshFallbackInFlight += 1;
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    // 有人在等就把这一格直接交给他，占用数不变
+    const next = singleMeshFallbackWaiters.shift();
+    if (next) next();
+    else singleMeshFallbackInFlight -= 1;
+  };
+}
 
 /**
  * 每个图层里「取回超时、先放了兜底盒子」的 geoHash。几何缓存按 dbno 共用、图层各装各的：
@@ -694,7 +729,12 @@ async function ensureGeometryForGeoHash(
   geoHash: string,
   lodAssetKey: string,
   debug: boolean,
-  options: { forceRetryNotFound?: boolean; forceRefresh?: boolean } = {}
+  options: {
+    forceRetryNotFound?: boolean
+    forceRefresh?: boolean
+    /** 原网格先向它要（打包取）；不给就按 `meshUrl` 逐个取 */
+    viaBatch?: NonNullable<MeshSource['batch']> | null
+  } = {}
 ): Promise<{ status: 'ok' | 'not_found' | 'error'; notFoundNew: boolean }> {
   const cache = getCache(dbno);
   const wasNotFound = cache.notFoundGeoHash.has(geoHash);
@@ -793,64 +833,88 @@ async function ensureGeometryForGeoHash(
     let notFoundNew = false;
     let timedOut = false;
 
-    // 必须带超时与 abort：裸 `fetch` 在连接挂住时**永久等待**，而这个 Promise 会挂在
-    // `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死
-    // ——表现为「浏览/对比一直在转、一帧都不出」，且没有任何错误可查。
-    // 超时按「单块网格」给：本机冷读 mesh 通常几十毫秒，8 s 足够覆盖慢盘与首次解析。
-    // 计时要盖到读完响应体：响应头到了、体卡住一样会永久等待；同一个 signal 会让 `arrayBuffer()` 一起 reject。
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
-    try {
-      const resp = await fetch(meshUrl, { signal: controller.signal });
-      if (resp.status === 404) {
-        notFound = true;
-        notFoundNew = !cache.notFoundGeoHash.has(geoHash);
-        cache.notFoundGeoHash.add(geoHash);
-      }
-      if (!resp.ok && resp.status !== 404) {
-        console.error('[dtx][instances-json] mesh request failed', {
+    /** `.mesh` 的原样字节 → 几何（解不出回 `null`）。两条取数的路（打包取、逐个取）拿到的字节相同，都从这里过。 */
+    const buildGeometry = (meshData: ArrayBuffer): BufferGeometry | null => {
+      const parseResult = parseMeshGeometryResult(meshData, meshUrl);
+      if (!parseResult.ok) {
+        console.error('[dtx][instances-json] mesh validation failed', {
           geoHash,
           meshUrl,
-          status: resp.status,
-          statusText: resp.statusText,
+          error: parseResult.error.message,
+          issue: parseResult.error.issue,
         });
+        return null;
       }
-      if (resp.ok) {
-        const meshData = await resp.arrayBuffer();
-        const parseResult = parseMeshGeometryResult(meshData, meshUrl);
-        if (parseResult.ok) {
-        const parsed = parseResult.data;
-        originalMeshSizeByGeoHash.set(geoHash, { bytes: meshData.byteLength, indexCount: parsed.indices.length });
-        const g = new BufferGeometry();
-        g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
-        if (parsed.normals && parsed.normals.length > 0) {
-          g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
+      const parsed = parseResult.data;
+      originalMeshSizeByGeoHash.set(geoHash, { bytes: meshData.byteLength, indexCount: parsed.indices.length });
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
+      if (parsed.normals && parsed.normals.length > 0) {
+        g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
+      }
+      g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
+      g.computeBoundingBox();
+      return g;
+    };
+
+    // 打包取（方案 A4）：调用方（`ensureGeometriesForGeoHashes`）确认数据源此刻给得了才会要。源自己攒批、限并发；
+    // 回 `single` 的键（旧后端、这一次没读出来、流断了）落到下面逐个取。
+    let batched: Awaited<ReturnType<NonNullable<MeshSource['batch']>['request']>> | null = null;
+    if (options.viaBatch) {
+      try {
+        batched = await options.viaBatch.request(geoHash);
+      } catch {
+        batched = null;
+      }
+    }
+    if (batched?.kind === 'mesh') {
+      geometry = buildGeometry(batched.data);
+    } else if (batched?.kind === 'missing') {
+      notFound = true;
+      notFoundNew = !cache.notFoundGeoHash.has(geoHash);
+      cache.notFoundGeoHash.add(geoHash);
+    } else {
+      // 逐个取。打包模式下退回来的键过一道并发闸：成百上千个键同时退回时不能一起发，
+      // 否则排在浏览器连接队列里的请求会被下面的时限误杀。
+      const releaseSlot = options.viaBatch ? await acquireSingleMeshFallbackSlot() : null;
+      // 必须带超时与 abort：裸 `fetch` 在连接挂住时**永久等待**，而这个 Promise 会挂在
+      // `cache.loadingGeoHash` 上，同一 geoHash 的后续调用全部 `await pending` 一起卡死
+      // ——表现为「浏览/对比一直在转、一帧都不出」，且没有任何错误可查。
+      // 超时按「单块网格」给：本机冷读 mesh 通常几十毫秒，8 s 足够覆盖慢盘与首次解析。
+      // 计时要盖到读完响应体：响应头到了、体卡住一样会永久等待；同一个 signal 会让 `arrayBuffer()` 一起 reject。
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), MESH_FETCH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(meshUrl, { signal: controller.signal });
+        if (resp.status === 404) {
+          notFound = true;
+          notFoundNew = !cache.notFoundGeoHash.has(geoHash);
+          cache.notFoundGeoHash.add(geoHash);
         }
-        g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
-          g.computeBoundingBox();
-          geometry = g;
-        } else {
-          console.error('[dtx][instances-json] mesh validation failed', {
+        if (!resp.ok && resp.status !== 404) {
+          console.error('[dtx][instances-json] mesh request failed', {
             geoHash,
             meshUrl,
-            error: parseResult.error.message,
-            issue: parseResult.error.issue,
+            status: resp.status,
+            statusText: resp.statusText,
           });
         }
+        if (resp.ok) geometry = buildGeometry(await resp.arrayBuffer());
+      } catch (e) {
+        if (controller.signal.aborted) {
+          timedOut = true;
+          console.warn('[dtx][instances-json] mesh 取回超时，先用兜底盒子，下次装载重拉', {
+            geoHash,
+            meshUrl,
+            timeoutMs: MESH_FETCH_TIMEOUT_MS,
+          });
+        } else if (debug) {
+          console.warn('[dtx][instances-json] load mesh failed', { geoHash, meshUrl, e });
+        }
+      } finally {
+        clearTimeout(timer);
+        releaseSlot?.();
       }
-    } catch (e) {
-      if (controller.signal.aborted) {
-        timedOut = true;
-        console.warn('[dtx][instances-json] mesh 取回超时，先用兜底盒子，下次装载重拉', {
-          geoHash,
-          meshUrl,
-          timeoutMs: MESH_FETCH_TIMEOUT_MS,
-        });
-      } else if (debug) {
-        console.warn('[dtx][instances-json] load mesh failed', { geoHash, meshUrl, e });
-      }
-    } finally {
-      clearTimeout(timer);
     }
 
     if (geometry) {
@@ -915,24 +979,41 @@ async function ensureGeometriesForGeoHashes(
   });
   if (unique.length === 0) return [];
 
+  const missing = new Set<string>();
+  const noteOutcome = (geoHash: string, res: { status: 'ok' | 'not_found' | 'error'; notFoundNew: boolean }) => {
+    if (
+      (options.collectAllFailures && res.status !== 'ok')
+      || (res.status === 'not_found' && res.notFoundNew)
+    ) {
+      missing.add(geoHash);
+    }
+  };
+
+  // 打包取可用：要取的键在同一拍里全交出去，由数据源攒批、限并发（一批 256 个上下、同时 3–4 批）。
+  // 逐个等的话源手里永远只有几个键，攒不成批。
+  const batch = availableMeshBatch();
+  if (batch) {
+    await Promise.all(unique.map(async (geoHash) => {
+      noteOutcome(geoHash, await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug, {
+        forceRetryNotFound,
+        forceRefresh,
+        viaBatch: batch,
+      }));
+    }));
+    return Array.from(missing);
+  }
+
   const queue = unique.slice();
   const concurrency = Math.max(1, Math.min(options.concurrency ?? 8, queue.length));
-  const missing = new Set<string>();
 
   const workers = Array.from({ length: concurrency }, async () => {
     while (queue.length > 0) {
       const geoHash = queue.pop();
       if (!geoHash) continue;
-      const res = await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug, {
+      noteOutcome(geoHash, await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug, {
         forceRetryNotFound,
         forceRefresh,
-      });
-      if (
-        (options.collectAllFailures && res.status !== 'ok')
-        || (res.status === 'not_found' && res.notFoundNew)
-      ) {
-        missing.add(geoHash);
-      }
+      }));
     }
   });
 

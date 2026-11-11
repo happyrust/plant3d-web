@@ -5,7 +5,8 @@
  * - `records`：`modelRecordSource.ts`（按祖先查 records → `InstanceEntry`，按根收、按构件缓存；生成走 `generateThenCollect`——
  *   右键显式重新生成，或显示路径「库无模型 / 节点查空 → 默认重新生成」）；
  * - `meshes`：`/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，`parseMeshGeometry` 解；
- *   2026-09-09 拍板替代 P0-1 的服务端转 GLB，`.glb` 口径留一个发布周期）；
+ *   2026-09-09 拍板替代 P0-1 的服务端转 GLB，`.glb` 口径留一个发布周期）；原网格另有打包取
+ *   `meshBatch.ts`（`POST /api/v1/meshes/batch`，2026-11-10 方案 A4；旧后端没有这条路由时自动退回逐个取）；
  * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）；
  * - `keypoints`：`keypointSource.ts`（2026-09-12：测量 P-Point → `element/ptset`，成员点集 `include_members`；
  *   基本体关键点服务端无接口，回空带原因）；
@@ -21,6 +22,7 @@ import {
   type CollectDbnumResult,
 } from './collectDbnum';
 import { createGenModelV1KeypointSource } from './keypointSource';
+import { createGenModelV1MeshBatcher } from './meshBatch';
 import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
 import { createGenModelV1SpatialSource } from './spatialSource';
 import { createGenModelV1TreeSource } from './treeSource';
@@ -40,12 +42,20 @@ import {
   createGenModelV1GenerationGuard,
   subscribeGenModelV1GenerationChange,
 } from '@/model-source/genModelV1/serviceLifecycle';
+import { buildGenModelV1Url } from '@/utils/apiBase';
+
+// 原网格的打包取。可不可用由它自己探测：`/health` 的 capabilities 里有没有那两格，发出去的请求回没回 405。
+const meshBatcher = createGenModelV1MeshBatcher({
+  url: () => buildGenModelV1Url('/api/v1/meshes/batch'),
+  capabilities: () => useGenModelV1Health().state.capabilities,
+});
 
 const meshes: MeshSource = {
   // legacy 的 LOD 键在这里没有意义；粗网格是同一个键加 ?lod=1（生成时开 AIOS_MESH_LOD1 才有）。
   // URL 以 .mesh 收尾，DTX 加载链据此选 parseMeshGeometry（legacy 的 .glb 仍走 parseGlbGeometry）。
   meshUrl: (geoHash) => genModelV1MeshUrl(geoHash),
   lod1MeshUrl: (geoHash) => genModelV1MeshUrl(geoHash, undefined, 1),
+  batch: meshBatcher,
 };
 
 /** v1 源在四个端口之外多出来的能力：记录源的缓存 / 进度，以及 `show_dbnum` 整库收集（P3-c）。 */
@@ -80,6 +90,8 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
     unsubscribeGeneration = subscribeGenModelV1GenerationChange(() => {
       records.invalidate();
       tree.invalidate();
+      // 后端换了一代：上一代试出来的「没有打包路由」作废（部署新后端之后不用刷新页面就用得上）
+      meshBatcher.reset();
       invalidateGenModelV1Dbnums();
       invalidateGenModelV1DbMetaInfo();
       resetDbnumServerEntrySupport();
@@ -131,6 +143,7 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
 
 export * from './collectDbnum';
 export * from './treeSource';
+export * from './meshBatch';
 export * from './modelRecords';
 export * from './modelRecordSource';
 export * from './instanceMapping';
