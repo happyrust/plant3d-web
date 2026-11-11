@@ -149,7 +149,11 @@ describe('DTXLayer 粗网格（L1）', () => {
     layer.addGeometry('quad', quad());
     layer.addObject('old', 'quad', new Matrix4());
     layer.addLod1Geometry('quad', tri());
-    layer.replaceGeometry('quad', quad());
+    // 换上去的是一份内容变了的网格（重新生成的结果）。内容一模一样时不算替换、粗网格留着
+    // （2026-11-11，见 `DTXLayer.replaceGeometry.spec.ts`）
+    const regenerated = quad();
+    regenerated.getAttribute('position').setXYZ(3, 2, 2, 0);
+    layer.replaceGeometry('quad', regenerated);
     expect(layer.hasLod1Geometry('quad')).toBe(false);
     layer.addLod1Geometry('quad', tri());
     layer.addObject('new', 'quad', new Matrix4());

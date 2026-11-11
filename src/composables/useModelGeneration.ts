@@ -701,6 +701,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       replace: boolean
       /** 不分批：边取边画之后的收尾用——场景里已经有东西了，不需要「先出 1000 个」，一批装完少跑几轮重建与回放钩子 */
       singleBatch?: boolean
+      /**
+       * 整套替换时：这些构件的记录刚按祖先重新查过（重载），或刚生成完查回来（重新生成），缓存里已经是最新的——
+       * 直接交给装载器，不让它逐个构件清掉重问（2026-11-11：一个 1888 件的 ZONE 重载要多发 1708 个请求、多等 4 秒）。
+       * 不在这里面的（并进来的 BRAN / HANG 根、叶子构件的属主 BRAN）照旧清掉重问。不给就全部清掉重问。
+       */
+      freshRefnos?: ReadonlySet<string>
     },
     progressRange: [number, number],
     label: string,
@@ -723,6 +729,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         syncGlobalLoadStatus();
       }
       offset += batch.length;
+      let freshEntries: Map<string, InstanceEntry[]> | null = null;
+      if (mode.replace && mode.freshRefnos) {
+        const fresh = mode.freshRefnos;
+        const records = getModelSource().records;
+        freshEntries = new Map(await records.instanceEntriesByRefnos(dbno, batch.filter((refno) => fresh.has(refno))));
+        const others = batch.filter((refno) => !fresh.has(refno));
+        if (others.length > 0) {
+          for (const [key, entries] of await records.instanceEntriesByRefnos(dbno, others, { forceRefresh: true })) {
+            freshEntries.set(key, entries);
+          }
+        }
+        undo?.session.throwIfStopped();
+      }
       const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
         lodAssetKey: 'L1',
         debug: false,
@@ -731,6 +750,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         replaceExistingObjects: mode.replace,
         forceRefreshGeometries: mode.replace,
         recompile: batches === 1 || index === 0 || index + 1 === batches,
+        ...(freshEntries ? { instanceEntriesByRefno: freshEntries } : {}),
         ...(undo ? { signal: undo.session.signal } : {}),
       });
       // 整套替换的那一次不进「新装的」账：被叫停时它要么还没开始换（什么都没动），要么已经换完了
@@ -1642,7 +1662,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           dbno,
           remainingRefnos,
           anyViewer,
-          { replace: regenerate || refresh, singleBatch: shownEarlyRefnos !== null },
+          {
+            replace: regenerate || refresh,
+            singleBatch: shownEarlyRefnos !== null,
+            // 重载 / 重新生成：范围查询回来的构件，记录都是刚查的那一份（根自己也是：没有记录的根在缓存里记的是空）
+            ...(regenerate || refresh ? { freshRefnos: new Set([normalizedRoot, ...visibleRefnos]) } : {}),
+          },
           [30, 95],
           `从 gen-model 加载 ${normalizedRoot}`,
           regenerate ? null : undo,

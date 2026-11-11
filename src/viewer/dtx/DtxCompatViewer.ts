@@ -57,6 +57,8 @@ export class DtxCompatScene {
 
   private _fallbackRefnoToObjectIds: Map<string, string[]> | null = null;
   private _fallbackIndexObjectCount = 0;
+  /** 兜底索引建到的最后一个对象：图层里对象被拿掉过（重载 / 加载中叫停）就对不上，索引整个重建 */
+  private _fallbackIndexLastObjectId: string | null = null;
   private _xrayOriginalOpacityByObjectId = new Map<string, number>();
   private _xrayDimOpacity = 0.2;
   private _focusKeepRefnos = new Set<string>();
@@ -152,9 +154,20 @@ export class DtxCompatScene {
     }
 
     // 增量构建已加载 objectId 的 refno 索引，缺少 db_meta 时也能完成选中/定位。
+    // 增量只在「对象只增不减」时成立。图层现在会真的拿掉对象（2026-11-11：重载换下来的旧对象、加载中叫停收回去的），
+    // 拿掉之后后面的对象往前挪：上次建到的那个位置上不再是同一个对象，就整个重建。
+    const lastIndexedId = this._fallbackIndexObjectCount > 0 && typeof this._dtxLayer.getObjectIdByIndex === 'function'
+      ? this._dtxLayer.getObjectIdByIndex(this._fallbackIndexObjectCount - 1)
+      : this._fallbackIndexLastObjectId;
+    if (objectCount < this._fallbackIndexObjectCount || lastIndexedId !== this._fallbackIndexLastObjectId) {
+      this._fallbackRefnoToObjectIds.clear();
+      this._fallbackIndexObjectCount = 0;
+      this._fallbackIndexLastObjectId = null;
+    }
     if (this._fallbackIndexObjectCount !== objectCount) {
       const all = this._dtxLayer.getAllObjectIds();
       if (Array.isArray(all)) {
+        this._fallbackIndexLastObjectId = all.length > 0 && typeof all[all.length - 1] === 'string' ? all[all.length - 1]! : null;
         const start = Math.max(0, Math.min(this._fallbackIndexObjectCount, all.length));
         for (let i = start; i < all.length; i++) {
           const objectId = all[i];

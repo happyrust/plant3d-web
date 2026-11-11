@@ -617,10 +617,50 @@ export class DTXLayer {
    * 后续新增对象会使用新 handle，适合显式重新生成后的热替换。
    */
   replaceGeometry(geoHash: string, geometry: BufferGeometry): GeometryHandle {
+    // 内容没变（重载时同一个网格又取了一遍）：留着原来那一份，不往缓冲里再追加一遍（2026-11-11；原来每重载一次，
+    // 顶点 / 索引缓冲就多出一整份，只增不减）。粗网格也跟着留下，不用重新补。
+    const existing = this._geometries.get(geoHash);
+    if (existing && this._hasSameGeometryData(existing, geometry)) return existing;
     this._geometries.delete(geoHash);
     // 粗网格跟着旧的原网格走；新原网格的粗网格由调用方重新补
     this._lod1Geometries.delete(geoHash);
     return this.addGeometry(geoHash, geometry);
+  }
+
+  /** 这份几何和缓冲里登记的那一份是不是逐位相同：顶点、索引；带法线的连法线一起比（不带的由顶点和索引算出来，不用比） */
+  private _hasSameGeometryData(handle: GeometryHandle, geometry: BufferGeometry): boolean {
+    const positionAttr = geometry.getAttribute('position');
+    if (!positionAttr || positionAttr.count !== handle.vertexCount) return false;
+    const indexAttr = geometry.getIndex();
+    if ((indexAttr ? indexAttr.count : positionAttr.count) !== handle.indexCount) return false;
+    const { vertexBase, vertexCount, indexBase, indexCount } = handle;
+    const positions = this._positionsBuffer;
+    for (let i = 0; i < vertexCount; i++) {
+      const offset = (vertexBase + i) * 3;
+      if (
+        positions[offset] !== positionAttr.getX(i)
+        || positions[offset + 1] !== positionAttr.getY(i)
+        || positions[offset + 2] !== positionAttr.getZ(i)
+      ) return false;
+    }
+    const indices = this._indicesBuffer;
+    for (let i = 0; i < indexCount; i++) {
+      // 不带索引的几何在缓冲里存的是顺序索引
+      if (indices[indexBase + i] !== (indexAttr ? indexAttr.getX(i) : i)) return false;
+    }
+    const normalAttr = geometry.getAttribute('normal');
+    if (normalAttr) {
+      const normals = this._normalsBuffer;
+      for (let i = 0; i < vertexCount; i++) {
+        const offset = (vertexBase + i) * 3;
+        if (
+          normals[offset] !== normalAttr.getX(i)
+          || normals[offset + 1] !== normalAttr.getY(i)
+          || normals[offset + 2] !== normalAttr.getZ(i)
+        ) return false;
+      }
+    }
+    return true;
   }
 
   // ========== 对象管理 ==========

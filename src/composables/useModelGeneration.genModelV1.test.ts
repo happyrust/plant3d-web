@@ -68,6 +68,10 @@ const v1Source = {
   versions: { listNodeVersions: listNodeVersionsMock },
   records: {
     invalidateRoot: vi.fn((_root: string): string[] => []),
+    /** 按构件取实例（整套替换时显示流程自己取了交给装载器）：每个构件回一条 */
+    instanceEntriesByRefnos: vi.fn(async (_dbno: number, refnos: string[], _options?: { forceRefresh?: boolean }) => (
+      new Map<string, unknown[]>(refnos.map((refno) => [refno, [{ geo_hash: `g:${refno}` }]]))
+    )),
     /** 叫停正在进行的那次共用记录读取（加载中可以停） */
     cancelCollect: vi.fn((_refno: string): boolean => true),
     subscribeProgress: (listener: ProgressListener) => {
@@ -1241,7 +1245,9 @@ describe('showModelByRefno 边取边画（方案 2026-11-10 A3）', () => {
     expect(loadInstancesMock).toHaveBeenCalledTimes(1);
     expect(loadInstancesMock.mock.calls[0]![2]).toEqual(ALL);
     expect(loadInstancesMock.mock.calls[0]![3]).toMatchObject({ replaceExistingObjects: true });
-    expect(loadInstancesMock.mock.calls[0]![3]).not.toHaveProperty('instanceEntriesByRefno');
+    // 交给装载器的实例是整个范围的（刚查回来的那一份），不是边取边画那样的一批成员
+    const entries = (loadInstancesMock.mock.calls[0]![3] as { instanceEntriesByRefno?: Map<string, unknown[]> }).instanceEntriesByRefno;
+    expect([...entries!.keys()]).toEqual(ALL);
   });
 
   it('遮罩只在生成阶段弹：边取边画期间读记录的进度不弹，自动补齐 / 重新生成的逐根进度照旧弹', async () => {
@@ -1709,6 +1715,44 @@ describe('showModelByRefno 重载（refresh）', () => {
     expect(evictMock).not.toHaveBeenCalled();
   });
 
+  it('重载：范围查询刚查回来的构件，实例直接从记录缓存拿了交给装载器，不让它逐个构件清掉重问', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    viewer.scene.objects[EQUI] = {};
+    viewer.__dtxLayer.hasObject = vi.fn(() => true);
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: EQUI, refnos: ['24384_24777', '24384_24776'] });
+
+    expect(await gen.showModelByRefno(EQUI, { refresh: true, flyTo: false })).toBe(true);
+
+    // 只按缓存取了一次（不带 forceRefresh）：这些构件的记录是范围查询刚查的那一份
+    expect(v1Source.records.instanceEntriesByRefnos).toHaveBeenCalledTimes(1);
+    expect(v1Source.records.instanceEntriesByRefnos).toHaveBeenCalledWith(8000, ['24384_24777', '24384_24776']);
+    const options = loadInstancesMock.mock.calls[0]![3] as { instanceEntriesByRefno?: Map<string, unknown[]>; forceReloadRefnos?: string[] };
+    expect([...options.instanceEntriesByRefno!.keys()]).toEqual(['24384_24777', '24384_24776']);
+    // 旧对象照样整套换掉、网格照样重新取
+    expect(options.forceReloadRefnos).toEqual(['24384_24777', '24384_24776']);
+  });
+
+  it('重载叶子构件：并进来的属主 BRAN 不在刚查的那一批里，它的记录清掉重问', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    const elbow = '24384_30001';
+    const bran = '24384_30000';
+    typeInfoMock.mockResolvedValue({ success: true, refno: elbow, noun: 'ELBO', owner_refno: bran, owner_noun: 'BRAN' });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: elbow, refnos: [elbow] });
+
+    expect(await gen.showModelByRefno(elbow, { refresh: true, flyTo: false })).toBe(true);
+
+    expect(v1Source.records.instanceEntriesByRefnos.mock.calls).toEqual([
+      [8000, [elbow]],
+      [8000, [bran], { forceRefresh: true }],
+    ]);
+    const options = loadInstancesMock.mock.calls[0]![3] as { instanceEntriesByRefno?: Map<string, unknown[]> };
+    expect([...options.instanceEntriesByRefno!.keys()].sort()).toEqual([bran, elbow]);
+  });
+
   it('K07 普通显示不碰记录缓存、不撤任何东西', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
@@ -1717,6 +1761,9 @@ describe('showModelByRefno 重载（refresh）', () => {
     expect(v1Source.records.invalidateRoot).not.toHaveBeenCalled();
     expect(evictMock).not.toHaveBeenCalled();
     expect(loadInstancesMock.mock.calls[0]![3]).toMatchObject({ replaceExistingObjects: false });
+    // 普通显示不自己取实例：装载器照旧向记录源要（缓存里有就不发请求）
+    expect(v1Source.records.instanceEntriesByRefnos).not.toHaveBeenCalled();
+    expect(loadInstancesMock.mock.calls[0]![3]).not.toHaveProperty('instanceEntriesByRefno');
   });
 
   it('K08 记录查空且收齐（这根被删、或名下带几何的成员删光）：不生成，撤下根与名下旧构件，不再算已加载', async () => {
