@@ -222,7 +222,8 @@ describe('showModelByRefno（gen-model-v1）', () => {
     // 「节点查询一个模型都没有 → 默认重新生成」：generateThenCollect 被调一发（这里是源级 mock）。
     // api 层 records 仍只发一次：生成后的重查命中 collectByAncestor 按请求记的备忘（mock 没真去清它）。
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('1_2');
+    // 显示补齐不带 force（后端规范 §4.5：带了会先把范围内已有的模型清掉再算）
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('1_2', { force: false });
     expect(records).toHaveBeenCalledTimes(1);
     expect(loadInstancesMock).not.toHaveBeenCalled();
     expect(gen.isModelActuallyLoaded('1_2')).toBe(false);
@@ -351,7 +352,8 @@ describe('showModelByRefno（gen-model-v1）', () => {
     await gen.showModelByRefno('24381_101410', { regenerate: true });
 
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410');
+    // 右键「重新生成模型」是唯一带 force 的入口
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410', { force: true });
     expect(loadInstancesMock).toHaveBeenCalledTimes(1);
     expect(loadInstancesMock).toHaveBeenCalledWith(expect.anything(), 7997, refnos, expect.objectContaining({
       dataSource: 'gen-model-v1', replaceExistingObjects: true, forceRefreshGeometries: true, forceReloadRefnos: refnos,
@@ -408,7 +410,7 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(ok).toBe(true);
     expect(typeInfoMock).toHaveBeenCalledWith('24381_145018');
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_145018');
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_145018', { force: false });
     expect(loadInstancesMock).toHaveBeenCalled();
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
       level: 'success', message: expect.stringContaining('已自动生成并加载'),
@@ -439,7 +441,7 @@ describe('showModelByRefno（gen-model-v1）', () => {
 
     expect(ok).toBe(true);
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_2');
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_2', { force: false });
     expect(loadInstancesMock).toHaveBeenCalled();
   });
 
@@ -569,9 +571,78 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(ok).toBe(true);
     expect(dbnumRootsMock).not.toHaveBeenCalled();
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410');
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410', { force: false });
     expect(loadInstancesMock).toHaveBeenCalled();
     expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining('dbnum=7997 库里没有成套模型'));
+  });
+
+  it('display_fill_is_never_forced：记录查询失败（退到子树也没查通）时不生成，哪怕库里没有成套模型', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    // 2026-11-10 之前：查询失败 + 库级预检查说「没有就绪模型」→ 自动发 force 的生成，一次瞬时读失败就可能把库里的模型清掉重算
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
+    visibleInstsMock.mockResolvedValue({ success: false, refno: '24381_101410', refnos: [], error_message: 'internal(500): boom' });
+    v1Source.tree.subtreeRefnos.mockResolvedValue({ success: false, refnos: [], truncated: true, error_message: 'internal(500): boom' });
+
+    await gen.showModelByRefno('24381_101410');
+
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'warning', message: expect.stringContaining('查询加载范围失败'),
+    }));
+  });
+
+  it('记录查询失败、退到子树查询拿到空表：那不是「查空」，不生成', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
+    visibleInstsMock.mockResolvedValue({ success: false, refno: '24381_101410', refnos: [], error_message: 'network(0): fetch failed' });
+    v1Source.tree.subtreeRefnos.mockResolvedValue({ success: true, refnos: [], truncated: false });
+
+    expect(await gen.showModelByRefno('24381_101410')).toBe(false);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(loadInstancesMock).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'warning', message: expect.stringContaining('记录查询没有应答'),
+    }));
+  });
+
+  it('查询成功但没收齐（部分 ZONE 出错）且一个构件都没有：不知道是不是真空，不生成', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_UNINITIALIZED);
+    visibleInstsMock.mockResolvedValue({
+      success: true, refno: '24381_535', refnos: [],
+      incomplete: { pending: [], truncated_roots: [], errors: { '24381_571': 'internal(500): boom' } },
+    });
+
+    expect(await gen.showModelByRefno('24381_535')).toBe(false);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining('尚未取得可见实例（出错 1 根）'),
+    }));
+  });
+
+  it.each([
+    ['model_lagging', '模型正在追平已入库的数据'],
+    ['initialization_publishing', '这个库正在更新'],
+  ])('库的读源理由是 %s 且节点查空：查空不代表没生成过，不自动生成，给提示', async (reason, hint) => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    dbnumRowsMock.mockReturnValue([
+      { dbnum: 7997, db_type: 'DESI', initialized: true, applied_sesno: 46, model_sesno: 41, model_source: 'memory', model_source_reason: reason },
+    ]);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '23714_997', refnos: [] });
+
+    expect(await gen.showModelByRefno('23714_997')).toBe(false);
+    expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info', message: expect.stringContaining(hint),
+    }));
   });
 
   it('库未初始化但节点查到了记录：照查照装，不生成；显示流程一次整库根枚举都不发', async () => {

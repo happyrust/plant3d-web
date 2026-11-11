@@ -4,10 +4,12 @@
  * - **显示 = 查询**：`collectRecordsByAncestor(refno)` 对节点自己发 `model/records`，服务端以它为**祖先**回答子树里已生成的
  *   全部实例（ADR-086 D1），没生成过是 200 空（D2）。不 generate、不展开容器、不解根。多个节点（整库显示逐 SITE）走
  *   `collectRecordsForAncestors`，一个祖先一次分页读取、有界并发。
- * - **生成入口仍是 `generateThenCollect`**：`generateThenCollect(refno, { force: true })` = `model/generate` → 摄入形态回 `422 container` 时展开一层子节点
+ * - **生成入口仍是 `generateThenCollect`**：`model/generate` → 摄入形态回 `422 container` 时展开一层子节点
  *   逐个 generate（深度 / 根数有上限）→ 回执不是 pending 的根有了新产物，再按祖先查一次记录。`generation_pending` / `timeout`
- *   的根**不显示**，记进 `pending` 交给调用方提示。调用方有三处：右键「重新生成模型」、显示时库级预检查无模型、
- *   节点查询一条记录都没有（后两处是「没有模型就默认重新生成」，每 refno 每实例只自动一发）。
+ *   的根**不显示**，记进 `pending` 交给调用方提示。调用方两类，`force` 必须写明：
+ *   - 右键「重新生成模型」/ 模型生成面板的按节点生成：`{ force: true }`（先删后生成）；
+ *   - 显示时节点查询成功且一条记录都没有的**模型资产补齐**：`{ force: false }`（只生成缺的 / 落后的根，每 refno 每实例只自动一发）。
+ *     gen-model 规范 §4.5：显示补齐不要带 force。
  *
  * 这一层只负责**把记录收齐**（`GeomInstQuery[]`），不做 `InstanceEntry` 映射（那是 `instanceMapping.ts` 的事）。
  */
@@ -75,9 +77,12 @@ export type CollectRecordsOptions = GenModelV1RequestOptions & {
   onRequestFailure?: (error: unknown) => void;
 };
 
-/** 右键「重新生成模型」的可选项。 */
+/** 生成入口（右键「重新生成模型」与显示时的模型资产补齐）的可选项。 */
 export type GenerateThenCollectOptions = CollectRecordsOptions & {
-  /** 缺省 `true`：范围内已有的产物重算替换。只有右键会走到这里，所以没有「不带 force」的显示补齐语义。 */
+  /**
+   * `true`（缺省，为了不改老调用方）：先把范围内已有的产物连同网格清掉再逐根生成——只给「人明确要求重新生成」用。
+   * `false`：模型资产补齐，已有且最新的根服务端直接回 `AlreadyAvailable`。显示路径必须显式传 `false`。
+   */
   force?: boolean;
   /** 容器展开的最大层数（默认 3：SITE → ZONE → 生成根一般够了） */
   maxContainerDepth?: number;
