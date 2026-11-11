@@ -23,6 +23,7 @@ import {
 } from './collectDbnum';
 import { createGenModelV1KeypointSource } from './keypointSource';
 import { createGenModelV1MeshBatcher } from './meshBatch';
+import { recordsMemberBatchSize } from './modelRecords';
 import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
 import { createGenModelV1SpatialSource } from './spatialSource';
 import { createGenModelV1TreeSource } from './treeSource';
@@ -50,6 +51,19 @@ const meshBatcher = createGenModelV1MeshBatcher({
   capabilities: () => useGenModelV1Health().state.capabilities,
 });
 
+/**
+ * 页面地址上的 `gm_records_batch`：顶层 SITE 拆成 ZONE 查记录时一发带几个 ZONE。`0` / `1` 关掉打包（一个 ZONE 一发），
+ * 别的正整数改个数；不给就用缺省（`recordsMemberBatchSize`）。量前后对照、出了问题临时关掉用。
+ */
+function recordsBatchOverride(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return new URLSearchParams(window.location.search).get('gm_records_batch');
+  } catch {
+    return null;
+  }
+}
+
 const meshes: MeshSource = {
   // legacy 的 LOD 键在这里没有意义；粗网格是同一个键加 ?lod=1（生成时开 AIOS_MESH_LOD1 才有）。
   // URL 以 .mesh 收尾，DTX 加载链据此选 parseMeshGeometry（legacy 的 .glb 仍走 parseGlbGeometry）。
@@ -75,6 +89,8 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
     noteRequestFailure: noteGenModelV1RequestFailure,
     // 顶层 SITE 按它的 ZONE 并行查（SITE 只是容器，生成根都在 ZONE 之下）
     expandAncestor: (refno, signal) => tree.topLevelSiteMembers(refno, signal),
+    // ZONE 多的 SITE 十几个 ZONE 打包成一发（后端在 /health 的 capabilities 里声明了批量形才打包；8 万件的 SITE 531 发 → 约 50 发）
+    memberBatchSize: (members) => recordsMemberBatchSize(useGenModelV1Health().state.capabilities, recordsBatchOverride(), members),
   });
   // 树的 visibleInsts 与几何加载共用一份按祖先查询的缓存：一次显示只打一次 records
   const tree = createGenModelV1TreeSource({

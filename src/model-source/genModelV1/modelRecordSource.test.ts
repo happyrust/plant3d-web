@@ -286,6 +286,93 @@ describe('createGenModelV1ModelRecordSource', () => {
     expect(records.mock.calls.at(-1)![0].generationRoot).toBe('9_2');
   });
 
+  describe('memberBatchSize：拆成成员查时几个成员打包成一发', () => {
+    type Req = { generationRoot?: string; generationRoots?: string[] };
+    const members = ['7_1', '7_2', '7_3', '7_4', '7_5', '7_6', '7_7'];
+    const rowsOf = (member: string): GeomInstQuery[] => (member === '7_4' ? [] : [item(`${member}1`, member), item(`${member}2`, member)]);
+    function batchApi() {
+      const records = vi.fn(async (req: Req) => {
+        if (req.generationRoots) {
+          return {
+            ...page(req.generationRoots.flatMap(rowsOf)),
+            generation_roots: req.generationRoots.map((root) => root.replace('_', '/')),
+            roots: req.generationRoots.map((root) => ({ generation_root: root.replace('_', '/'), total: rowsOf(root).length })),
+          };
+        }
+        return page(rowsOf(req.generationRoot!));
+      });
+      return { records, api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never } };
+    }
+    const shapes = (records: ReturnType<typeof vi.fn>) => records.mock.calls.map(([req]) => (req as Req).generationRoots?.join('+') ?? `single:${(req as Req).generationRoot}`);
+
+    it('组装点给了个数：成员按组发，每个成员照旧单独交、单独记在自己名下', async () => {
+      const { records, api } = batchApi();
+      const memberBatchSize = vi.fn((_members: number) => 4);
+      const source = createGenModelV1ModelRecordSource({
+        api,
+        recordsOptions: { concurrency: 1 },
+        expandAncestor: async (refno) => (refno === '7_0' ? members : null),
+        memberBatchSize,
+      });
+      const heard: string[] = [];
+      source.subscribeMemberRecords((batch) => heard.push(`${batch.member}:${batch.entries.size}:${batch.done}/${batch.total}`));
+
+      const site = await source.collectByAncestor('7_0');
+      // 问一次，带上这次要向服务端问的成员数（组装点据此决定打不打包）
+      expect(memberBatchSize.mock.calls).toEqual([[7]]);
+      expect(shapes(records)).toEqual(['single:7_1', 'single:7_2', '7_3+7_4', '7_5+7_6+7_7']);
+      expect(site.refno).toBe('7_0');
+      expect(site.items.map((record) => record.refno)).toEqual(members.flatMap((member) => rowsOf(member).map((record) => record.refno)));
+      expect(site.empty).toEqual(['7_4']);
+      expect(heard).toEqual(['7_1:2:1/7', '7_2:2:2/7', '7_3:2:3/7', '7_5:2:5/7', '7_6:2:6/7', '7_7:2:7/7']);
+
+      // 成员各自记下了：单独显示其中一个 ZONE 不再问服务端
+      const member = await source.collectByAncestor('7_6');
+      expect(records).toHaveBeenCalledTimes(4);
+      expect(member.items.map((record) => record.refno)).toEqual(['7_61', '7_62']);
+    });
+
+    it('已经收齐过的成员不再问，也不算进成员数', async () => {
+      const { records, api } = batchApi();
+      const memberBatchSize = vi.fn((_members: number) => 4);
+      const source = createGenModelV1ModelRecordSource({
+        api,
+        recordsOptions: { concurrency: 1 },
+        expandAncestor: async (refno) => (refno === '7_0' ? members : null),
+        memberBatchSize,
+      });
+      await source.collectByAncestor('7_3');
+      expect(memberBatchSize).not.toHaveBeenCalled();
+      const site = await source.collectByAncestor('7_0');
+      expect(memberBatchSize.mock.calls).toEqual([[6]]);
+      expect(shapes(records)).toEqual(['single:7_3', 'single:7_1', 'single:7_2', '7_4+7_5', '7_6+7_7']);
+      expect(site.items).toHaveLength(12);
+    });
+
+    it('没给、回 1、回乱值、自己抛错：一个成员一发', async () => {
+      const variants: (undefined | (() => number))[] = [undefined, () => 1, () => Number.NaN, () => { throw new Error('health not ready'); }];
+      for (const memberBatchSize of variants) {
+        const { records, api } = batchApi();
+        const source = createGenModelV1ModelRecordSource({
+          api,
+          recordsOptions: { concurrency: 1 },
+          expandAncestor: async (refno) => (refno === '7_0' ? members : null),
+          memberBatchSize,
+        });
+        const site = await source.collectByAncestor('7_0');
+        expect(shapes(records)).toEqual(members.map((member) => `single:${member}`));
+        expect(site.items).toHaveLength(12);
+      }
+    });
+
+    it('不拆的节点不打包：还是对它自己发一发单根形', async () => {
+      const { records, api } = batchApi();
+      const source = createGenModelV1ModelRecordSource({ api, expandAncestor: async () => null, memberBatchSize: () => 16 });
+      await source.collectByAncestor('7_3');
+      expect(shapes(records)).toEqual(['single:7_3']);
+    });
+  });
+
   describe('cancelCollect 与成员备忘（加载中可以停：已经取到的留着，再点眼睛只取剩下的）', () => {
     /** SITE 8_0 → 成员 8_1 … 8_5，各两条记录；`gate(member)` 之后那个成员要等放行（或被取消）才回 */
     function siteSource() {

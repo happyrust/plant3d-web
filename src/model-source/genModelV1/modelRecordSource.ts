@@ -127,6 +127,12 @@ export type GenModelV1ModelRecordSourceOptions = {
    * 拆成 ZONE 并行查既快又不撞服务端的单次上限。只能拆到生成根之上：BRAN 一类生成根自己就挂着隐式管身记录。
    */
   expandAncestor?: (refno: string, signal: AbortSignal) => Promise<string[] | null>;
+  /**
+   * 拆成成员查时一发 `model/records` 带几个成员（批量形，`CollectRecordsOptions.batchAncestors`）。不给或回 1：一个成员一发。
+   * 每次读取开始时问一次，`members` 是这次还要向服务端问的成员数——组装点按 `/health.capabilities` 和成员多少给
+   * （后端声明了批量形、成员够多才打包）。只管拆开查的那一路；不拆的节点、整库显示逐 SITE、生成之后的回查都仍是一个祖先一发。
+   */
+  memberBatchSize?: (members: number) => number;
 };
 
 export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecordSourceOptions = {}): GenModelV1ModelRecordSource {
@@ -327,6 +333,16 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   /** 一个成员收完交出来的那一批；`archived` = 它是之前留着的成员，实例已经在缓存里 */
   type MemberBatch = { ancestor: string; items: GeomInstQuery[]; done: number; total: number; archived?: boolean };
 
+  /** 拆成成员查时一发带几个成员（`members` = 这次还要向服务端问的成员数）；组装点没给、给的不是正整数、或它自己抛了错，都按 1。 */
+  function memberBatchSizeNow(members: number): number {
+    try {
+      const size = Math.floor(Number(options.memberBatchSize?.(members) ?? 1));
+      return Number.isFinite(size) && size > 1 ? size : 1;
+    } catch {
+      return 1;
+    }
+  }
+
   /**
    * 按祖先查一次；节点能拆（`expandAncestor`）就换成它的成员有界并发查，结果形状不变、`refno` 仍是请求的节点。
    * `onMemberRecords`：拆开查时每个成员收完交一次（边取边画）；不拆的节点不会调它。
@@ -373,6 +389,7 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
       ? { ancestors: [], generationRoots: [], items: [], pending: [], empty: [], errors: {} }
       : await collectRecordsForAncestors(unknown, {
         ...hooked,
+        batchAncestors: memberBatchSizeNow(unknown.length),
         onRootDone: (progress) => hooked.onRootDone?.({ done: known.size + progress.done, total, root: progress.root }),
         onAncestorRecords: (batch) => {
           const merged = { ...batch, done: known.size + batch.done, total };

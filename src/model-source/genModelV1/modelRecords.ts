@@ -19,6 +19,7 @@ import {
   genModelV1ModelRecords,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
+  MAX_MODEL_RECORDS_ROOTS,
   type GeomInstQuery,
   type GenModelV1RequestOptions,
   type ModelGenerateResponse,
@@ -47,7 +48,7 @@ export const defaultModelRecordsApi: ModelRecordsApi = {
 /** 防止异常服务端游标让一次读取无限翻页；达到上限仍 truncated 必须按未完成处理。 */
 export const MAX_MODEL_RECORD_PAGES = 10_000;
 
-const recordPageListeners: Array<(items: GeomInstQuery[]) => void> = [];
+const recordPageListeners: ((items: GeomInstQuery[]) => void)[] = [];
 
 /** 分页读记录时通知最内层监听者。用来在下一页回来之前先拉网格。 */
 export function pushRecordPageListener(listener: (items: GeomInstQuery[]) => void): () => void {
@@ -71,6 +72,16 @@ export type CollectRecordsOptions = GenModelV1RequestOptions & {
   pageSize?: number;
   /** 多个祖先同时在飞的读取数（默认 6） */
   concurrency?: number;
+  /**
+   * 一发 `model/records` 最多带几个祖先（批量形，spec §4.5.2）。缺省 1：一个祖先一发，和原来一样。
+   * 大于 1 时把还没查的祖先按传入顺序几个一组发：头几发仍只带一两个（第一批记录不等一整组），之后才带满（{@link RECORDS_BATCH_RAMP}）；
+   * 一组也不超过「剩下的平摊到 `concurrency` 路」，祖先不多时各路都有活干，不会比一个一发慢。
+   * 只给**同库、互不包含、都不是分组**的祖先用（顶层 SITE 拆出来的 ZONE）：服务端要求一批同库，分组在批量形里不展开。
+   * 结果与不打包时相同——每个祖先的记录按响应里的逐根条数切出来，`onRootDone` / `onAncestorRecords` 仍是一个祖先一次。
+   * 批量请求没成（不是取消）或响应对不上时，这一组退回一个祖先一发，这次读取余下的也不再打包：每个祖先的去向
+   * （空 / 409 / 出错）仍由它自己那一发决定。
+   */
+  batchAncestors?: number;
   /** 每收完一个祖先 / 生成根回调一次（进度） */
   onRootDone?: (progress: { done: number; total: number; root: string }) => void;
   /**
@@ -264,15 +275,89 @@ export function isLegacyNotGenerated(error: unknown): boolean {
 }
 
 /**
+ * 批量形（`batchAncestors` 大于 1）头几发各带几个祖先，下标是「这次读取里的第几发」，排不到的带满。
+ * 一上来就带满的话，第一批记录要等一整组读完才回来（服务端一组里是一个接一个读的，16 个 ZONE 约 0.25 秒）；
+ * 先发两个只带一个的，第一批照旧十几毫秒就到，边取边画的第一帧不变晚。
+ */
+export const RECORDS_BATCH_RAMP: readonly number[] = [1, 1, 2, 4, 8];
+
+/** 顶层 SITE 拆成 ZONE 查时一发带几个 ZONE（依据：plant3d-web 方案文档 2026-11-10 第 13.8 节的实测；32 个一发不比 16 个快）。 */
+export const RECORDS_MEMBER_BATCH = 16;
+
+/**
+ * 成员多于这个数才打包。几十个 ZONE 的 SITE 一个一发本来就在一秒以内，打包省不出什么（实测 19 个 ZONE 的 SITE 两种取法持平），
+ * 不动它；几百个 ZONE 的才是打包要管的（8 万件的 SITE 531 个）。
+ */
+export const RECORDS_MEMBER_BATCH_MIN_MEMBERS = 64;
+
+/**
+ * 拆成成员查时一发带几个成员。后端在 `/health.capabilities.model_records_batch_max_roots` 里声明了批量形、而且这次要查的成员
+ * 多于 {@link RECORDS_MEMBER_BATCH_MIN_MEMBERS} 个才打包；否则回 1，一个成员一发（旧后端、health 还没回来也是 1）。
+ * `override` 是页面地址上 `gm_records_batch` 的值：`0` / `1` 关掉打包，别的正整数改每发的个数（不超过后端声明的上限，
+ * 也不再看成员数）——量前后对照、出了问题临时关掉用。
+ */
+export function recordsMemberBatchSize(
+  capabilities: { model_records_batch_max_roots?: unknown } | null | undefined,
+  override?: string | null,
+  members: number = Number.POSITIVE_INFINITY,
+): number {
+  const declared = capabilities?.model_records_batch_max_roots;
+  const max = typeof declared === 'number' && Number.isFinite(declared) ? Math.min(Math.floor(declared), MAX_MODEL_RECORDS_ROOTS) : 0;
+  if (max < 2) return 1;
+  const raw = (override ?? '').trim();
+  if (raw !== '') {
+    const wanted = Number(raw);
+    if (Number.isInteger(wanted) && wanted >= 0) return Math.max(1, Math.min(wanted, max));
+  }
+  if (!(members > RECORDS_MEMBER_BATCH_MIN_MEMBERS)) return 1;
+  return Math.min(RECORDS_MEMBER_BATCH, max);
+}
+
+/**
+ * 把批量形的一页按响应里的逐根条数（`roots[]`，请求顺序；`items` 也按请求顺序平铺）切回各个祖先。
+ * - 没截断：每个祖先都齐。
+ * - 截断（整批超过一页）：这一页里装完的祖先照收，排在后面没装完的连同它们的条数回 `restTotals`，由调用方重新分组再发——
+ *   不拿游标接着翻：批量形翻页，服务端每一页都把整批重读一遍。
+ * 对不上（没有 `roots`、根数或根名不符、条数和记录数矛盾）回 `null`：调用方退回一个祖先一发，不猜。
+ */
+function splitBatchPage(
+  resp: ModelRecordsResponse,
+  ancestors: string[],
+): { complete: GeomInstQuery[][]; restTotals: number[] } | null {
+  const roots = resp?.roots;
+  const items = resp?.items;
+  if (!Array.isArray(roots) || !Array.isArray(items) || roots.length !== ancestors.length) return null;
+  const totals: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < roots.length; i++) {
+    const total = roots[i]?.total;
+    if (typeof total !== 'number' || !Number.isInteger(total) || total < 0) return null;
+    if (fromV1Refno(String(roots[i]?.generation_root ?? '')) !== ancestors[i]) return null;
+    totals.push(total);
+    sum += total;
+  }
+  if (resp.truncated ? items.length >= sum : items.length !== sum) return null;
+  const complete: GeomInstQuery[][] = [];
+  let offset = 0;
+  for (const total of totals) {
+    if (offset + total > items.length) break;
+    complete.push(items.slice(offset, offset + total));
+    offset += total;
+  }
+  return { complete, restTotals: totals.slice(complete.length) };
+}
+
+/**
  * 显示：对一批节点各自以祖先身份查 `model/records`（一个祖先一次分页读取，`concurrency` 路并发）。
  * 没生成过是空；409 `conflict`（库正被整库任务占用）记 `pending`；取消 / 服务换代整次向上抛。
+ * `batchAncestors` 大于 1 时几个祖先打包成一发（批量形），结果不变，见该选项的说明。
  */
 export async function collectRecordsForAncestors(
   ancestors: string[],
   options: CollectRecordsOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<CollectAncestorsResult> {
-  const { pageSize = 5000, concurrency = 6, onRootDone, onAncestorRecords, onRequestFailure, ...requestOptions } = options;
+  const { pageSize = 5000, concurrency = 6, batchAncestors = 1, onRootDone, onAncestorRecords, onRequestFailure, ...requestOptions } = options;
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const raw of ancestors) {
@@ -284,30 +369,122 @@ export async function collectRecordsForAncestors(
   const result: CollectAncestorsResult = { ancestors: unique, generationRoots: [], items: [], pending: [], empty: [], errors: {} };
   if (unique.length === 0) return result;
 
+  const total = unique.length;
+  const outcomes: ({ items: GeomInstQuery[]; error: unknown } | undefined)[] = new Array(total);
   let done = 0;
-  const outcomes = await mapWithConcurrency(unique, concurrency, async (ancestor) => {
+  /** 一个祖先有了去向（收齐 / 出错）：记下来，报进度，收齐且有记录的交给边取边画的消费方。 */
+  const settle = (index: number, items: GeomInstQuery[], error: unknown): void => {
+    const ancestor = unique[index]!;
+    outcomes[index] = { items, error };
+    done++;
+    onRootDone?.({ done, total, root: ancestor });
+    if (!error && items.length > 0 && onAncestorRecords) {
+      try {
+        onAncestorRecords({ ancestor, items, done, total });
+      } catch {
+        // 边取边画的消费方出错不能让这次读取失败：最终结果里这个祖先的记录照样在
+      }
+    }
+  };
+  /** 一个祖先一发（单根形，分页读完）。 */
+  const readSingle = async (index: number): Promise<void> => {
     throwIfAborted(requestOptions.signal);
     let items: GeomInstQuery[] = [];
     let error: unknown = null;
     try {
-      items = await collectAncestorRecords(api, ancestor, pageSize, requestOptions);
+      items = await collectAncestorRecords(api, unique[index]!, pageSize, requestOptions);
     } catch (caught) {
       reportRequestFailure(onRequestFailure, caught);
       if (isReadAborted(caught, requestOptions.signal)) throw caught;
       error = caught;
     }
-    done++;
-    onRootDone?.({ done, total: unique.length, root: ancestor });
-    if (!error && items.length > 0 && onAncestorRecords) {
-      try {
-        onAncestorRecords({ ancestor, items, done, total: unique.length });
-      } catch {
-        // 边取边画的消费方出错不能让这次读取失败：最终结果里这个祖先的记录照样在
-      }
+    settle(index, items, error);
+  };
+
+  const batchMax = Math.max(1, Math.min(Math.floor(Number(batchAncestors)) || 1, MAX_MODEL_RECORDS_ROOTS));
+  const lanes = Math.max(1, Math.min(concurrency, total));
+  let batching = batchMax > 1 && total > 1;
+  let issued = 0;
+  let next = 0;
+  /** 批量响应里一页没装下的祖先：按那一回知道的条数重新分好组，排在队头等着再发 */
+  const regrouped: number[][] = [];
+  const takeGroup = (): number[] | null => {
+    const waiting = regrouped.shift();
+    if (waiting) return waiting;
+    if (next >= total) return null;
+    // 一组不超过「剩下的平摊到每一路」：服务端一组里是一个接一个读的，一组拿多了，别的几路没活干、这一路还在排着读——
+    // 十几个 ZONE 的 SITE 打成一两个大组反而比一个一发慢。剩得多时（几百个 ZONE）这一条不起作用，照 batchMax 带满。
+    const fairShare = Math.ceil((total - next) / lanes);
+    const size = batching ? Math.max(1, Math.min(batchMax, RECORDS_BATCH_RAMP[issued] ?? batchMax, fairShare)) : 1;
+    issued++;
+    const group: number[] = [];
+    while (group.length < size && next < total) group.push(next++);
+    return group;
+  };
+  const readGroup = async (group: number[]): Promise<void> => {
+    if (group.length === 1 || !batching) {
+      for (const index of group) await readSingle(index);
+      return;
     }
-    return { ancestor, items, error };
-  });
-  for (const { ancestor, items, error } of outcomes) {
+    throwIfAborted(requestOptions.signal);
+    const names = group.map((index) => unique[index]!);
+    let resp: ModelRecordsResponse | null = null;
+    try {
+      resp = await api.records({ generationRoots: names, limit: pageSize }, requestOptions);
+    } catch (caught) {
+      reportRequestFailure(onRequestFailure, caught);
+      if (isReadAborted(caught, requestOptions.signal)) throw caught;
+    }
+    const split = resp ? splitBatchPage(resp, names) : null;
+    if (!resp || !split) {
+      // 批量请求没成（旧后端不认这个形状、整批里有一根读失败、409 …）或响应对不上：这一组一个一个重问，
+      // 这次读取余下的也不再打包——每个祖先是空、是 409 还是出错，由它自己那一发说了算
+      batching = false;
+      for (const index of group) await readSingle(index);
+      return;
+    }
+    const pageRows = resp.items.length;
+    const completeRows = split.restTotals.length === 0 ? pageRows : split.complete.reduce((rows, items) => rows + items.length, 0);
+    try {
+      // 分页监听者（下一发回来之前先拉网格）只是个提速的钩子：它出错不影响这一批记录
+      recordPageListeners[recordPageListeners.length - 1]?.(completeRows === pageRows ? resp.items : resp.items.slice(0, completeRows));
+    } catch {
+      // ignore
+    }
+    for (let i = 0; i < split.complete.length; i++) settle(group[i]!, split.complete[i]!, null);
+    // 一页没装下的：按条数重新分组，每组不超过这一页的实际大小；单独一个就超过一页的自己一组（走单根形分页）
+    let bucket: number[] = [];
+    let bucketRows = 0;
+    const flush = (): void => {
+      if (bucket.length > 0) regrouped.push(bucket);
+      bucket = [];
+      bucketRows = 0;
+    };
+    for (let i = 0; i < split.restTotals.length; i++) {
+      const index = group[split.complete.length + i]!;
+      const rows = split.restTotals[i]!;
+      if (rows > pageRows) {
+        flush();
+        regrouped.push([index]);
+        continue;
+      }
+      if (bucketRows + rows > pageRows) flush();
+      bucket.push(index);
+      bucketRows += rows;
+    }
+    flush();
+  };
+  await Promise.all(Array.from({ length: lanes }, async () => {
+    for (;;) {
+      const group = takeGroup();
+      if (!group) return;
+      await readGroup(group);
+    }
+  }));
+
+  for (let index = 0; index < total; index++) {
+    const ancestor = unique[index]!;
+    const { items, error } = outcomes[index] ?? { items: [], error: new Error('model/records 没有读到这个祖先（内部错误）') };
     if (error) {
       if (isLegacyNotGenerated(error)) {
         pushUnique(result.empty, ancestor);
@@ -357,11 +534,13 @@ export async function generateThenCollect(
 ): Promise<CollectRecordsResult> {
   const {
     force = true, maxContainerDepth = 3, maxRoots = 128, pageSize, concurrency, onRootDone, onRootStart, onRequestFailure,
-    // 生成之后那次按祖先查只有一个祖先，没有「分批交」可言；摘出来只为不让它混进发给接口的请求选项
+    // 生成之后那次按祖先查只有一个祖先，没有「分批交」「打包」可言；摘出来只为不让它们混进发给接口的请求选项
     onAncestorRecords: _onAncestorRecords,
+    batchAncestors: _batchAncestors,
     ...requestOptions
   } = options;
   void _onAncestorRecords;
+  void _batchAncestors;
   const start = fromV1Refno(refno);
   const result: CollectRecordsResult = {
     refno: start,

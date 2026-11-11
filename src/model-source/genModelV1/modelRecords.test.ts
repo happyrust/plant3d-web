@@ -15,6 +15,11 @@ import {
   isLegacyNotGenerated,
   mapWithConcurrency,
   MAX_MODEL_RECORD_PAGES,
+  pushRecordPageListener,
+  RECORDS_BATCH_RAMP,
+  RECORDS_MEMBER_BATCH,
+  RECORDS_MEMBER_BATCH_MIN_MEMBERS,
+  recordsMemberBatchSize,
   refnosOfRecords,
   type ModelRecordsApi,
 } from './modelRecords';
@@ -212,6 +217,278 @@ describe('collectRecordsByAncestor', () => {
     for (const call of records.mock.calls) {
       expect(call[1]).not.toHaveProperty('onAncestorRecords');
     }
+  });
+});
+
+describe('collectRecordsForAncestors：几个祖先打包成一发（批量形，batchAncestors）', () => {
+  type BatchReq = { generationRoot?: string; generationRoots?: string[]; limit?: number; cursor?: number };
+
+  beforeEach(() => {
+    __resetGenModelV1ServiceLifecycleForTests();
+  });
+
+  /** 祖先 `5_<n>` 有 `rowsOf(n)` 条记录；批量形照后端的做法回：按请求顺序平铺、`roots[]` 逐根条数、超过一页就截断。 */
+  function backend(rowsOf: (n: number) => number) {
+    const rowsFor = (ancestor: string): GeomInstQuery[] => {
+      const n = Number(ancestor.split('_')[1]);
+      return Array.from({ length: rowsOf(n) }, (_, i) => item(`${ancestor}${String(i).padStart(3, '0')}`, ancestor));
+    };
+    const records = vi.fn(async (req: BatchReq, _options?: unknown): Promise<ModelRecordsResponse> => {
+      if (req.generationRoots) {
+        const all = req.generationRoots.flatMap(rowsFor);
+        return {
+          ...page(all, req.cursor ?? 0, req.limit ?? 5000),
+          generation_roots: req.generationRoots.map(v1),
+          roots: req.generationRoots.map((root) => ({ generation_root: v1(root), total: rowsFor(root).length })),
+        };
+      }
+      return page(rowsFor(req.generationRoot!), req.cursor ?? 0, req.limit ?? 5000);
+    });
+    return { records, rowsFor };
+  }
+  const shapeOf = (records: ReturnType<typeof vi.fn>) => records.mock.calls.map(([req]) => (req as BatchReq).generationRoots?.join('+') ?? `single:${(req as BatchReq).generationRoot}`);
+  const names = (count: number) => Array.from({ length: count }, (_, i) => `5_${i + 1}`);
+
+  it('不给 batchAncestors：一个祖先一发，一个批量形请求都不发', async () => {
+    const { records } = backend(() => 2);
+    await collectRecordsForAncestors(names(5), { concurrency: 2 }, api({ records: records as never }));
+    expect(shapeOf(records).sort()).toEqual(names(5).map((name) => `single:${name}`));
+  });
+
+  it('头两发各带一个（单根形），之后 2、4，再带满；结果与一个一个查相同', async () => {
+    const { records, rowsFor } = backend((n) => (n % 3 === 0 ? 0 : n));
+    const heard: string[] = [];
+    const progress: string[] = [];
+    const result = await collectRecordsForAncestors(names(12), {
+      concurrency: 1,
+      batchAncestors: 4,
+      onAncestorRecords: ({ ancestor, items, done, total }) => heard.push(`${ancestor}:${items.length}:${done}/${total}`),
+      onRootDone: ({ done, total, root }) => progress.push(`${root}:${done}/${total}`),
+    }, api({ records: records as never }));
+
+    expect(shapeOf(records)).toEqual(['single:5_1', 'single:5_2', '5_3+5_4', '5_5+5_6+5_7+5_8', '5_9+5_10+5_11+5_12']);
+    for (const [req] of records.mock.calls) expect((req as BatchReq).limit).toBe(5000);
+    const plain = await collectRecordsForAncestors(names(12), { concurrency: 1 }, api({ records: backend((n) => (n % 3 === 0 ? 0 : n)).records as never }));
+    expect(result).toEqual(plain);
+    expect(result.items.map((record) => record.refno)).toEqual(names(12).flatMap((name) => rowsFor(name).map((record) => record.refno)));
+    expect(result.empty).toEqual(['5_3', '5_6', '5_9', '5_12']);
+    // 一个祖先交一次、报一次进度；查空的不交
+    expect(heard).toEqual(names(12).filter((_, i) => (i + 1) % 3 !== 0).map((name) => `${name}:${rowsFor(name).length}:${Number(name.split('_')[1])}/12`));
+    expect(progress).toEqual(names(12).map((name, i) => `${name}:${i + 1}/12`));
+  });
+
+  it('并发时各路各取下一组，同时在飞的不超过 concurrency；选项不漏进请求参数', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const { records: plainRecords } = backend(() => 1);
+    const records = vi.fn(async (req: BatchReq, options?: unknown) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 3));
+      inFlight -= 1;
+      return plainRecords(req, options);
+    });
+    const result = await collectRecordsForAncestors(names(40), { concurrency: 3, batchAncestors: 8 }, api({ records: records as never }));
+    expect(result.items).toHaveLength(40);
+    expect(maxInFlight).toBe(3);
+    // 头几发 1、1、2、4，带满 8、8；剩 16 个起一组不超过「剩下的平摊到 3 路」：6、4、2、2、1、1
+    expect(records.mock.calls.map(([req]) => (req as BatchReq).generationRoots?.length ?? 1)).toEqual([1, 1, 2, 4, 8, 8, 6, 4, 2, 2, 1, 1]);
+    for (const call of records.mock.calls) expect(call[1]).not.toHaveProperty('batchAncestors');
+  });
+
+  it('祖先不多时一组不超过剩下的平摊到每一路：19 个、6 路，最大的一组 3 个，各路都有活干', async () => {
+    const { records } = backend(() => 1);
+    const result = await collectRecordsForAncestors(names(19), { concurrency: 6, batchAncestors: 16 }, api({ records: records as never }));
+    expect(result.items).toHaveLength(19);
+    expect(records.mock.calls.map(([req]) => (req as BatchReq).generationRoots?.length ?? 1)).toEqual([1, 1, 2, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it('祖先比路数还少：全是一个一发（和不打包一样）', async () => {
+    const { records } = backend(() => 1);
+    await collectRecordsForAncestors(names(4), { concurrency: 6, batchAncestors: 16 }, api({ records: records as never }));
+    expect(shapeOf(records)).toEqual(names(4).map((name) => `single:${name}`));
+  });
+
+  it('一页装不下：装完的照收，没装完的按条数重新分组再发（不拿游标翻批量形）；单独就超过一页的走单根形分页', async () => {
+    // 页大小 10。5_3..5_6 是 4 + 9 + 25 + 3 条：第一页只装下 5_3（5_4 只来了一部分，不要）
+    const rows: Record<number, number> = { 1: 1, 2: 1, 3: 4, 4: 9, 5: 25, 6: 3 };
+    const { records, rowsFor } = backend((n) => rows[n] ?? 0);
+    const heard: string[] = [];
+    const result = await collectRecordsForAncestors(names(6), {
+      concurrency: 1,
+      pageSize: 10,
+      batchAncestors: 4,
+      onAncestorRecords: ({ ancestor, items }) => heard.push(`${ancestor}:${items.length}`),
+    }, api({ records: records as never }));
+
+    expect(shapeOf(records)).toEqual([
+      'single:5_1', 'single:5_2',
+      '5_3+5_4',            // 4 + 9 > 10：截断，5_3 齐了
+      'single:5_4',         // 9 条，自己一组
+      '5_5+5_6',            // 25 + 3：截断，一个都没装完
+      'single:5_5', 'single:5_5', 'single:5_5', // 25 条按游标翻三页
+      'single:5_6',
+    ]);
+    // 批量形从不带游标
+    for (const [req] of records.mock.calls) if ((req as BatchReq).generationRoots) expect((req as BatchReq).cursor).toBeUndefined();
+    expect(heard).toEqual(['5_1:1', '5_2:1', '5_3:4', '5_4:9', '5_5:25', '5_6:3']);
+    expect(result.items.map((record) => record.refno)).toEqual(names(6).flatMap((name) => rowsFor(name).map((record) => record.refno)));
+    expect(result.errors).toEqual({});
+  });
+
+  it('一页装不下、没装完的几个加起来不超过一页：合成一组再发一次', async () => {
+    const rows: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 2, 5: 8, 6: 3, 7: 3, 8: 3 };
+    const { records, rowsFor } = backend((n) => rows[n] ?? 0);
+    const result = await collectRecordsForAncestors(names(8), { concurrency: 1, pageSize: 10, batchAncestors: 4 }, api({ records: records as never }));
+    // 5_5..5_8 = 8 + 3 + 3 + 3 = 17 条：第一页装完 5_5，5_6 只来了 2 条 → 5_6+5_7+5_8（9 条）再发一次，正好一页
+    expect(shapeOf(records)).toEqual(['single:5_1', 'single:5_2', '5_3+5_4', '5_5+5_6+5_7+5_8', '5_6+5_7+5_8']);
+    expect(result.items.map((record) => record.refno)).toEqual(names(8).flatMap((name) => rowsFor(name).map((record) => record.refno)));
+  });
+
+  it('批量形每回来一页，分页监听者听到的是这一页里收下的记录（下一发回来之前先拉网格用）', async () => {
+    const rows: Record<number, number> = { 1: 1, 2: 1, 3: 4, 4: 9 };
+    const { records } = backend((n) => rows[n] ?? 0);
+    const heardPages: number[] = [];
+    const release = pushRecordPageListener((items) => heardPages.push(items.length));
+    try {
+      await collectRecordsForAncestors(names(4), { concurrency: 1, pageSize: 10, batchAncestors: 4 }, api({ records: records as never }));
+    } finally {
+      release();
+    }
+    // 5_1、5_2 各一页；5_3+5_4 那一页来了 10 条、只收下 5_3 的 4 条；5_4 自己再来 9 条
+    expect(heardPages).toEqual([1, 1, 4, 9]);
+  });
+  it('批量请求没成（旧后端 422）：这一组一个一个重问，余下的也不再打包', async () => {
+    const { records: plainRecords } = backend(() => 2);
+    const failures: unknown[] = [];
+    const records = vi.fn(async (req: BatchReq, options?: unknown) => {
+      if (req.generationRoots) throw new GenModelV1ApiError({ code: 'http', status: 422, path: '/api/v1/model/records', message: 'unknown field' });
+      return plainRecords(req, options);
+    });
+    const result = await collectRecordsForAncestors(names(9), {
+      concurrency: 1,
+      batchAncestors: 4,
+      onRequestFailure: (error) => failures.push(error),
+    }, api({ records: records as never }));
+
+    expect(shapeOf(records)).toEqual([
+      'single:5_1', 'single:5_2', '5_3+5_4', 'single:5_3', 'single:5_4',
+      'single:5_5', 'single:5_6', 'single:5_7', 'single:5_8', 'single:5_9',
+    ]);
+    expect(result.items).toHaveLength(18);
+    expect(result.errors).toEqual({});
+    expect(failures).toHaveLength(1);
+  });
+
+  it('整批回 409：逐个重问之后各自记 pending，不记 errors', async () => {
+    const records = vi.fn(async (_req: BatchReq) => {
+      throw new GenModelV1ApiError({ code: 'conflict', status: 409, path: '/api/v1/model/records', message: 'busy' });
+    });
+    const result = await collectRecordsForAncestors(names(4), { concurrency: 1, batchAncestors: 4 }, api({ records: records as never }));
+    expect(result.pending).toEqual(names(4));
+    expect(result.errors).toEqual({});
+    expect(shapeOf(records)).toEqual(['single:5_1', 'single:5_2', '5_3+5_4', 'single:5_3', 'single:5_4']);
+  });
+
+  it('响应对不上（没有 roots、根名不符、条数和记录数矛盾）：不猜，逐个重问', async () => {
+    const broken: ((resp: ModelRecordsResponse) => ModelRecordsResponse)[] = [
+      (resp) => ({ ...resp, roots: undefined }),
+      (resp) => ({ ...resp, roots: resp.roots!.map((root, i) => (i === 0 ? { ...root, generation_root: '9/9' } : root)) }),
+      (resp) => ({ ...resp, roots: resp.roots!.map((root, i) => (i === 0 ? { ...root, total: root.total + 1 } : root)) }),
+      (resp) => ({ ...resp, roots: resp.roots!.slice(1) }),
+      (resp) => ({ ...resp, truncated: true, next_cursor: 1 }),
+    ];
+    for (const breakIt of broken) {
+      const { records: plainRecords, rowsFor } = backend(() => 2);
+      const records = vi.fn(async (req: BatchReq, options?: unknown) => {
+        const resp = await plainRecords(req, options);
+        return req.generationRoots ? breakIt(resp) : resp;
+      });
+      const result = await collectRecordsForAncestors(names(4), { concurrency: 1, batchAncestors: 4 }, api({ records: records as never }));
+      expect(shapeOf(records)).toEqual(['single:5_1', 'single:5_2', '5_3+5_4', 'single:5_3', 'single:5_4']);
+      expect(result.items.map((record) => record.refno)).toEqual(names(4).flatMap((name) => rowsFor(name).map((record) => record.refno)));
+    }
+  });
+
+  it('途中取消：整次读取向上抛 cancelled，不退回逐个重问，也不再发下一组', async () => {
+    const controller = new AbortController();
+    const records = vi.fn(async (req: BatchReq, options?: { signal?: AbortSignal }) => {
+      if (req.generationRoots) {
+        controller.abort();
+        throw new GenModelV1ApiError({ code: 'cancelled', status: 0, path: '/api/v1/model/records', message: 'aborted' });
+      }
+      void options;
+      return page([item(`${req.generationRoot}9`, req.generationRoot!)]);
+    });
+    const heard: string[] = [];
+    await expect(collectRecordsForAncestors(names(12), {
+      concurrency: 1,
+      batchAncestors: 4,
+      signal: controller.signal,
+      onAncestorRecords: ({ ancestor }) => heard.push(ancestor),
+    }, api({ records: records as never }))).rejects.toMatchObject({ code: 'cancelled' });
+    expect(shapeOf(records)).toEqual(['single:5_1', 'single:5_2', '5_3+5_4']);
+    expect(heard).toEqual(['5_1', '5_2']);
+  });
+
+  it('只有一个祖先、或 batchAncestors 给 1 / 0 / 乱值：不走批量形', async () => {
+    for (const [ancestors, batchAncestors] of [[names(1), 16], [names(4), 1], [names(4), 0], [names(4), Number.NaN]] as const) {
+      const { records } = backend(() => 1);
+      await collectRecordsForAncestors([...ancestors], { concurrency: 1, batchAncestors }, api({ records: records as never }));
+      expect(shapeOf(records).every((shape) => shape.startsWith('single:'))).toBe(true);
+    }
+  });
+
+  it('一发最多带 64 个（服务端上限），给得再大也不超', async () => {
+    const { records } = backend(() => 0);
+    await collectRecordsForAncestors(names(200), { concurrency: 1, batchAncestors: 500 }, api({ records: records as never }));
+    expect(Math.max(...records.mock.calls.map(([req]) => (req as BatchReq).generationRoots?.length ?? 1))).toBe(64);
+  });
+});
+
+describe('recordsMemberBatchSize', () => {
+  it('后端没声明批量形（旧后端、health 还没回来）：1', () => {
+    expect(recordsMemberBatchSize(null)).toBe(1);
+    expect(recordsMemberBatchSize(undefined)).toBe(1);
+    expect(recordsMemberBatchSize({})).toBe(1);
+    expect(recordsMemberBatchSize({ model_records_batch_max_roots: 1 })).toBe(1);
+    expect(recordsMemberBatchSize({ model_records_batch_max_roots: '64' })).toBe(1);
+  });
+
+  it('声明了：缺省一发带 RECORDS_MEMBER_BATCH 个，不超过后端的上限', () => {
+    expect(recordsMemberBatchSize({ model_records_batch_max_roots: 64 })).toBe(RECORDS_MEMBER_BATCH);
+    expect(recordsMemberBatchSize({ model_records_batch_max_roots: 8 })).toBe(8);
+    expect(recordsMemberBatchSize({ model_records_batch_max_roots: 1000 })).toBe(RECORDS_MEMBER_BATCH);
+  });
+
+  it('成员不多（不超过 RECORDS_MEMBER_BATCH_MIN_MEMBERS 个）不打包；多了才打包', () => {
+    const caps = { model_records_batch_max_roots: 64 };
+    expect(recordsMemberBatchSize(caps, null, 19)).toBe(1);
+    expect(recordsMemberBatchSize(caps, null, RECORDS_MEMBER_BATCH_MIN_MEMBERS)).toBe(1);
+    expect(recordsMemberBatchSize(caps, null, RECORDS_MEMBER_BATCH_MIN_MEMBERS + 1)).toBe(RECORDS_MEMBER_BATCH);
+    expect(recordsMemberBatchSize(caps, null, 531)).toBe(RECORDS_MEMBER_BATCH);
+    expect(recordsMemberBatchSize(caps, null, Number.NaN)).toBe(1);
+    // 地址上明说了个数就照办，不再看成员数；明说关掉就关掉
+    expect(recordsMemberBatchSize(caps, '8', 19)).toBe(8);
+    expect(recordsMemberBatchSize(caps, '0', 531)).toBe(1);
+  });
+
+  it('页面地址上的 gm_records_batch：0 / 1 关掉，别的正整数改个数（不超过上限），乱值不理', () => {
+    const caps = { model_records_batch_max_roots: 64 };
+    expect(recordsMemberBatchSize(caps, '0')).toBe(1);
+    expect(recordsMemberBatchSize(caps, '1')).toBe(1);
+    expect(recordsMemberBatchSize(caps, '32')).toBe(32);
+    expect(recordsMemberBatchSize(caps, '500')).toBe(64);
+    expect(recordsMemberBatchSize(caps, 'abc')).toBe(RECORDS_MEMBER_BATCH);
+    expect(recordsMemberBatchSize(caps, '-3')).toBe(RECORDS_MEMBER_BATCH);
+    expect(recordsMemberBatchSize(caps, '')).toBe(RECORDS_MEMBER_BATCH);
+    expect(recordsMemberBatchSize(caps, null)).toBe(RECORDS_MEMBER_BATCH);
+    // 后端没声明时，地址上写什么都不打包
+    expect(recordsMemberBatchSize({}, '32')).toBe(1);
+  });
+
+  it('头几发带的个数是 1、1、2、4、8', () => {
+    expect([...RECORDS_BATCH_RAMP]).toEqual([1, 1, 2, 4, 8]);
   });
 });
 
