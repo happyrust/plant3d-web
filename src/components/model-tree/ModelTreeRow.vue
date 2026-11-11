@@ -11,6 +11,7 @@ import { rvmBadgeTitle, type IncrementalRoot } from '@/components/rvm-check/incr
 import { type RvmNodeStatus } from '@/components/rvm-check/rvmCheckFormat';
 import { pendingGenerationFillView } from '@/composables/generationFillState';
 import { modelLoadSessionView } from '@/composables/modelLoadSession';
+import { type NodeModelStatusAction } from '@/composables/nodeModelStatus';
 import { updateToLatestView } from '@/composables/updateToLatestState';
 import { useGenModelV1DbnumStatus } from '@/composables/useGenModelV1DbnumStatus';
 import { useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
@@ -52,8 +53,11 @@ const emit = defineEmits<{
   (e: 'select', index: number, ev: MouseEvent): void;
   (e: 'context', id: string, ev: MouseEvent): void;
   (e: 'rvm-status', refno: string): void;
-  /** 已加载节点行上的动作：`update` = 更新到最新（落后时），`reload` = 重载（库里的模型比本页装的新时） */
-  (e: 'node-action', id: string, action: 'update' | 'reload' | 'generate'): void;
+  /**
+   * 已加载节点行上的动作：`update` = 库一级的更新到最新（落后时），`update-node` = 节点一级的更新（落后、而这个库
+   * 没有库一级的更新可走时），`reload` = 重载（库里的模型比本页装的新时），`generate` = 补齐没有模型的单元
+   */
+  (e: 'node-action', id: string, action: NodeModelStatusAction): void;
   /** 加载中点了行尾的转圈：停掉这个节点的加载 */
   (e: 'stop-loading', id: string): void;
 }>();
@@ -262,13 +266,21 @@ const nodeAction = computed(() => {
   const action = nodeStatus.value?.action ?? null;
   return action === 'generate' && pendingFill.value ? null : action;
 });
+/** 两种「更新」（库一级、节点一级）按钮上的字和颜色一样，做的事不同 */
+const nodeActionIsUpdate = computed(() => nodeAction.value === 'update' || nodeAction.value === 'update-node');
 const nodeActionLabel = computed(() => {
   if (nodeAction.value === 'update') return updateState.value?.label ?? '更新';
+  // 节点一级的更新走显示流程：做的时候这一行在转圈
+  if (nodeAction.value === 'update-node') return props.loading ? '更新中' : '更新';
   return nodeAction.value === 'generate' ? '生成' : '重载';
 });
 const nodeActionTitle = computed(() => {
   if (nodeAction.value === 'generate') {
     return '生成：把这个节点下没有模型的单元生成出来并显示（不重算已有的）；单元多时先问一声，做完一块显示一块';
+  }
+  if (nodeAction.value === 'update-node') {
+    return '更新：让后端把这个节点下的单元按库文件最新会话重新生成（已是最新的跳过），做完自动换到屏幕上；'
+      + '只动这个节点。单元多、或者有单元被删要先清后生成时，先说明再问';
   }
   if (nodeAction.value !== 'update') return '重载：按库里最新的模型记录替换场景里的这个节点（不重新生成）';
   const hint = '更新到最新：让后端把这个库的新会话入库并重新生成受影响的模型；做完会提示，点「重载」才换到场景里';
@@ -384,7 +396,7 @@ onUnmounted(() => {
       </button>
       <button v-if="!ghost && nodeAction" type="button"
         class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4 disabled:cursor-wait disabled:opacity-70"
-        :class="nodeAction === 'update'
+        :class="nodeActionIsUpdate
           ? 'border-amber-500/50 text-amber-700 hover:bg-amber-50'
           : nodeAction === 'generate'
             ? 'border-emerald-600/50 text-emerald-700 hover:bg-emerald-50'
@@ -393,7 +405,7 @@ onUnmounted(() => {
         :disabled="updateState?.busy === true || nodeStatus?.checking === true || props.loading"
         data-testid="model-tree-node-action"
         :data-action="nodeAction"
-        :data-busy="updateState?.busy ? 'true' : undefined"
+        :data-busy="updateState?.busy || (nodeAction === 'update-node' && props.loading) ? 'true' : undefined"
         @mousedown.stop
         @click.stop="emit('node-action', row.id, nodeAction)">
         {{ nodeActionLabel }}

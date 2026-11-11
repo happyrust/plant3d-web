@@ -6,15 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   NODE_MODEL_STATUS_ROUTE_RECHECK_MS,
   __resetNodeModelFactsForTests,
+  backendMeshPurgeKeepsShared,
   fetchGenerationFacts,
   fetchNodeModelFacts,
 } from './nodeModelFacts';
 
 const statusMock = vi.hoisted(() => vi.fn());
+/** `/health` 的 capabilities（`useGenModelV1Health().state.capabilities`）：还没取到是 null */
+const health = vi.hoisted(() => ({ capabilities: null as Record<string, unknown> | null }));
 
 vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/genModelV1Api')>()),
   genModelV1NodeModelStatus: statusMock,
+}));
+vi.mock('@/composables/useGenModelV1Health', () => ({
+  useGenModelV1Health: () => ({ state: health }),
 }));
 
 /** 2026-11-11 本机新后端对 7997 的 SITE 24381/535 的原样回执 */
@@ -176,5 +182,23 @@ describe('fetchGenerationFacts（生成预检用得到的那几格）', () => {
   it('服务端没有那个接口：回 null', async () => {
     statusMock.mockRejectedValue(await apiError(404, false));
     expect(await fetchGenerationFacts('1_1')).toBeNull();
+  });
+});
+
+describe('backendMeshPurgeKeepsShared（后端有没有声明清几何不再带走别人共用的东西）', () => {
+  afterEach(() => {
+    health.capabilities = null;
+  });
+
+  it('只有 /health 的 capabilities 里明说 mesh_purge_keeps_shared = true 才算；没取到、没有这一格、不是 true 都按没修算', () => {
+    expect(backendMeshPurgeKeepsShared()).toBe(false);
+    health.capabilities = { mesh_batch_max_keys: 1024, mesh_batch_max_bytes: 33554432 };
+    expect(backendMeshPurgeKeepsShared()).toBe(false);
+    health.capabilities = { mesh_purge_keeps_shared: false };
+    expect(backendMeshPurgeKeepsShared()).toBe(false);
+    health.capabilities = { mesh_purge_keeps_shared: 'true' };
+    expect(backendMeshPurgeKeepsShared()).toBe(false);
+    health.capabilities = { mesh_batch_max_keys: 1024, mesh_purge_keeps_shared: true };
+    expect(backendMeshPurgeKeepsShared()).toBe(true);
   });
 });

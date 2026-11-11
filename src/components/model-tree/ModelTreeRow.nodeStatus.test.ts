@@ -6,7 +6,7 @@ import ModelTreeRow from './ModelTreeRow.vue';
 
 import type { FlatRow } from '@/composables/useModelTree';
 
-type NodeView = { verdict: string | null; iconKind: string | null; title: string; action: 'update' | 'reload' | 'generate' | null; checking: boolean };
+type NodeView = { verdict: string | null; iconKind: string | null; title: string; action: 'update' | 'update-node' | 'reload' | 'generate' | null; checking: boolean };
 
 const dbViewMock = vi.hoisted(() => vi.fn((): { kind: string; title: string } => ({ kind: 'file_ahead', title: 'DB 1112 · 库有 10 个新会话未更新' })));
 const dbRefreshMock = vi.hoisted(() => vi.fn());
@@ -390,6 +390,56 @@ describe('ModelTreeRow 未生成 / 部分生成 / 没有生成单元（接上后
       expect(fillOf(none)).toBe('outline');
     } finally {
       none.unmount();
+    }
+  });
+});
+
+describe('ModelTreeRow 节点一级的「更新」（方案第 12 节：按需生成的库 / 不在更新范围里的库里落后的节点）', () => {
+  const LAGGING_ON_DEMAND: NodeView = {
+    verdict: 'lagging', iconKind: 'stale', action: 'update-node', checking: false,
+    title: '本节点：落后：生成之后有 1 个单元被改到\n这个库的模型按需生成：点「更新」让后端把这个节点下的单元按库文件最新会话重新生成，做完自动换到屏幕上',
+  };
+
+  it('落后、没有库一级的更新可走：行上照样是「更新」（琥珀色），点了交出 node-action(update-node)；提示写明只动这个节点', async () => {
+    nodeViewMock.mockReturnValue(LAGGING_ON_DEMAND);
+    const { status, action, onNodeAction, unmount } = await mountRow(ZONE);
+    try {
+      expect(status()?.querySelector('svg')?.getAttribute('class')).toContain('fill-warning');
+      expect(action()?.textContent?.trim()).toBe('更新');
+      expect(action()?.getAttribute('data-action')).toBe('update-node');
+      expect(action()?.getAttribute('class')).toContain('border-amber-500/50');
+      expect(action()?.getAttribute('title')).toContain('让后端把这个节点下的单元按库文件最新会话重新生成');
+      expect(action()?.getAttribute('title')).toContain('只动这个节点');
+      expect((action() as HTMLButtonElement).disabled).toBe(false);
+      action()!.click();
+      expect(onNodeAction).toHaveBeenCalledWith('17496_8516', 'update-node');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('正在做（这一行在转圈）：按钮写「更新中」并禁用；库一级的「更新到最新」的进度不套到它头上', async () => {
+    const state = await import('@/composables/updateToLatestState');
+    state.__resetUpdateToLatestStateForTests();
+    // 同一个库正好有一次库一级的更新在跑：那是另一件事
+    state.setUpdateToLatestState(1112, { phase: 'running', message: '模型生成 2/3', taskIds: ['batch-1'] });
+    nodeViewMock.mockReturnValue(LAGGING_ON_DEMAND);
+    const idle = await mountRow(ZONE);
+    try {
+      expect(idle.action()?.textContent?.trim()).toBe('更新');
+      expect((idle.action() as HTMLButtonElement).disabled).toBe(false);
+      expect(idle.action()?.getAttribute('title')).not.toContain('模型生成 2/3');
+    } finally {
+      idle.unmount();
+    }
+    const busy = await mountRow(ZONE, { loading: true });
+    try {
+      expect(busy.action()?.textContent?.trim()).toBe('更新中');
+      expect((busy.action() as HTMLButtonElement).disabled).toBe(true);
+      expect(busy.action()?.getAttribute('data-busy')).toBe('true');
+    } finally {
+      busy.unmount();
+      state.__resetUpdateToLatestStateForTests();
     }
   });
 });

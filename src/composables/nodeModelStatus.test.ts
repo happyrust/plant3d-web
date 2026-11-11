@@ -328,17 +328,19 @@ describe('judgeNodeModelFacts（接口给的事实 → 行上的状态）', () =
     expect(describeNodeModelStatus(status).headline).toBe('落后：生成之后这个节点下有改动（不在某个生成单元名下，或有单元被删）');
   });
 
-  it('落后、但库不在后端的更新范围里：不给「更新」（会被拒绝），写明只能重新生成', () => {
+  it('落后、但库不在后端的更新范围里：库一级的更新会被拒绝，给节点一级的更新，写明只动这个节点', () => {
     const status = judgeFacts(SITE_LATEST, {
       verdict: 'lagging', verdict_reason: 'units_changed',
       units: { total: 3362, generated: 3362, missing: 0, failed: 0, lagging: 5, exact: true },
     });
-    expect(nodeModelStatusAction(status)).toBeNull();
-    expect(describeNodeModelStatus(status).detail).toContain('不在后端的更新范围里');
-    expect(describeNodeModelStatus(status).detail).toContain('重新生成模型');
+    expect(nodeModelStatusAction(status)).toBe('update-node');
+    const detail = describeNodeModelStatus(status).detail;
+    expect(detail).toContain('这个库不在后端的更新范围里（不参与）：点「更新」让后端把这个节点下的单元按库文件最新会话重新生成，做完自动换到屏幕上');
+    // 不再把人指到右键「重新生成模型」上去
+    expect(detail).not.toContain('重新生成模型');
   });
 
-  it('落后、模型是按需生成的（未初始化的库）：没有库水位可推进，不给「更新」', () => {
+  it('落后、模型是按需生成的（未初始化的库）：没有库水位可推进，给节点一级的更新', () => {
     const status = judgeFacts(SITE_NOT_GENERATED, {
       verdict: 'lagging', verdict_reason: 'units_changed',
       units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 1, exact: true },
@@ -346,10 +348,39 @@ describe('judgeNodeModelFacts（接口给的事实 → 行上的状态）', () =
       changes: { from_sesno: 445, to_sesno: 447, units_changed: 1, units_added: 0, units_removed: 0, elements: { added: 0, deleted: 0, modified: 1, noop: 0 }, unattributed: false },
       precheck: { units_to_generate: 0, needs_confirm: false, confirm_threshold_units: 20 },
     });
-    expect(nodeModelStatusAction(status)).toBeNull();
+    expect(nodeModelStatusAction(status)).toBe('update-node');
     const text = describeNodeModelStatus(status);
     expect(text.detail).toContain('对应会话 445–447');
-    expect(text.detail).toContain('这个库的模型按需生成');
+    expect(text.detail).toContain('这个库的模型按需生成：点「更新」让后端把这个节点下的单元按库文件最新会话重新生成，做完自动换到屏幕上');
+    expect(text.detail).not.toContain('先清后生成');
+  });
+
+  it('落后、按需生成、而且有单元被删：提示里先说要先清后生成、点了会先问', () => {
+    const status = judgeFacts(SITE_NOT_GENERATED, {
+      verdict: 'lagging', verdict_reason: 'other_changes',
+      units: { total: 20, generated: 20, missing: 0, failed: 0, lagging: 0, exact: true },
+      generated_at: { sesno_min: 445, sesno_max: 445, time_min: null, time_max: null, basis: 'own_generation' },
+      changes: { from_sesno: 445, to_sesno: 447, units_changed: 2, units_added: 0, units_removed: 2, elements: { added: 0, deleted: 9, modified: 0, noop: 0 }, unattributed: false },
+      precheck: { units_to_generate: 0, needs_confirm: false, confirm_threshold_units: 20 },
+    });
+    expect(nodeModelStatusAction(status)).toBe('update-node');
+    expect(describeNodeModelStatus(status).detail).toContain('有 2 个单元已被删，要先清后生成，点了会先说明再问');
+  });
+
+  it('两种「更新」怎么分：库有模型水位、在更新范围里才是库一级的；按需生成的（不管在不在范围里）和不在范围里的都是节点一级的', () => {
+    const lagging = (library: NodeModelStatusResponse['library'], basis: 'library_watermark' | 'own_generation' | 'mixed') => judgeFacts(SITE_LATEST, {
+      verdict: 'lagging', verdict_reason: 'units_changed', library,
+      units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 1, exact: true },
+      generated_at: { sesno_min: 445, sesno_max: 445, time_min: null, time_max: null, basis },
+    });
+    // 7997：在后端的监听范围里，但没初始化、模型全是按需生成的——库一级的更新没有水位可推进
+    expect(nodeModelStatusAction(lagging(LIBRARY_7997, 'own_generation'))).toBe('update-node');
+    expect(nodeModelStatusAction(lagging({ ...LIBRARY_7997, in_watch_scope: false }, 'own_generation'))).toBe('update-node');
+    expect(nodeModelStatusAction(lagging(LIBRARY_7999, 'library_watermark'))).toBe('update-node');
+    expect(nodeModelStatusAction(lagging(LIBRARY_7999, 'mixed'))).toBe('update-node');
+    expect(nodeModelStatusAction(lagging(LIBRARY_8000, 'library_watermark'))).toBe('update');
+    // 一部分靠库水位、一部分按需生成：库在范围里就让库一级的更新去追（它会推进水位）
+    expect(nodeModelStatusAction(lagging(LIBRARY_8000, 'mixed'))).toBe('update');
   });
 
   it('库正在被写：更新中；后端判不了：未知，原因码翻成话', () => {

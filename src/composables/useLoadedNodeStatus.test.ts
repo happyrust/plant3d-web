@@ -477,6 +477,82 @@ describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () 
     expect(store.view('9304_2')).toMatchObject({ verdict: 'reloadable', action: 'reload' });
   });
 
+  it('按需生成的库里落后的节点：行上给节点一级的更新（update-node）；有模型水位、在更新范围里的库照旧是库一级的更新', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997, ROW_8000);
+    const lagging = {
+      verdict: 'lagging' as const, verdictReason: 'units_changed',
+      units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 1, exact: true },
+      changes: { fromSesno: 445, toSesno: 447, unitsChanged: 1, unitsAdded: 0, unitsRemoved: 0, unattributed: false },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    };
+    fetchFacts.mockResolvedValueOnce(facts({ ...lagging, generatedAt: { ...OWN_447, sesnoMin: 445, sesnoMax: 445 } }));
+    store.noteLoaded('24381_535', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    await settled(store, '24381_535');
+    expect(store.view('24381_535')).toMatchObject({ verdict: 'lagging', iconKind: 'stale', action: 'update-node' });
+    expect(store.view('24381_535')!.title).toContain('这个库的模型按需生成：点「更新」让后端把这个节点下的单元按库文件最新会话重新生成');
+
+    fetchFacts.mockResolvedValueOnce(facts({
+      ...lagging, dbnum: 8000,
+      generatedAt: { sesnoMin: 1143, sesnoMax: 1143, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      library: { fileLatestSesno: 1146, modelSesno: 1143, modelSesnoTime: null, inWatchScope: true },
+    }));
+    store.noteLoaded('24384_26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 });
+    await settled(store, '24384_26547');
+    expect(store.view('24384_26547')).toMatchObject({ verdict: 'lagging', action: 'update' });
+  });
+
+  it('记一笔「本页装的不是后端现在的那一版」（节点一级的更新做到一半停了）：后端说最新时行上给「重载」；重新登记之后这一笔清掉', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    const latest = facts({
+      verdict: 'latest', units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    });
+    const lagging = facts({
+      verdict: 'lagging', verdictReason: 'units_changed',
+      units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 3, exact: true },
+      generatedAt: { ...OWN_447, sesnoMin: 445 },
+      changes: { fromSesno: 445, toSesno: 447, unitsChanged: 3, unitsAdded: 0, unitsRemoved: 0, unattributed: false },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    });
+    fetchFacts.mockResolvedValue(lagging);
+    store.noteLoaded('24381_535', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    await settled(store, '24381_535');
+    expect(store.entry('24381_535')!.staleReason).toBeNull();
+
+    // 更新到一半停了：后端还说落后——行上照旧是「更新」（再点接着做，做完会把屏幕上的换掉）
+    store.markStale('24381/535', '更新到一半停了：后端已经重新生成了一部分，屏幕上还是原来的');
+    expect(store.entry('24381_535')!.staleReason).toContain('更新到一半停了');
+    expect(store.view('24381_535')).toMatchObject({ verdict: 'lagging', action: 'update-node' });
+
+    // 在飞的那一块后端做完了，现在说最新：可屏幕上还是原来的——给「重载」，不说「最新」
+    fetchFacts.mockResolvedValue(latest);
+    store.recheck('24381_535');
+    await settled(store, '24381_535');
+    expect(store.view('24381_535')).toEqual({
+      verdict: 'reloadable', iconKind: 'reloadable', action: 'reload', checking: false,
+      title: '本节点：有更新可重载：更新到一半停了：后端已经重新生成了一部分，屏幕上还是原来的\n点「重载」按后端现在的模型把屏幕上的换掉',
+    });
+
+    // 重载做成了：显示流程重新登记这个节点，这一笔随之清掉，行上回到「最新」
+    store.noteLoaded('24381_535', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    await settled(store, '24381_535');
+    expect(store.entry('24381_535')!.staleReason).toBeNull();
+    expect(store.view('24381_535')).toMatchObject({ verdict: 'latest', action: null });
+  });
+
+  it('那一笔只对装在场景里的节点记：不在表里的、只是点过没装进场景的不记', async () => {
+    const { store } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    store.markStale('24381_999', '不在表里');
+    expect(store.entry('24381_999')).toBeNull();
+    store.noteWithoutModel('24381_535', 7997);
+    await settled(store, '24381_535');
+    store.markStale('24381_535', '只是点过');
+    expect(store.entry('24381_535')!.staleReason).toBeNull();
+  });
+
   it('服务端没有那个接口（回 null）：照旧走过渡办法', async () => {
     const { store, fetchFacts } = await loadStoreWithFacts();
     fetchFacts.mockResolvedValue(null);

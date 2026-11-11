@@ -23,8 +23,9 @@ import {
 } from '@/composables/generationFill';
 import { beginGenerationFill, clearPendingGenerationFill, notePendingGenerationFill } from '@/composables/generationFillState';
 import { beginModelLoadSession, ModelLoadStoppedError, type ModelLoadSession } from '@/composables/modelLoadSession';
-import { fetchGenerationFacts, fetchNodeModelFacts } from '@/composables/nodeModelFacts';
-import { changedSessionsOfNodeVersions } from '@/composables/nodeModelStatus';
+import { backendMeshPurgeKeepsShared, fetchGenerationFacts, fetchNodeModelFacts } from '@/composables/nodeModelFacts';
+import { changedSessionsOfNodeVersions, type NodeModelFacts } from '@/composables/nodeModelStatus';
+import { decideNodeUpdate, describeNodeUpdateSummary, planNodeUpdateChunks } from '@/composables/nodeModelUpdate';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
@@ -42,6 +43,7 @@ import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelR
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import {
   forgetLoadedNode,
+  markLoadedNodeStale,
   noteLoadedNode,
   noteNodeWithoutModel,
   provideLoadedNodeChangeQuery,
@@ -119,6 +121,8 @@ const STOPPED_FILL_RECHECK_DELAYS_MS: readonly number[] = [5_000, 20_000];
 const PRECHECK_AFTER_SHOWN_TIMEOUT_MS = 3_000;
 /** 一个模型都没有、要生成之前问预检，最多等这么久 */
 const PRECHECK_BEFORE_GENERATE_TIMEOUT_MS = 10_000;
+/** 节点一级的更新动手之前重新问一次节点模型状态，最多等这么久（等不到就不更新：不知道有没有单元被删） */
+const NODE_UPDATE_FACTS_TIMEOUT_MS = 15_000;
 
 /** 等一个承诺，最多等 `ms` 毫秒；超时就抛（原来的请求不取消，回来了也没人要）。 */
 function withTimeout<T>(task: Promise<T>, ms: number, what: string): Promise<T> {
@@ -405,7 +409,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (
     refno: string,
-    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean },
+    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean },
   ) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
@@ -909,11 +913,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
        * 重新查一遍范围，把没有模型的块生成并显示。不带 force，不动已有的模型。
        */
       fill?: boolean
+      /**
+       * 行上的「更新」，节点一级（方案第 12 节）：节点落后，而它所在的库没有库一级的更新可走（模型按需生成，或不在
+       * 后端的更新范围里）。先让后端把这个节点下的单元按库文件最新会话重新生成，再照「重载」那条路把屏幕上的换掉。
+       * 生成走哪条路、要不要先问，按后端此刻的节点模型状态定（`nodeModelUpdate.decideNodeUpdate`）。
+       */
+      update?: boolean
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
-    const refresh = loadOptions?.refresh === true;
+    const update = loadOptions?.update === true;
+    // 节点一级的更新，后一半就是重载：清本地记录缓存、重查、整套替换、撤下已不在的构件
+    const refresh = loadOptions?.refresh === true || update;
     const explicitFill = loadOptions?.fill === true;
     // 相机意图戳：本次加载要飞的话，加载前盖一次；落地时核对，期间用户点了别处就不动相机。
     const cameraStamp = loadOptions?.flyTo ? beginCameraIntent() : 0;
@@ -1041,6 +1053,165 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     let stopRecordPageListener: (() => void) | null = null;
     let progressiveLoad: ProgressiveLoad | null = null;
 
+    /** 节点一级的更新：后端这一次做了什么（收尾时写进提示）；没走到生成为 `null` */
+    let updateReport: { level: 'success' | 'info' | 'warning'; message: string } | null = null;
+    /**
+     * 节点一级的更新里，生成请求已经发出去过（后端那边可能已经换了一部分、甚至全部）。之后没能把屏幕上的换掉
+     * （被叫停、后端还在后台算）时，要在已加载节点表里记一笔「本页装的不是后端现在的那一版」。
+     */
+    let updateSentToBackend = false;
+    /**
+     * 节点一级的「更新到最新」的前一半：让后端把这个节点下的单元按库文件最新会话重新生成。
+     * 回 `true` = 接着照「重载」那条路把屏幕上的换掉；回 `false` = 不做了（取消、没做成），场景保持原样。
+     * 被叫停时抛 `ModelLoadStoppedError`（由显示流程的收尾统一处理）。
+     */
+    const runNodeUpdate = async (dbno: number, listChildren: (parent: string) => Promise<GenerationTreeNode[]>): Promise<boolean> => {
+      const records = getGenModelV1ModelSource().records;
+      const leave = (level: 'info' | 'warning', message: string, recheck: boolean): false => {
+        statusMessage.value = `refno=${normalizedRoot} 没有更新`;
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        consoleStore.addLog(level === 'warning' ? 'warning' : 'info', `[model-load] 更新 ${normalizedRoot}：${message}`);
+        emitToast({ message: `[${level === 'warning' ? '警告' : '提示'}] ${normalizedRoot}：${message}`, level });
+        if (recheck) recheckLoadedNode(normalizedRoot);
+        return false;
+      };
+      // 动手之前重新问一次后端（不用行上那份旧的）：有没有单元被删决定走哪条路
+      statusMessage.value = `正在核对 ${normalizedRoot} 的模型状态...`;
+      progress.value = 3;
+      syncGlobalLoadStatus();
+      let facts: NodeModelFacts | null;
+      try {
+        facts = await withTimeout(
+          fetchNodeModelFacts({ refno: normalizedRoot, signal: session.signal }),
+          NODE_UPDATE_FACTS_TIMEOUT_MS,
+          `节点模型状态 ${normalizedRoot}`,
+        );
+      } catch (e) {
+        if (session.stopped) throw e;
+        return leave('warning', `没有问到后端的节点模型状态（${e instanceof Error ? e.message : String(e)}），没有更新`, false);
+      }
+      session.throwIfStopped();
+      const decision = decideNodeUpdate({ facts, purgeKeepsShared: backendMeshPurgeKeepsShared() });
+      if (decision.kind === 'abort') return leave(decision.level, decision.message, decision.recheck);
+      if (decision.kind === 'reload') {
+        consoleStore.addLog('info', `[model-load] 更新 ${normalizedRoot}：${decision.message}`);
+        updateReport = { level: 'info', message: decision.message };
+        return true;
+      }
+      if (decision.confirm) {
+        statusMessage.value = `等待确认：更新 ${normalizedRoot}`;
+        syncGlobalLoadStatus();
+        const choice = await useConfirmDialogStore().openChoice({
+          title: decision.confirm.title,
+          message: decision.confirm.message,
+          choices: [{ id: 'update', text: decision.confirm.confirmText }],
+          cancelText: decision.confirm.cancelText,
+        });
+        session.throwIfStopped();
+        if (choice !== 'update') return leave('info', '已取消更新，模型保持现在的样子', false);
+      }
+
+      if (decision.kind === 'regenerate') {
+        // 有单元被删：先清后生成（同右键「重新生成模型」）。后端一开始清就停不了了。
+        session.setStoppable(false);
+        statusMessage.value = `正在重新生成 ${normalizedRoot}（有单元被删，先清后生成）...`;
+        progress.value = 5;
+        syncGlobalLoadStatus();
+        consoleStore.addLog(
+          'info',
+          `[model-load] 更新 ${normalizedRoot}：${decision.unitsRemoved} 个单元已被删，先清后生成（带 force），共 ${decision.unitsTotal} 个单元`,
+        );
+        updateSentToBackend = true;
+        const generated = await records.generateThenCollect(normalizedRoot, { force: true });
+        if (generated.items.length === 0) {
+          const timedOut = generated.pending.length > 0;
+          if (timedOut) scheduleDbnumModelReprobe(dbno);
+          const failed = Object.entries(generated.errors).map(([root, message]) => `${root}: ${message}`).join('; ');
+          // 范围内的旧模型后端已经清掉了，屏幕上还是旧的：记一笔，后端做完之后行上给「重载」
+          markLoadedNodeStale(normalizedRoot, '后端已经重新生成，屏幕上还是原来的');
+          recheckLoadedNodeLater(normalizedRoot, STOPPED_FILL_RECHECK_DELAYS_MS);
+          return leave(
+            'warning',
+            timedOut
+              ? '后端还在后台重新生成（范围内的旧模型已清掉），做完之后行上会给「重载」'
+              : `重新生成没有产出可显示的模型（${failed || generated.hints?.[generated.refno] || '没有新产物'}）；屏幕上还是原来的`,
+            true,
+          );
+        }
+        noteDbnumModelGenerated(dbno);
+        updateReport = { level: 'success', message: `有 ${decision.unitsRemoved} 个单元被删，已先清后生成 ${decision.unitsTotal} 个单元` };
+        return true;
+      }
+
+      // 不带 force：后端逐根核对，不是库文件最新会话的重新生成，已是最新的跳过；不清几何。SITE 一个 ZONE 一块。
+      const plan = await planNodeUpdateChunks({
+        root: normalizedRoot,
+        rootNoun: facts?.noun ?? null,
+        unitsTotal: decision.unitsTotal,
+        thresholdUnits: decision.thresholdUnits,
+        listChildren,
+      });
+      session.throwIfStopped();
+      const whole = isWholeNodePlan(plan);
+      consoleStore.addLog(
+        'info',
+        `[model-load] 更新 ${normalizedRoot}：不带 force 重新生成落后的单元（共 ${decision.unitsTotal} 个单元，其中 ${decision.unitsLagging} 个被改到）`
+          + (whole ? '' : `，分 ${plan.chunks.length} 块`),
+      );
+      let summary: GenerationFillSummary | null = null;
+      let failure: unknown = null;
+      fillRunning = true;
+      showProgressModal.value = false;
+      try {
+        summary = await runGenerationFill({
+          plan,
+          generateChunk: async (chunk) => {
+            updateSentToBackend = true;
+            // 带着会话的取消信号：叫停时这一发请求当场取消（后端那边照常算完）
+            return chunkResultFromCollect(chunk.refno, await records.generateThenCollect(chunk.refno, { force: false, signal: session.signal }));
+          },
+          // 屏幕上的等全部核对完再整套换（重载那条路），这里不装
+          loadChunk: async () => {},
+          onProgress: (step) => {
+            const units = `已核对 ${step.unitsDone} / ${plan.exact ? '' : '约 '}${step.unitsTotal} 个单元`;
+            const where = whole ? normalizedRoot : `第 ${step.chunkIndex + 1}/${step.chunkCount} 块`;
+            const reason = String(step.reason ?? '');
+            statusMessage.value = step.phase === 'waiting'
+              ? `${where}：${reason.length > 24 ? `${reason.slice(0, 24)}…` : reason}，`
+                + `${Math.round((step.waitMs ?? 0) / 1000)} 秒后自动再问（已问 ${step.attempt} 次）· ${units}`
+              : `正在更新 ${where}（落后的单元重新生成）· ${units}`;
+            totalCount.value = step.chunkCount;
+            currentIndex.value = step.chunkIndex + 1;
+            currentRefno.value = step.chunk.name && step.chunk.name !== step.chunk.refno
+              ? `${step.chunk.name} · ${step.chunk.refno}`
+              : step.chunk.refno;
+            progress.value = Math.min(28, 5 + Math.floor((step.unitsDone / Math.max(1, step.unitsTotal)) * 23));
+            syncGlobalLoadStatus();
+          },
+          shouldStop: () => session.stopped,
+          sleep,
+        });
+      } catch (e) {
+        failure = e;
+      } finally {
+        fillRunning = false;
+      }
+      // 被叫停：没发的块不再发，在飞的那一发后端照常算完。屏幕上的不动，由显示流程的收尾记账
+      if (session.stopped || summary?.stopped) throw new ModelLoadStoppedError(normalizedRoot);
+      if (failure || !summary) {
+        const em = failure instanceof Error ? failure.message : String(failure ?? '没有结果');
+        if (!updateSentToBackend) return leave('warning', `更新没有做成：${em}`, true);
+        // 做了一部分才出错：后端那边已经换了一部分，屏幕上跟着换
+        updateReport = { level: 'warning', message: `更新中途出错（${em}），后端已经做完的部分换到屏幕上` };
+        return true;
+      }
+      if (summary.outcomes.some((outcome) => outcome.state === 'pending')) scheduleDbnumModelReprobe(dbno);
+      if (summary.unitsDone > 0) noteDbnumModelGenerated(dbno);
+      updateReport = describeNodeUpdateSummary(summary);
+      return true;
+    };
+
     try {
       const startedAt = Date.now();
       let dbno: number;
@@ -1068,6 +1239,34 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
       undo.dbno = dbno;
       session.throwIfStopped();
+
+      const levelTag = { success: '成功', info: '提示', warning: '警告' } as const;
+      /** 一个节点的子节点（生成预检、分块时取成员的名字和类型） */
+      const listGenerationChildren = async (parent: string): Promise<GenerationTreeNode[]> => {
+        const resp = await getModelSource().tree.children(parent);
+        if (!resp.success) throw new Error(resp.error_message || 'tree children 查询失败');
+        return resp.children.map((child) => {
+          const key = normalizeRefnoString(String(child.refno ?? ''));
+          return {
+            refno: key,
+            noun: String(child.noun ?? ''),
+            name: String(child.name ?? '') || key,
+            childrenCount: typeof child.children_count === 'number' ? child.children_count : null,
+          };
+        });
+      };
+
+      // ---------- 节点一级的「更新到最新」的前一半（方案第 12 节；用户 2026-11-11 定：现在就加）----------
+      // 这个库没有库一级的更新可走（模型按需生成 / 不在后端的更新范围里）：让后端把这个节点下的单元按库文件最新会话
+      // 重新生成。做完往下走的就是「重载」那条路。
+      if (update) {
+        const proceed = await runNodeUpdate(dbno, listGenerationChildren);
+        if (!proceed) return false;
+        // 后端那边已经是新的了，屏幕上还没换：先记一笔。下面的重载做成了会重新登记这个节点（这一笔随之清掉）；
+        // 没做成（记录没查通、被叫停、出错）这一笔留着，后端说「最新」时行上给「重载」。
+        if (updateSentToBackend) markLoadedNodeStale(normalizedRoot, '后端已经重新生成，屏幕上还没换上');
+        session.throwIfStopped();
+      }
 
       // 「装的时候是哪一版」：开始取数之前读到的库水位（已加载节点表按它判「有更新可重载」）。取早不取晚——
       // 装的过程中后端正好跑完一个批次时，宁可之后多提示一次，不能漏掉。
@@ -1232,21 +1431,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let fillRan = false;
       let fillFlew = false;
       const unitsLabel = (plan: Pick<GenerationPlan, 'units' | 'exact'>): string => `${plan.exact ? ' ' : '约 '}${plan.units} 个单元`;
-      const levelTag = { success: '成功', info: '提示', warning: '警告' } as const;
-
-      const listGenerationChildren = async (parent: string): Promise<GenerationTreeNode[]> => {
-        const resp = await getModelSource().tree.children(parent);
-        if (!resp.success) throw new Error(resp.error_message || 'tree children 查询失败');
-        return resp.children.map((child) => {
-          const key = normalizeRefnoString(String(child.refno ?? ''));
-          return {
-            refno: key,
-            noun: String(child.noun ?? ''),
-            name: String(child.name ?? '') || key,
-            childrenCount: typeof child.children_count === 'number' ? child.children_count : null,
-          };
-        });
-      };
 
       /**
        * 这次能不能补、补哪几块。`existingShown`：这个节点已经有一部分模型显示出来了。
@@ -1857,11 +2041,22 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           return true;
         }
         loadedRoots.add(normalizedRoot);
+        // 重新登记：行上的状态跟着重问一次（节点一级的更新做完，落后 → 最新）；「本页装的不是后端现在的那一版」那一笔也随之清掉
         noteLoadedNode(normalizedRoot, dbno, loadWatermark);
         markedLoadedHere = true;
-        statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
+        statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : update ? '更新完成 (gen-model)' : '加载完成 (gen-model)';
         syncGlobalLoadStatus();
-        emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
+        if (update && updateReport) {
+          // 节点一级的更新：后端做了什么、屏幕上换了多少，一句话说完
+          const report: { level: 'success' | 'info' | 'warning'; message: string } = updateReport;
+          consoleStore.addLog(report.level === 'warning' ? 'warning' : 'info', `[model-load] 更新 ${normalizedRoot} 结束：${report.message}`);
+          emitToast({
+            message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}；屏幕上已换成最新的 ${v1Result.loadedObjects} 个几何实例`,
+            level: report.level,
+          });
+        } else {
+          emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
+        }
         // 已有的显示出来了，再把这个节点下没有模型的那几块补上（方案 B3）
         await fillAfterShown(loadRefnos[0] ?? null);
         return true;
@@ -1923,8 +2118,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           // 叫停时在飞的那一块后端照常算完：过一会儿再问两次，行上的数跟上来
           recheckLoadedNodeLater(normalizedRoot, STOPPED_FILL_RECHECK_DELAYS_MS);
         }
+        // 节点一级的更新做到一半被叫停：没发的块不再发，已经发出去的后端照常算完。屏幕上的不动——但后端那边可能
+        // 已经换了一部分（甚至全部），它自己看不出本页装的是哪一版：记一笔，后端说「最新」时行上给「重载」；
+        // 后端说还落后时行上照旧是「更新」，再点接着做（已是最新的会跳过）。
+        if (update && updateSentToBackend) {
+          markLoadedNodeStale(normalizedRoot, '更新到一半停了：后端已经重新生成了一部分，屏幕上还是原来的');
+          recheckLoadedNode(normalizedRoot);
+          recheckLoadedNodeLater(normalizedRoot, STOPPED_FILL_RECHECK_DELAYS_MS);
+        }
         session.markWithdrawn();
-        statusMessage.value = refresh ? '已停止重载，场景保持原样' : '已停止加载';
+        statusMessage.value = update ? '已停止更新，场景保持原样' : refresh ? '已停止重载，场景保持原样' : '已停止加载';
         progress.value = 100;
         syncGlobalLoadStatus();
         consoleStore.addLog(
@@ -1932,9 +2135,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           `[model-load] refno=${normalizedRoot} 加载被叫停：收回 ${withdrawn} 个构件；已取到的记录和网格留在缓存里`,
         );
         emitToast({
-          message: refresh
-            ? `[提示] ${normalizedRoot}：已停止重载，场景保持原样`
-            : `[提示] ${normalizedRoot}：已停止加载，这次画出来的已收起；已取到的数据留着，再点眼睛会接着装`,
+          message: update
+            ? `[提示] ${normalizedRoot}：已停止更新，屏幕上的没有动`
+              + (updateSentToBackend ? '；后端已经重新生成的留在后端，行上会给「更新」（接着做）或「重载」（换到屏幕上）' : '')
+            : refresh
+              ? `[提示] ${normalizedRoot}：已停止重载，场景保持原样`
+              : `[提示] ${normalizedRoot}：已停止加载，这次画出来的已收起；已取到的数据留着，再点眼睛会接着装`,
           level: 'info',
         });
         return false;

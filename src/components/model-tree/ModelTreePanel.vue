@@ -14,6 +14,7 @@ import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/compon
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { consumeModelLoadStopped, requestStopModelLoad } from '@/composables/modelLoadSession';
+import { type NodeModelStatusAction } from '@/composables/nodeModelStatus';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
@@ -1173,10 +1174,37 @@ function stopNodeLoading(rowId: string) {
   requestStopModelLoad(normalizeRefnoKeyLike(rowId));
 }
 
+/**
+ * 行上的「更新」，节点一级（方案第 12 节，2026-11-11 用户定：现在就加）：节点落后，而它所在的库没有库一级的更新可走
+ * ——模型按需生成的库，或不在后端更新范围里的库。让后端只把这个节点下的单元按库文件最新会话重新生成，做完直接换到
+ * 屏幕上（库一级的更新做完要再点「重载」；这里只动这一个节点，一步做完）。走哪条路、要不要先问，由显示流程按后端
+ * 此刻的节点模型状态定（`nodeModelUpdate.decideNodeUpdate`）：有单元被删才先清后生成，后端没声明 gen-model #142
+ * 已修时那一步先确认。
+ */
+async function updateNodeModel(rowId: string) {
+  if (!modelGenerationState.value) return;
+  const id = normalizeRefnoKeyLike(rowId);
+  if (!isRefnoLike(id)) return;
+  // 这个节点现在是藏着的：换完和点眼睛一样把它显示出来（换上去的构件本来就是可见的，眼睛跟上）
+  const wasHidden = pdmsTree.getCheckState(id) === 'unchecked';
+  setNodeLoading(id, true);
+  try {
+    const ok = await modelGenerationState.value.showModelByRefno(id, { flyTo: false, update: true });
+    // 中途被叫停、取消、没做成：场景保持原样，这里没有要补做的
+    const stopped = consumeModelLoadStopped(id);
+    if (ok && !stopped && wasHidden && modelGenerationState.value.isModelActuallyLoaded(id)) {
+      await pdmsTree.setVisible(id, true);
+    }
+  } finally {
+    setNodeLoading(id, false);
+  }
+}
+
 /** 节点行上的动作按钮（`ModelTreeRow` 的 `node-action`）。 */
-function onNodeAction(rowId: string, action: 'update' | 'reload' | 'generate') {
+function onNodeAction(rowId: string, action: NodeModelStatusAction) {
   if (action === 'reload') void reloadLoadedNode(rowId);
   else if (action === 'generate') void fillNodeModel(rowId);
+  else if (action === 'update-node') void updateNodeModel(rowId);
   else void updateLoadedNodeToLatest(rowId);
 }
 

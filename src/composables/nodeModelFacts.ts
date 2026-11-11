@@ -15,6 +15,7 @@ import type { GenerationUnitFacts } from '@/composables/generationFill';
 
 import { genModelV1NodeModelStatus, isGenModelV1RouteMissing } from '@/api/genModelV1Api';
 import { missingUnitsNeedLibraryUpdate, nodeModelFactsOf, type NodeModelFacts } from '@/composables/nodeModelStatus';
+import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import { toRefnoKey } from '@/utils/refnoKey';
 
 /** 认定「服务端没有这条路由」之后多久再试一次（后端可能换了新构建） */
@@ -77,6 +78,15 @@ export async function fetchGenerationFacts(refno: string): Promise<GenerationUni
   if (Date.now() < routeMissingUntil) return null;
   const facts = await (inflight.get(toRefnoKey(refno) || refno) ?? request(refno));
   return facts ? generationUnitFactsOf(facts) : null;
+}
+
+/**
+ * 后端有没有声明「清几何时不再带走别的范围共用的东西」（`/health` 的 `capabilities.mesh_purge_keeps_shared`，
+ * gen-model #142 修好的标志）。没声明的（旧构建，或 `/health` 还没取到）一律按没修算：节点一级的更新要走
+ * 「先清后生成」时先让人确认（`nodeModelUpdate.decideNodeUpdate`）。
+ */
+export function backendMeshPurgeKeepsShared(): boolean {
+  return useGenModelV1Health().state.capabilities?.mesh_purge_keeps_shared === true;
 }
 
 export function __resetNodeModelFactsForTests(): void {

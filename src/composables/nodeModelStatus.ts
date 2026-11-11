@@ -556,11 +556,21 @@ function missingRemedy(status: NodeModelStatus): string {
   return `库文件比模型水位新 ${ahead} 个会话，没有模型的单元多半是之后才有的：点「更新」让后端把这个库更新到最新`;
 }
 
-/** 落后的节点怎么追上：能「更新」的点更新；不在更新范围里的、按需生成的库，只能重新生成 */
+/**
+ * 落后的节点怎么追上。库有模型水位、在后端的更新范围里：点「更新」走库一级的更新。其余（模型按需生成的库、
+ * 不在更新范围里的库）没有库一级的更新可走：点「更新」让后端只把这个节点下的单元重新生成（节点一级的更新）。
+ */
 function laggingRemedy(status: NodeModelStatus): string {
-  if (nodeModelStatusAction(status) === 'update') return '点「更新」让后端把这个库更新到最新';
-  if (status.generated?.basis === 'own_generation') return '这个库的模型按需生成：右键「重新生成模型」换成最新的';
-  return '这个库不在后端的更新范围里（不参与），更新不了；右键「重新生成模型」可以换成最新的';
+  const action = nodeModelStatusAction(status);
+  if (action === 'update') return '点「更新」让后端把这个库更新到最新';
+  if (action !== 'update-node') return '';
+  const why = status.generated?.basis === 'own_generation'
+    ? '这个库的模型按需生成'
+    : '这个库不在后端的更新范围里（不参与）';
+  const removed = status.changes && status.changes.unitsRemoved > 0
+    ? `；有 ${status.changes.unitsRemoved} 个单元已被删，要先清后生成，点了会先说明再问`
+    : '';
+  return `${why}：点「更新」让后端把这个节点下的单元按库文件最新会话重新生成，做完自动换到屏幕上${removed}`;
 }
 
 /** 状态 → 行尾提示里的两句话（结论、说明）。 */
@@ -622,18 +632,25 @@ export function describeNodeModelStatus(status: NodeModelStatus): { headline: st
 }
 
 /**
+ * 行上的动作：`update` = 库一级的更新到最新（`update/execute`）；`update-node` = 节点一级的更新（只把这个节点下的
+ * 单元重新生成，见 `nodeModelUpdate`）；`reload` = 重载；`generate` = 补齐没有模型的单元。
+ */
+export type NodeModelStatusAction = 'update' | 'update-node' | 'reload' | 'generate';
+
+/**
  * 行上给的动作：
- * - 落后 → 更新到最新。接口说这个库不在后端的更新范围里、或模型是按需生成的（没有库水位可推进）时不给——
- *   更新会被后端拒绝，提示里写明只能重新生成；
+ * - 落后 → 更新。库有模型水位、在后端的更新范围里：库一级的更新到最新（`update`）。接口说这个库不在更新范围里、
+ *   或模型是按需生成的（没有库水位可推进）：库一级的更新会被后端拒绝，给节点一级的更新（`update-node`，
+ *   2026-11-11 用户定：现在就加）——按钮上的字都是「更新」；
  * - 有更新可重载 → 重载；
  * - 部分生成 / 未生成、而且确有单元要生成 → 库文件比模型水位新、库在更新范围里时是「更新」（见
  *   `missingUnitsNeedLibraryUpdate`），否则是「生成」（补齐，不带 force）；
  * - 其余没有。
  */
-export function nodeModelStatusAction(status: NodeModelStatus): 'update' | 'reload' | 'generate' | null {
+export function nodeModelStatusAction(status: NodeModelStatus): NodeModelStatusAction | null {
   if (status.verdict === 'lagging') {
     if (status.source !== 'model-status') return 'update';
-    return status.inWatchScope === true && status.generated?.basis !== 'own_generation' ? 'update' : null;
+    return status.inWatchScope === true && status.generated?.basis !== 'own_generation' ? 'update' : 'update-node';
   }
   if (status.verdict === 'reloadable') return 'reload';
   if (status.verdict === 'partial' || status.verdict === 'not_generated') {

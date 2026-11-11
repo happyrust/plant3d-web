@@ -842,6 +842,13 @@ export type GenModelV1Capabilities = {
   mesh_batch_max_keys?: number;
   /** 网格打包取一次响应的内容字节上限 */
   mesh_batch_max_bytes?: number;
+  /**
+   * 清几何（带 `force` 的 `model/generate`、带「一并删除网格文件」的清理）时不再带走别的范围共用的东西——
+   * gen-model #142 修好的标志。没有这一格、或不是 `true` 的后端：先清后生成一片范围，会把别的构件、别的库共用的
+   * `geo_relate` / `tubi_relate` 行（只写内存的库是共用的网格文件）一起删掉。前端走「先清后生成」之前据此决定
+   * 要不要先让人确认（`nodeModelUpdate.decideNodeUpdate`）。
+   */
+  mesh_purge_keeps_shared?: boolean;
   [key: string]: unknown;
 };
 

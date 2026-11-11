@@ -25,6 +25,7 @@ import {
   type FetchNodeModelFacts,
   type ListNodeChangedSessions,
   type NodeModelStatus,
+  type NodeModelStatusAction,
   type NodeModelStatusIconKind,
   type NodeModelVerdict,
 } from '@/composables/nodeModelStatus';
@@ -51,6 +52,12 @@ export type LoadedNodeEntry = {
   /** 最近一次判定；还没判过为 `null` */
   status: NodeModelStatus | null;
   checking: boolean;
+  /**
+   * 本页装的已经不是后端现在的那一版，而后端自己看不出来（它不知道本页装了什么）：节点一级的更新让后端重新生成了、
+   * 屏幕上却没换成（做到一半被叫停、后端还在后台算、重载没查通）。给人看的原因。后端说「最新」时行上据此给「重载」；
+   * 节点重新登记（重载 / 更新做成了）时清掉。没有这回事为 `null`。
+   */
+  staleReason: string | null;
 };
 
 export type LoadedNodeView = {
@@ -60,8 +67,11 @@ export type LoadedNodeView = {
   iconKind: NodeModelStatusIconKind | null;
   /** 行尾提示里关于本节点的那几行 */
   title: string;
-  /** 行上给的动作：落后 → 更新；有更新可重载 → 重载；部分生成 / 未生成 → 生成 */
-  action: 'update' | 'reload' | 'generate' | null;
+  /**
+   * 行上给的动作：落后 → 更新（库一级 `update`，或没有库一级的更新可走时节点一级 `update-node`）；
+   * 有更新可重载 → 重载；部分生成 / 未生成 → 生成
+   */
+  action: NodeModelStatusAction | null;
   checking: boolean;
 };
 
@@ -235,10 +245,21 @@ export function noteLoadedNode(
     loadedFileLatestSesno: at.fileLatestSesno,
     status: null,
     checking: false,
+    staleReason: null,
   });
   checkedAgainst.delete(key);
   startWatching();
   schedule(key);
+}
+
+/**
+ * 记一笔「本页装的不是后端现在的那一版」（见 `LoadedNodeEntry.staleReason`）。节点不在表里、或只是点过没装进场景的
+ * 不记（没有「本页装的」可言）。
+ */
+export function markLoadedNodeStale(refno: string, reason: string): void {
+  const entry = entries.get(toRefnoKey(refno));
+  if (!entry?.loaded) return;
+  entry.staleReason = reason;
 }
 
 /**
@@ -261,6 +282,7 @@ export function noteNodeWithoutModel(refno: string, dbnum: number): void {
       // 重问的这一会儿先留着上一次的结论，行上不闪
       status: existing?.status ?? null,
       checking: false,
+      staleReason: null,
     });
     checkedAgainst.delete(key);
     startWatching();
@@ -330,6 +352,17 @@ export function loadedNodeView(refno: string): LoadedNodeView | null {
   if (!entry) return null;
   const status = entry.status;
   if (!status) return { verdict: null, iconKind: null, title: '本节点：正在核对新旧…', action: null, checking: entry.checking };
+  // 后端说「最新」，可本页装的不是它现在的那一版（节点一级的更新让后端重新生成了、屏幕上没换成）：给「重载」。
+  // 后端说别的（还落后、部分生成……）时照它说的画——再点「更新」/「生成」做完也会把屏幕上的换掉。
+  if (entry.staleReason && status.verdict === 'latest') {
+    return {
+      verdict: 'reloadable',
+      iconKind: 'reloadable',
+      title: `本节点：有更新可重载：${entry.staleReason}\n点「重载」按后端现在的模型把屏幕上的换掉`,
+      action: 'reload',
+      checking: entry.checking,
+    };
+  }
   const text = describeNodeModelStatus(status);
   return {
     verdict: status.verdict,
@@ -347,6 +380,7 @@ export function useLoadedNodeStatus() {
     noteLoaded: noteLoadedNode,
     noteWithoutModel: noteNodeWithoutModel,
     forget: forgetLoadedNode,
+    markStale: markLoadedNodeStale,
     reset: resetLoadedNodes,
     recheck: recheckLoadedNode,
     recheckLater: recheckLoadedNodeLater,
