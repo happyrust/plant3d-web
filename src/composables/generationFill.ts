@@ -61,9 +61,33 @@ export type GenerationPlan = {
   exact: boolean;
   needsConfirm: boolean;
   thresholdUnits: number;
-  /** 查过、确认没有东西可生成的范围（没有子节点的容器） */
+  /** 查过、确认没有东西可生成的范围（没有子节点的容器；接口说没有要生成的单元的成员） */
   skipped: string[];
+  /** 后端对节点自己的预检；沿树数的（服务端没有那个接口、或没问到）为 `null` */
+  rootFacts: GenerationUnitFacts | null;
 };
+
+/**
+ * 后端的生成预检（`GET node/model-status` 的 `units` / `precheck`，gen-model 规范 §4.5.3）里这里用得到的几格：
+ * 这个范围下有多少个生成单元、不带 force 生成一次至少要生成几个、要不要先确认、阈值多少。
+ */
+export type GenerationUnitFacts = {
+  unitsTotal: number;
+  unitsToGenerate: number;
+  needsConfirm: boolean;
+  /** 阈值（后端给的；0 = 从不要求确认） */
+  thresholdUnits: number;
+  /** 数字是不是精确的 */
+  exact: boolean;
+  /**
+   * 缺的单元该靠「更新到最新」补，不该按需生成：这个库有模型水位、在后端的更新范围里、库文件比水位新——
+   * 没有模型的单元多半是水位之后才建的。这时一块都不排，行上给的是「更新」。
+   */
+  preferUpdate?: boolean;
+};
+
+/** 问一个范围的生成预检。回 `null` = 服务端没有那个接口（旧构建）；别的失败照常抛。 */
+export type FetchGenerationFacts = (refno: string) => Promise<GenerationUnitFacts | null>;
 
 function upper(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase();
@@ -84,11 +108,104 @@ async function mapBounded<T, R>(items: T[], concurrency: number, fn: (item: T) =
 }
 
 /**
- * 生成预检：`scopes` 是记录查询里一条记录都没有的范围——就是节点自己，或者它的成员（顶层 SITE 的 ZONE）。
+ * 按后端的生成预检定分块（2026-11-11 接上节点模型状态接口）。`rootFacts` 是节点自己的预检；`emptyMembers` 是按成员
+ * 拆开查时一条记录都没有的成员（顶层 SITE 的 ZONE）。
  *
- * 过渡办法（沿树往下数两层）：一个范围的单元数 ≈ 它的每个子节点「是交付单元算 1 个，否则算它的子节点数（至少 1）」之和。
- * 管道 ZONE 下是 PIPE → BRAN，数出来就是 BRAN 的个数；结构件没有交付单元，数出来只是个量级。没有子节点的容器
- * 没有东西可生成，不进 `chunks`。数不出来（请求失败）的范围按 1 个单元算、照常去生成。
+ * - 节点自己没有要生成的单元：一块都没有（那些没有记录的成员本来就没有几何，或者没有生成单元）。
+ * - 缺的单元该靠「更新到最新」补（`preferUpdate`）：也一块都没有。
+ * - 没有「没有记录的成员」（节点不拆，或者缺的单元都在有记录的成员里）：节点自己一块。
+ * - 否则逐个问这些成员：有要生成的单元的各成一块；问不到的按 1 个单元算、照常去生成。节点要生成的比这些成员加起来多
+ *   （有的成员只生成了一部分）时，最后再对节点自己补一块，把其余的一次生成掉。
+ */
+async function planFromFacts(input: {
+  root: string;
+  rootNoun: string | null;
+  rootFacts: GenerationUnitFacts;
+  emptyMembers: string[];
+  fetchFacts: FetchGenerationFacts;
+  listChildren: ListGenerationChildren;
+}): Promise<GenerationPlan> {
+  const { root, rootFacts } = input;
+  const rootNoun = upper(input.rootNoun);
+  const members = Array.from(new Set(input.emptyMembers.filter((scope) => scope && scope !== root)));
+  const base = {
+    root,
+    thresholdUnits: rootFacts.thresholdUnits,
+    rootFacts,
+  };
+  if (rootFacts.unitsToGenerate <= 0) {
+    return { ...base, chunks: [], units: 0, exact: rootFacts.exact, needsConfirm: false, skipped: members.length > 0 ? members : [root] };
+  }
+  // 缺的单元归「更新到最新」管：不按需生成（也不把这些范围记成「没有东西可生成」——更新完它们就有了）
+  if (rootFacts.preferUpdate) {
+    return { ...base, chunks: [], units: 0, exact: rootFacts.exact, needsConfirm: false, skipped: [] };
+  }
+  if (members.length === 0) {
+    return {
+      ...base,
+      chunks: [{ refno: root, noun: rootNoun, name: root, units: rootFacts.unitsToGenerate }],
+      units: rootFacts.unitsToGenerate,
+      exact: rootFacts.exact,
+      needsConfirm: rootFacts.needsConfirm,
+      skipped: [],
+    };
+  }
+  // 成员的名字、类型只为了进度条和确认框好看：查不到就用编号
+  let named = new Map<string, GenerationTreeNode>();
+  try {
+    named = new Map((await input.listChildren(root)).map((node) => [node.refno, node]));
+  } catch {
+    // 用编号
+  }
+  const counted = await mapBounded(members, PLAN_CHILDREN_CONCURRENCY, async (member) => {
+    try {
+      return { member, facts: await input.fetchFacts(member) };
+    } catch {
+      return { member, facts: null };
+    }
+  });
+  const chunks: GenerationChunk[] = [];
+  const skipped: string[] = [];
+  let exact = rootFacts.exact;
+  /** 这些成员里要生成的单元数（问不到的成员按 1 个算） */
+  let inMembers = 0;
+  for (const { member, facts } of counted) {
+    const node = named.get(member);
+    if (facts && facts.unitsToGenerate <= 0) {
+      skipped.push(member);
+      continue;
+    }
+    const units = facts ? facts.unitsToGenerate : 1;
+    if (!facts || !facts.exact) exact = false;
+    inMembers += units;
+    chunks.push({ refno: member, noun: upper(node?.noun) || 'ZONE', name: node?.name || member, units });
+  }
+  // 节点要生成的比这些成员加起来多：其余的在「有记录、但只生成了一部分」的成员里，对节点自己补一块
+  const remainder = rootFacts.unitsToGenerate - inMembers;
+  if (remainder > 0) chunks.push({ refno: root, noun: rootNoun, name: root, units: remainder });
+  const units = chunks.reduce((sum, chunk) => sum + chunk.units, 0);
+  return {
+    ...base,
+    chunks,
+    units,
+    exact,
+    needsConfirm: units === rootFacts.unitsToGenerate
+      ? rootFacts.needsConfirm
+      : rootFacts.thresholdUnits > 0 && units > rootFacts.thresholdUnits,
+    skipped,
+  };
+}
+
+/**
+ * 生成预检——**「有多少要生成、分几块」的事实从哪来，只有这一个入口**。
+ *
+ * 有后端的节点模型状态接口时（`facts`）：单元数、要不要确认、阈值都由后端给，数字是精确的，见 `planFromFacts`。
+ * 这时不看库是不是「有成套模型」——接口说缺就补、说不缺就不补。
+ *
+ * 服务端没有那个接口（旧构建）或没问到时退回过渡办法（沿树往下数两层）：`scopes` 是调用方按老规矩挑出来的、
+ * 记录查询里一条记录都没有的范围——节点自己，或者它的成员。一个范围的单元数 ≈ 它的每个子节点「是交付单元算 1 个，
+ * 否则算它的子节点数（至少 1）」之和。管道 ZONE 下是 PIPE → BRAN，数出来就是 BRAN 的个数；结构件没有交付单元，
+ * 数出来只是个量级。没有子节点的容器没有东西可生成，不进 `chunks`。数不出来（请求失败）的范围按 1 个单元算、照常去生成。
  */
 export async function planModelGeneration(input: {
   root: string;
@@ -98,7 +215,27 @@ export async function planModelGeneration(input: {
   listChildren: ListGenerationChildren;
   deliveryUnitTypes?: readonly string[];
   thresholdUnits?: number;
+  /** 后端的生成预检。`emptyMembers`：按成员拆开查时一条记录都没有的成员（不含节点自己） */
+  facts?: { fetch: FetchGenerationFacts; emptyMembers: string[] };
 }): Promise<GenerationPlan> {
+  if (input.facts) {
+    let rootFacts: GenerationUnitFacts | null = null;
+    try {
+      rootFacts = await input.facts.fetch(input.root);
+    } catch {
+      rootFacts = null;
+    }
+    if (rootFacts) {
+      return planFromFacts({
+        root: input.root,
+        rootNoun: input.rootNoun,
+        rootFacts,
+        emptyMembers: input.facts.emptyMembers,
+        fetchFacts: input.facts.fetch,
+        listChildren: input.listChildren,
+      });
+    }
+  }
   const thresholdUnits = input.thresholdUnits ?? GENERATION_CONFIRM_THRESHOLD_UNITS;
   const delivery = new Set((input.deliveryUnitTypes?.length ? input.deliveryUnitTypes : DEFAULT_DELIVERY_UNIT_TYPES).map(upper));
   const childrenOf = async (refno: string): Promise<GenerationTreeNode[] | null> => {
@@ -150,6 +287,7 @@ export async function planModelGeneration(input: {
     needsConfirm: thresholdUnits > 0 && units > thresholdUnits,
     thresholdUnits,
     skipped,
+    rootFacts: null,
   };
 }
 
@@ -173,7 +311,13 @@ export function describeGenerationConfirm(plan: GenerationPlan, existingShown: b
   confirmText: string;
   cancelText: string;
 } {
-  const where = isWholeNodePlan(plan) ? '' : `，分在 ${plan.chunks.length} 个 ${plan.chunks[0]?.noun || 'ZONE'} 里`;
+  // 多数时候每一块是一个成员（ZONE）；缺的单元有一部分不在「没有记录的成员」里时，最后还有对节点自己的一块
+  const memberChunks = plan.chunks.filter((chunk) => chunk.refno !== plan.root);
+  const where = isWholeNodePlan(plan)
+    ? ''
+    : memberChunks.length === plan.chunks.length
+      ? `，分在 ${plan.chunks.length} 个 ${plan.chunks[0]?.noun || 'ZONE'} 里`
+      : `，分 ${plan.chunks.length} 块（${memberChunks.length} 个 ${memberChunks[0]?.noun || 'ZONE'}，其余的最后一起生成）`;
   const how = isWholeNodePlan(plan)
     ? '生成要占用后端一段时间，状态栏有进度；超时会自动接着问，不用再点。'
     : '生成要占用后端一段时间：一块一块做，做完一块显示一块，状态栏有进度；超时会自动接着问，不用再点。';

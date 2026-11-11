@@ -10,10 +10,12 @@
  *
  * 已加载的节点（SITE / ZONE 行）传进来的是它自己的结论（`useLoadedNodeStatus`）：最新 = `current`、落后 = `stale`，
  * 另多一种 `reloadable`（库里的模型比本页装的新，点「重载」能换上）——蓝色刷新图标，叠在核对结论上时是右上角蓝点。
+ * 接上后端的节点模型状态之后（2026-11-11）节点还有三种：未生成 = `empty`（空心，与库一级同一个画法）、
+ * 部分生成 = `partial`（半个实心圆）、没有生成单元 = `nothing`（一道短横：这个节点下没有要生成的模型）。
  */
 import { computed } from 'vue';
 
-import { Check, Circle, CircleDashed, LoaderCircle, Minus, RefreshCw, Slash, X } from 'lucide-vue-next';
+import { Check, Circle, CircleDashed, Contrast, LoaderCircle, Minus, RefreshCw, Slash, X } from 'lucide-vue-next';
 
 import type { RvmNodeVerdict } from '@/components/rvm-check/rvmCheckFormat';
 import type { DbnumModelStatusKind } from '@/composables/useGenModelV1DbnumStatus';
@@ -23,7 +25,7 @@ import RvmStatusIcon from '@/components/rvm-check/RvmStatusIcon.vue';
 
 const props = defineProps<{
   verdict: RvmNodeVerdict | null;
-  generation: DbnumModelStatusKind | 'reloadable' | null;
+  generation: DbnumModelStatusKind | 'reloadable' | 'partial' | 'nothing' | null;
   outdated?: boolean;
 }>();
 
@@ -38,10 +40,11 @@ const SOLID_BG: Partial<Record<RvmNodeVerdict, string>> = {
 
 const inFlight = computed(() => props.verdict === 'running' || props.verdict === 'queued');
 const outdated = computed(() => props.outdated === true && !inFlight.value);
-/** 有已生成的模型（最新、库文件有新会话、落后、或有更新可重载）才画实心 */
+/** 有已生成的模型（最新、库文件有新会话、落后、有更新可重载、或生成了一部分）才画实心 */
 const solid = computed(() =>
   !!props.verdict && !inFlight.value
-  && (props.generation === 'current' || props.generation === 'file_ahead' || props.generation === 'stale' || props.generation === 'reloadable'));
+  && (props.generation === 'current' || props.generation === 'file_ahead' || props.generation === 'stale'
+    || props.generation === 'reloadable' || props.generation === 'partial'));
 const stale = computed(() => solid.value && props.generation === 'stale');
 const fileAhead = computed(() => solid.value && props.generation === 'file_ahead');
 const reloadable = computed(() => solid.value && props.generation === 'reloadable');
@@ -83,6 +86,10 @@ const dim = computed(() =>
       <Circle v-else-if="generation === 'current'" class="h-3 w-3 fill-success text-success" />
       <Circle v-else-if="generation === 'file_ahead'" class="h-3 w-3 fill-sky-500 text-sky-500" />
       <Circle v-else-if="generation === 'stale'" class="h-3 w-3 fill-warning text-warning" />
+      <Contrast v-else-if="generation === 'partial'" class="h-3 w-3 text-muted-foreground"
+        data-testid="model-tree-status-partial-icon" />
+      <Minus v-else-if="generation === 'nothing'" class="h-3 w-3 text-muted-foreground/60"
+        data-testid="model-tree-status-nothing-icon" />
       <Circle v-else-if="generation === 'empty'" class="h-3 w-3 text-muted-foreground/60" />
       <CircleDashed v-else class="h-3 w-3 text-muted-foreground/40" />
     </template>

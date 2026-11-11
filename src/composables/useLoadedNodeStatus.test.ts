@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, reactive } from 'vue';
 
-import { changedSessionsOfNodeVersions } from './nodeModelStatus';
+import { changedSessionsOfNodeVersions, type NodeModelFacts } from './nodeModelStatus';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
 
@@ -301,5 +301,192 @@ describe('useLoadedNodeStatus（页面内的已加载节点表）', () => {
     await settled(store, '9304_2');
     expect(h.listNodeVersions).toHaveBeenCalledTimes(2);
     expect(store.view('9304_2')!.verdict).toBe('lagging');
+  });
+});
+
+describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () => {
+  /** 接口给的事实（已经翻成驼峰）：缺省是 7997 那个 21 个单元、一个都没生成的 SITE */
+  function facts(patch: Partial<NodeModelFacts> = {}): NodeModelFacts {
+    return {
+      verdict: 'not_generated', verdictReason: null, dbnum: 7997, noun: 'SITE', unitRoot: null,
+      units: { total: 21, generated: 0, missing: 21, failed: 0, lagging: 0, exact: true },
+      generatedAt: null, changes: null,
+      precheck: { unitsToGenerate: 21, needsConfirm: true, thresholdUnits: 20 },
+      library: { fileLatestSesno: 447, modelSesno: null, modelSesnoTime: null, inWatchScope: true },
+      ...patch,
+    };
+  }
+  const OWN_447 = { sesnoMin: 447, sesnoMax: 447, timeMin: null, timeMax: null, basis: 'own_generation' as const };
+
+  async function loadStoreWithFacts() {
+    const store = await loadStore();
+    const fetchFacts = vi.fn(async (_query: { refno: string; signal?: AbortSignal }): Promise<NodeModelFacts | null> => facts());
+    store.provideFactsQuery(fetchFacts);
+    return { store, fetchFacts };
+  }
+
+  it('点过、但没有模型可显示的节点也登记一行：行上说得出「未生成」并给「生成」；它不算已加载', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    store.noteWithoutModel('24381/535', 7997);
+
+    expect(store.entry('24381_535')).toMatchObject({ refno: '24381_535', dbnum: 7997, loaded: false, loadedModelSesno: null });
+    await settled(store, '24381_535');
+    expect(fetchFacts).toHaveBeenCalledWith(expect.objectContaining({ refno: '24381_535' }));
+    expect(store.view('24381_535')).toMatchObject({
+      verdict: 'not_generated', iconKind: 'empty', action: 'generate',
+      title: '本节点：未生成：21 个单元都没有模型\n点眼睛或「生成」：生成并显示',
+    });
+    // 未初始化的库也答得出，节点版本表不用问
+    expect(h.listNodeVersions).not.toHaveBeenCalled();
+  });
+
+  it('生成到一半（部分生成）→ 生成完（最新）：显示流程叫一次重问，行上跟着变；按需生成不动库的水位，不会自己重问', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'partial', units: { total: 21, generated: 10, missing: 11, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 11, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.noteWithoutModel('24381_535', 7997);
+    await settled(store, '24381_535');
+    expect(store.view('24381_535')).toMatchObject({ verdict: 'partial', iconKind: 'partial', action: 'generate' });
+    expect(store.view('24381_535')!.title).toContain('部分生成：21 个单元里有 11 个没有模型');
+
+    // 同样的库状态再来一遍：不重问
+    setRows(ROW_7997);
+    await nextTick();
+    await flush();
+    expect(fetchFacts).toHaveBeenCalledTimes(1);
+
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'latest', units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.noteLoaded('24381_535', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    await settled(store, '24381_535');
+    expect(store.entry('24381_535')!.loaded).toBe(true);
+    expect(store.view('24381_535')).toMatchObject({ verdict: 'latest', iconKind: 'current', action: null });
+    expect(store.view('24381_535')!.title).toContain('模型是后端这次运行期间按需生成的，对应会话 447');
+  });
+
+  it('后端说已经没有要生成的单元：这一页里留着的那颗「生成」作废（上次停下之后它在后台做完了）；还缺的时候留着', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    const fill = await import('./generationFillState');
+    fill.__resetGenerationFillStateForTests();
+    setRows(ROW_7997);
+    fill.notePendingGenerationFill({ root: '24381_147826', dbnum: 7997, chunks: 1, units: 13, exact: true, reason: 'stopped' });
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'partial', units: { total: 13, generated: 1, missing: 12, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 12, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.noteWithoutModel('24381_147826', 7997);
+    await settled(store, '24381_147826');
+    expect(fill.pendingGenerationFill('24381_147826')).not.toBeNull();
+
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'latest', units: { total: 13, generated: 13, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.recheck('24381_147826');
+    await settled(store, '24381_147826');
+    expect(store.view('24381_147826')).toMatchObject({ verdict: 'latest', action: null });
+    expect(fill.pendingGenerationFill('24381_147826')).toBeNull();
+  });
+
+  it('过一会儿再问（生成到一半被叫停，在飞的那一块后端照常算完）：到点各问一次；节点撤表了就不问；再排一次顶掉上一次', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    fetchFacts.mockResolvedValue(facts({
+      verdict: 'partial', units: { total: 21, generated: 3, missing: 18, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 18, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.noteWithoutModel('24381_535', 7997);
+    await settled(store, '24381_535');
+    expect(fetchFacts).toHaveBeenCalledTimes(1);
+
+    vi.useFakeTimers();
+    store.recheckLater('24381_535', [5_000, 20_000]);
+    // 再排一次：上一次排的两次作废
+    store.recheckLater('24381_535', [5_000, 20_000]);
+    fetchFacts.mockResolvedValue(facts({
+      verdict: 'partial', units: { total: 21, generated: 10, missing: 11, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 11, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(fetchFacts).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchFacts).toHaveBeenCalledTimes(2);
+    expect(store.view('24381_535')!.title).toContain('21 个单元里有 11 个没有模型');
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(fetchFacts).toHaveBeenCalledTimes(3);
+
+    // 没登记的节点不排；撤表之后到点也不问
+    store.recheckLater('24381_999', [1_000]);
+    store.recheckLater('24381_535', [1_000]);
+    store.forget('24381_535');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchFacts).toHaveBeenCalledTimes(3);
+  });
+
+  it('已经装在场景里的节点再报「还有没有模型的部分」：不改它那一行（本页装的那一版留着），只重问一次', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_1112);
+    fetchFacts.mockResolvedValue(facts({
+      verdict: 'partial', dbnum: 1112, units: { total: 6, generated: 5, missing: 1, failed: 0, lagging: 0, exact: true },
+      generatedAt: { sesnoMin: 738, sesnoMax: 738, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      precheck: { unitsToGenerate: 1, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 748, modelSesno: 738, modelSesnoTime: null, inWatchScope: false },
+    }));
+    store.noteLoaded('17496_8516', 1112, { modelSesno: 738, fileLatestSesno: 748 });
+    await settled(store, '17496_8516');
+    store.noteWithoutModel('17496_8516', 1112);
+    await settled(store, '17496_8516');
+    expect(store.entry('17496_8516')).toMatchObject({ loaded: true, loadedModelSesno: 738 });
+    expect(fetchFacts).toHaveBeenCalledTimes(2);
+    expect(store.view('17496_8516')).toMatchObject({ verdict: 'partial', action: 'generate' });
+  });
+
+  it('没有生成单元的节点：图标是短横，没有动作', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'empty', noun: 'ZONE', units: { total: 0, generated: 0, missing: 0, failed: 0, lagging: 0, exact: true },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.noteWithoutModel('24381_179753', 7997);
+    await settled(store, '24381_179753');
+    expect(store.view('24381_179753')).toMatchObject({
+      verdict: 'empty', iconKind: 'nothing', action: null, title: '本节点：没有要生成的模型（这个节点下没有生成单元）',
+    });
+  });
+
+  it('库里的模型比本页装的新：接口说最新之后，再用节点版本表问一次其间改没改到本节点', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows({ ...ROW_1112, applied_sesno: 748, model_sesno: 748 });
+    fetchFacts.mockResolvedValue(facts({
+      verdict: 'latest', dbnum: 1112, units: { total: 18, generated: 18, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: { sesnoMin: 748, sesnoMax: 748, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 748, modelSesno: 748, modelSesnoTime: null, inWatchScope: true },
+    }));
+    h.listNodeVersions.mockResolvedValueOnce(timeline([{ sesno: 742, impact: 'mesh', unitsChanged: 2 }]));
+    store.noteLoaded('9304_2', 1112, { modelSesno: 738, fileLatestSesno: 748 });
+    await settled(store, '9304_2');
+    expect(h.listNodeVersions).toHaveBeenCalledWith(1112, '9304_2', 'subtree', expect.objectContaining({ sinceSesno: 738 }));
+    expect(store.view('9304_2')).toMatchObject({ verdict: 'reloadable', action: 'reload' });
+  });
+
+  it('服务端没有那个接口（回 null）：照旧走过渡办法', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    fetchFacts.mockResolvedValue(null);
+    setRows(ROW_1112, ROW_7997);
+    h.listNodeVersions.mockResolvedValueOnce(timeline([{ sesno: 742, impact: 'mesh', unitsChanged: 3 }]));
+    store.noteLoaded('9304_2', 1112, { modelSesno: 738, fileLatestSesno: 748 });
+    store.noteWithoutModel('24381_535', 7997);
+    await settled(store, '9304_2');
+    await settled(store, '24381_535');
+    expect(store.view('9304_2')).toMatchObject({ verdict: 'lagging', action: 'update' });
+    expect(store.view('24381_535')).toMatchObject({ verdict: 'untracked', iconKind: null, action: null });
   });
 });

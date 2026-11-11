@@ -1866,6 +1866,127 @@ export function genModelV1NodeDiffSummary(
   });
 }
 
+/** 节点模型状态的总判定（gen-model 规范 §4.5.3，ADR-099）。从上到下第一条成立的为准 */
+export type NodeModelStatusVerdictDto =
+  /** 判不了：两枚水位失配 / 读不到，或要比的那一段差分算不出来 */
+  | 'unknown'
+  /** 这个库此刻正在被写（数据批次或整库模型任务在跑） */
+  | 'updating'
+  /** 子树里没有生成单元：不需要生成 */
+  | 'empty'
+  | 'not_generated'
+  | 'partial'
+  /** 全部生成过，但生成之后这个节点下有影响模型的改动 */
+  | 'lagging'
+  | 'latest';
+
+/** 所属库的事实（数值与 `GET /dbnums` 那一行同源） */
+export type NodeModelStatusLibraryDto = {
+  file_latest_sesno: number;
+  file_latest_time: string | null;
+  applied_sesno: number;
+  model_sesno: number;
+  model_sesno_time: string | null;
+  initialized: boolean;
+  model_verdict: string;
+  model_verdict_reason: string | null;
+  model_source: string;
+  model_source_reason: string | null;
+  data_batch_running: boolean;
+  model_task_running: boolean;
+  /** 这个库在不在本进程的监听范围里；不在的库 `update/execute` 会拒绝 */
+  in_watch_scope: boolean;
+  [key: string]: unknown;
+};
+
+/** 子树里生成单元的计数：`total = generated + missing + failed`，`lagging ≤ generated` */
+export type NodeModelStatusUnitsDto = {
+  total: number;
+  generated: number;
+  missing: number;
+  /** 最近一次生成失败、还没重新成功的单元数 */
+  failed: number;
+  /** 已生成的单元里，生成之后被改到了的个数 */
+  lagging: number;
+  /** `lagging` 与 `missing` 是不是精确的 */
+  exact: boolean;
+};
+
+export type NodeModelStatusGeneratedAtDto = {
+  sesno_min: number;
+  sesno_max: number;
+  time_min: string | null;
+  time_max: string | null;
+  /** `library_watermark` 靠库的模型水位担保；`own_generation` 本进程按需生成的；`mixed` 两种都有 */
+  basis: 'library_watermark' | 'own_generation' | 'mixed' | (string & {});
+};
+
+/** 生成之后到库文件最新之间这个节点下变了什么（净差分，与 `node/diff-summary` 同一份计算） */
+export type NodeModelStatusChangesDto = {
+  from_sesno: number;
+  to_sesno: number;
+  units_changed: number;
+  units_added: number;
+  units_removed: number;
+  elements: NodeDiffCountsDto;
+  /** 有不属于任何生成单元的构件发生了几何变化（算不到某个单元头上） */
+  unattributed: boolean;
+};
+
+/** 生成预检：对这个节点发一次不带 `force` 的生成至少要生成几个单元、要不要先让人确认 */
+export type NodeModelStatusPrecheckDto = {
+  units_to_generate: number;
+  needs_confirm: boolean;
+  /** 阈值（后端环境变量，缺省 20；0 = 从不要求确认） */
+  confirm_threshold_units: number;
+};
+
+/** `GET /api/v1/node/model-status` 的回执（只读、不落库） */
+export type NodeModelStatusResponse = {
+  /** `a/b` */
+  refno: string;
+  noun: string;
+  dbnum: number;
+  /** 请求的节点在某个生成单元之内时是那个单元的根（`a/b`）；其余为 null */
+  unit_root: string | null;
+  verdict: NodeModelStatusVerdictDto;
+  verdict_reason: string | null;
+  library: NodeModelStatusLibraryDto;
+  units: NodeModelStatusUnitsDto;
+  /** `units.generated = 0` 时为 null */
+  generated_at: NodeModelStatusGeneratedAtDto | null;
+  /** 不需要比（没有已生成的单元，或它们都已对应到库文件最新）时为 null */
+  changes: NodeModelStatusChangesDto | null;
+  precheck: NodeModelStatusPrecheckDto;
+  cached?: boolean;
+  elapsed_ms?: number;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+/**
+ * **节点模型状态与生成预检**（gen-model 规范 §4.5.3，ADR-099；plant3d-web ADR 0072 第 4 条）：这个节点（含 SITE / ZONE）下的模型
+ * 生成过没有、是不是最新、要生成的话有多少。按需现算、只读、不落库；未初始化的库也答得出。不用给 `dbnum`。
+ *
+ * 错误：400 `INVALID_REFNO`、404 `REFNO_NOT_FOUND`（库文件最新会话上没有这个元素）、503 `SOURCE_NOT_FOUND`。
+ * 旧服务端没有这条路由：裸 404 / 405（`error.hasEnvelope === false`），调用方回落到过渡办法。
+ */
+export function genModelV1NodeModelStatus(
+  refno: string,
+  options?: GenModelV1RequestOptions,
+): Promise<NodeModelStatusResponse> {
+  return genModelV1Fetch<NodeModelStatusResponse>('/api/v1/node/model-status', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: { refno: toV1Refno(refno) },
+  });
+}
+
+/** 服务端没有这条路由（旧构建）：axum 对不存在的路由回不带信封的 404 / 405 */
+export function isGenModelV1RouteMissing(error: unknown): boolean {
+  return isGenModelV1ApiError(error) && (error.status === 404 || error.status === 405) && !error.hasEnvelope;
+}
+
 // ---------------------------------------------------------------------------
 // 模型版本时间轴的三条只读路由（spec `model-version-timeline-scrub`；后端 spec §4.15）
 //

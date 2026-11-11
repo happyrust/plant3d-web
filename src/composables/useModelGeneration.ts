@@ -18,9 +18,11 @@ import {
   type GenerationFillSummary,
   type GenerationPlan,
   type GenerationTreeNode,
+  type GenerationUnitFacts,
 } from '@/composables/generationFill';
 import { beginGenerationFill, clearPendingGenerationFill, notePendingGenerationFill } from '@/composables/generationFillState';
 import { beginModelLoadSession, ModelLoadStoppedError, type ModelLoadSession } from '@/composables/modelLoadSession';
+import { fetchGenerationFacts, fetchNodeModelFacts } from '@/composables/nodeModelFacts';
 import { changedSessionsOfNodeVersions } from '@/composables/nodeModelStatus';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -37,7 +39,15 @@ import {
 import { peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
-import { forgetLoadedNode, noteLoadedNode, provideLoadedNodeChangeQuery } from '@/composables/useLoadedNodeStatus';
+import {
+  forgetLoadedNode,
+  noteLoadedNode,
+  noteNodeWithoutModel,
+  provideLoadedNodeChangeQuery,
+  provideLoadedNodeFactsQuery,
+  recheckLoadedNode,
+  recheckLoadedNodeLater,
+} from '@/composables/useLoadedNodeStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { pushRecordPageListener } from '@/model-source/genModelV1/modelRecords';
@@ -101,11 +111,16 @@ const VISIBLE_REFNOS_PAGE_SIZE = 1000;
 /** 正在边取边画的节点（`a_b`）。跨 `useModelGeneration` 实例共用：模型树和查看器各有一份实例，装的是同一个场景。 */
 const progressiveRoots = new Set<string>();
 
+/** 生成到一半被叫停之后，隔多久再问行上的状态（在飞的那一块后端照常算完，多数是几秒的事） */
+const STOPPED_FILL_RECHECK_DELAYS_MS: readonly number[] = [5_000, 20_000];
+
 // 已加载节点表判「模型水位之后谁改到了这个节点」要问节点版本表（`node/versions?since_sesno=`）：在这里接上数据源。
 provideLoadedNodeChangeQuery(async ({ dbnum, refno, sinceSesno, signal }) => {
   const table = await getModelSource().versions.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal });
   return changedSessionsOfNodeVersions(table.versions);
 });
+// 行上的新旧先问后端的节点模型状态接口（`GET node/model-status`）；生成预检（下面的 `prepareFill`）问的是同一个接口。
+provideLoadedNodeFactsQuery(fetchNodeModelFacts);
 
 /**
  * 分批装入的每批大小：首批 `first` 个先出画，之后逐批翻倍。每批装完 DTX 层都要整层 recompile（全量重建 GPU 纹理），
@@ -959,6 +974,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const undo: LoadUndoLog = { session, dbno: 0, loadedKeys: [], unhidden: [] };
     /** 这一次显示里把节点记成了「已加载」（被叫停时要不要撤掉看它） */
     let markedLoadedHere = false;
+    /** 后端对这个节点的生成预检（补齐之前问到的）；没问、没问到、服务端没有那个接口为 `null` */
+    let rootFacts: GenerationUnitFacts | null = null;
     modelLoadStatus.begin({
       progress: progress.value,
       message: statusMessage.value,
@@ -1205,15 +1222,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (!visibleOk || visibleSource !== 'visible-insts' || scopeIncomplete) return null;
         const row = peekDbnumRow(dbno);
         if (dbnumEmptyQueryCaveat(row)) return null;
+        // 这一页里试过、有了定论的范围不再自动重发（真产不出的重发只会把同样的生成再跑一遍）；
+        // 人点「生成」时只跳过确认没有东西可生成的
+        const settled = (scope: string): boolean => (explicitFill ? fillScopeStates.get(scope) === 'empty' : fillScopeStates.has(scope));
         const members = emptyScopes.filter((scope) => scope !== normalizedRoot);
-        // 已经有一部分模型的节点：只有「模型按需生成」的库（未初始化 / 模型水位没立过）才把没有记录的 ZONE 当成没生成过。
-        // 库里有成套模型时，没有记录的 ZONE 多半本来就没有几何，或者是模型水位之后才建的（那归「更新到最新」管）——
-        // 这要等后端的节点模型状态接口才分得清，过渡期不去生成它们。
-        const candidates = existingShown
+        // 过渡办法（服务端没有节点模型状态接口时）挑的范围。已经有一部分模型的节点：只有「模型按需生成」的库
+        // （未初始化 / 模型水位没立过）才把没有记录的 ZONE 当成没生成过；库里有成套模型时，没有记录的 ZONE 多半本来
+        // 就没有几何，分不清就不去生成。有接口时不靠这条猜：接口说缺就补、说不缺就不补（见 `planModelGeneration`）。
+        const legacyCandidates = existingShown
           ? (dbnumRowLacksModel(row) === true ? members : [])
           : (members.length > 0 ? members : [normalizedRoot]);
-        const scopes = candidates.filter((scope) => (explicitFill ? fillScopeStates.get(scope) !== 'empty' : !fillScopeStates.has(scope)));
-        if (scopes.length === 0) return null;
         let rootNoun: string | null = null;
         try {
           const info = await rootTypeInfo;
@@ -1224,14 +1242,40 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const plan = await planModelGeneration({
           root: normalizedRoot,
           rootNoun,
-          scopes,
+          scopes: legacyCandidates.filter((scope) => !settled(scope)),
           listChildren: listGenerationChildren,
           deliveryUnitTypes: useGenModelV1Health().state.deliveryUnitTypes,
+          facts: { fetch: fetchGenerationFacts, emptyMembers: members.filter((scope) => !settled(scope)) },
         });
-        // 没有子节点的容器没有东西可生成：记下来，下次不再数
+        rootFacts = plan.rootFacts;
+        // 没有东西可生成的范围（没有子节点的容器；接口说没有要生成的单元的成员）：记下来，下次不再问
         for (const scope of plan.skipped) fillScopeStates.set(scope, 'empty');
-        return plan.chunks.length > 0 ? plan : null;
+        const chunks = plan.chunks.filter((chunk) => !settled(chunk.refno));
+        if (chunks.length === 0) return null;
+        if (chunks.length === plan.chunks.length) return plan;
+        // 有的块这一页里已经试出了定论：只做剩下的
+        const units = chunks.reduce((sum, chunk) => sum + chunk.units, 0);
+        return { ...plan, chunks, units, needsConfirm: plan.thresholdUnits > 0 && units > plan.thresholdUnits };
       };
+
+      /** 一个模型都没有、也没有东西可生成时要告诉人的原因（后端的节点模型状态说得清的两种）；说不清回 `null` */
+      const nothingToGenerateHint = (): string | null => {
+        if (!rootFacts) return null;
+        if (rootFacts.unitsToGenerate > 0) return awaitingUpdateHint();
+        return rootFacts.unitsTotal === 0
+          ? '这个节点下没有要生成的模型（没有生成单元）'
+          : `这个节点下的 ${rootFacts.unitsTotal} 个单元都生成过了，没有可显示的几何`;
+      };
+
+      /**
+       * 缺的单元归「更新到最新」管时要告诉人的话（库有模型水位、在后端的更新范围里、库文件比水位新：没有模型的单元
+       * 多半是水位之后才建的）。这时不按需生成，行上给的是「更新」。不是这种情形回 `null`。
+       */
+      const awaitingUpdateHint = (): string | null => (
+        rootFacts && rootFacts.preferUpdate && rootFacts.unitsToGenerate > 0
+          ? `有 ${rootFacts.unitsToGenerate} 个单元还没有模型，是库的模型水位之后才有的：点行上的「更新」让后端把这个库更新到最新`
+          : null
+      );
 
       /** 需确认生成：单元数超过阈值先问。回 `true` = 生成 */
       const confirmFill = async (plan: GenerationPlan, existingShown: boolean): Promise<boolean> => {
@@ -1402,7 +1446,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         try {
           const plan = await prepareFill(false);
           session.throwIfStopped();
-          if (!plan) return { ready: false, hint: null };
+          if (!plan) return { ready: false, hint: nothingToGenerateHint() };
           const whole = isWholeNodePlan(plan);
           const confirmed = await confirmFill(plan, false);
           session.throwIfStopped();
@@ -1484,8 +1528,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const plan = await prepareFill(true);
           session.throwIfStopped();
           if (!plan) {
-            if (explicitFill) {
-              clearPendingGenerationFill(normalizedRoot);
+            // 后端说这个节点已经没有要生成的单元（上次停下之后它在后台做完了、或别处生成过了）：行上那颗「生成」撤掉
+            if (explicitFill || (rootFacts && rootFacts.unitsToGenerate === 0)) clearPendingGenerationFill(normalizedRoot);
+            const awaiting = awaitingUpdateHint();
+            if (awaiting) {
+              // 已有的显示出来了；缺的那几个等「更新到最新」，不在这里按需生成
+              consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} ${awaiting}`);
+              emitToast({ message: `[提示] ${normalizedRoot}：已显示已有的模型；${awaiting}`, level: 'info' });
+              statusMessage.value = '加载完成 (gen-model)；部分单元等更新到最新';
+              syncGlobalLoadStatus();
+            } else if (explicitFill) {
               emitToast({ message: `[提示] ${normalizedRoot}：没有需要生成的部分`, level: 'info' });
             }
             return;
@@ -1515,6 +1567,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           });
           const summary = await runFill(plan, true, probeRefno);
           settleFill(plan, summary);
+          // 生成不动库的水位，行上的状态不会自己重问：补完叫一次（部分生成 → 最新）
+          recheckLoadedNode(normalizedRoot);
           const report = describeGenerationFillSummary(summary);
           consoleStore.addLog(report.level === 'warning' ? 'warning' : 'info', `[model-load] refno=${normalizedRoot} 补齐结束：${report.message}`);
           emitToast({ message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}`, level: report.level });
@@ -1583,6 +1637,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             : `refno=${normalizedRoot} 未加载`;
           progress.value = 100;
           syncGlobalLoadStatus();
+          // 点过、但没有模型可显示：行上照样说得出它「未生成 / 部分生成 / 没有生成单元」（后端的节点模型状态问得到时）
+          if (rootFacts) noteNodeWithoutModel(normalizedRoot, dbno);
           return false;
         }
         // 补齐出东西了，继续往下走装载流程
@@ -1803,6 +1859,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (markedLoadedHere && !genuinelyLoaded) {
           loadedRoots.delete(normalizedRoot);
           forgetLoadedNode(normalizedRoot);
+        }
+        // 生成到一半被叫停：已经生成的留在后端，行上的状态跟着重问一次（未生成 → 部分生成）。
+        // 这个节点点之前就装着的，重问它那一行；这一次才装的已经收回去了，按「没有模型可显示的节点」登记
+        if (rootFacts && undo.dbno > 0) {
+          if (isModelActuallyLoaded(normalizedRoot)) recheckLoadedNode(normalizedRoot);
+          else noteNodeWithoutModel(normalizedRoot, undo.dbno);
+          // 叫停时在飞的那一块后端照常算完：过一会儿再问两次，行上的数跟上来
+          recheckLoadedNodeLater(normalizedRoot, STOPPED_FILL_RECHECK_DELAYS_MS);
         }
         session.markWithdrawn();
         statusMessage.value = refresh ? '已停止重载，场景保持原样' : '已停止加载';

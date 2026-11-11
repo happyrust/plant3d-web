@@ -1150,11 +1150,16 @@ async function fillNodeModel(rowId: string) {
   if (!modelGenerationState.value) return;
   const id = normalizeRefnoKeyLike(rowId);
   if (!isRefnoLike(id)) return;
+  // 这个节点现在没显示（一个模型都没有、点过眼睛但选了不生成 / 中途停了）：生成完和点眼睛一样，飞过去并把眼睛点亮
+  const wasHidden = pdmsTree.getCheckState(id) === 'unchecked';
   setNodeLoading(id, true);
   try {
-    await modelGenerationState.value.showModelByRefno(id, { flyTo: false, fill: true });
+    const ok = await modelGenerationState.value.showModelByRefno(id, { flyTo: wasHidden, fill: true });
     // 新装进来的构件由装载那一步置为可见；中途被叫停的，这一次装的已经收回去，这里不用再做什么
-    consumeModelLoadStopped(id);
+    const stopped = consumeModelLoadStopped(id);
+    if (ok && !stopped && wasHidden && modelGenerationState.value.isModelActuallyLoaded(id)) {
+      await pdmsTree.setVisible(id, true);
+    }
   } finally {
     setNodeLoading(id, false);
   }

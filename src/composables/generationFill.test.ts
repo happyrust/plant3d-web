@@ -18,6 +18,7 @@ import {
   type GenerationFillProgress,
   type GenerationPlan,
   type GenerationTreeNode,
+  type GenerationUnitFacts,
 } from './generationFill';
 
 import type { CollectRecordsResult } from '@/model-source/genModelV1/modelRecords';
@@ -51,7 +52,7 @@ const pendingResult = (refnos: string[] = []): ChunkGenerateResult => ({ refnos,
 
 function planOf(chunks: GenerationChunk[]): GenerationPlan {
   const units = chunks.reduce((sum, chunk) => sum + chunk.units, 0);
-  return { root: '24381_535', chunks, units, exact: false, needsConfirm: units > 20, thresholdUnits: 20, skipped: [] };
+  return { root: '24381_535', chunks, units, exact: false, needsConfirm: units > 20, thresholdUnits: 20, skipped: [], rootFacts: null };
 }
 const chunk = (refno: string, units: number, name = refno): GenerationChunk => ({ refno, noun: 'ZONE', name, units });
 
@@ -133,6 +134,122 @@ describe('planModelGeneration：沿树往下数两层（过渡办法，等节点
     const listChildren = treeOf({ '1_1': [node('1_2', 'HANG', 30), node('1_3', 'BRAN', 12)] });
     const plan = await planModelGeneration({ root: '1_1', rootNoun: 'ZONE', scopes: ['1_1'], listChildren, deliveryUnitTypes: [] });
     expect(plan.units).toBe(2);
+  });
+});
+
+describe('planModelGeneration：后端的生成预检（节点模型状态接口）', () => {
+  /** 7997 的 SITE 24381_535（2026-11-11 新后端实查）：五个 ZONE 里一个没有生成单元，其余 3 / 7 / 5 / 6 个，合计 21，阈值 20 */
+  const FACTS_535: Record<string, GenerationUnitFacts> = {
+    '24381_535': { unitsTotal: 21, unitsToGenerate: 21, needsConfirm: true, thresholdUnits: 20, exact: true },
+    '24381_179753': { unitsTotal: 0, unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20, exact: true },
+    '24381_179300': { unitsTotal: 3, unitsToGenerate: 3, needsConfirm: false, thresholdUnits: 20, exact: true },
+    '24381_536': { unitsTotal: 7, unitsToGenerate: 7, needsConfirm: false, thresholdUnits: 20, exact: true },
+    '24381_571': { unitsTotal: 5, unitsToGenerate: 5, needsConfirm: false, thresholdUnits: 20, exact: true },
+    '24381_621': { unitsTotal: 6, unitsToGenerate: 6, needsConfirm: false, thresholdUnits: 20, exact: true },
+  };
+  const ALL_ZONES = ['24381_179753', '24381_179300', '24381_536', '24381_571', '24381_621'];
+  const factsOf = (table: Record<string, GenerationUnitFacts | null | Error>) => vi.fn(async (refno: string) => {
+    const facts = table[refno];
+    if (facts instanceof Error) throw facts;
+    if (facts === undefined) throw new Error(`no facts for ${refno}`);
+    return facts;
+  });
+
+  it('一个模型都没有的 SITE：逐个问没有记录的 ZONE，有单元要生成的各成一块；数字精确，要不要确认、阈值用后端给的', async () => {
+    const fetch = factsOf(FACTS_535);
+    const listChildren = treeOf(SITE_535);
+    const plan = await planModelGeneration({
+      root: '24381_535', rootNoun: 'SITE', scopes: ALL_ZONES, listChildren, facts: { fetch, emptyMembers: ALL_ZONES },
+    });
+    expect(plan.chunks).toEqual([
+      { refno: '24381_179300', noun: 'ZONE', name: '/6ZBR-ITUB-NH', units: 3 },
+      { refno: '24381_536', noun: 'ZONE', name: '/1RCV-SUPP-XX', units: 7 },
+      { refno: '24381_571', noun: 'ZONE', name: '/1RCV-ITUB-XX', units: 5 },
+      { refno: '24381_621', noun: 'ZONE', name: '/1RCV-RACK-XX', units: 6 },
+    ]);
+    expect(plan.skipped).toEqual(['24381_179753']);
+    expect(plan).toMatchObject({ units: 21, exact: true, needsConfirm: true, thresholdUnits: 20 });
+    expect(plan.rootFacts).toEqual(FACTS_535['24381_535']);
+    // 只为名字问了一次树（节点自己的子节点）；不再沿树往下数
+    expect(listChildren.mock.calls.map((call) => call[0])).toEqual(['24381_535']);
+    expect(fetch.mock.calls.map((call) => call[0]).sort()).toEqual(['24381_535', ...ALL_ZONES].sort());
+  });
+
+  it('节点自己没有要生成的单元：一块都没有，不再逐个问成员（那些没有记录的成员本来就没有几何）', async () => {
+    const fetch = factsOf({ '9_0': { unitsTotal: 3362, unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20, exact: true } });
+    const listChildren = vi.fn();
+    const plan = await planModelGeneration({
+      root: '9_0', rootNoun: 'SITE', scopes: [], listChildren, facts: { fetch, emptyMembers: ['9_1', '9_2'] },
+    });
+    expect(plan).toMatchObject({ chunks: [], units: 0, needsConfirm: false, skipped: ['9_1', '9_2'] });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(listChildren).not.toHaveBeenCalled();
+  });
+
+  it('不拆的节点（ZONE 自己）：一块，单元数就是后端说的；只生成了一部分的 ZONE 也是这样补', async () => {
+    const fetch = factsOf({ '24381_536': { unitsTotal: 7, unitsToGenerate: 2, needsConfirm: false, thresholdUnits: 20, exact: true } });
+    const plan = await planModelGeneration({
+      root: '24381_536', rootNoun: 'ZONE', scopes: [], listChildren: vi.fn(), facts: { fetch, emptyMembers: [] },
+    });
+    expect(plan.chunks).toEqual([{ refno: '24381_536', noun: 'ZONE', name: '24381_536', units: 2 }]);
+    expect(plan).toMatchObject({ units: 2, exact: true, needsConfirm: false });
+  });
+
+  it('SITE 要生成的比「没有记录的 ZONE」加起来多（有的 ZONE 只生成了一部分）：最后对节点自己补一块', async () => {
+    const fetch = factsOf({
+      ...FACTS_535,
+      // 两个 ZONE 已经有记录了（不在 emptyMembers 里），其中一个还缺 2 个单元
+      '24381_535': { unitsTotal: 21, unitsToGenerate: 13, needsConfirm: false, thresholdUnits: 20, exact: true },
+    });
+    const plan = await planModelGeneration({
+      root: '24381_535', rootNoun: 'SITE', scopes: [], listChildren: treeOf(SITE_535),
+      facts: { fetch, emptyMembers: ['24381_179753', '24381_571', '24381_621'] },
+    });
+    expect(plan.chunks.map((item) => [item.refno, item.units])).toEqual([['24381_571', 5], ['24381_621', 6], ['24381_535', 2]]);
+    expect(plan).toMatchObject({ units: 13, needsConfirm: false });
+    expect(describeGenerationConfirm(plan, true).message).toContain('分 3 块（2 个 ZONE，其余的最后一起生成）');
+  });
+
+  it('某个成员问不到：按 1 个单元算、照常去生成，数字不再算精确；要不要确认按后端的阈值重算', async () => {
+    const fetch = factsOf({ ...FACTS_535, '24381_536': new Error('HTTP 503') });
+    const plan = await planModelGeneration({
+      root: '24381_535', rootNoun: 'SITE', scopes: [], listChildren: treeOf(SITE_535), facts: { fetch, emptyMembers: ALL_ZONES },
+    });
+    // 3 + 1（问不到的）+ 5 + 6 = 15，后端说节点一共 21：其余 6 个最后对节点自己补一块
+    expect(plan.chunks.map((item) => [item.refno, item.units])).toEqual([
+      ['24381_179300', 3], ['24381_536', 1], ['24381_571', 5], ['24381_621', 6], ['24381_535', 6],
+    ]);
+    expect(plan).toMatchObject({ units: 21, exact: false, needsConfirm: true });
+  });
+
+  it('缺的单元该靠「更新到最新」补（库有水位、在更新范围里、库文件比水位新）：一块都不排，也不把这些范围记成「没有东西可生成」', async () => {
+    const fetch = factsOf({ '24384_26547': { unitsTotal: 2, unitsToGenerate: 1, needsConfirm: false, thresholdUnits: 20, exact: true, preferUpdate: true } });
+    const listChildren = vi.fn();
+    const plan = await planModelGeneration({
+      root: '24384_26547', rootNoun: 'SITE', scopes: [], listChildren, facts: { fetch, emptyMembers: ['24384_26550'] },
+    });
+    expect(plan).toMatchObject({ chunks: [], units: 0, needsConfirm: false, skipped: [] });
+    expect(plan.rootFacts).toMatchObject({ unitsToGenerate: 1, preferUpdate: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(listChildren).not.toHaveBeenCalled();
+  });
+
+  it('后端的阈值是 0：多少个单元都不要求确认', async () => {
+    const fetch = factsOf({ '1_1': { unitsTotal: 500, unitsToGenerate: 500, needsConfirm: false, thresholdUnits: 0, exact: true } });
+    const plan = await planModelGeneration({ root: '1_1', rootNoun: 'ZONE', scopes: ['1_1'], listChildren: vi.fn(), facts: { fetch, emptyMembers: [] } });
+    expect(plan).toMatchObject({ units: 500, needsConfirm: false, thresholdUnits: 0 });
+  });
+
+  it('服务端没有那个接口（回 null）或没问到（抛错）：退回沿树数，用调用方按老规矩挑的范围', async () => {
+    for (const fetch of [vi.fn(async () => null), vi.fn(async () => { throw new Error('network'); })]) {
+      const plan = await planModelGeneration({
+        root: '24381_535', rootNoun: 'SITE', scopes: ['24381_536', '24381_621'], listChildren: treeOf(SITE_535),
+        deliveryUnitTypes: ['BRAN', 'HANG', 'SUPPO', 'EQUI'], facts: { fetch, emptyMembers: ALL_ZONES },
+      });
+      expect(plan.chunks.map((item) => [item.refno, item.units])).toEqual([['24381_536', 8], ['24381_621', 7]]);
+      expect(plan).toMatchObject({ exact: false, rootFacts: null, thresholdUnits: GENERATION_CONFIRM_THRESHOLD_UNITS });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
   });
 });
 

@@ -6,7 +6,7 @@ import ModelTreeRow from './ModelTreeRow.vue';
 
 import type { FlatRow } from '@/composables/useModelTree';
 
-type NodeView = { verdict: string | null; iconKind: string | null; title: string; action: 'update' | 'reload' | null; checking: boolean };
+type NodeView = { verdict: string | null; iconKind: string | null; title: string; action: 'update' | 'reload' | 'generate' | null; checking: boolean };
 
 const dbViewMock = vi.hoisted(() => vi.fn((): { kind: string; title: string } => ({ kind: 'file_ahead', title: 'DB 1112 · 库有 10 个新会话未更新' })));
 const dbRefreshMock = vi.hoisted(() => vi.fn());
@@ -285,6 +285,111 @@ describe('ModelTreeRow 行上的「生成」（方案 2026-11-10 B3：节点下�
     } finally {
       unmount();
       state.__resetGenerationFillStateForTests();
+    }
+  });
+});
+
+describe('ModelTreeRow 未生成 / 部分生成 / 没有生成单元（接上后端的节点模型状态，2026-11-11）', () => {
+  const SITE_7997: FlatRow = { id: '24381_535', name: '/1RCV', type: 'SITE', depth: 1, hasChildren: true, dbnum: 7997, dbBoundary: true };
+  const ZONE_7997: FlatRow = { id: '24381_179753', name: 'ZONE', type: 'ZONE', depth: 2, hasChildren: false, dbnum: 7997 };
+  const NOT_GENERATED: NodeView = {
+    verdict: 'not_generated', iconKind: 'empty', action: 'generate', checking: false,
+    title: '本节点：未生成：21 个单元都没有模型\n点眼睛或「生成」：生成并显示',
+  };
+  const PARTIAL: NodeView = {
+    verdict: 'partial', iconKind: 'partial', action: 'generate', checking: false,
+    title: '本节点：部分生成：21 个单元里有 11 个没有模型',
+  };
+  const NOTHING: NodeView = {
+    verdict: 'empty', iconKind: 'nothing', action: null, checking: false, title: '本节点：没有要生成的模型（这个节点下没有生成单元）',
+  };
+  const fillButton = (host: HTMLElement) => host.querySelector('[data-testid="model-tree-node-fill"]') as HTMLButtonElement | null;
+
+  beforeEach(async () => {
+    (await import('@/composables/generationFillState')).__resetGenerationFillStateForTests();
+    dbViewMock.mockReturnValue({ kind: 'empty', title: 'DB 7997 · 库未初始化，模型按需生成' });
+  });
+
+  it('未生成：空心圆，提示里说有几个单元，行上给「生成」，点了交出 node-action(generate)', async () => {
+    nodeViewMock.mockReturnValue(NOT_GENERATED);
+    const { status, action, onNodeAction, unmount } = await mountRow(SITE_7997, { checkState: 'unchecked' });
+    try {
+      expect(status()?.getAttribute('data-node-status')).toBe('not_generated');
+      expect(status()?.getAttribute('title')).toContain('未生成：21 个单元都没有模型');
+      expect(action()?.textContent?.trim()).toBe('生成');
+      expect(action()?.getAttribute('data-action')).toBe('generate');
+      expect(action()?.getAttribute('title')).toContain('不重算已有的');
+      action()!.click();
+      expect(onNodeAction).toHaveBeenCalledWith('24381_535', 'generate');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('部分生成：半个实心圆，行上给「生成」', async () => {
+    nodeViewMock.mockReturnValue(PARTIAL);
+    const { status, action, unmount } = await mountRow(SITE_7997);
+    try {
+      expect(status()?.getAttribute('data-node-status')).toBe('partial');
+      expect(status()?.querySelector('[data-testid="model-tree-status-partial-icon"]')).not.toBeNull();
+      expect(action()?.textContent?.trim()).toBe('生成');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('没有生成单元：一道短横，没有按钮', async () => {
+    nodeViewMock.mockReturnValue(NOTHING);
+    const { status, action, unmount } = await mountRow(ZONE_7997, { checkState: 'unchecked' });
+    try {
+      expect(status()?.getAttribute('data-node-status')).toBe('empty');
+      expect(status()?.querySelector('[data-testid="model-tree-status-nothing-icon"]')).not.toBeNull();
+      expect(status()?.getAttribute('title')).toContain('没有要生成的模型');
+      expect(action()).toBeNull();
+    } finally {
+      unmount();
+    }
+  });
+
+  it('这一页里没补完留下的那颗「生成」在的时候，节点状态的「生成」不再出一颗（是同一件事）', async () => {
+    const state = await import('@/composables/generationFillState');
+    state.notePendingGenerationFill({ root: '24381_535', dbnum: 7997, chunks: 2, units: 11, exact: true, reason: 'stopped' });
+    nodeViewMock.mockReturnValue(PARTIAL);
+    const { host, action, unmount } = await mountRow(SITE_7997);
+    try {
+      expect(fillButton(host)?.textContent?.trim()).toBe('生成');
+      expect(action()).toBeNull();
+    } finally {
+      unmount();
+    }
+  });
+
+  it('这一行正在加载（生成中）：节点状态的「生成」先禁用', async () => {
+    nodeViewMock.mockReturnValue(NOT_GENERATED);
+    const { action, unmount } = await mountRow(SITE_7997, { checkState: 'unchecked', loading: true });
+    try {
+      expect((action() as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('核对过 RVM 的行：部分生成算「有模型」画实心，未生成 / 没有生成单元画空心', async () => {
+    const rvmStatus = { refno: '24381_535', verdict: 'pass', taskId: 't', at: null, sesno: null, message: '', name: null, stage: null, reasons: '' };
+    const fillOf = (row: { status: () => Element | null }) => row.status()?.querySelector('[data-testid="model-tree-status-icon"]')?.getAttribute('data-fill');
+    nodeViewMock.mockReturnValue(PARTIAL);
+    const partial = await mountRow(SITE_7997, { rvmStatus });
+    try {
+      expect(fillOf(partial)).toBe('solid');
+    } finally {
+      partial.unmount();
+    }
+    nodeViewMock.mockReturnValue(NOT_GENERATED);
+    const none = await mountRow(SITE_7997, { rvmStatus });
+    try {
+      expect(fillOf(none)).toBe('outline');
+    } finally {
+      none.unmount();
     }
   });
 });

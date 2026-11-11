@@ -255,9 +255,22 @@ const pendingFill = computed(() => (props.ghost ? null : pendingGenerationFillVi
 const updateState = computed(() => (
   nodeStatus.value?.action === 'update' && statusDbnum.value !== null ? updateToLatestView(statusDbnum.value) : null
 ));
-const nodeActionLabel = computed(() => (nodeStatus.value?.action === 'update' ? updateState.value?.label ?? '更新' : '重载'));
+/**
+ * 节点状态给的动作按钮。「生成」和上面那颗「生成」（这一页里没补完留下的）是同一件事：那一颗在的时候这一颗不出。
+ */
+const nodeAction = computed(() => {
+  const action = nodeStatus.value?.action ?? null;
+  return action === 'generate' && pendingFill.value ? null : action;
+});
+const nodeActionLabel = computed(() => {
+  if (nodeAction.value === 'update') return updateState.value?.label ?? '更新';
+  return nodeAction.value === 'generate' ? '生成' : '重载';
+});
 const nodeActionTitle = computed(() => {
-  if (nodeStatus.value?.action !== 'update') return '重载：按库里最新的模型记录替换场景里的这个节点（不重新生成）';
+  if (nodeAction.value === 'generate') {
+    return '生成：把这个节点下没有模型的单元生成出来并显示（不重算已有的）；单元多时先问一声，做完一块显示一块';
+  }
+  if (nodeAction.value !== 'update') return '重载：按库里最新的模型记录替换场景里的这个节点（不重新生成）';
   const hint = '更新到最新：让后端把这个库的新会话入库并重新生成受影响的模型；做完会提示，点「重载」才换到场景里';
   return updateState.value ? `${updateState.value.title}\n${hint}` : hint;
 });
@@ -369,18 +382,20 @@ onUnmounted(() => {
         @click.stop="emit('node-action', row.id, 'generate')">
         {{ pendingFill.label }}
       </button>
-      <button v-if="!ghost && nodeStatus?.action" type="button"
+      <button v-if="!ghost && nodeAction" type="button"
         class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4 disabled:cursor-wait disabled:opacity-70"
-        :class="nodeStatus.action === 'update'
+        :class="nodeAction === 'update'
           ? 'border-amber-500/50 text-amber-700 hover:bg-amber-50'
-          : 'border-sky-500/50 text-sky-700 hover:bg-sky-50'"
+          : nodeAction === 'generate'
+            ? 'border-emerald-600/50 text-emerald-700 hover:bg-emerald-50'
+            : 'border-sky-500/50 text-sky-700 hover:bg-sky-50'"
         :title="nodeActionTitle"
-        :disabled="updateState?.busy === true || nodeStatus.checking"
+        :disabled="updateState?.busy === true || nodeStatus?.checking === true || props.loading"
         data-testid="model-tree-node-action"
-        :data-action="nodeStatus.action"
+        :data-action="nodeAction"
         :data-busy="updateState?.busy ? 'true' : undefined"
         @mousedown.stop
-        @click.stop="emit('node-action', row.id, nodeStatus.action)">
+        @click.stop="emit('node-action', row.id, nodeAction)">
         {{ nodeActionLabel }}
       </button>
       <button v-if="!ghost && (rvmStatus || rvmIncremental || dbStatus || nodeStatus)" type="button"
