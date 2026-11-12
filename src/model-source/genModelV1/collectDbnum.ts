@@ -39,6 +39,13 @@ export type CollectDbnumReadyBatch = {
   refnos: string[];
   rootsDone: number;
   rootsTotal: number;
+  /** 这一批是哪个 SITE 的（「取最新」按 SITE 记「装了什么」） */
+  site?: CollectDbnumSite;
+  /**
+   * 这个 SITE 的记录收齐了、也没被预算切掉：`refnos` 就是它名下全部有几何的构件。
+   * 有待定（409）、截断、出错、或撞到预算的为 `false`——不能拿这一批当它完整的样子。
+   */
+  complete?: boolean;
 };
 
 export type CollectDbnumOptions = {
@@ -160,10 +167,12 @@ export async function collectDbnumRefnos(
       pushAllUnique(result.truncatedRoots, collected.generationRoots.slice(acceptedRoots.length));
     }
     const batchRefnos: string[] = [];
+    let cutByBudget = acceptedRoots.length < collected.generationRoots.length;
     for (const refno of refnosOfRecords(collected.items)) {
       if (seen.has(refno)) continue;
       if (result.refnos.length >= refnoBudget) {
         result.budgetLimited = true;
+        cutByBudget = true;
         break;
       }
       seen.add(refno);
@@ -181,6 +190,11 @@ export async function collectDbnumRefnos(
         refnos: batchRefnos,
         rootsDone: result.generationRoots.length,
         rootsTotal: result.generationRoots.length,
+        site,
+        complete: !cutByBudget
+          && collected.pending.length === 0
+          && collected.truncatedRoots.length === 0
+          && Object.keys(collected.errors).length === 0,
       });
     }
   }

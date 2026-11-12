@@ -162,7 +162,27 @@ export function consumeModelLoadStopped(root: string): boolean {
   return withdrawn.delete(toRefnoKey(root));
 }
 
+/** 正在进行的整库显示数（整库显示不是按节点的加载，没有上面那种会话） */
+let wholeLibraryLoads = 0;
+
+/** 整库显示开始时记一笔；回的函数在它结束时调（可重复调）。 */
+export function beginWholeLibraryLoad(): () => void {
+  wholeLibraryLoads += 1;
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    wholeLibraryLoads = Math.max(0, wholeLibraryLoads - 1);
+  };
+}
+
+/** 此刻有没有任何加载在进行：按节点的显示 / 重载 / 生成，或整库显示（「取最新」据此等它们结束，不打断）。 */
+export function hasActiveModelLoad(): boolean {
+  return sessions.size > 0 || wholeLibraryLoads > 0;
+}
+
 export function __resetModelLoadSessionsForTests(): void {
   sessions.clear();
   withdrawn.clear();
+  wholeLibraryLoads = 0;
 }

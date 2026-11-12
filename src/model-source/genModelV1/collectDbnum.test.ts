@@ -129,3 +129,50 @@ describe('collectDbnumRefnos', () => {
     expect(records.collectByAncestor).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('collectDbnumRefnos：每批带上是哪个 SITE、收没收齐（「取最新」按 SITE 记「装了什么」）', () => {
+  it('收齐的 SITE 为 complete；有待定 / 出错的不算收齐；一条记录都没有的 SITE 也交一批（空的、收齐）', async () => {
+    const records = fakeRecords({
+      '24381_2': { generationRoots: ['24381_10'], items: [item('24381_11', '24381_10'), item('24381_12', '24381_10')], empty: [] },
+      '24383_2': { generationRoots: ['24383_20'], items: [item('24383_21', '24383_20')], pending: ['24383_2'], empty: [], errors: { '24383_9': 'boom' } },
+    });
+    const batches: { site: string | undefined; complete: boolean | undefined; refnos: string[] }[] = [];
+    await collectDbnumRefnos(fakeTree(), records, 7997, {
+      onRefnosReady: (batch) => { batches.push({ site: batch.site?.refno, complete: batch.complete, refnos: batch.refnos }); },
+    });
+    expect(batches).toEqual([
+      { site: '24381_2', complete: true, refnos: ['24381_11', '24381_12'] },
+      { site: '24383_2', complete: false, refnos: ['24383_21'] },
+    ]);
+
+    const empty: { site: string | undefined; complete: boolean | undefined; refnos: string[] }[] = [];
+    await collectDbnumRefnos(fakeTree(), fakeRecords({}), 7997, {
+      onRefnosReady: (batch) => { empty.push({ site: batch.site?.refno, complete: batch.complete, refnos: batch.refnos }); },
+    });
+    expect(empty).toEqual([
+      { site: '24381_2', complete: true, refnos: [] },
+      { site: '24383_2', complete: true, refnos: [] },
+    ]);
+  });
+
+  it('截断的、被构件预算或生成根预算切掉的 SITE 不算收齐', async () => {
+    const plan = {
+      '24381_2': { generationRoots: ['24381_10', '24381_30'], items: [item('24381_11', '24381_10'), item('24381_12', '24381_10'), item('24381_31', '24381_30')], empty: [] },
+      '24383_2': { generationRoots: ['24383_20'], items: [item('24383_21', '24383_20')], empty: [], truncatedRoots: ['24383_40'] },
+    };
+    const seen = async (options: { maxRefnos?: number; maxTotalRoots?: number }) => {
+      const out: Record<string, boolean | undefined> = {};
+      await collectDbnumRefnos(fakeTree(), fakeRecords(plan), 7997, {
+        ...options,
+        onRefnosReady: (batch) => { out[batch.site!.refno] = batch.complete; },
+      });
+      return out;
+    };
+    // 不设预算：第一个收齐；第二个有截断的根
+    expect(await seen({})).toEqual({ '24381_2': true, '24383_2': false });
+    // 构件预算 2：第一个 SITE 的第三个构件被切掉
+    expect(await seen({ maxRefnos: 2 })).toEqual({ '24381_2': false });
+    // 生成根预算 1：第一个 SITE 的第二个根被切掉
+    expect(await seen({ maxTotalRoots: 1 })).toEqual({ '24381_2': false });
+  });
+});

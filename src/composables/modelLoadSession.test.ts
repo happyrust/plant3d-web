@@ -137,3 +137,29 @@ describe('被叫停的那一次显示：发起的一方问一次就清掉', () =
     expect(consumeModelLoadStopped('24381_535')).toBe(true);
   });
 });
+
+describe('有没有加载在进行（「取最新」据此等它们结束）', () => {
+  it('按节点的加载：开始之后算有，全部结束之后才算没有', async () => {
+    const { hasActiveModelLoad } = await import('./modelLoadSession');
+    expect(hasActiveModelLoad()).toBe(false);
+    const first = beginModelLoadSession('24383_80211');
+    const second = beginModelLoadSession('24383_80300');
+    expect(hasActiveModelLoad()).toBe(true);
+    first.end();
+    expect(hasActiveModelLoad()).toBe(true);
+    second.end();
+    expect(hasActiveModelLoad()).toBe(false);
+  });
+
+  it('整库显示没有按节点的会话：另记一笔；结束函数重复调不会多减', async () => {
+    const { beginWholeLibraryLoad, hasActiveModelLoad } = await import('./modelLoadSession');
+    const endFirst = beginWholeLibraryLoad();
+    const endSecond = beginWholeLibraryLoad();
+    expect(hasActiveModelLoad()).toBe(true);
+    endFirst();
+    endFirst();
+    expect(hasActiveModelLoad()).toBe(true);
+    endSecond();
+    expect(hasActiveModelLoad()).toBe(false);
+  });
+});

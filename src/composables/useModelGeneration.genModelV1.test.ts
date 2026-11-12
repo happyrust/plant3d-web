@@ -3332,3 +3332,310 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
     }));
   });
 });
+
+describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
+  const ROOT = '24384_24778';
+  const MEMBERS = ['24384_24779', '24384_24780'];
+
+  beforeEach(async () => {
+    visibleInstsMock.mockReset();
+    v1Source.tree.subtreeRefnos.mockReset();
+    v1Source.records.invalidateRoot.mockReset();
+    v1Source.records.invalidateRoot.mockReturnValue([]);
+    unitRefnosMock.mockReset();
+    unitRefnosMock.mockReturnValue([]);
+    typeInfoMock.mockResolvedValue({ success: true, refno: ROOT, noun: 'EQUI', owner_refno: null, owner_noun: null });
+    (await import('./modelGetWorkRegistry')).resetGetWorkRegistry();
+  });
+
+  /** 先正常装一个节点（两个成员），再让下一次按祖先查记录「查空且收齐」 */
+  async function loadedThenEmpty() {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+    expect(await gen.showModelByRefno(ROOT)).toBe(true);
+    loadInstancesMock.mockClear();
+    emitToastMock.mockClear();
+    forgetLoadedNodeMock.mockClear();
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [] });
+    return { gen, viewer };
+  }
+
+  describe('重载查空的护栏（confirmEmpty）：后端没有模型不等于它被删了', () => {
+    it.each(['not_generated', 'partial', 'updating', 'unknown'])(
+      '后端说这个节点 %s（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样',
+      async (verdict) => {
+        const { gen } = await loadedThenEmpty();
+        nodeFactsMock.mockResolvedValue({ verdict });
+
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+
+        expect(nodeFactsMock).toHaveBeenCalledWith(expect.objectContaining({ refno: ROOT }));
+        expect(evictMock).not.toHaveBeenCalled();
+        expect(forgetLoadedNodeMock).not.toHaveBeenCalled();
+        expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+        expect(gen.loadedRefnosOf(ROOT)).toEqual(MEMBERS);
+        expect(gen.statusMessage.value).toContain('没有当成已删除');
+        expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+        // 没出「已从场景撤下」那句
+        expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('已从场景撤下') }));
+      },
+    );
+
+    it('后端没有节点模型状态接口（旧构建回 null）、或这一问没问到：一样保持原样', async () => {
+      const first = await loadedThenEmpty();
+      nodeFactsMock.mockResolvedValue(null);
+      expect(await first.gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+      expect(evictMock).not.toHaveBeenCalled();
+
+      const second = await loadedThenEmpty();
+      nodeFactsMock.mockRejectedValue(Object.assign(new Error('库文件打不开'), { code: 'SOURCE_NOT_FOUND' }));
+      expect(await second.gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(second.gen.isModelActuallyLoaded(ROOT)).toBe(true);
+    });
+
+    it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下', async (verdict) => {
+      const { gen, viewer } = await loadedThenEmpty();
+      nodeFactsMock.mockResolvedValue({ verdict });
+
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(true);
+
+      expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [ROOT, ...MEMBERS], { release: true });
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(gen.loadedRefnosOf(ROOT)).toBeNull();
+      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+    });
+
+    it('后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下', async () => {
+      const { gen } = await loadedThenEmpty();
+      nodeFactsMock.mockRejectedValue(Object.assign(new Error('最新会话的索引里没有它'), { code: 'REFNO_NOT_FOUND' }));
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(true);
+      expect(evictMock).toHaveBeenCalledTimes(1);
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+    });
+
+    it('不带 confirmEmpty（状态栏、行上的「重载」）：行为照旧——不问节点模型状态，查空且收齐就撤', async () => {
+      const { gen } = await loadedThenEmpty();
+      nodeFactsMock.mockResolvedValue({ verdict: 'not_generated' });
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
+      expect(nodeFactsMock).not.toHaveBeenCalled();
+      expect(evictMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('记录没收齐（409 在生成）时本来就不撤：不为它白问一次节点模型状态', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+      visibleInstsMock.mockResolvedValueOnce({
+        success: true, refno: ROOT, refnos: [], incomplete: { pending: [ROOT], truncated_roots: [], errors: {} },
+      });
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+      expect(nodeFactsMock).not.toHaveBeenCalled();
+      expect(evictMock).not.toHaveBeenCalled();
+    });
+
+    it('查到了记录（没查空）：护栏不介入，照常整套替换', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(true);
+      expect(nodeFactsMock).not.toHaveBeenCalled();
+      expect(loadInstancesMock).toHaveBeenCalledWith(expect.anything(), 8000, MEMBERS, expect.objectContaining({ replaceExistingObjects: true }));
+    });
+  });
+
+  describe('withdrawRemovedRoot：库里已经没有这个节点了', () => {
+    it('它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+      expect(await gen.showModelByRefno(ROOT)).toBe(true);
+      emitToastMock.mockClear();
+      visibleInstsMock.mockClear();
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, '24384_24781']);
+      unitRefnosMock.mockReturnValueOnce(['24384_24779', '24384_24782']);
+      // 四个构件里三个有对象
+      evictMock.mockImplementationOnce((_layer, _dbno, refnos) => refnos.slice(1, 4));
+
+      expect(gen.withdrawRemovedRoot(ROOT)).toBe(3);
+
+      const targets = [ROOT, '24384_24781', '24384_24779', '24384_24782', '24384_24780'];
+      expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, targets, { release: true });
+      expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(targets, false);
+      expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenLastCalledWith(8000, []);
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(gen.loadedRefnosOf(ROOT)).toBeNull();
+      expect(gen.listLoadedRoots()).not.toContain(ROOT);
+      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+      expect(emitToastMock).not.toHaveBeenCalled();
+      expect(visibleInstsMock).not.toHaveBeenCalled();
+      expect(nodeFactsMock).not.toHaveBeenCalled();
+    });
+
+    it('什么对象都没撤到时不去刷新派生索引', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      expect(gen.withdrawRemovedRoot(ROOT)).toBe(0);
+      expect(viewer.__dtxAfterInstancesLoaded).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadedRefnosOf / isRootInScene', () => {
+    it('loadedRefnosOf：经显示流程装的回它装的那些；没经显示流程装的看场景索引的属主链；都没有回 null', async () => {
+      const { useModelGeneration, rememberLoadedRefnosOfRoot } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+      expect(gen.loadedRefnosOf(ROOT)).toBeNull();
+
+      unitRefnosMock.mockReturnValue(['24384_24779', '24384_24779', '24384_24790']);
+      expect(gen.loadedRefnosOf(ROOT)).toEqual(['24384_24779', '24384_24790']);
+
+      // 地址栏直装的容器节点：查看器替它记下装了哪些
+      rememberLoadedRefnosOfRoot('24384/26547', ['24384/26549', '24384_26716', '']);
+      expect(gen.loadedRefnosOf('24384_26547')).toEqual(['24384_26549', '24384_26716']);
+    });
+
+    it('isRootInScene：自己有对象、名下按属主链有对象、或上次装的构件还有在场景里的，都算在', async () => {
+      const { useModelGeneration, rememberLoadedRefnosOfRoot } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+      expect(gen.isRootInScene(ROOT)).toBe(false);
+      expect(gen.isRootInScene('')).toBe(false);
+
+      isDtxRefnoLoadedMock.mockImplementation((_dbno, refno) => refno === ROOT);
+      expect(gen.isRootInScene(ROOT)).toBe(true);
+      isDtxRefnoLoadedMock.mockReturnValue(false);
+
+      unitRefnosMock.mockReturnValueOnce(['24384_24779']);
+      expect(gen.isRootInScene(ROOT)).toBe(true);
+
+      // 容器节点：属主链认不到它，靠「上次装了哪些」——那些构件已经被别处撤光了就不算在
+      rememberLoadedRefnosOfRoot('24384_26547', ['24384_26549', '24384_26716']);
+      expect(gen.isRootInScene('24384_26547')).toBe(false);
+      isDtxRefnoLoadedMock.mockImplementation((_dbno, refno) => refno === '24384_26716');
+      expect(gen.isRootInScene('24384_26547')).toBe(true);
+    });
+
+    it('isRootInScene：经显示流程装过的节点直接算在', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+      expect(await gen.showModelByRefno(ROOT)).toBe(true);
+      expect(gen.isRootInScene(ROOT)).toBe(true);
+    });
+  });
+
+  describe('整库显示（showModelByDbnum）给「取最新」留的底', () => {
+    const SITE_A = { refno: '24381_101405', name: '/1PTU-INST23' };
+    const SITE_B = { refno: '24381_535', name: '/仪控ISO测试' };
+    const SITE_EMPTY = { refno: '24381_600', name: '/EMPTY' };
+    const SITE_PENDING = { refno: '24381_700', name: '/PENDING' };
+
+    type Batch = { site?: { refno: string; name: string }; complete?: boolean; refnos: string[] };
+    function collectWith(batches: Batch[], result: Record<string, unknown> = {}) {
+      collectDbnumMock.mockImplementation(async (dbnum: number, options: { onRefnosReady?: (b: any) => Promise<void> | void }) => {
+        let rootsDone = 0;
+        for (const batch of batches) {
+          rootsDone += 1;
+          await options.onRefnosReady?.({ roots: [], rootsDone, rootsTotal: batches.length, ...batch });
+        }
+        return {
+          dbnum, sites: batches.map((batch) => batch.site).filter(Boolean), refnos: batches.flatMap((batch) => batch.refnos),
+          generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [], budgetLimited: false,
+          siteSummaryAvailable: true,
+          ...result,
+        };
+      });
+    }
+
+    it('收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const registry = await import('./modelGetWorkRegistry');
+      dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      collectWith([
+        { site: SITE_A, complete: true, refnos: ['24381_1', '24381_2'] },
+        { site: SITE_B, complete: true, refnos: ['24381_3'] },
+        { site: SITE_EMPTY, complete: true, refnos: [] },
+        { site: SITE_PENDING, complete: false, refnos: ['24381_4'] },
+      ]);
+
+      expect((await gen.showModelByDbnum(7997)).loaded).toBe(true);
+
+      expect(registry.getWorkRegisteredRoots()).toEqual([
+        { refno: SITE_A.refno, dbnum: 7997, loadedModelSesno: 738, loadedFileLatestSesno: 748, origin: 'show_dbnum' },
+        { refno: SITE_B.refno, dbnum: 7997, loadedModelSesno: 738, loadedFileLatestSesno: 748, origin: 'show_dbnum' },
+      ]);
+      expect(gen.loadedRefnosOf(SITE_A.refno)).toEqual(['24381_1', '24381_2']);
+      expect(gen.loadedRefnosOf(SITE_B.refno)).toEqual(['24381_3']);
+      // 没收齐的 SITE 不知道它完整的样子：不登记成节点、不记它装了什么，但算「已在管」（不会被当成新出现的）
+      expect(gen.loadedRefnosOf(SITE_PENDING.refno)).toBeNull();
+      const [scope] = registry.getWorkRegisteredScopes();
+      expect(scope).toMatchObject({ dbnum: 7997, discover: true, checkedFileLatestSesno: 748 });
+      // 收齐而没有几何的 SITE 不算已在管：以后它有了东西，取最新当成新出现的装进来
+      expect([...scope!.knownSites].sort()).toEqual([SITE_A.refno, SITE_B.refno, SITE_PENDING.refno].sort());
+    });
+
+    it('按预算只显示了一部分：没轮到的 SITE 算已在管，以后不找新 SITE', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const registry = await import('./modelGetWorkRegistry');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      collectWith([{ site: SITE_A, complete: true, refnos: ['24381_1'] }], { skippedSites: ['24381/535'], budgetLimited: true });
+      await gen.showModelByDbnum(7997);
+      const [scope] = registry.getWorkRegisteredScopes();
+      expect(scope!.discover).toBe(false);
+      expect([...scope!.knownSites].sort()).toEqual([SITE_A.refno, SITE_B.refno].sort());
+    });
+
+    it('SITE 名单没取到（摘要不可用）：以后也不找新 SITE', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const registry = await import('./modelGetWorkRegistry');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      collectWith([{ site: SITE_A, complete: true, refnos: ['24381_1'] }], { siteSummaryAvailable: false });
+      await gen.showModelByDbnum(7997);
+      expect(registry.getWorkRegisteredScopes()[0]!.discover).toBe(false);
+    });
+
+    it('整库都是空的也登记这个库：以后有了模型，取最新能把新出现的 SITE 装进来', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const registry = await import('./modelGetWorkRegistry');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      collectWith([{ site: SITE_EMPTY, complete: true, refnos: [] }]);
+      const result = await gen.showModelByDbnum(7997);
+      expect(result).toMatchObject({ loaded: true, instanceCount: 0 });
+      expect(registry.getWorkRegisteredRoots()).toEqual([]);
+      expect(registry.getWorkRegisteredScopes()).toEqual([expect.objectContaining({ dbnum: 7997, discover: true })]);
+      expect(registry.getWorkRegisteredScopes()[0]!.knownSites.size).toBe(0);
+    });
+
+    it('一个构件都没取到、收集又没完成：不登记（不知道这个库的样子）', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const registry = await import('./modelGetWorkRegistry');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      collectWith([{ site: SITE_PENDING, complete: false, refnos: [] }], { pending: [SITE_PENDING.refno] });
+      expect((await gen.showModelByDbnum(7997)).loaded).toBe(false);
+      expect(registry.getWorkRegisteredScopes()).toEqual([]);
+    });
+
+    it('整库显示进行中「取最新」看得到（等它结束再对账）；结束、出错之后都放开', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const { hasActiveModelLoad } = await import('./modelLoadSession');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+      const during: boolean[] = [];
+      collectDbnumMock.mockImplementation(async (dbnum: number) => {
+        during.push(hasActiveModelLoad());
+        return { dbnum, sites: [], refnos: [], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [] };
+      });
+      expect(hasActiveModelLoad()).toBe(false);
+      await gen.showModelByDbnum(7997);
+      expect(during).toEqual([true]);
+      expect(hasActiveModelLoad()).toBe(false);
+
+      collectDbnumMock.mockRejectedValueOnce(new Error('炸了'));
+      await gen.showModelByDbnum(7997);
+      expect(hasActiveModelLoad()).toBe(false);
+    });
+  });
+});

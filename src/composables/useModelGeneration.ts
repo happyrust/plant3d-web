@@ -22,7 +22,8 @@ import {
   type GenerationUnitFacts,
 } from '@/composables/generationFill';
 import { beginGenerationFill, clearPendingGenerationFill, notePendingGenerationFill } from '@/composables/generationFillState';
-import { beginModelLoadSession, ModelLoadStoppedError, type ModelLoadSession } from '@/composables/modelLoadSession';
+import { noteGetWorkDbnumScope, noteGetWorkRoot, type GetWorkWatermark } from '@/composables/modelGetWorkRegistry';
+import { beginModelLoadSession, beginWholeLibraryLoad, ModelLoadStoppedError, type ModelLoadSession } from '@/composables/modelLoadSession';
 import { backendMeshPurgeKeepsShared, fetchGenerationFacts, fetchNodeModelFacts } from '@/composables/nodeModelFacts';
 import { changedSessionsOfNodeVersions, type NodeModelFacts } from '@/composables/nodeModelStatus';
 import { decideNodeUpdate, describeNodeUpdateSummary, planNodeUpdateChunks } from '@/composables/nodeModelUpdate';
@@ -145,6 +146,15 @@ const loadedRefnosByRoot = new Map<string, Set<string>>();
 
 export function __resetLoadedRefnosByRootForTests(): void {
   loadedRefnosByRoot.clear();
+}
+
+/**
+ * 不经 `showModelByRefno` 装进场景的节点（地址栏直装）：记下它这一次装了哪些构件，「取最新」重载它时才比得出
+ * 哪些被删了（容器节点靠这一份，见 `loadedRefnosByRoot`）。
+ */
+export function rememberLoadedRefnosOfRoot(root: string, refnos: readonly string[]): void {
+  const key = normalizeRefnoString(root);
+  if (key) loadedRefnosByRoot.set(key, new Set(refnos.map((refno) => normalizeRefnoString(refno)).filter(Boolean)));
 }
 
 // 已加载节点表判「模型水位之后谁改到了这个节点」要问节点版本表（`node/versions?since_sesno=`）：在这里接上数据源。
@@ -409,11 +419,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (
     refno: string,
-    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean },
+    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; confirmEmpty?: boolean },
   ) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
   listLoadedRoots: () => string[]
+  withdrawRemovedRoot: (refno: string) => number
+  loadedRefnosOf: (refno: string) => string[] | null
+  isRootInScene: (refno: string) => boolean
+  rememberLoadedRefnos: (root: string, refnos: readonly string[]) => void
 } {
   const { viewer } = options;
   const consoleStore = useConsoleStore();
@@ -884,6 +898,87 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     return true;
   }
 
+  /**
+   * 「取最新」发起的重载查空时的护栏。后端重启之后，模型按需生成的库（未初始化）里什么模型都没有，按祖先查记录
+   * 照样是「查空且收齐」——那不是被删了，不能把场景里的东西撤掉。所以动手撤之前问一次节点模型状态：只有后端明说
+   * 这个节点的单元都生成过（`latest` / `lagging`）、它名下确实没有生成单元（`empty`）、或库里已经没有这个节点
+   * （`REFNO_NOT_FOUND`）才当成「没有几何了」；没生成、只生成了一部分、库在更新、判不了、问不到，一律保持原样。
+   */
+  async function emptyRefreshMeansRemoved(root: string): Promise<{ removed: boolean; why: string }> {
+    try {
+      const facts = await withTimeout(fetchNodeModelFacts({ refno: root }), NODE_UPDATE_FACTS_TIMEOUT_MS, '节点模型状态');
+      if (!facts) return { removed: false, why: '后端没有节点模型状态接口，确认不了它是不是真的没有几何了' };
+      if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };
+      return {
+        removed: false,
+        why: facts.verdict === 'updating' ? '所在的库正在更新' : '后端现在没有这个节点的完整模型（可能重启过，或还没生成）',
+      };
+    } catch (e) {
+      if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, why: '' };
+      return { removed: false, why: `节点模型状态没问到（${e instanceof Error ? e.message : String(e)}）` };
+    }
+  }
+
+  /** 节点所在的库：与显示流程同一个口径（调用方钉了库号就用它，否则按 refno 查映射） */
+  function dbnoOfRoot(root: string): number | null {
+    return typeof options.db_num === 'number' ? options.db_num : tryGetDbnumByRefno(root);
+  }
+
+  /**
+   * 库里已经没有这个节点了（「取最新」问到 `REFNO_NOT_FOUND`）：它和它名下的构件从场景撤下、不再算已加载。
+   * 不发请求、不出提示（取最新自己汇总成一句）。回撤下的构件数。
+   */
+  function withdrawRemovedRoot(refno: string): number {
+    const root = normalizeRefnoString(refno);
+    if (!root) return 0;
+    const dbno = dbnoOfRoot(root);
+    const cached = getGenModelV1ModelSource().records.invalidateRoot(root).map((r) => normalizeRefnoString(r)).filter(Boolean);
+    const targets = uniqStrings([
+      root,
+      ...cached,
+      ...(dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : []),
+      ...(loadedRefnosByRoot.get(root) ?? []),
+    ]);
+    let evicted: string[] = [];
+    if (dbno != null) {
+      const anyViewer = viewer as any;
+      const dtxLayer = anyViewer?.__dtxLayer;
+      evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];
+      anyViewer?.scene?.setObjectsVisible?.(targets, false);
+      if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
+    }
+    loadedRoots.delete(root);
+    loadedRefnosByRoot.delete(root);
+    forgetLoadedNode(root);
+    consoleStore.addLog('info', `[model-load] 取最新：${root} 在库里已经没有了，撤下 ${targets.length} 个 refno（${evicted.length} 个有对象）`);
+    return evicted.length;
+  }
+
+  /** 这个节点现在装着哪些构件（「取最新」比对重载前后用）；不知道回 `null`。 */
+  function loadedRefnosOf(refno: string): string[] | null {
+    const root = normalizeRefnoString(refno);
+    const known = loadedRefnosByRoot.get(root);
+    if (known) return [...known];
+    const dbno = dbnoOfRoot(root);
+    const viaUnit = dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : [];
+    return viaUnit.length > 0 ? uniqStrings(viaUnit) : null;
+  }
+
+  /** 这个节点（或它名下装过的构件）还在不在场景里：别处已经撤掉的，「取最新」不该把它装回来。 */
+  function isRootInScene(refno: string): boolean {
+    const root = normalizeRefnoString(refno);
+    if (!root) return false;
+    if (loadedRoots.has(root)) return true;
+    const dbno = dbnoOfRoot(root);
+    if (dbno == null) return false;
+    if (isDtxRefnoLoaded(dbno, root)) return true;
+    if (resolveDtxRefnosByUnitRefno(dbno, root).length > 0) return true;
+    for (const member of loadedRefnosByRoot.get(root) ?? []) {
+      if (isDtxRefnoLoaded(dbno, member)) return true;
+    }
+    return false;
+  }
+
   /** 重载装完之后：重载前在这根名下、最新记录里已经没有的构件（数据批次删掉的成员）从场景撤下；根自己不撤。 */
   function evictMembersMissingFromRefresh(dbno: number, root: string, previousLeaves: string[], loadRefnos: string[]): void {
     const keep = new Set([root, ...loadRefnos]);
@@ -919,6 +1014,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
        * 生成走哪条路、要不要先问，按后端此刻的节点模型状态定（`nodeModelUpdate.decideNodeUpdate`）。
        */
       update?: boolean
+      /**
+       * 「取最新」发起的重载：记录查空时不直接当成「被删了」，先问后端这个节点的模型状态再决定撤不撤
+       * （见 `emptyRefreshMeansRemoved`）。别的重载入口（状态栏、行上的「重载」）不带，行为照旧。
+       */
+      confirmEmpty?: boolean
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
@@ -1841,7 +1941,26 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           level: 'warning',
         });
       } else if (visibleRefnos.length === 0) {
-        if (refresh) return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource);
+        if (refresh) {
+          // 取最新的护栏：收齐的查空才会走到「撤下」，动手之前先确认后端是真的没有它的几何了，而不是没有它的模型
+          const notCollected = !!scopeIncomplete && (
+            scopeIncomplete.pending.length > 0
+            || scopeIncomplete.truncated_roots.length > 0
+            || Object.keys(scopeIncomplete.errors).length > 0
+          );
+          const wouldWithdraw = visibleSource === 'visible-insts' && !notCollected;
+          if (loadOptions?.confirmEmpty === true && wouldWithdraw) {
+            const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);
+            if (!confirmed.removed) {
+              statusMessage.value = `refno=${normalizedRoot} 记录查空，没有当成已删除，场景保持原样`;
+              progress.value = 100;
+              syncGlobalLoadStatus();
+              consoleStore.addLog('warning', `[model-load] 重载 ${normalizedRoot}：记录查空，但${confirmed.why}——不当成已删除，场景保持原样`);
+              return false;
+            }
+          }
+          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource);
+        }
         if (visibleSource !== 'visible-insts') {
           // 记录查询失败后退到子树查询、子树也是空：这不是「查空」，同样不生成
           const noAnswer = `${normalizedRoot}：记录查询没有应答（退到子树查询也是空），未加载；稍后再点眼睛`;
@@ -2215,6 +2334,35 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const bumpProgress = (value: number) => {
       progress.value = Math.max(progress.value, Math.min(95, Math.floor(value)));
     };
+    // 「取最新」要知道整库显示装了哪些 SITE、各装了什么、装的时候库在哪个会话（开始取数之前读，取早不取晚）
+    const rowAtStart = peekDbnumRow(dbno);
+    const getWorkMark: GetWorkWatermark = {
+      modelSesno: typeof rowAtStart?.model_sesno === 'number' ? rowAtStart.model_sesno : null,
+      fileLatestSesno: typeof rowAtStart?.file_latest_sesno === 'number' ? rowAtStart.file_latest_sesno : null,
+    };
+    const siteBatches: { site: string; refnos: string[]; complete: boolean }[] = [];
+    const noteShownForGetWork = (result: { skippedSites: string[]; budgetLimited: boolean; siteSummaryAvailable: boolean }) => {
+      const managed: string[] = [];
+      for (const batch of siteBatches) {
+        if (batch.complete && batch.refnos.length > 0) {
+          // 收齐的 SITE：记下它装了哪些构件（重载时比得出谁被删了），登记成取最新要核对的节点
+          loadedRefnosByRoot.set(batch.site, new Set(batch.refnos));
+          noteGetWorkRoot(batch.site, dbno, getWorkMark, 'show_dbnum');
+          managed.push(batch.site);
+        } else if (!batch.complete) {
+          // 没收齐的 SITE：不知道它完整的样子，不归取最新管（也不当成新出现的）
+          managed.push(batch.site);
+        }
+        // 收齐而没有几何的 SITE 不记：以后它有了东西，取最新当成新出现的装进来
+      }
+      for (const site of result.skippedSites ?? []) managed.push(normalizeRefnoString(site));
+      noteGetWorkDbnumScope(dbno, {
+        sites: managed,
+        // 按预算只显示了一部分、或 SITE 名单没取到：没轮到的不是「新增的」，不去找
+        discover: result.budgetLimited !== true && result.siteSummaryAvailable !== false,
+        fileLatestSesno: getWorkMark.fileLatestSesno,
+      });
+    };
 
     // 逐 SITE 查询：收集阶段占 5 → 55，SITE 之间按个数走。
     const collected = await source.collectDbnum(dbno, {
@@ -2233,8 +2381,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = Math.max(progress.value, next);
         syncGlobalLoadStatus();
       },
-      onRefnosReady: async ({ refnos, rootsDone, rootsTotal }) => {
+      onRefnosReady: async ({ refnos, rootsDone, rootsTotal, site, complete }) => {
         loadedRootCount = rootsDone;
+        if (site) siteBatches.push({ site: normalizeRefnoString(site.refno), refnos: [...refnos], complete: complete === true });
         if (refnos.length === 0) return;
         liveBatches += 1;
         const from = progress.value;
@@ -2310,6 +2459,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         : `[提示] dbnum=${dbno} 的 ${collected.sites.length} 个 SITE 没有任何几何记录。${emptyHint}${tail}`;
       consoleStore.addLog('info', `[model-load] gen-model-v1 ${message}`);
       emitToast({ message, level: 'info' });
+      // 整库都是空的也登记：以后这个库有了模型，取最新能把新出现的 SITE 装进来
+      noteShownForGetWork(collected);
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
     }
 
@@ -2390,6 +2541,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     } else {
       emitToast({ message: `[成功] ${summary}`, level: 'success' });
     }
+    noteShownForGetWork(collected);
     return {
       loaded: !incompleteWithoutRenderedObjects,
       instanceCount: totals.loadedObjects,
@@ -2416,6 +2568,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     });
     // 整库是一批批到的：粗网格等整库装完再补一次，不在批与批之间插进来抢请求、反复 recompile
     const releaseLod1Backfill = holdDtxLod1Backfill();
+    // 「取最新」看得到整库显示正在进行（它没有按节点的加载会话）：等它结束再对账，不和它抢着装
+    const endWholeLibraryLoad = beginWholeLibraryLoad();
 
     try {
       if (!Number.isFinite(dbno) || dbno <= 0) {
@@ -2433,6 +2587,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message: `[错误] 按 dbnum 加载失败：${msg}`, level: 'error' });
       return { loaded: false, instanceCount: 0, refnoCount: 0, refnos: [] };
     } finally {
+      endWholeLibraryLoad();
       releaseLod1Backfill();
       isGenerating.value = false;
       showProgressModal.value = false;
@@ -2465,5 +2620,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     isModelActuallyLoaded,
     checkRefnoExists,
     listLoadedRoots: () => [...loadedRoots],
+    // 「取最新」用的几个出口（见 `useModelGetWork`）
+    withdrawRemovedRoot,
+    loadedRefnosOf,
+    isRootInScene,
+    /** 地址栏直装的节点：查看器替它记下这一次装了哪些构件 */
+    rememberLoadedRefnos: rememberLoadedRefnosOfRoot,
   };
 }
