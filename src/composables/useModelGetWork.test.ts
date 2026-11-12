@@ -116,12 +116,13 @@ beforeEach(() => {
 });
 
 describe('useModelGetWork：一轮走下来', () => {
-  it('已加载节点表里的节点有更新可重载：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新', async () => {
+  it('已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新', async () => {
     const { getWork } = await load();
     mocks.entries.mockReturnValue([tableEntry(SITE)]);
+    // 本页装的是 1143、库里的模型已到 1146
     mocks.facts.mockResolvedValue(facts('latest'));
-    // 本页装的是 1143、库里已到 1146：其间有会话改到了这个节点
-    mocks.listNodeVersions.mockResolvedValue({ versions: [{ sesno: 1146, sessionTime: null, impact: 'delivery', unitsChanged: 1 }] });
+    // 节点版本表就算说「其间没人改到它」也不看——根本不问
+    mocks.listNodeVersions.mockResolvedValue({ versions: [] });
     const scene = scenePort({ [SITE]: ['24384_26549'] });
     getWork.registerGetWorkScene(scene);
     const tree = { touchedDbnums: () => [8000], refresh: vi.fn(async () => treeReport()), nameOf: () => '/AIOS-INC-SITE' };
@@ -131,7 +132,8 @@ describe('useModelGetWork：一轮走下来', () => {
 
     expect(mocks.dbnums).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
     expect(mocks.refreshVerdict).toHaveBeenCalledTimes(1);
-    expect(mocks.listNodeVersions).toHaveBeenCalledWith(8000, SITE, 'subtree', expect.objectContaining({ sinceSesno: 1143 }));
+    // 不问节点版本表：真实库上那条查询一次十几到几十秒（见 `assumeChangedSince` 的说明）
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
     expect(tree.refresh).toHaveBeenCalledTimes(1);
     expect(scene.reload).toHaveBeenCalledWith(SITE);
     expect(report.models.reloaded).toEqual([{ refno: SITE, added: 1, removed: 0, total: 2 }]);
@@ -144,6 +146,90 @@ describe('useModelGetWork：一轮走下来', () => {
     expect(state.running).toBe(false);
     expect(state.progress).toBe('');
     expect(state.last?.summary).toBe(report.summary);
+  });
+
+  it('库的模型水位没动、只有库文件前进了（后台不会去追的库）：没有可换的新版，不重载，也不问节点版本表', async () => {
+    const { getWork } = await load();
+    // 不在监听范围的库：库文件到了 1146，模型还停在本页装的那一版 1143
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, applied_sesno: 1143, model_sesno: 1143, excluded: true, excluded_reason: 'watch_dbnums' }] });
+    mocks.entries.mockReturnValue([tableEntry(SITE)]);
+    mocks.facts.mockResolvedValue(facts('latest', 1143));
+    const scene = scenePort({ [SITE]: ['24384_26549'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.facts).toHaveBeenCalledTimes(1);
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(report.models).toMatchObject({ checked: 1, reloaded: [], kept: [], failed: [] });
+  });
+
+  it('后台的模型落后于库文件、但已经比本页装的新：重载换上后台现有的那一版，并说明还落后', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
+    mocks.entries.mockReturnValue([tableEntry(SITE)]);
+    mocks.facts.mockResolvedValue(facts('lagging'));
+    const scene = scenePort({ [SITE]: ['24384_26549'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
+    expect(scene.reload).toHaveBeenCalledWith(SITE);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([SITE]);
+    expect(report.models.kept).toEqual([{ refno: SITE, reason: expect.stringContaining('落后于库文件') }]);
+  });
+
+  it('旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载', async () => {
+    const { getWork } = await load();
+    // `fetchNodeModelFacts` 回 null = 服务端没有那条路由
+    mocks.facts.mockResolvedValue(null);
+    mocks.entries.mockReturnValue([tableEntry(SITE), tableEntry('24384_26548', { loadedModelSesno: 1146, loadedFileLatestSesno: 1143 })]);
+    const scene = scenePort({ [SITE]: ['a'], '24384_26548': ['b'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
+    // SITE 装的是 1143、库的模型到了 1146：重载；另一个装的时候模型已经是 1146（只是库文件那一格不一样）：不重载
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(SITE);
+    expect(report.models.checked).toBe(2);
+    expect(report.models.kept).toEqual([]);
+  });
+
+  it('旧后端（过渡办法）、库的模型水位没动而库文件前进了：不重载，也不凭空说它「落后」', async () => {
+    const { getWork } = await load();
+    mocks.facts.mockResolvedValue(null);
+    // 不在监听范围的库：模型还在本页装的 1146，库文件到了 1149
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
+    mocks.entries.mockReturnValue([tableEntry(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1146 })]);
+    const scene = scenePort({ [SITE]: ['a'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
+    expect(scene.reload).not.toHaveBeenCalled();
+    // 没问节点版本表，说不出它落后没落后：不记「没动、要说明」；库一级那句照旧点名
+    expect(report.models).toMatchObject({ checked: 1, reloaded: [], kept: [], failed: [] });
+    expect(report.libraries.map((item) => item.kind)).toEqual(['out_of_scope']);
+  });
+
+  it('库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [] });
+    mocks.entries.mockReturnValue([tableEntry(SITE)]);
+    mocks.facts.mockResolvedValue(facts('latest'));
+    const scene = scenePort({ [SITE]: ['a'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(scene.reload).toHaveBeenCalledWith(SITE);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([SITE]);
+    expect(report.libraries.map((item) => item.kind)).toEqual(['unknown']);
   });
 
   it('后端说库里没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不重载', async () => {
@@ -232,21 +318,22 @@ describe('useModelGetWork：在册的节点从哪来', () => {
 
   it('登记表里的节点核对过不用动：水位推进到现在；重载做成了就从登记表拿掉', async () => {
     const { getWork, registry } = await load();
-    registry.noteGetWorkRoot(SITE, 8000, { modelSesno: 1143, fileLatestSesno: 1143 }, 'show_dbnum');
+    // 不在监听范围的库：模型在 1146，库文件又前进到了 1149
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
+    // SITE 装的时候模型就是 1146（只有库文件那一格变了）：核对过不用动；另一个装的是 1143：库里的模型比它新，重载
+    registry.noteGetWorkRoot(SITE, 8000, { modelSesno: 1146, fileLatestSesno: 1146 }, 'show_dbnum');
     registry.noteGetWorkRoot('24384_26548', 8000, { modelSesno: 1143, fileLatestSesno: 1143 }, 'show_dbnum');
     mocks.facts.mockResolvedValue(facts('latest'));
-    mocks.listNodeVersions.mockImplementation(async (_dbnum: number, refno: string) => ({
-      versions: refno === '24384_26548' ? [{ sesno: 1146, sessionTime: null, impact: 'delivery', unitsChanged: 1 }] : [],
-    }));
     const scene = scenePort({ '24384_26548': ['a'] });
     getWork.registerGetWorkScene(scene);
 
     await getWork.requestGetWork();
 
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
     expect(scene.reload).toHaveBeenCalledTimes(1);
     expect(scene.reload).toHaveBeenCalledWith('24384_26548');
     expect(registry.getWorkRegisteredRoots()).toEqual([
-      { refno: SITE, dbnum: 8000, loadedModelSesno: 1146, loadedFileLatestSesno: 1146, origin: 'show_dbnum' },
+      { refno: SITE, dbnum: 8000, loadedModelSesno: 1146, loadedFileLatestSesno: 1149, origin: 'show_dbnum' },
     ]);
   });
 });

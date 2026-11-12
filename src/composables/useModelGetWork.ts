@@ -34,7 +34,7 @@ import {
 } from '@/composables/modelGetWorkRegistry';
 import { hasActiveModelLoad } from '@/composables/modelLoadSession';
 import { fetchNodeModelFacts } from '@/composables/nodeModelFacts';
-import { changedSessionsOfNodeVersions, resolveNodeModelStatus } from '@/composables/nodeModelStatus';
+import { resolveNodeModelStatus, type NodeChangedSession } from '@/composables/nodeModelStatus';
 import { isTreeNodeGoneMessage } from '@/composables/pdmsTreeRefresh';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { getGenModelV1Dbnums, peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
@@ -147,6 +147,23 @@ function selectedRefnoKey(): string | null {
   return /^\d+_\d+$/.test(key) ? key : null;
 }
 
+/**
+ * 「本页装的那一版之后，谁改到了这个节点」——取最新**不去问节点版本表**（`node/versions`），一律按改到了算：
+ * 回一条记在库现在的模型水位上的会话。`resolveNodeModelStatus` 只认落在「本页装的那一版之后、库的模型水位之内」的
+ * 会话，所以库里的模型比本页装的新时这个节点判成「有更新可重载」、直接重载；库的模型水位没动（只有库文件前进了、
+ * 后台没跟上）时这条会话不在那个范围里，等于没有可换的新版。
+ *
+ * 为什么不问：那条查询每来一个新会话都要把整条会话链现算一遍，不同节点之间不共用。2026-11-12 真实回放实测
+ * （1663 个会话的库）一次 17–28 秒，几个节点一起问会超过 120 秒的请求上限——结果是「新旧判不了、屏幕上的没有动」，
+ * 树换了、新增的构件却没装进来。重载只是重新查记录、和场景做差（同一个节点几十毫秒），记录才是准的。
+ * 代价：这个库在册的节点，在库的模型水位每动一次之后各重载一次（哪怕这次改动没碰到它）。
+ *
+ * 库状态里没有这个库的那一行（没取到）而后端答得出节点的状态时，记在起点的下一个会话上：照样算有更新。
+ */
+function assumeChangedSince(sinceSesno: number, row: DbnumRow | null): NodeChangedSession[] {
+  return [{ sesno: sesnoOf(row?.model_sesno) ?? sinceSesno + 1, time: null, unitsChanged: 0 }];
+}
+
 /** 数据源适配器的大包：用到时才引入，引入一次（状态栏不把它拖进首屏） */
 let modelSourceModule: Promise<typeof import('@/model-source')> | null = null;
 
@@ -185,7 +202,6 @@ const engine = createModelGetWork({
     return listSitesOfDbnum(tree, dbnum);
   },
   nodeStatus: async (root, row) => {
-    const { getModelSource } = await loadModelSource();
     let gone = false;
     const status = await resolveNodeModelStatus({
       dbnum: root.dbnum,
@@ -201,10 +217,7 @@ const engine = createModelGetWork({
           throw error;
         }
       },
-      listChangedSessions: async ({ dbnum, refno, sinceSesno, signal }) => {
-        const table = await getModelSource().versions.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal });
-        return changedSessionsOfNodeVersions(table.versions);
-      },
+      listChangedSessions: async ({ sinceSesno }) => assumeChangedSince(sinceSesno, row),
     });
     return { status, gone };
   },
