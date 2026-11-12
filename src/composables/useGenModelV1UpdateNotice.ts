@@ -11,7 +11,8 @@
  *   前一批动过、后一批没动的根永远换不上。
  * - `partial`（数据已应用、部分单元生成失败）照样提示；生成失败的根记录没换，不进重载名单。
  * - 批次里整根删掉的单元不在 `result.units` 里（删除走 DeleteCleanup，不出单元回执），另查
- *   `/tasks/{id}/changes`；场景里还挂着的进重载名单，重载时记录查空即从场景撤下。
+ *   `/tasks/{id}/changes`；场景里还挂着的进重载名单，重载时记录查空、后端也确认库里已经没有它，才从场景撤下
+ *   （记录查空不等于已删除，见 `useModelGeneration` 的 `emptyRefreshMeansRemoved`）。
  *
  * 信封形状见 gen-model `docs/specs/web-service-api.md` §5.3：`payload.result.batch { dbnum, db_type, start_sesno, end_sesno,
  * changed_elements }`、`payload.result.units[] { root_refno, status, kind }`。
@@ -440,7 +441,7 @@ export function dismissGenModelV1UpdateNotice(): void {
 
 /**
  * 「重载」：把提示里的重载名单按 `refreshModel` 重新装一遍（ViewerPanel 听 `showModelByRefnos`，只换记录与实例，
- * 不重新生成、不飞相机；删掉的根查空即撤下）。返回派发了哪些 refno；名单为空时不派发（改的是没显示的构件）。
+ * 不重新生成、不飞相机；删掉的根查空、后端确认它确实没有了才撤下）。返回派发了哪些 refno；名单为空时不派发。
  */
 export function reloadGenModelV1UpdateNotice(
   dispatch: (detail: ShowModelByRefnosDetail) => void = (detail) => {

@@ -58,6 +58,8 @@ type GenerationFacts = {
 const generationFactsMock = vi.fn(async (_refno: string): Promise<GenerationFacts | null> => null);
 /** 树的子节点（生成预检沿树数单元用）：缺省查不到 = 数不出来，按 1 个单元算 */
 const treeChildrenMock = vi.fn();
+/** 树的祖先链：服务端没有节点模型状态接口（旧构建）时，重载查空靠它确认「库里还有没有这个节点」。缺省问不到 */
+const treeAncestorsMock = vi.fn();
 /** 需确认生成的确认框：回 `'generate'` = 生成并显示，`null` = 取消 / 只显示已有的 */
 const openChoiceMock = vi.hoisted(() => vi.fn());
 
@@ -83,7 +85,7 @@ function tick(): Promise<void> {
 
 const v1Source = {
   kind: 'gen-model-v1' as const,
-  tree: { visibleInsts: visibleInstsMock, subtreeRefnos: vi.fn(), children: treeChildrenMock },
+  tree: { visibleInsts: visibleInstsMock, subtreeRefnos: vi.fn(), children: treeChildrenMock, ancestors: treeAncestorsMock },
   attributes: { typeInfo: typeInfoMock },
   versions: { listNodeVersions: listNodeVersionsMock },
   records: {
@@ -236,6 +238,8 @@ beforeEach(async () => {
   generationResumeTiming.budgetMs = -1;
   treeChildrenMock.mockReset();
   treeChildrenMock.mockRejectedValue(new Error('tree children not mocked'));
+  treeAncestorsMock.mockReset();
+  treeAncestorsMock.mockRejectedValue(new Error('tree ancestors not mocked'));
   openChoiceMock.mockReset();
   openChoiceMock.mockResolvedValue('generate');
   dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
@@ -1026,12 +1030,14 @@ describe('showModelByRefno 与已加载节点表（方案 2026-11-10 C2）', () 
     expect(listNodeVersionsMock).toHaveBeenCalledWith(1112, '9304_2', 'subtree', { sinceSesno: 738, signal });
   });
 
-  it('重载时发现这根已经没有几何（被删了）：从场景撤下，同时撤表', async () => {
+  it('重载时发现这根已经没有几何（被删了，后端也这么说）：从场景撤下，同时撤表', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
     visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: ['24381_1'] });
     await gen.showModelByRefno('24381_535');
     visibleInstsMock.mockResolvedValue({ success: true, refno: '24381_535', refnos: [] });
+    // 记录查空不等于已删除：后端明说库里没有这个节点了才撤
+    nodeFactsMock.mockRejectedValue(Object.assign(new Error('最新会话的索引里没有它'), { code: 'REFNO_NOT_FOUND' }));
     expect(await gen.showModelByRefno('24381_535', { refresh: true })).toBe(true);
     expect(forgetLoadedNodeMock).toHaveBeenCalledWith('24381_535');
   });
@@ -1813,7 +1819,7 @@ describe('showModelByRefno 重载（refresh）', () => {
     expect(loadInstancesMock.mock.calls[0]![3]).not.toHaveProperty('instanceEntriesByRefno');
   });
 
-  it('K08 记录查空且收齐（这根被删、或名下带几何的成员删光）：不生成，撤下根与名下旧构件，不再算已加载', async () => {
+  it('K08 记录查空且收齐、后端也确认它名下没有几何了（这根被删、或名下带几何的成员删光）：不生成，撤下根与名下旧构件，不再算已加载', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const viewer = makeViewer();
     const gen = useModelGeneration({ viewer, db_num: 8000 });
@@ -1822,6 +1828,8 @@ describe('showModelByRefno 重载（refresh）', () => {
     expect(await gen.showModelByRefno(root)).toBe(true);
     expect(gen.isModelActuallyLoaded(root)).toBe(true);
     loadInstancesMock.mockClear();
+    // 单元都生成过、它名下没有几何：成员删光了（根被删时后端回的是 REFNO_NOT_FOUND，见「重载查空的护栏」那一组）
+    nodeFactsMock.mockResolvedValue({ verdict: 'latest' });
 
     v1Source.records.invalidateRoot.mockReturnValueOnce([root, '24384_24779', '24384_24780']);
     unitRefnosMock.mockReturnValueOnce(['24384_24779', '24384_24781']);
@@ -3368,14 +3376,19 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
     return { gen, viewer };
   }
 
-  describe('重载查空的护栏（confirmEmpty）：后端没有模型不等于它被删了', () => {
-    it.each(['not_generated', 'partial', 'updating', 'unknown'])(
-      '后端说这个节点 %s（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样',
-      async (verdict) => {
+  describe('重载查空的护栏：记录查空不等于已删除（所有的重载都过这一道）', () => {
+    it.each([
+      ['not_generated', '后端现在没有这个节点的完整模型（可能重启过，或还没生成）'],
+      ['partial', '后端现在没有这个节点的完整模型（可能重启过，或还没生成）'],
+      ['unknown', '后端判不了这个节点的模型状态'],
+      ['updating', '所在的库正在更新'],
+    ])(
+      '后端说这个节点 %s（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说',
+      async (verdict, why) => {
         const { gen } = await loadedThenEmpty();
         nodeFactsMock.mockResolvedValue({ verdict });
 
-        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
 
         expect(nodeFactsMock).toHaveBeenCalledWith(expect.objectContaining({ refno: ROOT }));
         expect(evictMock).not.toHaveBeenCalled();
@@ -3384,29 +3397,90 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
         expect(gen.loadedRefnosOf(ROOT)).toEqual(MEMBERS);
         expect(gen.statusMessage.value).toContain('没有当成已删除');
         expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
-        // 没出「已从场景撤下」那句
-        expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('已从场景撤下') }));
+        // 给人的只有一句：没当成已删除、为什么。没出「已从场景撤下」那句
+        expect(emitToastMock).toHaveBeenCalledTimes(1);
+        expect(emitToastMock).toHaveBeenCalledWith({
+          message: `[警告] ${ROOT} 重载未完成：记录查空，但${why}——没有当成已删除，场景保持原样`,
+          level: 'warning',
+        });
+        expect(addLogMock).toHaveBeenCalledWith('warning', `[model-load] 重载 ${ROOT}：记录查空，但${why}——不当成已删除，场景保持原样`);
+        // 行上的状态重问一次（它多半还是重启之前问到的）
+        expect(recheckLoadedNodeMock).toHaveBeenCalledWith(ROOT);
       },
     );
 
-    it('后端没有节点模型状态接口（旧构建回 null）、或这一问没问到：一样保持原样', async () => {
-      const first = await loadedThenEmpty();
-      nodeFactsMock.mockResolvedValue(null);
-      expect(await first.gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
-      expect(evictMock).not.toHaveBeenCalled();
+    it('取最新发起的（quiet）：同样不撤，但不弹那一句（它自己汇总）', async () => {
+      const { gen } = await loadedThenEmpty();
+      nodeFactsMock.mockResolvedValue({ verdict: 'not_generated' });
 
-      const second = await loadedThenEmpty();
-      nodeFactsMock.mockRejectedValue(Object.assign(new Error('库文件打不开'), { code: 'SOURCE_NOT_FOUND' }));
-      expect(await second.gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(false);
+
       expect(evictMock).not.toHaveBeenCalled();
-      expect(second.gen.isModelActuallyLoaded(ROOT)).toBe(true);
+      expect(emitToastMock).not.toHaveBeenCalled();
+      expect(addLogMock).toHaveBeenCalledWith('warning', expect.stringContaining('不当成已删除'));
+    });
+
+    it('这一问没问到（库文件打不开、超时）：保持原样，原因照实说', async () => {
+      const { gen } = await loadedThenEmpty();
+      nodeFactsMock.mockRejectedValue(Object.assign(new Error('库文件打不开'), { code: 'SOURCE_NOT_FOUND' }));
+
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+      expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('节点模型状态没问到（库文件打不开）——没有当成已删除') }));
+      // 没有因此去问模型树（那是服务端没有这个接口时的过渡办法）
+      expect(treeAncestorsMock).not.toHaveBeenCalled();
+    });
+
+    describe('服务端没有节点模型状态接口（旧构建回 null）：只认「库里已经没有这个节点」，问模型树', () => {
+      it('树说库文件最新会话上没有这个节点：撤下', async () => {
+        const { gen, viewer } = await loadedThenEmpty();
+        nodeFactsMock.mockResolvedValue(null);
+        treeAncestorsMock.mockResolvedValue({ success: false, refnos: [], error_message: 'not_found (404): dbnum 8000 会话 Some(1155) 的索引里没有 24384/24778' });
+
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
+
+        expect(treeAncestorsMock).toHaveBeenCalledWith(ROOT);
+        expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [ROOT, ...MEMBERS], { release: true });
+        expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+      });
+
+      it('树说这个节点还在（分不清是成员删光了还是后端没有它的模型）：保持原样', async () => {
+        const { gen } = await loadedThenEmpty();
+        nodeFactsMock.mockResolvedValue(null);
+        treeAncestorsMock.mockResolvedValue({ success: true, refnos: ['24384_24777'] });
+
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+        expect(evictMock).not.toHaveBeenCalled();
+        expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+        expect(emitToastMock).toHaveBeenCalledWith({
+          message: `[警告] ${ROOT} 重载未完成：记录查空，但后端没有节点模型状态接口，确认不了它名下是不是真的没有几何了——没有当成已删除，场景保持原样`,
+          level: 'warning',
+        });
+      });
+
+      it.each([
+        ['树回了别的失败（不是「没有这个节点」）', async () => ({ success: false, refnos: [], error_message: 'server (500): 后端出错' })],
+        ['树也没问到', async () => { throw new Error('network: 断了'); }],
+      ])('%s：保持原样', async (_name, answer) => {
+        const { gen } = await loadedThenEmpty();
+        nodeFactsMock.mockResolvedValue(null);
+        treeAncestorsMock.mockImplementation(answer);
+
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+        expect(evictMock).not.toHaveBeenCalled();
+        expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+      });
     });
 
     it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下', async (verdict) => {
       const { gen, viewer } = await loadedThenEmpty();
       nodeFactsMock.mockResolvedValue({ verdict });
 
-      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(true);
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
 
       expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [ROOT, ...MEMBERS], { release: true });
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
@@ -3417,17 +3491,56 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
     it('后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下', async () => {
       const { gen } = await loadedThenEmpty();
       nodeFactsMock.mockRejectedValue(Object.assign(new Error('最新会话的索引里没有它'), { code: 'REFNO_NOT_FOUND' }));
-      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(true);
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
       expect(evictMock).toHaveBeenCalledTimes(1);
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
     });
 
-    it('不带 confirmEmpty（状态栏、行上的「重载」）：行为照旧——不问节点模型状态，查空且收齐就撤', async () => {
+    it('状态栏、行上的「重载」和重新部署后的重装（只带 refresh，不带别的）：一样先问，后端没有它的模型就不撤', async () => {
       const { gen } = await loadedThenEmpty();
       nodeFactsMock.mockResolvedValue({ verdict: 'not_generated' });
-      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
-      expect(nodeFactsMock).not.toHaveBeenCalled();
-      expect(evictMock).toHaveBeenCalledTimes(1);
+      // 模型树行上的「重载」带的是 { flyTo: false, refresh: true }；状态栏的重载、重新部署后的重装经查看器的事件带 { refresh: true }
+      expect(await gen.showModelByRefno(ROOT, { refresh: true })).toBe(false);
+      expect(nodeFactsMock).toHaveBeenCalledTimes(1);
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+    });
+
+    it('节点更新的后一半（重载）查空：同样先问，后端没有它的完整模型就不撤', async () => {
+      const { gen } = await loadedThenEmpty();
+      // 动手之前问的那一次说「落后、没有单元被删」→ 不带 force 重新生成；生成之后查记录是空的，再问一次：只有一部分
+      nodeFactsMock
+        .mockResolvedValueOnce({
+          dbnum: 8000, refno: ROOT, noun: 'EQUI', verdict: 'lagging', verdictReason: 'own_generation_stale',
+          units: { total: 1, generated: 1, missing: 0, failed: 0, lagging: 1, exact: true },
+          precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+          generatedAt: { sesnoMin: 1, sesnoMax: 1, timeMin: null, basis: 'own_generation' },
+          changes: { sinceSesno: 1, toSesno: 2, unitsChanged: 1, unitsAdded: 0, unitsRemoved: 0 },
+          library: { fileLatestSesno: 2, appliedSesno: 0, modelSesno: 0, initialized: false, inWatchScope: false },
+        })
+        .mockResolvedValueOnce({ verdict: 'partial' });
+
+      expect(await gen.showModelByRefno(ROOT, { update: true, flyTo: false })).toBe(false);
+
+      expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+      expect(nodeFactsMock).toHaveBeenCalledTimes(2);
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+    });
+
+    it('确认的这一会儿被叫停：还没开始撤，场景保持原样', async () => {
+      const { gen } = await loadedThenEmpty();
+      nodeFactsMock.mockImplementation(async () => {
+        requestStopModelLoad(ROOT);
+        return { verdict: 'latest' };
+      });
+
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(forgetLoadedNodeMock).not.toHaveBeenCalled();
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+      expect(gen.statusMessage.value).toBe('已停止重载，场景保持原样');
     });
 
     it('记录没收齐（409 在生成）时本来就不撤：不为它白问一次节点模型状态', async () => {
@@ -3436,7 +3549,7 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
       visibleInstsMock.mockResolvedValueOnce({
         success: true, refno: ROOT, refnos: [], incomplete: { pending: [ROOT], truncated_roots: [], errors: {} },
       });
-      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
       expect(nodeFactsMock).not.toHaveBeenCalled();
       expect(evictMock).not.toHaveBeenCalled();
     });
@@ -3445,7 +3558,7 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
       const { useModelGeneration } = await import('./useModelGeneration');
       const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
       visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
-      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(true);
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
       expect(nodeFactsMock).not.toHaveBeenCalled();
       expect(loadInstancesMock).toHaveBeenCalledWith(expect.anything(), 8000, MEMBERS, expect.objectContaining({ replaceExistingObjects: true }));
     });
@@ -3664,7 +3777,7 @@ describe('「取最新」用到的显示流程出口：补几处边角', () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
     visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [], incomplete });
-    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
     expect(nodeFactsMock).not.toHaveBeenCalled();
     expect(evictMock).not.toHaveBeenCalled();
   });
@@ -3909,7 +4022,7 @@ describe('这一次显示不弹提示（quiet）：「取最新」一轮重载�
     nodeFactsMock.mockResolvedValue({ verdict: 'latest' });
     visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [] });
 
-    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true, quiet: true })).toBe(true);
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(true);
 
     expect(evictMock).toHaveBeenCalledTimes(1);
     expect(emitToastMock).not.toHaveBeenCalled();

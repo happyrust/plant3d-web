@@ -27,6 +27,7 @@ import { beginModelLoadSession, beginWholeLibraryLoad, ModelLoadStoppedError, ty
 import { backendMeshPurgeKeepsShared, fetchGenerationFacts, fetchNodeModelFacts } from '@/composables/nodeModelFacts';
 import { changedSessionsOfNodeVersions, type NodeModelFacts } from '@/composables/nodeModelStatus';
 import { decideNodeUpdate, describeNodeUpdateSummary, planNodeUpdateChunks } from '@/composables/nodeModelUpdate';
+import { isTreeNodeGoneMessage } from '@/composables/pdmsTreeRefresh';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
@@ -421,7 +422,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (
     refno: string,
-    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; confirmEmpty?: boolean; quiet?: boolean },
+    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; quiet?: boolean },
   ) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
@@ -850,9 +851,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /**
-   * 重载（`refresh`）时这根按祖先查空：记录查询本身收齐了就是这根名下已没有几何——数据批次删了它，或删光了它名下
-   * 带几何的成员。它和它名下的旧构件从场景撤下、不再算已加载；没收齐（409 / 截断 / 出错）或只是退到子树查询时不下结论，
-   * 场景保持原样。两种都不生成。
+   * 重载（`refresh`）时这根按祖先查空、记录查询本身收齐了、后端也确认过它名下确实没有几何了（调用方先过
+   * `emptyRefreshMeansRemoved`）：数据批次删了它，或删光了它名下带几何的成员。它和它名下的旧构件从场景撤下、
+   * 不再算已加载；没收齐（409 / 截断 / 出错）或只是退到子树查询时不下结论，场景保持原样。两种都不生成。
    */
   function finishRefreshOfEmptyRoot(
     dbno: number,
@@ -903,24 +904,45 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /**
-   * 「取最新」发起的重载查空时的护栏。后端重启之后，模型按需生成的库（未初始化）里什么模型都没有，按祖先查记录
-   * 照样是「查空且收齐」——那不是被删了，不能把场景里的东西撤掉。所以动手撤之前问一次节点模型状态：只有后端明说
+   * 重载查空时的护栏：**记录查空不等于已删除**。后端重启之后，模型按需生成的库（未初始化）里什么模型都没有，按祖先
+   * 查记录照样是「查空且收齐」——那不是被删了，不能把场景里的东西撤掉。所以动手撤之前问一次节点模型状态：只有后端明说
    * 这个节点的单元都生成过（`latest` / `lagging`）、它名下确实没有生成单元（`empty`）、或库里已经没有这个节点
    * （`REFNO_NOT_FOUND`）才当成「没有几何了」；没生成、只生成了一部分、库在更新、判不了、问不到，一律保持原样。
+   *
+   * 所有的重载都过这一道（2026-11-12 用户定）：取最新、状态栏和行上的「重载」、重新部署后的重装、节点更新的后一半。
    */
   async function emptyRefreshMeansRemoved(root: string): Promise<{ removed: boolean; why: string }> {
     try {
       const facts = await withTimeout(fetchNodeModelFacts({ refno: root }), NODE_UPDATE_FACTS_TIMEOUT_MS, '节点模型状态');
-      if (!facts) return { removed: false, why: '后端没有节点模型状态接口，确认不了它是不是真的没有几何了' };
+      if (!facts) return await goneFromLibraryPerTree(root);
       if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };
       return {
         removed: false,
-        why: facts.verdict === 'updating' ? '所在的库正在更新' : '后端现在没有这个节点的完整模型（可能重启过，或还没生成）',
+        why: facts.verdict === 'updating'
+          ? '所在的库正在更新'
+          : facts.verdict === 'unknown'
+            ? '后端判不了这个节点的模型状态'
+            : '后端现在没有这个节点的完整模型（可能重启过，或还没生成）',
       };
     } catch (e) {
       if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, why: '' };
       return { removed: false, why: `节点模型状态没问到（${e instanceof Error ? e.message : String(e)}）` };
     }
+  }
+
+  /**
+   * 服务端没有节点模型状态接口（旧构建）时的过渡办法：只认「库里已经没有这个节点」这一种——问模型树的祖先链
+   * （树直接读库文件，不看后端有没有它的模型），树明说没有这个节点才撤。节点还在、只是它名下带几何的成员删光了的，
+   * 旧后端上分不清「删光了」和「后端没有它的模型」：保持原样。
+   */
+  async function goneFromLibraryPerTree(root: string): Promise<{ removed: boolean; why: string }> {
+    try {
+      const resp = await withTimeout(getModelSource().tree.ancestors(root), NODE_UPDATE_FACTS_TIMEOUT_MS, '模型树');
+      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, why: '' };
+    } catch {
+      // 树也没问到：按确认不了算
+    }
+    return { removed: false, why: '后端没有节点模型状态接口，确认不了它名下是不是真的没有几何了' };
   }
 
   /**
@@ -1022,11 +1044,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
        * 生成走哪条路、要不要先问，按后端此刻的节点模型状态定（`nodeModelUpdate.decideNodeUpdate`）。
        */
       update?: boolean
-      /**
-       * 「取最新」发起的重载：记录查空时不直接当成「被删了」，先问后端这个节点的模型状态再决定撤不撤
-       * （见 `emptyRefreshMeansRemoved`）。别的重载入口（状态栏、行上的「重载」）不带，行为照旧。
-       */
-      confirmEmpty?: boolean
       /**
        * 这一次显示不弹提示（控制台照记）：调用方自己把几个节点的结果汇总成一句。「取最新」一轮要重载好几个节点，
        * 每个节点各弹一条「已从 gen-model 加载 N 个几何实例」只会在最后那句交代之前闪过去。
@@ -1959,20 +1976,28 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         });
       } else if (visibleRefnos.length === 0) {
         if (refresh) {
-          // 取最新的护栏：收齐的查空才会走到「撤下」（没收齐的下面本来就保持原样，不为它白问一次）。
-          // 动手之前先确认后端是真的没有它的几何了，而不是没有它的模型
+          // 记录查空不等于已删除：收齐的查空才会走到「撤下」（没收齐的下面本来就保持原样，不为它白问一次）。
+          // 动手之前先确认后端是真的没有它的几何了，而不是没有它的模型。哪个入口发起的重载都一样。
           const notCollected = !!scopeIncomplete && (
             scopeIncomplete.pending.length > 0
             || scopeIncomplete.truncated_roots.length > 0
             || Object.keys(scopeIncomplete.errors).length > 0
           );
-          if (loadOptions?.confirmEmpty === true && !notCollected) {
+          if (!notCollected) {
             const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);
+            // 确认的这一会儿被叫停：还没开始撤，场景保持原样
+            session.throwIfStopped();
             if (!confirmed.removed) {
               statusMessage.value = `refno=${normalizedRoot} 记录查空，没有当成已删除，场景保持原样`;
               progress.value = 100;
               syncGlobalLoadStatus();
               consoleStore.addLog('warning', `[model-load] 重载 ${normalizedRoot}：记录查空，但${confirmed.why}——不当成已删除，场景保持原样`);
+              toast({
+                message: `[警告] ${normalizedRoot} 重载未完成：记录查空，但${confirmed.why}——没有当成已删除，场景保持原样`,
+                level: 'warning',
+              });
+              // 行上的状态多半还是重启之前问到的：重问一次，让它照实说（未生成的会给「生成」）
+              recheckLoadedNode(normalizedRoot);
               return false;
             }
           }
