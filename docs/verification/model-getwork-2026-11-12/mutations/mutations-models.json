@@ -1,0 +1,1291 @@
+{
+  "cwd": "D:/work/plant-code/old/plant3d-web-getwork",
+  "tests": [
+    "src/composables/modelGetWork.test.ts",
+    "src/composables/useModelGetWork.test.ts",
+    "src/composables/modelGetWorkRegistry.test.ts",
+    "src/composables/modelLoadSession.test.ts",
+    "src/composables/useModelGeneration.genModelV1.test.ts",
+    "src/model-source/genModelV1/collectDbnum.test.ts",
+    "src/composables/usePdmsOwnerTree.getwork.test.ts",
+    "src/components/model-tree/ModelGetWorkButton.test.ts",
+    "src/components/model-tree/GenModelV1HealthBadge.test.ts"
+  ],
+  "out": "mutations-models.result.json",
+  "mutations": [
+    {
+      "id": "G01",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库正在更新不等",
+      "find": "return kind === 'updating' || kind === 'file_ahead' || kind === 'model_behind';",
+      "replace": "return kind === 'file_ahead' || kind === 'model_behind';"
+    },
+    {
+      "id": "G02",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库文件领先不等",
+      "find": "return kind === 'updating' || kind === 'file_ahead' || kind === 'model_behind';",
+      "replace": "return kind === 'updating' || kind === 'model_behind';"
+    },
+    {
+      "id": "G03",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "模型落后于数据不等",
+      "find": "return kind === 'updating' || kind === 'file_ahead' || kind === 'model_behind';",
+      "replace": "return kind === 'updating' || kind === 'file_ahead';"
+    },
+    {
+      "id": "G04",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "不在监听范围、水位相等的库也点名",
+      "find": "model === null || fileLatest <= model) return null;",
+      "replace": "model === null || fileLatest < model) return null;"
+    },
+    {
+      "id": "G05",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "未初始化的库也按库一级点名",
+      "find": "if (!freshness.initialized || fileLatest === null || model === null",
+      "replace": "if (fileLatest === null || model === null"
+    },
+    {
+      "id": "G06",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "有过期标记的节点不核对",
+      "find": "  if (root.staleReason) return true;\n  if (!row) return true;",
+      "replace": "  if (!row) return true;"
+    },
+    {
+      "id": "G07",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库状态没取到的节点不核对",
+      "find": "  if (!row) return true;\n  if (root.loadedModelSesno === null",
+      "replace": "  if (!row) return false;\n  if (root.loadedModelSesno === null"
+    },
+    {
+      "id": "G08",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "装时水位没记下的节点不核对",
+      "find": "  if (root.loadedModelSesno === null && root.loadedFileLatestSesno === null) return true;\n  if (sesnoOf(row.model_sesno)",
+      "replace": "  if (sesnoOf(row.model_sesno)"
+    },
+    {
+      "id": "G09",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "模型水位变了不核对",
+      "find": "  if (sesnoOf(row.model_sesno) !== root.loadedModelSesno) return true;",
+      "replace": ""
+    },
+    {
+      "id": "G10",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "只有库文件前进不核对",
+      "find": "  if (sesnoOf(row.file_latest_sesno) !== root.loadedFileLatestSesno) return true;",
+      "replace": ""
+    },
+    {
+      "id": "G11",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重启后按需生成的库不重问",
+      "find": "  if (restarted && !(row.initialized === true && (sesnoOf(row.model_sesno) ?? 0) > 0)) return true;",
+      "replace": ""
+    },
+    {
+      "id": "G12",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重启后已初始化的库也重问",
+      "find": "  if (restarted && !(row.initialized === true && (sesnoOf(row.model_sesno) ?? 0) > 0)) return true;",
+      "replace": "  if (restarted) return true;"
+    },
+    {
+      "id": "G13",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库里没有的节点不撤",
+      "find": "  if (answer.gone) return { kind: 'withdraw' };",
+      "replace": ""
+    },
+    {
+      "id": "G14",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "有更新可重载的不重载",
+      "find": "    case 'reloadable':\n      return { kind: 'reload', note: null };",
+      "replace": "    case 'reloadable':\n      return { kind: 'none' };"
+    },
+    {
+      "id": "G15",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "最新但有过期标记的不重载",
+      "find": "if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };",
+      "replace": "if (ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };"
+    },
+    {
+      "id": "G16",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "按需生成的比本页新也不重载",
+      "find": "if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };",
+      "replace": "if (root.staleReason || watermarkUnknown) return { kind: 'reload', note: null };"
+    },
+    {
+      "id": "G17",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "装时水位没记下的最新节点不重载",
+      "find": "if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };",
+      "replace": "if (root.staleReason || ownGenerationNewer(root, status)) return { kind: 'reload', note: null };"
+    },
+    {
+      "id": "G18",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "落后且有可换新版的不重载",
+      "find": "if (status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {",
+      "replace": "if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {"
+    },
+    {
+      "id": "G19",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "落后而没有可换新版的也重载",
+      "find": "      return { kind: 'keep', reason: '后台的模型落后于库文件，屏幕上的没有可换的新版；行上的「更新」可让后端追上' };",
+      "replace": "      return { kind: 'reload', note: null };"
+    },
+    {
+      "id": "G20",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "名下没有生成单元的节点不重载",
+      "find": "      // 这个节点下已经没有生成单元（成员删光了）：重载会查空，确认之后把它名下的旧构件撤下\n      return { kind: 'reload', note: null };",
+      "replace": "      return { kind: 'none' };"
+    },
+    {
+      "id": "G21",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库在更新也重载",
+      "find": "      return { kind: 'keep', reason: '所在的库后台正在更新，屏幕上的没有动；稍后再点「取最新」' };",
+      "replace": "      return { kind: 'reload', note: null };"
+    },
+    {
+      "id": "G22",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "护栏：后端没有（完整）模型也去重载",
+      "find": "      return {\n        kind: 'keep',\n        reason: `${why}后端现在${what}这个节点的模型",
+      "replace": "      if (what) return { kind: 'reload', note: null };\n      return {\n        kind: 'keep',\n        reason: `${why}后端现在${what}这个节点的模型"
+    },
+    {
+      "id": "G23",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重启与否说法一样",
+      "find": "      const why = options.restarted ? '后端重启过，' : '';",
+      "replace": "      const why = '';"
+    },
+    {
+      "id": "G24",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "判不了也重载",
+      "find": "      return { kind: 'keep', reason: `新旧判不了（${status.reason || '后端没有答复'}），屏幕上的没有动` };",
+      "replace": "      return { kind: 'reload', note: null };"
+    },
+    {
+      "id": "G25",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "靠库水位担保的也按「按需生成比本页新」判",
+      "find": "  if (!generated || generated.basis === 'library_watermark') return false;",
+      "replace": "  if (!generated) return false;"
+    },
+    {
+      "id": "G26",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "按需生成的同一会话也算比本页新",
+      "find": "generated.sesnoMax > root.loadedFileLatestSesno;",
+      "replace": "generated.sesnoMax >= root.loadedFileLatestSesno;"
+    },
+    {
+      "id": "G27",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "部分生成但没有已生成单元的新 SITE 也装",
+      "find": "  return status.verdict === 'partial' && (status.units?.generated ?? 0) > 0;",
+      "replace": "  return status.verdict === 'partial';"
+    },
+    {
+      "id": "G28",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "落后的新 SITE 不装",
+      "find": "  if (status.verdict === 'latest' || status.verdict === 'lagging' || status.verdict === 'reloadable') return true;",
+      "replace": "  if (status.verdict === 'latest' || status.verdict === 'reloadable') return true;"
+    },
+    {
+      "id": "G29",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "等装载的上限放大三倍",
+      "find": "      if (ports.now() - startedAt >= GETWORK_LOAD_WAIT_MAX_MS) return false;",
+      "replace": "      if (ports.now() - startedAt >= GETWORK_LOAD_WAIT_MAX_MS * 3) return false;"
+    },
+    {
+      "id": "G30",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "装载没结束也照做",
+      "find": "      if (!(await waitLoadIdle())) return fail('有装载 / 生成一直没结束，这次没有取最新；等它结束再点');",
+      "replace": "      await waitLoadIdle();"
+    },
+    {
+      "id": "G31",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "认不出后端重启",
+      "find": "      report.backendRestarted = lastGeneration !== null && generation !== lastGeneration;",
+      "replace": "      report.backendRestarted = false;"
+    },
+    {
+      "id": "G32",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "树上碰过的库不算碰过",
+      "find": "      for (const dbnum of tree?.touchedDbnums() ?? []) touched.add(dbnum);",
+      "replace": ""
+    },
+    {
+      "id": "G33",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "装过模型的库不算碰过",
+      "find": "      for (const root of ports.roots()) touched.add(root.dbnum);",
+      "replace": ""
+    },
+    {
+      "id": "G34",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "整库显示过的库不算碰过",
+      "find": "      for (const scope of ports.dbnumScopes()) touched.add(scope.dbnum);",
+      "replace": ""
+    },
+    {
+      "id": "G35",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "等后台的上限放大三倍",
+      "find": "        while (pending.length > 0 && ports.now() - waitStartedAt < GETWORK_BACKEND_WAIT_MAX_MS) {",
+      "replace": "        while (pending.length > 0 && ports.now() - waitStartedAt < GETWORK_BACKEND_WAIT_MAX_MS * 3) {"
+    },
+    {
+      "id": "G36",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "后台没做完也不等",
+      "find": "      if (pending.length > 0) {\n        const waiting = [...pending];",
+      "replace": "      if (pending.length < 0) {\n        const waiting = [...pending];"
+    },
+    {
+      "id": "G37",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "等的时候一拍没取到就整轮失败",
+      "find": "          } catch {\n            // 这一拍没取到：接着等，用上一拍的\n          }",
+      "replace": "          } catch (waitError) {\n            throw waitError;\n          }"
+    },
+    {
+      "id": "G38",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "树刷新出错拖垮整轮",
+      "find": "          report.treeError = errorText(error);",
+      "replace": "          throw error;"
+    },
+    {
+      "id": "G39",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "已加载节点表里的节点也按「不在场景」丢掉",
+      "find": "      if (root.source === 'registry' && !scene.rootInScene(root.refno, root.dbnum)) ports.forgetRoot(root.refno);",
+      "replace": "      if (!scene.rootInScene(root.refno, root.dbnum)) ports.forgetRoot(root.refno);"
+    },
+    {
+      "id": "G40",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "登记表里别处已撤的节点照样核对",
+      "find": "      if (root.source === 'registry' && !scene.rootInScene(root.refno, root.dbnum)) ports.forgetRoot(root.refno);\n      else roots.push(root);",
+      "replace": "      roots.push(root);"
+    },
+    {
+      "id": "G41",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "所有节点都核对（不按库发现）",
+      "find": "      if (!rootNeedsCheck(root, row, restarted)) return false;",
+      "replace": "      if (!root) return false;"
+    },
+    {
+      "id": "G42",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "已加载节点表里的节点也推进水位",
+      "find": "        if (root.source === 'registry' && row) {",
+      "replace": "        if (row) {"
+    },
+    {
+      "id": "G43",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "不用动的节点不记说明（keep 不进回执）",
+      "find": "        models.kept.push({ refno: root.refno, reason: action.reason });\n        continue;",
+      "replace": "        continue;"
+    },
+    {
+      "id": "G44",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "动场景前不等别的装载",
+      "find": "      if (!(await waitLoadIdle())) {\n        models.failed.push({ refno: root.refno, reason: '有别的装载一直没结束，这个节点这次没换' });\n        continue;\n      }",
+      "replace": ""
+    },
+    {
+      "id": "G45",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "撤下之后登记表里还留着",
+      "find": "        else removedUnnamed += refnos;\n        ports.forgetRoot(root.refno);",
+      "replace": "        else removedUnnamed += refnos;"
+    },
+    {
+      "id": "G46",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载抛错拖垮整轮",
+      "find": "        models.failed.push({ refno: root.refno, reason: `重载出错：${errorText(error)}` });\n        continue;",
+      "replace": "        throw error;"
+    },
+    {
+      "id": "G47",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载没做成也算换过",
+      "find": "      if (!outcome.ok) {\n        models.failed.push({ refno: root.refno, reason: '重载没有完成",
+      "replace": "      if (outcome.ok === undefined) {\n        models.failed.push({ refno: root.refno, reason: '重载没有完成"
+    },
+    {
+      "id": "G48",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载做成的已加载节点表节点也从登记表撤（无条件 forget）",
+      "find": "      if (root.source === 'registry') ports.forgetRoot(root.refno);\n      const after = outcome.after;",
+      "replace": "      ports.forgetRoot(root.refno);\n      const after = outcome.after;"
+    },
+    {
+      "id": "G49",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载做成的登记表节点不交接",
+      "find": "      if (root.source === 'registry') ports.forgetRoot(root.refno);\n      const after = outcome.after;",
+      "replace": "      const after = outcome.after;"
+    },
+    {
+      "id": "G50",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载后查空不算撤下",
+      "find": "      if (!after || after.length === 0) {\n        for (const refno of outcome.before) removedAll.add(refno);\n        models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });\n        continue;\n      }",
+      "replace": "      if (!after) continue;"
+    },
+    {
+      "id": "G51",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新增构件数算错",
+      "find": "      const added = after.filter((refno) => !outcome.before.has(refno));",
+      "replace": "      const added = after;"
+    },
+    {
+      "id": "G52",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "撤下构件数算错",
+      "find": "      const removed = [...outcome.before].filter((refno) => !afterSet.has(refno));",
+      "replace": "      const removed = [];"
+    },
+    {
+      "id": "G53",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载后「还落后」不说",
+      "find": "      if (action.note) models.kept.push({ refno: root.refno, reason: action.note });",
+      "replace": ""
+    },
+    {
+      "id": "G54",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "按预算显示的库也找新 SITE",
+      "find": "      if (!scope.discover) continue;",
+      "replace": ""
+    },
+    {
+      "id": "G55",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库文件没变也每次找新 SITE",
+      "find": "      if (scope.checkedFileLatestSesno !== null && fileLatest === scope.checkedFileLatestSesno) continue;",
+      "replace": ""
+    },
+    {
+      "id": "G56",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "从没找过的库、库文件没变就不找",
+      "find": "      if (scope.checkedFileLatestSesno !== null && fileLatest === scope.checkedFileLatestSesno) continue;",
+      "replace": "      if (fileLatest === scope.checkedFileLatestSesno || scope.checkedFileLatestSesno === null) continue;"
+    },
+    {
+      "id": "G57",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "已在管的 SITE 也当新的",
+      "find": "        if (scope.knownSites.has(site.refno)) continue;",
+      "replace": ""
+    },
+    {
+      "id": "G58",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "名单里已不存在的 SITE 当成「还没有模型」",
+      "find": "        if (answer.gone) continue;\n",
+      "replace": ""
+    },
+    {
+      "id": "G59",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "没有生成单元的新 SITE 当成「还没有模型」",
+      "find": "        if (answer.status.verdict === 'empty') continue;",
+      "replace": ""
+    },
+    {
+      "id": "G60",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "后端没有模型的新 SITE 也装",
+      "find": "        if (!newSiteHasModel(answer.status)) {",
+      "replace": "        if (!answer.status) {"
+    },
+    {
+      "id": "G61",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新 SITE 没有模型也记「找过了」",
+      "find": "          allSettled = false;\n          models.kept.push({ refno: site.refno, reason: `新出现的 SITE ${site.name}：后端还没有它的模型",
+      "replace": "          models.kept.push({ refno: site.refno, reason: `新出现的 SITE ${site.name}：后端还没有它的模型"
+    },
+    {
+      "id": "G62",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "装新 SITE 前不等别的装载",
+      "find": "        if (!(await waitLoadIdle())) {\n          allSettled = false;\n          models.failed.push({ refno: site.refno, reason: '有别的装载一直没结束，新出现的 SITE 这次没装' });\n          continue;\n        }",
+      "replace": ""
+    },
+    {
+      "id": "G63",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新 SITE 装入抛错拖垮整轮",
+      "find": "          allSettled = false;\n          models.failed.push({ refno: site.refno, reason: `装入出错：${errorText(error)}` });\n          continue;",
+      "replace": "          throw error;"
+    },
+    {
+      "id": "G64",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新 SITE 没装成也记成已在管",
+      "find": "        if (!outcome.ok) {\n          allSettled = false;\n          models.failed.push({ refno: site.refno, reason: `新出现的 SITE ${site.name} 没装成` });\n          continue;\n        }",
+      "replace": ""
+    },
+    {
+      "id": "G65",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新 SITE 装上了不记成已在管",
+      "find": "        ports.noteSiteKnown(scope.dbnum, site.refno);",
+      "replace": ""
+    },
+    {
+      "id": "G66",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "一个构件都没装上的新 SITE 也计入新装入",
+      "find": "        if (outcome.after && outcome.after.length > 0) {\n          for (const refno of outcome.after) addedAll.add(refno);",
+      "replace": "        if (outcome.after) {\n          for (const refno of outcome.after) addedAll.add(refno);"
+    },
+    {
+      "id": "G67",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "有没处理完的新 SITE 也记「找过了」",
+      "find": "      if (allSettled) ports.noteScopeChecked(scope.dbnum, fileLatest);",
+      "replace": "      ports.noteScopeChecked(scope.dbnum, fileLatest);"
+    },
+    {
+      "id": "G68",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "查看器没挂也去动模型",
+      "find": "      if (scene) await refreshModels(report, scene, rows);\n      else report.models.rootsTotal = ports.roots().length;",
+      "replace": "      if (scene) await refreshModels(report, scene, rows);"
+    },
+    {
+      "id": "G69",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "第一轮就算库水位动了",
+      "find": "lastWatermarks.has(dbnum) && lastWatermarks.get(dbnum) !== key);",
+      "replace": "lastWatermarks.get(dbnum) !== key);"
+    },
+    {
+      "id": "G70",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "已登记成已删除的选中还去处理",
+      "find": "      if (selected && !ports.selection.isDeleted()) {",
+      "replace": "      if (selected) {"
+    },
+    {
+      "id": "G71",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "祖先挪走的选中也当成被删",
+      "find": "          gone = fate === 'deleted' ? true : fate === 'relocated' ? false : null;",
+      "replace": "          gone = fate === 'deleted' || fate === 'relocated' ? true : null;"
+    },
+    {
+      "id": "G72",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "祖先被删的选中还要去问",
+      "find": "          gone = fate === 'deleted' ? true : fate === 'relocated' ? false : null;",
+      "replace": "          gone = fate === 'relocated' ? false : null;"
+    },
+    {
+      "id": "G73",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "查空撤下的选中也当成被删",
+      "find": "models.withdrawn.some((item) => item.refno === selected && item.why === 'deleted')) gone = true;",
+      "replace": "models.withdrawn.some((item) => item.refno === selected)) gone = true;"
+    },
+    {
+      "id": "G74",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "问选中的构件出错拖垮整轮",
+      "find": "          } catch {\n            gone = null;\n          }",
+      "replace": "          } catch (probeError) {\n            throw probeError;\n          }"
+    },
+    {
+      "id": "G75",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "没问到也当成被删",
+      "find": "        if (gone === true) {\n          ports.selection.markDeleted(selected);",
+      "replace": "        if (gone !== false) {\n          ports.selection.markDeleted(selected);"
+    },
+    {
+      "id": "G76",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "派生物的「有变化」不看树",
+      "find": "{ changed: treeChanged || modelsChanged || librariesMoved, treeChanged, modelsChanged };",
+      "replace": "{ changed: modelsChanged || librariesMoved, treeChanged, modelsChanged };"
+    },
+    {
+      "id": "G77",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "派生物的「有变化」不看模型",
+      "find": "{ changed: treeChanged || modelsChanged || librariesMoved, treeChanged, modelsChanged };",
+      "replace": "{ changed: treeChanged || librariesMoved, treeChanged, modelsChanged };"
+    },
+    {
+      "id": "G78",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "派生物的「有变化」不看库水位",
+      "find": "{ changed: treeChanged || modelsChanged || librariesMoved, treeChanged, modelsChanged };",
+      "replace": "{ changed: treeChanged || modelsChanged, treeChanged, modelsChanged };"
+    },
+    {
+      "id": "G79",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "一个派生物出错后面的不做",
+      "find": "        } catch {\n          report.derived.push({ name: handler.name, ok: false });\n        }",
+      "replace": "        } catch (derivedError) {\n          report.derived.push({ name: handler.name, ok: false });\n          throw derivedError;\n        }"
+    },
+    {
+      "id": "G80",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "没等到的库不加说明",
+      "find": "const timedOut = report.waited?.timedOut.includes(dbnum) === true;",
+      "replace": "const timedOut = false;"
+    },
+    {
+      "id": "G81",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "运行中再点不排下一轮（直接回当前这一轮）",
+      "find": "    if (!followUp) {\n      const next: Promise<GetWorkReport> = current.then(() => {",
+      "replace": "    if (current) return current;\n    if (!followUp) {\n      const next: Promise<GetWorkReport> = current.then(() => {"
+    },
+    {
+      "id": "G82",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "排的下一轮跑完不放开",
+      "find": "        if (followUp === next) followUp = null;",
+      "replace": ""
+    },
+    {
+      "id": "G83",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "不在监听范围的库也把那一句标成警告",
+      "find": "    if (report.libraries.some((item) => item.kind !== 'out_of_scope')) caveats += 1;",
+      "replace": "    caveats += 1;"
+    },
+    {
+      "id": "G84",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "后台没跟上的库不标警告",
+      "find": "    if (report.libraries.some((item) => item.kind !== 'out_of_scope')) caveats += 1;",
+      "replace": ""
+    },
+    {
+      "id": "G85",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "有节点没动不标警告",
+      "find": "  if (models.kept.length > 0) {\n    caveats += 1;",
+      "replace": "  if (models.kept.length > 0) {"
+    },
+    {
+      "id": "G86",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "没做成的一轮不报错",
+      "find": "    return { summary: `取最新没有完成：${report.error ?? '原因不明'}`, detail: [], level: 'error' };",
+      "replace": "    return { summary: `取最新没有完成：${report.error ?? '原因不明'}`, detail: [], level: 'info' };"
+    },
+    {
+      "id": "G87",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "挪到没展开位置的不计入挪位置",
+      "find": "      tree.moved.length + relocated > 0 ? `挪位置 ${tree.moved.length + relocated}` : '',",
+      "replace": "      tree.moved.length > 0 ? `挪位置 ${tree.moved.length}` : '',"
+    },
+    {
+      "id": "G88",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "没问到下落的也算删除",
+      "find": "    const deleted = tree.removed.filter((item) => item.fate === 'deleted').length;",
+      "replace": "    const deleted = tree.removed.filter((item) => item.fate !== 'relocated').length;"
+    },
+    {
+      "id": "G89",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "整节点撤下的构件不计入撤下的合计",
+      "find": "        if (members.length > 0) for (const member of members) removedAll.add(member);",
+      "replace": ""
+    },
+    {
+      "id": "G90",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "跑完进度文字不清",
+      "find": "      ports.onProgress('');\n      return report;",
+      "replace": "      return report;"
+    },
+    {
+      "id": "U01",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "只是点过没装的也算在册",
+      "find": "    if (!entry.loaded) continue;",
+      "replace": ""
+    },
+    {
+      "id": "U02",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "两张表都有时以登记表为准",
+      "find": "    if (out.has(entry.refno)) continue;",
+      "replace": ""
+    },
+    {
+      "id": "U03",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "钉在历史版本上的选中也处理",
+      "find": "  if (getGlobalSelectedVersionPin()) return null;",
+      "replace": ""
+    },
+    {
+      "id": "U04",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "不是 PDMS refno 的选中也去问",
+      "find": "  return /^\\d+_\\d+$/.test(key) ? key : null;",
+      "replace": "  return key || null;"
+    },
+    {
+      "id": "U05",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "/dbnums 不强制重拉",
+      "find": "getGenModelV1Dbnums({ timeoutMs: 60_000, force: true });",
+      "replace": "getGenModelV1Dbnums({ timeoutMs: 60_000 });"
+    },
+    {
+      "id": "U06",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "库状态圆点不跟着换新",
+      "find": "    void useGenModelV1Health().refreshVerdict();",
+      "replace": ""
+    },
+    {
+      "id": "U07",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "REFNO_NOT_FOUND 不记成已删除",
+      "find": "if ((error as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') gone = true;",
+      "replace": ""
+    },
+    {
+      "id": "U08",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "任何失败都记成已删除",
+      "find": "if ((error as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') gone = true;",
+      "replace": "gone = true;"
+    },
+    {
+      "id": "U09",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "登记已删除时换了写法",
+      "find": "      if (raw && toRefnoKey(raw) === refno) setGlobalSelectedDeletedRefno(raw);",
+      "replace": "      if (raw && toRefnoKey(raw) === refno) setGlobalSelectedDeletedRefno(refno);"
+    },
+    {
+      "id": "U10",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "祖先链查得到也当成没有了",
+      "find": "    if (resp.success) return false;\n    return isTreeNodeGoneMessage(resp.error_message) ? true : null;",
+      "replace": "    if (resp.success) return true;\n    return isTreeNodeGoneMessage(resp.error_message) ? true : null;"
+    },
+    {
+      "id": "U11",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "别的失败也当成没有了",
+      "find": "    return isTreeNodeGoneMessage(resp.error_message) ? true : null;",
+      "replace": "    return true;"
+    },
+    {
+      "id": "U12",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "每个等的人各出一句",
+      "find": "  if (announced === report) return;",
+      "replace": ""
+    },
+    {
+      "id": "U13",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "没做成也收起更新提示",
+      "find": "  if (report.ok && report.models.failed.length === 0) dismissGenModelV1UpdateNotice();",
+      "replace": "  if (report.models.failed.length === 0) dismissGenModelV1UpdateNotice();"
+    },
+    {
+      "id": "U14",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "有节点没换成也收起更新提示",
+      "find": "  if (report.ok && report.models.failed.length === 0) dismissGenModelV1UpdateNotice();",
+      "replace": "  if (report.ok) dismissGenModelV1UpdateNotice();"
+    },
+    {
+      "id": "U15",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "旧的树撤登记时把新的也撤了",
+      "find": "    if (treePort === port) treePort = null;",
+      "replace": "    treePort = null;"
+    },
+    {
+      "id": "U16",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "旧的场景撤登记时把新的也撤了",
+      "find": "    if (scenePort === port) scenePort = null;",
+      "replace": "    scenePort = null;"
+    },
+    {
+      "id": "U17",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "旧的派生物撤登记时把同名新的也撤了",
+      "find": "    if (derivedHandlers.get(handler.name) === handler) derivedHandlers.delete(handler.name);",
+      "replace": "    derivedHandlers.delete(handler.name);"
+    },
+    {
+      "id": "U18",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "查 SITE 名单前不清根名单缓存",
+      "find": "    tree.invalidate?.();\n    return listSitesOfDbnum(tree, dbnum);",
+      "replace": "    return listSitesOfDbnum(tree, dbnum);"
+    },
+    {
+      "id": "U19",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "有装载在跑也不等",
+      "find": "  loadBusy: () => hasActiveModelLoad(),",
+      "replace": "  loadBusy: () => false,"
+    },
+    {
+      "id": "U20",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "排队标记算错",
+      "find": "  state.queued = callers > 1;\n  try {",
+      "replace": "  state.queued = false;\n  try {"
+    },
+    {
+      "id": "U21",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "跑完 running 不放下",
+      "find": "    callers -= 1;\n    state.running = callers > 0;",
+      "replace": "    callers -= 1;\n    state.running = true;"
+    },
+    {
+      "id": "U22",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "水位快照跟着缓存变",
+      "find": "  return (dbnum) => marks.get(dbnum) ?? { modelSesno: null, fileLatestSesno: null };",
+      "replace": "  return (dbnum) => { const row = peekGenModelV1Dbnums()?.response.dbnums?.find((item) => item.dbnum === dbnum); return row ? { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) } : { modelSesno: null, fileLatestSesno: null }; };"
+    },
+    {
+      "id": "U23",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "节点状态不带本页装的水位",
+      "find": "      loadedModelSesno: root.loadedModelSesno,\n      fetchFacts:",
+      "replace": "      loadedModelSesno: null,\n      fetchFacts:"
+    },
+    {
+      "id": "M01",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏：后端说最新也不敢撤",
+      "find": "if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };",
+      "replace": "if (facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };"
+    },
+    {
+      "id": "M02",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏：后端说落后也不敢撤",
+      "find": "if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };",
+      "replace": "if (facts.verdict === 'latest' || facts.verdict === 'empty') return { removed: true, why: '' };"
+    },
+    {
+      "id": "M03",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏：后端说没有生成单元也不敢撤",
+      "find": "if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };",
+      "replace": "if (facts.verdict === 'latest' || facts.verdict === 'lagging') return { removed: true, why: '' };"
+    },
+    {
+      "id": "M04",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏失效：后端说什么都撤",
+      "find": "      return {\n        removed: false,\n        why: facts.verdict === 'updating'",
+      "replace": "      return {\n        removed: true,\n        why: facts.verdict === 'updating'"
+    },
+    {
+      "id": "M05",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏失效：没有接口也撤",
+      "find": "      if (!facts) return { removed: false, why: '后端没有节点模型状态接口，确认不了它是不是真的没有几何了' };",
+      "replace": "      if (!facts) return { removed: true, why: '' };"
+    },
+    {
+      "id": "M06",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏：REFNO_NOT_FOUND 不当成没有了",
+      "find": "      if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, why: '' };",
+      "replace": ""
+    },
+    {
+      "id": "M07",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏失效：问不到也撤",
+      "find": "      return { removed: false, why: `节点模型状态没问到（${e instanceof Error ? e.message : String(e)}）` };",
+      "replace": "      return { removed: true, why: '' };"
+    },
+    {
+      "id": "M08",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "别的重载入口也走护栏",
+      "find": "          if (loadOptions?.confirmEmpty === true && !notCollected) {",
+      "replace": "          if (!notCollected) {"
+    },
+    {
+      "id": "M09",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "记录没收齐也白问一次",
+      "find": "          if (loadOptions?.confirmEmpty === true && !notCollected) {",
+      "replace": "          if (loadOptions?.confirmEmpty === true) {"
+    },
+    {
+      "id": "M10",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏失效：确认不了也照撤",
+      "find": "            if (!confirmed.removed) {",
+      "replace": "            if (!confirmed) {"
+    },
+    {
+      "id": "M11",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没收齐判定漏掉待定",
+      "find": "            scopeIncomplete.pending.length > 0\n            || scopeIncomplete.truncated_roots.length > 0",
+      "replace": "            scopeIncomplete.truncated_roots.length > 0"
+    },
+    {
+      "id": "M12",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没收齐判定漏掉截断",
+      "find": "            || scopeIncomplete.truncated_roots.length > 0\n            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (loadOptions?.confirmEmpty",
+      "replace": "            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (loadOptions?.confirmEmpty"
+    },
+    {
+      "id": "M13",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没收齐判定漏掉出错",
+      "find": "            || scopeIncomplete.truncated_roots.length > 0\n            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (loadOptions?.confirmEmpty",
+      "replace": "            || scopeIncomplete.truncated_roots.length > 0\n          );\n          if (loadOptions?.confirmEmpty"
+    },
+    {
+      "id": "M14",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "撤下已删节点漏掉记录缓存里的构件",
+      "find": "    const targets = uniqStrings([\n      root,\n      ...cached,\n      ...(dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : []),",
+      "replace": "    const targets = uniqStrings([\n      root,\n      ...(dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : []),"
+    },
+    {
+      "id": "M15",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "撤下已删节点漏掉场景索引认得的构件",
+      "find": "      ...cached,\n      ...(dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : []),\n      ...(loadedRefnosByRoot.get(root) ?? []),\n    ]);\n    let evicted",
+      "replace": "      ...cached,\n      ...(loadedRefnosByRoot.get(root) ?? []),\n    ]);\n    let evicted"
+    },
+    {
+      "id": "M16",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "撤下已删节点漏掉上次装的构件",
+      "find": "      ...(dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : []),\n      ...(loadedRefnosByRoot.get(root) ?? []),\n    ]);\n    let evicted",
+      "replace": "      ...(dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : []),\n    ]);\n    let evicted"
+    },
+    {
+      "id": "M17",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "撤下之后还算已加载",
+      "find": "    loadedRoots.delete(root);\n    loadedRefnosByRoot.delete(root);\n    forgetLoadedNode(root);\n    consoleStore.addLog('info', `[model-load] 取最新：",
+      "replace": "    loadedRefnosByRoot.delete(root);\n    forgetLoadedNode(root);\n    consoleStore.addLog('info', `[model-load] 取最新："
+    },
+    {
+      "id": "M18",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "撤下之后还记着它装了什么",
+      "find": "    loadedRoots.delete(root);\n    loadedRefnosByRoot.delete(root);\n    forgetLoadedNode(root);\n    consoleStore.addLog('info', `[model-load] 取最新：",
+      "replace": "    loadedRoots.delete(root);\n    forgetLoadedNode(root);\n    consoleStore.addLog('info', `[model-load] 取最新："
+    },
+    {
+      "id": "M19",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "撤下之后已加载节点表里还留着",
+      "find": "    loadedRoots.delete(root);\n    loadedRefnosByRoot.delete(root);\n    forgetLoadedNode(root);\n    consoleStore.addLog('info', `[model-load] 取最新：",
+      "replace": "    loadedRoots.delete(root);\n    loadedRefnosByRoot.delete(root);\n    consoleStore.addLog('info', `[model-load] 取最新："
+    },
+    {
+      "id": "M20",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没撤到对象也刷新派生索引",
+      "find": "      evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];\n      anyViewer?.scene?.setObjectsVisible?.(targets, false);\n      if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);\n    }\n    loadedRoots.delete(root);",
+      "replace": "      evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];\n      anyViewer?.scene?.setObjectsVisible?.(targets, false);\n      anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);\n    }\n    loadedRoots.delete(root);"
+    },
+    {
+      "id": "M21",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "空 refno 也去撤",
+      "find": "    const root = normalizeRefnoString(refno);\n    if (!root) return 0;\n    const dbno = dbnoOfRoot(root, knownDbno);",
+      "replace": "    const root = normalizeRefnoString(refno);\n    const dbno = dbnoOfRoot(root, knownDbno);"
+    },
+    {
+      "id": "M22",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "loadedRefnosOf 不看上次装的那一份",
+      "find": "    const known = loadedRefnosByRoot.get(root);\n    if (known) return [...known];\n    const dbno = dbnoOfRoot(root, knownDbno);",
+      "replace": "    const dbno = dbnoOfRoot(root, knownDbno);"
+    },
+    {
+      "id": "M23",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "loadedRefnosOf 没有时回空表而不是 null",
+      "find": "    return viaUnit.length > 0 ? uniqStrings(viaUnit) : null;",
+      "replace": "    return uniqStrings(viaUnit);"
+    },
+    {
+      "id": "M24",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "isRootInScene 不认经显示流程装的",
+      "find": "    if (!root) return false;\n    if (loadedRoots.has(root)) return true;\n    const dbno = dbnoOfRoot(root, knownDbno);\n    if (dbno == null) return false;",
+      "replace": "    if (!root) return false;\n    const dbno = dbnoOfRoot(root, knownDbno);\n    if (dbno == null) return false;"
+    },
+    {
+      "id": "M25",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "isRootInScene 不认自己有对象的",
+      "find": "    if (isDtxRefnoLoaded(dbno, root)) return true;\n    if (resolveDtxRefnosByUnitRefno(dbno, root).length > 0) return true;",
+      "replace": "    if (resolveDtxRefnosByUnitRefno(dbno, root).length > 0) return true;"
+    },
+    {
+      "id": "M26",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "isRootInScene 不认属主链上有对象的",
+      "find": "    if (isDtxRefnoLoaded(dbno, root)) return true;\n    if (resolveDtxRefnosByUnitRefno(dbno, root).length > 0) return true;",
+      "replace": "    if (isDtxRefnoLoaded(dbno, root)) return true;"
+    },
+    {
+      "id": "M27",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "isRootInScene 不看上次装的构件",
+      "find": "    for (const member of loadedRefnosByRoot.get(root) ?? []) {\n      if (isDtxRefnoLoaded(dbno, member)) return true;\n    }\n    return false;",
+      "replace": "    return false;"
+    },
+    {
+      "id": "M28",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "isRootInScene 上次装过就算在（不看还在不在）",
+      "find": "      if (isDtxRefnoLoaded(dbno, member)) return true;",
+      "replace": "      if (member) return true;"
+    },
+    {
+      "id": "M29",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "库号一律按映射查（不认调用方钉的）",
+      "find": "    return typeof options.db_num === 'number' ? options.db_num : tryGetDbnumByRefno(root);",
+      "replace": "    return tryGetDbnumByRefno(root);"
+    },
+    {
+      "id": "M30",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "库号解不出也算在场景里",
+      "find": "    const dbno = dbnoOfRoot(root, knownDbno);\n    if (dbno == null) return false;\n    if (isDtxRefnoLoaded(dbno, root)) return true;",
+      "replace": "    const dbno = dbnoOfRoot(root, knownDbno) ?? 0;\n    if (isDtxRefnoLoaded(dbno, root)) return true;"
+    },
+    {
+      "id": "M31",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没收齐的 SITE 也登记成节点",
+      "find": "        if (batch.complete && batch.refnos.length > 0) {",
+      "replace": "        if (batch.refnos.length > 0) {"
+    },
+    {
+      "id": "M32",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没有几何的 SITE 也登记成节点",
+      "find": "        if (batch.complete && batch.refnos.length > 0) {",
+      "replace": "        if (batch.complete) {"
+    },
+    {
+      "id": "M33",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "收齐的 SITE 不记它装了什么",
+      "find": "          loadedRefnosByRoot.set(batch.site, new Set(batch.refnos));\n          noteGetWorkRoot(batch.site, dbno, getWorkMark, 'show_dbnum');",
+      "replace": "          noteGetWorkRoot(batch.site, dbno, getWorkMark, 'show_dbnum');"
+    },
+    {
+      "id": "M34",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "收齐的 SITE 不登记成节点",
+      "find": "          loadedRefnosByRoot.set(batch.site, new Set(batch.refnos));\n          noteGetWorkRoot(batch.site, dbno, getWorkMark, 'show_dbnum');",
+      "replace": "          loadedRefnosByRoot.set(batch.site, new Set(batch.refnos));"
+    },
+    {
+      "id": "M35",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没收齐的 SITE 不算已在管",
+      "find": "        } else if (!batch.complete) {\n          // 没收齐的 SITE：不知道它完整的样子，不归取最新管（也不当成新出现的）\n          managed.push(batch.site);\n        }",
+      "replace": "        }"
+    },
+    {
+      "id": "M36",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "收齐而没有几何的 SITE 也算已在管",
+      "find": "        } else if (!batch.complete) {\n          // 没收齐的 SITE",
+      "replace": "        } else {\n          // 没收齐的 SITE"
+    },
+    {
+      "id": "M37",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没轮到的 SITE 不算已在管",
+      "find": "      for (const site of result.skippedSites ?? []) managed.push(normalizeRefnoString(site));",
+      "replace": ""
+    },
+    {
+      "id": "M38",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "按预算显示的库也找新 SITE",
+      "find": "        discover: result.budgetLimited !== true && result.siteSummaryAvailable !== false,",
+      "replace": "        discover: result.siteSummaryAvailable !== false,"
+    },
+    {
+      "id": "M39",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "SITE 名单没取到也找新 SITE",
+      "find": "        discover: result.budgetLimited !== true && result.siteSummaryAvailable !== false,",
+      "replace": "        discover: result.budgetLimited !== true,"
+    },
+    {
+      "id": "M40",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整库都空时不登记这个库",
+      "find": "      // 整库都是空的也登记：以后这个库有了模型，取最新能把新出现的 SITE 装进来\n      await noteShownForGetWork(collected);",
+      "replace": ""
+    },
+    {
+      "id": "M41",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整库显示完不登记",
+      "find": "    await noteShownForGetWork(collected);\n    return {\n      loaded: !incompleteWithoutRenderedObjects,",
+      "replace": "    return {\n      loaded: !incompleteWithoutRenderedObjects,"
+    },
+    {
+      "id": "M42",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整库显示进行中取最新看不到",
+      "find": "    const endWholeLibraryLoad = beginWholeLibraryLoad();",
+      "replace": "    const endWholeLibraryLoad = () => undefined;"
+    },
+    {
+      "id": "M43",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整库显示结束不放开",
+      "find": "      endWholeLibraryLoad();\n      releaseLod1Backfill();",
+      "replace": "      releaseLod1Backfill();"
+    },
+    {
+      "id": "M44",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "没说收没收齐的批当成收齐",
+      "find": "refnos: [...refnos], complete: complete === true });",
+      "replace": "refnos: [...refnos], complete: complete !== false });"
+    },
+    {
+      "id": "M45",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整库显示登记的水位不带模型水位",
+      "find": "      modelSesno: typeof row?.model_sesno === 'number' ? row.model_sesno : null,\n      fileLatestSesno: typeof row?.file_latest_sesno === 'number' ? row.file_latest_sesno : null,\n    });\n    const rowAtStart",
+      "replace": "      modelSesno: null,\n      fileLatestSesno: typeof row?.file_latest_sesno === 'number' ? row.file_latest_sesno : null,\n    });\n    const rowAtStart"
+    },
+    {
+      "id": "M46",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "rememberLoadedRefnosOfRoot 不归一 refno",
+      "find": "  if (key) loadedRefnosByRoot.set(key, new Set(refnos.map((refno) => normalizeRefnoString(refno)).filter(Boolean)));",
+      "replace": "  if (key) loadedRefnosByRoot.set(key, new Set(refnos));"
+    },
+    {
+      "id": "C01",
+      "file": "src/model-source/genModelV1/collectDbnum.ts",
+      "note": "生成根被预算切掉仍算收齐",
+      "find": "    let cutByBudget = acceptedRoots.length < collected.generationRoots.length;",
+      "replace": "    let cutByBudget = false;"
+    },
+    {
+      "id": "C02",
+      "file": "src/model-source/genModelV1/collectDbnum.ts",
+      "note": "构件被预算切掉仍算收齐",
+      "find": "        result.budgetLimited = true;\n        cutByBudget = true;\n        break;",
+      "replace": "        result.budgetLimited = true;\n        break;"
+    },
+    {
+      "id": "C03",
+      "file": "src/model-source/genModelV1/collectDbnum.ts",
+      "note": "有待定仍算收齐",
+      "find": "          && collected.pending.length === 0\n",
+      "replace": ""
+    },
+    {
+      "id": "C04",
+      "file": "src/model-source/genModelV1/collectDbnum.ts",
+      "note": "有截断仍算收齐",
+      "find": "          && collected.truncatedRoots.length === 0\n",
+      "replace": ""
+    },
+    {
+      "id": "C05",
+      "file": "src/model-source/genModelV1/collectDbnum.ts",
+      "note": "有出错仍算收齐",
+      "find": "          && Object.keys(collected.errors).length === 0,",
+      "replace": ","
+    },
+    {
+      "id": "C06",
+      "file": "src/model-source/genModelV1/collectDbnum.ts",
+      "note": "批次不带 SITE",
+      "find": "        rootsTotal: result.generationRoots.length,\n        site,",
+      "replace": "        rootsTotal: result.generationRoots.length,"
+    },
+    {
+      "id": "S01",
+      "file": "src/composables/modelLoadSession.ts",
+      "note": "只看按节点的会话",
+      "find": "  return sessions.size > 0 || wholeLibraryLoads > 0;",
+      "replace": "  return sessions.size > 0;"
+    },
+    {
+      "id": "S02",
+      "file": "src/composables/modelLoadSession.ts",
+      "note": "只看整库显示",
+      "find": "  return sessions.size > 0 || wholeLibraryLoads > 0;",
+      "replace": "  return wholeLibraryLoads > 0;"
+    },
+    {
+      "id": "S03",
+      "file": "src/composables/modelLoadSession.ts",
+      "note": "结束函数重复调多减",
+      "find": "    if (ended) return;\n    ended = true;\n    wholeLibraryLoads = Math.max(0, wholeLibraryLoads - 1);",
+      "replace": "    ended = true;\n    wholeLibraryLoads = Math.max(0, wholeLibraryLoads - 1);"
+    },
+    {
+      "id": "R01",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "登记不归一 refno",
+      "find": "  const key = toRefnoKey(refno);\n  if (!key || !Number.isFinite(dbnum) || dbnum <= 0) return;\n  roots.set(key,",
+      "replace": "  const key = refno;\n  if (!key || !Number.isFinite(dbnum) || dbnum <= 0) return;\n  roots.set(key,"
+    },
+    {
+      "id": "R02",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "库号不对的也登记",
+      "find": "  if (!key || !Number.isFinite(dbnum) || dbnum <= 0) return;\n  roots.set(key,",
+      "replace": "  if (!key) return;\n  roots.set(key,"
+    },
+    {
+      "id": "R03",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "同一个库再显示名单不合并",
+      "find": "  const knownSites = existing?.knownSites ?? new Set<string>();",
+      "replace": "  const knownSites = new Set<string>(existing ? [] : []);"
+    },
+    {
+      "id": "R04",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "读出去的根不是拷贝",
+      "find": "  return [...roots.values()].map((entry) => ({ ...entry }));",
+      "replace": "  return [...roots.values()];"
+    },
+    {
+      "id": "R05",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "读出去的名单不是拷贝",
+      "find": "map((scope) => ({ ...scope, knownSites: new Set(scope.knownSites) }));",
+      "replace": "map((scope) => ({ ...scope }));"
+    },
+    {
+      "id": "R06",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "清表不清整库显示的库",
+      "find": "  roots.clear();\n  scopes.clear();",
+      "replace": "  roots.clear();"
+    },
+    {
+      "id": "R07",
+      "file": "src/composables/modelGetWorkRegistry.ts",
+      "note": "整库登记的库号不校验",
+      "find": "  if (!Number.isFinite(dbnum) || dbnum <= 0) return;\n  const existing = scopes.get(dbnum);",
+      "replace": "  const existing = scopes.get(dbnum);"
+    },
+    {
+      "id": "P01",
+      "file": "src/composables/usePdmsOwnerTree.ts",
+      "note": "碰过的库把子节点的库也算上（根下的 SITE）",
+      "find": "      const dbnum = nodesById.value[id]?.dbnum;\n      if (typeof dbnum === 'number') dbnums.add(dbnum);",
+      "replace": "      const dbnum = nodesById.value[id]?.dbnum;\n      if (typeof dbnum === 'number') dbnums.add(dbnum);\n      for (const childId of nodesById.value[id]?.childrenIds ?? []) { const c = nodesById.value[childId]?.dbnum; if (typeof c === 'number') dbnums.add(c); }"
+    },
+    {
+      "id": "B01",
+      "file": "src/components/model-tree/ModelGetWorkButton.vue",
+      "note": "运行中按钮上不显示进度",
+      "find": "const label = computed(() => (running.value ? getWork.state.progress || '正在取最新…' : '取最新'));",
+      "replace": "const label = computed(() => (running.value ? '正在取最新…' : '取最新'));"
+    },
+    {
+      "id": "B02",
+      "file": "src/components/model-tree/ModelGetWorkButton.vue",
+      "note": "运行中还画着上一轮的结果",
+      "find": "    <span v-if=\"last && !running\"",
+      "replace": "    <span v-if=\"last\""
+    },
+    {
+      "id": "B03",
+      "file": "src/components/model-tree/ModelGetWorkButton.vue",
+      "note": "属性面板的缓存不失效",
+      "find": "      await queryClient?.invalidateQueries({ queryKey: ['pdms', 'ui-attr'] });",
+      "replace": ""
+    },
+    {
+      "id": "B04",
+      "file": "src/components/model-tree/ModelGetWorkButton.vue",
+      "note": "卸载不撤登记",
+      "find": "  offAttributes?.();",
+      "replace": ""
+    },
+    {
+      "id": "B05",
+      "file": "src/components/model-tree/ModelGetWorkButton.vue",
+      "note": "点了不叫取最新",
+      "find": "  void getWork.getLatest();",
+      "replace": ""
+    },
+    {
+      "id": "B06",
+      "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+      "note": "更新提示不引到取最新",
+      "find": "const noticeTitle = computed(() => `${updateNotice.title.value}\\n要连模型树一起刷新到最新，点右边的「取最新」`);",
+      "replace": "const noticeTitle = computed(() => updateNotice.title.value);"
+    }
+  ]
+}
