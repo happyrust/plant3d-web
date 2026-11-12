@@ -428,6 +428,17 @@ describe('K10 文案', () => {
       '点「重载」按最新记录替换场景里的 24384_24776, 24381_109449, 24384_24778；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）',
     );
   });
+
+  it('悬停说明的最后一行跟着重载名单走：有名单时点名并说明名单不全，没有名单时说为什么没有「重载」可点', () => {
+    const notice = mergeGenModelV1UpdateNotice(null, evaluateGenModelV1UpdateNotice(batchOf({ startSesno: 726, endSesno: 727 }), probe)!);
+    expect(notice.loadedRoots).toEqual(['24384_24776']);
+    expect(formatGenModelV1UpdateNoticeTitle(notice).split('\n').at(-1)).toBe(
+      '点「重载」按最新记录替换场景里的 24384_24776；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）',
+    );
+    expect(formatGenModelV1UpdateNoticeTitle({ ...notice, loadedRoots: [] }).split('\n').at(-1)).toBe(
+      '这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点',
+    );
+  });
 });
 
 describe('K11 createGenModelV1LoadedProbe', () => {

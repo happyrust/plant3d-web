@@ -546,6 +546,20 @@ describe('loadedModelDbnums：页面上装着节点的库（状态栏「数据�
     registry.forgetGetWorkRoot('24382_1911');
     expect(getWork.loadedModelDbnums()).toEqual([]);
   });
+
+  it('只整库显示过（已加载节点表是空的、也没有直装的根）：这个库照样算', async () => {
+    const { getWork, registry } = await load();
+    registry.noteGetWorkDbnumScope(8000, { sites: [SITE], discover: true, fileLatestSesno: 1146 });
+
+    expect(getWork.loadedModelDbnums()).toEqual([8000]);
+  });
+
+  it('只有地址栏直装的根（不在已加载节点表里）：它的库照样算', async () => {
+    const { getWork, registry } = await load();
+    registry.noteGetWorkRoot('24381_101405', 7997, { modelSesno: 738, fileLatestSesno: 748 }, 'show_refno');
+
+    expect(getWork.loadedModelDbnums()).toEqual([7997]);
+  });
 });
 
 describe('useModelGetWork：头一次点取最新就认得出「本页打开之后后端重启过」', () => {
@@ -598,5 +612,26 @@ describe('useModelGetWork：头一次点取最新就认得出「本页打开之�
     expect(report.backendRestarted).toBe(false);
     expect(mocks.facts).not.toHaveBeenCalled();
     expect(report.summary).toBe('已是最新：模型树和已装的模型都没有变化（核对了 1 个已装的节点）。');
+  });
+
+  it('页面打开之后后端重启过不止一次（服务代次 0 → 2）：头一轮认出重启；再点一轮代次没再变，不再算重启', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_7998] });
+    mocks.entries.mockReturnValue([tableEntry(X_ZONE, { dbnum: 7998, loadedModelSesno: 0, loadedFileLatestSesno: 675 })]);
+    mocks.health.mockResolvedValue({ generation: 2 });
+    mocks.facts.mockResolvedValue(notGenerated);
+    const scene = scenePort({ [X_ZONE]: ['24382_1913'] });
+    getWork.registerGetWorkScene(scene);
+
+    const first = await getWork.requestGetWork();
+    expect(first.backendRestarted).toBe(true);
+    expect(first.detail).toContain('这次取最新之前后端重启过');
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(scene.withdraw).not.toHaveBeenCalled();
+
+    const second = await getWork.requestGetWork();
+    expect(second.backendRestarted).toBe(false);
+    expect(second.detail).not.toContain('这次取最新之前后端重启过');
+    expect(scene.withdraw).not.toHaveBeenCalled();
   });
 });

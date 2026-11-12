@@ -254,4 +254,21 @@ describe('更新提示条把人引到「取最新」（2026-11-12）', () => {
       view.unmount();
     }
   });
+
+  it('先来一批认不出根的（出那句引导），再来一批认得出根的并进同一条：换成「重载」，引导收起', async () => {
+    const view = await mountBadge();
+    try {
+      await handleGenModelV1TaskEnvelopeForNotice(finished({}, [{ root_refno: '24384/23257', status: 'generated' }], { taskId: 't1' }));
+      await nextTick();
+      expect(view.reloadButton()).toBeNull();
+      expect(view.getWorkHint()?.textContent?.trim()).toBe('点「取最新」同步');
+
+      await handleGenModelV1TaskEnvelopeForNotice(finished({ start_sesno: 728, end_sesno: 729 }, MOVED, { taskId: 't2' }));
+      await nextTick();
+      expect(view.reloadButton()).not.toBeNull();
+      expect(view.getWorkHint()).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
 });

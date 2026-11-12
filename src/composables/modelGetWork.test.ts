@@ -965,6 +965,21 @@ describe('取最新：哪些库没能跟到最新', () => {
     expect(report.level).toBe('info');
   });
 
+  it('三枚水位对不上的库（后端判不了新旧）：一整轮下来那一句里写明是哪三枚，不单说「水位」', async () => {
+    const world = makeWorld({
+      rows: [row(ROW_8000, { model_verdict: 'not_judged', model_sesno: 1160 })],
+      tree: { touched: [8000], report: () => treeReport() },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.libraries).toEqual([{
+      dbnum: 8000,
+      kind: 'unknown',
+      text: '库 8000 的三枚水位（库文件最新会话、数据入库到的会话、模型生成所按的会话）对不上，新旧判不了',
+    }]);
+    expect(report.summary).toContain('库 8000 的三枚水位（库文件最新会话、数据入库到的会话、模型生成所按的会话）对不上，新旧判不了');
+    expect(report.summary).not.toMatch(/库 8000 的水位/);
+  });
+
   it('只交代这个页面碰过的库：没碰过 1112 就不提它', async () => {
     const world = makeWorld({ rows: [ROW_1112, ROW_8000], tree: { touched: [8000], report: () => treeReport() } });
     const report = await harness(world).engine.getLatest();

@@ -3463,6 +3463,7 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
 
       it.each([
         ['树回了别的失败（不是「没有这个节点」）', async () => ({ success: false, refnos: [], error_message: 'server (500): 后端出错' })],
+        ['树回了失败、没说原因', async () => ({ success: false, refnos: [] })],
         ['树也没问到', async () => { throw new Error('network: 断了'); }],
       ])('%s：保持原样', async (_name, answer) => {
         const { gen } = await loadedThenEmpty();
@@ -3474,6 +3475,50 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
         expect(evictMock).not.toHaveBeenCalled();
         expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
       });
+
+      it('取最新发起的（quiet）、树说没有这个节点：照样撤下，不弹「已从场景撤下」', async () => {
+        const { gen, viewer } = await loadedThenEmpty();
+        nodeFactsMock.mockResolvedValue(null);
+        treeAncestorsMock.mockResolvedValue({ success: false, refnos: [], error_message: 'not_found (404): dbnum 8000 会话 Some(1698) 的索引里没有 24384/24778' });
+
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(true);
+
+        expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [ROOT, ...MEMBERS], { release: true });
+        expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+        expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+        expect(emitToastMock).not.toHaveBeenCalled();
+      });
+
+      it('问模型树的这一会儿被叫停：还没开始撤，场景保持原样', async () => {
+        const { gen } = await loadedThenEmpty();
+        nodeFactsMock.mockResolvedValue(null);
+        treeAncestorsMock.mockImplementation(async () => {
+          requestStopModelLoad(ROOT);
+          return { success: false, refnos: [], error_message: 'not_found (404): 索引里没有 24384/24778' };
+        });
+
+        expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+        expect(evictMock).not.toHaveBeenCalled();
+        expect(forgetLoadedNodeMock).not.toHaveBeenCalled();
+        expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
+        expect(gen.statusMessage.value).toBe('已停止重载，场景保持原样');
+      });
+    });
+
+    it.each([
+      ['unknown', '后端判不了这个节点的模型状态'],
+      ['updating', '所在的库正在更新'],
+    ])('取最新发起的（quiet）、后端说 %s：不弹，但原因照实记进控制台（「%s」）', async (verdict, why) => {
+      const { gen } = await loadedThenEmpty();
+      nodeFactsMock.mockResolvedValue({ verdict });
+
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(false);
+
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(emitToastMock).not.toHaveBeenCalled();
+      expect(addLogMock).toHaveBeenCalledWith('warning', `[model-load] 重载 ${ROOT}：记录查空，但${why}——不当成已删除，场景保持原样`);
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
     });
 
     it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下', async (verdict) => {
@@ -4075,6 +4120,56 @@ describe('这一次显示不弹提示（quiet）：「取最新」一轮重载�
     expect(gen.statusMessage.value).toBe('已停止重载，场景保持原样');
     expect(emitToastMock).not.toHaveBeenCalled();
   });
+
+  /** 取最新一轮里会遇到的五种结局，对同一个节点挨个来一遍；查空撤下放最后（撤完它就不算装着了） */
+  async function everyOutcome(gen: Awaited<ReturnType<typeof loaded>>, quiet: boolean) {
+    const options = quiet ? { refresh: true, flyTo: false, quiet: true } : { refresh: true, flyTo: false };
+    // 做成
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+    expect(await gen.showModelByRefno(ROOT, options)).toBe(true);
+    // 记录没查通
+    visibleInstsMock.mockRejectedValueOnce(new Error('records 超时'));
+    v1Source.tree.subtreeRefnos.mockRejectedValueOnce(new Error('subtree 超时'));
+    expect(await gen.showModelByRefno(ROOT, options)).toBe(false);
+    // 装载出错
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+    loadInstancesMock.mockRejectedValueOnce(new Error('网格解不开'));
+    expect(await gen.showModelByRefno(ROOT, options)).toBe(false);
+    // 被叫停
+    visibleInstsMock.mockImplementationOnce(async () => {
+      requestStopModelLoad(ROOT);
+      throw new Error('aborted');
+    });
+    expect(await gen.showModelByRefno(ROOT, options)).toBe(false);
+    // 查空撤下（后端确认它名下确实没有几何了）
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    nodeFactsMock.mockResolvedValue({ verdict: 'latest' });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [] });
+    expect(await gen.showModelByRefno(ROOT, options)).toBe(true);
+    expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+  }
+
+  it('一轮里五种结局挨个来（做成、记录没查通、装载出错、被叫停、查空撤下），带 quiet：一条都不弹', async () => {
+    const gen = await loaded();
+
+    await everyOutcome(gen, true);
+
+    expect(emitToastMock).not.toHaveBeenCalled();
+  });
+
+  it('同样五种结局不带 quiet：各弹各的那一句，一条不少', async () => {
+    const gen = await loaded();
+
+    await everyOutcome(gen, false);
+
+    expect(emitToastMock.mock.calls.map(([payload]) => [payload.level, payload.message])).toEqual([
+      ['success', '[成功] 已从 gen-model 加载 4 个几何实例'],
+      ['warning', expect.stringContaining(`${ROOT} 重载未完成`)],
+      ['error', '[错误] 模型加载失败：网格解不开'],
+      ['info', `[提示] ${ROOT}：已停止重载，场景保持原样`],
+      ['info', `[提示] ${ROOT} 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下`],
+    ]);
+  });
 });
 
 describe('重载几个节点时的次序：场景里的对象按构件共用，先重载的节点刚装上的构件不能被后重载的撤掉', () => {
@@ -4085,6 +4180,10 @@ describe('重载几个节点时的次序：场景里的对象按构件共用，�
   const X = '24384_47469';
   const Y = '24384_47595';
   const Z = '24384_47502';
+  // 三个节点的用例里多出来的：第三个节点 C（装着 W）、A 名下的第三个构件 V
+  const C = '24384_47520';
+  const V = '24384_47596';
+  const W = '24384_47521';
 
   beforeEach(() => {
     visibleInstsMock.mockReset();
@@ -4094,6 +4193,23 @@ describe('重载几个节点时的次序：场景里的对象按构件共用，�
     unitRefnosMock.mockReturnValue([]);
     typeInfoMock.mockResolvedValue({ success: true, refno: A, noun: 'ZONE', owner_refno: null, owner_noun: null });
   });
+
+  /** A 装着 [X, Y, V]、B 装着 [Z]、C 装着 [W]；别的同 twoRoots */
+  async function threeRoots() {
+    const mod = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = mod.useModelGeneration({ viewer, db_num: 8000 });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [X, Y, V] });
+    expect(await gen.showModelByRefno(A)).toBe(true);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z] });
+    expect(await gen.showModelByRefno(B)).toBe(true);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: C, refnos: [W] });
+    expect(await gen.showModelByRefno(C)).toBe(true);
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    viewer.scene.setObjectsVisible.mockClear();
+    markLoadedNodeStaleMock.mockClear();
+    return { gen, viewer, round: mod.createModelReloadRound() };
+  }
 
   /** A 装着 [X, Y]、B 装着 [Z]；撤对象的那个假装载器照实回「这些有对象」 */
   async function twoRoots() {
@@ -4177,6 +4293,40 @@ describe('重载几个节点时的次序：场景里的对象按构件共用，�
     expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [Y], { release: true });
   });
 
+  it('同一轮里三个节点：A 的两个构件分别挪到 B 和 C、A 还剩一个，先重载 B、C 再重载 A：A 一个都不撤', async () => {
+    const { gen, round } = await threeRoots();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z, X] });
+    expect(await gen.showModelByRefno(B, { refresh: true, flyTo: false, round })).toBe(true);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: C, refnos: [W, Y] });
+    expect(await gen.showModelByRefno(C, { refresh: true, flyTo: false, round })).toBe(true);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [V] });
+    expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false, round })).toBe(true);
+
+    expect(evictMock).not.toHaveBeenCalled();
+    expect(gen.loadedRefnosOf(A)).toEqual([V]);
+    expect(gen.loadedRefnosOf(B)).toEqual([Z, X]);
+    expect(gen.loadedRefnosOf(C)).toEqual([W, Y]);
+    expect(markLoadedNodeStaleMock).not.toHaveBeenCalled();
+  });
+
+  it('同一轮里三个节点：A 名下的构件两个挪到了 B、C、一个真删了，A 整个查空：只撤 A 自己和真删的那个', async () => {
+    const { gen, viewer, round } = await threeRoots();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z, X] });
+    expect(await gen.showModelByRefno(B, { refresh: true, flyTo: false, round })).toBe(true);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: C, refnos: [W, Y] });
+    expect(await gen.showModelByRefno(C, { refresh: true, flyTo: false, round })).toBe(true);
+    nodeFactsMock.mockResolvedValue({ verdict: 'empty' });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [] });
+    expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false, round })).toBe(true);
+
+    expect(evictMock).toHaveBeenCalledTimes(1);
+    expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [A, V], { release: true });
+    expect(gen.isModelActuallyLoaded(A)).toBe(false);
+    expect(gen.loadedRefnosOf(B)).toEqual([Z, X]);
+    expect(gen.loadedRefnosOf(C)).toEqual([W, Y]);
+    expect(markLoadedNodeStaleMock).not.toHaveBeenCalled();
+  });
+
   describe('不在同一轮里（行上一个一个点「重载」）：撤掉的构件要是还登记在别的已装节点名下，给那个节点记一笔', () => {
     const REASON = '名下有构件被别的节点的重载撤下了，屏幕上可能缺构件';
 
@@ -4236,6 +4386,60 @@ describe('重载几个节点时的次序：场景里的对象按构件共用，�
       expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false })).toBe(true);
 
       expect(markLoadedNodeStaleMock).not.toHaveBeenCalled();
+    });
+
+    it('A 没有整个查空、只是少了几个构件时也一样：只有一部分撤掉的构件真有对象，只按那几个找', async () => {
+      const { gen } = await twoRoots();
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z, Y] });
+      expect(await gen.showModelByRefno(B, { refresh: true, flyTo: false })).toBe(true);
+      // A 这次的记录里只有一个新构件：要撤 X 和 Y，但只有 X 真有对象被撤；B 名下登记的是 Y
+      evictMock.mockImplementation(() => [X]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [V] });
+      expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false })).toBe(true);
+
+      expect(evictMock).toHaveBeenCalledTimes(1);
+      expect(markLoadedNodeStaleMock).not.toHaveBeenCalled();
+    });
+
+    it('A 整个查空撤下、它名下的构件在场景里本来就没有对象了：没有谁因此缺东西，不记', async () => {
+      const { gen } = await twoRoots();
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z, X, Y] });
+      expect(await gen.showModelByRefno(B, { refresh: true, flyTo: false })).toBe(true);
+      evictMock.mockImplementation(() => []);
+      nodeFactsMock.mockResolvedValue({ verdict: 'empty' });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [] });
+      expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false })).toBe(true);
+
+      expect(gen.isModelActuallyLoaded(A)).toBe(false);
+      expect(markLoadedNodeStaleMock).not.toHaveBeenCalled();
+    });
+
+    it('A 一次撤掉了 B 名下的两个构件：B 只记一笔（不是丢几个记几笔）', async () => {
+      const { gen, viewer } = await twoRoots();
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z, X, Y] });
+      expect(await gen.showModelByRefno(B, { refresh: true, flyTo: false })).toBe(true);
+      // A 这次的记录里只有一个新构件（没有整个查空）：X、Y 都按「我名下已经没有」撤了
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [V] });
+      expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false })).toBe(true);
+
+      expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [X, Y], { release: true });
+      expect(markLoadedNodeStaleMock).toHaveBeenCalledTimes(1);
+      expect(markLoadedNodeStaleMock).toHaveBeenCalledWith(B, REASON);
+    });
+
+    it('A 整个查空撤下，带走的构件分别登记在 B 和 C 名下：两个节点各记一笔', async () => {
+      const { gen } = await threeRoots();
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: B, refnos: [Z, X] });
+      expect(await gen.showModelByRefno(B, { refresh: true, flyTo: false })).toBe(true);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: C, refnos: [W, Y] });
+      expect(await gen.showModelByRefno(C, { refresh: true, flyTo: false })).toBe(true);
+      nodeFactsMock.mockResolvedValue({ verdict: 'empty' });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: A, refnos: [] });
+      expect(await gen.showModelByRefno(A, { refresh: true, flyTo: false })).toBe(true);
+
+      expect(markLoadedNodeStaleMock).toHaveBeenCalledTimes(2);
+      expect(markLoadedNodeStaleMock).toHaveBeenCalledWith(B, REASON);
+      expect(markLoadedNodeStaleMock).toHaveBeenCalledWith(C, REASON);
     });
   });
 });
