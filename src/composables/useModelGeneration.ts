@@ -39,7 +39,7 @@ import {
   prefetchDtxGeometries,
   resolveDtxRefnosByUnitRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
+import { getGenModelV1Dbnums, peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelReprobe } from '@/composables/useGenModelV1DbnumStatus';
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import {
@@ -124,6 +124,8 @@ const PRECHECK_AFTER_SHOWN_TIMEOUT_MS = 3_000;
 const PRECHECK_BEFORE_GENERATE_TIMEOUT_MS = 10_000;
 /** 节点一级的更新动手之前重新问一次节点模型状态，最多等这么久（等不到就不更新：不知道有没有单元被删） */
 const NODE_UPDATE_FACTS_TIMEOUT_MS = 15_000;
+/** 整库显示装完之后，「装之前的库水位」还没取到的话最多再等这么久（等不到按不知道登记） */
+const GETWORK_MARK_WAIT_MS = 3_000;
 
 /** 等一个承诺，最多等 `ms` 毫秒；超时就抛（原来的请求不取消，回来了也没人要）。 */
 function withTimeout<T>(task: Promise<T>, ms: number, what: string): Promise<T> {
@@ -424,9 +426,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
   listLoadedRoots: () => string[]
-  withdrawRemovedRoot: (refno: string) => number
-  loadedRefnosOf: (refno: string) => string[] | null
-  isRootInScene: (refno: string) => boolean
+  withdrawRemovedRoot: (refno: string, dbno?: number) => number
+  loadedRefnosOf: (refno: string, dbno?: number) => string[] | null
+  isRootInScene: (refno: string, dbno?: number) => boolean
   rememberLoadedRefnos: (root: string, refnos: readonly string[]) => void
 } {
   const { viewer } = options;
@@ -919,8 +921,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
   }
 
-  /** 节点所在的库：与显示流程同一个口径（调用方钉了库号就用它，否则按 refno 查映射） */
-  function dbnoOfRoot(root: string): number | null {
+  /**
+   * 节点所在的库。调用方给了就用给的（「取最新」登记节点时就记着库号——整库显示的页面里 refno → 库号的映射可能
+   * 还没装，那条路的库号是地址栏给的）；否则与显示流程同一个口径：钉了库号用钉的，再不然按 refno 查映射。
+   */
+  function dbnoOfRoot(root: string, given?: number): number | null {
+    if (typeof given === 'number' && Number.isFinite(given) && given > 0) return given;
     return typeof options.db_num === 'number' ? options.db_num : tryGetDbnumByRefno(root);
   }
 
@@ -928,10 +934,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
    * 库里已经没有这个节点了（「取最新」问到 `REFNO_NOT_FOUND`）：它和它名下的构件从场景撤下、不再算已加载。
    * 不发请求、不出提示（取最新自己汇总成一句）。回撤下的构件数。
    */
-  function withdrawRemovedRoot(refno: string): number {
+  function withdrawRemovedRoot(refno: string, knownDbno?: number): number {
     const root = normalizeRefnoString(refno);
     if (!root) return 0;
-    const dbno = dbnoOfRoot(root);
+    const dbno = dbnoOfRoot(root, knownDbno);
     const cached = getGenModelV1ModelSource().records.invalidateRoot(root).map((r) => normalizeRefnoString(r)).filter(Boolean);
     const targets = uniqStrings([
       root,
@@ -955,21 +961,21 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /** 这个节点现在装着哪些构件（「取最新」比对重载前后用）；不知道回 `null`。 */
-  function loadedRefnosOf(refno: string): string[] | null {
+  function loadedRefnosOf(refno: string, knownDbno?: number): string[] | null {
     const root = normalizeRefnoString(refno);
     const known = loadedRefnosByRoot.get(root);
     if (known) return [...known];
-    const dbno = dbnoOfRoot(root);
+    const dbno = dbnoOfRoot(root, knownDbno);
     const viaUnit = dbno != null ? resolveDtxRefnosByUnitRefno(dbno, root) : [];
     return viaUnit.length > 0 ? uniqStrings(viaUnit) : null;
   }
 
   /** 这个节点（或它名下装过的构件）还在不在场景里：别处已经撤掉的，「取最新」不该把它装回来。 */
-  function isRootInScene(refno: string): boolean {
+  function isRootInScene(refno: string, knownDbno?: number): boolean {
     const root = normalizeRefnoString(refno);
     if (!root) return false;
     if (loadedRoots.has(root)) return true;
-    const dbno = dbnoOfRoot(root);
+    const dbno = dbnoOfRoot(root, knownDbno);
     if (dbno == null) return false;
     if (isDtxRefnoLoaded(dbno, root)) return true;
     if (resolveDtxRefnosByUnitRefno(dbno, root).length > 0) return true;
@@ -2334,14 +2340,32 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const bumpProgress = (value: number) => {
       progress.value = Math.max(progress.value, Math.min(95, Math.floor(value)));
     };
-    // 「取最新」要知道整库显示装了哪些 SITE、各装了什么、装的时候库在哪个会话（开始取数之前读，取早不取晚）
+    // 「取最新」要知道整库显示装了哪些 SITE、各装了什么、装的时候库在哪个会话（开始取数之前的，取早不取晚）。
+    // 地址栏直开整库显示时，这里常常跑在 `/dbnums` 回来之前：那就现在要一份（共用缓存 / 在飞的那一发，不另发），
+    // 不等它——装载照常开始，登记的时候它多半早回来了。没有这一步，登记下来的水位是「不知道」，
+    // 头一次取最新只能把整库的 SITE 都重载一遍。
+    const markOfRow = (row: DbnumRow | null | undefined): GetWorkWatermark => ({
+      modelSesno: typeof row?.model_sesno === 'number' ? row.model_sesno : null,
+      fileLatestSesno: typeof row?.file_latest_sesno === 'number' ? row.file_latest_sesno : null,
+    });
     const rowAtStart = peekDbnumRow(dbno);
-    const getWorkMark: GetWorkWatermark = {
-      modelSesno: typeof rowAtStart?.model_sesno === 'number' ? rowAtStart.model_sesno : null,
-      fileLatestSesno: typeof rowAtStart?.file_latest_sesno === 'number' ? rowAtStart.file_latest_sesno : null,
-    };
+    const markAtStart: Promise<GetWorkWatermark> = rowAtStart
+      ? Promise.resolve(markOfRow(rowAtStart))
+      : getGenModelV1Dbnums().then(
+        (response) => markOfRow(response.dbnums?.find((item) => item.dbnum === dbno)),
+        () => markOfRow(null),
+      );
     const siteBatches: { site: string; refnos: string[]; complete: boolean }[] = [];
-    const noteShownForGetWork = (result: { skippedSites: string[]; budgetLimited: boolean; siteSummaryAvailable: boolean }) => {
+    const noteShownForGetWork = async (result: { skippedSites: string[]; budgetLimited: boolean; siteSummaryAvailable: boolean }) => {
+      // 整库都装完了库状态还没回来（少见）：最多再等一下，等不到按「不知道」记
+      let giveUp: ReturnType<typeof setTimeout> | undefined;
+      const getWorkMark = await Promise.race([
+        markAtStart,
+        new Promise<GetWorkWatermark>((resolve) => {
+          giveUp = setTimeout(() => resolve(markOfRow(null)), GETWORK_MARK_WAIT_MS);
+        }),
+      ]);
+      clearTimeout(giveUp);
       const managed: string[] = [];
       for (const batch of siteBatches) {
         if (batch.complete && batch.refnos.length > 0) {
@@ -2460,7 +2484,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       consoleStore.addLog('info', `[model-load] gen-model-v1 ${message}`);
       emitToast({ message, level: 'info' });
       // 整库都是空的也登记：以后这个库有了模型，取最新能把新出现的 SITE 装进来
-      noteShownForGetWork(collected);
+      await noteShownForGetWork(collected);
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
     }
 
@@ -2541,7 +2565,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     } else {
       emitToast({ message: `[成功] ${summary}`, level: 'success' });
     }
-    noteShownForGetWork(collected);
+    await noteShownForGetWork(collected);
     return {
       loaded: !incompleteWithoutRenderedObjects,
       instanceCount: totals.loadedObjects,

@@ -3755,13 +3755,13 @@ function registerSceneForGetWork(): void {
   offGetWorkScene = registerGetWorkScene({
     // 取最新发起的重载：不生成、不飞相机；记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤
     reload: async (refno) => (await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, confirmEmpty: true })) === true,
-    withdraw: (refno) => {
-      const withdrawn = modelGenerationRef.value?.withdrawRemovedRoot(refno) ?? 0;
+    withdraw: (refno, dbnum) => {
+      const withdrawn = modelGenerationRef.value?.withdrawRemovedRoot(refno, dbnum) ?? 0;
       requestRender();
       return withdrawn;
     },
-    loadedRefnos: (refno) => modelGenerationRef.value?.loadedRefnosOf(refno) ?? null,
-    rootInScene: (refno) => modelGenerationRef.value?.isRootInScene(refno) ?? false,
+    loadedRefnos: (refno, dbnum) => modelGenerationRef.value?.loadedRefnosOf(refno, dbnum) ?? null,
+    rootInScene: (refno, dbnum) => modelGenerationRef.value?.isRootInScene(refno, dbnum) ?? false,
   });
   offGetWorkMbd = registerGetWorkDerived({
     name: 'MBD 标注',

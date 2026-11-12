@@ -64,15 +64,19 @@ export type GetWorkTreePort = {
   nameOf(refno: string): string | null;
 };
 
+/**
+ * 场景这一侧。后三个都带着节点所在的库号（登记时就知道）：整库显示的页面里 refno → 库号的映射可能还没装
+ * （那条路的库号是地址栏给的），不能靠现查。
+ */
 export type GetWorkScenePort = {
   /** 重载（不生成）。`true` = 换上了，或查空并确认之后撤下了；`false` = 没做成，场景保持原样 */
   reload(refno: string): Promise<boolean>;
   /** 把库里已经没有的节点从场景撤下；回撤下的构件数 */
-  withdraw(refno: string): number;
+  withdraw(refno: string, dbnum: number): number;
   /** 这个节点现在装着哪些构件；不知道回 `null` */
-  loadedRefnos(refno: string): string[] | null;
+  loadedRefnos(refno: string, dbnum: number): string[] | null;
   /** 这个节点（或它名下的构件）还在不在场景里：别处已经撤掉的不该被取最新装回来 */
-  rootInScene(refno: string): boolean;
+  rootInScene(refno: string, dbnum: number): boolean;
 };
 
 export type GetWorkDerivedContext = {
@@ -474,6 +478,14 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
   let lastGeneration: number | null = null;
   /** 上一轮结束时碰过的库的水位：这一轮比它动了，派生物（房间树）才值得刷新 */
   let lastWatermarks = new Map<number, string>();
+  /**
+   * 已加载节点表里的节点上一次核对「不用动」时的水位（库的 + 它装时的）：库没再变就不再为它发请求。
+   * 那张表不归取最新改，记在这里；登记表里的节点靠推进它自己记的水位做到同一件事。
+   */
+  const settledAt = new Map<string, string>();
+  const settleKey = (root: GetWorkRoot, row: DbnumRow): string => (
+    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`
+  );
 
   /** 等装载 / 生成结束；等不到回 `false` */
   async function waitLoadIdle(): Promise<boolean> {
@@ -498,12 +510,18 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     // 登记表里的节点别处已经撤掉了（换了地址栏的列表、清了场景）：不归取最新管了，更不能把它装回来
     const roots: GetWorkRoot[] = [];
     for (const root of allRoots) {
-      if (root.source === 'registry' && !scene.rootInScene(root.refno)) ports.forgetRoot(root.refno);
+      if (root.source === 'registry' && !scene.rootInScene(root.refno, root.dbnum)) ports.forgetRoot(root.refno);
       else roots.push(root);
     }
     models.rootsTotal = roots.length;
 
-    const candidates = roots.filter((root) => rootNeedsCheck(root, rows.get(root.dbnum), restarted));
+    const candidates = roots.filter((root) => {
+      const row = rows.get(root.dbnum);
+      if (!rootNeedsCheck(root, row, restarted)) return false;
+      // 上一轮核对过、不用动，库也没再变：不再问（后端重启过、或它带着过期标记时照问）
+      if (row && !restarted && !root.staleReason && settledAt.get(root.refno) === settleKey(root, row)) return false;
+      return true;
+    });
     models.checked = candidates.length;
     if (candidates.length > 0) ports.onProgress(`核对 ${candidates.length} 个已装的节点…`);
     const answers = await mapLimit(candidates, GETWORK_STATUS_CONCURRENCY, (root) => ports.nodeStatus(root, rows.get(root.dbnum) ?? null));
@@ -517,10 +535,10 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno)).length + removedUnnamed;
     };
 
-    const reloadOne = async (refno: string): Promise<{ ok: boolean; before: Set<string>; after: string[] | null }> => {
-      const before = new Set(scene.loadedRefnos(refno) ?? []);
+    const reloadOne = async (refno: string, dbnum: number): Promise<{ ok: boolean; before: Set<string>; after: string[] | null }> => {
+      const before = new Set(scene.loadedRefnos(refno, dbnum) ?? []);
       const ok = await scene.reload(refno);
-      return { ok, before, after: scene.loadedRefnos(refno) };
+      return { ok, before, after: scene.loadedRefnos(refno, dbnum) };
     };
 
     let acted = 0;
@@ -533,12 +551,15 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       const row = rows.get(root.dbnum) ?? null;
       const action = decideRootAction(root, answers[index]!, { restarted });
       if (action.kind === 'none') {
-        // 核对过、不用动：登记表里的把水位推进到现在，下一轮库没再变就不问它了
+        // 核对过、不用动：下一轮库没再变就不问它了——登记表里的把水位推进到现在，已加载节点表里的记在这边
         if (root.source === 'registry' && row) {
           ports.advanceRoot(root.refno, { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) });
+        } else if (row) {
+          settledAt.set(root.refno, settleKey(root, row));
         }
         continue;
       }
+      settledAt.delete(root.refno);
       if (action.kind === 'keep') {
         models.kept.push({ refno: root.refno, reason: action.reason });
         continue;
@@ -551,8 +572,8 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       acted += 1;
       if (action.kind === 'withdraw') {
         ports.onProgress(`撤下已删除的节点 ${acted}/${toAct}…`);
-        const members = scene.loadedRefnos(root.refno) ?? [];
-        const refnos = scene.withdraw(root.refno);
+        const members = scene.loadedRefnos(root.refno, root.dbnum) ?? [];
+        const refnos = scene.withdraw(root.refno, root.dbnum);
         if (members.length > 0) for (const member of members) removedAll.add(member);
         else removedUnnamed += refnos;
         ports.forgetRoot(root.refno);
@@ -562,7 +583,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       ports.onProgress(`重载模型 ${acted}/${toAct}…`);
       let outcome: Awaited<ReturnType<typeof reloadOne>>;
       try {
-        outcome = await reloadOne(root.refno);
+        outcome = await reloadOne(root.refno, root.dbnum);
       } catch (error) {
         models.failed.push({ refno: root.refno, reason: `重载出错：${errorText(error)}` });
         continue;
@@ -625,7 +646,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         ports.onProgress(`装入新出现的 SITE ${site.name}…`);
         let outcome: Awaited<ReturnType<typeof reloadOne>>;
         try {
-          outcome = await reloadOne(site.refno);
+          outcome = await reloadOne(site.refno, scope.dbnum);
         } catch (error) {
           allSettled = false;
           models.failed.push({ refno: site.refno, reason: `装入出错：${errorText(error)}` });

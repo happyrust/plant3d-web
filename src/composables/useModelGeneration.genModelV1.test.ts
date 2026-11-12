@@ -26,9 +26,11 @@ const evictMock = vi.fn((_layer: unknown, _dbno: number, _refnos: string[], _opt
 /** 装载器的「这个构件已经在场景里」：缺省都不在 */
 const isDtxRefnoLoadedMock = vi.fn((_dbno: number, _refno: string): boolean => false);
 const unitRefnosMock = vi.fn((_dbno: number, _root: string): string[] => []);
-const { dbnumRootsMock, dbnumRowsMock } = vi.hoisted(() => ({
+const { dbnumRootsMock, dbnumRowsMock, getDbnumsMock } = vi.hoisted(() => ({
   dbnumRootsMock: vi.fn(),
   dbnumRowsMock: vi.fn((): Record<string, unknown>[] => []),
+  /** 整库显示开始时库状态还没取到，会要一份 `/dbnums`（共用缓存 / 在飞的那一发）：缺省回空表，绝不走到真的网络 */
+  getDbnumsMock: vi.fn(async (): Promise<{ dbnums: Record<string, unknown>[] }> => ({ dbnums: [] })),
 }));
 const releaseLod1Mock = vi.fn();
 const holdLod1Mock = vi.fn(() => releaseLod1Mock);
@@ -133,6 +135,7 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => {
 vi.mock('@/composables/useGenModelV1Dbnums', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/composables/useGenModelV1Dbnums')>()),
   peekGenModelV1Dbnums: () => ({ fetchedAt: 0, response: { dbnums: dbnumRowsMock() } }),
+  getGenModelV1Dbnums: () => getDbnumsMock(),
 }));
 vi.mock('@/api/genModelRealtimeApi', () => ({ enqueueParquetIncremental: vi.fn(), getParquetVersion: vi.fn() }));
 vi.mock('@/api/genModelTaskApi', () => ({ modelRegenerateByRefno: vi.fn(), modelShowByRefno: vi.fn() }));
@@ -236,6 +239,8 @@ beforeEach(async () => {
   openChoiceMock.mockReset();
   openChoiceMock.mockResolvedValue('generate');
   dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
+  getDbnumsMock.mockReset();
+  getDbnumsMock.mockResolvedValue({ dbnums: [] });
   loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => loadedAll(refnos));
   isDtxRefnoLoadedMock.mockReset();
   isDtxRefnoLoadedMock.mockReturnValue(false);
@@ -3711,5 +3716,145 @@ describe('「取最新」用到的显示流程出口：补几处边角', () => {
     expect(registry.getWorkRegisteredRoots()).toEqual([]);
     expect(gen.loadedRefnosOf(site.refno)).toBeNull();
     expect([...registry.getWorkRegisteredScopes()[0]!.knownSites]).toEqual([site.refno]);
+  });
+});
+describe('「取最新」用到的显示流程出口：库号由登记的一方给（整库显示的页面里映射可能还没装）', () => {
+  const SITE_REFNO = '24384_24932';
+  const MEMBERS = ['24384_25590', '24384_25592'];
+
+  beforeEach(async () => {
+    v1Source.records.invalidateRoot.mockReset();
+    v1Source.records.invalidateRoot.mockReturnValue([]);
+    unitRefnosMock.mockReset();
+    unitRefnosMock.mockReturnValue([]);
+    (await import('./modelGetWorkRegistry')).resetGetWorkRegistry();
+  });
+
+  it('映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问', async () => {
+    const { useModelGeneration, rememberLoadedRefnosOfRoot } = await import('./useModelGeneration');
+    const { tryGetDbnumByRefno } = await import('@/composables/useDbMetaInfo');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer });
+    rememberLoadedRefnosOfRoot(SITE_REFNO, MEMBERS);
+    isDtxRefnoLoadedMock.mockImplementation((dbno, refno) => dbno === 8000 && MEMBERS.includes(refno));
+    vi.mocked(tryGetDbnumByRefno).mockReturnValue(null as never);
+    try {
+      // 不给库号：映射没装，说不出在不在
+      expect(gen.isRootInScene(SITE_REFNO)).toBe(false);
+      // 给了库号：它上次装的构件还在场景里
+      expect(gen.isRootInScene(SITE_REFNO, 8000)).toBe(true);
+      // 库号给错了就不在
+      expect(gen.isRootInScene(SITE_REFNO, 7997)).toBe(false);
+
+      unitRefnosMock.mockImplementation((dbno) => (dbno === 8000 ? ['24384_26000'] : []));
+      expect(gen.loadedRefnosOf('24384_26205', 8000)).toEqual(['24384_26000']);
+      expect(gen.loadedRefnosOf('24384_26205')).toBeNull();
+
+      evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+      unitRefnosMock.mockReturnValue([]);
+      expect(gen.withdrawRemovedRoot(SITE_REFNO, 8000)).toBe(3);
+      expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [SITE_REFNO, ...MEMBERS], { release: true });
+    } finally {
+      vi.mocked(tryGetDbnumByRefno).mockReturnValue(7997 as never);
+    }
+  });
+
+  it('给的库号不像话（0、NaN）：当没给，退回原来的口径', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    unitRefnosMock.mockImplementation((dbno) => (dbno === 8000 ? ['24384_26000'] : []));
+    expect(gen.loadedRefnosOf('24384_26205', 0)).toEqual(['24384_26000']);
+    expect(gen.loadedRefnosOf('24384_26205', Number.NaN)).toEqual(['24384_26000']);
+  });
+});
+
+describe('整库显示登记时的库水位：开始显示时库状态还没取到', () => {
+  const SITE_A = { refno: '24381_101405', name: '/1PTU-INST23' };
+
+  function collectOneSite() {
+    collectDbnumMock.mockImplementation(async (dbnum: number, options: { onRefnosReady?: (b: any) => Promise<void> | void }) => {
+      await options.onRefnosReady?.({ roots: [], rootsDone: 1, rootsTotal: 1, site: SITE_A, complete: true, refnos: ['24381_1'] });
+      return {
+        dbnum, sites: [SITE_A], refnos: ['24381_1'], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {},
+        skippedSites: [], budgetLimited: false, siteSummaryAvailable: true,
+      };
+    });
+  }
+
+  beforeEach(async () => {
+    (await import('./modelGetWorkRegistry')).resetGetWorkRegistry();
+    // 缓存里还没有这个库的那一行
+    dbnumRowsMock.mockReturnValue([]);
+  });
+
+  it('要一份 /dbnums（不等它，装载照常开始），登记时用它回来的水位', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const registry = await import('./modelGetWorkRegistry');
+    let release!: (value: { dbnums: Record<string, unknown>[] }) => void;
+    getDbnumsMock.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    let collectStarted = false;
+    collectOneSite();
+    const collectImpl = collectDbnumMock.getMockImplementation()!;
+    collectDbnumMock.mockImplementation(async (...args: unknown[]) => {
+      collectStarted = true;
+      // 装载开始之后库状态才回来
+      release({ dbnums: [{ dbnum: 7997, model_sesno: 738, file_latest_sesno: 748 }, { dbnum: 8000, model_sesno: 1155, file_latest_sesno: 1155 }] });
+      return collectImpl(...args);
+    });
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+    await gen.showModelByDbnum(7997);
+
+    expect(collectStarted).toBe(true);
+    expect(getDbnumsMock).toHaveBeenCalledTimes(1);
+    expect(registry.getWorkRegisteredRoots()).toEqual([
+      { refno: SITE_A.refno, dbnum: 7997, loadedModelSesno: 738, loadedFileLatestSesno: 748, origin: 'show_dbnum' },
+    ]);
+    expect(registry.getWorkRegisteredScopes()[0]!.checkedFileLatestSesno).toBe(748);
+  });
+
+  it('缓存里已经有这一行：不另要', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
+    collectOneSite();
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    await gen.showModelByDbnum(7997);
+    expect(getDbnumsMock).not.toHaveBeenCalled();
+  });
+
+  it('/dbnums 没取到、或回来的表里没有这个库：按「不知道」登记，整库显示照常做完', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const registry = await import('./modelGetWorkRegistry');
+    collectOneSite();
+    getDbnumsMock.mockRejectedValue(new Error('超时'));
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    expect((await gen.showModelByDbnum(7997)).loaded).toBe(true);
+    expect(registry.getWorkRegisteredRoots()).toEqual([
+      { refno: SITE_A.refno, dbnum: 7997, loadedModelSesno: null, loadedFileLatestSesno: null, origin: 'show_dbnum' },
+    ]);
+
+    registry.resetGetWorkRegistry();
+    getDbnumsMock.mockResolvedValue({ dbnums: [{ dbnum: 8000, model_sesno: 1155, file_latest_sesno: 1155 }] });
+    await gen.showModelByDbnum(7997);
+    expect(registry.getWorkRegisteredRoots()[0]).toMatchObject({ loadedModelSesno: null, loadedFileLatestSesno: null });
+  });
+
+  it('整库都装完了库状态还没回来：最多再等 3 秒，等不到按「不知道」登记', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const registry = await import('./modelGetWorkRegistry');
+    collectOneSite();
+    getDbnumsMock.mockReturnValue(new Promise(() => undefined));
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const shown = gen.showModelByDbnum(7997);
+      await vi.advanceTimersByTimeAsync(2_900);
+      expect(registry.getWorkRegisteredRoots()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(200);
+      expect((await shown).loaded).toBe(true);
+      expect(registry.getWorkRegisteredRoots()[0]).toMatchObject({ refno: SITE_A.refno, loadedModelSesno: null, loadedFileLatestSesno: null });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -155,7 +155,7 @@ describe('useModelGetWork：一轮走下来', () => {
 
     const report = await getWork.requestGetWork();
 
-    expect(scene.withdraw).toHaveBeenCalledWith('24384_26716');
+    expect(scene.withdraw).toHaveBeenCalledWith('24384_26716', 8000);
     expect(scene.reload).not.toHaveBeenCalled();
     expect(report.models.withdrawn).toEqual([{ refno: '24384_26716', refnos: 1, why: 'deleted' }]);
   });

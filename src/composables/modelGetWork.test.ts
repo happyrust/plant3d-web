@@ -131,6 +131,8 @@ function makeWorld(patch: Partial<World> = {}): World {
 
 function harness(world: World) {
   const log: string[] = [];
+  /** 场景端口被问到时带的库号（登记时就知道的那个，不靠现查） */
+  const sceneCalls: string[] = [];
   const progress: string[] = [];
   const marked: string[] = [];
   const ports: GetWorkPorts = {
@@ -172,14 +174,21 @@ function harness(world: World) {
         }
         return true;
       },
-      withdraw: (refno) => {
+      withdraw: (refno, dbnum) => {
+        sceneCalls.push(`withdraw ${refno} ${dbnum}`);
         log.push(`withdraw ${refno}`);
         const count = world.withdrawCount[refno] ?? world.loaded[refno]?.length ?? 0;
         delete world.loaded[refno];
         return count;
       },
-      loadedRefnos: (refno) => world.loaded[refno] ?? null,
-      rootInScene: (refno) => !world.notInScene.has(refno),
+      loadedRefnos: (refno, dbnum) => {
+        sceneCalls.push(`loaded ${refno} ${dbnum}`);
+        return world.loaded[refno] ?? null;
+      },
+      rootInScene: (refno, dbnum) => {
+        sceneCalls.push(`in-scene ${refno} ${dbnum}`);
+        return !world.notInScene.has(refno);
+      },
     } : null),
     roots: () => world.roots,
     dbnumScopes: () => world.scopes,
@@ -228,7 +237,7 @@ function harness(world: World) {
       if (text) progress.push(text);
     },
   };
-  return { engine: createModelGetWork(ports), log, progress, marked };
+  return { engine: createModelGetWork(ports), log, progress, marked, sceneCalls };
 }
 
 describe('取最新：按库对账、按节点动手', () => {
@@ -1212,5 +1221,160 @@ describe('取最新：场景里一共多了 / 少了多少个构件，不重复�
     expect(report.models.loadedNew).toEqual([{ refno: '24384_30000', name: '/NEW-SITE', total: 2 }]);
     expect(report.models).toMatchObject({ componentsAdded: 2, componentsRemoved: 8 });
     expect(report.summary).toBe('已取最新：模型新装入 1 个 SITE、撤下 2 个已不存在的节点（新增 2 个构件、撤下 8 个构件）。');
+  });
+});
+describe('取最新：问场景时带着节点登记时的库号（不靠现查映射）', () => {
+  it('登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问', async () => {
+    const onDemand = root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 470, source: 'registry' });
+    const gone = root('7009_200', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 470, source: 'registry' });
+    const world = makeWorld({
+      rows: [ROW_7009],
+      roots: [onDemand, gone],
+      statuses: {
+        '7009_100': { status: status('latest', { dbnum: 7009, generated: { sesnoMin: 479, sesnoMax: 479, timeMin: null, basis: 'own_generation' } }), gone: false },
+        '7009_200': { status: status('unknown'), gone: true },
+      },
+      loaded: { '7009_100': ['7009_101'], '7009_200': ['7009_201'] },
+      scopes: [{ dbnum: 7009, knownSites: new Set<string>(), discover: true, checkedFileLatestSesno: 470 }],
+      sites: { 7009: [{ refno: '7009_300', name: '/NEW' }] },
+    });
+    const { engine, sceneCalls } = harness(world);
+    const report = await engine.getLatest();
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual(['7009_100']);
+    expect(report.models.withdrawn.map((item) => item.refno)).toEqual(['7009_200']);
+    expect(report.models.loadedNew.map((item) => item.refno)).toEqual(['7009_300']);
+    // 每一问都带着 7009
+    expect(sceneCalls.length).toBeGreaterThan(6);
+    expect(sceneCalls.every((call) => call.endsWith(' 7009'))).toBe(true);
+    expect(sceneCalls).toContain('in-scene 7009_100 7009');
+    expect(sceneCalls).toContain('withdraw 7009_200 7009');
+    expect(sceneCalls).toContain('loaded 7009_300 7009');
+  });
+});
+describe('取最新：已加载节点表里核对过、不用动的节点', () => {
+  it('库没再变：下一轮不再为它发请求；库又变了才再问；它自己重新装过（装时的水位变了）也再问', async () => {
+    const world = makeWorld({ rows: [ROW_8000_AT_1146], roots: [root(SITE)], statuses: { [SITE]: { status: status('latest'), gone: false } } });
+    const { engine, log } = harness(world);
+    const asked = () => log.filter((line) => line === `status ${SITE}`).length;
+
+    const first = await engine.getLatest();
+    expect(asked()).toBe(1);
+    expect(first.models.checked).toBe(1);
+
+    // 库没再变：不问
+    const second = await engine.getLatest();
+    expect(asked()).toBe(1);
+    expect(second.models).toMatchObject({ rootsTotal: 1, checked: 0 });
+
+    // 库又往前了：再问
+    world.rows = [row(ROW_8000, { file_latest_sesno: 1149, applied_sesno: 1149, model_sesno: 1149 })];
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+
+    // 它自己被重新装过（行上的「重载」之类）：装时的水位变了，要再核对一次
+    world.roots = [root(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1146 })];
+    await engine.getLatest();
+    expect(asked()).toBe(3);
+  });
+
+  it('后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问', async () => {
+    const onDemand = root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 470 });
+    const world = makeWorld({
+      rows: [ROW_7009],
+      roots: [onDemand],
+      statuses: { '7009_100': { status: status('latest', { dbnum: 7009, generated: { sesnoMin: 470, sesnoMax: 470, timeMin: null, basis: 'own_generation' } }), gone: false } },
+    });
+    const { engine, log } = harness(world);
+    const asked = () => log.filter((line) => line === 'status 7009_100').length;
+    await engine.getLatest();
+    await engine.getLatest();
+    expect(asked()).toBe(1);
+
+    world.generation = 2;
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+
+    // 之后没再重启、库没变：又不问了
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+
+    world.roots = [{ ...onDemand, staleReason: '更新到一半停了' }];
+    await engine.getLatest();
+    expect(asked()).toBe(3);
+  });
+
+  it('只有库的模型水位变了（库文件没动，后台追上来了）：也要再问', async () => {
+    // 装的时候和上一轮：后台还没跟上库文件（模型 1143、库文件 1146）；等了 45 秒没等到，核对这个节点：不用动
+    const world = makeWorld({ rows: [ROW_8000_FILE_1146], roots: [root(SITE)], statuses: { [SITE]: { status: status('latest'), gone: false } } });
+    const { engine, log } = harness(world);
+    const asked = () => log.filter((line) => line === `status ${SITE}`).length;
+    await engine.getLatest();
+    expect(asked()).toBe(1);
+    await engine.getLatest();
+    expect(asked()).toBe(1);
+    // 后台追上来了：模型水位 1143 → 1146，库文件还是 1146
+    world.rows = [ROW_8000_AT_1146];
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+  });
+
+  it('只有库文件又前进了（模型水位没动）：也要再问', async () => {
+    const world = makeWorld({ rows: [ROW_8000_FILE_1146], roots: [root(SITE)], statuses: { [SITE]: { status: status('latest'), gone: false } } });
+    const { engine, log } = harness(world);
+    const asked = () => log.filter((line) => line === `status ${SITE}`).length;
+    await engine.getLatest();
+    expect(asked()).toBe(1);
+    // 又有人保存了：库文件 1146 → 1149，后台还停在 1143
+    world.rows = [row(ROW_8000, { file_latest_sesno: 1149, applied_sesno: 1143, model_sesno: 1143 })];
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+  });
+
+  it('核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问', async () => {
+    const onDemand = root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 470 });
+    const generated = status('latest', { dbnum: 7009, generated: { sesnoMin: 470, sesnoMax: 470, timeMin: null, basis: 'own_generation' } });
+    const world = makeWorld({ rows: [ROW_7009], roots: [onDemand], statuses: { '7009_100': { status: generated, gone: false } } });
+    const { engine, log } = harness(world);
+    const asked = () => log.filter((line) => line === 'status 7009_100').length;
+    await engine.getLatest();
+    expect(asked()).toBe(1);
+    // 后端重启：它的模型没了
+    world.generation = 2;
+    world.statuses['7009_100'] = { status: status('not_generated', { dbnum: 7009, generated: null }), gone: false };
+    const restarted = await engine.getLatest();
+    expect(asked()).toBe(2);
+    expect(restarted.models.kept).toHaveLength(1);
+    // 没再重启、库没变：它上一轮不是「不用动」，这一轮还要问（不然那句说明就不见了）
+    const next = await engine.getLatest();
+    expect(asked()).toBe(3);
+    expect(next.models.kept).toHaveLength(1);
+  });
+
+  it('上一轮没动成、或只是说明了一句的节点（落后 / 后端没有模型 / 判不了）：下一轮照问', async () => {
+    const world = makeWorld({ rows: [ROW_8000_AT_1146], roots: [root(SITE)], statuses: { [SITE]: { status: status('lagging'), gone: false } } });
+    const { engine, log } = harness(world);
+    await engine.getLatest();
+    await engine.getLatest();
+    expect(log.filter((line) => line === `status ${SITE}`)).toHaveLength(2);
+  });
+
+  it('上一轮不用动、这一轮库变了它要重载：重载完再点（库没再变）仍然先问一次，问到不用动之后才不问', async () => {
+    const world = makeWorld({ rows: [ROW_8000_AT_1146], roots: [root(SITE)], statuses: { [SITE]: { status: status('latest'), gone: false } } });
+    const { engine, log } = harness(world);
+    const asked = () => log.filter((line) => line === `status ${SITE}`).length;
+    await engine.getLatest();
+    world.rows = [row(ROW_8000, { file_latest_sesno: 1149, applied_sesno: 1149, model_sesno: 1149 })];
+    world.statuses[SITE] = { status: RELOADABLE, gone: false };
+    await engine.getLatest();
+    expect(asked()).toBe(2);
+    expect(log).toContain(`reload ${SITE}`);
+    // 假场景里重载不改它记的水位（真的会重新登记）：库和它都没变，但上一轮动过它，不算「核对过不用动」
+    world.statuses[SITE] = { status: status('latest'), gone: false };
+    await engine.getLatest();
+    expect(asked()).toBe(3);
+    await engine.getLatest();
+    expect(asked()).toBe(3);
   });
 });
