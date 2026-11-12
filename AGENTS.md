@@ -16,7 +16,7 @@
 - `npm run dev`：启动 Vite 开发服务器（HMR）  
 - `npm run build`：先 `type-check` 再 `vite build` 产出 `dist/`  
 - `npm run preview`：本地预览生产构建  
-- `npm run lint`：运行 ESLint 并自动修复可修复问题  
+- `npm run lint`：运行 ESLint 并自动修复可修复问题（对全仓改写文件；合并前的检查改为对改动的文件跑 eslint，见「提交与 Pull Request 规范」）  
 - `npm run type-check`：真·类型检查（`vue-tsc --build --force`，不产出文件）并与 `scripts/type-check-baseline.txt` 比对，**只对基线之外的新增错误报红**（既有六百多条错误另立计划消化）；修掉一批既有错误后用 `npm run type-check:update-baseline` 收紧基线——不得为放行新错误改基线。脚本：`scripts/type-check.mjs`  
 - `npm test` / `npm run test:watch`：运行 Vitest（一次性/监听）  
 - `npm run test:e2e`：运行 Playwright（默认使用 `http://127.0.0.1:3101` 的 `webServer` 配置）
@@ -36,7 +36,7 @@
 - `vite.config.ts`：开发代理、构建与别名等配置  
 - `tsconfig*.json`：TypeScript 工程配置（含 `vue-tsc` 类型检查）  
 - `tailwind.config.ts`、`postcss.config.cjs`：样式与构建管线  
-- `eslint.config.js`：代码规范与导入顺序规则（建议提交前执行 `npm run lint`）
+- `eslint.config.js`：代码规范与导入顺序规则（提交前对改动的文件跑 `npx eslint`）
 
 ## 编码风格与命名约定
 
@@ -56,7 +56,7 @@
 
 - 提交信息建议遵循 Conventional Commits：`feat(scope): ...`、`fix(scope): ...`、`chore(scope): ...`（scope 示例：`mbd`、`review`、`ci`、`lint`、`dtx`）  
 - PR 需写清楚“做了什么/为什么/如何验证”，涉及 UI 或 3D 交互请附截图或录屏  
-- 合并前本地至少跑：`npm run type-check`、`npm run lint`、`npm test`；改动 E2E 相关时再跑 `npm run test:e2e`
+- 合并前本地至少跑：`npm run type-check`、对改动的文件跑 eslint（`npx eslint <改动的文件>`）、`npm test`；改动 E2E 相关时再跑 `npm run test:e2e`。不跑 `npm run lint`：它带自动修复，会对全仓改写文件，共用的检出里常有别人还没提交的改动，不要在那里跑（与 2026-11-08 落地计划的做法一致）
 - 任何改动 `src/components/review/ReviewPanel.vue` 或 `DesignerCommentHandlingPanel.vue` 的 PR，**本地必须**额外跑下列 5 套测试做"双胞胎面板"回归守护（防止 rebase / cherry-pick 整段消失式回归，参见 `开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md`）：
 
   ```bash
