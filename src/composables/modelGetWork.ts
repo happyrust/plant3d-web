@@ -153,6 +153,12 @@ export type GetWorkModelsReport = {
   /** 没动、要说明的（后台模型落后 / 后端没有它的模型 / 库在更新 / 判不了） */
   kept: { refno: string; reason: string }[];
   failed: { refno: string; reason: string }[];
+  /**
+   * 这一轮场景里一共多了 / 少了多少个构件（不重复计：一个节点既单独装过、又在装过的祖先名下时，
+   * 它的构件在两处的回执里都会出现，这里只算一次）
+   */
+  componentsAdded: number;
+  componentsRemoved: number;
 };
 
 export type GetWorkReport = {
@@ -321,7 +327,7 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, run: (item: T)
 }
 
 function emptyModels(): GetWorkModelsReport {
-  return { rootsTotal: 0, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [] };
+  return { rootsTotal: 0, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [], componentsAdded: 0, componentsRemoved: 0 };
 }
 
 function emptyReport(startedAt: number): GetWorkReport {
@@ -394,9 +400,8 @@ export function summarizeGetWork(report: GetWorkReport, label: (refno: string) =
   }
 
   const models = report.models;
-  const swappedIn = models.reloaded.reduce((sum, item) => sum + item.added, 0);
-  const swappedOut = models.reloaded.reduce((sum, item) => sum + item.removed, 0)
-    + models.withdrawn.reduce((sum, item) => sum + item.refnos, 0);
+  const swappedIn = models.componentsAdded;
+  const swappedOut = models.componentsRemoved;
   const modelBits = [
     models.reloaded.length > 0 ? `重载 ${models.reloaded.length} 个节点` : '',
     models.loadedNew.length > 0 ? `新装入 ${models.loadedNew.length} 个 SITE` : '',
@@ -503,6 +508,15 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     if (candidates.length > 0) ports.onProgress(`核对 ${candidates.length} 个已装的节点…`);
     const answers = await mapLimit(candidates, GETWORK_STATUS_CONCURRENCY, (root) => ports.nodeStatus(root, rows.get(root.dbnum) ?? null));
 
+    // 场景里多了 / 少了哪些构件（按构件记，不重复计）；说不出是哪些构件的（节点装了什么没记下）只记个数
+    const addedAll = new Set<string>();
+    const removedAll = new Set<string>();
+    let removedUnnamed = 0;
+    const settleCounts = () => {
+      models.componentsAdded = [...addedAll].filter((refno) => !removedAll.has(refno)).length;
+      models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno)).length + removedUnnamed;
+    };
+
     const reloadOne = async (refno: string): Promise<{ ok: boolean; before: Set<string>; after: string[] | null }> => {
       const before = new Set(scene.loadedRefnos(refno) ?? []);
       const ok = await scene.reload(refno);
@@ -537,7 +551,10 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       acted += 1;
       if (action.kind === 'withdraw') {
         ports.onProgress(`撤下已删除的节点 ${acted}/${toAct}…`);
+        const members = scene.loadedRefnos(root.refno) ?? [];
         const refnos = scene.withdraw(root.refno);
+        if (members.length > 0) for (const member of members) removedAll.add(member);
+        else removedUnnamed += refnos;
         ports.forgetRoot(root.refno);
         models.withdrawn.push({ refno: root.refno, refnos, why: 'deleted' });
         continue;
@@ -558,16 +575,16 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       if (root.source === 'registry') ports.forgetRoot(root.refno);
       const after = outcome.after;
       if (!after || after.length === 0) {
+        for (const refno of outcome.before) removedAll.add(refno);
         models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
         continue;
       }
       const afterSet = new Set(after);
-      models.reloaded.push({
-        refno: root.refno,
-        added: after.filter((refno) => !outcome.before.has(refno)).length,
-        removed: [...outcome.before].filter((refno) => !afterSet.has(refno)).length,
-        total: after.length,
-      });
+      const added = after.filter((refno) => !outcome.before.has(refno));
+      const removed = [...outcome.before].filter((refno) => !afterSet.has(refno));
+      for (const refno of added) addedAll.add(refno);
+      for (const refno of removed) removedAll.add(refno);
+      models.reloaded.push({ refno: root.refno, added: added.length, removed: removed.length, total: after.length });
       if (action.note) models.kept.push({ refno: root.refno, reason: action.note });
     }
 
@@ -620,11 +637,15 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
           continue;
         }
         ports.noteSiteKnown(scope.dbnum, site.refno);
-        if (outcome.after && outcome.after.length > 0) models.loadedNew.push({ refno: site.refno, name: site.name, total: outcome.after.length });
+        if (outcome.after && outcome.after.length > 0) {
+          for (const refno of outcome.after) addedAll.add(refno);
+          models.loadedNew.push({ refno: site.refno, name: site.name, total: outcome.after.length });
+        }
       }
       // 都处理完了才记「找过了」；有没装成的，下一轮（哪怕库文件没再变）还要再找
       if (allSettled) ports.noteScopeChecked(scope.dbnum, fileLatest);
     }
+    settleCounts();
   }
 
   async function runRound(): Promise<GetWorkReport> {

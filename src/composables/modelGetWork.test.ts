@@ -106,6 +106,8 @@ type World = {
   /** 重载一个节点之后它装着的构件（`null` = 查空撤下了）；没写的节点重载后不变 */
   afterReload: Record<string, string[] | null>;
   reloadFails: Set<string>;
+  /** 撤下一个节点时场景说撤了几个构件（没写就按它装着的件数） */
+  withdrawCount: Record<string, number>;
   notInScene: Set<string>;
   sites: Record<number, { refno: string; name: string }[]>;
   tree: { touched: number[]; report: () => TreeRefreshReport } | null;
@@ -121,7 +123,7 @@ type World = {
 function makeWorld(patch: Partial<World> = {}): World {
   return {
     now: 0, busy: () => false, generation: 1, rows: [ROW_8000_AT_1146], beforeFetchRows: null, roots: [], scopes: [], statuses: {},
-    loaded: {}, afterReload: {}, reloadFails: new Set(), notInScene: new Set(), sites: {}, tree: null, hasScene: true, selected: null,
+    loaded: {}, afterReload: {}, reloadFails: new Set(), withdrawCount: {}, notInScene: new Set(), sites: {}, tree: null, hasScene: true, selected: null,
     selectedIsDeleted: false, goneProbe: {}, derived: [], failProbe: null, failRows: null,
     ...patch,
   };
@@ -172,7 +174,7 @@ function harness(world: World) {
       },
       withdraw: (refno) => {
         log.push(`withdraw ${refno}`);
-        const count = world.loaded[refno]?.length ?? 0;
+        const count = world.withdrawCount[refno] ?? world.loaded[refno]?.length ?? 0;
         delete world.loaded[refno];
         return count;
       },
@@ -694,7 +696,7 @@ describe('取最新：整库显示里新出现的顶层 SITE', () => {
     // 已经在管的 SITE 不在这里重问
     expect(log).not.toContain(`status ${SITE}`);
     expect(report.models.loadedNew).toEqual([{ refno: NEW_SITE.refno, name: '/NEW-SITE', total: 2 }]);
-    expect(report.summary).toBe('已取最新：模型新装入 1 个 SITE。');
+    expect(report.summary).toBe('已取最新：模型新装入 1 个 SITE（新增 2 个构件）。');
   });
 
   it('库文件没有新会话：不查 SITE 名单', async () => {
@@ -937,7 +939,7 @@ describe('summarizeGetWork', () => {
   function base(patch: Partial<GetWorkReport>): GetWorkReport {
     return {
       startedAt: 0, finishedAt: 0, ok: true, error: null, backendRestarted: false, tree: null, treeError: null,
-      models: { rootsTotal: 0, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [] },
+      models: { rootsTotal: 0, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [], componentsAdded: 0, componentsRemoved: 0 },
       libraries: [], waited: null, selectionDeleted: null, derived: [], level: 'info', summary: '', detail: [],
       ...patch,
     };
@@ -959,7 +961,7 @@ describe('summarizeGetWork', () => {
         reloaded: [{ refno: 'a', added: 2, removed: 1, total: 9 }],
         loadedNew: [],
         withdrawn: [{ refno: 'b', refnos: 4, why: 'deleted' }],
-        kept: [], failed: [],
+        kept: [], failed: [], componentsAdded: 2, componentsRemoved: 5,
       },
     }));
     expect(out.summary).toBe(
@@ -982,7 +984,7 @@ describe('summarizeGetWork', () => {
   it('什么都没变：说已是最新、核对了多少', () => {
     const out = summarizeGetWork(base({
       tree: treeReport({ layersRequested: 12 }),
-      models: { rootsTotal: 3, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [] },
+      models: { rootsTotal: 3, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [], componentsAdded: 0, componentsRemoved: 0 },
     }));
     expect(out).toEqual({ summary: '已是最新：模型树和已装的模型都没有变化（核对了 12 层树、3 个已装的节点）。', detail: [], level: 'info' });
   });
@@ -1161,5 +1163,54 @@ describe('取最新：补几处边角', () => {
     });
     await harness(world).engine.getLatest();
     expect(seen).toEqual([{ changed: true, treeChanged: true, modelsChanged: false }]);
+  });
+});
+describe('取最新：场景里一共多了 / 少了多少个构件，不重复计', () => {
+  it('一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次', async () => {
+    const equi = '24384_25587';
+    const world = makeWorld({
+      roots: [root(equi), root(ZONE)],
+      statuses: { [equi]: { status: status('unknown'), gone: true }, [ZONE]: { status: RELOADABLE, gone: false } },
+      loaded: { [equi]: ['a1', 'a2'], [ZONE]: ['a1', 'a2', 'b1'] },
+      afterReload: { [ZONE]: ['b1', 'c1'] },
+    });
+    const report = await harness(world).engine.getLatest();
+    // 逐个节点的回执各说各的
+    expect(report.models.withdrawn).toEqual([{ refno: equi, refnos: 2, why: 'deleted' }]);
+    expect(report.models.reloaded).toEqual([{ refno: ZONE, added: 1, removed: 2, total: 2 }]);
+    // 合计只算一次：少了 a1、a2 两件，多了 c1 一件
+    expect(report.models).toMatchObject({ componentsAdded: 1, componentsRemoved: 2 });
+    expect(report.summary).toBe('已取最新：模型重载 1 个节点、撤下 1 个已不存在的节点（新增 1 个构件、撤下 2 个构件）。');
+  });
+
+  it('嵌套的两个节点都重载：同一批新构件只算一次', async () => {
+    const world = makeWorld({
+      roots: [root(SITE), root(ZONE)],
+      statuses: { [SITE]: { status: RELOADABLE, gone: false }, [ZONE]: { status: RELOADABLE, gone: false } },
+      loaded: { [SITE]: ['b1', 'x1'], [ZONE]: ['b1'] },
+      afterReload: { [SITE]: ['b1', 'x1', 'c1', 'c2'], [ZONE]: ['b1', 'c1', 'c2'] },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.models.reloaded.map((item) => item.added)).toEqual([2, 2]);
+    expect(report.models.componentsAdded).toBe(2);
+    expect(report.models.componentsRemoved).toBe(0);
+  });
+
+  it('撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计', async () => {
+    const gone = '24384_26716';
+    const world = makeWorld({
+      roots: [root(gone), root(ZONE)],
+      statuses: { [gone]: { status: status('unknown'), gone: true }, [ZONE]: { status: status('empty'), gone: false } },
+      loaded: { [ZONE]: ['z1', 'z2', 'z3'] },
+      withdrawCount: { [gone]: 5 },
+      afterReload: { [ZONE]: null, '24384_30000': ['n1', 'n2'] },
+      scopes: [{ dbnum: 8000, knownSites: new Set([SITE]), discover: true, checkedFileLatestSesno: 1143 }],
+      sites: { 8000: [{ refno: '24384_30000', name: '/NEW-SITE' }] },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.models.withdrawn).toEqual([{ refno: gone, refnos: 5, why: 'deleted' }, { refno: ZONE, refnos: 3, why: 'empty' }]);
+    expect(report.models.loadedNew).toEqual([{ refno: '24384_30000', name: '/NEW-SITE', total: 2 }]);
+    expect(report.models).toMatchObject({ componentsAdded: 2, componentsRemoved: 8 });
+    expect(report.summary).toBe('已取最新：模型新装入 1 个 SITE、撤下 2 个已不存在的节点（新增 2 个构件、撤下 8 个构件）。');
   });
 });
