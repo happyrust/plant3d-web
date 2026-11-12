@@ -152,6 +152,26 @@ export function __resetLoadedRefnosByRootForTests(): void {
 }
 
 /**
+ * 一次动作里要重载几个节点时共用的那份账（状态栏的「重载」、重新部署后的重装一次派发一串根）。
+ *
+ * 场景里的对象是按构件共用的，不是按节点各有一份：构件从 A 挪到了 B，先重载 B（把它装上）、再重载 A，A 会按
+ * 「我名下已经没有它」把它从场景撤掉——树上有、屏幕上没有（2026-11-12 真实回放：管道从一个 ZONE 挪到另一个，
+ * 一次事件按 [得到的, 失去的] 重载，管道的 9 个构件丢了）。同一轮里先重载的节点刚装上的构件记在这里，后重载的节点不撤。
+ * 只管这一轮：账是调用方每次动作新开的，下一次动作里它们照常可以被撤。
+ */
+export type ModelReloadRound = {
+  /** 这一轮里已经按最新记录装上的构件（`a_b`） */
+  readonly installed: Set<string>;
+};
+
+export function createModelReloadRound(): ModelReloadRound {
+  return { installed: new Set<string>() };
+}
+
+/** 重载撤掉的构件还登记在别的已装节点名下时，给那个节点记的那一笔（`markLoadedNodeStale` 的原因） */
+const LOST_MEMBERS_STALE_REASON = '名下有构件被别的节点的重载撤下了，屏幕上可能缺构件';
+
+/**
  * 不经 `showModelByRefno` 装进场景的节点（地址栏直装）：记下它这一次装了哪些构件，「取最新」重载它时才比得出
  * 哪些被删了（容器节点靠这一份，见 `loadedRefnosByRoot`）。
  */
@@ -422,7 +442,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (
     refno: string,
-    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; quiet?: boolean },
+    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; quiet?: boolean; round?: ModelReloadRound },
   ) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
@@ -863,6 +883,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     source: 'visible-insts' | 'subtree-refnos',
     /** 这一次显示用来出提示的那个函数（调用方要求不弹时它什么都不做） */
     toast: (payload: ToastPayload) => void,
+    /** 这一次重载属于哪一轮：同一轮里先重载的节点刚装上的构件不跟着撤 */
+    round: ModelReloadRound | undefined,
   ): boolean {
     if (
       incomplete
@@ -883,7 +905,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       return false;
     }
     const anyViewer = viewer as any;
-    const targets = uniqStrings([root, ...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, root)]);
+    // 它名下的旧构件里，同一轮里别的节点刚按最新记录装上的不撤（构件挪到了那个节点名下）
+    const targets = uniqStrings([root, ...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, root)])
+      .filter((refno) => !round?.installed.has(refno));
     const dtxLayer = anyViewer?.__dtxLayer;
     // 撤下的对象真的从图层里拿掉（2026-11-11，只隐藏的话对象槽只增不减）；对象表变了，派生索引跟着刷新
     const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];
@@ -892,6 +916,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     loadedRoots.delete(root);
     loadedRefnosByRoot.delete(root);
     forgetLoadedNode(root);
+    flagRootsLosingRefnos(root, evicted);
     statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
     progress.value = 100;
     syncGlobalLoadStatus();
@@ -1009,10 +1034,37 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     return false;
   }
 
-  /** 重载装完之后：重载前在这根名下、最新记录里已经没有的构件（数据批次删掉的成员）从场景撤下；根自己不撤。 */
-  function evictMembersMissingFromRefresh(dbno: number, root: string, previousLeaves: string[], loadRefnos: string[]): void {
+  /**
+   * 这一次重载真从场景里拿掉了对象的那些构件，要是还登记在**别的**已装节点名下，那个节点屏幕上就可能缺了东西
+   * （构件挪到了它名下、它先重载过；或它是包着这个节点的容器）：各记一笔。记了之后行上给「重载」，取最新也会重载它。
+   * 同一轮里先重载的节点刚装上的构件根本不撤（`ModelReloadRound`），走不到这里。
+   */
+  function flagRootsLosingRefnos(root: string, evicted: readonly string[]): void {
+    if (evicted.length === 0) return;
+    const gone = new Set(evicted);
+    for (const [other, members] of loadedRefnosByRoot) {
+      if (other === root) continue;
+      for (const member of members) {
+        if (!gone.has(member)) continue;
+        markLoadedNodeStale(other, LOST_MEMBERS_STALE_REASON);
+        break;
+      }
+    }
+  }
+
+  /**
+   * 重载装完之后：重载前在这根名下、最新记录里已经没有的构件（数据批次删掉的，或挪到了别的节点名下的）从场景撤下；
+   * 根自己不撤。同一轮里先重载的节点刚装上的构件不撤（`round`）。
+   */
+  function evictMembersMissingFromRefresh(
+    dbno: number,
+    root: string,
+    previousLeaves: string[],
+    loadRefnos: string[],
+    round: ModelReloadRound | undefined,
+  ): void {
     const keep = new Set([root, ...loadRefnos]);
-    const stale = previousLeaves.filter((refno) => !keep.has(refno));
+    const stale = previousLeaves.filter((refno) => !keep.has(refno) && !round?.installed.has(refno));
     if (stale.length === 0) return;
     const anyViewer = viewer as any;
     const dtxLayer = anyViewer?.__dtxLayer;
@@ -1020,6 +1072,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, stale, { release: true }) : [];
     anyViewer?.scene?.setObjectsVisible?.(stale, false);
     if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
+    flagRootsLosingRefnos(root, evicted);
     consoleStore.addLog(
       'info',
       `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里，从场景撤下（${evicted.length} 个有对象）`,
@@ -1049,6 +1102,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
        * 每个节点各弹一条「已从 gen-model 加载 N 个几何实例」只会在最后那句交代之前闪过去。
        */
       quiet?: boolean
+      /** 这一次重载属于哪一轮（一次动作重载几个节点时共用一份账，见 `ModelReloadRound`）；单个节点的重载不用给 */
+      round?: ModelReloadRound
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
@@ -2001,7 +2056,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               return false;
             }
           }
-          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, toast);
+          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, toast, loadOptions?.round);
         }
         if (visibleSource !== 'visible-insts') {
           // 记录查询失败后退到子树查询、子树也是空：这不是「查空」，同样不生成
@@ -2136,7 +2191,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         v1Result.noGeo += earlyLoad.totals.noGeo;
         v1Result.noGeoRefnos.push(...earlyLoad.totals.noGeoRefnos);
       }
-      if (refresh && !scopeIncomplete) evictMembersMissingFromRefresh(dbno, normalizedRoot, previousLeaves, loadRefnos);
+      // 这一轮里别的节点接着重载时，不许把刚按最新记录装上的这些构件当成「我名下已经没有的」撤掉
+      if (refresh && loadOptions?.round) for (const key of loadRefnos) loadOptions.round.installed.add(key);
+      if (refresh && !scopeIncomplete) evictMembersMissingFromRefresh(dbno, normalizedRoot, previousLeaves, loadRefnos, loadOptions?.round);
       if (typeof anyViewer.scene?.ensureRefnos === 'function') {
         anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
       }

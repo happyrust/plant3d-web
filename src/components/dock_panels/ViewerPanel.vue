@@ -95,7 +95,7 @@ import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
-import { useModelGeneration } from '@/composables/useModelGeneration';
+import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
 import {
   captureGetWorkWatermarks,
   noteGetWorkRoot,
@@ -5218,6 +5218,9 @@ onMounted(async () => {
         // 相机意图戳：开始加载前盖一次，落地时核对。与上面的 shouldApply 不是一回事——
         // 那个管「这条任务回执还该不该生效」，这个只管「相机还该不该动」。
         const cameraStamp = beginCameraIntent();
+        // 一次事件重载几个根（状态栏的「重载」、重新部署后的重装）：这几个根共用一份账，
+        // 先重载的根刚装上的构件，后重载的根不当成「我名下已经没有的」撤掉（构件在两个根之间挪了位置时会丢）
+        const reloadRound = (detail as any)?.refreshModel ? createModelReloadRound() : undefined;
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
@@ -5227,6 +5230,7 @@ onMounted(async () => {
             flyTo: singleFlyTo && !shouldApply,
             regenerate: !!(detail as any)?.regenModel,
             refresh: !!(detail as any)?.refreshModel,
+            round: reloadRound,
           });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =

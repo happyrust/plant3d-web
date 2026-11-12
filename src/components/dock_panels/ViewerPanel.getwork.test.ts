@@ -34,3 +34,24 @@ describe('ViewerPanel 接线（源码钉）：取最新登记的三维场景', (
     expect(options).not.toMatch(/regenerate|update|fill/);
   });
 });
+
+describe('ViewerPanel 接线（源码钉）：一次事件重载几个根（状态栏的「重载」、重新部署后的重装）', () => {
+  const handler = section('const handleShowModelByRefnos = (ev: Event) => {', 'window.addEventListener(\'showModelByRefnos\', handleShowModelByRefnos);');
+
+  it('带 refreshModel 的事件：这一串根共用一份重载的账——在循环外面开一份，每个根的重载都带着它', () => {
+    expect(handler).toContain('const reloadRound = (detail as any)?.refreshModel ? createModelReloadRound() : undefined;');
+    const opened = handler.indexOf('const reloadRound =');
+    const loop = handler.indexOf('for (const r of unique) {');
+    expect(opened).toBeGreaterThan(-1);
+    expect(loop).toBeGreaterThan(opened);
+    const call = handler.slice(handler.indexOf('await mg.showModelByRefno(r, {'));
+    const options = call.slice(0, call.indexOf('});'));
+    expect(options).toMatch(/\brefresh: !!\(detail as any\)\?\.refreshModel,/);
+    expect(options).toMatch(/\bround: reloadRound,/);
+  });
+
+  it('重新部署后的重装派发的就是这个事件（带 refreshModel、不飞相机）', () => {
+    const redeploy = section('function reloadLoadedModelsAfterRedeploy(): void {', 'onMounted(async () => {');
+    expect(redeploy).toContain('new CustomEvent(\'showModelByRefnos\', { detail: { refnos, refreshModel: true, flyTo: false } })');
+  });
+});
