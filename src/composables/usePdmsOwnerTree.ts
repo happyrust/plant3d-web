@@ -1237,6 +1237,19 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     return childrenLoadedById.size;
   }
 
+  /**
+   * 树上展开过的节点属于哪些库（「这个页面在树上碰过的库」）。只看取过子节点的那些节点自己的库号：
+   * 虚拟根没有库号——根下列着全部库的 SITE，不等于这些库都被碰过。
+   */
+  function loadedLayerDbnums(): number[] {
+    const dbnums = new Set<number>();
+    for (const id of childrenLoadedById) {
+      const dbnum = nodesById.value[id]?.dbnum;
+      if (typeof dbnum === 'number') dbnums.add(dbnum);
+    }
+    return [...dbnums];
+  }
+
   async function fetchLayerAnswer(layerId: string): Promise<TreeLayerAnswer> {
     let resp = await treeSource.children(layerId, 2000);
     if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
@@ -1351,6 +1364,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     clearXray,
 
     loadedLayerCount,
+    loadedLayerDbnums,
     refreshLoadedLayers,
   };
 }

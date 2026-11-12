@@ -394,6 +394,23 @@ describe('usePdmsOwnerTree.refreshLoadedLayers（取最新）', () => {
     }
   });
 
+  it('loadedLayerDbnums：只算展开过的节点自己的库；根下列着别的库的 SITE 不算碰过那些库', async () => {
+    const api = fakeApi(() => ({
+      roots: () => [node('1_1', 'SITE', '/SITE-A', '9_0', 0, 2, 8000), node('2_1', 'SITE', '/SITE-OTHER', '9_0', 1, 1, 7997)],
+      children: (parent) => (parent === '1/1' ? [node('1_2', 'ZONE', '/ZONE-A', '1_1', 0, 0, 8000)] : []),
+    }));
+    const { tree, stop } = await mountTree(api);
+    try {
+      // 只取过根那一层：虚拟根没有库号，一个库都不算碰过
+      expect(tree.loadedLayerDbnums()).toEqual([]);
+      tree.toggleExpand('1_1');
+      await vi.waitFor(() => expect(tree.nodesById.value['1_2']).toBeDefined());
+      expect(tree.loadedLayerDbnums()).toEqual([8000]);
+    } finally {
+      stop();
+    }
+  });
+
   it('同时点两下：只跑一轮，两次拿到同一份回执', async () => {
     const api = fakeApi(() => smallTree(() => 1));
     const { tree, stop } = await mountTree(api);
