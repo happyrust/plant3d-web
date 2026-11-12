@@ -20,6 +20,11 @@ import DimensionSemanticList from './DimensionSemanticList.vue';
 import DimensionToolbar from './DimensionToolbar.vue';
 import { expectedKindsFor, mbdAnnotationTypeLabel } from './mbdAnnotationTypes';
 import {
+  MBD_DROPPED_PRIMITIVE_RULE_ID,
+  mbdDroppedPrimitivesHeadline,
+  summarizeMbdDroppedPrimitives,
+} from './mbdDroppedPrimitives';
+import {
   groupMbdRecordsByFunction,
   mbdFunctionGroupVisibility,
   mbdFunctionOf,
@@ -27,6 +32,7 @@ import {
 import PipeInformationPanel from './PipeInformationPanel.vue';
 
 import type { DimensionBoundAction } from './dimensionBoundActions';
+import type { MbdDroppedPrimitive } from './mbdDroppedPrimitives';
 import type { MbdPrimitive } from '../adapters/mbdV2Contract';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '../domain/types';
@@ -457,6 +463,42 @@ const incompleteSources = computed((): readonly IncompleteSource[] => {
   return flagged;
 });
 const multiSourceIncomplete = computed(() => mbdDiagnostics.value.sources.length > 1);
+
+/**
+ * 票 14（#103）：求解器的出口自检拿掉图元时的常驻横幅（算法在 `mbdDroppedPrimitives.ts`）。这样的标注包
+ * 合契约、照常显示，少的那几处只记在缺省收起的诊断里；ADR 0046 不许不声不响地显示不完整的图，所以在这里
+ * 说出来。横幅只读诊断快照：换对象或清空来源时快照换掉，它跟着换或消失。
+ */
+const droppedPrimitives = computed(() => summarizeMbdDroppedPrimitives(mbdDiagnostics.value));
+const droppedPrimitivesHeadline = computed(() =>
+  (droppedPrimitives.value ? mbdDroppedPrimitivesHeadline(droppedPrimitives.value) : ''));
+/** 多包同屏时跟在头一句后面的逐包处数（「A：1 处；B：2 处。」）；单包不点名。 */
+const droppedPrimitivesSourceRows = computed(() => {
+  const summary = droppedPrimitives.value;
+  if (!summary?.multiSource) return [];
+  return summary.sources.map((source, index, all) => ({
+    refno: source.refno,
+    count: source.dropped.length,
+    tail: index < all.length - 1 ? '；' : '。',
+  }));
+});
+const droppedPrimitivesExpanded = ref(false);
+/** 展开后最多列 {@link DIAGNOSTICS_PAGE_SIZE} 处（与诊断列表同一个上限）；头一句里的处数照全量写。 */
+const visibleDroppedPrimitives = computed(() => {
+  const groups: { refno: string; total: number; dropped: readonly MbdDroppedPrimitive[] }[] = [];
+  let shown = 0;
+  for (const source of droppedPrimitives.value?.sources ?? []) {
+    if (shown >= DIAGNOSTICS_PAGE_SIZE) break;
+    const dropped = source.dropped.slice(0, DIAGNOSTICS_PAGE_SIZE - shown);
+    shown += dropped.length;
+    groups.push({ refno: source.refno, total: source.dropped.length, dropped });
+  }
+  return { groups, hidden: (droppedPrimitives.value?.total ?? 0) - shown };
+});
+// 换了一批标注包：上一批展开的清单不留给下一批。同一批重新同步（`popstate` 很频繁）不收。
+watch(() => mbdDiagnostics.value.sourceId, () => {
+  droppedPrimitivesExpanded.value = false;
+});
 
 function locateIssueRefno(refno: string): void {
   window.dispatchEvent(new CustomEvent('showModelByRefnos', {
@@ -1080,6 +1122,75 @@ function act(
         </template>
       </div>
       <div class="mt-1">未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。</div>
+    </div>
+    <!--
+      票 14：求解器的出口自检拿掉过图元（诊断规则号 contract.invalid_primitive）。
+      - 头一句与逐包的处数放在 alert 里，一出现就读给读屏用户；按钮和展开的清单在 alert 之外，展开时不会把
+        整段再读一遍。
+      - 这个面板自己不能滚（根元素 overflow-hidden），上面每多一行，最底下的「MBD 诊断」就少露一行。所以
+        收起时只有一句话加一个跟在句尾的按钮；展开的清单自己限高、自己滚，不然后面几处会被裁在面板底边之外。
+    -->
+    <div v-if="droppedPrimitives"
+      class="m-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+      data-testid="mbd-dropped-primitives">
+      <div>
+        <span role="alert" data-testid="mbd-dropped-primitives-summary">
+          <span class="font-semibold">{{ droppedPrimitivesHeadline }}</span>
+          <template v-for="row in droppedPrimitivesSourceRows"
+            :key="row.refno">
+            <span data-testid="mbd-dropped-primitives-source"
+              :data-refno="row.refno">{{ row.refno }}：{{ row.count }} 处</span>{{ row.tail }}
+          </template>
+        </span>
+        <button type="button"
+          class="ml-1 rounded border border-amber-400 px-1.5 hover:bg-amber-100"
+          data-testid="mbd-dropped-primitives-toggle"
+          :aria-expanded="droppedPrimitivesExpanded"
+          aria-controls="mbd-dropped-primitives-details"
+          @click="droppedPrimitivesExpanded = !droppedPrimitivesExpanded">
+          <template v-if="droppedPrimitivesExpanded">收起</template>
+          <template v-else>查看是哪 {{ droppedPrimitives.total }} 处</template>
+        </button>
+      </div>
+      <div v-if="droppedPrimitivesExpanded"
+        id="mbd-dropped-primitives-details"
+        class="mt-1"
+        data-testid="mbd-dropped-primitives-details">
+        <div data-testid="mbd-dropped-primitives-note">
+          被拿掉的图元不会画出来，请勿据此判断标注已完整。下面各处的原因来自标注包的诊断：
+        </div>
+        <div class="mt-1 max-h-60 overflow-y-auto"
+          tabindex="0"
+          role="group"
+          :aria-label="`被拿掉的 ${droppedPrimitives.total} 处`"
+          data-testid="mbd-dropped-primitives-list">
+          <div v-for="group in visibleDroppedPrimitives.groups"
+            :key="group.refno"
+            data-testid="mbd-dropped-primitives-group"
+            :data-refno="group.refno">
+            <div v-if="droppedPrimitives.multiSource"
+              class="mt-1 font-semibold"
+              data-testid="mbd-dropped-primitives-group-title">
+              标注包 {{ group.refno }}（{{ group.total }} 处）
+            </div>
+            <ul class="m-0 list-none p-0">
+              <li v-for="entry in group.dropped"
+                :key="entry.issueId"
+                class="mt-1 break-words"
+                data-testid="mbd-dropped-primitives-entry"
+                :data-issue-id="entry.issueId">
+                {{ entry.ruleId }} · 对象 {{ entry.objectRefno ?? '未注明' }} · {{ entry.reason }}
+              </li>
+            </ul>
+          </div>
+          <div v-if="visibleDroppedPrimitives.hidden > 0"
+            class="mt-1"
+            data-testid="mbd-dropped-primitives-more">
+            只列出前 {{ DIAGNOSTICS_PAGE_SIZE }} 处；其余 {{ visibleDroppedPrimitives.hidden }} 处见下方「MBD 诊断」里规则号为
+            {{ MBD_DROPPED_PRIMITIVE_RULE_ID }} 的条目。
+          </div>
+        </div>
+      </div>
     </div>
     <div v-if="mbdDiagnostics.channel"
       class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
