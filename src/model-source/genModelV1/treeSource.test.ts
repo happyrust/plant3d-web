@@ -264,7 +264,7 @@ describe('createGenModelV1TreeSource', () => {
   });
 
   it('children 记下服务端的视图：老服务端不回 view（没认 resolved=1）记 stored，认了记 resolved，虚拟根不带', async () => {
-    let view: 'resolved' | undefined;
+    let view: 'resolved' | undefined = undefined;
     const api = fakeApi({
       children: vi.fn(async (raw: string) => ({ source: 'direct', parent: toV1Refno(raw), ...(view ? { view } : {}), nodes: [] })),
     });
