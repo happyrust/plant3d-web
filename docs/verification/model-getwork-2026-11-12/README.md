@@ -9,6 +9,8 @@
 > **同一天的第三轮**（用户裁决之后按裁决改的几项）另记在 [`round3.md`](./round3.md)。因此又有几处过时，同样原文留着、各加了一句：
 > 第 4 节里「原有的重载没有带护栏」「每个重载的节点各出一条提示」两条（都改了）、第 5 节的七条（都定了）；
 > 文中的「监听范围」现在叫「后端更新范围」，「`confirmEmpty`」这个选项已经去掉（所有的重载都带那道护栏）。
+> 第 3.2 节那套叠加层场景第三轮也重跑了，但连的是沙箱后端、不是现网 8022（当时 8022 没有进程在听）；场景脚本里「等装载结束」的写法其实没有等，
+> 第三轮的派生脚本改对了——两件事都见 `round3.md` 第 3.3 节、第 6 节。
 任务书：主检出 `.scratch/incremental-sync/IMPLEMENT.md`；前一步的分析：`docs/investigation/incremental-update-frontend-sync-2026-11-12.md`（主检出，未提交）；
 决定：`docs/adr/0073-getwork-is-a-manual-read-only-sync-that-reconciles-the-tree-by-layer-and-reloads-models-by-node.md`。
 

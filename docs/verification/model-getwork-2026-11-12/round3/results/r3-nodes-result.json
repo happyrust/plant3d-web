@@ -1,0 +1,5724 @@
+{
+ "startedAt": "2026-11-12T10:12:25.012Z",
+ "front": "http://127.0.0.1:3103",
+ "backend": "http://127.0.0.1:9199",
+ "steps": [
+  {
+   "id": "S1",
+   "what": "改名（E3D 会话 1653–1654）：BRAN /AIOS-SUITE-T3-BRAN-R 改成 …-BRAN-ROLD，连同它的 9 个管件",
+   "dbnum": 8000,
+   "to": 1654,
+   "rowsBefore": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1652,
+     "applied": 1652,
+     "model": 1652,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 290,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1652,
+     "to_sesno": 1654,
+     "header_sesno_after": 1654,
+     "bytes_before": 74055680,
+     "bytes_after": 74127360,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 17,
+    "appliedMs": 22032,
+    "modelMs": 22571,
+    "row": {
+     "file": 1654,
+     "applied": 1654,
+     "model": 1654,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 5,
+    "framesForWindow": 2,
+    "terminalAfterMs": 22398,
+    "sample": "{\"type\":\"task_finished\",\"seq\":5,\"ts\":\"2026-11-12T18:12:52.485320100+08:00\",\"task_id\":\"db-20261112-181251-000040\",\"payload\":{\"task_id\":\"db-20261112-181251-000040\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1653,\"end_sesno\":1654,\"start_sesno_time\":\"2026-11-11T21:08:09+00:00\",\"end_sesno_time\":\"2026-11-11T21:08:13+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1653,1654],\"merged_sesno_times\":[\"2026-11-11T21:08:09+00:00\",\"2026-11-11T21:08:13+00:00\"],\"changed_elements\":11,\"added_elements\":0,\"modified_elements\":11,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1024,\"advanced\":1024},\"model_base_sesno\":1652},\"units\":[],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=11 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=11（ins/mod/del=0/11/0）基会话=1652 读页=1663 差分 47ms\",\"dbnum=8000: dbnum=8000: window 1652→1654 roots_T=1024 roots_S=1024 touched=0 regen=0 delete=0 advance=1024 lazy=0 | window 1652→1654: candidates=11 (+0 ~11 -0) rolled_up=0 unchanged=0 no_model=11 (metadata_only=10 unread_attribute=0 cache_stamp=0) unresolved=0 cascades=0 units regen=0 remove=0 derived=0\",\"dbnum=8000: dbnum=8000: metadata-only gate — 10 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=10 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=0 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpoint=0 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=11 dbs_queried=24 queries=572 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=8000: dbnum=8000: rigid-motion (model_transform_cheap_path) — transform=0 (anchors=0) rejected=0\",\"dbnum=8000: dbnum=8000: unit-level publish (model_unit_level_publish) — no_model_only roots not classified: cascade(s) off (model_structural_connection_cascade); D10 needs model_structural_connection_cascade / model_cable_endpoint_cascade / model_design_reference_cascade all on, every empty sub-plan falls back to regen\",\"dbnum=8000: dbnum=8000: window 1652→1654 规划耗时 total=113ms | sets=36ms design=0ms collect=72ms [ledger=10ms closure=0ms xgeom=0ms index_S=4ms roots_S=23ms[full] index_T=5ms roots_T=0ms[incremental parity=0ms] nested=2ms changes=0ms rigid=0ms cascades=21ms removed=0ms cache=0ms] bind=0ms | settled=0ms "
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1653→1654（改 11 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 628,
+      "right": 972,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1652 161 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 114 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1652 49 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1652 42 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 1141,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181251-000040",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1653,
+    "end_sesno": 1654,
+    "created_at": "2026-11-12T18:12:51.339608900+08:00",
+    "started_at": "2026-11-12T18:12:51.349169800+08:00",
+    "finished_at": "2026-11-12T18:12:52.482060200+08:00",
+    "units_done": 0,
+    "total_units": 0,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1654,
+     "applied": 1654,
+     "model": 1654,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47481 里 24384_47574 改名 /AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD",
+     "层 24384_47574 里 24384_47575 改名 /AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1",
+     "层 24384_47574 里 24384_47576 改名 /AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2",
+     "层 24384_47574 里 24384_47577 改名 /AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-ROLD-M3",
+     "层 24384_47574 里 24384_47578 改名 /AIOS-SUITE-T3-BRAN-R-M4 → /AIOS-SUITE-T3-BRAN-ROLD-M4",
+     "层 24384_47574 里 24384_47579 改名 /AIOS-SUITE-T3-BRAN-R-M5 → /AIOS-SUITE-T3-BRAN-ROLD-M5",
+     "层 24384_47574 里 24384_47580 改名 /AIOS-SUITE-T3-BRAN-R-M6 → /AIOS-SUITE-T3-BRAN-ROLD-M6",
+     "层 24384_47574 里 24384_47581 改名 /AIOS-SUITE-T3-BRAN-R-M7 → /AIOS-SUITE-T3-BRAN-ROLD-M7",
+     "层 24384_47574 里 24384_47582 改名 /AIOS-SUITE-T3-BRAN-R-M8 → /AIOS-SUITE-T3-BRAN-ROLD-M8",
+     "层 24384_47574 里 24384_47583 改名 /AIOS-SUITE-T3-BRAN-R-M9 → /AIOS-SUITE-T3-BRAN-ROLD-M9"
+    ],
+    "records": []
+   },
+   "getWork": {
+    "ms": 470,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 2/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型树改名 10；模型重载 3 个节点。",
+    "detail": [
+     "树上改名：/AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD、/AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1、/AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2 等 10 个",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478373499,
+    "finishedAt": 1794478373852,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [
+      {
+       "id": "24384_47574",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD",
+       "type": "BRAN",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R",
+       "previousType": "BRAN"
+      },
+      {
+       "id": "24384_47575",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M1",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M1",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47576",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M2",
+       "type": "BEND",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M2",
+       "previousType": "BEND"
+      },
+      {
+       "id": "24384_47577",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M3",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M3",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47578",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M4",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M4",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47579",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M5",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M5",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47580",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M6",
+       "type": "BEND",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M6",
+       "previousType": "BEND"
+      },
+      {
+       "id": "24384_47581",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M7",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M7",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47582",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M8",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M8",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47583",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD-M9",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/AIOS-SUITE-T3-BRAN-R-M9",
+       "previousType": "FTUB"
+      }
+     ],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树改名 10；模型重载 3 个节点。",
+    "detail": [
+     "树上改名：/AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD、/AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1、/AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2 等 10 个",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树改名 10；模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树改名 10；模型重载 3 个节点。\n· 树上改名：/AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD、/AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1、/AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2 等 10 个\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n（18:12:53）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": null
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树改名 10；模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S2",
+   "what": "新增（E3D 会话 1656–1657）：PIPE 下复制出一条新 BRAN /AIOS-SUITE-T3-BRAN-R（24384/47584）；文件一推就点，不等后端",
+   "dbnum": 8000,
+   "to": 1657,
+   "rowsBefore": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1654,
+     "applied": 1654,
+     "model": 1654,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 250,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1654,
+     "to_sesno": 1657,
+     "header_sesno_after": 1657,
+     "bytes_before": 74127360,
+     "bytes_after": 74287104,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 27876,
+    "appliedMs": 27876,
+    "modelMs": 27876,
+    "row": {
+     "file": 1657,
+     "applied": 1657,
+     "model": 1657,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 580,
+      "right": 1020,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1654 374 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1654 373 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1654 311 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1654 186 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 374,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181321-000041",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1655,
+    "end_sesno": 1657,
+    "created_at": "2026-11-12T18:13:21.355837100+08:00",
+    "started_at": "2026-11-12T18:13:21.357411400+08:00",
+    "finished_at": "2026-11-12T18:13:22.758680700+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1657,
+     "applied": 1657,
+     "model": 1657,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47481 多了 BRAN /AIOS-SUITE-T3-BRAN-R（24384_47584）"
+    ],
+    "records": [
+     "根 24384_47463：记录 23 → 32，多 9（24384_47585,24384_47586,24384_47587,24384_47588,24384_47589,24384_47590,24384_47591,24384_47592,24384_47593）少 0（）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 27858,
+    "progress": [
+     "核对后台状态…",
+     "等后台把库 8000 更新完…（已等 0 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 3 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 6 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 9 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 12 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 15 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 18 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 21 秒，最多 45 秒）",
+     "等后台把库 8000 更新完…（已等 24 秒，最多 45 秒）",
+     "刷新模型树…",
+     "重载模型 2/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。",
+    "detail": [
+     "树上新增：/AIOS-SUITE-T3-BRAN-R",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 32 个构件，新增 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "等后台更新库 8000 用了 27 秒"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478375774,
+    "finishedAt": 1794478403521,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [
+      {
+       "id": "24384_47584",
+       "name": "/AIOS-SUITE-T3-BRAN-R",
+       "type": "BRAN",
+       "dbnum": 8000
+      }
+     ],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 9,
+       "removed": 0,
+       "total": 32
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 9,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": {
+     "dbnums": [
+      8000
+     ],
+     "ms": 27235,
+     "timedOut": []
+    },
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。",
+    "detail": [
+     "树上新增：/AIOS-SUITE-T3-BRAN-R",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 32 个构件，新增 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "等后台更新库 8000 用了 27 秒"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。\n· 树上新增：/AIOS-SUITE-T3-BRAN-R\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 32 个构件，新增 9\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n· 等后台更新库 8000 用了 27 秒\n（18:13:23）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 模型未就绪 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": null
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 34,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。"
+   ]
+  },
+  {
+   "id": "S3",
+   "what": "删除（E3D 会话 1659–1660）：删掉 BRAN /AIOS-SUITE-T3-BRAN-ROLD（24384/47574）；删之前在树上选中它",
+   "dbnum": 8000,
+   "to": 1660,
+   "rowsBefore": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1657,
+     "applied": 1657,
+     "model": 1657,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 471,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1657,
+     "to_sesno": 1660,
+     "header_sesno_after": 1660,
+     "bytes_before": 74287104,
+     "bytes_after": 74442752,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 15,
+    "appliedMs": 25875,
+    "modelMs": 26421,
+    "row": {
+     "file": 1660,
+     "applied": 1660,
+     "model": 1660,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 5,
+    "framesForWindow": 2,
+    "terminalAfterMs": 26357,
+    "sample": "{\"type\":\"task_finished\",\"seq\":17,\"ts\":\"2026-11-12T18:13:52.444300200+08:00\",\"task_id\":\"db-20261112-181351-000042\",\"payload\":{\"task_id\":\"db-20261112-181351-000042\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1658,\"end_sesno\":1660,\"start_sesno_time\":\"2026-11-11T21:08:47+00:00\",\"end_sesno_time\":\"2026-11-11T21:08:56+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1658,1659,1660],\"merged_sesno_times\":[\"2026-11-11T21:08:47+00:00\",\"2026-11-11T21:08:52+00:00\",\"2026-11-11T21:08:56+00:00\"],\"changed_elements\":12,\"added_elements\":0,\"modified_elements\":2,\"deleted_elements\":10,\"credential_advance\":{\"requested\":1024,\"advanced\":1024},\"model_base_sesno\":1657},\"units\":[],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=10 modified=2 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=12（ins/mod/del=0/2/10）基会话=1657 读页=1671 差分 41ms\",\"dbnum=8000: dbnum=8000: window 1657→1660 roots_T=1024 roots_S=1025 touched=1 regen=0 delete=1 advance=1024 lazy=0 | window 1657→1660: candidates=12 (+0 ~2 -10) rolled_up=10 unchanged=0 no_model=2 (metadata_only=0 unread_attribute=0 cache_stamp=0) unresolved=0 cascades=0 units regen=0 remove=9 derived=1\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpoint=0 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=12 dbs_queried=24 queries=624 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=8000: dbnum=8000: rigid-motion (model_transform_cheap_path) — transform=0 (anchors=0) rejected=0\",\"dbnum=8000: dbnum=8000: unit-level publish (model_unit_level_publish) — no_model_only roots not classified: cascade(s) off (model_structural_connection_cascade); D10 needs model_structural_connection_cascade / model_cable_endpoint_cascade / model_design_reference_cascade all on, every empty sub-plan falls back to regen\",\"dbnum=8000: dbnum=8000: window 1657→1660 规划耗时 total=65ms | sets=27ms design=0ms collect=35ms [ledger=10ms closure=0ms xgeom=0ms index_S=6ms roots_S=0ms[cached] index_T=5ms roots_T=0ms[incremental parity=0ms] nested=2ms changes=0ms rigid=0ms cascades=5ms removed=0ms cache=3ms] bind=0ms | settled=0ms impact=0ms bucket=0ms carry=0ms rigid=0ms change_list=0ms finish=0ms (GitHub #68)\"],\"model_verdict\":\"in_sync\",\"model_caught_up_at\":\"2026-11-12T10:13:52.411746400Z\"}}}"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1658→1660（改 12 项，场景内 9 根受影响）",
+   "noticeHintBeforeClick": null,
+   "noticeReloadBeforeClick": true,
+   "noticeOverlay": {
+    "1280": {
+     "viewport": 1280,
+     "menuMode": "hierarchical",
+     "statusBar": {
+      "left": 0,
+      "right": 1280,
+      "top": 772,
+      "bottom": 800
+     },
+     "snackbars": [
+      {
+       "left": 304,
+       "right": 976,
+       "top": 676,
+       "bottom": 764
+      }
+     ],
+     "snackbarOverStatusBar": false,
+     "reload": {
+      "rect": {
+       "left": 718,
+       "right": 740,
+       "top": 778,
+       "bottom": 795
+      },
+      "covered": false,
+      "clickable": true
+     },
+     "dismiss": {
+      "rect": {
+       "left": 744,
+       "right": 755,
+       "top": 778,
+       "bottom": 795
+      },
+      "covered": false,
+      "clickable": true
+     },
+     "getWork": {
+      "rect": {
+       "left": 1209,
+       "right": 1272,
+       "top": 777,
+       "bottom": 797
+      },
+      "covered": false,
+      "clickable": true
+     }
+    },
+    "1600": {
+     "viewport": 1600,
+     "menuMode": "hierarchical",
+     "statusBar": {
+      "left": 0,
+      "right": 1600,
+      "top": 972,
+      "bottom": 1000
+     },
+     "snackbars": [
+      {
+       "left": 464,
+       "right": 1136,
+       "top": 876,
+       "bottom": 964
+      }
+     ],
+     "snackbarOverStatusBar": false,
+     "reload": {
+      "rect": {
+       "left": 718,
+       "right": 740,
+       "top": 978,
+       "bottom": 995
+      },
+      "covered": false,
+      "clickable": true
+     },
+     "dismiss": {
+      "rect": {
+       "left": 744,
+       "right": 755,
+       "top": 978,
+       "bottom": 995
+      },
+      "covered": false,
+      "clickable": true
+     },
+     "getWork": {
+      "rect": {
+       "left": 1529,
+       "right": 1592,
+       "top": 977,
+       "bottom": 997
+      },
+      "covered": false,
+      "clickable": true
+     }
+    }
+   },
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 509,
+      "right": 1091,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1657 225 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 120 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1657 97 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1657 59 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 6391,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181351-000042",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1658,
+    "end_sesno": 1660,
+    "created_at": "2026-11-12T18:13:51.344741500+08:00",
+    "started_at": "2026-11-12T18:13:51.346177+08:00",
+    "finished_at": "2026-11-12T18:13:52.441978+08:00",
+    "units_done": 0,
+    "total_units": 0,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1660,
+     "applied": 1660,
+     "model": 1660,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47481 少了 BRAN /AIOS-SUITE-T3-BRAN-ROLD（24384_47574）",
+     "层 24384_47574 整层没了（404）"
+    ],
+    "records": [
+     "根 24384_47463：记录 32 → 23，多 0（）少 9（24384_47575,24384_47576,24384_47577,24384_47578,24384_47579,24384_47580,24384_47581,24384_47582,24384_47583）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 487,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。",
+    "detail": [
+     "树上删除：/AIOS-SUITE-T3-BRAN-ROLD",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，撤下 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "选中的 /AIOS-SUITE-T3-BRAN-ROLD（24384_47574） 在库里已经没有了"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478438689,
+    "finishedAt": 1794478439084,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 19,
+     "layersFailed": [],
+     "added": [],
+     "removed": [
+      {
+       "id": "24384_47574",
+       "name": "/AIOS-SUITE-T3-BRAN-ROLD",
+       "type": "BRAN",
+       "dbnum": 8000,
+       "fate": "deleted"
+      }
+     ],
+     "removedNodeCount": 10,
+     "removedUnder": {
+      "24384_47574": "24384_47574",
+      "24384_47575": "24384_47574",
+      "24384_47576": "24384_47574",
+      "24384_47577": "24384_47574",
+      "24384_47578": "24384_47574",
+      "24384_47579": "24384_47574",
+      "24384_47580": "24384_47574",
+      "24384_47581": "24384_47574",
+      "24384_47582": "24384_47574",
+      "24384_47583": "24384_47574"
+     },
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [
+      "24384_47574"
+     ],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 9,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 9
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": "24384_47574",
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。",
+    "detail": [
+     "树上删除：/AIOS-SUITE-T3-BRAN-ROLD",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，撤下 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "选中的 /AIOS-SUITE-T3-BRAN-ROLD（24384_47574） 在库里已经没有了"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。\n· 树上删除：/AIOS-SUITE-T3-BRAN-ROLD\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，撤下 9\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n· 选中的 /AIOS-SUITE-T3-BRAN-ROLD（24384_47574） 在库里已经没有了\n（18:13:59）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 18,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。"
+   ]
+  },
+  {
+   "id": "S4",
+   "what": "删了重建（E3D 会话 1662–1663）：BRAN /AIOS-SUITE-T3-BRAN-R 删掉后重建，参考号从 24384/47584 换成 24384/47594",
+   "dbnum": 8000,
+   "to": 1663,
+   "rowsBefore": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1660,
+     "applied": 1660,
+     "model": 1660,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 184,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1660,
+     "to_sesno": 1663,
+     "header_sesno_after": 1663,
+     "bytes_before": 74442752,
+     "bytes_after": 74606592,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 12,
+    "appliedMs": 21289,
+    "modelMs": 22104,
+    "row": {
+     "file": 1663,
+     "applied": 1663,
+     "model": 1663,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 7,
+    "framesForWindow": 2,
+    "terminalAfterMs": 22097,
+    "sample": "{\"type\":\"task_finished\",\"seq\":24,\"ts\":\"2026-11-12T18:14:22.949094+08:00\",\"task_id\":\"db-20261112-181421-000043\",\"payload\":{\"task_id\":\"db-20261112-181421-000043\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1661,\"end_sesno\":1663,\"start_sesno_time\":\"2026-11-11T21:09:06+00:00\",\"end_sesno_time\":\"2026-11-11T21:09:15+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1661,1662,1663],\"merged_sesno_times\":[\"2026-11-11T21:09:06+00:00\",\"2026-11-11T21:09:11+00:00\",\"2026-11-11T21:09:15+00:00\"],\"changed_elements\":22,\"added_elements\":10,\"modified_elements\":2,\"deleted_elements\":10,\"credential_advance\":{\"requested\":1023,\"advanced\":1023},\"model_base_sesno\":1660},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47594\",\"noun\":\"BRAN\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[{\"room_num\":\"R446\",\"panel_refno\":\"24381_35345\",\"members\":5},{\"room_num\":\"R545\",\"panel_refno\":\"24381_35960\",\"members\":5}],\"geometry_before\":{\"records\":0},\"geometry_after\":{\"records\":9,\"aabb\":[8536.560546875,9954.6689453125,8900.0,11285.3837890625,14081.1455078125,8930.0]},\"geometry_diff\":{\"moved\":0,\"added\":9,\"removed\":0,\"sample\":[\"24384_47595\",\"24384_47596\",\"24384_47597\",\"24384_47598\",\"24384_47599\",\"24384_47600\",\"24384_47601\",\"24384_47602\"]}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=10 deleted=10 modified=2 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=22（ins/mod/del=10/2/10）基会话=1660 读页=1674 差分 48ms\",\"dbnum=8000: dbnum=8000: window 1660→1663 roots_T=1024 roots_S=1024 touched=2 regen=1 delete=1 advance=1023 lazy=0 | window 1660→1663: candidates=22 (+10 ~2 -10) rolled_up=20 unchanged=0 no_model=2 (metadata_only=0 unread_attribute=0 cache_stamp=0) unresolved=0 cascades=0 units regen=9 remove=9 derived=2\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpoint=0 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=22 dbs_queried=24 queries=1144 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=8000: dbnum=8000: rigid-motion (model_transform_cheap_path) — transform=0 (anchors=0) rejected=1 [24384/47594: root is not a settled persisted root]\",\"dbnum=8000: dbnum=8000: unit-level publish (model_unit_level_publish) — no_model_only roots not classified: cascade(s) off (model_structural_connection_cascade); D10 needs model_structural_connection_cascade / model_cable_endpoint_cascade / model_design_reference_cascade all on, every empty sub-plan falls back to regen\",\"dbnum=8000: dbnum=8000: window 1660→1663 规划耗时 total=85ms | sets=36ms design=12ms collect=3"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1661→1663（改 22 项，场景内 9 根受影响）",
+   "noticeHintBeforeClick": null,
+   "noticeReloadBeforeClick": true,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 501,
+      "right": 1099,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1660 192 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 115 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1660 80 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1660 43 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 948,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181421-000043",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1661,
+    "end_sesno": 1663,
+    "created_at": "2026-11-12T18:14:21.356866400+08:00",
+    "started_at": "2026-11-12T18:14:21.358774300+08:00",
+    "finished_at": "2026-11-12T18:14:22.945168900+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1663,
+     "applied": 1663,
+     "model": 1663,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47481 多了 BRAN /AIOS-SUITE-T3-BRAN-R（24384_47594）",
+     "层 24384_47481 少了 BRAN /AIOS-SUITE-T3-BRAN-R（24384_47584）"
+    ],
+    "records": [
+     "根 24384_47463：记录 23 → 23，多 9（24384_47595,24384_47596,24384_47597,24384_47598,24384_47599,24384_47600,24384_47601,24384_47602,24384_47603）少 9（24384_47585,24384_47586,24384_47587,24384_47588,24384_47589,24384_47590,24384_47591,24384_47592,24384_47593）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 454,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。",
+    "detail": [
+     "树上新增：/AIOS-SUITE-T3-BRAN-R",
+     "树上删除：/AIOS-SUITE-T3-BRAN-R",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 9，撤下 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478463791,
+    "finishedAt": 1794478464134,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 19,
+     "layersRefreshed": 19,
+     "layersFailed": [],
+     "added": [
+      {
+       "id": "24384_47594",
+       "name": "/AIOS-SUITE-T3-BRAN-R",
+       "type": "BRAN",
+       "dbnum": 8000
+      }
+     ],
+     "removed": [
+      {
+       "id": "24384_47584",
+       "name": "/AIOS-SUITE-T3-BRAN-R",
+       "type": "BRAN",
+       "dbnum": 8000,
+       "fate": "deleted"
+      }
+     ],
+     "removedNodeCount": 1,
+     "removedUnder": {
+      "24384_47584": "24384_47584"
+     },
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 9,
+       "removed": 9,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 9,
+     "componentsRemoved": 9
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。",
+    "detail": [
+     "树上新增：/AIOS-SUITE-T3-BRAN-R",
+     "树上删除：/AIOS-SUITE-T3-BRAN-R",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 9，撤下 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。\n· 树上新增：/AIOS-SUITE-T3-BRAN-R\n· 树上删除：/AIOS-SUITE-T3-BRAN-R\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 9，撤下 9\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n（18:14:24）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 18,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。"
+   ]
+  },
+  {
+   "id": "S5",
+   "what": "只改名（E3D 会话 1665–1666）：新 BRAN 的 9 个管件从 /Copy-of-… 改回原名；先把这条 BRAN 展开",
+   "dbnum": 8000,
+   "to": 1666,
+   "rowsBefore": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1663,
+     "applied": 1663,
+     "model": 1663,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 208,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1663,
+     "to_sesno": 1666,
+     "header_sesno_after": 1666,
+     "bytes_before": 74606592,
+     "bytes_after": 74723328,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 25,
+    "appliedMs": 25668,
+    "modelMs": 26209,
+    "row": {
+     "file": 1666,
+     "applied": 1666,
+     "model": 1666,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 5,
+    "framesForWindow": 2,
+    "terminalAfterMs": 26170,
+    "sample": "{\"type\":\"task_finished\",\"seq\":29,\"ts\":\"2026-11-12T18:14:52.516220900+08:00\",\"task_id\":\"db-20261112-181451-000044\",\"payload\":{\"task_id\":\"db-20261112-181451-000044\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1664,\"end_sesno\":1666,\"start_sesno_time\":\"2026-11-11T21:09:25+00:00\",\"end_sesno_time\":\"2026-11-11T21:09:35+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1664,1665,1666],\"merged_sesno_times\":[\"2026-11-11T21:09:25+00:00\",\"2026-11-11T21:09:31+00:00\",\"2026-11-11T21:09:35+00:00\"],\"changed_elements\":10,\"added_elements\":0,\"modified_elements\":10,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1024,\"advanced\":1024},\"model_base_sesno\":1663},\"units\":[],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=10 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=10（ins/mod/del=0/10/0）基会话=1663 读页=1675 差分 72ms\",\"dbnum=8000: dbnum=8000: window 1663→1666 roots_T=1024 roots_S=1024 touched=0 regen=0 delete=0 advance=1024 lazy=0 | window 1663→1666: candidates=10 (+0 ~10 -0) rolled_up=0 unchanged=0 no_model=10 (metadata_only=9 unread_attribute=0 cache_stamp=0) unresolved=0 cascades=0 units regen=0 remove=0 derived=0\",\"dbnum=8000: dbnum=8000: metadata-only gate — 9 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=9 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=0 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpoint=0 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=10 dbs_queried=24 queries=520 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=8000: dbnum=8000: rigid-motion (model_transform_cheap_path) — transform=0 (anchors=0) rejected=0\",\"dbnum=8000: dbnum=8000: unit-level publish (model_unit_level_publish) — no_model_only roots not classified: cascade(s) off (model_structural_connection_cascade); D10 needs model_structural_connection_cascade / model_cable_endpoint_cascade / model_design_reference_cascade all on, every empty sub-plan falls back to regen\",\"dbnum=8000: dbnum=8000: window 1663→1666 规划耗时 total=99ms | sets=39ms design=1ms collect=57ms [ledger=21ms closure=0ms xgeom=0ms index_S=10ms roots_S=0ms[cached] index_T=10ms roots_T=1ms[incremental parity=0ms] nested=2ms changes=0ms rigid=0ms cascades=6ms removed=0ms ca"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1664→1666（改 10 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 628,
+      "right": 972,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1663 217 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 118 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1663 92 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1663 51 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 997,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181451-000044",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1664,
+    "end_sesno": 1666,
+    "created_at": "2026-11-12T18:14:51.376524200+08:00",
+    "started_at": "2026-11-12T18:14:51.378318500+08:00",
+    "finished_at": "2026-11-12T18:14:52.512775+08:00",
+    "units_done": 0,
+    "total_units": 0,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1666,
+     "applied": 1666,
+     "model": 1666,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47594 里 24384_47595 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-R-M1",
+     "层 24384_47594 里 24384_47596 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-R-M2",
+     "层 24384_47594 里 24384_47597 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-R-M3",
+     "层 24384_47594 里 24384_47598 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M4 → /AIOS-SUITE-T3-BRAN-R-M4",
+     "层 24384_47594 里 24384_47599 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M5 → /AIOS-SUITE-T3-BRAN-R-M5",
+     "层 24384_47594 里 24384_47600 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M6 → /AIOS-SUITE-T3-BRAN-R-M6",
+     "层 24384_47594 里 24384_47601 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M7 → /AIOS-SUITE-T3-BRAN-R-M7",
+     "层 24384_47594 里 24384_47602 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M8 → /AIOS-SUITE-T3-BRAN-R-M8",
+     "层 24384_47594 里 24384_47603 改名 /Copy-of-AIOS-SUITE-T3-BRAN-R-M9 → /AIOS-SUITE-T3-BRAN-R-M9"
+    ],
+    "records": []
+   },
+   "getWork": {
+    "ms": 450,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 2/3…"
+    ],
+    "summary": "已取最新：模型树改名 9；模型重载 3 个节点。",
+    "detail": [
+     "树上改名：/Copy-of-AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-R-M1、/Copy-of-AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-R-M2、/Copy-of-AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-R-M3 等 9 个",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478493384,
+    "finishedAt": 1794478493778,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [
+      {
+       "id": "24384_47595",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M1",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M1",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47596",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M2",
+       "type": "BEND",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M2",
+       "previousType": "BEND"
+      },
+      {
+       "id": "24384_47597",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M3",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M3",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47598",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M4",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M4",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47599",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M5",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M5",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47600",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M6",
+       "type": "BEND",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M6",
+       "previousType": "BEND"
+      },
+      {
+       "id": "24384_47601",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M7",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M7",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47602",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M8",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M8",
+       "previousType": "FTUB"
+      },
+      {
+       "id": "24384_47603",
+       "name": "/AIOS-SUITE-T3-BRAN-R-M9",
+       "type": "FTUB",
+       "dbnum": 8000,
+       "previousName": "/Copy-of-AIOS-SUITE-T3-BRAN-R-M9",
+       "previousType": "FTUB"
+      }
+     ],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树改名 9；模型重载 3 个节点。",
+    "detail": [
+     "树上改名：/Copy-of-AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-R-M1、/Copy-of-AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-R-M2、/Copy-of-AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-R-M3 等 9 个",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树改名 9；模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树改名 9；模型重载 3 个节点。\n· 树上改名：/Copy-of-AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-R-M1、/Copy-of-AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-R-M2、/Copy-of-AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-R-M3 等 9 个\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n（18:14:53）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树改名 9；模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S6",
+   "what": "挪位置·空间位移（7998 库 E3D 会话 676–677）：EQUI /AIOS-SUITE-T4-EQ-X 上抬 300 mm",
+   "dbnum": 7998,
+   "to": 677,
+   "rowsBefore": {
+    "7998": {
+     "file": 675,
+     "applied": 675,
+     "model": 675,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1666,
+     "applied": 1666,
+     "model": 1666,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 46,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams7998_0001",
+     "from_sesno": 675,
+     "to_sesno": 677,
+     "header_sesno_after": 677,
+     "bytes_before": 15456256,
+     "bytes_after": 15501312,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 17,
+    "appliedMs": 26510,
+    "modelMs": 27327,
+    "row": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 8,
+    "framesForWindow": 2,
+    "terminalAfterMs": 27299,
+    "sample": "{\"type\":\"task_finished\",\"seq\":37,\"ts\":\"2026-11-12T18:15:22.575069+08:00\",\"task_id\":\"db-20261112-181521-000045\",\"payload\":{\"task_id\":\"db-20261112-181521-000045\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":7998,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams7998_0001\",\"start_sesno\":676,\"end_sesno\":677,\"start_sesno_time\":\"2026-11-11T20:34:00+00:00\",\"end_sesno_time\":\"2026-11-11T20:34:04+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[676,677],\"merged_sesno_times\":[\"2026-11-11T20:34:00+00:00\",\"2026-11-11T20:34:04+00:00\"],\"changed_elements\":3,\"added_elements\":0,\"modified_elements\":3,\"deleted_elements\":0,\"credential_advance\":{\"requested\":4,\"advanced\":4},\"model_base_sesno\":675},\"units\":[{\"dbnum\":7998,\"root_refno\":\"24382/1912\",\"noun\":\"EQUI\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":\"projection incomplete\",\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":1,\"aabb\":[124600.0,74700.0,-200.0,125400.0,75300.0,200.0]},\"geometry_after\":{\"records\":1,\"aabb\":[124600.0,74700.0,100.0,125400.0,75300.0,500.0]},\"geometry_diff\":{\"moved\":1,\"added\":0,\"removed\":0,\"sample\":[\"24382_1913\"]}}],\"warnings\":[\"dbnum=7998: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=3 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=3（ins/mod/del=0/3/0）基会话=675 读页=680 差分 35ms\",\"dbnum=7998: dbnum=7998: window 675→677 roots_T=5 roots_S=5 touched=1 regen=1 delete=0 advance=4 lazy=0 | window 675→677: candidates=3 (+0 ~3 -0) rolled_up=1 unchanged=0 no_model=2 (metadata_only=0 unread_attribute=0 cache_stamp=1) unresolved=0 cascades=1 units regen=1 remove=0 derived=0\",\"dbnum=7998: dbnum=7998: metadata-only gate — 1 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=0 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=1 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=7998: dbnum=7998: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=7998: dbnum=7998: nested-root observation only — nested_roots=2 duplicate_coverage_elements=14; no cross-root task compression was applied\",\"dbnum=7998: dbnum=7998: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=7998: dbnum=7998: cable-endpoint cascade on (same-db) — sources=1 (endpoint=1 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0; cross-db (GitHub #35) — members_queried=1 queries=2 query_failures=0 unreadable_members=[] referrers=0 handed off to their own dbnum's task: []\",\"dbnum=7998: dbnum=7998: design-reference cascade on — sources=3 dbs_queried=24 queries=156 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=7998: dbnum=7998: rigid-motion (model_transform_cheap_path) — transform=1 (anchors=1) re"
+   },
+   "noticeBeforeClick": "库 7998 已更新到会话 676→677（改 3 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 628,
+      "right": 972,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/health 121 ms",
+    "GET /api/v1/node/versions?dbnum=7998&refno=24382%2F1911&scope=subtree&since_sesno=675 80 ms（net::ERR_ABORTED）",
+    "POST /api/v1/model/records 32 ms",
+    "GET /api/v1/dbnums 21 ms"
+   ],
+   "versionsInBackground": {
+    "count": 2,
+    "maxMs": 1009,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181521-000045",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 676,
+    "end_sesno": 677,
+    "created_at": "2026-11-12T18:15:21.358479200+08:00",
+    "started_at": "2026-11-12T18:15:21.360130500+08:00",
+    "finished_at": "2026-11-12T18:15:22.571217400+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1666,
+     "applied": 1666,
+     "model": 1666,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [],
+    "records": [
+     "根 24382_1911：记录 1 → 1，多 0（）少 0（）位置变 1（24382_1913）"
+    ]
+   },
+   "getWork": {
+    "ms": 369,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/1…"
+    ],
+    "summary": "已取最新：模型重载 1 个节点。",
+    "detail": [
+     "重载 /AIOS-SUITE-T4-X-EQZ（24382_1911）：现有 1 个构件"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478523442,
+    "finishedAt": 1794478523688,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": false
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 1,
+     "reloaded": [
+      {
+       "refno": "24382_1911",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型重载 1 个节点。",
+    "detail": [
+     "重载 /AIOS-SUITE-T4-X-EQZ（24382_1911）：现有 1 个构件"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型重载 1 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型重载 1 个节点。\n· 重载 /AIOS-SUITE-T4-X-EQZ（24382_1911）：现有 1 个构件\n（18:15:23）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型重载 1 个节点。"
+   ]
+  },
+  {
+   "id": "J1",
+   "what": "一口气 18 个会话（1667–1684，别的录制腿留下的会话，内容不在本验证的清单里）",
+   "dbnum": 8000,
+   "to": 1684,
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1666,
+     "applied": 1666,
+     "model": 1666,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 188,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1666,
+     "to_sesno": 1684,
+     "header_sesno_after": 1684,
+     "bytes_before": 74723328,
+     "bytes_after": 75399168,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 16,
+    "appliedMs": 26703,
+    "modelMs": 28102,
+    "row": {
+     "file": 1684,
+     "applied": 1684,
+     "model": 1684,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 13,
+    "framesForWindow": 2,
+    "terminalAfterMs": 27891,
+    "sample": "{\"type\":\"task_finished\",\"seq\":50,\"ts\":\"2026-11-12T18:15:53.384495400+08:00\",\"task_id\":\"db-20261112-181551-000046\",\"payload\":{\"task_id\":\"db-20261112-181551-000046\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1667,\"end_sesno\":1684,\"start_sesno_time\":\"2026-11-11T21:09:45+00:00\",\"end_sesno_time\":\"2026-11-11T21:13:46+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1667,1668,1669,1670,1671,1672,1673,1674,1675,1676,1677,1678,1679,1680,1681,1682,1683,1684],\"merged_sesno_times\":[\"2026-11-11T21:09:45+00:00\",\"2026-11-11T21:10:41+00:00\",\"2026-11-11T21:10:56+00:00\",\"2026-11-11T21:11:03+00:00\",\"2026-11-11T21:11:16+00:00\",\"2026-11-11T21:11:22+00:00\",\"2026-11-11T21:11:26+00:00\",\"2026-11-11T21:11:37+00:00\",\"2026-11-11T21:11:41+00:00\",\"2026-11-11T21:11:45+00:00\",\"2026-11-11T21:11:55+00:00\",\"2026-11-11T21:12:02+00:00\",\"2026-11-11T21:12:06+00:00\",\"2026-11-11T21:13:17+00:00\",\"2026-11-11T21:13:23+00:00\",\"2026-11-11T21:13:28+00:00\",\"2026-11-11T21:13:37+00:00\",\"2026-11-11T21:13:46+00:00\"],\"changed_elements\":3,\"added_elements\":0,\"modified_elements\":3,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1020,\"advanced\":1020},\"model_base_sesno\":1666},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47517\",\"noun\":\"STRU\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":3,\"aabb\":[123939.703125,43965.0,-60.0,124060.0,44025.30078125,200.0]},\"geometry_after\":{\"records\":3,\"aabb\":[123939.703125,43965.0,-60.0,124060.0,44025.30078125,200.0]},\"geometry_diff\":{\"moved\":0,\"added\":0,\"removed\":0}},{\"dbnum\":8000,\"root_refno\":\"24384/47518\",\"noun\":\"FRMW\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":3,\"aabb\":[123939.703125,43965.0,-60.0,124060.0,44025.30078125,200.0]},\"geometry_after\":{\"records\":3,\"aabb\":[123939.703125,43965.0,-60.0,124060.0,44025.30078125,200.0]},\"geometry_diff\":{\"moved\":0,\"added\":0,\"removed\":0}},{\"dbnum\":8000,\"root_refno\":\"24384/47530\",\"noun\":\"STRU\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":2,\"aabb\":[127970.0,43970.0,-400.0,128030.0,44030.0,0.0]},\"geometry_after\":{\"records\":2,\"aabb\":[127970.0,43970.0,-400.0,128030.0,44030.0,0.0]},\"geometry_diff\":{\"moved\":0,\"added\":0,\"removed\":0}},{\"dbnum\":8000,\"root_refno\":\"24384/47531\",\"noun\":\"FRMW\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":2,\"aabb\":[127970.0,43970.0,-400.0,128030.0,44030.0,0.0]},\"geometry_after\":{\"records\":2,\"aabb\":[127970.0,43970.0,-400.0,128030.0,44030.0,0.0]},\"geometry_diff\":{\"moved\":0,\"added\":0,\"removed\":0}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1667→1684（改 3 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 628,
+      "right": 972,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1666 195 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 115 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1666 71 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1666 55 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 1159,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181551-000046",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1667,
+    "end_sesno": 1684,
+    "created_at": "2026-11-12T18:15:51.430833300+08:00",
+    "started_at": "2026-11-12T18:15:51.432881+08:00",
+    "finished_at": "2026-11-12T18:15:53.380163600+08:00",
+    "units_done": 4,
+    "total_units": 4,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1684,
+     "applied": 1684,
+     "model": 1684,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [],
+    "records": []
+   },
+   "getWork": {
+    "ms": 459,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型重载 3 个节点。",
+    "detail": [
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478554420,
+    "finishedAt": 1794478554782,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": false
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型重载 3 个节点。",
+    "detail": [
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型重载 3 个节点。\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n（18:15:54）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S7",
+   "what": "挪位置·改挂（E3D 会话 1685–1686）：PIPE /AIOS-SUITE-T3-PIPE 从 ZONE Z 挪到 ZONE Z2",
+   "dbnum": 8000,
+   "to": 1686,
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1684,
+     "applied": 1684,
+     "model": 1684,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 195,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1684,
+     "to_sesno": 1686,
+     "header_sesno_after": 1686,
+     "bytes_before": 75399168,
+     "bytes_after": 75481088,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 25,
+    "appliedMs": 25570,
+    "modelMs": 26394,
+    "row": {
+     "file": 1686,
+     "applied": 1686,
+     "model": 1686,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 7,
+    "framesForWindow": 2,
+    "terminalAfterMs": 26283,
+    "sample": "{\"type\":\"task_finished\",\"seq\":57,\"ts\":\"2026-11-12T18:16:22.724344900+08:00\",\"task_id\":\"db-20261112-181621-000047\",\"payload\":{\"task_id\":\"db-20261112-181621-000047\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1685,\"end_sesno\":1686,\"start_sesno_time\":\"2026-11-11T21:13:59+00:00\",\"end_sesno_time\":\"2026-11-11T21:14:03+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1685,1686],\"merged_sesno_times\":[\"2026-11-11T21:13:59+00:00\",\"2026-11-11T21:14:03+00:00\"],\"changed_elements\":12,\"added_elements\":0,\"modified_elements\":12,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1023,\"advanced\":1023},\"model_base_sesno\":1684},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47594\",\"noun\":\"BRAN\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"root 24384/47594 has 9 geometry record(s) (< 10); unit-level publish overhead exceeds its benefit, falling back to regen\",\"rooms_before\":[{\"room_num\":\"R446\",\"panel_refno\":\"24381_35345\",\"members\":5},{\"room_num\":\"R545\",\"panel_refno\":\"24381_35960\",\"members\":5}],\"rooms_after\":[{\"room_num\":\"R540\",\"panel_refno\":\"24381_35798\",\"members\":4},{\"room_num\":\"R545\",\"panel_refno\":\"24381_35960\",\"members\":5}],\"geometry_before\":{\"records\":9,\"aabb\":[8536.560546875,9954.6689453125,8900.0,11285.3837890625,14081.1455078125,8930.0]},\"geometry_after\":{\"records\":9,\"aabb\":[8536.560546875,9954.6689453125,11900.0,11285.3837890625,14081.1455078125,11930.0]},\"geometry_diff\":{\"moved\":9,\"added\":0,\"removed\":0,\"sample\":[\"24384_47595\",\"24384_47596\",\"24384_47597\",\"24384_47598\",\"24384_47599\",\"24384_47600\",\"24384_47601\",\"24384_47602\"]}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=12 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=12（ins/mod/del=0/12/0）基会话=1684 读页=1697 差分 52ms\",\"dbnum=8000: dbnum=8000: window 1684→1686 roots_T=1024 roots_S=1024 touched=1 regen=1 delete=0 advance=1023 lazy=0 | window 1684→1686: candidates=12 (+0 ~12 -0) rolled_up=1 unchanged=0 no_model=11 (metadata_only=0 unread_attribute=0 cache_stamp=8) unresolved=0 cascades=1 units regen=9 remove=0 derived=1\",\"dbnum=8000: dbnum=8000: metadata-only gate — 8 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=0 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=8 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpoint=0 route=0) tables_present=0 q"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1685→1686（改 12 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "noticeOverlay": {
+    "1280": {
+     "viewport": 1280,
+     "menuMode": "hierarchical",
+     "statusBar": {
+      "left": 0,
+      "right": 1280,
+      "top": 772,
+      "bottom": 800
+     },
+     "snackbars": [
+      {
+       "left": 304,
+       "right": 976,
+       "top": 676,
+       "bottom": 764
+      }
+     ],
+     "snackbarOverStatusBar": false,
+     "reload": {
+      "rect": null,
+      "covered": false,
+      "clickable": null
+     },
+     "dismiss": {
+      "rect": {
+       "left": 710,
+       "right": 720,
+       "top": 778,
+       "bottom": 795
+      },
+      "covered": false,
+      "clickable": true
+     },
+     "getWork": {
+      "rect": {
+       "left": 1209,
+       "right": 1272,
+       "top": 777,
+       "bottom": 797
+      },
+      "covered": false,
+      "clickable": true
+     }
+    },
+    "1600": {
+     "viewport": 1600,
+     "menuMode": "hierarchical",
+     "statusBar": {
+      "left": 0,
+      "right": 1600,
+      "top": 972,
+      "bottom": 1000
+     },
+     "snackbars": [
+      {
+       "left": 464,
+       "right": 1136,
+       "top": 876,
+       "bottom": 964
+      }
+     ],
+     "snackbarOverStatusBar": false,
+     "reload": {
+      "rect": null,
+      "covered": false,
+      "clickable": null
+     },
+     "dismiss": {
+      "rect": {
+       "left": 710,
+       "right": 720,
+       "top": 978,
+       "bottom": 995
+      },
+      "covered": false,
+      "clickable": true
+     },
+     "getWork": {
+      "rect": {
+       "left": 1529,
+       "right": 1592,
+       "top": 977,
+       "bottom": 997
+      },
+      "covered": false,
+      "clickable": true
+     }
+    }
+   },
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 627,
+      "right": 973,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1684 172 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1684 124 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 110 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1684 99 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 7,
+    "maxMs": 4716,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181621-000047",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1685,
+    "end_sesno": 1686,
+    "created_at": "2026-11-12T18:16:21.383417300+08:00",
+    "started_at": "2026-11-12T18:16:21.385113100+08:00",
+    "finished_at": "2026-11-12T18:16:22.720307200+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1686,
+     "applied": 1686,
+     "model": 1686,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47463 少了 PIPE /AIOS-SUITE-T3-PIPE（24384_47481）",
+     "层 24384_47500 多了 PIPE /AIOS-SUITE-T3-PIPE（24384_47481）"
+    ],
+    "records": [
+     "根 24384_47463：记录 23 → 14，多 0（）少 9（24384_47595,24384_47596,24384_47597,24384_47598,24384_47599,24384_47600,24384_47601,24384_47602,24384_47603）位置变 0（）",
+     "根 24384_47500：记录 1 → 10，多 9（24384_47595,24384_47596,24384_47597,24384_47598,24384_47599,24384_47600,24384_47601,24384_47602,24384_47603）少 0（）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 465,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-PIPE",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 14 个构件，撤下 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 10 个构件，新增 9"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478589051,
+    "finishedAt": 1794478589427,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [
+      {
+       "id": "24384_47481",
+       "name": "/AIOS-SUITE-T3-PIPE",
+       "type": "PIPE",
+       "dbnum": 8000,
+       "from": "24384_47463",
+       "to": "24384_47500"
+      }
+     ],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 9,
+       "total": 14
+      },
+      {
+       "refno": "24384_47500",
+       "added": 9,
+       "removed": 0,
+       "total": 10
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-PIPE",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 14 个构件，撤下 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 10 个构件，新增 9"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树挪位置 1；模型重载 3 个节点。\n· 树上挪位置：/AIOS-SUITE-T3-PIPE\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 14 个构件，撤下 9\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 10 个构件，新增 9\n（18:16:29）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S8",
+   "what": "挪回去（E3D 会话 1688–1689）：PIPE 从 Z2 挪回 Z",
+   "dbnum": 8000,
+   "to": 1689,
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1686,
+     "applied": 1686,
+     "model": 1686,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 193,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1686,
+     "to_sesno": 1689,
+     "header_sesno_after": 1689,
+     "bytes_before": 75481088,
+     "bytes_after": 75606016,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 28,
+    "appliedMs": 20459,
+    "modelMs": 21309,
+    "row": {
+     "file": 1689,
+     "applied": 1689,
+     "model": 1689,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 7,
+    "framesForWindow": 2,
+    "terminalAfterMs": 21303,
+    "sample": "{\"type\":\"task_finished\",\"seq\":64,\"ts\":\"2026-11-12T18:16:52.519215900+08:00\",\"task_id\":\"db-20261112-181651-000048\",\"payload\":{\"task_id\":\"db-20261112-181651-000048\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1687,\"end_sesno\":1689,\"start_sesno_time\":\"2026-11-11T21:14:13+00:00\",\"end_sesno_time\":\"2026-11-11T21:14:22+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1687,1688,1689],\"merged_sesno_times\":[\"2026-11-11T21:14:13+00:00\",\"2026-11-11T21:14:18+00:00\",\"2026-11-11T21:14:22+00:00\"],\"changed_elements\":12,\"added_elements\":0,\"modified_elements\":12,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1023,\"advanced\":1023},\"model_base_sesno\":1686},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47594\",\"noun\":\"BRAN\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"root 24384/47594 has 9 geometry record(s) (< 10); unit-level publish overhead exceeds its benefit, falling back to regen\",\"rooms_before\":[{\"room_num\":\"R540\",\"panel_refno\":\"24381_35798\",\"members\":4},{\"room_num\":\"R545\",\"panel_refno\":\"24381_35960\",\"members\":5}],\"rooms_after\":[{\"room_num\":\"R446\",\"panel_refno\":\"24381_35345\",\"members\":5},{\"room_num\":\"R545\",\"panel_refno\":\"24381_35960\",\"members\":5}],\"geometry_before\":{\"records\":9,\"aabb\":[8536.560546875,9954.6689453125,11900.0,11285.3837890625,14081.1455078125,11930.0]},\"geometry_after\":{\"records\":9,\"aabb\":[8536.560546875,9954.6689453125,8900.0,11285.3837890625,14081.1455078125,8930.0]},\"geometry_diff\":{\"moved\":9,\"added\":0,\"removed\":0,\"sample\":[\"24384_47595\",\"24384_47596\",\"24384_47597\",\"24384_47598\",\"24384_47599\",\"24384_47600\",\"24384_47601\",\"24384_47602\"]}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=12 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=12（ins/mod/del=0/12/0）基会话=1686 读页=1700 差分 65ms\",\"dbnum=8000: dbnum=8000: window 1686→1689 roots_T=1024 roots_S=1024 touched=1 regen=1 delete=0 advance=1023 lazy=0 | window 1686→1689: candidates=12 (+0 ~12 -0) rolled_up=1 unchanged=0 no_model=11 (metadata_only=0 unread_attribute=0 cache_stamp=8) unresolved=0 cascades=1 units regen=9 remove=0 derived=1\",\"dbnum=8000: dbnum=8000: metadata-only gate — 8 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=0 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=8 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpo"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1687→1689（改 12 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 627,
+      "right": 973,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1686 235 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 109 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1686 94 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1686 54 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 963,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181651-000048",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1687,
+    "end_sesno": 1689,
+    "created_at": "2026-11-12T18:16:51.079342900+08:00",
+    "started_at": "2026-11-12T18:16:51.082282900+08:00",
+    "finished_at": "2026-11-12T18:16:52.514703+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1689,
+     "applied": 1689,
+     "model": 1689,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47463 多了 PIPE /AIOS-SUITE-T3-PIPE（24384_47481）",
+     "层 24384_47500 少了 PIPE /AIOS-SUITE-T3-PIPE（24384_47481）"
+    ],
+    "records": [
+     "根 24384_47463：记录 14 → 23，多 9（24384_47595,24384_47596,24384_47597,24384_47598,24384_47599,24384_47600,24384_47601,24384_47602,24384_47603）少 0（）位置变 0（）",
+     "根 24384_47500：记录 10 → 1，多 0（）少 9（24384_47595,24384_47596,24384_47597,24384_47598,24384_47599,24384_47600,24384_47601,24384_47602,24384_47603）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 576,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 3/3…",
+     "补装挪了位置的构件 1/1…"
+    ],
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-PIPE",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件，撤下 9"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478613370,
+    "finishedAt": 1794478613822,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [
+      {
+       "id": "24384_47481",
+       "name": "/AIOS-SUITE-T3-PIPE",
+       "type": "PIPE",
+       "dbnum": 8000,
+       "from": "24384_47500",
+       "to": "24384_47463"
+      }
+     ],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 9,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 9,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-PIPE",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 9",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件，撤下 9"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树挪位置 1；模型重载 3 个节点。\n· 树上挪位置：/AIOS-SUITE-T3-PIPE\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 9\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件，撤下 9\n（18:16:53）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S9",
+   "what": "挪位置·改挂（E3D 会话 1691–1692）：EQUI /AIOS-SUITE-T3-EQ-CP 从 ZONE Z 挪到 ZONE Z2",
+   "dbnum": 8000,
+   "to": 1692,
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1689,
+     "applied": 1689,
+     "model": 1689,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 267,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1689,
+     "to_sesno": 1692,
+     "header_sesno_after": 1692,
+     "bytes_before": 75606016,
+     "bytes_after": 75718656,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 25,
+    "appliedMs": 26192,
+    "modelMs": 27016,
+    "row": {
+     "file": 1692,
+     "applied": 1692,
+     "model": 1692,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 7,
+    "framesForWindow": 2,
+    "terminalAfterMs": 26948,
+    "sample": "{\"type\":\"task_finished\",\"seq\":71,\"ts\":\"2026-11-12T18:17:22.536194600+08:00\",\"task_id\":\"db-20261112-181721-000049\",\"payload\":{\"task_id\":\"db-20261112-181721-000049\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1690,\"end_sesno\":1692,\"start_sesno_time\":\"2026-11-11T21:14:32+00:00\",\"end_sesno_time\":\"2026-11-11T21:14:42+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1690,1691,1692],\"merged_sesno_times\":[\"2026-11-11T21:14:32+00:00\",\"2026-11-11T21:14:38+00:00\",\"2026-11-11T21:14:42+00:00\"],\"changed_elements\":5,\"added_elements\":0,\"modified_elements\":5,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1023,\"advanced\":1023},\"model_base_sesno\":1689},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47479\",\"noun\":\"EQUI\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":1,\"aabb\":[99750.0,39850.0,-150.0,100250.0,40150.0,150.0]},\"geometry_after\":{\"records\":1,\"aabb\":[99750.0,39850.0,2850.0,100250.0,40150.0,3150.0]},\"geometry_diff\":{\"moved\":1,\"added\":0,\"removed\":0,\"sample\":[\"24384_47480\"]}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=5 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=5（ins/mod/del=0/5/0）基会话=1689 读页=1701 差分 44ms\",\"dbnum=8000: dbnum=8000: window 1689→1692 roots_T=1024 roots_S=1024 touched=1 regen=1 delete=0 advance=1023 lazy=0 | window 1689→1692: candidates=5 (+0 ~5 -0) rolled_up=1 unchanged=0 no_model=4 (metadata_only=0 unread_attribute=0 cache_stamp=1) unresolved=0 cascades=1 units regen=1 remove=0 derived=0\",\"dbnum=8000: dbnum=8000: metadata-only gate — 1 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=0 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=1 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=1 (endpoint=1 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0; cross-db (GitHub #35) — members_queried=1 queries=2 query_failures=0 unreadable_members=[] referrers=0 handed off to their own dbnum's task: []\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=5 dbs_queried=24 queries=260 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=8000: dbnum=8000: rigid-motion (model_t"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1690→1692（改 5 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 627,
+      "right": 973,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1689 207 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 111 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1689 83 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1689 56 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 1017,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181721-000049",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1690,
+    "end_sesno": 1692,
+    "created_at": "2026-11-12T18:17:21.308118800+08:00",
+    "started_at": "2026-11-12T18:17:21.310213300+08:00",
+    "finished_at": "2026-11-12T18:17:22.532857700+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1692,
+     "applied": 1692,
+     "model": 1692,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47463 少了 EQUI /AIOS-SUITE-T3-EQ-CP（24384_47479）",
+     "层 24384_47500 多了 EQUI /AIOS-SUITE-T3-EQ-CP（24384_47479）"
+    ],
+    "records": [
+     "根 24384_47463：记录 23 → 22，多 0（）少 1（24384_47480）位置变 0（）",
+     "根 24384_47500：记录 1 → 2，多 1（24384_47480）少 0（）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 447,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 3/3…"
+    ],
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-EQ-CP",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 22 个构件，撤下 1",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 2 个构件，新增 1"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478643444,
+    "finishedAt": 1794478643807,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [
+      {
+       "id": "24384_47479",
+       "name": "/AIOS-SUITE-T3-EQ-CP",
+       "type": "EQUI",
+       "dbnum": 8000,
+       "from": "24384_47463",
+       "to": "24384_47500"
+      }
+     ],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 1,
+       "total": 22
+      },
+      {
+       "refno": "24384_47500",
+       "added": 1,
+       "removed": 0,
+       "total": 2
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-EQ-CP",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 22 个构件，撤下 1",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 2 个构件，新增 1"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树挪位置 1；模型重载 3 个节点。\n· 树上挪位置：/AIOS-SUITE-T3-EQ-CP\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 22 个构件，撤下 1\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 2 个构件，新增 1\n（18:17:23）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S10",
+   "what": "挪回去（E3D 会话 1694–1695）：EQ-CP 从 Z2 挪回 Z",
+   "dbnum": 8000,
+   "to": 1695,
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1692,
+     "applied": 1692,
+     "model": 1692,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 213,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1692,
+     "to_sesno": 1695,
+     "header_sesno_after": 1695,
+     "bytes_before": 75718656,
+     "bytes_after": 75831296,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 20,
+    "appliedMs": 26477,
+    "modelMs": 27327,
+    "row": {
+     "file": 1695,
+     "applied": 1695,
+     "model": 1695,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 8,
+    "framesForWindow": 2,
+    "terminalAfterMs": 27316,
+    "sample": "{\"type\":\"task_finished\",\"seq\":79,\"ts\":\"2026-11-12T18:17:52.785056+08:00\",\"task_id\":\"db-20261112-181751-000050\",\"payload\":{\"task_id\":\"db-20261112-181751-000050\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1693,\"end_sesno\":1695,\"start_sesno_time\":\"2026-11-11T21:14:51+00:00\",\"end_sesno_time\":\"2026-11-11T21:15:00+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1693,1694,1695],\"merged_sesno_times\":[\"2026-11-11T21:14:51+00:00\",\"2026-11-11T21:14:56+00:00\",\"2026-11-11T21:15:00+00:00\"],\"changed_elements\":5,\"added_elements\":0,\"modified_elements\":5,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1023,\"advanced\":1023},\"model_base_sesno\":1692},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47479\",\"noun\":\"EQUI\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"root 24384/47479 has 1 geometry record(s) (< 10); unit-level publish overhead exceeds its benefit, falling back to regen\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":1,\"aabb\":[99750.0,39850.0,2850.0,100250.0,40150.0,3150.0]},\"geometry_after\":{\"records\":1,\"aabb\":[99750.0,39850.0,-150.0,100250.0,40150.0,150.0]},\"geometry_diff\":{\"moved\":1,\"added\":0,\"removed\":0,\"sample\":[\"24384_47480\"]}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=5 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=5（ins/mod/del=0/5/0）基会话=1692 读页=1704 差分 57ms\",\"dbnum=8000: dbnum=8000: window 1692→1695 roots_T=1024 roots_S=1024 touched=1 regen=1 delete=0 advance=1023 lazy=0 | window 1692→1695: candidates=5 (+0 ~5 -0) rolled_up=1 unchanged=0 no_model=4 (metadata_only=0 unread_attribute=0 cache_stamp=1) unresolved=0 cascades=1 units regen=1 remove=0 derived=0\",\"dbnum=8000: dbnum=8000: metadata-only gate — 1 modified candidate(s) changed nothing but attributes with dictionary DCHC=0 that the generator never reads (or only the CACHID / SPAMAP stamps) and were not rolled up (metadata_only=0 on NAME/DESC/PURP/FUNC/LCHKDA, unread_attribute=0 on the wider S6 tier, cache_stamp=1 on the stamp-only Q6 tier); ledger unchanged; a candidate whose changed attributes carry no CACHID / SPAMAP stamp does not seed the ancestor closure (its root advances instead of regenerating, GitHub #76), a stamped one still does (model_skip_metadata_only_changes)\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=1 (endpoint=1 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0; cross-db (GitHub #35) — members_queried=1 queries=2 query_failures=0 unreadable_members=[] referrers=0 handed off to their own dbnum's task: []\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=5 dbs_queried=24 queries=260 query_failures=0 edges=[] behavioural=[\\\"PO"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1693→1695（改 5 项）",
+   "noticeHintBeforeClick": "点「取最新」同步",
+   "noticeReloadBeforeClick": false,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 627,
+      "right": 973,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1692 217 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 141 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1692 96 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1692 60 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 974,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181751-000050",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1693,
+    "end_sesno": 1695,
+    "created_at": "2026-11-12T18:17:51.364919700+08:00",
+    "started_at": "2026-11-12T18:17:51.367962+08:00",
+    "finished_at": "2026-11-12T18:17:52.780818600+08:00",
+    "units_done": 1,
+    "total_units": 1,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1695,
+     "applied": 1695,
+     "model": 1695,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47463 多了 EQUI /AIOS-SUITE-T3-EQ-CP（24384_47479）",
+     "层 24384_47500 少了 EQUI /AIOS-SUITE-T3-EQ-CP（24384_47479）"
+    ],
+    "records": [
+     "根 24384_47463：记录 22 → 23，多 1（24384_47480）少 0（）位置变 0（）",
+     "根 24384_47500：记录 2 → 1，多 0（）少 1（24384_47480）位置变 0（）"
+    ]
+   },
+   "getWork": {
+    "ms": 583,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 1/3…",
+     "重载模型 2/3…",
+     "补装挪了位置的构件 1/1…"
+    ],
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-EQ-CP",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 1",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件，撤下 1"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478673621,
+    "finishedAt": 1794478674095,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [
+      {
+       "id": "24384_47479",
+       "name": "/AIOS-SUITE-T3-EQ-CP",
+       "type": "EQUI",
+       "dbnum": 8000,
+       "from": "24384_47500",
+       "to": "24384_47463"
+      }
+     ],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47470",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      },
+      {
+       "refno": "24384_47463",
+       "added": 1,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 1,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-EQ-CP",
+     "重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 1",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件，撤下 1"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树挪位置 1；模型重载 3 个节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树挪位置 1；模型重载 3 个节点。\n· 树上挪位置：/AIOS-SUITE-T3-EQ-CP\n· 重载 /AIOS-SUITE-T3-EQ-CASE（24384_47470）：现有 1 个构件\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件，新增 1\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件，撤下 1\n（18:17:54）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47470",
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": []
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+   ]
+  },
+  {
+   "id": "S11",
+   "what": "挪位置·改挂（E3D 会话 1697–1698）：BOX /AIOS-SUITE-T3-BOX-CASE 从 EQUI EQ-CASE 挪到 EQUI EQ-RN",
+   "dbnum": 8000,
+   "to": 1698,
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1695,
+     "applied": 1695,
+     "model": 1695,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "ms": 192,
+    "report": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1695,
+     "to_sesno": 1698,
+     "header_sesno_after": 1698,
+     "bytes_before": 75831296,
+     "bytes_after": 75941888,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 26,
+    "appliedMs": 26148,
+    "modelMs": 27232,
+    "row": {
+     "file": 1698,
+     "applied": 1698,
+     "model": 1698,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 9,
+    "framesForWindow": 2,
+    "terminalAfterMs": 27192,
+    "sample": "{\"type\":\"task_finished\",\"seq\":88,\"ts\":\"2026-11-12T18:18:22.963252+08:00\",\"task_id\":\"db-20261112-181821-000051\",\"payload\":{\"task_id\":\"db-20261112-181821-000051\",\"state\":\"succeeded\",\"result\":{\"project\":\"AvevaMarineSample\",\"status\":\"success\",\"batch\":{\"dbnum\":8000,\"db_type\":\"DESI\",\"file_path\":\"D:\\\\work\\\\plant-code\\\\old\\\\plant3d-web\\\\.scratch\\\\incremental-sync\\\\sandbox\\\\projects\\\\E3D3.1\\\\AvevaMarineSample\\\\ams000\\\\ams8000_0001\",\"start_sesno\":1696,\"end_sesno\":1698,\"start_sesno_time\":\"2026-11-11T21:15:09+00:00\",\"end_sesno_time\":\"2026-11-11T21:15:18+00:00\",\"status\":\"applied\",\"message\":null,\"merged_sesnos\":[1696,1697,1698],\"merged_sesno_times\":[\"2026-11-11T21:15:09+00:00\",\"2026-11-11T21:15:14+00:00\",\"2026-11-11T21:15:18+00:00\"],\"changed_elements\":4,\"added_elements\":0,\"modified_elements\":4,\"deleted_elements\":0,\"credential_advance\":{\"requested\":1022,\"advanced\":1022},\"model_base_sesno\":1695},\"units\":[{\"dbnum\":8000,\"root_refno\":\"24384/47468\",\"noun\":\"EQUI\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":2,\"aabb\":[99600.0,31800.0,-150.0,100400.0,34150.0,150.0]},\"geometry_after\":{\"records\":2,\"aabb\":[99600.0,31800.0,-150.0,100400.0,32200.0,150.0]},\"geometry_diff\":{\"moved\":1,\"added\":0,\"removed\":0,\"sample\":[\"24384_47471\"]}},{\"dbnum\":8000,\"root_refno\":\"24384/47470\",\"noun\":\"EQUI\",\"status\":\"generated\",\"attempts\":0,\"message\":null,\"old_owner\":null,\"new_owner\":null,\"kind\":\"regen\",\"transform_fallback_reason\":null,\"unit_fallback_reason\":\"projection incomplete\",\"rooms_before\":[],\"rooms_after\":[],\"geometry_before\":{\"records\":0},\"geometry_after\":{\"records\":0},\"geometry_diff\":{\"moved\":0,\"added\":0,\"removed\":0}}],\"warnings\":[\"dbnum=8000: 收集口径：净窗口（会话索引差分，ADR-031/036 单一口径；e3d-io 底座）——added=0 deleted=0 modified=4 成员补删=0 幽灵新增丢弃=0 原样重写跳过=0 终稿不可解析=0 类型改变=0 索引候选=4（ins/mod/del=0/4/0）基会话=1695 读页=1707 差分 63ms\",\"dbnum=8000: dbnum=8000: window 1695→1698 roots_T=1024 roots_S=1024 touched=2 regen=2 delete=0 advance=1022 lazy=0 | window 1695→1698: candidates=4 (+0 ~4 -0) rolled_up=1 unchanged=0 no_model=3 (metadata_only=0 unread_attribute=0 cache_stamp=0) unresolved=0 cascades=1 units regen=1 remove=0 derived=0\",\"dbnum=8000: dbnum=8000: XGEOMETRY observation only — matched=0 unreadable=0; window work and credential advancement were unchanged\",\"dbnum=8000: dbnum=8000: nested-root observation only — nested_roots=189 duplicate_coverage_elements=3165; no cross-root task compression was applied\",\"dbnum=8000: dbnum=8000: structural-connection cascade off — touched unchanged (model_structural_connection_cascade=false)\",\"dbnum=8000: dbnum=8000: cable-endpoint cascade on (same-db) — sources=0 (endpoint=0 route=0) tables_present=0 queries=0 query_failures=0 engine_unavailable=false edges=0 referrer_without_root=0 referrer_roots=0\",\"dbnum=8000: dbnum=8000: design-reference cascade on — sources=4 dbs_queried=24 queries=208 query_failures=0 edges=[] behavioural=[\\\"POSREF\\\"] referrer_roots=0 referrer_without_root=0\",\"dbnum=8000: dbnum=8000: rigid-motion (model_transform_cheap_path) — transform=0 (anchors=0) rejected=2 [24384/47468: 24384/47471: Reparented: 属主 24384/47470 → 24384/47468 | 24384/47470: 24384/47471: Reparented: 属主 24384/47470 → 24384/47468]\",\"dbnum=8000: dbnum=8000: unit-level publish (model_unit_level_publish) — no_model_only roots not classified: cascade(s) off (model_structural_connection_ca"
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1696→1698（改 4 项，场景内 1 根受影响）",
+   "noticeHintBeforeClick": null,
+   "noticeReloadBeforeClick": true,
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 519,
+      "right": 1081,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1695 185 ms（net::ERR_ABORTED）",
+    "GET /api/v1/health 98 ms",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1695 53 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1695 52 ms（net::ERR_ABORTED）"
+   ],
+   "versionsInBackground": {
+    "count": 5,
+    "maxMs": 975,
+    "unfinished": 0
+   },
+   "task": {
+    "task_id": "db-20261112-181821-000051",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1696,
+    "end_sesno": 1698,
+    "created_at": "2026-11-12T18:18:21.370905500+08:00",
+    "started_at": "2026-11-12T18:18:21.372927100+08:00",
+    "finished_at": "2026-11-12T18:18:22.958650100+08:00",
+    "units_done": 2,
+    "total_units": 2,
+    "intent": "apply_window",
+    "detailKeys": [
+     "intent",
+     "model_start_sesno",
+     "frozen_target_sesno",
+     "stages"
+    ],
+    "changes": null,
+    "units": null
+   },
+   "rowsAfter": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1698,
+     "applied": 1698,
+     "model": 1698,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "backendDiff": {
+    "tree": [
+     "层 24384_47468 多了 BOX /AIOS-SUITE-T3-BOX-CASE（24384_47471）",
+     "层 24384_47470 少了 BOX /AIOS-SUITE-T3-BOX-CASE（24384_47471）"
+    ],
+    "records": [
+     "根 24384_47470：记录 1 → 0，多 0（）少 1（24384_47471）位置变 0（）",
+     "根 24384_47463：记录 23 → 23，多 0（）少 0（）位置变 1（24384_47471）"
+    ]
+   },
+   "getWork": {
+    "ms": 365,
+    "progress": [
+     "核对后台状态…",
+     "重载模型 2/3…"
+    ],
+    "summary": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-BOX-CASE",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "撤下 /AIOS-SUITE-T3-EQ-CASE（24384_47470）（它名下已没有几何）：1 个构件"
+    ],
+    "level": "success",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478703829,
+    "finishedAt": 1794478704168,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [
+      {
+       "id": "24384_47471",
+       "name": "/AIOS-SUITE-T3-BOX-CASE",
+       "type": "BOX",
+       "dbnum": 8000,
+       "from": "24384_47470",
+       "to": "24384_47468"
+      }
+     ],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 4,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [
+      {
+       "refno": "24384_47470",
+       "refnos": 1,
+       "why": "empty"
+      }
+     ],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "success",
+    "summary": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-BOX-CASE",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "撤下 /AIOS-SUITE-T3-EQ-CASE（24384_47470）（它名下已没有几何）：1 个构件"
+    ]
+   },
+   "noticeAfterClick": null,
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。\n· 树上挪位置：/AIOS-SUITE-T3-BOX-CASE\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n· 撤下 /AIOS-SUITE-T3-EQ-CASE（24384_47470）（它名下已没有几何）：1 个构件\n（18:18:24）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 2 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "treeCompare": {
+    "compared": 19,
+    "mismatches": []
+   },
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": [
+     "24384_47470"
+    ]
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。"
+   ]
+  },
+  {
+   "id": "R1",
+   "what": "重起沙箱后端并把 7998 挪出监听范围；然后 7998 推到 679（后端不会跟）、8000 推到 1701（后端会跟）",
+   "rowsBefore": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1698,
+     "applied": 1698,
+     "model": 1698,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "restart": {
+    "ms": 9314,
+    "startedAtBefore": "2026-11-12T18:11:50.536076+08:00",
+    "startedAtAfter": "2026-11-12T18:18:35.028755200+08:00",
+    "watch": [
+     8000
+    ]
+   },
+   "settle": {
+    "ok": true,
+    "fileSeenMs": 25,
+    "appliedMs": 25,
+    "modelMs": 25,
+    "row": {
+     "file": 1698,
+     "applied": 1698,
+     "model": 1698,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "rowsAfterRestart": {
+    "7998": {
+     "file": 677,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": true,
+     "excludedReason": "watch_dbnums",
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1698,
+     "applied": 1698,
+     "model": 1698,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "replay": {
+    "7998": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams7998_0001",
+     "from_sesno": 677,
+     "to_sesno": 679,
+     "header_sesno_after": 679,
+     "bytes_before": 15501312,
+     "bytes_after": 15546368,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    },
+    "8000": {
+     "work": "D:\\work\\plant-code\\old\\plant3d-web\\.scratch\\incremental-sync\\sandbox\\projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+     "from_sesno": 1698,
+     "to_sesno": 1701,
+     "header_sesno_after": 1701,
+     "bytes_before": 75941888,
+     "bytes_after": 76052480,
+     "half": null,
+     "rollback": false,
+     "patched_bytes": 0
+    }
+   },
+   "caughtUp": {
+    "ok": true,
+    "fileSeenMs": 17,
+    "appliedMs": 6020,
+    "modelMs": 7126,
+    "row": {
+     "file": 1701,
+     "applied": 1701,
+     "model": 1701,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "rows": {
+    "7998": {
+     "file": 679,
+     "applied": 677,
+     "model": 677,
+     "initialized": true,
+     "excluded": true,
+     "excludedReason": "watch_dbnums",
+     "verdict": "in_sync"
+    },
+    "8000": {
+     "file": 1701,
+     "applied": 1701,
+     "model": 1701,
+     "initialized": true,
+     "excluded": false,
+     "excludedReason": null,
+     "verdict": "in_sync"
+    }
+   },
+   "push": {
+    "framesSinceStep": 8,
+    "wsOpened": [
+     {
+      "at": 1794478345565,
+      "url": "ws://127.0.0.1:3103/?token=<遮住>"
+     },
+     {
+      "at": 1794478346742,
+      "url": "ws://127.0.0.1:9199/api/v1/ws"
+     },
+     {
+      "at": 1794478712384,
+      "url": "ws://127.0.0.1:9199/api/v1/ws",
+      "closed": true
+     },
+     {
+      "at": 1794478715713,
+      "url": "ws://127.0.0.1:9199/api/v1/ws"
+     }
+    ]
+   },
+   "noticeBeforeClick": "库 8000 已更新到会话 1699→1701（改 4 项）",
+   "toast": {
+    "viewport": 1600,
+    "button": {
+     "left": 1529,
+     "right": 1592,
+     "top": 977,
+     "bottom": 997
+    },
+    "toasts": [
+     {
+      "left": 464,
+      "right": 1136,
+      "top": 896,
+      "bottom": 964
+     }
+    ],
+    "covered": false,
+    "clickable": true,
+    "statusBar": {
+     "left": 0,
+     "right": 1600,
+     "top": 972,
+     "bottom": 1000
+    },
+    "overStatusBar": false
+   },
+   "slowest": [
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1698 195 ms（net::ERR_ABORTED）",
+    "GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1698 194 ms（net::ERR_ABORTED）",
+    "POST /api/v1/model/records 121 ms",
+    "GET /api/v1/health 97 ms"
+   ],
+   "backendDiff": {
+    "tree": [
+     "层 24384_47468 少了 BOX /AIOS-SUITE-T3-BOX-CASE（24384_47471）",
+     "层 24384_47470 多了 BOX /AIOS-SUITE-T3-BOX-CASE（24384_47471）"
+    ],
+    "records": [
+     "根 24384_47470：记录 0 → 1，多 1（24384_47471）少 0（）位置变 0（）",
+     "根 24384_47463：记录 23 → 23，多 0（）少 0（）位置变 1（24384_47471）"
+    ]
+   },
+   "getWork": {
+    "ms": 455,
+    "progress": [
+     "核对后台状态…",
+     "核对 3 个已装的节点…",
+     "重载模型 1/2…"
+    ],
+    "summary": "已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-BOX-CASE",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "/AIOS-SUITE-T4-X-EQZ（24382_1911）：这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上",
+     "这次取最新之前后端重启过",
+     "库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）"
+    ],
+    "level": "warning",
+    "ok": true
+   },
+   "report": {
+    "startedAt": 1794478725897,
+    "finishedAt": 1794478726319,
+    "ok": true,
+    "error": null,
+    "backendRestarted": true,
+    "tree": {
+     "layersRequested": 20,
+     "layersRefreshed": 20,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [
+      {
+       "id": "24384_47471",
+       "name": "/AIOS-SUITE-T3-BOX-CASE",
+       "type": "BOX",
+       "dbnum": 8000,
+       "from": "24384_47468",
+       "to": "24384_47470"
+      }
+     ],
+     "droppedSelection": [],
+     "changed": true
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 3,
+     "checked": 3,
+     "reloaded": [
+      {
+       "refno": "24384_47463",
+       "added": 0,
+       "removed": 0,
+       "total": 23
+      },
+      {
+       "refno": "24384_47500",
+       "added": 0,
+       "removed": 0,
+       "total": 1
+      }
+     ],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [
+      {
+       "refno": "24382_1911",
+       "reason": "这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上"
+      }
+     ],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [
+     {
+      "dbnum": 7998,
+      "kind": "out_of_scope",
+      "text": "库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）"
+     }
+    ],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "warning",
+    "summary": "已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）。",
+    "detail": [
+     "树上挪位置：/AIOS-SUITE-T3-BOX-CASE",
+     "重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件",
+     "重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件",
+     "/AIOS-SUITE-T4-X-EQZ（24382_1911）：这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上",
+     "这次取最新之前后端重启过",
+     "库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）"
+    ]
+   },
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）。",
+    "resultLevel": "warning",
+    "resultTitle": "已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）。\n· 树上挪位置：/AIOS-SUITE-T3-BOX-CASE\n· 重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件\n· 重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件\n· /AIOS-SUITE-T4-X-EQZ（24382_1911）：这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上\n· 这次取最新之前后端重启过\n· 库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）\n（18:18:46）",
+    "updateNotice": null,
+    "updateNoticeTitle": null,
+    "healthBadge": "已连接 gen-model :9199 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 1 · 滞后 0 · 未判 0",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比"
+   },
+   "named7998": {
+    "dbnum": 7998,
+    "kind": "out_of_scope",
+    "text": "库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）"
+   },
+   "toastsDuringGetWork": [
+    "已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）。"
+   ],
+   "sceneCompare": {
+    "matricesCompared": 25,
+    "mismatches": [],
+    "registered": [
+     "24384_47463",
+     "24384_47500",
+     "24382_1911"
+    ],
+    "unregistered": [
+     "24384_47470"
+    ]
+   }
+  }
+ ],
+ "backendHealth": {
+  "version": "0.1.44",
+  "build_id": "0.1.44+ge8636c4a636f.1794402358.dirty",
+  "started_at": "2026-11-12T18:11:50.536076+08:00",
+  "watch_dbnums": [
+   8000,
+   7998
+  ],
+  "sul_db": {
+   "connected": true,
+   "ping_ms": 7,
+   "disconnects_total": 0,
+   "last_disconnect_at": null,
+   "last_disconnect_error": null,
+   "endpoint": "127.0.0.1:8199",
+   "medium": "rocksdb",
+   "durable": true
+  },
+  "project": "AvevaMarineSample"
+ },
+ "baseline": {
+  "rows": {
+   "7998": {
+    "file": 675,
+    "applied": 675,
+    "model": 675,
+    "initialized": true,
+    "excluded": false,
+    "excludedReason": null,
+    "verdict": "in_sync"
+   },
+   "8000": {
+    "file": 1652,
+    "applied": 1652,
+    "model": 1652,
+    "initialized": true,
+    "excluded": false,
+    "excludedReason": null,
+    "verdict": "in_sync"
+   }
+  },
+  "records": {
+   "24384_47470": 1,
+   "24384_47463": 23,
+   "24384_47500": 1,
+   "24382_1911": 1
+  },
+  "loadedTable": [
+   {
+    "refno": "24384_47470",
+    "loaded": true,
+    "modelSesno": 1652,
+    "fileLatestSesno": 1652,
+    "verdict": "latest"
+   },
+   {
+    "refno": "24384_47463",
+    "loaded": true,
+    "modelSesno": 1652,
+    "fileLatestSesno": 1652,
+    "verdict": "latest"
+   },
+   {
+    "refno": "24384_47500",
+    "loaded": true,
+    "modelSesno": 1652,
+    "fileLatestSesno": 1652,
+    "verdict": "latest"
+   },
+   {
+    "refno": "24382_1911",
+    "loaded": true,
+    "modelSesno": 675,
+    "fileLatestSesno": 675,
+    "verdict": "latest"
+   }
+  ],
+  "sceneObjects": 25,
+  "treeLayers": 20,
+  "wsOpened": [
+   {
+    "at": 1794478345565,
+    "url": "ws://127.0.0.1:3103/?token=<遮住>"
+   },
+   {
+    "at": 1794478346742,
+    "url": "ws://127.0.0.1:9199/api/v1/ws"
+   },
+   {
+    "at": 1794478712384,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "closed": true
+   },
+   {
+    "at": 1794478715713,
+    "url": "ws://127.0.0.1:9199/api/v1/ws"
+   }
+  ],
+  "wsSent": [
+   {
+    "at": 1794478346754,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"subscribe\",\"topics\":[\"tasks\"]}"
+   }
+  ],
+  "modelLoadLog": [
+   "[model-load] load_scope_refnos ok=1 source=visible-insts refno=24384_47470 dbno=8000 count=1",
+   "[model-load] resolved_load_scope refno=24384_47470 dbno=8000 component_count=1 actual_load_count=1 bran_hang_root_injected=0 root_noun=EQUI",
+   "[model-load] gen-model-v1 root=24384_47470 dbno=8000 loaded_refnos=1 skipped=0 objects=1 invalid_tubi=0 mesh404=0 no_geo=0 ms=153",
+   "[model-load] load_scope_refnos ok=1 source=visible-insts refno=24384_47463 dbno=8000 count=23",
+   "[model-load] resolved_load_scope refno=24384_47463 dbno=8000 component_count=23 actual_load_count=23 bran_hang_root_injected=0 root_noun=ZONE",
+   "[model-load] gen-model-v1 root=24384_47463 dbno=8000 loaded_refnos=22 skipped=1 objects=22 invalid_tubi=0 mesh404=0 no_geo=0 ms=55",
+   "[model-load] load_scope_refnos ok=1 source=visible-insts refno=24384_47500 dbno=8000 count=1",
+   "[model-load] resolved_load_scope refno=24384_47500 dbno=8000 component_count=1 actual_load_count=1 bran_hang_root_injected=0 root_noun=ZONE",
+   "[model-load] gen-model-v1 root=24384_47500 dbno=8000 loaded_refnos=1 skipped=0 objects=1 invalid_tubi=0 mesh404=0 no_geo=0 ms=49",
+   "[model-load] load_scope_refnos ok=1 source=visible-insts refno=24382_1911 dbno=7998 count=1",
+   "[model-load] resolved_load_scope refno=24382_1911 dbno=7998 component_count=1 actual_load_count=1 bran_hang_root_injected=0 root_noun=ZONE",
+   "[model-load] gen-model-v1 root=24382_1911 dbno=7998 loaded_refnos=1 skipped=0 objects=1 invalid_tubi=0 mesh404=0 no_geo=0 ms=47"
+  ],
+  "sceneMismatches": [],
+  "idleClick": {
+   "ms": 238,
+   "summary": "已是最新：模型树和已装的模型都没有变化（核对了 20 层树、4 个已装的节点）。"
+  }
+ },
+ "narrow": {
+  "ms": 243,
+  "toast": {
+   "viewport": 1280,
+   "button": {
+    "left": 1209,
+    "right": 1272,
+    "top": 777,
+    "bottom": 797
+   },
+   "toasts": [
+    {
+     "left": 304,
+     "right": 976,
+     "top": 696,
+     "bottom": 764
+    }
+   ],
+   "covered": false,
+   "clickable": true,
+   "statusBar": {
+    "left": 0,
+    "right": 1280,
+    "top": 772,
+    "bottom": 800
+   },
+   "overStatusBar": false
+  }
+ },
+ "guard": {
+  "toLive": [],
+  "blocked": [],
+  "allowedPost": {
+   "/api/v1/element/attributes": 8,
+   "/api/v1/model/records": 42,
+   "/api/v1/meshes/batch": 40
+  },
+  "requestsToSandbox": 1001,
+  "byPath": [
+   [
+    "GET /api/v1/tree/children",
+    388
+   ],
+   [
+    "GET /api/v1/node/model-status",
+    159
+   ],
+   [
+    "GET /api/v1/tree/ancestors",
+    101
+   ],
+   [
+    "GET /api/v1/tasks",
+    77
+   ],
+   [
+    "GET /api/v1/dbnums",
+    68
+   ],
+   [
+    "GET /api/v1/node/versions",
+    63
+   ],
+   [
+    "POST /api/v1/model/records",
+    42
+   ],
+   [
+    "POST /api/v1/meshes/batch",
+    40
+   ],
+   [
+    "GET /api/v1/health",
+    25
+   ],
+   [
+    "GET /api/v1/tree/roots",
+    17
+   ],
+   [
+    "POST /api/v1/element/attributes",
+    8
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181251-000040/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181321-000041/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181351-000042/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181421-000043/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181451-000044/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181521-000045/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181551-000046/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181621-000047/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181651-000048/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181721-000049/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181751-000050/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181821-000051/changes",
+    1
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181841-000000/changes",
+    1
+   ]
+  ],
+  "timings": [
+   [
+    "GET /api/v1/node/versions",
+    {
+     "count": 63,
+     "maxMs": 6391,
+     "totalMs": 48316
+    }
+   ],
+   [
+    "POST /api/v1/element/attributes",
+    {
+     "count": 8,
+     "maxMs": 567,
+     "totalMs": 947
+    }
+   ],
+   [
+    "GET /api/v1/health",
+    {
+     "count": 25,
+     "maxMs": 373,
+     "totalMs": 3296
+    }
+   ],
+   [
+    "GET /api/v1/tasks",
+    {
+     "count": 77,
+     "maxMs": 331,
+     "totalMs": 1910
+    }
+   ],
+   [
+    "GET /api/v1/dbnums",
+    {
+     "count": 68,
+     "maxMs": 275,
+     "totalMs": 1485
+    }
+   ],
+   [
+    "GET /api/v1/node/model-status",
+    {
+     "count": 159,
+     "maxMs": 125,
+     "totalMs": 3011
+    }
+   ],
+   [
+    "POST /api/v1/model/records",
+    {
+     "count": 42,
+     "maxMs": 121,
+     "totalMs": 1717
+    }
+   ],
+   [
+    "GET /api/v1/tree/roots",
+    {
+     "count": 17,
+     "maxMs": 64,
+     "totalMs": 216
+    }
+   ],
+   [
+    "GET /api/v1/tree/ancestors",
+    {
+     "count": 101,
+     "maxMs": 28,
+     "totalMs": 756
+    }
+   ],
+   [
+    "POST /api/v1/meshes/batch",
+    {
+     "count": 40,
+     "maxMs": 28,
+     "totalMs": 638
+    }
+   ],
+   [
+    "GET /api/v1/tree/children",
+    {
+     "count": 388,
+     "maxMs": 17,
+     "totalMs": 2881
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181751-000050/changes",
+    {
+     "count": 1,
+     "maxMs": 11,
+     "totalMs": 11
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181321-000041/changes",
+    {
+     "count": 1,
+     "maxMs": 7,
+     "totalMs": 7
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181521-000045/changes",
+    {
+     "count": 1,
+     "maxMs": 7,
+     "totalMs": 7
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181651-000048/changes",
+    {
+     "count": 1,
+     "maxMs": 7,
+     "totalMs": 7
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181421-000043/changes",
+    {
+     "count": 1,
+     "maxMs": 6,
+     "totalMs": 6
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181451-000044/changes",
+    {
+     "count": 1,
+     "maxMs": 6,
+     "totalMs": 6
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181721-000049/changes",
+    {
+     "count": 1,
+     "maxMs": 6,
+     "totalMs": 6
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181821-000051/changes",
+    {
+     "count": 1,
+     "maxMs": 6,
+     "totalMs": 6
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181251-000040/changes",
+    {
+     "count": 1,
+     "maxMs": 5,
+     "totalMs": 5
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181351-000042/changes",
+    {
+     "count": 1,
+     "maxMs": 5,
+     "totalMs": 5
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181551-000046/changes",
+    {
+     "count": 1,
+     "maxMs": 5,
+     "totalMs": 5
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181621-000047/changes",
+    {
+     "count": 1,
+     "maxMs": 5,
+     "totalMs": 5
+    }
+   ],
+   [
+    "GET /api/v1/tasks/db-20261112-181841-000000/changes",
+    {
+     "count": 1,
+     "maxMs": 3,
+     "totalMs": 3
+    }
+   ]
+  ],
+  "httpFailures": [
+   {
+    "at": 1794478346742,
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users",
+    "query": ""
+   },
+   {
+    "at": 1794478346903,
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/reviewers",
+    "query": ""
+   },
+   {
+    "at": 1794478346956,
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/me",
+    "query": ""
+   },
+   {
+    "at": 1794478347070,
+    "status": 401,
+    "method": "GET",
+    "path": "/api/review/tasks",
+    "query": "?requester_id=SJ"
+   },
+   {
+    "at": 1794478438855,
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "query": "?refno=24384%2F47574&resolved=1"
+   },
+   {
+    "at": 1794478463966,
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/ancestors",
+    "query": "?refno=24384%2F47584"
+   }
+  ],
+  "wsOpened": [
+   {
+    "at": 1794478345565,
+    "url": "ws://127.0.0.1:3103/?token=<遮住>"
+   },
+   {
+    "at": 1794478346742,
+    "url": "ws://127.0.0.1:9199/api/v1/ws"
+   },
+   {
+    "at": 1794478712384,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "closed": true
+   },
+   {
+    "at": 1794478715713,
+    "url": "ws://127.0.0.1:9199/api/v1/ws"
+   }
+  ],
+  "wsSent": [
+   {
+    "at": 1794478346754,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"subscribe\",\"topics\":[\"tasks\"]}"
+   },
+   {
+    "at": 1794478371758,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478375746,
+    "url": "ws://127.0.0.1:3103/?token=<遮住>",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478396763,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478405588,
+    "url": "ws://127.0.0.1:3103/?token=<遮住>",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478421764,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478435588,
+    "url": "ws://127.0.0.1:3103/?token=<遮住>",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478446763,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478465575,
+    "url": "ws://127.0.0.1:3103/?token=<遮住>",
+    "payload": "{\"type\":\"ping\"}"
+   },
+   {
+    "at": 1794478471758,
+    "url": "ws://127.0.0.1:9199/api/v1/ws",
+    "payload": "{\"type\":\"ping\"}"
+   }
+  ],
+  "wsReceived": 96,
+  "pageErrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+   "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+   "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+   "WebSocket connection to 'ws://127.0.0.1:9199/api/v1/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED"
+  ]
+ },
+ "finishedAt": "2026-11-12T10:18:48.871Z",
+ "checks": [
+  {
+   "step": "基线",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "基线",
+   "name": "三维对上：四个节点名下的构件和 25 个实例矩阵与后端的记录逐条一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "基线",
+   "name": "四个节点都在已加载节点表里，装时的水位是库此刻的水位",
+   "pass": true,
+   "detail": "24384_47470@1652 24384_47463@1652 24384_47500@1652 24382_1911@675"
+  },
+  {
+   "step": "基线",
+   "name": "页面的任务通道连的是沙箱后端",
+   "pass": true,
+   "detail": "ws://127.0.0.1:3103/?token=<遮住> ws://127.0.0.1:9199/api/v1/ws"
+  },
+  {
+   "step": "基线",
+   "name": "后台没变时点取最新：说已是最新，一个模型都不重载",
+   "pass": true,
+   "detail": "已是最新：模型树和已装的模型都没有变化（核对了 20 层树、4 个已装的节点）。"
+  },
+  {
+   "step": "S1",
+   "name": "后端批次追上：库 8000 三枚水位都到 1654",
+   "pass": true,
+   "detail": "看见文件 17 ms，数据 22032 ms，模型 22571 ms；{\"file\":1654,\"applied\":1654,\"model\":1654,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S1",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 22398 ms 收到；这一步共收 5 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S1",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1653→1654（改 11 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S1",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树改名 10；模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S1",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 470 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1652 161 ms（net::ERR_ABORTED）；GET /api/v1/health 114 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1652 49 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1652 42 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S1",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S1",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S1",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S1",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树改名 10；模型重载 3 个节点。"
+  },
+  {
+   "step": "S1",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树改名 10；模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "S1",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S1",
+   "name": "树的回执：改名里有这条 BRAN 和它的管件，没有新增、删除、挪位置",
+   "pass": true,
+   "detail": "改名 10 个：24384_47574 /AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD；24384_47575 /AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1；24384_47576 /AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2"
+  },
+  {
+   "step": "S1",
+   "name": "页面树上这条 BRAN 现在叫 /AIOS-SUITE-T3-BRAN-ROLD",
+   "pass": true,
+   "detail": "/AIOS-SUITE-T3-BRAN-ROLD"
+  },
+  {
+   "step": "S2",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。 failed=[] kept=[]"
+  },
+  {
+   "step": "S2",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 27858 ms，其中等后台 27235 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1654 374 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1654 373 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1654 311 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1654 186 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S2",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":580,\"right\":1020,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S2",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S2",
+   "name": "三维对上：各根名下的构件和 34 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S2",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。"
+  },
+  {
+   "step": "S2",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树新增 1；模型重载 3 个节点（新增 9 个构件）。\"]"
+  },
+  {
+   "step": "S2",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":580,\"right\":1020,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S2",
+   "name": "文件一推就点：取最新自己等后台做完（回执里记了等的是 8000 库、没有等超时）",
+   "pass": true,
+   "detail": "waited={\"dbnums\":[8000],\"ms\":27235,\"timedOut\":[]} 进度=核对后台状态… / 等后台把库 8000 更新完…（已等 0 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 3 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 6 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 9 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 12 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 15 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 18 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 21 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 24 秒，最多 45 秒） / 刷新模型树… / 重载模型 2/3… / 重载模型 3/3…"
+  },
+  {
+   "step": "S2",
+   "name": "树的回执：新增里有 24384_47584，挂在 PIPE 下",
+   "pass": true,
+   "detail": "新增 [{\"id\":\"24384_47584\",\"name\":\"/AIOS-SUITE-T3-BRAN-R\",\"type\":\"BRAN\",\"dbnum\":8000}]"
+  },
+  {
+   "step": "S2",
+   "name": "模型的回执：重载了 ZONE Z，装进了新构件",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_47470\",\"added\":0,\"removed\":0,\"total\":1},{\"refno\":\"24384_47463\",\"added\":9,\"removed\":0,\"total\":32},{\"refno\":\"24384_47500\",\"added\":0,\"removed\":0,\"total\":1}]"
+  },
+  {
+   "step": "S3",
+   "name": "后端批次追上：库 8000 三枚水位都到 1660",
+   "pass": true,
+   "detail": "看见文件 15 ms，数据 25875 ms，模型 26421 ms；{\"file\":1660,\"applied\":1660,\"model\":1660,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S3",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 26357 ms 收到；这一步共收 5 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S3",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1658→1660（改 12 项，场景内 9 根受影响）｜有「重载」"
+  },
+  {
+   "step": "S3",
+   "name": "窗口宽 1600：底部提示条正显示着，状态栏提示上的「重载」「忽略」和「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":464,\"right\":1136,\"top\":876,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000} 重载 {\"rect\":{\"left\":718,\"right\":740,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 忽略 {\"rect\":{\"left\":744,\"right\":755,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"covered\":false,\"clickable\":true}"
+  },
+  {
+   "step": "S3",
+   "name": "窗口宽 1280：底部提示条正显示着，状态栏提示上的「重载」「忽略」和「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":304,\"right\":976,\"top\":676,\"bottom\":764}] 状态栏 {\"left\":0,\"right\":1280,\"top\":772,\"bottom\":800} 重载 {\"rect\":{\"left\":718,\"right\":740,\"top\":778,\"bottom\":795},\"covered\":false,\"clickable\":true} 忽略 {\"rect\":{\"left\":744,\"right\":755,\"top\":778,\"bottom\":795},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1209,\"right\":1272,\"top\":777,\"bottom\":797},\"covered\":false,\"clickable\":true}"
+  },
+  {
+   "step": "S3",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。 failed=[] kept=[]"
+  },
+  {
+   "step": "S3",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 487 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1657 225 ms（net::ERR_ABORTED）；GET /api/v1/health 120 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1657 97 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1657 59 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S3",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":509,\"right\":1091,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S3",
+   "name": "树对上：页面取过的 18 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S3",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S3",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。"
+  },
+  {
+   "step": "S3",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树删除 1；模型重载 3 个节点（撤下 9 个构件）；选中的构件已被删除。\"]"
+  },
+  {
+   "step": "S3",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":509,\"right\":1091,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S3",
+   "name": "删之前：选中的是这条 BRAN",
+   "pass": true,
+   "detail": "24384_47574"
+  },
+  {
+   "step": "S3",
+   "name": "树的回执：删除里有 24384_47574，判成已删除（带名字）",
+   "pass": true,
+   "detail": "[{\"id\":\"24384_47574\",\"name\":\"/AIOS-SUITE-T3-BRAN-ROLD\",\"type\":\"BRAN\",\"dbnum\":8000,\"fate\":\"deleted\"}]"
+  },
+  {
+   "step": "S3",
+   "name": "页面树上没有它了，它的 9 个管件也没了",
+   "pass": true,
+   "detail": "removedNodeCount=10"
+  },
+  {
+   "step": "S3",
+   "name": "选中的节点被删：登记成已删除并写进回执",
+   "pass": true,
+   "detail": "deleted=true selectionDeleted=24384_47574"
+  },
+  {
+   "step": "S3",
+   "name": "模型的回执：重载了 ZONE Z，撤下了被删的构件",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_47470\",\"added\":0,\"removed\":0,\"total\":1},{\"refno\":\"24384_47463\",\"added\":0,\"removed\":9,\"total\":23},{\"refno\":\"24384_47500\",\"added\":0,\"removed\":0,\"total\":1}]"
+  },
+  {
+   "step": "S4",
+   "name": "后端批次追上：库 8000 三枚水位都到 1663",
+   "pass": true,
+   "detail": "看见文件 12 ms，数据 21289 ms，模型 22104 ms；{\"file\":1663,\"applied\":1663,\"model\":1663,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S4",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 22097 ms 收到；这一步共收 7 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S4",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1661→1663（改 22 项，场景内 9 根受影响）｜有「重载」"
+  },
+  {
+   "step": "S4",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。 failed=[] kept=[]"
+  },
+  {
+   "step": "S4",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 454 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1660 192 ms（net::ERR_ABORTED）；GET /api/v1/health 115 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1660 80 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1660 43 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S4",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":501,\"right\":1099,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S4",
+   "name": "树对上：页面取过的 18 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S4",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S4",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。"
+  },
+  {
+   "step": "S4",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树新增 1、删除 1；模型重载 3 个节点（新增 9 个构件、撤下 9 个构件）。\"]"
+  },
+  {
+   "step": "S4",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":501,\"right\":1099,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S4",
+   "name": "树的回执：删除里有 47584、新增里有 47594",
+   "pass": true,
+   "detail": "删除 24384_47584 新增 24384_47594"
+  },
+  {
+   "step": "S5",
+   "name": "后端批次追上：库 8000 三枚水位都到 1666",
+   "pass": true,
+   "detail": "看见文件 25 ms，数据 25668 ms，模型 26209 ms；{\"file\":1666,\"applied\":1666,\"model\":1666,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S5",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 26170 ms 收到；这一步共收 5 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S5",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1664→1666（改 10 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S5",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树改名 9；模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S5",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 450 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1663 217 ms（net::ERR_ABORTED）；GET /api/v1/health 118 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1663 92 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1663 51 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S5",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S5",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S5",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S5",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树改名 9；模型重载 3 个节点。"
+  },
+  {
+   "step": "S5",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树改名 9；模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "S5",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S5",
+   "name": "树的回执：改名 9 个，没有新增、删除",
+   "pass": true,
+   "detail": "改名 9"
+  },
+  {
+   "step": "S6",
+   "name": "后端批次追上：库 7998 三枚水位都到 677",
+   "pass": true,
+   "detail": "看见文件 17 ms，数据 26510 ms，模型 27327 ms；{\"file\":677,\"applied\":677,\"model\":677,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S6",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 27299 ms 收到；这一步共收 8 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S6",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 7998 已更新到会话 676→677（改 3 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S6",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型重载 1 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S6",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 369 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/health 121 ms；GET /api/v1/node/versions?dbnum=7998&refno=24382%2F1911&scope=subtree&since_sesno=675 80 ms（net::ERR_ABORTED）；POST /api/v1/model/records 32 ms；GET /api/v1/dbnums 21 ms"
+  },
+  {
+   "step": "S6",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S6",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S6",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S6",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型重载 1 个节点。"
+  },
+  {
+   "step": "S6",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型重载 1 个节点。\"]"
+  },
+  {
+   "step": "S6",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S6",
+   "name": "场景里 BOX 24382_1913 的矩阵真的上移了 300 mm",
+   "pass": true,
+   "detail": "之前 125000,75000,0 之后 125000,75000,300"
+  },
+  {
+   "step": "S6",
+   "name": "模型的回执：重载了 7998 的那个 ZONE；树没有变化",
+   "pass": true,
+   "detail": "[{\"refno\":\"24382_1911\",\"added\":0,\"removed\":0,\"total\":1}]"
+  },
+  {
+   "step": "J1",
+   "name": "后端批次追上：库 8000 三枚水位都到 1684",
+   "pass": true,
+   "detail": "看见文件 16 ms，数据 26703 ms，模型 28102 ms；{\"file\":1684,\"applied\":1684,\"model\":1684,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "J1",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 27891 ms 收到；这一步共收 13 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "J1",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1667→1684（改 3 项）｜点「取最新」同步"
+  },
+  {
+   "step": "J1",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "J1",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 459 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1666 195 ms（net::ERR_ABORTED）；GET /api/v1/health 115 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1666 71 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1666 55 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "J1",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "J1",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "J1",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "J1",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型重载 3 个节点。"
+  },
+  {
+   "step": "J1",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "J1",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":628,\"right\":972,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S7",
+   "name": "后端批次追上：库 8000 三枚水位都到 1686",
+   "pass": true,
+   "detail": "看见文件 25 ms，数据 25570 ms，模型 26394 ms；{\"file\":1686,\"applied\":1686,\"model\":1686,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S7",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 26283 ms 收到；这一步共收 7 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S7",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1685→1686（改 12 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S7",
+   "name": "窗口宽 1600：底部提示条正显示着，状态栏提示上的「忽略」和「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":464,\"right\":1136,\"top\":876,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000} 重载 {\"rect\":null,\"covered\":false,\"clickable\":null} 忽略 {\"rect\":{\"left\":710,\"right\":720,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"covered\":false,\"clickable\":true}"
+  },
+  {
+   "step": "S7",
+   "name": "窗口宽 1280：底部提示条正显示着，状态栏提示上的「忽略」和「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":304,\"right\":976,\"top\":676,\"bottom\":764}] 状态栏 {\"left\":0,\"right\":1280,\"top\":772,\"bottom\":800} 重载 {\"rect\":null,\"covered\":false,\"clickable\":null} 忽略 {\"rect\":{\"left\":710,\"right\":720,\"top\":778,\"bottom\":795},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1209,\"right\":1272,\"top\":777,\"bottom\":797},\"covered\":false,\"clickable\":true}"
+  },
+  {
+   "step": "S7",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S7",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 465 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1684 172 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1684 124 ms（net::ERR_ABORTED）；GET /api/v1/health 110 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1684 99 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S7",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S7",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S7",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S7",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+  },
+  {
+   "step": "S7",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "S7",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S7",
+   "name": "树的回执：挪位置里有 PIPE，从 Z 到 Z2",
+   "pass": true,
+   "detail": "[{\"id\":\"24384_47481\",\"name\":\"/AIOS-SUITE-T3-PIPE\",\"type\":\"PIPE\",\"dbnum\":8000,\"from\":\"24384_47463\",\"to\":\"24384_47500\"}]"
+  },
+  {
+   "step": "S7",
+   "name": "页面树上 PIPE 现在挂在 Z2 下",
+   "pass": true,
+   "detail": "24384_47500"
+  },
+  {
+   "step": "S7",
+   "name": "模型的回执：两个 ZONE 都重载了，Z 撤下管道的构件、Z2 装进来",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_47470\",\"added\":0,\"removed\":0,\"total\":1},{\"refno\":\"24384_47463\",\"added\":0,\"removed\":9,\"total\":14},{\"refno\":\"24384_47500\",\"added\":9,\"removed\":0,\"total\":10}]"
+  },
+  {
+   "step": "S8",
+   "name": "后端批次追上：库 8000 三枚水位都到 1689",
+   "pass": true,
+   "detail": "看见文件 28 ms，数据 20459 ms，模型 21309 ms；{\"file\":1689,\"applied\":1689,\"model\":1689,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S8",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 21303 ms 收到；这一步共收 7 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S8",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1687→1689（改 12 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S8",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S8",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 576 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1686 235 ms（net::ERR_ABORTED）；GET /api/v1/health 109 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1686 94 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1686 54 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S8",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S8",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S8",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S8",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+  },
+  {
+   "step": "S8",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "S8",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S8",
+   "name": "树的回执：PIPE 从 Z2 回到 Z",
+   "pass": true,
+   "detail": "[{\"id\":\"24384_47481\",\"name\":\"/AIOS-SUITE-T3-PIPE\",\"type\":\"PIPE\",\"dbnum\":8000,\"from\":\"24384_47500\",\"to\":\"24384_47463\"}]"
+  },
+  {
+   "step": "S9",
+   "name": "后端批次追上：库 8000 三枚水位都到 1692",
+   "pass": true,
+   "detail": "看见文件 25 ms，数据 26192 ms，模型 27016 ms；{\"file\":1692,\"applied\":1692,\"model\":1692,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S9",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 26948 ms 收到；这一步共收 7 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S9",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1690→1692（改 5 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S9",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S9",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 447 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1689 207 ms（net::ERR_ABORTED）；GET /api/v1/health 111 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1689 83 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1689 56 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S9",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S9",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S9",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S9",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+  },
+  {
+   "step": "S9",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "S9",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S9",
+   "name": "树的回执：EQ-CP 从 Z 到 Z2；它展开着的那一层还在",
+   "pass": true,
+   "detail": "[{\"id\":\"24384_47479\",\"name\":\"/AIOS-SUITE-T3-EQ-CP\",\"type\":\"EQUI\",\"dbnum\":8000,\"from\":\"24384_47463\",\"to\":\"24384_47500\"}] 展开=true"
+  },
+  {
+   "step": "S10",
+   "name": "后端批次追上：库 8000 三枚水位都到 1695",
+   "pass": true,
+   "detail": "看见文件 20 ms，数据 26477 ms，模型 27327 ms；{\"file\":1695,\"applied\":1695,\"model\":1695,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S10",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 27316 ms 收到；这一步共收 8 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S10",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1693→1695（改 5 项）｜点「取最新」同步"
+  },
+  {
+   "step": "S10",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S10",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 583 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1692 217 ms（net::ERR_ABORTED）；GET /api/v1/health 141 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1692 96 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1692 60 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S10",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S10",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S10",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S10",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 3 个节点。"
+  },
+  {
+   "step": "S10",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 3 个节点。\"]"
+  },
+  {
+   "step": "S10",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":627,\"right\":973,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S11",
+   "name": "后端批次追上：库 8000 三枚水位都到 1698",
+   "pass": true,
+   "detail": "看见文件 26 ms，数据 26148 ms，模型 27232 ms；{\"file\":1698,\"applied\":1698,\"model\":1698,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "S11",
+   "name": "推送到达：页面的任务通道收到这个窗口的完成帧",
+   "pass": true,
+   "detail": "文件写完后 27192 ms 收到；这一步共收 9 帧，属于这个窗口的 2 帧"
+  },
+  {
+   "step": "S11",
+   "name": "点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1696→1698（改 4 项，场景内 1 根受影响）｜有「重载」"
+  },
+  {
+   "step": "S11",
+   "name": "取最新做成（没有失败的节点、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "S11",
+   "name": "取最新自己不慢：除去等后台的那一段，15 秒之内做完",
+   "pass": true,
+   "detail": "共 365 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1695 185 ms（net::ERR_ABORTED）；GET /api/v1/health 98 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1695 53 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1695 52 ms（net::ERR_ABORTED）"
+  },
+  {
+   "step": "S11",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":519,\"right\":1081,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "S11",
+   "name": "树对上：页面取过的 19 层和后端逐层一样",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S11",
+   "name": "三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "S11",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。"
+  },
+  {
+   "step": "S11",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹）",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。\"]"
+  },
+  {
+   "step": "S11",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":519,\"right\":1081,\"top\":896,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000}"
+  },
+  {
+   "step": "S11",
+   "name": "树的回执：BOX-CASE 从 EQ-CASE 到 EQ-RN",
+   "pass": true,
+   "detail": "[{\"id\":\"24384_47471\",\"name\":\"/AIOS-SUITE-T3-BOX-CASE\",\"type\":\"BOX\",\"dbnum\":8000,\"from\":\"24384_47470\",\"to\":\"24384_47468\"}]"
+  },
+  {
+   "step": "S11",
+   "name": "页面树上 BOX-CASE 挂在 EQ-RN 下",
+   "pass": true,
+   "detail": "24384_47468"
+  },
+  {
+   "step": "S11",
+   "name": "单独装的 EQ-CASE 名下已没有几何：按「查空」撤下（不是当成已删除），树上它还在",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_47470\",\"refnos\":1,\"why\":\"empty\"}] 树上=/AIOS-SUITE-T3-EQ-CASE"
+  },
+  {
+   "step": "S11",
+   "name": "那句交代没有把还在库里的 EQ-CASE 说成「已不存在」/「已删除」",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 2 个节点、撤下 1 个名下已没有几何的节点。"
+  },
+  {
+   "step": "R1",
+   "name": "后端重起了：启动时刻变了，监听名单只剩 8000",
+   "pass": true,
+   "detail": "2026-11-12T18:11:50.536076+08:00 → 2026-11-12T18:18:35.028755200+08:00，监听 [8000]，9314 ms"
+  },
+  {
+   "step": "R1",
+   "name": "重起后：8000 仍齐平在 1698；7998 还是初始化过的，但已标成不在监听范围",
+   "pass": true,
+   "detail": "{\"7998\":{\"file\":677,\"applied\":677,\"model\":677,\"initialized\":true,\"excluded\":true,\"excludedReason\":\"watch_dbnums\",\"verdict\":\"in_sync\"},\"8000\":{\"file\":1698,\"applied\":1698,\"model\":1698,\"initialized\":true,\"excluded\":false,\"excludedReason\":null,\"verdict\":\"in_sync\"}}"
+  },
+  {
+   "step": "R1",
+   "name": "后端跟上了 8000（到 1701）",
+   "pass": true,
+   "detail": "数据 6020 ms，模型 7126 ms"
+  },
+  {
+   "step": "R1",
+   "name": "后端没有跟 7998：库文件到了 679，数据和模型停在 677",
+   "pass": true,
+   "detail": "{\"file\":679,\"applied\":677,\"model\":677,\"initialized\":true,\"excluded\":true,\"excludedReason\":\"watch_dbnums\",\"verdict\":\"in_sync\"}"
+  },
+  {
+   "step": "R1",
+   "name": "认出后端重启过",
+   "pass": true,
+   "detail": "backendRestarted=true"
+  },
+  {
+   "step": "R1",
+   "name": "不在后端更新范围里的库被如实点名（叫法已改）：库 7998，模型停在 677，库文件已到 679",
+   "pass": true,
+   "detail": "{\"dbnum\":7998,\"kind\":\"out_of_scope\",\"text\":\"库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）\"}"
+  },
+  {
+   "step": "R1",
+   "name": "那句交代里也说了这件事（状态栏上看得到）",
+   "pass": true,
+   "detail": "已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）。｜树上挪位置：/AIOS-SUITE-T3-BOX-CASE,重载 /AIOS-SUITE-T3-Z（24384_47463）：现有 23 个构件,重载 /AIOS-SUITE-T3-Z2（24384_47500）：现有 1 个构件,/AIOS-SUITE-T4-X-EQZ（24382_1911）：这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上,这次取最新之前后端重启过,库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）"
+  },
+  {
+   "step": "R1",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 2 个节点；1 个节点的模型没有动。没跟到最新：库 7998 \"]"
+  },
+  {
+   "step": "R1",
+   "name": "那一句弹出来的时候没有压在状态栏上",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":464,\"right\":1136,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "R1",
+   "name": "没有把任何节点当成已删除撤下；7998 的那个 ZONE 还在场景里",
+   "pass": true,
+   "detail": "withdrawn=[] kept=[{\"refno\":\"24382_1911\",\"reason\":\"这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上\"}]"
+  },
+  {
+   "step": "R1",
+   "name": "树对上：页面取过的 19 层和后端逐层一样（含不在监听范围的 7998）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "R1",
+   "name": "三维对上：与后端此刻供出的记录逐条一样（25 个实例矩阵；7998 的模型按后端说的停在 677）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "R1",
+   "name": "8000 这一步（BOX-CASE 挪回 EQ-CASE）照常处理",
+   "pass": true,
+   "detail": "[{\"id\":\"24384_47471\",\"name\":\"/AIOS-SUITE-T3-BOX-CASE\",\"type\":\"BOX\",\"dbnum\":8000,\"from\":\"24384_47468\",\"to\":\"24384_47470\"}]"
+  },
+  {
+   "step": "R1",
+   "name": "BOX-CASE 回到 EQ-CASE 名下后在场景里（经 ZONE Z）；EQ-CASE 自己没有被重新登记成单独装着的节点",
+   "pass": true,
+   "detail": "场景里 BOX-CASE 的对象 1 个；不在册的：24384_47470"
+  },
+  {
+   "step": "R1",
+   "name": "取最新做成（没有失败的节点）",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "step": "R1",
+   "name": "取最新自己不慢：15 秒之内做完",
+   "pass": true,
+   "detail": "共 455 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1698 195 ms（net::ERR_ABORTED）；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1698 194 ms（net::ERR_ABORTED）；POST /api/v1/model/records 121 ms；GET /api/v1/health 97 ms"
+  },
+  {
+   "step": "R1",
+   "name": "那一句弹出来的时候没有盖住「取最新」按钮（还点得到）",
+   "pass": true,
+   "detail": "{\"viewport\":1600,\"button\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"toasts\":[{\"left\":464,\"right\":1136,\"top\":896,\"bottom\":964}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000},\"overStatusBar\":false}"
+  },
+  {
+   "step": "窄窗口",
+   "name": "窗口宽 1280 时：那一句弹出来也盖不到「取最新」按钮，也没有压在状态栏上",
+   "pass": true,
+   "detail": "{\"viewport\":1280,\"button\":{\"left\":1209,\"right\":1272,\"top\":777,\"bottom\":797},\"toasts\":[{\"left\":304,\"right\":976,\"top\":696,\"bottom\":764}],\"covered\":false,\"clickable\":true,\"statusBar\":{\"left\":0,\"right\":1280,\"top\":772,\"bottom\":800},\"overStatusBar\":false}"
+  },
+  {
+   "step": "护栏",
+   "name": "页面没有一个请求发往 8022 / 8009",
+   "pass": true,
+   "detail": "发往沙箱后端 1001 个请求"
+  },
+  {
+   "step": "护栏",
+   "name": "页面对沙箱后端只发了 GET 和三种只读 POST（没有生成、更新、初始化）",
+   "pass": true,
+   "detail": "放行的只读 POST：{\"/api/v1/element/attributes\":8,\"/api/v1/model/records\":42,\"/api/v1/meshes/batch\":40}"
+  }
+ ]
+}

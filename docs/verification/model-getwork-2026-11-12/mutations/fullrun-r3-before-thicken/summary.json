@@ -1,0 +1,112 @@
+{
+  "startedAt": "2026-11-12T10:33:32.042Z",
+  "lists": [
+    {
+      "name": "mutations-tree",
+      "total": 57,
+      "recorded": 57,
+      "killed": 57,
+      "killedByAssertion": 57,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "33 passed (33)",
+        "ms": 2929
+      },
+      "closing": {
+        "status": 0,
+        "tests": "33 passed (33)",
+        "ms": 2458
+      }
+    },
+    {
+      "name": "mutations-models",
+      "total": 182,
+      "recorded": 182,
+      "killed": 182,
+      "killedByAssertion": 182,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "371 passed (371)",
+        "ms": 4446
+      },
+      "closing": {
+        "status": 0,
+        "tests": "371 passed (371)",
+        "ms": 4568
+      }
+    },
+    {
+      "name": "mutations-round3",
+      "total": 29,
+      "recorded": 29,
+      "killed": 29,
+      "killedByAssertion": 29,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "314 passed (314)",
+        "ms": 2724
+      },
+      "closing": {
+        "status": 0,
+        "tests": "314 passed (314)",
+        "ms": 3216
+      }
+    },
+    {
+      "name": "mutations-replay",
+      "total": 20,
+      "recorded": 20,
+      "killed": 20,
+      "killedByAssertion": 20,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "119 passed (119)",
+        "ms": 2335
+      },
+      "closing": {
+        "status": 0,
+        "tests": "119 passed (119)",
+        "ms": 2225
+      }
+    },
+    {
+      "name": "mutations-r3",
+      "total": 53,
+      "recorded": 53,
+      "killed": 53,
+      "killedByAssertion": 53,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "374 passed | 1 todo (375)",
+        "ms": 3785
+      },
+      "closing": {
+        "status": 0,
+        "tests": "374 passed | 1 todo (375)",
+        "ms": 3610
+      }
+    }
+  ],
+  "worktreeStatusAfter": "",
+  "finishedAt": "2026-11-12T10:59:18.314Z"
+}

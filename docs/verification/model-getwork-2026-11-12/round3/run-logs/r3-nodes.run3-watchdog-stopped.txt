@@ -1,0 +1,29 @@
+[18:05:37] 沙箱后端：0.1.44+ge8636c4a636f.1794402358.dirty，监听 [8000,7998]，库 127.0.0.1:8199（rocksdb）
+[18:05:37] 基线：开页面
+  ✓ [基线] 树对上：页面取过的 19 层和后端逐层一样
+  ✓ [基线] 三维对上：四个节点名下的构件和 25 个实例矩阵与后端的记录逐条一样
+  ✓ [基线] 四个节点都在已加载节点表里，装时的水位是库此刻的水位 — 24384_47470@1652 24384_47463@1652 24384_47500@1652 24382_1911@675
+  ✓ [基线] 页面的任务通道连的是沙箱后端 — ws://127.0.0.1:3103/?token=<遮住> ws://127.0.0.1:9199/api/v1/ws
+  ✓ [基线] 后台没变时点取最新：说已是最新，一个模型都不重载 — 已是最新：模型树和已装的模型都没有变化（核对了 20 层树、4 个已装的节点）。
+[18:05:41] S1：改名（E3D 会话 1653–1654）：BRAN /AIOS-SUITE-T3-BRAN-R 改成 …-BRAN-ROLD，连同它的 9 个管件
+  ✓ [S1] 后端批次追上：库 8000 三枚水位都到 1654 — 看见文件 15 ms，数据 22164 ms，模型 22715 ms；{"file":1654,"applied":1654,"model":1654,"initialized":true,"excluded":false,"excludedReason":null,"verdict":"in_sync"}
+  ✓ [S1] 推送到达：页面的任务通道收到这个窗口的完成帧 — 文件写完后 22521 ms 收到；这一步共收 5 帧，属于这个窗口的 2 帧
+  ✓ [S1] 点之前：状态栏出了「数据已更新」的提示，说的是这个库到了这个会话；有「重载」可点，或者写着点「取最新」 — 库 8000 已更新到会话 1653→1654（改 11 项）｜点「取最新」同步
+    后端的差：层 24384_47481 里 24384_47574 改名 /AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD；层 24384_47574 里 24384_47575 改名 /AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1；层 24384_47574 里 24384_47576 改名 /AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2；层 24384_47574 里 24384_47577 改名 /AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-ROLD-M3；层 24384_47574 里 24384_47578 改名 /AIOS-SUITE-T3-BRAN-R-M4 → /AIOS-SUITE-T3-BRAN-ROLD-M4；层 24384_47574 里 24384_47579 改名 /AIOS-SUITE-T3-BRAN-R-M5 → /AIOS-SUITE-T3-BRAN-ROLD-M5；层 24384_47574 里 24384_47580 改名 /AIOS-SUITE-T3-BRAN-R-M6 → /AIOS-SUITE-T3-BRAN-ROLD-M6；层 24384_47574 里 24384_47581 改名 /AIOS-SUITE-T3-BRAN-R-M7 → /AIOS-SUITE-T3-BRAN-ROLD-M7；层 24384_47574 里 24384_47582 改名 /AIOS-SUITE-T3-BRAN-R-M8 → /AIOS-SUITE-T3-BRAN-ROLD-M8；层 24384_47574 里 24384_47583 改名 /AIOS-SUITE-T3-BRAN-R-M9 → /AIOS-SUITE-T3-BRAN-ROLD-M9
+    取最新 360 ms：已取最新：模型树改名 10；模型重载 3 个节点。
+  ✓ [S1] 取最新做成（没有失败的节点、没有判不了的节点） — 已取最新：模型树改名 10；模型重载 3 个节点。 failed=[] kept=[]
+  ✓ [S1] 取最新自己不慢：除去等后台的那一段，15 秒之内做完 — 共 360 ms，其中等后台 0 ms；最慢的请求：GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1652 172 ms（net::ERR_ABORTED）；GET /api/v1/health 99 ms；GET /api/v1/node/versions?dbnum=8000&refno=24384%2F47470&scope=subtree&since_sesno=1652 82 ms（net::ERR_ABORTED）；POST /api/v1/model/records 46 ms
+  ✓ [S1] 那一句弹出来的时候没有盖住「取最新」按钮（还点得到） — {"viewport":1600,"button":{"left":1529,"right":1592,"top":977,"bottom":997},"toasts":[{"left":628,"right":972,"top":896,"bottom":964}],"covered":false,"clickable":true,"statusBar":{"left":0,"right":1600,"top":972,"bottom":1000},"overStatusBar":false}
+  ✓ [S1] 树对上：页面取过的 19 层和后端逐层一样
+  ✓ [S1] 三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的
+  ✓ [S1] 状态栏那句交代和回执一致 — 已取最新：模型树改名 10；模型重载 3 个节点。
+  ✓ [S1] 取最新期间只弹了一条提示，就是最后那句交代（每个节点各自的装载提示没有弹） — ["已取最新：模型树改名 10；模型重载 3 个节点。"]
+  ✓ [S1] 那一句弹出来的时候没有压在状态栏上 — 提示条 [{"left":628,"right":972,"top":896,"bottom":964}] 状态栏 {"left":0,"right":1600,"top":972,"bottom":1000}
+  ✓ [S1] 树的回执：改名里有这条 BRAN 和它的管件，没有新增、删除、挪位置 — 改名 10 个：24384_47574 /AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD；24384_47575 /AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1；24384_47576 /AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2
+  ✓ [S1] 页面树上这条 BRAN 现在叫 /AIOS-SUITE-T3-BRAN-ROLD — /AIOS-SUITE-T3-BRAN-ROLD
+[18:06:07] S2：新增（E3D 会话 1656–1657）：PIPE 下复制出一条新 BRAN /AIOS-SUITE-T3-BRAN-R（24384/47584）；文件一推就点，不等后端
+[18:06:53] 出错：TypeError: fetch failed
+  ✓ [护栏] 页面没有一个请求发往 8022 / 8009 — 发往沙箱后端 202 个请求
+  ✓ [护栏] 页面对沙箱后端只发了 GET 和三种只读 POST（没有生成、更新、初始化） — 放行的只读 POST：{"/api/v1/element/attributes":7,"/api/v1/model/records":7,"/api/v1/meshes/batch":6}
+[18:06:53] 共 20 项，过 20，没过 0
+r3-nodes 退出码 2

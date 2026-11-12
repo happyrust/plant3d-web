@@ -1,0 +1,550 @@
+[
+  {
+    "id": "H01",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "核对过不用动的节点下一轮照问（不记）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3696,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "4 failed | 330 passed (334)",
+    "failedCount": 4,
+    "failedTests": [
+      "库没再变：下一轮不再为它发请求；库又变了才再问；它自己重新装过（装时的水位变了）也再问",
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问",
+      "只有库的模型水位变了（库文件没动，后台追上来了）：也要再问",
+      "上一轮不用动、这一轮库变了它要重载：重载完再点（库没再变）仍然先问一次，问到不用动之后才不问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H02",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "后端重启过也不重问核对过的节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2547,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 332 passed (334)",
+    "failedCount": 2,
+    "failedTests": [
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问",
+      "核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H03",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "带过期标记的节点也按「核对过」跳过",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2397,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H04",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "动过的节点还留着「核对过不用动」的记号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2673,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H05",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "记号不带库的模型水位（库变了也跳过）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3281,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "4 failed | 330 passed (334)",
+    "failedCount": 4,
+    "failedTests": [
+      "库没再变：下一轮不再为它发请求；库又变了才再问；它自己重新装过（装时的水位变了）也再问",
+      "只有库的模型水位变了（库文件没动，后台追上来了）：也要再问",
+      "只有库文件又前进了（模型水位没动）：也要再问",
+      "上一轮不用动、这一轮库变了它要重载：重载完再点（库没再变）仍然先问一次，问到不用动之后才不问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H06",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "记号不带节点装时的水位（重新装过也跳过）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2718,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "库没再变：下一轮不再为它发请求；库又变了才再问；它自己重新装过（装时的水位变了）也再问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H07",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "合计的新增构件数不去重（各节点相加）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4993,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "4 failed | 330 passed (334)",
+    "failedCount": 4,
+    "failedTests": [
+      "嵌套的两个节点都重载：同一批新构件只算一次",
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少",
+      "后面撤下的是个已删除的节点，它的一个构件早先挪到了先重载的节点名下：同样补一次；真删掉的才算少了",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H08",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "合计的撤下构件数不去重（各节点相加）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2782,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "5 failed | 329 passed (334)",
+    "failedCount": 5,
+    "failedTests": [
+      "一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次",
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少",
+      "嵌套的两个节点：构件只是挪出了里面那个、还在外面那个名下——外面的先重载就补一次；它还在场景里，不算撤下",
+      "后面撤下的是个已删除的节点，它的一个构件早先挪到了先重载的节点名下：同样补一次；真删掉的才算少了",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H09",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "说不出装了什么的撤下不计数",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2745,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H10",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "查空撤下的构件不计入合计",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2904,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "3 failed | 331 passed (334)",
+    "failedCount": 3,
+    "failedTests": [
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计",
+      "只有查空撤下的：那一句不说「已不存在」",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H11",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新装入 SITE 的构件不计入合计",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2896,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 332 passed (334)",
+    "failedCount": 2,
+    "failedTests": [
+      "库文件前进了：查 SITE 名单，后端有模型的新 SITE 装进来、记成已在管，记下找过了",
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H12",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "合计不落到回执里",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2827,
+    "filesLine": "2 failed | 1 passed (3)",
+    "testsLine": "11 failed | 323 passed (334)",
+    "failedCount": 11,
+    "failedTests": [
+      "只核对所在库水位变了的节点；后端说有更新可重载的才重载，说最新的不动",
+      "库里已经没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不去重载",
+      "重载没做成：记进失败，场景不算换过；重载里撤下的构件数算进交代",
+      "库文件前进了：查 SITE 名单，后端有模型的新 SITE 装进来、记成已在管，记下找过了",
+      "一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次",
+      "嵌套的两个节点都重载：同一批新构件只算一次"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H13",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "问在不在场景时不带登记的库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2742,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H14",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "撤下时不带登记的库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2723,
+    "filesLine": "2 failed | 1 passed (3)",
+    "testsLine": "2 failed | 332 passed (334)",
+    "failedCount": 2,
+    "failedTests": [
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问",
+      "后端说库里没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H15",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新 SITE 问装了什么时不带库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2601,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H16",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "节点问装了什么时不带库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2773,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H17",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "给了库号也只按映射查",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2467,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H18",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "给的库号是 0 也照用",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2633,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "给的库号不像话（0、NaN）：当没给，退回原来的口径"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H19",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "isRootInScene 不用给的库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2620,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H20",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "loadedRefnosOf 不用给的库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3030,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H21",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "withdrawRemovedRoot 不用给的库号",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2951,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H22",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "库状态没取到时不去要，直接按不知道登记",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3092,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 332 passed (334)",
+    "failedCount": 2,
+    "failedTests": [
+      "要一份 /dbnums（不等它，装载照常开始），登记时用它回来的水位",
+      "整库都装完了库状态还没回来：最多再等 3 秒，等不到按「不知道」登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H23",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "缓存里有这一行也再要一份",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2818,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 332 passed (334)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "缓存里已经有这一行：不另要"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H24",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "/dbnums 失败拖垮整库显示",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2933,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "/dbnums 没取到、或回来的表里没有这个库：按「不知道」登记，整库显示照常做完"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H25",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "取水位取错库的那一行",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2669,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "/dbnums 没取到、或回来的表里没有这个库：按「不知道」登记，整库显示照常做完"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H26",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "等库状态不设上限",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 22478,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库都装完了库状态还没回来：最多再等 3 秒，等不到按「不知道」登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H27",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "等库状态的上限缩成 0（不等）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2780,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库都装完了库状态还没回来：最多再等 3 秒，等不到按「不知道」登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H28",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "登记的水位不带库文件会话",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2516,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 332 passed (334)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "要一份 /dbnums（不等它，装载照常开始），登记时用它回来的水位"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "H29",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "记号不带库文件会话（只有库文件前进时也跳过）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2902,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 333 passed (334)",
+    "failedCount": 1,
+    "failedTests": [
+      "只有库文件又前进了（模型水位没动）：也要再问"
+    ],
+    "tail": ""
+  }
+]

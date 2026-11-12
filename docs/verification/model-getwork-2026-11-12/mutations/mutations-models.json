@@ -143,7 +143,7 @@
       "id": "G19",
       "file": "src/composables/modelGetWork.ts",
       "note": "落后而没有可换新版的也重载",
-      "find": "      return { kind: 'keep', reason: '后台的模型落后于库文件，屏幕上的没有可换的新版；行上的「更新」可让后端追上' };",
+      "find": "      return { kind: 'keep', reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上' };",
       "replace": "      return { kind: 'reload', note: null };"
     },
     {
@@ -835,8 +835,8 @@
     {
       "id": "M05",
       "file": "src/composables/useModelGeneration.ts",
-      "note": "护栏失效：没有接口也撤",
-      "find": "      if (!facts) return { removed: false, why: '后端没有节点模型状态接口，确认不了它是不是真的没有几何了' };",
+      "note": "护栏失效：服务端没有节点模型状态接口时不问模型树、直接撤",
+      "find": "      if (!facts) return await goneFromLibraryPerTree(root);",
       "replace": "      if (!facts) return { removed: true, why: '' };"
     },
     {
@@ -856,16 +856,16 @@
     {
       "id": "M08",
       "file": "src/composables/useModelGeneration.ts",
-      "note": "别的重载入口也走护栏",
-      "find": "          if (loadOptions?.confirmEmpty === true && !notCollected) {",
-      "replace": "          if (!notCollected) {"
+      "note": "护栏只有取最新发起的重载才过（状态栏、行上的「重载」和重新部署后的重装不过）",
+      "find": "          if (!notCollected) {\n            const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);",
+      "replace": "          if (!notCollected && quiet) {\n            const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);"
     },
     {
       "id": "M09",
       "file": "src/composables/useModelGeneration.ts",
       "note": "记录没收齐也白问一次",
-      "find": "          if (loadOptions?.confirmEmpty === true && !notCollected) {",
-      "replace": "          if (loadOptions?.confirmEmpty === true) {"
+      "find": "          if (!notCollected) {\n            const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);",
+      "replace": "          if (refresh) {\n            const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);"
     },
     {
       "id": "M10",
@@ -885,15 +885,15 @@
       "id": "M12",
       "file": "src/composables/useModelGeneration.ts",
       "note": "没收齐判定漏掉截断",
-      "find": "            || scopeIncomplete.truncated_roots.length > 0\n            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (loadOptions?.confirmEmpty",
-      "replace": "            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (loadOptions?.confirmEmpty"
+      "find": "            || scopeIncomplete.truncated_roots.length > 0\n            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (!notCollected) {",
+      "replace": "            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (!notCollected) {"
     },
     {
       "id": "M13",
       "file": "src/composables/useModelGeneration.ts",
       "note": "没收齐判定漏掉出错",
-      "find": "            || scopeIncomplete.truncated_roots.length > 0\n            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (loadOptions?.confirmEmpty",
-      "replace": "            || scopeIncomplete.truncated_roots.length > 0\n          );\n          if (loadOptions?.confirmEmpty"
+      "find": "            || scopeIncomplete.truncated_roots.length > 0\n            || Object.keys(scopeIncomplete.errors).length > 0\n          );\n          if (!notCollected) {",
+      "replace": "            || scopeIncomplete.truncated_roots.length > 0\n          );\n          if (!notCollected) {"
     },
     {
       "id": "M14",
@@ -1284,7 +1284,7 @@
       "id": "B06",
       "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
       "note": "更新提示不引到取最新",
-      "find": "const noticeTitle = computed(() => `${updateNotice.title.value}\\n要连模型树一起刷新到最新，点右边的「取最新」`);",
+      "find": "const noticeTitle = computed(() => `${updateNotice.title.value}\\n要把模型树和已装的模型一起同步到最新，点右边的「取最新」`);",
       "replace": "const noticeTitle = computed(() => updateNotice.title.value);"
     }
   ]

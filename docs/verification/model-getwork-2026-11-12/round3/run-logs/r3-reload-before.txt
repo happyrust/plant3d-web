@@ -1,0 +1,52 @@
+[16:24:07] 沙箱后端 0.1.44+ge8636c4a636f.1794402358.dirty，监听 [8000]；8000 {"file":1684,"applied":1684,"model":1684,"initialized":true,"excluded":false,"excludedReason":null,"verdict":"in_sync"}；7998 {"file":675,"applied":0,"model":0,"initialized":false,"excluded":true,"excludedReason":"watch_dbnums","verdict":"not_judged"}
+  ✓ [摆法] 后端只监听 8000；7998 没初始化过、不在后端更新范围里 — {"file":675,"applied":0,"model":0,"initialized":false,"excluded":true,"excludedReason":"watch_dbnums","verdict":"not_judged"}
+  ✓ [甲·基线] 装着 Z、Z2：三维和后端对上（24 个实例矩阵逐个对；场景里不许缺、不许多）
+[16:24:13] A1：PIPE 从 Z 挪到 Z2；次序 [Z2, Z]（得到管道的先重载）
+  ✓ [A1] 后端批次追上：库 8000 三枚水位都到 1686 — 数据 14750 ms，模型 15594 ms
+  ✗ [A1] 一次重载两个节点（PIPE 从 Z 挪到 Z2；次序 [Z2, Z]（得到管道的先重载））之后三维和后端对上（15 个实例矩阵逐个对；场景里不许缺、不许多） — 24384_47595：后端 1 个实例，场景里 0 个对象；24384_47596：后端 1 个实例，场景里 0 个对象；24384_47597：后端 1 个实例，场景里 0 个对象；24384_47598：后端 1 个实例，场景里 0 个对象
+[16:24:31] A2：PIPE 挪回 Z；次序 [Z, Z2]（得到管道的先重载）
+  ✓ [A2] 后端批次追上：库 8000 三枚水位都到 1689 — 数据 26096 ms，模型 26920 ms
+  ✗ [A2] 一次重载两个节点（PIPE 挪回 Z；次序 [Z, Z2]（得到管道的先重载））之后三维和后端对上（15 个实例矩阵逐个对；场景里不许缺、不许多） — 24384_47595：后端 1 个实例，场景里 0 个对象；24384_47596：后端 1 个实例，场景里 0 个对象；24384_47597：后端 1 个实例，场景里 0 个对象；24384_47598：后端 1 个实例，场景里 0 个对象
+[16:25:01] A3：设备 EQ-CP 从 Z 挪到 Z2；先点 Z2 那一行的「重载」（得到设备的），再点 Z 那一行
+  ✓ [A3] 后端批次追上：库 8000 三枚水位都到 1692 — 数据 26471 ms，模型 27298 ms
+  ✓ [A3] 两行都出了「重载」 — 文件写完后 53121 ms；行上：{"24384_47463":{"action":"reload","actionLabel":"重载","fill":null,"status":"reloadable"},"24384_47500":{"action":"reload","actionLabel":"重载","fill":null,"status":"reloadable"}}
+  ✗ [A3] 行上逐个点「重载」（设备 EQ-CP 从 Z 挪到 Z2；先点 Z2 那一行的「重载」（得到设备的），再点 Z 那一行）之后三维和后端对上（23 个实例矩阵逐个对；场景里不许缺、不许多） — 24384_47480：后端 1 个实例，场景里 0 个对象
+  ✗ [A3] 再点一次「取最新」之后三维和后端对上（23 个实例矩阵逐个对；场景里不许缺、不许多） — 24384_47480：后端 1 个实例，场景里 0 个对象
+  ✓ [A3] 取最新期间只弹了一条提示，就是最后那句交代 — ["已取最新：模型树挪位置 1。"]
+[16:25:57] A4：EQ-CP 挪回 Z；先点 Z2 那一行（这回是失去设备的），再点 Z 那一行——次序反过来的对照
+  ✓ [A4] 后端批次追上：库 8000 三枚水位都到 1695 — 数据 30163 ms，模型 30991 ms
+  ✓ [A4] 两行都出了「重载」 — 文件写完后 55837 ms；行上：{"24384_47463":{"action":"reload","actionLabel":"重载","fill":null,"status":"reloadable"},"24384_47500":{"action":"reload","actionLabel":"重载","fill":null,"status":"reloadable"}}
+  ✓ [A4] 行上逐个点「重载」（EQ-CP 挪回 Z；先点 Z2 那一行（这回是失去设备的），再点 Z 那一行——次序反过来的对照）之后三维和后端对上（24 个实例矩阵逐个对；场景里不许缺、不许多）
+  ✓ [B1·基线] 单独装着 EQ-RN、EQ-CASE：三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）
+  ✓ [B2·基线] 单独装着 EQ-RN、EQ-CASE：三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）
+  ✓ [B3·基线] 单独装着 EQ-RN、EQ-CASE：三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）
+[16:27:03] 乙：会话 1696–1698，BOX /AIOS-SUITE-T3-BOX-CASE 从 EQ-CASE 挪到 EQ-RN
+  ✓ [乙] 后端批次追上：库 8000 三枚水位都到 1698 — 数据 23724 ms，模型 24544 ms
+  ✓ [B1] 状态栏出了「数据已更新」的提示，带「重载」和「忽略」 — 库 8000 已更新到会话 1696→1698（改 4 项，场景内 2 根受影响）｜重载名单 ["24384_47468","24384_47470"]
+  ✗ [B1] 窗口宽 1600：底部提示条正显示着，「重载」「忽略」「取最新」都点得到，提示条没有压在状态栏上 — 提示条 [{"left":464,"right":1136,"top":904,"bottom":992}] 状态栏 {"left":0,"right":1600,"top":972,"bottom":1000} 重载 {"rect":{"left":712,"right":734,"top":978,"bottom":995},"covered":true,"clickable":false} 忽略 {"rect":{"left":738,"right":748,"top":978,"bottom":995},"covered":true,"clickable":false} 取最新 {"rect":{"left":1529,"right":1592,"top":977,"bottom":997},"covered":false,"clickable":true}
+  ✗ [B1] 窗口宽 1280：底部提示条正显示着，「重载」「忽略」「取最新」都点得到，提示条没有压在状态栏上 — 提示条 [{"left":304,"right":976,"top":704,"bottom":792}] 状态栏 {"left":0,"right":1600,"top":772,"bottom":800} 重载 {"rect":{"left":712,"right":734,"top":778,"bottom":795},"covered":true,"clickable":false} 忽略 {"rect":{"left":738,"right":748,"top":778,"bottom":795},"covered":true,"clickable":false} 取最新 {"rect":{"left":1529,"right":1592,"top":777,"bottom":797},"covered":false,"clickable":false}
+  ✗ [B1] 点提示上的「重载」（重载名单的次序 ["24384_47468","24384_47470"]）之后三维和后端对上（1 个实例矩阵逐个对；场景里不许缺、不许多） — 24384_47471：后端 1 个实例，场景里 0 个对象
+  ✗ [B1] BOX-CASE 在场景里（它现在在 EQ-RN 名下） — 场景里 BOX-CASE 的对象 0 个
+  ✗ [B2] 一次重载两台设备（得到 BOX 的 EQ-RN 先重载）之后三维和后端对上（1 个实例矩阵逐个对；场景里不许缺、不许多） — 24384_47471：后端 1 个实例，场景里 0 个对象
+  ✗ [B2] BOX-CASE 在场景里（它现在在 EQ-RN 名下） — 场景里 BOX-CASE 的对象 0 个
+  ✓ [B3] 一次重载两台设备（失去 BOX 的 EQ-CASE 先重载（对照））之后三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）
+  ✓ [B3] BOX-CASE 在场景里（它现在在 EQ-RN 名下） — 场景里 BOX-CASE 的对象 1 个
+[16:27:38] 丙：node/versions（8000 库此刻在会话 1698，共这么多个会话；since_sesno=1695）
+    ZONE Z，库前进之后头一次问（scope=subtree）：46966 ms {"status":200,"versions":1,"sesnos":[1697],"meta":{"dbnum":8000,"refno":"24384/47463","noun":"ZONE","scope":"subtree","unit_root":null,"unit_noun":null,"file_latest_sesno":1698,"truncated":false,"cached":false,"elapsed_m
+    ZONE Z，紧接着再问一次：14 ms {"status":200,"versions":1,"sesnos":[1697],"meta":{"dbnum":8000,"refno":"24384/47463","noun":"ZONE","scope":"subtree","unit_root":null,"unit_noun":null,"file_latest_sesno":1698,"truncated":false,"cached":true,"elapsed_ms
+    ZONE Z2，头一次问（另一个节点）：20952 ms {"status":200,"versions":0,"sesnos":[],"meta":{"dbnum":8000,"refno":"24384/47500","noun":"ZONE","scope":"subtree","unit_root":null,"unit_noun":null,"file_latest_sesno":1698,"truncated":false,"cached":false,"elapsed_ms":2
+    ZONE Z2，再问一次：15 ms {"status":200,"versions":0,"sesnos":[],"meta":{"dbnum":8000,"refno":"24384/47500","noun":"ZONE","scope":"subtree","unit_root":null,"unit_noun":null,"file_latest_sesno":1698,"truncated":false,"cached":true,"elapsed_ms":20
+    设备 EQ-CP，头一次问（scope=self）：13542 ms {"status":200,"versions":0,"sesnos":[],"meta":{"dbnum":8000,"refno":"24384/47479","noun":"EQUI","scope":"self","unit_root":"24384/47479","unit_noun":"EQUI","file_latest_sesno":1698,"truncated":false,"cached":false,"elaps
+    SITE，头一次问——问到 2 秒客户端就取消：2012 ms {"aborted":true,"error":"This operation was aborted"}
+    SITE，取消之后立刻再问（看后端取消之后还算不算、算完留不留）：26438 ms {"status":200,"versions":1,"sesnos":[1697],"meta":{"dbnum":8000,"refno":"24384/47462","noun":"SITE","scope":"subtree","unit_root":null,"unit_noun":null,"file_latest_sesno":1698,"truncated":false,"cached":false,"elapsed_m
+    SITE，再问一次：15 ms {"status":200,"versions":1,"sesnos":[1697],"meta":{"dbnum":8000,"refno":"24384/47462","noun":"SITE","scope":"subtree","unit_root":null,"unit_noun":null,"file_latest_sesno":1698,"truncated":false,"cached":true,"elapsed_ms
+[16:29:30] D0：点眼睛装 7998 的 ZONE（沙箱后端按需生成）
+  ✓ [D0] 7998 的 ZONE 装上了：后端按需生成了它的模型，场景里有那个 BOX — 场景里 BOX 1 个对象；后端记录 1 条；生成请求 {"/api/v1/model/generate":1}；装之前后端说它 not_generated
+[16:29:31] D1：重起沙箱后端（监听名单不变）
+  ✓ [D1] 后端重起了；按需生成的模型没了：7998 那个 ZONE 的记录查空且收齐，后端说它没生成 — 记录 0 条 complete=true；节点模型状态 {"status":200,"verdict":"not_generated","reason":null,"units":{"total":1,"generated":0,"missing":1,"failed":0,"lagging":0,"exact":true},"code":null}
+  ✗ [D1] 经原有的「重载」（状态栏的重载、重新部署后的重装派发的那个事件）：查空没有当成已删除，BOX 还在场景里、节点还算装着 — 场景里 BOX 0 个对象；已加载节点表 null
+  ✗ [D1] 给人的提示没有说它「已删除」「已从场景撤下」，说的是没有当成已删除 — ["[info] [提示] 24382_1911 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下"]
+  ✓ [护栏] 页面没有一个请求发往 8022 / 8009 — 发往沙箱后端 387 个请求
+  ✓ [护栏] 页面对沙箱后端只发了 GET 和三种只读 POST；多放行的只有丁那一页的 model/generate（发给沙箱后端） — 只读 POST {"/api/v1/element/attributes":12,"/api/v1/model/records":26,"/api/v1/meshes/batch":17}；多放行 {"丁":{"/api/v1/model/generate":1}}
+[16:29:46] before：共 33 项，过 21，没过 12
+r3-reload before 退出码 1

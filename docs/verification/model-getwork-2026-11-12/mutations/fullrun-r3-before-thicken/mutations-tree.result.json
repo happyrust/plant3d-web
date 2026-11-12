@@ -1,0 +1,1070 @@
+[
+  {
+    "id": "T01",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "认不出树接口的 404（已删节点）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2315,
+    "filesLine": "2 failed (2)",
+    "testsLine": "4 failed | 29 passed (33)",
+    "failedCount": 4,
+    "failedTests": [
+      "认得 gen-model 对已删节点的 404（2026-11-12 现网原话），别的失败不算",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着",
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置",
+      "先新增一台设备（任务 …-123321-000006），再删掉（…-124322-000008）：每次点取最新树都跟上"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T02",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "没取过子节点的层也对账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2449,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "子节点没取过的层不对账：给了答复也不理（没取过的层不白取）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T03",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "没取到的层不记进回执",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2568,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "一层没取到（网络错）：这一层保持原样，记进回执，不当成子节点都没了",
+      "一层断网没取到：那一层保持原样、记进回执，别的层照常对账"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T04",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "自己那一层回 404 的节点不记",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2785,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T05",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "新节点不继承父节点的未勾选",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2792,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "新节点的勾选态继承父节点：父节点未勾选 → 未勾选并回放隐藏；否则勾选并回放显示",
+      "父节点是隐藏的：新来的子节点也隐藏，回放到场景"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T06",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "不忽略把自己列进子节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2558,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "后端把父节点自己也列进子节点：忽略，不造环"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T07",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "同一层里重复的子节点不去重",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2672,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "后端把父节点自己也列进子节点：忽略，不造环"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T08",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "二级成员也改主位置",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2381,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "分组新收录一个已在主位置的元素：不改它的主位置，经由的 GPITEM 记在分组上；撤出收录时主位置那一行还在",
+      "分组新收录了一个已在树上的元素：取最新之后隐藏这个元素，分组的勾选态跟着变（两处父节点都记上了）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T09",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "新的二级成员把分组当主位置",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2358,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "分组新收录一个树上还没有的元素：进树、挂在分组下，但分组不是它的主位置"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T10",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "类型变了不算改名",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2705,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "类型变了（同一个 refno 换了 noun）也算改名那一类"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T11",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "已有节点的名字不更新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2411,
+    "filesLine": "2 failed (2)",
+    "testsLine": "4 failed | 29 passed (33)",
+    "failedCount": 4,
+    "failedTests": [
+      "一轮对完：新增的进树、删掉的撤掉、改名的换名字、挪位置的到新父节点下，回执逐项说清",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着",
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置",
+      "一层断网没取到：那一层保持原样、记进回执，别的层照常对账"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T12",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "子节点数不跟着服务端",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2745,
+    "filesLine": "2 failed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "一轮对完：新增的进树、删掉的撤掉、改名的换名字、挪位置的到新父节点下，回执逐项说清",
+      "挪到了树上还没展开的位置：从树上撤掉（下落先记不知道，等着去问）；它的状态一起清",
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T13",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "不再是成员的节点不解除视图父节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2992,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "分组新收录一个已在主位置的元素：不改它的主位置，经由的 GPITEM 记在分组上；撤出收录时主位置那一行还在"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T14",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "子节点表变了不重算勾选聚合",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2767,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "同一层里只是顺序变了：按服务端的顺序排，算有变化",
+      "删掉唯一没勾的子节点：父节点从半选回到勾选，并沿祖先上推"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T15",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "分组的成员经由表不重建",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2720,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "分组新收录一个已在主位置的元素：不改它的主位置，经由的 GPITEM 记在分组上；撤出收录时主位置那一行还在"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T16",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "解析不到的成员数不更新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2982,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "解析不到的成员数、存储视图的提示跟着这一次的答复走"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T17",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "挪走而旧层没取到时不从旧位置拿掉",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2548,
+    "filesLine": "2 failed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "一层没取到（网络错）：这一层保持原样，记进回执，不当成子节点都没了",
+      "挪走了、而旧位置那一层这一轮没取到：从旧位置的子节点表里拿掉，不在两处都出行",
+      "一层断网没取到：那一层保持原样、记进回执，别的层照常对账"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T18",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "走不到的节点不撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2561,
+    "filesLine": "2 failed (2)",
+    "testsLine": "9 failed | 24 passed (33)",
+    "failedCount": 9,
+    "failedTests": [
+      "一轮对完：新增的进树、删掉的撤掉、改名的换名字、挪位置的到新父节点下，回执逐项说清",
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "一层的子节点删光了：父节点自己的勾选态留着（不被空表聚合成半选）",
+      "挪到了树上还没展开的位置：从树上撤掉（下落先记不知道，等着去问）；它的状态一起清",
+      "对账之前就挂不到根上的节点（历史遗留的孤儿）：悄悄清掉，不算这一轮删的",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T19",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "历史遗留的孤儿也算这一轮删的",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2833,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "对账之前就挂不到根上的节点（历史遗留的孤儿）：悄悄清掉，不算这一轮删的"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T20",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "被删节点的勾选态不清",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2685,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T21",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "被删节点的子节点数不清",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2375,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T22",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "被删节点的视图父节点记录不清",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2524,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "对账之前就挂不到根上的节点（历史遗留的孤儿）：悄悄清掉，不算这一轮删的"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T23",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "被删节点还记着取过子节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2518,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T24",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "被删节点还记着展开",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2473,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T25",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "被删节点还留在选中里",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2439,
+    "filesLine": "2 failed (2)",
+    "testsLine": "4 failed | 29 passed (33)",
+    "failedCount": 4,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "挪到了树上还没展开的位置：从树上撤掉（下落先记不知道，等着去问）；它的状态一起清",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着",
+      "先新增一台设备（任务 …-123321-000006），再删掉（…-124322-000008）：每次点取最新树都跟上"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T26",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "回执把一起消失的后代也逐个列出来",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2686,
+    "filesLine": "2 failed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着",
+      "先新增一台设备（任务 …-123321-000006），再删掉（…-124322-000008）：每次点取最新树都跟上"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T27",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "自己那一层回 404 的不直接定为已删除",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2753,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T28",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "子节点删光也按空表聚合",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2587,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "一层的子节点删光了：父节点自己的勾选态留着（不被空表聚合成半选）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T29",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "勾选聚合不沿祖先上推",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2823,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "删掉唯一没勾的子节点：父节点从半选回到勾选，并沿祖先上推"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T30",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "已被撤掉的层的失败也算进回执",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2451,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "展开、勾选、选中：还在的节点原样留着；被删节点的展开、选中、勾选、子节点数、取过子节点的标记都清掉",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T31",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "回执恒说没有变化",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2439,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "一轮对完：新增的进树、删掉的撤掉、改名的换名字、挪位置的到新父节点下，回执逐项说清",
+      "同一层里只是顺序变了：按服务端的顺序排，算有变化"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T32",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "只是顺序变了不算有变化",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2516,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "同一层里只是顺序变了：按服务端的顺序排，算有变化"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T33",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "取层不设并发上限",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2390,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "同时在飞的请求不超过上限；重复的层只取一次；抛错的层按没取到记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T34",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "取层抛错不接住",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2447,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "同时在飞的请求不超过上限；重复的层只取一次；抛错的层按没取到记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T35",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "重复的层取多次",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2320,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "同时在飞的请求不超过上限；重复的层只取一次；抛错的层按没取到记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T36",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "问下落不设上限",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2603,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "超过上限的不问、留着不知道；问的时候抛错也是不知道"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T37",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "下落判反",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2614,
+    "filesLine": "2 failed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "没定下落的去问：还在 = 挪到了没展开的位置，没有了 = 已删除，没问到 = 不知道；已经定了的不再问",
+      "超过上限的不问、留着不知道；问的时候抛错也是不知道",
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T38",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "已定下落的也再问",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2639,
+    "filesLine": "2 failed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "没定下落的去问：还在 = 挪到了没展开的位置，没有了 = 已删除，没问到 = 不知道；已经定了的不再问",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T39",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "问下落抛错不当不知道",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2387,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "超过上限的不问、留着不知道；问的时候抛错也是不知道"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T40",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "这一轮才进树的节点也算挪位置",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2805,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "新元素同一轮里先在分组下出现、再在主位置出现：只算新增一次，不算挪位置，主位置是真正的父节点"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T41",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "挪位置不改父节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2865,
+    "filesLine": "2 failed (2)",
+    "testsLine": "4 failed | 29 passed (33)",
+    "failedCount": 4,
+    "failedTests": [
+      "一轮对完：新增的进树、删掉的撤掉、改名的换名字、挪位置的到新父节点下，回执逐项说清",
+      "挪走了、而旧位置那一层这一轮没取到：从旧位置的子节点表里拿掉，不在两处都出行",
+      "新元素同一轮里先在分组下出现、再在主位置出现：只算新增一次，不算挪位置，主位置是真正的父节点",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "T42",
+    "file": "src/composables/pdmsTreeRefresh.ts",
+    "note": "新节点不记勾选态、不回放可见性",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2853,
+    "filesLine": "2 failed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "新节点的勾选态继承父节点：父节点未勾选 → 未勾选并回放隐藏；否则勾选并回放显示",
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着",
+      "父节点是隐藏的：新来的子节点也隐藏，回放到场景"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W01",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "取最新不清根名单的缓存",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2648,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "根那一层：新增的 SITE 出现、删掉的 SITE 消失（根名单有 60 秒缓存，取最新要绕开它）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W02",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "取层时认不出 404",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3005,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W03",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "被删节点不从树的选中里清掉",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2587,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "2 failed | 31 passed (33)",
+    "failedCount": 2,
+    "failedTests": [
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着",
+      "先新增一台设备（任务 …-123321-000006），再删掉（…-124322-000008）：每次点取最新树都跟上"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W04",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "被删节点的展开记录不写回",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2733,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W05",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "取过子节点的标记不写回",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3044,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "后台没变：点取最新树上一行不动，回执说没有变化",
+      "一层断网没取到：那一层保持原样、记进回执，别的层照常对账",
+      "同时点两下：只跑一轮，两次拿到同一份回执"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W06",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "新节点的显示不回放到场景",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2581,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "别人保存之后点取最新：新增的出现、删掉的消失、改名生效、挪位置到新父节点下；展开、勾选、选中留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W07",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "新节点的隐藏不回放到场景",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2522,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "父节点是隐藏的：新来的子节点也隐藏，回放到场景"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W08",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "祖先链查得到也当成没有了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2456,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W09",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "同时点两下各跑一轮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2554,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "同时点两下：只跑一轮，两次拿到同一份回执"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W10",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "可见构件缓存不清",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2660,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "「这个节点下有哪些带几何的构件」的缓存跟着清掉：取最新之后再选中没展开的节点会重新问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W11",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "视图父节点表不写回",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2615,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "分组新收录了一个已在树上的元素：取最新之后隐藏这个元素，分组的勾选态跟着变（两处父节点都记上了）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W12",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "祖先链 404 不当成已删除",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2685,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W13",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "跑完不放开，下一次点还是旧的那一轮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2657,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "3 failed | 30 passed (33)",
+    "failedCount": 3,
+    "failedTests": [
+      "一层断网没取到：那一层保持原样、记进回执，别的层照常对账",
+      "同时点两下：只跑一轮，两次拿到同一份回执",
+      "先新增一台设备（任务 …-123321-000006），再删掉（…-124322-000008）：每次点取最新树都跟上"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W14",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "勾选态不写回",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2688,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "父节点是隐藏的：新来的子节点也隐藏，回放到场景"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "W15",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "子节点数不写回",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2406,
+    "filesLine": "1 failed | 1 passed (2)",
+    "testsLine": "1 failed | 32 passed (33)",
+    "failedCount": 1,
+    "failedTests": [
+      "消失的节点自己那一层没取过：去问一次祖先链——库里没有了是已删除，还在是挪到了没展开的位置"
+    ],
+    "tail": ""
+  }
+]
