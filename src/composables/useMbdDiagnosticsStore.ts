@@ -38,6 +38,12 @@ export type MbdDiagnosticsSourceSnapshot = Readonly<{
   /** 该包的归属对象（契约 `subject`）；`null` = 负载没声明，装载失败的包缺省。 */
   subject?: Readonly<{ refno: string; noun: string }> | null;
   /**
+   * 空包（票 134）：取数、契约、映射都过了，负载里一个图元都没有。按负载判，不按提交的记录数——`mbd_kinds` 把记录滤光
+   * 不算空包；装载失败的包是 `false`。面板据它在标题下写「为什么没有标注」。缺省 = 调用方没说（旧调用方、测试替身），
+   * 面板不猜。
+   */
+  empty?: boolean;
+  /**
    * 该包通道级装载失败原因（API 传输、契约错误或单包原子拒绝）；成功时为 null。
    * 逐包拒绝（2026-11-02）下一包失败只记在这里，不掀翻其它包。
    */

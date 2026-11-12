@@ -24,6 +24,7 @@ import {
   mbdDroppedPrimitivesHeadline,
   summarizeMbdDroppedPrimitives,
 } from './mbdDroppedPrimitives';
+import { summarizeMbdEmptyReasons } from './mbdEmptyReasons';
 import {
   groupMbdRecordsByFunction,
   mbdFunctionGroupVisibility,
@@ -499,6 +500,12 @@ const visibleDroppedPrimitives = computed(() => {
 watch(() => mbdDiagnostics.value.sourceId, () => {
   droppedPrimitivesExpanded.value = false;
 });
+
+/**
+ * 票 134（#103）：空包（被接受、一个图元都没有）时写在标题下的「为什么没有标注」（挑哪一两条、中文怎么说在
+ * `mbdEmptyReasons.ts`）。只读诊断快照里同步层标的 `empty`：有图元的包、装载失败的包都不出；换对象或清空来源时跟着换。
+ */
+const emptyReasons = computed(() => summarizeMbdEmptyReasons(mbdDiagnostics.value));
 
 function locateIssueRefno(refno: string): void {
   window.dispatchEvent(new CustomEvent('showModelByRefnos', {
@@ -1069,6 +1076,36 @@ function act(
             ×
           </button>
         </span>
+      </div>
+      <!--
+        票 134：空包时直接在标题下写为什么没有标注——不用展开诊断区、不用读英文。
+        - 每个空包一行：头一句是「为什么空」，至多再跟一句细节（另起一行、颜色淡一档）；多个对象同屏时点名是哪个。
+        - 后端没给原因的另用一种写法和标记，不和带原因的混在一起。
+        - 原文、PML 行号和其余的细节仍在下面的「MBD 诊断」里。
+      -->
+      <div v-if="emptyReasons"
+        class="mt-1"
+        role="status"
+        data-testid="mbd-empty-reasons">
+        <div v-for="entry in emptyReasons.sources"
+          :key="entry.refno"
+          class="mt-1 break-words"
+          data-testid="mbd-empty-reason"
+          :data-refno="entry.refno"
+          :data-reason="entry.lines.length > 0 ? 'given' : 'none'">
+          <span class="font-semibold">{{ emptyReasons.multiSource ? `${entry.refno} 没有标注：` : '没有标注：' }}</span>
+          <template v-if="entry.lines.length > 0">
+            <span v-for="(line, index) in entry.lines"
+              :key="line.issueId"
+              :class="index > 0 ? 'block text-slate-500' : ''"
+              data-testid="mbd-empty-reason-line"
+              :data-rule-id="line.ruleId ?? ''"
+              :data-origin="line.origin">{{ line.text }}</span>
+          </template>
+          <span v-else
+            class="italic text-slate-500"
+            data-testid="mbd-empty-reason-none">后端没有给出原因。</span>
+        </div>
       </div>
     </div>
     <div class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"

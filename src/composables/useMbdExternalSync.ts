@@ -92,7 +92,7 @@ type MbdSourceLoadOutcome = MbdDiagnosticsSourceSnapshot & Readonly<{
   records: readonly ExternalDimensionRecord[];
   /**
    * 空包：取数、契约、映射都过了，负载里一个图元都没有（真实库里 7059 个归属对象有 261 个）。
-   * 按负载判，不按提交的记录数——`mbd_kinds` 把记录滤光不算空包。
+   * 按负载判，不按提交的记录数——`mbd_kinds` 把记录滤光不算空包。这里必给；随逐包快照写进诊断（票 134）。
    */
   empty: boolean;
 }>;
@@ -427,8 +427,9 @@ export function createMbdExternalSync(
       const results = outcomes as readonly MbdSourceLoadOutcome[];
 
       const allRecords = results.flatMap(result => result.records);
+      // `empty` 随逐包快照带出去（票 134）：尺寸面板据它在标题下写「为什么没有标注」。
       const sources: MbdDiagnosticsSourceSnapshot[] = results.map(
-        ({ records: _records, empty: _empty, ...source }) => source,
+        ({ records: _records, ...source }) => source,
       );
       const failed = sources.filter(source => source.loadError !== null);
 

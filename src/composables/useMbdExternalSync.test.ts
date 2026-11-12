@@ -1045,7 +1045,8 @@ describe('createMbdExternalSync', () => {
     const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(diagnostics.loadError).toBeUndefined();
     expect(diagnostics.notes).toEqual(['本对象没有可显示的标注：后端返回 0 个图元，也没有给出原因']);
-    expect(diagnostics.sources[0]).not.toHaveProperty('empty');
+    // 票 134：「这一包是空包」要带进逐包快照——尺寸面板据它在标题下写「为什么没有标注」。
+    expect(diagnostics.sources[0]).toHaveProperty('empty', true);
   });
 
   it('points an empty package with issues at the diagnostics and keeps the error toast last', async () => {
@@ -1099,6 +1100,10 @@ describe('createMbdExternalSync', () => {
     // 有图元的那一包照常提交。
     expect(target.replaceExternalSource.mock.calls[0]![1].map((record: { id: string }) => record.id))
       .toEqual(['A:dim-1']);
+    // 逐包快照里写明各包是不是空包（票 134）：按负载判，有图元的那一包是 false。
+    expect((diagnostics.set as ReturnType<typeof vi.fn>).mock.calls[0]![0].sources
+      .map((entry: { refno: string; empty?: boolean }) => [entry.refno, entry.empty]))
+      .toEqual([['A', false], ['B', true], ['C', true], ['D', true], ['E', true]]);
 
     // 换了一组：重新提示。
     search = '?mbd_refno=A,B';
