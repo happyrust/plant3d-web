@@ -1,6 +1,6 @@
 /**
  * 「取最新」的协调（`modelGetWork`）：按库对账、两轮不并发、装载中排队、等后台的上限、后端重启后的护栏、
- * 不在监听范围的库的交代。端口全是假的；`/dbnums` 的行照 2026-11-12 现网的回执（8022，去掉了文件路径）。
+ * 不在后端更新范围的库的交代。端口全是假的；`/dbnums` 的行照 2026-11-12 现网的回执（8022，去掉了文件路径）。
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -29,25 +29,25 @@ import type { TreeRefreshReport } from '@/composables/pdmsTreeRefresh';
 
 // ---------- 现网 `/dbnums` 的四种行（2026-11-12 03:22，`.scratch/incremental-sync/dbnums-0330.json`） ----------
 
-/** 监听范围内、三枚水位对齐 */
+/** 后端更新范围内、三枚水位对齐 */
 const ROW_8000 = {
   dbnum: 8000, db_type: 'DESI', file_latest_sesno: 1155, not_in_project: false, applied_sesno: 1155, initialized: true,
   model_sesno: 1155, model_sesno_time: '2026-11-11T04:50:07+00:00', model_verdict: 'in_sync', model_verdict_reason: null,
   excluded: false, excluded_reason: null, model_source: 'database', model_source_reason: null,
 } as unknown as DbnumRow;
-/** 不在监听范围、已初始化、库文件比已入库的新 10 个会话 */
+/** 不在后端更新范围、已初始化、库文件比已入库的新 10 个会话 */
 const ROW_1112 = {
   dbnum: 1112, db_type: 'DESI', file_latest_sesno: 748, not_in_project: false, applied_sesno: 738, initialized: true,
   model_sesno: 738, model_sesno_time: '2026-09-23T07:19:54+00:00', model_verdict: 'in_sync', model_verdict_reason: null,
   excluded: true, excluded_reason: 'watch_dbnums', model_source: 'database', model_source_reason: null,
 } as unknown as DbnumRow;
-/** 不在监听范围、未初始化：模型按需生成、只在后端内存里 */
+/** 不在后端更新范围、未初始化：模型按需生成、只在后端内存里 */
 const ROW_7009 = {
   dbnum: 7009, db_type: 'DESI', file_latest_sesno: 479, not_in_project: false, applied_sesno: 0, initialized: false,
   model_sesno: 0, model_sesno_time: null, model_verdict: 'not_judged', model_verdict_reason: 'data_watermark_unestablished',
   excluded: true, excluded_reason: 'watch_dbnums', model_source: 'memory', model_source_reason: 'data_watermark_unestablished',
 } as unknown as DbnumRow;
-/** 不在监听范围、已初始化、水位相等 */
+/** 不在后端更新范围、已初始化、水位相等 */
 const ROW_7334 = {
   dbnum: 7334, db_type: 'DESI', file_latest_sesno: 312, not_in_project: false, applied_sesno: 312, initialized: true,
   model_sesno: 312, model_sesno_time: '2026-09-20T02:09:56+00:00', model_verdict: 'in_sync', model_verdict_reason: null,
@@ -459,7 +459,7 @@ describe('取最新：正在装载或生成时不打断', () => {
   });
 });
 
-describe('取最新：监听范围内的库后台还没做完', () => {
+describe('取最新：后端更新范围内的库后台还没做完', () => {
   it('库文件已前进、后台那一批还没做完：等它做完再一起换（进度里说在等谁）', async () => {
     let fetches = 0;
     const world = makeWorld({
@@ -500,7 +500,7 @@ describe('取最新：监听范围内的库后台还没做完', () => {
     expect(report.level).toBe('warning');
   });
 
-  it('不在监听范围的库不等（后台不会去追）；等的时候某一拍库状态没取到，接着等', async () => {
+  it('不在后端更新范围的库不等（后台不会去追）；等的时候某一拍库状态没取到，接着等', async () => {
     const outOfScope = makeWorld({ rows: [ROW_1112], roots: [root('17496_9', { dbnum: 1112, loadedModelSesno: 738, loadedFileLatestSesno: 748 })] });
     const first = await harness(outOfScope).engine.getLatest();
     expect(first.waited).toBeNull();
@@ -518,7 +518,7 @@ describe('取最新：监听范围内的库后台还没做完', () => {
     expect(second.waited?.timedOut).toEqual([]);
   });
 
-  it('libraryWaitsForBackend：监听范围内文件领先 / 模型落后 / 正在写才等', () => {
+  it('libraryWaitsForBackend：后端更新范围内库文件领先 / 模型没跟上数据 / 正在写才等', () => {
     expect(libraryWaitsForBackend(ROW_8000)).toBe(false);
     expect(libraryWaitsForBackend(ROW_8000_FILE_1146)).toBe(true);
     expect(libraryWaitsForBackend(row(ROW_8000, { model_verdict: 'lagging' }))).toBe(true);
@@ -611,11 +611,11 @@ describe('取最新：后端重启之后的护栏', () => {
     const node = root(SITE);
     const lagging = status('lagging');
     expect(decideRootAction(node, { status: lagging, gone: false }, { restarted: false })).toEqual({
-      kind: 'keep', reason: expect.stringContaining('没有可换的新版'),
+      kind: 'keep', reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上',
     });
     const withReloadable = status('lagging', { reloadableSessions: [{ sesno: 1146, time: null, unitsChanged: 1 }] });
     expect(decideRootAction(node, { status: withReloadable, gone: false }, { restarted: false })).toEqual({
-      kind: 'reload', note: expect.stringContaining('落后于库文件'),
+      kind: 'reload', note: '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上',
     });
   });
 
@@ -882,7 +882,7 @@ describe('取最新：选中的构件与派生物', () => {
 });
 
 describe('取最新：哪些库没能跟到最新', () => {
-  it('不在监听范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告', async () => {
+  it('不在后端更新范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告', async () => {
     const world = makeWorld({
       rows: [ROW_1112, ROW_7009, ROW_7334, ROW_8000],
       tree: { touched: [1112, 7009, 7334, 8000], report: () => treeReport() },
@@ -891,10 +891,10 @@ describe('取最新：哪些库没能跟到最新', () => {
     expect(report.libraries).toEqual([{
       dbnum: 1112,
       kind: 'out_of_scope',
-      text: '库 1112 不在后台的监听范围里：模型停在会话 738，库文件已到 748（树已是最新，模型不会自动跟上）',
+      text: '库 1112 不在后端更新范围里：模型停在会话 738，库文件已到 748（树已是最新，模型不会自动跟上）',
     }]);
     expect(report.summary).toBe(
-      '已是最新：模型树和已装的模型都没有变化（核对了 3 层树）。没跟到最新：库 1112 不在后台的监听范围里：模型停在会话 738，库文件已到 748（树已是最新，模型不会自动跟上）。',
+      '已是最新：模型树和已装的模型都没有变化（核对了 3 层树）。没跟到最新：库 1112 不在后端更新范围里：模型停在会话 738，库文件已到 748（树已是最新，模型不会自动跟上）。',
     );
     expect(report.level).toBe('info');
   });
@@ -910,16 +910,25 @@ describe('取最新：哪些库没能跟到最新', () => {
     expect(describeLibraryGap(7334, ROW_7334)).toBeNull();
     // 未初始化、按需生成：没有库一级的模型水位，落不落后在节点那里说
     expect(describeLibraryGap(7009, ROW_7009)).toBeNull();
-    expect(describeLibraryGap(1112, ROW_1112)?.kind).toBe('out_of_scope');
+    expect(describeLibraryGap(1112, ROW_1112)).toEqual({
+      dbnum: 1112, kind: 'out_of_scope', text: '库 1112 不在后端更新范围里：模型停在会话 738，库文件已到 748（树已是最新，模型不会自动跟上）',
+    });
     expect(describeLibraryGap(8000, ROW_8000_FILE_1146)).toEqual({
       dbnum: 8000, kind: 'backend_behind', text: '库 8000 后台还没跟上：数据入库到会话 1143，库文件已到 1146',
     });
     expect(describeLibraryGap(8000, row(ROW_8000, { model_verdict: 'lagging', model_sesno: 1150 }))).toEqual({
       dbnum: 8000, kind: 'backend_behind', text: '库 8000 后台的模型还没跟上：模型在会话 1150，数据已到 1155',
     });
-    expect(describeLibraryGap(8000, row(ROW_8000, { model_source_reason: 'initialization_publishing' }))?.kind).toBe('updating');
-    expect(describeLibraryGap(8000, row(ROW_8000, { blocked: true }))?.kind).toBe('blocked');
-    expect(describeLibraryGap(8000, row(ROW_8000, { model_verdict: 'not_judged', model_sesno: 1160 }))?.kind).toBe('unknown');
+    expect(describeLibraryGap(8000, row(ROW_8000, { model_source_reason: 'initialization_publishing' }))).toEqual({
+      dbnum: 8000, kind: 'updating', text: '库 8000 后台还在更新（模型在会话 1155，库文件已到 1155）',
+    });
+    expect(describeLibraryGap(8000, row(ROW_8000, { blocked: true }))).toEqual({
+      dbnum: 8000, kind: 'blocked', text: '库 8000 被后台阻断，不会更新（模型在会话 1155，库文件已到 1155）',
+    });
+    // 「水位」不单说：是哪三枚写出来
+    expect(describeLibraryGap(8000, row(ROW_8000, { model_verdict: 'not_judged', model_sesno: 1160 }))).toEqual({
+      dbnum: 8000, kind: 'unknown', text: '库 8000 的三枚水位（库文件最新会话、数据入库到的会话、模型生成所按的会话）对不上，新旧判不了',
+    });
     expect(describeLibraryGap(9999, null)).toEqual({ dbnum: 9999, kind: 'unknown', text: '库 9999 的状态没取到，新旧不知道' });
   });
 });
@@ -1067,7 +1076,7 @@ describe('取最新：补几处边角', () => {
     const world = makeWorld({ roots: [root(SITE)], statuses: { [SITE]: { status: lagging, gone: false } } });
     const report = await harness(world).engine.getLatest();
     expect(report.models.reloaded.map((item) => item.refno)).toEqual([SITE]);
-    expect(report.models.kept).toEqual([{ refno: SITE, reason: expect.stringContaining('落后于库文件') }]);
+    expect(report.models.kept).toEqual([{ refno: SITE, reason: '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上' }]);
   });
 
   it('整库显示的库从没找过新 SITE（当时没读到库文件的会话）：库文件没变也要找一次', async () => {

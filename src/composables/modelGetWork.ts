@@ -3,15 +3,15 @@
  * 已装的三维模型换成后台现在的那一版、跟着模型走的东西不留旧状态，最后给一句交代。
  *
  * 这一期（2026-11-12 用户定：做法 A，只有手动按钮）的边界：
- * - 只读：不调用 `update/execute`、节点更新、生成这类让后端开工的接口。后台模型落后于库文件的库 / 节点不动，
+ * - 只读：不调用 `update/execute`、节点更新、生成这类让后端开工的接口。后台的模型没跟上库文件的库、落后的节点不动，
  *   在交代里点明（行上的「更新」「生成」照旧可用）；
  * - 只有按钮会叫它。引擎写成「谁都可以叫它对一次账」，推送、轮询、标签页回前台这些自动触发这一期都不接。
  *
- * 一轮的顺序（固定）：等正在进行的装载 / 生成结束 → 核对后台（`/health` 认重启、`/dbnums` 取水位）→
- * 监听范围内还没做完的库有上限地等 → 刷新模型树 → 重载模型 → 派生物 → 一句交代。
+ * 一轮的顺序（固定）：等正在进行的装载 / 生成结束 → 核对后台（`/health` 认重启、`/dbnums` 取各库的三枚水位）→
+ * 后端更新范围内还没做完的库有上限地等 → 刷新模型树 → 重载模型 → 派生物 → 一句交代。
  * 两轮不并发：运行中再点，合并成「这一轮完了再跑一轮」。
  *
- * 刷新范围按库发现、按节点动手：模型这一半只核对「所在库的水位和装的时候不一样」的节点，问后端它的节点模型状态
+ * 刷新范围按库发现、按节点动手：模型这一半只核对「所在库的模型水位或库文件最新会话和装的时候不一样」的节点，问后端它的节点模型状态
  * 之后才决定换不换；别的库的节点不碰。接线那一层（`useModelGetWork`）给的状态里，库的模型水位比本页装的新就算
  * 「有更新可重载」——不再逐个节点去问其间改没改到它（那条查询在真实库上一次要几十秒），所以水位动过的库里在册的
  * 节点各重载一次。树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
@@ -27,7 +27,7 @@ import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
 /** 等正在进行的装载 / 生成：多久看一次、最多等多久（等不到这一轮不做，照实说） */
 export const GETWORK_LOAD_WAIT_POLL_MS = 500;
 export const GETWORK_LOAD_WAIT_MAX_MS = 10 * 60_000;
-/** 等后台把监听范围内的库更新完：多久看一次 `/dbnums`、最多等多久（等不到就换能换的并说明） */
+/** 等后台把后端更新范围内的库更新完：多久看一次 `/dbnums`、最多等多久（等不到就换能换的并说明） */
 export const GETWORK_BACKEND_WAIT_POLL_MS = 3_000;
 export const GETWORK_BACKEND_WAIT_MAX_MS = 45_000;
 /** 同时在问节点模型状态的节点数 */
@@ -156,7 +156,7 @@ export type GetWorkModelsReport = {
   loadedNew: { refno: string; name: string; total: number }[];
   /** 整个从场景撤下的节点：`deleted` 库里没有它了；`empty` 它还在、名下已没有几何 */
   withdrawn: { refno: string; refnos: number; why: 'deleted' | 'empty' }[];
-  /** 没动、要说明的（后台模型落后 / 后端没有它的模型 / 库在更新 / 判不了） */
+  /** 没动、要说明的（节点落后 / 后端没有它的模型 / 库在更新 / 判不了） */
   kept: { refno: string; reason: string }[];
   failed: { refno: string; reason: string }[];
   /**
@@ -202,11 +202,11 @@ function errorText(error: unknown): string {
   return text.length > 160 ? `${text.slice(0, 160)}…` : text;
 }
 
-/** 这个库后台是不是还在往最新追（监听范围内才会自己追上：值得等一等） */
+/** 这个库后台是不是还在往最新追（后端更新范围内才会自己追上：值得等一等） */
 export function libraryWaitsForBackend(row: DbnumRow | null | undefined): boolean {
   if (!row) return false;
   const kind = judgeDbnumFreshness(row).kind;
-  // `excluded`（不在监听范围 / 不在本项目）的库后台不会去追，等也白等
+  // `excluded`（不在后端更新范围 / 不在本项目）的库后台不会去追，等也白等
   return kind === 'updating' || kind === 'file_ahead' || kind === 'model_behind';
 }
 
@@ -222,7 +222,7 @@ export function describeLibraryGap(dbnum: number, row: DbnumRow | null | undefin
       return {
         dbnum,
         kind: 'out_of_scope',
-        text: `库 ${dbnum} 不在后台的监听范围里：模型停在会话 ${model}，库文件已到 ${fileLatest}（树已是最新，模型不会自动跟上）`,
+        text: `库 ${dbnum} 不在后端更新范围里：模型停在会话 ${model}，库文件已到 ${fileLatest}（树已是最新，模型不会自动跟上）`,
       };
     case 'updating':
       return { dbnum, kind: 'updating', text: `库 ${dbnum} 后台还在更新（模型在会话 ${model ?? '—'}，库文件已到 ${fileLatest ?? '—'}）` };
@@ -233,14 +233,14 @@ export function describeLibraryGap(dbnum: number, row: DbnumRow | null | undefin
     case 'blocked':
       return { dbnum, kind: 'blocked', text: `库 ${dbnum} 被后台阻断，不会更新（模型在会话 ${model ?? '—'}，库文件已到 ${fileLatest ?? '—'}）` };
     case 'unknown':
-      return { dbnum, kind: 'unknown', text: `库 ${dbnum} 的水位对不上，新旧判不了` };
+      return { dbnum, kind: 'unknown', text: `库 ${dbnum} 的三枚水位（库文件最新会话、数据入库到的会话、模型生成所按的会话）对不上，新旧判不了` };
     default:
       return null;
   }
 }
 
 /**
- * 这个节点这一轮要不要向后端核对（「按库发现」）：所在库的水位和装的时候一样就不问。
+ * 这个节点这一轮要不要向后端核对（「按库发现」）：所在库的模型水位和库文件最新会话都和装的时候一样就不问。
  * `restarted`：上一轮以来后端重启过——库里没有成套模型的（模型按需生成、只在后端内存里）要问，重启后那些模型没了。
  */
 export function rootNeedsCheck(root: GetWorkRoot, row: DbnumRow | null | undefined, restarted: boolean): boolean {
@@ -286,11 +286,11 @@ export function decideRootAction(
       if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };
       return { kind: 'none' };
     case 'lagging': {
-      const behind = '后台的模型落后于库文件，这次换上的是后台现有的那一版；行上的「更新」可让后端追上';
+      const behind = '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上';
       if (status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
         return { kind: 'reload', note: behind };
       }
-      return { kind: 'keep', reason: '后台的模型落后于库文件，屏幕上的没有可换的新版；行上的「更新」可让后端追上' };
+      return { kind: 'keep', reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上' };
     }
     case 'empty':
       // 这个节点下已经没有生成单元（成员删光了）：重载会查空，确认之后把它名下的旧构件撤下
@@ -462,7 +462,7 @@ export function summarizeGetWork(report: GetWorkReport, label: (refno: string) =
     ? `已取最新：${parts.join('；')}。`
     : `已是最新：模型树和已装的模型都没有变化${checked ? `（核对了 ${checked}）` : ''}。`;
   if (report.libraries.length > 0) {
-    // 不在监听范围里的库是长期如此的事实：照实说，但不为它把这一句标成警告
+    // 不在后端更新范围里的库是长期如此的事实：照实说，但不为它把这一句标成警告
     if (report.libraries.some((item) => item.kind !== 'out_of_scope')) caveats += 1;
     summary += `没跟到最新：${report.libraries.map((item) => item.text).join('；')}。`;
     for (const item of report.libraries) detail.push(item.text);
@@ -764,7 +764,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       for (const root of ports.roots()) touched.add(root.dbnum);
       for (const scope of ports.dbnumScopes()) touched.add(scope.dbnum);
 
-      // ④ 监听范围内的库后台还在追：有上限地等它做完，再一起换
+      // ④ 后端更新范围内的库后台还在追：有上限地等它做完，再一起换
       const pendingOf = (current: Map<number, DbnumRow>): number[] => (
         [...touched].filter((dbnum) => libraryWaitsForBackend(current.get(dbnum))).sort((a, b) => a - b)
       );

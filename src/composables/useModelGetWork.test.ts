@@ -150,7 +150,7 @@ describe('useModelGetWork：一轮走下来', () => {
 
   it('库的模型水位没动、只有库文件前进了（后台不会去追的库）：没有可换的新版，不重载，也不问节点版本表', async () => {
     const { getWork } = await load();
-    // 不在监听范围的库：库文件到了 1146，模型还停在本页装的那一版 1143
+    // 不在后端更新范围的库：库文件到了 1146，模型还停在本页装的那一版 1143
     mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, applied_sesno: 1143, model_sesno: 1143, excluded: true, excluded_reason: 'watch_dbnums' }] });
     mocks.entries.mockReturnValue([tableEntry(SITE)]);
     mocks.facts.mockResolvedValue(facts('latest', 1143));
@@ -165,7 +165,7 @@ describe('useModelGetWork：一轮走下来', () => {
     expect(report.models).toMatchObject({ checked: 1, reloaded: [], kept: [], failed: [] });
   });
 
-  it('后台的模型落后于库文件、但已经比本页装的新：重载换上后台现有的那一版，并说明还落后', async () => {
+  it('节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后', async () => {
     const { getWork } = await load();
     mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
     mocks.entries.mockReturnValue([tableEntry(SITE)]);
@@ -178,7 +178,7 @@ describe('useModelGetWork：一轮走下来', () => {
     expect(mocks.listNodeVersions).not.toHaveBeenCalled();
     expect(scene.reload).toHaveBeenCalledWith(SITE);
     expect(report.models.reloaded.map((item) => item.refno)).toEqual([SITE]);
-    expect(report.models.kept).toEqual([{ refno: SITE, reason: expect.stringContaining('落后于库文件') }]);
+    expect(report.models.kept).toEqual([{ refno: SITE, reason: '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上' }]);
   });
 
   it('旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载', async () => {
@@ -202,7 +202,7 @@ describe('useModelGetWork：一轮走下来', () => {
   it('旧后端（过渡办法）、库的模型水位没动而库文件前进了：不重载，也不凭空说它「落后」', async () => {
     const { getWork } = await load();
     mocks.facts.mockResolvedValue(null);
-    // 不在监听范围的库：模型还在本页装的 1146，库文件到了 1149
+    // 不在后端更新范围的库：模型还在本页装的 1146，库文件到了 1149
     mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
     mocks.entries.mockReturnValue([tableEntry(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1146 })]);
     const scene = scenePort({ [SITE]: ['a'] });
@@ -318,7 +318,7 @@ describe('useModelGetWork：在册的节点从哪来', () => {
 
   it('登记表里的节点核对过不用动：水位推进到现在；重载做成了就从登记表拿掉', async () => {
     const { getWork, registry } = await load();
-    // 不在监听范围的库：模型在 1146，库文件又前进到了 1149
+    // 不在后端更新范围的库：模型在 1146，库文件又前进到了 1149
     mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
     // SITE 装的时候模型就是 1146（只有库文件那一格变了）：核对过不用动；另一个装的是 1143：库里的模型比它新，重载
     registry.noteGetWorkRoot(SITE, 8000, { modelSesno: 1146, fileLatestSesno: 1146 }, 'show_dbnum');
