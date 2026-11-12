@@ -542,8 +542,9 @@ const touched = (match) => Boolean(match && !match.summaryOnly && (match.changed
 
 /** summary.md 里一个对象的一行：每处变化的改前 → 改后。 */
 function describeRow(row) {
+  if (!row.inBase || !row.inCurr) return `只在${row.inBase ? '基准' : '当前'}里，结局 ${outcomeLabel(row.inBase ? row.outcomeBase : row.outcomeCurr)}`;
   const parts = [];
-  if (row.inBase && row.inCurr && row.outcomeBase !== row.outcomeCurr) parts.push(`结局 ${outcomeLabel(row.outcomeBase)} → ${outcomeLabel(row.outcomeCurr)}`);
+  if (row.outcomeBase !== row.outcomeCurr) parts.push(`结局 ${outcomeLabel(row.outcomeBase)} → ${outcomeLabel(row.outcomeCurr)}`);
   for (const [field, [a, b]] of Object.entries(row.scan ?? {})) if (field !== 'outcome') parts.push(`${SCAN_LABEL.get(field)} ${show(a)} → ${show(b)}`);
   if (row.primitives?.summaryOnly) {
     parts.push(`图元 ${row.primitives.countBefore} → ${row.primitives.countAfter}（种类 ${show(row.primitives.kinds[0])} → ${show(row.primitives.kinds[1])}）`);
