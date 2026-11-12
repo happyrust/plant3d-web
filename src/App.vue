@@ -5,6 +5,7 @@ import { authVerifyToken } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
+import ModelGetWorkButton from '@/components/model-tree/ModelGetWorkButton.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
 import ReleaseNotesDialog from '@/components/ReleaseNotesDialog.vue';
@@ -161,6 +162,7 @@ onMounted(() => {
             <div class="flex h-7 shrink-0 items-center border-t border-border bg-background px-2"
               data-testid="app-status-bar">
               <GenModelV1HealthBadge />
+              <ModelGetWorkButton class="ml-2" />
             </div>
           </div>
         </v-main>

@@ -25,7 +25,8 @@ try {
 }
 
 const noticeText = updateNotice.text;
-const noticeTitle = updateNotice.title;
+// 这条提示的「重载」只换已装的模型；连模型树一起同步的入口是右边的「取最新」（2026-11-12）
+const noticeTitle = computed(() => `${updateNotice.title.value}\n要连模型树一起刷新到最新，点右边的「取最新」`);
 
 function reloadFromNotice(): void {
   const refnos = updateNotice.reload();

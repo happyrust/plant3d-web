@@ -208,3 +208,18 @@ describe('K10 状态栏更新提示条', () => {
     }
   });
 });
+
+describe('更新提示条把人引到「取最新」（2026-11-12）', () => {
+  it('悬停说明的最后一行：要连模型树一起刷新，点右边的「取最新」', async () => {
+    const view = await mountBadge();
+    try {
+      await handleGenModelV1TaskEnvelopeForNotice(finished({}, MOVED));
+      await nextTick();
+      const lines = (view.bar()?.getAttribute('title') ?? '').split('\n');
+      expect(lines.at(-1)).toBe('要连模型树一起刷新到最新，点右边的「取最新」');
+      expect(lines.length).toBeGreaterThan(1);
+    } finally {
+      view.unmount();
+    }
+  });
+});
