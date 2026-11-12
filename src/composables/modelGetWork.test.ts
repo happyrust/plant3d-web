@@ -1114,6 +1114,12 @@ describe('取最新：补几处边角', () => {
     expect(report.models.loadedNew).toEqual([]);
     expect(report.ok).toBe(true);
     expect(log).toContain('scope-checked 8000 1146');
+
+    // 场景说它装着的是一张空表（不是「不知道」）：一样不计入
+    const emptyList = makeWorld({ scopes: [scopeOf()], sites: { 8000: [NEW_SITE] }, afterReload: { [NEW_SITE.refno]: [] } });
+    const second = await harness(emptyList).engine.getLatest();
+    expect(second.models.loadedNew).toEqual([]);
+    expect(second.summary).toContain('已是最新');
   });
 
   it('要装新 SITE 的时候有别的装载在跑：等它完了再装；一直不完就记失败', async () => {
