@@ -974,8 +974,21 @@ function act(
 </script>
 
 <template>
-  <div class="flex h-full w-full flex-col overflow-hidden">
-    <DimensionToolbar :disabled="!viewerContext.dimensionSystem.value"
+  <div class="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden scroll-pt-40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-500"
+    tabindex="0"
+    role="region"
+    aria-label="尺寸面板"
+    data-testid="dimension-panel-scroll">
+    <!--
+      尺寸面板可滚动（新票）：根元素自己是滚动容器。面板里从上到下叠着工具栏、管道信息、两个 BRAN 块、几条横幅、几块开关、
+      诊断区，最后才是尺寸列表，加起来经常超过面板高度；以前根元素是 overflow-hidden，超出的被裁掉、滚轮够不着。
+      - 竖排弹性容器里孩子缺省不会被压到比内容矮，所以内容超出时是根在滚，各块保持原样、互不挤压。
+      - 工具栏粘在顶边（sticky），不跟着滚；scroll-pt 给它留出高度，键盘把焦点移到上面的控件时不会落在它背后。
+      - 根能拿焦点（tabindex）、有名字：键盘用户停在它上面就能用方向键 / 翻页键滚。
+      只改根、工具栏、列表外框这三处的类名，不另包一层：模板别的行一行不动，别的分支并进来不会整段冲突。
+    -->
+    <DimensionToolbar class="sticky top-0 z-10 shrink-0"
+      :disabled="!viewerContext.dimensionSystem.value"
       :can-undo="viewerContext.dimensionSystem.value?.document.canUndo ?? false"
       :can-redo="viewerContext.dimensionSystem.value?.document.canRedo ?? false"
       @export-svg="exportSvg" />
@@ -1127,8 +1140,8 @@ function act(
       票 14：求解器的出口自检拿掉过图元（诊断规则号 contract.invalid_primitive）。
       - 头一句与逐包的处数放在 alert 里，一出现就读给读屏用户；按钮和展开的清单在 alert 之外，展开时不会把
         整段再读一遍。
-      - 这个面板自己不能滚（根元素 overflow-hidden），上面每多一行，最底下的「MBD 诊断」就少露一行。所以
-        收起时只有一句话加一个跟在句尾的按钮；展开的清单自己限高、自己滚，不然后面几处会被裁在面板底边之外。
+      - 收起时只有一句话加一个跟在句尾的按钮；展开的清单自己限高、自己滚：十几处、几十处时不把下面的开关和
+        诊断区推出去好几屏（面板本身能滚，见模板顶上的说明）。
     -->
     <div v-if="droppedPrimitives"
       class="m-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
@@ -1454,7 +1467,11 @@ function act(
         </button>
       </div>
     </details>
-    <div class="min-h-0 flex-1">
+    <!--
+      尺寸列表不许收缩（以前是 min-h-0 flex-1：上面的块一多它就被分到 0 高）：内容多高就多高，由面板来滚；
+      上面的块少、面板有富余时照旧撑满剩下的高度。
+    -->
+    <div class="shrink-0 grow">
       <DimensionSemanticList :items="items"
         :selected-id="selectedId"
         :user="currentUser"
