@@ -230,6 +230,19 @@ describe('更新提示条把人引到「取最新」（2026-11-12）', () => {
     }
   });
 
+  it('没有「重载」可点的提示：悬停说明的最后一行照样把人引到「取最新」，上一行是为什么没有「重载」', async () => {
+    const view = await mountBadge();
+    try {
+      await handleGenModelV1TaskEnvelopeForNotice(finished({}, [{ root_refno: '24384/23257', status: 'generated' }]));
+      await nextTick();
+      const lines = (view.bar()?.getAttribute('title') ?? '').split('\n');
+      expect(lines.at(-1)).toBe('要把模型树和已装的模型一起同步到最新，点右边的「取最新」');
+      expect(lines.at(-2)).toBe('这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点');
+    } finally {
+      view.unmount();
+    }
+  });
+
   it('有「重载」可点的时候不画那句「点「取最新」同步」（两样只出一样）', async () => {
     const view = await mountBadge();
     try {

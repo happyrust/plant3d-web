@@ -3827,6 +3827,27 @@ describe('「取最新」用到的显示流程出口：补几处边角', () => {
     expect(evictMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['有截断的根', { pending: [], truncated_roots: ['24384_24790'], errors: {} }],
+    ['有出错的根', { pending: [], truncated_roots: [], errors: { '24384_24791': 'boom' } }],
+  ])('取最新发起的（quiet）重载查空而记录没收齐（%s）：同样不撤、不问，装着的构件原样，也不弹', async (_name, incomplete) => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    const members = ['24384_24779', '24384_24780'];
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: members });
+    expect(await gen.showModelByRefno(ROOT)).toBe(true);
+    emitToastMock.mockClear();
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [], incomplete });
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(false);
+
+    expect(nodeFactsMock).not.toHaveBeenCalled();
+    expect(evictMock).not.toHaveBeenCalled();
+    expect(gen.loadedRefnosOf(ROOT)).toEqual(members);
+    expect(emitToastMock).not.toHaveBeenCalled();
+  });
+
   it('withdrawRemovedRoot：空 refno 什么都不做', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });

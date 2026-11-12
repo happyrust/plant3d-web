@@ -182,6 +182,23 @@ describe('useModelGetWork：一轮走下来', () => {
     expect(report.models.kept).toEqual([{ refno: SITE, reason: '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上' }]);
   });
 
+  it('节点落后、库里的模型并不比本页装的新（没有可换的新版）：不重载，照实说没有可换的', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' }] });
+    // 本页装的就是库里现有的那一版（1146）；装的时候库文件在 1146，现在到了 1149
+    mocks.entries.mockReturnValue([tableEntry(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1146 })]);
+    mocks.facts.mockResolvedValue(facts('lagging'));
+    const scene = scenePort({ [SITE]: ['24384_26549'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.facts).toHaveBeenCalledTimes(1);
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(report.models.reloaded).toEqual([]);
+    expect(report.models.kept).toEqual([{ refno: SITE, reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上' }]);
+  });
+
   it('旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载', async () => {
     const { getWork } = await load();
     // `fetchNodeModelFacts` 回 null = 服务端没有那条路由
