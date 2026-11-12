@@ -35,6 +35,7 @@
  *   node scripts/mbd-live-sweep.mjs --include-sites "INST"       # 只扫名字匹配的 SITE
  *   node scripts/mbd-live-sweep.mjs --save-payloads all --out .scratch/mbd-live-sweep/full   # 每个答复都存下来
  *   node scripts/mbd-live-sweep.mjs --payload-dir .scratch/mbd-live-sweep/full/payloads      # 重放存下来的答复
+ *   node scripts/mbd-sweep-compare.mjs <基准目录> <这次的 --out 目录>   # 换版之后与一份基准逐对象比（用法见它的 --help）
  *
  * 选项：
  *   --base <url>            模型树所在的 gen-model（缺省 GEN_MODEL_V1_BASE_URL 或 http://127.0.0.1:8022）
