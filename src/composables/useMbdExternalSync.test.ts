@@ -1049,7 +1049,7 @@ describe('createMbdExternalSync', () => {
     expect(diagnostics.sources[0]).toHaveProperty('empty', true);
   });
 
-  it('points an empty package with issues at the diagnostics and keeps the error toast last', async () => {
+  it('points an empty package with issues at the dimension panel and keeps the error toast last', async () => {
     const harness = createHarness({
       search: '?mbd_refno=17496_106456',
       fetchPipeData: vi.fn(async () => ({
@@ -1070,8 +1070,9 @@ describe('createMbdExternalSync', () => {
     await harness.sync.sync(harness.target);
 
     // 提示条只有一个槽位，后发的盖掉先发的：error 诊断那句必须排在空包那句后面。
+    // 票 134 之后原因就写在面板标题下：提示条指到尺寸面板，不再叫人去翻缺省收起的诊断区。
     expect(harness.emitToast.mock.calls.map(([payload]) => payload)).toEqual([
-      { message: 'MBD 标注：17496_106456 没有可显示的标注（后端返回 0 个图元），原因见尺寸面板的诊断', level: 'warning' },
+      { message: 'MBD 标注：17496_106456 没有可显示的标注（后端返回 0 个图元），原因见尺寸面板', level: 'warning' },
       { message: 'MBD 标注存在 1 条 error 诊断，详见尺寸面板', level: 'error' },
     ]);
     const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls[0]![0];
@@ -1094,7 +1095,7 @@ describe('createMbdExternalSync', () => {
     await sync.sync(target);
     expect(emitToast).toHaveBeenCalledTimes(1);
     expect(emitToast).toHaveBeenLastCalledWith({
-      message: 'MBD 标注：4 个对象没有可显示的标注（B、C、D 等），详见尺寸面板的诊断',
+      message: 'MBD 标注：4 个对象没有可显示的标注（B、C、D 等），详见尺寸面板',
       level: 'warning',
     });
     // 有图元的那一包照常提交。

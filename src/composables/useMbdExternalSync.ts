@@ -493,17 +493,19 @@ export function createMbdExternalSync(
       // 标注在画面外，还是这个对象本来就没有可标的内容（真实库里 261 个，其中 43 个连一条诊断都没有）。
       // 每次同步合成一句；同一句不重复弹（popstate 很频繁），空包消失后复位。排在 error 诊断的提示
       // 之前：提示条只有一个槽位，后发的盖掉先发的，更要紧的那句留到最后。
+      // 票 134 之后，每个空包的原因就写在尺寸面板的标题下（`mbdEmptyReasons`），所以这两句只指到
+      // 「尺寸面板」——不再叫人去翻缺省收起、排在面板最底下的诊断区。
       const emptySources = results.filter(result => result.empty);
       const describeEmpty = (): string | null => {
         if (emptySources.length === 0) return null;
         if (emptySources.length === 1) {
           const [only] = emptySources;
           return `MBD 标注：${only!.refno} 没有可显示的标注（后端返回 0 个图元），`
-            + (only!.issues.length > 0 ? '原因见尺寸面板的诊断' : '后端没有给出原因');
+            + (only!.issues.length > 0 ? '原因见尺寸面板' : '后端没有给出原因');
         }
         const listed = emptySources.slice(0, 3).map(source => source.refno).join('、');
         return `MBD 标注：${emptySources.length} 个对象没有可显示的标注（${listed}`
-          + `${emptySources.length > 3 ? ' 等' : ''}），详见尺寸面板的诊断`;
+          + `${emptySources.length > 3 ? ' 等' : ''}），详见尺寸面板`;
       };
       const emptyToast = describeEmpty();
       if (emptyToast !== null && emptyToast !== lastEmptyToast) {
