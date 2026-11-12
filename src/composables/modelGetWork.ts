@@ -12,7 +12,9 @@
  * 两轮不并发：运行中再点，合并成「这一轮完了再跑一轮」。
  *
  * 刷新范围按库发现、按节点动手：模型这一半只核对「所在库的水位和装的时候不一样」的节点，问后端它的节点模型状态
- * 之后才决定换不换；不做全部重装。树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
+ * 之后才决定换不换；别的库的节点不碰。接线那一层（`useModelGetWork`）给的状态里，库的模型水位比本页装的新就算
+ * 「有更新可重载」——不再逐个节点去问其间改没改到它（那条查询在真实库上一次要几十秒），所以水位动过的库里在册的
+ * 节点各重载一次。树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
  *
  * 这个文件不引用 Vue、不引用数据源：要用的东西都从 `GetWorkPorts` 进来，接线在 `useModelGetWork`。
  */
@@ -530,9 +532,17 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     const addedAll = new Set<string>();
     const removedAll = new Set<string>();
     let removedUnnamed = 0;
+    /**
+     * 这一轮动过场景的节点，按处理的先后：它这一步从场景拿掉了哪些构件、做完之后它名下是哪些构件（撤下的为 `null`）。
+     * 场景里的对象是按构件共用的，不是按节点各有一份——后处理的节点拿掉的构件，可能正是先处理的节点刚装上的。
+     */
+    const steps: { root: GetWorkRoot; removed: ReadonlySet<string>; after: Set<string> | null; reloadedIndex: number | null }[] = [];
     const settleCounts = () => {
+      // 一个构件被某个节点拿掉、却还在另一个节点名下（挪了位置）：它还在场景里，不算少了
+      const present = new Set<string>();
+      for (const step of steps) for (const refno of step.after ?? []) present.add(refno);
       models.componentsAdded = [...addedAll].filter((refno) => !removedAll.has(refno)).length;
-      models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno)).length + removedUnnamed;
+      models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno) && !present.has(refno)).length + removedUnnamed;
     };
 
     const reloadOne = async (refno: string, dbnum: number): Promise<{ ok: boolean; before: Set<string>; after: string[] | null }> => {
@@ -576,6 +586,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         const refnos = scene.withdraw(root.refno, root.dbnum);
         if (members.length > 0) for (const member of members) removedAll.add(member);
         else removedUnnamed += refnos;
+        steps.push({ root, removed: new Set(members), after: null, reloadedIndex: null });
         ports.forgetRoot(root.refno);
         models.withdrawn.push({ refno: root.refno, refnos, why: 'deleted' });
         continue;
@@ -597,6 +608,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       const after = outcome.after;
       if (!after || after.length === 0) {
         for (const refno of outcome.before) removedAll.add(refno);
+        steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });
         models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
         continue;
       }
@@ -605,8 +617,39 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       const removed = [...outcome.before].filter((refno) => !afterSet.has(refno));
       for (const refno of added) addedAll.add(refno);
       for (const refno of removed) removedAll.add(refno);
+      steps.push({ root, removed: new Set(removed), after: afterSet, reloadedIndex: models.reloaded.length });
       models.reloaded.push({ refno: root.refno, added: added.length, removed: removed.length, total: after.length });
       if (action.note) models.kept.push({ refno: root.refno, reason: action.note });
+    }
+
+    // 构件在两个在册节点之间挪了位置（或嵌套的两个节点里，它只是挪出了里面那个）：先重载的节点把它装上了，后处理的
+    // 节点按「我名下已经没有它」又把它从场景拿掉。名下的构件被后来者拿掉了的节点，补重载一次把它装回来。
+    const repairs = steps.filter((step, index) => {
+      const mine = step.after;
+      if (!mine) return false;
+      return steps.slice(index + 1).some((later) => [...later.removed].some((refno) => mine.has(refno)));
+    });
+    for (let index = 0; index < repairs.length; index++) {
+      const { root, reloadedIndex } = repairs[index]!;
+      if (!(await waitLoadIdle())) {
+        models.failed.push({ refno: root.refno, reason: '有别的装载一直没结束，它名下被别的节点撤掉的构件这次没补装' });
+        continue;
+      }
+      ports.onProgress(`补装挪了位置的构件 ${index + 1}/${repairs.length}…`);
+      let ok = false;
+      try {
+        ok = await scene.reload(root.refno);
+      } catch (error) {
+        models.failed.push({ refno: root.refno, reason: `补装出错：${errorText(error)}` });
+        continue;
+      }
+      if (!ok) {
+        models.failed.push({ refno: root.refno, reason: '它名下有构件被别的节点的重载撤掉了，补装没有完成' });
+        continue;
+      }
+      const entry = reloadedIndex !== null ? models.reloaded[reloadedIndex] : undefined;
+      const now = scene.loadedRefnos(root.refno, root.dbnum);
+      if (entry && now) entry.total = now.length;
     }
 
     // 整库显示过的库：新出现的顶层 SITE 装进来

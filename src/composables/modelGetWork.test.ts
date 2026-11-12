@@ -1397,3 +1397,158 @@ describe('取最新：已加载节点表里核对过、不用动的节点', () =
     expect(asked()).toBe(3);
   });
 });
+
+/**
+ * 2026-11-12 真实回放撞到的：8000 库里 PIPE /AIOS-SUITE-T3-PIPE 从 ZONE …-Z2 挪回 ZONE …-Z（E3D 会话 1688–1689），
+ * 两个 ZONE 都在页面上装着。先重载 Z（管道的 9 个构件装到它名下），再重载 Z2——Z2 按「我名下已经没有它们了」把这 9 个
+ * 构件从场景拿掉。场景里的对象是按构件共用的，结果树上有、场景里没有。
+ */
+describe('取最新：构件在两个在册节点之间挪了位置', () => {
+  const Z = '24384_47463';
+  const Z2 = '24384_47500';
+  const reloads = (log: string[]) => log.filter((line) => line.startsWith('reload'));
+
+  it('先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少', async () => {
+    const world = makeWorld({
+      roots: [root(Z), root(Z2)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [Z2]: { status: RELOADABLE, gone: false } },
+      loaded: { [Z]: ['24384_47465'], [Z2]: ['24384_47502', '24384_47595', '24384_47596'] },
+      afterReload: { [Z]: ['24384_47465', '24384_47595', '24384_47596'], [Z2]: ['24384_47502'] },
+    });
+    const { engine, log, progress } = harness(world);
+    const report = await engine.getLatest();
+    expect(reloads(log)).toEqual([`reload ${Z}`, `reload ${Z2}`, `reload ${Z}`]);
+    expect(progress).toContain('补装挪了位置的构件 1/1…');
+    expect(report.models.reloaded).toEqual([
+      { refno: Z, added: 2, removed: 0, total: 3 },
+      { refno: Z2, added: 0, removed: 2, total: 1 },
+    ]);
+    expect(report.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 0, failed: [] });
+    expect(report.summary).toBe('已取最新：模型重载 2 个节点。');
+  });
+
+  it('次序反过来（先处理的是丢构件的那个）：后装的那个自己就装上了，不用补', async () => {
+    const world = makeWorld({
+      roots: [root(Z2), root(Z)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [Z2]: { status: RELOADABLE, gone: false } },
+      loaded: { [Z]: ['24384_47465'], [Z2]: ['24384_47502', '24384_47595'] },
+      afterReload: { [Z]: ['24384_47465', '24384_47595'], [Z2]: ['24384_47502'] },
+    });
+    const { engine, log } = harness(world);
+    await engine.getLatest();
+    expect(reloads(log)).toEqual([`reload ${Z2}`, `reload ${Z}`]);
+  });
+
+  it('各换各的、谁也没拿掉谁名下的构件：不补', async () => {
+    const world = makeWorld({
+      roots: [root(Z), root(Z2)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [Z2]: { status: RELOADABLE, gone: false } },
+      loaded: { [Z]: ['a1', 'a2'], [Z2]: ['b1', 'b2'] },
+      afterReload: { [Z]: ['a1', 'a3'], [Z2]: ['b1'] },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(reloads(log)).toEqual([`reload ${Z}`, `reload ${Z2}`]);
+    expect(report.models).toMatchObject({ componentsAdded: 1, componentsRemoved: 2 });
+  });
+
+  it('嵌套的两个节点：构件只是挪出了里面那个、还在外面那个名下——外面的先重载就补一次；它还在场景里，不算撤下', async () => {
+    const equi = '24384_47470';
+    const world = makeWorld({
+      roots: [root(Z), root(equi)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [equi]: { status: RELOADABLE, gone: false } },
+      // BOX 24384_47471 从这台 EQUI 挪到了同一个 ZONE 下的另一台 EQUI：ZONE 名下的构件没变
+      loaded: { [Z]: ['24384_47469', '24384_47471', '24384_47472'], [equi]: ['24384_47471', '24384_47472'] },
+      afterReload: { [equi]: ['24384_47472'] },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(reloads(log)).toEqual([`reload ${Z}`, `reload ${equi}`, `reload ${Z}`]);
+    expect(report.models.reloaded).toEqual([
+      { refno: Z, added: 0, removed: 0, total: 3 },
+      { refno: equi, added: 0, removed: 1, total: 1 },
+    ]);
+    expect(report.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 0 });
+  });
+
+  it('后面撤下的是个已删除的节点，它的一个构件早先挪到了先重载的节点名下：同样补一次；真删掉的才算少了', async () => {
+    const gone = '24384_26716';
+    const world = makeWorld({
+      roots: [root(Z), root(gone)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [gone]: { status: status('unknown'), gone: true } },
+      loaded: { [Z]: ['a1'], [gone]: ['g1', 'm1'] },
+      afterReload: { [Z]: ['a1', 'm1'] },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(log.filter((line) => line.startsWith('reload') || line.startsWith('withdraw'))).toEqual([`reload ${Z}`, `withdraw ${gone}`, `reload ${Z}`]);
+    expect(report.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 1 });
+  });
+
+  it('后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补', async () => {
+    const world = makeWorld({
+      roots: [root(Z), root(Z2)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [Z2]: { status: status('empty'), gone: false } },
+      loaded: { [Z]: ['a1'], [Z2]: ['m1'] },
+      afterReload: { [Z]: ['a1', 'm1'], [Z2]: null },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(reloads(log)).toEqual([`reload ${Z}`, `reload ${Z2}`, `reload ${Z}`]);
+    expect(report.models.withdrawn).toEqual([{ refno: Z2, refnos: 1, why: 'empty' }]);
+    expect(report.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 0 });
+  });
+
+  it('补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成', async () => {
+    const moved = () => makeWorld({
+      roots: [root(Z), root(Z2)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [Z2]: { status: RELOADABLE, gone: false } },
+      loaded: { [Z]: ['a1'], [Z2]: ['b1', 'm1'] },
+      afterReload: { [Z]: ['a1', 'm1'] },
+    });
+
+    // 回 false：Z2 重载的时候顺手把 Z 标成「重载不成」，于是只有补的那一次不成
+    const refused = moved();
+    Object.defineProperty(refused.afterReload, Z2, { get: () => { refused.reloadFails.add(Z); return ['b1']; }, enumerable: true });
+    const first = await harness(refused).engine.getLatest();
+    expect(first.models.failed).toEqual([{ refno: Z, reason: '它名下有构件被别的节点的重载撤掉了，补装没有完成' }]);
+    expect(first.models.reloaded.map((item) => item.refno)).toEqual([Z, Z2]);
+
+    // 抛错：Z 第二次重载时抛
+    const throwing = moved();
+    let calls = 0;
+    Object.defineProperty(throwing.afterReload, Z, {
+      get: () => {
+        calls += 1;
+        if (calls > 1) throw new Error('DTX 图层没了');
+        return ['a1', 'm1'];
+      },
+      enumerable: true,
+    });
+    throwing.afterReload[Z2] = ['b1'];
+    const second = await harness(throwing).engine.getLatest();
+    expect(second.models.failed).toEqual([{ refno: Z, reason: '补装出错：DTX 图层没了' }]);
+
+    // 要补的时候别的装载一直不完
+    const busy = moved();
+    let blocked = false;
+    busy.busy = () => blocked;
+    Object.defineProperty(busy.afterReload, Z2, { get: () => { blocked = true; return ['b1']; }, enumerable: true });
+    const third = await harness(busy).engine.getLatest();
+    expect(third.models.failed).toEqual([{ refno: Z, reason: '有别的装载一直没结束，它名下被别的节点撤掉的构件这次没补装' }]);
+  });
+
+  it('补完之后那个节点的现有构件数按补完的算', async () => {
+    const world = makeWorld({
+      roots: [root(Z), root(Z2)],
+      statuses: { [Z]: { status: RELOADABLE, gone: false }, [Z2]: { status: RELOADABLE, gone: false } },
+      loaded: { [Z]: ['a1'], [Z2]: ['b1', 'm1'] },
+    });
+    // Z 第一次重载装成 [a1, m1]；补的那一次后端又多给了一件（期间又有一批落地）
+    let calls = 0;
+    Object.defineProperty(world.afterReload, Z, { get: () => { calls += 1; return calls > 1 ? ['a1', 'm1', 'n1'] : ['a1', 'm1']; }, enumerable: true });
+    world.afterReload[Z2] = ['b1'];
+    const report = await harness(world).engine.getLatest();
+    expect(report.models.reloaded[0]).toEqual({ refno: Z, added: 1, removed: 0, total: 3 });
+  });
+});
