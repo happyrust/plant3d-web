@@ -3858,3 +3858,108 @@ describe('整库显示登记时的库水位：开始显示时库状态还没取�
     }
   });
 });
+
+describe('这一次显示不弹提示（quiet）：「取最新」一轮重载几个节点，只留它自己最后那句交代', () => {
+  const ROOT = '24384_24778';
+  const MEMBERS = ['24384_24779', '24384_24780'];
+
+  beforeEach(() => {
+    visibleInstsMock.mockReset();
+    v1Source.tree.subtreeRefnos.mockReset();
+    v1Source.records.invalidateRoot.mockReset();
+    v1Source.records.invalidateRoot.mockReturnValue([]);
+    unitRefnosMock.mockReset();
+    unitRefnosMock.mockReturnValue([]);
+    typeInfoMock.mockResolvedValue({ success: true, refno: ROOT, noun: 'EQUI', owner_refno: null, owner_noun: null });
+  });
+
+  async function loaded() {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+    expect(await gen.showModelByRefno(ROOT)).toBe(true);
+    emitToastMock.mockClear();
+    addLogMock.mockClear();
+    return gen;
+  }
+
+  it('重载做成了：不弹「已从 gen-model 加载…」，控制台照记', async () => {
+    const gen = await loaded();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(true);
+
+    expect(emitToastMock).not.toHaveBeenCalled();
+    expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining(`root=${ROOT} dbno=8000 loaded_refnos=2`));
+  });
+
+  it('同一件事不带 quiet：照旧弹一条', async () => {
+    const gen = await loaded();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
+
+    expect(emitToastMock).toHaveBeenCalledTimes(1);
+    expect(emitToastMock).toHaveBeenCalledWith({ message: '[成功] 已从 gen-model 加载 4 个几何实例', level: 'success' });
+  });
+
+  it('查空撤下：不弹「已从场景撤下」，控制台照记', async () => {
+    const gen = await loaded();
+    evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+    nodeFactsMock.mockResolvedValue({ verdict: 'latest' });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [] });
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true, quiet: true })).toBe(true);
+
+    expect(evictMock).toHaveBeenCalledTimes(1);
+    expect(emitToastMock).not.toHaveBeenCalled();
+    expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining('最新记录里这根名下没有几何'));
+  });
+
+  it('记录没查通：不弹「重载未完成」，控制台照记', async () => {
+    const gen = await loaded();
+    visibleInstsMock.mockRejectedValueOnce(new Error('records 超时'));
+    v1Source.tree.subtreeRefnos.mockRejectedValueOnce(new Error('subtree 超时'));
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(false);
+
+    expect(emitToastMock).not.toHaveBeenCalled();
+    expect(addLogMock).toHaveBeenCalledWith('warning', expect.stringContaining(`重载 ${ROOT} 未取得收齐的记录`));
+  });
+
+  it('装载出错：不弹「模型加载失败」；错在哪记进控制台和 error', async () => {
+    const gen = await loaded();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+    loadInstancesMock.mockRejectedValueOnce(new Error('网格解不开'));
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(false);
+
+    expect(emitToastMock).not.toHaveBeenCalled();
+    expect(gen.error.value).toBe('网格解不开');
+    expect(addLogMock).toHaveBeenCalledWith('error', `[model-load] refno=${ROOT} 加载失败：网格解不开`);
+  });
+
+  it('装载出错不带 quiet：弹「模型加载失败」，控制台也记', async () => {
+    const gen = await loaded();
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+    loadInstancesMock.mockRejectedValueOnce(new Error('网格解不开'));
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+    expect(emitToastMock).toHaveBeenCalledWith({ message: '[错误] 模型加载失败：网格解不开', level: 'error' });
+    expect(addLogMock).toHaveBeenCalledWith('error', `[model-load] refno=${ROOT} 加载失败：网格解不开`);
+  });
+
+  it('重载中被叫停：不弹「已停止重载」', async () => {
+    const gen = await loaded();
+    visibleInstsMock.mockImplementationOnce(async () => {
+      requestStopModelLoad(ROOT);
+      throw new Error('aborted');
+    });
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, quiet: true })).toBe(false);
+
+    expect(gen.statusMessage.value).toBe('已停止重载，场景保持原样');
+    expect(emitToastMock).not.toHaveBeenCalled();
+  });
+});

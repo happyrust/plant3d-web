@@ -3753,8 +3753,11 @@ function registerSceneForGetWork(): void {
   offGetWorkScene?.();
   offGetWorkMbd?.();
   offGetWorkScene = registerGetWorkScene({
-    // 取最新发起的重载：不生成、不飞相机；记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤
-    reload: async (refno) => (await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, confirmEmpty: true })) === true,
+    // 取最新发起的重载：不生成、不飞相机；记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤；
+    // 每个节点各自的装载提示不弹（`quiet`），取最新做完自己说一句
+    reload: async (refno) => (
+      await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, confirmEmpty: true, quiet: true })
+    ) === true,
     withdraw: (refno, dbnum) => {
       const withdrawn = modelGenerationRef.value?.withdrawRemovedRoot(refno, dbnum) ?? 0;
       requestRender();

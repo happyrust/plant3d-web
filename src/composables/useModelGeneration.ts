@@ -55,7 +55,7 @@ import {
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { pushRecordPageListener } from '@/model-source/genModelV1/modelRecords';
-import { emitToast } from '@/ribbon/toastBus';
+import { emitToast, type ToastPayload } from '@/ribbon/toastBus';
 import { toRefnoKey } from '@/utils/refnoKey';
 import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
 
@@ -421,7 +421,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (
     refno: string,
-    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; confirmEmpty?: boolean },
+    options?: { flyTo?: boolean; regenerate?: boolean; refresh?: boolean; fill?: boolean; update?: boolean; confirmEmpty?: boolean; quiet?: boolean },
   ) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
@@ -860,6 +860,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     previousLeaves: string[],
     incomplete: VisibleInstsIncomplete | null,
     source: 'visible-insts' | 'subtree-refnos',
+    /** 这一次显示用来出提示的那个函数（调用方要求不弹时它什么都不做） */
+    toast: (payload: ToastPayload) => void,
   ): boolean {
     if (
       incomplete
@@ -896,7 +898,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       'info',
       `[model-load] 重载 ${root}：最新记录里这根名下没有几何（根被删，或带几何的成员删光），撤下 ${targets.length} 个 refno（${evicted.length} 个有对象）`,
     );
-    emitToast({ message: `[提示] ${root} 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下`, level: 'info' });
+    toast({ message: `[提示] ${root} 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下`, level: 'info' });
     return true;
   }
 
@@ -1025,10 +1027,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
        * （见 `emptyRefreshMeansRemoved`）。别的重载入口（状态栏、行上的「重载」）不带，行为照旧。
        */
       confirmEmpty?: boolean
+      /**
+       * 这一次显示不弹提示（控制台照记）：调用方自己把几个节点的结果汇总成一句。「取最新」一轮要重载好几个节点，
+       * 每个节点各弹一条「已从 gen-model 加载 N 个几何实例」只会在最后那句交代之前闪过去。
+       */
+      quiet?: boolean
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
+    const quiet = loadOptions?.quiet === true;
+    const toast = (payload: ToastPayload): void => {
+      if (!quiet) emitToast(payload);
+    };
     const update = loadOptions?.update === true;
     // 节点一级的更新，后一半就是重载：清本地记录缓存、重查、整套替换、撤下已不在的构件
     const refresh = loadOptions?.refresh === true || update;
@@ -1080,12 +1091,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           } else {
             const err = `[错误] 无法定位：包围盒为空（refno=${normalizedRoot}）`;
             consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`);
-            emitToast({ message: err, level: 'error' });
+            toast({ message: err, level: 'error' });
           }
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e);
           consoleStore.addLog('error', `[model-load] flyTo 异常 refno=${normalizedRoot} err=${em}`);
-          emitToast({ message: `[错误] 定位异常：${em}`, level: 'error' });
+          toast({ message: `[错误] 定位异常：${em}`, level: 'error' });
         }
       }
       // 「显示」= 保证可见：对象已在场景但 refno 级可见态是 false（此前「隐藏」写进 objects 状态表，
@@ -1178,7 +1189,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = 100;
         syncGlobalLoadStatus();
         consoleStore.addLog(level === 'warning' ? 'warning' : 'info', `[model-load] 更新 ${normalizedRoot}：${message}`);
-        emitToast({ message: `[${level === 'warning' ? '警告' : '提示'}] ${normalizedRoot}：${message}`, level });
+        toast({ message: `[${level === 'warning' ? '警告' : '提示'}] ${normalizedRoot}：${message}`, level });
         if (recheck) recheckLoadedNode(normalizedRoot);
         return false;
       };
@@ -1334,7 +1345,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             'warning',
             `[model-load] 跳过不可加载节点 refno=${normalizedRoot}：db_meta_info.json 未包含该 ref0，通常表示它不是当前部署模型库中的可绘制实例`
           );
-          emitToast({
+          toast({
             message: `[提示] 当前节点不在已部署模型库映射中，未触发模型加载（refno=${normalizedRoot}）`,
             level: 'info',
           });
@@ -1420,7 +1431,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           progress.value = 100;
           syncGlobalLoadStatus();
           consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 重新生成后不显示：${hint}`);
-          emitToast({ message: `[提示] ${normalizedRoot}：${hint}`, level: 'info' });
+          toast({ message: `[提示] ${normalizedRoot}：${hint}`, level: 'info' });
           return false;
         }
         noteDbnumModelGenerated(dbno);
@@ -1484,7 +1495,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         emptyScopes = empty;
         if (source === 'subtree-refnos' && truncated) {
           consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`);
-          emitToast({
+          toast({
             message: `[错误] 子孙 refno 列表过大已被截断（${normalizedRoot}），结果可能不完整`,
             level: 'error',
           });
@@ -1797,7 +1808,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             'info',
             `[model-load] refno=${normalizedRoot} ${why}，自动补齐模型（不带 force）` + (whole ? '' : `：分 ${plan.chunks.length} 块，${unitsLabel(plan).trim()}`),
           );
-          emitToast({
+          toast({
             message: whole
               ? `[提示] ${normalizedRoot} 尚未生成模型，正在自动生成...`
               : `[提示] ${normalizedRoot} 尚未生成模型，正在分 ${plan.chunks.length} 块生成（${unitsLabel(plan).trim()}），做完一块显示一块`,
@@ -1824,7 +1835,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成成功，取得 ${visibleRefnos.length} 个构件`);
             if (visibleRefnos.length === 0) return { ready: false, hint: null };
             const report = describeGenerationFillSummary(summary);
-            emitToast(whole && report.level === 'success'
+            toast(whole && report.level === 'success'
               ? { message: `[成功] ${normalizedRoot} 模型已自动生成并加载`, level: 'success' }
               : { message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}`, level: report.level });
             return { ready: true, hint: null };
@@ -1838,14 +1849,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           if (groupHint) autoGenerateHints.set(normalizedRoot, groupHint);
           const hint = timedOut ? '服务端后台继续生成，完成后再点眼睛' : (failed || groupHint || '生成未产出可显示模型');
           consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 自动生成未产出：${hint}`);
-          emitToast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
+          toast({ message: `[提示] ${normalizedRoot} 自动生成未完成：${hint}`, level: 'info' });
           return { ready: false, hint: timedOut ? '后端还在后台生成，稍后再点眼睛会接着问（不重算已有的）' : null };
         } catch (e) {
           // 被叫停的不是生成失败：到显示流程的收尾那里统一收回去
           if (session.stopped) throw e;
           const em = e instanceof Error ? e.message : String(e);
           consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 自动生成异常：${em}`);
-          emitToast({ message: `[警告] ${normalizedRoot} 自动生成失败：${em}`, level: 'warning' });
+          toast({ message: `[警告] ${normalizedRoot} 自动生成失败：${em}`, level: 'warning' });
           return { ready: false, hint: null };
         }
       };
@@ -1871,11 +1882,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             if (awaiting) {
               // 已有的显示出来了；缺的那几个等「更新到最新」，不在这里按需生成
               consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} ${awaiting}`);
-              emitToast({ message: `[提示] ${normalizedRoot}：已显示已有的模型；${awaiting}`, level: 'info' });
+              toast({ message: `[提示] ${normalizedRoot}：已显示已有的模型；${awaiting}`, level: 'info' });
               statusMessage.value = '加载完成 (gen-model)；部分单元等更新到最新';
               syncGlobalLoadStatus();
             } else if (explicitFill) {
-              emitToast({ message: `[提示] ${normalizedRoot}：没有需要生成的部分`, level: 'info' });
+              toast({ message: `[提示] ${normalizedRoot}：没有需要生成的部分`, level: 'info' });
             }
             return;
           }
@@ -1886,7 +1897,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               root: normalizedRoot, dbnum: dbno, chunks: plan.chunks.length, units: plan.units, exact: plan.exact, reason: 'declined',
             });
             consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 还有${unitsLabel(plan)}没有模型，用户选了只显示已有的`);
-            emitToast({
+            toast({
               message: `[提示] ${normalizedRoot}：只显示了已有的模型，还有${unitsLabel(plan)}没有模型；行上点「生成」可以补齐`,
               level: 'info',
             });
@@ -1898,7 +1909,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             'info',
             `[model-load] refno=${normalizedRoot} 下有 ${plan.chunks.length} 块没有模型（${unitsLabel(plan).trim()}），分块补齐（不带 force）`,
           );
-          emitToast({
+          toast({
             message: `[提示] ${normalizedRoot} 下还有${unitsLabel(plan)}没有模型，正在分 ${plan.chunks.length} 块生成，做完一块显示一块`,
             level: 'info',
           });
@@ -1911,7 +1922,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           recheckLoadedNode(normalizedRoot);
           const report = describeGenerationFillSummary(summary);
           consoleStore.addLog(report.level === 'warning' ? 'warning' : 'info', `[model-load] refno=${normalizedRoot} 补齐结束：${report.message}`);
-          emitToast({ message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}`, level: report.level });
+          toast({ message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}`, level: report.level });
           statusMessage.value = report.level === 'success' ? '加载完成 (gen-model)' : `加载完成 (gen-model)；${report.message}`;
           progress.value = 100;
           syncGlobalLoadStatus();
@@ -1920,7 +1931,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           if (session.stopped) throw e;
           const em = e instanceof Error ? e.message : String(e);
           consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 补齐异常：${em}`);
-          emitToast({ message: `[警告] ${normalizedRoot} 补齐没有完成：${em}`, level: 'warning' });
+          toast({ message: `[警告] ${normalizedRoot} 补齐没有完成：${em}`, level: 'warning' });
         }
       };
 
@@ -1930,7 +1941,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (refresh && (!visibleOk || visibleSource !== 'visible-insts')) {
         const why = visibleErr || (visibleOk ? `记录查询退到子树（${visibleSource}）` : '记录查询未应答');
         consoleStore.addLog('warning', `[model-load] 重载 ${normalizedRoot} 未取得收齐的记录（${why}），场景保持原样`);
-        emitToast({ message: `[警告] ${normalizedRoot} 重载未完成：${why}，场景保持原样`, level: 'warning' });
+        toast({ message: `[警告] ${normalizedRoot} 重载未完成：${why}，场景保持原样`, level: 'warning' });
         statusMessage.value = `refno=${normalizedRoot} 重载未完成，场景保持原样`;
         progress.value = 100;
         syncGlobalLoadStatus();
@@ -1942,7 +1953,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 会自动发带 force 的生成——一次瞬时读失败就可能把这个节点在库里的模型清掉重算（方案 B1）。
         const failure = visibleErr || '记录查询未应答';
         consoleStore.addLog('warning', `[model-load] 查询加载范围失败：${failure}`);
-        emitToast({
+        toast({
           message: `[警告] 查询加载范围失败：${failure}`,
           level: 'warning',
         });
@@ -1965,13 +1976,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               return false;
             }
           }
-          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource);
+          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, toast);
         }
         if (visibleSource !== 'visible-insts') {
           // 记录查询失败后退到子树查询、子树也是空：这不是「查空」，同样不生成
           const noAnswer = `${normalizedRoot}：记录查询没有应答（退到子树查询也是空），未加载；稍后再点眼睛`;
           consoleStore.addLog('warning', `[model-load] ${noAnswer}`);
-          emitToast({ message: `[警告] ${noAnswer}`, level: 'warning' });
+          toast({ message: `[警告] ${noAnswer}`, level: 'warning' });
           statusMessage.value = `refno=${normalizedRoot} 未加载`;
           progress.value = 100;
           syncGlobalLoadStatus();
@@ -1990,7 +2001,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               ? `${normalizedRoot}：${caveat}`
               : `${normalizedRoot}：${filled.hint ?? autoGenerateHints.get(normalizedRoot) ?? '范围内没有已生成的模型；右键「重新生成模型」可生成'}`;
           consoleStore.addLog('info', `[model-load] ${emptyHint}`);
-          emitToast({ message: `[提示] ${emptyHint}`, level: 'info' });
+          toast({ message: `[提示] ${emptyHint}`, level: 'info' });
           statusMessage.value = scopeIncomplete
             ? `refno=${normalizedRoot} 模型尚未就绪（${tail}）`
             : `refno=${normalizedRoot} 未加载`;
@@ -2159,7 +2170,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             'warning',
             `[model-load] gen-model-v1 refno=${normalizedRoot} 收集未完成（${incompleteTail}），已画 ${v1Result.loadedObjects} 个实例，未记为已加载`,
           );
-          emitToast({
+          toast({
             message: `[提示] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例，但 ${incompleteTail}`,
             level: 'warning',
           });
@@ -2175,12 +2186,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           // 节点一级的更新：后端做了什么、屏幕上换了多少，一句话说完
           const report: { level: 'success' | 'info' | 'warning'; message: string } = updateReport;
           consoleStore.addLog(report.level === 'warning' ? 'warning' : 'info', `[model-load] 更新 ${normalizedRoot} 结束：${report.message}`);
-          emitToast({
+          toast({
             message: `[${levelTag[report.level]}] ${normalizedRoot}：${report.message}；屏幕上已换成最新的 ${v1Result.loadedObjects} 个几何实例`,
             level: report.level,
           });
         } else {
-          emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
+          toast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
         }
         // 已有的显示出来了，再把这个节点下没有模型的那几块补上（方案 B3）
         await fillAfterShown(loadRefnos[0] ?? null);
@@ -2216,7 +2227,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         ? incompleteTail
         : mesh404 > 0 ? `网格缺失 ${mesh404} 个 refno` : noGeo > 0 ? `${noGeo} 个 refno 没有几何记录` : '服务端未返回可绘制实例';
       consoleStore.addLog('warning', `[model-load] gen-model-v1 未绘制实例 refno=${normalizedRoot}：${hint}`);
-      emitToast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
+      toast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
       return false;
     } catch (e) {
       if (session.stopped) {
@@ -2259,7 +2270,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           'info',
           `[model-load] refno=${normalizedRoot} 加载被叫停：收回 ${withdrawn} 个构件；已取到的记录和网格留在缓存里`,
         );
-        emitToast({
+        toast({
           message: update
             ? `[提示] ${normalizedRoot}：已停止更新，屏幕上的没有动`
               + (updateSentToBackend ? '；后端已经重新生成的留在后端，行上会给「更新」（接着做）或「重载」（换到屏幕上）' : '')
@@ -2274,7 +2285,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       error.value = msg;
       statusMessage.value = '加载失败';
       syncGlobalLoadStatus();
-      emitToast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });
+      // 控制台也记一笔：调用方要求不弹提示时（取最新），出了什么错只有这里看得到
+      consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 加载失败：${msg}`);
+      toast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });
       return false;
     } finally {
       progressiveLoad?.dispose();
