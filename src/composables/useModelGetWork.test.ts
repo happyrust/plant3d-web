@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   dismissNotice: vi.fn(),
   toast: vi.fn(),
   addLog: vi.fn(),
+  /** 用例要用到的树数据源别的方法（根名单） */
+  treeExtras: {} as Record<string, unknown>,
 }));
 
 vi.mock('@/composables/useGenModelV1Health', () => ({
@@ -38,7 +40,7 @@ vi.mock('@/ribbon/toastBus', () => ({ emitToast: (payload: unknown) => mocks.toa
 vi.mock('@/composables/useConsoleStore', () => ({ useConsoleStore: () => ({ addLog: mocks.addLog }) }));
 vi.mock('@/model-source', () => ({
   getModelSource: () => ({
-    tree: { ancestors: mocks.ancestors, invalidate: mocks.invalidateTree },
+    tree: { ancestors: mocks.ancestors, invalidate: mocks.invalidateTree, ...mocks.treeExtras },
     versions: { listNodeVersions: mocks.listNodeVersions },
   }),
 }));
@@ -99,7 +101,10 @@ async function load() {
 }
 
 beforeEach(() => {
-  for (const mock of Object.values(mocks)) mock.mockReset();
+  for (const mock of Object.values(mocks)) {
+    if (typeof mock === 'function') mock.mockReset();
+  }
+  mocks.treeExtras = {};
   mocks.health.mockResolvedValue({ generation: 1 });
   mocks.refreshVerdict.mockResolvedValue(undefined);
   mocks.dbnums.mockResolvedValue({ dbnums: [ROW_8000] });
@@ -372,5 +377,51 @@ describe('useModelGetWork：登记与状态', () => {
 
     mocks.peekDbnums.mockReturnValue(null);
     expect(getWork.captureGetWorkWatermarks()(8000)).toEqual({ modelSesno: null, fileLatestSesno: null });
+  });
+});
+
+describe('useModelGetWork：补几处边角', () => {
+  it('场景换了一个（查看器重挂）：旧的那个再撤，不影响新的', async () => {
+    const { getWork } = await load();
+    mocks.entries.mockReturnValue([tableEntry(SITE, { staleReason: '后端已经重新生成，屏幕上还没换上' })]);
+    mocks.facts.mockResolvedValue(facts('latest'));
+    const oldScene = scenePort({ [SITE]: ['a'] });
+    const newScene = scenePort({ [SITE]: ['a'] });
+    const offOld = getWork.registerGetWorkScene(oldScene);
+    getWork.registerGetWorkScene(newScene);
+    offOld();
+    await getWork.requestGetWork();
+    expect(oldScene.reload).not.toHaveBeenCalled();
+    expect(newScene.reload).toHaveBeenCalledWith(SITE);
+  });
+
+  it('整库显示过的库：库文件前进后查一次 SITE 名单（先清根名单的缓存），后端有模型的新 SITE 装进来、记成已在管', async () => {
+    const { getWork, registry } = await load();
+    registry.noteGetWorkDbnumScope(8000, { sites: [SITE], discover: true, fileLatestSesno: 1143 });
+    const worldRoot = vi.fn(async () => ({ success: true, node: { refno: 'gm-root:P:ALL', name: 'P / ALL', noun: 'WORL', owner: null, children_count: 2, dbnum: null } }));
+    const children = vi.fn(async () => ({
+      success: true, parent_refno: 'gm-root:P:ALL', truncated: false,
+      children: [
+        { refno: SITE, name: '/AIOS-INC-SITE', noun: 'SITE', owner: 'gm-root:P:ALL', children_count: 1, dbnum: 8000 },
+        { refno: '24384_30000', name: '/NEW-SITE', noun: 'SITE', owner: 'gm-root:P:ALL', children_count: 1, dbnum: 8000 },
+        { refno: '24381_2', name: '/OTHER-LIB', noun: 'SITE', owner: 'gm-root:P:ALL', children_count: 1, dbnum: 7997 },
+      ],
+    }));
+    mocks.treeExtras = { worldRoot, children };
+    mocks.facts.mockResolvedValue(facts('latest'));
+    const scene = scenePort();
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.invalidateTree).toHaveBeenCalled();
+    expect(worldRoot).toHaveBeenCalledTimes(1);
+    expect(mocks.facts).toHaveBeenCalledWith(expect.objectContaining({ refno: '24384_30000' }));
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith('24384_30000');
+    expect(report.models.loadedNew).toEqual([{ refno: '24384_30000', name: '/NEW-SITE', total: 1 }]);
+    const [scope] = registry.getWorkRegisteredScopes();
+    expect([...scope!.knownSites].sort()).toEqual(['24384_30000', SITE].sort());
+    expect(scope!.checkedFileLatestSesno).toBe(1146);
   });
 });

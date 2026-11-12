@@ -1942,14 +1942,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         });
       } else if (visibleRefnos.length === 0) {
         if (refresh) {
-          // 取最新的护栏：收齐的查空才会走到「撤下」，动手之前先确认后端是真的没有它的几何了，而不是没有它的模型
+          // 取最新的护栏：收齐的查空才会走到「撤下」（没收齐的下面本来就保持原样，不为它白问一次）。
+          // 动手之前先确认后端是真的没有它的几何了，而不是没有它的模型
           const notCollected = !!scopeIncomplete && (
             scopeIncomplete.pending.length > 0
             || scopeIncomplete.truncated_roots.length > 0
             || Object.keys(scopeIncomplete.errors).length > 0
           );
-          const wouldWithdraw = visibleSource === 'visible-insts' && !notCollected;
-          if (loadOptions?.confirmEmpty === true && wouldWithdraw) {
+          if (loadOptions?.confirmEmpty === true && !notCollected) {
             const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);
             if (!confirmed.removed) {
               statusMessage.value = `refno=${normalizedRoot} 记录查空，没有当成已删除，场景保持原样`;

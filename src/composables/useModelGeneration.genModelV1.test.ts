@@ -3639,3 +3639,77 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
     });
   });
 });
+describe('「取最新」用到的显示流程出口：补几处边角', () => {
+  const ROOT = '24384_24778';
+
+  beforeEach(async () => {
+    visibleInstsMock.mockReset();
+    v1Source.records.invalidateRoot.mockReset();
+    v1Source.records.invalidateRoot.mockReturnValue([]);
+    unitRefnosMock.mockReset();
+    unitRefnosMock.mockReturnValue([]);
+    typeInfoMock.mockResolvedValue({ success: true, refno: ROOT, noun: 'EQUI', owner_refno: null, owner_noun: null });
+    (await import('./modelGetWorkRegistry')).resetGetWorkRegistry();
+  });
+
+  it.each([
+    ['有截断的根', { pending: [], truncated_roots: ['24384_24790'], errors: {} }],
+    ['有出错的根', { pending: [], truncated_roots: [], errors: { '24384_24791': 'boom' } }],
+  ])('重载查空而记录没收齐（%s）：本来就不撤，不为它白问一次节点模型状态', async (_name, incomplete) => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [], incomplete });
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false, confirmEmpty: true })).toBe(false);
+    expect(nodeFactsMock).not.toHaveBeenCalled();
+    expect(evictMock).not.toHaveBeenCalled();
+  });
+
+  it('withdrawRemovedRoot：空 refno 什么都不做', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    expect(gen.withdrawRemovedRoot('')).toBe(0);
+    expect(evictMock).not.toHaveBeenCalled();
+    expect(forgetLoadedNodeMock).not.toHaveBeenCalled();
+  });
+
+  it('没钉库号时按 refno 查映射；映射里没有这个节点：不算在场景里、撤不到对象、也说不出它装着什么', async () => {
+    const { useModelGeneration, rememberLoadedRefnosOfRoot } = await import('./useModelGeneration');
+    const { tryGetDbnumByRefno } = await import('@/composables/useDbMetaInfo');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer });
+    // 映射查得到：用映射给的库号
+    unitRefnosMock.mockReturnValue(['24384_24779']);
+    expect(gen.isRootInScene(ROOT)).toBe(true);
+    expect(unitRefnosMock).toHaveBeenLastCalledWith(7997, ROOT);
+
+    vi.mocked(tryGetDbnumByRefno).mockReturnValue(null as never);
+    try {
+      isDtxRefnoLoadedMock.mockReturnValue(true);
+      expect(gen.isRootInScene(ROOT)).toBe(false);
+      expect(gen.loadedRefnosOf(ROOT)).toBeNull();
+      rememberLoadedRefnosOfRoot(ROOT, ['24384_24779']);
+      expect(gen.withdrawRemovedRoot(ROOT)).toBe(0);
+      expect(evictMock).not.toHaveBeenCalled();
+      // 表还是撤掉的
+      expect(gen.loadedRefnosOf(ROOT)).toBeNull();
+      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+    } finally {
+      vi.mocked(tryGetDbnumByRefno).mockReturnValue(7997 as never);
+    }
+  });
+
+  it('整库显示：一批没说收没收齐的（旧形状）不当成收齐——不登记成节点', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const registry = await import('./modelGetWorkRegistry');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const site = { refno: '24381_101405', name: '/1PTU-INST23' };
+    collectDbnumMock.mockImplementation(async (dbnum: number, options: { onRefnosReady?: (b: any) => Promise<void> | void }) => {
+      await options.onRefnosReady?.({ roots: [], rootsDone: 1, rootsTotal: 1, site, refnos: ['24381_1'] });
+      return { dbnum, sites: [site], refnos: ['24381_1'], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [] };
+    });
+    await gen.showModelByDbnum(7997);
+    expect(registry.getWorkRegisteredRoots()).toEqual([]);
+    expect(gen.loadedRefnosOf(site.refno)).toBeNull();
+    expect([...registry.getWorkRegisteredScopes()[0]!.knownSites]).toEqual([site.refno]);
+  });
+});

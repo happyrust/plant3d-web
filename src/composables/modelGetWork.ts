@@ -577,7 +577,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       const row = rows.get(scope.dbnum) ?? null;
       const fileLatest = sesnoOf(row?.file_latest_sesno);
       // 库文件没有新会话：不会有新的 SITE（找过一次之后才敢跳过）
-      if (scope.checkedFileLatestSesno !== null && fileLatest === scope.checkedFileLatestSesno && !restarted) continue;
+      if (scope.checkedFileLatestSesno !== null && fileLatest === scope.checkedFileLatestSesno) continue;
       let sites: { refno: string; name: string }[];
       try {
         sites = await ports.listSites(scope.dbnum);

@@ -359,6 +359,14 @@ describe('取最新：两轮不并发', () => {
     // 都跑完之后再点：又是新的一轮
     await engineUnderTest.getLatest();
     expect(refreshes).toBe(3);
+
+    // 排过一次下一轮之后，再来一遍照样排得上（上一次排的那一轮不会被当成还没跑）
+    const fourth = engineUnderTest.getLatest();
+    const fifth = engineUnderTest.getLatest();
+    expect(fifth).not.toBe(second);
+    expect(fifth).not.toBe(fourth);
+    await Promise.all([fourth, fifth]);
+    expect(refreshes).toBe(5);
   });
 });
 
@@ -538,6 +546,8 @@ describe('取最新：后端重启之后的护栏', () => {
     }]);
     expect(second.summary).toContain('1 个节点的模型没有动');
     expect(second.detail).toContain('上一次取最新以来后端重启过');
+    // 有节点没跟上：这一句是警告的颜色
+    expect(second.level).toBe('warning');
   });
 
   it('重启后库里有成套模型的库（已初始化）不用重问：模型还在库里', async () => {
@@ -557,6 +567,10 @@ describe('取最新：后端重启之后的护栏', () => {
     // 只有库文件前进（模型水位没动）也要问：按需生成的库、被删的节点都只动这一格
     expect(rootNeedsCheck(at1143, ROW_8000_FILE_1146, false)).toBe(true);
     expect(rootNeedsCheck(root(SITE, { loadedModelSesno: null, loadedFileLatestSesno: null }), ROW_8000_AT_1143, false)).toBe(true);
+    // 两边都没有水位可比（装的时候没记下，库这一行也没带）：比不出「一样」，要问
+    expect(rootNeedsCheck(root(SITE, { loadedModelSesno: null, loadedFileLatestSesno: null }), { dbnum: 8000 } as DbnumRow, false)).toBe(true);
+    // 只有模型水位变了（装的时候后台还没跟上库文件，现在跟上了）也要问
+    expect(rootNeedsCheck(root(SITE, { loadedModelSesno: 1143, loadedFileLatestSesno: 1146 }), ROW_8000_AT_1146, false)).toBe(true);
     expect(rootNeedsCheck(root(SITE, { staleReason: '后端已经重新生成，屏幕上还没换上' }), ROW_8000_AT_1143, false)).toBe(true);
     expect(rootNeedsCheck(at1143, null, false)).toBe(true);
     expect(rootNeedsCheck(at1143, ROW_8000_AT_1143, true)).toBe(false);
@@ -986,4 +1000,166 @@ it('时间常量：等后台最多 45 秒、3 秒看一次（任务书定的上�
   expect(GETWORK_BACKEND_WAIT_MAX_MS).toBe(45_000);
   expect(GETWORK_BACKEND_WAIT_POLL_MS).toBe(3_000);
   expect(vi.isFakeTimers()).toBe(false);
+});
+
+describe('取最新：补几处边角', () => {
+  const NEW_SITE = { refno: '24384_30000', name: '/NEW-SITE' };
+  const scopeOf = (patch: Partial<GetWorkDbnumScope> = {}): GetWorkDbnumScope => (
+    { dbnum: 8000, knownSites: new Set([SITE]), discover: true, checkedFileLatestSesno: 1143, ...patch }
+  );
+
+  it('只有整库显示碰过的库也算碰过：后台没做完同样要等、要交代', async () => {
+    const world = makeWorld({ rows: [ROW_8000_FILE_1146], scopes: [scopeOf({ discover: false })] });
+    const report = await harness(world).engine.getLatest();
+    expect(report.waited?.dbnums).toEqual([8000]);
+    expect(report.libraries.map((item) => item.dbnum)).toEqual([8000]);
+  });
+
+  it('撤下已删除的节点之后，登记表里不再留它', async () => {
+    const world = makeWorld({
+      roots: [root('24384_26716', { source: 'registry' })],
+      statuses: { '24384_26716': { status: status('unknown'), gone: true } },
+      loaded: { '24384_26716': ['24384_26717'] },
+    });
+    const { engine, log } = harness(world);
+    await engine.getLatest();
+    expect(log.indexOf('forget 24384_26716')).toBeGreaterThan(log.indexOf('withdraw 24384_26716'));
+  });
+
+  it('重载抛错：记进失败（带原因），后面的节点照常做', async () => {
+    // 让第一个节点的重载抛错
+    const throwing = makeWorld({
+      roots: [root(SITE), root(ZONE)],
+      statuses: { [SITE]: { status: RELOADABLE, gone: false }, [ZONE]: { status: RELOADABLE, gone: false } },
+    });
+    Object.defineProperty(throwing.afterReload, SITE, { get: () => { throw new Error('DTX 图层没了'); }, enumerable: true });
+    const report = await harness(throwing).engine.getLatest();
+    expect(report.models.failed).toEqual([{ refno: SITE, reason: '重载出错：DTX 图层没了' }]);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([ZONE]);
+  });
+
+  it('落后但有可换的新版：重载，同时把「还落后」说出来', async () => {
+    const lagging = status('lagging', { reloadableSessions: [{ sesno: 1146, time: null, unitsChanged: 1 }] });
+    const world = makeWorld({ roots: [root(SITE)], statuses: { [SITE]: { status: lagging, gone: false } } });
+    const report = await harness(world).engine.getLatest();
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([SITE]);
+    expect(report.models.kept).toEqual([{ refno: SITE, reason: expect.stringContaining('落后于库文件') }]);
+  });
+
+  it('整库显示的库从没找过新 SITE（当时没读到库文件的会话）：库文件没变也要找一次', async () => {
+    const world = makeWorld({ rows: [ROW_8000_AT_1143], scopes: [scopeOf({ checkedFileLatestSesno: null })], sites: { 8000: [] } });
+    const { engine, log } = harness(world);
+    await engine.getLatest();
+    expect(log).toContain('sites 8000');
+    expect(log).toContain('scope-checked 8000 1143');
+  });
+
+  it('新 SITE 查到名单之后库里又没有它了：不装、不说，照常记「找过了」', async () => {
+    const world = makeWorld({
+      scopes: [scopeOf()],
+      sites: { 8000: [NEW_SITE] },
+      statuses: { [NEW_SITE.refno]: { status: status('unknown'), gone: true } },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(log).not.toContain(`reload ${NEW_SITE.refno}`);
+    expect(report.models.kept).toEqual([]);
+    expect(log).toContain('scope-checked 8000 1146');
+  });
+
+  it('新 SITE 没装成（重载回 false / 抛错）：记失败，不算已在管，也不记「找过了」', async () => {
+    const failing = makeWorld({ scopes: [scopeOf()], sites: { 8000: [NEW_SITE] }, reloadFails: new Set([NEW_SITE.refno]) });
+    const a = harness(failing);
+    const first = await a.engine.getLatest();
+    expect(first.models.failed).toEqual([{ refno: NEW_SITE.refno, reason: '新出现的 SITE /NEW-SITE 没装成' }]);
+    expect(a.log.some((line) => line.startsWith('known') || line.startsWith('scope-checked'))).toBe(false);
+
+    const throwing = makeWorld({ scopes: [scopeOf()], sites: { 8000: [NEW_SITE] } });
+    Object.defineProperty(throwing.afterReload, NEW_SITE.refno, { get: () => { throw new Error('炸了'); }, enumerable: true });
+    const b = harness(throwing);
+    const second = await b.engine.getLatest();
+    expect(second.models.failed).toEqual([{ refno: NEW_SITE.refno, reason: '装入出错：炸了' }]);
+    expect(b.log.some((line) => line.startsWith('known') || line.startsWith('scope-checked'))).toBe(false);
+  });
+
+  it('新 SITE 装了但一个构件都没装上：算已在管，不计入「新装入」', async () => {
+    const world = makeWorld({ scopes: [scopeOf()], sites: { 8000: [NEW_SITE] }, afterReload: { [NEW_SITE.refno]: null } });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(log).toContain(`known 8000 ${NEW_SITE.refno}`);
+    expect(report.models.loadedNew).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(log).toContain('scope-checked 8000 1146');
+  });
+
+  it('要装新 SITE 的时候有别的装载在跑：等它完了再装；一直不完就记失败', async () => {
+    const world = makeWorld({ scopes: [scopeOf()], sites: { 8000: [NEW_SITE] } });
+    let asked = 0;
+    // 开头不忙；问完新 SITE 的状态之后忙两拍
+    world.busy = () => {
+      asked += 1;
+      return asked === 2 || asked === 3;
+    };
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(world.now).toBeGreaterThan(0);
+    expect(log).toContain(`reload ${NEW_SITE.refno}`);
+    expect(report.models.loadedNew).toHaveLength(1);
+
+    const stuck = makeWorld({ scopes: [scopeOf()], sites: { 8000: [NEW_SITE] } });
+    let calls = 0;
+    stuck.busy = () => ++calls > 1;
+    const b = harness(stuck);
+    const second = await b.engine.getLatest();
+    expect(second.models.failed).toEqual([{ refno: NEW_SITE.refno, reason: '有别的装载一直没结束，新出现的 SITE 这次没装' }]);
+    expect(b.log).not.toContain(`reload ${NEW_SITE.refno}`);
+    expect(b.log.some((line) => line.startsWith('scope-checked'))).toBe(false);
+  });
+
+  it('要重载节点的时候别的装载一直不完：这个节点记失败、不动它', async () => {
+    const world = makeWorld({ roots: [root(SITE)], statuses: { [SITE]: { status: RELOADABLE, gone: false } } });
+    let calls = 0;
+    world.busy = () => ++calls > 1;
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(report.models.failed).toEqual([{ refno: SITE, reason: '有别的装载一直没结束，这个节点这次没换' }]);
+    expect(log).not.toContain(`reload ${SITE}`);
+  });
+
+  it('选中的节点这一轮查空撤下了（它还在库里，只是名下没有几何了）：不算被删', async () => {
+    const world = makeWorld({
+      selected: ZONE,
+      roots: [root(ZONE)],
+      statuses: { [ZONE]: { status: status('empty'), gone: false } },
+      loaded: { [ZONE]: ['a'] },
+      afterReload: { [ZONE]: null },
+      goneProbe: { [ZONE]: false },
+    });
+    const { engine, marked, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(report.models.withdrawn).toEqual([{ refno: ZONE, refnos: 1, why: 'empty' }]);
+    expect(log).toContain(`probe ${ZONE}`);
+    expect(marked).toEqual([]);
+    expect(report.selectionDeleted).toBeNull();
+  });
+
+  it('问选中的构件还在不在时出错：不动选中，这一轮照常做完', async () => {
+    const world = makeWorld({ selected: '24384_26549' });
+    Object.defineProperty(world.goneProbe, '24384_26549', { get: () => { throw new Error('断了'); }, enumerable: true });
+    const { engine, marked } = harness(world);
+    const report = await engine.getLatest();
+    expect(report.ok).toBe(true);
+    expect(marked).toEqual([]);
+  });
+
+  it('只有树变了：派生物拿到的也是「有变化」', async () => {
+    const seen: GetWorkDerivedContext[] = [];
+    const world = makeWorld({
+      rows: [ROW_8000_AT_1143],
+      tree: { touched: [8000], report: () => treeReport({ changed: true }) },
+      derived: [{ name: '房间树', run: (context) => { seen.push(context); } }],
+    });
+    await harness(world).engine.getLatest();
+    expect(seen).toEqual([{ changed: true, treeChanged: true, modelsChanged: false }]);
+  });
 });

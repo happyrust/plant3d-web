@@ -176,3 +176,21 @@ describe('collectDbnumRefnos：每批带上是哪个 SITE、收没收齐（「�
     expect(await seen({ maxTotalRoots: 1 })).toEqual({ '24381_2': false });
   });
 });
+describe('collectDbnumRefnos：收没收齐，逐个原因单独看', () => {
+  const full = { generationRoots: ['24381_10'], items: [item('24381_11', '24381_10')], empty: [] };
+  it.each([
+    ['有待定（409）', { pending: ['24383_2'] }],
+    ['有出错的根', { errors: { '24383_9': 'boom' } }],
+    ['有截断的根', { truncatedRoots: ['24383_40'] }],
+  ])('%s 的 SITE 不算收齐', async (_name, flaw) => {
+    const records = fakeRecords({
+      '24381_2': full,
+      '24383_2': { generationRoots: ['24383_20'], items: [item('24383_21', '24383_20')], empty: [], ...flaw },
+    });
+    const complete: Record<string, boolean | undefined> = {};
+    await collectDbnumRefnos(fakeTree(), records, 7997, {
+      onRefnosReady: (batch) => { complete[batch.site!.refno] = batch.complete; },
+    });
+    expect(complete).toEqual({ '24381_2': true, '24383_2': false });
+  });
+});
