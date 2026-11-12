@@ -47,6 +47,8 @@ async function mountButton() {
     button: () => host.querySelector<HTMLButtonElement>('[data-testid="model-getwork-button"]')!,
     label: () => host.querySelector('[data-testid="model-getwork-label"]')?.textContent?.trim() ?? '',
     result: () => host.querySelector<HTMLElement>('[data-testid="model-getwork-result"]'),
+    /** 这一组里从左到右画了什么 */
+    order: () => [...host.querySelector('[data-testid="model-getwork"]')!.children].map((element) => (element as HTMLElement).dataset.testid),
     unmount: () => {
       app.unmount();
       host.remove();
@@ -126,12 +128,15 @@ describe('状态栏的「取最新」按钮', () => {
     }
   });
 
-  it('做完：按钮回到「取最新」，右边常驻那一句；悬停是那一句加逐条细节和时刻', async () => {
+  it('做完：按钮回到「取最新」，左边常驻那一句（按钮留在最右端）；悬停是那一句加逐条细节和时刻', async () => {
     const view = await mountButton();
     try {
+      expect(view.order()).toEqual(['model-getwork-button']);
       h.state.last = report();
       await nextTick();
       expect(view.label()).toBe('取最新');
+      // 那一句画在按钮左边：按钮钉在状态栏最右端，底部正中的提示条盖不到它（盖住了就没法再点一次）
+      expect(view.order()).toEqual(['model-getwork-result', 'model-getwork-button']);
       const result = view.result()!;
       expect(result.textContent?.trim()).toBe('已取最新：模型树新增 1；模型重载 1 个节点（新增 2 个构件）。');
       expect(result.dataset.level).toBe('success');

@@ -162,7 +162,8 @@ onMounted(() => {
             <div class="flex h-7 shrink-0 items-center border-t border-border bg-background px-2"
               data-testid="app-status-bar">
               <GenModelV1HealthBadge />
-              <ModelGetWorkButton class="ml-2" />
+              <!-- 钉在最右端：底部正中的提示条盖不到（原因见组件里的说明） -->
+              <ModelGetWorkButton class="ml-auto pl-2" />
             </div>
           </div>
         </v-main>

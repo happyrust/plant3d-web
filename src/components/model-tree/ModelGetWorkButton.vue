@@ -9,10 +9,13 @@ import { registerGetWorkDerived, useModelGetWork } from '@/composables/useModelG
 /**
  * 底部状态栏的「取最新」按钮（E3D 的 GETWORK；2026-11-12 用户定：只做手动的这一个，不自动刷新）。
  *
- * 点一下：这个页面碰过的库对一次账——模型树刷新到位、已装的模型换成后台现在的那一版，然后在按钮右边留一句交代
+ * 点一下：这个页面碰过的库对一次账——模型树刷新到位、已装的模型换成后台现在的那一版，然后在按钮左边留一句交代
  * （动了什么、哪些库没跟到最新；悬停看逐条细节，同一句也进提示和控制台）。逻辑都在 `useModelGetWork`，这里只管画。
  *
- * 放在状态栏、连接徽标旁边：不依赖哪个面板开着，始终看得到；和「数据已更新」的提示在同一处，那句交代也有地方常驻。
+ * 放在状态栏：不依赖哪个面板开着，始终看得到；和「数据已更新」的提示在同一条上，那句交代也有地方常驻。
+ * 按钮钉在状态栏的**最右端**、那一句在它左边：全局提示条（`v-snackbar`）画在底部正中、盖在状态栏上，鼠标停在它上面时
+ * 它不会自己消失。按钮要是在中间（2026-11-12 真实回放撞到的：「数据已更新」的提示一出来就把它挤到了提示条底下），
+ * 取最新自己弹的那一句会盖住按钮，鼠标又正好停在上面——想再点一次就点不到。右端在提示条的范围之外。
  */
 const getWork = useModelGetWork();
 
@@ -86,8 +89,15 @@ function onClick(): void {
 </script>
 
 <template>
-  <span class="inline-flex min-w-0 items-center gap-1.5"
+  <span class="inline-flex min-w-0 items-center justify-end gap-1.5"
     data-testid="model-getwork">
+    <span v-if="last && !running"
+      data-testid="model-getwork-result"
+      :data-level="last.level"
+      :data-ok="last.ok ? 'true' : 'false'"
+      class="min-w-0 max-w-[560px] truncate text-[11px]"
+      :class="resultClass"
+      :title="resultTitle">{{ last.summary }}</span>
     <button type="button"
       data-testid="model-getwork-button"
       :data-running="running ? 'true' : 'false'"
@@ -101,12 +111,5 @@ function onClick(): void {
       <span class="truncate"
         data-testid="model-getwork-label">{{ label }}</span>
     </button>
-    <span v-if="last && !running"
-      data-testid="model-getwork-result"
-      :data-level="last.level"
-      :data-ok="last.ok ? 'true' : 'false'"
-      class="min-w-0 max-w-[560px] truncate text-[11px]"
-      :class="resultClass"
-      :title="resultTitle">{{ last.summary }}</span>
   </span>
 </template>
