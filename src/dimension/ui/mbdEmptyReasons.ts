@@ -24,7 +24,12 @@ export const MBD_EMPTY_REASON_MAX_LINES = 2;
  *
  * **数组的先后就是一个空包里有好几条时的先后**：
  * 1. 先是「为什么空」的那七条——每个空包恰好有其中一条（逐个组合数过，14 种组合）；
- * 2. 再是陪着出现的细节，服务端的中文说明排在最前（它说的是具体哪几个构件、缺什么）。
+ * 2. 再是陪着出现的细节：「管道上没有点 ATTA」在前，服务端的中文说明（`data.view_issue`）其次，求解器其余的细节在后。
+ *
+ * `data.view_issue` 排在 `support.em4_no_pipe_atta` 之后是 P2 定的：REST 空支架上服务端那句讲的是归属（「配不到 STRU，以 REST 为
+ * 归属对象」），不是「为什么空」。按规则号分不开它和别的 `data.view_issue`，所以这一挪对同时带这两条的包一律生效——
+ * `respond-final-b4-641284675` 的 260 个空包里是 147 个：1 个 EM4 的 REST，和 146 个 EM4 的 STRU 空支架（它们的服务端说明是
+ * 「N 根型钢没有 SPRE」，现在让到第三位、留在诊断区）；另 7 个 em9_pipe_supp 的 REST 没有「没有点 ATTA」这一条，第二行不变。
  */
 export const MBD_EMPTY_REASON_WORDINGS: readonly Readonly<{ ruleId: string; text: string | null }>[] = [
   // —— 为什么空 ——
@@ -39,8 +44,8 @@ export const MBD_EMPTY_REASON_WORDINGS: readonly Readonly<{ ruleId: string; text
   },
   { ruleId: 'civil.arch_floor_only', text: '建筑窗体只给楼板（FLOOR）出标注，这个对象不是楼板。' },
   // —— 陪着出现的细节 ——
-  { ruleId: 'data.view_issue', text: null },
   { ruleId: 'support.em4_no_pipe_atta', text: '这个支架的管道上没有点 ATTA，找不了墙，也定不出参考视向。' },
+  { ruleId: 'data.view_issue', text: null },
   { ruleId: 'support.part_geometry_missing', text: '有构件缺少可用的截面数据（POSS / POSE / 截面点），被跳过了。' },
   { ruleId: 'civil.member_off_face', text: '随这个构件交来的成员里有不在它任何一个面上的，这些成员没有标注。' },
   { ruleId: 'civil.arch_round_member', text: '有圆形的开孔，建筑窗体不标圆形开孔。' },

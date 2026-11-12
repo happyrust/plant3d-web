@@ -199,13 +199,14 @@ describe('mbdEmptyReasonLines：一个空包的诊断里，标题下写哪一两
   });
 
   /**
-   * 一个空包里好几条诊断时的先后：先写「为什么空」的那一条，再至多补一条细节——服务端的中文说明排在求解器的细节前面。
+   * 一个空包里好几条诊断时的先后：先写「为什么空」的那一条，再至多补一条细节——「管道上没有点 ATTA」排在服务端的中文说明
+   * 前面（P2 的决定：REST 空支架的服务端说明讲的是归属，不是「为什么空」），服务端的说明排在求解器其余的细节前面。
    * 下面是最终标注包里空包的全部 14 种规则号组合。
    */
   it.each([
-    // 146 个 EM4 支架
+    // 146 个 EM4 支架：服务端那句讲的是「几根型钢没有 SPRE」，这一挪它也让到了第三位，留在诊断区
     [['data.view_issue', 'support.em4_no_pipe_atta', 'support.part_geometry_missing', 'support.nothing_to_annotate'],
-      ['support.nothing_to_annotate', 'data.view_issue']],
+      ['support.nothing_to_annotate', 'support.em4_no_pipe_atta']],
     [['civil.nothing_to_annotate'], ['civil.nothing_to_annotate']],
     [['support.em4_no_pipe_atta', 'support.nothing_to_annotate'], ['support.nothing_to_annotate', 'support.em4_no_pipe_atta']],
     [['civil.arch_floor_only'], ['civil.arch_floor_only']],
@@ -219,13 +220,46 @@ describe('mbdEmptyReasonLines：一个空包的诊断里，标题下写哪一两
     [['civil.arch_round_member', 'civil.member_off_face', 'civil.nothing_to_annotate'],
       ['civil.nothing_to_annotate', 'civil.member_off_face']],
     [['data.view_issue', 'civil.arch_floor_only'], ['civil.arch_floor_only', 'data.view_issue']],
-    [['data.view_issue', 'support.em4_no_pipe_atta', 'support.nothing_to_annotate'], ['support.nothing_to_annotate', 'data.view_issue']],
+    // EM4 的 REST 空支架（1 个）：服务端那句讲的是「配不到 STRU，以 REST 为归属对象」
+    [['data.view_issue', 'support.em4_no_pipe_atta', 'support.nothing_to_annotate'],
+      ['support.nothing_to_annotate', 'support.em4_no_pipe_atta']],
   ] as const)('orders %j as %j', (given, expected) => {
     const issues = given.map(ruleId => issue(ruleId));
 
     expect(rulesOf(issues)).toEqual(expected);
     // 先后只看规则号，不看诊断在包里的顺序。
     expect(rulesOf(shuffled(issues))).toEqual(expected);
+  });
+
+  it('orders the accompanying details among themselves: no point ATTA, the server note, then the solver\'s other details', () => {
+    const details = [
+      'support.em4_no_pipe_atta',
+      'data.view_issue',
+      'support.part_geometry_missing',
+      'civil.member_off_face',
+      'civil.arch_round_member',
+      'adapter.implied_tube_not_drawn',
+    ];
+
+    // 相邻的两条两两比：表里前一条总排在后一条前面，不看它们在包里谁先谁后。
+    for (let index = 0; index + 1 < details.length; index += 1) {
+      const [earlier, later] = [details[index]!, details[index + 1]!];
+      expect(rulesOf([issue(later), issue(earlier)])).toEqual([earlier, later]);
+      expect(rulesOf([issue(earlier), issue(later)])).toEqual([earlier, later]);
+    }
+    // 「为什么空」的那七条都排在任何一条细节前面。
+    const whyEmpty = [
+      'data.empty_branch',
+      'civil.geometry_missing',
+      'adapter.civil_wall_without_solid',
+      'support.no_parts',
+      'support.nothing_to_annotate',
+      'civil.nothing_to_annotate',
+      'civil.arch_floor_only',
+    ];
+    for (const why of whyEmpty) {
+      expect(rulesOf([issue(details[0]), issue(why)])).toEqual([why, details[0]]);
+    }
   });
 
   it('never writes more than two lines, and one rule id only once', () => {

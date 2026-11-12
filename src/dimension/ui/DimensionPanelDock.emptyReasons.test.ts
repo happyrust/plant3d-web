@@ -81,6 +81,10 @@ const WORDS = {
   archFloor: 'nothing to annotate on this arch floor: no wall near the slab; no room over the slab; no NXTR trench in the slab '
     + '(markCivil.drawarch L1691-1710 draws only wall names and doors, room numbers with their elevations, and trench openings)',
   templateWall: 'STWALL 15201_379 没有截面（SPRE 没设）：在 E3D 里没有实体，不标——PML 土建窗体在这种墙上读不出厚度，不出图',
+  // REST 空支架上服务端的那一句：讲的是归属，不是「为什么空」（`respond-final-b4-641284675` 里 8 个 REST 空包都带着它）。
+  restOwner: 'REST /Copy-(2)-of-1TFA021MP-SUPP-14/REST 在 ZONE /1TFA-LX-SUPP 与全库都配不到 STRU（按名找过 '
+    + '/Copy-(2)-of-1TFA021MP-SUPP-14/STRU、/Copy-(2)-of-1TFA021MP-SUPP-14），以 REST 为归属对象',
+  restNothing: 'nothing to annotate on this support: 1 part(s) (PCLA × 1) with 0 contact(s) between them give 0 dimension chain(s) and 0 label(s)',
 } as const;
 
 let issueSeq = 0;
@@ -197,7 +201,7 @@ describe('DimensionPanelDock：空包时在标题下写为什么没有标注', (
     expect(squeeze(box!.textContent)).not.toContain('branch has no members');
   });
 
-  it('writes two lines at most: why it is empty first, then the server\'s own Chinese note', async () => {
+  it('writes two lines at most: why it is empty first, then the missing point ATTA ahead of the server note', async () => {
     const host = await show([source('24383_80213', {
       empty: true,
       annotationType: 'em4_supp',
@@ -206,17 +210,54 @@ describe('DimensionPanelDock：空包时在标题下写为什么没有标注', (
 
     const [row] = rowsOf(host);
     const lines = linesOf(row!);
-    expect(lines.map(line => line.getAttribute('data-rule-id'))).toEqual(['support.nothing_to_annotate', 'data.view_issue']);
-    expect(lines.map(line => line.getAttribute('data-origin'))).toEqual(['rule', 'server']);
+    // P2：`data.view_issue` 排到 `support.em4_no_pipe_atta` 之后——两条都在的包，第二行写「没有点 ATTA」。
+    expect(lines.map(line => line.getAttribute('data-rule-id'))).toEqual(['support.nothing_to_annotate', 'support.em4_no_pipe_atta']);
+    expect(lines.map(line => line.getAttribute('data-origin'))).toEqual(['rule', 'rule']);
     expect(squeeze(lines[0]!.textContent)).toBe('这个支架的构件出不了尺寸，也出不了标签，没有可标注的内容。');
-    // 服务端的说明本来就是中文：一个字不改。
-    expect(squeeze(lines[1]!.textContent)).toBe(WORDS.viewIssue);
-    // 另两条细节（英文）不上来，留在诊断区。
-    expect(squeeze(reasons(host)!.textContent)).not.toMatch(/ATTA on its pipes|has no usable section data|nothing to annotate/);
+    expect(squeeze(lines[1]!.textContent)).toBe('这个支架的管道上没有点 ATTA，找不了墙，也定不出参考视向。');
+    // 服务端那句（几根型钢没有 SPRE）与另一条细节不上来，英文原话也不上来；都留在诊断区。
+    expect(squeeze(reasons(host)!.textContent)).not.toMatch(/没有 SPRE|ATTA on its pipes|has no usable section data|nothing to annotate/);
     const diagnostics = squeeze(diagnosticsOf(host)!.textContent);
     for (const words of [WORDS.viewIssue, WORDS.em4NoAtta, WORDS.partGeometry, WORDS.supportNothing]) {
       expect(diagnostics).toContain(words);
     }
+  });
+
+  it('keeps the server\'s own Chinese note as the second line when the package has no point-ATTA issue', async () => {
+    // em9_pipe_supp 的 REST 空支架（真实库里 7 个）：包里没有 `support.em4_no_pipe_atta`，第二行仍是服务端那句。
+    const host = await show([source('24381_178965', {
+      empty: true,
+      annotationType: 'em9_pipe_supp',
+      issues: [
+        issue('24381_178965', 'data.view_issue', WORDS.restOwner, { severity: 'warning' }),
+        issue('24381_178965', 'support.nothing_to_annotate', WORDS.restNothing),
+      ],
+    })]);
+
+    const lines = linesOf(rowsOf(host)[0]!);
+    expect(lines.map(line => line.getAttribute('data-rule-id'))).toEqual(['support.nothing_to_annotate', 'data.view_issue']);
+    expect(lines.map(line => line.getAttribute('data-origin'))).toEqual(['rule', 'server']);
+    // 服务端的说明本来就是中文：一个字不改。
+    expect(squeeze(lines[1]!.textContent)).toBe(WORDS.restOwner);
+  });
+
+  it('writes the missing point ATTA, not the ownership note, under an EM4 REST support', async () => {
+    // EM4 的 REST 空支架（真实库里 1 个，24383_69177）：服务端那句讲的是归属，不是「为什么空」。
+    const host = await show([source('24383_69177', {
+      empty: true,
+      annotationType: 'em4_supp',
+      issues: [
+        issue('24383_69177', 'data.view_issue', WORDS.restOwner, { severity: 'warning' }),
+        issue('24383_69177', 'support.em4_no_pipe_atta', WORDS.em4NoAtta),
+        issue('24383_69177', 'support.nothing_to_annotate', WORDS.supportNothing),
+      ],
+    })]);
+
+    const [row] = rowsOf(host);
+    expect(linesOf(row!).map(line => line.getAttribute('data-rule-id')))
+      .toEqual(['support.nothing_to_annotate', 'support.em4_no_pipe_atta']);
+    expect(squeeze(row!.textContent)).not.toContain('以 REST 为归属对象');
+    expect(squeeze(diagnosticsOf(host)!.textContent)).toContain(WORDS.restOwner);
   });
 
   it('keeps the PML method names and line numbers out of the line under the title', async () => {
