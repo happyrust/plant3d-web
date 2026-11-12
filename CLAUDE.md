@@ -162,7 +162,7 @@ scripts/                  # 构建和验证脚本
 
 1. **不要提交构建产物**: `dist/`, `coverage/`, `test-results/` 已在 `.gitignore`
 2. **不要提交敏感信息**: `.env.*` 文件不应包含真实密钥
-3. **合并前检查**: 至少运行 `npm run type-check` + `npm run lint` + `npm test`
+3. **合并前检查**: 至少运行 `npm run type-check` + 对改动的文件跑 eslint（`npx eslint <改动的文件>`）+ `npm test`；不跑 `npm run lint`（它带自动修复，会改写全仓文件，见 `AGENTS.md`）
 4. **/files 路径**: 始终代理到后端，不使用本地 `public/files`
 5. **plant-ui WASM**: 离线包里 `backend/web/pkg` 来自 plant-ui，由 `scripts/build-offline-release.mjs` 叠加，不在本仓构建
 
