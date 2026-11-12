@@ -1239,7 +1239,19 @@ describe('取最新：场景里一共多了 / 少了多少个构件，不重复�
     expect(report.models.withdrawn).toEqual([{ refno: gone, refnos: 5, why: 'deleted' }, { refno: ZONE, refnos: 3, why: 'empty' }]);
     expect(report.models.loadedNew).toEqual([{ refno: '24384_30000', name: '/NEW-SITE', total: 2 }]);
     expect(report.models).toMatchObject({ componentsAdded: 2, componentsRemoved: 8 });
-    expect(report.summary).toBe('已取最新：模型新装入 1 个 SITE、撤下 2 个已不存在的节点（新增 2 个构件、撤下 8 个构件）。');
+    // 撤下分两种说：库里已经没有的，和还在库里、名下没有几何了的（不能把后一种说成「已不存在」）
+    expect(report.summary).toBe('已取最新：模型新装入 1 个 SITE、撤下 1 个已不存在的节点、撤下 1 个名下已没有几何的节点（新增 2 个构件、撤下 8 个构件）。');
+  });
+
+  it('只有查空撤下的：那一句不说「已不存在」', async () => {
+    const world = makeWorld({
+      roots: [root(ZONE)],
+      statuses: { [ZONE]: { status: status('empty'), gone: false } },
+      loaded: { [ZONE]: ['z1'] },
+      afterReload: { [ZONE]: null },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.summary).toBe('已取最新：模型撤下 1 个名下已没有几何的节点（撤下 1 个构件）。');
   });
 });
 describe('取最新：问场景时带着节点登记时的库号（不靠现查映射）', () => {

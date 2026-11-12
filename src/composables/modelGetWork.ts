@@ -408,10 +408,14 @@ export function summarizeGetWork(report: GetWorkReport, label: (refno: string) =
   const models = report.models;
   const swappedIn = models.componentsAdded;
   const swappedOut = models.componentsRemoved;
+  // 撤下分两种说：库里已经没有它的，和它还在库里、只是名下没有几何了的（比如唯一的构件挪到了别的设备下）
+  const withdrawnDeleted = models.withdrawn.filter((item) => item.why === 'deleted').length;
+  const withdrawnEmpty = models.withdrawn.length - withdrawnDeleted;
   const modelBits = [
     models.reloaded.length > 0 ? `重载 ${models.reloaded.length} 个节点` : '',
     models.loadedNew.length > 0 ? `新装入 ${models.loadedNew.length} 个 SITE` : '',
-    models.withdrawn.length > 0 ? `撤下 ${models.withdrawn.length} 个已不存在的节点` : '',
+    withdrawnDeleted > 0 ? `撤下 ${withdrawnDeleted} 个已不存在的节点` : '',
+    withdrawnEmpty > 0 ? `撤下 ${withdrawnEmpty} 个名下已没有几何的节点` : '',
   ].filter(Boolean);
   if (modelBits.length > 0) {
     const counts = [swappedIn > 0 ? `新增 ${swappedIn} 个构件` : '', swappedOut > 0 ? `撤下 ${swappedOut} 个构件` : ''].filter(Boolean).join('、');
