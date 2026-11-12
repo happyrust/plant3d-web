@@ -44,4 +44,17 @@ describe('底部状态栏与全局提示条（源码钉）', () => {
   it('这条规则是全局的（不带 scoped）：提示条是挂到页面最外层去画的，带 scoped 的样式够不着它', () => {
     expect(source).not.toMatch(/<style[^>]*\bscoped\b/);
   });
+
+  it('装着停靠布局和状态栏的那一列能随窗口变窄（min-w-0）：不然窗口一窄，状态栏最右端的「取最新」被切到窗口外', () => {
+    // 2026-11-12 实测：窗口从 1600 改到 1280，没有 min-w-0 时这一列被停靠布局上一次排好的宽度撑在 1600，
+    // 「取最新」在 1529–1592，窗口只到 1280
+    const column = template.match(/<div class="([^"]*)">\s*<div class="min-h-0 flex-1">\s*<DockLayout \/>/);
+    expect(column).not.toBeNull();
+    const classes = column![1]!.split(/\s+/);
+    expect(classes).toContain('min-w-0');
+    expect(classes).toContain('flex-1');
+    // 状态栏是这一列的最后一个孩子：列变窄它就跟着变窄
+    const after = template.slice(template.indexOf('<DockLayout />'));
+    expect(after.indexOf('data-testid="app-status-bar"')).toBeGreaterThan(-1);
+  });
 });

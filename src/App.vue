@@ -155,7 +155,9 @@ onMounted(() => {
         </v-app-bar>
 
         <v-main class="flex-1 min-h-0 d-flex flex-row" style="flex: 1 1 auto;">
-          <div class="flex-1 min-h-0 flex flex-col">
+          <!-- min-w-0：窗口变窄时这一列要能跟着变窄。没有它，这一列被停靠布局上一次排好的宽度撑着缩不动，
+               右边超出窗口的那一截（停靠布局的右侧，和状态栏最右端的「取最新」）被切掉、看不见也点不到 -->
+          <div class="flex-1 min-h-0 min-w-0 flex flex-col">
             <div class="min-h-0 flex-1">
               <DockLayout />
             </div>
