@@ -679,8 +679,10 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     const finish = (): GetWorkReport => {
       report.finishedAt = ports.now();
       const tree = ports.tree();
+      // 这一轮从树上消失的节点树上已经查不到名字了：用回执里记下的
+      const goneNames = new Map((report.tree?.removed ?? []).map((item) => [item.id, item.name]));
       Object.assign(report, summarizeGetWork(report, (refno) => {
-        const name = tree?.nameOf(refno);
+        const name = tree?.nameOf(refno) ?? goneNames.get(refno);
         return name ? `${name}（${refno}）` : refno;
       }));
       ports.onProgress('');

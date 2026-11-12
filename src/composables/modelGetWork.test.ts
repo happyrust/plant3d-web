@@ -776,6 +776,19 @@ describe('取最新：选中的构件与派生物', () => {
     removedUnder: { '24384_26716': '24384_26716', '24384_26717': '24384_26716' },
   });
 
+  it('被删的节点树上已经查不到名字：细节里用它消失前的名字', async () => {
+    const world = makeWorld({
+      roots: [root('24384_26716')],
+      statuses: { '24384_26716': { status: status('unknown'), gone: true } },
+      loaded: { '24384_26716': ['24384_26717'] },
+      selected: '24384_26716',
+      tree: { touched: [8000], report: () => removedTree('deleted') },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.detail).toContain('撤下 /AIOS-INC-ADD（24384_26716）（库里已经没有它）：1 个构件');
+    expect(report.detail).toContain('选中的 /AIOS-INC-ADD（24384_26716） 在库里已经没有了');
+  });
+
   it('选中的构件随被删的祖先一起从树上消失：登记成「已删除」，不用再去问', async () => {
     const world = makeWorld({ selected: '24384_26717', tree: { touched: [8000], report: () => removedTree('deleted') } });
     const { engine, log, marked } = harness(world);
