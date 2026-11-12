@@ -1,0 +1,91 @@
+{
+  "startedAt": "2026-11-12T05:22:09.850Z",
+  "lists": [
+    {
+      "name": "mutations-tree",
+      "total": 57,
+      "recorded": 57,
+      "killed": 57,
+      "killedByAssertion": 57,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "33 passed (33)",
+        "ms": 3348
+      },
+      "closing": {
+        "status": 0,
+        "tests": "33 passed (33)",
+        "ms": 3104
+      }
+    },
+    {
+      "name": "mutations-models",
+      "total": 182,
+      "recorded": 182,
+      "killed": 182,
+      "killedByAssertion": 182,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "337 passed (337)",
+        "ms": 5998
+      },
+      "closing": {
+        "status": 0,
+        "tests": "337 passed (337)",
+        "ms": 6026
+      }
+    },
+    {
+      "name": "mutations-round3",
+      "total": 29,
+      "recorded": 29,
+      "killed": 29,
+      "killedByAssertion": 29,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "282 passed (282)",
+        "ms": 3055
+      },
+      "closing": {
+        "status": 0,
+        "tests": "282 passed (282)",
+        "ms": 3119
+      }
+    },
+    {
+      "name": "mutations-replay",
+      "total": 20,
+      "recorded": 20,
+      "killed": 20,
+      "killedByAssertion": 20,
+      "killedBySuiteError": [],
+      "survived": [],
+      "timeout": [],
+      "invalid": [],
+      "baseline": {
+        "status": 0,
+        "tests": "111 passed (111)",
+        "ms": 2067
+      },
+      "closing": {
+        "status": 0,
+        "tests": "111 passed (111)",
+        "ms": 2399
+      }
+    }
+  ],
+  "worktreeStatusAfter": "M docs/adr/0073-getwork-is-a-manual-read-only-sync-that-reconciles-the-tree-by-layer-and-reloads-models-by-node.md\n M docs/verification/model-getwork-2026-11-12/README.md\n M docs/verification/model-getwork-2026-11-12/mutations/mutations-models.json\n M docs/verification/model-getwork-2026-11-12/mutations/mutations-round3.json\n?? docs/verification/model-getwork-2026-11-12/mutations/fullrun-head-174e7646/\n?? docs/verification/model-getwork-2026-11-12/mutations/mutate-full.mjs\n?? docs/verification/model-getwork-2026-11-12/mutations/mutations-replay.json\n?? docs/verification/model-getwork-2026-11-12/mutations/update-mutations-r2.mjs\n?? docs/verification/model-getwork-2026-11-12/replay.md\n?? docs/verification/model-getwork-2026-11-12/replay/",
+  "finishedAt": "2026-11-12T05:45:29.290Z"
+}

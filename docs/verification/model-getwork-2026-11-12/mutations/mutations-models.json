@@ -325,8 +325,8 @@
       "id": "G45",
       "file": "src/composables/modelGetWork.ts",
       "note": "撤下之后登记表里还留着",
-      "find": "        else removedUnnamed += refnos;\n        ports.forgetRoot(root.refno);",
-      "replace": "        else removedUnnamed += refnos;"
+      "find": "        steps.push({ root, removed: new Set(members), after: null, reloadedIndex: null });\n        ports.forgetRoot(root.refno);",
+      "replace": "        steps.push({ root, removed: new Set(members), after: null, reloadedIndex: null });"
     },
     {
       "id": "G46",
@@ -360,7 +360,7 @@
       "id": "G50",
       "file": "src/composables/modelGetWork.ts",
       "note": "重载后查空不算撤下",
-      "find": "      if (!after || after.length === 0) {\n        for (const refno of outcome.before) removedAll.add(refno);\n        models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });\n        continue;\n      }",
+      "find": "      if (!after || after.length === 0) {\n        for (const refno of outcome.before) removedAll.add(refno);\n        steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });\n        models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });\n        continue;\n      }",
       "replace": "      if (!after) continue;"
     },
     {

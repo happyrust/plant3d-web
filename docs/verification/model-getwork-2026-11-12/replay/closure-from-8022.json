@@ -1,0 +1,245 @@
+{
+ "takenAt": "2026-11-12T03:22:44.617Z",
+ "project": "AvevaMarineSample",
+ "mdb": "/ALL",
+ "closure": {
+  "status": "ok",
+  "project": "AvevaMarineSample",
+  "mdb": "/ALL",
+  "roots": [
+   {
+    "path": "D:\\AVEVA\\Projects\\E3D3.1",
+    "reachable": true,
+    "codes_seen": [
+     "acp",
+     "acw",
+     "ams",
+     "aps",
+     "scb",
+     "tes",
+     "zdj"
+    ],
+    "problem": null,
+    "scan_ms": 0
+   }
+  ],
+  "projects": [
+   {
+    "name": "AvevaMarineSample",
+    "codes": [
+     "AMS"
+    ],
+    "is_main": true,
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample",
+    "db_dirs": [
+     "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000"
+    ],
+    "dbnums": [
+     1112,
+     7997,
+     7998,
+     7999,
+     8000,
+     7000,
+     6890,
+     5052,
+     5100,
+     5053,
+     5200,
+     7332,
+     7330,
+     7331,
+     7329,
+     7353,
+     7324,
+     7352,
+     7350,
+     7354,
+     7327,
+     7356,
+     7333,
+     7326,
+     7322,
+     7351,
+     7334,
+     7741,
+     7742,
+     5054,
+     5101
+    ],
+    "shadowed": []
+   },
+   {
+    "name": "ZDJ",
+    "codes": [
+     "ZDJ"
+    ],
+    "is_main": false,
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ",
+    "db_dirs": [
+     "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ\\ZDJ000"
+    ],
+    "dbnums": [
+     7600
+    ],
+    "shadowed": []
+   },
+   {
+    "name": "SCB",
+    "codes": [
+     "SCB"
+    ],
+    "is_main": false,
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB",
+    "db_dirs": [
+     "D:\\AVEVA\\Projects\\E3D3.1\\SCB\\scb000"
+    ],
+    "dbnums": [
+     6000,
+     6001,
+     6002,
+     6003
+    ],
+    "shadowed": []
+   },
+   {
+    "name": "AvevaCatalogue",
+    "codes": [
+     "ACP"
+    ],
+    "is_main": false,
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue",
+    "db_dirs": [
+     "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue\\acp000"
+    ],
+    "dbnums": [
+     7043,
+     7044,
+     7010,
+     7027,
+     7021,
+     7026,
+     7022,
+     7046,
+     7006,
+     7014,
+     7015,
+     7002,
+     7029,
+     7323,
+     7007,
+     7004,
+     7008,
+     7034,
+     7047,
+     7048,
+     250702,
+     250705,
+     250700,
+     250701,
+     7001,
+     7003,
+     7009,
+     7045,
+     7011,
+     7320,
+     7321,
+     7325,
+     7328,
+     7360
+    ],
+    "shadowed": []
+   },
+   {
+    "name": "AvevaPlantSample",
+    "codes": [
+     "APS"
+    ],
+    "is_main": false,
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample",
+    "db_dirs": [
+     "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000"
+    ],
+    "dbnums": [
+     7355
+    ],
+    "shadowed": []
+   }
+  ],
+  "seen_projects": [
+   {
+    "name": "AvevaCatalogue",
+    "codes": [
+     "ACP"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue"
+   },
+   {
+    "name": "AvevaMarineSample",
+    "codes": [
+     "AMS"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample"
+   },
+   {
+    "name": "AvevaPlantSample",
+    "codes": [
+     "APS"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample"
+   },
+   {
+    "name": "YCYK-E3D",
+    "codes": [
+     "ACW"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\E3D3.1-slyk-project\\YCYK-E3D"
+   },
+   {
+    "name": "SCB",
+    "codes": [
+     "SCB"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB"
+   },
+   {
+    "name": "TEST",
+    "codes": [
+     "TES"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\TEST"
+   },
+   {
+    "name": "YCYK-E3D",
+    "codes": [
+     "ACW"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\YCYK-E3D"
+   },
+   {
+    "name": "ZDJ",
+    "codes": [
+     "ZDJ"
+    ],
+    "root_index": 0,
+    "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ"
+   }
+  ],
+  "unresolved": [],
+  "problems": [],
+  "declaration_error": null,
+  "sys": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\amssys"
+ }
+}

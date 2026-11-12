@@ -60,7 +60,7 @@
       "id": "H08",
       "file": "src/composables/modelGetWork.ts",
       "note": "合计的撤下构件数不去重（各节点相加）",
-      "find": "      models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno)).length + removedUnnamed;",
+      "find": "      models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno) && !present.has(refno)).length + removedUnnamed;",
       "replace": "      models.componentsRemoved = models.reloaded.reduce((sum, item) => sum + item.removed, 0) + models.withdrawn.reduce((sum, item) => sum + item.refnos, 0);"
     },
     {

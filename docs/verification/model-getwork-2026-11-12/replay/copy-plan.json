@@ -1,0 +1,420 @@
+[
+ {
+  "project": "AvevaMarineSample",
+  "code": "ams",
+  "dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000",
+  "files": [
+   {
+    "dbnum": 1112,
+    "name": "ams1112_0001",
+    "size": 21344256
+   },
+   {
+    "dbnum": 7997,
+    "name": "ams7997_0001",
+    "size": 75886592
+   },
+   {
+    "dbnum": 7998,
+    "name": "ams7998_0001",
+    "size": 14706688
+   },
+   {
+    "dbnum": 7999,
+    "name": "ams7999_0001",
+    "size": 61270016
+   },
+   {
+    "dbnum": 8000,
+    "name": "ams8000_0001",
+    "size": 53764096
+   },
+   {
+    "dbnum": 7000,
+    "name": "ams7000_0001",
+    "size": 109834240
+   },
+   {
+    "dbnum": 6890,
+    "name": "ams6890_0001",
+    "size": 133011456
+   },
+   {
+    "dbnum": 5052,
+    "name": "ams5052_0001",
+    "size": 159404032
+   },
+   {
+    "dbnum": 5100,
+    "name": "ams5100_0001",
+    "size": 169984
+   },
+   {
+    "dbnum": 5053,
+    "name": "ams5053_0001",
+    "size": 143126528
+   },
+   {
+    "dbnum": 5200,
+    "name": "ams5200_0001",
+    "size": 7356416
+   },
+   {
+    "dbnum": 7332,
+    "name": "ams7332_0001",
+    "size": 1361920
+   },
+   {
+    "dbnum": 7330,
+    "name": "ams7330_0001",
+    "size": 1519616
+   },
+   {
+    "dbnum": 7331,
+    "name": "ams7331_0001",
+    "size": 1404928
+   },
+   {
+    "dbnum": 7329,
+    "name": "ams7329_0001",
+    "size": 5146624
+   },
+   {
+    "dbnum": 7353,
+    "name": "ams7353_0001",
+    "size": 294912
+   },
+   {
+    "dbnum": 7324,
+    "name": "ams7324_0001",
+    "size": 5560320
+   },
+   {
+    "dbnum": 7352,
+    "name": "ams7352_0001",
+    "size": 393216
+   },
+   {
+    "dbnum": 7350,
+    "name": "ams7350_0001",
+    "size": 6072320
+   },
+   {
+    "dbnum": 7354,
+    "name": "ams7354_0001",
+    "size": 1888256
+   },
+   {
+    "dbnum": 7327,
+    "name": "ams7327_0001",
+    "size": 19249152
+   },
+   {
+    "dbnum": 7356,
+    "name": "ams7356_0001",
+    "size": 1359872
+   },
+   {
+    "dbnum": 7333,
+    "name": "ams7333_0001",
+    "size": 88303616
+   },
+   {
+    "dbnum": 7326,
+    "name": "ams7326_0001",
+    "size": 16861184
+   },
+   {
+    "dbnum": 7322,
+    "name": "ams7322_0001",
+    "size": 12156928
+   },
+   {
+    "dbnum": 7351,
+    "name": "ams7351_0001",
+    "size": 1238308864
+   },
+   {
+    "dbnum": 7334,
+    "name": "ams7334_0001",
+    "size": 374784
+   },
+   {
+    "dbnum": 7741,
+    "name": "ams7741_0001",
+    "size": 165888
+   },
+   {
+    "dbnum": 7742,
+    "name": "ams7742_0001",
+    "size": 325632
+   },
+   {
+    "dbnum": 5054,
+    "name": "ams5054_0001",
+    "size": 133621760
+   },
+   {
+    "dbnum": 5101,
+    "name": "ams5101_0001",
+    "size": 26624
+   }
+  ],
+  "special": [
+   "ams3001",
+   "ams3002",
+   "ams7355",
+   "ams7997_0001.codex-before-d03-delete-20260727",
+   "ams8000_0001.codex-before-move-20260724",
+   "amscom",
+   "amscom.codex-before-d03-relaunch-20260727",
+   "amsmis",
+   "amssys"
+  ]
+ },
+ {
+  "project": "ZDJ",
+  "code": "zdj",
+  "dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ\\ZDJ000",
+  "files": [
+   {
+    "dbnum": 7600,
+    "name": "zdj7600_0001",
+    "size": 44279808
+   }
+  ],
+  "special": [
+   "zdj7209",
+   "zdj7210",
+   "zdj7211",
+   "zdjcom",
+   "zdjmis",
+   "zdjsys"
+  ]
+ },
+ {
+  "project": "SCB",
+  "code": "scb",
+  "dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB\\scb000",
+  "files": [
+   {
+    "dbnum": 6000,
+    "name": "scb6000_0001",
+    "size": 2398208
+   },
+   {
+    "dbnum": 6001,
+    "name": "scb6001_0001",
+    "size": 18432
+   },
+   {
+    "dbnum": 6002,
+    "name": "scb6002_0001",
+    "size": 129024
+   },
+   {
+    "dbnum": 6003,
+    "name": "scb6003_0001",
+    "size": 43008
+   }
+  ],
+  "special": [
+   "scbcom",
+   "scbmis",
+   "scbsys"
+  ]
+ },
+ {
+  "project": "AvevaCatalogue",
+  "code": "acp",
+  "dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue\\acp000",
+  "files": [
+   {
+    "dbnum": 7043,
+    "name": "acp7043_0001",
+    "size": 32768
+   },
+   {
+    "dbnum": 7044,
+    "name": "acp7044_0001",
+    "size": 1085440
+   },
+   {
+    "dbnum": 7010,
+    "name": "acp7010_0001",
+    "size": 794624
+   },
+   {
+    "dbnum": 7021,
+    "name": "acp7021_0001",
+    "size": 329295872
+   },
+   {
+    "dbnum": 7026,
+    "name": "acp7026_0001",
+    "size": 20076544
+   },
+   {
+    "dbnum": 7022,
+    "name": "acp7022_0001",
+    "size": 3262464
+   },
+   {
+    "dbnum": 7046,
+    "name": "acp7046_0001",
+    "size": 106496
+   },
+   {
+    "dbnum": 7006,
+    "name": "acp7006_0001",
+    "size": 112640
+   },
+   {
+    "dbnum": 7014,
+    "name": "acp7014_0001",
+    "size": 589824
+   },
+   {
+    "dbnum": 7015,
+    "name": "acp7015_0001",
+    "size": 4448256
+   },
+   {
+    "dbnum": 7002,
+    "name": "acp7002_0001",
+    "size": 16799744
+   },
+   {
+    "dbnum": 7323,
+    "name": "acp7323_0001",
+    "size": 77824
+   },
+   {
+    "dbnum": 7007,
+    "name": "acp7007_0001",
+    "size": 12867584
+   },
+   {
+    "dbnum": 7004,
+    "name": "acp7004_0001",
+    "size": 8009728
+   },
+   {
+    "dbnum": 7008,
+    "name": "acp7008_0001",
+    "size": 30193664
+   },
+   {
+    "dbnum": 7034,
+    "name": "acp7034_0001",
+    "size": 532480
+   },
+   {
+    "dbnum": 7047,
+    "name": "acp7047_0001",
+    "size": 2359296
+   },
+   {
+    "dbnum": 7048,
+    "name": "acp7048_0001",
+    "size": 4175872
+   },
+   {
+    "dbnum": 250702,
+    "name": "acp250702_0001",
+    "size": 5052416
+   },
+   {
+    "dbnum": 250705,
+    "name": "acp250705_0001",
+    "size": 475136
+   },
+   {
+    "dbnum": 250700,
+    "name": "acp250700_0001",
+    "size": 11208704
+   },
+   {
+    "dbnum": 250701,
+    "name": "acp250701_0001",
+    "size": 4116480
+   },
+   {
+    "dbnum": 7001,
+    "name": "acp7001_0001",
+    "size": 12328960
+   },
+   {
+    "dbnum": 7003,
+    "name": "acp7003_0001",
+    "size": 7686144
+   },
+   {
+    "dbnum": 7009,
+    "name": "acp7009_0001",
+    "size": 282624
+   },
+   {
+    "dbnum": 7045,
+    "name": "acp7045_0001",
+    "size": 69775360
+   },
+   {
+    "dbnum": 7011,
+    "name": "acp7011_0001",
+    "size": 167936
+   },
+   {
+    "dbnum": 7320,
+    "name": "acp7320_0001",
+    "size": 431941632
+   },
+   {
+    "dbnum": 7321,
+    "name": "acp7321_0001",
+    "size": 350208
+   },
+   {
+    "dbnum": 7325,
+    "name": "acp7325_0001",
+    "size": 125110272
+   },
+   {
+    "dbnum": 7328,
+    "name": "acp7328_0001",
+    "size": 36864
+   },
+   {
+    "dbnum": 7360,
+    "name": "acp7360_0001",
+    "size": 39919616
+   }
+  ],
+  "special": [
+   "acp7027",
+   "acp7029",
+   "acpcom",
+   "acpmis",
+   "acpsys"
+  ]
+ },
+ {
+  "project": "AvevaPlantSample",
+  "code": "aps",
+  "dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000",
+  "files": [
+   {
+    "dbnum": 7355,
+    "name": "aps7355_0001",
+    "size": 53196800
+   }
+  ],
+  "special": [
+   "aps7009",
+   "aps7140",
+   "apscom",
+   "apsmis",
+   "apssys"
+  ]
+ }
+]

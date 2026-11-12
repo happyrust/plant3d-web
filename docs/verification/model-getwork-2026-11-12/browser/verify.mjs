@@ -789,11 +789,15 @@ async function scenarioShowDbnum(browser, real, results) {
       real.geoC.every((id) => after.scene[id]) && real.geoA.every((id) => !after.scene[id]) && real.geoB.every((id) => after.scene[id]) && testGeo.every((id) => after.scene[id]),
       `C ${real.geoC.filter((id) => after.scene[id]).length}/${real.geoC.length} A ${real.geoA.filter((id) => after.scene[id]).length}/${real.geoA.length} 测试 SITE ${testGeo.filter((id) => after.scene[id]).length}/${testGeo.length}`);
     const reloadedSite = report?.models.reloaded.find((item) => item.refno === SITE);
-    check(name, '回执：只重载了有变化的那个 SITE（新增 = C 的件数、撤下 = A 的件数），别的 SITE 没动',
-      !!reloadedSite && reloadedSite.added === real.geoC.length && reloadedSite.removed === real.geoA.length && report.models.reloaded.length === 1,
+    // 第二轮（真实回放之后）改了：取最新不再问节点版本表，库的模型水位动过就把这个库登记的 SITE 都重载一遍
+    const registeredSites = before.registry.roots.length;
+    const otherSites = (report?.models.reloaded ?? []).filter((item) => item.refno !== SITE);
+    check(name, '回执：登记的 SITE 都重载了一遍；有变化的那个新增 = C 的件数、撤下 = A 的件数，别的 SITE 构件没有增减',
+      !!reloadedSite && reloadedSite.added === real.geoC.length && reloadedSite.removed === real.geoA.length
+      && report.models.reloaded.length === registeredSites && otherSites.every((item) => item.added === 0 && item.removed === 0),
       JSON.stringify(report?.models.reloaded));
     check(name, '回执：新出现的测试 SITE 装进来了', !!report?.models.loadedNew.some((item) => item.refno === TEST_SITE && item.total >= 1), JSON.stringify(report?.models.loadedNew));
-    check(name, '那句交代', !!report?.ok && /重载 1 个节点/.test(report.summary) && /新装入 1 个 SITE/.test(report.summary), report?.summary ?? '');
+    check(name, '那句交代', !!report?.ok && new RegExp(`重载 ${registeredSites} 个节点`).test(report.summary) && /新装入 1 个 SITE/.test(report.summary), report?.summary ?? '');
   } finally {
     results.showDbnumLog = { blocked: log.blocked, allowedPost: log.allowedPost, overlaid: log.overlaid, httpFailures: log.httpFailures.slice(0, 30), pageErrors: events.pageErrors, consoleErrors: events.console.slice(0, 20) };
     check(name, '护栏：除 GET 和三种只读 POST 之外没有请求发到后端', log.blocked.length === 0, log.blocked.length ? JSON.stringify(log.blocked.slice(0, 5)) : `放行的只读 POST：${JSON.stringify(log.allowedPost)}`);
