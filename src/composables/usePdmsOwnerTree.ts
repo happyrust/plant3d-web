@@ -4,6 +4,14 @@ import type { TreeNodeDto } from '@/api/genModelE3dTypes';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
+import {
+  classifyDisappearedNodes,
+  fetchTreeLayerAnswers,
+  isTreeNodeGoneMessage,
+  reconcileTreeLayers,
+  type TreeLayerAnswer,
+  type TreeRefreshReport,
+} from '@/composables/pdmsTreeRefresh';
 import { aggregateCheckState, recomputeViewAncestors } from '@/composables/useModelTree';
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 import { getModelSource } from '@/model-source';
@@ -1221,6 +1229,89 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     { immediate: true }
   );
 
+  // ---------- 取最新（GETWORK，2026-11-12）：把已经取过子节点的层重取一遍、对账（规则在 `pdmsTreeRefresh`） ----------
+  let layerRefreshRunning: Promise<TreeRefreshReport> | null = null;
+
+  /** 取过子节点的层数（没取过的层「取最新」不碰） */
+  function loadedLayerCount(): number {
+    return childrenLoadedById.size;
+  }
+
+  async function fetchLayerAnswer(layerId: string): Promise<TreeLayerAnswer> {
+    let resp = await treeSource.children(layerId, 2000);
+    if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
+      resp = await treeSource.children(wrapSurrealThingId(layerId), 2000);
+    }
+    if (!resp.success) {
+      return { ok: false, gone: isTreeNodeGoneMessage(resp.error_message), error: resp.error_message || 'children api failed' };
+    }
+    return { ok: true, children: resp.children, unresolvedCount: resp.unresolved?.length ?? 0, view: resp.view ?? null };
+  }
+
+  /** 从树上消失的节点库里还有没有：祖先链查得到就是还在（挪到了树上没展开的位置），404 就是没有了 */
+  async function probeDisappearedNode(id: string): Promise<'exists' | 'gone' | 'unknown'> {
+    const resp = await treeSource.ancestors(id);
+    if (resp.success) return 'exists';
+    return isTreeNodeGoneMessage(resp.error_message) ? 'gone' : 'unknown';
+  }
+
+  const refreshDeps = { normalizeId: normalizeRefnoKey, toNode: dtoToTreeNode };
+
+  function snapshotForRefresh() {
+    return {
+      nodesById: nodesById.value,
+      rootIds: rootIds.value,
+      loadedLayers: childrenLoadedById,
+      expandedIds: expandedIds.value,
+      selectedIds: selectedIds.value,
+      checkStateById: checkStateById.value,
+      childrenCountById: childrenCountById.value,
+      viewParentsById,
+    };
+  }
+
+  async function runLayerRefresh(): Promise<TreeRefreshReport> {
+    const layerIds = [...childrenLoadedById].filter((id) => !!nodesById.value[id]);
+    // 根那一层（SITE 名单）数据源有一份短缓存：先清掉，重取到的才是此刻的
+    treeSource.invalidate?.();
+    const answers = await fetchTreeLayerAnswers(layerIds, fetchLayerAnswer);
+    // 对账按此刻的树做（取数期间新展开的层、被重置的树都以现在为准；答复里已不在树上的层会被跳过）
+    const result = reconcileTreeLayers(snapshotForRefresh(), answers, refreshDeps);
+    nodesById.value = result.nodesById;
+    childrenCountById.value = result.childrenCountById;
+    checkStateById.value = result.checkStateById;
+    if (result.expandedIds.size !== expandedIds.value.size) expandedIds.value = result.expandedIds;
+    if (result.report.droppedSelection.length > 0) {
+      selectedIds.value = result.selectedIds;
+      lastAnchorIndex.value = null;
+    }
+    childrenLoadedById.clear();
+    for (const id of result.loadedLayers) childrenLoadedById.add(id);
+    viewParentsById.clear();
+    for (const [childId, parents] of result.viewParentsById) viewParentsById.set(childId, parents);
+    // 「这个节点下有哪些带几何的构件」的缓存按旧树记的：一起清掉
+    visibleInstCache.clear();
+    // 新进树的节点继承父节点的可见性，回放到场景（与第一次取子节点同一个动作）
+    if (result.show.length > 0) sceneGraph.setVisible(result.show, true);
+    if (result.hide.length > 0) sceneGraph.setVisible(result.hide, false);
+
+    const removed = await classifyDisappearedNodes(result.report.removed, probeDisappearedNode);
+    return { ...result.report, removed };
+  }
+
+  /**
+   * 「取最新」里树的这一半：所有取过子节点的层重取一遍，新增的出现、删掉的消失、改名和挪位置跟上；展开、勾选、
+   * 选中留着，指向已不存在节点的记录清掉。没取过的层不取。同时只跑一轮（再叫拿到的是同一轮的结果）。
+   */
+  function refreshLoadedLayers(): Promise<TreeRefreshReport> {
+    if (layerRefreshRunning) return layerRefreshRunning;
+    const task = runLayerRefresh().finally(() => {
+      if (layerRefreshRunning === task) layerRefreshRunning = null;
+    });
+    layerRefreshRunning = task;
+    return task;
+  }
+
   return {
     nodesById,
     rootIds,
@@ -1258,5 +1349,8 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     flyTo,
     isolateXray,
     clearXray,
+
+    loadedLayerCount,
+    refreshLoadedLayers,
   };
 }
