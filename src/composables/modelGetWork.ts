@@ -105,8 +105,14 @@ export type GetWorkPorts = {
   sleep(ms: number): Promise<void>;
   /** 有装载 / 生成在跑 */
   loadBusy(): boolean;
-  /** 强制探一次 `/health`，回服务代次；连不上就抛 */
+  /** 强制探一次 `/health`，回服务代次（页面打开以来每看到后端换一次加一）；连不上就抛 */
   probeService(): Promise<{ generation: number }>;
+  /**
+   * 页面打开时的服务代次（`probeService` 回的那个数的起点）。给了，头一轮取最新就认得出「本页打开之后后端重启过」；
+   * 不给，头一轮没有可比的，要到第二轮才认得出（2026-11-12 在真实后端上撞到：装了按需生成的节点 → 后端重启 →
+   * 头一次点取最新，说的是「已是最新」，而后端此刻已经没有那个节点的模型了）。
+   */
+  initialGeneration?: number;
   /** 强制重拉 `/dbnums`：库号 → 行；取不到就抛 */
   fetchDbnumRows(): Promise<Map<number, DbnumRow>>;
   /** 模型树；面板没开为 `null` */
@@ -443,7 +449,7 @@ export function summarizeGetWork(report: GetWorkReport, label: (refno: string) =
     parts.push('选中的构件已被删除');
     detail.push(`选中的 ${label(report.selectionDeleted)} 在库里已经没有了`);
   }
-  if (report.backendRestarted) detail.push('上一次取最新以来后端重启过');
+  if (report.backendRestarted) detail.push('这次取最新之前后端重启过');
   if (report.waited) {
     detail.push(`等后台更新库 ${report.waited.dbnums.join('、')} 用了 ${Math.round(report.waited.ms / 1000)} 秒${report.waited.timedOut.length > 0 ? `，库 ${report.waited.timedOut.join('、')} 没等到` : ''}`);
   }
@@ -480,8 +486,8 @@ export type ModelGetWork = {
 export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
   let current: Promise<GetWorkReport> | null = null;
   let followUp: Promise<GetWorkReport> | null = null;
-  /** 上一轮看到的服务代次：变了就是后端重启过 */
-  let lastGeneration: number | null = null;
+  /** 上一轮看到的服务代次（头一轮之前是页面打开时的那个，没给就是不知道）：变了就是后端重启过 */
+  let lastGeneration: number | null = ports.initialGeneration ?? null;
   /** 上一轮结束时碰过的库的水位：这一轮比它动了，派生物（房间树）才值得刷新 */
   let lastWatermarks = new Map<number, string>();
   /**

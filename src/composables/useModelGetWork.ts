@@ -47,6 +47,7 @@ import {
   getGlobalSelectedVersionPin,
   setGlobalSelectedDeletedRefno,
 } from '@/composables/useSelectionStore';
+import { getGenModelV1ServiceGeneration } from '@/model-source/genModelV1/serviceLifecycle';
 import { emitToast } from '@/ribbon/toastBus';
 import { toRefnoKey } from '@/utils/refnoKey';
 
@@ -190,6 +191,8 @@ const engine = createModelGetWork({
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   loadBusy: () => hasActiveModelLoad(),
   probeService: async () => ({ generation: (await ensureGenModelV1Freshness({ force: true })).generation }),
+  // 此刻（页面刚打开、还没装任何模型）的服务代次：头一次点取最新就比得出「这期间后端重启过没有」
+  initialGeneration: getGenModelV1ServiceGeneration(),
   fetchDbnumRows: async () => {
     const response = await getGenModelV1Dbnums({ timeoutMs: 60_000, force: true });
     const rows = new Map<number, DbnumRow>();

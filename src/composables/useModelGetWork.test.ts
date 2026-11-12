@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TreeRefreshReport } from '@/composables/pdmsTreeRefresh';
 
 const mocks = vi.hoisted(() => ({
-  health: vi.fn(async (): Promise<{ generation: number }> => ({ generation: 1 })),
+  health: vi.fn(async (): Promise<{ generation: number }> => ({ generation: 0 })),
   refreshVerdict: vi.fn(async () => undefined),
   dbnums: vi.fn(async (_options?: unknown): Promise<{ dbnums: Record<string, unknown>[] }> => ({ dbnums: [] })),
   peekDbnums: vi.fn((): { fetchedAt: number; response: { dbnums: Record<string, unknown>[] } } | null => null),
@@ -105,7 +105,8 @@ beforeEach(() => {
     if (typeof mock === 'function') mock.mockReset();
   }
   mocks.treeExtras = {};
-  mocks.health.mockResolvedValue({ generation: 1 });
+  // 服务代次从 0 起（页面打开以来没见过后端换）
+  mocks.health.mockResolvedValue({ generation: 0 });
   mocks.refreshVerdict.mockResolvedValue(undefined);
   mocks.dbnums.mockResolvedValue({ dbnums: [ROW_8000] });
   mocks.peekDbnums.mockReturnValue(null);
@@ -544,5 +545,58 @@ describe('loadedModelDbnums：页面上装着节点的库（状态栏「数据�
     mocks.entries.mockReturnValue([]);
     registry.forgetGetWorkRoot('24382_1911');
     expect(getWork.loadedModelDbnums()).toEqual([]);
+  });
+});
+
+describe('useModelGetWork：头一次点取最新就认得出「本页打开之后后端重启过」', () => {
+  // 2026-11-12 真实后端上撞到的：装了 7998 的一个 ZONE（未初始化的库，模型按需生成、只在后端内存里）→ 后端重启 →
+  // 头一次点取最新。原来没有可比的服务代次，说的是「已是最新」。
+  const X_ZONE = '24382_1911';
+  const ROW_7998 = {
+    dbnum: 7998, db_type: 'DESI', initialized: false, file_latest_sesno: 675, applied_sesno: 0, model_sesno: 0,
+    model_verdict: 'not_judged', excluded: true, excluded_reason: 'watch_dbnums',
+  };
+  const notGenerated = {
+    ...facts('not_generated', 0), dbnum: 7998, noun: 'ZONE', generatedAt: null,
+    units: { total: 1, generated: 0, missing: 1, failed: 0, lagging: 0, exact: true },
+    library: { fileLatestSesno: 675, modelSesno: 0, modelSesnoTime: null, inWatchScope: false },
+  };
+
+  it('页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_7998] });
+    mocks.entries.mockReturnValue([tableEntry(X_ZONE, { dbnum: 7998, loadedModelSesno: 0, loadedFileLatestSesno: 675 })]);
+    mocks.health.mockResolvedValue({ generation: 1 });
+    mocks.facts.mockResolvedValue(notGenerated);
+    const scene = scenePort({ [X_ZONE]: ['24382_1913'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(report.backendRestarted).toBe(true);
+    expect(mocks.facts).toHaveBeenCalledWith(expect.objectContaining({ refno: X_ZONE }));
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(scene.withdraw).not.toHaveBeenCalled();
+    expect(report.models.kept).toEqual([{
+      refno: X_ZONE,
+      reason: '后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成',
+    }]);
+    expect(report.summary).toBe('已取最新：1 个节点的模型没有动。');
+    expect(report.detail).toContain('这次取最新之前后端重启过');
+    expect(report.level).toBe('warning');
+  });
+
+  it('服务代次没变（还是 0）：不算重启，水位没变的节点不问，照说「已是最新」', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_7998] });
+    mocks.entries.mockReturnValue([tableEntry(X_ZONE, { dbnum: 7998, loadedModelSesno: 0, loadedFileLatestSesno: 675 })]);
+    mocks.facts.mockResolvedValue(notGenerated);
+    getWork.registerGetWorkScene(scenePort({ [X_ZONE]: ['24382_1913'] }));
+
+    const report = await getWork.requestGetWork();
+
+    expect(report.backendRestarted).toBe(false);
+    expect(mocks.facts).not.toHaveBeenCalled();
+    expect(report.summary).toBe('已是最新：模型树和已装的模型都没有变化（核对了 1 个已装的节点）。');
   });
 });

@@ -95,6 +95,8 @@ type World = {
   now: number;
   busy: () => boolean;
   generation: number;
+  /** 页面打开时的服务代次（接线给的）；不写就是没给 */
+  initialGeneration?: number;
   rows: DbnumRow[];
   /** 每次重拉 `/dbnums` 之前调（等后台时用它推进后台的状态） */
   beforeFetchRows: (() => void) | null;
@@ -141,6 +143,7 @@ function harness(world: World) {
       world.now += ms;
     },
     loadBusy: () => world.busy(),
+    ...(world.initialGeneration !== undefined ? { initialGeneration: world.initialGeneration } : {}),
     probeService: async () => {
       log.push('health');
       if (world.failProbe) throw new Error(world.failProbe);
@@ -556,9 +559,72 @@ describe('取最新：后端重启之后的护栏', () => {
       reason: '后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成',
     }]);
     expect(second.summary).toContain('1 个节点的模型没有动');
-    expect(second.detail).toContain('上一次取最新以来后端重启过');
+    expect(second.detail).toContain('这次取最新之前后端重启过');
     // 有节点没跟上：这一句是警告的颜色
     expect(second.level).toBe('warning');
+  });
+
+  it('头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除', async () => {
+    // 2026-11-12 真实后端上撞到的：装了 7998 的一个 ZONE（按需生成）→ 后端重启 → 头一次点取最新，原来说的是「已是最新」
+    const world = makeWorld({
+      initialGeneration: 0,
+      generation: 1,
+      rows: [ROW_7009],
+      roots: [root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 479 })],
+      statuses: { '7009_100': { status: status('not_generated', { dbnum: 7009 }), gone: false } },
+      loaded: { '7009_100': ['7009_101', '7009_102'] },
+    });
+    const { engine, log } = harness(world);
+
+    const first = await engine.getLatest();
+
+    expect(first.backendRestarted).toBe(true);
+    expect(log).toContain('status 7009_100');
+    expect(log.some((line) => line.startsWith('reload') || line.startsWith('withdraw'))).toBe(false);
+    expect(world.loaded['7009_100']).toEqual(['7009_101', '7009_102']);
+    expect(first.models.kept).toEqual([{
+      refno: '7009_100',
+      reason: '后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成',
+    }]);
+    expect(first.summary).toBe('已取最新：1 个节点的模型没有动。');
+    expect(first.detail).toContain('这次取最新之前后端重启过');
+    expect(first.level).toBe('warning');
+
+    // 第二轮：后端没再重启——不再算重启，核对过的节点也不再问
+    log.length = 0;
+    const second = await engine.getLatest();
+    expect(second.backendRestarted).toBe(false);
+  });
+
+  it('头一轮：服务代次还是页面打开时的那个——不算重启，水位没变的节点不问', async () => {
+    const world = makeWorld({
+      initialGeneration: 0,
+      generation: 0,
+      rows: [ROW_7009],
+      roots: [root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 479 })],
+      loaded: { '7009_100': ['7009_101'] },
+    });
+    const { engine, log } = harness(world);
+
+    const first = await engine.getLatest();
+
+    expect(first.backendRestarted).toBe(false);
+    expect(log.some((line) => line.startsWith('status'))).toBe(false);
+    expect(first.detail).not.toContain('这次取最新之前后端重启过');
+  });
+
+  it('没给页面打开时的服务代次：头一轮没有可比的，不算重启（第二轮起照旧认得出）', async () => {
+    const world = makeWorld({
+      generation: 5,
+      rows: [ROW_7009],
+      roots: [root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 479 })],
+      loaded: { '7009_100': ['7009_101'] },
+    });
+    const { engine } = harness(world);
+
+    expect((await engine.getLatest()).backendRestarted).toBe(false);
+    world.generation = 6;
+    expect((await engine.getLatest()).backendRestarted).toBe(true);
   });
 
   it('重启后库里有成套模型的库（已初始化）不用重问：模型还在库里', async () => {
