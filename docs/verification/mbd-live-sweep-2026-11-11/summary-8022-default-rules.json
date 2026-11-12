@@ -1,0 +1,1775 @@
+{
+ "backend": {
+  "version": "0.1.44",
+  "started_at": "2026-11-11T16:10:00.024815600+08:00",
+  "project": "AvevaMarineSample",
+  "mdb": "/ALL"
+ },
+ "base": "http://127.0.0.1:8022",
+ "mbdBase": "http://127.0.0.1:8022",
+ "startedAt": "2026-11-11T14:11:30.414Z",
+ "elapsedMs": 85373,
+ "enumeration": {
+  "sites": 39,
+  "skippedSites": [
+   "/Steel_Template_Site",
+   "/MDS/SPECIALS",
+   "/MDS/SPECIALS",
+   "/MDS/SPECIALS",
+   "/MDS-Standards-Site",
+   "/MDS-Standards-Supports",
+   "/MDS/TEMPLATES",
+   "/MDS/TEMPLATES/ORI",
+   "/MDS/TEMPLATES",
+   "/MDS/TEMPLATES/ORI",
+   "/MDS/TEMPLATES",
+   "/MDS/TEMPLATES/ORI",
+   "/MDS/HANGERS",
+   "/MDS/TEMPLATES",
+   "/MDS/HANGERS",
+   "/MDS/HANGERS"
+  ],
+  "treeRequests": 6722,
+  "treeErrors": [],
+  "treeErrorCount": 0,
+  "ms": 3419
+ },
+ "nounCounts": {
+  "STRU": 2348,
+  "REST": 279,
+  "EQUI": 1163,
+  "BRAN": 2431,
+  "FLOOR": 275,
+  "STWALL": 246,
+  "GWALL": 255,
+  "WALL": 62
+ },
+ "swept": 7059,
+ "outcomes": {
+  "ok": 6646,
+  "empty": 261,
+  "not_annotatable": 71,
+  "contract_rejected": 67,
+  "mapping_rejected": 7,
+  "http_error": 6,
+  "degenerate": 1
+ },
+ "byType": {
+  "(BRAN)": {
+   "http_error": 6
+  },
+  "(REST)": {
+   "not_annotatable": 1
+  },
+  "(STRU)": {
+   "not_annotatable": 70
+  },
+  "arch": {
+   "ok": 45,
+   "empty": 59
+  },
+  "civil": {
+   "ok": 726,
+   "empty": 5,
+   "contract_rejected": 1,
+   "mapping_rejected": 2
+  },
+  "em4_equi": {
+   "ok": 212
+  },
+  "em4_pipe": {
+   "ok": 1812,
+   "contract_rejected": 4,
+   "degenerate": 1,
+   "mapping_rejected": 5
+  },
+  "em4_supp": {
+   "ok": 2140,
+   "contract_rejected": 61,
+   "empty": 190
+  },
+  "em9_equi": {
+   "ok": 951
+  },
+  "em9_pipe": {
+   "ok": 602,
+   "contract_rejected": 1
+  },
+  "em9_pipe_supp": {
+   "ok": 158,
+   "empty": 7
+  }
+ },
+ "timingMs": {
+  "p50": 32,
+  "p90": 47,
+  "p99": 135,
+  "max": 2883
+ },
+ "reasons": [
+  {
+   "key": "empty | em4_supp | <n>，但一个图元都没有",
+   "count": 190,
+   "samples": [
+    "24383_69177",
+    "24383_69211",
+    "24383_69213",
+    "24383_69355",
+    "24383_69357"
+   ]
+  },
+  {
+   "key": "contract_rejected | em4_supp | MBD V<n> payload has an invalid primitive label \"<refno>:support:label:<n>\"",
+   "count": 61,
+   "samples": [
+    "24381_71247",
+    "24384_48",
+    "24384_78",
+    "24384_108",
+    "24384_138"
+   ]
+  },
+  {
+   "key": "empty | arch | <n>，但一个图元都没有",
+   "count": 59,
+   "samples": [
+    "24381_37018",
+    "24381_37090",
+    "24381_37115",
+    "24381_37119",
+    "24381_37125"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <name> 所在的 ZONE <name> 不是支架区（NAME 不含 [\"SUPP\"]，PURP NI 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 49,
+   "samples": [
+    "17496_73858",
+    "24381_37112",
+    "17496_106408",
+    "24381_36959",
+    "24381_37809"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <name> 所在的 ZONE <name> 不是支架区（NAME 不含 [\"SUPP\"]，PURP unset 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 10,
+   "samples": [
+    "24381_779",
+    "24381_1163",
+    "24381_1515",
+    "24381_3949",
+    "24381_5011"
+   ]
+  },
+  {
+   "key": "empty | em9_pipe_supp | <n>，但一个图元都没有",
+   "count": 7,
+   "samples": [
+    "24381_178965",
+    "24381_178968",
+    "24381_178987",
+    "24381_178990",
+    "24381_179009"
+   ]
+  },
+  {
+   "key": "http_error | (BRAN) | <n> precondition: BRAN <refno> 建不起可信的成员结点视图：every branch member was skipped for missing geometry",
+   "count": 6,
+   "samples": [
+    "32573_1",
+    "24381_101408",
+    "24381_177395",
+    "24383_101287",
+    "24383_101220"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <name> 所在的 ZONE <name>,<n>米新增钢平台模拟 不是支架区（NAME 不含 [\"SUPP\"]，PURP unset 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 5,
+   "samples": [
+    "24381_177299",
+    "24381_177311",
+    "24381_177327",
+    "24381_177342",
+    "24381_177358"
+   ]
+  },
+  {
+   "key": "mapping_rejected | em4_pipe | <n> 个图元无法映射（首个：<refno>:isoline:<n>:angle:<refno>:<n> — degenerate arc frame: normal or x_axis collapses or they are parallel after source_to_design）",
+   "count": 5,
+   "samples": [
+    "24383_97932",
+    "24383_97968",
+    "24383_99749",
+    "24383_99757",
+    "24383_100538"
+   ]
+  },
+  {
+   "key": "empty | civil | <n>，但一个图元都没有",
+   "count": 5,
+   "samples": [
+    "17496_106456",
+    "17496_106500",
+    "17496_117236",
+    "24381_25747",
+    "24381_2162"
+   ]
+  },
+  {
+   "key": "contract_rejected | em4_pipe | MBD V<n> payload has invalid meta",
+   "count": 4,
+   "samples": [
+    "24383_75665",
+    "24383_76345",
+    "24383_100161",
+    "24384_23032"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <refno> 所在的 ZONE <name> 不是支架区（NAME 不含 [\"SUPP\"]，PURP NI 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 2,
+   "samples": [
+    "24381_34112",
+    "24381_34464"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <refno> 所在的 ZONE <refno> 不是支架区（NAME 不含 [\"SUPP\"]，PURP unset 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 2,
+   "samples": [
+    "14195_4",
+    "24384_26202"
+   ]
+  },
+  {
+   "key": "mapping_rejected | civil | <n> 个图元无法映射（首个：<refno>:thick:top:circle<n> — degenerate arc frame: normal or x_axis collapses or they are parallel after source_to_design）",
+   "count": 2,
+   "samples": [
+    "24381_2147",
+    "24381_4342"
+   ]
+  },
+  {
+   "key": "not_annotatable | (REST) | <n> not_annotatable: REST <refno> 没有 MBD 标注：REST <name> 所在的 ZONE <name> 不是支架区（NAME 不含 [\"SUPP\"]，PURP unset 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 1,
+   "samples": [
+    "24381_622"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <name>，禁止占用 所在的 ZONE <name>(含设备保温) 不是支架区（NAME 不含 [\"SUPP\"]，PURP unset 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 1,
+   "samples": [
+    "24381_171354"
+   ]
+  },
+  {
+   "key": "not_annotatable | (STRU) | <n> not_annotatable: STRU <refno> 没有 MBD 标注：STRU <name> 所在的 ZONE <refno> 不是支架区（NAME 不含 [\"SUPP\"]，PURP unset 不在 [\"SUPP\"]），也不在 WALL / GWALL / STWALL / FLOOR 之下",
+   "count": 1,
+   "samples": [
+    "24384_26205"
+   ]
+  },
+  {
+   "key": "contract_rejected | em9_pipe | MBD V<n> payload has invalid meta",
+   "count": 1,
+   "samples": [
+    "24381_147426"
+   ]
+  },
+  {
+   "key": "degenerate | em4_pipe | 合契约，但画出来看不见：<n> 个弧 / 圈的半径小于 <n> mm",
+   "count": 1,
+   "samples": [
+    "24383_91813"
+   ]
+  },
+  {
+   "key": "contract_rejected | civil | MBD V<n> payload has an invalid primitive label \"<refno>:name:A\"",
+   "count": 1,
+   "samples": [
+    "24381_25804"
+   ]
+  }
+ ],
+ "issues": [
+  {
+   "key": "info | civil | suppress civil.member_off_face | PANE <refno>: centre is off its face or outside its outline (civilMem.checkifok L<n><n>)",
+   "count": 66108,
+   "samples": [
+    "17496_79591",
+    "17496_79598",
+    "17496_79604",
+    "17496_79610",
+    "17496_79648"
+   ]
+  },
+  {
+   "key": "warning | civil | data civil.member_shape_missing | PANE <refno> has no usable shape (no edge lines / plate faces from the host); PML civilMem.getShape drops it silently (NRTO is never shaped, civilMem.pmlobj L<n>)",
+   "count": 2943,
+   "samples": [
+    "17496_106683",
+    "17496_106765",
+    "17496_107037",
+    "17496_106824",
+    "17496_105912"
+   ]
+  },
+  {
+   "key": "info | em4_supp | other locate.no_wall | no STWALL / GWALL found within <n> m to locate against",
+   "count": 1250,
+   "samples": [
+    "24381_537",
+    "24381_549",
+    "24381_553",
+    "24381_567",
+    "24381_47185"
+   ]
+  },
+  {
+   "key": "info | em4_supp | data support.part_geometry_missing | SCTN <refno> has no usable section data (POSS / POSE / section points); skipped",
+   "count": 1149,
+   "samples": [
+    "24383_80213",
+    "24383_80228",
+    "24383_80243",
+    "24383_80258",
+    "24383_80273"
+   ]
+  },
+  {
+   "key": "info | em4_supp | data support.part_geometry_missing | PJOI <refno> has no usable bolt geometry; part skipped",
+   "count": 1107,
+   "samples": [
+    "24383_86102",
+    "24383_86118",
+    "24383_86131",
+    "24383_86144",
+    "24383_86157"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.implied_tube_not_drawn | implied tube <refno> -> <refno> (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 1083,
+   "samples": [
+    "24383_66479",
+    "24383_68131",
+    "24383_68351",
+    "24383_74823",
+    "24383_74875"
+   ]
+  },
+  {
+   "key": "info | em9_equi | data equipment.elconn_missing | no ELCONN position; the equipment origin is the base point (markEqui.pmlobj:<n>)",
+   "count": 951,
+   "samples": [
+    "24381_101421",
+    "24381_101423",
+    "24381_101425",
+    "24381_101427",
+    "24381_101429"
+   ]
+  },
+  {
+   "key": "info | em4_supp | other support.em4_no_pipe_atta | the support has no point ATTA on its pipes: no wall search, no reference look direction and no near walls (PML errors on the unset mbdlocation, suiSupport.pmlobj:<n>)",
+   "count": 950,
+   "samples": [
+    "24381_47844",
+    "24381_47868",
+    "24381_47892",
+    "24381_47916",
+    "24381_47940"
+   ]
+  },
+  {
+   "key": "info | em4_supp | other locate.near_wall | the nearest hit <n> mm away is a WALL; PML only records it as a near wall for supports and stops searching that direction, so no locating dimension is drawn there",
+   "count": 754,
+   "samples": [
+    "24381_47185",
+    "24381_47161",
+    "24381_47231",
+    "24381_47255",
+    "24381_47301"
+   ]
+  },
+  {
+   "key": "info | em9_equi | other locate.near_wall | the nearest hit <n> mm away is a WALL; PML only records it as a near wall for supports and stops searching that direction, so no locating dimension is drawn there",
+   "count": 554,
+   "samples": [
+    "24381_101423",
+    "24381_101427",
+    "24381_101429",
+    "24381_101433",
+    "24381_101435"
+   ]
+  },
+  {
+   "key": "warning | civil | data civil.member_shape_missing | FITT <refno> has no usable shape (no edge lines / plate faces from the host); PML civilMem.getShape drops it silently (NRTO is never shaped, civilMem.pmlobj L<n>)",
+   "count": 400,
+   "samples": [
+    "17496_106424",
+    "17496_106428",
+    "17496_106430",
+    "17496_106457",
+    "17496_106460"
+   ]
+  },
+  {
+   "key": "info | em9_equi | other locate.no_wall | no STWALL / GWALL found within <n> m to locate against",
+   "count": 372,
+   "samples": [
+    "24381_101558",
+    "24381_101618",
+    "24381_101622",
+    "24381_101691",
+    "24381_101824"
+   ]
+  },
+  {
+   "key": "warning | civil | suppress civil.dim_degenerate | 孔洞尺寸 <refno>:member:<refno>:dim:B:<n>: projected length <n> mm is below the reliable threshold",
+   "count": 329,
+   "samples": [
+    "17496_79664",
+    "17496_79697",
+    "17496_79713",
+    "17496_79729",
+    "17496_79756"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.implied_tube_not_drawn | implied tube <refno> -> Tail (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 327,
+   "samples": [
+    "24383_66748",
+    "24383_66777",
+    "24383_66808",
+    "24383_68205",
+    "24383_68351"
+   ]
+  },
+  {
+   "key": "warning | civil | suppress civil.dim_degenerate | 孔洞尺寸 <refno>:member:<refno>:dim:A:<n>: projected length <n> mm is below the reliable threshold",
+   "count": 281,
+   "samples": [
+    "17496_79591",
+    "17496_79610",
+    "17496_79648",
+    "17496_79697",
+    "17496_79713"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.implied_tube_not_drawn | implied tube Head -> <refno> (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 274,
+   "samples": [
+    "24381_583",
+    "24383_68131",
+    "24383_68351",
+    "24383_74015",
+    "24383_74403"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | ATTA origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 273,
+   "samples": [
+    "24381_587",
+    "24381_598",
+    "24383_73930",
+    "24383_73985",
+    "24383_74019"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | BEND origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 218,
+   "samples": [
+    "24383_76345",
+    "24383_82706",
+    "24383_82750",
+    "24383_82766",
+    "24383_82774"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point Tail sits <n> mm across the isoline axis from its neighbour <refno> (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so t",
+   "count": 205,
+   "samples": [
+    "24383_74015",
+    "24383_76094",
+    "24383_76113",
+    "24383_76122",
+    "24383_76127"
+   ]
+  },
+  {
+   "key": "info | em4_equi | other locate.near_wall | the nearest hit <n> mm away is a WALL; PML only records it as a near wall for supports and stops searching that direction, so no locating dimension is drawn there",
+   "count": 198,
+   "samples": [
+    "24381_46869",
+    "24381_46897",
+    "24381_76570",
+    "24381_76566",
+    "24381_76574"
+   ]
+  },
+  {
+   "key": "info | em9_equi | suppress locate.civil_label_skipped | floor name label skipped: owner name \"\" has no second-to-last '-' part",
+   "count": 192,
+   "samples": [
+    "24381_101824",
+    "24381_101826",
+    "24381_101866",
+    "24381_101868",
+    "24381_101870"
+   ]
+  },
+  {
+   "key": "warning | em9_equi | other locate.single_wall | only the east-west wall was found; PML draws nothing in this case (mbdlocation.pmlobj:<n>), the one locating dimension is kept",
+   "count": 190,
+   "samples": [
+    "24381_101421",
+    "24381_101431",
+    "24381_101433",
+    "24381_101435",
+    "24381_101437"
+   ]
+  },
+  {
+   "key": "warning | em9_equi | data equipment.nozzle_without_p1 | nozzle has no complete P<n> (position, direction, bore); skipped as a rotation reference — PML fails the whole equipment here (mbdlocation.pmlobj:<n>)",
+   "count": 188,
+   "samples": [
+    "24381_101957",
+    "24381_109449",
+    "24381_109456",
+    "24381_109463",
+    "24381_109470"
+   ]
+  },
+  {
+   "key": "info | em4_equi | data equipment.elconn_missing | no ELCONN position; the equipment origin is the base point (markEqui.pmlobj:<n>)",
+   "count": 181,
+   "samples": [
+    "24381_31010",
+    "24381_31012",
+    "24381_31044",
+    "24381_46777",
+    "24381_46823"
+   ]
+  },
+  {
+   "key": "warning | civil | data civil.member_shape_missing | FIXING <refno> has no usable shape (no edge lines / plate faces from the host); PML civilMem.getShape drops it silently (NRTO is never shaped, civilMem.pmlobj L<n>)",
+   "count": 175,
+   "samples": [
+    "17496_106765",
+    "17496_107037",
+    "17496_106824",
+    "17496_105930",
+    "17496_105935"
+   ]
+  },
+  {
+   "key": "info | em4_equi | other locate.no_wall | no STWALL / GWALL found within <n> m to locate against",
+   "count": 151,
+   "samples": [
+    "24381_46777",
+    "24381_46823",
+    "24381_46869",
+    "24381_46895",
+    "24381_46897"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | SBFI <refno> does not cross any face of the element",
+   "count": 145,
+   "samples": [
+    "17496_106465",
+    "17496_106542",
+    "17496_106581",
+    "17496_106613",
+    "17496_118542"
+   ]
+  },
+  {
+   "key": "warning | em9_equi | other locate.single_wall | only the north-south wall was found; PML draws nothing in this case (mbdlocation.pmlobj:<n>), the one locating dimension is kept",
+   "count": 117,
+   "samples": [
+    "24381_101423",
+    "24381_101560",
+    "24381_101562",
+    "24381_101564",
+    "24381_101594"
+   ]
+  },
+  {
+   "key": "warning | em4_supp | other locate.single_wall | only the north-south wall was found; PML draws nothing in this case (mbdlocation.pmlobj:<n>), the one locating dimension is kept",
+   "count": 107,
+   "samples": [
+    "24381_77267",
+    "24381_77303",
+    "24381_77308",
+    "24381_77313",
+    "24381_77318"
+   ]
+  },
+  {
+   "key": "warning | em9_equi | data data.view_issue | STWALL <refno> 没有 SPRE：截面按 DESP [<n>, <n>] 矩形、原点对齐",
+   "count": 103,
+   "samples": [
+    "24381_101930",
+    "24381_102000",
+    "24381_102014",
+    "24381_102032",
+    "24381_103000"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | PANE <refno> does not cross any face of the element",
+   "count": 99,
+   "samples": [
+    "24381_31194",
+    "24381_31261",
+    "24381_31253",
+    "24381_31377",
+    "24381_31378"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.atta_before_first_point | ATTA sits before the first dimension point of its isoline; PML asks to check the ATTA's position<name> in the BRAN and draws nothing for this isoline",
+   "count": 94,
+   "samples": [
+    "24383_66479",
+    "24383_66509",
+    "24383_82728",
+    "24383_82829",
+    "24383_82899"
+   ]
+  },
+  {
+   "key": "warning | civil | suppress civil.dim_degenerate | 尺寸标注 <refno>:edge:<n>: projected length <n> mm is below the reliable threshold",
+   "count": 84,
+   "samples": [
+    "24381_15142",
+    "24381_15158",
+    "24381_15189",
+    "24381_15224",
+    "24381_15240"
+   ]
+  },
+  {
+   "key": "info | arch | suppress civil.member_off_face | NXTR <refno> does not cross any face of the element",
+   "count": 81,
+   "samples": [
+    "24381_39088",
+    "24381_39319",
+    "24381_38695",
+    "24381_37018",
+    "24381_37054"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | NXTR <refno> does not cross any face of the element",
+   "count": 71,
+   "samples": [
+    "24381_44375",
+    "24381_15262",
+    "17496_79664",
+    "17496_79697",
+    "17496_79713"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress adapter.implied_tube_not_drawn | implied tube <refno> -> <refno> (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 61,
+   "samples": [
+    "24381_103389",
+    "24381_103433",
+    "24381_103506",
+    "24381_103882",
+    "24381_104483"
+   ]
+  },
+  {
+   "key": "warning | em4_supp | other locate.single_wall | only the east-west wall was found; PML draws nothing in this case (mbdlocation.pmlobj:<n>), the one locating dimension is kept",
+   "count": 49,
+   "samples": [
+    "24381_77227",
+    "24381_77239",
+    "24381_77235",
+    "24381_78067",
+    "24381_78147"
+   ]
+  },
+  {
+   "key": "warning | em4_equi | data equipment.nozzle_without_p1 | nozzle has no complete P<n> (position, direction, bore); skipped as a rotation reference — PML fails the whole equipment here (mbdlocation.pmlobj:<n>)",
+   "count": 48,
+   "samples": [
+    "24383_76360",
+    "24383_76459"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point Tail sits <n> mm across the isoline axis from its neighbour Head (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so the ",
+   "count": 46,
+   "samples": [
+    "24383_75356",
+    "24383_92127",
+    "24383_92132",
+    "24383_92137",
+    "24383_85349"
+   ]
+  },
+  {
+   "key": "info | arch | suppress civil.arch_round_member | NXTR <refno> is round; the arch form skips round openings (markCivil.pmlobj L<n>)",
+   "count": 40,
+   "samples": [
+    "24381_39796",
+    "24381_39319",
+    "24381_38695",
+    "24381_36962",
+    "24381_36990"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | ELBO origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 39,
+   "samples": [
+    "24383_66479",
+    "24383_76094",
+    "24383_76113",
+    "24383_76122",
+    "24383_76127"
+   ]
+  },
+  {
+   "key": "info | em9_equi | suppress locate.dimension_degenerate | ew locating dimension skipped: the wall foot is within <n> mm of the base point",
+   "count": 34,
+   "samples": [
+    "24381_101930",
+    "24381_102014",
+    "24381_102032",
+    "24381_103000",
+    "24381_103023"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | NCYL <refno> does not cross any face of the element",
+   "count": 31,
+   "samples": [
+    "24381_15320",
+    "24381_15331",
+    "17496_100019",
+    "17496_72959",
+    "17496_106114"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | ATTA origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 27,
+   "samples": [
+    "24381_177462",
+    "24381_177439",
+    "24381_177475",
+    "24381_177600",
+    "24381_177646"
+   ]
+  },
+  {
+   "key": "warning | em4_equi | other locate.single_wall | only the north-south wall was found; PML draws nothing in this case (mbdlocation.pmlobj:<n>), the one locating dimension is kept",
+   "count": 24,
+   "samples": [
+    "24381_90895",
+    "24381_100677",
+    "24381_100695",
+    "24381_100725",
+    "24384_24780"
+   ]
+  },
+  {
+   "key": "warning | em4_supp | data data.view_issue | SCTN <refno> 的截面目录链第 <n> 跳断在 <refno>（SPRE 悬空：db <n> 会话 <n> 的索引里没有 <refno>），没有截面点与目录原语",
+   "count": 22,
+   "samples": [
+    "24384_24970",
+    "24384_24946",
+    "24384_24978",
+    "24384_25130",
+    "24384_25282"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress adapter.implied_tube_not_drawn | implied tube <refno> -> Tail (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 21,
+   "samples": [
+    "24381_101412",
+    "24381_104481",
+    "24381_105433",
+    "24381_105601",
+    "24381_105728"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress linear.point_off_axis | dimension point Tail sits <n> mm across the isoline axis from its neighbour <refno> (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so t",
+   "count": 21,
+   "samples": [
+    "24381_101412",
+    "24381_106467",
+    "24381_106505",
+    "24381_106790",
+    "24381_147828"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.member_off_axis | member leave direction deviates <n>° from the isoline axis (max <n>°); the running-dimension segment Head--Tail spanning it would be a foreshortened projection and is suppressed",
+   "count": 19,
+   "samples": [
+    "24384_22528",
+    "24384_22775",
+    "24384_22784",
+    "24384_22788",
+    "24384_22797"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | data tag.branch_name_no_isoline | no isoline axis covers the pipe-name label anchor (PML: \"Cant find good isoline\"); the pipe-name label is not drawn",
+   "count": 17,
+   "samples": [
+    "24383_84825",
+    "24383_84876",
+    "24383_85424",
+    "24383_92456",
+    "24383_92497"
+   ]
+  },
+  {
+   "key": "warning | em4_equi | other locate.single_wall | only the east-west wall was found; PML draws nothing in this case (mbdlocation.pmlobj:<n>), the one locating dimension is kept",
+   "count": 16,
+   "samples": [
+    "24381_76570",
+    "24381_76578",
+    "24381_76640",
+    "24381_76665",
+    "24383_76459"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe_supp | data data.view_issue | REST <name> 在 ZONE <name> 与全库都配不到 STRU（按名找过 <name>），以 REST 为归属对象",
+   "count": 16,
+   "samples": [
+    "24381_177961",
+    "24381_177965",
+    "24381_178216",
+    "24381_178236",
+    "24381_178360"
+   ]
+  },
+  {
+   "key": "warning | civil | data civil.member_shape_missing | PFIT <refno> has no usable shape (no edge lines / plate faces from the host); PML civilMem.getShape drops it silently (NRTO is never shaped, civilMem.pmlobj L<n>)",
+   "count": 15,
+   "samples": [
+    "24381_25769",
+    "24381_25870",
+    "24381_20484",
+    "24381_10624"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | WELD origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 14,
+   "samples": [
+    "24381_147426",
+    "24381_147828",
+    "24381_147862",
+    "24381_147898",
+    "24381_147923"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | data kd_points.atta_side_missing | <name> needs the P<n> direction and PARA[<n>]; the ATTA takes its origin as a single dimension point",
+   "count": 14,
+   "samples": [
+    "24383_68047",
+    "24383_74129",
+    "24383_74230",
+    "24383_74266",
+    "24383_74328"
+   ]
+  },
+  {
+   "key": "info | arch | other civil.arch_floor_only | the arch form only annotates FLOOR elements (markCivil.drawarch L<n>)",
+   "count": 12,
+   "samples": [
+    "24381_37115",
+    "24381_37119",
+    "24381_38428",
+    "24381_38432",
+    "24381_38376"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress adapter.implied_tube_not_drawn | implied tube Head -> <refno> (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 10,
+   "samples": [
+    "24381_104746",
+    "24381_104806",
+    "24381_105433",
+    "24381_106156",
+    "24381_106188"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.segment_unreliable | projected length <n> mm is below the reliable threshold",
+   "count": 10,
+   "samples": [
+    "24383_67939",
+    "24383_67975",
+    "24383_74129",
+    "24383_74403",
+    "24383_74407"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.segment_unreliable | projected length <n> mm is below the reliable threshold",
+   "count": 9,
+   "samples": [
+    "24381_147955",
+    "24381_147970",
+    "24381_177565",
+    "24381_177600",
+    "24381_177852"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point <refno> sits <n> mm across the isoline axis from its neighbour <refno> (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, s",
+   "count": 9,
+   "samples": [
+    "24383_84203",
+    "24383_84256",
+    "24383_97968",
+    "24383_98558",
+    "24383_98539"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | NRTO <refno> does not cross any face of the element",
+   "count": 8,
+   "samples": [
+    "17496_99813",
+    "17496_100202"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | BEND origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 7,
+   "samples": [
+    "24381_147828",
+    "24381_147862",
+    "24381_147898",
+    "24381_147983",
+    "24381_147999"
+   ]
+  },
+  {
+   "key": "warning | arch | data data.view_issue | STWALL <refno> 没有 SPRE：截面按 DESP [<n>, <n>] 矩形、原点对齐",
+   "count": 7,
+   "samples": [
+    "24381_39170",
+    "24381_39319",
+    "24381_38695"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | FITT <refno> does not cross any face of the element",
+   "count": 7,
+   "samples": [
+    "24381_25380",
+    "24381_25391",
+    "24381_25420",
+    "24381_15727",
+    "24381_15765"
+   ]
+  },
+  {
+   "key": "error | (BRAN) | data adapter.no_members_with_geometry | every branch member was skipped for missing geometry",
+   "count": 6,
+   "samples": [
+    "32573_1",
+    "24381_101408",
+    "24381_177395",
+    "24383_101287",
+    "24383_101220"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.atta_before_first_point | ATTA sits before the first dimension point of its isoline; PML asks to check the ATTA's position<name> in the BRAN and draws nothing for this isoline",
+   "count": 6,
+   "samples": [
+    "24381_103633",
+    "24381_107276",
+    "24381_147504",
+    "24381_147511",
+    "24381_177376"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress linear.point_off_axis | dimension point <refno> sits <n> mm across the isoline axis from its neighbour <refno> (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, s",
+   "count": 6,
+   "samples": [
+    "24381_105996",
+    "24381_106160",
+    "24381_106326",
+    "24381_106541",
+    "24381_177475"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | data linear.axis_inferred_from_neighbour | arrive port axis is missing from the catalogue; inferred as the reverse of <refno>'s facing port direction",
+   "count": 6,
+   "samples": [
+    "24383_66799",
+    "24383_74015",
+    "24383_84721",
+    "24383_85844",
+    "24383_98289"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point <refno> sits <n> mm across the isoline axis from its neighbour Tail (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so t",
+   "count": 6,
+   "samples": [
+    "24383_94626",
+    "24383_95187",
+    "24383_98204",
+    "24383_98919",
+    "24383_99408"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress linear.segment_spans_kink | dimension points <refno>--<refno> sit <n> mm apart across the isoline axis (max <n> mm = od × <refno>) and an undrawn slot lies between them; no tube runs there, so the segment would be a foreshortened projection and is ",
+   "count": 5,
+   "samples": [
+    "24381_177501",
+    "24381_177717",
+    "24381_177771",
+    "24381_177886",
+    "24381_177901"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | NBOX <refno> does not cross any face of the element",
+   "count": 5,
+   "samples": [
+    "17496_79785",
+    "17496_118542"
+   ]
+  },
+  {
+   "key": "warning | civil | data civil.member_shape_missing | SBFI <refno> has no usable shape (no edge lines / plate faces from the host); PML civilMem.getShape drops it silently (NRTO is never shaped, civilMem.pmlobj L<n>)",
+   "count": 5,
+   "samples": [
+    "17496_105724",
+    "24381_31253",
+    "24381_5178",
+    "24381_5202"
+   ]
+  },
+  {
+   "key": "info | arch | suppress civil.member_off_face | NXTR <refno>: centre is off its face or outside its outline (civilMem.checkifok L<n><n>)",
+   "count": 4,
+   "samples": [
+    "24381_36962",
+    "24381_36990",
+    "24381_37018",
+    "24381_37054"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | FIXING <refno> does not cross any face of the element",
+   "count": 4,
+   "samples": [
+    "17496_106765",
+    "17496_106212",
+    "24381_1932",
+    "24381_4302"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | STWALL <refno> 没有 SPRE：截面按 DESP [<n>, <n>] 矩形、原点对齐",
+   "count": 4,
+   "samples": [
+    "17496_99203",
+    "17496_100380"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe_supp | data data.view_issue | REST <name>(<n>)-of<n>TFA<n>MP-SUPP<n><name> 在 ZONE <name> 与全库都配不到 STRU（按名找过 <name>(<n>)-of<n>TFA<n>MP-SUPP<n><name>(<n>)-of<n>TFA<n>MP-SUPP<n>），以 REST 为归属对象",
+   "count": 3,
+   "samples": [
+    "24381_178965",
+    "24381_178987",
+    "24381_179009"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | split split.geometry | missing leave_dir",
+   "count": 3,
+   "samples": [
+    "24383_66799",
+    "24383_74015",
+    "24383_98919"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | WELD origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 3,
+   "samples": [
+    "24383_76213",
+    "24383_76345"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.member_directions_missing | BEND port direction is missing; member kept without a direction",
+   "count": 3,
+   "samples": [
+    "24383_84721",
+    "24383_98289",
+    "24383_98919"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | data linear.axis_inferred_from_neighbour | leave port axis is missing from the catalogue; inferred as the reverse of <refno>'s facing port direction",
+   "count": 3,
+   "samples": [
+    "24383_84721",
+    "24383_85844",
+    "24383_98289"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.member_directions_missing | FTUB port direction is missing; member kept without a direction",
+   "count": 3,
+   "samples": [
+    "24384_22404",
+    "24384_22441",
+    "24384_22478"
+   ]
+  },
+  {
+   "key": "error | civil | data civil.geometry_missing | GWALL: GWALL needs at least two non-horizontal faces",
+   "count": 3,
+   "samples": [
+    "17496_106456",
+    "17496_117236",
+    "24381_2162"
+   ]
+  },
+  {
+   "key": "info | em4_equi | suppress locate.civil_label_skipped | floor name label skipped: owner name \"\" has no second-to-last '-' part",
+   "count": 2,
+   "samples": [
+    "24381_57919",
+    "24381_57972"
+   ]
+  },
+  {
+   "key": "warning | em4_supp | data data.view_issue | REST <name> 在 ZONE <name> 与全库都配不到 STRU（按名找过 <name>），以 REST 为归属对象",
+   "count": 2,
+   "samples": [
+    "24383_69177",
+    "24383_71771"
+   ]
+  },
+  {
+   "key": "info | em4_supp | data support.part_geometry_missing | HROD <refno> has no usable LCYL geometry; part skipped",
+   "count": 2,
+   "samples": [
+    "24383_72796",
+    "24383_72799"
+   ]
+  },
+  {
+   "key": "warning | em4_supp | data support.atta_far_apart | ATTA <name> is more than <n> mm from <name> (PML suiSupport.pmlobj:<n><n>: probably misnamed)",
+   "count": 2,
+   "samples": [
+    "24383_88375",
+    "24384_393"
+   ]
+  },
+  {
+   "key": "warning | em4_equi | data data.view_issue | STWALL <refno> 没有 SPRE：截面按 DESP [<n>, <n>] 矩形、原点对齐",
+   "count": 2,
+   "samples": [
+    "24384_26549"
+   ]
+  },
+  {
+   "key": "info | em4_equi | suppress locate.dimension_degenerate | ns locating dimension skipped: the wall foot is within <n> mm of the base point",
+   "count": 2,
+   "samples": [
+    "24384_24886",
+    "24384_24894"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | data welds.no_isoline | no isoline hosts this weld (PML: \"Cant find good isoline\"); it is not drawn",
+   "count": 2,
+   "samples": [
+    "24381_147426"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | VALV origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 2,
+   "samples": [
+    "24381_147888",
+    "24381_147923"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | VALV origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 2,
+   "samples": [
+    "24383_76094",
+    "24383_76127"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | REDU origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 2,
+   "samples": [
+    "24383_76113",
+    "24383_98086"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | COUP origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 2,
+   "samples": [
+    "24383_76345"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point Head sits <n> mm across the isoline axis from its neighbour Tail (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so the ",
+   "count": 2,
+   "samples": [
+    "24383_84876",
+    "24383_98170"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.segment_spans_kink | dimension points Tail--<refno> sit <n> mm apart across the isoline axis (max <n> mm = od × <refno>) and an undrawn slot lies between them; no tube runs there, so the segment would be a foreshortened projection and is sup",
+   "count": 2,
+   "samples": [
+    "24383_98269",
+    "24383_98708"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.member_off_axis | member leave direction deviates <n>° from the isoline axis (max <n>°); the running-dimension segment <refno>--Tail spanning it would be a foreshortened projection and is suppressed",
+   "count": 2,
+   "samples": [
+    "24384_23862",
+    "24384_24075"
+   ]
+  },
+  {
+   "key": "warning | civil | suppress civil.dim_degenerate | 尺寸标注 <refno>:wall:<refno>:chain:<n>: projected length <n> mm is below the reliable threshold",
+   "count": 2,
+   "samples": [
+    "17496_72729"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | GWALL <refno> 推不出找墙用的面：<refno> 的环 <n> 只有 <n> 个顶点，构不成剖面",
+   "count": 2,
+   "samples": [
+    "17496_117236",
+    "24381_2162"
+   ]
+  },
+  {
+   "key": "info | civil | suppress civil.member_off_face | NRTO <refno>: centre is off its face or outside its outline (civilMem.checkifok L<n><n>)",
+   "count": 2,
+   "samples": [
+    "24381_24979",
+    "24381_15371"
+   ]
+  },
+  {
+   "key": "info | em9_equi | suppress locate.dimension_degenerate | ns locating dimension skipped: the wall foot is within <n> mm of the base point",
+   "count": 1,
+   "samples": [
+    "24381_114125"
+   ]
+  },
+  {
+   "key": "info | em9_pipe_supp | data support.no_parts | the support has no element that becomes a part (no geometry to dimension)",
+   "count": 1,
+   "samples": [
+    "24381_179219"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress linear.point_off_axis | dimension point <refno> sits <n> mm across the isoline axis from its neighbour <refno>@apos (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a ki",
+   "count": 1,
+   "samples": [
+    "24381_104483"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress linear.point_off_axis | dimension point <refno> sits <n> mm across the isoline axis from its neighbour Head (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so t",
+   "count": 1,
+   "samples": [
+    "24381_105433"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress adapter.member_directions_missing | COUP port direction is missing; member kept without a direction",
+   "count": 1,
+   "samples": [
+    "24381_146953"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | data linear.axis_inferred_from_neighbour | leave port axis is missing from the catalogue; inferred as the reverse of <refno>'s facing port direction",
+   "count": 1,
+   "samples": [
+    "24381_146953"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | data linear.axis_inferred_from_neighbour | arrive port axis is missing from the catalogue; inferred as the reverse of <refno>'s facing port direction",
+   "count": 1,
+   "samples": [
+    "24381_146953"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | FLAN origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 1,
+   "samples": [
+    "24381_147426"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress linear.point_off_axis | dimension point <refno> sits <n> mm across the isoline axis from its neighbour Tail (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink, so t",
+   "count": 1,
+   "samples": [
+    "24381_146345"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | REDU origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 1,
+   "samples": [
+    "24381_147939"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | COUP origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 1,
+   "samples": [
+    "24381_148010"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | suppress isodim.member_off_axis | ELBO origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 1,
+   "samples": [
+    "24381_148034"
+   ]
+  },
+  {
+   "key": "warning | (BRAN) | suppress adapter.implied_tube_not_drawn | implied tube Head -> Tail (<n> mm) is not coaxial with its ports (<n>° off); E<n>D draws no tube here, so no tube length is dimensioned",
+   "count": 1,
+   "samples": [
+    "24381_177395"
+   ]
+  },
+  {
+   "key": "warning | em9_pipe | data polar.neighbour_bad | the previous isoline has no outside diameter or obstacle length (PML: \"pre isoline is bad, check bore and length\" and the whole branch fails); the neighbour pipe-body obstacles of this pair are left out",
+   "count": 1,
+   "samples": [
+    "24381_177702"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.member_directions_missing | VALV port direction is missing; member kept without a direction",
+   "count": 1,
+   "samples": [
+    "24383_66799"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.member_directions_missing | CAP port direction is missing; member kept without a direction",
+   "count": 1,
+   "samples": [
+    "24383_74015"
+   ]
+  },
+  {
+   "key": "info | em4_pipe | other legs.no_isoline | no isoline hosts this support leg (PML: \"Cant find good isoline\"); its dimension is skipped",
+   "count": 1,
+   "samples": [
+    "24383_74179"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.member_off_axis | member leave direction deviates <n>° from the isoline axis (max <n>°); the running-dimension segment <refno>--<refno> spanning it would be a foreshortened projection and is suppressed",
+   "count": 1,
+   "samples": [
+    "24383_85308"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress adapter.member_directions_missing | ELBO port direction is missing; member kept without a direction",
+   "count": 1,
+   "samples": [
+    "24383_85844"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.member_off_axis | member leave direction deviates <n>° from the isoline axis (max <n>°); the running-dimension segment Tail--Head spanning it would be a foreshortened projection and is suppressed",
+   "count": 1,
+   "samples": [
+    "24383_85990"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point <refno>@lpos sits <n> mm across the isoline axis from its neighbour <refno>@apos (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such",
+   "count": 1,
+   "samples": [
+    "24383_98086"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress linear.point_off_axis | dimension point Tail sits <n> mm across the isoline axis from its neighbour <refno>@apos (max <n> mm = od × <refno>) with an undrawn slot between them, i.e. outside the pipe body; E<n>D draws no tube through such a kink,",
+   "count": 1,
+   "samples": [
+    "24383_98086"
+   ]
+  },
+  {
+   "key": "warning | em4_pipe | suppress isodim.member_off_axis | TEE origin and both ports sit more than <n> mm (od × <refno>) off the isoline axis; PML asks to check its order<name> in the BRAN and takes no dimension point",
+   "count": 1,
+   "samples": [
+    "24383_101078"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | 楼板旁的墙 <refno> 没有几何，跳过：STWALL <refno> 推不出找墙用的面：目录截面没有顶点，DESP [<n>, <n>] 又没给满厚、高两项",
+   "count": 1,
+   "samples": [
+    "17496_79729"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | GWALL <refno> 推不出找墙用的面：GWALL <refno> 下没有任何 PLOO<name> 环，出不了剖面",
+   "count": 1,
+   "samples": [
+    "17496_106456"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | STWALL <refno> 推不出找墙用的面：目录截面没有顶点，DESP [<n>, <n>] 又没给满厚、高两项",
+   "count": 1,
+   "samples": [
+    "17496_106500"
+   ]
+  },
+  {
+   "key": "error | civil | data civil.geometry_missing | STWALL: STWALL needs two faces or axis_start / axis_end / thickness / height",
+   "count": 1,
+   "samples": [
+    "17496_106500"
+   ]
+  },
+  {
+   "key": "warning | arch | data data.view_issue | STWALL <refno> 推不出找墙用的面：目录截面没有顶点，DESP [<n>] 又没给满厚、高两项",
+   "count": 1,
+   "samples": [
+    "24381_42189"
+   ]
+  },
+  {
+   "key": "error | arch | data civil.geometry_missing | STWALL: STWALL needs two faces or axis_start / axis_end / thickness / height",
+   "count": 1,
+   "samples": [
+    "24381_42189"
+   ]
+  },
+  {
+   "key": "warning | arch | data data.view_issue | 楼板旁的墙 <refno> 没有几何，跳过：STWALL <refno> 推不出找墙用的面：目录截面没有顶点，DESP [<n>] 又没给满厚、高两项",
+   "count": 1,
+   "samples": [
+    "24381_42328"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | NXTR <refno> 的环读不成：<refno> 的环 <n> 只有 <n> 个顶点，构不成剖面",
+   "count": 1,
+   "samples": [
+    "17496_116569"
+   ]
+  },
+  {
+   "key": "warning | civil | data civil.member_shape_missing | NXTR <refno> has no usable shape (no edge lines / plate faces from the host); PML civilMem.getShape drops it silently (NRTO is never shaped, civilMem.pmlobj L<n>)",
+   "count": 1,
+   "samples": [
+    "17496_116569"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | FLOOR <refno> 推不出找墙用的面：<refno> 的环 <n> 只有 <n> 个顶点，构不成剖面",
+   "count": 1,
+   "samples": [
+    "24381_25747"
+   ]
+  },
+  {
+   "key": "warning | civil | data data.view_issue | FLOOR <refno> 在 SPAMAP 里没有包围盒、面也读不出，附近的墙与房间没找",
+   "count": 1,
+   "samples": [
+    "24381_25747"
+   ]
+  },
+  {
+   "key": "error | civil | data civil.geometry_missing | FLOOR: FLOOR needs its top and bottom faces",
+   "count": 1,
+   "samples": [
+    "24381_25747"
+   ]
+  }
+ ],
+ "kindsByType": {
+  "em4_supp": {
+   "objects": 2391,
+   "kinds": {
+    "aid_line": {
+     "primitives": 3422,
+     "objects": 1441
+    },
+    "linear_dim": {
+     "primitives": 16166,
+     "objects": 2115
+    },
+    "label": {
+     "primitives": 2077,
+     "objects": 1554
+    },
+    "leader_line": {
+     "primitives": 2077,
+     "objects": 1554
+    },
+    "aid_circle": {
+     "primitives": 431,
+     "objects": 161
+    },
+    "angle_dim": {
+     "primitives": 7,
+     "objects": 7
+    }
+   }
+  },
+  "em4_equi": {
+   "objects": 212,
+   "kinds": {
+    "label": {
+     "primitives": 1080,
+     "objects": 212
+    },
+    "leader_line": {
+     "primitives": 212,
+     "objects": 212
+    },
+    "aid_line": {
+     "primitives": 25,
+     "objects": 25
+    },
+    "aid_text": {
+     "primitives": 419,
+     "objects": 212
+    },
+    "linear_dim": {
+     "primitives": 80,
+     "objects": 59
+    },
+    "angle_dim": {
+     "primitives": 187,
+     "objects": 187
+    }
+   }
+  },
+  "em9_equi": {
+   "objects": 951,
+   "kinds": {
+    "label": {
+     "primitives": 5338,
+     "objects": 951
+    },
+    "leader_line": {
+     "primitives": 951,
+     "objects": 951
+    },
+    "aid_line": {
+     "primitives": 257,
+     "objects": 257
+    },
+    "aid_text": {
+     "primitives": 1813,
+     "objects": 951
+    },
+    "linear_dim": {
+     "primitives": 816,
+     "objects": 546
+    },
+    "angle_dim": {
+     "primitives": 694,
+     "objects": 694
+    }
+   }
+  },
+  "em9_pipe_supp": {
+   "objects": 165,
+   "kinds": {
+    "linear_dim": {
+     "primitives": 1070,
+     "objects": 158
+    }
+   }
+  },
+  "em4_pipe": {
+   "objects": 1822,
+   "kinds": {
+    "linear_dim": {
+     "primitives": 8588,
+     "objects": 1687
+    },
+    "aid_line": {
+     "primitives": 40951,
+     "objects": 1690
+    },
+    "label": {
+     "primitives": 12782,
+     "objects": 1822
+    },
+    "leader_line": {
+     "primitives": 12782,
+     "objects": 1822
+    },
+    "angle_dim": {
+     "primitives": 671,
+     "objects": 454
+    },
+    "aid_text": {
+     "primitives": 7862,
+     "objects": 1431
+    },
+    "weld_mark": {
+     "primitives": 559,
+     "objects": 183
+    },
+    "slope_mark": {
+     "primitives": 242,
+     "objects": 91
+    }
+   }
+  },
+  "em9_pipe": {
+   "objects": 603,
+   "kinds": {
+    "aid_line": {
+     "primitives": 14653,
+     "objects": 459
+    },
+    "aid_text": {
+     "primitives": 5473,
+     "objects": 444
+    },
+    "linear_dim": {
+     "primitives": 7359,
+     "objects": 603
+    },
+    "label": {
+     "primitives": 8392,
+     "objects": 603
+    },
+    "leader_line": {
+     "primitives": 5861,
+     "objects": 603
+    },
+    "weld_mark": {
+     "primitives": 3530,
+     "objects": 603
+    },
+    "angle_dim": {
+     "primitives": 252,
+     "objects": 173
+    },
+    "slope_mark": {
+     "primitives": 1228,
+     "objects": 228
+    }
+   }
+  },
+  "arch": {
+   "objects": 104,
+   "kinds": {
+    "label": {
+     "primitives": 1953,
+     "objects": 45
+    },
+    "aid_circle": {
+     "primitives": 402,
+     "objects": 27
+    },
+    "aid_text": {
+     "primitives": 402,
+     "objects": 27
+    },
+    "linear_dim": {
+     "primitives": 1424,
+     "objects": 34
+    },
+    "leader_line": {
+     "primitives": 6,
+     "objects": 4
+    }
+   }
+  },
+  "civil": {
+   "objects": 734,
+   "kinds": {
+    "label": {
+     "primitives": 52976,
+     "objects": 729
+    },
+    "aid_circle": {
+     "primitives": 3604,
+     "objects": 710
+    },
+    "aid_line": {
+     "primitives": 10238,
+     "objects": 729
+    },
+    "linear_dim": {
+     "primitives": 20611,
+     "objects": 444
+    },
+    "aid_arc": {
+     "primitives": 739,
+     "objects": 103
+    },
+    "aid_text": {
+     "primitives": 745,
+     "objects": 103
+    },
+    "leader_line": {
+     "primitives": 22509,
+     "objects": 659
+    }
+   }
+  }
+ }
+}
