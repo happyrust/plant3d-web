@@ -98,6 +98,7 @@ import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnota
 import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
 import {
   captureGetWorkWatermarks,
+  loadedModelDbnums,
   noteGetWorkRoot,
   registerGetWorkDerived,
   registerGetWorkScene,
@@ -4246,6 +4247,8 @@ onMounted(async () => {
   // 单元根自己多半没对象（几何在成员名下），探针沿属主链问装载器；`show_refno` 直装的路不进 loadedRoots，也靠这一条。
   setGenModelV1LoadedProbe(createGenModelV1LoadedProbe({
     activeDbnum: () => activeDbno,
+    // 页面上装着节点的库都算（不只是最后装的那个库）：哪个库有变化的批次落地都要出提示
+    loadedDbnums: loadedModelDbnums,
     isModelActuallyLoaded: (refno) => modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false,
     resolveUnitObjectIds: resolveDtxObjectIdsByUnitRefno,
   }));

@@ -55,3 +55,14 @@ describe('ViewerPanel 接线（源码钉）：一次事件重载几个根（状�
     expect(redeploy).toContain('new CustomEvent(\'showModelByRefnos\', { detail: { refnos, refreshModel: true, flyTo: false } })');
   });
 });
+
+describe('ViewerPanel 接线（源码钉）：状态栏「数据已更新」提示的场景探针', () => {
+  const probe = section('setGenModelV1LoadedProbe(createGenModelV1LoadedProbe({', 'startGenModelV1UpdateNotice();');
+
+  it('页面上装着节点的库都报给提示（不只是最后装的那个库）；原来认的「当前激活的库」照旧报', () => {
+    expect(probe).toMatch(/\bloadedDbnums: loadedModelDbnums,/);
+    expect(probe).toMatch(/\bactiveDbnum: \(\) => activeDbno,/);
+    // `loadedModelDbnums` 是取最新接线里给的那一个（已加载节点表里装着的 + 取最新自己的登记表）
+    expect(source).toMatch(/import \{[^}]*\bloadedModelDbnums,[^}]*\} from '@\/composables\/useModelGetWork';/);
+  });
+});

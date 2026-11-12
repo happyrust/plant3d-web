@@ -140,6 +140,19 @@ function currentRoots(): GetWorkRoot[] {
   return [...out.values()];
 }
 
+/**
+ * 页面上装着节点的那些库：已加载节点表里装着的节点、取最新登记的直装根、整库显示过的库。
+ *
+ * 状态栏「数据已更新」的提示拿它判断一个数据批次和本页有没有关系（查看器把它接进提示的场景探针）：这些库里任何一个
+ * 有变化的批次落地都要提示——只有手动的「取最新」，人是靠那条提示知道该去点的。只是点过、没有模型可显示的节点不算。
+ */
+export function loadedModelDbnums(): number[] {
+  const out = new Set<number>();
+  for (const root of currentRoots()) out.add(root.dbnum);
+  for (const scope of getWorkRegisteredScopes()) out.add(scope.dbnum);
+  return [...out];
+}
+
 /** 当前选中的构件（`a_b`）：没有、不是 PDMS 的 refno、或钉在某个历史版本上的（版本对比里选的）都回 `null` */
 function selectedRefnoKey(): string | null {
   if (getGlobalSelectedVersionPin()) return null;

@@ -98,6 +98,7 @@ async function mountBadge() {
     bar: () => host.querySelector('[data-testid="gen-model-v1-update-notice"]'),
     text: () => host.querySelector('[data-testid="gen-model-v1-update-notice-text"]')?.textContent?.trim() ?? '',
     reloadButton: () => host.querySelector<HTMLButtonElement>('[data-testid="gen-model-v1-update-notice-reload"]'),
+    getWorkHint: () => host.querySelector<HTMLElement>('[data-testid="gen-model-v1-update-notice-getwork-hint"]'),
     dismissButton: () => host.querySelector<HTMLButtonElement>('[data-testid="gen-model-v1-update-notice-dismiss"]'),
     unmount: () => { app.unmount(); host.remove(); },
   };
@@ -150,14 +151,20 @@ describe('K10 状态栏更新提示条', () => {
     }
   });
 
-  it('受影响的根都不在场景里：只提示、没有「重载」；「×」忽略后提示条消失', async () => {
+  it('批次里的根没有一个认得出在场景里：只提示、没有「重载」，换成一句「点「取最新」同步」；「×」忽略后提示条消失', async () => {
     const view = await mountBadge();
     try {
       await handleGenModelV1TaskEnvelopeForNotice(finished({}, [{ root_refno: '24384/23257', status: 'generated' }]));
       await nextTick();
       expect(view.text()).toBe('库 8000 已更新到会话 726→727（改 2 项）');
       expect(view.reloadButton()).toBeNull();
-      expect(view.bar()?.getAttribute('title')).toContain('受影响的构件都不在场景里，不用重载');
+      // 没有动作可点的时候把人引到「取最新」：单独一段，不跟着前面那句一起被截断
+      expect(view.getWorkHint()?.textContent?.trim()).toBe('点「取最新」同步');
+      expect(view.getWorkHint()?.className).toContain('shrink-0');
+      // 认不出不等于不在场景里（经上层节点装进来的单元认不出）：不再说「不用重载」
+      const title = view.bar()?.getAttribute('title') ?? '';
+      expect(title).not.toContain('不在场景里');
+      expect(title).toContain('这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点');
       view.dismissButton()!.click();
       await nextTick();
       expect(view.bar()).toBeNull();
@@ -210,14 +217,39 @@ describe('K10 状态栏更新提示条', () => {
 });
 
 describe('更新提示条把人引到「取最新」（2026-11-12）', () => {
-  it('悬停说明的最后一行：要连模型树一起刷新，点右边的「取最新」', async () => {
+  it('悬停说明的最后一行：要把模型树和已装的模型一起同步，点右边的「取最新」', async () => {
     const view = await mountBadge();
     try {
       await handleGenModelV1TaskEnvelopeForNotice(finished({}, MOVED));
       await nextTick();
       const lines = (view.bar()?.getAttribute('title') ?? '').split('\n');
-      expect(lines.at(-1)).toBe('要连模型树一起刷新到最新，点右边的「取最新」');
+      expect(lines.at(-1)).toBe('要把模型树和已装的模型一起同步到最新，点右边的「取最新」');
       expect(lines.length).toBeGreaterThan(1);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('有「重载」可点的时候不画那句「点「取最新」同步」（两样只出一样）', async () => {
+    const view = await mountBadge();
+    try {
+      await handleGenModelV1TaskEnvelopeForNotice(finished({}, MOVED));
+      await nextTick();
+      expect(view.reloadButton()).not.toBeNull();
+      expect(view.getWorkHint()).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('装着节点的库有变化、批次里一个单元回执都没有（改的是库里别处）：照样出提示，引到「取最新」', async () => {
+    const view = await mountBadge();
+    try {
+      await handleGenModelV1TaskEnvelopeForNotice(finished({ start_sesno: 1667, end_sesno: 1684, changed_elements: 37 }, []));
+      await nextTick();
+      expect(view.text()).toBe('库 8000 已更新到会话 1667→1684（改 37 项）');
+      expect(view.reloadButton()).toBeNull();
+      expect(view.getWorkHint()).not.toBeNull();
     } finally {
       view.unmount();
     }

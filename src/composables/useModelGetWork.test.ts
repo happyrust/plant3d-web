@@ -512,3 +512,37 @@ describe('useModelGetWork：补几处边角', () => {
     expect(scope!.checkedFileLatestSesno).toBe(1146);
   });
 });
+
+describe('loadedModelDbnums：页面上装着节点的库（状态栏「数据已更新」的提示拿它判断一个批次和本页有没有关系）', () => {
+  it('已加载节点表里装着的节点、取最新登记的直装根、整库显示过的库都算；同一个库只算一次', async () => {
+    const { getWork, registry } = await load();
+    mocks.entries.mockReturnValue([
+      tableEntry('24384_47463'),
+      tableEntry('24384_47500'),
+      tableEntry('24382_1911', { dbnum: 7998 }),
+    ]);
+    registry.noteGetWorkRoot('24381_101405', 7997, { modelSesno: 738, fileLatestSesno: 748 }, 'show_refno');
+    registry.noteGetWorkDbnumScope(1112, { sites: [], discover: true, fileLatestSesno: 12 });
+
+    expect(getWork.loadedModelDbnums().sort((a, b) => a - b)).toEqual([1112, 7997, 7998, 8000]);
+  });
+
+  it('只是点过、没有模型可显示的节点（loaded = false）不算：它的库有变化不该为它提示', async () => {
+    const { getWork } = await load();
+    mocks.entries.mockReturnValue([tableEntry('24382_1911', { dbnum: 7998, loaded: false })]);
+
+    expect(getWork.loadedModelDbnums()).toEqual([]);
+  });
+
+  it('每次问都是此刻的名单：节点撤掉之后它的库就不算了', async () => {
+    const { getWork, registry } = await load();
+    expect(getWork.loadedModelDbnums()).toEqual([]);
+    mocks.entries.mockReturnValue([tableEntry('24384_47463')]);
+    registry.noteGetWorkRoot('24382_1911', 7998, { modelSesno: 675, fileLatestSesno: 675 }, 'debug_refno');
+    expect(getWork.loadedModelDbnums().sort((a, b) => a - b)).toEqual([7998, 8000]);
+
+    mocks.entries.mockReturnValue([]);
+    registry.forgetGetWorkRoot('24382_1911');
+    expect(getWork.loadedModelDbnums()).toEqual([]);
+  });
+});

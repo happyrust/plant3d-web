@@ -3,7 +3,8 @@
  * 增量更新案例集合 K 组见 gen-model `docs/plans/2026-10-27-plant3d-web-incremental-linkage-test-cases.md`）。
  *
  * 订阅 `/api/v1/ws` tasks 主题里**所有**任务的 `task_finished`（不只是本会话登记的）：后端自己跑完的 DESI
- * 数据批次落在当前已装入的库 / 生成根上时，只在底部状态栏给一条可点的更新提示，由人决定何时重载受影响的生成根；
+ * 数据批次落在页面上装着节点的库 / 已在场景里的生成根上时，只在底部状态栏给一条可点的更新提示，由人决定何时重载受影响的生成根
+ * （或点「取最新」连模型树一起同步）；
  * 不自动换场景、不打断进行中的标注 / 测量。收口计划 §12「只吃自己 ensure 出来的数据」仍然成立：这里不替用户换数据，
  * 只告诉他数据变了；点「重载」才走 `showModelByRefnos { refreshModel: true }` 把受影响的根换成最新记录。
  *
@@ -154,7 +155,8 @@ export function parseGenModelV1FinishedBatch(envelope: GenModelV1TaskEnvelope): 
 
 /**
  * 这一批跟当前场景有没有关系：只看 DESI（SYST / DICT 等 meta 库不改几何）、要真有变化（只登录不改的
- * DBMDAT-only 会话 `changed_elements = 0`、没单元）、且要么该库已装入、要么批次里有根已在场景里。
+ * DBMDAT-only 会话 `changed_elements = 0`、没单元——没有变化不提示）、且要么页面上装着这个库的节点
+ * （`probe.dbnums()`，见 `createGenModelV1LoadedProbe`）、要么批次里有根已在场景里。
  * 生成失败但在场景里的根也算「有关系」（要让人知道），只是不进 `loadedRoots`。
  */
 export function evaluateGenModelV1UpdateNotice(
@@ -300,23 +302,40 @@ export async function lookupGenModelV1DeletedRootsInScene(
   return { roots: found, incomplete };
 }
 
-/** ViewerPanel 的场景探针：库是否已装入看当前激活的库；根是否在场景先问加载器记账，再沿属主链问 DTX 运行时索引。 */
+/**
+ * ViewerPanel 的场景探针。
+ *
+ * 「这个库在不在页面上」认两样：**页面上装着节点的库**（已加载节点表里装着的、取最新登记的直装根和整库显示——由
+ * `loadedDbnums` 给）和当前激活的库（最近一次往场景里装实例的那个库；空间查询这类不进登记表的装法靠它）。
+ * 2026-11-12 之前只认后一样，真实回放里漏报了三步：页面装着 8000 和 7998 两个库的节点时，只有最后装的那个库的批次会出提示。
+ * 人是靠这条提示知道该去点「取最新」的，所以装着节点的库一个都不能漏。
+ *
+ * 根是否在场景：先问加载器记账，再沿属主链问 DTX 运行时索引。经上层节点（SITE / ZONE）装进来的单元这两处都认不出——
+ * 所以「场景内 N 根受影响」可能少算，提示出不出不靠它。
+ */
 export function createGenModelV1LoadedProbe(deps: {
   activeDbnum: () => number | null;
+  /** 页面上装着节点的库 */
+  loadedDbnums: () => Iterable<number>;
   isModelActuallyLoaded: (refno: string) => boolean;
   resolveUnitObjectIds: (dbnum: number, refno: string) => string[];
 }): GenModelV1LoadedProbe {
   return {
     dbnums: () => {
-      const dbnum = deps.activeDbnum();
-      return dbnum !== null ? [dbnum] : [];
+      const out = new Set<number>(deps.loadedDbnums());
+      const active = deps.activeDbnum();
+      if (active !== null) out.add(active);
+      return [...out];
     },
     isRootLoaded: (refno, dbnum) =>
       deps.isModelActuallyLoaded(refno) || deps.resolveUnitObjectIds(dbnum, refno).length > 0,
   };
 }
 
-/** 状态栏那一行：单库写会话范围，跨库只列库号。 */
+/**
+ * 状态栏那一行：单库写会话范围，跨库只列库号。没有认出可重载的根时（改到的单元是经上层节点装进来的，或改的是
+ * 这个库里别处）「场景内 N 根受影响」那半句不出；提示条在这一行后面另画一句「点「取最新」同步」（见状态栏的徽标组件）。
+ */
 export function formatGenModelV1UpdateNoticeText(notice: GenModelV1UpdateNotice): string {
   const [only] = notice.spans;
   let head = '数据已更新';
@@ -354,8 +373,8 @@ export function formatGenModelV1UpdateNoticeTitle(notice: GenModelV1UpdateNotice
     lines.push('删除清单没查全（超过服务端单批上限或查询失败）：可能有已删构件没被撤下，重载后请核对场景');
   }
   lines.push(notice.loadedRoots.length > 0
-    ? `点「重载」按最新记录替换场景里的 ${notice.loadedRoots.join(', ')}；不重新生成、不动相机`
-    : '受影响的构件都不在场景里，不用重载');
+    ? `点「重载」按最新记录替换场景里的 ${notice.loadedRoots.join(', ')}；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）`
+    : '这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点');
   return lines.join('\n');
 }
 
