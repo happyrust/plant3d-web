@@ -205,6 +205,20 @@ function makeViewer() {
   } as any;
 }
 
+type ConfirmDialogModule = typeof import('@/composables/useConfirmDialogStore');
+
+/**
+ * 接上真的确认弹窗状态（别的用例里它是个一问就答的桩）：几个节点同时要确认时怎么排队，要用真的才看得出来。
+ * 回弹窗的状态与按钮（`ConfirmDialog.vue` 用的就是这一份）。
+ */
+async function useRealConfirmDialog(): Promise<ReturnType<ConfirmDialogModule['useConfirmDialogStore']>> {
+  const real = await vi.importActual<ConfirmDialogModule>('@/composables/useConfirmDialogStore');
+  real.__resetConfirmDialogStoreForTests();
+  const dialog = real.useConfirmDialogStore();
+  openChoiceMock.mockImplementation((options: Parameters<typeof dialog.openChoice>[0]) => dialog.openChoice(options));
+  return dialog;
+}
+
 /** `/dbnums` 行：已初始化、模型水位盖过 = 库里有成套模型 */
 const DBNUM_ROWS_WITH_MODEL = [
   { dbnum: 7997, db_type: 'DESI', initialized: true, applied_sesno: 447, model_sesno: 447 },
@@ -2678,6 +2692,177 @@ describe('showModelByRefno 模型资产补齐：预检、确认、分块生成�
       expect(noteNodeWithoutModelMock).not.toHaveBeenCalled();
     });
   });
+
+  describe('几个节点同时要确认生成：全页面一个确认框，排队一个个问，后来的不盖掉先来的（#163）', () => {
+    /** 两个都还没有模型、都超过确认阈值的 ZONE：约 30 个和约 25 个单元 */
+    const ZONE_A = '24381_700';
+    const ZONE_B = '24381_800';
+    const FRESH: Record<string, string[]> = { [ZONE_A]: ['24381_702'], [ZONE_B]: ['24381_802'] };
+    type Generation = Pick<ReturnType<typeof import('./useModelGeneration').useModelGeneration>, 'showModelByRefno'>;
+    let dialog: Awaited<ReturnType<typeof useRealConfirmDialog>>;
+
+    beforeEach(async () => {
+      dialog = await useRealConfirmDialog();
+      // 几个节点同时在走显示流程：桩按节点回各自的东西
+      const generatedZones = new Set<string>();
+      typeInfoMock.mockImplementation(async (refno: string) => ({ success: true, refno, noun: refno === SITE ? 'SITE' : 'ZONE' }));
+      useTree({
+        ...TREE,
+        // SITE 下没有模型的两个 ZONE 合计约 27 个单元，超过阈值
+        '24381_536': [child('24381_537', 'STRU', 12), child('24381_549', 'REST', 3)],
+        '24381_621': [child('24381_622', 'REST', 9), child('24381_631', 'STRU', 3)],
+        [ZONE_A]: [child('24381_701', 'PIPE', 30)],
+        [ZONE_B]: [child('24381_801', 'PIPE', 25)],
+      });
+      visibleInstsMock.mockImplementation(async (refno: string) => {
+        // SITE：已有一部分模型，三个 ZONE 没有记录；两个 ZONE：生成之前查空，生成之后查得到新出来的构件
+        if (refno === SITE) return { success: true, refno, refnos: EXISTING, empty_scopes: ['24381_179753', '24381_536', '24381_621'] };
+        return generatedZones.has(refno)
+          ? { success: true, refno, refnos: FRESH[refno] ?? [] }
+          : { success: true, refno, refnos: [], empty_scopes: [refno] };
+      });
+      v1Source.records.generateThenCollect.mockImplementation(async (refno: string) => {
+        generatedZones.add(refno);
+        return generated(refno, FRESH[refno] ?? []) as never;
+      });
+    });
+
+    /** 第一个节点先走到确认（它的确认框弹着），再让第二个节点也走到确认（排在后面） */
+    async function askInTurn(gen: Generation, firstRoot: string, secondRoot: string) {
+      const first = gen.showModelByRefno(firstRoot, { flyTo: false });
+      await vi.waitFor(() => expect(dialog.visible.value).toBe(true));
+      const second = gen.showModelByRefno(secondRoot, { flyTo: false });
+      await vi.waitFor(() => expect(openChoiceMock).toHaveBeenCalledTimes(2));
+      return { first, second };
+    }
+
+    it('第一个节点的确认框还弹着，第二个节点也走到确认：答完一个再弹下一个，各拿各的答复，两个都收口、行上的加载态都放开', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+      const { first, second } = await askInTurn(gen, ZONE_A, ZONE_B);
+      // 两个都在等确认；弹着的还是先问的那个
+      expect(dialog.message.value).toContain('约 30 个单元');
+      expect(modelLoadSessionView(ZONE_A)).toEqual({ stoppable: true, stopping: false });
+      expect(modelLoadSessionView(ZONE_B)).toEqual({ stoppable: true, stopping: false });
+
+      // 第一个选「生成并显示」：往下走的是它，不是后来的那个
+      dialog.choose('generate');
+      expect(await first).toBe(true);
+      expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual([ZONE_A]);
+      expect(gen.isModelActuallyLoaded(ZONE_A)).toBe(true);
+      expect(modelLoadSessionView(ZONE_A)).toBeNull();
+
+      // 接着弹出来的是第二个的；它点取消
+      await vi.waitFor(() => expect(dialog.visible.value).toBe(true));
+      expect(dialog.message.value).toContain('约 25 个单元');
+      expect(modelLoadSessionView(ZONE_B)).toEqual({ stoppable: true, stopping: false });
+      dialog.cancelChoice();
+      expect(await second).toBe(false);
+      expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
+      expect(pendingGenerationFill(ZONE_B)).toMatchObject({ units: 25, reason: 'declined' });
+      expect(gen.isModelActuallyLoaded(ZONE_B)).toBe(false);
+      expect(modelLoadSessionView(ZONE_B)).toBeNull();
+      expect(dialog.visible.value).toBe(false);
+    });
+
+    it('排在后面等确认的节点被叫停：当场收口，不用等前面的确认框关；轮到它时不再弹，前一个不受影响', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+
+      const { first, second } = await askInTurn(gen, ZONE_A, ZONE_B);
+      // 第二个还在排队：行尾点停
+      expect(requestStopModelLoad(ZONE_B)).toBe(true);
+      expect(await second).toBe(false);
+      expect(modelLoadSessionView(ZONE_B)).toBeNull();
+      expect(consumeModelLoadStopped(ZONE_B)).toBe(true);
+      expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({ level: 'info', message: expect.stringContaining(`${ZONE_B}：已停止加载`) }));
+      // 停不是「取消」：不留「已取消」那一笔
+      expect(pendingGenerationFill(ZONE_B)).toBeNull();
+      // 前一个的确认框原样弹着，它的加载也还在等
+      expect(dialog.visible.value).toBe(true);
+      expect(dialog.message.value).toContain('约 30 个单元');
+      expect(modelLoadSessionView(ZONE_A)).toEqual({ stoppable: true, stopping: false });
+
+      dialog.choose('generate');
+      expect(await first).toBe(true);
+      await tick();
+      // 第二个的确认框没有再弹出来（弹过的只有第一个的），也没有替它发生成
+      expect(dialog.visible.value).toBe(false);
+      expect(dialog.message.value).toContain('约 30 个单元');
+      expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual([ZONE_A]);
+    });
+
+    it('已有的模型显示出来之后才问的节点，排队等确认时被隐藏了：轮到它不弹，和叫停一样把这一次画出来的收回去', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const gen = useModelGeneration({ viewer, db_num: 7997 });
+
+      const { first, second } = await askInTurn(gen, ZONE_A, SITE);
+      // SITE 已有的那部分已经装上了，它的确认（「生成并显示 / 只显示已有的」）排在后面
+      expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([EXISTING]);
+      expect(openChoiceMock.mock.calls[1]![0]).toMatchObject({ cancelText: '只显示已有的' });
+
+      // 排队期间人把 SITE 隐藏了（refno 级可见态被改成 false），然后才答第一个
+      viewer.scene.objects[SITE] = { visible: false };
+      dialog.cancelChoice();
+      expect(await first).toBe(false);
+      expect(await second).toBe(false);
+
+      // SITE 的确认框没有弹：弹过的只有第一个的
+      expect(dialog.visible.value).toBe(false);
+      expect(dialog.message.value).toContain('约 30 个单元');
+      expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
+      // 和叫停一样：这一次装进来的从场景里拿掉，告诉发起显示的一方别再把它置回可见
+      expect(evictMock).toHaveBeenCalledTimes(1);
+      expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 7997, EXISTING, { release: true });
+      expect(gen.isModelActuallyLoaded(SITE)).toBe(false);
+      expect(consumeModelLoadStopped(SITE)).toBe(true);
+      expect(modelLoadSessionView(SITE)).toBeNull();
+      // 第一个是点了取消的：照「已取消」记，不算被叫停
+      expect(consumeModelLoadStopped(ZONE_A)).toBe(false);
+      expect(pendingGenerationFill(ZONE_A)).toMatchObject({ units: 30, reason: 'declined' });
+    });
+
+    it('一个模型都没有的节点排队等确认时被隐藏了：轮到它不弹，按已停止收口', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const gen = useModelGeneration({ viewer, db_num: 7997 });
+
+      const { first, second } = await askInTurn(gen, ZONE_A, ZONE_B);
+      viewer.scene.objects[ZONE_B] = { visible: false };
+      dialog.choose('generate');
+      expect(await first).toBe(true);
+      expect(await second).toBe(false);
+
+      expect(dialog.visible.value).toBe(false);
+      expect(dialog.message.value).toContain('约 30 个单元');
+      expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual([ZONE_A]);
+      expect(consumeModelLoadStopped(ZONE_B)).toBe(true);
+      expect(pendingGenerationFill(ZONE_B)).toBeNull();
+      expect(modelLoadSessionView(ZONE_B)).toBeNull();
+    });
+
+    it('发问之前就藏着的节点（点眼睛就是要它显示）：不算排队期间被隐藏，轮到它照常问', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const gen = useModelGeneration({ viewer, db_num: 7997 });
+      // 之前隐藏过，状态表里留着 visible=false；要到开始生成时才被立成可见
+      viewer.scene.objects[ZONE_B] = { visible: false };
+
+      const { first, second } = await askInTurn(gen, ZONE_A, ZONE_B);
+      dialog.cancelChoice();
+      expect(await first).toBe(false);
+
+      await vi.waitFor(() => expect(dialog.visible.value).toBe(true));
+      expect(dialog.message.value).toContain('约 25 个单元');
+      dialog.cancelChoice();
+      expect(await second).toBe(false);
+      // 是人点的取消，不是被当成叫停
+      expect(consumeModelLoadStopped(ZONE_B)).toBe(false);
+      expect(pendingGenerationFill(ZONE_B)).toMatchObject({ units: 25, reason: 'declined' });
+    });
+  });
 });
 
 describe('showModelByRefno 加载中可以停（用户 2026-11-11 定：停掉剩下的批次，这个节点画出来的收起来，回到没显示）', () => {
@@ -3330,5 +3515,35 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
       level: 'warning',
       message: expect.stringContaining('1 个生成根失败：24381_549（generation_failed: 几何坏了）'),
     }));
+  });
+
+  it('更新的确认排在别的确认后面时被叫停：当场收口，轮到它不再弹；前一个不受影响（#163）', async () => {
+    const dialog = await useRealConfirmDialog();
+    const OTHER_ZONE = '24381_621';
+    // 单元多：两个节点的更新都要先确认
+    nodeFactsMock.mockResolvedValue({ ...LAGGING, units: { ...LAGGING.units, total: 30 } });
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: loadedViewer(), db_num: 7997 });
+
+    const first = gen.showModelByRefno(UPDATE_ZONE, { update: true, flyTo: false });
+    await vi.waitFor(() => expect(dialog.visible.value).toBe(true));
+    const second = gen.showModelByRefno(OTHER_ZONE, { update: true, flyTo: false });
+    await vi.waitFor(() => expect(openChoiceMock).toHaveBeenCalledTimes(2));
+
+    // 第二个还在排队：行尾点停
+    expect(requestStopModelLoad(OTHER_ZONE)).toBe(true);
+    expect(await second).toBe(false);
+    expect(modelLoadSessionView(OTHER_ZONE)).toBeNull();
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({ level: 'info', message: `[提示] ${OTHER_ZONE}：已停止更新，屏幕上的没有动` }));
+    // 前一个的确认框原样弹着
+    expect(dialog.visible.value).toBe(true);
+    expect(modelLoadSessionView(UPDATE_ZONE)).toEqual({ stoppable: true, stopping: false });
+
+    dialog.choose('update');
+    expect(await first).toBe(true);
+    await tick();
+    // 第二个的确认框没有再弹出来，后端也只收到第一个节点的请求
+    expect(dialog.visible.value).toBe(false);
+    expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual([UPDATE_ZONE]);
   });
 });

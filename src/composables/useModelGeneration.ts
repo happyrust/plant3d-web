@@ -1107,6 +1107,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           message: decision.confirm.message,
           choices: [{ id: 'update', text: decision.confirm.confirmText }],
           cancelText: decision.confirm.cancelText,
+          // 全页面只有一个确认弹窗，几个节点同时要问时排队一个个弹：排队期间这次更新被叫停了，这一问就撤掉、不再弹
+          signal: session.signal,
         });
         session.throwIfStopped();
         if (choice !== 'update') return leave('info', '已取消更新，模型保持现在的样子', false);
@@ -1504,17 +1506,41 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           : null
       );
 
-      /** 需确认生成：单元数超过阈值先问。回 `true` = 生成 */
-      const confirmFill = async (plan: GenerationPlan, existingShown: boolean): Promise<boolean> => {
+      /**
+       * 显示意图：这个节点（或它已经显示出来的一个构件 `probeRefno`）被隐藏了 = 人不要它了。
+       * 没给 `probeRefno` 时看分块生成已经装进场景的第一个构件。
+       */
+      const nodeHidden = (probeRefno: string | null): boolean => {
+        const objects = fillViewer.scene?.objects;
+        if (!objects) return false;
+        if (objects[normalizedRoot]?.visible === false) return true;
+        const probe = probeRefno ?? (fillLoaded.values().next().value as string | undefined);
+        return probe ? objects[probe]?.visible === false : false;
+      };
+
+      /**
+       * 需确认生成：单元数超过阈值先问。回 `true` = 生成。`probeRefno`：已经显示出来的一个构件（没有就 `null`）。
+       * 全页面只有一个确认弹窗，几个节点同时要问时排队一个个弹。排队期间这次加载被叫停、或这个节点被隐藏了，
+       * 轮到它时不再弹：回 `false`，会话已经是停止的，调用方接着的 `session.throwIfStopped()` 把它带去收尾。
+       */
+      const confirmFill = async (plan: GenerationPlan, existingShown: boolean, probeRefno: string | null): Promise<boolean> => {
         if (!plan.needsConfirm) return true;
         const dialog = describeGenerationConfirm(plan, existingShown);
         statusMessage.value = `等待确认：${normalizedRoot} 有${unitsLabel(plan)}要生成`;
         syncGlobalLoadStatus();
+        // 发问之后才被隐藏的才算：一个模型都没有的节点要到开始生成才被立成可见，发问时它可能本来就是藏着的
+        const hiddenAtAsk = nodeHidden(probeRefno);
         const choice = await useConfirmDialogStore().openChoice({
           title: dialog.title,
           message: dialog.message,
           choices: [{ id: 'generate', text: dialog.confirmText }],
           cancelText: dialog.cancelText,
+          signal: session.signal,
+          skipWhen: () => {
+            // 同分块生成时：节点被隐藏和叫停一样处理
+            if (!session.stopped && !hiddenAtAsk && nodeHidden(probeRefno)) session.stop();
+            return session.stopped;
+          },
         });
         return choice === 'generate';
       };
@@ -1557,13 +1583,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 人点的是「显示」：先把这个节点的可见态立成 true，之后它被改成 false 就是人把它隐藏了
         if (!existingShown) showRefnosTracked(fillViewer.scene, [normalizedRoot], undo);
         // 显示意图：这个节点（或它刚显示出来的构件）被隐藏了，就不再往下生成、装载
-        const hidden = (): boolean => {
-          const objects = fillViewer.scene?.objects;
-          if (!objects) return false;
-          if (objects[normalizedRoot]?.visible === false) return true;
-          const probe = probeRefno ?? (fillLoaded.values().next().value as string | undefined);
-          return probe ? objects[probe]?.visible === false : false;
-        };
+        const hidden = (): boolean => nodeHidden(probeRefno);
         /** 做到第几块了（被叫停在一块中间时，从这一块起算没做完） */
         let chunkIndexNow = 0;
         let summary: GenerationFillSummary | null = null;
@@ -1675,7 +1695,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           session.throwIfStopped();
           if (!plan) return { ready: false, hint: nothingToGenerateHint() };
           const whole = isWholeNodePlan(plan);
-          const confirmed = await confirmFill(plan, false);
+          const confirmed = await confirmFill(plan, false, null);
           session.throwIfStopped();
           if (!confirmed) {
             notePendingGenerationFill({
@@ -1773,7 +1793,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             }
             return;
           }
-          const confirmed = await confirmFill(plan, true);
+          const confirmed = await confirmFill(plan, true, probeRefno);
           session.throwIfStopped();
           if (!confirmed) {
             notePendingGenerationFill({
