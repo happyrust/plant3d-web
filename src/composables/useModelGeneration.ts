@@ -207,8 +207,17 @@ function withTimeout<T>(task: Promise<T>, ms: number, what: string): Promise<T> 
  */
 const loadedRefnosByRoot = new Map<string, Set<string>>();
 
+/**
+ * 状态表里的 `visible=false` 不都是人藏的：这里撤下构件（数据批次删掉的成员、整根撤下）时会顺手写一笔，重载给
+ * 「整个节点藏着」时新增的构件预先记的也是它。这些构件记在这里：重载判「藏着的继续藏着」时，不在场景里、又记在这里的
+ * 不算人藏的，按新增的构件对待——否则被删掉的构件以后又回到记录里，会一直留在暗处。一经置为可见就销掉。
+ * 跨 `useModelGeneration` 实例共用（同 `loadedRefnosByRoot`：几份实例装的是同一个场景）。
+ */
+const hiddenByLoader = new Set<string>();
+
 export function __resetLoadedRefnosByRootForTests(): void {
   loadedRefnosByRoot.clear();
+  hiddenByLoader.clear();
 }
 
 /**
@@ -697,6 +706,50 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
     }
     scene?.setObjectsVisible?.(ids, true);
+    if (hiddenByLoader.size > 0) for (const id of ids) hiddenByLoader.delete(id);
+  }
+
+  /**
+   * 重载时的显隐（取最新、行上 / 状态栏的「重载」、重新部署后的重装）。重载换的是内容，不是「显示」：
+   * 人藏起来的构件换完还得藏着，不能像显示那样一律拉回可见（拉回去的话，屏幕上又出来了、树上的眼睛还关着）。
+   * - 藏着的（状态表里 `visible=false`）不动：换上去的新对象由装完的回放（`applyStateToRefnos`）藏回去；
+   * - 这一次才装进场景的（数据批次新增的）跟节点走：节点原来装着的构件全都藏着就跟着藏，否则显示；
+   * - 其余照旧置为可见。
+   *
+   * 节点只藏了一部分时，新增的构件在哪个子节点下面这里不知道（记录里的属主只到生成根）：树上那一层取进来过的，
+   * 树刷新时已经按父节点的勾选态记进状态表了，照着走；没取进来过的先显示，展开那一层时由树按父节点的勾选态回放。
+   */
+  function showReloadedRefnos(
+    scene: ProgressiveViewer['scene'],
+    dbno: number,
+    ids: string[],
+    previousMembers: readonly string[],
+    undo: LoadUndoLog | null,
+  ): void {
+    const objects = scene?.objects;
+    const hidden = (id: string): boolean => objects?.[id]?.visible === false;
+    // 这个节点名下没有藏着的东西：和显示一样全部置为可见
+    if (!objects || !(ids.some(hidden) || previousMembers.some(hidden))) {
+      showRefnosTracked(scene, ids, undo);
+      return;
+    }
+    const inScene = (id: string): boolean => isDtxRefnoLoaded(dbno, id);
+    const membersInScene = uniqStrings([...ids, ...previousMembers]).filter(inScene);
+    const wholeNodeHidden = membersInScene.length > 0 && membersInScene.every(hidden);
+    const toShow: string[] = [];
+    const toHide: string[] = [];
+    for (const id of ids) {
+      const loaded = inScene(id);
+      // 藏着的保持原样。不在场景里、那一笔又是这里撤下 / 预先记的（不是人藏的）不算：按新增的构件对待
+      if (hidden(id) && (loaded || !hiddenByLoader.has(id))) continue;
+      if (!loaded && wholeNodeHidden) toHide.push(id);
+      else toShow.push(id);
+    }
+    if (toShow.length > 0) showRefnosTracked(scene, toShow, undo);
+    if (toHide.length > 0) {
+      scene?.setObjectsVisible?.(toHide, false);
+      for (const id of toHide) hiddenByLoader.add(id);
+    }
   }
 
   /** 记下一次装载新装进来的构件；装载器说它被叫停了（什么都没装）就回 `true` */
@@ -1051,6 +1104,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // 撤下的对象真的从图层里拿掉（2026-11-11，只隐藏的话对象槽只增不减）；对象表变了，派生索引跟着刷新
     const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];
     anyViewer?.scene?.setObjectsVisible?.(targets, false);
+    // 这一笔不可见是撤下时顺手记的，不是人藏的（见 `hiddenByLoader`）
+    for (const refno of targets) hiddenByLoader.add(refno);
     if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     loadedRoots.delete(root);
     loadedRefnosByRoot.delete(root);
@@ -1139,6 +1194,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const dtxLayer = anyViewer?.__dtxLayer;
       evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, targets, { release: true }) : [];
       anyViewer?.scene?.setObjectsVisible?.(targets, false);
+      // 这一笔不可见是撤下时顺手记的，不是人藏的（见 `hiddenByLoader`）
+      for (const target of targets) hiddenByLoader.add(target);
       if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     }
     loadedRoots.delete(root);
@@ -1210,6 +1267,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // 同上：撤下的对象从图层里拿掉，派生索引跟着刷新
     const evicted = dtxLayer ? evictDtxRefnos(dtxLayer, dbno, stale, { release: true }) : [];
     anyViewer?.scene?.setObjectsVisible?.(stale, false);
+    // 这一笔不可见是撤下时顺手记的，不是人藏的：这些构件以后又回到记录里，重载时要照常显示（见 `hiddenByLoader`）
+    for (const refno of stale) hiddenByLoader.add(refno);
     if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     flagRootsLosingRefnos(root, evicted);
     consoleStore.addLog(
@@ -2441,8 +2500,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 「显示」= 保证可见：先把本次范围的 refno 级可见态拉回 true（权威在 scene.objects 状态表）。
       // 否则先前「隐藏」写过 false 的 refno，装完会被 __dtxAfterInstancesLoaded 的 applyStateToRefnos 立刻再藏掉；
       // 已在层里、被 loader 跳过的旧对象也一并恢复可见。
+      // 重载（取最新、「重载」）不是「显示」：藏着的换完还藏着，新增的构件跟节点走（`showReloadedRefnos`）。
+      // 更新 / 重新生成 / 补齐做完是要把节点显示出来的（模型树随后把眼睛点亮），照旧一律置为可见。
       if (remainingRefnos.length > 0 || !shownEarlyRefnos) {
-        showRefnosTracked(anyViewer.scene, uniqStrings([normalizedRoot, ...remainingRefnos]), undo);
+        const shownRefnos = uniqStrings([normalizedRoot, ...remainingRefnos]);
+        const reloadOnly = loadOptions?.refresh === true && !update && !regenerate && !explicitFill;
+        if (reloadOnly) showReloadedRefnos(anyViewer.scene, dbno, shownRefnos, previousLeaves, undo);
+        else showRefnosTracked(anyViewer.scene, shownRefnos, undo);
       }
       // 进了装载：之后这个节点再有记录查询（装载器补查根自己的记录），也不该把状态条拉回「查询记录」
       recordsCollected = true;

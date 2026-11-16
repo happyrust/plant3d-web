@@ -2035,6 +2035,227 @@ describe('showModelByRefno 重载（refresh）', () => {
   });
 });
 
+describe('重载不是「显示」：藏着的构件换完还藏着，新增的构件跟节点走（取最新 / 行上的「重载」，2026-11-17）', () => {
+  const ROOT = '24384_24778';
+  const M1 = '24384_24779';
+  const M2 = '24384_24780';
+  const M3 = '24384_24781';
+  const NEW = '24384_24790';
+  const RELOAD = { refresh: true, flyTo: false, quiet: true };
+
+  /** 状态表真的会被写的查看器：`setObjectsVisible` 照场景的口径改 `objects[refno].visible`（别的用例里它只是个记调用的桩） */
+  function statefulViewer() {
+    const viewer = makeViewer();
+    viewer.scene.setObjectsVisible.mockImplementation((ids: string[], visible: boolean) => {
+      for (const id of ids) viewer.scene.objects[id] = { ...viewer.scene.objects[id], visible };
+    });
+    return viewer;
+  }
+
+  /** 这些构件算「装在场景里」（装载器的运行时索引）；回的集合改了就跟着变 */
+  function inScene(...refnos: string[]): Set<string> {
+    const loaded = new Set(refnos);
+    isDtxRefnoLoadedMock.mockImplementation((_dbno, refno) => loaded.has(refno));
+    return loaded;
+  }
+
+  beforeEach(() => {
+    visibleInstsMock.mockReset();
+    v1Source.tree.subtreeRefnos.mockReset();
+    v1Source.records.invalidateRoot.mockReset();
+    v1Source.records.invalidateRoot.mockReturnValue([]);
+    unitRefnosMock.mockReset();
+    unitRefnosMock.mockReturnValue([]);
+    typeInfoMock.mockResolvedValue({ success: true, refno: ROOT, noun: 'EQUI', owner_refno: null, owner_noun: null });
+  });
+
+  it('节点里单独藏起来的成员：照样换成最新的，但不拉回可见；别的成员照旧置为可见', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    viewer.scene.objects[M1] = { visible: true };
+    viewer.scene.objects[M2] = { visible: false };
+    inScene(M1, M2);
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2] });
+
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+    expect(loadInstancesMock).toHaveBeenCalledWith(
+      expect.anything(), 8000, [M1, M2], expect.objectContaining({ replaceExistingObjects: true }),
+    );
+    // 藏着的那个没有被拉回可见：换上去的新对象由装完的回放（applyStateToRefnos）照状态表藏回去
+    expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true]]);
+    expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+    expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenCalledWith(8000, [M1, M2]);
+  });
+
+  it('整个节点藏着（树上点了节点的眼睛）：重载后一个也不拉回可见，这一次新增的成员跟着藏', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    // 树上隐藏节点：节点自己和名下带几何的构件都记成不可见
+    for (const refno of [ROOT, M1, M2]) viewer.scene.objects[refno] = { visible: false };
+    inScene(M1, M2);
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2, NEW] });
+
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+    expect(loadInstancesMock).toHaveBeenCalledWith(
+      expect.anything(), 8000, [M1, M2, NEW], expect.objectContaining({ replaceExistingObjects: true }),
+    );
+    // 没有任何「置为可见」；新增的那个预先记成不可见，装完由回放藏起来
+    expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[NEW], false]]);
+  });
+
+  it('成员是一个个藏起来的（节点自己的眼睛没点过）、全都藏着：新增的成员同样跟着藏', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    for (const refno of [M1, M2]) viewer.scene.objects[refno] = { visible: false };
+    inScene(M1, M2);
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2, NEW] });
+
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+    expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, NEW], false]]);
+  });
+
+  it('节点只藏了一部分：新增的成员照常显示，藏着的那个还藏着', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    viewer.scene.objects[M1] = { visible: true };
+    viewer.scene.objects[M2] = { visible: false };
+    inScene(M1, M2);
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2, NEW] });
+
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+    expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1, NEW], true]]);
+    expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+  });
+
+  it('树上已经按父节点的勾选态记成不可见的新构件（那一层在树里取进来过）：还没装进场景也不拉回可见', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    viewer.scene.objects[M1] = { visible: true };
+    // 取最新先刷树：新行挂在一个藏着的子节点下面，树按父节点的勾选态先记进状态表
+    viewer.scene.objects[NEW] = { visible: false };
+    inScene(M1);
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, NEW] });
+
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+    expect(loadInstancesMock).toHaveBeenCalledWith(
+      expect.anything(), 8000, [M1, NEW], expect.objectContaining({ replaceExistingObjects: true }),
+    );
+    expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true]]);
+    expect(viewer.scene.objects[NEW]).toEqual({ visible: false });
+  });
+
+  it('数据批次删掉、后来又回来的成员：撤下时顺手记的不可见不算人藏的，重载后照常显示（人藏的那个还藏着）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    const loaded = inScene(M1, M2, M3);
+    for (const refno of [M2, M3]) viewer.scene.objects[refno] = { visible: true };
+    viewer.scene.objects[M1] = { visible: false };
+    evictMock.mockImplementation((_layer, _dbno, refnos) => {
+      for (const refno of refnos) loaded.delete(refno);
+      return [...refnos];
+    });
+
+    // 这一批里 M2 被删了：重载把它从场景撤下，状态表里顺手记成不可见
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2, M3]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M3] });
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+    expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [M2], { release: true });
+    expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+
+    // 下一批里 M2 又有了：重载把它装回来，照常显示
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M3]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2, M3] });
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+    expect(viewer.scene.objects[M2]).toEqual({ visible: true });
+    expect(viewer.scene.objects[M1]).toEqual({ visible: false });
+  });
+
+  it('构件从一个节点挪到另一个节点、两个节点先后各自重载：前一个撤下它时记的不可见，不带到后一个节点上', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    const OTHER = '24384_24800';
+    const OTHER_MEMBER = '24384_24801';
+    const MOVED = M2;
+    const loaded = inScene(M1, MOVED, OTHER_MEMBER);
+    for (const refno of [M1, MOVED, OTHER_MEMBER]) viewer.scene.objects[refno] = { visible: true };
+    evictMock.mockImplementation((_layer, _dbno, refnos) => {
+      for (const refno of refnos) loaded.delete(refno);
+      return [...refnos];
+    });
+
+    // 原来的节点重载：构件已经不在它名下，撤下
+    v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, MOVED]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1] });
+    expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+    expect(viewer.scene.objects[MOVED]).toEqual({ visible: false });
+
+    // 另一个节点重载：构件到了它名下，装上并显示
+    typeInfoMock.mockResolvedValue({ success: true, refno: OTHER, noun: 'EQUI', owner_refno: null, owner_noun: null });
+    v1Source.records.invalidateRoot.mockReturnValueOnce([OTHER, OTHER_MEMBER]);
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: OTHER, refnos: [OTHER_MEMBER, MOVED] });
+    expect(await gen.showModelByRefno(OTHER, RELOAD)).toBe(true);
+    expect(viewer.scene.objects[MOVED]).toEqual({ visible: true });
+  });
+
+  it('右键重新生成做完是要显示出来的：藏着的成员照旧拉回可见', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    viewer.scene.objects[M1] = { visible: false };
+    inScene(M1);
+    v1Source.records.generateThenCollect.mockImplementationOnce(async (refno: string) => (
+      { refno, generationRoots: [refno], items: [{ refno }], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {} } as never
+    ));
+    visibleInstsMock.mockResolvedValue({ success: true, refno: ROOT, refnos: [M1] });
+
+    expect(await gen.showModelByRefno(ROOT, { regenerate: true, flyTo: false })).toBe(true);
+
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith([ROOT, M1], true);
+    expect(viewer.scene.objects[M1]).toEqual({ visible: true });
+  });
+
+  it('重载被叫停（还没开始换）：藏着的原样藏着，没有多出来的显隐动作', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = statefulViewer();
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    viewer.scene.objects[M1] = { visible: true };
+    viewer.scene.objects[M2] = { visible: false };
+    inScene(M1, M2);
+    v1Source.records.invalidateRoot.mockReturnValue([ROOT, M1, M2]);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: ROOT, refnos: [M1, M2] });
+    loadInstancesMock.mockImplementationOnce(async () => {
+      requestStopModelLoad(ROOT);
+      return loaderCancelled();
+    });
+
+    expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+
+    expect(viewer.scene.objects[M1]).toEqual({ visible: true });
+    expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+    // 这一次没有把谁从隐藏改成显示，停下来也就没有要藏回去的
+    expect(viewer.scene.setObjectsVisible.mock.calls.filter((call: unknown[]) => call[1] === false)).toHaveLength(0);
+    expect(evictMock).not.toHaveBeenCalled();
+    consumeModelLoadStopped(ROOT);
+  });
+});
+
 describe('showModelByRefno 模型资产补齐：预检、确认、分块生成（方案 2026-11-10 B3）', () => {
   /** 7997 的 SITE 24381_535（2026-11-11 实查）：ZONE 179300、571 有模型；536、621 没有；179753 没有子节点 */
   const SITE = '24381_535';
@@ -3314,6 +3535,18 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
     nodeFactsMock.mockResolvedValue(LAGGING);
     generationResumeTiming.delaysMs = [0];
     generationResumeTiming.budgetMs = 60_000;
+  });
+
+  it('更新做完是要把节点显示出来的：藏着的成员照旧拉回可见（和重载不一样——模型树随后把眼睛点亮）', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = loadedViewer();
+    viewer.scene.objects[MEMBERS[0]!] = { visible: false };
+    isDtxRefnoLoadedMock.mockImplementation((_dbno, refno) => MEMBERS.includes(refno));
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+
+    expect(await gen.showModelByRefno(UPDATE_ZONE, { update: true, flyTo: false })).toBe(true);
+
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith([UPDATE_ZONE, ...MEMBERS], true);
   });
 
   it('没有单元被删：不问人，对节点发一发不带 force 的生成（后端只重算不是最新的单元，不清几何），做完照重载那条路整套替换', async () => {
