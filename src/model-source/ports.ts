@@ -121,6 +121,11 @@ export type TreeSource = {
    * 不支持分组的数据源不实现。
    */
   groupRoot?(): Promise<NodeResponse>;
+  /**
+   * 清掉适配器里「根名单」一类的短缓存，下一次取到的是此刻的（「取最新」重取根那一层之前调）。
+   * 没有这类缓存的数据源不实现。
+   */
+  invalidate?(): void;
   node(refno: string): Promise<NodeResponse>;
   /** 直接成员，按存储顺序；`limit` 由适配器自己截（gen-model 服务端不截断）。 */
   children(refno: string, limit?: number): Promise<ChildrenResponse>;

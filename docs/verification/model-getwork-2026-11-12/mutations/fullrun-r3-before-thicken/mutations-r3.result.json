@@ -1,0 +1,1001 @@
+[
+  {
+    "id": "Y01",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "quiet 不起作用：照旧弹",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3747,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "6 failed | 368 passed | 1 todo (375)",
+    "failedCount": 6,
+    "failedTests": [
+      "取最新发起的（quiet）：同样不撤，但不弹那一句（它自己汇总）",
+      "重载做成了：不弹「已从 gen-model 加载…」，控制台照记",
+      "查空撤下：不弹「已从场景撤下」，控制台照记",
+      "记录没查通：不弹「重载未完成」，控制台照记",
+      "装载出错：不弹「模型加载失败」；错在哪记进控制台和 error",
+      "重载中被叫停：不弹「已停止重载」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y02",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "quiet 反了：没要求不弹的反而不弹",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4003,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "60 failed | 314 passed | 1 todo (375)",
+    "failedCount": 60,
+    "failedTests": [
+      "超过一页的构件分批装入（首批 1000、之后翻倍），进度 30 → 95 按已装 refno 递增，结果按批累加",
+      "显示先按祖先查 records；查空走一次默认重新生成，未产出仍是提示、不装载",
+      "an_empty_scope_is_a_hint_not_an_error：visibleInsts 查空不退到子树、不装载（自动重新生成未产出）",
+      "收集未完成且一个构件都没取到：提示稍后再显示，不装载、不记已加载、不触发自动生成",
+      "a_timed_out_generate_does_not_display：pending 回执不查可见实例、不装载",
+      "auto_generate_on_empty_records：BRAN 类型 records 为空时自动生成并装载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y03",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "查空撤下的那一句绕过静音的出口",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4042,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "查空撤下：不弹「已从场景撤下」，控制台照记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y04",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "「已加载 N 个几何实例」绕过静音的出口",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4303,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "重载做成了：不弹「已从 gen-model 加载…」，控制台照记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y05",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "「重载未完成」绕过静音的出口",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4119,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "记录没查通：不弹「重载未完成」，控制台照记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y06",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "「模型加载失败」绕过静音的出口",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3670,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "装载出错：不弹「模型加载失败」；错在哪记进控制台和 error"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y07",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "被叫停的那一句绕过静音的出口",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4121,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "重载中被叫停：不弹「已停止重载」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y08",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "装载出错不进控制台（不弹的时候错在哪就查不到了）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3989,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "装载出错：不弹「模型加载失败」；错在哪记进控制台和 error",
+      "装载出错不带 quiet：弹「模型加载失败」，控制台也记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y10",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "旧后端：模型树回任何失败都当成节点没了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4989,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "树回了别的失败（不是「没有这个节点」）：保持原样"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y11",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "旧后端：模型树明说没有这个节点也不撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4156,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "树说库文件最新会话上没有这个节点：撤下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y12",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "旧后端：确认不了也撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5366,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "3 failed | 371 passed | 1 todo (375)",
+    "failedCount": 3,
+    "failedTests": [
+      "树说这个节点还在（分不清是成员删光了还是后端没有它的模型）：保持原样",
+      "树回了别的失败（不是「没有这个节点」）：保持原样",
+      "树也没问到：保持原样"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y13",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "确认的那一会儿被叫停，照样往下撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4712,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "确认的这一会儿被叫停：还没开始撤，场景保持原样"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y14",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏挡住了却不告诉人",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4121,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "6 failed | 368 passed | 1 todo (375)",
+    "failedCount": 6,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "这一问没问到（库文件打不开、超时）：保持原样，原因照实说",
+      "树说这个节点还在（分不清是成员删光了还是后端没有它的模型）：保持原样"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y15",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏挡住之后不叫行上的状态重问",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4744,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "4 failed | 370 passed | 1 todo (375)",
+    "failedCount": 4,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y16",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "「后端判不了」说成「没有完整模型」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3844,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y17",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "「库正在更新」的原因说反了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3691,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "4 failed | 370 passed | 1 todo (375)",
+    "failedCount": 4,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y20",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "不记这一轮里已经装上的构件",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4124,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "同一轮里，构件从 A 挪到 B，先重载 B、再重载 A：A 不撤 B 刚装上的那个构件",
+      "同一轮里，A 名下唯一还在的构件挪到了 B，先重载 B、再重载 A（A 整个查空）：撤下 A 自己，不撤 B 刚装上的构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y21",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "成员差集不看这一轮的账：先重载的节点刚装上的构件照撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4099,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "同一轮里，构件从 A 挪到 B，先重载 B、再重载 A：A 不撤 B 刚装上的那个构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y22",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整个节点查空撤下时不看这一轮的账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4410,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "同一轮里，A 名下唯一还在的构件挪到了 B，先重载 B、再重载 A（A 整个查空）：撤下 A 自己，不撤 B 刚装上的构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y23",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "这一轮的账没有交给成员差集",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4097,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "同一轮里，构件从 A 挪到 B，先重载 B、再重载 A：A 不撤 B 刚装上的那个构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y24",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "这一轮的账没有交给查空的收尾",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3978,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "同一轮里，A 名下唯一还在的构件挪到了 B，先重载 B、再重载 A（A 整个查空）：撤下 A 自己，不撤 B 刚装上的构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y25",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "记账时把正在重载的节点自己也记上",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4489,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "3 failed | 371 passed | 1 todo (375)",
+    "failedCount": 3,
+    "failedTests": [
+      "次序反过来（先重载失去构件的 A）本来就没事：A 撤掉它，B 再把它装上",
+      "先点得到构件的 B、再点 A：A 照旧把它撤了（它不知道 B 刚装过），B 记一笔——行上会给「重载」，取最新也会重载它",
+      "撤的构件没有登记在别的节点名下（真删了）：不记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y26",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "成员差集：按「想撤的」而不是「真撤掉对象的」去找别的节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4641,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "撤的构件在场景里本来就没有对象（别人已经撤过了）：没有谁因此缺东西，不记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y27",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "成员差集撤掉了别的节点名下的构件却不记账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4693,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "先点得到构件的 B、再点 A：A 照旧把它撤了（它不知道 B 刚装过），B 记一笔——行上会给「重载」，取最新也会重载它"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y28",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整个节点查空撤下：按「想撤的」而不是「真撤掉对象的」去找别的节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5139,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "只有一部分撤掉的构件有对象：只按真撤掉对象的那几个找"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y29",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整个节点查空撤下时带走了别的节点名下的构件却不记账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5740,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "A 整个查空撤下时同样：它带走的构件还登记在 B 名下，B 记一笔"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y30",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "记的那一笔没有写原因",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5611,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "先点得到构件的 B、再点 A：A 照旧把它撤了（它不知道 B 刚装过），B 记一笔——行上会给「重载」，取最新也会重载它",
+      "A 整个查空撤下时同样：它带走的构件还登记在 B 名下，B 记一笔"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y31",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "同一个节点丢了几个构件就记几笔",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6076,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "A 整个查空撤下时同样：它带走的构件还登记在 B 名下，B 记一笔"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y32",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "记账时不管那个构件是不是真在它名下：见到别的节点就记",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5822,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "3 failed | 371 passed | 1 todo (375)",
+    "failedCount": 3,
+    "failedTests": [
+      "次序反过来（先重载失去构件的 A）本来就没事：A 撤掉它，B 再把它装上",
+      "撤的构件没有登记在别的节点名下（真删了）：不记",
+      "只有一部分撤掉的构件有对象：只按真撤掉对象的那几个找"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y40",
+    "file": "src/components/dock_panels/ViewerPanel.vue",
+    "note": "取最新发起的重载不带 quiet",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4621,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "取最新发起的重载：只重载（不生成）、不飞相机、不弹每个节点各自的提示"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y41",
+    "file": "src/components/dock_panels/ViewerPanel.vue",
+    "note": "一次事件重载几个根：不开那份账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5211,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "带 refreshModel 的事件：这一串根共用一份重载的账——在循环外面开一份，每个根的重载都带着它"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y42",
+    "file": "src/components/dock_panels/ViewerPanel.vue",
+    "note": "一次事件重载几个根：开了账却不带给每个根",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5626,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "带 refreshModel 的事件：这一串根共用一份重载的账——在循环外面开一份，每个根的重载都带着它"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y43",
+    "file": "src/components/dock_panels/ViewerPanel.vue",
+    "note": "提示的场景探针不报页面上装着节点的库",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4316,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "页面上装着节点的库都报给提示（不只是最后装的那个库）；原来认的「当前激活的库」照旧报"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y50",
+    "file": "src/composables/useGenModelV1UpdateNotice.ts",
+    "note": "探针不认页面上装着节点的库（只认激活的那个）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4243,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "4 failed | 370 passed | 1 todo (375)",
+    "failedCount": 4,
+    "failedTests": [
+      "页面上装着节点的库都算，不只是最后装的那个（激活的）库；重复的只算一次；每次问都是此刻的名单",
+      "S1：8000 库只改了名（不是激活的库，批次里的根也认不出在场景里）——要提示",
+      "J1：8000 库一口气 18 个会话，改的是库里别处（一个单元回执都没有落在场景里）——要提示",
+      "经信封进来：三步各出一条、并进同一条提示；重载名单是空的（没有「重载」可点）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y51",
+    "file": "src/composables/useGenModelV1UpdateNotice.ts",
+    "note": "探针不认当前激活的库了（空间查询这类不进登记表的装法会漏）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5137,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "只有激活的库、没有登记的节点时：就是那个激活的库；都没有就是空",
+      "页面上装着节点的库都算，不只是最后装的那个（激活的）库；重复的只算一次；每次问都是此刻的名单"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y52",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "装着节点的库：漏掉已加载节点表和登记的直装根",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5301,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "已加载节点表里装着的节点、取最新登记的直装根、整库显示过的库都算；同一个库只算一次",
+      "每次问都是此刻的名单：节点撤掉之后它的库就不算了"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y53",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "装着节点的库：漏掉整库显示过的库",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4351,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "已加载节点表里装着的节点、取最新登记的直装根、整库显示过的库都算；同一个库只算一次"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y54",
+    "file": "src/composables/useGenModelV1UpdateNotice.ts",
+    "note": "认不出可重载的根时仍说「受影响的构件都不在场景里，不用重载」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4353,
+    "filesLine": "2 failed | 5 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "经信封进来：三步各出一条、并进同一条提示；重载名单是空的（没有「重载」可点）",
+      "批次里的根没有一个认得出在场景里：只提示、没有「重载」，换成一句「点「取最新」同步」；「×」忽略后提示条消失"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y55",
+    "file": "src/composables/useGenModelV1UpdateNotice.ts",
+    "note": "有「重载」时不说明名单不全",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4547,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "跨库只列库号；生成失败与删除在文案 / 悬停里都点名"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y56",
+    "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+    "note": "没有「重载」可点时不画那句「点「取最新」同步」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4482,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "批次里的根没有一个认得出在场景里：只提示、没有「重载」，换成一句「点「取最新」同步」；「×」忽略后提示条消失",
+      "装着节点的库有变化、批次里一个单元回执都没有（改的是库里别处）：照样出提示，引到「取最新」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y57",
+    "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+    "note": "有「重载」可点时也画那句引导（两样一起出）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5307,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "有「重载」可点的时候不画那句「点「取最新」同步」（两样只出一样）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y58",
+    "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+    "note": "那句引导会跟着前面的字一起被截断",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5524,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "批次里的根没有一个认得出在场景里：只提示、没有「重载」，换成一句「点「取最新」同步」；「×」忽略后提示条消失"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y60",
+    "file": "src/App.vue",
+    "note": "提示条不抬（回到贴着底边）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5878,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "画在底部的提示条抬到状态栏上面：下边距不小于状态栏的高度"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y61",
+    "file": "src/App.vue",
+    "note": "提示条抬得比状态栏矮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5554,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "画在底部的提示条抬到状态栏上面：下边距不小于状态栏的高度"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y62",
+    "file": "src/App.vue",
+    "note": "样式带了 scoped（够不着挂在页面最外层的提示条）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5290,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "画在底部的提示条抬到状态栏上面：下边距不小于状态栏的高度",
+      "这条规则是全局的（不带 scoped）：提示条是挂到页面最外层去画的，带 scoped 的样式够不着它"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y63",
+    "file": "src/App.vue",
+    "note": "状态栏变高了、提示条没跟着抬",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5229,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "状态栏在：一条固定高度的横条，里面是连接徽标（带「数据已更新」的提示）和钉在最右端的「取最新」",
+      "画在底部的提示条抬到状态栏上面：下边距不小于状态栏的高度"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y64",
+    "file": "src/App.vue",
+    "note": "装着停靠布局和状态栏的那一列不能随窗口变窄（去掉 min-w-0）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4826,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "装着停靠布局和状态栏的那一列能随窗口变窄（min-w-0）：不然窗口一窄，状态栏最右端的「取最新」被切到窗口外"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y70",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "点名的那一句退回「监听范围」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4673,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "不在后端更新范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告",
+      "describeLibraryGap：各种库状态"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y71",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "「水位」又单说了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5726,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "describeLibraryGap：各种库状态"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y72",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "节点落后的那一句退回「后台的模型落后于库文件」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4415,
+    "filesLine": "2 failed | 5 passed (7)",
+    "testsLine": "3 failed | 371 passed | 1 todo (375)",
+    "failedCount": 3,
+    "failedTests": [
+      "decideRootAction：落后的节点——有可换的新版才重载（并说明还落后），没有就不动",
+      "落后但有可换的新版：重载，同时把「还落后」说出来",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y80",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "头一轮不拿页面打开时的服务代次比（退回只和上一轮比）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4166,
+    "filesLine": "2 failed | 5 passed (7)",
+    "testsLine": "2 failed | 372 passed | 1 todo (375)",
+    "failedCount": 2,
+    "failedTests": [
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y81",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "接线没有把页面打开时的服务代次交给引擎",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3837,
+    "filesLine": "1 failed | 6 passed (7)",
+    "testsLine": "1 failed | 373 passed | 1 todo (375)",
+    "failedCount": 1,
+    "failedTests": [
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "Y82",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "认出重启了却不在细节里说",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 3696,
+    "filesLine": "2 failed | 5 passed (7)",
+    "testsLine": "3 failed | 371 passed | 1 todo (375)",
+    "failedCount": 3,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  }
+]

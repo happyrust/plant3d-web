@@ -10,8 +10,8 @@ import { useGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNoti
  * 底部状态栏的 gen-model 连接徽标（plan P1-4）：一个状态点 + 身份摘要 + 库三态，点一下重探。
  * 徽标常驻在 App.vue 底部状态栏左侧；数据源本身持有轮询，
  * 徽标挂载/卸载只增减自己的展示 owner，不再决定缓存正确性探针是否存活。
- * 徽标本身只探 `/health` 与 `/dbnums`。旁边多一条「轻量联动」的更新提示（2026-10-26）：后端自己跑完的数据批次落在当前
- * 装入的库 / 根上时只提示「有更新」，由人点「重载」才换场景里的实例；不被动重载（收口计划 §12「只吃自己 ensure
+ * 徽标本身只探 `/health` 与 `/dbnums`。旁边多一条「轻量联动」的更新提示（2026-10-26）：后端自己跑完的数据批次落在页面上
+ * 装着节点的库 / 已在场景里的根上时只提示「有更新」，由人点「重载」才换场景里的实例；不被动重载（收口计划 §12「只吃自己 ensure
  * 出来的数据」仍成立）。文案与悬停说明由 `useGenModelV1UpdateNotice` 给出。
  */
 const health = useGenModelV1Health();
@@ -25,7 +25,9 @@ try {
 }
 
 const noticeText = updateNotice.text;
-const noticeTitle = updateNotice.title;
+// 这条提示的「重载」只换它点名的那几根；把模型树和已装的模型一起同步的入口是右边的「取最新」（2026-11-12）。
+// 没有认出可重载的根时这条提示上没有「重载」，模板里在那一行字后面另画一句「点「取最新」同步」。
+const noticeTitle = computed(() => `${updateNotice.title.value}\n要把模型树和已装的模型一起同步到最新，点右边的「取最新」`);
 
 function reloadFromNotice(): void {
   const refnos = updateNotice.reload();
@@ -106,6 +108,10 @@ onUnmounted(() => {
         class="shrink-0 font-medium underline underline-offset-2 hover:text-primary"
         @mousedown.stop
         @click="reloadFromNotice">重载</button>
+      <!-- 没有认出可重载的根：这条提示上没有动作可点，把人引到右边的「取最新」（不随前面那句一起被截断） -->
+      <span v-else
+        data-testid="gen-model-v1-update-notice-getwork-hint"
+        class="shrink-0 text-muted-foreground">点「取最新」同步</span>
       <button type="button"
         data-testid="gen-model-v1-update-notice-dismiss"
         class="shrink-0 px-0.5 text-muted-foreground hover:text-foreground"

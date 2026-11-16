@@ -1,0 +1,387 @@
+[
+  {
+    "id": "X01",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "库里的模型比本页装的新也不算有更新（不重载）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2701,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "5 failed | 119 passed (124)",
+    "failedCount": 5,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后",
+      "旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载",
+      "库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载",
+      "登记表里的节点核对过不用动：水位推进到现在；重载做成了就从登记表拿掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X02",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "库状态里没有这个库的那一行时算不出有更新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2659,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X03",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "不看库的模型水位、一律记在起点的下一个会话上（旧后端下凭空判成落后）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2245,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "旧后端（过渡办法）、库的模型水位没动而库文件前进了：不重载，也不凭空说它「落后」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X04",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "又去问节点版本表",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2442,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "6 failed | 118 passed (124)",
+    "failedCount": 6,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后",
+      "旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载",
+      "旧后端（过渡办法）、库的模型水位没动而库文件前进了：不重载，也不凭空说它「落后」",
+      "库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载",
+      "登记表里的节点核对过不用动：水位推进到现在；重载做成了就从登记表拿掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X05",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "挪了位置、还在别的节点名下的构件也算撤下",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2312,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "嵌套的两个节点：构件只是挪出了里面那个、还在外面那个名下——外面的先重载就补一次；它还在场景里，不算撤下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X06",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "被删节点撤走的构件不记账（先重载的节点名下的被它撤走也不补）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2759,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "后面撤下的是个已删除的节点，它的一个构件早先挪到了先重载的节点名下：同样补一次；真删掉的才算少了"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X07",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "查空撤下的节点拿掉的构件不记账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2407,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X08",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载拿掉的构件不记账",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2427,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "4 failed | 120 passed (124)",
+    "failedCount": 4,
+    "failedTests": [
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少",
+      "嵌套的两个节点：构件只是挪出了里面那个、还在外面那个名下——外面的先重载就补一次；它还在场景里，不算撤下",
+      "补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成",
+      "补完之后那个节点的现有构件数按补完的算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X09",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "先处理的节点拿掉的也算（丢构件的在前时多补一次）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2510,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "次序反过来（先处理的是丢构件的那个）：后装的那个自己就装上了，不用补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X10",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "撤下的节点也去补重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2542,
+    "filesLine": "2 failed | 1 passed (3)",
+    "testsLine": "4 failed | 120 passed (124)",
+    "failedCount": 4,
+    "failedTests": [
+      "库里已经没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不去重载",
+      "后面撤下的是个已删除的节点，它的一个构件早先挪到了先重载的节点名下：同样补一次；真删掉的才算少了",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补",
+      "后端说库里没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X11",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "补装之前不等别的装载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 1982,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X12",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "补装没做成不记失败",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2076,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X13",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "补装抛错不记失败",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2067,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X14",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "补完之后现有构件数不更新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2013,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "补完之后那个节点的现有构件数按补完的算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X15",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "不补装（先重载的节点名下的构件被后来者拿掉就丢了）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 1922,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "6 failed | 118 passed (124)",
+    "failedCount": 6,
+    "failedTests": [
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少",
+      "嵌套的两个节点：构件只是挪出了里面那个、还在外面那个名下——外面的先重载就补一次；它还在场景里，不算撤下",
+      "后面撤下的是个已删除的节点，它的一个构件早先挪到了先重载的节点名下：同样补一次；真删掉的才算少了",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补",
+      "补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成",
+      "补完之后那个节点的现有构件数按补完的算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X16",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "补装时不说在做什么",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2182,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X17",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "查空撤下的也说成「已不存在」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 1888,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 122 passed (124)",
+    "failedCount": 2,
+    "failedTests": [
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计",
+      "只有查空撤下的：那一句不说「已不存在」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X18",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "查空撤下的那一句里不说",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2186,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "2 failed | 122 passed (124)",
+    "failedCount": 2,
+    "failedTests": [
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计",
+      "只有查空撤下的：那一句不说「已不存在」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X19",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库里已经没有的节点那一句里不说",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2004,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "4 failed | 120 passed (124)",
+    "failedCount": 4,
+    "failedTests": [
+      "库里已经没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不去重载",
+      "树上增删改挪各几处、模型换了多少，一句说完",
+      "一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次",
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "X20",
+    "file": "src/components/model-tree/ModelGetWorkButton.vue",
+    "note": "那一句又画回按钮右边（按钮不在最右端，会被提示条盖住）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 2024,
+    "filesLine": "1 failed | 2 passed (3)",
+    "testsLine": "1 failed | 123 passed (124)",
+    "failedCount": 1,
+    "failedTests": [
+      "做完：按钮回到「取最新」，左边常驻那一句（按钮留在最右端）；悬停是那一句加逐条细节和时刻"
+    ],
+    "tail": ""
+  }
+]

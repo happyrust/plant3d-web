@@ -1,0 +1,16 @@
+第 1 次：BOX 的对象 1 个（o:24384_47471:0）
+  点击：7 点设备的眼睛之前 → 142 点了设备的眼睛 → 156 脚本认为设备装完了 → 358 点了 ZONE 的眼睛
+  状态：8:没在跑/不在 → 145:在跑/不在 → 296:没在跑/在场景 → 356:在跑/在场景 → 448:没在跑/在场景
+  装载：load_scope_refnos ok=1 refno=24384_47470 dbno=8000 count=1 ｜ gen-model-v1 root=24384_47470 dbno=8000 loaded_refnos=1 skipped=0 objects=1 ｜ load_scope_refnos ok=1 refno=24384_47463 dbno=8000 count=23 ｜ gen-model-v1 root=24384_47463 dbno=8000 loaded_refnos=22 skipped=1 objects=22
+第 2 次：BOX 的对象 1 个（o:24384_47471:0）
+  点击：1 点设备的眼睛之前 → 96 点了设备的眼睛 → 102 脚本认为设备装完了 → 260 点了 ZONE 的眼睛
+  状态：1:没在跑/不在 → 96:在跑/不在 → 208:没在跑/在场景 → 259:在跑/在场景 → 318:没在跑/在场景
+  装载：load_scope_refnos ok=1 refno=24384_47470 dbno=8000 count=1 ｜ gen-model-v1 root=24384_47470 dbno=8000 loaded_refnos=1 skipped=0 objects=1 ｜ load_scope_refnos ok=1 refno=24384_47463 dbno=8000 count=23 ｜ gen-model-v1 root=24384_47463 dbno=8000 loaded_refnos=22 skipped=1 objects=22
+第 3 次：BOX 的对象 1 个（o:24384_47471:0）
+  点击：7 点设备的眼睛之前 → 136 点了设备的眼睛 → 148 脚本认为设备装完了 → 282 点了 ZONE 的眼睛
+  状态：8:没在跑/不在 → 135:在跑/不在 → 235:没在跑/在场景 → 283:在跑/在场景 → 359:没在跑/在场景
+  装载：load_scope_refnos ok=1 refno=24384_47470 dbno=8000 count=1 ｜ gen-model-v1 root=24384_47470 dbno=8000 loaded_refnos=1 skipped=0 objects=1 ｜ load_scope_refnos ok=1 refno=24384_47463 dbno=8000 count=23 ｜ gen-model-v1 root=24384_47463 dbno=8000 loaded_refnos=22 skipped=1 objects=22
+第 4 次：BOX 的对象 1 个（o:24384_47471:0）
+  点击：3 点设备的眼睛之前 → 150 点了设备的眼睛 → 176 脚本认为设备装完了 → 346 点了 ZONE 的眼睛
+  状态：1:没在跑/不在 → 147:在跑/不在 → 298:没在跑/在场景 → 345:在跑/在场景 → 435:没在跑/在场景
+  装载：load_scope_refnos ok=1 refno=24384_47470 dbno=8000 count=1 ｜ gen-model-v1 root=24384_47470 dbno=8000 loaded_refnos=1 skipped=0 objects=1 ｜ load_scope_refnos ok=1 refno=24384_47463 dbno=8000 count=23 ｜ gen-model-v1 root=24384_47463 dbno=8000 loaded_refnos=22 skipped=1 objects=22

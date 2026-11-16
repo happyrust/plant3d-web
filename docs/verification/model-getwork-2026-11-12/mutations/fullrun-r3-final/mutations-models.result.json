@@ -1,0 +1,3484 @@
+[
+  {
+    "id": "G01",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库正在更新不等",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5278,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "libraryWaitsForBackend：后端更新范围内库文件领先 / 模型没跟上数据 / 正在写才等"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G02",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库文件领先不等",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5536,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "库文件已前进、后台那一批还没做完：等它做完再一起换（进度里说在等谁）",
+      "等到上限还没做完：换能换的，交代里点名这个库",
+      "不在后端更新范围的库不等（后台不会去追）；等的时候某一拍库状态没取到，接着等",
+      "libraryWaitsForBackend：后端更新范围内库文件领先 / 模型没跟上数据 / 正在写才等",
+      "只有整库显示碰过的库也算碰过：后台没做完同样要等、要交代"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G03",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "模型落后于数据不等",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5073,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "libraryWaitsForBackend：后端更新范围内库文件领先 / 模型没跟上数据 / 正在写才等"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G04",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "不在监听范围、水位相等的库也点名",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4496,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "只核对所在库水位变了的节点；后端说有更新可重载的才重载，说最新的不动",
+      "不在后端更新范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告",
+      "describeLibraryGap：各种库状态"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G05",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "未初始化的库也按库一级点名",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4370,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "不在后端更新范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告",
+      "describeLibraryGap：各种库状态",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除",
+      "服务代次没变（还是 0）：不算重启，水位没变的节点不问，照说「已是最新」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G06",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "有过期标记的节点不核对",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4292,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G07",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库状态没取到的节点不核对",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4572,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问",
+      "库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G08",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "装时水位没记下的节点不核对",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4467,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G09",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "模型水位变了不核对",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4732,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G10",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "只有库文件前进不核对",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4434,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "11 failed | 382 passed (393)",
+    "failedCount": 11,
+    "failedTests": [
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问",
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问",
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问",
+      "只有库的模型水位变了（库文件没动，后台追上来了）：也要再问",
+      "只有库文件又前进了（模型水位没动）：也要再问",
+      "核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G11",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重启后按需生成的库不重问",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4937,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "4 failed | 389 passed (393)",
+    "failedCount": 4,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G12",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重启后已初始化的库也重问",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4877,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "重启后库里有成套模型的库（已初始化）不用重问：模型还在库里",
+      "rootNeedsCheck：水位一样不问；变了、没记下、有过期标记、重启且库里没有成套模型时要问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G13",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库里没有的节点不撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5271,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "10 failed | 383 passed (393)",
+    "failedCount": 10,
+    "failedTests": [
+      "库里已经没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不去重载",
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景",
+      "被删的节点树上已经查不到名字：细节里用它消失前的名字",
+      "选中的正是这一轮撤下的节点：登记成已删除；已经登记过的不重复处理",
+      "撤下已删除的节点之后，登记表里不再留它",
+      "一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G14",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "有更新可重载的不重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4934,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "30 failed | 363 passed (393)",
+    "failedCount": 30,
+    "failedTests": [
+      "只核对所在库水位变了的节点；后端说有更新可重载的才重载，说最新的不动",
+      "一轮里的顺序：先核对后台，再刷新树，再重载模型，最后才是派生物",
+      "重载没做成：记进失败，场景不算换过；重载里撤下的构件数算进交代",
+      "装载中点了按钮：等它结束才开始对账（之前一个请求都不发）",
+      "核对完、要动场景的时候又有装载在跑：等它完了再重载这个节点",
+      "库文件已前进、后台那一批还没做完：等它做完再一起换（进度里说在等谁）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G15",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "最新但有过期标记的不重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5476,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "decideRootAction：最新但本页装的不是那一版（过期标记 / 按需生成的比本页新 / 装时的水位没记下）→ 重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G16",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "按需生成的比本页新也不重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5181,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "decideRootAction：最新但本页装的不是那一版（过期标记 / 按需生成的比本页新 / 装时的水位没记下）→ 重载",
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G17",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "装时水位没记下的最新节点不重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4903,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "decideRootAction：最新但本页装的不是那一版（过期标记 / 按需生成的比本页新 / 装时的水位没记下）→ 重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G18",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "落后且有可换新版的不重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5062,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "decideRootAction：落后的节点——有可换的新版才重载（并说明还落后），没有就不动",
+      "落后但有可换的新版：重载，同时把「还落后」说出来",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G19",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "落后而没有可换新版的也重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4777,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "decideRootAction：落后的节点——有可换的新版才重载（并说明还落后），没有就不动",
+      "节点落后、库里的模型并不比本页装的新（没有可换的新版）：不重载，照实说没有可换的"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G20",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "名下没有生成单元的节点不重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4550,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "6 failed | 387 passed (393)",
+    "failedCount": 6,
+    "failedTests": [
+      "重载查空（节点还在、名下的成员删光了）：算撤下，数的是重载前它装着的构件",
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景",
+      "选中的节点这一轮查空撤下了（它还在库里，只是名下没有几何了）：不算被删",
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计",
+      "只有查空撤下的：那一句不说「已不存在」",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G21",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库在更新也重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4963,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G22",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "护栏：后端没有（完整）模型也去重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5312,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "6 failed | 387 passed (393)",
+    "failedCount": 6,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景",
+      "核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除",
+      "页面打开之后后端重启过不止一次（服务代次 0 → 2）：头一轮认出重启；再点一轮代次没再变，不再算重启"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G23",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重启与否说法一样",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 7206,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "4 failed | 389 passed (393)",
+    "failedCount": 4,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G24",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "判不了也重载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5939,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景",
+      "别的失败（库文件打不开）不当成已删除：屏幕上的不动"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G25",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "靠库水位担保的也按「按需生成比本页新」判",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5681,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "8 failed | 385 passed (393)",
+    "failedCount": 8,
+    "failedTests": [
+      "只核对所在库水位变了的节点；后端说有更新可重载的才重载，说最新的不动",
+      "decideRootAction：后端没有（完整）模型、库在更新、判不了——都不动场景",
+      "decideRootAction：落后的节点——有可换的新版才重载（并说明还落后），没有就不动",
+      "decideRootAction：最新但本页装的不是那一版（过期标记 / 按需生成的比本页新 / 装时的水位没记下）→ 重载",
+      "核对过、不用动：把它记的水位推进到现在；重载做成了就交给已加载节点表（从登记表拿掉）",
+      "库没再变：下一轮不再为它发请求；库又变了才再问；它自己重新装过（装时的水位变了）也再问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G26",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "按需生成的同一会话也算比本页新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5141,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "decideRootAction：最新但本页装的不是那一版（过期标记 / 按需生成的比本页新 / 装时的水位没记下）→ 重载",
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G27",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "部分生成但没有已生成单元的新 SITE 也装",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6311,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "newSiteHasModel：最新 / 落后 / 可重载算有；部分生成要真有生成过的单元；未生成、空、判不了不算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G28",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "落后的新 SITE 不装",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6873,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "newSiteHasModel：最新 / 落后 / 可重载算有；部分生成要真有生成过的单元；未生成、空、判不了不算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G29",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "等装载的上限放大三倍",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6114,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "装载一直不结束：到上限就放弃，照实说，页面不动"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G30",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "装载没结束也照做",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5126,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "装载一直不结束：到上限就放弃，照实说，页面不动"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G31",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "认不出后端重启",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5213,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "8 failed | 385 passed (393)",
+    "failedCount": 8,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "没给页面打开时的服务代次：头一轮没有可比的，不算重启（第二轮起照旧认得出）",
+      "重启后库里有成套模型的库（已初始化）不用重问：模型还在库里",
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问",
+      "核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G32",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "树上碰过的库不算碰过",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4818,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "什么都没变的一轮：派生物拿到「没变化」；碰过的库水位比上一轮动了就算有变化",
+      "不在后端更新范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告",
+      "三枚水位对不上的库（后端判不了新旧）：一整轮下来那一句里写明是哪三枚，不单说「水位」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G33",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "装过模型的库不算碰过",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5621,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "库文件已前进、后台那一批还没做完：等它做完再一起换（进度里说在等谁）",
+      "等到上限还没做完：换能换的，交代里点名这个库",
+      "不在后端更新范围的库不等（后台不会去追）；等的时候某一拍库状态没取到，接着等",
+      "旧后端（过渡办法）、库的模型水位没动而库文件前进了：不重载，也不凭空说它「落后」",
+      "库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G34",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "整库显示过的库不算碰过",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6051,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "只有整库显示碰过的库也算碰过：后台没做完同样要等、要交代"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G35",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "等后台的上限放大三倍",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6998,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "等到上限还没做完：换能换的，交代里点名这个库"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G36",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "后台没做完也不等",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5547,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "4 failed | 389 passed (393)",
+    "failedCount": 4,
+    "failedTests": [
+      "库文件已前进、后台那一批还没做完：等它做完再一起换（进度里说在等谁）",
+      "等到上限还没做完：换能换的，交代里点名这个库",
+      "不在后端更新范围的库不等（后台不会去追）；等的时候某一拍库状态没取到，接着等",
+      "只有整库显示碰过的库也算碰过：后台没做完同样要等、要交代"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G37",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "等的时候一拍没取到就整轮失败",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5198,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "不在后端更新范围的库不等（后台不会去追）；等的时候某一拍库状态没取到，接着等"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G38",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "树刷新出错拖垮整轮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4988,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "树刷新出错：记下来，模型照常核对"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G39",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "已加载节点表里的节点也按「不在场景」丢掉",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5583,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "已加载节点表里的节点不看「还在不在场景」（照旧信它）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G40",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "登记表里别处已撤的节点照样核对",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4747,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "别处已经撤掉的：从登记表拿掉，不问、更不装回来",
+      "登记表里的节点在别的库：在不在场景、装着什么、撤下，都按它自己的库号问",
+      "登记表里的节点别处已经撤了：从登记表拿掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G41",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "所有节点都核对（不按库发现）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4686,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "7 failed | 386 passed (393)",
+    "failedCount": 7,
+    "failedTests": [
+      "库的水位和装的时候一样：一个节点都不问，什么都不动",
+      "只核对所在库水位变了的节点；后端说有更新可重载的才重载，说最新的不动",
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮：服务代次还是页面打开时的那个——不算重启，水位没变的节点不问",
+      "重启后库里有成套模型的库（已初始化）不用重问：模型还在库里",
+      "已加载节点表里装着的 + 登记表里的；同一个节点以已加载节点表为准；只是点过没装的不算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G42",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "已加载节点表里的节点也推进水位",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4851,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "核对过、不用动：把它记的水位推进到现在；重载做成了就交给已加载节点表（从登记表拿掉）",
+      "库没再变：下一轮不再为它发请求；库又变了才再问；它自己重新装过（装时的水位变了）也再问",
+      "后端重启过、或它带着「本页装的不是后端现在的那一版」的标记：照问",
+      "只有库的模型水位变了（库文件没动，后台追上来了）：也要再问",
+      "上一轮不用动、这一轮库变了它要重载：重载完再点（库没再变）仍然先问一次，问到不用动之后才不问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G43",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "不用动的节点不记说明（keep 不进回执）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4928,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "6 failed | 387 passed (393)",
+    "failedCount": 6,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "核对过不用动之后，某一轮它又成了「没动、要说明」的（比如重启后后端没有它的模型了）：之后每轮都照问",
+      "节点落后、库里的模型并不比本页装的新（没有可换的新版）：不重载，照实说没有可换的",
+      "别的失败（库文件打不开）不当成已删除：屏幕上的不动",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G44",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "动场景前不等别的装载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4590,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "核对完、要动场景的时候又有装载在跑：等它完了再重载这个节点",
+      "要重载节点的时候别的装载一直不完：这个节点记失败、不动它"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G45",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "撤下之后登记表里还留着",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4993,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "撤下已删除的节点之后，登记表里不再留它"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G46",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载抛错拖垮整轮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5108,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "重载抛错：记进失败（带原因），后面的节点照常做"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G47",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载没做成也算换过",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5946,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "重载没做成：记进失败，场景不算换过；重载里撤下的构件数算进交代",
+      "重载没做成的登记表节点留在登记表里（下次还归取最新管）",
+      "有节点重载没成：更新提示留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G48",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载做成的已加载节点表节点也从登记表撤（无条件 forget）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4917,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "一轮里的顺序：先核对后台，再刷新树，再重载模型，最后才是派生物",
+      "已加载节点表里的节点不看「还在不在场景」（照旧信它）",
+      "上一轮不用动、这一轮库变了它要重载：重载完再点（库没再变）仍然先问一次，问到不用动之后才不问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G49",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载做成的登记表节点不交接",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4932,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "核对过、不用动：把它记的水位推进到现在；重载做成了就交给已加载节点表（从登记表拿掉）",
+      "登记表里的节点核对过不用动：水位推进到现在；重载做成了就从登记表拿掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G50",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载后查空不算撤下",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4669,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "重载查空（节点还在、名下的成员删光了）：算撤下，数的是重载前它装着的构件",
+      "选中的节点这一轮查空撤下了（它还在库里，只是名下没有几何了）：不算被删",
+      "撤下的节点说不出它装了哪些构件：按场景报的件数算；查空撤下的、新装入的 SITE 也都算进合计",
+      "只有查空撤下的：那一句不说「已不存在」",
+      "后面那个是查空撤下的（名下的几何都没了），拿掉的构件里有先重载的节点名下的：也补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G51",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新增构件数算错",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4642,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "11 failed | 382 passed (393)",
+    "failedCount": 11,
+    "failedTests": [
+      "只核对所在库水位变了的节点；后端说有更新可重载的才重载，说最新的不动",
+      "重载没做成：记进失败，场景不算换过；重载里撤下的构件数算进交代",
+      "一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次",
+      "嵌套的两个节点都重载：同一批新构件只算一次",
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少",
+      "各换各的、谁也没拿掉谁名下的构件：不补"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G52",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "撤下构件数算错",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4639,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "7 failed | 386 passed (393)",
+    "failedCount": 7,
+    "failedTests": [
+      "重载没做成：记进失败，场景不算换过；重载里撤下的构件数算进交代",
+      "一个节点既单独装过、又在装过的 ZONE 名下：它的构件被撤只算一次",
+      "先重载的节点装上了它们、后重载的节点又把它们从场景拿掉：给先重载的那个补重载一次；合计不算多也不算少",
+      "各换各的、谁也没拿掉谁名下的构件：不补",
+      "嵌套的两个节点：构件只是挪出了里面那个、还在外面那个名下——外面的先重载就补一次；它还在场景里，不算撤下",
+      "补重载没做成、抛错、或别的装载一直不完：各记一笔失败，说清是补装没成"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G53",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "重载后「还落后」不说",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4746,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "落后但有可换的新版：重载，同时把「还落后」说出来",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G54",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "按预算显示的库也找新 SITE",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5482,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "按预算只显示了一部分的库：不找新 SITE（没轮到的不是新增的）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G55",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "库文件没变也每次找新 SITE",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5480,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "库文件没有新会话：不查 SITE 名单"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G56",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "从没找过的库、库文件没变就不找",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5267,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库显示的库从没找过新 SITE（当时没读到库文件的会话）：库文件没变也要找一次"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G57",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "已在管的 SITE 也当新的",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5307,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "库文件前进了：查 SITE 名单，后端有模型的新 SITE 装进来、记成已在管，记下找过了",
+      "整库显示过的库：库文件前进后查一次 SITE 名单（先清根名单的缓存），后端有模型的新 SITE 装进来、记成已在管"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G58",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "名单里已不存在的 SITE 当成「还没有模型」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5262,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "新 SITE 查到名单之后库里又没有它了：不装、不说，照常记「找过了」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G59",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "没有生成单元的新 SITE 当成「还没有模型」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5665,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "名下没有生成单元的新 SITE：没有可装的，不装也不说；记下找过了"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G60",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "后端没有模型的新 SITE 也装",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5591,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "新 SITE 后端还没有模型：不装、说明，也不记「找过了」——下一轮还要再看"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G61",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新 SITE 没有模型也记「找过了」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5409,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "新 SITE 后端还没有模型：不装、说明，也不记「找过了」——下一轮还要再看"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G62",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "装新 SITE 前不等别的装载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4664,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "要装新 SITE 的时候有别的装载在跑：等它完了再装；一直不完就记失败"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G63",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新 SITE 装入抛错拖垮整轮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4695,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "新 SITE 没装成（重载回 false / 抛错）：记失败，不算已在管，也不记「找过了」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G64",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新 SITE 没装成也记成已在管",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4700,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "新 SITE 没装成（重载回 false / 抛错）：记失败，不算已在管，也不记「找过了」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G65",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "新 SITE 装上了不记成已在管",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4586,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "库文件前进了：查 SITE 名单，后端有模型的新 SITE 装进来、记成已在管，记下找过了",
+      "新 SITE 装了但一个构件都没装上：算已在管，不计入「新装入」",
+      "整库显示过的库：库文件前进后查一次 SITE 名单（先清根名单的缓存），后端有模型的新 SITE 装进来、记成已在管"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G66",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "一个构件都没装上的新 SITE 也计入新装入",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4466,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "新 SITE 装了但一个构件都没装上：算已在管，不计入「新装入」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G67",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "有没处理完的新 SITE 也记「找过了」",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4681,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "新 SITE 后端还没有模型：不装、说明，也不记「找过了」——下一轮还要再看",
+      "新 SITE 没装成（重载回 false / 抛错）：记失败，不算已在管，也不记「找过了」",
+      "要装新 SITE 的时候有别的装载在跑：等它完了再装；一直不完就记失败"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G68",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "查看器没挂也去动模型",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5464,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "查看器没挂：不碰模型，只说在册几个"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G69",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "第一轮就算库水位动了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5098,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "什么都没变的一轮：派生物拿到「没变化」；碰过的库水位比上一轮动了就算有变化"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G70",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "已登记成已删除的选中还去处理",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4658,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "选中的正是这一轮撤下的节点：登记成已删除；已经登记过的不重复处理"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G71",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "祖先挪走的选中也当成被删",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4888,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "祖先只是挪到了没展开的位置：选中的不算删除，也不去问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G72",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "祖先被删的选中还要去问",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4898,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "选中的构件随被删的祖先一起从树上消失：登记成「已删除」，不用再去问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G73",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "查空撤下的选中也当成被删",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5825,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "选中的节点这一轮查空撤下了（它还在库里，只是名下没有几何了）：不算被删"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G74",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "问选中的构件出错拖垮整轮",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4940,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "问选中的构件还在不在时出错：不动选中，这一轮照常做完"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G75",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "没问到也当成被删",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4632,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "问选中的构件还在不在时出错：不动选中，这一轮照常做完",
+      "还在、或没问到（网络错）：不动选中"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G76",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "派生物的「有变化」不看树",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4798,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "只有树变了：派生物拿到的也是「有变化」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G77",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "派生物的「有变化」不看模型",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4973,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "派生物：每轮都叫到，带着「这一轮有没有变化」；一个出错不影响别的，回执里记下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G78",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "派生物的「有变化」不看库水位",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4886,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "什么都没变的一轮：派生物拿到「没变化」；碰过的库水位比上一轮动了就算有变化"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G79",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "一个派生物出错后面的不做",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4556,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "派生物：每轮都叫到，带着「这一轮有没有变化」；一个出错不影响别的，回执里记下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G80",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "没等到的库不加说明",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4630,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "等到上限还没做完：换能换的，交代里点名这个库"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G81",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "运行中再点不排下一轮（直接回当前这一轮）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4828,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "运行中再点：排成下一轮；期间点多少下都合并成那一轮",
+      "运行中再点：排成下一轮；每一轮只给一句交代（不是每个等的人一句）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G82",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "排的下一轮跑完不放开",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4997,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "运行中再点：排成下一轮；期间点多少下都合并成那一轮"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G83",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "不在监听范围的库也把那一句标成警告",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5207,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "不在后端更新范围的库（1112：模型停在 738、库文件已到 748）：交代里点明，不算警告"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G84",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "后台没跟上的库不标警告",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4914,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "等到上限还没做完：换能换的，交代里点名这个库"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G85",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "有节点没动不标警告",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4730,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "3 failed | 390 passed (393)",
+    "failedCount": 3,
+    "failedTests": [
+      "重启后按需生成的库里模型没了（未生成）：屏幕上的不动、不当成已删除，交代里说明",
+      "头一轮就认得出重启：页面打开时的服务代次给了、现在比它大——按需生成的库里的节点照问、不重载、不当成已删除",
+      "页面打开时服务代次是 0、现在是 1：认出重启；后端说这个节点没生成——不重载、不撤，说它没有被当成已删除"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G86",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "没做成的一轮不报错",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4796,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "装载一直不结束：到上限就放弃，照实说，页面不动",
+      "后台连不上：报错的那一句，不收起更新提示，页面不动"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G87",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "挪到没展开位置的不计入挪位置",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5234,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "树上增删改挪各几处、模型换了多少，一句说完"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G88",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "没问到下落的也算删除",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5542,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "树上增删改挪各几处、模型换了多少，一句说完"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G89",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "整节点撤下的构件不计入撤下的合计",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4640,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "31 failed | 276 passed (307)",
+    "failedCount": 31,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新",
+      "库的模型水位没动、只有库文件前进了（后台不会去追的库）：没有可换的新版，不重载，也不问节点版本表",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后",
+      "节点落后、库里的模型并不比本页装的新（没有可换的新版）：不重载，照实说没有可换的",
+      "旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载",
+      "旧后端（过渡办法）、库的模型水位没动而库文件前进了：不重载，也不凭空说它「落后」"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "G90",
+    "file": "src/composables/modelGetWork.ts",
+    "note": "跑完进度文字不清",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4532,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U01",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "只是点过没装的也算在册",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4762,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "已加载节点表里装着的 + 登记表里的；同一个节点以已加载节点表为准；只是点过没装的不算",
+      "只是点过、没有模型可显示的节点（loaded = false）不算：它的库有变化不该为它提示"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U02",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "两张表都有时以登记表为准",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4502,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "已加载节点表里装着的 + 登记表里的；同一个节点以已加载节点表为准；只是点过没装的不算"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U03",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "钉在历史版本上的选中也处理",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4771,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "钉在历史版本上的选中（版本对比里点的）、不是 PDMS refno 的选中：不碰、不问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U04",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "不是 PDMS refno 的选中也去问",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4581,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "钉在历史版本上的选中（版本对比里点的）、不是 PDMS refno 的选中：不碰、不问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U05",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "/dbnums 不强制重拉",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 6141,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U06",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "库状态圆点不跟着换新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5324,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U07",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "REFNO_NOT_FOUND 不记成已删除",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5096,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "后端说库里没有这个节点（REFNO_NOT_FOUND）：从场景撤下，不重载"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U08",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "任何失败都记成已删除",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4714,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "别的失败（库文件打不开）不当成已删除：屏幕上的不动"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U09",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "登记已删除时换了写法",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4523,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "库里没有它了（祖先链 404）：登记成「已删除」，选中的写法原样不变"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U10",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "祖先链查得到也当成没有了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4319,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "还在、或没问到（网络错）：不动选中"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U11",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "别的失败也当成没有了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4173,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "还在、或没问到（网络错）：不动选中"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U12",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "每个等的人各出一句",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4177,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "运行中再点：排成下一轮；每一轮只给一句交代（不是每个等的人一句）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U13",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "没做成也收起更新提示",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4032,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "后台连不上：报错的那一句，不收起更新提示，页面不动"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U14",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "有节点没换成也收起更新提示",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4222,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "有节点重载没成：更新提示留着"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U15",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "旧的树撤登记时把新的也撤了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4255,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "树、场景、派生物：登记了才用；撤掉之后不用；后登记的顶掉先登记的，先登记的再撤不影响后登记的"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U16",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "旧的场景撤登记时把新的也撤了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4338,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "场景换了一个（查看器重挂）：旧的那个再撤，不影响新的"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U17",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "旧的派生物撤登记时把同名新的也撤了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4376,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "树、场景、派生物：登记了才用；撤掉之后不用；后登记的顶掉先登记的，先登记的再撤不影响后登记的"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U18",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "查 SITE 名单前不清根名单缓存",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4328,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库显示过的库：库文件前进后查一次 SITE 名单（先清根名单的缓存），后端有模型的新 SITE 装进来、记成已在管"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U19",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "有装载在跑也不等",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4035,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "有装载在跑：等它结束才开始（用真的加载会话）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U20",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "排队标记算错",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4369,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "运行中再点：排成下一轮；每一轮只给一句交代（不是每个等的人一句）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U21",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "跑完 running 不放下",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4120,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新",
+      "运行中再点：排成下一轮；每一轮只给一句交代（不是每个等的人一句）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U22",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "水位快照跟着缓存变",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4454,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "captureGetWorkWatermarks：读的是调用那一刻 /dbnums 缓存里的水位，之后缓存变了不跟着变；没有的库回空"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "U23",
+    "file": "src/composables/useModelGetWork.ts",
+    "note": "节点状态不带本页装的水位",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4196,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "已加载节点表里的节点、库里的模型比本页装的新：经场景重载，给一句交代，收起状态栏的更新提示，库状态一起换新",
+      "节点落后（后台的模型没跟上库文件）、但库里的模型已经比本页装的新：重载换上后台现有的那一版，并说明还落后",
+      "旧后端没有节点模型状态接口（过渡办法）：同样只看库的模型水位——比本页装的新就重载，没动就不重载",
+      "库状态里没有这个库的那一行，但后端答得出节点的状态、库里的模型比本页装的新：照样重载",
+      "登记表里的节点核对过不用动：水位推进到现在；重载做成了就从登记表拿掉"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M01",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏：后端说最新也不敢撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4183,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "K08 记录查空且收齐、后端也确认它名下没有几何了（这根被删、或名下带几何的成员删光）：不生成，撤下根与名下旧构件，不再算已加载",
+      "后端说这个节点 latest（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下",
+      "查空撤下：不弹「已从场景撤下」，控制台照记",
+      "一轮里五种结局挨个来（做成、记录没查通、装载出错、被叫停、查空撤下），带 quiet：一条都不弹",
+      "同样五种结局不带 quiet：各弹各的那一句，一条不少"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M02",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏：后端说落后也不敢撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4316,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "后端说这个节点 lagging（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M03",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏：后端说没有生成单元也不敢撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4569,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "7 failed | 386 passed (393)",
+    "failedCount": 7,
+    "failedTests": [
+      "后端说这个节点 empty（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下",
+      "同一轮里，A 名下唯一还在的构件挪到了 B，先重载 B、再重载 A（A 整个查空）：撤下 A 自己，不撤 B 刚装上的构件",
+      "同一轮里三个节点：A 名下的构件两个挪到了 B、C、一个真删了，A 整个查空：只撤 A 自己和真删的那个",
+      "A 整个查空撤下时同样：它带走的构件还登记在 B 名下，B 记一笔",
+      "只有一部分撤掉的构件有对象：只按真撤掉对象的那几个找",
+      "A 整个查空撤下、它名下的构件在场景里本来就没有对象了：没有谁因此缺东西，不记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M04",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏失效：后端说什么都撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4310,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "9 failed | 384 passed (393)",
+    "failedCount": 9,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "取最新发起的（quiet）：同样不撤，但不弹那一句（它自己汇总）",
+      "取最新发起的（quiet）、后端说 unknown：不弹，但原因照实记进控制台（「后端判不了这个节点的模型状态」）"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M05",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏失效：服务端没有节点模型状态接口时不问模型树、直接撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4623,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "6 failed | 387 passed (393)",
+    "failedCount": 6,
+    "failedTests": [
+      "树说库文件最新会话上没有这个节点：撤下",
+      "树说这个节点还在（分不清是成员删光了还是后端没有它的模型）：保持原样",
+      "树回了别的失败（不是「没有这个节点」）：保持原样",
+      "树回了失败、没说原因：保持原样",
+      "树也没问到：保持原样",
+      "问模型树的这一会儿被叫停：还没开始撤，场景保持原样"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M06",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏：REFNO_NOT_FOUND 不当成没有了",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4398,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "重载时发现这根已经没有几何（被删了，后端也这么说）：从场景撤下，同时撤表",
+      "后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M07",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏失效：问不到也撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4334,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "这一问没问到（库文件打不开、超时）：保持原样，原因照实说"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M08",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏只有取最新发起的重载才过（状态栏、行上的「重载」和重新部署后的重装不过）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4709,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "14 failed | 379 passed (393)",
+    "failedCount": 14,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "这一问没问到（库文件打不开、超时）：保持原样，原因照实说",
+      "树说库文件最新会话上没有这个节点：撤下"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M09",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "记录没收齐也白问一次",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5725,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "记录没收齐（409 在生成）时本来就不撤：不为它白问一次节点模型状态",
+      "重载查空而记录没收齐（有截断的根）：本来就不撤，不为它白问一次节点模型状态",
+      "重载查空而记录没收齐（有出错的根）：本来就不撤，不为它白问一次节点模型状态",
+      "取最新发起的（quiet）重载查空而记录没收齐（有截断的根）：同样不撤、不问，装着的构件原样，也不弹",
+      "取最新发起的（quiet）重载查空而记录没收齐（有出错的根）：同样不撤、不问，装着的构件原样，也不弹"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M10",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "护栏失效：确认不了也照撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4669,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "14 failed | 379 passed (393)",
+    "failedCount": 14,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "取最新发起的（quiet）：同样不撤，但不弹那一句（它自己汇总）",
+      "这一问没问到（库文件打不开、超时）：保持原样，原因照实说"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M11",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没收齐判定漏掉待定",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4321,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "记录没收齐（409 在生成）时本来就不撤：不为它白问一次节点模型状态"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M12",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没收齐判定漏掉截断",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4269,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "重载查空而记录没收齐（有截断的根）：本来就不撤，不为它白问一次节点模型状态",
+      "取最新发起的（quiet）重载查空而记录没收齐（有截断的根）：同样不撤、不问，装着的构件原样，也不弹"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M13",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没收齐判定漏掉出错",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4502,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "重载查空而记录没收齐（有出错的根）：本来就不撤，不为它白问一次节点模型状态",
+      "取最新发起的（quiet）重载查空而记录没收齐（有出错的根）：同样不撤、不问，装着的构件原样，也不弹"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M14",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "撤下已删节点漏掉记录缓存里的构件",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4103,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M15",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "撤下已删节点漏掉场景索引认得的构件",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4198,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M16",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "撤下已删节点漏掉上次装的构件",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4401,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示",
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M17",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "撤下之后还算已加载",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4545,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M18",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "撤下之后还记着它装了什么",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4689,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示",
+      "没钉库号时按 refno 查映射；映射里没有这个节点：不算在场景里、撤不到对象、也说不出它装着什么"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M19",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "撤下之后已加载节点表里还留着",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4407,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示",
+      "没钉库号时按 refno 查映射；映射里没有这个节点：不算在场景里、撤不到对象、也说不出它装着什么"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M20",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没撤到对象也刷新派生索引",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4334,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "什么对象都没撤到时不去刷新派生索引"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M21",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "空 refno 也去撤",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4335,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "withdrawRemovedRoot：空 refno 什么都不做"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M22",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "loadedRefnosOf 不看上次装的那一份",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4740,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "12 failed | 381 passed (393)",
+    "failedCount": 12,
+    "failedTests": [
+      "后端说这个节点 not_generated（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 partial（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 unknown（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "后端说这个节点 updating（比如重启后按需生成的模型没了）：不撤、不算已删除，场景保持原样，并照实说",
+      "loadedRefnosOf：经显示流程装的回它装的那些；没经显示流程装的看场景索引的属主链；都没有回 null",
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M23",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "loadedRefnosOf 没有时回空表而不是 null",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5097,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "9 failed | 384 passed (393)",
+    "failedCount": 9,
+    "failedTests": [
+      "后端说这个节点 latest（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下",
+      "后端说这个节点 lagging（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下",
+      "后端说这个节点 empty（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下",
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示",
+      "loadedRefnosOf：经显示流程装的回它装的那些；没经显示流程装的看场景索引的属主链；都没有回 null",
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M24",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "isRootInScene 不认经显示流程装的",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5355,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "isRootInScene：经显示流程装过的节点直接算在"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M25",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "isRootInScene 不认自己有对象的",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5085,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "isRootInScene：自己有对象、名下按属主链有对象、或上次装的构件还有在场景里的，都算在"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M26",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "isRootInScene 不认属主链上有对象的",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4485,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "isRootInScene：自己有对象、名下按属主链有对象、或上次装的构件还有在场景里的，都算在",
+      "没钉库号时按 refno 查映射；映射里没有这个节点：不算在场景里、撤不到对象、也说不出它装着什么"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M27",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "isRootInScene 不看上次装的构件",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4783,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "isRootInScene：自己有对象、名下按属主链有对象、或上次装的构件还有在场景里的，都算在",
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M28",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "isRootInScene 上次装过就算在（不看还在不在）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5003,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "isRootInScene：自己有对象、名下按属主链有对象、或上次装的构件还有在场景里的，都算在",
+      "映射查不到库号（2026-11-12 真机：show_dbnum 页面里取最新把登记的 SITE 全丢了）：给了库号就按给的问"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M29",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "库号一律按映射查（不认调用方钉的）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5419,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "它和它名下的构件（上次装的、记录缓存里的、场景索引认得的）从场景撤下、撤表；不发请求、不出提示",
+      "给的库号不像话（0、NaN）：当没给，退回原来的口径"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M30",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "库号解不出也算在场景里",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4761,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "没钉库号时按 refno 查映射；映射里没有这个节点：不算在场景里、撤不到对象、也说不出它装着什么"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M31",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没收齐的 SITE 也登记成节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4441,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "整库显示：一批没说收没收齐的（旧形状）不当成收齐——不登记成节点"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M32",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没有几何的 SITE 也登记成节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4857,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "整库都是空的也登记这个库：以后有了模型，取最新能把新出现的 SITE 装进来"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M33",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "收齐的 SITE 不记它装了什么",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5218,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M34",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "收齐的 SITE 不登记成节点",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4564,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "4 failed | 389 passed (393)",
+    "failedCount": 4,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "要一份 /dbnums（不等它，装载照常开始），登记时用它回来的水位",
+      "/dbnums 没取到、或回来的表里没有这个库：按「不知道」登记，整库显示照常做完",
+      "整库都装完了库状态还没回来：最多再等 3 秒，等不到按「不知道」登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M35",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没收齐的 SITE 不算已在管",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4329,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "整库显示：一批没说收没收齐的（旧形状）不当成收齐——不登记成节点"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M36",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "收齐而没有几何的 SITE 也算已在管",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4754,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "整库都是空的也登记这个库：以后有了模型，取最新能把新出现的 SITE 装进来"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M37",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没轮到的 SITE 不算已在管",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4475,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "按预算只显示了一部分：没轮到的 SITE 算已在管，以后不找新 SITE"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M38",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "按预算显示的库也找新 SITE",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4249,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "按预算只显示了一部分：没轮到的 SITE 算已在管，以后不找新 SITE"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M39",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "SITE 名单没取到也找新 SITE",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4315,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "SITE 名单没取到（摘要不可用）：以后也不找新 SITE"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M40",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整库都空时不登记这个库",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4365,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库都是空的也登记这个库：以后有了模型，取最新能把新出现的 SITE 装进来"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M41",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整库显示完不登记",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4360,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "7 failed | 386 passed (393)",
+    "failedCount": 7,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "按预算只显示了一部分：没轮到的 SITE 算已在管，以后不找新 SITE",
+      "SITE 名单没取到（摘要不可用）：以后也不找新 SITE",
+      "整库显示：一批没说收没收齐的（旧形状）不当成收齐——不登记成节点",
+      "要一份 /dbnums（不等它，装载照常开始），登记时用它回来的水位",
+      "/dbnums 没取到、或回来的表里没有这个库：按「不知道」登记，整库显示照常做完"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M42",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整库显示进行中取最新看不到",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4695,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库显示进行中「取最新」看得到（等它结束再对账）；结束、出错之后都放开"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M43",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整库显示结束不放开",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4678,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库显示进行中「取最新」看得到（等它结束再对账）；结束、出错之后都放开"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M44",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "没说收没收齐的批当成收齐",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4647,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库显示：一批没说收没收齐的（旧形状）不当成收齐——不登记成节点"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M45",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "整库显示登记的水位不带模型水位",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4569,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "收齐的 SITE 登记成取最新要核对的节点（带装之前读到的库水位），并记下各自装了哪些构件",
+      "要一份 /dbnums（不等它，装载照常开始），登记时用它回来的水位"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "M46",
+    "file": "src/composables/useModelGeneration.ts",
+    "note": "rememberLoadedRefnosOfRoot 不归一 refno",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4631,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "loadedRefnosOf：经显示流程装的回它装的那些；没经显示流程装的看场景索引的属主链；都没有回 null"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "C01",
+    "file": "src/model-source/genModelV1/collectDbnum.ts",
+    "note": "生成根被预算切掉仍算收齐",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4915,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "截断的、被构件预算或生成根预算切掉的 SITE 不算收齐"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "C02",
+    "file": "src/model-source/genModelV1/collectDbnum.ts",
+    "note": "构件被预算切掉仍算收齐",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4886,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "截断的、被构件预算或生成根预算切掉的 SITE 不算收齐"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "C03",
+    "file": "src/model-source/genModelV1/collectDbnum.ts",
+    "note": "有待定仍算收齐",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4670,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "有待定（409） 的 SITE 不算收齐"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "C04",
+    "file": "src/model-source/genModelV1/collectDbnum.ts",
+    "note": "有截断仍算收齐",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5167,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "截断的、被构件预算或生成根预算切掉的 SITE 不算收齐",
+      "有截断的根 的 SITE 不算收齐"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "C05",
+    "file": "src/model-source/genModelV1/collectDbnum.ts",
+    "note": "有出错仍算收齐",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4590,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "有出错的根 的 SITE 不算收齐"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "C06",
+    "file": "src/model-source/genModelV1/collectDbnum.ts",
+    "note": "批次不带 SITE",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4646,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "5 failed | 388 passed (393)",
+    "failedCount": 5,
+    "failedTests": [
+      "收齐的 SITE 为 complete；有待定 / 出错的不算收齐；一条记录都没有的 SITE 也交一批（空的、收齐）",
+      "截断的、被构件预算或生成根预算切掉的 SITE 不算收齐",
+      "有待定（409） 的 SITE 不算收齐",
+      "有出错的根 的 SITE 不算收齐",
+      "有截断的根 的 SITE 不算收齐"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "S01",
+    "file": "src/composables/modelLoadSession.ts",
+    "note": "只看按节点的会话",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4432,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "整库显示进行中「取最新」看得到（等它结束再对账）；结束、出错之后都放开",
+      "整库显示没有按节点的会话：另记一笔；结束函数重复调不会多减"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "S02",
+    "file": "src/composables/modelLoadSession.ts",
+    "note": "只看整库显示",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4630,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "有装载在跑：等它结束才开始（用真的加载会话）",
+      "按节点的加载：开始之后算有，全部结束之后才算没有"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "S03",
+    "file": "src/composables/modelLoadSession.ts",
+    "note": "结束函数重复调多减",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5233,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "整库显示没有按节点的会话：另记一笔；结束函数重复调不会多减"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R01",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "登记不归一 refno",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4887,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "登记时 refno 归一成 a_b；同一个节点再登记覆盖原来那一行"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R02",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "库号不对的也登记",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4454,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "空 refno、解不出库号的不登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R03",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "同一个库再显示名单不合并",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4637,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "记下已在管的 SITE、要不要找新 SITE、显示时库文件的最新会话；同一个库再显示一次名单合并"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R04",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "读出去的根不是拷贝",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4726,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "读出去的是拷贝：改它不影响表"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R05",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "读出去的名单不是拷贝",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4617,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "库号不对的不登记；读出去的名单是拷贝"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R06",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "清表不清整库显示的库",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4812,
+    "filesLine": "2 failed | 7 passed (9)",
+    "testsLine": "7 failed | 386 passed (393)",
+    "failedCount": 7,
+    "failedTests": [
+      "按预算只显示了一部分：没轮到的 SITE 算已在管，以后不找新 SITE",
+      "整库都是空的也登记这个库：以后有了模型，取最新能把新出现的 SITE 装进来",
+      "一个构件都没取到、收集又没完成：不登记（不知道这个库的样子）",
+      "整库显示：一批没说收没收齐的（旧形状）不当成收齐——不登记成节点",
+      "新装进来的 SITE 记成已在管；找过一次之后记下当时库文件的最新会话；没登记过的库不管",
+      "库号不对的不登记；读出去的名单是拷贝"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "R07",
+    "file": "src/composables/modelGetWorkRegistry.ts",
+    "note": "整库登记的库号不校验",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 4980,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "库号不对的不登记；读出去的名单是拷贝"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "P01",
+    "file": "src/composables/usePdmsOwnerTree.ts",
+    "note": "碰过的库把子节点的库也算上（根下的 SITE）",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5349,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "loadedLayerDbnums：只算展开过的节点自己的库；根下列着别的库的 SITE 不算碰过那些库"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "B01",
+    "file": "src/components/model-tree/ModelGetWorkButton.vue",
+    "note": "运行中按钮上不显示进度",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5676,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "运行中：按钮上是这一轮正在做的事（没有进度文字时是「正在取最新…」），上一轮的结果先不画；再点会排下一轮"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "B02",
+    "file": "src/components/model-tree/ModelGetWorkButton.vue",
+    "note": "运行中还画着上一轮的结果",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5134,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "运行中：按钮上是这一轮正在做的事（没有进度文字时是「正在取最新…」），上一轮的结果先不画；再点会排下一轮"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "B03",
+    "file": "src/components/model-tree/ModelGetWorkButton.vue",
+    "note": "属性面板的缓存不失效",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5489,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "属性面板的缓存登记成「取最新之后重取」；卸载时撤掉登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "B04",
+    "file": "src/components/model-tree/ModelGetWorkButton.vue",
+    "note": "卸载不撤登记",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5453,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "1 failed | 392 passed (393)",
+    "failedCount": 1,
+    "failedTests": [
+      "属性面板的缓存登记成「取最新之后重取」；卸载时撤掉登记"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "B05",
+    "file": "src/components/model-tree/ModelGetWorkButton.vue",
+    "note": "点了不叫取最新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5074,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "点一下：叫一次取最新",
+      "运行中：按钮上是这一轮正在做的事（没有进度文字时是「正在取最新…」），上一轮的结果先不画；再点会排下一轮"
+    ],
+    "tail": ""
+  },
+  {
+    "id": "B06",
+    "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+    "note": "更新提示不引到取最新",
+    "outcome": "killed",
+    "killedBy": "assertion",
+    "status": 1,
+    "signal": null,
+    "spawnError": null,
+    "ms": 5553,
+    "filesLine": "1 failed | 8 passed (9)",
+    "testsLine": "2 failed | 391 passed (393)",
+    "failedCount": 2,
+    "failedTests": [
+      "悬停说明的最后一行：要把模型树和已装的模型一起同步，点右边的「取最新」",
+      "没有「重载」可点的提示：悬停说明的最后一行照样把人引到「取最新」，上一行是为什么没有「重载」"
+    ],
+    "tail": ""
+  }
+]

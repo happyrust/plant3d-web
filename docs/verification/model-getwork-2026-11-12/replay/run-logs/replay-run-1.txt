@@ -1,0 +1,78 @@
+[11:58:09] 沙箱后端：0.1.44+ge8636c4a636f.1794402358.dirty，监听 [8000,7998]，库 127.0.0.1:8199（rocksdb）
+[11:58:09] 基线：开页面
+  ✓ [基线] 树对上：页面取过的 15 层和后端逐层一样
+  ✓ [基线] 三维对上：三个根名下的构件和 25 个实例矩阵与后端的记录逐条一样
+  ✓ [基线] 三个根都在已加载节点表里，装时的水位是库此刻的水位 — 24384_47463@1652 24384_47500@1652 24382_1911@675
+  ✓ [基线] 页面的任务通道连的是沙箱后端 — ws://127.0.0.1:3103/?token=<已去掉> ws://127.0.0.1:9199/api/v1/ws
+  ✓ [基线] 后台没变时点取最新：说已是最新，一个模型都不重载 — 已是最新：模型树和已装的模型都没有变化（核对了 16 层树、3 个已装的节点）。
+[11:58:13] S1：改名（E3D 会话 1653–1654）：BRAN /AIOS-SUITE-T3-BRAN-R 改成 …-BRAN-ROLD，连同它的 9 个管件
+  ✓ [S1] 后端批次追上：库 8000 三枚水位都到 1654 — 看见文件 28 ms，数据 28484 ms，模型 29037 ms；{"file":1654,"applied":1654,"model":1654,"initialized":true,"excluded":false,"excludedReason":null,"verdict":"in_sync"}
+  ✓ [S1] 推送到达：页面的任务通道收到这个窗口的完成帧 — 文件写完后 28996 ms 收到；这一步共收 5 帧，属于这个窗口的 2 帧
+    后端的差：层 24384_47481 里 24384_47574 改名 /AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD；层 24384_47574 里 24384_47575 改名 /AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1；层 24384_47574 里 24384_47576 改名 /AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2；层 24384_47574 里 24384_47577 改名 /AIOS-SUITE-T3-BRAN-R-M3 → /AIOS-SUITE-T3-BRAN-ROLD-M3；层 24384_47574 里 24384_47578 改名 /AIOS-SUITE-T3-BRAN-R-M4 → /AIOS-SUITE-T3-BRAN-ROLD-M4；层 24384_47574 里 24384_47579 改名 /AIOS-SUITE-T3-BRAN-R-M5 → /AIOS-SUITE-T3-BRAN-ROLD-M5；层 24384_47574 里 24384_47580 改名 /AIOS-SUITE-T3-BRAN-R-M6 → /AIOS-SUITE-T3-BRAN-ROLD-M6；层 24384_47574 里 24384_47581 改名 /AIOS-SUITE-T3-BRAN-R-M7 → /AIOS-SUITE-T3-BRAN-ROLD-M7；层 24384_47574 里 24384_47582 改名 /AIOS-SUITE-T3-BRAN-R-M8 → /AIOS-SUITE-T3-BRAN-ROLD-M8；层 24384_47574 里 24384_47583 改名 /AIOS-SUITE-T3-BRAN-R-M9 → /AIOS-SUITE-T3-BRAN-ROLD-M9
+    取最新 66422 ms：已取最新：模型树改名 10。
+  ✓ [S1] 取最新做成（没有失败的节点） — 已取最新：模型树改名 10。 failed=[]
+  ✓ [S1] 树对上：页面取过的 15 层和后端逐层一样
+  ✓ [S1] 三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的
+  ✓ [S1] 状态栏那句交代和回执一致 — 已取最新：模型树改名 10。
+  ✓ [S1] 树的回执：改名里有这条 BRAN 和它的管件，没有新增、删除、挪位置 — 改名 10 个：24384_47574 /AIOS-SUITE-T3-BRAN-R → /AIOS-SUITE-T3-BRAN-ROLD；24384_47575 /AIOS-SUITE-T3-BRAN-R-M1 → /AIOS-SUITE-T3-BRAN-ROLD-M1；24384_47576 /AIOS-SUITE-T3-BRAN-R-M2 → /AIOS-SUITE-T3-BRAN-ROLD-M2
+  ✓ [S1] 页面树上这条 BRAN 现在叫 /AIOS-SUITE-T3-BRAN-ROLD — /AIOS-SUITE-T3-BRAN-ROLD
+[11:59:50] S2：新增（E3D 会话 1656–1657）：PIPE 下复制出一条新 BRAN /AIOS-SUITE-T3-BRAN-R（24384/47584）；文件一推就点，不等后端
+    后端的差：层 24384_47481 多了 BRAN /AIOS-SUITE-T3-BRAN-R（24384_47584）；根 24384_47463：记录 23 → 32，多 9（24384_47585,24384_47586,24384_47587,24384_47588,24384_47589,24384_47590,24384_47591,24384_47592,24384_47593）少 0（）位置变 0（）
+    取最新 144580 ms：已取最新：模型树新增 1；2 个节点的模型没有动。
+  ✓ [S2] 取最新做成（没有失败的节点） — 已取最新：模型树新增 1；2 个节点的模型没有动。 failed=[]
+  ✓ [S2] 树对上：页面取过的 15 层和后端逐层一样
+  ✗ [S2] 三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的 — 根 24384_47463 名下的构件对不上：缺 24384_47585,24384_47586,24384_47587,24384_47588,24384_47589,24384_47590,24384_47591,24384_47592,24384_47593，多 无；24384_47585：后端 1 个实例，场景里 0 个对象；24384_47586：后端 1 个实例，场景里 0 个对象；24384_47587：后端 1 个实例，场景里 0 个对象
+  ✓ [S2] 状态栏那句交代和回执一致 — 已取最新：模型树新增 1；2 个节点的模型没有动。
+  ✓ [S2] 文件一推就点：取最新自己等后台做完（回执里记了等的是 8000 库、没有等超时） — waited={"dbnums":[8000],"ms":24267,"timedOut":[]} 进度=核对后台状态… / 等后台把库 8000 更新完…（已等 0 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 3 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 6 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 9 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 12 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 15 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 18 秒，最多 45 秒） / 等后台把库 8000 更新完…（已等 21 秒，最多 45 秒） / 刷新模型树… / 核对 2 个已装的节点…
+  ✓ [S2] 树的回执：新增里有 24384_47584，挂在 PIPE 下 — 新增 [{"id":"24384_47584","name":"/AIOS-SUITE-T3-BRAN-R","type":"BRAN","dbnum":8000}]
+  ✗ [S2] 模型的回执：重载了 ZONE Z，装进了新构件 — []
+[12:02:16] S3：删除（E3D 会话 1659–1660）：删掉 BRAN /AIOS-SUITE-T3-BRAN-ROLD（24384/47574）；删之前在树上选中它
+  ✓ [S3] 后端批次追上：库 8000 三枚水位都到 1660 — 看见文件 26 ms，数据 24464 ms，模型 25290 ms；{"file":1660,"applied":1660,"model":1660,"initialized":true,"excluded":false,"excludedReason":null,"verdict":"in_sync"}
+  ✓ [S3] 推送到达：页面的任务通道收到这个窗口的完成帧 — 文件写完后 25264 ms 收到；这一步共收 5 帧，属于这个窗口的 2 帧
+    后端的差：层 24384_47481 少了 BRAN /AIOS-SUITE-T3-BRAN-ROLD（24384_47574）；层 24384_47574 整层没了（404）；根 24384_47463：记录 32 → 23，多 0（）少 9（24384_47575,24384_47576,24384_47577,24384_47578,24384_47579,24384_47580,24384_47581,24384_47582,24384_47583）位置变 0（）
+    取最新 70700 ms：已取最新：模型树删除 1；模型重载 1 个节点（新增 9 个构件、撤下 9 个构件）；选中的构件已被删除。
+  ✓ [S3] 取最新做成（没有失败的节点） — 已取最新：模型树删除 1；模型重载 1 个节点（新增 9 个构件、撤下 9 个构件）；选中的构件已被删除。 failed=[]
+  ✓ [S3] 树对上：页面取过的 14 层和后端逐层一样
+  ✓ [S3] 三维对上：各根名下的构件和 25 个实例矩阵与后端的记录逐条一样，场景里没有多余的
+  ✓ [S3] 状态栏那句交代和回执一致 — 已取最新：模型树删除 1；模型重载 1 个节点（新增 9 个构件、撤下 9 个构件）；选中的构件已被删除。
+  ✓ [S3] 删之前：选中的是这条 BRAN — 24384_47574
+  ✓ [S3] 树的回执：删除里有 24384_47574，判成已删除（带名字） — [{"id":"24384_47574","name":"/AIOS-SUITE-T3-BRAN-ROLD","type":"BRAN","dbnum":8000,"fate":"deleted"}]
+  ✓ [S3] 页面树上没有它了，它的 9 个管件也没了 — removedNodeCount=10
+  ✓ [S3] 选中的节点被删：登记成已删除并写进回执 — deleted=true selectionDeleted=24384_47574
+  ✓ [S3] 模型的回执：重载了 ZONE Z，撤下了被删的构件 — [{"refno":"24384_47463","added":9,"removed":9,"total":23}]
+[12:03:55] S4：删了重建（E3D 会话 1662–1663）：BRAN /AIOS-SUITE-T3-BRAN-R 删掉后重建，参考号从 24384/47584 换成 24384/47594
+  ✓ [S4] 后端批次追上：库 8000 三枚水位都到 1663 — 看见文件 28 ms，数据 16212 ms，模型 17307 ms；{"file":1663,"applied":1663,"model":1663,"initialized":true,"excluded":false,"excludedReason":null,"verdict":"in_sync"}
+  ✓ [S4] 推送到达：页面的任务通道收到这个窗口的完成帧 — 文件写完后 17234 ms 收到；这一步共收 7 帧，属于这个窗口的 2 帧
+[12:04:44] 出错：page.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('[data-testid="model-getwork-button"]')
+    - locator resolved to <button type="button" data-queued="false" data-running="false" data-testid="model-getwork-button" title="取最新：把模型树和已装的三维模型同步到后台现在的状态↵· 模型树：新增的出现、删掉的消失、改名和挪位置跟上；展开、勾选、选中留着↵· 模型：后台已有新模型的节点重载，库里已删的撤下；不会让后端开工（要后端更新用行上的「更新」）↵· 后台还没跟上库文件的库会点名说明" class="inline-flex h-5 max-w-[360px] shrink-0 items-center gap-1 rounded-sm border border-border px-1.5 text-[11px] text-foreground hover:bg-muted">…</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div role="status" aria-live="polite" class="v-snackbar__content">…</div> from <div class="v-overlay-container">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div role="status" aria-live="polite" class="v-snackbar__content">…</div> from <div class="v-overlay-container">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    57 × waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div role="status" aria-live="polite" class="v-snackbar__content">…</div> from <div class="v-overlay-container">…</div> subtree intercepts pointer events
+     - retrying click action
+       - waiting 500ms
+
+    at clickGetWork (D:\work\plant-code\old\plant3d-web\.scratch\incremental-sync\sandbox\replay-verify.mjs:400:14)
+    at async runStep (D:\work\plant-code\old\plant3d-web\.scratch\incremental-sync\sandbox\replay-verify.mjs:607:11)
+    at async file:///D:/work/plant-code/old/plant3d-web/.scratch/incremental-sync/sandbox/replay-verify.mjs:807:12
+  ✓ [护栏] 页面没有一个请求发往 8022 / 8009 — 发往沙箱后端 345 个请求
+  ✓ [护栏] 页面对沙箱后端只发了 GET 和三种只读 POST（没有生成、更新、初始化） — 放行的只读 POST：{"/api/v1/element/attributes":7,"/api/v1/model/records":4,"/api/v1/meshes/batch":3}
+[12:04:44] 共 35 项，过 33，没过 2

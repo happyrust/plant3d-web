@@ -5,6 +5,7 @@ import { authVerifyToken } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
+import ModelGetWorkButton from '@/components/model-tree/ModelGetWorkButton.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
 import ReleaseNotesDialog from '@/components/ReleaseNotesDialog.vue';
@@ -154,13 +155,17 @@ onMounted(() => {
         </v-app-bar>
 
         <v-main class="flex-1 min-h-0 d-flex flex-row" style="flex: 1 1 auto;">
-          <div class="flex-1 min-h-0 flex flex-col">
+          <!-- min-w-0：窗口变窄时这一列要能跟着变窄。没有它，这一列被停靠布局上一次排好的宽度撑着缩不动，
+               右边超出窗口的那一截（停靠布局的右侧，和状态栏最右端的「取最新」）被切掉、看不见也点不到 -->
+          <div class="flex-1 min-h-0 min-w-0 flex flex-col">
             <div class="min-h-0 flex-1">
               <DockLayout />
             </div>
             <div class="flex h-7 shrink-0 items-center border-t border-border bg-background px-2"
               data-testid="app-status-bar">
               <GenModelV1HealthBadge />
+              <!-- 钉在最右端：位置固定，不随左边的提示出没而挪动（原因见组件里的说明）。提示条不压状态栏见下面的全局样式 -->
+              <ModelGetWorkButton class="ml-auto pl-2" />
             </div>
           </div>
         </v-main>
@@ -177,5 +182,15 @@ onMounted(() => {
 .ribbon-app-bar.hierarchical-app-bar .v-toolbar__extension {
   height: 48px !important;
   min-height: 48px !important;
+}
+
+/*
+ * 全局提示条（菜单栏里的 v-snackbar）缺省贴着视口底边、画在正中，正好压在底部状态栏（上面模板里的 h-7 = 1.75rem）的中段上：
+ * 「数据已更新」提示上的「重载」「忽略」就在那一段，鼠标停在提示条上时它又不会自己消失——压住了就点不到
+ * （2026-11-12 实测：窗口宽 1600 时提示条占 464–1136，「重载」在 712–734）。
+ * 画在底部的提示条一律抬到状态栏上面：下边距 = 状态栏的高度 + Vuetify 原有的 8px。状态栏的高度改了，这里要跟着改。
+ */
+.v-snackbar:not(.v-snackbar--top):not(.v-snackbar--center) {
+  margin-bottom: calc(1.75rem + 8px);
 }
 </style>

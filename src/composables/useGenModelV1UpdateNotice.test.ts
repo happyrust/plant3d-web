@@ -423,22 +423,112 @@ describe('K10 文案', () => {
     expect(title).toContain('批次里删掉、场景里还在的：24384_24778（重载时撤下）');
     expect(title).toContain('生成失败、重载不换（场景里保留旧几何）：24381_109450');
     expect(title).toContain('点「重载」按最新记录替换场景里的 24384_24776, 24381_109449, 24384_24778');
+    // 「重载」只换点名的这几根：经上层节点装进来的单元认不出、不在名单里，这一点也说出来
+    expect(title.split('\n').at(-1)).toBe(
+      '点「重载」按最新记录替换场景里的 24384_24776, 24381_109449, 24384_24778；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）',
+    );
+  });
+
+  it('悬停说明的最后一行跟着重载名单走：有名单时点名并说明名单不全，没有名单时说为什么没有「重载」可点', () => {
+    const notice = mergeGenModelV1UpdateNotice(null, evaluateGenModelV1UpdateNotice(batchOf({ startSesno: 726, endSesno: 727 }), probe)!);
+    expect(notice.loadedRoots).toEqual(['24384_24776']);
+    expect(formatGenModelV1UpdateNoticeTitle(notice).split('\n').at(-1)).toBe(
+      '点「重载」按最新记录替换场景里的 24384_24776；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）',
+    );
+    expect(formatGenModelV1UpdateNoticeTitle({ ...notice, loadedRoots: [] }).split('\n').at(-1)).toBe(
+      '这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点',
+    );
   });
 });
 
 describe('K11 createGenModelV1LoadedProbe', () => {
-  it('库是否装入看当前激活的库；没有激活库就是空', () => {
+  it('只有激活的库、没有登记的节点时：就是那个激活的库；都没有就是空', () => {
     let active: number | null = 8000;
-    const probe = createGenModelV1LoadedProbe({ activeDbnum: () => active, isModelActuallyLoaded: () => false, resolveUnitObjectIds: () => [] });
+    const probe = createGenModelV1LoadedProbe({ activeDbnum: () => active, loadedDbnums: () => [], isModelActuallyLoaded: () => false, resolveUnitObjectIds: () => [] });
     expect([...probe.dbnums()]).toEqual([8000]);
     active = null;
     expect([...probe.dbnums()]).toEqual([]);
+  });
+
+  it('页面上装着节点的库都算，不只是最后装的那个（激活的）库；重复的只算一次；每次问都是此刻的名单', () => {
+    let loaded = [8000, 7998];
+    let active: number | null = 7998;
+    const probe = createGenModelV1LoadedProbe({ activeDbnum: () => active, loadedDbnums: () => loaded, isModelActuallyLoaded: () => false, resolveUnitObjectIds: () => [] });
+    expect([...probe.dbnums()].sort()).toEqual([7998, 8000]);
+    // 激活的库不在登记的名单里（空间查询这类不进登记表的装法）：照旧算
+    active = 7997;
+    expect([...probe.dbnums()].sort()).toEqual([7997, 7998, 8000]);
+    // 节点撤掉之后那个库就不算了
+    loaded = [8000];
+    active = null;
+    expect([...probe.dbnums()]).toEqual([8000]);
+  });
+
+  describe('2026-11-12 真实回放里漏报的三步：页面装着 8000 的两个 ZONE 和 7998 的一个 ZONE，最后装的是 7998', () => {
+    // 单元都是经上层的 ZONE 装进来的：按单元根问，加载器和 DTX 的属主链都认不出
+    const probe = createGenModelV1LoadedProbe({
+      activeDbnum: () => 7998,
+      loadedDbnums: () => [8000, 7998],
+      isModelActuallyLoaded: () => false,
+      resolveUnitObjectIds: () => [],
+    });
+
+    it('S1：8000 库只改了名（不是激活的库，批次里的根也认不出在场景里）——要提示', () => {
+      const impact = evaluateGenModelV1UpdateNotice(batchOf({ dbnum: 8000, startSesno: 1653, endSesno: 1654, changedElements: 10, roots: ['24384_47574'] }), probe);
+      expect(impact).not.toBeNull();
+      expect(impact!.loadedRoots).toEqual([]);
+      expect(formatGenModelV1UpdateNoticeText(mergeGenModelV1UpdateNotice(null, impact!))).toBe('库 8000 已更新到会话 1653→1654（改 10 项）');
+    });
+
+    it('S6：7998 库的设备挪了位置（设备是经 ZONE 装进来的，按单元根认不出）——要提示', () => {
+      const impact = evaluateGenModelV1UpdateNotice(batchOf({ dbnum: 7998, startSesno: 676, endSesno: 677, changedElements: 3, roots: ['24382_1912'] }), probe);
+      expect(impact).not.toBeNull();
+      expect(impact!.loadedRoots).toEqual([]);
+    });
+
+    it('J1：8000 库一口气 18 个会话，改的是库里别处（一个单元回执都没有落在场景里）——要提示', () => {
+      const impact = evaluateGenModelV1UpdateNotice(batchOf({ dbnum: 8000, startSesno: 1667, endSesno: 1684, changedElements: 37, roots: [] }), probe);
+      expect(impact).not.toBeNull();
+    });
+
+    it('没有变化的批次（只登录不改：没有改动、没有单元）落在装着节点的库上——不提示', () => {
+      expect(evaluateGenModelV1UpdateNotice(batchOf({ dbnum: 8000, startSesno: 1699, endSesno: 1699, changedElements: 0, roots: [] }), probe)).toBeNull();
+    });
+
+    it('别的库（页面上没有装它的节点、也不是激活的库）有变化——不提示', () => {
+      expect(evaluateGenModelV1UpdateNotice(batchOf({ dbnum: 7997, changedElements: 5, roots: ['24381_1'] }), probe)).toBeNull();
+    });
+
+    it('不是设计库（SYST / DICT）的批次——不提示', () => {
+      expect(evaluateGenModelV1UpdateNotice(batchOf({ dbnum: 8000, dbType: 'SYST', changedElements: 5 }), probe)).toBeNull();
+    });
+
+    it('经信封进来：三步各出一条、并进同一条提示；重载名单是空的（没有「重载」可点）', async () => {
+      setGenModelV1LoadedProbe(probe);
+      await handleGenModelV1TaskEnvelopeForNotice(finished(
+        { dbnum: 8000, start_sesno: 1653, end_sesno: 1654, changed_elements: 10 }, [{ root_refno: '24384/47574', kind: 'noop', status: 'generated' }], { taskId: 's1' },
+      ));
+      expect(useGenModelV1UpdateNotice().text.value).toBe('库 8000 已更新到会话 1653→1654（改 10 项）');
+      await handleGenModelV1TaskEnvelopeForNotice(finished(
+        { dbnum: 7998, start_sesno: 676, end_sesno: 677, changed_elements: 3 }, [{ root_refno: '24382/1912', kind: 'transform', status: 'generated' }], { taskId: 's6' },
+      ));
+      await handleGenModelV1TaskEnvelopeForNotice(finished({ dbnum: 8000, start_sesno: 1667, end_sesno: 1684, changed_elements: 37 }, [], { taskId: 'j1' }));
+      const notice = useGenModelV1UpdateNotice().notice.value!;
+      expect(notice.spans).toEqual([{ dbnum: 8000, startSesno: 1653, endSesno: 1684 }, { dbnum: 7998, startSesno: 676, endSesno: 677 }]);
+      expect(notice.loadedRoots).toEqual([]);
+      expect(useGenModelV1UpdateNotice().text.value).toBe('库 8000、7998 已更新（改 50 项）');
+      // 悬停说明不再说「受影响的构件都不在场景里」——那是认不出，不是不在
+      const title = useGenModelV1UpdateNotice().title.value;
+      expect(title).not.toContain('不在场景里');
+      expect(title.split('\n').at(-1)).toBe('这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点');
+    });
   });
 
   it('根在不在场景：加载器记账命中即是；否则沿属主链问 DTX（EQUI 自己没对象、show_refno 直装不记账）', () => {
     const resolveUnitObjectIds = vi.fn((_dbnum: number, refno: string) => (refno === '24384_24776' ? ['o:24384_24777:0'] : []));
     const probe = createGenModelV1LoadedProbe({
       activeDbnum: () => 8000,
+      loadedDbnums: () => [],
       isModelActuallyLoaded: (refno) => refno === '24381_145018',
       resolveUnitObjectIds,
     });

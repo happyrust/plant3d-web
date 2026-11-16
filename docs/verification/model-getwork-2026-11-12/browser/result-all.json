@@ -1,0 +1,2130 @@
+{
+ "startedAt": "2026-11-12T02:55:17.774Z",
+ "front": "http://127.0.0.1:3103",
+ "backend": "http://127.0.0.1:8022",
+ "real": {
+  "sesno": 1155,
+  "geoA": [
+   "24384_25590",
+   "24384_25592",
+   "24384_25594",
+   "24384_25602"
+  ],
+  "geoB": [
+   "24384_25614",
+   "24384_25616",
+   "24384_25618",
+   "24384_25626"
+  ],
+  "geoC": [
+   "24384_25644",
+   "24384_25646",
+   "24384_25648",
+   "24384_25650",
+   "24384_25658",
+   "24384_25659",
+   "24384_25667"
+  ]
+ },
+ "tree": {
+  "before": {
+   "tree": {
+    "present": true,
+    "nodes": {
+     "24384_24932": {
+      "name": "/1CSV-HVACHB",
+      "type": "SITE",
+      "parentId": "gm-root:AvevaMarineSample:ALL",
+      "childrenIds": [
+       "24384_26199",
+       "24384_24933",
+       "24384_24940",
+       "24384_24945",
+       "24384_25586"
+      ]
+     },
+     "24384_25586": {
+      "name": "/-SR-CSV-6-HVAC-SUPP",
+      "type": "ZONE",
+      "parentId": "24384_24932",
+      "childrenIds": [
+       "24384_25587",
+       "24384_25611"
+      ]
+     },
+     "24384_26199": {
+      "name": "ZONE",
+      "type": "ZONE",
+      "parentId": "24384_24932",
+      "childrenIds": [
+       "24384_26205",
+       "24384_26202",
+       "24384_26203"
+      ]
+     },
+     "24384_25587": {
+      "name": "/-SR-CSV-S6124",
+      "type": "STRU",
+      "parentId": "24384_25586",
+      "childrenIds": [
+       "24384_25588",
+       "24384_25593",
+       "24384_25601",
+       "24384_25609",
+       "24384_25610"
+      ]
+     },
+     "24384_25611": {
+      "name": "/-SR-CSV-S6125",
+      "type": "STRU",
+      "parentId": "24384_25586",
+      "childrenIds": [
+       "24384_25612",
+       "24384_25617",
+       "24384_25625",
+       "24384_25633",
+       "24384_25634"
+      ]
+     },
+     "24384_25635": null,
+     "24384_26202": {
+      "name": "STRU",
+      "type": "STRU",
+      "parentId": "24384_26199",
+      "childrenIds": []
+     },
+     "24384_24970": null,
+     "24384_26205": {
+      "name": "/Copy-of--SR-CSV-S5001",
+      "type": "STRU",
+      "parentId": "24384_26199",
+      "childrenIds": [
+       "24384_26206",
+       "24384_26211",
+       "24384_26219",
+       "24384_26227",
+       "24384_26228"
+      ]
+     },
+     "24384_25614": {
+      "name": "/-SR-CSV-S6125-V1/F1",
+      "type": "FITT",
+      "parentId": "24384_25613",
+      "childrenIds": []
+     }
+    },
+    "expanded": [
+     "24384_24932",
+     "24384_25586",
+     "24384_26199",
+     "24384_25587",
+     "24384_25611"
+    ],
+    "selected": [
+     "24384_25587"
+    ],
+    "checks": {
+     "24384_24932": "indeterminate",
+     "24384_25586": "indeterminate",
+     "24384_26199": "checked",
+     "24384_25587": "checked",
+     "24384_25611": "indeterminate",
+     "24384_25635": null,
+     "24384_26202": "checked",
+     "24384_24970": null,
+     "24384_26205": "checked",
+     "24384_25614": "unchecked"
+    },
+    "loadedLayers": 25,
+    "touchedDbnums": [
+     8000
+    ]
+   },
+   "scene": {
+    "24384_25590": true,
+    "24384_25592": true,
+    "24384_25594": true,
+    "24384_25602": true,
+    "24384_25614": true,
+    "24384_25616": true,
+    "24384_25618": true,
+    "24384_25626": true,
+    "24384_25644": false,
+    "24384_25646": false,
+    "24384_25648": false,
+    "24384_25650": false,
+    "24384_25658": false,
+    "24384_25659": false,
+    "24384_25667": false,
+    "24384_26208": true,
+    "24384_26210": true,
+    "24384_26212": true,
+    "24384_26220": true
+   },
+   "sceneObjects": 12,
+   "loadedTable": [
+    {
+     "refno": "24384_25587",
+     "loaded": true,
+     "modelSesno": 1155,
+     "fileLatestSesno": 1155,
+     "verdict": "latest"
+    },
+    {
+     "refno": "24384_25586",
+     "loaded": true,
+     "modelSesno": 1155,
+     "fileLatestSesno": 1155,
+     "verdict": "latest"
+    },
+    {
+     "refno": "24384_26205",
+     "loaded": true,
+     "modelSesno": 1155,
+     "fileLatestSesno": 1155,
+     "verdict": "latest"
+    }
+   ],
+   "registry": {
+    "roots": [],
+    "scopes": []
+   },
+   "selection": {
+    "refno": "24384_25587",
+    "deleted": false
+   },
+   "getWork": {
+    "running": false,
+    "progress": "",
+    "last": null
+   },
+   "dom": {
+    "button": "取最新",
+    "result": null,
+    "resultLevel": null,
+    "resultTitle": null,
+    "deletedNotice": null,
+    "treeRows": [
+     "24383_73927 SITE 1RCV-PIPEBJ",
+     "24383_80151 SITE 1AXIS",
+     "24383_80211 SITE 1RX-ELECBJ",
+     "24384_26547 SITE AIOS-INC-20261029-p79-rvm3-P79",
+     "24384_46 SITE 1RX03-PIPEBJ",
+     "24384_24932 SITE 1CSV-HVACHB",
+     "24384_26199 ZONE ZONE",
+     "24384_26205 STRU Copy-of--SR-CSV-S5001",
+     "24384_26202 STRU STRU",
+     "24384_26203 PIPE PIPE",
+     "24384_24933 ZONE -NX-CSV-S01",
+     "24384_24940 ZONE -NX-CSV-E01",
+     "24384_24945 ZONE -SR-CSV-5-HVAC-SUPP",
+     "24384_25586 ZONE -SR-CSV-6-HVAC-SUPP",
+     "24384_25587 STRU -SR-CSV-S6124",
+     "24384_25588 FRMW -SR-CSV-S6124/MAIN",
+     "24384_25593 SUBS -SR-CSV-S6124/SUBS1",
+     "24384_25601 SUBS -SR-CSV-S6124/SUBS2",
+     "24384_25609 TEXT -SR-CSV-S6124-V1/TEXT",
+     "24384_25610 TEXT -SR-CSV-S6124-V2/TEXT",
+     "24384_25611 STRU -SR-CSV-S6125",
+     "24384_25612 FRMW -SR-CSV-S6125/MAIN",
+     "24384_25613 SCTN -SR-CSV-S6125-V1",
+     "24384_25614 FITT -SR-CSV-S6125-V1/F1",
+     "24384_25615 SCTN -SR-CSV-S6125-V2",
+     "24384_25617 SUBS -SR-CSV-S6125/SUBS1",
+     "24384_25625 SUBS -SR-CSV-S6125/SUBS2",
+     "24384_25633 TEXT -SR-CSV-S6125-V1/TEXT",
+     "24384_25634 TEXT -SR-CSV-S6125-V2/TEXT",
+     "24384_22399 SITE 1RX03-EQUI",
+     "15201_535 SITE Steel_Template_Site",
+     "23716_1 SITE MDS/SPECIALS",
+     "23714_1 SITE MDS/SPECIALS",
+     "23715_1 SITE MDS/SPECIALS",
+     "23705_1 SITE MDS-Standards-Site",
+     "23705_289 SITE MDS-Standards-Supports",
+     "23713_2343 SITE MDS/TEMPLATES",
+     "23737_1 SITE MDS/TEMPLATES/ORI",
+     "15516_2 SITE MDS/TEMPLATES",
+     "23736_1 SITE MDS/TEMPLATES/ORI",
+     "23734_1 SITE MDS/TEMPLATES",
+     "23738_1 SITE MDS/TEMPLATES/ORI",
+     "23711_1 SITE MDS/HANGERS",
+     "23740_1 SITE MDS/TEMPLATES",
+     "23717_2 SITE MDS/HANGERS",
+     "23710_1 SITE MDS/HANGERS"
+    ]
+   },
+   "toasts": [
+    {
+     "at": 1794452126256,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    },
+    {
+     "at": 1794452126654,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    },
+    {
+     "at": 1794452127150,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    }
+   ]
+  },
+  "after": {
+   "tree": {
+    "present": true,
+    "nodes": {
+     "24384_24932": {
+      "name": "/1CSV-HVACHB",
+      "type": "SITE",
+      "parentId": "gm-root:AvevaMarineSample:ALL",
+      "childrenIds": [
+       "24384_26199",
+       "24384_24933",
+       "24384_24940",
+       "24384_24945",
+       "24384_25586"
+      ]
+     },
+     "24384_25586": {
+      "name": "/-SR-CSV-6-HVAC-SUPP",
+      "type": "ZONE",
+      "parentId": "24384_24932",
+      "childrenIds": [
+       "24384_25611",
+       "24384_25635",
+       "24384_26202"
+      ]
+     },
+     "24384_26199": {
+      "name": "ZONE",
+      "type": "ZONE",
+      "parentId": "24384_24932",
+      "childrenIds": [
+       "24384_26205",
+       "24384_26203",
+       "24384_24970"
+      ]
+     },
+     "24384_25587": null,
+     "24384_25611": {
+      "name": "/-SR-CSV-S6125-GETWORK-RENAMED",
+      "type": "STRU",
+      "parentId": "24384_25586",
+      "childrenIds": [
+       "24384_25612",
+       "24384_25617",
+       "24384_25625",
+       "24384_25633",
+       "24384_25634"
+      ]
+     },
+     "24384_25635": {
+      "name": "/-SR-CSV-S6137",
+      "type": "STRU",
+      "parentId": "24384_25586",
+      "childrenIds": []
+     },
+     "24384_26202": {
+      "name": "STRU",
+      "type": "STRU",
+      "parentId": "24384_25586",
+      "childrenIds": []
+     },
+     "24384_24970": {
+      "name": "/-SR-CSV-S5002",
+      "type": "STRU",
+      "parentId": "24384_26199",
+      "childrenIds": []
+     },
+     "24384_26205": {
+      "name": "/Copy-of--SR-CSV-S5001",
+      "type": "STRU",
+      "parentId": "24384_26199",
+      "childrenIds": [
+       "24384_26206",
+       "24384_26211",
+       "24384_26219",
+       "24384_26227",
+       "24384_26228"
+      ]
+     },
+     "24384_25614": {
+      "name": "/-SR-CSV-S6125-V1/F1",
+      "type": "FITT",
+      "parentId": "24384_25613",
+      "childrenIds": []
+     }
+    },
+    "expanded": [
+     "24384_24932",
+     "24384_25586",
+     "24384_26199",
+     "24384_25611"
+    ],
+    "selected": [],
+    "checks": {
+     "24384_24932": "indeterminate",
+     "24384_25586": "indeterminate",
+     "24384_26199": "checked",
+     "24384_25587": null,
+     "24384_25611": "indeterminate",
+     "24384_25635": "checked",
+     "24384_26202": "checked",
+     "24384_24970": "checked",
+     "24384_26205": "checked",
+     "24384_25614": "unchecked"
+    },
+    "loadedLayers": 15,
+    "touchedDbnums": [
+     8000
+    ]
+   },
+   "scene": {
+    "24384_25590": false,
+    "24384_25592": false,
+    "24384_25594": false,
+    "24384_25602": false,
+    "24384_25614": true,
+    "24384_25616": true,
+    "24384_25618": true,
+    "24384_25626": true,
+    "24384_25644": true,
+    "24384_25646": true,
+    "24384_25648": true,
+    "24384_25650": true,
+    "24384_25658": true,
+    "24384_25659": true,
+    "24384_25667": true,
+    "24384_26208": true,
+    "24384_26210": true,
+    "24384_26212": true,
+    "24384_26220": true
+   },
+   "sceneObjects": 15,
+   "loadedTable": [
+    {
+     "refno": "24384_25586",
+     "loaded": true,
+     "modelSesno": 1156,
+     "fileLatestSesno": 1156,
+     "verdict": "latest"
+    },
+    {
+     "refno": "24384_26205",
+     "loaded": true,
+     "modelSesno": 1155,
+     "fileLatestSesno": 1155,
+     "verdict": "latest"
+    }
+   ],
+   "registry": {
+    "roots": [],
+    "scopes": []
+   },
+   "selection": {
+    "refno": "24384_25587",
+    "deleted": true
+   },
+   "getWork": {
+    "running": false,
+    "progress": "",
+    "last": {
+     "startedAt": 1794452129864,
+     "finishedAt": 1794452130486,
+     "ok": true,
+     "error": null,
+     "backendRestarted": false,
+     "tree": {
+      "layersRequested": 25,
+      "layersRefreshed": 15,
+      "layersFailed": [],
+      "added": [
+       {
+        "id": "24384_24970",
+        "name": "/-SR-CSV-S5002",
+        "type": "STRU",
+        "dbnum": 8000
+       },
+       {
+        "id": "24384_25635",
+        "name": "/-SR-CSV-S6137",
+        "type": "STRU",
+        "dbnum": 8000
+       }
+      ],
+      "removed": [
+       {
+        "id": "24384_25587",
+        "name": "/-SR-CSV-S6124",
+        "type": "STRU",
+        "dbnum": 8000,
+        "fate": "deleted"
+       }
+      ],
+      "removedNodeCount": 24,
+      "removedUnder": {
+       "24384_25587": "24384_25587",
+       "24384_25588": "24384_25587",
+       "24384_25593": "24384_25587",
+       "24384_25601": "24384_25587",
+       "24384_25609": "24384_25587",
+       "24384_25610": "24384_25587",
+       "24384_25589": "24384_25587",
+       "24384_25591": "24384_25587",
+       "24384_25594": "24384_25587",
+       "24384_25602": "24384_25587",
+       "24384_25590": "24384_25587",
+       "24384_25592": "24384_25587",
+       "24384_25595": "24384_25587",
+       "24384_25603": "24384_25587",
+       "24384_25596": "24384_25587",
+       "24384_25597": "24384_25587",
+       "24384_25598": "24384_25587",
+       "24384_25599": "24384_25587",
+       "24384_25600": "24384_25587",
+       "24384_25604": "24384_25587",
+       "24384_25605": "24384_25587",
+       "24384_25606": "24384_25587",
+       "24384_25607": "24384_25587",
+       "24384_25608": "24384_25587"
+      },
+      "renamed": [
+       {
+        "id": "24384_25611",
+        "name": "/-SR-CSV-S6125-GETWORK-RENAMED",
+        "type": "STRU",
+        "dbnum": 8000,
+        "previousName": "/-SR-CSV-S6125",
+        "previousType": "STRU"
+       }
+      ],
+      "moved": [
+       {
+        "id": "24384_26202",
+        "name": "STRU",
+        "type": "STRU",
+        "dbnum": 8000,
+        "from": "24384_26199",
+        "to": "24384_25586"
+       }
+      ],
+      "droppedSelection": [
+       "24384_25587"
+      ],
+      "changed": true
+     },
+     "treeError": null,
+     "models": {
+      "rootsTotal": 3,
+      "checked": 3,
+      "reloaded": [
+       {
+        "refno": "24384_25586",
+        "added": 7,
+        "removed": 4,
+        "total": 11
+       }
+      ],
+      "loadedNew": [],
+      "withdrawn": [
+       {
+        "refno": "24384_25587",
+        "refnos": 4,
+        "why": "deleted"
+       }
+      ],
+      "kept": [],
+      "failed": [],
+      "componentsAdded": 7,
+      "componentsRemoved": 4
+     },
+     "libraries": [],
+     "waited": null,
+     "selectionDeleted": "24384_25587",
+     "derived": [
+      {
+       "name": "房间树",
+       "ok": true
+      },
+      {
+       "name": "属性面板",
+       "ok": true
+      },
+      {
+       "name": "MBD 标注",
+       "ok": true
+      }
+     ],
+     "level": "success",
+     "summary": "已取最新：模型树新增 2、删除 1、改名 1、挪位置 1；模型重载 1 个节点、撤下 1 个已不存在的节点（新增 7 个构件、撤下 4 个构件）；选中的构件已被删除。",
+     "detail": [
+      "树上新增：/-SR-CSV-S5002、/-SR-CSV-S6137",
+      "树上删除：/-SR-CSV-S6124",
+      "树上改名：/-SR-CSV-S6125 → /-SR-CSV-S6125-GETWORK-RENAMED",
+      "树上挪位置：STRU",
+      "重载 /-SR-CSV-6-HVAC-SUPP（24384_25586）：现有 11 个构件，新增 7，撤下 4",
+      "撤下 /-SR-CSV-S6124（24384_25587）（库里已经没有它）：4 个构件",
+      "选中的 /-SR-CSV-S6124（24384_25587） 在库里已经没有了"
+     ]
+    }
+   },
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型树新增 2、删除 1、改名 1、挪位置 1；模型重载 1 个节点、撤下 1 个已不存在的节点（新增 7 个构件、撤下 4 个构件）；选中的构件已被删除。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型树新增 2、删除 1、改名 1、挪位置 1；模型重载 1 个节点、撤下 1 个已不存在的节点（新增 7 个构件、撤下 4 个构件）；选中的构件已被删除。\n· 树上新增：/-SR-CSV-S5002、/-SR-CSV-S6137\n· 树上删除：/-SR-CSV-S6124\n· 树上改名：/-SR-CSV-S6125 → /-SR-CSV-S6125-GETWORK-RENAMED\n· 树上挪位置：STRU\n· 重载 /-SR-CSV-6-HVAC-SUPP（24384_25586）：现有 11 个构件，新增 7，撤下 4\n· 撤下 /-SR-CSV-S6124（24384_25587）（库里已经没有它）：4 个构件\n· 选中的 /-SR-CSV-S6124（24384_25587） 在库里已经没有了\n（10:55:30）",
+    "deletedNotice": "该构件已删除，属性见底部属性历史对比",
+    "treeRows": [
+     "24383_73927 SITE 1RCV-PIPEBJ",
+     "24383_80151 SITE 1AXIS",
+     "24383_80211 SITE 1RX-ELECBJ",
+     "24384_26547 SITE AIOS-INC-20261029-p79-rvm3-P79",
+     "24384_46 SITE 1RX03-PIPEBJ",
+     "24384_24932 SITE 1CSV-HVACHB",
+     "24384_26199 ZONE ZONE",
+     "24384_26205 STRU Copy-of--SR-CSV-S5001",
+     "24384_26203 PIPE PIPE",
+     "24384_24970 STRU -SR-CSV-S5002",
+     "24384_24933 ZONE -NX-CSV-S01",
+     "24384_24940 ZONE -NX-CSV-E01",
+     "24384_24945 ZONE -SR-CSV-5-HVAC-SUPP",
+     "24384_25586 ZONE -SR-CSV-6-HVAC-SUPP",
+     "24384_25611 STRU -SR-CSV-S6125-GETWORK-RENAMED",
+     "24384_25612 FRMW -SR-CSV-S6125/MAIN",
+     "24384_25613 SCTN -SR-CSV-S6125-V1",
+     "24384_25614 FITT -SR-CSV-S6125-V1/F1",
+     "24384_25615 SCTN -SR-CSV-S6125-V2",
+     "24384_25617 SUBS -SR-CSV-S6125/SUBS1",
+     "24384_25625 SUBS -SR-CSV-S6125/SUBS2",
+     "24384_25633 TEXT -SR-CSV-S6125-V1/TEXT",
+     "24384_25634 TEXT -SR-CSV-S6125-V2/TEXT",
+     "24384_25635 STRU -SR-CSV-S6137",
+     "24384_26202 STRU STRU",
+     "24384_22399 SITE 1RX03-EQUI",
+     "15201_535 SITE Steel_Template_Site",
+     "23716_1 SITE MDS/SPECIALS",
+     "23714_1 SITE MDS/SPECIALS",
+     "23715_1 SITE MDS/SPECIALS",
+     "23705_1 SITE MDS-Standards-Site",
+     "23705_289 SITE MDS-Standards-Supports",
+     "23713_2343 SITE MDS/TEMPLATES",
+     "23737_1 SITE MDS/TEMPLATES/ORI",
+     "15516_2 SITE MDS/TEMPLATES",
+     "23736_1 SITE MDS/TEMPLATES/ORI",
+     "23734_1 SITE MDS/TEMPLATES",
+     "23738_1 SITE MDS/TEMPLATES/ORI",
+     "23711_1 SITE MDS/HANGERS",
+     "23740_1 SITE MDS/TEMPLATES",
+     "23717_2 SITE MDS/HANGERS",
+     "23710_1 SITE MDS/HANGERS"
+    ]
+   },
+   "toasts": [
+    {
+     "at": 1794452126256,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    },
+    {
+     "at": 1794452126654,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    },
+    {
+     "at": 1794452127150,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    },
+    {
+     "at": 1794452130472,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 11 个几何实例"
+    },
+    {
+     "at": 1794452130488,
+     "level": "success",
+     "message": "已取最新：模型树新增 2、删除 1、改名 1、挪位置 1；模型重载 1 个节点、撤下 1 个已不存在的节点（新增 7 个构件、撤下 4 个构件）；选中的构件已被删除。"
+    }
+   ]
+  },
+  "run1": {
+   "ms": 728,
+   "progress": [
+    "核对后台状态…",
+    "刷新模型树…",
+    "核对 3 个已装的节点…",
+    "重载模型 2/2…"
+   ]
+  },
+  "world": "B",
+  "requests1": {
+   "children": 26,
+   "roots": 1,
+   "status": 7,
+   "versions": 4,
+   "records": 1,
+   "dbnums": 2,
+   "health": 1
+  },
+  "second": {
+   "run2": {
+    "ms": 2022,
+    "progress": [
+     "核对后台状态…"
+    ]
+   },
+   "report": {
+    "startedAt": 1794452132855,
+    "finishedAt": 1794452134782,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 15,
+     "layersRefreshed": 15,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": false
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 2,
+     "checked": 0,
+     "reloaded": [],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "info",
+    "summary": "已是最新：模型树和已装的模型都没有变化（核对了 15 层树、2 个已装的节点）。",
+    "detail": []
+   },
+   "requests": {
+    "status": 0,
+    "records": 0,
+    "children": 14
+   }
+  },
+  "double": {
+   "queuedSeen": {
+    "queuedRightAway": true,
+    "changed": true,
+    "running": false
+   },
+   "summariesBefore": 2,
+   "summariesAfter": 2
+  },
+  "restart": {
+   "run3": {
+    "ms": 713,
+    "progress": [
+     "核对后台状态…",
+     "核对 2 个已装的节点…",
+     "重载模型 1/1…"
+    ]
+   },
+   "report": {
+    "startedAt": 1794452136271,
+    "finishedAt": 1794452136855,
+    "ok": true,
+    "error": null,
+    "backendRestarted": true,
+    "tree": {
+     "layersRequested": 15,
+     "layersRefreshed": 15,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": false
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 2,
+     "checked": 2,
+     "reloaded": [],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [
+      {
+       "refno": "24384_25586",
+       "reason": "后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成"
+      }
+     ],
+     "failed": [
+      {
+       "refno": "24384_26205",
+       "reason": "重载没有完成，场景保持原样（记录没查通，或后端现在没有它的模型）"
+      }
+     ],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "warning",
+    "summary": "已取最新：1 个节点的模型没有动；1 个节点重载没成。",
+    "detail": [
+     "/-SR-CSV-6-HVAC-SUPP（24384_25586）：后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成",
+     "/Copy-of--SR-CSV-S5001（24384_26205）：重载没有完成，场景保持原样（记录没查通，或后端现在没有它的模型）",
+     "上一次取最新以来后端重启过"
+    ]
+   },
+   "scene": {
+    "24384_25590": false,
+    "24384_25592": false,
+    "24384_25594": false,
+    "24384_25602": false,
+    "24384_25614": true,
+    "24384_25616": true,
+    "24384_25618": true,
+    "24384_25626": true,
+    "24384_25644": true,
+    "24384_25646": true,
+    "24384_25648": true,
+    "24384_25650": true,
+    "24384_25658": true,
+    "24384_25659": true,
+    "24384_25667": true,
+    "24384_26208": true,
+    "24384_26210": true,
+    "24384_26212": true,
+    "24384_26220": true
+   },
+   "statusCalls": {
+    "24384_25586": 3,
+    "24384_26205": 4
+   }
+  }
+ },
+ "treeLog": {
+  "blocked": [],
+  "allowedPost": {
+   "/api/v1/element/attributes": 4,
+   "/api/v1/model/records": 6,
+   "/api/v1/meshes/batch": 5
+  },
+  "overlaid": {
+   "tree-children": 13,
+   "records": 3,
+   "dbnums": 10,
+   "tree-gone": 10,
+   "status-gone": 2,
+   "status": 12,
+   "versions": 7,
+   "health": 1
+  },
+  "httpFailures": [
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/reviewers",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/me",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/review/tasks",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25587",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25588",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25593",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25601",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25589",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25591",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25594",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25602",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/node/model-status",
+    "refno": "24384_25587",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25595",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/tree/children",
+    "refno": "24384_25603",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/node/model-status",
+    "refno": "24384_25587",
+    "phase": "B"
+   }
+  ],
+  "wsFramesSent": [
+   {
+    "url": "ws://127.0.0.1:8022/api/v1/ws",
+    "payload": "{\"type\":\"subscribe\",\"topics\":[\"tasks\"]}"
+   }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ },
+ "showRefno": {
+  "before": {
+   "tree": {
+    "present": true,
+    "nodes": {
+     "24384_25611": null,
+     "24384_25635": null
+    },
+    "expanded": [],
+    "selected": [],
+    "checks": {
+     "24384_25611": null,
+     "24384_25635": null
+    },
+    "loadedLayers": 1,
+    "touchedDbnums": []
+   },
+   "scene": {
+    "24384_25614": true,
+    "24384_25616": true,
+    "24384_25618": false,
+    "24384_25626": false,
+    "24384_25644": true,
+    "24384_25646": true,
+    "24384_25648": true,
+    "24384_25650": true,
+    "24384_25658": true,
+    "24384_25659": true,
+    "24384_25667": true
+   },
+   "sceneObjects": 9,
+   "loadedTable": [],
+   "registry": {
+    "roots": [
+     {
+      "refno": "24384_25611",
+      "dbnum": 8000,
+      "loadedModelSesno": 1155,
+      "loadedFileLatestSesno": 1155,
+      "origin": "show_refno"
+     },
+     {
+      "refno": "24384_25635",
+      "dbnum": 8000,
+      "loadedModelSesno": 1155,
+      "loadedFileLatestSesno": 1155,
+      "origin": "show_refno"
+     }
+    ],
+    "scopes": []
+   },
+   "selection": {
+    "refno": null,
+    "deleted": false
+   },
+   "getWork": {
+    "running": false,
+    "progress": "",
+    "last": null
+   },
+   "dom": {
+    "button": "取最新",
+    "result": null,
+    "resultLevel": null,
+    "resultTitle": null,
+    "deletedNotice": null,
+    "treeRows": [
+     "gm-root:AvevaMarineSample:ALL AvevaMarineSample / ALL",
+     "9304_2 SITE 1RS-CIVI",
+     "14195_2 SITE SITE",
+     "24381_42520 SITE 1RB-CIVI",
+     "24381_44873 SITE 1RC-CIVI",
+     "24381_535 SITE 仪控ISO测试",
+     "24381_776 SITE SSC测试",
+     "24381_34109 SITE 1RX-ARCHHB",
+     "24381_46775 SITE 1CAM-HVACHB",
+     "24381_48631 SITE 1CAV-HVACHB",
+     "24381_57476 SITE 1CCV-HVACHB",
+     "24381_76564 SITE 1CPV-HVACHB",
+     "24381_79977 SITE SITE",
+     "24381_100675 SITE 1CUP-HVACHB",
+     "24381_101405 SITE 1PTU-INST23",
+     "24381_177373 SITE 1TTU-INST23",
+     "24383_66456 SITE 1WCC-PIPEBJ",
+     "24383_73927 SITE 1RCV-PIPEBJ",
+     "24383_80151 SITE 1AXIS",
+     "24383_80211 SITE 1RX-ELECBJ",
+     "24384_26547 SITE AIOS-INC-20261029-p79-rvm3-P79",
+     "24384_46 SITE 1RX03-PIPEBJ",
+     "24384_24932 SITE 1CSV-HVACHB",
+     "24384_22399 SITE 1RX03-EQUI",
+     "15201_535 SITE Steel_Template_Site",
+     "23716_1 SITE MDS/SPECIALS",
+     "23714_1 SITE MDS/SPECIALS",
+     "23715_1 SITE MDS/SPECIALS",
+     "23705_1 SITE MDS-Standards-Site",
+     "23705_289 SITE MDS-Standards-Supports",
+     "23713_2343 SITE MDS/TEMPLATES",
+     "23737_1 SITE MDS/TEMPLATES/ORI",
+     "15516_2 SITE MDS/TEMPLATES",
+     "23736_1 SITE MDS/TEMPLATES/ORI",
+     "23734_1 SITE MDS/TEMPLATES",
+     "23738_1 SITE MDS/TEMPLATES/ORI"
+    ]
+   },
+   "toasts": [
+    {
+     "at": 1794452140494,
+     "level": "info",
+     "message": "[信息] 正在加载 2 个 BRAN（24384_25611、24384_25635）…"
+    },
+    {
+     "at": 1794452141005,
+     "level": "success",
+     "message": "[成功] 对象 9（已加载 11，跳过 0，mesh 缺失 0，无几何 2），缺失 refno：24384_25611、24384_25635"
+    }
+   ]
+  },
+  "after": {
+   "tree": {
+    "present": true,
+    "nodes": {
+     "24384_25611": null,
+     "24384_25635": null
+    },
+    "expanded": [],
+    "selected": [],
+    "checks": {
+     "24384_25611": null,
+     "24384_25635": null
+    },
+    "loadedLayers": 1,
+    "touchedDbnums": []
+   },
+   "scene": {
+    "24384_25614": true,
+    "24384_25616": true,
+    "24384_25618": true,
+    "24384_25626": true,
+    "24384_25644": false,
+    "24384_25646": false,
+    "24384_25648": false,
+    "24384_25650": false,
+    "24384_25658": false,
+    "24384_25659": false,
+    "24384_25667": false
+   },
+   "sceneObjects": 4,
+   "loadedTable": [
+    {
+     "refno": "24384_25611",
+     "loaded": true,
+     "modelSesno": 1156,
+     "fileLatestSesno": 1156,
+     "verdict": "latest"
+    }
+   ],
+   "registry": {
+    "roots": [],
+    "scopes": []
+   },
+   "selection": {
+    "refno": null,
+    "deleted": false
+   },
+   "getWork": {
+    "running": false,
+    "progress": "",
+    "last": {
+     "startedAt": 1794452142948,
+     "finishedAt": 1794452144271,
+     "ok": true,
+     "error": null,
+     "backendRestarted": false,
+     "tree": {
+      "layersRequested": 1,
+      "layersRefreshed": 1,
+      "layersFailed": [],
+      "added": [],
+      "removed": [],
+      "removedNodeCount": 0,
+      "removedUnder": {},
+      "renamed": [],
+      "moved": [],
+      "droppedSelection": [],
+      "changed": false
+     },
+     "treeError": null,
+     "models": {
+      "rootsTotal": 2,
+      "checked": 2,
+      "reloaded": [
+       {
+        "refno": "24384_25611",
+        "added": 2,
+        "removed": 0,
+        "total": 4
+       }
+      ],
+      "loadedNew": [],
+      "withdrawn": [
+       {
+        "refno": "24384_25635",
+        "refnos": 7,
+        "why": "deleted"
+       }
+      ],
+      "kept": [],
+      "failed": [],
+      "componentsAdded": 2,
+      "componentsRemoved": 7
+     },
+     "libraries": [],
+     "waited": null,
+     "selectionDeleted": null,
+     "derived": [
+      {
+       "name": "房间树",
+       "ok": true
+      },
+      {
+       "name": "属性面板",
+       "ok": true
+      },
+      {
+       "name": "MBD 标注",
+       "ok": true
+      }
+     ],
+     "level": "success",
+     "summary": "已取最新：模型重载 1 个节点、撤下 1 个已不存在的节点（新增 2 个构件、撤下 7 个构件）。",
+     "detail": [
+      "重载 24384_25611：现有 4 个构件，新增 2",
+      "撤下 24384_25635（库里已经没有它）：7 个构件"
+     ]
+    }
+   },
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型重载 1 个节点、撤下 1 个已不存在的节点（新增 2 个构件、撤下 7 个构件）。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型重载 1 个节点、撤下 1 个已不存在的节点（新增 2 个构件、撤下 7 个构件）。\n· 重载 24384_25611：现有 4 个构件，新增 2\n· 撤下 24384_25635（库里已经没有它）：7 个构件\n（10:55:44）",
+    "deletedNotice": null,
+    "treeRows": [
+     "gm-root:AvevaMarineSample:ALL AvevaMarineSample / ALL",
+     "9304_2 SITE 1RS-CIVI",
+     "14195_2 SITE SITE",
+     "24381_42520 SITE 1RB-CIVI",
+     "24381_44873 SITE 1RC-CIVI",
+     "24381_535 SITE 仪控ISO测试",
+     "24381_776 SITE SSC测试",
+     "24381_34109 SITE 1RX-ARCHHB",
+     "24381_46775 SITE 1CAM-HVACHB",
+     "24381_48631 SITE 1CAV-HVACHB",
+     "24381_57476 SITE 1CCV-HVACHB",
+     "24381_76564 SITE 1CPV-HVACHB",
+     "24381_79977 SITE SITE",
+     "24381_100675 SITE 1CUP-HVACHB",
+     "24381_101405 SITE 1PTU-INST23",
+     "24381_177373 SITE 1TTU-INST23",
+     "24383_66456 SITE 1WCC-PIPEBJ",
+     "24383_73927 SITE 1RCV-PIPEBJ",
+     "24383_80151 SITE 1AXIS",
+     "24383_80211 SITE 1RX-ELECBJ",
+     "24384_26547 SITE AIOS-INC-20261029-p79-rvm3-P79",
+     "24384_46 SITE 1RX03-PIPEBJ",
+     "24384_24932 SITE 1CSV-HVACHB",
+     "24384_22399 SITE 1RX03-EQUI",
+     "15201_535 SITE Steel_Template_Site",
+     "23716_1 SITE MDS/SPECIALS",
+     "23714_1 SITE MDS/SPECIALS",
+     "23715_1 SITE MDS/SPECIALS",
+     "23705_1 SITE MDS-Standards-Site",
+     "23705_289 SITE MDS-Standards-Supports",
+     "23713_2343 SITE MDS/TEMPLATES",
+     "23737_1 SITE MDS/TEMPLATES/ORI",
+     "15516_2 SITE MDS/TEMPLATES",
+     "23736_1 SITE MDS/TEMPLATES/ORI",
+     "23734_1 SITE MDS/TEMPLATES",
+     "23738_1 SITE MDS/TEMPLATES/ORI"
+    ]
+   },
+   "toasts": [
+    {
+     "at": 1794452140494,
+     "level": "info",
+     "message": "[信息] 正在加载 2 个 BRAN（24384_25611、24384_25635）…"
+    },
+    {
+     "at": 1794452141005,
+     "level": "success",
+     "message": "[成功] 对象 9（已加载 11，跳过 0，mesh 缺失 0，无几何 2），缺失 refno：24384_25611、24384_25635"
+    },
+    {
+     "at": 1794452144253,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 4 个几何实例"
+    },
+    {
+     "at": 1794452144272,
+     "level": "success",
+     "message": "已取最新：模型重载 1 个节点、撤下 1 个已不存在的节点（新增 2 个构件、撤下 7 个构件）。"
+    }
+   ]
+  },
+  "run": {
+   "ms": 1397,
+   "progress": [
+    "核对后台状态…",
+    "核对 2 个已装的节点…",
+    "重载模型 1/2…"
+   ]
+  },
+  "busy": {
+   "run": {
+    "ms": 3560,
+    "progress": [
+     "等正在进行的装载结束…",
+     "核对后台状态…"
+    ]
+   },
+   "report": {
+    "startedAt": 1794452145130,
+    "finishedAt": 1794452148585,
+    "ok": true,
+    "error": null,
+    "backendRestarted": false,
+    "tree": {
+     "layersRequested": 1,
+     "layersRefreshed": 1,
+     "layersFailed": [],
+     "added": [],
+     "removed": [],
+     "removedNodeCount": 0,
+     "removedUnder": {},
+     "renamed": [],
+     "moved": [],
+     "droppedSelection": [],
+     "changed": false
+    },
+    "treeError": null,
+    "models": {
+     "rootsTotal": 2,
+     "checked": 0,
+     "reloaded": [],
+     "loadedNew": [],
+     "withdrawn": [],
+     "kept": [],
+     "failed": [],
+     "componentsAdded": 0,
+     "componentsRemoved": 0
+    },
+    "libraries": [],
+    "waited": null,
+    "selectionDeleted": null,
+    "derived": [
+     {
+      "name": "房间树",
+      "ok": true
+     },
+     {
+      "name": "属性面板",
+      "ok": true
+     },
+     {
+      "name": "MBD 标注",
+      "ok": true
+     }
+    ],
+    "level": "info",
+    "summary": "已是最新：模型树和已装的模型都没有变化（核对了 1 层树、2 个已装的节点）。",
+    "detail": []
+   },
+   "loadedTable": [
+    {
+     "refno": "24384_25611",
+     "loaded": true,
+     "modelSesno": 1156,
+     "fileLatestSesno": 1156,
+     "verdict": "latest"
+    },
+    {
+     "refno": "24384_46",
+     "loaded": true,
+     "modelSesno": 1156,
+     "fileLatestSesno": 1156,
+     "verdict": "latest"
+    }
+   ]
+  }
+ },
+ "showRefnoLog": {
+  "blocked": [],
+  "allowedPost": {
+   "/api/v1/model/records": 5,
+   "/api/v1/meshes/batch": 4
+  },
+  "overlaid": {
+   "records": 1,
+   "dbnums": 4,
+   "status-gone": 1,
+   "status": 3,
+   "versions": 1
+  },
+  "httpFailures": [
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/reviewers",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/me",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/review/tasks",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/node/model-status",
+    "refno": "24384_25635",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_3b57ab40b1a8e31d35b6bb2fe69957b574b985dfdb6564a1d90e8f2b561895cd.mesh",
+    "refno": "",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_732939115b73e0ba7fe1a3b7cab1eb0abfac0d25b416beaf94030eb20a251a93.mesh",
+    "refno": "",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_086f9e64d574d46e8eecb43262ea11946732c6d08aae10a22549c6f4876cccf8.mesh",
+    "refno": "",
+    "phase": "B"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_98bc8b1a475e75a3f7117c1f9c2006ab20ceb973a45a3ba076edd8a6f4fe4415.mesh",
+    "refno": "",
+    "phase": "B"
+   }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ },
+ "showDbnum": {
+  "loadResult": {
+   "dbno": 8000,
+   "updatedAt": "2026-11-12T02:55:55.723Z",
+   "status": "loaded",
+   "source": "gen-model-v1",
+   "refnoCount": 2607,
+   "loadedRefnos": 2607,
+   "loadedObjects": 2676,
+   "budgetLimited": false
+  },
+  "loadMs": 12620,
+  "before": {
+   "registry": {
+    "roots": [
+     {
+      "refno": "24384_46",
+      "dbnum": 8000,
+      "loadedModelSesno": 1155,
+      "loadedFileLatestSesno": 1155,
+      "origin": "show_dbnum"
+     },
+     {
+      "refno": "24384_24932",
+      "dbnum": 8000,
+      "loadedModelSesno": 1155,
+      "loadedFileLatestSesno": 1155,
+      "origin": "show_dbnum"
+     },
+     {
+      "refno": "24384_22399",
+      "dbnum": 8000,
+      "loadedModelSesno": 1155,
+      "loadedFileLatestSesno": 1155,
+      "origin": "show_dbnum"
+     }
+    ],
+    "scopes": [
+     {
+      "dbnum": 8000,
+      "knownSites": [
+       "24384_46",
+       "24384_24932",
+       "24384_22399"
+      ],
+      "discover": true,
+      "checkedFileLatestSesno": 1155
+     }
+    ]
+   },
+   "sceneObjects": 2676
+  },
+  "after": {
+   "tree": {
+    "present": true,
+    "nodes": {
+     "24384_24932": {
+      "name": "/1CSV-HVACHB",
+      "type": "SITE",
+      "parentId": "gm-root:AvevaMarineSample:ALL",
+      "childrenIds": []
+     },
+     "24384_26547": {
+      "name": "/AIOS-INC-20261029-p79-rvm3-P79",
+      "type": "SITE",
+      "parentId": "gm-root:AvevaMarineSample:ALL",
+      "childrenIds": []
+     }
+    },
+    "expanded": [],
+    "selected": [],
+    "checks": {
+     "24384_24932": "checked",
+     "24384_26547": "checked"
+    },
+    "loadedLayers": 1,
+    "touchedDbnums": []
+   },
+   "scene": {
+    "24384_25590": false,
+    "24384_25592": false,
+    "24384_25594": false,
+    "24384_25602": false,
+    "24384_25614": true,
+    "24384_25616": true,
+    "24384_25618": true,
+    "24384_25626": true,
+    "24384_25644": true,
+    "24384_25646": true,
+    "24384_25648": true,
+    "24384_25650": true,
+    "24384_25658": true,
+    "24384_25659": true,
+    "24384_25667": true,
+    "24384_26550": true
+   },
+   "sceneObjects": 2680,
+   "loadedTable": [
+    {
+     "refno": "24384_24932",
+     "loaded": true,
+     "modelSesno": 1156,
+     "fileLatestSesno": 1156,
+     "verdict": "latest"
+    },
+    {
+     "refno": "24384_26547",
+     "loaded": true,
+     "modelSesno": 1156,
+     "fileLatestSesno": 1156,
+     "verdict": "latest"
+    }
+   ],
+   "registry": {
+    "roots": [
+     {
+      "refno": "24384_46",
+      "dbnum": 8000,
+      "loadedModelSesno": 1156,
+      "loadedFileLatestSesno": 1156,
+      "origin": "show_dbnum"
+     },
+     {
+      "refno": "24384_22399",
+      "dbnum": 8000,
+      "loadedModelSesno": 1156,
+      "loadedFileLatestSesno": 1156,
+      "origin": "show_dbnum"
+     }
+    ],
+    "scopes": [
+     {
+      "dbnum": 8000,
+      "knownSites": [
+       "24384_46",
+       "24384_24932",
+       "24384_22399",
+       "24384_26547"
+      ],
+      "discover": true,
+      "checkedFileLatestSesno": 1156
+     }
+    ]
+   },
+   "selection": {
+    "refno": null,
+    "deleted": false
+   },
+   "getWork": {
+    "running": false,
+    "progress": "",
+    "last": {
+     "startedAt": 1794452157391,
+     "finishedAt": 1794452160982,
+     "ok": true,
+     "error": null,
+     "backendRestarted": false,
+     "tree": {
+      "layersRequested": 1,
+      "layersRefreshed": 1,
+      "layersFailed": [],
+      "added": [],
+      "removed": [],
+      "removedNodeCount": 0,
+      "removedUnder": {},
+      "renamed": [],
+      "moved": [],
+      "droppedSelection": [],
+      "changed": false
+     },
+     "treeError": null,
+     "models": {
+      "rootsTotal": 3,
+      "checked": 3,
+      "reloaded": [
+       {
+        "refno": "24384_24932",
+        "added": 7,
+        "removed": 4,
+        "total": 143
+       }
+      ],
+      "loadedNew": [
+       {
+        "refno": "24384_26547",
+        "name": "/AIOS-INC-20261029-p79-rvm3-P79",
+        "total": 1
+       }
+      ],
+      "withdrawn": [],
+      "kept": [],
+      "failed": [],
+      "componentsAdded": 8,
+      "componentsRemoved": 4
+     },
+     "libraries": [],
+     "waited": null,
+     "selectionDeleted": null,
+     "derived": [
+      {
+       "name": "房间树",
+       "ok": true
+      },
+      {
+       "name": "属性面板",
+       "ok": true
+      },
+      {
+       "name": "MBD 标注",
+       "ok": true
+      }
+     ],
+     "level": "success",
+     "summary": "已取最新：模型重载 1 个节点、新装入 1 个 SITE（新增 8 个构件、撤下 4 个构件）。",
+     "detail": [
+      "重载 /1CSV-HVACHB（24384_24932）：现有 143 个构件，新增 7，撤下 4",
+      "新装入 /AIOS-INC-20261029-p79-rvm3-P79：1 个构件"
+     ]
+    }
+   },
+   "dom": {
+    "button": "取最新",
+    "result": "已取最新：模型重载 1 个节点、新装入 1 个 SITE（新增 8 个构件、撤下 4 个构件）。",
+    "resultLevel": "success",
+    "resultTitle": "已取最新：模型重载 1 个节点、新装入 1 个 SITE（新增 8 个构件、撤下 4 个构件）。\n· 重载 /1CSV-HVACHB（24384_24932）：现有 143 个构件，新增 7，撤下 4\n· 新装入 /AIOS-INC-20261029-p79-rvm3-P79：1 个构件\n（10:56:00）",
+    "deletedNotice": null,
+    "treeRows": [
+     "gm-root:AvevaMarineSample:ALL AvevaMarineSample / ALL",
+     "9304_2 SITE 1RS-CIVI",
+     "14195_2 SITE SITE",
+     "24381_42520 SITE 1RB-CIVI",
+     "24381_44873 SITE 1RC-CIVI",
+     "24381_535 SITE 仪控ISO测试",
+     "24381_776 SITE SSC测试",
+     "24381_34109 SITE 1RX-ARCHHB",
+     "24381_46775 SITE 1CAM-HVACHB",
+     "24381_48631 SITE 1CAV-HVACHB",
+     "24381_57476 SITE 1CCV-HVACHB",
+     "24381_76564 SITE 1CPV-HVACHB",
+     "24381_79977 SITE SITE",
+     "24381_100675 SITE 1CUP-HVACHB",
+     "24381_101405 SITE 1PTU-INST23",
+     "24381_177373 SITE 1TTU-INST23",
+     "24383_66456 SITE 1WCC-PIPEBJ",
+     "24383_73927 SITE 1RCV-PIPEBJ",
+     "24383_80151 SITE 1AXIS",
+     "24383_80211 SITE 1RX-ELECBJ",
+     "24384_26547 SITE AIOS-INC-20261029-p79-rvm3-P79",
+     "24384_46 SITE 1RX03-PIPEBJ",
+     "24384_24932 SITE 1CSV-HVACHB",
+     "24384_22399 SITE 1RX03-EQUI",
+     "15201_535 SITE Steel_Template_Site",
+     "23716_1 SITE MDS/SPECIALS",
+     "23714_1 SITE MDS/SPECIALS",
+     "23715_1 SITE MDS/SPECIALS",
+     "23705_1 SITE MDS-Standards-Site",
+     "23705_289 SITE MDS-Standards-Supports",
+     "23713_2343 SITE MDS/TEMPLATES",
+     "23737_1 SITE MDS/TEMPLATES/ORI",
+     "15516_2 SITE MDS/TEMPLATES",
+     "23736_1 SITE MDS/TEMPLATES/ORI",
+     "23734_1 SITE MDS/TEMPLATES",
+     "23738_1 SITE MDS/TEMPLATES/ORI"
+    ]
+   },
+   "toasts": [
+    {
+     "at": 1794452151455,
+     "level": "info",
+     "message": "[信息] 正在从 gen-model 加载 dbnum=8000 的全部 SITE…"
+    },
+    {
+     "at": 1794452155708,
+     "level": "success",
+     "message": "[成功] dbnum=8000：4 个 SITE / 9 个生成根，已加载 2676 个实例（2607 个 refno）"
+    },
+    {
+     "at": 1794452160769,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 146 个几何实例"
+    },
+    {
+     "at": 1794452160973,
+     "level": "success",
+     "message": "[成功] 已从 gen-model 加载 1 个几何实例"
+    },
+    {
+     "at": 1794452160984,
+     "level": "success",
+     "message": "已取最新：模型重载 1 个节点、新装入 1 个 SITE（新增 8 个构件、撤下 4 个构件）。"
+    }
+   ]
+  },
+  "run": {
+   "ms": 3734,
+   "progress": [
+    "核对后台状态…",
+    "核对 3 个已装的节点…",
+    "重载模型 1/1…",
+    "装入新出现的 SITE /AIOS-INC-20261029-p79-rvm3-P79…"
+   ]
+  }
+ },
+ "showDbnumLog": {
+  "blocked": [],
+  "allowedPost": {
+   "/api/v1/model/records": 17,
+   "/api/v1/meshes/batch": 9
+  },
+  "overlaid": {
+   "records": 3,
+   "dbnums": 2,
+   "status": 6,
+   "versions": 3
+  },
+  "httpFailures": [
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/reviewers",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/users/me",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 401,
+    "method": "GET",
+    "path": "/api/review/tasks",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_daec88b899b8c2c3cae2be81a33ab1fb079824b7144634d4be11dfbc4cf9ba3f.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_589ff3c8b4f43cda6bfe3e6ae82d4906f131a9fe6a1ef54b3d862e30fa269c54.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_3f4f6255d7ca71a1712461fc7c1acdfe2cb304cbc0fb368d21141c1142e39c62.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_78a3041169a39bf9979990357cd05d8709a20147acc7bccb6fb62296d1573860.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_cd5a4032ce299cab238dcd3794e0462369394593b4d5a2c1a60b1548a32460b3.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_086f9e64d574d46e8eecb43262ea11946732c6d08aae10a22549c6f4876cccf8.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_3b57ab40b1a8e31d35b6bb2fe69957b574b985dfdb6564a1d90e8f2b561895cd.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_98bc8b1a475e75a3f7117c1f9c2006ab20ceb973a45a3ba076edd8a6f4fe4415.mesh",
+    "refno": "",
+    "phase": "A"
+   },
+   {
+    "status": 404,
+    "method": "GET",
+    "path": "/api/v1/meshes/e3d_baked_v2_732939115b73e0ba7fe1a3b7cab1eb0abfac0d25b416beaf94030eb20a251a93.mesh",
+    "refno": "",
+    "phase": "A"
+   }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ },
+ "finishedAt": "2026-11-12T02:56:03.096Z",
+ "checks": [
+  {
+   "scenario": "树与眼睛",
+   "name": "之前：树上 Z 下是 A、B（没有 C），Y 下有 M",
+   "pass": true,
+   "detail": "Z=24384_25587,24384_25611 Y=24384_26205,24384_26202,24384_26203"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "之前：场景里有 A、B 的构件，没有 C 的",
+   "pass": true,
+   "detail": "A 4 件、B 4 件、C 7 件"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "之前：B 的一个构件隐藏着（未勾选），A 选中",
+   "pass": true,
+   "detail": "构件 24384_25614=unchecked 选中=24384_25587"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "之前：在册节点有 A、Z、R",
+   "pass": true,
+   "detail": "24384_25587@1155 24384_25586@1155 24384_26205@1155"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "树：A 消失，C 出现在 Z 下，M 挪到 Z 下，N 出现在 Y 下，B 改了名",
+   "pass": true,
+   "detail": "Z=24384_25611,24384_25635,24384_26202 Y=24384_26205,24384_26203,24384_24970 B=/-SR-CSV-S6125-GETWORK-RENAMED"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "树的状态保住：SITE、Z、Y、B 还展开着；B 的那个构件还是隐藏（未勾选）",
+   "pass": true,
+   "detail": "展开=24384_24932,24384_25586,24384_26199,24384_25611 构件 24384_25614=unchecked"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "树的回执：新增 C 和 N、删除 A（已删除）、改名 B、挪位置 M",
+   "pass": true,
+   "detail": "新增 24384_24970,24384_25635 删除 24384_25587:deleted 改名 24384_25611 挪 24384_26202"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "场景：C 的构件装进来了，A 的构件撤下了，B 的还在",
+   "pass": true,
+   "detail": "C 7/7 A 0/4 B 4/4"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "模型的回执：重载 Z（新增 = C 的件数，撤下 = A 的件数），A 作为已不存在的节点撤下",
+   "pass": true,
+   "detail": "{\"rootsTotal\":3,\"checked\":3,\"reloaded\":[{\"refno\":\"24384_25586\",\"added\":7,\"removed\":4,\"total\":11}],\"loadedNew\":[],\"withdrawn\":[{\"refno\":\"24384_25587\",\"refnos\":4,\"why\":\"deleted\"}],\"kept\":[],\"failed\":[],\"componentsAdded\":7,\"componentsRemoved\":4}"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "选中的 A 已被删除：登记成已删除，属性面板给「该构件已删除」",
+   "pass": true,
+   "detail": "deleted=true 属性面板=该构件已删除，属性见底部属性历史对比"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "那句交代：状态栏上常驻，和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树新增 2、删除 1、改名 1、挪位置 1；模型重载 1 个节点、撤下 1 个已不存在的节点（新增 7 个构件、撤下 4 个构件）；选中的构件已被删除。"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "在册节点：Z 重新登记到新水位，A 撤表",
+   "pass": true,
+   "detail": "24384_25586@1156 24384_26205@1155"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "再点一次：说已是最新，模型一个不重载",
+   "pass": true,
+   "detail": "已是最新：模型树和已装的模型都没有变化（核对了 15 层树、2 个已装的节点）。"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "再点一次：按库发现——库的水位没变，不重取记录（树照旧把取过的层对一遍）",
+   "pass": true,
+   "detail": "{\"status\":0,\"records\":0,\"children\":14}"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "连点两下：第二下排成下一轮（按钮上看得到在排队），先后跑完两轮、各给一句交代",
+   "pass": true,
+   "detail": "点完就在排队=true 这两下之后的交代条数=2"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "重启之后：认出后端重启过",
+   "pass": true,
+   "detail": "backendRestarted=true"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "重启之后：场景一个构件都没被撤（B、C、R 的都还在）",
+   "pass": true,
+   "detail": "B 4/4 C 7/7 R 4/4"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "重启之后：Z 没动并说明（后端重启过…不当成已删除）",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_25586\",\"reason\":\"后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成\"}]"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "重启之后：R 去重载时记录查空，护栏拦住——没撤，记成没换成",
+   "pass": true,
+   "detail": "failed=[{\"refno\":\"24384_26205\",\"reason\":\"重载没有完成，场景保持原样（记录没查通，或后端现在没有它的模型）\"}] R 的节点状态问了 4 次，查记录 1 次"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "重启之后：R、Z 还在在册节点里",
+   "pass": true,
+   "detail": "24384_25586 24384_26205"
+  },
+  {
+   "scenario": "树与眼睛",
+   "name": "护栏：除 GET 和三种只读 POST 之外没有请求发到后端",
+   "pass": true,
+   "detail": "放行的只读 POST：{\"/api/v1/element/attributes\":4,\"/api/v1/model/records\":6,\"/api/v1/meshes/batch\":5}"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "之前：B 的前两件和 C 都在场景里，B 的后两件不在",
+   "pass": true,
+   "detail": "B 2/4 C 7/7"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "之前：两个直装的根登记在取最新的登记表里（带装时的水位），不在已加载节点表里",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_25611\",\"dbnum\":8000,\"loadedModelSesno\":1155,\"loadedFileLatestSesno\":1155,\"origin\":\"show_refno\"},{\"refno\":\"24384_25635\",\"dbnum\":8000,\"loadedModelSesno\":1155,\"loadedFileLatestSesno\":1155,\"origin\":\"show_refno\"}]"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "场景：B 的四件都在了（新增的两件装进来），C 的构件撤下了",
+   "pass": true,
+   "detail": "B 4/4 C 0/7"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "回执：重载 B（新增 2 件），C 作为已不存在的节点撤下",
+   "pass": true,
+   "detail": "{\"rootsTotal\":2,\"checked\":2,\"reloaded\":[{\"refno\":\"24384_25611\",\"added\":2,\"removed\":0,\"total\":4}],\"loadedNew\":[],\"withdrawn\":[{\"refno\":\"24384_25635\",\"refnos\":7,\"why\":\"deleted\"}],\"kept\":[],\"failed\":[],\"componentsAdded\":2,\"componentsRemoved\":7}"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "之后：B 交给已加载节点表，登记表里不再有这两个根",
+   "pass": true,
+   "detail": "已加载节点表=24384_25611 登记表="
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "那句交代",
+   "pass": true,
+   "detail": "已取最新：模型重载 1 个节点、撤下 1 个已不存在的节点（新增 2 个构件、撤下 7 个构件）。"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "装载中点取最新：先说在等装载结束，装载没被打断（那个 SITE 装完、进了已加载节点表），然后这一轮照常做完",
+   "pass": true,
+   "detail": "进度=等正在进行的装载结束… / 核对后台状态… 用时 3560 毫秒；已是最新：模型树和已装的模型都没有变化（核对了 1 层树、2 个已装的节点）。"
+  },
+  {
+   "scenario": "地址栏直装",
+   "name": "护栏：除 GET 和三种只读 POST 之外没有请求发到后端",
+   "pass": true,
+   "detail": "放行的只读 POST：{\"/api/v1/model/records\":5,\"/api/v1/meshes/batch\":4}"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "之前：整库装进来了；A、B 的构件在，C 的和测试 SITE 的不在",
+   "pass": true,
+   "detail": "status=loaded 实例 2676，构件 2607"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "之前：收齐的 SITE 登记在册；空的测试 SITE 不算已在管",
+   "pass": true,
+   "detail": "登记的根=24384_46,24384_24932,24384_22399 已在管=24384_46,24384_24932,24384_22399"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "场景：C 的构件装进来了，A 的撤下了，B 的还在，测试 SITE 的构件装进来了",
+   "pass": true,
+   "detail": "C 7/7 A 0/4 测试 SITE 1/1"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "回执：只重载了有变化的那个 SITE（新增 = C 的件数、撤下 = A 的件数），别的 SITE 没动",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_24932\",\"added\":7,\"removed\":4,\"total\":143}]"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "回执：新出现的测试 SITE 装进来了",
+   "pass": true,
+   "detail": "[{\"refno\":\"24384_26547\",\"name\":\"/AIOS-INC-20261029-p79-rvm3-P79\",\"total\":1}]"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "那句交代",
+   "pass": true,
+   "detail": "已取最新：模型重载 1 个节点、新装入 1 个 SITE（新增 8 个构件、撤下 4 个构件）。"
+  },
+  {
+   "scenario": "整库显示",
+   "name": "护栏：除 GET 和三种只读 POST 之外没有请求发到后端",
+   "pass": true,
+   "detail": "放行的只读 POST：{\"/api/v1/model/records\":17,\"/api/v1/meshes/batch\":9}"
+  }
+ ]
+}

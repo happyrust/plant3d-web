@@ -1,0 +1,386 @@
+{
+  "cwd": "D:/work/plant-code/old/plant3d-web-getwork",
+  "tests": [
+    "src/composables/useModelGeneration.genModelV1.test.ts",
+    "src/components/dock_panels/ViewerPanel.getwork.test.ts",
+    "src/composables/useGenModelV1UpdateNotice.test.ts",
+    "src/composables/useModelGetWork.test.ts",
+    "src/composables/modelGetWork.test.ts",
+    "src/components/model-tree/GenModelV1HealthBadge.test.ts",
+    "src/App.statusBar.test.ts"
+  ],
+  "out": "mutations-r3.result.json",
+  "mutations": [
+    {
+      "id": "Y01",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "quiet 不起作用：照旧弹",
+      "find": "      if (!quiet) emitToast(payload);",
+      "replace": "      emitToast(payload);"
+    },
+    {
+      "id": "Y02",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "quiet 反了：没要求不弹的反而不弹",
+      "find": "    const quiet = loadOptions?.quiet === true;",
+      "replace": "    const quiet = loadOptions?.quiet !== true;"
+    },
+    {
+      "id": "Y03",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "查空撤下的那一句绕过静音的出口",
+      "find": "    toast({ message: `[提示] ${root} 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下`, level: 'info' });",
+      "replace": "    emitToast({ message: `[提示] ${root} 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下`, level: 'info' });"
+    },
+    {
+      "id": "Y04",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "「已加载 N 个几何实例」绕过静音的出口",
+      "find": "          toast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });",
+      "replace": "          emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });"
+    },
+    {
+      "id": "Y05",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "「重载未完成」绕过静音的出口",
+      "find": "        toast({ message: `[警告] ${normalizedRoot} 重载未完成：${why}，场景保持原样`, level: 'warning' });",
+      "replace": "        emitToast({ message: `[警告] ${normalizedRoot} 重载未完成：${why}，场景保持原样`, level: 'warning' });"
+    },
+    {
+      "id": "Y06",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "「模型加载失败」绕过静音的出口",
+      "find": "      toast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });",
+      "replace": "      emitToast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });"
+    },
+    {
+      "id": "Y07",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "被叫停的那一句绕过静音的出口",
+      "find": "        toast({\n          message: update\n            ? `[提示] ${normalizedRoot}：已停止更新，屏幕上的没有动`",
+      "replace": "        emitToast({\n          message: update\n            ? `[提示] ${normalizedRoot}：已停止更新，屏幕上的没有动`"
+    },
+    {
+      "id": "Y08",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "装载出错不进控制台（不弹的时候错在哪就查不到了）",
+      "find": "      consoleStore.addLog('error', `[model-load] refno=${normalizedRoot} 加载失败：${msg}`);\n",
+      "replace": ""
+    },
+    {
+      "id": "Y10",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "旧后端：模型树回任何失败都当成节点没了",
+      "find": "      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, why: '' };",
+      "replace": "      if (!resp.success) return { removed: true, why: '' };"
+    },
+    {
+      "id": "Y11",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "旧后端：模型树明说没有这个节点也不撤",
+      "find": "      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, why: '' };",
+      "replace": "      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: false, why: '' };"
+    },
+    {
+      "id": "Y12",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "旧后端：确认不了也撤",
+      "find": "    return { removed: false, why: '后端没有节点模型状态接口，确认不了它名下是不是真的没有几何了' };",
+      "replace": "    return { removed: true, why: '后端没有节点模型状态接口，确认不了它名下是不是真的没有几何了' };"
+    },
+    {
+      "id": "Y13",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "确认的那一会儿被叫停，照样往下撤",
+      "find": "            // 确认的这一会儿被叫停：还没开始撤，场景保持原样\n            session.throwIfStopped();\n",
+      "replace": "            // 确认的这一会儿被叫停：还没开始撤，场景保持原样\n"
+    },
+    {
+      "id": "Y14",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏挡住了却不告诉人",
+      "find": "              toast({\n                message: `[警告] ${normalizedRoot} 重载未完成：记录查空，但${confirmed.why}——没有当成已删除，场景保持原样`,\n                level: 'warning',\n              });\n",
+      "replace": ""
+    },
+    {
+      "id": "Y15",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "护栏挡住之后不叫行上的状态重问",
+      "find": "              // 行上的状态多半还是重启之前问到的：重问一次，让它照实说（未生成的会给「生成」）\n              recheckLoadedNode(normalizedRoot);\n",
+      "replace": "              // 行上的状态多半还是重启之前问到的：重问一次，让它照实说（未生成的会给「生成」）\n"
+    },
+    {
+      "id": "Y16",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "「后端判不了」说成「没有完整模型」",
+      "find": "          : facts.verdict === 'unknown'\n",
+      "replace": "          : facts.verdict === 'unknown-'\n"
+    },
+    {
+      "id": "Y17",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "「库正在更新」的原因说反了",
+      "find": "        why: facts.verdict === 'updating'\n",
+      "replace": "        why: facts.verdict !== 'updating'\n"
+    },
+    {
+      "id": "Y20",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "不记这一轮里已经装上的构件",
+      "find": "      if (refresh && loadOptions?.round) for (const key of loadRefnos) loadOptions.round.installed.add(key);\n",
+      "replace": ""
+    },
+    {
+      "id": "Y21",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "成员差集不看这一轮的账：先重载的节点刚装上的构件照撤",
+      "find": "    const stale = previousLeaves.filter((refno) => !keep.has(refno) && !round?.installed.has(refno));",
+      "replace": "    const stale = previousLeaves.filter((refno) => !keep.has(refno));"
+    },
+    {
+      "id": "Y22",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整个节点查空撤下时不看这一轮的账",
+      "find": "      .filter((refno) => !round?.installed.has(refno));",
+      "replace": "      .filter(() => true);"
+    },
+    {
+      "id": "Y23",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "这一轮的账没有交给成员差集",
+      "find": "      if (refresh && !scopeIncomplete) evictMembersMissingFromRefresh(dbno, normalizedRoot, previousLeaves, loadRefnos, loadOptions?.round);",
+      "replace": "      if (refresh && !scopeIncomplete) evictMembersMissingFromRefresh(dbno, normalizedRoot, previousLeaves, loadRefnos, undefined);"
+    },
+    {
+      "id": "Y24",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "这一轮的账没有交给查空的收尾",
+      "find": "          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, toast, loadOptions?.round);",
+      "replace": "          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, toast, undefined);"
+    },
+    {
+      "id": "Y25",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "记账时把正在重载的节点自己也记上",
+      "find": "      if (other === root) continue;\n",
+      "replace": ""
+    },
+    {
+      "id": "Y26",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "成员差集：按「想撤的」而不是「真撤掉对象的」去找别的节点",
+      "find": "    flagRootsLosingRefnos(root, evicted);\n    consoleStore.addLog(\n      'info',\n      `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里",
+      "replace": "    flagRootsLosingRefnos(root, stale);\n    consoleStore.addLog(\n      'info',\n      `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里"
+    },
+    {
+      "id": "Y27",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "成员差集撤掉了别的节点名下的构件却不记账",
+      "find": "    flagRootsLosingRefnos(root, evicted);\n    consoleStore.addLog(\n      'info',\n      `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里",
+      "replace": "    consoleStore.addLog(\n      'info',\n      `[model-load] 重载 ${root}：${stale.length} 个构件已不在最新记录里"
+    },
+    {
+      "id": "Y28",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整个节点查空撤下：按「想撤的」而不是「真撤掉对象的」去找别的节点",
+      "find": "    flagRootsLosingRefnos(root, evicted);\n    statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;",
+      "replace": "    flagRootsLosingRefnos(root, targets);\n    statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;"
+    },
+    {
+      "id": "Y29",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "整个节点查空撤下时带走了别的节点名下的构件却不记账",
+      "find": "    flagRootsLosingRefnos(root, evicted);\n    statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;",
+      "replace": "    statusMessage.value = `refno=${root} 最新记录里已没有几何，已从场景撤下`;"
+    },
+    {
+      "id": "Y30",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "记的那一笔没有写原因",
+      "find": "        markLoadedNodeStale(other, LOST_MEMBERS_STALE_REASON);",
+      "replace": "        markLoadedNodeStale(other, '');"
+    },
+    {
+      "id": "Y31",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "同一个节点丢了几个构件就记几笔",
+      "find": "        markLoadedNodeStale(other, LOST_MEMBERS_STALE_REASON);\n        break;\n",
+      "replace": "        markLoadedNodeStale(other, LOST_MEMBERS_STALE_REASON);\n"
+    },
+    {
+      "id": "Y32",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "记账时不管那个构件是不是真在它名下：见到别的节点就记",
+      "find": "        if (!gone.has(member)) continue;\n",
+      "replace": ""
+    },
+    {
+      "id": "Y40",
+      "file": "src/components/dock_panels/ViewerPanel.vue",
+      "note": "取最新发起的重载不带 quiet",
+      "find": "      await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, quiet: true })",
+      "replace": "      await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false })"
+    },
+    {
+      "id": "Y41",
+      "file": "src/components/dock_panels/ViewerPanel.vue",
+      "note": "一次事件重载几个根：不开那份账",
+      "find": "        const reloadRound = (detail as any)?.refreshModel ? createModelReloadRound() : undefined;",
+      "replace": "        const reloadRound = undefined;"
+    },
+    {
+      "id": "Y42",
+      "file": "src/components/dock_panels/ViewerPanel.vue",
+      "note": "一次事件重载几个根：开了账却不带给每个根",
+      "find": "            round: reloadRound,\n",
+      "replace": ""
+    },
+    {
+      "id": "Y43",
+      "file": "src/components/dock_panels/ViewerPanel.vue",
+      "note": "提示的场景探针不报页面上装着节点的库",
+      "find": "    loadedDbnums: loadedModelDbnums,",
+      "replace": "    loadedDbnums: () => [],"
+    },
+    {
+      "id": "Y50",
+      "file": "src/composables/useGenModelV1UpdateNotice.ts",
+      "note": "探针不认页面上装着节点的库（只认激活的那个）",
+      "find": "      const out = new Set<number>(deps.loadedDbnums());",
+      "replace": "      const out = new Set<number>();"
+    },
+    {
+      "id": "Y51",
+      "file": "src/composables/useGenModelV1UpdateNotice.ts",
+      "note": "探针不认当前激活的库了（空间查询这类不进登记表的装法会漏）",
+      "find": "      if (active !== null) out.add(active);\n",
+      "replace": ""
+    },
+    {
+      "id": "Y52",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "装着节点的库：漏掉已加载节点表和登记的直装根",
+      "find": "  for (const root of currentRoots()) out.add(root.dbnum);\n",
+      "replace": ""
+    },
+    {
+      "id": "Y53",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "装着节点的库：漏掉整库显示过的库",
+      "find": "  for (const scope of getWorkRegisteredScopes()) out.add(scope.dbnum);\n",
+      "replace": ""
+    },
+    {
+      "id": "Y54",
+      "file": "src/composables/useGenModelV1UpdateNotice.ts",
+      "note": "认不出可重载的根时仍说「受影响的构件都不在场景里，不用重载」",
+      "find": "    : '这一批改到的单元里没有本页单独装过的（经上层的 SITE / ZONE 装进来的在这里认不出），所以没有「重载」可点');",
+      "replace": "    : '受影响的构件都不在场景里，不用重载');"
+    },
+    {
+      "id": "Y55",
+      "file": "src/composables/useGenModelV1UpdateNotice.ts",
+      "note": "有「重载」时不说明名单不全",
+      "find": "；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）`",
+      "replace": "；不重新生成、不动相机`"
+    },
+    {
+      "id": "Y56",
+      "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+      "note": "没有「重载」可点时不画那句「点「取最新」同步」",
+      "find": "      <span v-else\n        data-testid=\"gen-model-v1-update-notice-getwork-hint\"",
+      "replace": "      <span v-if=\"false\"\n        data-testid=\"gen-model-v1-update-notice-getwork-hint\""
+    },
+    {
+      "id": "Y57",
+      "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+      "note": "有「重载」可点时也画那句引导（两样一起出）",
+      "find": "      <span v-else\n        data-testid=\"gen-model-v1-update-notice-getwork-hint\"",
+      "replace": "      <span v-if=\"updateNotice.notice.value\"\n        data-testid=\"gen-model-v1-update-notice-getwork-hint\""
+    },
+    {
+      "id": "Y58",
+      "file": "src/components/model-tree/GenModelV1HealthBadge.vue",
+      "note": "那句引导会跟着前面的字一起被截断",
+      "find": "        class=\"shrink-0 text-muted-foreground\">点「取最新」同步</span>",
+      "replace": "        class=\"text-muted-foreground\">点「取最新」同步</span>"
+    },
+    {
+      "id": "Y60",
+      "file": "src/App.vue",
+      "note": "提示条不抬（回到贴着底边）",
+      "find": "  margin-bottom: calc(1.75rem + 8px);",
+      "replace": "  margin-bottom: 8px;"
+    },
+    {
+      "id": "Y61",
+      "file": "src/App.vue",
+      "note": "提示条抬得比状态栏矮",
+      "find": "  margin-bottom: calc(1.75rem + 8px);",
+      "replace": "  margin-bottom: calc(1rem + 8px);"
+    },
+    {
+      "id": "Y62",
+      "file": "src/App.vue",
+      "note": "样式带了 scoped（够不着挂在页面最外层的提示条）",
+      "find": "<style>\n.ribbon-app-bar {",
+      "replace": "<style scoped>\n.ribbon-app-bar {"
+    },
+    {
+      "id": "Y63",
+      "file": "src/App.vue",
+      "note": "状态栏变高了、提示条没跟着抬",
+      "find": "<div class=\"flex h-7 shrink-0 items-center border-t border-border bg-background px-2\"",
+      "replace": "<div class=\"flex h-10 shrink-0 items-center border-t border-border bg-background px-2\""
+    },
+    {
+      "id": "Y64",
+      "file": "src/App.vue",
+      "note": "装着停靠布局和状态栏的那一列不能随窗口变窄（去掉 min-w-0）",
+      "find": "<div class=\"flex-1 min-h-0 min-w-0 flex flex-col\">",
+      "replace": "<div class=\"flex-1 min-h-0 flex flex-col\">"
+    },
+    {
+      "id": "Y70",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "点名的那一句退回「监听范围」",
+      "find": "text: `库 ${dbnum} 不在后端更新范围里：模型停在会话 ${model}，库文件已到 ${fileLatest}（树已是最新，模型不会自动跟上）`,",
+      "replace": "text: `库 ${dbnum} 不在后台的监听范围里：模型停在会话 ${model}，库文件已到 ${fileLatest}（树已是最新，模型不会自动跟上）`,"
+    },
+    {
+      "id": "Y71",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "「水位」又单说了",
+      "find": "text: `库 ${dbnum} 的三枚水位（库文件最新会话、数据入库到的会话、模型生成所按的会话）对不上，新旧判不了` };",
+      "replace": "text: `库 ${dbnum} 的水位对不上，新旧判不了` };"
+    },
+    {
+      "id": "Y72",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "节点落后的那一句退回「后台的模型落后于库文件」",
+      "find": "      const behind = '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上';",
+      "replace": "      const behind = '后台的模型落后于库文件，这次换上的是后台现有的那一版；行上的「更新」可让后端追上';"
+    },
+    {
+      "id": "Y80",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "头一轮不拿页面打开时的服务代次比（退回只和上一轮比）",
+      "find": "  let lastGeneration: number | null = ports.initialGeneration ?? null;",
+      "replace": "  let lastGeneration: number | null = null;"
+    },
+    {
+      "id": "Y81",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "接线没有把页面打开时的服务代次交给引擎",
+      "find": "  initialGeneration: getGenModelV1ServiceGeneration(),\n",
+      "replace": ""
+    },
+    {
+      "id": "Y82",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "认出重启了却不在细节里说",
+      "find": "  if (report.backendRestarted) detail.push('这次取最新之前后端重启过');\n",
+      "replace": ""
+    }
+  ]
+}
