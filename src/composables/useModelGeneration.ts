@@ -52,6 +52,7 @@ import { noteDbnumModelGenerated, reconcileDbnumModelStatus, scheduleDbnumModelR
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import {
   forgetLoadedNode,
+  loadedNodeEntry,
   markLoadedNodeStale,
   noteLoadedNode,
   noteNodeWithoutModel,
@@ -2655,6 +2656,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           noteLoadedNode(normalizedRoot, dbno, loadWatermark);
           markedLoadedHere = true;
           consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 成员已在场景中，根自身无几何，按已加载收口`);
+        } else if (!loadedRoots.has(normalizedRoot)) {
+          // 收齐了、要装的构件全都已经在场景里（先点亮过它下面的节点，或者别的 useModelGeneration 实例 / 别的入口装的）：
+          // 这个节点就是「已加载」，照样记。不记的话模型树上它的眼睛一直是灭的（再点还是「显示」、藏不掉），
+          // 已加载节点表里也没有它（取最新不核对它）。
+          // 这个实例已经记过的不重记（已加载的节点在行上点「生成」也走到这里）：这一次什么都没换，
+          // 它「装的时候是哪一版」不能跟着挪到此刻。
+          loadedRoots.add(normalizedRoot);
+          // 表里已经有它（别的实例登记的）：那一条记的是构件装上去时的那一版，不拿此刻的水位盖掉；被叫停时也不撤那一条
+          if (loadedNodeEntry(normalizedRoot)?.loaded !== true) {
+            noteLoadedNode(normalizedRoot, dbno, loadWatermark);
+            markedLoadedHere = true;
+          }
+          consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 构件都已在场景中，按已加载收口`);
         }
         // 已有的都在场景里了（行上的「生成」走到这里）：把没有模型的那几块补上
         if (!collectionIncomplete) await fillAfterShown(loadRefnos[0] ?? null);
