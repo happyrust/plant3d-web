@@ -146,6 +146,8 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
   // 缓存 queryVisibleInstRefnos 结果，避免选中组节点时重复请求后端
   const visibleInstCache = new Map<string, string[]>();
+  // 同一节点在途的那次查询：选中、隔离、定位前后脚问同一个节点时只发一次
+  const visibleInstPending = new Map<string, Promise<string[]>>();
 
   function resetAllState() {
     nodesById.value = {};
@@ -170,7 +172,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     viewParentsById.clear();
     prefetchSeq++;
     prefetchQueue.length = 0;
-    visibleInstCache.clear();
+    invalidateVisibleInsts();
   }
 
   function rebuildInitialChecks() {
@@ -570,6 +572,12 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     );
   }
 
+  /** 树里有这个节点，后端说它有子节点，但还没取回来。 */
+  function hasUnloadedChildren(id: string): boolean {
+    if (!nodesById.value[id] || childrenLoadedById.has(id)) return false;
+    return (childrenCountById.value.get(id) ?? 0) > 0;
+  }
+
   /**
    * 从 web-server 查询指定 refno 的子树所有 refnos
    */
@@ -613,6 +621,35 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       console.error('[pdms-tree] queryVisibleInstRefnos error:', e);
       return [];
     }
+  }
+
+  /** 按祖先查到的构件清单全部作废；在途的那几次查完也不再记。 */
+  function invalidateVisibleInsts() {
+    visibleInstCache.clear();
+    visibleInstPending.clear();
+  }
+
+  /**
+   * 带缓存的 queryVisibleInstRefnos，给「树里这棵子树没取全」时的选中 / 隔离 / 定位用：名下有几何的构件
+   * 按祖先一次查回来，不为此把子树逐层取进树里。查空（含失败）不记，下次再查。
+   */
+  function queryVisibleInstRefnosCached(refno: string): Promise<string[]> {
+    const key = normalizeRefnoKey(refno);
+    const cached = visibleInstCache.get(key);
+    if (cached) return Promise.resolve(cached);
+    const pending = visibleInstPending.get(key);
+    if (pending) return pending;
+
+    const request: Promise<string[]> = queryVisibleInstRefnos(key).then((refnos) => {
+      // 等的这会儿清单被作废过：这次的结果只交给等它的人，不记
+      if (visibleInstPending.get(key) === request) {
+        visibleInstPending.delete(key);
+        if (refnos.length > 0) visibleInstCache.set(key, refnos);
+      }
+      return refnos;
+    });
+    visibleInstPending.set(key, request);
+    return request;
   }
 
   async function setSceneVisibleInBatches(refnos: string[], visible: boolean, batchSize = 50): Promise<void> {
@@ -728,10 +765,11 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     checkStateById.value.set(rootId, desiredState);
     let updated: string[] = [];
 
-    // 先同步树侧 eye（子节点应跟随父节点变化），再异步应用到三维与 instances.json
+    // 先同步树侧 eye（子节点应跟随父节点变化），再异步应用到三维与 instances.json。
+    // 只改树里已加载的节点：没展开过的子孙在 ensureChildrenLoaded 时继承父节点的确定态，
+    // 不必为了勾选状态把整棵子树逐层拉下来（一个 ZONE 就是几百次串行 tree/children）。
     if (!DEBUG.skipTreeCascade) {
       const t2 = DEBUG.logTiming ? performance.now() : 0;
-      await ensureDescendantStateLoaded(rootId, desiredState, () => seq === setVisibleSeq);
       updated = await setCheckStateDeep(rootId, desiredState, () => seq === setVisibleSeq);
       if (DEBUG.logTiming) {
         console.log('[pdms-tree][perf] apply tree checkState', { refno: rootId, ms: performance.now() - t2 });
@@ -753,8 +791,11 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
     // 关键：不在前端递归遍历子树；改为后端一次性返回“可见实例 refnos（含子孙 + 自身）”
     const t0 = DEBUG.logTiming ? performance.now() : 0;
+    // 显示之前可能刚生成了新的模型：以前按祖先查到的清单都作废，这次查到的记下来给选中 / 隔离 / 定位用。
+    if (visible) invalidateVisibleInsts();
     let refnos = DEBUG.skipVisibleInstsApi ? [rootId] : await queryVisibleInstRefnos(rootId);
     if (seq !== setVisibleSeq) return;
+    if (!DEBUG.skipVisibleInstsApi && refnos.length > 0) visibleInstCache.set(rootId, [...refnos]);
 
     if (refnos.length === 0) {
       // 兜底：至少切换自身
@@ -779,40 +820,6 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
-  async function ensureDescendantStateLoaded(
-    rootId: string,
-    desiredState: CheckState,
-    shouldContinue?: () => boolean,
-  ) {
-    if (desiredState === 'indeterminate') return;
-    const queue: string[] = [rootId];
-    const visited = new Set<string>();
-
-    while (queue.length > 0) {
-      if (shouldContinue && !shouldContinue()) return;
-      const currentId = queue.shift();
-      if (!currentId || visited.has(currentId)) continue;
-      visited.add(currentId);
-
-      const node = nodesById.value[currentId];
-      if (!node) continue;
-
-      const expectedChildren = childrenCountById.value.get(currentId) ?? 0;
-      if (node.childrenIds.length === 0 && expectedChildren > 0) {
-        await ensureChildrenLoaded(currentId);
-        if (shouldContinue && !shouldContinue()) return;
-      }
-
-      const refreshedNode = nodesById.value[currentId];
-      if (!refreshedNode) continue;
-
-      for (const childId of refreshedNode.childrenIds) {
-        checkStateById.value.set(childId, desiredState);
-        queue.push(childId);
-      }
-    }
-  }
-
   function clearSelectionInScene(viewer: DtxCompatViewer) {
     const selectedObjectIds = viewer.scene.selectedObjectIds;
     if (selectedObjectIds && selectedObjectIds.length > 0) {
@@ -820,33 +827,27 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
+  let selectionSyncSeq = 0;
+
   async function syncSceneSelection() {
     const viewer = viewerRef.value;
     if (!viewer) return;
 
+    const seq = ++selectionSyncSeq;
     clearSelectionInScene(viewer);
 
     const union = new Set<string>();
     for (const id of selectedIds.value) {
       const localIds = collectLoadedSubtreeRefnos(id);
+      for (const refno of localIds) union.add(refno);
+      if (!localIds.some(hasUnloadedChildren)) continue;
 
-      // 检查是否为"子节点未加载的组节点"：前端树只有自身，但后端显示有子节点
-      const node = nodesById.value[id];
-      const childrenNotLoaded = node && node.childrenIds.length === 0 && (childrenCountById.value.get(id) ?? 0) > 0;
-
-      if (localIds.length <= 1 && childrenNotLoaded) {
-        // 组节点且子节点未展开：使用缓存或后端查询可见实例 refnos
-        let cached = visibleInstCache.get(id);
-        if (!cached) {
-          cached = await queryVisibleInstRefnos(id);
-          if (cached.length > 0) visibleInstCache.set(id, cached);
-        }
-        for (const refno of cached) union.add(refno);
-        // 始终包含自身
-        union.add(id);
-      } else {
-        for (const refno of localIds) union.add(refno);
-      }
+      // 这棵子树在树里没取全（没展开过，或只展开了几层）：树里已有的不够，再并上按祖先查到的有几何的构件。
+      // 点眼睛不会顺带把整棵子树装进树里，显示过的节点也一样要走这里。
+      const geometry = await queryVisibleInstRefnosCached(id);
+      // 等的这会儿又选了别的：这一轮作废，免得慢的那次回来把新选中的盖掉
+      if (seq !== selectionSyncSeq) return;
+      for (const refno of geometry) union.add(refno);
     }
 
     const list = Array.from(union);
@@ -891,28 +892,49 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
    * SITE / ZONE / PIPE 这类范围根从来没单独装过，按定位什么都不会发生，也没有任何提示
    * （plant-ui `fix(focus)` `36cc91f2d` 修的就是这个）。现在走 `resolveFocusScope`：
    * 直接并 → 子树并集（本地索引，`getSubtreeAABB`）→ 查一次子树清单，三级都空才回 false。
+   *
+   * 树里这棵子树没取全时（没展开过，或只展开了几层），已加载的那部分只是一角，拿去「直接并」会飞到那一角上：
+   * 这一档让给子树并集；最后一档先按祖先查一次有几何的构件（一次请求），查不到才退回逐层查子树清单。
    */
   async function flyTo(id: string): Promise<boolean> {
     const viewer = viewerRef.value;
     if (!viewer) return false;
 
     const loaded = collectLoadedSubtreeRefnos(id);
+    const partial = loaded.some(hasUnloadedChildren);
     const result = await flyToScope(viewer, {
-      refnos: loaded,
+      refnos: partial ? [] : loaded,
       scopeRefnos: [id],
       allowSubtreeQuery: true,
-      lookupSubtreeRefnos: querySubtreeRefnos,
+      lookupSubtreeRefnos: partial
+        ? async (root) => {
+          const geometry = await queryVisibleInstRefnosCached(root);
+          return [...loaded, ...(geometry.length > 0 ? geometry : await querySubtreeRefnos(root))];
+        }
+        : querySubtreeRefnos,
       source: 'tree',
     });
     return result.ok;
   }
 
+  let isolateSeq = 0;
+
   async function isolateXray(id: string) {
-    const keep = collectLoadedSubtreeRefnos(id);
-    sceneGraph.isolate(keep);
+    const seq = ++isolateSeq;
+    const loaded = collectLoadedSubtreeRefnos(id);
+    if (!loaded.some(hasUnloadedChildren)) {
+      sceneGraph.isolate(loaded);
+      return;
+    }
+
+    // 同 syncSceneSelection：树里没取全的子树，只留树里已有的会把它名下的构件一起弱化
+    const geometry = await queryVisibleInstRefnosCached(id);
+    if (seq !== isolateSeq) return;
+    sceneGraph.isolate(Array.from(new Set([...loaded, ...geometry])));
   }
 
   function clearXray() {
+    isolateSeq++;
     sceneGraph.clearIsolation();
   }
 
