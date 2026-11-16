@@ -175,7 +175,7 @@ import {
   buildMeasurementComponentsText,
   buildMeasurementValueText,
 } from '@/utils/xeokitMeasurementFormat';
-import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
+import { beginCameraIntent, isCameraIntentCurrent, supersedeCameraIntents } from '@/viewer/camera/cameraIntent';
 import { flyToScope } from '@/viewer/camera/focusScope';
 import { CadGrid } from '@/viewer/dtx/dtxCadGrid';
 import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
@@ -822,7 +822,7 @@ const modelUnitCompare = createModelUnitCompareController({
     toolsRef.value?.cancelMeasurementInteraction?.();
     exitXeokitMeasureMode();
     store.setToolMode('none');
-    pivotControllerRef.value?.handleMouseUp();
+    pivotControllerRef.value?.cancelActiveGesture();
     // 拖框工具会临时禁用 OrbitControls；切到分屏时必须把共享相机的控制权归还。
     if (dtxViewerRef.value) dtxViewerRef.value.controls.enabled = true;
   },
@@ -4030,7 +4030,7 @@ onMounted(async () => {
   // E3D 外观开着就按 E3D 口径染色（CE yellow / highlight white，无描边）
   applySglSelectionStyle(selectionController, sglLookEnabled.value);
 
-  // 初始化动态 Pivot 控制器
+  // 初始化动态 Pivot 控制器（Hover 优先，选中构件包围盒中心兜底）
   const pivotController = new DynamicPivotController(
     dtxViewer.controls,
     selectionController,
@@ -4038,6 +4038,34 @@ onMounted(async () => {
     {
       enabled: true,
       longPressDelay: 300,
+      allowLongPress: () => !store.toolMode.value || store.toolMode.value === 'none',
+      resolveSelectedBounds: (target) => {
+        const compat = compatViewerRef.value;
+        if (!compat) return null;
+        const selectedRefnos = compat.scene.selectedObjectIds.filter(
+          (refno) => compat.scene.objects[refno]?.visible !== false,
+        );
+        if (selectedRefnos.length === 0) return null;
+        const aabb = compat.scene.getSubtreeAABB(selectedRefnos) ?? compat.scene.getAABB(selectedRefnos);
+        if (!aabb) return null;
+        target.min.set(aabb[0], aabb[1], aabb[2]);
+        target.max.set(aabb[3], aabb[4], aabb[5]);
+        return target;
+      },
+      resolveHoverPoint: (mousePos) => {
+        const primaryHit = selectionController.pickPoint(mousePos);
+        const compareState = modelUnitCompareState.value;
+        if (compareState?.status === 'ready' && !isModelUnitSplitCompareReady()) {
+          const raycaster = canvasRay(mousePos, canvas, dtxViewer.camera);
+          const comparePick = pickModelUnitCompareObject(raycaster, compareState.activeSide);
+          if (comparePick && (!primaryHit || comparePick.distance <= primaryHit.distance)) {
+            return raycaster.ray.origin
+              .clone()
+              .addScaledVector(raycaster.ray.direction, comparePick.distance);
+          }
+        }
+        return primaryHit ? primaryHit.point.clone() : null;
+      },
     }
   );
   pivotControllerRef.value = pivotController;
@@ -4939,6 +4967,8 @@ onMounted(async () => {
   };
   const onControlsStart = () => {
     orbitControlsHeld = true;
+    dtxViewer.cancelFlyTo();
+    supersedeCameraIntents();
   };
   const onControlsEnd = () => {
     orbitControlsHeld = false;
@@ -4957,6 +4987,9 @@ onMounted(async () => {
     const onGizmoChange = () => requestRender();
     const onGizmoStart = () => {
       gizmoHeld = true;
+      dtxViewer.cancelFlyTo();
+      supersedeCameraIntents();
+      pivotControllerRef.value?.cancelActiveGesture();
       requestRender();
     };
     const onGizmoEnd = () => {
@@ -4983,38 +5016,62 @@ onMounted(async () => {
     dtxViewer.flyTo(ev.position, ev.target, { duration: ev.duration });
   });
 
-  // 添加鼠标事件监听器，用于动态 pivot（长按 300ms 触发）
-  // 测量 / 标注 / 拾取等工具模式下用户会在拾取点上停顿按住，不能被当成"长按设 pivot"，
-  // 否则拾取点会被设成旋转中心、视角跟着跳；只在导航态（toolMode === 'none'）才允许。
+  // 添加鼠标与滚轮事件监听器（捕获阶段先于 OrbitControls 执行）：
+  // - 旋转/缩放/平移起手时按 Hover 优先、选中构件兜底对齐操作焦点
+  // - 导航态（toolMode === 'none'）下长按 300ms 仍将旋转中心设到命中点
+  let pivotDownSeq = 0;
+  let pivotPointerDownReachedBubble = false;
   const onCanvasMouseDown = (e: PointerEvent) => {
     if (isModelUnitSplitCompareReady()) return;
-    if (store.toolMode.value && store.toolMode.value !== 'none') return;
     const rect = canvas.getBoundingClientRect();
     const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
-    pivotControllerRef.value?.handleMouseDown(canvasPos);
+    const seq = ++pivotDownSeq;
+    pivotPointerDownReachedBubble = false;
+    pivotControllerRef.value?.handleMouseDown(canvasPos, e);
+    queueMicrotask(() => {
+      if (seq === pivotDownSeq && !pivotPointerDownReachedBubble) {
+        pivotControllerRef.value?.handleMouseUp();
+      }
+    });
+  };
+
+  const onCanvasMouseDownBubble = () => {
+    pivotPointerDownReachedBubble = true;
   };
 
   const onCanvasMouseMove = (e: PointerEvent) => {
     if (isModelUnitSplitCompareReady()) return;
     const rect = canvas.getBoundingClientRect();
     const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
-    pivotControllerRef.value?.handleMouseMove(canvasPos);
+    pivotControllerRef.value?.handleMouseMove(canvasPos, e);
   };
 
   const onCanvasMouseUp = () => {
+    pivotPointerDownReachedBubble = true;
     pivotControllerRef.value?.handleMouseUp();
   };
 
-  canvas.addEventListener('pointerdown', onCanvasMouseDown);
-  canvas.addEventListener('pointermove', onCanvasMouseMove);
-  canvas.addEventListener('pointerup', onCanvasMouseUp);
-  canvas.addEventListener('pointercancel', onCanvasMouseUp);
+  const onCanvasWheel = (e: WheelEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
+    const rect = canvas.getBoundingClientRect();
+    const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
+    pivotControllerRef.value?.handleWheel(canvasPos, e);
+  };
+
+  canvas.addEventListener('pointerdown', onCanvasMouseDown, { capture: true });
+  canvas.addEventListener('pointerdown', onCanvasMouseDownBubble);
+  canvas.addEventListener('pointermove', onCanvasMouseMove, { capture: true });
+  canvas.addEventListener('pointerup', onCanvasMouseUp, { capture: true });
+  canvas.addEventListener('pointercancel', onCanvasMouseUp, { capture: true });
+  canvas.addEventListener('wheel', onCanvasWheel, { capture: true, passive: true });
 
   offPivotEvents = () => {
-    canvas.removeEventListener('pointerdown', onCanvasMouseDown);
-    canvas.removeEventListener('pointermove', onCanvasMouseMove);
-    canvas.removeEventListener('pointerup', onCanvasMouseUp);
-    canvas.removeEventListener('pointercancel', onCanvasMouseUp);
+    canvas.removeEventListener('pointerdown', onCanvasMouseDown, { capture: true });
+    canvas.removeEventListener('pointerdown', onCanvasMouseDownBubble);
+    canvas.removeEventListener('pointermove', onCanvasMouseMove, { capture: true });
+    canvas.removeEventListener('pointerup', onCanvasMouseUp, { capture: true });
+    canvas.removeEventListener('pointercancel', onCanvasMouseUp, { capture: true });
+    canvas.removeEventListener('wheel', onCanvasWheel, { capture: true });
   };
 
   const onXeokitToolsPointerDown = (e: PointerEvent) => {
