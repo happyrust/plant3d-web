@@ -50,7 +50,15 @@ type LoaderOptions = {
    * 对象还没开始往图层里加就收手——什么都不加、什么都不记，结果里 `cancelled: true`。对象已经在加的这一批加完为止。
    */
   signal?: AbortSignal
+  /** 这一批取网格的进度，只给状态条用（见 {@link MeshProgressListener}）。这一批没有要装的构件时不报 */
+  onMeshProgress?: MeshProgressListener
 }
+
+/**
+ * 取网格的进度：真要去取的网格数定下来时先报一次 `(0, total)`（都已经在缓存里就是 `(0, 0)`），之后每个网格有了结果报一次
+ * `(done, total)`——取不到的也算。被叫停时不保证报到 `total`（还没轮到的可能不再取，也就不再报）。回调自己抛错不影响取网格。
+ */
+export type MeshProgressListener = (done: number, total: number) => void
 
 /** 取一个网格的结局。`cancelled` = 调用方叫停了、这一个没有去取：不是取不到，什么都不记。 */
 type GeometryOutcome = { status: 'ok' | 'not_found' | 'error' | 'cancelled'; notFoundNew: boolean };
@@ -989,6 +997,7 @@ async function ensureGeometriesForGeoHashes(
     collectAllFailures?: boolean
     /** 叫停：还没发出去的网格不再发；调用方回来之后自己看 `signal.aborted` */
     signal?: AbortSignal
+    onProgress?: MeshProgressListener
   } = {}
 ): Promise<string[]> {
   const cache = getCache(dbno);
@@ -1005,10 +1014,22 @@ async function ensureGeometriesForGeoHashes(
     // 对曾经 404 的几何体：允许重试拉取（用于生成完成后的 forceReload）。
     return forceRetryNotFound && (cache.notFoundGeoHash.has(h) || cache.failedGeoHash.has(h));
   });
+  const reportProgress = (done: number) => {
+    if (!options.onProgress) return;
+    try {
+      options.onProgress(done, unique.length);
+    } catch {
+      // 进度只是给人看的：回调出错不影响取网格
+    }
+  };
+  reportProgress(0);
   if (unique.length === 0) return [];
 
   const missing = new Set<string>();
+  let settled = 0;
   const noteOutcome = (geoHash: string, res: GeometryOutcome) => {
+    settled += 1;
+    reportProgress(settled);
     // 被叫停的不是取不到
     if (res.status === 'cancelled') return;
     if (
@@ -1055,15 +1076,19 @@ async function ensureGeometriesForGeoHashes(
   return Array.from(missing);
 }
 
-/** 记录还在翻页时先把这一页的网格拉进图层缓存，装载阶段直接命中。`signal`：叫停之后不再发新的网格请求。 */
+/**
+ * 记录还在翻页时先把这一页的网格拉进图层缓存，装载阶段直接命中。`signal`：叫停之后不再发新的网格请求。
+ * `onProgress`：这一页取网格的进度；第一次（报总数）在这个函数返回之前就报了。
+ */
 export function prefetchDtxGeometries(
   dtxLayer: DTXLayer,
   dbno: number,
   geoHashes: string[],
   lodAssetKey = 'L1',
   signal?: AbortSignal,
+  onProgress?: MeshProgressListener,
 ): Promise<string[]> {
-  return ensureGeometriesForGeoHashes(dtxLayer, dbno, geoHashes, lodAssetKey, false, { concurrency: 4, signal });
+  return ensureGeometriesForGeoHashes(dtxLayer, dbno, geoHashes, lodAssetKey, false, { concurrency: 4, signal, onProgress });
 }
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
@@ -1634,6 +1659,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     forceRefresh: forceRefreshGeometries,
     collectAllFailures: replaceExistingObjects,
     signal,
+    onProgress: options.onMeshProgress,
   });
   // 取网格的时候被叫停：取到的留在图层里（下次不用再取），对象不加
   if (signal?.aborted) return cancelledResult();

@@ -5,9 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // v1 下同一类行为见 `useModelGeneration.genModelV1.test.ts`。
 const emitToastMock = vi.fn();
 const addLogMock = vi.fn();
-const beginMock = vi.fn();
-const updateMock = vi.fn();
-const finishMock = vi.fn();
 const loadInstancesMock = vi.fn();
 const getSubtreeRefnosMock = vi.fn();
 const isDtxRefnoLoadedMock = vi.fn();
@@ -48,14 +45,6 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   holdDtxLod1Backfill: () => () => {},
   isDtxRefnoLoaded: isDtxRefnoLoadedMock,
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
-}));
-
-vi.mock('@/composables/useModelLoadStatus', () => ({
-  useModelLoadStatus: () => ({
-    begin: beginMock,
-    update: updateMock,
-    finish: finishMock,
-  }),
 }));
 
 vi.mock('@/ribbon/toastBus', () => ({

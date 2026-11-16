@@ -266,3 +266,89 @@ describe('装载链取网格：打包取不可用时与原来一样逐个取', (
     await expectSingleFetchOnly();
   });
 });
+
+describe('取网格的进度（#164：只有一批的装载，状态条也要跟着取到的网格往前走）', () => {
+  /** 记下报上来的每一次「有结果的 / 要取的」 */
+  function progressLog() {
+    const heard: string[] = [];
+    return { heard, listen: (done: number, total: number) => { heard.push(`${done}/${total}`); } };
+  }
+
+  it('先报要取几个（去重之后；函数返回之前就报了），之后每个网格有了结果报一次，源说没有的也算', async () => {
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const layer = await newLayer();
+    const release = new Map<string, (result: MeshBatchResult) => void>();
+    mocks.batchRequest.mockImplementation((geoHash) => new Promise<MeshBatchResult>((resolve) => { release.set(geoHash, resolve); }));
+    const { heard, listen } = progressLog();
+
+    const pending = mod.prefetchDtxGeometries(layer, freshDbno(), ['pa', 'pb', 'pc', 'pb'], 'L1', undefined, listen);
+    expect(heard).toEqual(['0/3']);
+    await vi.waitFor(() => expect(release.size).toBe(3));
+
+    release.get('pb')!({ kind: 'mesh', data: meshFixture('3.mesh') });
+    await vi.waitFor(() => expect(heard).toEqual(['0/3', '1/3']));
+    release.get('pa')!({ kind: 'missing' });
+    release.get('pc')!({ kind: 'mesh', data: meshFixture('23708_26903_1361.mesh') });
+    await pending;
+    expect(heard).toEqual(['0/3', '1/3', '2/3', '3/3']);
+  });
+
+  it('要的网格都已经在图层里：只报一次 0/0，不再去取', async () => {
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const layer = await newLayer();
+    const dbno = freshDbno();
+    await mod.prefetchDtxGeometries(layer, dbno, ['ga', 'gb']);
+    expect(mocks.batchRequest).toHaveBeenCalledTimes(2);
+    const { heard, listen } = progressLog();
+
+    await mod.prefetchDtxGeometries(layer, dbno, ['ga', 'gb'], 'L1', undefined, listen);
+
+    expect(heard).toEqual(['0/0']);
+    expect(mocks.batchRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('装载一批构件带 onMeshProgress：同样先报总数、再逐个报；打包取不可用、逐个取的那条路也报', async () => {
+    mocks.batchAvailable.mockReturnValue(false);
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const layer = await newLayer();
+    vi.stubGlobal('fetch', vi.fn(async (_url: string) => new Response(meshFixture('3.mesh'), { status: 200 })));
+    serveInstances(['1_1', '1_2', '1_3'], ['la', 'lb', 'la']);
+    const { heard, listen } = progressLog();
+
+    const result = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, freshDbno(), ['1_1', '1_2', '1_3'], {
+      dataSource: 'gen-model-v1', onMeshProgress: listen,
+    });
+
+    expect(result.loadedObjects).toBe(3);
+    expect(heard).toEqual(['0/2', '1/2', '2/2']);
+  });
+
+  it('这一批的构件都已经在场景里（没有要装的）：不报', async () => {
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const layer = await newLayer();
+    const dbno = freshDbno();
+    serveInstances(['1_1'], ['ga']);
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, ['1_1'], { dataSource: 'gen-model-v1' });
+    const { heard, listen } = progressLog();
+
+    const again = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, ['1_1'], { dataSource: 'gen-model-v1', onMeshProgress: listen });
+
+    expect(again.loadedObjects).toBe(0);
+    expect(heard).toEqual([]);
+  });
+
+  it('回调自己抛错：网格照样取完、构件照样装上', async () => {
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const layer = await newLayer();
+    serveInstances(['1_1', '1_2'], ['ga', 'gb']);
+    const listen = vi.fn((_done: number, _total: number): void => { throw new Error('状态条坏了'); });
+
+    const result = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, freshDbno(), ['1_1', '1_2'], {
+      dataSource: 'gen-model-v1', onMeshProgress: listen,
+    });
+
+    expect(result.loadedObjects).toBe(2);
+    expect(listen.mock.calls).toEqual([[0, 2], [1, 2], [2, 2]]);
+    expect(layer.hasGeometry('gb')).toBe(true);
+  });
+});

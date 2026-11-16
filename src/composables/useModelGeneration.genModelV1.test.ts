@@ -12,6 +12,7 @@ import {
   modelLoadSessionView,
   requestStopModelLoad,
 } from '@/composables/modelLoadSession';
+import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { createGenModelV1ModelRecordSource } from '@/model-source/genModelV1/modelRecordSource';
 import { __resetGenModelV1ServiceLifecycleForTests } from '@/model-source/genModelV1/serviceLifecycle';
 import { createGenModelV1TreeSource } from '@/model-source/genModelV1/treeSource';
@@ -19,6 +20,8 @@ import { createGenModelV1TreeSource } from '@/model-source/genModelV1/treeSource
 const emitToastMock = vi.fn();
 const addLogMock = vi.fn();
 const loadInstancesMock = vi.fn();
+/** 记录翻页时先拉这一页的网格（`prefetchDtxGeometries`）：缺省当场拉完，不报进度 */
+const prefetchMock = vi.fn();
 const collectDbnumMock = vi.fn();
 const visibleInstsMock = vi.fn();
 const typeInfoMock = vi.fn();
@@ -151,13 +154,11 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   holdDtxLod1Backfill: holdLod1Mock,
   isDtxRefnoLoaded: (dbno: number, refno: string) => isDtxRefnoLoadedMock(dbno, refno),
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
+  prefetchDtxGeometries: (...args: unknown[]) => prefetchMock(...args),
   resolveDtxRefnosByUnitRefno: unitRefnosMock,
 }));
 vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
   useDbnoInstancesParquetLoader: () => ({ isParquetAvailable: vi.fn(), queryAllRefnosByDbno: vi.fn() }),
-}));
-vi.mock('@/composables/useModelLoadStatus', () => ({
-  useModelLoadStatus: () => ({ begin: vi.fn(), update: vi.fn(), finish: vi.fn() }),
 }));
 // 已加载节点表（C2）：这里只看显示流程在什么时候登记 / 撤表、带的是哪一版的水位
 vi.mock('@/composables/useLoadedNodeStatus', () => ({
@@ -240,6 +241,8 @@ beforeEach(async () => {
   memberListeners.clear();
   __resetGenerationFillStateForTests();
   __resetModelLoadSessionsForTests();
+  // 状态条的状态是全页面一份（用真的：几个加载同时在跑时状态条显示谁、「停」认谁，要看它）：每个用例从空的开始
+  useModelLoadStatus().reset();
   // 「每个节点上一次装了哪些构件」是模块级的（跨实例共用）：每个用例从空的开始
   (await import('./useModelGeneration')).__resetLoadedRefnosByRootForTests();
   // 缺省不自动接着问（一发定论）：要验「超时自动接续」的用例自己把预算放开、把间隔调成 0
@@ -251,6 +254,8 @@ beforeEach(async () => {
   openChoiceMock.mockResolvedValue('generate');
   dbnumRowsMock.mockReturnValue(DBNUM_ROWS_WITH_MODEL);
   loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => loadedAll(refnos));
+  prefetchMock.mockReset();
+  prefetchMock.mockResolvedValue([]);
   isDtxRefnoLoadedMock.mockReset();
   isDtxRefnoLoadedMock.mockReturnValue(false);
   evictMock.mockReset();
@@ -3545,5 +3550,325 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
     // 第二个的确认框没有再弹出来，后端也只收到第一个节点的请求
     expect(dialog.visible.value).toBe(false);
     expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual([UPDATE_ZONE]);
+  });
+});
+
+describe('状态条：几个加载同时在跑时各走各的进度，先结束的不把「停」带走；只有一批的装载进度也往前走（#164）', () => {
+  const NODE = '24381_101410';
+  const OTHER = '24381_202020';
+  type MeshProgress = (done: number, total: number) => void;
+  type ScopeAnswer = { success: boolean; refno: string; refnos: string[]; error_message?: string };
+
+  /** 查看器左下角状态条此刻的内容（全页面一份，这里用的是真的） */
+  const bar = () => useModelLoadStatus().state.value;
+  const barLine = () => `${bar().progress}% ${bar().message}`;
+
+  /** 记录源的进度广播（全页面都收得到）：`refno` 是发起那次查询的节点，`root` 是刚查完的生成根 */
+  function emitRecordsProgress(refno: string, root: string, done: number, total: number): void {
+    for (const listener of [...progressListeners]) listener({ refno, root, done, total });
+  }
+
+  it('不超过一页的节点（装载只有一批）：进了装载，文案从「查询记录」换成装载阶段的，进度跟着取到的网格往前走，不再停在 30%', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const seen: string[] = [];
+    let instanceDuringLoad = '';
+    visibleInstsMock.mockImplementation(async () => {
+      emitRecordsProgress(NODE, '24381_145018', 3, 3);
+      seen.push(barLine());
+      return { success: true, refno: NODE, refnos: ['24381_1', '24381_2', '24381_3'] };
+    });
+    loadInstancesMock.mockImplementation(async (
+      _layer: unknown, _dbno: number, refnos: string[], options: { onMeshProgress?: MeshProgress },
+    ) => {
+      seen.push(barLine());
+      for (const done of [0, 10, 20]) {
+        options.onMeshProgress?.(done, 20);
+        seen.push(barLine());
+      }
+      instanceDuringLoad = `${gen.progress.value}% ${gen.statusMessage.value}`;
+      return loadedAll(refnos);
+    });
+
+    expect(await gen.showModelByRefno(NODE)).toBe(true);
+
+    expect(seen).toEqual([
+      '30% gen-model 查询记录：3/3 个生成根',
+      '30% 从 gen-model 加载 3 个 refno...',
+      `30% 从 gen-model 加载 ${NODE}：取网格 0/20...`,
+      `56% 从 gen-model 加载 ${NODE}：取网格 10/20...`,
+      `82% 从 gen-model 加载 ${NODE}：网格已取齐，正在装入场景...`,
+    ]);
+    // 这个实例对外的那一份（整屏进度弹窗、调用方读的）和状态条是同一个内容
+    expect(instanceDuringLoad).toBe(seen[4]);
+    expect(bar()).toMatchObject({ visible: false, progress: 100, message: '加载完成 (gen-model)', stopKey: null });
+  });
+
+  it('分了批的装载：文案还是「装入第几批」，百分比在这一批占的那一段里跟着取到的网格走', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const refnos = Array.from({ length: 2500 }, (_, i) => `24381_${i + 1}`);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: NODE, refnos });
+    const seen: string[] = [];
+    loadInstancesMock.mockImplementation(async (
+      _layer: unknown, _dbno: number, batch: string[], options: { onMeshProgress?: MeshProgress },
+    ) => {
+      seen.push(barLine());
+      options.onMeshProgress?.(50, 100);
+      seen.push(barLine());
+      options.onMeshProgress?.(100, 100);
+      seen.push(barLine());
+      return loadedAll(batch);
+    });
+
+    expect(await gen.showModelByRefno(NODE)).toBe(true);
+
+    const firstBatch = `从 gen-model 加载 ${NODE}：装入第 1/2 批（1000/2500 个 refno）...`;
+    const secondBatch = `从 gen-model 加载 ${NODE}：装入第 2/2 批（2500/2500 个 refno）...`;
+    expect(seen).toEqual([
+      `30% ${firstBatch}`, `40% ${firstBatch}`, `50% ${firstBatch}`,
+      `56% ${secondBatch}`, `71% ${secondBatch}`, `87% ${secondBatch}`,
+    ]);
+  });
+
+  it('别的节点的记录查询进度（全页面广播）不动这个节点的进度：文案、节点号、百分比都还是自己的', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const own = () => ({
+      bar: { message: bar().message, progress: bar().progress, currentRefno: bar().currentRefno, stopKey: bar().stopKey },
+      instance: {
+        message: gen.statusMessage.value, progress: gen.progress.value, currentRefno: gen.currentRefno.value,
+        index: gen.currentIndex.value, total: gen.totalCount.value,
+      },
+    });
+    let before: ReturnType<typeof own> | null = null;
+    let after: ReturnType<typeof own> | null = null;
+    visibleInstsMock.mockImplementation(async () => {
+      emitRecordsProgress(NODE, '24381_145018', 1, 4);
+      before = own();
+      // 另一个正在显示的 SITE、模型树查可见性……各自的查询收完了
+      emitRecordsProgress(OTHER, '24381_300001', 3, 3);
+      emitRecordsProgress('24381_303030', '24381_300002', 6, 6);
+      after = own();
+      return { success: true, refno: NODE, refnos: ['24381_1'] };
+    });
+
+    expect(await gen.showModelByRefno(NODE)).toBe(true);
+
+    expect(before).toEqual({
+      bar: { message: 'gen-model 查询记录：1/4 个生成根', progress: 15, currentRefno: '24381_145018', stopKey: NODE },
+      instance: { message: 'gen-model 查询记录：1/4 个生成根', progress: 15, currentRefno: '24381_145018', index: 2, total: 4 },
+    });
+    expect(after).toEqual(before);
+  });
+
+  it('进了装载之后这个节点再有记录查询的进度（装载器补查、模型树查可见性）：不把状态条拉回「查询记录」', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: NODE, refnos: ['24381_1', '24381_2'] });
+    const line = () => `${barLine()} @${bar().currentRefno}`;
+    let before = '';
+    let after = '';
+    loadInstancesMock.mockImplementation(async (
+      _layer: unknown, _dbno: number, refnos: string[], options: { onMeshProgress?: MeshProgress },
+    ) => {
+      options.onMeshProgress?.(5, 10);
+      before = line();
+      emitRecordsProgress(NODE, '24381_145018', 1, 1);
+      after = line();
+      return loadedAll(refnos);
+    });
+
+    expect(await gen.showModelByRefno(NODE)).toBe(true);
+
+    expect(before).toBe(`56% 从 gen-model 加载 ${NODE}：取网格 5/10... @${NODE}`);
+    expect(after).toBe(before);
+  });
+
+  it.each<[string, boolean]>([
+    ['同一份 useModelGeneration（模型树上连点两个节点）', true],
+    ['两份 useModelGeneration（模型树点一个、查看器里点一个）', false],
+  ])('两个节点的加载重叠 · %s：后开始的不盖先开始的；先结束的收尾之后状态条还在，换成还在跑的那个，「停」认它、点了真能停', async (_label, shared) => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const firstGen = useModelGeneration({ viewer, db_num: 7997 });
+    const secondGen = shared ? firstGen : useModelGeneration({ viewer, db_num: 7997 });
+    // 两个节点的范围查询都先挂着，由用例决定谁先回
+    const answer = new Map<string, (result: ScopeAnswer) => void>();
+    visibleInstsMock.mockImplementation((refno: string) => new Promise<ScopeAnswer>((resolve) => { answer.set(refno, resolve); }));
+
+    const first = firstGen.showModelByRefno(NODE);
+    await vi.waitFor(() => expect(answer.has(NODE)).toBe(true));
+    const second = secondGen.showModelByRefno(OTHER);
+    await vi.waitFor(() => expect(answer.has(OTHER)).toBe(true));
+
+    // 后开始的那个把自己的记录查完了：状态条显示的是先开始的那个，不跟着变
+    emitRecordsProgress(OTHER, '24381_300001', 3, 3);
+    expect(bar()).toEqual({
+      visible: true, message: '查询可见实例范围...', progress: 10, currentRefno: NODE, error: null, stopKey: NODE,
+    });
+    expect(secondGen.statusMessage.value).toBe('gen-model 查询记录：3/3 个生成根');
+    if (!shared) {
+      // 两份实例各自对外的进度也互不相干
+      expect(firstGen.statusMessage.value).toBe('查询可见实例范围...');
+      expect(firstGen.progress.value).toBe(10);
+      expect(firstGen.currentRefno.value).toBe(NODE);
+    }
+
+    // 先开始的那个先结束
+    answer.get(NODE)!({ success: true, refno: NODE, refnos: ['24381_1'] });
+    expect(await first).toBe(true);
+
+    // 状态条没有跟着收起来：换成还在跑的那个，带着它自己的进度和「停」
+    expect(bar()).toEqual({
+      visible: true, message: 'gen-model 查询记录：3/3 个生成根', progress: 30, currentRefno: '24381_300001', error: null, stopKey: OTHER,
+    });
+    expect(modelLoadSessionView(OTHER)).toEqual({ stoppable: true, stopping: false });
+
+    // 点状态条上的「停」（它拿 stopKey 去叫停）：停下来的是还在跑的那个
+    expect(requestStopModelLoad(bar().stopKey!)).toBe(true);
+    expect(v1Source.records.cancelCollect).toHaveBeenCalledWith(OTHER);
+    answer.get(OTHER)!({ success: false, refno: OTHER, refnos: [], error_message: 'cancelled: gen-model 读取已被调用方取消' });
+    expect(await second).toBe(false);
+    expect(secondGen.statusMessage.value).toBe('已停止加载');
+    if (!shared) expect(firstGen.statusMessage.value).toBe('加载完成 (gen-model)');
+    // 装进场景的只有先结束的那个节点的构件
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([['24381_1']]);
+    expect(bar()).toMatchObject({ visible: false, message: '已停止加载', stopKey: null });
+    expect(modelLoadSessionView(OTHER)).toBeNull();
+    expect(consumeModelLoadStopped(OTHER)).toBe(true);
+  });
+
+  it('记录查完、翻页时先发出去的网格还没都回来：状态条说在取网格，进度跟着取到的走（30 → 70）；之后的装载从那里接着走', async () => {
+    __resetGenModelV1ServiceLifecycleForTests();
+    const { collectRecordsByAncestor } = await import('@/model-source/genModelV1/modelRecords');
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    const record = (refno: string, hashes: string[]) => ({
+      refno, old_refno: null, owner: '24381_145018', world_aabb: null,
+      world_trans: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] },
+      insts: hashes.map((geo_hash) => ({ geo_hash })), has_neg: false, generic: 'ELBO', pts: null, date: null,
+    });
+    const recordsApi = {
+      generate: vi.fn(),
+      children: vi.fn(async (refno: string) => ({ source: 'direct', parent: refno, nodes: [] })),
+      // 一页记录：两个构件，四个不同的网格
+      records: vi.fn(async () => ({
+        source: 'model-database', total: 2, truncated: false, next_cursor: null,
+        items: [record('24381_1', ['h1', 'h2']), record('24381_2', ['h2', 'h3', 'h4'])],
+      })),
+    };
+    visibleInstsMock.mockImplementation(async () => {
+      // 真的按祖先读一页：显示流程登记的分页回调收到这一页，先去取它的网格
+      await collectRecordsByAncestor(NODE, {}, recordsApi as never);
+      return { success: true, refno: NODE, refnos: ['24381_1', '24381_2'] };
+    });
+    let report!: MeshProgress;
+    let finishPrefetch!: () => void;
+    prefetchMock.mockImplementation((
+      _layer: unknown, _dbno: number, hashes: string[], _lod: string, _signal: AbortSignal, onProgress: MeshProgress,
+    ) => {
+      report = onProgress;
+      onProgress(0, hashes.length);
+      return new Promise<string[]>((resolve) => { finishPrefetch = () => resolve([]); });
+    });
+    let atLoad = '';
+    loadInstancesMock.mockImplementation(async (_layer: unknown, _dbno: number, refnos: string[]) => {
+      atLoad = barLine();
+      return loadedAll(refnos);
+    });
+
+    const shown = gen.showModelByRefno(NODE);
+    await vi.waitFor(() => expect(bar().message).toBe('记录查询结束，正在取网格 0/4...'));
+    expect(prefetchMock).toHaveBeenCalledWith(expect.anything(), 7997, ['h1', 'h2', 'h3', 'h4'], 'L1', expect.any(AbortSignal), expect.any(Function));
+    expect(bar()).toMatchObject({ visible: true, progress: 30, stopKey: NODE });
+    report(2, 4);
+    expect(barLine()).toBe('50% 记录查询结束，正在取网格 2/4...');
+    expect(loadInstancesMock).not.toHaveBeenCalled();
+    report(4, 4);
+    expect(barLine()).toBe('70% 记录查询结束，正在取网格 4/4...');
+
+    finishPrefetch();
+    expect(await shown).toBe(true);
+    // 等网格那一段走到了 70：装载从 70 接着走，不退回 30
+    expect(atLoad).toBe('70% 从 gen-model 加载 2 个 refno...');
+  });
+
+  it('记录查完时边取边画先到的一批还在装：状态条说在装先到的一批，不再是「查询记录 N/N」', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    let releaseFirstBatch!: () => void;
+    loadInstancesMock.mockImplementationOnce((_layer: unknown, _dbno: number, refnos: string[]) => new Promise((resolve) => {
+      releaseFirstBatch = () => resolve(loadedAll(refnos));
+    }));
+    visibleInstsMock.mockImplementation(async () => {
+      emitRecordsProgress(NODE, '24381_100', 1, 2);
+      // 第一个成员的记录到了：边取边画立刻开始装这一批
+      emitMember(NODE, '24381_100', ['24381_1', '24381_2'], 1, 2);
+      await tick();
+      emitRecordsProgress(NODE, '24381_200', 2, 2);
+      return { success: true, refno: NODE, refnos: ['24381_1', '24381_2', '24381_3'] };
+    });
+
+    const shown = gen.showModelByRefno(NODE);
+    await vi.waitFor(() => expect(bar().message).toBe('记录查询结束，正在把先到的一批构件装入场景...'));
+    expect(bar()).toMatchObject({ visible: true, progress: 30, stopKey: NODE });
+    expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+
+    releaseFirstBatch();
+    expect(await shown).toBe(true);
+    // 先到的一批装完，剩下的那一个由收尾装
+    expect(loadInstancesMock.mock.calls.map((call) => call[2])).toEqual([['24381_1', '24381_2'], ['24381_3']]);
+    expect(bar()).toMatchObject({ visible: false, message: '加载完成 (gen-model)' });
+  });
+
+  it('已有的显示出来之后问后端有没有还没生成的部分：这一会儿状态条说在核对，问完换回原来那一句', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    // 库文件比模型水位新：显示出来之后要问一次生成预检
+    dbnumRowsMock.mockReturnValue(DBNUM_ROWS_FILE_AHEAD);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: NODE, refnos: ['24381_1'] });
+    let during = '';
+    generationFactsMock.mockImplementation(async () => {
+      during = `${bar().visible ? '开着' : '收起'} ${barLine()}`;
+      return { unitsTotal: 3, unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20, exact: true };
+    });
+
+    expect(await gen.showModelByRefno(NODE)).toBe(true);
+
+    expect(generationFactsMock).toHaveBeenCalledWith(NODE);
+    expect(during).toBe('开着 100% 加载完成 (gen-model)；正在核对有没有还没生成的部分...');
+    expect(gen.statusMessage.value).toBe('加载完成 (gen-model)');
+    expect(bar()).toMatchObject({ visible: false, progress: 100, message: '加载完成 (gen-model)' });
+  });
+
+  it('整库显示：状态条上没有「停」；收尾装载只有一批时文案换成取网格、装入场景，百分比跟着走', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    collectDbnumMock.mockImplementation(async (dbnum: number) => ({
+      dbnum, sites: [{ refno: '24381_101405', name: '/1PTU-INST23' }], refnos: ['24381_1', '24381_2'],
+      generationRoots: ['24381_101410'], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [],
+    }));
+    const seen: string[] = [];
+    loadInstancesMock.mockImplementation(async (
+      _layer: unknown, _dbno: number, refnos: string[], options: { onMeshProgress?: MeshProgress },
+    ) => {
+      seen.push(`${bar().visible ? '开着' : '收起'} 停=${bar().stopKey} ${barLine()}`);
+      options.onMeshProgress?.(2, 4);
+      seen.push(barLine());
+      options.onMeshProgress?.(4, 4);
+      seen.push(barLine());
+      return loadedAll(refnos);
+    });
+
+    const result = await gen.showModelByDbnum(7997);
+
+    expect(result.loaded).toBe(true);
+    expect(seen).toEqual([
+      '开着 停=null 5% gen-model：查找 dbnum=7997 的 SITE...',
+      '71% gen-model 整库 dbnum=7997：取网格 2/4...',
+      '87% gen-model 整库 dbnum=7997：网格已取齐，正在装入场景...',
+    ]);
+    expect(bar()).toMatchObject({ visible: false, progress: 100, message: 'Model loaded (gen-model)' });
   });
 });
