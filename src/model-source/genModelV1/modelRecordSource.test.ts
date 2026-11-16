@@ -700,6 +700,8 @@ describe('createGenModelV1ModelRecordSource', () => {
       });
       const heard: string[] = [];
       const site = source.collectByAncestor('8_0', { onRecordPage: (items) => heard.push(hashesOf(items)) });
+      // 放行 8_1 的那一拍里 site 就已经拒掉，先接住，免得在下面断言之前被当成没人处理的拒绝
+      site.catch(() => undefined);
       await release('8_1');
       await expect(site).rejects.toMatchObject({ code: 'cancelled' });
 
