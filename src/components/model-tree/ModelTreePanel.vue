@@ -1046,10 +1046,13 @@ async function showNode() {
   if (isRefnoLike(id) && modelGenerationState.value && !DEBUG_SKIP_EYE_AUTO_GENERATE) {
     // 加载中被叫停了（或生成到一半这个节点被隐藏了）：不再把它同步成可见
     let withdrawn = false;
+    // 和点眼睛一样让行尾转圈：前面有节点在加载时这一次要排队（#166），行上得看得到它在等、点一下能取消
+    setNodeLoading(id, true);
     try {
       await modelGenerationState.value.showModelByRefno(id, { flyTo: true });
       withdrawn = consumeModelLoadStopped(id);
     } finally {
+      setNodeLoading(id, false);
       if (!withdrawn) await pdmsTree.setVisible(id, true);
     }
   } else {
@@ -1102,7 +1105,10 @@ async function regenerateNode() {
       flyTo: true,
       regenerate: true,
     });
-    if (success) await pdmsTree.setVisible(id, true);
+    // 重新生成在排队的时候也能停（#166）：停了就是什么都没做。这里把那一笔「收回去了」销掉——
+    // 留着的话，下一次点眼睛会被当成「这次显示收回去了」，不再同步成可见
+    const stopped = consumeModelLoadStopped(id);
+    if (success && !stopped) await pdmsTree.setVisible(id, true);
   } finally {
     setNodeLoading(id, false);
   }

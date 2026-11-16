@@ -22,7 +22,12 @@ import {
   type GenerationUnitFacts,
 } from '@/composables/generationFill';
 import { beginGenerationFill, clearPendingGenerationFill, notePendingGenerationFill } from '@/composables/generationFillState';
-import { beginModelLoadSession, ModelLoadStoppedError, type ModelLoadSession } from '@/composables/modelLoadSession';
+import {
+  beginModelLoadSession,
+  ModelLoadStoppedError,
+  noteModelLoadWithdrawn,
+  type ModelLoadSession,
+} from '@/composables/modelLoadSession';
 import { backendMeshPurgeKeepsShared, fetchGenerationFacts, fetchNodeModelFacts } from '@/composables/nodeModelFacts';
 import { changedSessionsOfNodeVersions, type NodeModelFacts } from '@/composables/nodeModelStatus';
 import { decideNodeUpdate, describeNodeUpdateSummary, planNodeUpdateChunks } from '@/composables/nodeModelUpdate';
@@ -491,6 +496,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null);
 
   const loadedRoots = new Set<string>();
+  /**
+   * 还没结束的普通显示（不带重新生成 / 重载 / 补齐 / 更新）：节点 → 那一次显示。同一个节点在排队或在跑的时候又被点了
+   * 一次，搭上已有的那一次，不另起一条（#166）。只在这个实例里合并：「已加载」的账是按实例记的，别的实例发起的
+   * 同一个节点照旧自己跑一遍，由排队排在后面。
+   */
+  const sharedShows = new Map<string, SharedShow>();
 
   /**
    * 模型资产补齐试过、有了定论的范围（`a_b`，节点自己或它的一个 ZONE）：`empty` = 生成跑过了、没有可显示的东西（数据的终局，
@@ -622,6 +633,21 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dbno: number
     loadedKeys: string[]
     unhidden: string[]
+  };
+
+  /** 一次显示的相机安排，装到要飞的地方时现问：同一个节点又被点了一次的话，以后点的那一下为准（#166） */
+  type ShowCamera = {
+    flyTo: boolean
+    /** 相机意图戳：落地时还是最新的才动相机 */
+    stamp: number
+  };
+
+  /** 一次还没结束的普通显示：同一个节点再点时搭上它（#166） */
+  type SharedShow = {
+    task: Promise<boolean>
+    /** 这一次最后被收回去了（被叫停）：搭车的发起方各自也要记一笔 */
+    withdrawn: boolean
+    camera: ShowCamera
   };
 
   /** 把这些构件置为可见（「显示」= 保证可见）；其中原来装着但藏着的记进 `unhidden` */
@@ -1114,11 +1140,71 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
     }
 
-    isGenerating.value = true;
-    lastLoadDebug.value = null;
+    const camera: ShowCamera = { flyTo: loadOptions?.flyTo === true, stamp: cameraStamp };
+    // 同一个节点的普通显示还在排队 / 在跑：搭上那一次，不另起一条（#166）。能走到这里说明节点还没装好——
+    // 装好了的，上面已经按「已在场景」回去了。
+    const plain = !loadOptions?.regenerate && !refresh && !explicitFill;
+    const riding = plain ? sharedShows.get(normalizedRoot) : undefined;
+    if (riding) {
+      // 相机跟后点的这一下：先点那一次的意图戳已经被这一下顶掉了，把这一下的交给它，落地时照样飞
+      if (camera.flyTo) {
+        riding.camera.flyTo = true;
+        riding.camera.stamp = camera.stamp;
+      }
+      const ok = await riding.task;
+      // 那一次被叫停收回去了：这一位发起方回去之后同样要问得到
+      if (riding.withdrawn) noteModelLoadWithdrawn(normalizedRoot);
+      return ok;
+    }
+
     // 加载会话（加载中可以停，2026-11-11）：行尾的转圈和状态条经它叫停这一次显示。右键「重新生成模型」不能停——
     // 后端已经在清旧模型、算新模型，前端停下来只会留下一个对不上的场景。
+    // 点下去当场进会话（行尾立刻是「停」），再排队等轮到（#166）：同一时刻只有一个节点在读记录、装载、补齐。
+    // 排队中的一律能停——重新生成也是，这时什么都还没发给后端。
     const session = beginModelLoadSession(normalizedRoot, { stoppable: loadOptions?.regenerate !== true });
+    const run = async (): Promise<boolean> => {
+      try {
+        const turn = session.waitTurn();
+        if (turn !== true && !(await turn)) {
+          // 排队时被叫停：还没开始，什么都没装、什么都没发；只记一笔「这次显示收回去了」
+          session.markWithdrawn();
+          consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 排队时被叫停：还没开始加载，已从队列里拿掉`);
+          return false;
+        }
+        return await runShowModelLoad(session, normalizedRoot, loadOptions, camera);
+      } finally {
+        // 交出这一轮：排在后面的节点接着跑
+        session.end();
+      }
+    };
+    if (!plain) return run();
+    const share: SharedShow = { task: Promise.resolve(false), withdrawn: false, camera };
+    sharedShows.set(normalizedRoot, share);
+    share.task = run().finally(() => {
+      share.withdrawn = session.withdrawn;
+      sharedShows.delete(normalizedRoot);
+    });
+    return share.task;
+  }
+
+  /**
+   * `showModelByRefno` 的后一段：轮到这个节点了，真正去加载——读记录、装载、按需补齐、收尾。
+   * 加载会话由前一段开、由前一段结束（排队、交出这一轮都在那里），这里只管用。
+   */
+  async function runShowModelLoad(
+    session: ModelLoadSession,
+    normalizedRoot: string,
+    loadOptions: Parameters<typeof showModelByRefno>[1],
+    camera: ShowCamera,
+  ): Promise<boolean> {
+    const update = loadOptions?.update === true;
+    const refresh = loadOptions?.refresh === true || update;
+    const explicitFill = loadOptions?.fill === true;
+    // 轮到的这一刻节点算不算已经加载过（排队期间前面的加载可能已经把它装上了）：被叫停时据此决定撤不撤「已加载」
+    const genuinelyLoaded = loadedRoots.has(normalizedRoot);
+
+    isGenerating.value = true;
+    lastLoadDebug.value = null;
     const undo: LoadUndoLog = { session, dbno: 0, loadedKeys: [], unhidden: [] };
     /** 这一次显示里把节点记成了「已加载」（被叫停时要不要撤掉看它） */
     let markedLoadedHere = false;
@@ -1497,8 +1583,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           dbno,
           dtxLayer: prefetchLayer,
           anyViewer: viewer as ProgressiveViewer,
-          flyTo: loadOptions?.flyTo === true,
-          cameraStamp,
+          // 第一批装好时现问：同一个节点又被点了一次的话，以后点的那一下为准
+          get flyTo() { return camera.flyTo; },
+          get cameraStamp() { return camera.stamp; },
           onBatchLoaded: (shown) => { shownEarly = shown; },
           undo,
         });
@@ -1725,11 +1812,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         mergeLoadTotals(fillTotals, totals);
         fillViewer.scene?.ensureRefnos?.(fresh, { computeAabb: false });
         // 一个模型都没有的节点：第一块出来就飞一次（全部做完后收尾路径会对整体再对一次焦）
-        if (!existingShown && !fillFlew && loadOptions?.flyTo) {
+        if (!existingShown && !fillFlew && camera.flyTo) {
           fillFlew = true;
           try {
             const aabb = fillViewer.scene?.getAABB?.(fresh.length > 5000 ? fresh.slice(0, 5000) : fresh) ?? null;
-            if (aabb && isCameraIntentCurrent(cameraStamp)) fillViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+            if (aabb && isCameraIntentCurrent(camera.stamp)) fillViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
           } catch {
             // ignore flyTo errors
           }
@@ -2181,11 +2268,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
       }
       // 边取边画时第一批到就飞过一次；收齐后再对整体对一次焦——除非用户在这期间自己动过视口
-      if (loadOptions?.flyTo && !progressiveLoad?.cameraTakenOverByUser()) {
+      if (camera.flyTo && !progressiveLoad?.cameraTakenOverByUser()) {
         try {
           const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
           const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-          if (aabb && isCameraIntentCurrent(cameraStamp)) {
+          if (aabb && isCameraIntentCurrent(camera.stamp)) {
             anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
           }
         } catch {
@@ -2360,7 +2447,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       isGenerating.value = false;
       showProgressModal.value = false;
       status.finish();
-      session.end();
     }
   }
 

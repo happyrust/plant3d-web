@@ -185,11 +185,13 @@ function onToggleExpand(ev: MouseEvent) {
 /**
  * 加载中可以停（用户 2026-11-11 定）：这一行在转圈、而且转的是「显示这个节点」（有加载会话、此刻能停）时，
  * 行尾这颗按钮就是「停」。重新生成、别的处理占着这一行时不能停，照旧是禁用的转圈。
+ * 还在排队、没轮到的（#166：连续点亮几个节点时一个个来）一律能停，点了当场取消，不等前面的跑完。
  */
 const loadSession = computed(() => (props.loading ? modelLoadSessionView(props.row.id) : null));
 const canStopLoading = computed(() => props.loading === true && loadSession.value?.stoppable === true);
 const loadingTitle = computed(() => {
   if (!props.loading) return undefined;
+  if (canStopLoading.value && loadSession.value?.queued) return '排队中：前面的节点加载完就轮到它。点一下取消，不用等前面的跑完';
   if (canStopLoading.value) return '加载中，点一下停：停掉剩下的批次，把这次画出来的收起来；已取到的数据留着，再点眼睛会更快';
   if (loadSession.value?.stopping) return '正在停…';
   return '正在处理，这一步不能停';
