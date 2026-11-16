@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createGenModelV1TreeSource, eleTreeNodeToDto, isGroupRootId, isVirtualRootId, makeGroupRootId, makeVirtualRootId, SUBTREE_CONCURRENCY, type GenModelV1TreeApi } from './treeSource';
 
-import type { ModelRecordsApi } from './modelRecords';
+import type { CollectRecordsOptions, CollectRecordsResult, ModelRecordsApi } from './modelRecords';
 
 import { GenModelV1ApiError, toV1Refno, type EleTreeNodeDto, type SearchResponse, type TreeRootsResponse } from '@/api/genModelV1Api';
 import {
@@ -370,6 +370,57 @@ describe('createGenModelV1TreeSource', () => {
     expect(resp.empty_scopes).toEqual([]);
 
     expect((await tree.visibleInsts(ROOT_ID)).success).toBe(false);
+  });
+
+  it('visibleInsts 的 onRecordPage 转给这一次按祖先查询；不给时调用形状和原来一样（#165）', async () => {
+    const collected: CollectRecordsResult = {
+      refno: '9304_2', generationRoots: [], items: [], pending: [], empty: ['9304_2'], truncatedRoots: [], errors: {}, statuses: {},
+    };
+    const collectByAncestor = vi.fn(async (_refno: string, _options?: CollectRecordsOptions) => collected);
+    const tree = createGenModelV1TreeSource({ api: fakeApi(), collectByAncestor, recordsOptions: { pageSize: 100 } });
+
+    await tree.visibleInsts('9304/2');
+    expect(collectByAncestor).toHaveBeenLastCalledWith('9304_2', { pageSize: 100 });
+    expect(collectByAncestor.mock.calls[0]![1]).not.toHaveProperty('onRecordPage');
+
+    const onRecordPage = vi.fn();
+    await tree.visibleInsts('9304_2', { onRecordPage });
+    expect(collectByAncestor).toHaveBeenCalledTimes(2);
+    expect(collectByAncestor.mock.calls[1]![0]).toBe('9304_2');
+    expect(collectByAncestor.mock.calls[1]![1]).toEqual({ pageSize: 100, onRecordPage });
+    expect(collectByAncestor.mock.calls[1]![1]!.onRecordPage).toBe(onRecordPage);
+  });
+
+  it('visibleInsts 的 onRecordPage 收到的是这次查询读到的每一页；回调不混进发给接口的请求选项（#165）', async () => {
+    const identity = { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] };
+    const rows = ['17496_9001', '17496_9002', '17496_9003'].map((refno) => ({
+      refno, old_refno: null, owner: '9304_2', world_aabb: null, world_trans: identity,
+      insts: [{ geo_hash: `g-${refno}`, transform: identity, is_tubi: false, is_invalid_tubi: false }],
+      has_neg: false, generic: 'ELBO', pts: null, date: null,
+    }));
+    // 两条一页：三条记录翻两页
+    const records = vi.fn(async ({ cursor }: { cursor?: number }, _options?: unknown) => {
+      const from = cursor ?? 0;
+      const next = from + 2;
+      return {
+        source: 'model-database', items: rows.slice(from, next), total: rows.length,
+        truncated: next < rows.length, next_cursor: next < rows.length ? next : null,
+      };
+    });
+    const api = fakeApi();
+    const recordsApi: ModelRecordsApi = { generate: vi.fn() as never, records: records as never, children: api.children };
+    const tree = createGenModelV1TreeSource({ api, recordsApi });
+
+    const heard: string[][] = [];
+    const resp = await tree.visibleInsts('9304_2', {
+      onRecordPage: (items) => heard.push(items.flatMap((entry) => (entry.insts ?? []).map((inst) => String(inst.geo_hash)))),
+    });
+
+    expect(resp.success).toBe(true);
+    expect(resp.refnos).toEqual(['17496_9001', '17496_9002', '17496_9003']);
+    expect(heard).toEqual([['g-17496_9001', 'g-17496_9002'], ['g-17496_9003']]);
+    expect(records).toHaveBeenCalledTimes(2);
+    for (const call of records.mock.calls) expect(call[1]).not.toHaveProperty('onRecordPage');
   });
 
   it('visibleInsts 把「查过、一条记录都没有的范围」交出来（模型资产补齐按块做，方案 B3）', async () => {

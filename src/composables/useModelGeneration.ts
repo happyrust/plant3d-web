@@ -4,6 +4,7 @@ import type { Ref } from 'vue';
 import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
 import type { PdmsTypeInfoResponse } from '@/api/genModelPdmsAttrApi';
 import type { DbnumRow } from '@/api/genModelV1Api';
+import type { RecordPageItem } from '@/model-source/ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
@@ -53,7 +54,6 @@ import {
 } from '@/composables/useLoadedNodeStatus';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
-import { pushRecordPageListener } from '@/model-source/genModelV1/modelRecords';
 import { emitToast } from '@/ribbon/toastBus';
 import { toRefnoKey } from '@/utils/refnoKey';
 import { beginCameraIntent, isCameraIntentCurrent } from '@/viewer/camera/cameraIntent';
@@ -356,8 +356,11 @@ export function describeVisibleInstsIncomplete(incomplete: VisibleInstsIncomplet
 
 export async function queryLoadScopeRefnos(
   refno: string,
-  /** `isStopped`：加载被叫停了——记录读取被取消不是「查询失败」，不要退到逐节点的子树查询（那要发几百个请求） */
-  options: { isStopped?: () => boolean } = {},
+  /**
+   * `isStopped`：加载被叫停了——记录读取被取消不是「查询失败」，不要退到逐节点的子树查询（那要发几百个请求）。
+   * `onRecordPage`：这次查询每读到一页记录回调一次（显示流程用它先取这一页的网格）；只收这次查询自己的页。
+   */
+  options: { isStopped?: () => boolean; onRecordPage?: (items: readonly RecordPageItem[]) => void } = {},
 ): Promise<{
   refnos: string[]
   source: 'visible-insts' | 'subtree-refnos'
@@ -380,7 +383,10 @@ export async function queryLoadScopeRefnos(
 
   let incomplete: VisibleInstsIncomplete | null = null;
   try {
-    const resp = await getModelSource().tree.visibleInsts(normalized);
+    const tree = getModelSource().tree;
+    const resp = options.onRecordPage
+      ? await tree.visibleInsts(normalized, { onRecordPage: options.onRecordPage })
+      : await tree.visibleInsts(normalized);
     if (!resp.success) {
       throw new Error(resp.error_message || 'e3d visible-insts 查询失败');
     }
@@ -1157,7 +1163,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     });
     // 多批装载期间不补拉粗网格：补拉的请求与 recompile 会插进批与批之间，和本次装载抢连接与主线程
     const releaseLod1Backfill = holdDtxLod1Backfill();
-    let stopRecordPageListener: (() => void) | null = null;
+    // 这次显示结束了：之后才到的记录页（和别处共用的那次读取可能还在翻）不再引出取网格
+    let loadEnded = false;
     let progressiveLoad: ProgressiveLoad | null = null;
 
     /** 节点一级的更新：后端这一次做了什么（收尾时写进提示）；没走到生成为 `null` */
@@ -1405,8 +1412,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         status.progress = Math.max(status.progress, percent);
         status.publish();
       };
-      stopRecordPageListener = prefetchLayer
-        ? pushRecordPageListener((items) => {
+      /**
+       * 记录每到一页，下一页回来之前先取这一页的网格。它经查询选项（`onRecordPage`）只交给这次显示自己发的记录读取
+       * （范围查询、重新生成 / 补齐之后的回查）：别的节点同时在查的记录页到不了这里，所以取的网格只进这个节点的库
+       * （`dbno`）的缓存、只跟这个节点的会话一起取消（#165）。没有 DTX 层时不预取。
+       */
+      const prefetchPageMeshes = prefetchLayer
+        ? (items: readonly RecordPageItem[]): void => {
+          if (loadEnded || session.stopped) return;
           const hashes: string[] = [];
           const seen = new Set<string>();
           for (const item of items) {
@@ -1417,20 +1430,21 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               hashes.push(hash);
             }
           }
-          if (hashes.length > 0 && !session.stopped) {
-            // 每一页各报各的「取完 / 要取」，在这里并进整次显示的合计
-            let pageDone = 0;
-            let pageTotal = 0;
-            meshPrefetches.push(prefetchDtxGeometries(prefetchLayer, dbno, hashes, 'L1', session.signal, (done, total) => {
-              prefetched.done += done - pageDone;
-              prefetched.total += total - pageTotal;
-              pageDone = done;
-              pageTotal = total;
-              showPrefetchWait();
-            }));
-          }
-        })
+          if (hashes.length === 0) return;
+          // 每一页各报各的「取完 / 要取」，在这里并进整次显示的合计
+          let pageDone = 0;
+          let pageTotal = 0;
+          meshPrefetches.push(prefetchDtxGeometries(prefetchLayer, dbno, hashes, 'L1', session.signal, (done, total) => {
+            prefetched.done += done - pageDone;
+            prefetched.total += total - pageTotal;
+            pageDone = done;
+            pageTotal = total;
+            showPrefetchWait();
+          }));
+        }
         : null;
+      /** 这次显示自己发的记录读取都带上的查询选项 */
+      const ownRecordPages = prefetchPageMeshes ? { onRecordPage: prefetchPageMeshes } : {};
 
       const regenerate = loadOptions?.regenerate === true;
       if (regenerate) {
@@ -1438,7 +1452,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         status.progress = 5;
         status.publish();
         // 右键「重新生成模型」是唯一带 force 的入口：先把范围内已有的模型清掉再逐根生成
-        const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot, { force: true });
+        const generated = await getGenModelV1ModelSource().records.generateThenCollect(normalizedRoot, { force: true, ...ownRecordPages });
         if (generated.items.length === 0) {
           const timedOut = generated.pending.length > 0;
           if (timedOut) scheduleDbnumModelReprobe(dbno);
@@ -1506,7 +1520,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       try {
         const { refnos, source, truncated, incomplete, emptyScopes: empty } = await queryLoadScopeRefnos(
           normalizedRoot,
-          { isStopped: () => session.stopped },
+          { isStopped: () => session.stopped, ...ownRecordPages },
         );
         visibleRefnos = refnos;
         visibleSource = source;
@@ -1746,7 +1760,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             generateChunk: async (chunk) => chunkResultFromCollect(
               chunk.refno,
               // 带着会话的取消信号：叫停时这一发请求当场取消（后端那边照常算完）
-              await getGenModelV1ModelSource().records.generateThenCollect(chunk.refno, { force: false, signal: session.signal }),
+              await getGenModelV1ModelSource().records.generateThenCollect(
+                chunk.refno,
+                { force: false, signal: session.signal, ...ownRecordPages },
+              ),
             ),
             // 节点自己一块时不在这里装：生成完按原来的路重查、定范围（BRAN / HANG 要并上根自己）、一次装完
             loadChunk: whole ? async () => {} : (_chunk, refnos) => loadFillChunk(refnos, existingShown),
@@ -1807,7 +1824,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const queryScopeStoppable = async (): ReturnType<typeof queryLoadScopeRefnos> => {
         const off = session.onStop(() => { getModelSource().records.cancelCollect?.(normalizedRoot); });
         try {
-          return await queryLoadScopeRefnos(normalizedRoot, { isStopped: () => session.stopped });
+          return await queryLoadScopeRefnos(normalizedRoot, { isStopped: () => session.stopped, ...ownRecordPages });
         } finally {
           off();
         }
@@ -2337,7 +2354,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       return false;
     } finally {
       progressiveLoad?.dispose();
-      stopRecordPageListener?.();
+      loadEnded = true;
       unsubscribeProgress();
       releaseLod1Backfill();
       isGenerating.value = false;

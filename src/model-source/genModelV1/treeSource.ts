@@ -17,7 +17,7 @@
  */
 import { collectRecordsByAncestor, mapWithConcurrency, refnosOfRecords, type CollectRecordsOptions, type CollectRecordsResult, type ModelRecordsApi } from './modelRecords';
 
-import type { SubtreeRefnosParams, TreeSource } from '../ports';
+import type { SubtreeRefnosParams, TreeSource, VisibleInstsOptions } from '../ports';
 import type {
   AncestorsResponse,
   ChildrenResponse,
@@ -521,8 +521,9 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
   /**
    * 「有几何的构件 refno 集」= 以节点为祖先查已生成的记录，再把构件 refno 去重（ADR 0069）。
    * 不 generate、不展开容器。虚拟根拒绝（整 MDB 不是一次点击该显示的范围，`show_dbnum` 按 SITE 查）。
+   * `query.onRecordPage` 转给这一次按祖先查询：只收这次查询读到的页。
    */
-  async function visibleInsts(refno: string): Promise<VisibleInstsResponse> {
+  async function visibleInsts(refno: string, query: VisibleInstsOptions = {}): Promise<VisibleInstsResponse> {
     const key = fromV1Refno(refno);
     if (isVirtualRootId(refno)) {
       return { success: false, refno, refnos: [], error_message: '虚拟根不支持整体显示：请按 SITE / ZONE 操作' };
@@ -531,7 +532,10 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     try {
       // records 与 health 并行：记录源自己负责「备忘命中前等 health、写回前核对代次」；这里只保留 health 失败即失败。
       const freshness = ensureFreshness();
-      const pending = collectByAncestor(key, options.recordsOptions);
+      const pending = collectByAncestor(
+        key,
+        query.onRecordPage ? { ...options.recordsOptions, onRecordPage: query.onRecordPage } : options.recordsOptions,
+      );
       pending.catch(() => undefined);
       await freshness;
       guard = createGenModelV1GenerationGuard();

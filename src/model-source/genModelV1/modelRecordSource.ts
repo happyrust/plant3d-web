@@ -26,6 +26,7 @@ import {
   type CollectRecordsResult,
   type GenerateThenCollectOptions,
   type ModelRecordsApi,
+  type RecordPageListener,
 } from './modelRecords';
 
 import type { InstanceEntryQueryOptions, ModelRecordSource } from '../ports';
@@ -77,6 +78,8 @@ export type GenModelV1ModelRecordSource = ModelRecordSource & {
   /**
    * 显示一个节点：以它为祖先查已生成的记录并把整根记录映射进缓存。同一节点的干净结果备忘一份——树勾一次眼睛会让
    * `visibleInsts(节点)` 被问两遍（加载范围 + 可见性传播），第二遍直接回备忘，不再对同一个 SITE 重打一轮。
+   * `options.onRecordPage`：这次查询读到的每一页交一次，别的节点的查询读到的页不会交到这里。同一节点同时被问、共用一发读取时，
+   * 各方的回调都收这一发的页（后搭上的只收搭上之后读到的）；命中备忘时没有页可交。
    */
   collectByAncestor(refno: string, options?: CollectRecordsOptions): Promise<CollectRecordsResult>;
   /**
@@ -98,7 +101,8 @@ export type GenModelV1ModelRecordSource = ModelRecordSource & {
   /**
    * 叫停对这个节点正在进行的那次共用读取（加载中可以停，2026-11-11）：在飞的请求取消、后面的成员不再发，
    * 那次读取以 `cancelled` 收口（在等它的调用方都收到）。叫停之前已经收齐的成员留在缓存里——再读这个节点时只问没收齐的。
-   * 没有在读回 `false`。带着自己 `signal` / 回调的读取不是共用的，由它们自己的 `signal` 管。
+   * 没有在读回 `false`。带着自己 `signal` / `onRootDone` / `onRequestFailure` 的读取不是共用的，由它们自己的 `signal` 管
+   * （只带 `onRecordPage` 的仍是共用的）。
    */
   cancelCollect(refno: string): boolean;
   /** 缓存里某构件的实例（不发请求）。 */
@@ -274,21 +278,42 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
 
   /**
    * 同一节点、不带取消信号与回调的并发查询共用一发（树的可见性传播、选中联动与显示流程常同时问同一个节点）。
-   * 每一发带着自己的取消开关：`cancelCollect` 用它叫停。
+   * 每一发带着自己的取消开关：`cancelCollect` 用它叫停。分页回调（`onRecordPage`）不妨碍共用：搭上同一发的各方的回调都挂在
+   * 这一发上（`pageListeners`），这一发读到的页每个回调交一遍——页跟着读取走，不会交给问别的节点的人。
    */
-  const inflightByRequested = new Map<string, { task: Promise<CollectRecordsResult>; controller: AbortController }>();
+  const inflightByRequested = new Map<string, {
+    task: Promise<CollectRecordsResult>;
+    controller: AbortController;
+    pageListeners: Set<RecordPageListener>;
+  }>();
 
   async function collectByAncestor(refno: string, extra: CollectRecordsOptions = {}): Promise<CollectRecordsResult> {
     const requested = fromV1Refno(refno);
     const shareable = !extra.signal && !extra.onRootDone && !extra.onRequestFailure;
     if (!shareable) return collectByAncestorOnce(requested, extra);
+    const { onRecordPage, ...shared } = extra;
     const inflight = inflightByRequested.get(requested);
-    if (inflight) return inflight.task;
+    if (inflight) {
+      // 搭上已经在读的那一发：之后读到的页也交给它；已经翻过去的不补（那些网格到装载时再取）
+      if (onRecordPage) inflight.pageListeners.add(onRecordPage);
+      return inflight.task;
+    }
     const controller = new AbortController();
-    const task = collectByAncestorOnce(requested, { ...extra, signal: controller.signal }).finally(() => {
+    const pageListeners = new Set<RecordPageListener>();
+    if (onRecordPage) pageListeners.add(onRecordPage);
+    const task = collectByAncestorOnce(requested, {
+      ...shared,
+      signal: controller.signal,
+      onRecordPage: (items) => {
+        for (const listener of pageListeners) {
+          try { listener(items); } catch { /* 一方的回调出错不影响读取，也不影响别的回调 */ }
+        }
+      },
+    }).finally(() => {
+      pageListeners.clear();
       if (inflightByRequested.get(requested)?.task === task) inflightByRequested.delete(requested);
     });
-    inflightByRequested.set(requested, { task, controller });
+    inflightByRequested.set(requested, { task, controller, pageListeners });
     return task;
   }
 

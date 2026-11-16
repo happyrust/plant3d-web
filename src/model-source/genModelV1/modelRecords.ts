@@ -48,15 +48,24 @@ export const defaultModelRecordsApi: ModelRecordsApi = {
 /** 防止异常服务端游标让一次读取无限翻页；达到上限仍 truncated 必须按未完成处理。 */
 export const MAX_MODEL_RECORD_PAGES = 10_000;
 
-const recordPageListeners: ((items: GeomInstQuery[]) => void)[] = [];
+/**
+ * 分页读记录时每到一页的回调，经查询选项（`CollectRecordsOptions.onRecordPage`）交给这一次读取：只收这次读取自己的页。
+ * 不做成全页面共用的监听：几个节点同时查记录时各自的页必须回到各自手里——接的一方拿这一页去拉网格，
+ * 拉进的是它自己那个库的缓存、用的是它自己的取消信号（#165）。
+ */
+export type RecordPageListener = (items: GeomInstQuery[]) => void;
 
-/** 分页读记录时通知最内层监听者。用来在下一页回来之前先拉网格。 */
-export function pushRecordPageListener(listener: (items: GeomInstQuery[]) => void): () => void {
-  recordPageListeners.push(listener);
-  return () => {
-    const index = recordPageListeners.lastIndexOf(listener);
-    if (index >= 0) recordPageListeners.splice(index, 1);
-  };
+/**
+ * 把这一页交给这次读取自己的分页回调。它只是个提速的钩子（下一页回来之前先拉网格）：回调出错不影响读记录。
+ * 这次读取已经被叫停（`signal` 中止）就不交了：响应赶在中止之前到、中止之后才轮到处理的那一页，不该再引出新的取网格。
+ */
+function notifyRecordPage(listener: RecordPageListener | undefined, items: GeomInstQuery[], signal?: AbortSignal): void {
+  if (!listener || signal?.aborted) return;
+  try {
+    listener(items);
+  } catch {
+    // ignore
+  }
 }
 
 class ModelRecordsPaginationIncompleteError extends Error {
@@ -90,6 +99,12 @@ export type CollectRecordsOptions = GenModelV1RequestOptions & {
    * 最终结果不变，仍按传入顺序拼接。
    */
   onAncestorRecords?: (batch: { ancestor: string; items: GeomInstQuery[]; done: number; total: number }) => void;
+  /**
+   * 这次读取每读到一页记录回调一次，交的是这一页里收下的记录（批量形一页没装下的祖先不算，它们重发时再交）。
+   * 显示流程用它在下一页回来之前先拉这一页的网格。只有这次读取自己的页——同时在读的别的查询各有各的回调（见
+   * {@link RecordPageListener}）。回调自己抛错不影响读取。
+   */
+  onRecordPage?: RecordPageListener;
   /** 原始请求错误被折叠进结果前的观察器；用于让服务生命周期看见 network 断线。 */
   onRequestFailure?: (error: unknown) => void;
 };
@@ -240,12 +255,13 @@ function rootsOf(generated: ModelGenerateResponse, fallback: string): string[] {
   return roots.map((root) => fromV1Refno(String(root)));
 }
 
-/** 以一个节点为祖先分页读完 `model/records`。 */
+/** 以一个节点为祖先分页读完 `model/records`；每到一页交给 `onRecordPage`。 */
 async function collectAncestorRecords(
   api: ModelRecordsApi,
   ancestor: string,
   pageSize: number,
   requestOptions: GenModelV1RequestOptions,
+  onRecordPage?: RecordPageListener,
 ): Promise<GeomInstQuery[]> {
   const out: GeomInstQuery[] = [];
   let cursor: number | undefined;
@@ -253,7 +269,7 @@ async function collectAncestorRecords(
     throwIfAborted(requestOptions.signal);
     const resp: ModelRecordsResponse = await api.records({ generationRoot: ancestor, limit: pageSize, cursor }, requestOptions);
     out.push(...resp.items);
-    recordPageListeners[recordPageListeners.length - 1]?.(resp.items);
+    notifyRecordPage(onRecordPage, resp.items, requestOptions.signal);
     if (!resp.truncated) return out;
     if (resp.next_cursor === null || resp.next_cursor === undefined) {
       throw new ModelRecordsPaginationIncompleteError(ancestor, 'truncated=true 但缺少 next_cursor');
@@ -357,7 +373,9 @@ export async function collectRecordsForAncestors(
   options: CollectRecordsOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<CollectAncestorsResult> {
-  const { pageSize = 5000, concurrency = 6, batchAncestors = 1, onRootDone, onAncestorRecords, onRequestFailure, ...requestOptions } = options;
+  const {
+    pageSize = 5000, concurrency = 6, batchAncestors = 1, onRootDone, onAncestorRecords, onRecordPage, onRequestFailure, ...requestOptions
+  } = options;
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const raw of ancestors) {
@@ -392,7 +410,7 @@ export async function collectRecordsForAncestors(
     let items: GeomInstQuery[] = [];
     let error: unknown = null;
     try {
-      items = await collectAncestorRecords(api, unique[index]!, pageSize, requestOptions);
+      items = await collectAncestorRecords(api, unique[index]!, pageSize, requestOptions, onRecordPage);
     } catch (caught) {
       reportRequestFailure(onRequestFailure, caught);
       if (isReadAborted(caught, requestOptions.signal)) throw caught;
@@ -445,12 +463,8 @@ export async function collectRecordsForAncestors(
     }
     const pageRows = resp.items.length;
     const completeRows = split.restTotals.length === 0 ? pageRows : split.complete.reduce((rows, items) => rows + items.length, 0);
-    try {
-      // 分页监听者（下一发回来之前先拉网格）只是个提速的钩子：它出错不影响这一批记录
-      recordPageListeners[recordPageListeners.length - 1]?.(completeRows === pageRows ? resp.items : resp.items.slice(0, completeRows));
-    } catch {
-      // ignore
-    }
+    // 这一页里收下的记录交给分页回调（下一发回来之前先拉网格）；没装完的祖先重发时再交
+    notifyRecordPage(onRecordPage, completeRows === pageRows ? resp.items : resp.items.slice(0, completeRows), requestOptions.signal);
     for (let i = 0; i < split.complete.length; i++) settle(group[i]!, split.complete[i]!, null);
     // 一页没装下的：按条数重新分组，每组不超过这一页的实际大小；单独一个就超过一页的自己一组（走单根形分页）
     let bucket: number[] = [];
@@ -526,6 +540,7 @@ export async function collectRecordsByAncestor(
  * 右键「重新生成模型」：`model/generate(force)` → 容器按契约展开一层递归（上限在 options 里）→ 对请求的节点按祖先查一次记录。
  * 全部根都回了 pending / 都没产物时不查记录（`items` 为空），由调用方按 `pending` 提示「服务端后台继续生成，完成后再点眼睛」。
  * 分组（GPWL / GPSET）：`force` 回 422 `group_scope` 时不带 force 按成员生成一次；空组记 `empty` 并给 `hints`，不回退为分组自己。
+ * `onRecordPage` 只管生成之后那次按祖先查：每到一页交一次。
  */
 export async function generateThenCollect(
   refno: string,
@@ -534,6 +549,8 @@ export async function generateThenCollect(
 ): Promise<CollectRecordsResult> {
   const {
     force = true, maxContainerDepth = 3, maxRoots = 128, pageSize, concurrency, onRootDone, onRootStart, onRequestFailure,
+    // 分页回调只给生成之后那次按祖先查用；摘出来也为了不让它混进发给 generate / children 的请求选项
+    onRecordPage,
     // 生成之后那次按祖先查只有一个祖先，没有「分批交」「打包」可言；摘出来只为不让它们混进发给接口的请求选项
     onAncestorRecords: _onAncestorRecords,
     batchAncestors: _batchAncestors,
@@ -645,7 +662,7 @@ export async function generateThenCollect(
 
   // 生成完成之后，再调用显示接口（ADR 0069 / plant-ui ADR-0030 D2）：一根都没生成出来就不查，调用方按 pending 提示
   if (result.generationRoots.length === 0) return result;
-  const collected = await collectRecordsForAncestors([start], { pageSize, concurrency, onRequestFailure, ...requestOptions }, api);
+  const collected = await collectRecordsForAncestors([start], { pageSize, concurrency, onRequestFailure, onRecordPage, ...requestOptions }, api);
   result.items = collected.items;
   for (const owner of collected.generationRoots) pushUnique(result.generationRoots, owner);
   for (const ancestor of collected.pending) pushUnique(result.pending, ancestor);

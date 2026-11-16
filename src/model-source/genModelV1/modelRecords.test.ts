@@ -15,7 +15,6 @@ import {
   isLegacyNotGenerated,
   mapWithConcurrency,
   MAX_MODEL_RECORD_PAGES,
-  pushRecordPageListener,
   RECORDS_BATCH_RAMP,
   RECORDS_MEMBER_BATCH,
   RECORDS_MEMBER_BATCH_MIN_MEMBERS,
@@ -345,19 +344,36 @@ describe('collectRecordsForAncestors：几个祖先打包成一发（批量形�
     expect(result.items.map((record) => record.refno)).toEqual(names(8).flatMap((name) => rowsFor(name).map((record) => record.refno)));
   });
 
-  it('批量形每回来一页，分页监听者听到的是这一页里收下的记录（下一发回来之前先拉网格用）', async () => {
+  it('批量形每回来一页，这次读取的分页回调收到的是这一页里收下的记录（下一发回来之前先拉网格用）', async () => {
     const rows: Record<number, number> = { 1: 1, 2: 1, 3: 4, 4: 9 };
     const { records } = backend((n) => rows[n] ?? 0);
     const heardPages: number[] = [];
-    const release = pushRecordPageListener((items) => heardPages.push(items.length));
-    try {
-      await collectRecordsForAncestors(names(4), { concurrency: 1, pageSize: 10, batchAncestors: 4 }, api({ records: records as never }));
-    } finally {
-      release();
-    }
+    await collectRecordsForAncestors(
+      names(4),
+      { concurrency: 1, pageSize: 10, batchAncestors: 4, onRecordPage: (items) => heardPages.push(items.length) },
+      api({ records: records as never }),
+    );
     // 5_1、5_2 各一页；5_3+5_4 那一页来了 10 条、只收下 5_3 的 4 条；5_4 自己再来 9 条
     expect(heardPages).toEqual([1, 1, 4, 9]);
+    // 回调是这次读取自己的事，不混进发给接口的请求选项
+    for (const call of records.mock.calls) expect(call[1]).not.toHaveProperty('onRecordPage');
   });
+
+  it('两次打包读取同时进行：各自的分页回调只收到自己那几个祖先的页（#165）', async () => {
+    const { records } = backend((n) => n);
+    const client = api({ records: records as never });
+    const owners = (items: GeomInstQuery[]): string => [...new Set(items.map((record) => record.owner))].join('+');
+    const heardLow: string[] = [];
+    const heardHigh: string[] = [];
+    await Promise.all([
+      collectRecordsForAncestors(names(8).slice(0, 4), { concurrency: 1, batchAncestors: 4, onRecordPage: (items) => heardLow.push(owners(items)) }, client),
+      collectRecordsForAncestors(names(8).slice(4), { concurrency: 1, batchAncestors: 4, onRecordPage: (items) => heardHigh.push(owners(items)) }, client),
+    ]);
+    // 各自：头两发各带一个（单根形），之后两个一组（批量形）
+    expect(heardLow).toEqual(['5_1', '5_2', '5_3+5_4']);
+    expect(heardHigh).toEqual(['5_5', '5_6', '5_7+5_8']);
+  });
+
   it('批量请求没成（旧后端 422）：这一组一个一个重问，余下的也不再打包', async () => {
     const { records: plainRecords } = backend(() => 2);
     const failures: unknown[] = [];
@@ -443,6 +459,143 @@ describe('collectRecordsForAncestors：几个祖先打包成一发（批量形�
     const { records } = backend(() => 0);
     await collectRecordsForAncestors(names(200), { concurrency: 1, batchAncestors: 500 }, api({ records: records as never }));
     expect(Math.max(...records.mock.calls.map(([req]) => (req as BatchReq).generationRoots?.length ?? 1))).toBe(64);
+  });
+});
+
+describe('onRecordPage：分页回调跟着这一次读取走，同时在读的别的查询收不到（#165）', () => {
+  type PageReq = { generationRoot?: string; limit?: number; cursor?: number };
+
+  beforeEach(() => {
+    __resetGenModelV1ServiceLifecycleForTests();
+  });
+
+  /** 祖先 `1_1` 名下的记录是 `1_100`、`1_101`……（祖先号后面接两位序号） */
+  const rowsOf = (ancestor: string, count: number): GeomInstQuery[] =>
+    Array.from({ length: count }, (_, i) => item(`${ancestor}${String(i).padStart(2, '0')}`, ancestor));
+  const refnosOf = (items: GeomInstQuery[]): string[] => items.map((record) => record.refno);
+
+  /**
+   * 每一发 `model/records` 都停在闸上，由测试决定哪一发先回来——两次读取的页交错着回来，才看得出串没串。
+   * 这个假后端不理会取消信号：叫停之后响应照常回来，相当于「响应赶在叫停之前已经到了」。
+   */
+  function gatedBackend(counts: Record<string, number>) {
+    const waiting: { root: string; open: () => void }[] = [];
+    const records = vi.fn(async (req: PageReq, _options?: unknown): Promise<ModelRecordsResponse> => {
+      const root = req.generationRoot!;
+      await new Promise<void>((open) => { waiting.push({ root, open }); });
+      return page(rowsOf(root, counts[root] ?? 0), req.cursor ?? 0, req.limit ?? 5000);
+    });
+    /** 放行 `root` 等在闸上的那一发，并等这一页处理完 */
+    const release = async (root: string): Promise<void> => {
+      await vi.waitFor(() => expect(waiting.some((entry) => entry.root === root)).toBe(true));
+      waiting.splice(waiting.findIndex((entry) => entry.root === root), 1)[0]!.open();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    return { records, release };
+  }
+
+  it.each([
+    ['两个库的节点', '1_1', '2_1'],
+    ['同一个库的两个节点', '1_1', '1_2'],
+  ])('%s同时查、页交错着回来：各自的回调只收到自己的页，一页不多一页不少', async (_name, first, second) => {
+    // 各 3 条、页大小 2：各翻两页
+    const { records, release } = gatedBackend({ [first]: 3, [second]: 3 });
+    const client = api({ records: records as never });
+    const heardFirst: string[][] = [];
+    const heardSecond: string[][] = [];
+    const readFirst = collectRecordsByAncestor(first, { pageSize: 2, onRecordPage: (items) => heardFirst.push(refnosOf(items)) }, client);
+    const readSecond = collectRecordsByAncestor(second, { pageSize: 2, onRecordPage: (items) => heardSecond.push(refnosOf(items)) }, client);
+
+    // 后发起的那次的页先回来，先发起的两页夹在中间
+    await release(second);
+    await release(first);
+    await release(first);
+    await release(second);
+    const [a, b] = await Promise.all([readFirst, readSecond]);
+
+    expect(heardFirst).toEqual([[`${first}00`, `${first}01`], [`${first}02`]]);
+    expect(heardSecond).toEqual([[`${second}00`, `${second}01`], [`${second}02`]]);
+    expect(refnosOf(a.items)).toEqual([`${first}00`, `${first}01`, `${first}02`]);
+    expect(refnosOf(b.items)).toEqual([`${second}00`, `${second}01`, `${second}02`]);
+  });
+
+  it('只有一次查询带了回调：另一次查询的页不会交给它；回调不混进发给接口的请求选项', async () => {
+    const { records, release } = gatedBackend({ '1_1': 3, '2_1': 3 });
+    const client = api({ records: records as never });
+    const heard: string[][] = [];
+    const plain = collectRecordsByAncestor('1_1', { pageSize: 2 }, client);
+    const hooked = collectRecordsByAncestor('2_1', { pageSize: 2, onRecordPage: (items) => heard.push(refnosOf(items)) }, client);
+
+    // 没带回调的那次的两页都赶在前面回来
+    await release('1_1');
+    await release('1_1');
+    await release('2_1');
+    await release('2_1');
+    const [a] = await Promise.all([plain, hooked]);
+
+    expect(refnosOf(a.items)).toEqual(['1_100', '1_101', '1_102']);
+    expect(heard).toEqual([['2_100', '2_101'], ['2_102']]);
+    expect(records).toHaveBeenCalledTimes(4);
+    for (const call of records.mock.calls) expect(call[1]).not.toHaveProperty('onRecordPage');
+  });
+
+  it('一次查询被叫停：之后到的页不再交给它的回调；同时在读的另一次查询照常收页、读完', async () => {
+    const { records, release } = gatedBackend({ '1_1': 5, '2_1': 5 });
+    const client = api({ records: records as never });
+    const controller = new AbortController();
+    const heardStopped: string[][] = [];
+    const heardOther: string[][] = [];
+    const stopped = collectRecordsByAncestor('1_1', {
+      pageSize: 2,
+      signal: controller.signal,
+      onRecordPage: (items) => heardStopped.push(refnosOf(items)),
+    }, client).then(() => null, (error: unknown) => error);
+    const other = collectRecordsByAncestor('2_1', { pageSize: 2, onRecordPage: (items) => heardOther.push(refnosOf(items)) }, client);
+
+    await release('1_1');
+    await release('2_1');
+    expect(heardStopped).toEqual([['1_100', '1_101']]);
+    // 第二页的请求已经发出去了才叫停：这一页照常回来，但不再交
+    controller.abort(new Error('已停止加载'));
+    await release('1_1');
+    await release('2_1');
+    await release('2_1');
+
+    expect(await stopped).toMatchObject({ code: 'cancelled' });
+    expect(heardStopped).toEqual([['1_100', '1_101']]);
+    // 被叫停的那次没有再发第三页
+    expect(records.mock.calls.filter(([req]) => req.generationRoot === '1_1')).toHaveLength(2);
+    const result = await other;
+    expect(heardOther).toEqual([['2_100', '2_101'], ['2_102', '2_103'], ['2_104']]);
+    expect(refnosOf(result.items)).toEqual(['2_100', '2_101', '2_102', '2_103', '2_104']);
+    expect(result.errors).toEqual({});
+  });
+
+  it('回调自己抛错：这次读取照常读完，同时在读的另一次查询也不受影响', async () => {
+    const { records, release } = gatedBackend({ '1_1': 3, '2_1': 3 });
+    const client = api({ records: records as never });
+    let thrown = 0;
+    const heardOther: string[][] = [];
+    const failing = collectRecordsByAncestor('1_1', {
+      pageSize: 2,
+      onRecordPage: () => {
+        thrown += 1;
+        throw new Error('listener failed');
+      },
+    }, client);
+    const other = collectRecordsByAncestor('2_1', { pageSize: 2, onRecordPage: (items) => heardOther.push(refnosOf(items)) }, client);
+
+    await release('1_1');
+    await release('2_1');
+    await release('1_1');
+    await release('2_1');
+    const [a, b] = await Promise.all([failing, other]);
+
+    expect(thrown).toBe(2);
+    expect(refnosOf(a.items)).toEqual(['1_100', '1_101', '1_102']);
+    expect(a.errors).toEqual({});
+    expect(heardOther).toEqual([['2_100', '2_101'], ['2_102']]);
+    expect(b.items).toHaveLength(3);
   });
 });
 
@@ -574,6 +727,38 @@ describe('generateThenCollect', () => {
     expect(children).toHaveBeenCalledTimes(1);
     expect(records).toHaveBeenCalledTimes(1);
     expect(result.generationRoots).toEqual(expect.arrayContaining(['1_1', '1_3']));
+  });
+
+  it('onRecordPage 只交给生成之后那次按祖先查：每到一页交一次，不混进发给 generate / children / records 的请求选项（#165）', async () => {
+    // 请求的节点是容器：generate 回 422，展开一层再生成成员，三个接口都会用到
+    const generate = vi.fn(async ({ refno }: { refno: string }, _options?: unknown) => {
+      if (toV1Refno(refno) === '1/2') {
+        throw new GenModelV1ApiError({ code: 'container', status: 422, path: '/api/v1/model/generate', message: 'SITE' });
+      }
+      return { status: 'Generated', generation_root: v1(refno), generation_roots: [v1(refno)] };
+    });
+    const children = vi.fn(async (_refno: string, _options?: unknown) => ({
+      source: 'direct',
+      parent: '1/2',
+      nodes: [{ refno: '1_1', noun: 'BRAN', name: '/B1', owner: '1_2', order: 0, children_count: 0 }],
+    }));
+    const rows = [item('1_10', '1_1'), item('1_11', '1_1'), item('1_12', '1_1')];
+    const records = vi.fn(async ({ cursor, limit }: { cursor?: number; limit?: number }, _options?: unknown) => page(rows, cursor ?? 0, limit ?? 2));
+    const heard: string[][] = [];
+    const result = await generateThenCollect('1_2', {
+      pageSize: 2,
+      onRecordPage: (items) => heard.push(items.map((record) => record.refno)),
+    }, api({ generate: generate as never, children: children as never, records: records as never }));
+
+    expect(result.items).toHaveLength(3);
+    // 生成、展开容器的时候没有页可交；生成完按祖先查的两页各交一次
+    expect(heard).toEqual([['1_10', '1_11'], ['1_12']]);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(children).toHaveBeenCalledTimes(1);
+    expect(records).toHaveBeenCalledTimes(2);
+    for (const call of generate.mock.calls) expect(call[1]).not.toHaveProperty('onRecordPage');
+    for (const call of children.mock.calls) expect(call[1]).not.toHaveProperty('onRecordPage');
+    for (const call of records.mock.calls) expect(call[1]).not.toHaveProperty('onRecordPage');
   });
 
   it('超过 maxRoots 的节点记 truncatedRoots，不再 generate', async () => {

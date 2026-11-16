@@ -9,7 +9,8 @@ vi.mock('@/model-source', () => ({
   getModelSource: () => ({
     kind: 'gen-model-v1',
     tree: {
-      visibleInsts: (refno: string) => e3dGetVisibleInstsMock(refno),
+      // 参数原样转给 mock：下面的断言要看得见「传了几个参数」
+      visibleInsts: (...args: unknown[]) => e3dGetVisibleInstsMock(...args),
       subtreeRefnos: (refno: string, params?: unknown) => e3dGetSubtreeRefnosMock(refno, params),
     },
     attributes: { typeInfo: (refno: string) => pdmsGetTypeInfoMock(refno) },
@@ -45,6 +46,21 @@ describe('queryLoadScopeRefnos', () => {
     });
     expect(e3dGetVisibleInstsMock).toHaveBeenCalledWith('24381_145018');
     expect(e3dGetSubtreeRefnosMock).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it('带了 onRecordPage：原样交给这一次 visible-insts 查询；不带时仍然只传节点一个参数（#165）', async () => {
+    e3dGetVisibleInstsMock.mockResolvedValue({ success: true, refnos: ['24381_145019'] });
+    const onRecordPage = vi.fn();
+
+    const { queryLoadScopeRefnos } = await import('@/composables/useModelGeneration');
+    await queryLoadScopeRefnos('24381_145018', { onRecordPage });
+    expect(e3dGetVisibleInstsMock).toHaveBeenCalledTimes(1);
+    expect(e3dGetVisibleInstsMock.mock.calls[0]).toHaveLength(2);
+    expect(e3dGetVisibleInstsMock.mock.calls[0]![0]).toBe('24381_145018');
+    expect(e3dGetVisibleInstsMock.mock.calls[0]![1].onRecordPage).toBe(onRecordPage);
+
+    await queryLoadScopeRefnos('24381_145018', { isStopped: () => false });
+    expect(e3dGetVisibleInstsMock.mock.calls[1]).toEqual(['24381_145018']);
   }, 15_000);
 
   it('visible-insts 成功但为空时不回退 subtree：查空就是未加载', async () => {

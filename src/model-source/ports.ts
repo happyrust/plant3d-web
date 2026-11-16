@@ -98,6 +98,20 @@ export type SubtreeRefnosParams = {
   limit?: number;
 };
 
+/** 按祖先查记录时读到的一页里的一条记录。端口只露显示流程要的那一格：这条记录用到哪些网格（`geo_hash`）。 */
+export type RecordPageItem = {
+  insts?: readonly { geo_hash?: string | null }[] | null;
+};
+
+export type VisibleInstsOptions = {
+  /**
+   * 这次查询每读到一页记录回调一次，交的是这一页的记录；显示流程用它在下一页回来之前先取这一页的网格。
+   * 只有这次查询自己读到的页：同时在查的别的节点各有各的回调，互不相干（#165）。结果来自缓存、没有发请求时不回调；
+   * 回调抛错不影响查询。
+   */
+  onRecordPage?: (items: readonly RecordPageItem[]) => void;
+};
+
 /** 模型树取数。refno 一律本仓内部键 `dbno_seqno`（`a_b`），转换由适配器负责。 */
 export type TreeSource = {
   /** 单根。gen-model 没有单一 WORL，适配器合成虚拟根（D4-A）。 */
@@ -116,7 +130,7 @@ export type TreeSource = {
   /** 子树 refno 集；gen-model 源下改为「有几何的构件集 ∪ BFS children」（plan §3）。 */
   subtreeRefnos(refno: string, params?: SubtreeRefnosParams): Promise<SubtreeRefnosResponse>;
   /** 有几何的叶子 refno；gen-model 源下 = 以节点为祖先查 `model/records`，不生成（ADR 0069）。 */
-  visibleInsts(refno: string): Promise<VisibleInstsResponse>;
+  visibleInsts(refno: string, options?: VisibleInstsOptions): Promise<VisibleInstsResponse>;
 };
 
 /** `queryInstanceEntriesByRefnos` 现有 options 的子集。 */

@@ -2,7 +2,9 @@
  * gen-model-v1 下的显示流程（plan 2026-09-06 P3-c）：容器显示的逐根进度弹窗、整库 `showModelByDbnum` 的分批装入与进度。
  * 数据源整个 mock 掉：这里只测 useModelGeneration 怎么驱动进度状态与加载器，不测适配器本身。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { RecordPageItem } from '@/model-source/ports';
 
 import { generationResumeTiming } from '@/composables/generationFill';
 import { __resetGenerationFillStateForTests, pendingGenerationFill } from '@/composables/generationFillState';
@@ -68,8 +70,16 @@ type MemberBatch = { refno: string; member: string; entries: Map<string, unknown
 type MemberListener = (batch: MemberBatch) => void;
 const memberListeners = new Set<MemberListener>();
 
-/** 显示补齐发给记录源的请求：不带 force；带着加载会话的取消信号（加载中可以停，叫停时这一发当场取消） */
-const FILL_REQUEST = { force: false, signal: expect.any(AbortSignal) };
+/** 显示流程经查询选项交下来的分页回调：只收这次查询自己读到的记录页（#165） */
+type PageListener = (items: readonly RecordPageItem[]) => void;
+/** 显示流程自己发的记录读取（范围查询、补齐 / 重新生成之后的回查）都带着这次显示自己的分页回调（#165） */
+const OWN_PAGES = { onRecordPage: expect.any(Function) };
+/** 显示补齐发给记录源的请求：不带 force；带着加载会话的取消信号（加载中可以停，叫停时这一发当场取消）和分页回调 */
+const FILL_REQUEST = { force: false, signal: expect.any(AbortSignal), ...OWN_PAGES };
+/** 右键「重新生成模型」发给记录源的请求：唯一带 force 的入口；回查的记录页同样交给这次显示 */
+const REGENERATE_REQUEST = { force: true, ...OWN_PAGES };
+/** 节点一级的更新发给记录源的请求：不带 force、能取消；屏幕上的要等后面的重载才换，这一步不取网格，不带分页回调 */
+const UPDATE_REQUEST = { force: false, signal: expect.any(AbortSignal) };
 
 /** 记录源「一个成员收完」的那一批（边取边画）：给当前订阅方各送一份 */
 function emitMember(refno: string, member: string, refnos: string[], done: number, total: number): void {
@@ -536,7 +546,7 @@ describe('showModelByRefno（gen-model-v1）', () => {
 
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
     // 右键「重新生成模型」是唯一带 force 的入口
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410', { force: true });
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_101410', REGENERATE_REQUEST);
     expect(loadInstancesMock).toHaveBeenCalledTimes(1);
     expect(loadInstancesMock).toHaveBeenCalledWith(expect.anything(), 7997, refnos, expect.objectContaining({
       dataSource: 'gen-model-v1', replaceExistingObjects: true, forceRefreshGeometries: true, forceReloadRefnos: refnos,
@@ -594,6 +604,8 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(typeInfoMock).toHaveBeenCalledWith('24381_145018');
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith('24381_145018', FILL_REQUEST);
+    // 生成前的范围查询和生成后的重查都带着这次显示自己的分页回调（#165）
+    expect(visibleInstsMock.mock.calls).toEqual([['24381_145018', OWN_PAGES], ['24381_145018', OWN_PAGES]]);
     expect(loadInstancesMock).toHaveBeenCalled();
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
       level: 'success', message: expect.stringContaining('已自动生成并加载'),
@@ -1767,7 +1779,7 @@ describe('showModelByRefno 重载（refresh）', () => {
     expect(await gen.showModelByRefno(EQUI, { refresh: true, flyTo: false })).toBe(true);
 
     expect(v1Source.records.invalidateRoot).toHaveBeenCalledWith(EQUI);
-    expect(visibleInstsMock).toHaveBeenCalledWith(EQUI);
+    expect(visibleInstsMock).toHaveBeenCalledWith(EQUI, OWN_PAGES);
     expect(v1Source.records.generateThenCollect).not.toHaveBeenCalled();
     expect(loadInstancesMock).toHaveBeenCalledWith(expect.anything(), 8000, ['24384_24777'], expect.objectContaining({
       dataSource: 'gen-model-v1', replaceExistingObjects: true, forceRefreshGeometries: true, forceReloadRefnos: ['24384_24777'],
@@ -3175,7 +3187,7 @@ describe('showModelByRefno 加载中可以停（用户 2026-11-11 定：停掉�
     expect(during).toEqual({ stoppable: false, stopping: false });
     expect(stopAccepted).toBe(false);
     // 重新生成的请求不带取消信号
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith(SITE, { force: true });
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith(SITE, REGENERATE_REQUEST);
     expect(evictMock).not.toHaveBeenCalled();
   });
 });
@@ -3235,7 +3247,7 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
     expect(nodeFactsMock).toHaveBeenCalledWith({ refno: UPDATE_ZONE, signal: expect.any(AbortSignal) });
     expect(openChoiceMock).not.toHaveBeenCalled();
     expect(v1Source.records.generateThenCollect).toHaveBeenCalledTimes(1);
-    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith(UPDATE_ZONE, FILL_REQUEST);
+    expect(v1Source.records.generateThenCollect).toHaveBeenCalledWith(UPDATE_ZONE, UPDATE_REQUEST);
     // 先生成、后清本地记录缓存重查：换上去的是重新生成之后的记录
     expect(v1Source.records.generateThenCollect.mock.invocationCallOrder[0]!)
       .toBeLessThan(v1Source.records.invalidateRoot.mock.invocationCallOrder[0]!);
@@ -3279,7 +3291,7 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
     expect(await gen.showModelByRefno(SITE_NODE, { update: true, flyTo: false })).toBe(true);
 
     expect(v1Source.records.generateThenCollect.mock.calls.map((call) => call[0])).toEqual(['24381_536', '24381_621']);
-    for (const call of v1Source.records.generateThenCollect.mock.calls) expect((call as unknown[])[1]).toEqual(FILL_REQUEST);
+    for (const call of v1Source.records.generateThenCollect.mock.calls) expect((call as unknown[])[1]).toEqual(UPDATE_REQUEST);
     expect(statuses[0]).toContain('正在更新 第 1/2 块');
     expect(statuses[1]).toContain('正在更新 第 2/2 块');
     // 更新期间不弹整屏遮罩
@@ -3758,9 +3770,9 @@ describe('状态条：几个加载同时在跑时各走各的进度，先结束�
         items: [record('24381_1', ['h1', 'h2']), record('24381_2', ['h2', 'h3', 'h4'])],
       })),
     };
-    visibleInstsMock.mockImplementation(async () => {
-      // 真的按祖先读一页：显示流程登记的分页回调收到这一页，先去取它的网格
-      await collectRecordsByAncestor(NODE, {}, recordsApi as never);
+    visibleInstsMock.mockImplementation(async (_refno: string, options?: { onRecordPage?: PageListener }) => {
+      // 真的按祖先读一页：这一页交给显示流程经查询选项带来的分页回调，它先去取这一页的网格
+      await collectRecordsByAncestor(NODE, { onRecordPage: options?.onRecordPage }, recordsApi as never);
       return { success: true, refno: NODE, refnos: ['24381_1', '24381_2'] };
     });
     let report!: MeshProgress;
@@ -3870,5 +3882,212 @@ describe('状态条：几个加载同时在跑时各走各的进度，先结束�
       '87% gen-model 整库 dbnum=7997：网格已取齐，正在装入场景...',
     ]);
     expect(bar()).toMatchObject({ visible: false, progress: 100, message: 'Model loaded (gen-model)' });
+  });
+});
+
+describe('记录分页的网格预取跟着各自的查询走：几个节点同时加载时各取各的网格（#165）', () => {
+  const FIRST = '24381_101410';
+  type PrefetchCall = [layer: unknown, dbno: number, hashes: string[], lod: string, signal: AbortSignal, onProgress: unknown];
+  const prefetchCalls = (): PrefetchCall[] => prefetchMock.mock.calls as PrefetchCall[];
+  /** 一页记录：一个构件，用到这几个网格 */
+  const pageOf = (...hashes: string[]) => [{ insts: hashes.map((geo_hash) => ({ geo_hash })) }];
+  const collected = (refno: string) => ({
+    refno, generationRoots: [refno], items: [{ refno }], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {},
+  });
+
+  afterEach(() => {
+    // `vi.clearAllMocks()` 不清实现：接过真记录源的「叫停」换回缺省的桩
+    v1Source.records.cancelCollect.mockImplementation(() => true);
+  });
+
+  /**
+   * 接上真的记录源和树源，后面是个假后端：每个节点 `pages` 页、每页一条记录（构件 `<节点><页号>`，网格 `<节点>-g<页号>`）。
+   * 每一发都停在闸上，`release(节点)` 放行一页；被取消的请求当场拒掉。
+   */
+  function wirePagedSources(pages: number) {
+    __resetGenModelV1ServiceLifecycleForTests();
+    const waiting: { root: string; open: () => void }[] = [];
+    const records = vi.fn(async (req: { generationRoot?: string; cursor?: number }, requestOptions?: { signal?: AbortSignal }) => {
+      const root = req.generationRoot!;
+      const signal = requestOptions?.signal;
+      await new Promise<void>((resolve) => {
+        const entry = { root, open: resolve };
+        waiting.push(entry);
+        signal?.addEventListener('abort', () => {
+          const index = waiting.indexOf(entry);
+          if (index >= 0) waiting.splice(index, 1);
+          resolve();
+        }, { once: true });
+      });
+      if (signal?.aborted) throw signal.reason;
+      const index = req.cursor ?? 0;
+      return {
+        source: 'model-database',
+        items: [{
+          refno: `${root}${index + 1}`, old_refno: null, owner: root, world_aabb: null,
+          world_trans: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] },
+          insts: [{ geo_hash: `${root}-g${index + 1}` }], has_neg: false, generic: 'ELBO', pts: null, date: null,
+        }],
+        total: pages,
+        truncated: index + 1 < pages,
+        next_cursor: index + 1 < pages ? index + 1 : null,
+      };
+    });
+    const recordSource = createGenModelV1ModelRecordSource({
+      api: { generate: vi.fn() as never, records: records as never, children: vi.fn() as never },
+    });
+    const tree = createGenModelV1TreeSource({
+      api: { roots: vi.fn(), children: vi.fn(), ancestors: vi.fn(), search: vi.fn() } as never,
+      collectByAncestor: (refno, options) => recordSource.collectByAncestor(refno, options),
+    });
+    visibleInstsMock.mockImplementation((refno: string, options?: { onRecordPage?: PageListener }) => tree.visibleInsts(refno, options));
+    v1Source.records.cancelCollect.mockImplementation((refno: string) => recordSource.cancelCollect(refno));
+    /** 放行 `root` 等在闸上的那一页，并等它处理完 */
+    const release = async (root: string): Promise<void> => {
+      await vi.waitFor(() => expect(waiting.some((entry) => entry.root === root)).toBe(true));
+      waiting.splice(waiting.findIndex((entry) => entry.root === root), 1)[0]!.open();
+      await tick();
+    };
+    return { release };
+  }
+
+  it.each<[string, number, number, string]>([
+    ['两个库的节点', 7997, 8000, '9304_2'],
+    ['同一个库的两个节点（同一份 useModelGeneration）', 7997, 7997, '24381_202020'],
+  ])('%s同时加载、记录页交错着回来：各取各的网格（进自己的库、跟自己的会话）；停掉后点的那个，先点的照常取完、装完', async (_label, firstDb, secondDb, SECOND) => {
+    const { release } = wirePagedSources(3);
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const firstGen = useModelGeneration({ viewer, db_num: firstDb });
+    const secondGen = secondDb === firstDb ? firstGen : useModelGeneration({ viewer, db_num: secondDb });
+
+    const first = firstGen.showModelByRefno(FIRST);
+    const second = secondGen.showModelByRefno(SECOND);
+    // 后点的节点的分页回调后登记；页按「先点的、后点的、先点的」的顺序回来
+    await release(FIRST);
+    await release(SECOND);
+    await release(FIRST);
+
+    expect(prefetchCalls().map((call) => [call[1], call[2]])).toEqual([
+      [firstDb, [`${FIRST}-g1`]],
+      [secondDb, [`${SECOND}-g1`]],
+      [firstDb, [`${FIRST}-g2`]],
+    ]);
+    const firstSignal = prefetchCalls()[0]![4];
+    const secondSignal = prefetchCalls()[1]![4];
+    expect(secondSignal).not.toBe(firstSignal);
+    expect(prefetchCalls()[2]![4]).toBe(firstSignal);
+
+    // 停掉后点的那个：中止的只有它自己的取消信号
+    expect(requestStopModelLoad(SECOND)).toBe(true);
+    expect(await second).toBe(false);
+    expect(secondSignal.aborted).toBe(true);
+    expect(firstSignal.aborted).toBe(false);
+
+    // 先点的那个不受影响：余下的页照常回来、照常先取网格，然后装进它自己的库
+    await release(FIRST);
+    expect(prefetchCalls().slice(3).map((call) => [call[1], call[2], call[4] === firstSignal])).toEqual([
+      [firstDb, [`${FIRST}-g3`], true],
+    ]);
+    expect(await first).toBe(true);
+    expect(loadInstancesMock.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      [firstDb, [`${FIRST}1`, `${FIRST}2`, `${FIRST}3`]],
+    ]);
+  });
+
+  it('这次显示结束之后才到的记录页（和别处共用的那次读取还在翻）：不再引出取网格', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    let onPage: PageListener | undefined;
+    visibleInstsMock.mockImplementation(async (_refno: string, options?: { onRecordPage?: PageListener }) => {
+      onPage = options?.onRecordPage;
+      onPage?.(pageOf('h1', 'h2', 'h1'));
+      return { success: true, refno: FIRST, refnos: ['24381_1'] };
+    });
+
+    expect(await gen.showModelByRefno(FIRST)).toBe(true);
+    // 一页里重复的网格只取一次
+    expect(prefetchCalls().map((call) => [call[1], call[2]])).toEqual([[7997, ['h1', 'h2']]]);
+
+    onPage!(pageOf('h3'));
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('被叫停之后才到的记录页：不再引出取网格', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    let onPage: PageListener | undefined;
+    let answer!: (result: { success: boolean; refno: string; refnos: string[]; error_message?: string }) => void;
+    visibleInstsMock.mockImplementation((_refno: string, options?: { onRecordPage?: PageListener }) => {
+      onPage = options?.onRecordPage;
+      return new Promise((resolve) => { answer = resolve; });
+    });
+
+    const shown = gen.showModelByRefno(FIRST);
+    await vi.waitFor(() => expect(onPage).toBeTypeOf('function'));
+    onPage!(pageOf('h1'));
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+
+    expect(requestStopModelLoad(FIRST)).toBe(true);
+    // 响应赶在叫停之前到、叫停之后才轮到处理的那一页
+    onPage!(pageOf('h2'));
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+    answer({ success: false, refno: FIRST, refnos: [], error_message: 'cancelled: gen-model 读取已被调用方取消' });
+    expect(await shown).toBe(false);
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('按块补齐之后回查到的记录页、补齐后重查读到的记录页：都交给这次显示自己的回调，照样先取网格', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: FIRST, noun: 'BRAN', owner_refno: null, owner_noun: null });
+    // 第一次范围查询查空：触发补齐
+    visibleInstsMock.mockResolvedValueOnce({ success: true, refno: FIRST, refnos: [] });
+    v1Source.records.generateThenCollect.mockImplementationOnce((async (refno: string, options?: { onRecordPage?: PageListener }) => {
+      options?.onRecordPage?.(pageOf('fill-h1'));
+      return collected(refno);
+    }) as never);
+    // 补齐之后重查
+    visibleInstsMock.mockImplementationOnce(async (_refno: string, options?: { onRecordPage?: PageListener }) => {
+      options?.onRecordPage?.(pageOf('requery-h1', 'requery-h2'));
+      return { success: true, refno: FIRST, refnos: ['24381_1'] };
+    });
+
+    expect(await gen.showModelByRefno(FIRST)).toBe(true);
+
+    expect(prefetchCalls().map((call) => [call[1], call[2]])).toEqual([
+      [7997, ['fill-h1']],
+      [7997, ['requery-h1', 'requery-h2']],
+    ]);
+    expect(prefetchCalls()[1]![4]).toBe(prefetchCalls()[0]![4]);
+  });
+
+  it('右键重新生成之后回查到的记录页：也交给这次显示自己的回调', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    viewer.__dtxLayer.hasObject = vi.fn(() => true);
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    v1Source.records.generateThenCollect.mockImplementationOnce((async (refno: string, options?: { onRecordPage?: PageListener }) => {
+      options?.onRecordPage?.(pageOf('regen-h1'));
+      return collected(refno);
+    }) as never);
+    visibleInstsMock.mockResolvedValue({ success: true, refno: FIRST, refnos: ['24381_1'] });
+
+    expect(await gen.showModelByRefno(FIRST, { regenerate: true })).toBe(true);
+
+    expect(prefetchCalls().map((call) => [call[1], call[2]])).toEqual([[7997, ['regen-h1']]]);
+  });
+
+  it('查看器没有 DTX 层（没处放网格）：范围查询不带分页回调，也不预取', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    delete viewer.__dtxLayer;
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: FIRST, refnos: ['24381_1'] });
+
+    await gen.showModelByRefno(FIRST);
+
+    expect(visibleInstsMock.mock.calls[0]).toEqual([FIRST]);
+    expect(prefetchMock).not.toHaveBeenCalled();
   });
 });
