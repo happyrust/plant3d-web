@@ -167,22 +167,44 @@ describe('K05 useGenModelV1TaskFeed', () => {
     expect(feedStatus.value).toBe('live');
   });
 
-  it('握手连败 5 次就停在 down 不再重试；显式 connect 重新计数、立刻再连', async () => {
+  it('握手连败 5 次后改成 30 s 一次的慢重连，不停在 down 等人；显式 connect 重新计数、立刻再连', async () => {
     const feed = await loadFeed();
     const { feedStatus } = feed.useGenModelV1TaskFeed();
     feed.subscribeGenModelV1TaskEvents(() => undefined);
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       lastSocket().serverDrop();
       await vi.advanceTimersByTimeAsync(3_000);
     }
     expect(FakeWebSocket.instances).toHaveLength(5);
-    await vi.advanceTimersByTimeAsync(60_000);
+    lastSocket().serverDrop();
+    await vi.advanceTimersByTimeAsync(29_999);
     expect(FakeWebSocket.instances).toHaveLength(5);
     expect(feedStatus.value).toBe('down');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeWebSocket.instances).toHaveLength(6);
 
     feed.connectGenModelV1TaskFeed();
     expect(FakeWebSocket.instances).toHaveLength(6);
+    lastSocket().serverDrop();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(FakeWebSocket.instances).toHaveLength(7);
     expect(feedStatus.value).toBe('connecting');
+  });
+
+  it('断过又连上：先发一条 feed_resumed 让订阅者补账；第一次连上不发', async () => {
+    const feed = await loadFeed();
+    const received: string[] = [];
+    feed.subscribeGenModelV1TaskEvents((envelope) => received.push(envelope.type));
+    lastSocket().serverOpen();
+    expect(received).toEqual([]);
+
+    lastSocket().serverDrop();
+    await vi.advanceTimersByTimeAsync(3_000);
+    lastSocket().serverOpen();
+    expect(received).toEqual([feed.GEN_MODEL_V1_FEED_RESUMED]);
+
+    lastSocket().serverSend({ type: 'task_progress', seq: 1 });
+    expect(received).toEqual([feed.GEN_MODEL_V1_FEED_RESUMED, 'task_progress']);
   });
 
   it('最后一个订阅者退订：关连接、回到 idle、清 missedEvents；迟到的 close 不把状态改成 down，也不重连', async () => {

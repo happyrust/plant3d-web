@@ -374,28 +374,40 @@ function clearDbSelection(): void {
 async function refreshTaskSnapshot(t: AdminTaskView): Promise<void> {
   const dto = await genModelV1TaskGet(t.taskId, { identity: requestIdentity() });
   const view = taskViewFromDto(t.taskId, t.dbnum, t.intent, dto);
+  const latest = tasks.value.get(t.taskId) ?? t;
+  // 请求在路上时 WS 可能已经把它收口：终态不许被一份更早发出的「运行中」快照盖回去
+  if (TASK_TERMINAL.has(latest.state) && !TASK_TERMINAL.has(view.state)) return;
   if (!TASK_TERMINAL.has(view.state)) {
     // WS 明细（在飞单元/失败计数）REST 拿不到，轮询覆盖其它字段时保留
-    view.activeUnits = t.activeUnits;
-    view.failedUnits = t.failedUnits;
-    view.lastUnitFailure = t.lastUnitFailure;
-    view.stageHint = t.stageHint;
+    view.activeUnits = latest.activeUnits;
+    view.failedUnits = latest.failedUnits;
+    view.lastUnitFailure = latest.lastUnitFailure;
+    view.stageHint = latest.stageHint;
   }
   const next = new Map(tasks.value);
   next.set(t.taskId, view);
   tasks.value = next;
 }
 
+let pollInflight = false;
+
 async function pollTasksOnce(): Promise<void> {
+  // 上一拍还没回来就跳过这一拍：两拍的响应乱序落地会互相覆盖
+  if (pollInflight) return;
   const active = [...tasks.value.values()].filter((t) => !TASK_TERMINAL.has(t.state));
   if (active.length === 0) {
     stopPolling();
     return;
   }
+  pollInflight = true;
   taskPollBusy.value = true;
-  // 单拍失败不摘卡——下一轮再试（任务在服务端活得比前端久）
-  await Promise.allSettled(active.map((t) => refreshTaskSnapshot(t)));
-  taskPollBusy.value = false;
+  try {
+    // 单拍失败不摘卡——下一轮再试（任务在服务端活得比前端久）
+    await Promise.allSettled(active.map((t) => refreshTaskSnapshot(t)));
+  } finally {
+    pollInflight = false;
+    taskPollBusy.value = false;
+  }
 }
 
 function ensurePolling(): void {

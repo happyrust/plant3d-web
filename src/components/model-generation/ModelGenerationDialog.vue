@@ -179,9 +179,9 @@ function refreshSitePicker() {
 }
 
 function stageChipClass(task: AdminTaskView, index: number): string {
-  if (task.state === 'succeeded' || task.state === 'partial') {
-    return 'bg-emerald-100 text-emerald-700';
-  }
+  if (task.state === 'succeeded') return 'bg-emerald-100 text-emerald-700';
+  // 部分完成：阶段都走完了，但有单元没生成出来——与状态标签、告警图标同一个琥珀色，别画成全绿
+  if (task.state === 'partial') return 'bg-amber-100 text-amber-700';
   if (index < task.stageIndex) return 'bg-emerald-100 text-emerald-700';
   if (index === task.stageIndex) return 'bg-blue-100 text-blue-700';
   return 'bg-gray-100 text-gray-400';
