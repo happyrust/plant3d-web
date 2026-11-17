@@ -15,6 +15,7 @@ import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrD
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { consumeModelLoadStopped, requestStopModelLoad } from '@/composables/modelLoadSession';
 import { type NodeModelStatusAction } from '@/composables/nodeModelStatus';
+import { dtxLoaderRevision } from '@/composables/useDbnoInstancesDtxLoader';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
@@ -235,6 +236,10 @@ function getCheckState(id: string) {
   if (!isRefnoLike(id)) return state;
   const modelState = modelGenerationState.value;
   if (!modelState) return state;
+  // 「装着没有」查的是装载器的运行时索引，不是响应式的。读一下它的修订号（每装完 / 换掉 / 撤下一批 +1），
+  // 装载一结束行上的眼睛就跟着重算。不读的话，不是点这一行的眼睛装进来的构件（取最新、状态栏「重载」带进来的
+  // 新构件，别的面板装的）要等面板因为别的事重画才亮——通常是增量校验那个 5 秒一次的轮询。
+  void dtxLoaderRevision.value;
   return modelState.isModelActuallyLoaded(id) ? state : 'unchecked';
 }
 
