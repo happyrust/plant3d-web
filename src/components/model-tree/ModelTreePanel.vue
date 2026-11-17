@@ -15,6 +15,7 @@ import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrD
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { consumeModelLoadStopped, requestStopModelLoad } from '@/composables/modelLoadSession';
 import { type NodeModelStatusAction } from '@/composables/nodeModelStatus';
+import { provideTreeHiddenScope } from '@/composables/treeHiddenScope';
 import { dtxLoaderRevision } from '@/composables/useDbnoInstancesDtxLoader';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
@@ -89,6 +90,10 @@ const offGetWorkTree = registerGetWorkTree({
   nameOf: (refno) => pdmsTree.nodesById.value[refno]?.name ?? null,
 });
 onUnmounted(offGetWorkTree);
+
+// 重载定新增的构件显不显示时，装载流程要问这棵树「藏着的那部分名下现在有哪些构件」（见 `treeHiddenScope`）；面板卸载时撤
+const offTreeHiddenScope = provideTreeHiddenScope((root, signal) => pdmsTree.hiddenScopeUnder(root, signal));
+onUnmounted(offTreeHiddenScope);
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();

@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 
 import type { TreeNodeDto } from '@/api/genModelE3dTypes';
+import type { TreeHiddenScope } from '@/composables/treeHiddenScope';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
@@ -59,6 +60,9 @@ function shouldRetryWithWrappedId(errorMessage: string | null | undefined): bool
   // 后端 Surreal 查询构造失败/解析失败时常会带 SQL/rs_surreal 字样
   return msg.includes('rs_surreal') || msg.includes('SQL:') || msg.includes('query_ancestor_refnos failed');
 }
+
+/** 重载时问「藏着的节点名下有哪些构件」（`hiddenScopeUnder`），同时向后端问几个节点 */
+const HIDDEN_SCOPE_CONCURRENCY = 4;
 
 function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
   const node: TreeNode = {
@@ -629,9 +633,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   }
 
   /**
-   * 查询“可见几何实例”相关的 refnos（子孙 + 自身），用于切换 instances.json 里的显示/隐藏。
+   * 查询“可见几何实例”相关的 refnos（子孙 + 自身）。没查到（请求失败）回 `null`，和「查到了、是空的」分得开。
    */
-  async function queryVisibleInstRefnos(refno: string): Promise<string[]> {
+  async function fetchVisibleInstRefnos(refno: string): Promise<string[] | null> {
     try {
       const normalizedRefno = normalizeRefnoKey(refno);
       let resp = await treeSource.visibleInsts(normalizedRefno);
@@ -640,13 +644,20 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       }
       if (!resp.success) {
         console.error('[pdms-tree] queryVisibleInstRefnos failed:', resp.error_message);
-        return [];
+        return null;
       }
       return (resp.refnos || []).map((r) => normalizeRefnoKey(String(r))).filter(Boolean);
     } catch (e) {
       console.error('[pdms-tree] queryVisibleInstRefnos error:', e);
-      return [];
+      return null;
     }
+  }
+
+  /**
+   * 查询“可见几何实例”相关的 refnos（子孙 + 自身），用于切换 instances.json 里的显示/隐藏。没查到按空表算。
+   */
+  async function queryVisibleInstRefnos(refno: string): Promise<string[]> {
+    return (await fetchVisibleInstRefnos(refno)) ?? [];
   }
 
   /** 按祖先查到的构件清单全部作废；在途的那几次查完也不再记。 */
@@ -676,6 +687,64 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     });
     visibleInstPending.set(key, request);
     return request;
+  }
+
+  /**
+   * 这个节点下面、树上藏着的最上一层节点：从它往下只穿过「部分藏着」（半选）的节点，遇到藏着的收下、不再往下
+   * （它下面的都跟着它）。节点自己不是半选就回空表：整个显示着的下面没有藏着的；整个藏着的不归这里管
+   * （重载按场景里的可见态定）。只看已经取进树里的层。
+   */
+  function hiddenTopNodesUnder(id: string): string[] {
+    const root = normalizeRefnoKey(id);
+    const nodes = nodesById.value;
+    const states = checkStateById.value;
+    if (!nodes[root] || states.get(root) !== 'indeterminate') return [];
+    const hidden: string[] = [];
+    // 解析视图下同一个节点可以经几个父节点到达（分组成员），只看一次
+    const seen = new Set<string>([root]);
+    const pending: string[] = [root];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      for (const childId of nodes[current]?.childrenIds ?? []) {
+        if (seen.has(childId) || !nodes[childId]) continue;
+        seen.add(childId);
+        const state = states.get(childId);
+        if (state === 'unchecked') hidden.push(childId);
+        else if (state === 'indeterminate') pending.push(childId);
+      }
+    }
+    return hidden;
+  }
+
+  /**
+   * 重载定新增的构件显不显示时问的（见 `treeHiddenScope`）：这个节点下面藏着的那些节点，名下现在各有哪些构件。
+   * 现查，不用 `visibleInstCache`：那份是以前查到的清单，这次新增的构件不在里面。没有藏着的节点回 `null`，不发请求；
+   * 一个节点没查到（请求失败，或问到一半被叫停、没轮到它）记进 `failed`，别的照常。
+   */
+  async function hiddenScopeUnder(id: string, signal?: AbortSignal): Promise<TreeHiddenScope | null> {
+    const hiddenNodes = hiddenTopNodesUnder(id);
+    if (hiddenNodes.length === 0) return null;
+    const found: (string[] | null)[] = hiddenNodes.map(() => null);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < hiddenNodes.length && !signal?.aborted) {
+        const index = next++;
+        found[index] = await fetchVisibleInstRefnos(hiddenNodes[index]!);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(HIDDEN_SCOPE_CONCURRENCY, hiddenNodes.length) }, worker));
+    const refnos = new Set<string>();
+    const failed: string[] = [];
+    hiddenNodes.forEach((node, index) => {
+      const members = found[index];
+      if (!members) {
+        failed.push(node);
+        return;
+      }
+      refnos.add(node);
+      for (const refno of members) refnos.add(refno);
+    });
+    return { refnos, failed };
   }
 
   async function setSceneVisibleInBatches(refnos: string[], visible: boolean, batchSize = 50): Promise<void> {
@@ -1397,6 +1466,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     getCheckState,
     setVisible,
     hasAncestorWhere,
+    hiddenScopeUnder,
 
     selectByRowIndex,
 

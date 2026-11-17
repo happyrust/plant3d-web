@@ -8,6 +8,9 @@
  *
  * 「装着没有」只认节点自己。PIPE、BRAN 这类自己没有几何的中间节点是跟着上一级装进来的：有下级的节点，某个上级
  * 登记在已加载节点表里就算装着；节点自己登记在表里（别的显示流程装的）也算。叶子不认上级。
+ *
+ * 最后一组不是眼睛：面板挂上时把「树上藏着的那部分名下现在有哪些构件」这句问话接到树上（`treeHiddenScope`），卸载时撤。
+ * 借这里现成的面板挂载验接线；问话本身、树怎么答、装载流程怎么用各有自己的测试。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, type App } from 'vue';
@@ -16,6 +19,7 @@ import ModelTreePanel from './ModelTreePanel.vue';
 
 import type { CheckState, FlatRow } from '@/composables/useModelTree';
 
+import { queryTreeHiddenScope, type TreeHiddenScope } from '@/composables/treeHiddenScope';
 import { dtxLoaderRevision } from '@/composables/useDbnoInstancesDtxLoader';
 
 const fake = vi.hoisted(() => ({
@@ -29,6 +33,8 @@ const fake = vi.hoisted(() => ({
   parentOf: new Map<string, string>(),
   /** 已加载节点表：真的那张是响应式的，这里在替换那个模块时换成响应式的 Map */
   loadedNodes: new Map<string, { loaded: boolean }>(),
+  /** 树对「藏着的那部分名下现在有哪些构件」的回答（`hiddenScopeUnder`）：用到的用例自己定 */
+  hiddenScopeUnder: vi.fn<(id: string, signal?: AbortSignal) => Promise<TreeHiddenScope | null>>(),
 }));
 
 // happy-dom 没有布局，滚动容器高度是 0，真的虚拟列表一行都不画：换成「有几行画几行」
@@ -79,6 +85,7 @@ vi.mock('@/composables/usePdmsOwnerTree', async () => {
         }
         return false;
       },
+      hiddenScopeUnder: (id: string, signal?: AbortSignal) => fake.hiddenScopeUnder(id, signal),
       expandPathToNode: vi.fn(async () => true),
       focusNodeById: vi.fn(async () => undefined),
       loadedLayerDbnums: () => [],
@@ -208,6 +215,7 @@ beforeEach(() => {
   fake.loaded.clear();
   fake.parentOf.clear();
   fake.loadedNodes.clear();
+  fake.hiddenScopeUnder.mockReset();
   // 面板挂上时有两句调试输出
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
 });
@@ -345,5 +353,26 @@ describe('跟着上一级装进来的中间节点', () => {
     const host = await mountPanel();
 
     expect(eyeOf(host, NOT_LOADED.id)).toBe('on');
+  });
+});
+
+describe('重载定新增的构件显不显示时，装载流程问的那句「树上藏着的那部分名下现在有哪些构件」（treeHiddenScope）', () => {
+  it('面板挂着：问话原样交给这棵树（节点、叫停信号），树的回答原样带回；面板卸载之后问不到', async () => {
+    const answer: TreeHiddenScope = { refnos: new Set([PIPE.id, ELBO.id]), failed: [] };
+    fake.hiddenScopeUnder.mockResolvedValue(answer);
+    // 没有面板：没有树可问
+    expect(await queryTreeHiddenScope(ZONE.id)).toBeNull();
+
+    await mountPanel();
+    const controller = new AbortController();
+    expect(await queryTreeHiddenScope(ZONE.id, controller.signal)).toBe(answer);
+    expect(fake.hiddenScopeUnder).toHaveBeenCalledTimes(1);
+    expect(fake.hiddenScopeUnder).toHaveBeenCalledWith(ZONE.id, controller.signal);
+
+    mounted?.app.unmount();
+    mounted?.host.remove();
+    mounted = null;
+    expect(await queryTreeHiddenScope(ZONE.id)).toBeNull();
+    expect(fake.hiddenScopeUnder).toHaveBeenCalledTimes(1);
   });
 });
