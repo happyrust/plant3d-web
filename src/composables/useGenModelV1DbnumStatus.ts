@@ -54,7 +54,8 @@ type SessionEvidence = { source: 'generated' | 'records'; at: number; generation
 export const DBNUM_STATUS_PENDING_RETRY_DELAYS_MS = [10_000, 30_000, 60_000];
 
 const sessionEvidence = reactive(new Map<number, SessionEvidence>());
-const pendingRetries = new Map<number, { count: number; timer: ReturnType<typeof setTimeout> }>();
+/** 各库正在等的那一拍补拉；一轮走完或被作废就从表里拿掉 */
+const pendingRetries = new Map<number, ReturnType<typeof setTimeout>>();
 /** 别处的数据批次落地之后隔这么久重拉一次 `/dbnums`；这段时间里又落了批次就从头再等，连着落几批只拉一次 */
 export const DBNUM_STATUS_BATCH_REFRESH_DELAY_MS = 2_000;
 let unsubscribeBatches: (() => void) | null = null;
@@ -120,9 +121,9 @@ export function acquireDbnumStatus(_dbnum: number): () => void {
 }
 
 function clearPendingRetry(dbnum: number): void {
-  const retry = pendingRetries.get(dbnum);
-  if (!retry) return;
-  clearTimeout(retry.timer);
+  const timer = pendingRetries.get(dbnum);
+  if (timer === undefined) return;
+  clearTimeout(timer);
   pendingRetries.delete(dbnum);
 }
 
@@ -136,17 +137,23 @@ export function invalidateDbnumModelStatus(dbnum?: number): void {
   refreshRows();
 }
 
-/** 生成在服务端后台继续（pending）：排几次延迟重拉 `/dbnums`，让圆点在水位变化后自己跟上。 */
+/**
+ * 生成在服务端后台继续（pending）：排几次延迟重拉 `/dbnums`，让圆点在水位变化后自己跟上。
+ * 每调一次都从头排一轮，上一轮没走完的作废。
+ */
 export function scheduleDbnumModelReprobe(dbnum: number): void {
-  const existing = pendingRetries.get(dbnum);
-  if (existing) clearTimeout(existing.timer);
-  const count = existing?.count ?? 0;
+  scheduleReprobe(dbnum, 0);
+}
+
+/** 排一轮里的第 `count` 拍。第几拍由调用方往下传，不记在表里：表里留着走完的次数，下一轮就排不上。 */
+function scheduleReprobe(dbnum: number, count: number): void {
+  clearPendingRetry(dbnum);
   if (count >= DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length) return;
   const timer = setTimeout(() => {
     refreshRows();
-    scheduleDbnumModelReprobe(dbnum);
+    scheduleReprobe(dbnum, count + 1);
   }, DBNUM_STATUS_PENDING_RETRY_DELAYS_MS[count] ?? 60_000);
-  pendingRetries.set(dbnum, { count: count + 1, timer });
+  pendingRetries.set(dbnum, timer);
 }
 
 /** 人点行尾圆点：立刻重拉 `/dbnums`。 */
@@ -182,7 +189,7 @@ export function useGenModelV1DbnumStatus() {
     /** 测试用：清全部状态并停表。 */
     __reset(): void {
       sessionEvidence.clear();
-      for (const retry of pendingRetries.values()) clearTimeout(retry.timer);
+      for (const timer of pendingRetries.values()) clearTimeout(timer);
       pendingRetries.clear();
       unsubscribeBatches?.();
       unsubscribeBatches = null;
