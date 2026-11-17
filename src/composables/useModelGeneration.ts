@@ -57,6 +57,7 @@ import {
   markLoadedNodeStale,
   noteLoadedNode,
   noteNodeWithoutModel,
+  provideLoadedNodeAncestorsQuery,
   provideLoadedNodeChangeQuery,
   provideLoadedNodeFactsQuery,
   recheckLoadedNode,
@@ -258,6 +259,9 @@ provideLoadedNodeChangeQuery(async ({ dbnum, refno, sinceSesno, signal }) => {
 });
 // 行上的新旧先问后端的节点模型状态接口（`GET node/model-status`）；生成预检（下面的 `prepareFill`）问的是同一个接口。
 provideLoadedNodeFactsQuery(fetchNodeModelFacts);
+// 后端跑完一批时，节点表要找这一批重新生成的单元在哪些已装节点下面（好不等逐会话的核对就给「重载」）：问树的祖先链；
+// 没查到时 `tree.ancestors` 自己不抛、回空的链。
+provideLoadedNodeAncestorsQuery(async (refno) => (await getModelSource().tree.ancestors(refno)).refnos);
 
 /**
  * 分批装入的每批大小：首批 `first` 个先出画，之后逐批翻倍。每批装完 DTX 层都要整层 recompile（全量重建 GPU 纹理），
