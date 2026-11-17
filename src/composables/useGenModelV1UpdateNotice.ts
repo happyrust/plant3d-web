@@ -10,18 +10,30 @@
  *
  * - 重载或忽略之前到达的相关批次并进同一条提示：根取并集，会话范围按库从最早的起点到最新的终点。只留最新一条的话，
  *   前一批动过、后一批没动的根永远换不上。
- * - `partial`（数据已应用、部分单元生成失败）照样提示；生成失败的根记录没换，不进重载名单。
+ * - `partial`（数据已应用、部分单元生成失败）照样提示；只有回执写明 `generated` 的根换了记录，其余不进重载名单。
  * - 批次里整根删掉的单元不在 `result.units` 里（删除走 DeleteCleanup，不出单元回执），另查
  *   `/tasks/{id}/changes`；场景里还挂着的进重载名单，重载时记录查空、后端也确认库里已经没有它，才从场景撤下
  *   （记录查空不等于已删除，见 `useModelGeneration` 的 `emptyRefreshMeansRemoved`）。
+ * - 任务流断过又连上（`feed_resumed`）：断线期间收口的批次不回放，按收口时刻从 `/tasks` 补进来，走同一条处理路。
  *
  * 信封形状见 gen-model `docs/specs/web-service-api.md` §5.3：`payload.result.batch { dbnum, db_type, start_sesno, end_sesno,
  * changed_elements }`、`payload.result.units[] { root_refno, status, kind }`。
  */
 import { computed, ref } from 'vue';
 
-import { fromV1Refno, genModelV1TaskChanges, type TaskChangesResponse } from '@/api/genModelV1Api';
-import { subscribeGenModelV1TaskEvents, type GenModelV1TaskEnvelope } from '@/composables/useGenModelV1TaskFeed';
+import {
+  fromV1Refno,
+  genModelV1Fetch,
+  genModelV1TaskChanges,
+  type TaskChangesResponse,
+  type TaskListDto,
+  type TaskListEntryDto,
+} from '@/api/genModelV1Api';
+import {
+  GEN_MODEL_V1_FEED_RESUMED,
+  subscribeGenModelV1TaskEvents,
+  type GenModelV1TaskEnvelope,
+} from '@/composables/useGenModelV1TaskFeed';
 
 export type GenModelV1FinishedBatch = {
   taskId: string;
@@ -34,7 +46,7 @@ export type GenModelV1FinishedBatch = {
   changedElements: number;
   /** 批次里的模型工作单元根（`a_b`），含生成失败的 */
   roots: string[];
-  /** `roots` 里这一轮生成失败的（`status = failed`）：记录没换，重载不碰 */
+  /** `roots` 里这一轮没有生成成功的（回执不是 `status = generated`）：记录没换，重载不碰 */
   failedRoots: string[];
   finishedAt: string | null;
 };
@@ -135,9 +147,9 @@ export function parseGenModelV1FinishedBatch(envelope: GenModelV1TaskEnvelope): 
     if (typeof raw !== 'string' || !raw.trim()) continue;
     const key = fromV1Refno(raw);
     if (!roots.includes(key)) roots.push(key);
-    if (typeof status === 'string' && status.toLowerCase() === 'failed' && !failedRoots.includes(key)) {
-      failedRoots.push(key);
-    }
+    // 只有写明 generated 的换了记录；failed、缺状态或别的取值都不进重载名单
+    const generated = typeof status === 'string' && status.toLowerCase() === 'generated';
+    if (!generated && !failedRoots.includes(key)) failedRoots.push(key);
   }
   return {
     taskId,
@@ -383,6 +395,24 @@ let probe: GenModelV1LoadedProbe | null = null;
 let unsubscribe: (() => void) | null = null;
 const batchListeners = new Set<(batch: GenModelV1FinishedBatch) => void>();
 
+/** 断线补账：只补订阅之后收口的批次，处理过的任务不再处理（WS 与补账可能各到一次）。 */
+const CATCH_UP_LIMIT = 50;
+const HANDLED_LIMIT = 500;
+const handledTaskIds = new Set<string>();
+let watchSince = 0;
+
+function rememberHandled(batch: GenModelV1FinishedBatch): void {
+  if (batch.taskId) {
+    handledTaskIds.add(batch.taskId);
+    if (handledTaskIds.size > HANDLED_LIMIT) {
+      const oldest = handledTaskIds.values().next().value;
+      if (oldest !== undefined) handledTaskIds.delete(oldest);
+    }
+  }
+  const at = batch.finishedAt ? Date.parse(batch.finishedAt) : NaN;
+  if (Number.isFinite(at)) watchSince = Math.max(watchSince, at);
+}
+
 /**
  * 提示条代次。`handleGenModelV1TaskEnvelopeForNotice` 里的删除清单查询是异步的，等它回来时提示可能已经被
  * 忽略、重载、换了探针或整体复位过；代次对不上就丢弃这次结果，否则提示会重新冒出来、改动数也会重复计。
@@ -414,6 +444,8 @@ export function subscribeGenModelV1FinishedBatches(listener: (batch: GenModelV1F
 export async function handleGenModelV1TaskEnvelopeForNotice(envelope: GenModelV1TaskEnvelope): Promise<void> {
   const batch = parseGenModelV1FinishedBatch(envelope);
   if (!batch) return;
+  if (batch.taskId && handledTaskIds.has(batch.taskId)) return;
+  rememberHandled(batch);
   for (const listener of batchListeners) {
     try {
       listener(batch);
@@ -437,10 +469,60 @@ export async function handleGenModelV1TaskEnvelopeForNotice(envelope: GenModelV1
   }
 }
 
+export type GenModelV1RecentTasks = () => Promise<TaskListEntryDto[]>;
+
+const defaultRecentTasks: GenModelV1RecentTasks = async () => {
+  // 按种类分开取：混在一页里时，RVM 核对一多，数据批次会被挤出服务端单页的窗口（至多 160 条）
+  const pages = await Promise.all(
+    ['data_batch', 'model_rebuild'].map((kind) => (
+      genModelV1Fetch<TaskListDto>('/api/v1/tasks', { query: { kind, limit: CATCH_UP_LIMIT } })
+    )),
+  );
+  return pages.flatMap((page) => page.tasks ?? []);
+};
+
+/**
+ * 任务流断过又连上：断线期间收口的数据批次不回放，从 `/tasks` 取最近收口的、订阅之后才收口且没处理过的，
+ * 按收口时刻先后走 `task_finished` 同一条处理路。返回补了几批；取不动就当没有。
+ */
+export async function catchUpGenModelV1FinishedBatches(
+  fetchRecent: GenModelV1RecentTasks = defaultRecentTasks,
+): Promise<number> {
+  const since = watchSince;
+  let list: TaskListEntryDto[];
+  try {
+    list = await fetchRecent();
+  } catch {
+    return 0;
+  }
+  const finishedAt = (entry: TaskListEntryDto) => Date.parse(entry.finished_at ?? '');
+  const missed = list
+    .filter((entry) => entry.state === 'succeeded' || entry.state === 'partial')
+    .filter((entry) => !!entry.task_id && !handledTaskIds.has(entry.task_id))
+    .filter((entry) => Number.isFinite(finishedAt(entry)) && finishedAt(entry) > since)
+    .sort((left, right) => finishedAt(left) - finishedAt(right));
+  for (const entry of missed) {
+    await handleGenModelV1TaskEnvelopeForNotice({
+      type: 'task_finished',
+      task_id: entry.task_id,
+      ts: entry.finished_at ?? undefined,
+      payload: { task_id: entry.task_id, state: entry.state, result: entry.result },
+    });
+  }
+  return missed.length;
+}
+
 /** 订阅任务流（幂等）；第一个订阅者会把 `/api/v1/ws` 拉起来。 */
 export function startGenModelV1UpdateNotice(): void {
   if (unsubscribe) return;
+  watchSince = Date.now();
   unsubscribe = subscribeGenModelV1TaskEvents((envelope) => {
+    if (envelope.type === GEN_MODEL_V1_FEED_RESUMED) {
+      void catchUpGenModelV1FinishedBatches().catch((error) => {
+        console.warn('[gen-model-v1] 任务流重连后补账失败', error);
+      });
+      return;
+    }
     // handler 现在是 async：探针同步抛错或响应体异常都会变成 rejection，这里必须兜住
     void handleGenModelV1TaskEnvelopeForNotice(envelope).catch((error) => {
       console.warn('[gen-model-v1] 处理更新通知信封失败', error);
@@ -482,6 +564,8 @@ export function __resetGenModelV1UpdateNoticeForTests(): void {
   notice.value = null;
   probe = null;
   batchListeners.clear();
+  handledTaskIds.clear();
+  watchSince = 0;
 }
 
 export function useGenModelV1UpdateNotice() {

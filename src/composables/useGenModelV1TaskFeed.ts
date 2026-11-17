@@ -6,7 +6,8 @@
  *   broadcast 滞后丢过帧（服务端 `SeqCounter::skip` 故意留的记号）——事件不回放，明细以 REST 为准。
  * - 连接建立后服务端默认已订阅 `tasks` 主题；仍显式发一遍 `subscribe` 对齐 spec 形态。
  * - 服务端 90s 空闲断开（spec §5.4 约定客户端 30s 内 ping 一次）；掉线自动重连，
- *   连续握手失败封顶后停在 `down`——REST 轮询本来就是兜底通道。
+ *   连续握手失败到线后改成慢节拍重连（服务端重启 / 重新部署可能要好几分钟），不停在 `down` 等人。
+ * - 断过之后再连上，先给订阅者发一条合成信封 `feed_resumed`：断线期间的事件不回放，订阅者自己用 REST 补账。
  */
 import { ref, type Ref } from 'vue';
 
@@ -32,8 +33,11 @@ export type GenModelV1TaskFeedStatus = 'idle' | 'connecting' | 'live' | 'down';
 
 const PING_INTERVAL_MS = 25_000;
 const RECONNECT_DELAY_MS = 3_000;
-/** 握手屡败（比如服务端旧到没有 /ws）不无限重试；下一次显式 `connect` 时重估可达性。 */
+/** 握手连败到这个数之后改成慢节拍重连；下一次显式 `connect` 时重新计数、立刻再连。 */
 const MAX_CONNECT_FAILURES = 5;
+const SLOW_RECONNECT_DELAY_MS = 30_000;
+/** 断线重连成功后发给订阅者的合成信封类型（不是服务端发的）。 */
+export const GEN_MODEL_V1_FEED_RESUMED = 'feed_resumed';
 
 const feedStatus: Ref<GenModelV1TaskFeedStatus> = ref('idle');
 /** 因 seq 空洞确认丢掉的信封数；>0 时逐单元明细以 REST 读数为准。 */
@@ -46,6 +50,8 @@ let pingTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let connectFailures = 0;
 let lastSeq = 0;
+/** 这一次订阅期间连上过又断了：下一次连上要告诉订阅者补账 */
+let resumePending = false;
 
 /** `buildGenModelV1Url` 的 http(s)/同源相对路径 → ws(s)（`/gm` 代理与生产同源都走得到）。 */
 export function genModelV1WsUrl(path = '/api/v1/ws'): string {
@@ -72,11 +78,21 @@ function stopTimers(): void {
 
 function scheduleReconnect(): void {
   if (reconnectTimer || listeners.size === 0) return;
-  if (connectFailures >= MAX_CONNECT_FAILURES) return; // 已停在 down，等显式重连
+  const delay = connectFailures >= MAX_CONNECT_FAILURES ? SLOW_RECONNECT_DELAY_MS : RECONNECT_DELAY_MS;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     openSocket();
-  }, RECONNECT_DELAY_MS);
+  }, delay);
+}
+
+function deliver(envelope: GenModelV1TaskEnvelope): void {
+  for (const listener of listeners) {
+    try {
+      listener(envelope);
+    } catch {
+      // 单个监听方的异常不能打断事件流
+    }
+  }
 }
 
 function openSocket(): void {
@@ -95,6 +111,8 @@ function openSocket(): void {
   } catch {
     feedStatus.value = 'down';
     connectFailures += 1;
+    resumePending = true;
+    scheduleReconnect();
     return;
   }
   socket = ws;
@@ -113,6 +131,10 @@ function openSocket(): void {
     pingTimer = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
     }, PING_INTERVAL_MS);
+    if (resumePending) {
+      resumePending = false;
+      deliver({ type: GEN_MODEL_V1_FEED_RESUMED, ts: new Date().toISOString(), task_id: null, payload: {} });
+    }
   };
   ws.onmessage = (event: MessageEvent) => {
     // 旧连接 CLOSING 期间的残留帧：不改 lastSeq / missedEvents，也不转给订阅方（新连接从头计号）
@@ -130,13 +152,7 @@ function openSocket(): void {
       if (lastSeq > 0 && seq > lastSeq + 1) missedEvents.value += seq - lastSeq - 1;
       if (seq > lastSeq) lastSeq = seq;
     }
-    for (const listener of listeners) {
-      try {
-        listener(envelope);
-      } catch {
-        // 单个监听方的异常不能打断事件流
-      }
-    }
+    deliver(envelope);
   };
   ws.onclose = () => {
     if (!opened) connectFailures += 1;
@@ -156,6 +172,7 @@ function openSocket(): void {
       return;
     }
     feedStatus.value = 'down';
+    resumePending = true;
     scheduleReconnect();
   };
   ws.onerror = () => {
@@ -187,6 +204,7 @@ export function subscribeGenModelV1TaskEvents(
       feedStatus.value = 'idle';
       missedEvents.value = 0;
       lastSeq = 0;
+      resumePending = false;
     }
   };
 }

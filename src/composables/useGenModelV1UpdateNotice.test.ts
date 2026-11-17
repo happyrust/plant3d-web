@@ -7,9 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   feedListeners: new Set<(envelope: unknown) => void>(),
   changes: vi.fn(async (): Promise<{ items: unknown[]; next_cursor: string | null }> => ({ items: [], next_cursor: null })),
+  /** 补账取任务列表走通用请求：`(path, { query: { kind, limit } })` */
+  tasks: vi.fn(async (_path?: string, _request?: unknown): Promise<{ tasks: unknown[] }> => ({ tasks: [] })),
 }));
 
 vi.mock('@/composables/useGenModelV1TaskFeed', () => ({
+  GEN_MODEL_V1_FEED_RESUMED: 'feed_resumed',
   subscribeGenModelV1TaskEvents: vi.fn((listener: (envelope: unknown) => void) => {
     h.feedListeners.add(listener);
     return () => { h.feedListeners.delete(listener); };
@@ -19,10 +22,12 @@ vi.mock('@/composables/useGenModelV1TaskFeed', () => ({
 vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/genModelV1Api')>()),
   genModelV1TaskChanges: h.changes,
+  genModelV1Fetch: h.tasks,
 }));
 
 import {
   __resetGenModelV1UpdateNoticeForTests,
+  catchUpGenModelV1FinishedBatches,
   createGenModelV1LoadedProbe,
   dismissGenModelV1UpdateNotice,
   evaluateGenModelV1UpdateNotice,
@@ -91,9 +96,49 @@ beforeEach(() => {
   h.feedListeners.clear();
   h.changes.mockReset();
   h.changes.mockResolvedValue({ items: [], next_cursor: null });
+  h.tasks.mockReset();
+  h.tasks.mockResolvedValue({ tasks: [] });
 });
 afterEach(() => {
   __resetGenModelV1UpdateNoticeForTests();
+});
+
+describe('只认写明 generated 的根；断线后补账', () => {
+  it('回执里没写 generated 的根（失败、缺状态）都不进重载名单', () => {
+    const batch = parseGenModelV1FinishedBatch(finished({}, [
+      { root_refno: '24384/1', status: 'generated' },
+      { root_refno: '24384/2', status: 'failed' },
+      { root_refno: '24384/3' },
+    ]))!;
+    expect(batch.roots).toEqual(['24384_1', '24384_2', '24384_3']);
+    expect(batch.failedRoots).toEqual(['24384_2', '24384_3']);
+  });
+
+  it('feed_resumed：只补订阅之后收口、没处理过的批次，按收口先后进提示；同一个任务不重复处理', async () => {
+    setGenModelV1LoadedProbe(probeOf([8000], ['24384_24776']));
+    startGenModelV1UpdateNotice();
+    const after = new Date(Date.now() + 60_000).toISOString();
+    const before = new Date(Date.now() - 60_000).toISOString();
+    const entry = (taskId: string, finishedAt: string) => ({
+      ...finished({}, undefined, { taskId }).payload,
+      kind: 'data_batch',
+      finished_at: finishedAt,
+    });
+    h.tasks.mockImplementation(async (_path?: string, request?: unknown) => (
+      (request as { query?: { kind?: string } } | undefined)?.query?.kind === 'data_batch'
+        ? { tasks: [entry('db-late', after), entry('db-old', before)] }
+        : { tasks: [] }
+    ));
+    for (const listener of h.feedListeners) listener({ type: 'feed_resumed' });
+    await vi.waitFor(() => expect(useGenModelV1UpdateNotice().notice.value?.taskIds).toEqual(['db-late']));
+    expect(h.tasks).toHaveBeenCalledWith('/api/v1/tasks', { query: { kind: 'data_batch', limit: 50 } });
+    expect(h.tasks).toHaveBeenCalledWith('/api/v1/tasks', { query: { kind: 'model_rebuild', limit: 50 } });
+
+    expect(await catchUpGenModelV1FinishedBatches(async () => [entry('db-late', after)] as never)).toBe(0);
+    for (const listener of h.feedListeners) listener(finished({}, undefined, { taskId: 'db-late' }));
+    await Promise.resolve();
+    expect(useGenModelV1UpdateNotice().notice.value?.taskIds).toEqual(['db-late']);
+  });
 });
 
 describe('K01 parseGenModelV1FinishedBatch', () => {

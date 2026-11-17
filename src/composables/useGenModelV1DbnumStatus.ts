@@ -5,6 +5,7 @@
  * 判定与说法都交给 `judgeDbnumFreshness` / `describeDbnumFreshness`（`./dbnumFreshness`）——「模型生成」面板的状态徽标
  * 用的是同一对函数，两处对同一个库说法一致（方案 `docs/plans/2026-11-10-model-load-speed-generate-and-freshness-plan.md` C1）。
  * 库一级按**库文件最新会话**判：模型与已入库数据一致、但库文件还有新会话的库不再是「最新」。
+ * 别处的数据批次落地（任务流的 `task_finished`，断线重连后补进来的也算）时另外重拉一次 `/dbnums`，不等下一拍轮询。
  *
  * 2026-11-10 起**不再调用 `GET /dbnums/{n}/model/roots`**（同一份方案的 A1）：
  * 那条接口要冻结源文件并枚举整库生成根（实测 7997 一次 21–24 s、7999 15–25 s、7333 40 s），而它的 `ready`
@@ -17,6 +18,7 @@ import type { DbnumRow } from '@/api/genModelV1Api';
 
 import { describeDbnumFreshness, judgeDbnumFreshness, type DbnumFreshnessKind } from '@/composables/dbnumFreshness';
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
+import { subscribeGenModelV1FinishedBatches } from '@/composables/useGenModelV1UpdateNotice';
 import { getGenModelV1ServiceSnapshot } from '@/model-source/genModelV1/serviceLifecycle';
 
 /**
@@ -53,6 +55,10 @@ export const DBNUM_STATUS_PENDING_RETRY_DELAYS_MS = [10_000, 30_000, 60_000];
 
 const sessionEvidence = reactive(new Map<number, SessionEvidence>());
 const pendingRetries = new Map<number, { count: number; timer: ReturnType<typeof setTimeout> }>();
+/** 别处的数据批次落地之后隔这么久重拉一次 `/dbnums`；这段时间里又落了批次就从头再等，连着落几批只拉一次 */
+export const DBNUM_STATUS_BATCH_REFRESH_DELAY_MS = 2_000;
+let unsubscribeBatches: (() => void) | null = null;
+let batchRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function rowOf(dbnum: number): DbnumRow | null {
   const { state } = useGenModelV1Health();
@@ -92,11 +98,24 @@ export function dbnumModelStatusView(dbnum: number): DbnumModelStatusView {
   return { kind, title: [`${prefix}${headline}`, text.detail, text.watermarks].filter(Boolean).join('\n') };
 }
 
+/** 批次落地后库的水位变了：重拉 `/dbnums`。一次请求带回全部库，所以不分落在哪个库上。 */
+function ensureBatchSubscription(): void {
+  if (unsubscribeBatches) return;
+  unsubscribeBatches = subscribeGenModelV1FinishedBatches(() => {
+    if (batchRefreshTimer) clearTimeout(batchRefreshTimer);
+    batchRefreshTimer = setTimeout(() => {
+      batchRefreshTimer = null;
+      refreshRows();
+    }, DBNUM_STATUS_BATCH_REFRESH_DELAY_MS);
+  });
+}
+
 /**
  * 行尾圆点挂载。状态全部来自已在轮询的 `/dbnums`，这里不需要为「在看」的库另起探测；
- * 保留登记 / 释放这一对只为不动调用方（`ModelTreeRow`）。
+ * 第一个圆点挂上时订阅「批次落地」，登记 / 释放本身什么都不记（保留这一对只为不动调用方 `ModelTreeRow`）。
  */
 export function acquireDbnumStatus(_dbnum: number): () => void {
+  ensureBatchSubscription();
   return () => {};
 }
 
@@ -165,6 +184,10 @@ export function useGenModelV1DbnumStatus() {
       sessionEvidence.clear();
       for (const retry of pendingRetries.values()) clearTimeout(retry.timer);
       pendingRetries.clear();
+      unsubscribeBatches?.();
+      unsubscribeBatches = null;
+      if (batchRefreshTimer) clearTimeout(batchRefreshTimer);
+      batchRefreshTimer = null;
     },
   };
 }

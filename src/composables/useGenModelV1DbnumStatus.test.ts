@@ -3,10 +3,18 @@ import { resolve } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DBNUM_STATUS_PENDING_RETRY_DELAYS_MS, useGenModelV1DbnumStatus } from './useGenModelV1DbnumStatus';
+import {
+  DBNUM_STATUS_BATCH_REFRESH_DELAY_MS,
+  DBNUM_STATUS_PENDING_RETRY_DELAYS_MS,
+  useGenModelV1DbnumStatus,
+} from './useGenModelV1DbnumStatus';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
 
+import {
+  __resetGenModelV1UpdateNoticeForTests,
+  handleGenModelV1TaskEnvelopeForNotice,
+} from '@/composables/useGenModelV1UpdateNotice';
 import { __resetGenModelV1ServiceLifecycleForTests } from '@/model-source/genModelV1/serviceLifecycle';
 
 const rootsMock = vi.hoisted(() => vi.fn());
@@ -33,9 +41,25 @@ function setRow(dbnum: number, row: Partial<DbnumRow>) {
   healthState.verdict.lastCheckedAt = Date.now();
 }
 
+let batchSeq = 0;
+
+/** 别处收口了一个数据批次（任务流的 `task_finished`）。任务号每次换一个：同一个任务只处理一次。 */
+async function landBatch(dbnum: number) {
+  batchSeq += 1;
+  await handleGenModelV1TaskEnvelopeForNotice({
+    type: 'task_finished',
+    task_id: `db-${batchSeq}`,
+    payload: {
+      state: 'succeeded',
+      result: { batch: { dbnum, db_type: 'DESI', end_sesno: 12, changed_elements: 1 }, units: [] },
+    },
+  });
+}
+
 describe('useGenModelV1DbnumStatus：库状态只读 /dbnums 那一行，不做整库根枚举', () => {
   afterEach(() => {
     useGenModelV1DbnumStatus().__reset();
+    __resetGenModelV1UpdateNoticeForTests();
     __resetGenModelV1ServiceLifecycleForTests();
     healthState.verdict.rows = {};
     healthState.verdict.error = null;
@@ -164,6 +188,44 @@ describe('useGenModelV1DbnumStatus：库状态只读 /dbnums 那一行，不做�
     }
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(refreshVerdictMock).toHaveBeenCalledTimes(DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length);
+  });
+
+  it('别处的数据批次落地：隔 2 s 重拉一次 /dbnums，落在哪个库都拉（一次请求带回全部库）；连着落几批只拉一次', async () => {
+    vi.useFakeTimers();
+    const store = useGenModelV1DbnumStatus();
+    store.acquire(8000);
+
+    await landBatch(7998);
+    await vi.advanceTimersByTimeAsync(DBNUM_STATUS_BATCH_REFRESH_DELAY_MS - 1);
+    expect(refreshVerdictMock).not.toHaveBeenCalled();
+    // 还没到点又落一批：从这一批起重新等
+    await landBatch(8000);
+    await vi.advanceTimersByTimeAsync(DBNUM_STATUS_BATCH_REFRESH_DELAY_MS - 1);
+    expect(refreshVerdictMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(1);
+
+    await landBatch(8000);
+    await vi.advanceTimersByTimeAsync(DBNUM_STATUS_BATCH_REFRESH_DELAY_MS);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('没有圆点挂载过就不订阅批次；__reset 之后退订，在等的那一次也作废', async () => {
+    vi.useFakeTimers();
+    const store = useGenModelV1DbnumStatus();
+    await landBatch(8000);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refreshVerdictMock).not.toHaveBeenCalled();
+
+    store.acquire(8000);
+    await landBatch(8000);
+    store.__reset();
+    await landBatch(8000);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refreshVerdictMock).not.toHaveBeenCalled();
   });
 
   it('服务换代后本页面的证据作废（未初始化库按需生成的结果随后端重启就没了）', async () => {

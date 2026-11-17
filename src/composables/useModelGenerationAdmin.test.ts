@@ -296,6 +296,33 @@ describe('一键完全重新部署', () => {
     admin.stopUpgradeHealthPolling();
   });
 
+  it('任务轮询的慢响应晚于 WS 收口回来：终态不被那份「运行中」快照盖回去', async () => {
+    const admin = await loadAdmin();
+    h.upgrade.mockResolvedValue({
+      target_version: 8,
+      requested: [8000],
+      full_scope: true,
+      upgrade: { state: 'running' },
+      receipt: { enqueued: [{ task_id: 't-8000', dbnum: 8000, intent: 'reinitialize' }], merged: [] },
+    });
+    h.health.mockResolvedValue({ status: 'ok', storage_version: { upgrade: { state: 'done' } } });
+    let staleReply!: (value: unknown) => void;
+    h.taskGet
+      .mockImplementationOnce(() => new Promise((resolve) => { staleReply = resolve; }))
+      .mockResolvedValue({ task_id: 't-8000', state: 'succeeded' });
+
+    await admin.redeploy([8000], { all: true });
+    expect(h.taskGet).toHaveBeenCalledTimes(1);
+    emit({ type: 'task_finished', seq: 2, task_id: 't-8000', payload: { task_id: 't-8000', state: 'succeeded' } });
+    await flushMicrotasks();
+    expect(admin.tasks.value.get('t-8000')?.state).toBe('succeeded');
+
+    staleReply({ task_id: 't-8000', state: 'running', current_stage: 'wipe_reinit' });
+    await flushMicrotasks();
+    expect(admin.tasks.value.get('t-8000')?.state).toBe('succeeded');
+    admin.stopUpgradeHealthPolling();
+  });
+
   it('probeRedeploySupport：health 没有 storage_version → outdated；升级在跑 → running', async () => {
     const admin = await loadAdmin();
     h.health.mockResolvedValueOnce({ status: 'ok', version: '0.9.0' });
