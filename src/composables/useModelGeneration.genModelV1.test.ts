@@ -31,6 +31,8 @@ const typeInfoMock = vi.fn();
 const evictMock = vi.fn((_layer: unknown, _dbno: number, _refnos: string[], _options?: { release?: boolean }): string[] => []);
 /** 装载器的「这个构件已经在场景里」：缺省都不在 */
 const isDtxRefnoLoadedMock = vi.fn((_dbno: number, _refno: string): boolean => false);
+/** 同一个问题不分库问（库号映射查不到时用）：缺省都不在 */
+const isDtxRefnoLoadedAcrossAllDbnosMock = vi.fn((_refno: string): boolean => false);
 const unitRefnosMock = vi.fn((_dbno: number, _root: string): string[] => []);
 const { dbnumRootsMock, dbnumRowsMock, getDbnumsMock } = vi.hoisted(() => ({
   dbnumRootsMock: vi.fn(),
@@ -172,6 +174,7 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   evictDtxRefnos: evictMock,
   holdDtxLod1Backfill: holdLod1Mock,
   isDtxRefnoLoaded: (dbno: number, refno: string) => isDtxRefnoLoadedMock(dbno, refno),
+  isDtxRefnoLoadedAcrossAllDbnos: (refno: string) => isDtxRefnoLoadedAcrossAllDbnosMock(refno),
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
   prefetchDtxGeometries: (...args: unknown[]) => prefetchMock(...args),
   resolveDtxRefnosByUnitRefno: unitRefnosMock,
@@ -283,6 +286,8 @@ beforeEach(async () => {
   prefetchMock.mockResolvedValue([]);
   isDtxRefnoLoadedMock.mockReset();
   isDtxRefnoLoadedMock.mockReturnValue(false);
+  isDtxRefnoLoadedAcrossAllDbnosMock.mockReset();
+  isDtxRefnoLoadedAcrossAllDbnosMock.mockReturnValue(false);
   loadedNodeEntryMock.mockReset();
   loadedNodeEntryMock.mockReturnValue(null);
   evictMock.mockReset();
@@ -5909,6 +5914,31 @@ describe('「取最新」用到的显示流程出口：补几处边角', () => {
       // 表还是撤掉的
       expect(gen.loadedRefnosOf(ROOT)).toBeNull();
       expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+    } finally {
+      vi.mocked(tryGetDbnumByRefno).mockReturnValue(7997 as never);
+    }
+  });
+
+  it('isModelActuallyLoaded：库号映射查不到（只带 show_dbnum 打开时没装它）时，装载器里记着的构件照样算装着', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const { tryGetDbnumByRefno } = await import('@/composables/useDbMetaInfo');
+    const gen = useModelGeneration({ viewer: makeViewer() });
+    const LEAF = '24384_24779';
+    // 映射查得到：只问映射给的那个库，不去各库都问
+    isDtxRefnoLoadedAcrossAllDbnosMock.mockReturnValue(true);
+    expect(gen.isModelActuallyLoaded(LEAF)).toBe(false);
+    expect(isDtxRefnoLoadedMock).toHaveBeenLastCalledWith(7997, LEAF);
+    expect(isDtxRefnoLoadedAcrossAllDbnosMock).not.toHaveBeenCalled();
+
+    vi.mocked(tryGetDbnumByRefno).mockReturnValue(null as never);
+    try {
+      // 映射查不到：整库显示装进来的构件在装载器里记着，各库都问一遍
+      isDtxRefnoLoadedAcrossAllDbnosMock.mockImplementation((refno) => refno === LEAF);
+      isDtxRefnoLoadedMock.mockClear();
+      expect(gen.isModelActuallyLoaded(LEAF)).toBe(true);
+      expect(gen.isModelActuallyLoaded('24384/24779')).toBe(true);
+      expect(gen.isModelActuallyLoaded('24384_24780')).toBe(false);
+      expect(isDtxRefnoLoadedMock).not.toHaveBeenCalled();
     } finally {
       vi.mocked(tryGetDbnumByRefno).mockReturnValue(7997 as never);
     }

@@ -43,6 +43,7 @@ import {
   evictDtxRefnos,
   holdDtxLod1Backfill,
   isDtxRefnoLoaded,
+  isDtxRefnoLoadedAcrossAllDbnos,
   loadDbnoInstancesForVisibleRefnosDtx,
   prefetchDtxGeometries,
   resolveDtxRefnosByUnitRefno,
@@ -1090,7 +1091,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     if (!normalizedRoot) return false;
     if (loadedRoots.has(normalizedRoot)) return true;
     const dbno = tryGetDbnumByRefno(normalizedRoot);
-    if (dbno != null && isDtxRefnoLoaded(dbno, normalizedRoot)) return true;
+    // 「构件号 → 库号」的映射没装上（地址栏只带 `show_dbnum` 打开时启动不预拉它）或查不到这个节点时，不能就此当它没装：
+    // 整库显示装进来的构件在装载器里记着，只是这里问不出它属于哪个库——那就各库都问一遍。不然模型树上这些构件行
+    // 三维里明明显示着，眼睛却是灭的，要等别的操作把映射拉回来、行又重画一次才亮（2026-11-17 沙箱回归查出来的）。
+    if (dbno != null ? isDtxRefnoLoaded(dbno, normalizedRoot) : isDtxRefnoLoadedAcrossAllDbnos(normalizedRoot)) return true;
     const anyViewer = viewer as any;
     const dtxLayer = anyViewer?.__dtxLayer;
     return !!dtxLayer?.hasObject?.(normalizedRoot);
