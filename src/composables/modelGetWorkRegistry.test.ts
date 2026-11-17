@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { computed } from 'vue';
 
 import {
   advanceGetWorkRoot,
   forgetGetWorkRoot,
   getWorkRegisteredRoots,
   getWorkRegisteredScopes,
+  isGetWorkRoot,
   noteGetWorkDbnumScope,
   noteGetWorkRoot,
   noteGetWorkScopeChecked,
@@ -49,6 +51,34 @@ describe('取最新的登记表：直接装进场景的节点', () => {
     noteGetWorkRoot('24384_26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 }, 'show_dbnum');
     getWorkRegisteredRoots()[0]!.loadedModelSesno = 9999;
     expect(getWorkRegisteredRoots()[0]!.loadedModelSesno).toBe(1143);
+  });
+
+  it('问一个节点在不在册（模型树画眼睛用）：登记了的在，refno 两种写法都认；没登记的、空的不在', () => {
+    noteGetWorkRoot('24384/26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 }, 'show_dbnum');
+    expect(isGetWorkRoot('24384_26547')).toBe(true);
+    expect(isGetWorkRoot('24384/26547')).toBe(true);
+    expect(isGetWorkRoot('24384_9')).toBe(false);
+    expect(isGetWorkRoot('')).toBe(false);
+  });
+
+  it('在不在册是响应式的：登记、撤掉、清表的那一刻，读过它的计算当场重算（登记发生在装载结束之后，没有别的信号）', () => {
+    // 计算属性算过一次就留着结果，依赖变了才重算：表不是响应式的话，下面每一步读到的都是头一次的结果
+    const inRegistry = computed(() => isGetWorkRoot('24384_26547'));
+    const other = computed(() => isGetWorkRoot('24384_9'));
+    expect(inRegistry.value).toBe(false);
+    expect(other.value).toBe(false);
+
+    noteGetWorkRoot('24384/26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 }, 'show_dbnum');
+    expect(inRegistry.value).toBe(true);
+    expect(other.value).toBe(false);
+
+    forgetGetWorkRoot('24384/26547');
+    expect(inRegistry.value).toBe(false);
+
+    noteGetWorkRoot('24384_26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 }, 'show_refno');
+    expect(inRegistry.value).toBe(true);
+    resetGetWorkRegistry();
+    expect(inRegistry.value).toBe(false);
   });
 });
 

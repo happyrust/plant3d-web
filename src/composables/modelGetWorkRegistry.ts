@@ -5,7 +5,12 @@
  *
  * 节点一旦被取最新重载过，就由已加载节点表接管（重载走的是 `showModelByRefno`，它会登记），从这里撤掉。
  * 模块级单例：整库显示在显示流程里登记、地址栏直装在查看器里登记，取最新在状态栏里读。
+ *
+ * 模型树画眼睛也看它（`isGetWorkRoot`，2026-11-17）：在册的直装节点和它下面的中间节点算装着。登记发生在装载结束之后，
+ * 那时没有别的信号让树上的行重算，所以节点这张表是响应式的（浅的：只跟「谁在册」，不跟每一行里记的水位）。
  */
+import { shallowReactive } from 'vue';
+
 import { toRefnoKey } from '@/utils/refnoKey';
 
 export type GetWorkWatermark = { modelSesno: number | null; fileLatestSesno: number | null };
@@ -26,7 +31,7 @@ export type GetWorkRegisteredScope = {
   checkedFileLatestSesno: number | null;
 };
 
-const roots = new Map<string, GetWorkRegisteredRoot>();
+const roots = shallowReactive(new Map<string, GetWorkRegisteredRoot>());
 const scopes = new Map<number, GetWorkRegisteredScope>();
 
 /** 登记一个直接装进场景的节点。`at` 是开始装之前读到的库水位（取早不取晚）。 */
@@ -51,6 +56,11 @@ export function advanceGetWorkRoot(refno: string, at: GetWorkWatermark): void {
 
 export function forgetGetWorkRoot(refno: string): void {
   roots.delete(toRefnoKey(refno));
+}
+
+/** 这个节点是不是在册的直装节点。响应式：登记、撤掉、清表的那一刻，读过它的计算和画面当场重算。 */
+export function isGetWorkRoot(refno: string): boolean {
+  return roots.has(toRefnoKey(refno));
 }
 
 /**

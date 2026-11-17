@@ -9,6 +9,10 @@
  * 「装着没有」只认节点自己。PIPE、BRAN 这类自己没有几何的中间节点是跟着上一级装进来的：有下级的节点，某个上级
  * 登记在已加载节点表里就算装着；节点自己登记在表里（别的显示流程装的）也算。叶子不认上级。
  *
+ * 整库显示（`show_dbnum`）和地址栏直装（`show_refno` / `debug_refno`）装进来的不进已加载节点表，记在取最新的登记表
+ * （`modelGetWorkRegistry`）里：在册的直装根和「登记在已加载节点表里」一样看待。登记发生在装载结束之后（修订号那时
+ * 已经动过了），所以那张表自己也得是响应式的。这里用真的那张表。
+ *
  * 最后一组不是眼睛：面板挂上时把「树上藏着的那部分名下现在有哪些构件」这句问话接到树上（`treeHiddenScope`），卸载时撤。
  * 借这里现成的面板挂载验接线；问话本身、树怎么答、装载流程怎么用各有自己的测试。
  */
@@ -19,6 +23,7 @@ import ModelTreePanel from './ModelTreePanel.vue';
 
 import type { CheckState, FlatRow } from '@/composables/useModelTree';
 
+import { forgetGetWorkRoot, noteGetWorkRoot, resetGetWorkRegistry } from '@/composables/modelGetWorkRegistry';
 import { queryTreeHiddenScope, type TreeHiddenScope } from '@/composables/treeHiddenScope';
 import { dtxLoaderRevision } from '@/composables/useDbnoInstancesDtxLoader';
 
@@ -186,6 +191,19 @@ function showPipeline(): void {
   fake.parentOf.set(ATTA.id, BRAN.id);
 }
 
+// 整库显示是一个 SITE 一个 SITE 装的：SITE 在那条管线的最上面，自己也没有几何
+const SITE: FlatRow = { id: '14207_50', name: 'SITE 1', type: 'SITE', depth: 0, hasChildren: true, dbnum: 6015 };
+
+/** 把 SITE 和它下面那条管线画到树上 */
+function showSite(): void {
+  showPipeline();
+  fake.rows = [SITE, ...fake.rows];
+  fake.parentOf.set(ZONE.id, SITE.id);
+}
+
+/** 直装的节点登记时记的库水位（眼睛不看它） */
+const AT = { modelSesno: 1143, fileLatestSesno: 1143 };
+
 let mounted: { app: App; host: HTMLElement } | null = null;
 
 async function mountPanel(): Promise<HTMLElement> {
@@ -215,6 +233,7 @@ beforeEach(() => {
   fake.loaded.clear();
   fake.parentOf.clear();
   fake.loadedNodes.clear();
+  resetGetWorkRegistry();
   fake.hiddenScopeUnder.mockReset();
   // 面板挂上时有两句调试输出
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -353,6 +372,115 @@ describe('跟着上一级装进来的中间节点', () => {
     const host = await mountPanel();
 
     expect(eyeOf(host, NOT_LOADED.id)).toBe('on');
+  });
+});
+
+describe('整库显示、地址栏直接装进来的模型（不进已加载节点表，记在取最新的登记表里）', () => {
+  it('整库显示装进来的 SITE：它自己和下面有下级的中间节点（ZONE、PIPE、BRAN）眼睛是亮的；叶子照旧只看自己在不在场景里', async () => {
+    showSite();
+    // 整库显示不经这个面板的显示流程、也不进已加载节点表：只在取最新的登记表里记了这个 SITE
+    noteGetWorkRoot(SITE.id, 6015, AT, 'show_dbnum');
+    // 有几何的构件装进了场景；SITE、ZONE、PIPE、BRAN 自己没有几何，ATTA 也没有
+    fake.loaded.add(ELBO.id);
+    const host = await mountPanel();
+
+    expect(eyeOf(host, SITE.id)).toBe('on');
+    expect(eyeOf(host, ZONE.id)).toBe('on');
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+    expect(eyeOf(host, PIPE_2.id)).toBe('on');
+    expect(eyeOf(host, BRAN.id)).toBe('on');
+    expect(eyeOf(host, ELBO.id)).toBe('on');
+    expect(eyeOf(host, ATTA.id)).toBe('off');
+  });
+
+  it('登记的那一刻当场亮，撤掉、清表当场灭（登记在装载结束之后，装载器的修订号这时不动）', async () => {
+    showSite();
+    const host = await mountPanel();
+    // 谁都没装：都是灭的
+    expect(eyeOf(host, SITE.id)).toBe('off');
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+
+    noteGetWorkRoot(SITE.id, 6015, AT, 'show_dbnum');
+    await nextTick();
+    expect(eyeOf(host, SITE.id)).toBe('on');
+    expect(eyeOf(host, ZONE.id)).toBe('on');
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+    expect(eyeOf(host, BRAN.id)).toBe('on');
+    // 叶子不认上级：场景里没有它就是灭的
+    expect(eyeOf(host, ELBO.id)).toBe('off');
+
+    // 从地址栏的列表里撤掉它（或取最新发现它已经不在场景里）
+    forgetGetWorkRoot(SITE.id);
+    await nextTick();
+    expect(eyeOf(host, SITE.id)).toBe('off');
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+
+    // 再装上，然后场景清空
+    noteGetWorkRoot(SITE.id, 6015, AT, 'show_dbnum');
+    await nextTick();
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+    resetGetWorkRegistry();
+    await nextTick();
+    expect(eyeOf(host, SITE.id)).toBe('off');
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+  });
+
+  it('地址栏直接装进来的中间节点（BRAN）：它自己亮；它上面的、旁边的不跟着亮', async () => {
+    showSite();
+    noteGetWorkRoot(BRAN.id, 6015, AT, 'show_refno');
+    fake.loaded.add(ELBO.id);
+    const host = await mountPanel();
+
+    expect(eyeOf(host, BRAN.id)).toBe('on');
+    expect(eyeOf(host, ELBO.id)).toBe('on');
+    // 上面几级只装了这一根 BRAN，不算装着；旁边的 PIPE 2 没装；没有几何的叶子不认上级
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, ZONE.id)).toBe('off');
+    expect(eyeOf(host, SITE.id)).toBe('off');
+    expect(eyeOf(host, PIPE_2.id)).toBe('off');
+    expect(eyeOf(host, ATTA.id)).toBe('off');
+  });
+
+  it('直装的节点自己在册就算装着，不要求它有下级', async () => {
+    fake.rows = [NOT_LOADED];
+    noteGetWorkRoot(NOT_LOADED.id, 6015, AT, 'debug_refno');
+    const host = await mountPanel();
+
+    expect(eyeOf(host, NOT_LOADED.id)).toBe('on');
+  });
+
+  it('人藏起来的行（树上的勾选态是隐藏）照旧是灭的，旁边没藏的照旧亮', async () => {
+    showSite();
+    noteGetWorkRoot(SITE.id, 6015, AT, 'show_dbnum');
+    // 藏 PIPE 1：树把它和它下面已经取进树里的节点都记成隐藏，上面两级变成半选
+    fake.checkStates.set(SITE.id, 'indeterminate');
+    fake.checkStates.set(ZONE.id, 'indeterminate');
+    fake.checkStates.set(PIPE.id, 'unchecked');
+    fake.checkStates.set(BRAN.id, 'unchecked');
+    const host = await mountPanel();
+
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+    expect(eyeOf(host, PIPE_2.id)).toBe('on');
+    expect(eyeOf(host, ZONE.id)).toBe('on');
+    expect(eyeOf(host, SITE.id)).toBe('on');
+  });
+
+  it('取最新重载之后改由已加载节点表接管（那边登记、这边撤掉）：眼睛一直亮着', async () => {
+    showSite();
+    noteGetWorkRoot(SITE.id, 6015, AT, 'show_dbnum');
+    const host = await mountPanel();
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+
+    // 重载走的是显示流程：已加载节点表先登记，取最新随后把它从自己的登记表撤掉
+    fake.loadedNodes.set(SITE.id, { loaded: true });
+    forgetGetWorkRoot(SITE.id);
+    await nextTick();
+    expect(eyeOf(host, SITE.id)).toBe('on');
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+    expect(eyeOf(host, BRAN.id)).toBe('on');
   });
 });
 

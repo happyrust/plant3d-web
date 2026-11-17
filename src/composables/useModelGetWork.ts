@@ -51,8 +51,8 @@ import { getGenModelV1ServiceGeneration } from '@/model-source/genModelV1/servic
 import { emitToast } from '@/ribbon/toastBus';
 import { toRefnoKey } from '@/utils/refnoKey';
 
-// 查看器登记地址栏直装的根、卸载时清登记表，都从这里拿（它只引这一个模块）
-export { noteGetWorkRoot, resetGetWorkRegistry } from '@/composables/modelGetWorkRegistry';
+// 查看器登记地址栏直装的根、从地址栏的列表里撤下时撤掉、卸载时清登记表，都从这里拿（它只引这一个模块）
+export { forgetGetWorkRoot, noteGetWorkRoot, resetGetWorkRegistry } from '@/composables/modelGetWorkRegistry';
 
 let treePort: GetWorkTreePort | null = null;
 let scenePort: GetWorkScenePort | null = null;
