@@ -38,6 +38,9 @@ export const LOADED_NODE_DBNUMS_POLL_MS = 60_000;
 /** 同时在问状态的节点数上限 */
 export const LOADED_NODE_CHECK_CONCURRENCY = 2;
 
+/** 后端的一版节点模型：已生成的那部分对应到哪些会话、当时有几个生成单元落后（后端没给为 `null`） */
+export type LoadedNodeGeneration = { sesnoMin: number; sesnoMax: number; laggingUnits: number | null };
+
 export type LoadedNodeEntry = {
   /** `a_b` */
   refno: string;
@@ -58,6 +61,14 @@ export type LoadedNodeEntry = {
    * 节点重新登记（重载 / 更新做成了）时清掉。没有这回事为 `null`。
    */
   staleReason: string | null;
+  /**
+   * 装上之后头一次问到的后端那一版模型：只对装进了场景的节点记，只记后端的节点模型状态接口答的那一次，之后重问不覆盖
+   * （离「本页装的那一版」最近的就是头一次）；节点重新登记（重载 / 更新做成了）时清掉重记。
+   * `null` = 那一次后端说不出（没答上来、或没有已生成的部分）；没有这一格 = 还没问回来、或走的是过渡办法（旧后端）。
+   * 后端按需生成的模型不动库的水位，「屏幕上装的是不是后端现在的那一版」只能拿它比（取最新用，见
+   * `modelGetWork` 的 `screenHoldsBackendModel`）。
+   */
+  loadedGenerated?: LoadedNodeGeneration | null;
 };
 
 export type LoadedNodeView = {
@@ -200,6 +211,13 @@ async function run(key: string): Promise<void> {
     if (!current || checkTokens.get(key) !== token) return;
     current.status = status;
     current.checking = false;
+    // 装上之后头一次问到的那一版记下来（见 `LoadedNodeEntry.loadedGenerated`）：说不出也记一笔，之后答上来的不补——
+    // 隔了一阵才问到的那一版，保不准还是装上时的
+    if (current.loaded && current.loadedGenerated === undefined && status.source === 'model-status') {
+      current.loadedGenerated = status.generated
+        ? { sesnoMin: status.generated.sesnoMin, sesnoMax: status.generated.sesnoMax, laggingUnits: status.units?.lagging ?? null }
+        : null;
+    }
     // 后端说这个节点已经没有要生成的单元（上次停下之后它在后台做完了、或别处生成过了）：这一页里留着的那颗「生成」作废。
     // 正在补齐的不动——做完由显示流程自己收口。
     if (status.source === 'model-status' && status.unitsToGenerate === 0 && !isGenerationFillActive(key)) {

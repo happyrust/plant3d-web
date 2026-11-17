@@ -8,12 +8,14 @@ import {
   createModelGetWork,
   decideRootAction,
   describeLibraryGap,
+  describeOutOfScopeLibrary,
   GETWORK_BACKEND_WAIT_MAX_MS,
   GETWORK_BACKEND_WAIT_POLL_MS,
   GETWORK_LOAD_WAIT_MAX_MS,
   libraryWaitsForBackend,
   newSiteHasModel,
   rootNeedsCheck,
+  screenHoldsBackendModel,
   summarizeGetWork,
   type GetWorkDbnumScope,
   type GetWorkDerivedContext,
@@ -539,7 +541,7 @@ describe('取最新：后端重启之后的护栏', () => {
       rows: [ROW_7009],
       roots: [onDemand],
       loaded: { '7009_100': ['7009_101', '7009_102'] },
-      statuses: { '7009_100': { status: status('not_generated', { dbnum: 7009, generated: null, units: { total: 2, generated: 0, missing: 2, failed: 0, lagging: 0, exact: true } }), gone: false } },
+      statuses: { '7009_100': { status: status('not_generated', { dbnum: 7009, generated: null, unitsToGenerate: 2, units: { total: 2, generated: 0, missing: 2, failed: 0, lagging: 0, exact: true } }), gone: false } },
     });
     const { engine, log } = harness(world);
     // 第一轮：没重启、水位没变——不问
@@ -571,7 +573,7 @@ describe('取最新：后端重启之后的护栏', () => {
       generation: 1,
       rows: [ROW_7009],
       roots: [root('7009_100', { dbnum: 7009, loadedModelSesno: 0, loadedFileLatestSesno: 479 })],
-      statuses: { '7009_100': { status: status('not_generated', { dbnum: 7009 }), gone: false } },
+      statuses: { '7009_100': { status: status('not_generated', { dbnum: 7009, generated: null, unitsToGenerate: 1 }), gone: false } },
       loaded: { '7009_100': ['7009_101', '7009_102'] },
     });
     const { engine, log } = harness(world);
@@ -671,6 +673,54 @@ describe('取最新：后端重启之后的护栏', () => {
     expect(decide(RELOADABLE)).toEqual({ kind: 'reload', note: null });
     expect(decide(status('latest'))).toEqual({ kind: 'none' });
     expect(decide(status('empty'))).toEqual({ kind: 'reload', note: null });
+  });
+
+  it('decideRootAction：后端没有（完整）模型时，让人去点的是行上真给的那一颗按钮', () => {
+    const node = root(SITE);
+    const reasonOf = (item: NodeModelStatus, restarted = false): string => (
+      (decideRootAction(node, { status: item, gone: false }, { restarted }) as { reason: string }).reason
+    );
+    const oneMissing = { total: 2, generated: 1, missing: 1, failed: 0, lagging: 0, exact: true };
+    // 库在后端更新范围里、库文件比模型水位新：缺的单元靠库一级的更新补，行上给的是「更新」（不是「生成」）
+    const libraryBehind = { modelSesno: 1652, fileLatestSesno: 1657, inWatchScope: true, unitsToGenerate: 1, units: oneMissing };
+    expect(reasonOf(status('partial', libraryBehind))).toBe(
+      '后端现在只有一部分这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「更新」可让后端把这个库更新到最新',
+    );
+    expect(reasonOf(status('not_generated', { ...libraryBehind, generated: null }), true)).toBe(
+      '后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「更新」可让后端把这个库更新到最新',
+    );
+    // 库已经跟上、或不在更新范围里（按需生成）：行上给的是「生成」
+    expect(reasonOf(status('partial', { ...libraryBehind, modelSesno: 1657 }))).toBe(
+      '后端现在只有一部分这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成',
+    );
+    expect(reasonOf(status('not_generated', { ...libraryBehind, inWatchScope: false, generated: null }))).toBe(
+      '后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成',
+    );
+    // 没有要生成的单元、或说不出要生成几个：行上没有按钮，不指一颗不存在的
+    expect(reasonOf(status('partial', { ...libraryBehind, unitsToGenerate: 0 }))).toBe('后端现在只有一部分这个节点的模型，屏幕上的保持原样（不当成已删除）');
+    expect(reasonOf(status('not_generated', { unitsToGenerate: null, generated: null }))).toBe('后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）');
+  });
+
+  it('库在后端更新范围里、后台还没跟上，节点下新建的单元还没有模型：一整轮下来细节里让人点的是「更新」，不提「生成」', async () => {
+    // 2026-11-17 沙箱：8000 库文件 1652 → 1657（新建了一条分支），后台故意不跟；ZONE 成了「部分生成」，行上给的是库一级的「更新」，
+    // 取最新的细节却写「行上的『生成』可重新生成」
+    const behind = row(ROW_8000, { file_latest_sesno: 1657, applied_sesno: 1652, model_sesno: 1652 });
+    const partial = status('partial', {
+      modelSesno: 1652, fileLatestSesno: 1657, loadedModelSesno: 1652, unitsToGenerate: 1,
+      units: { total: 2, generated: 1, missing: 1, failed: 0, lagging: 0, exact: true },
+    });
+    const world = makeWorld({
+      rows: [behind],
+      roots: [root(ZONE, { loadedModelSesno: 1652, loadedFileLatestSesno: 1652 })],
+      statuses: { [ZONE]: { status: partial, gone: false } },
+      loaded: { [ZONE]: ['24384_47481'] },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.models.kept).toEqual([{
+      refno: ZONE,
+      reason: '后端现在只有一部分这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「更新」可让后端把这个库更新到最新',
+    }]);
+    expect(report.detail.join('\n')).not.toContain('「生成」');
   });
 
   it('decideRootAction：落后的节点——有可换的新版才重载（并说明还落后），没有就不动', () => {
@@ -986,6 +1036,466 @@ describe('取最新：哪些库没能跟到最新', () => {
     expect(report.libraries).toEqual([]);
   });
 
+  // ---- 2026-11-17 沙箱里撞到的：7998 初始化过、不在后端更新范围里，库一级的模型停在 677、库文件到了 679 ----
+  const ROW_7998 = row(ROW_1112, { dbnum: 7998, file_latest_sesno: 679, applied_sesno: 677, model_sesno: 677 });
+  const NOTE_7998 = '库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 679（树已是最新，模型不会自动跟上）';
+  const FACT_7998 = '库 7998 不在后端更新范围里（库一级的模型停在会话 677，库文件已到 679）；页面上装着的 1 个节点已是最新';
+  const EQUI_A = '24382_1911';
+  const EQUI_B = '24382_1920';
+  const EQUI_C = '24382_1930';
+  /** 装上的时候库就是现在这个水位（装上之后库没再变过） */
+  const in7998 = (refno: string, patch: Partial<GetWorkRoot> = {}): GetWorkRoot => (
+    root(refno, { dbnum: 7998, loadedModelSesno: 677, loadedFileLatestSesno: 679, ...patch })
+  );
+  const status7998 = (verdict: NodeModelStatus['verdict'], patch: Partial<NodeModelStatus> = {}): NodeModelStatus => status(verdict, {
+    dbnum: 7998, modelSesno: 677, fileLatestSesno: 679, loadedModelSesno: 677, inWatchScope: false,
+    generated: { sesnoMin: 677, sesnoMax: 677, timeMin: null, basis: 'library_watermark' },
+    ...patch,
+  });
+  /** 库一级的模型（677）生成之后有会话改到了它 */
+  const LAGGING_7998 = status7998('lagging', { units: { total: 1, generated: 1, missing: 0, failed: 0, lagging: 1, exact: true } });
+  /** 做过节点一级的更新：后端按库文件最新会话（679）重新生成了它 */
+  const UPDATED_7998 = status7998('latest', { generated: { sesnoMin: 679, sesnoMax: 679, timeMin: null, basis: 'own_generation' } });
+  const KEPT_LAGGING = '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上';
+  const POINT_TO_UPDATE = '点行上的「更新」可让后端追上';
+  /** 装上之后头一次问到的后端那一版：装上时就落后（库一级那一版）/ 做过节点一级的更新之后重新登记的 */
+  const LOADED_WHILE_LAGGING = { sesnoMin: 677, sesnoMax: 677, laggingUnits: 1 };
+  const LOADED_AFTER_UPDATE = { sesnoMin: 679, sesnoMax: 679, laggingUnits: 0 };
+  const askedOf = (log: string[], refno: string): number => log.filter((line) => line === `status ${refno}`).length;
+
+  it('不在后端更新范围的库、节点装上的时候就已经落后（库的水位和装的时候一样）：照样问它，点明有节点落后、去点行上的「更新」', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998, ROW_8000_AT_1146],
+      roots: [in7998(EQUI_A), root(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1146 })],
+      statuses: { [EQUI_A]: { status: LAGGING_7998, gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+
+    // 8000 在后端更新范围里、水位没变：它的节点照旧不问；7998 的要问
+    expect(log.filter((line) => line.startsWith('status'))).toEqual([`status ${EQUI_A}`]);
+    expect(log.some((line) => line.startsWith('reload') || line.startsWith('withdraw'))).toBe(false);
+    expect(report.models).toMatchObject({ rootsTotal: 2, checked: 1, kept: [{ refno: EQUI_A, reason: KEPT_LAGGING }] });
+    expect(report.libraries).toEqual([{
+      dbnum: 7998,
+      kind: 'out_of_scope',
+      text: `${NOTE_7998}；页面上装着的 1 个节点落后，${POINT_TO_UPDATE}`,
+    }]);
+    expect(report.libraryFacts).toEqual([]);
+    expect(report.summary).toBe(`已取最新：1 个节点的模型没有动。没跟到最新：${NOTE_7998}；页面上装着的 1 个节点落后，${POINT_TO_UPDATE}。`);
+    expect(report.detail).toContain(`${EQUI_A}：${KEPT_LAGGING}`);
+    expect(report.level).toBe('warning');
+
+    // 没人去点「更新」：下一轮照问、照说
+    const again = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(2);
+    expect(again.summary).toBe(report.summary);
+  });
+
+  it('节点一级的更新做完之后（后端说它是最新）：不再说这个库没跟到最新，只在细节里留一句；库没再变就不再问', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      // 本页自己做的更新：做完重新登记过，装上之后头一次问到的就是更新之后那一版
+      roots: [in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE })],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+      tree: { touched: [7998], report: () => treeReport() },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+
+    expect(askedOf(log, EQUI_A)).toBe(1);
+    expect(log.some((line) => line.startsWith('reload'))).toBe(false);
+    expect(report.libraries).toEqual([]);
+    expect(report.libraryFacts).toEqual([FACT_7998]);
+    expect(report.summary).toBe('已是最新：模型树和已装的模型都没有变化（核对了 3 层树、1 个已装的节点）。');
+    expect(report.detail).toEqual([FACT_7998]);
+    expect(report.level).toBe('info');
+
+    // 库没再变：不再为它发请求，说法不变
+    const again = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(1);
+    expect(again.models.checked).toBe(0);
+    expect(again.libraries).toEqual([]);
+    expect(again.summary).toBe(report.summary);
+    expect(again.detail).toEqual([FACT_7998]);
+
+    // 库文件又往前走了、又改到了它：再问，重新点名
+    world.rows = [row(ROW_7998, { file_latest_sesno: 681 })];
+    world.statuses[EQUI_A] = {
+      status: status7998('lagging', { fileLatestSesno: 681, generated: { sesnoMin: 679, sesnoMax: 679, timeMin: null, basis: 'own_generation' } }),
+      gone: false,
+    };
+    const third = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(2);
+    expect(third.libraries.map((item) => item.text)).toEqual([
+      `库 7998 不在后端更新范围里：模型停在会话 677，库文件已到 681（树已是最新，模型不会自动跟上）；页面上装着的 1 个节点落后，${POINT_TO_UPDATE}`,
+    ]);
+    expect(third.libraryFacts).toEqual([]);
+  });
+
+  it('装着的几个节点只有一部分落后：说清几个里有几个；都落后就说都落后', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A), in7998(EQUI_B), in7998(EQUI_C)],
+      statuses: {
+        [EQUI_A]: { status: LAGGING_7998, gone: false },
+        // 677 之后的会话没改到它：库一级的模型对它来说就是最新的
+        [EQUI_B]: { status: status7998('latest'), gone: false },
+        [EQUI_C]: { status: LAGGING_7998, gone: false },
+      },
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.libraries.map((item) => item.text)).toEqual([`${NOTE_7998}；页面上装着的 3 个节点里有 2 个落后，${POINT_TO_UPDATE}`]);
+    expect(report.models.kept.map((item) => item.refno)).toEqual([EQUI_A, EQUI_C]);
+
+    const allBehind = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A), in7998(EQUI_C)],
+      statuses: { [EQUI_A]: { status: LAGGING_7998, gone: false }, [EQUI_C]: { status: LAGGING_7998, gone: false } },
+    });
+    const second = await harness(allBehind).engine.getLatest();
+    expect(second.libraries.map((item) => item.text)).toEqual([`${NOTE_7998}；页面上装着的 2 个节点都落后，${POINT_TO_UPDATE}`]);
+  });
+
+  it('有节点说不出新旧（旧后端的过渡办法、后端判不了）：不敢说「都已是最新」，照库一级的原话', async () => {
+    // 旧后端没有节点模型状态接口：过渡办法不问节点版本表，它说的「最新」不作数
+    const fallback = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A)],
+      statuses: { [EQUI_A]: { status: status7998('latest', { source: 'versions' }), gone: false } },
+    });
+    const old = harness(fallback);
+    const first = await old.engine.getLatest();
+    expect(first.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(first.libraryFacts).toEqual([]);
+    // 下一轮库没再变：没敢说它最新的照问，话不变（不会因为「上一轮核对过」就改口说最新）
+    const firstAgain = await old.engine.getLatest();
+    expect(askedOf(old.log, EQUI_A)).toBe(2);
+    expect(firstAgain.libraries).toEqual(first.libraries);
+    expect(firstAgain.libraryFacts).toEqual([]);
+
+    const unsure = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE }), in7998(EQUI_B)],
+      statuses: {
+        [EQUI_A]: { status: UPDATED_7998, gone: false },
+        [EQUI_B]: { status: status7998('unknown', { reason: '后端判不了' }), gone: false },
+      },
+    });
+    const second = await harness(unsure).engine.getLatest();
+    expect(second.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(second.libraryFacts).toEqual([]);
+    expect(second.models.kept.map((item) => item.refno)).toEqual([EQUI_B]);
+  });
+
+  it('查看器没挂、或这个库在页面上的节点这一轮都撤下了：没有节点可说，照库一级的原话', async () => {
+    const noScene = makeWorld({ rows: [ROW_7998], roots: [in7998(EQUI_A)], hasScene: false, statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false } } });
+    const first = await harness(noScene).engine.getLatest();
+    expect(first.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(first.libraryFacts).toEqual([]);
+
+    // 库里已经没有这个节点：撤下之后这个库在页面上没有节点了
+    const gone = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A)],
+      statuses: { [EQUI_A]: { status: status7998('unknown'), gone: true } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+      tree: { touched: [7998], report: () => treeReport() },
+    });
+    const second = await harness(gone).engine.getLatest();
+    expect(second.models.withdrawn.map((item) => item.refno)).toEqual([EQUI_A]);
+    expect(second.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(second.libraryFacts).toEqual([]);
+  });
+
+  it('整库显示 / 地址栏直装登记的节点也一样：核对到最新之后把水位推进，下一轮不再问', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, { source: 'registry' })],
+      statuses: { [EQUI_A]: { status: status7998('latest'), gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+    });
+    const { engine, log } = harness(world);
+    const first = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(1);
+    expect(log).toContain(`advance ${EQUI_A} 677/679`);
+    expect(first.libraries).toEqual([]);
+    expect(first.libraryFacts).toEqual([FACT_7998]);
+
+    const second = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(1);
+    expect(second.libraries).toEqual([]);
+    expect(second.libraryFacts).toEqual([FACT_7998]);
+  });
+
+  it('别人对它做过节点一级的更新（后端按需生成的比本页装的新）：重载换上，换上之后算最新；重载没做成就不算', async () => {
+    // 本页装的时候库文件在 678，后端后来在 679 上重新生成过
+    const make = (reloadFails: boolean) => makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, { loadedFileLatestSesno: 678 })],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+      reloadFails: new Set(reloadFails ? [EQUI_A] : []),
+    });
+    const done = harness(make(false));
+    const report = await done.engine.getLatest();
+    expect(done.log).toContain(`reload ${EQUI_A}`);
+    expect(report.libraries).toEqual([]);
+    expect(report.libraryFacts).toEqual([FACT_7998]);
+
+    const failed = await harness(make(true)).engine.getLatest();
+    expect(failed.models.failed.map((item) => item.refno)).toEqual([EQUI_A]);
+    expect(failed.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(failed.libraryFacts).toEqual([]);
+  });
+
+  it('整库显示的库这一轮新装入的 SITE 也算页面上装着的节点：它是最新就一起算最新，它落后就点名', async () => {
+    const NEW_7998 = { refno: '24382_3000', name: '/NEW-7998' };
+    const make = (siteStatus: NodeModelStatus) => makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, { source: 'registry' })],
+      scopes: [{ dbnum: 7998, knownSites: new Set([EQUI_A]), discover: true, checkedFileLatestSesno: 677 }],
+      sites: { 7998: [{ refno: EQUI_A, name: '/OLD-7998' }, NEW_7998] },
+      // 原有的那个：677 之后的会话没改到它，库一级的模型对它来说就是最新的
+      statuses: { [EQUI_A]: { status: status7998('latest'), gone: false }, [NEW_7998.refno]: { status: siteStatus, gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+    });
+    const fresh = await harness(make(UPDATED_7998)).engine.getLatest();
+    expect(fresh.models.loadedNew.map((item) => item.refno)).toEqual([NEW_7998.refno]);
+    expect(fresh.libraries).toEqual([]);
+    expect(fresh.libraryFacts).toEqual(['库 7998 不在后端更新范围里（库一级的模型停在会话 677，库文件已到 679）；页面上装着的 2 个节点都已是最新']);
+
+    const behind = await harness(make(LAGGING_7998)).engine.getLatest();
+    expect(behind.models.loadedNew.map((item) => item.refno)).toEqual([NEW_7998.refno]);
+    expect(behind.libraries.map((item) => item.text)).toEqual([`${NOTE_7998}；页面上装着的 2 个节点里有 1 个落后，${POINT_TO_UPDATE}`]);
+    expect(behind.libraryFacts).toEqual([]);
+  });
+
+  it('换上之后名下的构件又被别的节点的重载撤掉、补装没成：这个节点不算最新', async () => {
+    // 装的时候库一级的模型在 675，到 677 之间改到了它（可重载），678、679 没改到它（后端说最新）
+    const older = { loadedModelSesno: 675, loadedFileLatestSesno: 675 };
+    const reloadable = status7998('reloadable', { loadedModelSesno: 675, reloadableSessions: [{ sesno: 677, time: null, unitsChanged: 1 }] });
+    // 构件 m1 从 EQUI_B 挪到了 EQUI_A 名下：EQUI_A 先重载装上了它，EQUI_B 重载时又把它从场景拿掉，要给 EQUI_A 补重载一次
+    const moved = () => makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, older), in7998(EQUI_B, older)],
+      statuses: { [EQUI_A]: { status: reloadable, gone: false }, [EQUI_B]: { status: reloadable, gone: false } },
+      loaded: { [EQUI_A]: ['a1'], [EQUI_B]: ['b1', 'm1'] },
+      afterReload: { [EQUI_A]: ['a1', 'm1'] },
+    });
+
+    const fine = moved();
+    fine.afterReload[EQUI_B] = ['b1'];
+    const done = await harness(fine).engine.getLatest();
+    expect(done.models.failed).toEqual([]);
+    expect(done.libraries).toEqual([]);
+    expect(done.libraryFacts).toEqual(['库 7998 不在后端更新范围里（库一级的模型停在会话 677，库文件已到 679）；页面上装着的 2 个节点都已是最新']);
+
+    // EQUI_B 重载的时候顺手把 EQUI_A 标成「重载不成」，于是只有补的那一次不成
+    const refused = moved();
+    Object.defineProperty(refused.afterReload, EQUI_B, { get: () => { refused.reloadFails.add(EQUI_A); return ['b1']; }, enumerable: true });
+    const report = await harness(refused).engine.getLatest();
+    expect(report.models.failed).toEqual([{ refno: EQUI_A, reason: '它名下有构件被别的节点的重载撤掉了，补装没有完成' }]);
+    expect(report.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(report.libraryFacts).toEqual([]);
+  });
+
+  it('装上之后别的页面让后端重新生成过它（和本页装上时记下的那一版不一样）：后端说最新也不算，照库一级的原话，每轮照问', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      // 装上的时候它落后（库一级那一版）；之后别的页面对它做了节点一级的更新，本页屏幕上还是原来那一版
+      roots: [in7998(EQUI_A, { loadedGenerated: LOADED_WHILE_LAGGING })],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+    });
+    const { engine, log } = harness(world);
+    const first = await engine.getLatest();
+    // 换不换不归这条规则管：不重载，只是不改口
+    expect(log.some((line) => line.startsWith('reload'))).toBe(false);
+    expect(first.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(first.libraryFacts).toEqual([]);
+
+    const again = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(2);
+    expect(again.libraries).toEqual(first.libraries);
+
+    // 本页把它重新登记了（重载过 / 自己点了「更新」）：记下的就是现在这一版，这才改口；之后库没再变就不再问
+    world.roots = [in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE })];
+    const third = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(3);
+    expect(third.libraries).toEqual([]);
+    expect(third.libraryFacts).toEqual([FACT_7998]);
+    const fourth = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(3);
+    expect(fourth.libraryFacts).toEqual([FACT_7998]);
+  });
+
+  it('装上时那一版没记下（状态还没问回来；整库显示 / 地址栏直装登记的不记）：后端按需生成的那一版不敢算，记下之后才算', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A)],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false } },
+    });
+    const { engine, log } = harness(world);
+    const first = await engine.getLatest();
+    expect(first.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(first.libraryFacts).toEqual([]);
+
+    // 已加载节点表问回来了：记下的和现在的一样
+    world.roots = [in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE })];
+    const second = await engine.getLatest();
+    expect(askedOf(log, EQUI_A)).toBe(2);
+    expect(second.libraries).toEqual([]);
+    expect(second.libraryFacts).toEqual([FACT_7998]);
+
+    // 登记表里的节点不记装上时那一版：后端按需生成的一直不敢算，每轮照问（水位照旧推进）
+    const registry = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, { source: 'registry' })],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false } },
+    });
+    const viaRegistry = harness(registry);
+    const third = await viaRegistry.engine.getLatest();
+    expect(viaRegistry.log).toContain(`advance ${EQUI_A} 677/679`);
+    expect(third.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(third.libraryFacts).toEqual([]);
+    await viaRegistry.engine.getLatest();
+    expect(askedOf(viaRegistry.log, EQUI_A)).toBe(2);
+  });
+
+  it('旧后端的过渡办法说可重载：照样换上，换上之后也不算核对过是最新（它不问节点版本表），照库一级的原话', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      // 装的时候库一级的模型在 675，后来到了 677
+      roots: [in7998(EQUI_A, { loadedModelSesno: 675, loadedFileLatestSesno: 675 })],
+      statuses: {
+        [EQUI_A]: {
+          status: status7998('reloadable', { source: 'versions', loadedModelSesno: 675, reloadableSessions: [{ sesno: 677, time: null, unitsChanged: 1 }] }),
+          gone: false,
+        },
+      },
+      loaded: { [EQUI_A]: ['24382_1912'] },
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(log).toContain(`reload ${EQUI_A}`);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([EQUI_A]);
+    expect(report.models.failed).toEqual([]);
+    expect(report.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(report.libraryFacts).toEqual([]);
+  });
+
+  it('这一轮撤下的节点（库里已删 / 重载后查空）不算页面上装着的：按剩下的节点说', async () => {
+    // 库里已删的撤下了，剩下的那个核对过是最新：说「1 个节点已是最新」
+    const deleted = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE }), in7998(EQUI_B)],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false }, [EQUI_B]: { status: status7998('unknown'), gone: true } },
+      loaded: { [EQUI_A]: ['24382_1912'], [EQUI_B]: ['24382_1921'] },
+    });
+    const first = await harness(deleted).engine.getLatest();
+    expect(first.models.withdrawn).toEqual([{ refno: EQUI_B, refnos: 1, why: 'deleted' }]);
+    expect(first.libraries).toEqual([]);
+    expect(first.libraryFacts).toEqual([FACT_7998]);
+
+    // 重载后查空（名下的成员删光了）撤下的也一样，剩下的那个落后：说「1 个节点落后」，不是「2 个里有 1 个」
+    const emptied = makeWorld({
+      rows: [ROW_7998],
+      roots: [in7998(EQUI_A), in7998(EQUI_C, { loadedModelSesno: 675, loadedFileLatestSesno: 675 })],
+      statuses: {
+        [EQUI_A]: { status: LAGGING_7998, gone: false },
+        [EQUI_C]: {
+          status: status7998('reloadable', { loadedModelSesno: 675, reloadableSessions: [{ sesno: 677, time: null, unitsChanged: 1 }] }),
+          gone: false,
+        },
+      },
+      loaded: { [EQUI_A]: ['24382_1912'], [EQUI_C]: ['24382_1931'] },
+      afterReload: { [EQUI_C]: null },
+    });
+    const second = await harness(emptied).engine.getLatest();
+    expect(second.models.withdrawn).toEqual([{ refno: EQUI_C, refnos: 1, why: 'empty' }]);
+    expect(second.libraries.map((item) => item.text)).toEqual([`${NOTE_7998}；页面上装着的 1 个节点落后，${POINT_TO_UPDATE}`]);
+    expect(second.libraryFacts).toEqual([]);
+  });
+
+  it('重载没做成的节点仍算页面上装着的：另一个核对过是最新，也不说「都已是最新」', async () => {
+    const world = makeWorld({
+      rows: [ROW_7998],
+      // EQUI_B 装的时候库文件在 678，后端后来在 679 上重新生成过：要换，这次没换成
+      roots: [in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE }), in7998(EQUI_B, { loadedFileLatestSesno: 678 })],
+      statuses: { [EQUI_A]: { status: UPDATED_7998, gone: false }, [EQUI_B]: { status: UPDATED_7998, gone: false } },
+      loaded: { [EQUI_A]: ['24382_1912'], [EQUI_B]: ['24382_1921'] },
+      reloadFails: new Set([EQUI_B]),
+    });
+    const report = await harness(world).engine.getLatest();
+    expect(report.models.failed.map((item) => item.refno)).toEqual([EQUI_B]);
+    expect(report.libraries).toEqual([{ dbnum: 7998, kind: 'out_of_scope', text: NOTE_7998 }]);
+    expect(report.libraryFacts).toEqual([]);
+  });
+
+  it('在后端更新范围里、只是后台还没跟上的库不按这一套：水位和装的时候一样的节点照旧不问（后台追上来水位会变，那时再问）', async () => {
+    const world = makeWorld({
+      rows: [ROW_8000_FILE_1146],
+      // 装上的时候库就是现在这个水位：数据入库到 1143、库文件已到 1146
+      roots: [root(SITE, { loadedModelSesno: 1143, loadedFileLatestSesno: 1146 })],
+    });
+    const { engine, log } = harness(world);
+    const report = await engine.getLatest();
+    expect(report.waited?.timedOut).toEqual([8000]);
+    expect(log.filter((line) => line.startsWith('status'))).toEqual([]);
+    expect(report.models).toMatchObject({ rootsTotal: 1, checked: 0 });
+    expect(report.libraries.map((item) => item.kind)).toEqual(['backend_behind']);
+    expect(report.libraryFacts).toEqual([]);
+  });
+
+  it('screenHoldsBackendModel：屏幕上装的是不是后端现在的这一版', () => {
+    const reRegistered = in7998(EQUI_A, { loadedGenerated: LOADED_AFTER_UPDATE });
+    // 靠库的水位担保的那一版：变没变归水位那一路管，这里算
+    expect(screenHoldsBackendModel(in7998(EQUI_A), status7998('latest'))).toBe(true);
+    // 后端按需生成的：装上时记下的和现在的一样才算；没记下、当时后端说不出、记下的是另一版都不算
+    expect(screenHoldsBackendModel(reRegistered, UPDATED_7998)).toBe(true);
+    expect(screenHoldsBackendModel(in7998(EQUI_A), UPDATED_7998)).toBe(false);
+    expect(screenHoldsBackendModel(in7998(EQUI_A, { loadedGenerated: null }), UPDATED_7998)).toBe(false);
+    expect(screenHoldsBackendModel(in7998(EQUI_A, { loadedGenerated: LOADED_WHILE_LAGGING }), UPDATED_7998)).toBe(false);
+    // 一部分单元是按需生成的（mixed）也按按需生成的算：最早、最晚的会话都要一样
+    const mixed = status7998('latest', { generated: { sesnoMin: 677, sesnoMax: 679, timeMin: null, basis: 'mixed' } });
+    const loadedAt = (sesnoMin: number, sesnoMax: number, laggingUnits: number | null) => in7998(EQUI_A, { loadedGenerated: { sesnoMin, sesnoMax, laggingUnits } });
+    expect(screenHoldsBackendModel(loadedAt(677, 679, 0), mixed)).toBe(true);
+    expect(screenHoldsBackendModel(loadedAt(677, 677, 0), mixed)).toBe(false);
+    expect(screenHoldsBackendModel(loadedAt(675, 679, 0), mixed)).toBe(false);
+    // 对应的会话没变、落后的单元比装上时少了：少掉的是装上之后重新生成的；现在有几个落后后端没说就比不出来，不算
+    expect(screenHoldsBackendModel(loadedAt(677, 679, 2), mixed)).toBe(false);
+    expect(screenHoldsBackendModel(loadedAt(677, 679, 2), { ...mixed, units: null })).toBe(false);
+    expect(screenHoldsBackendModel(loadedAt(677, 679, 2), { ...mixed, units: { total: 3, generated: 3, missing: 0, failed: 0, lagging: 2, exact: true } })).toBe(true);
+    // 装上时后端没说有几个落后：只比会话
+    expect(screenHoldsBackendModel(loadedAt(677, 679, null), mixed)).toBe(true);
+    // 过渡办法给的状态、后端没说模型对应到哪些会话：说不准，不算
+    expect(screenHoldsBackendModel(reRegistered, status7998('latest', { source: 'versions' }))).toBe(false);
+    expect(screenHoldsBackendModel(reRegistered, status7998('latest', { generated: null }))).toBe(false);
+  });
+
+  it('describeOutOfScopeLibrary：按页面上装着的节点说', () => {
+    const note = describeLibraryGap(7998, ROW_7998)!;
+    expect(note.text).toBe(NOTE_7998);
+    // 这个库在页面上没装节点、或有节点说不出新旧：原话
+    expect(describeOutOfScopeLibrary(note, ROW_7998, null)).toEqual({ note, fact: null });
+    expect(describeOutOfScopeLibrary(note, ROW_7998, { total: 0, latest: 0, lagging: 0 })).toEqual({ note, fact: null });
+    expect(describeOutOfScopeLibrary(note, ROW_7998, { total: 2, latest: 1, lagging: 0 })).toEqual({ note, fact: null });
+    // 装着的都核对过是最新：不算没跟上，只留一句事实
+    expect(describeOutOfScopeLibrary(note, ROW_7998, { total: 1, latest: 1, lagging: 0 })).toEqual({ note: null, fact: FACT_7998 });
+    expect(describeOutOfScopeLibrary(note, ROW_7998, { total: 3, latest: 3, lagging: 0 })).toEqual({
+      note: null,
+      fact: '库 7998 不在后端更新范围里（库一级的模型停在会话 677，库文件已到 679）；页面上装着的 3 个节点都已是最新',
+    });
+    // 有落后的：仍算没跟到最新，点明几个
+    expect(describeOutOfScopeLibrary(note, ROW_7998, { total: 3, latest: 1, lagging: 1 })).toEqual({
+      note: { dbnum: 7998, kind: 'out_of_scope', text: `${NOTE_7998}；页面上装着的 3 个节点里有 1 个落后，${POINT_TO_UPDATE}` },
+      fact: null,
+    });
+  });
+
   it('describeLibraryGap：各种库状态', () => {
     expect(describeLibraryGap(8000, ROW_8000)).toBeNull();
     expect(describeLibraryGap(7334, ROW_7334)).toBeNull();
@@ -1052,7 +1562,7 @@ describe('summarizeGetWork', () => {
     return {
       startedAt: 0, finishedAt: 0, ok: true, error: null, backendRestarted: false, tree: null, treeError: null,
       models: { rootsTotal: 0, checked: 0, reloaded: [], loadedNew: [], withdrawn: [], kept: [], failed: [], componentsAdded: 0, componentsRemoved: 0 },
-      libraries: [], waited: null, selectionDeleted: null, derived: [], level: 'info', summary: '', detail: [],
+      libraries: [], libraryFacts: [], waited: null, selectionDeleted: null, derived: [], level: 'info', summary: '', detail: [],
       ...patch,
     };
   }

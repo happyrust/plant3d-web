@@ -553,6 +553,81 @@ describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () 
     expect(store.entry('24381_535')!.staleReason).toBeNull();
   });
 
+  it('装进场景的节点：登记之后头一次问到的后端那一版记下来（取最新拿它核对屏幕上装的是不是后端现在的那一版）；之后重问不覆盖；重新登记清掉重记', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    const lagging = facts({
+      verdict: 'lagging', verdictReason: 'units_changed',
+      units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 3, exact: true },
+      generatedAt: { ...OWN_447, sesnoMin: 443, sesnoMax: 445 },
+      changes: { fromSesno: 443, toSesno: 447, unitsChanged: 3, unitsAdded: 0, unitsRemoved: 0, unattributed: false },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    });
+    const latest = facts({
+      verdict: 'latest', units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    });
+
+    // 装上的时候它就落后（按需生成在会话 443–445 上，库文件已到 447）
+    fetchFacts.mockResolvedValue(lagging);
+    store.noteLoaded('24381_535', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    // 还没问回来：没有这一格
+    expect(store.entry('24381_535')!.loadedGenerated).toBeUndefined();
+    await settled(store, '24381_535');
+    expect(store.entry('24381_535')!.loadedGenerated).toEqual({ sesnoMin: 443, sesnoMax: 445, laggingUnits: 3 });
+
+    // 别的页面让后端把它重新生成了，后端现在说最新：记下的还是装上时那一版（屏幕上的没换）
+    fetchFacts.mockResolvedValue(latest);
+    store.recheck('24381_535');
+    await settled(store, '24381_535');
+    expect(store.view('24381_535')!.verdict).toBe('latest');
+    expect(store.entry('24381_535')!.loadedGenerated).toEqual({ sesnoMin: 443, sesnoMax: 445, laggingUnits: 3 });
+
+    // 本页重载 / 更新做成了：显示流程重新登记，记的是这之后头一次问到的那一版
+    store.noteLoaded('24381_535', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    expect(store.entry('24381_535')!.loadedGenerated).toBeUndefined();
+    await settled(store, '24381_535');
+    expect(store.entry('24381_535')!.loadedGenerated).toEqual({ sesnoMin: 447, sesnoMax: 447, laggingUnits: 0 });
+  });
+
+  it('那一版只对装进场景的节点记、只记接口答的那一次：只是点过的不记；头一次没答上来记成「说不出」，之后答上来也不补；旧后端（过渡办法）不记', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997, ROW_1112);
+    const latest = facts({
+      verdict: 'latest', units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    });
+
+    // 只是点过、没有模型可显示（生成到一半停了：后端有已生成的部分，可本页没装）
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'partial', units: { total: 21, generated: 10, missing: 11, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 11, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.noteWithoutModel('24381_535', 7997);
+    await settled(store, '24381_535');
+    expect(store.entry('24381_535')!.status).toMatchObject({ source: 'model-status', verdict: 'partial' });
+    expect(store.entry('24381_535')!.loadedGenerated).toBeUndefined();
+
+    // 头一次没答上来：记成说不出；隔了一阵才答上来的那一版保不准还是装上时的，不补
+    fetchFacts.mockRejectedValueOnce(Object.assign(new Error('库文件打不开'), { code: 'SOURCE_NOT_FOUND' }));
+    store.noteLoaded('24381_600', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    await settled(store, '24381_600');
+    expect(store.entry('24381_600')!.status).toMatchObject({ source: 'model-status', verdict: 'unknown' });
+    expect(store.entry('24381_600')!.loadedGenerated).toBeNull();
+    fetchFacts.mockResolvedValueOnce(latest);
+    store.recheck('24381_600');
+    await settled(store, '24381_600');
+    expect(store.view('24381_600')!.verdict).toBe('latest');
+    expect(store.entry('24381_600')!.loadedGenerated).toBeNull();
+
+    // 旧后端没有那个接口：走过渡办法，没有「后端那一版」可记
+    fetchFacts.mockResolvedValue(null);
+    store.noteLoaded('9304_2', 1112, { modelSesno: 738, fileLatestSesno: 748 });
+    await settled(store, '9304_2');
+    expect(store.entry('9304_2')!.status).toMatchObject({ source: 'versions', verdict: 'latest' });
+    expect(store.entry('9304_2')!.loadedGenerated).toBeUndefined();
+  });
+
   it('服务端没有那个接口（回 null）：照旧走过渡办法', async () => {
     const { store, fetchFacts } = await loadStoreWithFacts();
     fetchFacts.mockResolvedValue(null);

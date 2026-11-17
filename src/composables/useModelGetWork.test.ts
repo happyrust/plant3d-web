@@ -354,6 +354,52 @@ describe('useModelGetWork：在册的节点从哪来', () => {
       { refno: SITE, dbnum: 8000, loadedModelSesno: 1146, loadedFileLatestSesno: 1149, origin: 'show_dbnum' },
     ]);
   });
+
+  // 不在后端更新范围的库：库一级的模型停在 1146，库文件到了 1149；节点的模型是后端按需生成的、已在 1149 上（做过节点一级的更新），后端说最新
+  const GAP_ROW = { ...ROW_8000, file_latest_sesno: 1149, excluded: true, excluded_reason: 'watch_dbnums' };
+  const ownLatest = {
+    ...facts('latest'),
+    generatedAt: { sesnoMin: 1149, sesnoMax: 1149, timeMin: null, timeMax: null, basis: 'own_generation' },
+    library: { fileLatestSesno: 1149, modelSesno: 1146, modelSesnoTime: null, inWatchScope: false },
+  };
+
+  it('已加载节点表记下的「装上时后端那一版」带给引擎：和后端现在的是同一版，才说页面上装着的节点已是最新', async () => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [GAP_ROW] });
+    mocks.facts.mockResolvedValue(ownLatest);
+    mocks.entries.mockReturnValue([tableEntry(SITE, {
+      loadedModelSesno: 1146, loadedFileLatestSesno: 1149, loadedGenerated: { sesnoMin: 1149, sesnoMax: 1149, laggingUnits: 0 },
+    })]);
+    const scene = scenePort({ [SITE]: ['a'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(report.libraries).toEqual([]);
+    expect(report.libraryFacts).toEqual(['库 8000 不在后端更新范围里（库一级的模型停在会话 1146，库文件已到 1149）；页面上装着的 1 个节点已是最新']);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['表里还没记下（状态没问回来、旧后端）', {}],
+    ['记的是「当时后端说不出」', { loadedGenerated: null }],
+    ['记下的和后端现在的不是同一版（装上之后别的页面让后端重新生成过）', { loadedGenerated: { sesnoMin: 1146, sesnoMax: 1146, laggingUnits: 2 } }],
+  ])('%s：核对不出屏幕上装的是不是后端现在的那一版，照库一级的原话说没跟到最新', async (_name, patch) => {
+    const { getWork } = await load();
+    mocks.dbnums.mockResolvedValue({ dbnums: [GAP_ROW] });
+    mocks.facts.mockResolvedValue(ownLatest);
+    mocks.entries.mockReturnValue([tableEntry(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1149, ...patch })]);
+    const scene = scenePort({ [SITE]: ['a'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(report.libraryFacts).toEqual([]);
+    expect(report.libraries).toEqual([
+      { dbnum: 8000, kind: 'out_of_scope', text: '库 8000 不在后端更新范围里：模型停在会话 1146，库文件已到 1149（树已是最新，模型不会自动跟上）' },
+    ]);
+  });
 });
 
 describe('useModelGetWork：选中的构件', () => {
@@ -590,6 +636,8 @@ describe('useModelGetWork：头一次点取最新就认得出「本页打开之�
   const notGenerated = {
     ...facts('not_generated', 0), dbnum: 7998, noun: 'ZONE', generatedAt: null,
     units: { total: 1, generated: 0, missing: 1, failed: 0, lagging: 0, exact: true },
+    // 缺的那个单元要生成：行上给的是「生成」，取最新的话跟着它说
+    precheck: { unitsToGenerate: 1, needsConfirm: false, thresholdUnits: 20 },
     library: { fileLatestSesno: 675, modelSesno: 0, modelSesnoTime: null, inWatchScope: false },
   };
 
