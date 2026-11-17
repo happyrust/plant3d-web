@@ -5,6 +5,9 @@
  * 不是响应式的）。不是点这一行的眼睛装进来的构件——取最新、状态栏「重载」带进来的新构件，别的面板装的——装完之后
  * 面板这边没有任何响应式的东西变，那一行的眼睛原来要等面板因为别的事重画（增量校验那个 5 秒一次的轮询）才亮。
  * 算眼睛时读一下装载器的修订号 `dtxLoaderRevision`（每装完 / 换掉 / 撤下一批 +1）：修订号一动，眼睛当场重算。
+ *
+ * 「装着没有」只认节点自己。PIPE、BRAN 这类自己没有几何的中间节点是跟着上一级装进来的：有下级的节点，某个上级
+ * 登记在已加载节点表里就算装着；节点自己登记在表里（别的显示流程装的）也算。叶子不认上级。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, type App } from 'vue';
@@ -22,6 +25,10 @@ const fake = vi.hoisted(() => ({
   checkStates: new Map<string, CheckState>(),
   /** 「模型装着没有」的底：普通的 Set——真的那个查的是装载器的运行时索引，同样不是响应式的 */
   loaded: new Set<string>(),
+  /** 树上的父节点（子 → 父） */
+  parentOf: new Map<string, string>(),
+  /** 已加载节点表：真的那张是响应式的，这里在替换那个模块时换成响应式的 Map */
+  loadedNodes: new Map<string, { loaded: boolean }>(),
 }));
 
 // happy-dom 没有布局，滚动容器高度是 0，真的虚拟列表一行都不画：换成「有几行画几行」
@@ -65,6 +72,13 @@ vi.mock('@/composables/usePdmsOwnerTree', async () => {
       customTypes: ref(new Set()),
       getCheckState: (id: string) => fake.checkStates.get(id) ?? 'checked',
       setVisible: vi.fn(async () => undefined),
+      // 真的那个沿主位置的父链和收录它的分组往上找（usePdmsOwnerTree.ancestors.test.ts）；这里只有一条父链
+      hasAncestorWhere: (id: string, test: (ancestorId: string) => boolean) => {
+        for (let cur = fake.parentOf.get(id); cur; cur = fake.parentOf.get(cur)) {
+          if (test(cur)) return true;
+        }
+        return false;
+      },
       expandPathToNode: vi.fn(async () => true),
       focusNodeById: vi.fn(async () => undefined),
       loadedLayerDbnums: () => [],
@@ -126,10 +140,14 @@ vi.mock('@/composables/useGenModelV1DbnumStatus', () => ({
     invalidate: vi.fn(), scheduleReprobe: vi.fn(), noteGenerated: vi.fn(), reconcile: vi.fn(),
   }),
 }));
-vi.mock('@/composables/useLoadedNodeStatus', () => ({
-  loadedNodeEntry: vi.fn(() => null),
-  useLoadedNodeStatus: () => ({ view: vi.fn(() => null), recheck: vi.fn() }),
-}));
+vi.mock('@/composables/useLoadedNodeStatus', async () => {
+  const { reactive } = await import('vue');
+  fake.loadedNodes = reactive(new Map<string, { loaded: boolean }>());
+  return {
+    loadedNodeEntry: (refno: string) => fake.loadedNodes.get(refno) ?? null,
+    useLoadedNodeStatus: () => ({ view: vi.fn(() => null), recheck: vi.fn() }),
+  };
+});
 vi.mock('@/composables/useModelGetWork', () => ({ registerGetWorkTree: vi.fn(() => vi.fn()) }));
 vi.mock('@/composables/useModelTreeStore', () => ({ setModelTreeInstance: vi.fn() }));
 vi.mock('@/composables/useDockApi', () => ({ ensurePanelAndActivate: vi.fn() }));
@@ -142,6 +160,24 @@ vi.mock('@/components/model-tree/RoomTreePanel.vue', async () => {
 const OLD: FlatRow = { id: '14207_6209', name: 'FTUB 1', type: 'FTUB', depth: 2, hasChildren: false, dbnum: 6015 };
 const NEW: FlatRow = { id: '14207_6210', name: 'FTUB 2', type: 'FTUB', depth: 2, hasChildren: false, dbnum: 6015 };
 const NOT_LOADED: FlatRow = { id: '14207_6300', name: 'FTUB 3', type: 'FTUB', depth: 2, hasChildren: false, dbnum: 6015 };
+
+// 一条管线从上到下：ZONE › PIPE › BRAN › 构件。前三层自己没有几何；ELBO 有几何，ATTA 没有
+const ZONE: FlatRow = { id: '14207_100', name: 'ZONE 1', type: 'ZONE', depth: 0, hasChildren: true, dbnum: 6015 };
+const PIPE: FlatRow = { id: '14207_200', name: 'PIPE 1', type: 'PIPE', depth: 1, hasChildren: true, dbnum: 6015 };
+const PIPE_2: FlatRow = { id: '14207_210', name: 'PIPE 2', type: 'PIPE', depth: 1, hasChildren: true, dbnum: 6015 };
+const BRAN: FlatRow = { id: '14207_300', name: 'BRAN 1', type: 'BRAN', depth: 2, hasChildren: true, dbnum: 6015 };
+const ELBO: FlatRow = { id: '14207_400', name: 'ELBO 1', type: 'ELBO', depth: 3, hasChildren: false, dbnum: 6015 };
+const ATTA: FlatRow = { id: '14207_500', name: 'ATTA 1', type: 'ATTA', depth: 3, hasChildren: false, dbnum: 6015 };
+
+/** 把这条管线画到树上（行 + 父子关系） */
+function showPipeline(): void {
+  fake.rows = [ZONE, PIPE, BRAN, ELBO, ATTA, PIPE_2];
+  fake.parentOf.set(PIPE.id, ZONE.id);
+  fake.parentOf.set(PIPE_2.id, ZONE.id);
+  fake.parentOf.set(BRAN.id, PIPE.id);
+  fake.parentOf.set(ELBO.id, BRAN.id);
+  fake.parentOf.set(ATTA.id, BRAN.id);
+}
 
 let mounted: { app: App; host: HTMLElement } | null = null;
 
@@ -170,6 +206,8 @@ beforeEach(() => {
   fake.rows = [];
   fake.checkStates.clear();
   fake.loaded.clear();
+  fake.parentOf.clear();
+  fake.loadedNodes.clear();
   // 面板挂上时有两句调试输出
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
 });
@@ -229,5 +267,83 @@ describe('模型树行上的眼睛跟着装载走', () => {
     dtxLoaderRevision.value += 1;
     await nextTick();
     expect(eyeOf(host, NEW.id)).toBe('off');
+  });
+});
+
+describe('跟着上一级装进来的中间节点', () => {
+  it('先装上一级（ZONE）：下面有下级的中间节点（PIPE、BRAN）眼睛是亮的；叶子照旧只看自己在不在场景里', async () => {
+    showPipeline();
+    // 点 ZONE 的眼睛装的：这个面板的显示流程记着它，已加载节点表里也登记了它
+    fake.loaded.add(ZONE.id);
+    fake.loadedNodes.set(ZONE.id, { loaded: true });
+    // 有几何的构件装进了场景；ATTA 没有几何，场景里没有它
+    fake.loaded.add(ELBO.id);
+    const host = await mountPanel();
+
+    expect(eyeOf(host, ZONE.id)).toBe('on');
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+    expect(eyeOf(host, PIPE_2.id)).toBe('on');
+    expect(eyeOf(host, BRAN.id)).toBe('on');
+    expect(eyeOf(host, ELBO.id)).toBe('on');
+    expect(eyeOf(host, ATTA.id)).toBe('off');
+  });
+
+  it('上一级登记进已加载节点表的那一刻当场亮，撤表当场灭（装载器的修订号没动）', async () => {
+    showPipeline();
+    const host = await mountPanel();
+    // 谁都没装：中间节点是灭的
+    expect(eyeOf(host, ZONE.id)).toBe('off');
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+
+    // 别的显示流程装了 ZONE（这个面板的显示流程没装过它）：表里一登记，ZONE 自己和它下面的中间节点都亮
+    fake.loadedNodes.set(ZONE.id, { loaded: true });
+    await nextTick();
+    expect(eyeOf(host, ZONE.id)).toBe('on');
+    expect(eyeOf(host, PIPE.id)).toBe('on');
+    expect(eyeOf(host, BRAN.id)).toBe('on');
+    // 叶子不认上级：场景里没有它就是灭的
+    expect(eyeOf(host, ELBO.id)).toBe('off');
+
+    // ZONE 从场景撤下、撤表
+    fake.loadedNodes.delete(ZONE.id);
+    await nextTick();
+    expect(eyeOf(host, ZONE.id)).toBe('off');
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+  });
+
+  it('上一级只是点过、没有模型可显示（表里记的是没装进场景）：它和它下面的中间节点都不亮', async () => {
+    showPipeline();
+    fake.loadedNodes.set(ZONE.id, { loaded: false });
+    const host = await mountPanel();
+
+    expect(eyeOf(host, ZONE.id)).toBe('off');
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+  });
+
+  it('人藏起来的中间节点（树上的勾选态是隐藏）照旧是灭的，旁边没藏的照旧亮', async () => {
+    showPipeline();
+    fake.loaded.add(ZONE.id);
+    fake.loadedNodes.set(ZONE.id, { loaded: true });
+    // 藏 PIPE 1：树把它和它下面已经取进树里的节点都记成隐藏，ZONE 变成半选
+    fake.checkStates.set(ZONE.id, 'indeterminate');
+    fake.checkStates.set(PIPE.id, 'unchecked');
+    fake.checkStates.set(BRAN.id, 'unchecked');
+    const host = await mountPanel();
+
+    expect(eyeOf(host, PIPE.id)).toBe('off');
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+    expect(eyeOf(host, PIPE_2.id)).toBe('on');
+    expect(eyeOf(host, ZONE.id)).toBe('on');
+  });
+
+  it('节点自己登记在表里就算装着，不要求它有下级', async () => {
+    fake.rows = [NOT_LOADED];
+    fake.loadedNodes.set(NOT_LOADED.id, { loaded: true });
+    const host = await mountPanel();
+
+    expect(eyeOf(host, NOT_LOADED.id)).toBe('on');
   });
 });
