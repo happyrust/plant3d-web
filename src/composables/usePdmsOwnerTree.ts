@@ -140,6 +140,24 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     return [parentId, ...linked];
   }
 
+  /**
+   * 这个节点的上级里有没有满足条件的：沿树往上找，主位置的父链和解析视图下收录它的分组都算（同 `viewParentsOf`）。
+   * 只看已经取进树里的层；节点自己不算。走过的节点不再走：同一个上级经主位置和分组两条线都能到，分组的收录关系也不保证没有环。
+   */
+  function hasAncestorWhere(id: string, test: (ancestorId: string) => boolean): boolean {
+    const start = normalizeRefnoKey(id);
+    const seen = new Set<string>([start]);
+    const pending = viewParentsOf(start);
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      if (test(current)) return true;
+      pending.push(...viewParentsOf(current));
+    }
+    return false;
+  }
+
   // 空闲预取：用户展开一层后，把「下一层」的 children 也拉进树——钻取式浏览的
   // 下一次展开直接命中 childrenLoadedById，不再等后端往返。只挂用户主动展开
   // （toggleExpand）：批量路径（setVisible 级联 / 祖先链定位）不预取，免得一次
@@ -1378,6 +1396,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
     getCheckState,
     setVisible,
+    hasAncestorWhere,
 
     selectByRowIndex,
 

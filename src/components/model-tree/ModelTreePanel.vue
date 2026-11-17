@@ -230,7 +230,8 @@ function toggleExpand(id: string) {
   pdmsTree.toggleExpand(id);
 }
 
-function getCheckState(id: string) {
+function getCheckState(row: Pick<DiffFlatRow, 'id' | 'hasChildren'>) {
+  const id = row.id;
   const state = pdmsTree.getCheckState(id);
   if (state === 'unchecked') return state;
   if (!isRefnoLike(id)) return state;
@@ -240,7 +241,25 @@ function getCheckState(id: string) {
   // 装载一结束行上的眼睛就跟着重算。不读的话，不是点这一行的眼睛装进来的构件（取最新、状态栏「重载」带进来的
   // 新构件，别的面板装的）要等面板因为别的事重画才亮——通常是增量校验那个 5 秒一次的轮询。
   void dtxLoaderRevision.value;
-  return modelState.isModelActuallyLoaded(id) ? state : 'unchecked';
+  if (modelState.isModelActuallyLoaded(id)) return state;
+  return isShownWithLoadedNode(row) ? state : 'unchecked';
+}
+
+/**
+ * 「装着没有」（`isModelActuallyLoaded`）只认节点自己：这个面板的显示流程装过它，或它自己有几何在场景里。两样都不占、
+ * 模型却装着的还有两种，按已加载节点表（全页面共用，响应式：登记 / 撤表的那一刻行上就重算）认：
+ * - 节点自己登记在表里：别的显示流程装的（模型树和查看器各有一份，装的是同一个场景）；
+ * - 有下级的节点，它的某个上级登记在表里：PIPE、BRAN 这类自己没有几何的中间节点，名下的构件是跟着上级一起装进来的。
+ *   不认的话，先装上一级再展开，下面一排中间节点的眼睛都是灭的，要各点一下才亮、再点一下才藏得掉。
+ * 没有下级的行不走第二条：叶子自己不在场景里（没有几何，或上级装完之后才加的、还没重载）就是没显示。
+ * 第二条是按「上级装着」推的，不逐个核对名下的构件：上级装完之后才加进来的中间节点（还没取最新 / 重载）眼睛也是亮的，
+ * 重载之后才对得上。
+ * 点过、但没有模型可显示的节点在表里是 `loaded = false`，不算。
+ */
+function isShownWithLoadedNode(row: Pick<DiffFlatRow, 'id' | 'hasChildren'>): boolean {
+  const isLoadedNode = (refno: string): boolean => loadedNodeEntry(refno)?.loaded === true;
+  if (isLoadedNode(row.id)) return true;
+  return row.hasChildren && pdmsTree.hasAncestorWhere(row.id, isLoadedNode);
 }
 
 // Initialize model generation composable
@@ -1653,7 +1672,7 @@ function onSearchEnter(value: string) {
             :index="vr.index"
             :expanded="isExpanded(rowAt(vr.index)!.id)"
             :selected="isRowSelected(rowAt(vr.index)!)"
-            :check-state="getCheckState(rowAt(vr.index)!.id)"
+            :check-state="getCheckState(rowAt(vr.index)!)"
             :loading="isNodeLoading(rowAt(vr.index)!.id)"
             :diff-status="rowAt(vr.index)!.diffStatus"
             :diff-count="rowAt(vr.index)!.diffCount"
