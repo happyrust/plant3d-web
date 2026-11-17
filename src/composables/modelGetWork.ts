@@ -16,6 +16,11 @@
  * 「有更新可重载」——不再逐个节点去问其间改没改到它（那条查询在真实库上一次要几十秒），所以水位动过的库里在册的
  * 节点各重载一次。树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
  *
+ * 例外（2026-11-17）：不在后端更新范围里、库一级的模型又落后于库文件的库。后台不会去追它，新旧只能按页面上装着的
+ * 节点说——节点装上的时候就可能已经落后，做过节点一级更新的又已经是最新。所以这种库里在册的节点哪怕库的水位和装的
+ * 时候一样也核对（核对到是最新、屏幕上装的又确实是那一版之后，库没再变就不再问），交代按节点说（见 `describeOutOfScopeLibrary`）。
+ * 这只改问不问和怎么说，不改换不换：换不换仍由 `decideRootAction` 定。
+ *
  * 这个文件不引用 Vue、不引用数据源：要用的东西都从 `GetWorkPorts` 进来，接线在 `useModelGetWork`。
  */
 import type { DbnumRow } from '@/api/genModelV1Api';
@@ -23,6 +28,7 @@ import type { NodeModelStatus } from '@/composables/nodeModelStatus';
 import type { TreeRefreshReport } from '@/composables/pdmsTreeRefresh';
 
 import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
+import { nodeModelStatusAction } from '@/composables/nodeModelStatus';
 
 /** 等正在进行的装载 / 生成：多久看一次、最多等多久（等不到这一轮不做，照实说） */
 export const GETWORK_LOAD_WAIT_POLL_MS = 500;
@@ -32,6 +38,9 @@ export const GETWORK_BACKEND_WAIT_POLL_MS = 3_000;
 export const GETWORK_BACKEND_WAIT_MAX_MS = 45_000;
 /** 同时在问节点模型状态的节点数 */
 export const GETWORK_STATUS_CONCURRENCY = 3;
+
+/** 后端的一版节点模型：已生成的那部分对应到哪些会话、当时有几个生成单元落后（后端没给为 `null`） */
+export type GetWorkLoadedGeneration = { sesnoMin: number; sesnoMax: number; laggingUnits: number | null };
 
 /** 页面上装着的一个节点（「本页装的是哪一版」） */
 export type GetWorkRoot = {
@@ -45,6 +54,12 @@ export type GetWorkRoot = {
   staleReason: string | null;
   /** `table` = 已加载节点表里的；`registry` = 整库显示 / 地址栏直装登记的 */
   source: 'table' | 'registry';
+  /**
+   * 装上之后头一次问到的后端那一版模型（已加载节点表记的）。`null` = 当时后端说不出；不给 = 没记下
+   * （登记表里的节点、状态还没问回来、旧后端）。后端按需生成的模型不动库的水位，屏幕上的是不是它现在的那一版
+   * 只能拿这个比（见 `screenHoldsBackendModel`）。
+   */
+  loadedGenerated?: GetWorkLoadedGeneration | null;
 };
 
 /** 整库显示过的库：取最新时看它有没有新出现的顶层 SITE */
@@ -187,6 +202,11 @@ export type GetWorkReport = {
   models: GetWorkModelsReport;
   /** 没能跟到最新的库 */
   libraries: GetWorkLibraryNote[];
+  /**
+   * 不算没跟上、只在细节里交代的库一级事实：不在后端更新范围里的库，库一级的模型落后于库文件，
+   * 但页面上装着的节点都核对过是最新（比如都做过节点一级的更新）
+   */
+  libraryFacts: string[];
   /** 等后台的那一段：等了哪些库、多久、哪些没等到 */
   waited: { dbnums: number[]; ms: number; timedOut: number[] } | null;
   /** 选中的构件这一轮发现已被删除 */
@@ -246,6 +266,46 @@ export function describeLibraryGap(dbnum: number, row: DbnumRow | null | undefin
 }
 
 /**
+ * 不在后端更新范围里、库一级的模型落后于库文件的库，页面上装着的节点这一轮核对下来各是什么样（给库一级那句话用）。
+ */
+export type GetWorkLibraryNodes = {
+  /** 这个库在页面上装着的节点数（这一轮撤下的不算） */
+  total: number;
+  /** 后端的节点模型状态接口说是最新、屏幕上的也是那一版的 */
+  latest: number;
+  /** 落后的（要点行上的「更新」） */
+  lagging: number;
+};
+
+/**
+ * 不在后端更新范围里、库一级的模型落后于库文件的库（`describeLibraryGap` 的 `out_of_scope`），按页面上装着的节点
+ * 怎么交代（纯函数）：
+ * - 有节点落后：仍算没跟到最新，点明几个落后、去点行上的「更新」（节点一级的更新）；
+ * - 装着的都核对过是最新（比如都做过节点一级的更新）：不算没跟上，只留一句事实放在细节里；
+ * - 其余（这个库在页面上没装节点、查看器没挂、有节点说不出新旧）：照库一级的原话。
+ */
+export function describeOutOfScopeLibrary(
+  note: GetWorkLibraryNote,
+  row: DbnumRow | null | undefined,
+  nodes: GetWorkLibraryNodes | null | undefined,
+): { note: GetWorkLibraryNote | null; fact: string | null } {
+  if (!nodes || nodes.total <= 0) return { note, fact: null };
+  if (nodes.lagging > 0) {
+    const who = nodes.lagging < nodes.total
+      ? `页面上装着的 ${nodes.total} 个节点里有 ${nodes.lagging} 个落后`
+      : nodes.total === 1 ? '页面上装着的 1 个节点落后' : `页面上装着的 ${nodes.total} 个节点都落后`;
+    return { note: { ...note, text: `${note.text}；${who}，点行上的「更新」可让后端追上` }, fact: null };
+  }
+  if (nodes.latest < nodes.total) return { note, fact: null };
+  const freshness = row ? judgeDbnumFreshness(row) : null;
+  const all = nodes.total === 1 ? '页面上装着的 1 个节点已是最新' : `页面上装着的 ${nodes.total} 个节点都已是最新`;
+  return {
+    note: null,
+    fact: `库 ${note.dbnum} 不在后端更新范围里（库一级的模型停在会话 ${freshness?.model ?? '—'}，库文件已到 ${freshness?.fileLatest ?? '—'}）；${all}`,
+  };
+}
+
+/**
  * 这个节点这一轮要不要向后端核对（「按库发现」）：所在库的模型水位和库文件最新会话都和装的时候一样就不问。
  * `restarted`：上一轮以来后端重启过——库里没有成套模型的（模型按需生成、只在后端内存里）要问，重启后那些模型没了。
  */
@@ -264,6 +324,26 @@ export type GetWorkRootAction =
   | { kind: 'reload'; note: string | null }
   | { kind: 'keep'; reason: string }
   | { kind: 'none' };
+
+/**
+ * 屏幕上装的是不是后端现在的这一版（纯函数）。只用来定「不在后端更新范围的库里，装着的节点都已是最新」这句话敢不敢说，
+ * 不改变换不换：靠库的水位担保的那一版，库的水位没动它就没动；后端按需生成的那部分不动库的水位——要装上之后头一次
+ * 问到的那一版和现在的一样才算（做过节点一级更新的节点重新登记过，记的就是更新之后那一版）。说不准的一律不算：
+ * 比如装上之后别的页面让后端重新生成过它，后端说「最新」，屏幕上却还是原来那一版。
+ */
+export function screenHoldsBackendModel(root: GetWorkRoot, status: NodeModelStatus): boolean {
+  if (status.source !== 'model-status') return false;
+  const generated = status.generated;
+  if (!generated) return false;
+  if (generated.basis === 'library_watermark') return true;
+  const loaded = root.loadedGenerated;
+  if (!loaded) return false;
+  if (generated.sesnoMin !== loaded.sesnoMin || generated.sesnoMax !== loaded.sesnoMax) return false;
+  // 对应的会话没变、落后的单元却比装上时少了：少掉的那些是装上之后重新生成的
+  if (loaded.laggingUnits === null) return true;
+  const lagging = status.units?.lagging ?? null;
+  return lagging !== null && lagging >= loaded.laggingUnits;
+}
 
 /** 后端按需生成的模型比本页装的新（别的页面 / 别人让它在更新的会话上重新生成过） */
 function ownGenerationNewer(root: GetWorkRoot, status: NodeModelStatus): boolean {
@@ -307,9 +387,15 @@ export function decideRootAction(
     case 'not_generated': {
       const what = status.verdict === 'partial' ? '只有一部分' : '没有';
       const why = options.restarted ? '后端重启过，' : '';
+      // 让人去点的按钮跟着行上真给的那一颗走（同一个判定 `nodeModelStatusAction`）：库在后端更新范围里、库文件比模型水位新时，
+      // 缺的单元靠库一级的更新补，行上给的是「更新」而不是「生成」；没有要生成的单元时行上没有按钮，就不提
+      const rowAction = nodeModelStatusAction(status);
+      const remedy = rowAction === 'update'
+        ? '；行上的「更新」可让后端把这个库更新到最新'
+        : rowAction === 'generate' ? '；行上的「生成」可重新生成' : '';
       return {
         kind: 'keep',
-        reason: `${why}后端现在${what}这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成`,
+        reason: `${why}后端现在${what}这个节点的模型，屏幕上的保持原样（不当成已删除）${remedy}`,
       };
     }
     case 'untracked':
@@ -353,6 +439,7 @@ function emptyReport(startedAt: number): GetWorkReport {
     treeError: null,
     models: emptyModels(),
     libraries: [],
+    libraryFacts: [],
     waited: null,
     selectionDeleted: null,
     derived: [],
@@ -473,6 +560,8 @@ export function summarizeGetWork(report: GetWorkReport, label: (refno: string) =
     summary += `没跟到最新：${report.libraries.map((item) => item.text).join('；')}。`;
     for (const item of report.libraries) detail.push(item.text);
   }
+  // 不算没跟上的库一级事实：不进那一句，只留在细节里
+  for (const text of report.libraryFacts) detail.push(text);
   const acted = (tree?.changed ?? false) || models.reloaded.length + models.loadedNew.length + models.withdrawn.length > 0 || !!report.selectionDeleted;
   return { summary, detail, level: caveats > 0 ? 'warning' : acted ? 'success' : 'info' };
 }
@@ -492,11 +581,13 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
   let lastWatermarks = new Map<number, string>();
   /**
    * 已加载节点表里的节点上一次核对「不用动」时的水位（库的 + 它装时的）：库没再变就不再为它发请求。
-   * 那张表不归取最新改，记在这里；登记表里的节点靠推进它自己记的水位做到同一件事。
+   * 那张表不归取最新改，记在这里；登记表里的节点靠推进它自己记的水位做到同一件事（这里也按推进之后的水位记一笔）。
+   * `confirmedLatest`：那一次是后端的节点模型状态接口明说「最新」、屏幕上装的又核对得出就是那一版——不在后端更新范围里的库靠它判断「装着的节点都已是最新」
+   * （过渡办法不问节点版本表，它说的「最新」不作数）。
    */
-  const settledAt = new Map<string, string>();
-  const settleKey = (root: GetWorkRoot, row: DbnumRow): string => (
-    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`
+  const settledAt = new Map<string, { key: string; confirmedLatest: boolean }>();
+  const settleKey = (row: DbnumRow, loadedModelSesno: number | null, loadedFileLatestSesno: number | null): string => (
+    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${loadedModelSesno ?? ''}:${loadedFileLatestSesno ?? ''}`
   );
 
   /** 等装载 / 生成结束；等不到回 `false` */
@@ -515,7 +606,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     report: GetWorkReport,
     scene: GetWorkScenePort,
     rows: Map<number, DbnumRow>,
-  ): Promise<void> {
+  ): Promise<Map<number, GetWorkLibraryNodes>> {
     const models = report.models;
     const restarted = report.backendRestarted;
     const allRoots = ports.roots();
@@ -527,11 +618,45 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     }
     models.rootsTotal = roots.length;
 
+    // 不在后端更新范围里、库一级的模型落后于库文件的库：后台不会去追它，新旧按页面上装着的节点说。
+    // 节点装上的时候就可能已经落后，所以这种库的节点哪怕库的水位和装的时候一样也核对
+    const gapLibraries = new Map<number, boolean>();
+    const inGapLibrary = (dbnum: number): boolean => {
+      let gap = gapLibraries.get(dbnum);
+      if (gap === undefined) {
+        gap = describeLibraryGap(dbnum, rows.get(dbnum))?.kind === 'out_of_scope';
+        gapLibraries.set(dbnum, gap);
+      }
+      return gap;
+    };
+    type Standing = 'latest' | 'lagging' | 'unsure';
+    /** 这种库里页面上装着的节点这一轮各是什么样（这一轮撤下的不在里面） */
+    const standing = new Map<string, { dbnum: number; state: Standing }>();
+    for (const root of roots) if (inGapLibrary(root.dbnum)) standing.set(root.refno, { dbnum: root.dbnum, state: 'unsure' });
+    const stand = (root: { refno: string; dbnum: number }, state: Standing): void => {
+      if (inGapLibrary(root.dbnum)) standing.set(root.refno, { dbnum: root.dbnum, state });
+    };
+    /**
+     * 这个节点这一轮算什么。`onScreen`：屏幕上装的就是后端现在的那一版（这一轮刚换上的，或 `screenHoldsBackendModel` 核对出来的）。
+     * 那样、后端的节点模型状态接口又明说最新，才算最新
+     */
+    const standingOf = (status: NodeModelStatus, onScreen: boolean): Standing => {
+      if (status.verdict === 'lagging') return 'lagging';
+      return onScreen && status.source === 'model-status' && (status.verdict === 'latest' || status.verdict === 'reloadable') ? 'latest' : 'unsure';
+    };
+
     const candidates = roots.filter((root) => {
       const row = rows.get(root.dbnum);
-      if (!rootNeedsCheck(root, row, restarted)) return false;
+      const gap = inGapLibrary(root.dbnum);
+      if (!gap && !rootNeedsCheck(root, row, restarted)) return false;
       // 上一轮核对过、不用动，库也没再变：不再问（后端重启过、或它带着过期标记时照问）
-      if (row && !restarted && !root.staleReason && settledAt.get(root.refno) === settleKey(root, row)) return false;
+      const settled = settledAt.get(root.refno);
+      if (row && !restarted && !root.staleReason && settled?.key === settleKey(row, root.loadedModelSesno, root.loadedFileLatestSesno)) {
+        // 后台不会去追的库里，上一轮没敢说它最新的（装上时那一版还没记下、状态是过渡办法给的）照问：有把握了才改口
+        if (gap && !settled.confirmedLatest) return true;
+        if (gap) stand(root, 'latest');
+        return false;
+      }
       return true;
     });
     models.checked = candidates.length;
@@ -570,18 +695,27 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       const root = candidates[index]!;
       const row = rows.get(root.dbnum) ?? null;
       const action = decideRootAction(root, answers[index]!, { restarted });
+      const status = answers[index]!.status;
       if (action.kind === 'none') {
         // 核对过、不用动：下一轮库没再变就不问它了——登记表里的把水位推进到现在，已加载节点表里的记在这边
+        const state = standingOf(status, screenHoldsBackendModel(root, status));
+        stand(root, state);
         if (root.source === 'registry' && row) {
-          ports.advanceRoot(root.refno, { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) });
+          const at = { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) };
+          ports.advanceRoot(root.refno, at);
+          // 后台不会去追的库不看水位、每轮都问：登记表里的也在这边记一笔（按推进之后的水位），库没再变就不再问
+          if (inGapLibrary(root.dbnum)) {
+            settledAt.set(root.refno, { key: settleKey(row, at.modelSesno, at.fileLatestSesno), confirmedLatest: state === 'latest' });
+          }
         } else if (row) {
-          settledAt.set(root.refno, settleKey(root, row));
+          settledAt.set(root.refno, { key: settleKey(row, root.loadedModelSesno, root.loadedFileLatestSesno), confirmedLatest: state === 'latest' });
         }
         continue;
       }
       settledAt.delete(root.refno);
       if (action.kind === 'keep') {
         models.kept.push({ refno: root.refno, reason: action.reason });
+        stand(root, standingOf(status, false));
         continue;
       }
       // 要动场景了：这期间有人点了眼睛在装别的，先等它完
@@ -599,6 +733,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         steps.push({ root, removed: new Set(members), after: null, reloadedIndex: null });
         ports.forgetRoot(root.refno);
         models.withdrawn.push({ refno: root.refno, refnos, why: 'deleted' });
+        standing.delete(root.refno);
         continue;
       }
       ports.onProgress(`重载模型 ${acted}/${toAct}…`);
@@ -620,6 +755,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         for (const refno of outcome.before) removedAll.add(refno);
         steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });
         models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
+        standing.delete(root.refno);
         continue;
       }
       const afterSet = new Set(after);
@@ -630,6 +766,7 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       steps.push({ root, removed: new Set(removed), after: afterSet, reloadedIndex: models.reloaded.length });
       models.reloaded.push({ refno: root.refno, added: added.length, removed: removed.length, total: after.length });
       if (action.note) models.kept.push({ refno: root.refno, reason: action.note });
+      stand(root, standingOf(status, true));
     }
 
     // 构件在两个在册节点之间挪了位置（或嵌套的两个节点里，它只是挪出了里面那个）：先重载的节点把它装上了，后处理的
@@ -714,12 +851,26 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         if (outcome.after && outcome.after.length > 0) {
           for (const refno of outcome.after) addedAll.add(refno);
           models.loadedNew.push({ refno: site.refno, name: site.name, total: outcome.after.length });
+          stand({ refno: site.refno, dbnum: scope.dbnum }, standingOf(answer.status, true));
         }
       }
       // 都处理完了才记「找过了」；有没装成的，下一轮（哪怕库文件没再变）还要再找
       if (allSettled) ports.noteScopeChecked(scope.dbnum, fileLatest);
     }
     settleCounts();
+
+    // 后台不会去追的库：页面上装着的节点有几个、几个核对过是最新、几个落后（给库一级那句话用）
+    const notSwapped = new Set(models.failed.map((item) => item.refno));
+    const libraryNodes = new Map<number, GetWorkLibraryNodes>();
+    for (const [refno, { dbnum, state }] of standing) {
+      const nodes = libraryNodes.get(dbnum) ?? { total: 0, latest: 0, lagging: 0 };
+      nodes.total += 1;
+      // 没换成、没补装成的：屏幕上的不是后端现有的那一版，不算最新
+      if (state === 'latest' && !notSwapped.has(refno)) nodes.latest += 1;
+      else if (state === 'lagging') nodes.lagging += 1;
+      libraryNodes.set(dbnum, nodes);
+    }
+    return libraryNodes;
   }
 
   async function runRound(): Promise<GetWorkReport> {
@@ -803,7 +954,8 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       }
 
       // ⑥ 再重载模型
-      if (scene) await refreshModels(report, scene, rows);
+      let libraryNodes = new Map<number, GetWorkLibraryNodes>();
+      if (scene) libraryNodes = await refreshModels(report, scene, rows);
       else report.models.rootsTotal = ports.roots().length;
 
       // ⑦ 跟着模型走的东西
@@ -855,6 +1007,13 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       for (const dbnum of [...touched].sort((a, b) => a - b)) {
         const note = describeLibraryGap(dbnum, rows.get(dbnum));
         if (!note) continue;
+        if (note.kind === 'out_of_scope') {
+          // 后台不会去追它：落没落后按页面上装着的节点说
+          const said = describeOutOfScopeLibrary(note, rows.get(dbnum), libraryNodes.get(dbnum));
+          if (said.note) report.libraries.push(said.note);
+          if (said.fact) report.libraryFacts.push(said.fact);
+          continue;
+        }
         const timedOut = report.waited?.timedOut.includes(dbnum) === true;
         report.libraries.push(timedOut ? { ...note, text: `${note.text}，等了 ${Math.round((report.waited?.ms ?? 0) / 1000)} 秒还没做完，这次先换了能换的` } : note);
       }

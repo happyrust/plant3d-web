@@ -124,6 +124,8 @@ function currentRoots(): GetWorkRoot[] {
       loadedFileLatestSesno: entry.loadedFileLatestSesno,
       staleReason: entry.staleReason,
       source: 'table',
+      // 装上之后头一次问到的后端那一版（表里记下了才带）：引擎拿它核对屏幕上装的是不是后端现在的那一版
+      ...(entry.loadedGenerated !== undefined ? { loadedGenerated: entry.loadedGenerated } : {}),
     });
   }
   for (const entry of getWorkRegisteredRoots()) {
