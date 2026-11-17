@@ -190,6 +190,55 @@ describe('useGenModelV1DbnumStatus：库状态只读 /dbnums 那一行，不做�
     expect(refreshVerdictMock).toHaveBeenCalledTimes(DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length);
   });
 
+  it('scheduleReprobe：一轮走完之后再调，照样从头再排一轮', async () => {
+    vi.useFakeTimers();
+    const store = useGenModelV1DbnumStatus();
+    const perRound = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length;
+    const wholeRound = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0);
+
+    store.scheduleReprobe(7997);
+    await vi.advanceTimersByTimeAsync(wholeRound);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(perRound);
+
+    store.scheduleReprobe(7997);
+    for (const [index, delay] of DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.entries()) {
+      await vi.advanceTimersByTimeAsync(delay);
+      expect(refreshVerdictMock).toHaveBeenCalledTimes(perRound + index + 1);
+    }
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(perRound * 2);
+  });
+
+  it('scheduleReprobe：一轮还没走完又调，前一次排的作废，从后一次调用起从头排', async () => {
+    vi.useFakeTimers();
+    const store = useGenModelV1DbnumStatus();
+    const perRound = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length;
+    const wholeRound = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0);
+    const [firstDelay = 0] = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS;
+
+    store.scheduleReprobe(7997);
+    await vi.advanceTimersByTimeAsync(firstDelay / 2);
+    store.scheduleReprobe(7997);
+    await vi.advanceTimersByTimeAsync(firstDelay - 1);
+    expect(refreshVerdictMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(wholeRound + 10 * 60_000);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(perRound);
+  });
+
+  it('scheduleReprobe：连着调的次数比一轮的次数还多，也只排一轮、照样拉满', async () => {
+    vi.useFakeTimers();
+    const store = useGenModelV1DbnumStatus();
+    const perRound = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.length;
+    const wholeRound = DBNUM_STATUS_PENDING_RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0);
+
+    for (let i = 0; i < perRound + 1; i += 1) store.scheduleReprobe(7997);
+    await vi.advanceTimersByTimeAsync(wholeRound + 10 * 60_000);
+    expect(refreshVerdictMock).toHaveBeenCalledTimes(perRound);
+  });
+
   it('别处的数据批次落地：隔 2 s 重拉一次 /dbnums，落在哪个库都拉（一次请求带回全部库）；连着落几批只拉一次', async () => {
     vi.useFakeTimers();
     const store = useGenModelV1DbnumStatus();
