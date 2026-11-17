@@ -13,6 +13,7 @@ import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
+import { isGetWorkRoot } from '@/composables/modelGetWorkRegistry';
 import { consumeModelLoadStopped, requestStopModelLoad } from '@/composables/modelLoadSession';
 import { type NodeModelStatusAction } from '@/composables/nodeModelStatus';
 import { provideTreeHiddenScope } from '@/composables/treeHiddenScope';
@@ -252,9 +253,11 @@ function getCheckState(row: Pick<DiffFlatRow, 'id' | 'hasChildren'>) {
 
 /**
  * 「装着没有」（`isModelActuallyLoaded`）只认节点自己：这个面板的显示流程装过它，或它自己有几何在场景里。两样都不占、
- * 模型却装着的还有两种，按已加载节点表（全页面共用，响应式：登记 / 撤表的那一刻行上就重算）认：
- * - 节点自己登记在表里：别的显示流程装的（模型树和查看器各有一份，装的是同一个场景）；
- * - 有下级的节点，它的某个上级登记在表里：PIPE、BRAN 这类自己没有几何的中间节点，名下的构件是跟着上级一起装进来的。
+ * 模型却装着的还有两种，按「登记在册的节点」认——已加载节点表里装着的，和取最新登记表里的直装节点（整库显示的 SITE、
+ * 地址栏直装的节点：它们不进已加载节点表）。两张表都是全页面共用、响应式的：登记 / 撤表的那一刻行上就重算（直装的
+ * 节点是装载结束之后才登记的，那时装载器的修订号已经动过了）。
+ * - 节点自己登记在册：别的显示流程装的（模型树和查看器各有一份，装的是同一个场景），或直装的；
+ * - 有下级的节点，它的某个上级登记在册：PIPE、BRAN 这类自己没有几何的中间节点，名下的构件是跟着上级一起装进来的。
  *   不认的话，先装上一级再展开，下面一排中间节点的眼睛都是灭的，要各点一下才亮、再点一下才藏得掉。
  * 没有下级的行不走第二条：叶子自己不在场景里（没有几何，或上级装完之后才加的、还没重载）就是没显示。
  * 第二条是按「上级装着」推的，不逐个核对名下的构件：上级装完之后才加进来的中间节点（还没取最新 / 重载）眼睛也是亮的，
@@ -262,7 +265,7 @@ function getCheckState(row: Pick<DiffFlatRow, 'id' | 'hasChildren'>) {
  * 点过、但没有模型可显示的节点在表里是 `loaded = false`，不算。
  */
 function isShownWithLoadedNode(row: Pick<DiffFlatRow, 'id' | 'hasChildren'>): boolean {
-  const isLoadedNode = (refno: string): boolean => loadedNodeEntry(refno)?.loaded === true;
+  const isLoadedNode = (refno: string): boolean => loadedNodeEntry(refno)?.loaded === true || isGetWorkRoot(refno);
   if (isLoadedNode(row.id)) return true;
   return row.hasChildren && pdmsTree.hasAncestorWhere(row.id, isLoadedNode);
 }

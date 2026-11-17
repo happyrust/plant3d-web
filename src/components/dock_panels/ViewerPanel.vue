@@ -98,6 +98,7 @@ import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnota
 import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
 import {
   captureGetWorkWatermarks,
+  forgetGetWorkRoot,
   loadedModelDbnums,
   noteGetWorkRoot,
   registerGetWorkDerived,
@@ -4585,6 +4586,9 @@ onMounted(async () => {
       const removedRoots = delta.evict
         .flatMap(group => group.rootRefnos)
         .filter(refno => !nextRefnos.includes(refno));
+      // 撤下的直装节点当场从取最新的登记表撤掉：模型树上它和它下面中间节点的眼睛跟着灭。不撤的话，登记表要到
+      // 下一次取最新发现它不在场景里才撤（`modelGetWork` 的 `refreshModels`），这期间眼睛一直亮着。
+      for (const refno of removedRoots) forgetGetWorkRoot(refno);
       console.log('[show_refno] 撤下', { removedRoots, evictedRefnoCount });
       if (delta.load.length === 0) {
         emitToast({
