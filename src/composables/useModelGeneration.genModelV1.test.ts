@@ -14,6 +14,7 @@ import {
   modelLoadSessionView,
   requestStopModelLoad,
 } from '@/composables/modelLoadSession';
+import { provideTreeHiddenScope, type TreeHiddenScope } from '@/composables/treeHiddenScope';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { createGenModelV1ModelRecordSource } from '@/model-source/genModelV1/modelRecordSource';
 import { __resetGenModelV1ServiceLifecycleForTests } from '@/model-source/genModelV1/serviceLifecycle';
@@ -2230,7 +2231,7 @@ describe('重载不是「显示」：藏着的构件换完还藏着，新增的�
     expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, NEW], false]]);
   });
 
-  it('节点只藏了一部分：新增的成员照常显示，藏着的那个还藏着', async () => {
+  it('节点里只有个别成员藏着（树上没有藏着的子节点可问）：新增的成员照常显示，藏着的那个还藏着', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const viewer = statefulViewer();
     const gen = useModelGeneration({ viewer, db_num: 8000 });
@@ -2264,6 +2265,257 @@ describe('重载不是「显示」：藏着的构件换完还藏着，新增的�
     );
     expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true]]);
     expect(viewer.scene.objects[NEW]).toEqual({ visible: false });
+  });
+
+  describe('节点只藏了一部分、这一次又带来新构件：先问模型树「藏着的那部分名下现在有哪些构件」（`treeHiddenScope`）', () => {
+    /** 树上藏着的子节点（它自己没有几何，只出现在树的回答里） */
+    const HIDDEN_NODE = '24384_24785';
+    const NEW2 = '24384_24791';
+    let offProvider: (() => void) | null = null;
+
+    /** 模型树这一头：给一份现成的回答，或给一个自己决定怎么答的函数（抛错、一直不答） */
+    function treeAnswers(answer: TreeHiddenScope | null | (() => Promise<TreeHiddenScope | null>)) {
+      offProvider?.();
+      const provider = vi.fn((_root: string, _signal?: AbortSignal): Promise<TreeHiddenScope | null> => (
+        typeof answer === 'function' ? answer() : Promise.resolve(answer)
+      ));
+      offProvider = provideTreeHiddenScope(provider);
+      return provider;
+    }
+
+    /** 控制台里「藏着的节点没查到」的那条说明 */
+    function scopeWarnings(): string[] {
+      return addLogMock.mock.calls
+        .filter((call) => call[0] === 'warning' && String(call[1]).includes('树上藏着的节点'))
+        .map((call) => String(call[1]));
+    }
+
+    afterEach(() => {
+      offProvider?.();
+      offProvider = null;
+    });
+
+    it('新构件落在藏着的子节点下面（那一层没在树里取进来过，状态表里没有它）：预先记成不可见；别的新构件照常显示', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      // M2 在藏着的子节点下面：人在树上点了那个子节点的眼睛
+      viewer.scene.objects[M2] = { visible: false };
+      inScene(M1, M2);
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2, NEW, NEW2] });
+      const provider = treeAnswers({ refnos: new Set([HIDDEN_NODE, M2, NEW]), failed: [] });
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(provider.mock.calls[0]![0]).toBe(ROOT);
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1, NEW2], true], [[NEW], false]]);
+      // 显隐在装载之前就定好：新对象装上去之后，由装完的回放（applyStateToRefnos）照状态表藏起来
+      expect(Math.max(...viewer.scene.setObjectsVisible.mock.invocationCallOrder))
+        .toBeLessThan(loadInstancesMock.mock.invocationCallOrder[0]!);
+      expect(loadInstancesMock).toHaveBeenCalledWith(
+        expect.anything(), 8000, [M1, M2, NEW, NEW2], expect.objectContaining({ replaceExistingObjects: true }),
+      );
+      expect(viewer.scene.objects[NEW]).toEqual({ visible: false });
+      expect(viewer.scene.objects[NEW2]).toEqual({ visible: true });
+      expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+      expect(scopeWarnings()).toEqual([]);
+    });
+
+    it('场景里一个藏着的都没有、藏着的子节点这一次才第一次有构件：新构件照样跟着藏', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      inScene(M1);
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, NEW] });
+      treeAnswers({ refnos: new Set([HIDDEN_NODE, NEW]), failed: [] });
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true], [[NEW], false]]);
+      expect(viewer.scene.objects[NEW]).toEqual({ visible: false });
+    });
+
+    it('这一次没有新构件：不问树（不多发请求），照原来的规则走', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      viewer.scene.objects[M2] = { visible: false };
+      inScene(M1, M2);
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2] });
+      const provider = treeAnswers({ refnos: new Set([HIDDEN_NODE, M2]), failed: [] });
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      expect(provider).not.toHaveBeenCalled();
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true]]);
+      expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+    });
+
+    it('树说藏着、场景里却显示着的构件（人单独把它点出来过）：不动它，只藏新增的', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      inScene(M1);
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, NEW] });
+      treeAnswers({ refnos: new Set([HIDDEN_NODE, M1, NEW]), failed: [] });
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true], [[NEW], false]]);
+      expect(viewer.scene.objects[M1]).toEqual({ visible: true });
+    });
+
+    it('树答不上来（查询抛错）：重载照常做完，新构件照原来的规则显示出来', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const { useModelGeneration } = await import('./useModelGeneration');
+        const viewer = statefulViewer();
+        const gen = useModelGeneration({ viewer, db_num: 8000 });
+        viewer.scene.objects[M1] = { visible: true };
+        viewer.scene.objects[M2] = { visible: false };
+        inScene(M1, M2);
+        v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1, M2]);
+        visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, M2, NEW] });
+        const provider = treeAnswers(() => Promise.reject(new Error('tree offline')));
+
+        expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1, NEW], true]]);
+        expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('[tree-hidden-scope]'), expect.any(Error));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('藏着的节点里有没查到的（请求失败）：查到的那部分照样藏，定不了的照常显示，控制台留一条说明', async () => {
+      const FAILED_NODE = '24384_24786';
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      inScene(M1);
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, NEW, NEW2] });
+      treeAnswers({ refnos: new Set([HIDDEN_NODE, NEW]), failed: [FAILED_NODE] });
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      // NEW2 也许就在没查到的那个节点下面：定不了，照常显示
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1, NEW2], true], [[NEW], false]]);
+      expect(scopeWarnings()).toEqual([
+        expect.stringContaining(`重载 ${ROOT}：树上藏着的节点有 1 个没查到名下的构件（${FAILED_NODE}）`),
+      ]);
+    });
+
+    it('藏着的节点一个都没查到：新构件照原来的规则显示出来，控制台留一条说明', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      inScene(M1);
+      v1Source.records.invalidateRoot.mockReturnValueOnce([ROOT, M1]);
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [M1, NEW] });
+      treeAnswers({ refnos: new Set<string>(), failed: [HIDDEN_NODE] });
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1, NEW], true]]);
+      expect(scopeWarnings()).toHaveLength(1);
+    });
+
+    it('问树的时候被叫停：不等树答完，当场收手，一个显隐动作都没有', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      viewer.scene.objects[M2] = { visible: false };
+      inScene(M1, M2);
+      v1Source.records.invalidateRoot.mockReturnValue([ROOT, M1, M2]);
+      visibleInstsMock.mockResolvedValue({ success: true, refno: ROOT, refnos: [M1, M2, NEW] });
+      // 树一直不答
+      let noteAsked!: () => void;
+      const treeAsked = new Promise<void>((resolve) => { noteAsked = resolve; });
+      const provider = treeAnswers(() => {
+        noteAsked();
+        return new Promise<TreeHiddenScope | null>(() => {});
+      });
+
+      const pending = gen.showModelByRefno(ROOT, { refresh: true, flyTo: false });
+      expect(await Promise.race([treeAsked.then(() => '问到树了'), pending.then(() => '没问树就结束了')])).toBe('问到树了');
+      expect(requestStopModelLoad(ROOT)).toBe(true);
+
+      const outcome = await Promise.race([
+        pending,
+        new Promise<string>((resolve) => { setTimeout(() => resolve('还在等树'), 300); }),
+      ]);
+      expect(outcome).toBe(false);
+      expect(provider.mock.calls[0]![1]?.aborted).toBe(true);
+      expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
+      expect(loadInstancesMock).not.toHaveBeenCalled();
+      expect(evictMock).not.toHaveBeenCalled();
+      expect(viewer.scene.objects[M2]).toEqual({ visible: false });
+      expect(consumeModelLoadStopped(ROOT)).toBe(true);
+    });
+
+    it('右键重新生成不问树：做完是要把节点显示出来的', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      inScene(M1);
+      v1Source.records.generateThenCollect.mockImplementationOnce(async (refno: string) => (
+        { refno, generationRoots: [refno], items: [{ refno }], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {} } as never
+      ));
+      visibleInstsMock.mockResolvedValue({ success: true, refno: ROOT, refnos: [M1, NEW] });
+      const provider = treeAnswers({ refnos: new Set([HIDDEN_NODE, NEW]), failed: [] });
+
+      expect(await gen.showModelByRefno(ROOT, { regenerate: true, flyTo: false })).toBe(true);
+
+      expect(provider).not.toHaveBeenCalled();
+      expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith([ROOT, M1, NEW], true);
+      expect(viewer.scene.objects[NEW]).toEqual({ visible: true });
+    });
+
+    it('预先记的不可见是装载流程记的、不是人藏的：构件没装上（被叫停），那个子节点后来又显示了，下一次重载照常显示它', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = statefulViewer();
+      const gen = useModelGeneration({ viewer, db_num: 8000 });
+      viewer.scene.objects[M1] = { visible: true };
+      viewer.scene.objects[M2] = { visible: false };
+      inScene(M1, M2);
+      v1Source.records.invalidateRoot.mockReturnValue([ROOT, M1, M2]);
+      visibleInstsMock.mockResolvedValue({ success: true, refno: ROOT, refnos: [M1, M2, NEW] });
+      treeAnswers({ refnos: new Set([HIDDEN_NODE, M2, NEW]), failed: [] });
+      // 第一次：新构件预先记成不可见，随后装载被叫停，新构件没有装进场景
+      loadInstancesMock.mockImplementationOnce(async () => {
+        requestStopModelLoad(ROOT);
+        return loaderCancelled();
+      });
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(false);
+      consumeModelLoadStopped(ROOT);
+      expect(viewer.scene.objects[NEW]).toEqual({ visible: false });
+
+      // 人在树上把那个子节点重新显示出来：树照它手上的名单改场景（名单里还没有新构件），树上不再有藏着的节点
+      viewer.scene.objects[M2] = { visible: true };
+      treeAnswers(null);
+      viewer.scene.setObjectsVisible.mockClear();
+
+      expect(await gen.showModelByRefno(ROOT, RELOAD)).toBe(true);
+
+      expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1, M2, NEW], true]]);
+      expect(viewer.scene.objects[NEW]).toEqual({ visible: true });
+    });
   });
 
   it('数据批次删掉、后来又回来的成员：撤下时顺手记的不可见不算人藏的，重载后照常显示（人藏的那个还藏着）', async () => {
@@ -3684,6 +3936,26 @@ describe('showModelByRefno 节点一级的更新到最新（方案第 12 节；�
     expect(await gen.showModelByRefno(UPDATE_ZONE, { update: true, flyTo: false })).toBe(true);
 
     expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith([UPDATE_ZONE, ...MEMBERS], true);
+  });
+
+  it('更新不问模型树「藏着的那部分」（那是重载才问的）：节点只藏了一部分、这一次又有新构件，做完照样全部显示出来', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = loadedViewer();
+    viewer.scene.objects[MEMBERS[0]!] = { visible: false };
+    // MEMBERS[1] 这一次才有（还不在场景里）；树上它落在藏着的子节点下面
+    isDtxRefnoLoadedMock.mockImplementation((_dbno, refno) => refno === MEMBERS[0]);
+    const tree = vi.fn(async (): Promise<TreeHiddenScope | null> => ({ refnos: new Set(MEMBERS), failed: [] }));
+    const offTree = provideTreeHiddenScope(tree);
+    try {
+      const gen = useModelGeneration({ viewer, db_num: 7997 });
+
+      expect(await gen.showModelByRefno(UPDATE_ZONE, { update: true, flyTo: false })).toBe(true);
+
+      expect(tree).not.toHaveBeenCalled();
+      expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith([UPDATE_ZONE, ...MEMBERS], true);
+    } finally {
+      offTree();
+    }
   });
 
   it('没有单元被删：不问人，对节点发一发不带 force 的生成（后端只重算不是最新的单元，不清几何），做完照重载那条路整套替换', async () => {

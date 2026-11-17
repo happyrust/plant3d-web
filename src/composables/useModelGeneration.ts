@@ -35,6 +35,7 @@ import { changedSessionsOfNodeVersions, type NodeModelFacts } from '@/composable
 import { decideNodeUpdate, describeNodeUpdateSummary, planNodeUpdateChunks } from '@/composables/nodeModelUpdate';
 import { isTreeNodeGoneMessage } from '@/composables/pdmsTreeRefresh';
 import { progressiveBatchWaitMs, shouldLoadProgressiveBatch } from '@/composables/progressiveLoadPolicy';
+import { queryTreeHiddenScope } from '@/composables/treeHiddenScope';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -718,7 +719,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
    * - 其余照旧置为可见。
    *
    * 节点只藏了一部分时，新增的构件在哪个子节点下面这里不知道（记录里的属主只到生成根）：树上那一层取进来过的，
-   * 树刷新时已经按父节点的勾选态记进状态表了，照着走；没取进来过的先显示，展开那一层时由树按父节点的勾选态回放。
+   * 树刷新时已经按父节点的勾选态记进状态表了，照着走；没取进来过的靠 `treeHidden`——模型树上藏着的那些节点名下
+   * 现在的构件（调用方问来的，见 `treeHiddenRefnosForReload`）：新增的构件落在里面的跟着藏。没问到（没有树、请求失败）
+   * 就先显示，展开那一层时由树按父节点的勾选态回放。
    */
   function showReloadedRefnos(
     scene: ProgressiveViewer['scene'],
@@ -726,11 +729,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     ids: string[],
     previousMembers: readonly string[],
     undo: LoadUndoLog | null,
+    treeHidden: ReadonlySet<string> | null = null,
   ): void {
     const objects = scene?.objects;
     const hidden = (id: string): boolean => objects?.[id]?.visible === false;
-    // 这个节点名下没有藏着的东西：和显示一样全部置为可见
-    if (!objects || !(ids.some(hidden) || previousMembers.some(hidden))) {
+    const underHiddenNode = (id: string): boolean => treeHidden?.has(id) === true;
+    // 这个节点名下没有藏着的东西（状态表里没有，树上藏着的节点下面也没有这一次的构件）：和显示一样全部置为可见
+    if (!objects || !(ids.some(hidden) || previousMembers.some(hidden) || ids.some(underHiddenNode))) {
       showRefnosTracked(scene, ids, undo);
       return;
     }
@@ -743,7 +748,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const loaded = inScene(id);
       // 藏着的保持原样。不在场景里、那一笔又是这里撤下 / 预先记的（不是人藏的）不算：按新增的构件对待
       if (hidden(id) && (loaded || !hiddenByLoader.has(id))) continue;
-      if (!loaded && wholeNodeHidden) toHide.push(id);
+      // 新增的构件：整个节点藏着，或它落在树上藏着的节点下面，就跟着藏。已经在场景里显示着的不动
+      if (!loaded && (wholeNodeHidden || underHiddenNode(id))) toHide.push(id);
       else toShow.push(id);
     }
     if (toShow.length > 0) showRefnosTracked(scene, toShow, undo);
@@ -751,6 +757,30 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       scene?.setObjectsVisible?.(toHide, false);
       for (const id of toHide) hiddenByLoader.add(id);
     }
+  }
+
+  /**
+   * 重载带来了新构件（还不在场景里的）时，向模型树问它藏着的那部分名下现在有哪些构件（`treeHiddenScope`），交给
+   * `showReloadedRefnos`。没有新构件不问；树上这个节点没有藏着的部分、没有树、没问到、问到一半被叫停，都回 `null`（照原来的规则走）。
+   */
+  async function treeHiddenRefnosForReload(
+    root: string,
+    dbno: number,
+    ids: readonly string[],
+    signal: AbortSignal,
+  ): Promise<ReadonlySet<string> | null> {
+    if (!ids.some((id) => id !== root && !isDtxRefnoLoaded(dbno, id))) return null;
+    const scope = await queryTreeHiddenScope(root, signal);
+    if (!scope) return null;
+    if (scope.failed.length > 0) {
+      const shown = scope.failed.slice(0, 5).join(', ');
+      consoleStore.addLog(
+        'warning',
+        `[model-load] 重载 ${root}：树上藏着的节点有 ${scope.failed.length} 个没查到名下的构件（${shown}${scope.failed.length > 5 ? ' …' : ''}），` +
+          '它们下面新增的构件这次照常显示',
+      );
+    }
+    return scope.refnos.size > 0 ? scope.refnos : null;
   }
 
   /** 记下一次装载新装进来的构件；装载器说它被叫停了（什么都没装）就回 `true` */
@@ -2506,8 +2536,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (remainingRefnos.length > 0 || !shownEarlyRefnos) {
         const shownRefnos = uniqStrings([normalizedRoot, ...remainingRefnos]);
         const reloadOnly = loadOptions?.refresh === true && !update && !regenerate && !explicitFill;
-        if (reloadOnly) showReloadedRefnos(anyViewer.scene, dbno, shownRefnos, previousLeaves, undo);
-        else showRefnosTracked(anyViewer.scene, shownRefnos, undo);
+        if (reloadOnly) {
+          // 节点只藏了一部分、这次又带来了新构件：先问树上藏着的那部分名下现在有哪些构件，落在里面的新构件跟着藏
+          const treeHidden = await treeHiddenRefnosForReload(normalizedRoot, dbno, shownRefnos, session.signal);
+          session.throwIfStopped();
+          showReloadedRefnos(anyViewer.scene, dbno, shownRefnos, previousLeaves, undo, treeHidden);
+        } else {
+          showRefnosTracked(anyViewer.scene, shownRefnos, undo);
+        }
       }
       // 进了装载：之后这个节点再有记录查询（装载器补查根自己的记录），也不该把状态条拉回「查询记录」
       recordsCollected = true;
