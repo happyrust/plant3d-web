@@ -8,6 +8,9 @@
  * - 登记之后在后台问一次状态（`resolveNodeModelStatus`），不挡出图；同时在问的不超过 2 个节点；
  * - 表里有节点时每分钟强制重拉一次 `/dbnums`（轻量形态，服务端毫秒级）；后端跑完数据批次（任务流）时立刻重拉。
  *   某个库的水位变了，只对这个库里登记的节点重问一次；按需生成不动库的水位，生成完由显示流程叫一次重问；
+ * - 判「有更新可重载」要问节点版本表（逐个会话核对其间改没改到本节点），会话多的库冷算一次十几秒到半分钟。页面已经知道
+ *   被改到的行不等它（`LoadedNodeEntry.reloadHint`，2026-11-17）：之前标着落后、库的模型水位追上了的；后端跑完的一批
+ *   重新生成的单元在它下面的。只能等的行不留着上一次的动作，写「核对中」（`LoadedNodeView.actionPending`）；
  * - 它是这个页面的记忆，不是事实来源：页面一刷新就没了。「生成过没有、新不新」每次都问后端，不看它。
  *
  * 进程内单例：模型树和查看器各有一份 `useModelGeneration`，装的是同一个场景，共用这一张表。
@@ -16,9 +19,11 @@ import { reactive, watch } from 'vue';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
 
+import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
 import { clearPendingGenerationFill, isGenerationFillActive } from '@/composables/generationFillState';
 import {
   describeNodeModelStatus,
+  nodeModelChangesText,
   nodeModelStatusAction,
   nodeModelStatusIconKind,
   resolveNodeModelStatus,
@@ -30,16 +35,24 @@ import {
   type NodeModelVerdict,
 } from '@/composables/nodeModelStatus';
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
-import { subscribeGenModelV1FinishedBatches } from '@/composables/useGenModelV1UpdateNotice';
+import { subscribeGenModelV1FinishedBatches, type GenModelV1FinishedBatch } from '@/composables/useGenModelV1UpdateNotice';
 import { toRefnoKey } from '@/utils/refnoKey';
 
 /** 表里有节点时 `/dbnums` 的重拉间隔（没有节点时沿用健康探针自己的 5 分钟） */
 export const LOADED_NODE_DBNUMS_POLL_MS = 60_000;
 /** 同时在问状态的节点数上限 */
 export const LOADED_NODE_CHECK_CONCURRENCY = 2;
+/** 后端跑完的一批里重新生成的单元多于这个数，就不逐个查它们在哪些已装节点下面了（等逐会话的核对） */
+export const LOADED_NODE_BATCH_ROOTS_LIMIT = 40;
 
 /** 后端的一版节点模型：已生成的那部分对应到哪些会话、当时有几个生成单元落后（后端没给为 `null`） */
 export type LoadedNodeGeneration = { sesnoMin: number; sesnoMax: number; laggingUnits: number | null };
+
+/**
+ * 页面已经知道「库里的模型比本页装的新、而且改到了这个节点」的依据：库的模型水位到了 `modelSesno`、本页装的那一版
+ * 比它早，就成立。`reason` 是给人看的原因。
+ */
+export type LoadedNodeReloadHint = { modelSesno: number; reason: string };
 
 export type LoadedNodeEntry = {
   /** `a_b` */
@@ -69,6 +82,14 @@ export type LoadedNodeEntry = {
    * `modelGetWork` 的 `screenHoldsBackendModel`）。
    */
   loadedGenerated?: LoadedNodeGeneration | null;
+  /**
+   * 不等逐会话的核对就能给「重载」的依据（见 `LoadedNodeReloadHint`）：这个节点之前标着落后、给的是库一级的「更新」
+   * （库的模型水位追上当时库文件的最新会话，那些改动就生成了）；或后端跑完的一批重新生成的单元在它下面。有几条时留门槛
+   * 最早的。后端按不早于门槛的库给出确定的结论之后作废（以后端的为准）；节点重新登记时没有。
+   */
+  reloadHint?: LoadedNodeReloadHint | null;
+  /** 正在重问、而且已经走到慢的那一问（节点版本表）：判定回来时收起；被新的一次顶掉的那次走到那一问不记 */
+  awaitingChanges?: boolean;
 };
 
 export type LoadedNodeView = {
@@ -83,6 +104,13 @@ export type LoadedNodeView = {
    * 有更新可重载 → 重载；部分生成 / 未生成 → 生成
    */
   action: NodeModelStatusAction | null;
+  /**
+   * 正在等逐会话的核对（要十几秒到半分钟），上一次的动作这会儿不作数：`action` 给 `null`，行上写「核对中」。
+   * 只在是的时候有这一格。
+   */
+  actionPending?: boolean;
+  /** 重问的这一会儿 `action` 照样作数、不用禁用（已经知道该「重载」）。只在是的时候有这一格。 */
+  actionHolds?: boolean;
   checking: boolean;
 };
 
@@ -120,9 +148,12 @@ export function provideLoadedNodeChangeQuery(query: ListNodeChangedSessions | nu
   changeQuery = query;
 }
 
-const listChangedSessions: ListNodeChangedSessions = (query) => (
-  changeQuery ? changeQuery(query) : Promise.reject(new Error('变化查询还没有接上'))
-);
+const listChangedSessions: ListNodeChangedSessions = (query) => {
+  // 走到这一问就要等了（冷算十几秒到半分钟）：记在节点上，行上据此写「核对中」。被新的一次顶掉的那次不算
+  const entry = entries.get(query.refno);
+  if (entry && !query.signal?.aborted) entry.awaitingChanges = true;
+  return changeQuery ? changeQuery(query) : Promise.reject(new Error('变化查询还没有接上'));
+};
 
 /**
  * 问后端「这个节点的模型状态」（`GET node/model-status`）的查询，同样由显示流程在加载时接上。没接上、或服务端没有
@@ -132,6 +163,112 @@ let factsQuery: FetchNodeModelFacts | null = null;
 
 export function provideLoadedNodeFactsQuery(query: FetchNodeModelFacts | null): void {
   factsQuery = query;
+}
+
+/** 这个库现在的模型水位；库状态没取到、或库正在被写（水位还会动）回 `null` */
+function settledModelSesno(dbnum: number): number | null {
+  const row = rowOf(dbnum);
+  if (!row) return null;
+  const freshness = judgeDbnumFreshness(row);
+  return freshness.kind === 'updating' ? null : freshness.model;
+}
+
+/** 后端有没有按不早于会话 `sesno` 的库给过确定的结论（「新旧未知」「库正在更新」不算结论） */
+function judgedAtOrAfter(status: NodeModelStatus, sesno: number): boolean {
+  return status.verdict !== 'unknown' && status.verdict !== 'updating' && status.modelSesno !== null && status.modelSesno >= sesno;
+}
+
+/** 这个节点记着的依据现在成立没有：库的模型水位到了门槛，而本页装的那一版比门槛早。成立时带上库现在的模型水位。 */
+function reloadHintHolds(entry: LoadedNodeEntry): { hint: LoadedNodeReloadHint; model: number } | null {
+  const hint = entry.reloadHint;
+  const loaded = entry.loadedModelSesno;
+  if (!hint || loaded === null || loaded <= 0 || loaded >= hint.modelSesno) return null;
+  const model = settledModelSesno(entry.dbnum);
+  return model !== null && model >= hint.modelSesno ? { hint, model } : null;
+}
+
+/** 记一条依据；已经有的留门槛早的那一条（库追到那里就该给「重载」了） */
+function keepReloadHint(entry: LoadedNodeEntry, hint: LoadedNodeReloadHint): void {
+  if (!entry.reloadHint || hint.modelSesno < entry.reloadHint.modelSesno) entry.reloadHint = hint;
+}
+
+/**
+ * 一次判定回来之后收拾依据：后端按不早于门槛的库给了确定的结论，记着的那条作废（它说没改到就是没改到）；
+ * 这一次说落后、给的是库一级的「更新」，就记下「库的模型水位追上这时库文件的最新会话，这些改动就生成了」。
+ */
+function settleReloadHint(key: string, status: NodeModelStatus): void {
+  const entry = entries.get(key);
+  if (!entry) return;
+  entry.awaitingChanges = false;
+  if (entry.reloadHint && judgedAtOrAfter(status, entry.reloadHint.modelSesno)) entry.reloadHint = null;
+  // 节点一级的「更新」做完由显示流程自己换到屏幕上；部分生成的缺的单元补没补上要问了才知道：都不记
+  if (status.verdict !== 'lagging' || nodeModelStatusAction(status) !== 'update') return;
+  const model = status.modelSesno;
+  // 落后是拿「模型水位之后、到库文件最新会话」这一段判的（后端的改动清单查到的也是那里）：库的模型水位追到那里，这些改动才算生成了
+  const through = status.fileLatestSesno;
+  if (model === null || through === null || through <= model) return;
+  keepReloadHint(entry, {
+    modelSesno: through,
+    reason: `之前标着落后的改动库里已经生成了${status.changes ? `（${nodeModelChangesText(status.changes)}）` : ''}`,
+  });
+}
+
+/** 问一个节点的祖先链（自己在前、往上到根，`a_b`）；查不到回空的。由显示流程在加载时接上（同 `provideLoadedNodeChangeQuery`）。 */
+export type ListNodeAncestors = (refno: string) => Promise<readonly string[]>;
+
+let unsubscribeBatchMarks: (() => void) | null = null;
+
+/**
+ * 接上祖先链查询：后端每跑完一批，就用这一批的改动清单（重新生成的单元）找出它们在哪些已装节点下面，给这些节点记一条
+ * 依据（`LoadedNodeEntry.reloadHint`）——库的模型水位一到这一批的末尾，行上就给「重载」，不等逐会话的核对。
+ * 再接一次换成新的；给 `null` = 不看了。
+ */
+export function provideLoadedNodeAncestorsQuery(query: ListNodeAncestors | null): void {
+  unsubscribeBatchMarks?.();
+  unsubscribeBatchMarks = query
+    ? subscribeGenModelV1FinishedBatches((batch) => { void markNodesRegeneratedBy(batch, query); })
+    : null;
+}
+
+/**
+ * 这个节点用不用查「这一批重新生成的单元在不在它下面」：同一个库、本页装的那一版比这一批早，而且后端还没有按这一批
+ * 之后的库给过它确定的结论（给过就以那个为准）。
+ */
+function mayBeRegeneratedBy(entry: LoadedNodeEntry, batch: GenModelV1FinishedBatch): boolean {
+  if (entry.dbnum !== batch.dbnum) return false;
+  const loaded = entry.loadedModelSesno;
+  if (loaded === null || loaded <= 0 || loaded >= batch.endSesno) return false;
+  return !(entry.status && judgedAtOrAfter(entry.status, batch.endSesno));
+}
+
+async function markNodesRegeneratedBy(batch: GenModelV1FinishedBatch, ancestorsOf: ListNodeAncestors): Promise<void> {
+  // 生成失败的单元记录没换；整单元被删的不在这份名单里——这两种都等逐会话的核对
+  const generated = batch.roots.filter((root) => !batch.failedRoots.includes(root));
+  if (generated.length > LOADED_NODE_BATCH_ROOTS_LIMIT) return;
+  const waiting = new Set<string>();
+  for (const entry of entries.values()) {
+    if (mayBeRegeneratedBy(entry, batch)) waiting.add(entry.refno);
+  }
+  for (const root of generated) {
+    if (waiting.size === 0) return;
+    let chain: readonly string[];
+    try {
+      chain = await ancestorsOf(root);
+    } catch {
+      continue;
+    }
+    for (const refno of chain) {
+      if (!waiting.delete(refno)) continue;
+      // 查的这一会儿节点可能撤下了、重新装过了，或者后端的结论已经回来了：再看一眼
+      const entry = entries.get(refno);
+      if (entry && mayBeRegeneratedBy(entry, batch)) {
+        keepReloadHint(entry, {
+          modelSesno: batch.endSesno,
+          reason: `后端跑完的一批（到会话 ${batch.endSesno}）重新生成了这个节点下的模型`,
+        });
+      }
+    }
+  }
 }
 
 /** 重拉 `/dbnums`（健康探针对外给的这个入口总是绕过五分钟的共享缓存；在飞的共用）。 */
@@ -218,6 +355,7 @@ async function run(key: string): Promise<void> {
         ? { sesnoMin: status.generated.sesnoMin, sesnoMax: status.generated.sesnoMax, laggingUnits: status.units?.lagging ?? null }
         : null;
     }
+    settleReloadHint(key, status);
     // 后端说这个节点已经没有要生成的单元（上次停下之后它在后台做完了、或别处生成过了）：这一页里留着的那颗「生成」作废。
     // 正在补齐的不动——做完由显示流程自己收口。
     if (status.source === 'model-status' && status.unitsToGenerate === 0 && !isGenerationFillActive(key)) {
@@ -381,12 +519,38 @@ export function loadedNodeView(refno: string): LoadedNodeView | null {
       checking: entry.checking,
     };
   }
+  // 页面已经知道库里的模型比本页装的新、而且改到了这个节点（见 `LoadedNodeEntry.reloadHint`）：不等逐会话的核对，先给「重载」。
+  // 依据成立时，后端还没有按不早于门槛的库给过确定的结论（给过，依据就作废了）：手上那个结论是旧的，按页面知道的写。
+  // 上一次说「部分生成」的行除外：那一行要紧的是把缺的补上，照后端说的画，等它重新判（缺的还缺着的话，毫秒级就答得出）。
+  const known = reloadHintHolds(entry);
+  if (known && status.verdict !== 'partial') {
+    return {
+      verdict: 'reloadable',
+      iconKind: 'reloadable',
+      title: [
+        `本节点：有更新可重载：${known.hint.reason}`,
+        `本页装的是会话 ${entry.loadedModelSesno} 的模型，库里已到 ${known.model}。点「重载」换上`,
+        entry.checking ? '逐个会话的核对还在做，答复回来以它为准' : '',
+      ].filter(Boolean).join('\n'),
+      action: 'reload',
+      actionHolds: true,
+      checking: entry.checking,
+    };
+  }
   const text = describeNodeModelStatus(status);
+  const action = nodeModelStatusAction(status);
+  // 已经是「有更新可重载」、库的模型水位没有倒回去：重问的这一会儿「重载」照样作数
+  const now = status.verdict === 'reloadable' ? settledModelSesno(entry.dbnum) : null;
+  const holds = now !== null && status.modelSesno !== null && now >= status.modelSesno;
+  // 走到慢的那一问了（要等十几秒到半分钟），上一次的动作这会儿不作数：不留一颗灰着的按钮，行上写「核对中」
+  const pending = entry.awaitingChanges === true && action !== null && !holds;
   return {
     verdict: status.verdict,
     iconKind: nodeModelStatusIconKind(status),
-    title: [`本节点：${text.headline}`, text.detail].filter(Boolean).join('\n'),
-    action: nodeModelStatusAction(status),
+    title: [`本节点：${text.headline}`, text.detail, pending ? '（这是上一次的结论，正在重新核对）' : ''].filter(Boolean).join('\n'),
+    action: pending ? null : action,
+    ...(pending ? { actionPending: true } : {}),
+    ...(holds ? { actionHolds: true } : {}),
     checking: entry.checking,
   };
 }
@@ -395,6 +559,7 @@ export function useLoadedNodeStatus() {
   return {
     provideChangeQuery: provideLoadedNodeChangeQuery,
     provideFactsQuery: provideLoadedNodeFactsQuery,
+    provideAncestorsQuery: provideLoadedNodeAncestorsQuery,
     noteLoaded: noteLoadedNode,
     noteWithoutModel: noteNodeWithoutModel,
     forget: forgetLoadedNode,

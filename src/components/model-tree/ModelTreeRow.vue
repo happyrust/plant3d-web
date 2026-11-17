@@ -396,6 +396,13 @@ onUnmounted(() => {
         @click.stop="emit('node-action', row.id, 'generate')">
         {{ pendingFill.label }}
       </button>
+      <!-- 正在等逐会话的核对（十几秒到半分钟）、上一次的动作这会儿不作数：不留一颗灰着的按钮，写「核对中」 -->
+      <span v-if="nodeStatus?.actionPending"
+        class="inline-flex h-5 shrink-0 items-center rounded border border-border px-1 text-[10px] leading-4 text-muted-foreground"
+        data-testid="model-tree-node-action-pending"
+        title="核对中：正在向后端核对这个节点在本页装上之后有没有被改到（会话多的库要十几秒到半分钟），答复回来再给动作">
+        核对中
+      </span>
       <button v-if="!ghost && nodeAction" type="button"
         class="inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] leading-4 disabled:cursor-wait disabled:opacity-70"
         :class="nodeActionIsUpdate
@@ -404,7 +411,7 @@ onUnmounted(() => {
             ? 'border-emerald-600/50 text-emerald-700 hover:bg-emerald-50'
             : 'border-sky-500/50 text-sky-700 hover:bg-sky-50'"
         :title="nodeActionTitle"
-        :disabled="updateState?.busy === true || nodeStatus?.checking === true || props.loading"
+        :disabled="updateState?.busy === true || (nodeStatus?.checking === true && nodeStatus?.actionHolds !== true) || props.loading"
         data-testid="model-tree-node-action"
         :data-action="nodeAction"
         :data-busy="updateState?.busy || (nodeAction === 'update-node' && props.loading) ? 'true' : undefined"

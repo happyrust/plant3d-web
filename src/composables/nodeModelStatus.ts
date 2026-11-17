@@ -524,8 +524,8 @@ function missingText(units: NodeModelUnits): string {
   return `${units.total} 个单元里有 ${lacking} 个没有模型${failed}`;
 }
 
-/** 接口给的净变化：「改到 3 个交付单元（新增 1、删除 1）」 */
-function changesText(changes: NodeModelChanges): string {
+/** 接口给的净变化：「会话 738 之后到 748，改到 3 个交付单元（新增 1、删除 1）」 */
+export function nodeModelChangesText(changes: NodeModelChanges): string {
   const parts = [
     changes.unitsAdded > 0 ? `新增 ${changes.unitsAdded}` : '',
     changes.unitsRemoved > 0 ? `删除 ${changes.unitsRemoved}` : '',
@@ -590,7 +590,7 @@ export function describeNodeModelStatus(status: NodeModelStatus): { headline: st
         const what = units && units.lagging > 0
           ? `生成之后有 ${units.lagging} 个单元被改到`
           : '生成之后这个节点下有改动（不在某个生成单元名下，或有单元被删）';
-        const changes = status.changes ? `${changesText(status.changes)}。` : '';
+        const changes = status.changes ? `${nodeModelChangesText(status.changes)}。` : '';
         return {
           headline: `落后：${what}`,
           detail: `${generatedText(status)}。${changes}${laggingRemedy(status)}${reloadable}`,

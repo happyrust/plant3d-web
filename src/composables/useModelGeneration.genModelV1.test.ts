@@ -59,6 +59,7 @@ const purgeKeepsSharedMock = vi.fn((): boolean => false);
 const listNodeVersionsMock = vi.fn();
 const providedChangeQuery = vi.hoisted(() => ({ value: null as unknown }));
 const providedFactsQuery = vi.hoisted(() => ({ value: null as unknown }));
+const providedAncestorsQuery = vi.hoisted(() => ({ value: null as unknown }));
 type GenerationFacts = {
   unitsTotal: number; unitsToGenerate: number; needsConfirm: boolean; thresholdUnits: number; exact: boolean; preferUpdate?: boolean;
 };
@@ -189,6 +190,7 @@ vi.mock('@/composables/useLoadedNodeStatus', () => ({
   markLoadedNodeStale: (...args: unknown[]) => markLoadedNodeStaleMock(...args),
   provideLoadedNodeChangeQuery: (query: unknown) => { providedChangeQuery.value = query; },
   provideLoadedNodeFactsQuery: (query: unknown) => { providedFactsQuery.value = query; },
+  provideLoadedNodeAncestorsQuery: (query: unknown) => { providedAncestorsQuery.value = query; },
 }));
 // 后端的节点模型状态接口（生成预检问它）：缺省回 null = 服务端没有这条路由，走过渡办法（沿树数）；要验接口的用例自己给
 vi.mock('@/composables/nodeModelFacts', () => ({
@@ -1167,6 +1169,18 @@ describe('showModelByRefno 与已加载节点表（方案 2026-11-10 C2）', () 
       { sesno: 745, time: null, unitsChanged: 1 },
     ]);
     expect(listNodeVersionsMock).toHaveBeenCalledWith(1112, '9304_2', 'subtree', { sinceSesno: 738, signal });
+  });
+
+  it('给节点表接上的祖先链查询（后端跑完一批时，找被重新生成的单元在哪些已装节点下面）：问树的祖先链，回自己到根的那一串；没查到回空的', async () => {
+    await import('./useModelGeneration');
+    const query = providedAncestorsQuery.value as (refno: string) => Promise<readonly string[]>;
+    expect(typeof query).toBe('function');
+    treeAncestorsMock.mockResolvedValue({ success: true, refnos: ['24384_47470', '24384_47463', '24384_100'] });
+    expect(await query('24384_47470')).toEqual(['24384_47470', '24384_47463', '24384_100']);
+    expect(treeAncestorsMock).toHaveBeenCalledWith('24384_47470');
+
+    treeAncestorsMock.mockResolvedValue({ success: false, refnos: [], error_message: 'not_found (404)' });
+    expect(await query('24384_47470')).toEqual([]);
   });
 
   it('重载时发现这根已经没有几何（被删了，后端也这么说）：从场景撤下，同时撤表', async () => {

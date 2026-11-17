@@ -6,7 +6,10 @@ import ModelTreeRow from './ModelTreeRow.vue';
 
 import type { FlatRow } from '@/composables/useModelTree';
 
-type NodeView = { verdict: string | null; iconKind: string | null; title: string; action: 'update' | 'update-node' | 'reload' | 'generate' | null; checking: boolean };
+type NodeView = {
+  verdict: string | null; iconKind: string | null; title: string; action: 'update' | 'update-node' | 'reload' | 'generate' | null;
+  actionPending?: boolean; actionHolds?: boolean; checking: boolean;
+};
 
 const dbViewMock = vi.hoisted(() => vi.fn((): { kind: string; title: string } => ({ kind: 'file_ahead', title: 'DB 1112 · 库有 10 个新会话未更新' })));
 const dbRefreshMock = vi.hoisted(() => vi.fn());
@@ -131,14 +134,53 @@ describe('ModelTreeRow 节点一级状态', () => {
     }
   });
 
-  it('节点状态正在重查（库的水位刚变）：动作按钮先禁用，免得按着旧结论再点一次', async () => {
+  it('节点状态正在重查、问的是快的那一半（毫秒级）：动作按钮先禁用，免得按着旧结论再点一次；不出「核对中」', async () => {
     nodeViewMock.mockReturnValue({ ...LAGGING, checking: true });
-    const { action, unmount } = await mountRow(ZONE);
+    const { host, action, unmount } = await mountRow(ZONE);
     try {
       expect(action()?.textContent?.trim()).toBe('更新');
       expect((action() as HTMLButtonElement).disabled).toBe(true);
+      expect(host.querySelector('[data-testid="model-tree-node-action-pending"]')).toBeNull();
     } finally {
       unmount();
+    }
+  });
+
+  it('正在等逐个会话的核对（要十几秒到半分钟）、上一次的动作已经不作数：不留着那颗灰按钮，写「核对中」；图标和提示照上一次的结论画', async () => {
+    nodeViewMock.mockReturnValue({
+      ...LAGGING, action: null, checking: true, actionPending: true, title: `${LAGGING.title}\n（这是上一次的结论，正在重新核对）`,
+    });
+    const { host, status, action, unmount } = await mountRow(ZONE);
+    try {
+      expect(action()).toBeNull();
+      const pending = host.querySelector('[data-testid="model-tree-node-action-pending"]');
+      expect(pending?.tagName).toBe('SPAN');
+      expect(pending?.textContent?.trim()).toBe('核对中');
+      expect(pending?.getAttribute('title')).toContain('答复回来再给动作');
+      expect(status()?.getAttribute('data-node-status')).toBe('lagging');
+      expect(status()?.querySelector('svg')?.getAttribute('class')).toContain('fill-warning');
+      expect(status()?.getAttribute('title')).toContain('（这是上一次的结论，正在重新核对）');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('重查的时候已经知道该重载（库里的模型比本页装的新、改到了它）：「重载」不用等，照样能点；这一行自己在加载时照旧禁用', async () => {
+    nodeViewMock.mockReturnValue({ ...RELOADABLE, checking: true, actionHolds: true });
+    const idle = await mountRow(ZONE);
+    try {
+      expect(idle.action()?.textContent?.trim()).toBe('重载');
+      expect((idle.action() as HTMLButtonElement).disabled).toBe(false);
+      idle.action()!.click();
+      expect(idle.onNodeAction).toHaveBeenCalledWith('17496_8516', 'reload');
+    } finally {
+      idle.unmount();
+    }
+    const loading = await mountRow(ZONE, { loading: true });
+    try {
+      expect((loading.action() as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      loading.unmount();
     }
   });
 
