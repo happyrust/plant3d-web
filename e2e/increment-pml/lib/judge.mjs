@@ -144,14 +144,14 @@ function sameRow(a, b) {
 }
 
 /**
- * W1 不点任何东西，页面自己知道变了：存盘后时限内，受影响的已装节点的行出现预期的信号；不受影响的行不变。
- * 实际用了多久记在 `facts.latencyMs`，不卡线。
+ * W1 不点任何东西，页面自己知道变了：存盘后时限内，受影响的已装节点的行出现预期的信号，而且到点「取最新」之前还在；
+ * 不受影响的行不变。实际用了多久记在 `facts.latencyMs`，不卡线；信号出过又没了的，哪一刻没的记在 `facts.withdrawnMs`。
  *
  * @param {object} input
  * @param {number} input.startAt 存盘完成的时刻（毫秒）
  * @param {number} [input.windowMs] 时限，缺省 180 秒
  * @param {Record<string, RowState>} input.baseline 存盘之前各行的样子
- * @param {{ t: number, rows: Record<string, RowState> }[]} input.samples 存盘之后的采样
+ * @param {{ t: number, rows: Record<string, RowState> }[]} input.samples 存盘之后、点「取最新」之前的采样（行的采样在点之前就停了）
  * @param {Record<string, { nodeStatus?: string[], action?: string[] }>} [input.affected] 受影响的根 → 行上该出现什么（两样都写就都要对上）
  * @param {string[]} [input.unaffected] 不受影响的根
  * @param {{ t: number, what: string }[]} [input.interactions] 这期间在页面上做过的操作
@@ -216,6 +216,28 @@ export function judgeW1(input) {
         message: `${root} 的行过了 ${windowMs / 1000} 秒才出现信号`,
         actual: hit.t - startAt,
         expected: windowMs,
+      });
+    }
+    // 信号出过、点「取最新」之前又没了：页面先知道、后来又不说了（行上的标记撤了，场景还没换）。看的是点之前最后一次定下来的样子：
+    // 中途「核对中」、没了又出来的都不算
+    const settledLater = samples.filter((sample) => {
+      const row = sample.rows.get(root);
+      return sample.t > hit.t && row !== undefined && rowSettled(row);
+    });
+    const last = settledLater.at(-1);
+    if (last && !rowShows(last.rows.get(root), want)) {
+      // 没的那一刻 = 最后这一段没有信号的采样里最早的一次
+      let goneIndex = settledLater.length - 1;
+      while (goneIndex > 0 && !rowShows(settledLater[goneIndex - 1].rows.get(root), want)) goneIndex -= 1;
+      const gone = settledLater[goneIndex];
+      (facts.withdrawnMs ??= {})[root] = gone.t - startAt;
+      problems.push({
+        code: 'signal-withdrawn',
+        message: `${root} 的行出过信号，点取最新之前又没了（存盘后 ${((hit.t - startAt) / 1000).toFixed(1)} 秒出，${((gone.t - startAt) / 1000).toFixed(1)} 秒没）`,
+        actual: rowBrief(last.rows.get(root)),
+        expected: want,
+        shownAtMs: hit.t - startAt,
+        goneAtMs: gone.t - startAt,
       });
     }
   }

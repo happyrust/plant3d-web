@@ -262,6 +262,62 @@ describe('W1 不点任何东西，页面自己知道变了', () => {
     assertFail(judgeW1(input({ affected })), 'no-signal');
   });
 
+  /** 出了「重载」之后接着采到的一次：EQ-A 的行是给的样子，另外两行不变 */
+  const later = (row, ms) => ({ t: T0 + ms, rows: { [EQ_A]: row, [EQ_B]: latest, [PIPE_P]: latest } });
+
+  test('反例：信号出过，点取最新之前又没了（「重载」出来之后变回「最新」）', () => {
+    const samples = [...input().samples, later(reloadable, 50_000), later(latest, 57_000), later(latest, 70_000)];
+    const result = judgeW1(input({ samples }));
+    assertFail(result, 'signal-withdrawn');
+    const problem = problemOf(result, 'signal-withdrawn');
+    assert.equal(problem.shownAtMs, 35_000);
+    assert.equal(problem.goneAtMs, 57_000);
+    assert.deepEqual(problem.actual, { present: true, action: null, nodeStatus: 'latest', pending: false });
+    assert.deepEqual(problem.expected, wantReload);
+    assert.equal(result.facts.latencyMs[EQ_A], 35_000);
+    assert.deepEqual(result.facts.withdrawnMs, { [EQ_A]: 57_000 });
+  });
+
+  test('信号一直留到点之前：过，不记「没了」的时刻', () => {
+    const result = judgeW1(input({ samples: [...input().samples, later(reloadable, 60_000)] }));
+    assertPass(result);
+    assert.equal(result.facts.withdrawnMs, undefined);
+  });
+
+  test('出了信号之后中途核对了一下、没了又出来，点之前还在：过', () => {
+    assertPass(judgeW1(input({ samples: [...input().samples, later(checking, 40_000), later(reloadable, 45_000)] })));
+    assertPass(judgeW1(input({ samples: [...input().samples, later(latest, 40_000), later(reloadable, 45_000)] })));
+  });
+
+  test('最后一次采样还在核对：按最后一次定下来的样子算', () => {
+    assertPass(judgeW1(input({ samples: [...input().samples, later(reloadable, 40_000), later(checking, 45_000)] })));
+    const result = judgeW1(input({ samples: [...input().samples, later(latest, 40_000), later(checking, 45_000)] }));
+    assertFail(result, 'signal-withdrawn');
+    assert.equal(problemOf(result, 'signal-withdrawn').goneAtMs, 40_000);
+  });
+
+  test('反例：没了、又出来、又没了——记最后这一次没的时刻', () => {
+    const samples = [...input().samples, later(latest, 40_000), later(reloadable, 45_000), later(latest, 50_000), later(latest, 55_000)];
+    const result = judgeW1(input({ samples }));
+    assertFail(result, 'signal-withdrawn');
+    assert.equal(problemOf(result, 'signal-withdrawn').goneAtMs, 50_000);
+  });
+
+  test('自动路径：先出「更新」、后端追上之后换成「重载」，两样都在预期里，不算没了', () => {
+    const affected = { [EQ_A]: { nodeStatus: ['lagging', 'reloadable'] } };
+    const samples = [...withRow(EQ_A, [latest, lagging, lagging]), later(reloadable, 50_000)];
+    const result = judgeW1(input({ affected, samples }));
+    assertPass(result);
+    assert.equal(result.facts.latencyMs[EQ_A], 20_000);
+  });
+
+  test('反例：出过信号之后行变成「新旧未知」，点之前没再出来', () => {
+    const unknown = { present: true, action: null, nodeStatus: 'unknown', pending: false };
+    const result = judgeW1(input({ samples: [...input().samples, later(unknown, 50_000)] }));
+    assertFail(result, 'signal-withdrawn');
+    assert.equal(problemOf(result, 'signal-withdrawn').actual.nodeStatus, 'unknown');
+  });
+
   test('反例：没有给要看的行、存盘之前的行状态没采到', () => {
     assertFail(judgeW1(input({ affected: {}, unaffected: [] })), 'nothing-to-judge');
     assertFail(judgeW1(input({ baseline: { [EQ_B]: latest, [PIPE_P]: latest } })), 'no-baseline');
