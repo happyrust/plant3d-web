@@ -21,6 +21,7 @@ import { sleep } from './backend.mjs';
 import { judgeW3, judgeW4, refnoKey, summarize, VERDICT_LABEL } from './judge.mjs';
 import { observeBackend, observePage, runLeg, sceneForJudging, sceneTruth } from './leg.mjs';
 import {
+  cameraChange,
   clickGetWork,
   createGuardedContext,
   expandTree,
@@ -29,6 +30,7 @@ import {
   maskText,
   newPage,
   openApp,
+  readCamera,
   readLoadedLayerCount,
   readTreeTops,
   requestSummary,
@@ -673,6 +675,7 @@ export async function runCase(env, caseDef, caseDir) {
       const legNotes = [];
       let command = null;
       let legResult = null;
+      let cameraBefore = null;
       let levels = null;
       let result;
       const levelWatch = watchLibraries(backend, dbnums);
@@ -716,7 +719,10 @@ export async function runCase(env, caseDef, caseDir) {
             return { savedAt, commandMs: ran.ms, evidence: legResult.evidence ?? null, libraries: legResult.libraries };
           },
           restore: base ? { base, mode: legDef.restoreMode ?? 'identical', rebuiltCount: legDef.rebuiltCount } : undefined,
-          beforeClick: () => shot(`${legDef.id}-1-before-click`),
+          beforeClick: async () => {
+            cameraBefore = await readCamera(page).catch(() => null);
+            await shot(`${legDef.id}-1-before-click`);
+          },
           from,
         });
       } catch (error) {
@@ -729,6 +735,22 @@ export async function runCase(env, caseDef, caseDir) {
       from = result.times.to;
       results[legDef.id] = result;
       await shot(`${legDef.id}-2-after`);
+
+      // 相机：点「取最新」之前和这条腿判完之后各读一次位姿（等它停住再记），只记不判；读不出来就记「不知道」，不连累这条腿
+      const cameraAfter = await readCamera(page).catch(() => null);
+      const cameraDiff = cameraChange(cameraBefore, cameraAfter);
+      const toMm = (value) => (value === null ? null : value * (env.sceneToMm ?? 1000));
+      const camera = {
+        moved: cameraDiff.moved,
+        positionByMm: toMm(cameraDiff.positionBy),
+        targetByMm: toMm(cameraDiff.targetBy),
+        turnedDeg: cameraDiff.turnedDeg,
+        viewDistanceMm: { before: toMm(cameraDiff.viewDistance.before), after: toMm(cameraDiff.viewDistance.after) },
+        fovChanged: cameraDiff.fovChanged,
+        zoomChanged: cameraDiff.zoomChanged,
+        beforeClick: cameraBefore,
+        afterClick: cameraAfter,
+      };
 
       // W4：场景 = 这条腿导出的 E3D
       const judgements = { ...result.judgements };
@@ -807,7 +829,7 @@ export async function runCase(env, caseDef, caseDir) {
         dialogs: log.dialogs.filter(inSpan),
         interactions: log.interactions.filter(inSpan),
       }, 0);
-      writeJson(files.record, { ...result, judgements: ordered, summary, command, legResult, libraryLevels: levels, follow }, 0);
+      writeJson(files.record, { ...result, judgements: ordered, summary, command, legResult, libraryLevels: levels, follow, camera }, 0);
       const legRecord = {
         id: legDef.id,
         title: legDef.title ?? '',
@@ -860,6 +882,7 @@ export async function runCase(env, caseDef, caseDir) {
         truth: truthInfo,
         rootFacts: result.rootFacts,
         requests: result.requests,
+        camera,
         notes: [...result.notes, ...legNotes],
         files,
       };

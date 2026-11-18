@@ -7,8 +7,9 @@
  *
  * 一条用例没跑完（前提没过、腿命令没过、中途出错）就停，后面的用例不跑：副本这时可能不在起点上，接着跑出来的结果不可信。
  *
- * 用法：node e2e/increment-pml/run.mjs --config <运行配置.json> --out <证据目录> [--case K16,K17] [--headed]
- * 退出码：0 跑完了，没有「不过」（已知缺口不算「不过」）；1 跑完了，有「不过」；2 没跑完。
+ * 用法：node e2e/increment-pml/run.mjs --config <运行配置.json> --out <证据目录> [--case K16,K17] [--headed] [--check-config]
+ * `--check-config` 只看运行配置写得对不对（和真跑时开头查的是同一套），不开浏览器、不问后端、不建目录；写得对退出 0。
+ * 退出码：0 跑完了，没有「不过」（已知缺口不算「不过」）；1 跑完了，有「不过」；2 没跑完（参数或运行配置不对也是 2）。
  */
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -47,6 +48,7 @@ const { values: args } = parseArgs({
     out: { type: 'string' },
     case: { type: 'string' },
     headed: { type: 'boolean', default: false },
+    'check-config': { type: 'boolean', default: false },
   },
 });
 if (!args.config) refuse('没给 --config');
@@ -134,6 +136,11 @@ const wanted = args.case ? args.case.split(',').map((id) => id.trim()).filter(Bo
 const unknown = (wanted ?? []).filter((id) => !config.cases.some((item) => item.id === id));
 if (unknown.length > 0) refuse(`--case 里有运行配置没有的用例：${unknown.join('、')}`);
 const selected = wanted ? config.cases.filter((item) => wanted.includes(item.id)) : config.cases;
+
+if (args['check-config']) {
+  console.log(`[网页验收] 运行配置没问题：${selected.length} 条用例（${selected.map((item) => item.id).join('、')}）`);
+  process.exit(0);
+}
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.mkdirSync(cacheDir, { recursive: true });
@@ -259,6 +266,18 @@ function reportMarkdown() {
         for (const hit of judgement.gaps.slice(0, 8)) lines.push(`    - 已知缺口 ${hit.gap}：${hit.message}`);
       }
       for (const note of leg.notes) lines.push(`- 备注：${note}`);
+      if (leg.camera) {
+        const by = (mm) => (mm === null || mm === undefined ? '（没读到）' : `${Math.round(mm)} mm`);
+        const unsettled = [leg.camera.beforeClick, leg.camera.afterClick].some((pose) => pose?.atRest === false) ? '（读的时候相机还没停住，幅度只作参考）' : '';
+        if (leg.camera.moved === null) {
+          lines.push('- 相机（只记不判）：位姿没读到，不知道点「取最新」前后动没动');
+        } else if (leg.camera.moved) {
+          lines.push(`- 相机（只记不判）：点「取最新」前后动了——位置挪了 ${by(leg.camera.positionByMm)}，看向的点挪了 ${by(leg.camera.targetByMm)}，朝向转了 ${leg.camera.turnedDeg.toFixed(2)}°，`
+            + `离看向的点 ${by(leg.camera.viewDistanceMm.before)} → ${by(leg.camera.viewDistanceMm.after)}${unsettled}`);
+        } else {
+          lines.push(`- 相机（只记不判）：点「取最新」前后没动${unsettled}`);
+        }
+      }
       const span = item.legs.indexOf(leg) === 0 ? '从开页面到这条腿判完' : '从上一条腿判完到这条腿判完';
       lines.push(`- ${span}，页面发了 ${leg.requests.total} 条请求：发往 8022 / 8009 的 ${leg.requests.toLive} 条，守卫拦下 ${leg.requests.blocked} 条`);
       lines.push(`- 证据文件：${[leg.files.judgements, leg.files.record, leg.files.requests, ...leg.files.shots].join('、')}`);

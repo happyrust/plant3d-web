@@ -619,6 +619,74 @@ export async function readScene(page, dbnums, { sceneToMm = 1000 } = {}) {
   }, { libs: dbnums, scale: sceneToMm });
 }
 
+/**
+ * 相机的位姿：位置、看向的点（控制器的目标点）、朝向（四元数）、视场角、缩放。位置和目标点是场景自己的单位。
+ * 相机飞过去是一段动画（查看器的 `flyTo` 缺省 800 毫秒），读在半路上幅度就不准：在页面里隔 50 毫秒看一眼，连着 `restMs`
+ * 没动才算停住（`atRest`）；等了 `timeoutMs` 还在动，就记最后看到的那一帧，`atRest` 是 `false`。「没动」允许浮点的零头：
+ * 控制器每帧都把位置重算一遍，静止的相机最后一位也会跳。
+ * 只是记下来看的，不进判定。页面上没有查看器时返回 `null`。
+ */
+export async function readCamera(page, { restMs = 300, timeoutMs = 3000 } = {}) {
+  return page.evaluate(async ({ rest, limit }) => {
+    const viewer = window.__dtxViewer;
+    const camera = viewer?.camera;
+    if (!camera) return null;
+    const pose = () => {
+      const target = viewer.controls?.target ?? null;
+      return {
+        position: [camera.position.x, camera.position.y, camera.position.z],
+        target: target ? [target.x, target.y, target.z] : null,
+        quaternion: [camera.quaternion.x, camera.quaternion.y, camera.quaternion.z, camera.quaternion.w],
+        fov: camera.fov ?? null,
+        zoom: camera.zoom ?? null,
+      };
+    };
+    const numbers = (item) => [...item.position, ...(item.target ?? []), ...item.quaternion, item.fov ?? 0, item.zoom ?? 0];
+    const still = (a, b) => {
+      const from = numbers(a);
+      const to = numbers(b);
+      return from.length === to.length && from.every((value, index) => Math.abs(value - to[index]) <= 1e-9 * Math.max(1, Math.abs(value)));
+    };
+    const startedAt = Date.now();
+    let last = pose();
+    let stillSince = startedAt;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const now = Date.now();
+      const next = pose();
+      if (!still(last, next)) stillSince = now;
+      last = next;
+      const atRest = now - stillSince >= rest;
+      if (atRest || now - startedAt >= limit) return { at: now, ...last, atRest, waitedMs: now - startedAt };
+    }
+  }, { rest: restMs, limit: timeoutMs });
+}
+
+/**
+ * 两次相机位姿差多少：位置、看向的点各挪了多远（场景单位），朝向转了多少度，相机离看向的点前后各多远，视场角、缩放变没变。
+ * 超出舍入误差就算动了。有一次没读到（或者读到的不成形）时 `moved` 是 `null`（不知道），不抛错。
+ */
+export function cameraChange(before, after, { distanceEps = 1e-6, angleEpsDeg = 1e-3 } = {}) {
+  const numbers = (value, length) => Array.isArray(value) && value.length === length && value.every((item) => Number.isFinite(item));
+  const usable = (pose) => !!pose && numbers(pose.position, 3) && numbers(pose.quaternion, 4) && (pose.target === null || numbers(pose.target, 3));
+  if (!usable(before) || !usable(after)) {
+    return { moved: null, positionBy: null, targetBy: null, turnedDeg: null, viewDistance: { before: null, after: null }, fovChanged: null, zoomChanged: null };
+  }
+  const distance = (a, b) => (a && b ? Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) : null);
+  const positionBy = distance(before.position, after.position);
+  const targetBy = distance(before.target, after.target);
+  // q 和 -q 是同一个朝向，所以取点积的绝对值；一模一样时直接算 0（反余弦在 1 附近会带出舍入的零头）
+  const sameTurn = before.quaternion.every((value, index) => value === after.quaternion[index]);
+  const dot = Math.abs(before.quaternion.reduce((sum, value, index) => sum + value * after.quaternion[index], 0));
+  const turnedDeg = sameTurn ? 0 : (2 * Math.acos(Math.min(1, dot)) * 180) / Math.PI;
+  const fovChanged = before.fov !== after.fov;
+  const zoomChanged = before.zoom !== after.zoom;
+  const targetKnown = (before.target === null) === (after.target === null);
+  const moved = positionBy > distanceEps || (targetBy ?? 0) > distanceEps || !targetKnown || turnedDeg > angleEpsDeg || fovChanged || zoomChanged;
+  const viewDistance = { before: distance(before.position, before.target), after: distance(after.position, after.target) };
+  return { moved, positionBy, targetBy, turnedDeg, viewDistance, fovChanged, zoomChanged };
+}
+
 /** 页面自己的账：各根名下装了哪些构件、已加载节点表、取最新的登记表和上一次的回执、弹过的提示 */
 export async function readPageState(page, roots) {
   return page.evaluate(async (wanted) => {
