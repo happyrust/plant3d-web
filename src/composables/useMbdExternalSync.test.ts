@@ -1181,7 +1181,7 @@ describe('createMbdExternalSync', () => {
           data: contractPayload({
             input_refno: refno,
             branch_refno: refno,
-            annotation_type: refno === '17496_108516' ? 'ArchitectureWindow' : 'PipingIsometric',
+            annotation_type: refno === '17496_108516' ? 'arch' : 'em4_pipe',
           }),
           diagnostics: [],
         };

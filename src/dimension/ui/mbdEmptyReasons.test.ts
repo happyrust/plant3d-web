@@ -153,6 +153,7 @@ function snapshot(sources: readonly MbdDiagnosticsSourceSnapshot[]): MbdDiagnost
     isolines: [],
     loadError: null,
     sources,
+    deferredRefnos: [],
   };
 }
 
