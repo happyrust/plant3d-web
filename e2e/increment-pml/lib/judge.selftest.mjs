@@ -16,6 +16,7 @@ import {
   judgeW6,
   judgeW7,
   loadKnownGaps,
+  rebuiltLayersToOpen,
   refnoKey,
   summarize,
 } from './judge.mjs';
@@ -1068,6 +1069,108 @@ describe('W7 还原之后回到原样', () => {
     assertFail(result, 'tree-children');
     assert.equal(problemOf(result, 'tree-children').actual.length, 3);
     assert.equal(problemOf(result, 'tree-children').expected.length, 2);
+  });
+
+  describe('重建类：建回来的节点在树上是新的一行，比之前要先展开', () => {
+    const M1 = '24384_30031';
+    const M2 = '24384_30032';
+    const T1 = '24384_30033';
+    const NEW_BRAN = '24384_39010';
+    const NEW_M1 = '24384_39011';
+    const NEW_M2 = '24384_39012';
+    const NEW_T1 = '24384_39013';
+
+    /** apply 之前：支管展开着，下面两个成员 */
+    const treeWithMembers = () => {
+      const tree = treeAtStart();
+      tree[BRAN_S].childrenIds = [M1, M2];
+      tree[M1] = { name: '/AIOS-SUITE-BRAN-S-M1', type: 'FTUB', parentId: BRAN_S, childrenIds: null };
+      tree[M2] = { name: '=24384/30032', type: 'BEND', parentId: BRAN_S, childrenIds: null };
+      return tree;
+    };
+
+    /** 还原之后：支管整条删了再建，新的那一行还没展开 */
+    const treeRebuiltClosed = () => {
+      const tree = treeAtStart();
+      delete tree[BRAN_S];
+      tree[NEW_BRAN] = { name: '/AIOS-SUITE-BRAN-S', type: 'BRAN', parentId: PIPE_P, childrenIds: null };
+      tree[PIPE_P].childrenIds = [NEW_BRAN];
+      return tree;
+    };
+
+    /** 把新的那一行展开之后 */
+    const treeRebuiltOpen = () => {
+      const tree = treeRebuiltClosed();
+      tree[NEW_BRAN].childrenIds = [NEW_M1, NEW_M2];
+      tree[NEW_M1] = { name: '/AIOS-SUITE-BRAN-S-M1', type: 'FTUB', parentId: NEW_BRAN, childrenIds: null };
+      tree[NEW_M2] = { name: '=24384/39012', type: 'BEND', parentId: NEW_BRAN, childrenIds: null };
+      return tree;
+    };
+
+    const rebuiltBranch = (overrides = {}) => input({ mode: 'rebuild', treeBefore: treeWithMembers(), ...overrides });
+
+    test('没展开：要展开的就是新的那一行；不展开就比，判不过（其实只是页面还没问）', () => {
+      assert.deepEqual(rebuiltLayersToOpen(treeWithMembers(), treeRebuiltClosed()), [NEW_BRAN]);
+      const result = judgeW7(rebuiltBranch({ treeAfter: treeRebuiltClosed() }));
+      assertFail(result, 'tree-children');
+      assert.equal(problemOf(result, 'tree-children').actual.length, 0);
+      assert.equal(problemOf(result, 'tree-children').expected.length, 2);
+      assert.equal(result.facts.openedForCompare, undefined);
+    });
+
+    test('展开之后：没有要再展开的，逐行对得上，算回到原样；展开过的行记在事实里', () => {
+      assert.deepEqual(rebuiltLayersToOpen(treeWithMembers(), treeRebuiltOpen()), []);
+      const result = judgeW7(rebuiltBranch({ treeAfter: treeRebuiltOpen(), openedForCompare: [NEW_BRAN] }));
+      assertPass(result);
+      assert.deepEqual(result.facts.openedForCompare, [NEW_BRAN]);
+      assert.deepEqual(
+        result.facts.refnoChanges.tree.map((item) => [item.before, item.after]),
+        [[BRAN_S, NEW_BRAN], [M1, NEW_M1], [M2, NEW_M2]],
+      );
+    });
+
+    test('反例：展开之后成员少一个、次序换了，照样判不过', () => {
+      const fewer = treeRebuiltOpen();
+      delete fewer[NEW_M2];
+      fewer[NEW_BRAN].childrenIds = [NEW_M1];
+      assertFail(judgeW7(rebuiltBranch({ treeAfter: fewer })), 'tree-children');
+
+      const swapped = treeRebuiltOpen();
+      swapped[NEW_BRAN].childrenIds = [NEW_M2, NEW_M1];
+      const result = judgeW7(rebuiltBranch({ treeAfter: swapped }));
+      assertFail(result, 'tree-retyped');
+      assert.ok(codes(result).includes('tree-renamed'));
+    });
+
+    test('参考号没换的行不替它展开：原来取过的那一层现在没了，照实判不过', () => {
+      const closed = treeWithMembers();
+      closed[BRAN_S].childrenIds = null;
+      delete closed[M1];
+      delete closed[M2];
+      assert.deepEqual(rebuiltLayersToOpen(treeWithMembers(), closed), []);
+      assertFail(judgeW7(rebuiltBranch({ treeAfter: closed })), 'tree-children');
+    });
+
+    test('apply 之前就没展开的行不展开；成员个数对不上的地方不往下走', () => {
+      assert.deepEqual(rebuiltLayersToOpen(treeAtStart(), treeRebuiltClosed()), []);
+      const more = treeRebuiltClosed();
+      more['24384_39020'] = { name: '/EXTRA', type: 'BRAN', parentId: PIPE_P, childrenIds: null };
+      more[PIPE_P].childrenIds = [NEW_BRAN, '24384_39020'];
+      assert.deepEqual(rebuiltLayersToOpen(treeWithMembers(), more), []);
+    });
+
+    test('逐层：上一层展开了，才看得到下一层里要展开的', () => {
+      const before = treeWithMembers();
+      before[M1].childrenIds = [T1];
+      before[T1] = { name: '/AIOS-SUITE-TAP', type: 'ATTA', parentId: M1, childrenIds: null };
+      assert.deepEqual(rebuiltLayersToOpen(before, treeRebuiltClosed()), [NEW_BRAN]);
+      assert.deepEqual(rebuiltLayersToOpen(before, treeRebuiltOpen()), [NEW_M1]);
+      const deeper = treeRebuiltOpen();
+      deeper[NEW_M1].childrenIds = [NEW_T1];
+      deeper[NEW_T1] = { name: '/AIOS-SUITE-TAP', type: 'ATTA', parentId: NEW_M1, childrenIds: null };
+      assert.deepEqual(rebuiltLayersToOpen(before, deeper), []);
+      assertPass(judgeW7(input({ mode: 'rebuild', treeBefore: before, treeAfter: deeper, openedForCompare: [NEW_BRAN, NEW_M1] })));
+    });
   });
 
   describe('行、眼睛和场景', () => {

@@ -1,16 +1,28 @@
 /**
  * 一条腿的流程：存盘之前记一遍（页面的行、场景、树，后端的记录、水位、层）→ 把要看的行摆好、开始采样 → 存盘 →
  * 不碰页面，等行上的信号 → 等后端跟上 → 按后端前后的差算回执的预期 → 点一次「取最新」→ 再记一遍 → 判 W1–W3、W5、W6
- * （还原的腿再判 W7）。
+ * （还原的腿再判 W7；重建类的还原在判 W7 之前先把建回来的行展开，见 `openRebuiltLayers`）。
  *
  * 存盘这一步由调用方给（在 E3D 里跑宏，或者回放一个录好的会话），其余各腿走同一份代码。W4（场景 = E3D）要 E3D 的导出，不在这里。
  */
 import { expectedModels, expectedTree, sleep } from './backend.mjs';
-import { judgeW1, judgeW2, judgeW3, judgeW5, judgeW6, judgeW7, refnoKey, SIGNAL_WINDOW_MS, summarize } from './judge.mjs';
+import {
+  judgeW1,
+  judgeW2,
+  judgeW3,
+  judgeW5,
+  judgeW6,
+  judgeW7,
+  rebuiltLayersToOpen,
+  refnoKey,
+  SIGNAL_WINDOW_MS,
+  summarize,
+} from './judge.mjs';
 import {
   arrangeRows,
   cleanlinessInput,
   clickGetWork,
+  expandTree,
   fetchedLayers,
   layerCounts,
   readPageState,
@@ -27,6 +39,8 @@ import {
 
 const CATCH_UP_MS = 240_000;
 const SETTLE_MS = 5000;
+/** 重建类还原比树之前最多往下展开几层 */
+const REBUILT_OPEN_ROUNDS = 8;
 const NOTHING = Object.freeze({ complete: true, components: {} });
 
 /** 页面此刻的样子：页面自己的账、场景里的对象、模型树 */
@@ -82,6 +96,24 @@ export function sceneTruth(sceneSide, backendSide, rootIds) {
     scene: { ...sceneSide.byRoot, ...sceneSide.extra },
     backend,
   };
+}
+
+/**
+ * 重建类的还原比树之前：删了再建出来的节点在页面的树上是新的一行，成员那一层页面还没取过。apply 之前展开着的那几行
+ * 对应到现在的新行，由脚本逐层展开（一层展开了才看得到下一层），回来的是展开之后的树和展开过的行。
+ * 展开了还是取不到成员的行不再重试，留给 W7 照实判。
+ */
+export async function openRebuiltLayers(ctx, treeBefore, treeAfter) {
+  const opened = [];
+  let tree = treeAfter;
+  for (let round = 0; round < REBUILT_OPEN_ROUNDS; round++) {
+    const ids = rebuiltLayersToOpen(treeBefore, tree).filter((id) => !opened.includes(id));
+    if (ids.length === 0) break;
+    await expandTree(ctx.page, ctx.log, ids);
+    opened.push(...ids);
+    tree = await readTree(ctx.page);
+  }
+  return { tree, opened };
 }
 
 /** 采样记录压成每一行的变化过程：行 → 变了的那几笔（`atMs` 从存盘完成算起，负的是存盘之前）。给报告看的 */
@@ -237,6 +269,15 @@ export async function runLeg(ctx, leg) {
   if (JSON.stringify(librariesAtEnd) !== JSON.stringify(backendAfter.libraries)) {
     notes.push('点取最新的这一会儿后端的库水位又动了：预期是按点之前的样子算的');
   }
+  // 重建类的还原：比树之前先把建回来的行展开。展开之后的树只给 W7 用——W2、W5 看的是点完取最新那一刻的树，
+  // 这里新取的行不算进去；W6 的时段把这几次展开也盖住
+  let restoreTree = null;
+  if (leg.restore?.mode === 'rebuild') {
+    restoreTree = await openRebuiltLayers(ctx, leg.restore.base.before.page.tree, pageAfter.tree);
+    if (restoreTree.opened.length > 0) {
+      notes.push(`重建类的还原：建回来的节点在树上是新的一行、收着，比树之前由脚本展开了 ${restoreTree.opened.length} 行（${restoreTree.opened.join('、')}）`);
+    }
+  }
   times.to = Date.now();
 
   // 判
@@ -279,10 +320,11 @@ export async function runLeg(ctx, leg) {
       mode: leg.restore.mode ?? 'identical',
       roots: base.rootIds,
       treeBefore: base.before.page.tree,
-      treeAfter: pageAfter.tree,
+      treeAfter: restoreTree ? restoreTree.tree : pageAfter.tree,
       sceneBefore: base.before.scene.byRoot,
       sceneAfter: sceneAfter.byRoot,
       rebuiltCount: leg.restore.rebuiltCount,
+      openedForCompare: restoreTree ? restoreTree.opened : undefined,
       rowsBefore: base.before.rows,
       rowsAfter,
       loadedTableAfter: pageAfter.state.loadedTable.filter((entry) => entry.loaded).map((entry) => entry.refno),
@@ -316,7 +358,15 @@ export async function runLeg(ctx, leg) {
     expected: { ...expected, unchanged: models.unchanged, detail: models.detail },
     click: { clickedAt: click.clickedAt, ms: click.ms },
     receipt,
-    after: { rows: rowsAfter, page: pageAfter, backend: backendAfter, scene: sceneAfter, librariesAtEnd },
+    after: {
+      rows: rowsAfter,
+      page: pageAfter,
+      backend: backendAfter,
+      scene: sceneAfter,
+      librariesAtEnd,
+      // 重建类的还原：W7 比的是这份展开之后的树（`page.tree` 是展开之前的）
+      ...(restoreTree ? { restoreTree } : {}),
+    },
     judgements,
     summary: summarize(Object.values(judgements)),
     requests: requestSummary(log, { from: times.from, to: times.to }),

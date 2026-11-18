@@ -1269,6 +1269,14 @@ function stableName(name, id) {
   return name.replaceAll(`${a}/${b}`, '<refno>').replaceAll(`${a}_${b}`, '<refno>');
 }
 
+/** 树里没有上级（或者上级不在这份树里）的那几行，按参考号排好 */
+function treeTops(tree) {
+  return [...tree.keys()].filter((id) => {
+    const parent = tree.get(id).parentId;
+    return parent === null || !tree.has(parent);
+  }).sort();
+}
+
 /**
  * 重建类的还原：删掉的元素建回来之后参考号是新的，树不能按参考号比。从顶层往下，按成员次序逐个对，比类型和名字；
  * 参考号换了的记下来，不算错。
@@ -1276,12 +1284,8 @@ function stableName(name, id) {
 function alignRebuiltTree(before, after) {
   const problems = [];
   const refnoChanges = [];
-  const topsOf = (tree) => [...tree.keys()].filter((id) => {
-    const parent = tree.get(id).parentId;
-    return parent === null || !tree.has(parent);
-  }).sort();
-  const topsBefore = topsOf(before);
-  const topDiff = setDiff(topsOf(after), topsBefore);
+  const topsBefore = treeTops(before);
+  const topDiff = setDiff(treeTops(after), topsBefore);
   if (topDiff.extra.length > 0 || topDiff.missing.length > 0) {
     problems.push({
       code: 'tree-top',
@@ -1319,6 +1323,38 @@ function alignRebuiltTree(before, after) {
     if (after.has(id)) walk(id, id, '');
   }
   return { problems, refnoChanges };
+}
+
+/**
+ * 重建类的还原在比树之前要先展开哪几行：apply 之前取过成员那一层、还原之后换了参考号又还没展开过的节点。
+ * 删了再建出来的节点在页面的树上是新的一行，它的成员那一层页面还没取过；不先展开，比出来的差别只是「页面还没问」。
+ * 对法和 `alignRebuiltTree` 一样（从顶层往下按成员次序）。参考号没换的节点不在此列：它那一层原来取过、现在没了，照实判。
+ *
+ * @param {Tree} treeBefore apply 之前的页面树
+ * @param {Tree} treeAfter 还原并取最新之后的页面树
+ * @returns {string[]} 还原之后那份树里要展开的节点
+ */
+export function rebuiltLayersToOpen(treeBefore, treeAfter) {
+  const before = normalizeTree(treeBefore);
+  const after = normalizeTree(treeAfter);
+  const open = [];
+  const walk = (beforeId, afterId) => {
+    const was = before.get(beforeId);
+    const now = after.get(afterId);
+    if (!was.childrenIds) return;
+    if (!now.childrenIds) {
+      if (beforeId !== afterId) open.push(afterId);
+      return;
+    }
+    const kidsBefore = was.childrenIds.filter((id) => before.has(id));
+    const kidsAfter = now.childrenIds.filter((id) => after.has(id));
+    if (kidsBefore.length !== kidsAfter.length) return;
+    kidsBefore.forEach((kid, index) => walk(kid, kidsAfter[index]));
+  };
+  for (const id of treeTops(before)) {
+    if (after.has(id)) walk(id, id);
+  }
+  return open;
 }
 
 /** 重建类的还原：参考号没换的构件照常逐个比；只在一边有的，按几何找对应（建回来的构件该在原处） */
@@ -1396,6 +1432,8 @@ function judgeRowsAgainstScene(rows, scene, loadedTable, rootsInfo, options, pro
  * - `identical`（属性类的还原）：树按参考号逐行相同，场景按参考号逐个构件相同。
  * - `rebuild`（删了再建的还原）：建回来的元素参考号是新的，树按成员次序 + 类型 + 名字比，场景里换了参考号的构件按几何找对应；
  *   换了的参考号记在 `facts.refnoChanges`，不算错。给了 `rebuiltCount` 就要求场景里换了参考号的构件正好这么多。
+ *   建回来的节点在树上是新的一行、还没展开过：调用方先按 `rebuiltLayersToOpen` 把它们展开，再把展开之后的树交进来，
+ *   展开过哪几行用 `openedForCompare` 报上来，记在 `facts.openedForCompare`。
  *
  * 给了行状态就顺带比：前后都有的根，行和眼睛要一样；名下没有对象的根，眼睛不该亮。
  *
@@ -1407,6 +1445,7 @@ function judgeRowsAgainstScene(rows, scene, loadedTable, rootsInfo, options, pro
  * @param {SceneByRoot} input.sceneBefore
  * @param {SceneByRoot} input.sceneAfter
  * @param {number} [input.rebuiltCount]
+ * @param {string[]} [input.openedForCompare] 比树之前由脚本展开过的行（重建类）
  * @param {Record<string, RowState>} [input.rowsBefore]
  * @param {Record<string, RowState>} [input.rowsAfter]
  * @param {string[]} [input.loadedTableAfter] 还原之后已加载节点表里的根
@@ -1423,6 +1462,7 @@ export function judgeW7(input, options = {}) {
   const problems = [];
   const gaps = [];
   const facts = { mode, roots: roots.length, objects: 0, maxPositionMm: 0, refnoChanges: { tree: [], scene: [] }, tolerance };
+  if (input.openedForCompare) facts.openedForCompare = keyList(input.openedForCompare);
 
   if (!input.treeBefore || !input.treeAfter) {
     problems.push({ code: 'no-tree', message: '没有前后两份模型树', actual: null, expected: '前后两份模型树' });
