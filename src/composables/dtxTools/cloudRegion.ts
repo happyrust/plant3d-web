@@ -123,6 +123,7 @@ export type CloudOverlayEl = {
   /** 目标合并 AABB 的解析缓存，见 resolveCloudTargetBbox */
   targetBbox: { min: Vec3; max: Vec3 } | null
   targetBboxAt: number
+  targetBboxRevision?: number
   render: CloudRenderCache
   /** ADR-0050 视口降级：本条记录的 missing / stale 态；null = 正常 */
   degrade: AnnotationDegrade | null

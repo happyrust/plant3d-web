@@ -526,6 +526,52 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.evictDtxRefnos(dtxLayer, dbno, [removed])).toEqual([]);
   });
 
+  it('replaceExistingObjects：构件平移 300mm 重载后刷新 refnoTransform 与实例指纹，未变动构件重载前后指纹严格一致', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99018;
+    const moved = '24382_1913';
+    const steady = '24382_1920';
+    const makeMoved = (tz: number) => ({
+      geo_hash: '1',
+      matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, tz, 1],
+      refno_transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, tz, 1],
+      uniforms: { refno: moved, noun: 'EQUI' },
+    });
+    const steadyEntry = {
+      geo_hash: '1',
+      matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 20, 30, 1],
+      refno_transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 20, 30, 1],
+      uniforms: { refno: steady, noun: 'EQUI' },
+    };
+    recordSourceMocks.instanceEntriesByRefnos
+      .mockResolvedValueOnce(new Map([[moved, [makeMoved(0)]], [steady, [steadyEntry]]]))
+      .mockResolvedValueOnce(new Map([[moved, [makeMoved(0.3)]], [steady, [steadyEntry]]]));
+
+    const dtxLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [moved, steady], { dataSource: 'gen-model-v1' });
+    const oldMovedId = mod.resolveDtxObjectIdsByRefno(dbno, moved)[0]!;
+    const sigMovedBefore = mod.getDtxRefnoInstanceSignatureAcrossAllDbnos(moved);
+    const sigSteadyBefore = mod.getDtxRefnoInstanceSignatureAcrossAllDbnos(steady);
+    expect(mod.getDtxRefnoTransform(dbno, moved)?.[14]).toBe(0);
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [moved, steady], {
+      dataSource: 'gen-model-v1',
+      forceReloadRefnos: [moved, steady],
+      replaceExistingObjects: true,
+    });
+
+    const newMovedId = mod.resolveDtxObjectIdsByRefno(dbno, moved)[0]!;
+    expect(newMovedId).not.toBe(oldMovedId);
+    expect(dtxLayer.hasObject(oldMovedId)).toBe(false);
+    expect(mod.getDtxRefnoTransform(dbno, moved)?.[14]).toBeCloseTo(0.3, 4);
+    expect(mod.getDtxRefnoInstanceSignatureAcrossAllDbnos(moved)).not.toBe(sigMovedBefore);
+    expect(mod.getDtxRefnoInstanceSignatureAcrossAllDbnos(steady)).toBe(sigSteadyBefore);
+
+    mod.evictDtxRefnos(dtxLayer, dbno, [moved], { release: true });
+    expect(mod.getDtxRefnoInstanceSignatureAcrossAllDbnos(moved)).toBeNull();
+  });
+
   it('替换所需几何加载失败时保留旧对象可见', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');

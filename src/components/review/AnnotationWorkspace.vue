@@ -30,6 +30,23 @@ import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 import type { AnnotationType } from '@/composables/useToolStore';
 import type { AnnotationSeverity } from '@/types/auth';
 
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
+
+const bindingResolve = useAnnotationBindingResolve();
+
+function workspaceBindingBadge(item: Pick<AnnotationWorkspaceItem, 'type' | 'id'>): {
+  label: string;
+  tone: string;
+  title: string;
+} | null {
+  void bindingResolve.entries?.value;
+  const degrade = bindingResolve.getRecordDegrade?.(item.type, item.id);
+  if (!degrade) return null;
+  return degrade.state === 'missing'
+    ? { label: '绑定构件已缺失', tone: 'border-rose-200 bg-rose-50 text-rose-700', title: degrade.title }
+    : { label: '绑定位置已失效', tone: 'border-amber-200 bg-amber-50 text-amber-700', title: degrade.title };
+}
+
 type AnnotationWorkspaceDensity = 'normal' | 'dock';
 
 export type AnnotationWorkspaceTextCollapseMode = 'collapse-all' | 'expand-all' | 'expand-selected';
@@ -451,6 +468,13 @@ watch(
                   </span>
                   <span class="rounded-full border px-2 py-0.5 text-[11px] font-semibold" :class="item.priorityTone">
                     {{ item.priorityLabel }}
+                  </span>
+                  <span v-if="workspaceBindingBadge(item)"
+                    class="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                    :class="workspaceBindingBadge(item)!.tone"
+                    :title="workspaceBindingBadge(item)!.title"
+                    :data-testid="`annotation-workspace-binding-badge-${item.id}`">
+                    {{ workspaceBindingBadge(item)!.label }}
                   </span>
                 </div>
                 <div class="mt-2 truncate text-sm font-semibold text-slate-950">{{ item.title }}</div>

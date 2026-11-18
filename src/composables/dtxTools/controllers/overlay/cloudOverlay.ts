@@ -229,19 +229,26 @@ export function createCloudOverlay(ctx: DtxToolsContext, deps: CloudOverlayDeps)
    */
   function resolveCloudTargetBbox(cloud: CloudOverlayEl): { min: Vec3; max: Vec3 } | null {
     const now = Date.now();
-    // 用时间戳而不是「有没有结果」判缓存：解析失败（目标未加载）同样要冷却，
-    // 否则一批未加载目标的云线会每帧各查一次 AABB。
-    if (cloud.targetBboxAt > 0 && now - cloud.targetBboxAt < CLOUD_TARGET_BBOX_TTL_MS) {
+    const revision = dtxLoaderRevision.value;
+    // 用时间戳 + 模型装载修订号判缓存：模型刚重载/撤下（dtxLoaderRevision 变化）时当帧重算，不保留旧包围盒；
+    // 修订号没变时走 TTL 冷却，避免未加载目标每帧各查一次 AABB。
+    if (
+      cloud.targetBboxAt > 0
+      && cloud.targetBboxRevision === revision
+      && now - cloud.targetBboxAt < CLOUD_TARGET_BBOX_TTL_MS
+    ) {
       return cloud.targetBbox;
     }
     const refnos = getCloudMemberRefnos(cloud.record);
-    const live = refnos.length > 0
-      ? ctx.compatViewerRef.value?.scene.getAABB(refnos) ?? null
+    const scene = ctx.compatViewerRef.value?.scene;
+    const live = refnos.length > 0 && scene
+      ? (scene.getSubtreeAABB?.(refnos) ?? scene.getAABB(refnos) ?? null)
       : null;
     cloud.targetBbox = live
       ? { min: [live[0], live[1], live[2]], max: [live[3], live[4], live[5]] }
       : cloud.record.selectionBbox ?? null;
     cloud.targetBboxAt = now;
+    cloud.targetBboxRevision = revision;
     return cloud.targetBbox;
   }
 

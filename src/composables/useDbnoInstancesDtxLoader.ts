@@ -103,6 +103,8 @@ type DbnoRuntimeCache = {
   refnoToObjectIds: Map<string, string[]>
   objectIdToRefno: Map<string, string>
   objectIdToSpecValue: Map<string, number | null>
+  /** 每个对象槽对应的几何 hash + 实例矩阵指纹（不含自增 objectCounter），供取最新比对构件是否真发生了位移或几何重算 */
+  objectIdToInstanceSig: Map<string, string>
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
   refnoToOwnerNoun: Map<string, string>
@@ -587,7 +589,20 @@ function refnoKeyCandidates(refno: string): string[] {
   return [...out].filter(Boolean);
 }
 
-/** 跨库：该 refno 的几何是否已装进场景（任一 dbno 缓存的 loadedRefnos 命中）。 */
+function formatMatrixNumber(value: number): string {
+  const rounded = Math.abs(value) < 1e-7 ? 0 : Math.round(value * 1e4) / 1e4;
+  return String(rounded);
+}
+
+function formatDtxInstanceSignature(geoHash: string, matrixElements: ArrayLike<number>): string {
+  const nums: string[] = [];
+  for (let i = 0; i < 16; i += 1) {
+    nums.push(formatMatrixNumber(Number(matrixElements[i] ?? 0)));
+  }
+  return `${geoHash}:${nums.join(',')}`;
+}
+
+/** 跨库：该 refno（或其名下成员，针对 EQUI / BRAN 等单元键）的几何是否已装进场景。 */
 export function isDtxRefnoLoadedAcrossAllDbnos(refno: string): boolean {
   const keys = refnoKeyCandidates(refno);
   if (keys.length === 0) return false;
@@ -595,8 +610,41 @@ export function isDtxRefnoLoadedAcrossAllDbnos(refno: string): boolean {
     for (const key of keys) {
       if (cache.loadedRefnos.has(key)) return true;
     }
+    for (const key of keys) {
+      for (const [leaf, ids] of cache.refnoToObjectIds) {
+        if (ids.length > 0 && isUnderUnit(cache, leaf, key)) return true;
+      }
+    }
   }
   return false;
+}
+
+/**
+ * 跨库：提取构件（含单元名下已装子件）的实时几何 + 实例变换指纹；场景中无其对象时回 `null`。
+ * 指纹不带自增 `objectId`，因此同一构件在「取最新」整库重载后若位置与几何均未变化，前后指纹严格相等。
+ */
+export function getDtxRefnoInstanceSignatureAcrossAllDbnos(refno: string): string | null {
+  const keys = refnoKeyCandidates(refno);
+  if (keys.length === 0) return null;
+  const parts: string[] = [];
+  for (const cache of cachesByDbno.values()) {
+    const matchedLeaves = new Set<string>();
+    for (const key of keys) {
+      for (const [leaf, ids] of cache.refnoToObjectIds) {
+        if (ids.length === 0 || matchedLeaves.has(leaf)) continue;
+        if (leaf === key || isUnderUnit(cache, leaf, key)) {
+          matchedLeaves.add(leaf);
+          for (const objectId of ids) {
+            const sig = cache.objectIdToInstanceSig?.get(objectId) ?? objectId;
+            parts.push(`${leaf}@${sig}`);
+          }
+        }
+      }
+    }
+  }
+  if (parts.length === 0) return null;
+  parts.sort();
+  return parts.join('|');
 }
 
 /** 跨库：运行时索引是否认识该 refno（noun 已登记），与几何是否加载无关。 */
@@ -637,6 +685,7 @@ function createRuntimeCache(): DbnoRuntimeCache {
     refnoToObjectIds: new Map(),
     objectIdToRefno: new Map(),
     objectIdToSpecValue: new Map(),
+    objectIdToInstanceSig: new Map(),
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
     refnoToOwnerNoun: new Map(),
@@ -654,6 +703,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
   const existing = cachesByDbno.get(dbno);
   if (existing) {
     if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map();
+    if (!existing.objectIdToInstanceSig) existing.objectIdToInstanceSig = new Map();
     if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
     if (!existing.failedGeoHash) existing.failedGeoHash = new Set();
     if (!existing.invalidTubiObjectIds) existing.invalidTubiObjectIds = new Set();
@@ -1180,6 +1230,7 @@ export function evictDtxRefnos(
       // 按对象记的索引：对象已经不显示，留着会让 noun 计数、属性值与直管候选继续把旧对象算进去
       cache.objectIdToRefno.delete(objectId);
       cache.objectIdToSpecValue.delete(objectId);
+      cache.objectIdToInstanceSig.delete(objectId);
       cache.invalidTubiObjectIds.delete(objectId);
       cache.tubiObjectIds.delete(objectId);
     }
@@ -1491,6 +1542,7 @@ export function loadDtxAabbProxyRefnos(
     }
     cache.objectIdToRefno.set(objectId, refno);
     cache.objectIdToSpecValue.set(objectId, parseSpecValue(entry.specValue));
+    cache.objectIdToInstanceSig.set(objectId, formatDtxInstanceSignature(AABB_PROXY_GEO_HASH, matrix.elements));
     cache.refnoTransform.set(refno, matrix.toArray());
     cache.refnoToNoun.set(refno, normalizeNounKey(entry.noun || '') || 'AABB_PROXY');
     if (!cache.refnoToSpecValue.has(refno)) {
@@ -1700,6 +1752,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       ),
       objectIdToRefno: new Map(cache.objectIdToRefno),
       objectIdToSpecValue: new Map(cache.objectIdToSpecValue),
+      objectIdToInstanceSig: new Map(cache.objectIdToInstanceSig),
       refnoTransform: new Map(
         [...cache.refnoTransform].map(([refno, transform]) => [refno, [...transform]]),
       ),
@@ -1723,6 +1776,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     if (!cache.loadedRefnos.has(key)) newlyLoadedKeys.add(key);
     cache.loadedRefnos.add(key);
   };
+  /** 本次重载已写入最新变换的键（跨属主映射如 TUBI → BRAN 时也刷新旧变换，但不被同批后续实例覆盖首条） */
+  const refreshedTransformKeys = new Set<string>();
   if (replaceExistingObjects) {
     for (const refno of toLoad) {
       const previousObjectIds = cache.refnoToObjectIds.get(refno) ?? [];
@@ -1740,6 +1795,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.refnoToObjectIds.set(refno, []);
       cache.loadedRefnos.delete(refno);
       cache.refnoLoadSource.delete(refno);
+      cache.refnoTransform.delete(refno);
     }
   }
 
@@ -1862,6 +1918,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         objectIdsByMappedRefno.set(mappedRefnoKey, mappedObjectIds);
         cache.objectIdToRefno.set(objectId, mappedRefnoKey);
         cache.objectIdToSpecValue.set(objectId, specValue);
+        cache.objectIdToInstanceSig.set(objectId, formatDtxInstanceSignature(geoHash, matrix.elements));
         if (invalidTubi) {
           cache.invalidTubiObjectIds.add(objectId);
           invalidTubiObjects++;
@@ -1892,8 +1949,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         if (Array.isArray(refnoTransform) && refnoTransform.length === 16) {
         // 检查 refnoTransform 数组中是否包含 null 或 undefined
           const hasInvalidValue = refnoTransform.some((v: any) => v === null || v === undefined || typeof v !== 'number');
-          if (!hasInvalidValue && !cache.refnoTransform.has(mappedRefnoKey)) {
+          if (!hasInvalidValue && (!cache.refnoTransform.has(mappedRefnoKey) || (replaceExistingObjects && !refreshedTransformKeys.has(mappedRefnoKey)))) {
             cache.refnoTransform.set(mappedRefnoKey, refnoTransform as number[]);
+            refreshedTransformKeys.add(mappedRefnoKey);
           }
         }
         if (noun && !cache.refnoToNoun.has(mappedRefnoKey)) {
@@ -1962,6 +2020,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.refnoToObjectIds = replacementSnapshot.refnoToObjectIds;
       cache.objectIdToRefno = replacementSnapshot.objectIdToRefno;
       cache.objectIdToSpecValue = replacementSnapshot.objectIdToSpecValue;
+      cache.objectIdToInstanceSig = replacementSnapshot.objectIdToInstanceSig;
       cache.refnoTransform = replacementSnapshot.refnoTransform;
       cache.refnoToNoun = replacementSnapshot.refnoToNoun;
       cache.refnoToOwnerNoun = replacementSnapshot.refnoToOwnerNoun;
@@ -1989,6 +2048,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     for (const objectId of replacedObjectIds) {
       cache.objectIdToRefno.delete(objectId);
       cache.objectIdToSpecValue.delete(objectId);
+      cache.objectIdToInstanceSig.delete(objectId);
       cache.invalidTubiObjectIds.delete(objectId);
       cache.tubiObjectIds.delete(objectId);
     }

@@ -372,6 +372,9 @@ function selectAnnotation(item: AnnotationWorkspaceItem | null) {
   selectedAnnotationId.value = item?.id ?? null;
   selectedAnnotationType.value = item?.type ?? null;
   setActiveAnnotation(item?.type ?? null, item?.id ?? null);
+  if (item && bindingResolve.getRecordDegrade?.(item.type, item.id)?.state === 'missing') {
+    emitToast({ message: '构件在当前模型中已不存在，批注记录已保留', level: 'warning' });
+  }
 }
 
 function workspaceItemKey(item: AnnotationWorkspaceItem): string {
@@ -482,7 +485,10 @@ async function locateAnnotation(item: AnnotationWorkspaceItem | null, refnos = i
   // 有元素失败时 error 也会带话（「N 个关联元素加载失败」），所以不能按 error 跳过；纯传输错误（超时 / viewer 未就绪）ok / fail 都空，喂进去是空操作。
   bindingResolve.markLoadResult(result);
   if (result.error && receiptCurrent()) {
-    emitToast({ message: result.error, level: 'warning' });
+    const message = result.ok.length === 0 && result.fail.length > 0
+      ? `构件在当前模型中已不存在（${result.error}）`
+      : result.error;
+    emitToast({ message, level: 'warning' });
   }
 }
 

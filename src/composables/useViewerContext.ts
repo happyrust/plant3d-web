@@ -101,11 +101,13 @@ export function applyLoadedModelHighlight(options: {
 
   const previous = [...options.viewer.scene.selectedObjectIds];
   if (previous.length > 0) options.viewer.scene.setObjectsSelected(previous, false);
-  options.viewer.scene.ensureRefnos(refnos);
+  const subtree = options.viewer.scene.getSubtreeRefnos?.(refnos) ?? [];
+  const highlightRefnos = subtree.length > 0 ? subtree : refnos;
+  options.viewer.scene.ensureRefnos(highlightRefnos);
   options.setSelectedRefnos(refnos);
-  options.viewer.scene.setObjectsSelected(refnos, true);
+  options.viewer.scene.setObjectsSelected(highlightRefnos, true);
 
-  const aabb = options.viewer.scene.getAABB(refnos);
+  const aabb = options.viewer.scene.getSubtreeAABB?.(refnos) ?? options.viewer.scene.getAABB(highlightRefnos);
   if (options.flyTo && aabb) {
     options.viewer.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
   }

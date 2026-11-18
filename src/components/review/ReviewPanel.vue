@@ -1644,6 +1644,9 @@ function handleTableSelectAnnotation(item: AnnotationWorkspaceItem | null) {
   }
   expandedAnnotationId.value = item.id;
   expandedAnnotationType.value = item.type;
+  if (bindingResolve.getRecordDegrade?.(item.type, item.id)?.state === 'missing') {
+    emitToast({ message: '构件在当前模型中已不存在，批注记录已保留', level: 'warning' });
+  }
 }
 
 function handleTableCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copied' | 'fallback' | 'failed' }) {
@@ -1698,7 +1701,10 @@ async function locateWorkspaceAnnotation(item: AnnotationWorkspaceItem, refnos =
   // 它说的是模型元素装没装上，不是某个任务的事，切了任务也照记；只有提示是瞬态的。
   bindingResolve.markLoadResult(result);
   if (result.error && receiptCurrent()) {
-    emitToast({ message: result.error, level: 'warning' });
+    const message = result.ok.length === 0 && result.fail.length > 0
+      ? `构件在当前模型中已不存在（${result.error}）`
+      : result.error;
+    emitToast({ message, level: 'warning' });
   }
 }
 

@@ -300,6 +300,9 @@ export class DtxCompatScene {
         this._selection.deselect(objectIds);
       }
     }
+    if (!selected && this._selection && this.selectedObjectIds.length === 0) {
+      this._selection.clearSelection();
+    }
     if (changed) {
       this.syncFocusTransparencyFromSelection();
     }
@@ -352,6 +355,9 @@ export class DtxCompatScene {
     for (const refno of refnos) {
       const st = this.objects[refno];
       if (!st) continue;
+      if (!computeAabb && st.aabb) {
+        delete st.aabb;
+      }
 
       const objectIds = this._getDtxObjectIds(refno);
       if (objectIds.length === 0) continue;

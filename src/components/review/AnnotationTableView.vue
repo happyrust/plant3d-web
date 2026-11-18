@@ -48,6 +48,7 @@ import type { AnnotationTableSortKey } from './annotationTableSorting';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
 import type { AnnotationType } from '@/composables/useToolStore';
 
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationTableFilter } from '@/composables/useAnnotationTableFilter';
 import { useContainerQuery } from '@/composables/useContainerQuery';
 import {
@@ -496,6 +497,32 @@ function ariaSortFor(key: AnnotationTableSortKey): 'ascending' | 'descending' | 
 // Severity / Status pill tone
 // ----------------------------------------------------------------------
 
+const bindingResolve = useAnnotationBindingResolve();
+
+function recordBindingBadge(item: AnnotationWorkspaceItem): {
+  state: 'missing' | 'stale';
+  label: string;
+  tone: string;
+  title: string;
+} | null {
+  void bindingResolve.entries?.value;
+  const degrade = bindingResolve.getRecordDegrade?.(item.type, item.id);
+  if (!degrade) return null;
+  return degrade.state === 'missing'
+    ? {
+      state: 'missing',
+      label: '绑定构件已缺失',
+      tone: 'border-rose-200 bg-rose-50 text-rose-700',
+      title: degrade.title,
+    }
+    : {
+      state: 'stale',
+      label: '绑定位置已失效',
+      tone: 'border-amber-200 bg-amber-50 text-amber-700',
+      title: degrade.title,
+    };
+}
+
 function severityPillClass(item: AnnotationWorkspaceItem): string {
   return getAnnotationSeverityDisplay(item.severity).color;
 }
@@ -882,6 +909,13 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                   </button>
                   <!-- eslint-disable-next-line vue/no-v-html -->
                   <span v-else class="font-semibold text-slate-950 line-clamp-2" v-html="highlightTitle(item)" />
+                  <span v-if="recordBindingBadge(item)"
+                    class="ml-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none"
+                    :class="recordBindingBadge(item)!.tone"
+                    :title="recordBindingBadge(item)!.title"
+                    :data-testid="`annotation-table-binding-badge-${item.id}`">
+                    {{ recordBindingBadge(item)!.label }}
+                  </span>
                   <span v-if="isTitleSaving(item)" class="ml-2 text-[11px] font-medium text-brand">保存中</span>
                   <template v-if="isWide && item.description">
                     <span class="text-slate-500"> · </span>
@@ -983,6 +1017,13 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               :data-testid="`annotation-table-severity-pill-${item.id}`">
               <span class="h-1.5 w-1.5 rounded-full" :class="severityDotClass(item)" />
               {{ severityLabel(item) }}
+            </span>
+            <span v-if="recordBindingBadge(item)"
+              class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none"
+              :class="recordBindingBadge(item)!.tone"
+              :title="recordBindingBadge(item)!.title"
+              :data-testid="`annotation-table-binding-badge-${item.id}`">
+              {{ recordBindingBadge(item)!.label }}
             </span>
             <span class="ml-auto flex gap-1.5 text-slate-400">
               <button type="button"

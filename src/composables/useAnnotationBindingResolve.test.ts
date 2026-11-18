@@ -345,4 +345,86 @@ describe('useAnnotationBindingResolve（ADR-0050 运行时：批量解析 + 定�
     vi.advanceTimersByTime(200);
     expect(api.getBindingResolve('rect', 'late', 'member', '=1/2')?.state).toBe('unloaded');
   });
+
+  it('#158 取最新三态流转：留存构件换新重解析、撤下/已删构件标失效保留、重新装回自动恢复绑定', async () => {
+    vi.useFakeTimers();
+    const store = useToolStore();
+    // 同一单据下两条批注：一条挂在 24382_1913（平移 300mm 仍留存），一条挂在 24384_47574（本轮删除撤下），另有一条未装 24384_99999
+    store.addCloudAnnotation(makeCloud('c-moved', {
+      objectIds: ['24382_1913'],
+      anchorRefno: '24382_1913',
+      anchorWorldPos: [0, 0, 0],
+    }));
+    store.addAnnotation(makeText('t-deleted', {
+      refno: '24384_47574',
+      worldPos: [10, 20, 30],
+    }));
+    store.addRectAnnotation(makeRect('r-probed-gone', {
+      refnos: ['24384_99999'],
+    }));
+
+    loaderMock.loaded.add('24382_1913');
+    loaderMock.loaded.add('24384_47574');
+    let currentBoxes: Record<string, [number, number, number, number, number, number]> = {
+      '24382_1913': [-50, -50, -50, 50, 50, 50],
+      '24384_47574': [0, 10, 20, 20, 30, 40],
+    };
+    useViewerContext().viewerRef.value = {
+      scene: {
+        getSubtreeAABB: (ids: string[]) => currentBoxes[ids[0] ?? ''] ?? null,
+        getAABB: (ids: string[]) => currentBoxes[ids[0] ?? ''] ?? null,
+      },
+    } as unknown as DtxCompatViewer;
+
+    api.resolveAll();
+    expect(api.getRecordDegrade('cloud', 'c-moved')).toBeNull();
+    expect(api.getRecordDegrade('text', 't-deleted')).toBeNull();
+
+    // ① 取最新开始前拍快照
+    api.captureBeforeGetWork();
+
+    // ② 模拟取最新模型重载与撤下：24382_1913 平移 300mm 换新对象；24384_47574 被撤下；24384_99999 树探查已删
+    currentBoxes = {
+      '24382_1913': [250, -50, -50, 350, 50, 50],
+    };
+    loaderMock.loaded.delete('24384_47574');
+
+    await api.reconcileAfterGetWork({
+      probeNodeGone: async (refno) => (refno === '24384_99999' ? true : false),
+    });
+
+    // 批注记录全部保留，绝不自动删除
+    expect(store.cloudAnnotations.value).toHaveLength(1);
+    expect(store.annotations.value).toHaveLength(1);
+    expect(store.rectAnnotations.value).toHaveLength(1);
+
+    // 24382_1913：member 保持 resolved，anchor 按平移 300mm 后的新包围盒重算为 stale
+    expect(api.getBindingResolve('cloud', 'c-moved', 'member', '24382_1913')?.state).toBe('resolved');
+    expect(api.getBindingResolve('cloud', 'c-moved', 'anchor', '24382_1913')?.state).toBe('stale');
+
+    // 24384_47574 与 24384_99999：标为权威 missing，带「构件在当前模型中已不存在」原因
+    expect(api.getBindingResolve('text', 't-deleted', 'anchor', '24384_47574')).toMatchObject({
+      state: 'missing',
+      reason: expect.stringContaining('构件在当前模型中已不存在'),
+    });
+    expect(api.getRecordDegrade('text', 't-deleted')).toMatchObject({ state: 'missing' });
+    expect(api.getRecordDegrade('rect', 'r-probed-gone')).toMatchObject({ state: 'missing' });
+
+    // ③ 补装节点恢复可见：dtxLoaderRevision 递增后自动撤销 missing 恢复为 resolved
+    currentBoxes['24384_47574'] = [0, 10, 20, 20, 30, 40];
+    loaderMock.loaded.add('24384_47574');
+    dtxLoaderRevision.value += 1;
+    await nextTick();
+    vi.advanceTimersByTime(200);
+
+    expect(api.getBindingResolve('text', 't-deleted', 'anchor', '24384_47574')?.state).toBe('resolved');
+    expect(api.getRecordDegrade('text', 't-deleted')).toBeNull();
+
+    // ④ 下一轮取最新恢复可见：24384_99999 被补建装回，reconcileAfterGetWork 同步解除失效
+    api.captureBeforeGetWork();
+    loaderMock.loaded.add('24384_99999');
+    await api.reconcileAfterGetWork();
+    expect(api.getBindingResolve('rect', 'r-probed-gone', 'member', '24384_99999')?.state).toBe('resolved');
+    expect(api.getRecordDegrade('rect', 'r-probed-gone')).toBeNull();
+  });
 });

@@ -260,7 +260,7 @@ export function createPanelActions(ctx: DtxToolsContext, hooks: PanelActionHooks
     const rec = ctx.store.cloudAnnotations.value.find((a) => a.id === id);
     if (!rec) return;
     const refnos = getCloudMemberRefnos(rec);
-    const aabb = viewer.scene.getAABB(refnos);
+    const aabb = viewer.scene.getSubtreeAABB?.(refnos) ?? viewer.scene.getAABB(refnos);
     if (!aabb) return;
     viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
   }

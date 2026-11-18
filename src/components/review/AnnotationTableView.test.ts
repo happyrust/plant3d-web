@@ -1101,4 +1101,59 @@ describe('AnnotationTableView', () => {
     outside.remove();
     destroy();
   });
+
+  it('22. #158 取最新后绑定构件缺失行常驻显示「绑定构件已缺失」徽标，同单据未删构件批注不受影响', async () => {
+    const { useToolStore } = await import('@/composables/useToolStore');
+    const { useAnnotationBindingResolve } = await import('@/composables/useAnnotationBindingResolve');
+    const toolStore = useToolStore();
+    const bindingResolve = useAnnotationBindingResolve();
+    toolStore.clearAll();
+    bindingResolve.resetForTests();
+
+    toolStore.addAnnotation({
+      id: 'ann-gone',
+      entityId: '24384_47574',
+      refno: '24384_47574',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '1',
+      title: '已删分支批注',
+      description: '分支删除后应保留并常驻提示',
+      createdAt: 1,
+    });
+    toolStore.addAnnotation({
+      id: 'ann-kept',
+      entityId: '24382_1913',
+      refno: '24382_1913',
+      worldPos: [10, 0, 0],
+      visible: true,
+      glyph: '2',
+      title: '正常留存批注',
+      description: '不受影响',
+      createdAt: 2,
+    });
+
+    bindingResolve.markLoadResult({
+      ok: ['24382_1913'],
+      fail: [{ refno: '24384_47574', error: '构件在当前模型中已不存在' }],
+    });
+
+    const { host, destroy } = mountTable({
+      items: [
+        createItem({ id: 'ann-gone', type: 'text', title: '已删分支批注', refnos: ['24384_47574'] }),
+        createItem({ id: 'ann-kept', type: 'text', title: '正常留存批注', refnos: ['24382_1913'] }),
+      ],
+    });
+    await nextTick();
+
+    const goneBadge = host.querySelector<HTMLElement>('[data-testid="annotation-table-binding-badge-ann-gone"]');
+    expect(goneBadge).not.toBeNull();
+    expect(goneBadge?.textContent).toContain('绑定构件已缺失');
+    expect(goneBadge?.getAttribute('title')).toContain('构件在当前模型中已不存在');
+    expect(host.querySelector('[data-testid="annotation-table-binding-badge-ann-kept"]')).toBeNull();
+
+    destroy();
+    bindingResolve.resetForTests();
+    toolStore.clearAll();
+  });
 });

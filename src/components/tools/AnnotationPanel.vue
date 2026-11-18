@@ -14,6 +14,7 @@ import {
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
 import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useCommentThread } from '@/composables/useCommentThread';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -348,6 +349,26 @@ function isSectionFocused(type: AnnotationType): boolean {
   return currentFocusType.value === type;
 }
 
+const bindingResolve = useAnnotationBindingResolve();
+
+function panelBindingBadge(type: AnnotationType, id: string): {
+  label: string;
+  tone: string;
+  title: string;
+} | null {
+  void bindingResolve.entries?.value;
+  const degrade = bindingResolve.getRecordDegrade?.(type, id);
+  if (!degrade) return null;
+  return degrade.state === 'missing'
+    ? { label: '绑定构件已缺失', tone: 'border-rose-200 bg-rose-50 text-rose-700', title: degrade.title }
+    : { label: '绑定位置已失效', tone: 'border-amber-200 bg-amber-50 text-amber-700', title: degrade.title };
+}
+
+function isAllBindingsMissing(type: AnnotationType, id: string): boolean {
+  const summary = bindingResolve.getRecordSummary?.(type, id);
+  return !!summary && summary.missing > 0 && summary.usable === 0;
+}
+
 function setMode(mode: 'none' | 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb') {
   store.setToolMode(mode);
 }
@@ -357,6 +378,9 @@ function setActiveText(id: string) {
   store.activeCloudAnnotationId.value = null;
   store.activeRectAnnotationId.value = null;
   store.activeObbAnnotationId.value = null;
+  if (bindingResolve.getRecordDegrade?.('text', id)?.state === 'missing') {
+    emitToast({ message: '构件在当前模型中已不存在，批注记录已保留', level: 'warning' });
+  }
 }
 
 function setActiveCloudAnno(id: string) {
@@ -364,6 +388,9 @@ function setActiveCloudAnno(id: string) {
   store.activeAnnotationId.value = null;
   store.activeRectAnnotationId.value = null;
   store.activeObbAnnotationId.value = null;
+  if (bindingResolve.getRecordDegrade?.('cloud', id)?.state === 'missing') {
+    emitToast({ message: '构件在当前模型中已不存在，批注记录已保留', level: 'warning' });
+  }
 }
 
 function setActiveRectAnno(id: string) {
@@ -371,6 +398,9 @@ function setActiveRectAnno(id: string) {
   store.activeAnnotationId.value = null;
   store.activeCloudAnnotationId.value = null;
   store.activeObbAnnotationId.value = null;
+  if (bindingResolve.getRecordDegrade?.('rect', id)?.state === 'missing') {
+    emitToast({ message: '构件在当前模型中已不存在，批注记录已保留', level: 'warning' });
+  }
 }
 
 function toggleTextVisible(id: string, current: boolean) {
@@ -405,11 +435,19 @@ function dispatchShowModelByAnnotation(
 }
 
 function flyText(id: string) {
+  if (isAllBindingsMissing('text', id)) {
+    emitToast({ message: '构件在当前模型中已不存在', level: 'warning' });
+    return;
+  }
   dispatchShowModelByAnnotation(store.annotations.value.find((a) => a.id === id));
   props.tools.flyToAnnotation(id);
 }
 
 function flyCloud(id: string) {
+  if (isAllBindingsMissing('cloud', id)) {
+    emitToast({ message: '构件在当前模型中已不存在', level: 'warning' });
+    return;
+  }
   const record = store.cloudAnnotations.value.find((a) => a.id === id);
   const refnos = record ? getCloudMemberRefnos(record) : [];
   if (refnos.length > 0) {
@@ -420,6 +458,10 @@ function flyCloud(id: string) {
 }
 
 function flyRect(id: string) {
+  if (isAllBindingsMissing('rect', id)) {
+    emitToast({ message: '构件在当前模型中已不存在', level: 'warning' });
+    return;
+  }
   props.tools.flyToRectAnnotation?.(id);
 }
 
@@ -965,6 +1007,13 @@ function formatCommentTime(timestamp: number): string {
                 <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-warning-subtle px-1 py-0.5 text-[10px] text-warning">
                   已最小化
                 </span>
+                <span v-if="panelBindingBadge('text', a.id)"
+                  class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px] font-medium"
+                  :class="panelBindingBadge('text', a.id)!.tone"
+                  :title="panelBindingBadge('text', a.id)!.title"
+                  :data-testid="`annotation-panel-binding-badge-text-${a.id}`">
+                  {{ panelBindingBadge('text', a.id)!.label }}
+                </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
             </div>
@@ -1037,6 +1086,13 @@ function formatCommentTime(timestamp: number): string {
                   :class="getAnnotationSeverityDisplay(a.severity).color"
                   :title="getAnnotationSeverityDisplay(a.severity).label">
                   {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
+                </span>
+                <span v-if="panelBindingBadge('cloud', a.id)"
+                  class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px] font-medium"
+                  :class="panelBindingBadge('cloud', a.id)!.tone"
+                  :title="panelBindingBadge('cloud', a.id)!.title"
+                  :data-testid="`annotation-panel-binding-badge-cloud-${a.id}`">
+                  {{ panelBindingBadge('cloud', a.id)!.label }}
                 </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>

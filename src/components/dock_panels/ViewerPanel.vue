@@ -67,6 +67,7 @@ import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue'
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
 import { modelLoadSessionView, requestStopModelLoad } from '@/composables/modelLoadSession';
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { hasPersistedBackgroundMode, useBackgroundStore } from '@/composables/useBackgroundStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
@@ -3813,10 +3814,12 @@ function handleOpenProjectSettingsEvent(): void {
  */
 let offGetWorkScene: (() => void) | null = null;
 let offGetWorkMbd: (() => void) | null = null;
+let offGetWorkAnnotations: (() => void) | null = null;
 
 function registerSceneForGetWork(): void {
   offGetWorkScene?.();
   offGetWorkMbd?.();
+  offGetWorkAnnotations?.();
   offGetWorkScene = registerGetWorkScene({
     // 取最新发起的重载：不生成、不飞相机；每个节点各自的装载提示不弹（`quiet`），取最新做完自己说一句。
     // 记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤——这一道所有的重载都过，不用另说
@@ -3842,6 +3845,20 @@ function registerSceneForGetWork(): void {
       }
     },
   });
+  const annotationBindingResolve = useAnnotationBindingResolve();
+  offGetWorkAnnotations = registerGetWorkDerived({
+    name: '校审批注绑定',
+    // #158：模型重载/撤下前记录已装绑定构件，完成后重新解析留存构件绑定并将撤下/已删构件标为失效保留
+    beforeModels: () => {
+      annotationBindingResolve.captureBeforeGetWork();
+    },
+    run: async (context) => {
+      await annotationBindingResolve.reconcileAfterGetWork({
+        probeNodeGone: context.probeNodeGone,
+      });
+      requestRender();
+    },
+  });
 }
 
 function unregisterSceneForGetWork(): void {
@@ -3849,6 +3866,8 @@ function unregisterSceneForGetWork(): void {
   offGetWorkScene = null;
   offGetWorkMbd?.();
   offGetWorkMbd = null;
+  offGetWorkAnnotations?.();
+  offGetWorkAnnotations = null;
   // 场景没了：整库显示 / 地址栏直装登记的那些也撤掉
   resetGetWorkRegistry();
 }

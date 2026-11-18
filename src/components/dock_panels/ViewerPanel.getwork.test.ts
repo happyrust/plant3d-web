@@ -72,4 +72,11 @@ describe('ViewerPanel 接线（源码钉）：状态栏「数据已更新」提�
     expect(mbd).toContain('latestRefresh: readGetWorkMbdRefresh()');
     expect(source).toMatch(/import \{[^}]*\breadGetWorkMbdRefresh,[^}]*\} from '@\/composables\/useModelGetWork';/);
   });
+
+  it('#158 取最新登记校审批注绑定派生物：重载前 captureBeforeGetWork、完成后 reconcileAfterGetWork', () => {
+    const annotations = section('offGetWorkAnnotations = registerGetWorkDerived({', 'function unregisterSceneForGetWork(): void {');
+    expect(annotations).toContain('name: \'校审批注绑定\'');
+    expect(annotations).toContain('annotationBindingResolve.captureBeforeGetWork()');
+    expect(annotations).toContain('annotationBindingResolve.reconcileAfterGetWork(');
+  });
 });

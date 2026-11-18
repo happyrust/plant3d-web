@@ -27,6 +27,7 @@ import {
   type BindingResolveProbe,
   type BindingResolveSummary,
 } from '@/review/domain/bindingResolve';
+import { toRefnoKey } from '@/utils/refnoKey';
 
 /**
  * 批注关联的失效解析（ADR-0050）——运行时部分。
@@ -48,6 +49,8 @@ type ResolveEntries = ReadonlyMap<string, BindingResolveEntry>;
 const entries: ShallowRef<ResolveEntries> = shallowRef(new Map());
 /** 按 refno 的定位 / 加载明确失败过的构件（权威 missing 证据）→ 那次回执里的错误文本（没有就 null）。 */
 const verifiedMissing = new Map<string, string | null>();
+/** 「取最新」开始前已在场景中的批注绑定构件（本轮重载/撤下后若不在场景中，说明已被撤下或删除） */
+let loadedBeforeGetWork = new Set<string>();
 let lastResolvedAt = 0;
 let watcherInstalled = false;
 /** 模型分批装载时修订号会连续 +1，合并成一次重算；间隔取一帧多一点即可。 */
@@ -64,19 +67,92 @@ function normalizeRefno(refno: string): string {
   return String(refno ?? '').trim();
 }
 
+function missingKeysOf(refno: string): string[] {
+  const raw = normalizeRefno(refno);
+  if (!raw) return [];
+  const canonical = toRefnoKey(raw);
+  return canonical && canonical !== raw ? [raw, canonical] : [raw];
+}
+
+function hasVerifiedMissing(refno: string): boolean {
+  return missingKeysOf(refno).some((key) => verifiedMissing.has(key));
+}
+
+function getVerifiedMissingReason(refno: string): string | null | undefined {
+  for (const key of missingKeysOf(refno)) {
+    if (verifiedMissing.has(key)) return verifiedMissing.get(key);
+  }
+  return undefined;
+}
+
+function setVerifiedMissing(refno: string, error: string | null): boolean {
+  const keys = missingKeysOf(refno);
+  if (keys.length === 0) return false;
+  let changed = false;
+  for (const key of keys) {
+    if (!verifiedMissing.has(key) || verifiedMissing.get(key) !== error) {
+      verifiedMissing.set(key, error);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function deleteVerifiedMissing(refno: string): boolean {
+  let deleted = false;
+  for (const key of missingKeysOf(refno)) {
+    if (verifiedMissing.delete(key)) deleted = true;
+  }
+  return deleted;
+}
+
+function clearLoadedFromVerifiedMissing(isLoaded: (refno: string) => boolean = isDtxRefnoLoadedAcrossAllDbnos): boolean {
+  if (verifiedMissing.size === 0) return false;
+  let cleared = false;
+  for (const key of [...verifiedMissing.keys()]) {
+    if (isLoaded(key) && deleteVerifiedMissing(key)) {
+      cleared = true;
+    }
+  }
+  return cleared;
+}
+
+function collectAllBoundRefnos(): string[] {
+  const store = useToolStore();
+  if (typeof (store as Partial<typeof store>).getAnnotationRecordsByType !== 'function') return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const type of ANNOTATION_TYPES) {
+    for (const record of store.getAnnotationRecordsByType(type) ?? []) {
+      for (const binding of deriveAnnotationBindings(type, record)) {
+        const refno = normalizeRefno(binding.refno);
+        if (!refno) continue;
+        const canonical = toRefnoKey(refno) || refno;
+        if (seen.has(canonical)) continue;
+        seen.add(canonical);
+        out.push(refno);
+      }
+    }
+  }
+  return out;
+}
+
 function createDefaultProbe(): BindingResolveProbe {
   const { viewerRef } = useViewerContext();
   return {
     isLoaded: (refno) => isDtxRefnoLoadedAcrossAllDbnos(refno),
     isKnown: (refno) => isDtxRefnoKnownAcrossAllDbnos(refno),
-    isVerifiedMissing: (refno) => verifiedMissing.has(normalizeRefno(refno)),
-    missingReason: (refno) => verifiedMissing.get(normalizeRefno(refno)),
+    isVerifiedMissing: (refno) => hasVerifiedMissing(refno),
+    missingReason: (refno) => getVerifiedMissingReason(refno),
     anchorDrift: (refno, worldPos) => {
-      const scene = viewerRef.value?.scene as { getAABB?: (ids: string[]) => ArrayLike<number> | null } | undefined;
-      if (!scene?.getAABB) return null;
+      const scene = viewerRef.value?.scene as {
+        getSubtreeAABB?: (ids: string[]) => ArrayLike<number> | null;
+        getAABB?: (ids: string[]) => ArrayLike<number> | null;
+      } | undefined;
+      if (!scene?.getAABB && !scene?.getSubtreeAABB) return null;
       let aabb: ArrayLike<number> | null = null;
       try {
-        aabb = scene.getAABB([refno]) ?? null;
+        aabb = scene.getSubtreeAABB?.([refno]) ?? scene.getAABB?.([refno]) ?? null;
       } catch {
         return null;
       }
@@ -147,18 +223,88 @@ function markLoadResult(result: { ok?: readonly string[]; fail?: readonly LoadRe
   let changed = false;
   for (const raw of result.ok ?? []) {
     const refno = normalizeRefno(raw);
-    if (refno && verifiedMissing.delete(refno)) changed = true;
+    if (refno && deleteVerifiedMissing(refno)) changed = true;
   }
   for (const raw of result.fail ?? []) {
     const refno = normalizeRefno(typeof raw === 'string' ? raw : raw?.refno);
     if (!refno) continue;
     const error = typeof raw === 'string' ? null : (raw.error?.trim() || null);
-    if (!verifiedMissing.has(refno) || verifiedMissing.get(refno) !== error) {
-      verifiedMissing.set(refno, error);
+    if (setVerifiedMissing(refno, error)) {
       changed = true;
     }
   }
   if (changed || (result.ok?.length ?? 0) > 0) resolveAll();
+}
+
+/**
+ * 「取最新」开始前拍下当前已在场景里的绑定构件集合：
+ * 若本轮重载/撤下后该构件已不在场景中，说明其在最新模型中已被删除或无几何撤下。
+ */
+function captureBeforeGetWork(isLoaded: (refno: string) => boolean = isDtxRefnoLoadedAcrossAllDbnos): void {
+  const next = new Set<string>();
+  for (const refno of collectAllBoundRefnos()) {
+    if (!isLoaded(refno)) continue;
+    for (const key of missingKeysOf(refno)) next.add(key);
+  }
+  loadedBeforeGetWork = next;
+}
+
+export type ReconcileAnnotationBindingsAfterGetWorkOptions = {
+  probeNodeGone?: (refno: string) => Promise<boolean | null>;
+  isLoaded?: (refno: string) => boolean;
+  probe?: BindingResolveProbe;
+};
+
+/**
+ * 「取最新」完成模型重载与撤下后，同步核对全部校审批注对构件的绑定（#158）：
+ * 1. 重新出现在场景里的构件自动解除失效标记；
+ * 2. 本轮从场景撤下的绑定构件，或经树探查在当前模型中已删除的未装绑定构件，标为权威 `missing`（保留批注记录不删除）；
+ * 3. 对留存构件立即按最新包围盒/变换刷新绑定解析结果。
+ */
+async function reconcileAfterGetWork(
+  options: ReconcileAnnotationBindingsAfterGetWorkOptions = {},
+): Promise<ResolveEntries> {
+  if (pendingResolveAll !== null) {
+    clearTimeout(pendingResolveAll);
+    pendingResolveAll = null;
+  }
+  const checkLoaded = options.isLoaded ?? options.probe?.isLoaded ?? isDtxRefnoLoadedAcrossAllDbnos;
+  clearLoadedFromVerifiedMissing(checkLoaded);
+
+  const boundRefnos = collectAllBoundRefnos();
+  const toProbe: string[] = [];
+  for (const refno of boundRefnos) {
+    if (checkLoaded(refno)) {
+      deleteVerifiedMissing(refno);
+      continue;
+    }
+    if (missingKeysOf(refno).some((key) => loadedBeforeGetWork.has(key))) {
+      setVerifiedMissing(refno, '构件在当前模型中已不存在');
+      continue;
+    }
+    if (!hasVerifiedMissing(refno) && options.probeNodeGone) {
+      toProbe.push(refno);
+    }
+  }
+  loadedBeforeGetWork = new Set();
+
+  if (toProbe.length > 0 && options.probeNodeGone) {
+    const probeNodeGone = options.probeNodeGone;
+    await Promise.all(
+      toProbe.map(async (refno) => {
+        try {
+          const gone = await probeNodeGone(refno);
+          if (gone === true) {
+            setVerifiedMissing(refno, '构件在当前模型中已不存在');
+          }
+        } catch {
+          // 网络或探针失败时不误标 missing
+        }
+      }),
+    );
+  }
+
+  return resolveAll(options.probe);
 }
 
 function getBindingResolve(
@@ -244,9 +390,10 @@ function recordSetSignature(): string {
 function installWatchers(): void {
   if (watcherInstalled) return;
   watcherInstalled = true;
-  // ① 模型加载 / 版本切换 → 运行时索引修订 +1 → 批量重算（ADR-0050 的触发点）。
+  // ① 模型加载 / 版本切换 → 运行时索引修订 +1 → 若此前标为缺失的构件已重新装入场景，自动解除 missing，再合并重算。
   // 大模型分批装载会连续 bump，这里合并成一次。
   watch(dtxLoaderRevision, () => {
+    clearLoadedFromVerifiedMissing();
     scheduleResolveAll();
   });
   // ④ 记录集合变化（导入快照 / 服务端拉回 / 新建 / 删除 / 绑定增删）→ 同一个合并窗口。
@@ -264,6 +411,7 @@ function resetForTests(): void {
   }
   entries.value = new Map();
   verifiedMissing.clear();
+  loadedBeforeGetWork = new Set();
   lastResolvedAt = 0;
 }
 
@@ -273,6 +421,8 @@ export type AnnotationBindingResolveApi = {
   resolveAll: typeof resolveAll;
   resolveRecord: typeof resolveRecord;
   markLoadResult: typeof markLoadResult;
+  captureBeforeGetWork: typeof captureBeforeGetWork;
+  reconcileAfterGetWork: typeof reconcileAfterGetWork;
   getBindingResolve: typeof getBindingResolve;
   getRecordSummary: typeof getRecordSummary;
   getRecordDegrade: typeof getRecordDegrade;
@@ -288,6 +438,8 @@ export function useAnnotationBindingResolve(): AnnotationBindingResolveApi {
     resolveAll,
     resolveRecord,
     markLoadResult,
+    captureBeforeGetWork,
+    reconcileAfterGetWork,
     getBindingResolve,
     getRecordSummary,
     getRecordDegrade,

@@ -101,11 +101,15 @@ export type GetWorkDerivedContext = {
   changed: boolean;
   treeChanged: boolean;
   modelsChanged: boolean;
+  /** 探查某个 refno 在最新树中是否已不存在：`true` 已删、`false` 仍在、`null` 未知 */
+  probeNodeGone?: (refno: string) => Promise<boolean | null>;
 };
 
-/** 跟着模型走的东西（属性面板、MBD 标注、房间树……）：各自登记一个「取最新之后要做的事」 */
+/** 跟着模型走的东西（属性面板、MBD 标注、房间树、校审批注绑定、测量与净距……）：各自登记一个「取最新之后要做的事」 */
 export type GetWorkDerived = {
   name: string;
+  /** 模型重载与撤下开始前拍快照（可选）：供派生物对比本轮撤下或发生几何/变换变化的已装构件 */
+  beforeModels?: () => void | Promise<void>;
   run(context: GetWorkDerivedContext): void | Promise<void>;
 };
 
@@ -953,7 +957,15 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         }
       }
 
-      // ⑥ 再重载模型
+      // ⑥ 再重载模型（先通知需要对比前后场景状态的派生物拍下快照）
+      const derivedList = ports.derived();
+      for (const handler of derivedList) {
+        try {
+          await handler.beforeModels?.();
+        } catch {
+          // 拍快照失败不阻断模型重载
+        }
+      }
       let libraryNodes = new Map<number, GetWorkLibraryNodes>();
       if (scene) libraryNodes = await refreshModels(report, scene, rows);
       else report.models.rootsTotal = ports.roots().length;
@@ -993,8 +1005,13 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         }
       }
 
-      const context: GetWorkDerivedContext = { changed: treeChanged || modelsChanged || librariesMoved, treeChanged, modelsChanged };
-      for (const handler of ports.derived()) {
+      const context: GetWorkDerivedContext = {
+        changed: treeChanged || modelsChanged || librariesMoved,
+        treeChanged,
+        modelsChanged,
+        probeNodeGone: ports.probeNodeGone,
+      };
+      for (const handler of derivedList) {
         try {
           await handler.run(context);
           report.derived.push({ name: handler.name, ok: true });
