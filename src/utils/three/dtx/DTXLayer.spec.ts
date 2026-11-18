@@ -44,7 +44,7 @@ describe('DTXLayer.raycastObject', () => {
 });
 
 describe('DTXLayer bounding boxes', () => {
-  it('当预计算 AABB 与实例矩阵明显不一致时回退到动态世界包围盒', () => {
+  it('直接信任合法的服务端预计算 world_aabb，仅在预计算盒退化或越界时回退动态世界包围盒', () => {
     const layer = new DTXLayer({
       maxVertices: 64,
       maxIndices: 128,
@@ -59,8 +59,9 @@ describe('DTXLayer bounding boxes', () => {
       new Vector3(100, 200, 50),
     );
 
+    // 1b78523a：有限、非空且尺寸在 1e-6..1e6 内的服务端 world_aabb 直接采用，不扫全量顶点
     layer.addObject(
-      'o:test:0',
+      'o:trusted:0',
       'box',
       matrix,
       undefined,
@@ -70,16 +71,31 @@ describe('DTXLayer bounding boxes', () => {
         max: [0.5, 0.5, 0.5],
       },
     );
+    const trusted = layer.getObjectBoundingBox('o:trusted:0');
+    expect(trusted).not.toBeNull();
+    expect(trusted?.min.x).toBeCloseTo(-0.5, 6);
+    expect(trusted?.max.x).toBeCloseTo(0.5, 6);
 
-    const bbox = layer.getObjectBoundingBox('o:test:0');
-
-    expect(bbox).not.toBeNull();
-    expect(bbox?.min.x).toBeCloseTo(950, 6);
-    expect(bbox?.max.x).toBeCloseTo(1050, 6);
-    expect(bbox?.min.y).toBeCloseTo(1900, 6);
-    expect(bbox?.max.y).toBeCloseTo(2100, 6);
-    expect(bbox?.min.z).toBeCloseTo(2975, 6);
-    expect(bbox?.max.z).toBeCloseTo(3025, 6);
+    // 退化或非法的预计算 AABB（例如零体积点盒）自动回退到按网格与实例矩阵计算的动态世界包围盒
+    layer.addObject(
+      'o:fallback:0',
+      'box',
+      matrix,
+      undefined,
+      {},
+      {
+        min: [0, 0, 0],
+        max: [0, 0, 0],
+      },
+    );
+    const fallback = layer.getObjectBoundingBox('o:fallback:0');
+    expect(fallback).not.toBeNull();
+    expect(fallback?.min.x).toBeCloseTo(950, 6);
+    expect(fallback?.max.x).toBeCloseTo(1050, 6);
+    expect(fallback?.min.y).toBeCloseTo(1900, 6);
+    expect(fallback?.max.y).toBeCloseTo(2100, 6);
+    expect(fallback?.min.z).toBeCloseTo(2975, 6);
+    expect(fallback?.max.z).toBeCloseTo(3025, 6);
   });
 });
 
