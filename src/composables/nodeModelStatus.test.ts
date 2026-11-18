@@ -207,6 +207,12 @@ function judgeFacts(
   return judgeNodeModelFacts({ facts: facts(response, patch), loadedModelSesno, changedSinceLoaded, now: 1000 });
 }
 
+function localMinute(iso: string): string {
+  const at = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
 describe('nodeModelFactsOf（接口回执 → 事实）', () => {
   it('字段改成驼峰，单元根改成 a_b；数字缺了按 0、布尔缺了按保守的一边算', () => {
     expect(facts(SITE_LATEST)).toMatchObject({
@@ -240,7 +246,7 @@ describe('judgeNodeModelFacts（接口给的事实 → 行上的状态）', () =
     expect(status).toMatchObject({ verdict: 'latest', source: 'model-status', modelSesno: 213, fileLatestSesno: 236, librarySessionsAhead: 23, inWatchScope: false });
     const text = describeNodeModelStatus(status);
     expect(text.headline).toBe('最新（库有 23 个新会话，未涉及本节点）');
-    expect(text.detail).toBe('模型按会话 213 生成（2026-10-27 01:02 保存）；库文件最新 236；3362 个单元都已生成');
+    expect(text.detail).toBe(`模型按会话 213 生成（${localMinute(LIBRARY_7999.model_sesno_time!)} 保存）；库文件最新 236；3362 个单元都已生成`);
     expect(nodeModelStatusAction(status)).toBeNull();
     expect(nodeModelStatusIconKind(status)).toBe('current');
   });
@@ -282,7 +288,7 @@ describe('judgeNodeModelFacts（接口给的事实 → 行上的状态）', () =
     const text = describeNodeModelStatus(partial);
     expect(text.headline).toBe('部分生成：2 个单元里有 1 个没有模型');
     expect(text.detail).toBe(
-      '模型按会话 1143 生成（2026-11-07 19:45 保存）；库文件最新 1146。库文件比模型水位新 3 个会话，没有模型的单元多半是之后才有的：点「更新」让后端把这个库更新到最新',
+      `模型按会话 1143 生成（${localMinute(LIBRARY_8000.model_sesno_time!)} 保存）；库文件最新 1146。库文件比模型水位新 3 个会话，没有模型的单元多半是之后才有的：点「更新」让后端把这个库更新到最新`,
     );
     const none = judgeFacts(SITE_NOT_GENERATED, { dbnum: 8000, library: LIBRARY_8000 });
     expect(nodeModelStatusAction(none)).toBe('update');
@@ -314,7 +320,7 @@ describe('judgeNodeModelFacts（接口给的事实 → 行上的状态）', () =
     const text = describeNodeModelStatus(status);
     expect(text.headline).toBe('落后：生成之后有 2 个单元被改到');
     expect(text.detail).toBe(
-      '模型按会话 1143 生成（2026-11-07 19:45 保存）；库文件最新 1146。会话 1143 之后到 1146，改到 3 个交付单元（新增 1）。点「更新」让后端把这个库更新到最新',
+      `模型按会话 1143 生成（${localMinute(LIBRARY_8000.model_sesno_time!)} 保存）；库文件最新 1146。会话 1143 之后到 1146，改到 3 个交付单元（新增 1）。点「更新」让后端把这个库更新到最新`,
     );
     expect(nodeModelStatusAction(status)).toBe('update');
     expect(nodeModelStatusIconKind(status)).toBe('stale');
