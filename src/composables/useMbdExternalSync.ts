@@ -36,9 +36,20 @@ export type MbdExternalSyncDeps = Readonly<{
   emitToast(payload: ToastPayload): void;
 }>;
 
+export type MbdLatestRefreshInput = Readonly<{
+  /** 本轮「取最新」受影响的对象 refno（`a_b` 或 `a/b` 均自动归一）。 */
+  affectedRefnos?: ReadonlySet<string> | readonly string[];
+  /** 本轮「取最新」发生变动的数据库号集合。 */
+  affectedDbnums?: ReadonlySet<number> | readonly number[];
+  /** 当前三维模型各库所在的模型会话号（`dbnum -> modelSesno`），供面板对比标注会话与模型会话。 */
+  modelSessionsByDbnum?: ReadonlyMap<number, number> | Readonly<Record<number, number>>;
+}>;
+
 export type MbdExternalSyncOptions = Readonly<{
   /** 宿主级过期判定（例如尺寸系统已被替换或组件已卸载）。 */
   isCancelled?: () => boolean;
+  /** 「取最新」增量刷新上下文（#142）；常规地址栏同步时省略。 */
+  latestRefresh?: MbdLatestRefreshInput;
 }>;
 
 export type MbdExternalSync = Readonly<{
@@ -296,6 +307,82 @@ export function createMbdExternalSync(
   };
   /** 上一次弹过的空包提示；同一句不重复弹，空包消失后复位。 */
   let lastEmptyToast: string | null = null;
+  /** 已成功装载的对象快照缓存，供「取最新」按受影响对象增量重取与识别已删除对象（#142）。 */
+  const cachedOutcomes = new Map<string, Readonly<{
+    optionsSignature: string;
+    outcome: MbdSourceLoadOutcome;
+  }>>();
+
+  const normalizeRefnoToken = (raw: string): string =>
+    raw.trim().replace(/^=+/, '').replace(/\//g, '_');
+
+  const toNormalizedRefnoSet = (
+    input: ReadonlySet<string> | readonly string[] | undefined,
+  ): ReadonlySet<string> | null => {
+    if (!input) return null;
+    const out = new Set<string>();
+    for (const item of input) {
+      const norm = normalizeRefnoToken(item);
+      if (norm) out.add(norm);
+    }
+    return out;
+  };
+
+  const toDbnumSet = (
+    input: ReadonlySet<number> | readonly number[] | undefined,
+  ): ReadonlySet<number> | null => {
+    if (!input) return null;
+    const out = new Set<number>();
+    for (const item of input) {
+      if (Number.isFinite(item)) out.add(item);
+    }
+    return out;
+  };
+
+  const normalizeModelSessions = (
+    input: ReadonlyMap<number, number> | Readonly<Record<number, number>> | undefined,
+  ): Readonly<Record<number, number>> | undefined => {
+    if (!input) return undefined;
+    const out: Record<number, number> = {};
+    if (input instanceof Map) {
+      for (const [k, v] of input.entries()) {
+        if (Number.isFinite(k) && Number.isFinite(v)) out[k] = v;
+      }
+      return out;
+    }
+    for (const [k, v] of Object.entries(input as Record<string, number>)) {
+      const dbnum = Number(k);
+      if (Number.isFinite(dbnum) && Number.isFinite(v)) out[dbnum] = v;
+    }
+    return out;
+  };
+
+  const isSourceAffectedByRefresh = (
+    refno: string,
+    cached: MbdSourceLoadOutcome,
+    affectedRefnos: ReadonlySet<string> | null,
+    affectedDbnums: ReadonlySet<number> | null,
+  ): boolean => {
+    // 两者都没指定时（例如后端重启兜底）：全部重取。
+    if (affectedRefnos === null && affectedDbnums === null) return true;
+    if (affectedRefnos?.has(refno)) return true;
+    const subjectRefno = cached.subject?.refno ? normalizeRefnoToken(cached.subject.refno) : null;
+    if (subjectRefno && affectedRefnos?.has(subjectRefno)) return true;
+    if (affectedDbnums) {
+      const sv = cached.sourceVersion;
+      if (sv) {
+        if (affectedDbnums.has(sv.dbnum)) return true;
+        if (sv.databases.some(db => affectedDbnums.has(db.dbnum))) return true;
+      }
+    }
+    return false;
+  };
+
+  const isNotFoundParseFailure = (
+    parsed: Extract<MbdV2ParseResult, { ok: false }>,
+  ): boolean =>
+    parsed.notFound === true
+    || /在所钉会话里不存在|库里没有|不存在该对象|对象已删除/.test(parsed.error);
 
   return {
     async sync(target, options = {}) {
@@ -312,8 +399,13 @@ export function createMbdExternalSync(
         target.replaceExternalSource('mbd', []);
         deps.diagnostics.clear();
         failureToasts.clear();
+        cachedOutcomes.clear();
         lastEmptyToast = null;
         return;
+      }
+      const activeSet = new Set(requestedRefnos);
+      for (const key of cachedOutcomes.keys()) {
+        if (!activeSet.has(key)) cachedOutcomes.delete(key);
       }
 
       const objectLimit = parseMbdObjectLimit(params.get('mbd_limit'));
@@ -341,13 +433,56 @@ export function createMbdExternalSync(
        * 前后已有记录的 `id` 不变。单对象保持裸 id，与旧行为一致。
        */
       const multiRefnos = requestedRefnos.length > 1;
+      const optionsSignature = [
+        partialEnabled ? '1' : '0',
+        labelPresentation,
+        kindFilter ? [...kindFilter].sort().join(',') : '',
+        lodDisabled ? '0' : '1',
+        presentation3dDisabled ? '0' : '1',
+        polarApplied ? '1' : '0',
+        multiRefnos ? 'm' : 's',
+      ].join('|');
+      const latestRefresh = options.latestRefresh;
+      const affectedRefnoSet = toNormalizedRefnoSet(latestRefresh?.affectedRefnos);
+      const affectedDbnumSet = toDbnumSet(latestRefresh?.affectedDbnums);
+      const modelSessionsByDbnum = normalizeModelSessions(latestRefresh?.modelSessionsByDbnum);
 
       const loadSource = async (refno: string): Promise<MbdSourceLoadOutcome | null> => {
+        const previousCached = cachedOutcomes.get(refno);
+        if (
+          latestRefresh !== undefined
+          && previousCached !== undefined
+          && previousCached.optionsSignature === optionsSignature
+          && !isSourceAffectedByRefresh(refno, previousCached.outcome, affectedRefnoSet, affectedDbnumSet)
+        ) {
+          return previousCached.outcome;
+        }
         try {
           const parsed = await deps.fetchPipeData(refno, { partial: partialEnabled });
           // 在途 sync 被新 sync 顶替或宿主作废：立刻收手，不白费映射，外层也会整体放弃。
           if (cancelled()) return null;
           if (!parsed.ok) {
+            if (
+              latestRefresh !== undefined
+              && previousCached !== undefined
+              && isNotFoundParseFailure(parsed)
+            ) {
+              cachedOutcomes.delete(refno);
+              failureToasts.delete(refno);
+              return {
+                refno,
+                records: [],
+                empty: false,
+                deleted: true,
+                issues: [],
+                skipped: [],
+                layoutMode: null,
+                notes: ['对象已删除：最新会话中已不存在该对象，标注已撤下'],
+                sourceVersion: null,
+                isolines: [],
+                loadError: null,
+              };
+            }
             throw new MbdAtomicRejectionError(parsed.error, parsed.issues ?? [], []);
           }
           const payload: MbdV2PipeData = parsed.data;
@@ -398,7 +533,7 @@ export function createMbdExternalSync(
             }))
             : stripped;
           const empty = payload.primitives.length === 0;
-          return {
+          const okOutcome: MbdSourceLoadOutcome = {
             refno,
             records,
             empty,
@@ -449,7 +584,10 @@ export function createMbdExternalSync(
                 : []),
             ],
           };
+          cachedOutcomes.set(refno, { optionsSignature, outcome: okOutcome });
+          return okOutcome;
         } catch (error) {
+          cachedOutcomes.delete(refno);
           // 逐包拒绝的出口：取数失败、契约错误、映射未全量成功都转成这一包的
           // loadError——只有它不提交，其余包照常。
           const rejection = error instanceof MbdAtomicRejectionError ? error : null;
@@ -534,6 +672,7 @@ export function createMbdExternalSync(
         ),
         sourceVersion: sources.find(source => source.sourceVersion !== null)?.sourceVersion ?? null,
         isolines: sources.flatMap(source => source.isolines),
+        ...(modelSessionsByDbnum !== undefined ? { modelSessionsByDbnum } : {}),
         ...(loadError !== null ? { loadError } : {}),
       });
 

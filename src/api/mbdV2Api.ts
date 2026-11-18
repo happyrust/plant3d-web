@@ -286,22 +286,29 @@ async function fetchMbdV2Guarded(
 function toParseResult(outcome: MbdV2GuardedOutcome): MbdV2ParseResult {
   if (outcome.kind === 'result') return outcome.result;
   let issues: readonly MbdV2Issue[] = [];
+  let notFound = false;
   const trimmed = outcome.bodyText.trim();
   if (trimmed) {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        issues = extractEnvelopeIssues((parsed as { detail?: unknown }).detail);
+        const env = parsed as { code?: unknown; detail?: unknown };
+        issues = extractEnvelopeIssues(env.detail);
+        notFound = outcome.status === 404 && env.code === 'not_found';
       }
     } catch {
       // ignore
     }
   }
-  return {
+  const result: MbdV2ParseResult = {
     ok: false,
     error: describeMbdV2HttpFailure(outcome.status, outcome.bodyText),
     ...(issues.length > 0 ? { issues } : {}),
   };
+  if (notFound) {
+    Object.defineProperty(result, 'notFound', { value: true, enumerable: false });
+  }
+  return result;
 }
 
 /**

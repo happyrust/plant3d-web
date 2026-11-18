@@ -1654,4 +1654,73 @@ describe('DimensionPanelDock', () => {
       }
     });
   });
+
+  it('#142 「取最新」后展示已删除对象说明（不挂装载失败角标），并在标注会话与模型会话不一致时同时写明两个会话号', async () => {
+    mocks.dimensionSystem.value = createSystem();
+    const store = useMbdDiagnosticsStore();
+    store.set({
+      channel: 'api',
+      sourceId: '24381_145018,17496_106465,24381_200001',
+      issues: [],
+      skipped: [],
+      loadError: null,
+      sourceVersion: {
+        dbnum: 7997,
+        sesno: 42,
+        databases: [{ dbnum: 7997, sesno: 42, db_type: 'DESI' }],
+      },
+      modelSessionsByDbnum: {
+        7997: 42, // 更新范围内，与标注会话一致
+        8001: 10, // 更新范围外，模型停在会话 10，而标注现算读了会话 12
+      },
+      sources: [
+        {
+          refno: '24381_145018',
+          issues: [],
+          skipped: [],
+          layoutMode: null,
+          notes: [],
+          sourceVersion: { dbnum: 7997, sesno: 42, databases: [{ dbnum: 7997, sesno: 42, db_type: 'DESI' }] },
+          isolines: [],
+          loadError: null,
+        },
+        {
+          refno: '17496_106465',
+          issues: [],
+          skipped: [],
+          layoutMode: null,
+          notes: [],
+          sourceVersion: { dbnum: 8001, sesno: 12, databases: [{ dbnum: 8001, sesno: 12, db_type: 'DESI' }] },
+          isolines: [],
+          loadError: null,
+        },
+        {
+          refno: '24381_200001',
+          deleted: true,
+          issues: [],
+          skipped: [],
+          layoutMode: null,
+          notes: ['对象已删除：最新会话中已不存在该对象，标注已撤下'],
+          sourceVersion: null,
+          isolines: [],
+          loadError: null,
+        },
+      ],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+
+    // 不挂装载失败红标
+    expect(host.querySelector('[data-testid="mbd-error-badge"]')).toBeNull();
+    // 顶部显示已删除说明
+    const deletedNotice = host.querySelector('[data-testid="mbd-deleted-sources"]')?.textContent ?? '';
+    expect(deletedNotice).toContain('24381_200001');
+    expect(deletedNotice).toContain('对象已删除');
+
+    // 7997 会话一致不报；8001 会话不一致同时写明两个会话号
+    const mismatches = [...host.querySelectorAll('[data-testid="mbd-session-mismatch"]')]
+      .map(el => el.textContent?.trim() ?? '');
+    expect(mismatches).toEqual(['标注 8001@12 ≠ 模型 8001@10']);
+  });
 });

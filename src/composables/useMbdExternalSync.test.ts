@@ -1240,4 +1240,141 @@ describe('createMbdExternalSync', () => {
       expect(snapAll.deferredRefnos).toEqual([]);
     });
   });
+
+  describe('#142 latestRefresh incremental sync (GETWORK)', () => {
+    it('refetches only affected objects to their new coordinates/session and skips unaffected cached objects', async () => {
+      let pipeSesno = 41;
+      let pipeOffsetX = 0;
+      const calls: string[] = [];
+      const fetchPipeData: MbdExternalSyncDeps['fetchPipeData'] = vi.fn(async refno => {
+        calls.push(refno);
+        if (refno === '24381_145018') {
+          return {
+            ok: true as const,
+            diagnostics: [],
+            data: contractPayload({
+              input_refno: refno,
+              branch_refno: refno,
+              primitives: [{
+                kind: 'linear_dim',
+                id: `${refno}:dim-1`,
+                start: [pipeOffsetX, 0, 0],
+                end: [pipeOffsetX + 1000, 0, 0],
+                text: '1000',
+                extension_lines: [
+                  { from: [pipeOffsetX, 0, 0], to: [pipeOffsetX, 100, 0] },
+                  { from: [pipeOffsetX + 1000, 0, 0], to: [pipeOffsetX + 1000, 100, 0] },
+                ],
+                arrow_lines: [
+                  { from: [pipeOffsetX, 0, 0], to: [pipeOffsetX + 20, 10, 0] },
+                  { from: [pipeOffsetX + 1000, 0, 0], to: [pipeOffsetX + 980, 10, 0] },
+                ],
+                label_anchor: [pipeOffsetX + 500, 100, 0],
+              }],
+              meta: {
+                geometry_space: 'source_mm',
+                source_to_design: IDENTITY,
+                source_version: {
+                  dbnum: 7997,
+                  sesno: pipeSesno,
+                  databases: [{ dbnum: 7997, sesno: pipeSesno, db_type: 'DESI' }],
+                },
+                notes: [],
+              },
+            }),
+          };
+        }
+        return {
+          ok: true as const,
+          diagnostics: [],
+          data: contractPayload({
+            input_refno: refno,
+            branch_refno: refno,
+            meta: {
+              geometry_space: 'source_mm',
+              source_to_design: IDENTITY,
+              source_version: {
+                dbnum: 8001,
+                sesno: 12,
+                databases: [{ dbnum: 8001, sesno: 12, db_type: 'DESI' }],
+              },
+              notes: [],
+            },
+          }),
+        };
+      });
+
+      const harness = createHarness({
+        search: '?mbd_refno=24381_145018,17496_106465',
+        fetchPipeData,
+      });
+
+      // 初次装载：两个对象都取一次
+      await harness.sync.sync(harness.target);
+      expect(calls).toEqual(['24381_145018', '17496_106465']);
+
+      // 管子挪位（X 平移 +2000）、会话推进到 42，而 17496_106465 未受影响
+      calls.length = 0;
+      pipeSesno = 42;
+      pipeOffsetX = 2000;
+      await harness.sync.sync(harness.target, {
+        latestRefresh: {
+          affectedRefnos: ['24381/145018'],
+          modelSessionsByDbnum: { 7997: 42, 8001: 10 },
+        },
+      });
+
+      // 只重取了受影响的 24381_145018，17496_106465 复用缓存零请求
+      expect(calls).toEqual(['24381_145018']);
+      const updatedRecords = harness.target.replaceExternalSource.mock.calls.at(-1)?.[1] as readonly any[];
+      expect(updatedRecords).toHaveLength(2);
+      const movedPipe = updatedRecords.find(r => r.id === '24381_145018:dim-1');
+      expect(movedPipe.layout.labelAnchor[0]).toBe(2500);
+      const snap = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+      expect(snap.sourceVersion.sesno).toBe(42);
+      expect(snap.modelSessionsByDbnum).toEqual({ 7997: 42, 8001: 10 });
+    });
+
+    it('withdraws annotations and marks deleted (without loadError or error toast) when a loaded equipment disappears on latestRefresh', async () => {
+      let equiDeleted = false;
+      const fetchPipeData: MbdExternalSyncDeps['fetchPipeData'] = vi.fn(async refno => {
+        if (refno === '24381_200001' && equiDeleted) {
+          return {
+            ok: false as const,
+            notFound: true,
+            error: 'refno 24381/200001 在所钉会话里不存在',
+          };
+        }
+        return {
+          ok: true as const,
+          diagnostics: [],
+          data: contractPayload({ input_refno: refno, branch_refno: refno }),
+        };
+      });
+
+      const harness = createHarness({
+        search: '?mbd_refno=24381_145018,24381_200001',
+        fetchPipeData,
+      });
+
+      await harness.sync.sync(harness.target);
+      expect(harness.target.replaceExternalSource.mock.calls.at(-1)?.[1]).toHaveLength(2);
+
+      // 设备在最新会话中被删：点「取最新」后撤下设备标注，写明「对象已删除」，不报装载失败
+      equiDeleted = true;
+      await harness.sync.sync(harness.target, {
+        latestRefresh: { affectedRefnos: ['24381_200001'] },
+      });
+
+      const remaining = harness.target.replaceExternalSource.mock.calls.at(-1)?.[1] as readonly { id: string }[];
+      expect(remaining.map(r => r.id)).toEqual(['24381_145018:dim-1']);
+      expect(harness.emitToast).not.toHaveBeenCalled();
+      const snap = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+      expect(snap.loadError).toBeUndefined();
+      const equiSource = snap.sources.find((s: { refno: string }) => s.refno === '24381_200001');
+      expect(equiSource.deleted).toBe(true);
+      expect(equiSource.loadError).toBeNull();
+      expect(equiSource.notes.join('；')).toContain('对象已删除');
+    });
+  });
 });

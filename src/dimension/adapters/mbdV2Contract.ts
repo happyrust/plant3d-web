@@ -471,7 +471,13 @@ export type MbdV2ParseResult =
     data: MbdV2PipeData;
     diagnostics: readonly MbdV2ParseDiagnostic[];
   }>
-  | Readonly<{ ok: false; error: string; issues?: readonly MbdV2Issue[] }>;
+  | Readonly<{
+    ok: false;
+    error: string;
+    issues?: readonly MbdV2Issue[];
+    /** True when the server returned a 404 `not_found` envelope (#142). */
+    notFound?: boolean;
+  }>;
 
 const ISSUE_SEVERITIES: readonly MbdV2IssueSeverity[] = [
   'info',

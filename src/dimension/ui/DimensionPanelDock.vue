@@ -311,6 +311,33 @@ const sourceVersionTitle = computed(() => {
   );
   return `求解器读取的数据库会话：${databases.length > 0 ? databases.join('、') : `${version.dbnum}@${version.sesno}`}`;
 });
+
+/**
+ * #142：标注包所依据的会话号与当前三维模型所在会话号不一致时（如不在后端更新范围的库），
+ * 在面板上同时写明两个会话号。
+ */
+const mbdSessionMismatches = computed(() => {
+  const modelSessions = mbdDiagnostics.value.modelSessionsByDbnum;
+  if (!modelSessions) return [];
+  const versions = mbdDiagnostics.value.sources.length > 0
+    ? mbdDiagnostics.value.sources.map(s => s.sourceVersion).filter(Boolean)
+    : mbdDiagnostics.value.sourceVersion ? [mbdDiagnostics.value.sourceVersion] : [];
+  const seen = new Set<number>();
+  const out: { dbnum: number; mbdSesno: number; modelSesno: number }[] = [];
+  for (const version of versions) {
+    if (!version || seen.has(version.dbnum)) continue;
+    const modelSesno = modelSessions[version.dbnum];
+    if (typeof modelSesno === 'number' && Number.isFinite(modelSesno) && modelSesno !== version.sesno) {
+      seen.add(version.dbnum);
+      out.push({ dbnum: version.dbnum, mbdSesno: version.sesno, modelSesno });
+    }
+  }
+  return out;
+});
+
+/** #142：「取最新」后发现已在最新会话里删除的对象（标注已撤下，不算装载失败）。 */
+const mbdDeletedSources = computed(() =>
+  mbdDiagnostics.value.sources.filter(source => source.deleted === true));
 const diagnosticsBySeverity = computed(() => {
   const groups: Record<'error' | 'warning' | 'info', MbdDiagnosticsSnapshot['issues'][number][]> = {
     error: [],
@@ -423,8 +450,9 @@ const hiddenDiagnosticsCount = computed(() => {
 });
 const diagnosticsVisible = computed(() =>
   diagnosticsCount.value > 0
+  || mbdDiagnostics.value.notes.length > 0
   || mbdDiagnostics.value.loadError !== null
-  || mbdDiagnostics.value.sources.some(source => source.loadError !== null)
+  || mbdDiagnostics.value.sources.some(source => source.loadError !== null || source.deleted === true)
   || mbdDiagnostics.value.layoutMode !== null);
 /**
  * 「本分支标注不完整」的逐包判断，期望集按标注类型取（`expectedKindsFor`，#103 M7）：管道包和
@@ -1147,6 +1175,13 @@ function act(
           :title="sourceVersionTitle">
           {{ sourceVersionBadge }}
         </span>
+        <span v-for="mismatch in mbdSessionMismatches"
+          :key="mismatch.dbnum"
+          class="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-amber-900"
+          data-testid="mbd-session-mismatch"
+          :data-dbnum="mismatch.dbnum">
+          标注 {{ mismatch.dbnum }}@{{ mismatch.mbdSesno }} ≠ 模型 {{ mismatch.dbnum }}@{{ mismatch.modelSesno }}
+        </span>
         <button v-if="mbdErrorBadgeVisible"
           type="button"
           class="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 font-semibold text-red-700"
@@ -1195,6 +1230,17 @@ function act(
             ×
           </button>
         </span>
+      </div>
+      <div v-if="mbdDeletedSources.length > 0"
+        class="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900"
+        role="status"
+        data-testid="mbd-deleted-sources">
+        <div v-for="entry in mbdDeletedSources"
+          :key="entry.refno"
+          data-testid="mbd-deleted-source"
+          :data-refno="entry.refno">
+          <span class="font-semibold">{{ entry.refno }}：</span>对象已删除，标注已撤下。
+        </div>
       </div>
       <div v-if="mbdBatchLimitBanner"
         class="mt-1 flex flex-wrap items-center justify-between gap-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-sky-900"

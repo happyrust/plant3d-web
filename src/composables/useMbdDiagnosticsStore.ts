@@ -44,6 +44,11 @@ export type MbdDiagnosticsSourceSnapshot = Readonly<{
    */
   empty?: boolean;
   /**
+   * 对象在「取最新」后确认已从最新会话删除（#142）：标注已撤下，诊断写明已删除，
+   * 不算装载失败（`loadError === null`）。
+   */
+  deleted?: boolean;
+  /**
    * 该包通道级装载失败原因（API 传输、契约错误或单包原子拒绝）；成功时为 null。
    * 逐包拒绝（2026-11-02）下一包失败只记在这里，不掀翻其它包。
    */
@@ -85,6 +90,11 @@ export type MbdDiagnosticsSnapshot = Readonly<{
    * 全部已装载或未超限时为空数组。
    */
   deferredRefnos: readonly string[];
+  /**
+   * 当前三维模型各设计库所在的模型会话号（`dbnum -> sesno`，#142）：
+   * 面板据此核对标注包的 `sourceVersion` 是否与三维模型会话一致。
+   */
+  modelSessionsByDbnum?: Readonly<Record<number, number>>;
 }>;
 
 type MbdDiagnosticsUpdate =
