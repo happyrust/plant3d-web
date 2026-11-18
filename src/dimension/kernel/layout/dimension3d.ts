@@ -25,7 +25,12 @@ import {
 } from '../vec';
 
 import { emptyLayout } from './linear';
-import { lodSecondaryFar, lodShortLine } from './shared/lod';
+import {
+  lodCloseUpLineScale,
+  lodProjectedSourceTextHeightPx,
+  lodSecondaryFar,
+  lodShortLine,
+} from './shared/lod';
 import { labelBoundsOf, rectCorners } from './shared/screen';
 
 import type {
@@ -110,6 +115,7 @@ export function layoutDimension3d(
   const sourceHeightM = input.textHeightM !== undefined && input.textHeightM > 0
     ? input.textHeightM
     : 0;
+  const lodProjectedPx = lodProjectedSourceTextHeightPx(input.textHeightM, metresPerPixel);
   const h = Math.max(sourceHeightM, rules.textFloorPx * metresPerPixel);
   const idealHeightPx = h / metresPerPixel;
 
@@ -119,7 +125,7 @@ export function layoutDimension3d(
   // than its own value text.
   // Only the secondary floor applies here (no detail tier for 3D running
   // dimensions); `metresPerPixel` is already finite and positive.
-  if (lodSecondaryFar(input.lod, sourceHeightM > 0 ? sourceHeightM / metresPerPixel : null, theme)) {
+  if (lodSecondaryFar(input.lod, lodProjectedPx, theme)) {
     return hidden('secondary-far');
   }
 
@@ -147,10 +153,11 @@ export function layoutDimension3d(
   const lodLabelWidthPx = idealHeightPx > theme.sourceTextHeightMaxPx
     ? font.getWidth(theme.sourceTextHeightMaxPx, label)
     : labelWidthPx;
+  const lineScale = lodCloseUpLineScale(input.textHeightM, lodProjectedPx, theme);
   if (
     input.lod?.hideShort
     && label.length > 0
-    && lodShortLine(lineLengthPx, lodLabelWidthPx, theme, input.lod.tier)
+    && lodShortLine(lineLengthPx * lineScale, lodLabelWidthPx, theme, input.lod.tier)
   ) {
     return hidden('short-line');
   }

@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { SOLVESPACE_DIMENSION_THEME } from '../../theme';
 
 import {
+  LOD_CLOSEUP_SHORT_LINE_REF_TEXT_M,
+  LOD_EFFECTIVE_SOURCE_TEXT_MIN_M,
+  lodCloseUpLineScale,
   lodDetailFar,
+  lodProjectedSourceTextHeightPx,
   lodSecondaryFar,
   lodShortLine,
   lodTierHiddenReason,
@@ -96,5 +100,34 @@ describe('tier predicates', () => {
     expect(lodTierHiddenReason({ tier: 'primary', hideShort: true }, 10.5, gated)).toBeNull();
     expect(lodTierHiddenReason({ tier: 'secondary' }, null, gated)).toBeNull();
     expect(lodTierHiddenReason(undefined, 10.5, gated)).toBeNull();
+  });
+
+  it('#138 caps the close-up LOD floor at 2 mm without inflating mid/far views or drawn heights', () => {
+    expect(LOD_EFFECTIVE_SOURCE_TEXT_MIN_M).toBe(0.002);
+    expect(LOD_CLOSEUP_SHORT_LINE_REF_TEXT_M).toBe(0.006);
+
+    // Raw geometric projection stays untouched for text sizing:
+    expect(projectedSourceTextHeightPx(0.00059, 0.0001)).toBeCloseTo(5.9, 6);
+
+    // Close-up outside camera.near=0.1m (0.1 mm/px): 0.59 mm lifts to 2 mm -> 20 px >= 18 px
+    const closeUpPx = lodProjectedSourceTextHeightPx(0.00059, 0.0001);
+    expect(closeUpPx).toBeCloseTo(20, 6);
+    expect(lodDetailFar({ tier: 'detail' }, closeUpPx, theme)).toBe(false);
+
+    // Mid / whole-object view (1 mm/px): 2 mm -> 2 px < 18 px, still hidden!
+    const midPx = lodProjectedSourceTextHeightPx(0.00059, 0.001);
+    expect(midPx).toBeCloseTo(2, 6);
+    expect(lodDetailFar({ tier: 'detail' }, midPx, theme)).toBe(true);
+
+    // Heights >= 2 mm are completely unchanged at every scale:
+    expect(lodProjectedSourceTextHeightPx(0.027, 0.002)).toBeCloseTo(13.5, 9);
+    expect(lodProjectedSourceTextHeightPx(undefined, 0.0001)).toBeNull();
+    expect(lodProjectedSourceTextHeightPx(0, 0.0001)).toBeNull();
+
+    // Short-line close-up scale only activates for < 2 mm text AFTER reaching close-up:
+    expect(lodCloseUpLineScale(0.00042, midPx, theme)).toBe(1);
+    expect(lodCloseUpLineScale(0.00042, closeUpPx, theme)).toBeCloseTo(0.006 / 0.00042, 6);
+    expect(lodCloseUpLineScale(0.002, closeUpPx, theme)).toBe(1);
+    expect(lodCloseUpLineScale(0.027, 270, theme)).toBe(1);
   });
 });

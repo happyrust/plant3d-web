@@ -26,7 +26,13 @@ import { add3, EPSILON, length3, scale3, sub3, tryNormalize3 } from '../vec';
 
 import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
-import { lodShortLine, lodTierHiddenReason, projectedSourceTextHeightPx } from './shared/lod';
+import {
+  lodCloseUpLineScale,
+  lodProjectedSourceTextHeightPx,
+  lodShortLine,
+  lodTierHiddenReason,
+  projectedSourceTextHeightPx,
+} from './shared/lod';
 import {
   backProjectedSegment,
   labelBoundsOf,
@@ -320,9 +326,16 @@ function lodHiddenReason(
   const lod = input.lod;
   if (!lod) return null;
   // Tier rules (secondary floor, detail ceiling) are shared with the 3D and
-  // tag presentations; the short-line rule measures this presentation's own
-  // dimension line against the label at the resolved text height.
-  const tierHidden = lodTierHiddenReason(lod, projectedPx, context.theme);
+  // tag presentations; tiny source text heights (< 2 mm, #138) clamp their LOD
+  // gate floor to 2 mm so close-up views outside `camera.near` can always reveal
+  // them without inflating drawn font height (`resolveTextHeightPx`) or mid/far views.
+  const lodProjectedPx = input.textHeightM !== undefined && input.textHeightM > 0
+    ? lodProjectedSourceTextHeightPx(
+      input.textHeightM,
+      context.projector.worldPerPixelAt(input.labelAnchor),
+    )
+    : projectedPx;
+  const tierHidden = lodTierHiddenReason(lod, lodProjectedPx, context.theme);
   if (tierHidden) return tierHidden;
   if (lod.hideShort && input.formattedLabel.length > 0) {
     const dimensionLine = input.lines.find(line => line.part === 'dimension');
@@ -330,8 +343,9 @@ function lodHiddenReason(
       const from = projectSceneVertex(sceneVertex(dimensionLine.from), context.projector);
       const to = projectSceneVertex(sceneVertex(dimensionLine.to), context.projector);
       const lineLengthPx = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      const lineScale = lodCloseUpLineScale(input.textHeightM, lodProjectedPx, context.theme);
       const labelWidthPx = context.font.getWidth(textHeightPx, input.formattedLabel);
-      if (lodShortLine(lineLengthPx, labelWidthPx, context.theme, lod.tier)) {
+      if (lodShortLine(lineLengthPx * lineScale, labelWidthPx, context.theme, lod.tier)) {
         return 'short-line';
       }
     }

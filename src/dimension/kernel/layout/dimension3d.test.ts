@@ -272,6 +272,29 @@ describe('layoutDimension3d', () => {
     expect(layoutDimension3d(record, short, context(555)).derived.lodHidden).toBe('short-line');
   });
 
+  it('#138 reveals a sub-millimetre clearance run (0.42 mm text on 1.22 mm gap) at reachable close-up outside camera.near while keeping mid/far views hidden', () => {
+    // Reproduces 24381_38695 member 24381_38940: 1.22 mm clearance run with 0.4234 mm solver text height.
+    // On a floor slab (camera.near = 0.1 m), pixelsPerMetre reaches ~10,000 px/m (0.1 mm/px), never the
+    // ~45,000 px/m an uncapped 13 px floor label would demand.
+    const sliverSpec: ExplicitDimension3dInput = { ...spec, to: [0.00122, 0, 0] };
+    const sliver: ExplicitLayoutInput = {
+      ...input,
+      formattedLabel: '1.22',
+      textHeightM: 0.0004234,
+      lod: { tier: 'detail', hideShort: true },
+      dimension3d: sliverSpec,
+    };
+
+    // Mid-view (1,000 px/m = 1 mm/px) and pre-close-up (5,000 px/m = 0.2 mm/px): still hidden!
+    expect(layoutDimension3d(sliver, sliverSpec, context(1000)).derived.lodHidden).toBe('short-line');
+    expect(layoutDimension3d(sliver, sliverSpec, context(5000)).derived.lodHidden).toBe('short-line');
+
+    // Reachable close-up just outside camera.near = 0.1 m (10,000 px/m = 0.1 mm/px): drawn cleanly!
+    const closeUp = layoutDimension3d(sliver, sliverSpec, context(10000));
+    expect(closeUp.derived.lodHidden).toBeUndefined();
+    expect(closeUp.scenePrimitives.length).toBeGreaterThan(0);
+  });
+
   it('falls back to view-plane text when the text plane is edge-on', () => {
     // Pipe along the view ray: the baseline projects to a point.
     const edgeOn: ExplicitDimension3dInput = {

@@ -10,8 +10,8 @@ import type { ExplicitLodHiddenReason, ExplicitLodInput } from '../../types';
 
 /**
  * Source text height projected to screen pixels, or null when the source
- * declares none (or the projector cannot say): the camera-dependent number
- * every tier rule compares against.
+ * declares none (or the projector cannot say): the true geometric projection
+ * used when sizing drawn text.
  */
 export function projectedSourceTextHeightPx(
   textHeightM: number | undefined,
@@ -22,6 +22,60 @@ export function projectedSourceTextHeightPx(
     && Number.isFinite(metresPerPixel)
     && metresPerPixel > 0
     ? textHeightM / metresPerPixel
+    : null;
+}
+
+/**
+ * Design-space source text height floor (`2 mm`) for close-up LOD visibility
+ * gates (#138).
+ *
+ * At the room / floor-slab camera near clipping plane (`near = 0.1 m`),
+ * `metresPerPixel` bottoms out around `0.09–0.105 mm/px`, so any source text
+ * `>= 2 mm` already reaches `lodDetailMinPx` (`18 px`) naturally outside `near`,
+ * whereas `< 2 mm` text (`0.4–1 mm` on 1 mm civil/arch clearances, `1–2 mm` on
+ * EM9 pipe slope marks) can never reach `18 px` before clipping.
+ *
+ * Clamping the LOD gate's effective source height at `2 mm` (`0.002 m`) —
+ * without altering drawn geometry — guarantees a reachable close-up distance
+ * outside `camera.near` while keeping `100%` of whole-object / fit-to-bounds
+ * views identical to baseline.
+ */
+export const LOD_EFFECTIVE_SOURCE_TEXT_MIN_M = 0.002;
+
+/**
+ * Effective line-length scale factor applied to `< 2 mm`-text dimensions once
+ * the camera has already entered the close-up gate (`lodProjectedPx >= lodDetailMinPx`),
+ * so `~1.2 mm` clearance runs whose text height was shrunk with the gap are not
+ * permanently deleted by `lodShortLine` against the `13 px`-floored label width.
+ */
+export const LOD_CLOSEUP_SHORT_LINE_REF_TEXT_M = 0.006;
+
+export function lodCloseUpLineScale(
+  textHeightM: number | undefined,
+  lodProjectedPx: number | null,
+  theme: DimensionTheme,
+): number {
+  if (
+    textHeightM === undefined
+    || !(textHeightM > 0)
+    || textHeightM >= LOD_EFFECTIVE_SOURCE_TEXT_MIN_M
+    || lodProjectedPx === null
+    || lodProjectedPx < theme.lodDetailMinPx
+  ) {
+    return 1;
+  }
+  return LOD_CLOSEUP_SHORT_LINE_REF_TEXT_M / textHeightM;
+}
+
+export function lodProjectedSourceTextHeightPx(
+  textHeightM: number | undefined,
+  metresPerPixel: number,
+): number | null {
+  return textHeightM !== undefined && textHeightM > 0
+    ? projectedSourceTextHeightPx(
+      Math.max(textHeightM, LOD_EFFECTIVE_SOURCE_TEXT_MIN_M),
+      metresPerPixel,
+    )
     : null;
 }
 

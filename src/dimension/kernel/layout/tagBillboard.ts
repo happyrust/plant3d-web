@@ -27,7 +27,11 @@ import { resolveDimensionStyleRole, SOLVESPACE_DIMENSION_THEME } from '../theme'
 import { add3, EPSILON, scale3, tryNormalize3 } from '../vec';
 
 import { emptyLayout } from './linear';
-import { lodTierHiddenReason, projectedSourceTextHeightPx } from './shared/lod';
+import {
+  LOD_EFFECTIVE_SOURCE_TEXT_MIN_M,
+  lodProjectedSourceTextHeightPx,
+  lodTierHiddenReason,
+} from './shared/lod';
 
 import type { ViewportProjector } from '../projector';
 import type { DimensionTheme } from '../theme';
@@ -233,10 +237,19 @@ export function planTagBillboard(
     emptyLayout(input.id, input.labelPinned, input.formattedLabel, reason);
   const empty = (): LayoutResult => emptyLayout(input.id, input.labelPinned, input.formattedLabel);
 
-  // Level of detail, keyed on the projected source text height at the
-  // solver's label position (same rule as the flat presentation).
-  const metresPerPixel = projector.worldPerPixelAt(input.labelAnchor);
-  const projectedPx = projectedSourceTextHeightPx(input.textHeightM, metresPerPixel);
+  // Every vertex of the tag hangs off `anchor3`. Keying LOD on `anchor3`
+  // rather than `input.labelAnchor` ensures a tag with a long leader (e.g. a
+  // 2.46 m wall-edge offset whose solver text midpoint sits > 1 m from the
+  // target) can actually appear when the camera focuses on `anchor3` (#138).
+  const anchor3 = spec.target ?? input.labelAnchor;
+  const labelScale = projector.worldPerPixelAt(input.labelAnchor);
+  const metresPerPixel = input.textHeightM !== undefined
+    && input.textHeightM > 0
+    && input.textHeightM < LOD_EFFECTIVE_SOURCE_TEXT_MIN_M
+    && anchor3 !== input.labelAnchor
+    ? Math.min(labelScale, projector.worldPerPixelAt(anchor3))
+    : labelScale;
+  const projectedPx = lodProjectedSourceTextHeightPx(input.textHeightM, metresPerPixel);
   const tierHidden = input.lod ? lodTierHiddenReason(input.lod, projectedPx, theme) : null;
   if (tierHidden) return hidden(tierHidden);
   // `closeUp` follows the same gate as the detail tier itself, so a tag never
@@ -249,10 +262,9 @@ export function planTagBillboard(
     .filter(text => text.length > 0);
   if (lines.length === 0) return input.lod ? hidden('detail-far') : empty();
 
-  // Every vertex of the tag hangs off `anchor3`: with the anchor out of the
-  // frustum (behind the camera on a close-up) the painter clips the whole
-  // body, so the snapshot must not park a mirrored body on screen either.
-  const anchor3 = spec.target ?? input.labelAnchor;
+  // With `anchor3` out of the frustum (behind the camera on a close-up) the
+  // painter clips the whole body, so the snapshot must not park a mirrored
+  // body on screen either.
   if (!isSceneVertexVisible(sceneVertex(anchor3), projector)) return empty();
   const anchor = projectSceneVertex(sceneVertex(anchor3), projector);
   // The solver's label position only steers the preferred direction; behind

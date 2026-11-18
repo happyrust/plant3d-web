@@ -395,6 +395,44 @@ describe('layoutTagBillboard', () => {
     expect(onSide || onTopOrBottom).toBe(true);
     expect(layout.primitives).toEqual(layoutTagBillboard(input, spec, context()).primitives);
   });
+
+  it('#138 reveals sub-millimetre detail cards (0.59 mm text, including long-leader offsets) on close-up outside camera.near while keeping mid/far views hidden', () => {
+    // Reproduces 24381_38695 member 24381_38940 (0.5928 mm detail cards) at near = 0.1 m (~10,000 px/m).
+    const tinyCard: ExplicitLayoutInput = {
+      ...input,
+      textHeightM: 0.0005928,
+      lod: { tier: 'detail' },
+    };
+
+    // Mid-view (1,000 px/m) and pre-close-up (5,000 px/m = 0.2 mm/px -> 10 px < 18 px): still hidden!
+    const mid = planTagBillboard(tinyCard, spec, context(1000));
+    expect(!isTagBillboardPlan(mid) && mid.derived.lodHidden).toBe('detail-far');
+    const medium = planTagBillboard(tinyCard, spec, context(5000));
+    expect(!isTagBillboardPlan(medium) && medium.derived.lodHidden).toBe('detail-far');
+
+    // Close-up outside camera.near = 0.1 m (10,000 px/m = 0.1 mm/px -> 20 px >= 18 px): drawn!
+    const closeUp = planTagBillboard(tinyCard, spec, context(10000));
+    expect(isTagBillboardPlan(closeUp)).toBe(true);
+
+    // Long-leader tiny tag (e.g. 24381_5191 ydis:B where labelAnchor sits 1.23 m away from target):
+    // focusing camera on `spec.target` (worldPerPixelAt(target) = 0.0001 m/px while labelAnchor is far = 0.0015 m/px)
+    // still reveals the card when focused on its hanging anchor.
+    const baseCtx = context(10000);
+    const depthAwareCtx: LayoutContext = {
+      ...baseCtx,
+      projector: {
+        ...baseCtx.projector,
+        worldPerPixelAt(point: Vec3) {
+          return Math.hypot(point[0], point[1], point[2]) < 0.01 ? 0.0001 : 0.0015;
+        },
+      },
+    };
+    const longLeaderCard: ExplicitLayoutInput = {
+      ...tinyCard,
+      labelAnchor: [0, 1.23, 0],
+    };
+    expect(isTagBillboardPlan(planTagBillboard(longLeaderCard, spec, depthAwareCtx))).toBe(true);
+  });
 });
 
 describe('placeTagBillboards', () => {
