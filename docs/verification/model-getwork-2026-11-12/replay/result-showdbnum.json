@@ -1,0 +1,540 @@
+{
+ "startedAt": "2026-11-12T05:18:41.748Z",
+ "steps": [
+  {
+   "id": "W1",
+   "what": "新建整个 SITE（E3D 会话 1529–1530，ident/setup_t3.mac）：SITE /AIOS-SUITE-T3 连同两个 ZONE、十来台设备、一条管道",
+   "to": 1530,
+   "caughtUp": {
+    "ok": true,
+    "ms": 7503,
+    "row": {
+     "file": 1530,
+     "applied": 1530,
+     "model": 1530,
+     "roots": 1013
+    }
+   },
+   "getWork": {
+    "ms": 1763,
+    "waitedMs": 0,
+    "summary": "已取最新：模型树新增 2、删除 1；模型重载 8 个节点、新装入 2 个 SITE、撤下 1 个已不存在的节点（新增 25 个构件、撤下 21 个构件）。",
+    "level": "success",
+    "reloaded": 8,
+    "loadedNew": [
+     {
+      "refno": "24384_47462",
+      "name": "/AIOS-SUITE-T3",
+      "total": 24
+     },
+     {
+      "refno": "24384_47503",
+      "name": "/AIOS-SUITE-T3-S2",
+      "total": 1
+     }
+    ],
+    "withdrawn": [
+     {
+      "refno": "24384_33564",
+      "refnos": 21,
+      "why": "deleted"
+     }
+    ],
+    "kept": [],
+    "failed": [],
+    "componentsAdded": 25,
+    "componentsRemoved": 21,
+    "rootsTotal": 9,
+    "checked": 9,
+    "treeAdded": [
+     "24384_47462",
+     "24384_47503"
+    ],
+    "progress": [
+     "核对后台状态…",
+     "核对 9 个已装的节点…",
+     "重载模型 1/9…",
+     "重载模型 2/9…",
+     "重载模型 3/9…",
+     "重载模型 5/9…",
+     "重载模型 7/9…",
+     "重载模型 8/9…",
+     "重载模型 9/9…",
+     "装入新出现的 SITE /AIOS-SUITE-T3-S2…"
+    ],
+    "recordsRequests": 19,
+    "recordsMs": 1036,
+    "slowest": [
+     "POST /api/v1/model/records 279 ms",
+     "GET /api/v1/node/model-status 229 ms",
+     "GET /api/v1/node/model-status 212 ms",
+     "GET /api/v1/health 109 ms"
+    ]
+   },
+   "backend": {
+    "sitesBefore": 9,
+    "sitesAfter": 10,
+    "componentsBefore": 2786,
+    "componentsAfter": 2790,
+    "row": {
+     "file": 1530,
+     "applied": 1530,
+     "model": 1530,
+     "roots": 1013
+    }
+   },
+   "page": {
+    "objects": 2859,
+    "registry": [],
+    "loadedTable": 10,
+    "treeHasNewSite": true
+   },
+   "compare": {
+    "compared": 2859,
+    "mismatches": [],
+    "count": 0
+   },
+   "sitesDelta": {
+    "brandNew": [
+     "24384_47462",
+     "24384_47503"
+    ],
+    "vanished": [
+     "24384_33564"
+    ]
+   }
+  },
+  {
+   "id": "W2",
+   "what": "一口气 22 个会话（1531–1552，别的录制腿留下的）",
+   "to": 1552,
+   "caughtUp": {
+    "ok": true,
+    "ms": 39821,
+    "row": {
+     "file": 1552,
+     "applied": 1552,
+     "model": 1552,
+     "roots": 1024
+    }
+   },
+   "getWork": {
+    "ms": 2520,
+    "waitedMs": 0,
+    "summary": "已取最新：模型树新增 1；模型重载 10 个节点、新装入 1 个 SITE（新增 14 个构件）。",
+    "level": "success",
+    "reloaded": 10,
+    "loadedNew": [
+     {
+      "refno": "24384_47507",
+      "name": "/AIOS-SUITE-T2-JNT2",
+      "total": 14
+     }
+    ],
+    "withdrawn": [],
+    "kept": [],
+    "failed": [],
+    "componentsAdded": 14,
+    "componentsRemoved": 0,
+    "rootsTotal": 10,
+    "checked": 10,
+    "treeAdded": [
+     "24384_47507"
+    ],
+    "progress": [
+     "核对后台状态…",
+     "核对 10 个已装的节点…",
+     "重载模型 1/10…",
+     "重载模型 2/10…",
+     "重载模型 3/10…",
+     "重载模型 4/10…",
+     "重载模型 5/10…",
+     "重载模型 6/10…",
+     "重载模型 7/10…",
+     "重载模型 8/10…",
+     "重载模型 9/10…",
+     "重载模型 10/10…"
+    ],
+    "recordsRequests": 20,
+    "recordsMs": 1501,
+    "slowest": [
+     "GET /api/v1/node/versions 859 ms",
+     "GET /api/v1/node/versions 801 ms",
+     "GET /api/v1/node/versions 735 ms",
+     "GET /api/v1/node/versions 643 ms"
+    ]
+   },
+   "backend": {
+    "sitesBefore": 10,
+    "sitesAfter": 11,
+    "componentsBefore": 2790,
+    "componentsAfter": 2804,
+    "row": {
+     "file": 1552,
+     "applied": 1552,
+     "model": 1552,
+     "roots": 1024
+    }
+   },
+   "page": {
+    "objects": 2873,
+    "registry": [],
+    "loadedTable": 11,
+    "treeHasNewSite": true
+   },
+   "compare": {
+    "compared": 2873,
+    "mismatches": [],
+    "count": 0
+   },
+   "sitesDelta": {
+    "brandNew": [
+     "24384_47507"
+    ],
+    "vanished": []
+   }
+  },
+  {
+   "id": "W3",
+   "what": "只改一个自定义属性（E3D 会话 1553–1554，meta/uda_text_apply.mac）：模型不变，库的水位往前走",
+   "to": 1554,
+   "caughtUp": {
+    "ok": true,
+    "ms": 5456,
+    "row": {
+     "file": 1554,
+     "applied": 1554,
+     "model": 1554,
+     "roots": 1024
+    }
+   },
+   "getWork": {
+    "ms": 2738,
+    "waitedMs": 0,
+    "summary": "已取最新：模型重载 11 个节点。",
+    "level": "success",
+    "reloaded": 11,
+    "loadedNew": [],
+    "withdrawn": [],
+    "kept": [],
+    "failed": [],
+    "componentsAdded": 0,
+    "componentsRemoved": 0,
+    "rootsTotal": 11,
+    "checked": 11,
+    "treeAdded": [],
+    "progress": [
+     "核对后台状态…",
+     "核对 11 个已装的节点…",
+     "重载模型 1/11…",
+     "重载模型 2/11…",
+     "重载模型 3/11…",
+     "重载模型 4/11…",
+     "重载模型 5/11…",
+     "重载模型 6/11…",
+     "重载模型 7/11…",
+     "重载模型 8/11…",
+     "重载模型 9/11…",
+     "重载模型 10/11…",
+     "重载模型 11/11…"
+    ],
+    "recordsRequests": 20,
+    "recordsMs": 1562,
+    "slowest": [
+     "GET /api/v1/node/versions 1012 ms",
+     "GET /api/v1/node/versions 963 ms",
+     "GET /api/v1/node/versions 767 ms",
+     "GET /api/v1/dbnums 718 ms"
+    ]
+   },
+   "backend": {
+    "sitesBefore": 11,
+    "sitesAfter": 11,
+    "componentsBefore": 2804,
+    "componentsAfter": 2804,
+    "row": {
+     "file": 1554,
+     "applied": 1554,
+     "model": 1554,
+     "roots": 1024
+    }
+   },
+   "page": {
+    "objects": 2873,
+    "registry": [],
+    "loadedTable": 11,
+    "treeHasNewSite": true
+   },
+   "compare": {
+    "compared": 2873,
+    "mismatches": [],
+    "count": 0
+   },
+   "sitesDelta": {
+    "brandNew": [],
+    "vanished": []
+   }
+  }
+ ],
+ "baseline": {
+  "loadMs": 5241,
+  "loadResult": {
+   "status": "loaded",
+   "loadedObjects": 2855,
+   "refnoCount": 2786
+  },
+  "sites": [
+   {
+    "refno": "24384_40608",
+    "name": "/AIOS-SUITE-8000",
+    "zones": 2,
+    "records": 125
+   },
+   {
+    "refno": "24384_40598",
+    "name": "/AIOS-SUITE-T4",
+    "zones": 1,
+    "records": 4
+   },
+   {
+    "refno": "24384_33631",
+    "name": "/AIOS-SUITE-T2-PJOI",
+    "zones": 1,
+    "records": 18
+   },
+   {
+    "refno": "24384_33564",
+    "name": "/AIOS-SUITE-T3",
+    "zones": 1,
+    "records": 21
+   },
+   {
+    "refno": "24384_33557",
+    "name": "/AIOS-SUITE-T1-8000",
+    "zones": 1,
+    "records": 3
+   },
+   {
+    "refno": "24384_26547",
+    "name": "/AIOS-INC-20261029-p79-rvm3-P79",
+    "zones": 1,
+    "records": 1
+   },
+   {
+    "refno": "24384_46",
+    "name": "/1RX03-PIPEBJ",
+    "zones": 2,
+    "records": 514
+   },
+   {
+    "refno": "24384_24932",
+    "name": "/1CSV-HVACHB",
+    "zones": 5,
+    "records": 150
+   },
+   {
+    "refno": "24384_22399",
+    "name": "/1RX03-EQUI",
+    "zones": 3,
+    "records": 2019
+   }
+  ],
+  "row": {
+   "file": 1528,
+   "applied": 1528,
+   "model": 1528,
+   "roots": 1010
+  },
+  "sceneObjects": 2855,
+  "registry": {
+   "roots": [
+    "24384_40608@1528",
+    "24384_40598@1528",
+    "24384_33631@1528",
+    "24384_33564@1528",
+    "24384_33557@1528",
+    "24384_26547@1528",
+    "24384_46@1528",
+    "24384_24932@1528",
+    "24384_22399@1528"
+   ],
+   "scopes": [
+    {
+     "dbnum": 8000,
+     "discover": true,
+     "knownSites": [
+      "24384_40608",
+      "24384_40598",
+      "24384_33631",
+      "24384_33564",
+      "24384_33557",
+      "24384_26547",
+      "24384_46",
+      "24384_24932",
+      "24384_22399"
+     ],
+     "checked": 1528
+    }
+   ]
+  },
+  "loadedTable": [],
+  "snapshotMs": 1165
+ },
+ "guard": {
+  "toLive": [],
+  "blocked": [],
+  "allowedPost": {
+   "/api/v1/model/records": 76,
+   "/api/v1/meshes/batch": 48
+  },
+  "requestsToSandbox": 431,
+  "pageErrors": []
+ },
+ "finishedAt": "2026-11-12T05:20:01.061Z",
+ "checks": [
+  {
+   "step": "整库·基线",
+   "name": "整库装进来了，和后端逐条一样（2855 个实例矩阵）",
+   "pass": true,
+   "detail": "loaded；"
+  },
+  {
+   "step": "整库·基线",
+   "name": "有几何的顶层 SITE 都登记成了在册节点（带装时的水位 1528），库记成「要找新 SITE」；新 SITE 还不存在",
+   "pass": true,
+   "detail": "登记 9 个：24384_40608@1528 24384_40598@1528 24384_33631@1528 24384_33564@1528 24384_33557@1528 24384_26547@1528 24384_46@1528 24384_24932@1528 24384_22399@1528；后端有几何的 SITE 9 个"
+  },
+  {
+   "step": "W1",
+   "name": "后端批次追上：三枚水位都到 1530",
+   "pass": true,
+   "detail": "7503 ms；{\"file\":1530,\"applied\":1530,\"model\":1530,\"roots\":1013}"
+  },
+  {
+   "step": "W1",
+   "name": "取最新做成（没有失败、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树新增 2、删除 1；模型重载 8 个节点、新装入 2 个 SITE、撤下 1 个已不存在的节点（新增 25 个构件、撤下 21 个构件）。 failed=[] kept=[]"
+  },
+  {
+   "step": "W1",
+   "name": "三维对上：整个库和后端逐条一样（2859 个实例矩阵），场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "W1",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树新增 2、删除 1；模型重载 8 个节点、新装入 2 个 SITE、撤下 1 个已不存在的节点（新增 25 个构件、撤下 21 个构件）。"
+  },
+  {
+   "step": "W1",
+   "name": "在册的节点正好是后端此刻有几何的顶层 SITE，装时的水位都推进到了现在",
+   "pass": true,
+   "detail": "在册 10 个，后端 10 个；24384_40608@1530 24384_40598@1530 24384_33631@1530 24384_33557@1530 24384_26547@1530 24384_46@1530 24384_24932@1530 24384_22399@1530 24384_47462@1530 24384_47503@1530"
+  },
+  {
+   "step": "W1",
+   "name": "新出现的 SITE（2 个）都装进来了，件数和后端的记录数一样；库里删掉的 SITE（1 个）撤下了",
+   "pass": true,
+   "detail": "新装入 [{\"refno\":\"24384_47462\",\"name\":\"/AIOS-SUITE-T3\",\"total\":24},{\"refno\":\"24384_47503\",\"name\":\"/AIOS-SUITE-T3-S2\",\"total\":1}]；撤下 [{\"refno\":\"24384_33564\",\"refnos\":21,\"why\":\"deleted\"}]；后端新出现 24384_47462,24384_47503，后端删掉 24384_33564"
+  },
+  {
+   "step": "W1",
+   "name": "这一步 E3D 新建的 SITE /AIOS-SUITE-T3（24384_47462）在新装入的里面，那一句里说了新装入几个 SITE",
+   "pass": true,
+   "detail": "已取最新：模型树新增 2、删除 1；模型重载 8 个节点、新装入 2 个 SITE、撤下 1 个已不存在的节点（新增 25 个构件、撤下 21 个构件）。"
+  },
+  {
+   "step": "W1",
+   "name": "新 SITE 记成已在管；下次不会再当成新的",
+   "pass": true,
+   "detail": "{\"dbnum\":8000,\"discover\":true,\"knownSites\":[\"24384_40608\",\"24384_40598\",\"24384_33631\",\"24384_33564\",\"24384_33557\",\"24384_26547\",\"24384_46\",\"24384_24932\",\"24384_22399\",\"24384_47462\",\"24384_47503\"],\"checked\":1530}"
+  },
+  {
+   "step": "W2",
+   "name": "后端批次追上：三枚水位都到 1552",
+   "pass": true,
+   "detail": "39821 ms；{\"file\":1552,\"applied\":1552,\"model\":1552,\"roots\":1024}"
+  },
+  {
+   "step": "W2",
+   "name": "取最新做成（没有失败、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型树新增 1；模型重载 10 个节点、新装入 1 个 SITE（新增 14 个构件）。 failed=[] kept=[]"
+  },
+  {
+   "step": "W2",
+   "name": "三维对上：整个库和后端逐条一样（2873 个实例矩阵），场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "W2",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型树新增 1；模型重载 10 个节点、新装入 1 个 SITE（新增 14 个构件）。"
+  },
+  {
+   "step": "W2",
+   "name": "在册的节点正好是后端此刻有几何的顶层 SITE，装时的水位都推进到了现在",
+   "pass": true,
+   "detail": "在册 11 个，后端 11 个；24384_40608@1552 24384_40598@1552 24384_33631@1552 24384_33557@1552 24384_26547@1552 24384_46@1552 24384_24932@1552 24384_22399@1552 24384_47462@1552 24384_47503@1552 24384_47507@1552"
+  },
+  {
+   "step": "W2",
+   "name": "新出现的 SITE（1 个）都装进来了，件数和后端的记录数一样；库里删掉的 SITE（0 个）撤下了",
+   "pass": true,
+   "detail": "新装入 [{\"refno\":\"24384_47507\",\"name\":\"/AIOS-SUITE-T2-JNT2\",\"total\":14}]；撤下 []；后端新出现 24384_47507，后端删掉 无"
+  },
+  {
+   "step": "W3",
+   "name": "后端批次追上：三枚水位都到 1554",
+   "pass": true,
+   "detail": "5456 ms；{\"file\":1554,\"applied\":1554,\"model\":1554,\"roots\":1024}"
+  },
+  {
+   "step": "W3",
+   "name": "取最新做成（没有失败、没有判不了的节点）",
+   "pass": true,
+   "detail": "已取最新：模型重载 11 个节点。 failed=[] kept=[]"
+  },
+  {
+   "step": "W3",
+   "name": "三维对上：整个库和后端逐条一样（2873 个实例矩阵），场景里没有多余的",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "W3",
+   "name": "状态栏那句交代和回执一致",
+   "pass": true,
+   "detail": "已取最新：模型重载 11 个节点。"
+  },
+  {
+   "step": "W3",
+   "name": "在册的节点正好是后端此刻有几何的顶层 SITE，装时的水位都推进到了现在",
+   "pass": true,
+   "detail": "在册 11 个，后端 11 个；24384_40608@1554 24384_40598@1554 24384_33631@1554 24384_33557@1554 24384_26547@1554 24384_46@1554 24384_24932@1554 24384_22399@1554 24384_47462@1554 24384_47503@1554 24384_47507@1554"
+  },
+  {
+   "step": "W3",
+   "name": "新出现的 SITE（0 个）都装进来了，件数和后端的记录数一样；库里删掉的 SITE（0 个）撤下了",
+   "pass": true,
+   "detail": "新装入 []；撤下 []；后端新出现 无，后端删掉 无"
+  },
+  {
+   "step": "护栏",
+   "name": "页面没有一个请求发往 8022 / 8009",
+   "pass": true,
+   "detail": "发往沙箱后端 431 个请求"
+  },
+  {
+   "step": "护栏",
+   "name": "页面对沙箱后端只发了 GET 和三种只读 POST",
+   "pass": true,
+   "detail": "{\"/api/v1/model/records\":76,\"/api/v1/meshes/batch\":48}"
+  }
+ ]
+}

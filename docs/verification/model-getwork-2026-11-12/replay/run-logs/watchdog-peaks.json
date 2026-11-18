@@ -1,0 +1,15 @@
+{
+  "started_at": "2026-11-12T11:46:36.2877695+08:00",
+  "samples": 954,
+  "min_free_mem_gb": 8.29,
+  "min_free_mem_at": "12:57:30",
+  "min_free_c_gb": 6.32,
+  "min_free_d_gb": 30.26,
+  "max_server_ws_mb": 577.5,
+  "max_server_ws_at": "12:01:44",
+  "max_server_private_mb": 567.5,
+  "max_surreal_ws_mb": 281.4,
+  "max_surreal_private_mb": 269.9,
+  "max_foreign_rustc": 10,
+  "last_at": "13:20:32"
+}

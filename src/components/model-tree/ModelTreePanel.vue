@@ -19,6 +19,7 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
 import { useModelGeneration } from '@/composables/useModelGeneration';
+import { registerGetWorkTree } from '@/composables/useModelGetWork';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { openRoomInfo, useRoomInfo } from '@/composables/useRoomInfo';
@@ -79,6 +80,14 @@ const treeDiff = useTreeVersionDiff({
 
 // Register the global tree instance for console commands
 setModelTreeInstance(pdmsTree);
+
+// 「取最新」（GETWORK，2026-11-12）：登记这棵树——取最新时把取过子节点的层重取一遍、对账；面板卸载时撤
+const offGetWorkTree = registerGetWorkTree({
+  touchedDbnums: () => pdmsTree.loadedLayerDbnums(),
+  refresh: () => pdmsTree.refreshLoadedLayers(),
+  nameOf: (refno) => pdmsTree.nodesById.value[refno]?.name ?? null,
+});
+onUnmounted(offGetWorkTree);
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();

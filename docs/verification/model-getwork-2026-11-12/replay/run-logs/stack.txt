@@ -1,0 +1,1841 @@
+[11:41:56] ===== 准备：监听 [8000, 7998] =====
+[11:41:56] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[11:41:56]   e3d_version = "e3d31"
+[11:41:56]   enable_log = false
+[11:41:56]   sync_graph_db = false
+[11:41:56]   sync_versioned = false
+[11:41:56]   sync_tidb = false
+[11:41:56]   replace_dbs = true
+[11:41:56]   enable_index = false
+[11:41:56]   sync_chunk_size = 10_0000
+[11:41:56]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[11:41:56]   included_projects = []
+[11:41:56]   project_search_paths = []
+[11:41:56]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[11:41:56]   mdb_name = "ALL"
+[11:41:56]   project_name = "AvevaMarineSample"
+[11:41:56]   project_code = 1516
+[11:41:56]   surreal_ns = 1516
+[11:41:56]   module = "DESI"
+[11:41:56]   gen_model = false
+[11:41:56]   gen_mesh = false
+[11:41:56]   replace_mesh = false
+[11:41:56]   save_db = true
+[11:41:56]   apply_boolean_operation = true
+[11:41:56]   mesh_tol_ratio = 3.0
+[11:41:56]   gen_spatial_tree = true
+[11:41:56]   load_spatial_tree = false
+[11:41:56]   save_spatial_tree_to_db = false
+[11:41:56]   gen_model_batch_size = 4
+[11:41:56]   build_cate_relate = false
+[11:41:56]   gen_noun_graph = false
+[11:41:56]   arangodb_database = "ams"
+[11:41:56]   multi_threads = false
+[11:41:56]   arangodb_url = "http://127.0.0.1:8529"
+[11:41:56]   rebuild_ssc_tree = false
+[11:41:56]   arangodb_user = <已遮住>  ← 沙箱改写
+[11:41:56]   arangodb_password = <已遮住>  ← 沙箱改写
+[11:41:56]   ip = "127.0.0.1"
+[11:41:56]   user = <已遮住>  ← 沙箱改写
+[11:41:56]   password = <已遮住>  ← 沙箱改写
+[11:41:56]   port = "3306"
+[11:41:56]   sql_threads_number = 10
+[11:41:56]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[11:41:56]   v_ip = "127.0.0.1"  ← 沙箱改写
+[11:41:56]   v_port = 8199  ← 沙箱改写
+[11:41:56]   v_user = <已遮住>  ← 沙箱改写
+[11:41:56]   v_password = <已遮住>  ← 沙箱改写
+[11:41:56]   model_cache_mode = "incremental-overlay"
+[11:41:56]   pe_chunk = 300
+[11:41:56]   att_chunk = 200
+[11:41:56]   kv_ip = "localhost"
+[11:41:56]   kv_port = "8010"
+[11:41:56]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[11:41:56]   mqtt_port = 1883
+[11:41:56]   location = "SJZ"
+[11:41:56]   location_dbs = [1112]
+[11:41:56]   server_release_ip = "127.0.0.1:9099"
+[11:41:56]   remote_file_server_hosts = []
+[11:41:56]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[11:41:56]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[11:41:56]   http_api_cors = ["*"]
+[11:41:56]   startup_autorun = true
+[11:41:56]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[11:41:56]   block_file_identity_conflicts = false
+[11:41:56]   data_incremental = true
+[11:41:56]   model_incremental = true
+[11:41:56]   model_design_reference_cascade = true
+[11:41:56]   model_cable_endpoint_cascade = true
+[11:41:56]   model_transform_cheap_path = true
+[11:41:56]   model_unit_level_publish = true
+[11:41:56]   group_scosel = false
+[11:41:56]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[11:41:56]   extra_element_dbnums = [251095, 251137, 251049]
+[11:41:56]   save_model_mesh_to_graph_db = true
+[11:41:56]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[11:41:56]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[11:41:56]   only_update_dbinfo = false
+[11:41:56]   debug_print_world_transform = false
+[11:41:56]   only_rebuild_pdms_element = false
+[11:41:56]   debug_refno_types = ["LOOP", "PRIM"]
+[11:41:56]   manual_db_nums = [7997, 7998, 7999, 8000]
+[11:41:56]   plat_url = ""
+[11:41:56]   puhua_database_ip = ""
+[11:41:56]   puhua_database_user = <已遮住>  ← 沙箱改写
+[11:41:56]   puhua_database_password = <已遮住>  ← 沙箱改写
+[11:41:56]   room_key_word = ["-RM"]
+[11:41:56]   gen_history_model = false
+[11:41:56]   model_concurrency_mode = "adaptive"
+[11:41:56]   model_regen_claim_page = 100
+[11:41:56]   model_post_regen_aabb_page = 256
+[11:41:56]   model_regen_execution_group = 16
+[11:41:56]   model_memory_slice_elements = 8000
+[11:41:56]   model_overlay_max_roots = 50000
+[11:41:56]   model_element_cache_max_entries = 200000
+[11:41:56]   model_generation_input_max_dbnums = 0
+[11:41:56]   model_historical_snapshots_max = 16
+[11:41:56]   model_root_inflight_max = 2
+[11:41:56]   model_full_rebuild_enabled = true
+[11:41:56] ---- 配置里所有像地址、路径的值 ----
+[11:41:56]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[11:41:56]   arangodb_url = "http://127.0.0.1:8529"
+[11:41:56]   ip = "127.0.0.1"
+[11:41:56]   port = "3306"
+[11:41:56]   v_ip = "127.0.0.1"
+[11:41:56]   v_port = 8199
+[11:41:56]   kv_ip = "localhost"
+[11:41:56]   kv_port = "8010"
+[11:41:56]   mqtt_host = "127.0.0.1"
+[11:41:56]   mqtt_port = 1883
+[11:41:56]   server_release_ip = "127.0.0.1:9099"
+[11:41:56]   remote_file_server_hosts = []
+[11:41:56]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[11:41:56]   http_api_addr = "127.0.0.1:9199"
+[11:41:56]   model_transform_cheap_path = true
+[11:41:56]   plat_url = ""
+[11:41:56]   puhua_database_ip = ""
+[11:41:56] ---- 后端子进程的环境变量 ----
+[11:41:56]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[11:41:56]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[11:41:56]   AIOS_STORE_MODE = rocksdb
+[11:41:56]   AIOS_DATA_FACE = ingest
+[11:41:56]   AIOS_STARTUP_AUTORUN = 1
+[11:41:56]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[11:41:56]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[11:41:56]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[11:41:56]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[11:41:56]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[11:41:56]   RUST_MIN_STACK = 134217728
+[11:41:56]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[11:41:56]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[11:41:56] ---- 两台进程 ----
+[11:41:56]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[11:41:56]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[11:41:56]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（74055680 字节，1 个名字）
+[11:41:56]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[11:42:00]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[11:42:00] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[11:42:00] 拷了 resource：19 个文件
+[11:42:00] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[11:42:57] ===== 准备：监听 [8000, 7998] =====
+[11:42:58] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[11:42:58]   e3d_version = "e3d31"
+[11:42:58]   enable_log = false
+[11:42:58]   sync_graph_db = false
+[11:42:58]   sync_versioned = false
+[11:42:58]   sync_tidb = false
+[11:42:58]   replace_dbs = true
+[11:42:58]   enable_index = false
+[11:42:58]   sync_chunk_size = 10_0000
+[11:42:58]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[11:42:58]   included_projects = []
+[11:42:58]   project_search_paths = []
+[11:42:58]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[11:42:58]   mdb_name = "ALL"
+[11:42:58]   project_name = "AvevaMarineSample"
+[11:42:58]   project_code = 1516
+[11:42:58]   surreal_ns = 1516
+[11:42:58]   module = "DESI"
+[11:42:58]   gen_model = false
+[11:42:58]   gen_mesh = false
+[11:42:58]   replace_mesh = false
+[11:42:58]   save_db = true
+[11:42:58]   apply_boolean_operation = true
+[11:42:58]   mesh_tol_ratio = 3.0
+[11:42:58]   gen_spatial_tree = true
+[11:42:58]   load_spatial_tree = false
+[11:42:58]   save_spatial_tree_to_db = false
+[11:42:58]   gen_model_batch_size = 4
+[11:42:58]   build_cate_relate = false
+[11:42:58]   gen_noun_graph = false
+[11:42:58]   arangodb_database = "ams"
+[11:42:58]   multi_threads = false
+[11:42:58]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[11:42:58]   rebuild_ssc_tree = false
+[11:42:58]   arangodb_user = <已遮住>  ← 沙箱改写
+[11:42:58]   arangodb_password = <已遮住>  ← 沙箱改写
+[11:42:58]   ip = "127.0.0.1"
+[11:42:58]   user = <已遮住>  ← 沙箱改写
+[11:42:58]   password = <已遮住>  ← 沙箱改写
+[11:42:58]   port = "9"  ← 沙箱改写
+[11:42:58]   sql_threads_number = 10
+[11:42:58]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[11:42:58]   v_ip = "127.0.0.1"  ← 沙箱改写
+[11:42:58]   v_port = 8199  ← 沙箱改写
+[11:42:58]   v_user = <已遮住>  ← 沙箱改写
+[11:42:58]   v_password = <已遮住>  ← 沙箱改写
+[11:42:58]   model_cache_mode = "incremental-overlay"
+[11:42:58]   pe_chunk = 300
+[11:42:58]   att_chunk = 200
+[11:42:58]   kv_ip = "localhost"
+[11:42:58]   kv_port = "9"  ← 沙箱改写
+[11:42:58]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[11:42:58]   mqtt_port = 9  ← 沙箱改写
+[11:42:58]   location = "SJZ"
+[11:42:58]   location_dbs = [1112]
+[11:42:58]   server_release_ip = "127.0.0.1:9099"
+[11:42:58]   remote_file_server_hosts = []
+[11:42:58]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[11:42:58]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[11:42:58]   http_api_cors = ["*"]
+[11:42:58]   startup_autorun = true
+[11:42:58]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[11:42:58]   block_file_identity_conflicts = false
+[11:42:58]   data_incremental = true
+[11:42:58]   model_incremental = true
+[11:42:58]   model_design_reference_cascade = true
+[11:42:58]   model_cable_endpoint_cascade = true
+[11:42:58]   model_transform_cheap_path = true
+[11:42:58]   model_unit_level_publish = true
+[11:42:58]   group_scosel = false
+[11:42:58]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[11:42:58]   extra_element_dbnums = [251095, 251137, 251049]
+[11:42:58]   save_model_mesh_to_graph_db = true
+[11:42:58]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[11:42:58]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[11:42:58]   only_update_dbinfo = false
+[11:42:58]   debug_print_world_transform = false
+[11:42:58]   only_rebuild_pdms_element = false
+[11:42:58]   debug_refno_types = ["LOOP", "PRIM"]
+[11:42:58]   manual_db_nums = [7997, 7998, 7999, 8000]
+[11:42:58]   plat_url = ""
+[11:42:58]   puhua_database_ip = ""
+[11:42:58]   puhua_database_user = <已遮住>  ← 沙箱改写
+[11:42:58]   puhua_database_password = <已遮住>  ← 沙箱改写
+[11:42:58]   room_key_word = ["-RM"]
+[11:42:58]   gen_history_model = false
+[11:42:58]   model_concurrency_mode = "adaptive"
+[11:42:58]   model_regen_claim_page = 100
+[11:42:58]   model_post_regen_aabb_page = 256
+[11:42:58]   model_regen_execution_group = 16
+[11:42:58]   model_memory_slice_elements = 8000
+[11:42:58]   model_overlay_max_roots = 50000
+[11:42:58]   model_element_cache_max_entries = 200000
+[11:42:58]   model_generation_input_max_dbnums = 0
+[11:42:58]   model_historical_snapshots_max = 16
+[11:42:58]   model_root_inflight_max = 2
+[11:42:58]   model_full_rebuild_enabled = true
+[11:42:58] ---- 配置里所有像地址、路径的值 ----
+[11:42:58]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[11:42:58]   arangodb_url = "http://127.0.0.1:9"
+[11:42:58]   ip = "127.0.0.1"
+[11:42:58]   port = "9"
+[11:42:58]   v_ip = "127.0.0.1"
+[11:42:58]   v_port = 8199
+[11:42:58]   kv_ip = "localhost"
+[11:42:58]   kv_port = "9"
+[11:42:58]   mqtt_host = "127.0.0.1"
+[11:42:58]   mqtt_port = 9
+[11:42:58]   server_release_ip = "127.0.0.1:9099"
+[11:42:58]   remote_file_server_hosts = []
+[11:42:58]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[11:42:58]   http_api_addr = "127.0.0.1:9199"
+[11:42:58]   model_transform_cheap_path = true
+[11:42:58]   plat_url = ""
+[11:42:58]   puhua_database_ip = ""
+[11:42:58] ---- 后端子进程的环境变量 ----
+[11:42:58]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[11:42:58]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[11:42:58]   AIOS_STORE_MODE = rocksdb
+[11:42:58]   AIOS_DATA_FACE = ingest
+[11:42:58]   AIOS_STARTUP_AUTORUN = 1
+[11:42:58]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[11:42:58]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[11:42:58]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[11:42:58]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[11:42:58]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[11:42:58]   RUST_MIN_STACK = 134217728
+[11:42:58]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[11:42:58]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[11:42:58] ---- 两台进程 ----
+[11:42:58]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[11:42:58]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[11:42:58]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（74055680 字节，1 个名字）
+[11:42:58]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[11:43:01]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[11:43:01] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[11:43:01] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[11:43:11] ===== 启动：监听 [8000, 7998] =====
+[11:43:11] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[11:43:11]   e3d_version = "e3d31"
+[11:43:11]   enable_log = false
+[11:43:11]   sync_graph_db = false
+[11:43:11]   sync_versioned = false
+[11:43:11]   sync_tidb = false
+[11:43:11]   replace_dbs = true
+[11:43:11]   enable_index = false
+[11:43:11]   sync_chunk_size = 10_0000
+[11:43:11]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[11:43:11]   included_projects = []
+[11:43:11]   project_search_paths = []
+[11:43:11]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[11:43:11]   mdb_name = "ALL"
+[11:43:11]   project_name = "AvevaMarineSample"
+[11:43:11]   project_code = 1516
+[11:43:11]   surreal_ns = 1516
+[11:43:11]   module = "DESI"
+[11:43:11]   gen_model = false
+[11:43:11]   gen_mesh = false
+[11:43:11]   replace_mesh = false
+[11:43:11]   save_db = true
+[11:43:11]   apply_boolean_operation = true
+[11:43:11]   mesh_tol_ratio = 3.0
+[11:43:11]   gen_spatial_tree = true
+[11:43:11]   load_spatial_tree = false
+[11:43:11]   save_spatial_tree_to_db = false
+[11:43:11]   gen_model_batch_size = 4
+[11:43:11]   build_cate_relate = false
+[11:43:11]   gen_noun_graph = false
+[11:43:11]   arangodb_database = "ams"
+[11:43:11]   multi_threads = false
+[11:43:11]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[11:43:11]   rebuild_ssc_tree = false
+[11:43:11]   arangodb_user = <已遮住>  ← 沙箱改写
+[11:43:11]   arangodb_password = <已遮住>  ← 沙箱改写
+[11:43:11]   ip = "127.0.0.1"
+[11:43:11]   user = <已遮住>  ← 沙箱改写
+[11:43:11]   password = <已遮住>  ← 沙箱改写
+[11:43:11]   port = "9"  ← 沙箱改写
+[11:43:11]   sql_threads_number = 10
+[11:43:11]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[11:43:11]   v_ip = "127.0.0.1"  ← 沙箱改写
+[11:43:11]   v_port = 8199  ← 沙箱改写
+[11:43:11]   v_user = <已遮住>  ← 沙箱改写
+[11:43:11]   v_password = <已遮住>  ← 沙箱改写
+[11:43:11]   model_cache_mode = "incremental-overlay"
+[11:43:11]   pe_chunk = 300
+[11:43:11]   att_chunk = 200
+[11:43:11]   kv_ip = "localhost"
+[11:43:11]   kv_port = "9"  ← 沙箱改写
+[11:43:11]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[11:43:11]   mqtt_port = 9  ← 沙箱改写
+[11:43:11]   location = "SJZ"
+[11:43:11]   location_dbs = [1112]
+[11:43:11]   server_release_ip = "127.0.0.1:9099"
+[11:43:11]   remote_file_server_hosts = []
+[11:43:11]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[11:43:11]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[11:43:11]   http_api_cors = ["*"]
+[11:43:11]   startup_autorun = true
+[11:43:11]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[11:43:11]   block_file_identity_conflicts = false
+[11:43:11]   data_incremental = true
+[11:43:11]   model_incremental = true
+[11:43:11]   model_design_reference_cascade = true
+[11:43:11]   model_cable_endpoint_cascade = true
+[11:43:11]   model_transform_cheap_path = true
+[11:43:11]   model_unit_level_publish = true
+[11:43:11]   group_scosel = false
+[11:43:11]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[11:43:11]   extra_element_dbnums = [251095, 251137, 251049]
+[11:43:11]   save_model_mesh_to_graph_db = true
+[11:43:11]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[11:43:11]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[11:43:11]   only_update_dbinfo = false
+[11:43:11]   debug_print_world_transform = false
+[11:43:11]   only_rebuild_pdms_element = false
+[11:43:11]   debug_refno_types = ["LOOP", "PRIM"]
+[11:43:11]   manual_db_nums = [7997, 7998, 7999, 8000]
+[11:43:11]   plat_url = ""
+[11:43:11]   puhua_database_ip = ""
+[11:43:11]   puhua_database_user = <已遮住>  ← 沙箱改写
+[11:43:11]   puhua_database_password = <已遮住>  ← 沙箱改写
+[11:43:11]   room_key_word = ["-RM"]
+[11:43:11]   gen_history_model = false
+[11:43:11]   model_concurrency_mode = "adaptive"
+[11:43:11]   model_regen_claim_page = 100
+[11:43:11]   model_post_regen_aabb_page = 256
+[11:43:11]   model_regen_execution_group = 16
+[11:43:11]   model_memory_slice_elements = 8000
+[11:43:11]   model_overlay_max_roots = 50000
+[11:43:11]   model_element_cache_max_entries = 200000
+[11:43:11]   model_generation_input_max_dbnums = 0
+[11:43:11]   model_historical_snapshots_max = 16
+[11:43:11]   model_root_inflight_max = 2
+[11:43:11]   model_full_rebuild_enabled = true
+[11:43:11] ---- 配置里所有像地址、路径的值 ----
+[11:43:11]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[11:43:11]   arangodb_url = "http://127.0.0.1:9"
+[11:43:11]   ip = "127.0.0.1"
+[11:43:11]   port = "9"
+[11:43:11]   v_ip = "127.0.0.1"
+[11:43:11]   v_port = 8199
+[11:43:11]   kv_ip = "localhost"
+[11:43:11]   kv_port = "9"
+[11:43:11]   mqtt_host = "127.0.0.1"
+[11:43:11]   mqtt_port = 9
+[11:43:11]   server_release_ip = "127.0.0.1:9099"
+[11:43:11]   remote_file_server_hosts = []
+[11:43:11]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[11:43:11]   http_api_addr = "127.0.0.1:9199"
+[11:43:11]   model_transform_cheap_path = true
+[11:43:11]   plat_url = ""
+[11:43:11]   puhua_database_ip = ""
+[11:43:11] ---- 后端子进程的环境变量 ----
+[11:43:11]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[11:43:11]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[11:43:11]   AIOS_STORE_MODE = rocksdb
+[11:43:11]   AIOS_DATA_FACE = ingest
+[11:43:11]   AIOS_STARTUP_AUTORUN = 1
+[11:43:11]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[11:43:11]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[11:43:11]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[11:43:11]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[11:43:11]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[11:43:11]   RUST_MIN_STACK = 134217728
+[11:43:11]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[11:43:11]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[11:43:11] ---- 两台进程 ----
+[11:43:11]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[11:43:11]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[11:43:12]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（74055680 字节，1 个名字）
+[11:43:12]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[11:43:15]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[11:43:15] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[11:43:15] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[11:43:20] 内存闸门通过：空闲 15.1 GB ≥ 10 GB；C 盘可用 8.62 GB，D 盘可用 20.32 GB；别的会话的 rustc 2 个
+[11:43:22] SurrealDB 起来了：进程 57780，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[11:43:22] 后端起来了：进程 3768，监听 [8000, 7998]
+[12:15:56] 停了 server_pid 进程 3768（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[12:15:56] 停了 surreal_pid 进程 57780（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[12:16:02] 端口：9199 没人在听，8199 没人在听
+[12:16:07] ===== 启动：监听 [8000, 7998] =====
+[12:16:07] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:16:07]   e3d_version = "e3d31"
+[12:16:07]   enable_log = false
+[12:16:07]   sync_graph_db = false
+[12:16:07]   sync_versioned = false
+[12:16:07]   sync_tidb = false
+[12:16:07]   replace_dbs = true
+[12:16:07]   enable_index = false
+[12:16:07]   sync_chunk_size = 10_0000
+[12:16:07]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:16:07]   included_projects = []
+[12:16:07]   project_search_paths = []
+[12:16:07]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:16:07]   mdb_name = "ALL"
+[12:16:07]   project_name = "AvevaMarineSample"
+[12:16:07]   project_code = 1516
+[12:16:07]   surreal_ns = 1516
+[12:16:07]   module = "DESI"
+[12:16:07]   gen_model = false
+[12:16:07]   gen_mesh = false
+[12:16:07]   replace_mesh = false
+[12:16:07]   save_db = true
+[12:16:07]   apply_boolean_operation = true
+[12:16:07]   mesh_tol_ratio = 3.0
+[12:16:07]   gen_spatial_tree = true
+[12:16:07]   load_spatial_tree = false
+[12:16:07]   save_spatial_tree_to_db = false
+[12:16:07]   gen_model_batch_size = 4
+[12:16:07]   build_cate_relate = false
+[12:16:07]   gen_noun_graph = false
+[12:16:07]   arangodb_database = "ams"
+[12:16:07]   multi_threads = false
+[12:16:07]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:16:07]   rebuild_ssc_tree = false
+[12:16:07]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:16:07]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:16:07]   ip = "127.0.0.1"
+[12:16:07]   user = <已遮住>  ← 沙箱改写
+[12:16:07]   password = <已遮住>  ← 沙箱改写
+[12:16:07]   port = "9"  ← 沙箱改写
+[12:16:07]   sql_threads_number = 10
+[12:16:07]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:16:07]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:16:07]   v_port = 8199  ← 沙箱改写
+[12:16:07]   v_user = <已遮住>  ← 沙箱改写
+[12:16:07]   v_password = <已遮住>  ← 沙箱改写
+[12:16:07]   model_cache_mode = "incremental-overlay"
+[12:16:07]   pe_chunk = 300
+[12:16:07]   att_chunk = 200
+[12:16:07]   kv_ip = "localhost"
+[12:16:07]   kv_port = "9"  ← 沙箱改写
+[12:16:07]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:16:07]   mqtt_port = 9  ← 沙箱改写
+[12:16:07]   location = "SJZ"
+[12:16:07]   location_dbs = [1112]
+[12:16:07]   server_release_ip = "127.0.0.1:9099"
+[12:16:07]   remote_file_server_hosts = []
+[12:16:07]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:16:07]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:16:07]   http_api_cors = ["*"]
+[12:16:07]   startup_autorun = true
+[12:16:07]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:16:07]   block_file_identity_conflicts = false
+[12:16:07]   data_incremental = true
+[12:16:07]   model_incremental = true
+[12:16:07]   model_design_reference_cascade = true
+[12:16:07]   model_cable_endpoint_cascade = true
+[12:16:07]   model_transform_cheap_path = true
+[12:16:07]   model_unit_level_publish = true
+[12:16:08]   group_scosel = false
+[12:16:08]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[12:16:08]   extra_element_dbnums = [251095, 251137, 251049]
+[12:16:08]   save_model_mesh_to_graph_db = true
+[12:16:08]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:16:08]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:16:08]   only_update_dbinfo = false
+[12:16:08]   debug_print_world_transform = false
+[12:16:08]   only_rebuild_pdms_element = false
+[12:16:08]   debug_refno_types = ["LOOP", "PRIM"]
+[12:16:08]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:16:08]   plat_url = ""
+[12:16:08]   puhua_database_ip = ""
+[12:16:08]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:16:08]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:16:08]   room_key_word = ["-RM"]
+[12:16:08]   gen_history_model = false
+[12:16:08]   model_concurrency_mode = "adaptive"
+[12:16:08]   model_regen_claim_page = 100
+[12:16:08]   model_post_regen_aabb_page = 256
+[12:16:08]   model_regen_execution_group = 16
+[12:16:08]   model_memory_slice_elements = 8000
+[12:16:08]   model_overlay_max_roots = 50000
+[12:16:08]   model_element_cache_max_entries = 200000
+[12:16:08]   model_generation_input_max_dbnums = 0
+[12:16:08]   model_historical_snapshots_max = 16
+[12:16:08]   model_root_inflight_max = 2
+[12:16:08]   model_full_rebuild_enabled = true
+[12:16:08] ---- 配置里所有像地址、路径的值 ----
+[12:16:08]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:16:08]   arangodb_url = "http://127.0.0.1:9"
+[12:16:08]   ip = "127.0.0.1"
+[12:16:08]   port = "9"
+[12:16:08]   v_ip = "127.0.0.1"
+[12:16:08]   v_port = 8199
+[12:16:08]   kv_ip = "localhost"
+[12:16:08]   kv_port = "9"
+[12:16:08]   mqtt_host = "127.0.0.1"
+[12:16:08]   mqtt_port = 9
+[12:16:08]   server_release_ip = "127.0.0.1:9099"
+[12:16:08]   remote_file_server_hosts = []
+[12:16:08]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:16:08]   http_api_addr = "127.0.0.1:9199"
+[12:16:08]   model_transform_cheap_path = true
+[12:16:08]   plat_url = ""
+[12:16:08]   puhua_database_ip = ""
+[12:16:08] ---- 后端子进程的环境变量 ----
+[12:16:08]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:16:08]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:16:08]   AIOS_STORE_MODE = rocksdb
+[12:16:08]   AIOS_DATA_FACE = ingest
+[12:16:08]   AIOS_STARTUP_AUTORUN = 1
+[12:16:08]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:16:08]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:16:08]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:16:08]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:16:08]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:16:08]   RUST_MIN_STACK = 134217728
+[12:16:08]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:16:08]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:16:08] ---- 两台进程 ----
+[12:16:08]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:16:08]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:16:08]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（74055680 字节，1 个名字）
+[12:16:08]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[12:16:10]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:16:10] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[12:16:10] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[12:16:15] 内存闸门通过：空闲 16.3 GB ≥ 10 GB；C 盘可用 7.42 GB，D 盘可用 32.85 GB；别的会话的 rustc 0 个
+[12:16:16] SurrealDB 起来了：进程 35292，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[12:16:16] 后端起来了：进程 29320，监听 [8000, 7998]
+[12:27:33] ===== 重起后端：监听 [8000] =====
+[12:27:33] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:27:33]   e3d_version = "e3d31"
+[12:27:33]   enable_log = false
+[12:27:33]   sync_graph_db = false
+[12:27:33]   sync_versioned = false
+[12:27:33]   sync_tidb = false
+[12:27:33]   replace_dbs = true
+[12:27:33]   enable_index = false
+[12:27:33]   sync_chunk_size = 10_0000
+[12:27:33]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:27:33]   included_projects = []
+[12:27:33]   project_search_paths = []
+[12:27:33]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:27:33]   mdb_name = "ALL"
+[12:27:33]   project_name = "AvevaMarineSample"
+[12:27:33]   project_code = 1516
+[12:27:33]   surreal_ns = 1516
+[12:27:33]   module = "DESI"
+[12:27:33]   gen_model = false
+[12:27:33]   gen_mesh = false
+[12:27:33]   replace_mesh = false
+[12:27:33]   save_db = true
+[12:27:33]   apply_boolean_operation = true
+[12:27:33]   mesh_tol_ratio = 3.0
+[12:27:33]   gen_spatial_tree = true
+[12:27:33]   load_spatial_tree = false
+[12:27:33]   save_spatial_tree_to_db = false
+[12:27:33]   gen_model_batch_size = 4
+[12:27:33]   build_cate_relate = false
+[12:27:33]   gen_noun_graph = false
+[12:27:33]   arangodb_database = "ams"
+[12:27:33]   multi_threads = false
+[12:27:33]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:27:33]   rebuild_ssc_tree = false
+[12:27:33]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:27:33]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:27:33]   ip = "127.0.0.1"
+[12:27:33]   user = <已遮住>  ← 沙箱改写
+[12:27:33]   password = <已遮住>  ← 沙箱改写
+[12:27:33]   port = "9"  ← 沙箱改写
+[12:27:33]   sql_threads_number = 10
+[12:27:33]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:27:33]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:27:33]   v_port = 8199  ← 沙箱改写
+[12:27:33]   v_user = <已遮住>  ← 沙箱改写
+[12:27:33]   v_password = <已遮住>  ← 沙箱改写
+[12:27:33]   model_cache_mode = "incremental-overlay"
+[12:27:33]   pe_chunk = 300
+[12:27:33]   att_chunk = 200
+[12:27:33]   kv_ip = "localhost"
+[12:27:33]   kv_port = "9"  ← 沙箱改写
+[12:27:33]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:27:33]   mqtt_port = 9  ← 沙箱改写
+[12:27:33]   location = "SJZ"
+[12:27:33]   location_dbs = [1112]
+[12:27:33]   server_release_ip = "127.0.0.1:9099"
+[12:27:33]   remote_file_server_hosts = []
+[12:27:33]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:27:33]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:27:33]   http_api_cors = ["*"]
+[12:27:33]   startup_autorun = true
+[12:27:33]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:27:33]   block_file_identity_conflicts = false
+[12:27:33]   data_incremental = true
+[12:27:33]   model_incremental = true
+[12:27:33]   model_design_reference_cascade = true
+[12:27:33]   model_cable_endpoint_cascade = true
+[12:27:33]   model_transform_cheap_path = true
+[12:27:33]   model_unit_level_publish = true
+[12:27:33]   group_scosel = false
+[12:27:33]   watch_dbnums = [8000]  ← 沙箱改写
+[12:27:33]   extra_element_dbnums = [251095, 251137, 251049]
+[12:27:33]   save_model_mesh_to_graph_db = true
+[12:27:33]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:27:33]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:27:33]   only_update_dbinfo = false
+[12:27:33]   debug_print_world_transform = false
+[12:27:33]   only_rebuild_pdms_element = false
+[12:27:33]   debug_refno_types = ["LOOP", "PRIM"]
+[12:27:33]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:27:33]   plat_url = ""
+[12:27:33]   puhua_database_ip = ""
+[12:27:33]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:27:33]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:27:33]   room_key_word = ["-RM"]
+[12:27:33]   gen_history_model = false
+[12:27:33]   model_concurrency_mode = "adaptive"
+[12:27:33]   model_regen_claim_page = 100
+[12:27:33]   model_post_regen_aabb_page = 256
+[12:27:33]   model_regen_execution_group = 16
+[12:27:33]   model_memory_slice_elements = 8000
+[12:27:33]   model_overlay_max_roots = 50000
+[12:27:33]   model_element_cache_max_entries = 200000
+[12:27:33]   model_generation_input_max_dbnums = 0
+[12:27:33]   model_historical_snapshots_max = 16
+[12:27:33]   model_root_inflight_max = 2
+[12:27:33]   model_full_rebuild_enabled = true
+[12:27:33] ---- 配置里所有像地址、路径的值 ----
+[12:27:33]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:27:33]   arangodb_url = "http://127.0.0.1:9"
+[12:27:33]   ip = "127.0.0.1"
+[12:27:33]   port = "9"
+[12:27:33]   v_ip = "127.0.0.1"
+[12:27:33]   v_port = 8199
+[12:27:33]   kv_ip = "localhost"
+[12:27:33]   kv_port = "9"
+[12:27:33]   mqtt_host = "127.0.0.1"
+[12:27:33]   mqtt_port = 9
+[12:27:33]   server_release_ip = "127.0.0.1:9099"
+[12:27:33]   remote_file_server_hosts = []
+[12:27:33]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:27:33]   http_api_addr = "127.0.0.1:9199"
+[12:27:33]   model_transform_cheap_path = true
+[12:27:33]   plat_url = ""
+[12:27:33]   puhua_database_ip = ""
+[12:27:33] ---- 后端子进程的环境变量 ----
+[12:27:33]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:27:33]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:27:33]   AIOS_STORE_MODE = rocksdb
+[12:27:33]   AIOS_DATA_FACE = ingest
+[12:27:33]   AIOS_STARTUP_AUTORUN = 1
+[12:27:33]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:27:33]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:27:33]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:27:33]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:27:33]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:27:33]   RUST_MIN_STACK = 134217728
+[12:27:33]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:27:33]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:27:33] ---- 两台进程 ----
+[12:27:33]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:27:33]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:27:33]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（75941888 字节，1 个名字）
+[12:27:36]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:27:36] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[12:27:36] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[12:27:36] 停了 server_pid 进程 29320（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[12:27:39] 内存闸门通过：空闲 16.8 GB ≥ 10 GB；C 盘可用 7.28 GB，D 盘可用 30.54 GB；别的会话的 rustc 1 个
+[12:27:39] 后端重起了：进程 55708，监听 [8000]，日志 stdout-r1.log
+[12:33:57] 停了 server_pid 进程 55708（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[12:33:57] 停了 surreal_pid 进程 35292（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[12:34:03] 端口：9199 没人在听，8199 没人在听
+[12:34:15] ===== 启动：监听 [80007998] =====
+[12:34:15] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:34:15]   e3d_version = "e3d31"
+[12:34:15]   enable_log = false
+[12:34:15]   sync_graph_db = false
+[12:34:15]   sync_versioned = false
+[12:34:15]   sync_tidb = false
+[12:34:15]   replace_dbs = true
+[12:34:15]   enable_index = false
+[12:34:15]   sync_chunk_size = 10_0000
+[12:34:15]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:34:15]   included_projects = []
+[12:34:15]   project_search_paths = []
+[12:34:15]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:34:15]   mdb_name = "ALL"
+[12:34:15]   project_name = "AvevaMarineSample"
+[12:34:15]   project_code = 1516
+[12:34:15]   surreal_ns = 1516
+[12:34:15]   module = "DESI"
+[12:34:15]   gen_model = false
+[12:34:15]   gen_mesh = false
+[12:34:15]   replace_mesh = false
+[12:34:15]   save_db = true
+[12:34:15]   apply_boolean_operation = true
+[12:34:15]   mesh_tol_ratio = 3.0
+[12:34:15]   gen_spatial_tree = true
+[12:34:15]   load_spatial_tree = false
+[12:34:15]   save_spatial_tree_to_db = false
+[12:34:15]   gen_model_batch_size = 4
+[12:34:15]   build_cate_relate = false
+[12:34:15]   gen_noun_graph = false
+[12:34:15]   arangodb_database = "ams"
+[12:34:15]   multi_threads = false
+[12:34:15]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:34:15]   rebuild_ssc_tree = false
+[12:34:15]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:34:15]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:34:15]   ip = "127.0.0.1"
+[12:34:15]   user = <已遮住>  ← 沙箱改写
+[12:34:15]   password = <已遮住>  ← 沙箱改写
+[12:34:15]   port = "9"  ← 沙箱改写
+[12:34:15]   sql_threads_number = 10
+[12:34:15]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:34:15]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:34:15]   v_port = 8199  ← 沙箱改写
+[12:34:15]   v_user = <已遮住>  ← 沙箱改写
+[12:34:15]   v_password = <已遮住>  ← 沙箱改写
+[12:34:15]   model_cache_mode = "incremental-overlay"
+[12:34:15]   pe_chunk = 300
+[12:34:15]   att_chunk = 200
+[12:34:15]   kv_ip = "localhost"
+[12:34:15]   kv_port = "9"  ← 沙箱改写
+[12:34:15]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:34:15]   mqtt_port = 9  ← 沙箱改写
+[12:34:15]   location = "SJZ"
+[12:34:15]   location_dbs = [1112]
+[12:34:15]   server_release_ip = "127.0.0.1:9099"
+[12:34:15]   remote_file_server_hosts = []
+[12:34:15]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:34:15]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:34:15]   http_api_cors = ["*"]
+[12:34:15]   startup_autorun = true
+[12:34:15]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:34:15]   block_file_identity_conflicts = false
+[12:34:15]   data_incremental = true
+[12:34:15]   model_incremental = true
+[12:34:15]   model_design_reference_cascade = true
+[12:34:15]   model_cable_endpoint_cascade = true
+[12:34:15]   model_transform_cheap_path = true
+[12:34:15]   model_unit_level_publish = true
+[12:34:15]   group_scosel = false
+[12:34:15]   watch_dbnums = [80007998]  ← 沙箱改写
+[12:34:15]   extra_element_dbnums = [251095, 251137, 251049]
+[12:34:15]   save_model_mesh_to_graph_db = true
+[12:34:15]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:34:15]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:34:15]   only_update_dbinfo = false
+[12:34:15]   debug_print_world_transform = false
+[12:34:15]   only_rebuild_pdms_element = false
+[12:34:15]   debug_refno_types = ["LOOP", "PRIM"]
+[12:34:15]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:34:15]   plat_url = ""
+[12:34:15]   puhua_database_ip = ""
+[12:34:15]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:34:15]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:34:15]   room_key_word = ["-RM"]
+[12:34:15]   gen_history_model = false
+[12:34:15]   model_concurrency_mode = "adaptive"
+[12:34:15]   model_regen_claim_page = 100
+[12:34:15]   model_post_regen_aabb_page = 256
+[12:34:15]   model_regen_execution_group = 16
+[12:34:15]   model_memory_slice_elements = 8000
+[12:34:15]   model_overlay_max_roots = 50000
+[12:34:15]   model_element_cache_max_entries = 200000
+[12:34:15]   model_generation_input_max_dbnums = 0
+[12:34:15]   model_historical_snapshots_max = 16
+[12:34:15]   model_root_inflight_max = 2
+[12:34:15]   model_full_rebuild_enabled = true
+[12:34:15] ---- 配置里所有像地址、路径的值 ----
+[12:34:15]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:34:15]   arangodb_url = "http://127.0.0.1:9"
+[12:34:15]   ip = "127.0.0.1"
+[12:34:15]   port = "9"
+[12:34:15]   v_ip = "127.0.0.1"
+[12:34:15]   v_port = 8199
+[12:34:15]   kv_ip = "localhost"
+[12:34:15]   kv_port = "9"
+[12:34:15]   mqtt_host = "127.0.0.1"
+[12:34:15]   mqtt_port = 9
+[12:34:15]   server_release_ip = "127.0.0.1:9099"
+[12:34:15]   remote_file_server_hosts = []
+[12:34:15]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:34:15]   http_api_addr = "127.0.0.1:9199"
+[12:34:15]   model_transform_cheap_path = true
+[12:34:15]   plat_url = ""
+[12:34:15]   puhua_database_ip = ""
+[12:34:15] ---- 后端子进程的环境变量 ----
+[12:34:15]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:34:15]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:34:15]   AIOS_STORE_MODE = rocksdb
+[12:34:15]   AIOS_DATA_FACE = ingest
+[12:34:15]   AIOS_STARTUP_AUTORUN = 1
+[12:34:15]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:34:15]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:34:15]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:34:15]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:34:15]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:34:15]   RUST_MIN_STACK = 134217728
+[12:34:15]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:34:15]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:34:15] ---- 两台进程 ----
+[12:34:15]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:34:15]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:34:18]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:34:18] 核对没过，共 1 处，什么都不起：
+[12:34:18]   ✗ 沙箱工程根里没有库 80007998 的文件
+[12:36:05] ===== 启动：监听 [8000, 7998] =====
+[12:36:05] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:36:05]   e3d_version = "e3d31"
+[12:36:05]   enable_log = false
+[12:36:05]   sync_graph_db = false
+[12:36:05]   sync_versioned = false
+[12:36:05]   sync_tidb = false
+[12:36:05]   replace_dbs = true
+[12:36:05]   enable_index = false
+[12:36:05]   sync_chunk_size = 10_0000
+[12:36:05]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:36:05]   included_projects = []
+[12:36:05]   project_search_paths = []
+[12:36:05]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:36:05]   mdb_name = "ALL"
+[12:36:05]   project_name = "AvevaMarineSample"
+[12:36:05]   project_code = 1516
+[12:36:05]   surreal_ns = 1516
+[12:36:05]   module = "DESI"
+[12:36:05]   gen_model = false
+[12:36:05]   gen_mesh = false
+[12:36:05]   replace_mesh = false
+[12:36:05]   save_db = true
+[12:36:05]   apply_boolean_operation = true
+[12:36:05]   mesh_tol_ratio = 3.0
+[12:36:05]   gen_spatial_tree = true
+[12:36:05]   load_spatial_tree = false
+[12:36:05]   save_spatial_tree_to_db = false
+[12:36:05]   gen_model_batch_size = 4
+[12:36:05]   build_cate_relate = false
+[12:36:05]   gen_noun_graph = false
+[12:36:05]   arangodb_database = "ams"
+[12:36:05]   multi_threads = false
+[12:36:05]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:36:05]   rebuild_ssc_tree = false
+[12:36:05]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:36:05]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:36:05]   ip = "127.0.0.1"
+[12:36:05]   user = <已遮住>  ← 沙箱改写
+[12:36:05]   password = <已遮住>  ← 沙箱改写
+[12:36:05]   port = "9"  ← 沙箱改写
+[12:36:05]   sql_threads_number = 10
+[12:36:05]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:36:05]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:36:05]   v_port = 8199  ← 沙箱改写
+[12:36:05]   v_user = <已遮住>  ← 沙箱改写
+[12:36:05]   v_password = <已遮住>  ← 沙箱改写
+[12:36:05]   model_cache_mode = "incremental-overlay"
+[12:36:05]   pe_chunk = 300
+[12:36:05]   att_chunk = 200
+[12:36:05]   kv_ip = "localhost"
+[12:36:05]   kv_port = "9"  ← 沙箱改写
+[12:36:05]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:36:05]   mqtt_port = 9  ← 沙箱改写
+[12:36:05]   location = "SJZ"
+[12:36:05]   location_dbs = [1112]
+[12:36:05]   server_release_ip = "127.0.0.1:9099"
+[12:36:05]   remote_file_server_hosts = []
+[12:36:05]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:36:05]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:36:05]   http_api_cors = ["*"]
+[12:36:05]   startup_autorun = true
+[12:36:05]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:36:05]   block_file_identity_conflicts = false
+[12:36:05]   data_incremental = true
+[12:36:05]   model_incremental = true
+[12:36:05]   model_design_reference_cascade = true
+[12:36:05]   model_cable_endpoint_cascade = true
+[12:36:05]   model_transform_cheap_path = true
+[12:36:05]   model_unit_level_publish = true
+[12:36:05]   group_scosel = false
+[12:36:05]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[12:36:05]   extra_element_dbnums = [251095, 251137, 251049]
+[12:36:05]   save_model_mesh_to_graph_db = true
+[12:36:05]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:36:05]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:36:05]   only_update_dbinfo = false
+[12:36:05]   debug_print_world_transform = false
+[12:36:05]   only_rebuild_pdms_element = false
+[12:36:05]   debug_refno_types = ["LOOP", "PRIM"]
+[12:36:05]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:36:05]   plat_url = ""
+[12:36:05]   puhua_database_ip = ""
+[12:36:05]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:36:05]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:36:05]   room_key_word = ["-RM"]
+[12:36:05]   gen_history_model = false
+[12:36:05]   model_concurrency_mode = "adaptive"
+[12:36:05]   model_regen_claim_page = 100
+[12:36:05]   model_post_regen_aabb_page = 256
+[12:36:05]   model_regen_execution_group = 16
+[12:36:05]   model_memory_slice_elements = 8000
+[12:36:05]   model_overlay_max_roots = 50000
+[12:36:05]   model_element_cache_max_entries = 200000
+[12:36:05]   model_generation_input_max_dbnums = 0
+[12:36:05]   model_historical_snapshots_max = 16
+[12:36:05]   model_root_inflight_max = 2
+[12:36:05]   model_full_rebuild_enabled = true
+[12:36:05] ---- 配置里所有像地址、路径的值 ----
+[12:36:05]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:36:05]   arangodb_url = "http://127.0.0.1:9"
+[12:36:05]   ip = "127.0.0.1"
+[12:36:05]   port = "9"
+[12:36:05]   v_ip = "127.0.0.1"
+[12:36:05]   v_port = 8199
+[12:36:05]   kv_ip = "localhost"
+[12:36:05]   kv_port = "9"
+[12:36:05]   mqtt_host = "127.0.0.1"
+[12:36:05]   mqtt_port = 9
+[12:36:05]   server_release_ip = "127.0.0.1:9099"
+[12:36:05]   remote_file_server_hosts = []
+[12:36:05]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:36:05]   http_api_addr = "127.0.0.1:9199"
+[12:36:05]   model_transform_cheap_path = true
+[12:36:05]   plat_url = ""
+[12:36:05]   puhua_database_ip = ""
+[12:36:05] ---- 后端子进程的环境变量 ----
+[12:36:05]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:36:05]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:36:05]   AIOS_STORE_MODE = rocksdb
+[12:36:05]   AIOS_DATA_FACE = ingest
+[12:36:05]   AIOS_STARTUP_AUTORUN = 1
+[12:36:05]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:36:05]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:36:05]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:36:05]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:36:05]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:36:05]   RUST_MIN_STACK = 134217728
+[12:36:05]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:36:05]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:36:05] ---- 两台进程 ----
+[12:36:05]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:36:05]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:36:05]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（74055680 字节，1 个名字）
+[12:36:05]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[12:36:08]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:36:08] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[12:36:08] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[12:36:12] 内存闸门通过：空闲 15.5 GB ≥ 10 GB；C 盘可用 7.12 GB，D 盘可用 39.01 GB；别的会话的 rustc 0 个
+[12:36:14] SurrealDB 起来了：进程 34700，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[12:36:14] 后端起来了：进程 47664，监听 [8000, 7998]
+[12:45:01] ===== 重起后端：监听 [8000] =====
+[12:45:01] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:45:01]   e3d_version = "e3d31"
+[12:45:01]   enable_log = false
+[12:45:01]   sync_graph_db = false
+[12:45:01]   sync_versioned = false
+[12:45:01]   sync_tidb = false
+[12:45:01]   replace_dbs = true
+[12:45:01]   enable_index = false
+[12:45:01]   sync_chunk_size = 10_0000
+[12:45:01]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:45:01]   included_projects = []
+[12:45:01]   project_search_paths = []
+[12:45:01]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:45:01]   mdb_name = "ALL"
+[12:45:01]   project_name = "AvevaMarineSample"
+[12:45:01]   project_code = 1516
+[12:45:01]   surreal_ns = 1516
+[12:45:01]   module = "DESI"
+[12:45:01]   gen_model = false
+[12:45:01]   gen_mesh = false
+[12:45:01]   replace_mesh = false
+[12:45:01]   save_db = true
+[12:45:01]   apply_boolean_operation = true
+[12:45:01]   mesh_tol_ratio = 3.0
+[12:45:01]   gen_spatial_tree = true
+[12:45:01]   load_spatial_tree = false
+[12:45:01]   save_spatial_tree_to_db = false
+[12:45:01]   gen_model_batch_size = 4
+[12:45:01]   build_cate_relate = false
+[12:45:01]   gen_noun_graph = false
+[12:45:01]   arangodb_database = "ams"
+[12:45:01]   multi_threads = false
+[12:45:01]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:45:01]   rebuild_ssc_tree = false
+[12:45:01]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:45:01]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:45:01]   ip = "127.0.0.1"
+[12:45:01]   user = <已遮住>  ← 沙箱改写
+[12:45:01]   password = <已遮住>  ← 沙箱改写
+[12:45:01]   port = "9"  ← 沙箱改写
+[12:45:01]   sql_threads_number = 10
+[12:45:01]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:45:01]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:45:01]   v_port = 8199  ← 沙箱改写
+[12:45:01]   v_user = <已遮住>  ← 沙箱改写
+[12:45:01]   v_password = <已遮住>  ← 沙箱改写
+[12:45:01]   model_cache_mode = "incremental-overlay"
+[12:45:01]   pe_chunk = 300
+[12:45:01]   att_chunk = 200
+[12:45:01]   kv_ip = "localhost"
+[12:45:01]   kv_port = "9"  ← 沙箱改写
+[12:45:01]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:45:01]   mqtt_port = 9  ← 沙箱改写
+[12:45:01]   location = "SJZ"
+[12:45:01]   location_dbs = [1112]
+[12:45:01]   server_release_ip = "127.0.0.1:9099"
+[12:45:01]   remote_file_server_hosts = []
+[12:45:01]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:45:01]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:45:01]   http_api_cors = ["*"]
+[12:45:01]   startup_autorun = true
+[12:45:01]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:45:01]   block_file_identity_conflicts = false
+[12:45:01]   data_incremental = true
+[12:45:01]   model_incremental = true
+[12:45:01]   model_design_reference_cascade = true
+[12:45:01]   model_cable_endpoint_cascade = true
+[12:45:01]   model_transform_cheap_path = true
+[12:45:01]   model_unit_level_publish = true
+[12:45:01]   group_scosel = false
+[12:45:01]   watch_dbnums = [8000]  ← 沙箱改写
+[12:45:01]   extra_element_dbnums = [251095, 251137, 251049]
+[12:45:01]   save_model_mesh_to_graph_db = true
+[12:45:01]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:45:01]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:45:01]   only_update_dbinfo = false
+[12:45:01]   debug_print_world_transform = false
+[12:45:01]   only_rebuild_pdms_element = false
+[12:45:01]   debug_refno_types = ["LOOP", "PRIM"]
+[12:45:01]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:45:01]   plat_url = ""
+[12:45:01]   puhua_database_ip = ""
+[12:45:01]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:45:01]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:45:01]   room_key_word = ["-RM"]
+[12:45:01]   gen_history_model = false
+[12:45:01]   model_concurrency_mode = "adaptive"
+[12:45:01]   model_regen_claim_page = 100
+[12:45:01]   model_post_regen_aabb_page = 256
+[12:45:01]   model_regen_execution_group = 16
+[12:45:01]   model_memory_slice_elements = 8000
+[12:45:01]   model_overlay_max_roots = 50000
+[12:45:01]   model_element_cache_max_entries = 200000
+[12:45:01]   model_generation_input_max_dbnums = 0
+[12:45:01]   model_historical_snapshots_max = 16
+[12:45:01]   model_root_inflight_max = 2
+[12:45:01]   model_full_rebuild_enabled = true
+[12:45:01] ---- 配置里所有像地址、路径的值 ----
+[12:45:01]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:45:01]   arangodb_url = "http://127.0.0.1:9"
+[12:45:01]   ip = "127.0.0.1"
+[12:45:01]   port = "9"
+[12:45:01]   v_ip = "127.0.0.1"
+[12:45:01]   v_port = 8199
+[12:45:01]   kv_ip = "localhost"
+[12:45:01]   kv_port = "9"
+[12:45:01]   mqtt_host = "127.0.0.1"
+[12:45:01]   mqtt_port = 9
+[12:45:01]   server_release_ip = "127.0.0.1:9099"
+[12:45:01]   remote_file_server_hosts = []
+[12:45:01]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:45:01]   http_api_addr = "127.0.0.1:9199"
+[12:45:01]   model_transform_cheap_path = true
+[12:45:01]   plat_url = ""
+[12:45:01]   puhua_database_ip = ""
+[12:45:01] ---- 后端子进程的环境变量 ----
+[12:45:01]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:45:01]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:45:01]   AIOS_STORE_MODE = rocksdb
+[12:45:01]   AIOS_DATA_FACE = ingest
+[12:45:01]   AIOS_STARTUP_AUTORUN = 1
+[12:45:01]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:45:01]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:45:01]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:45:01]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:45:01]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:45:01]   RUST_MIN_STACK = 134217728
+[12:45:01]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:45:01]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:45:01] ---- 两台进程 ----
+[12:45:01]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:45:01]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:45:01]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（75941888 字节，1 个名字）
+[12:45:04]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:45:04] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[12:45:04] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[12:45:05] 停了 server_pid 进程 47664（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[12:45:07] 内存闸门通过：空闲 11.9 GB ≥ 10 GB；C 盘可用 7.04 GB，D 盘可用 43.9 GB；别的会话的 rustc 2 个
+[12:45:07] 后端重起了：进程 54900，监听 [8000]，日志 stdout-r1.log
+[12:49:54] 停了 server_pid 进程 54900（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[12:49:54] 停了 surreal_pid 进程 34700（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[12:50:00] 端口：9199 没人在听，8199 没人在听
+[12:50:12] ===== 启动：监听 [8000, 7998] =====
+[12:50:12] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:50:12]   e3d_version = "e3d31"
+[12:50:12]   enable_log = false
+[12:50:12]   sync_graph_db = false
+[12:50:12]   sync_versioned = false
+[12:50:12]   sync_tidb = false
+[12:50:12]   replace_dbs = true
+[12:50:12]   enable_index = false
+[12:50:12]   sync_chunk_size = 10_0000
+[12:50:12]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:50:12]   included_projects = []
+[12:50:12]   project_search_paths = []
+[12:50:12]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:50:12]   mdb_name = "ALL"
+[12:50:12]   project_name = "AvevaMarineSample"
+[12:50:12]   project_code = 1516
+[12:50:12]   surreal_ns = 1516
+[12:50:12]   module = "DESI"
+[12:50:12]   gen_model = false
+[12:50:12]   gen_mesh = false
+[12:50:12]   replace_mesh = false
+[12:50:12]   save_db = true
+[12:50:12]   apply_boolean_operation = true
+[12:50:12]   mesh_tol_ratio = 3.0
+[12:50:12]   gen_spatial_tree = true
+[12:50:12]   load_spatial_tree = false
+[12:50:12]   save_spatial_tree_to_db = false
+[12:50:12]   gen_model_batch_size = 4
+[12:50:12]   build_cate_relate = false
+[12:50:12]   gen_noun_graph = false
+[12:50:12]   arangodb_database = "ams"
+[12:50:12]   multi_threads = false
+[12:50:12]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:50:12]   rebuild_ssc_tree = false
+[12:50:12]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:50:12]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:50:12]   ip = "127.0.0.1"
+[12:50:12]   user = <已遮住>  ← 沙箱改写
+[12:50:12]   password = <已遮住>  ← 沙箱改写
+[12:50:12]   port = "9"  ← 沙箱改写
+[12:50:12]   sql_threads_number = 10
+[12:50:12]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:50:12]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:50:12]   v_port = 8199  ← 沙箱改写
+[12:50:12]   v_user = <已遮住>  ← 沙箱改写
+[12:50:12]   v_password = <已遮住>  ← 沙箱改写
+[12:50:12]   model_cache_mode = "incremental-overlay"
+[12:50:12]   pe_chunk = 300
+[12:50:12]   att_chunk = 200
+[12:50:12]   kv_ip = "localhost"
+[12:50:12]   kv_port = "9"  ← 沙箱改写
+[12:50:12]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:50:12]   mqtt_port = 9  ← 沙箱改写
+[12:50:12]   location = "SJZ"
+[12:50:12]   location_dbs = [1112]
+[12:50:12]   server_release_ip = "127.0.0.1:9099"
+[12:50:12]   remote_file_server_hosts = []
+[12:50:12]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:50:12]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:50:12]   http_api_cors = ["*"]
+[12:50:12]   startup_autorun = true
+[12:50:12]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:50:12]   block_file_identity_conflicts = false
+[12:50:12]   data_incremental = true
+[12:50:12]   model_incremental = true
+[12:50:12]   model_design_reference_cascade = true
+[12:50:12]   model_cable_endpoint_cascade = true
+[12:50:12]   model_transform_cheap_path = true
+[12:50:12]   model_unit_level_publish = true
+[12:50:12]   group_scosel = false
+[12:50:12]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[12:50:12]   extra_element_dbnums = [251095, 251137, 251049]
+[12:50:12]   save_model_mesh_to_graph_db = true
+[12:50:12]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:50:12]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:50:12]   only_update_dbinfo = false
+[12:50:12]   debug_print_world_transform = false
+[12:50:12]   only_rebuild_pdms_element = false
+[12:50:12]   debug_refno_types = ["LOOP", "PRIM"]
+[12:50:12]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:50:12]   plat_url = ""
+[12:50:12]   puhua_database_ip = ""
+[12:50:12]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:50:12]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:50:12]   room_key_word = ["-RM"]
+[12:50:12]   gen_history_model = false
+[12:50:12]   model_concurrency_mode = "adaptive"
+[12:50:12]   model_regen_claim_page = 100
+[12:50:12]   model_post_regen_aabb_page = 256
+[12:50:12]   model_regen_execution_group = 16
+[12:50:12]   model_memory_slice_elements = 8000
+[12:50:12]   model_overlay_max_roots = 50000
+[12:50:12]   model_element_cache_max_entries = 200000
+[12:50:12]   model_generation_input_max_dbnums = 0
+[12:50:12]   model_historical_snapshots_max = 16
+[12:50:12]   model_root_inflight_max = 2
+[12:50:12]   model_full_rebuild_enabled = true
+[12:50:12] ---- 配置里所有像地址、路径的值 ----
+[12:50:12]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:50:12]   arangodb_url = "http://127.0.0.1:9"
+[12:50:12]   ip = "127.0.0.1"
+[12:50:12]   port = "9"
+[12:50:12]   v_ip = "127.0.0.1"
+[12:50:12]   v_port = 8199
+[12:50:12]   kv_ip = "localhost"
+[12:50:12]   kv_port = "9"
+[12:50:12]   mqtt_host = "127.0.0.1"
+[12:50:12]   mqtt_port = 9
+[12:50:12]   server_release_ip = "127.0.0.1:9099"
+[12:50:12]   remote_file_server_hosts = []
+[12:50:12]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:50:12]   http_api_addr = "127.0.0.1:9199"
+[12:50:12]   model_transform_cheap_path = true
+[12:50:12]   plat_url = ""
+[12:50:12]   puhua_database_ip = ""
+[12:50:12] ---- 后端子进程的环境变量 ----
+[12:50:12]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:50:12]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:50:12]   AIOS_STORE_MODE = rocksdb
+[12:50:12]   AIOS_DATA_FACE = ingest
+[12:50:12]   AIOS_STARTUP_AUTORUN = 1
+[12:50:12]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:50:12]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:50:12]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:50:12]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:50:12]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:50:12]   RUST_MIN_STACK = 134217728
+[12:50:12]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:50:12]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:50:12] ---- 两台进程 ----
+[12:50:12]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:50:12]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:50:12]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（74055680 字节，1 个名字）
+[12:50:12]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[12:50:15]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:50:15] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[12:50:15] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[12:50:20] 内存闸门通过：空闲 14.9 GB ≥ 10 GB；C 盘可用 6.99 GB，D 盘可用 42.9 GB；别的会话的 rustc 4 个
+[12:50:21] SurrealDB 起来了：进程 16832，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[12:50:21] 后端起来了：进程 11536，监听 [8000, 7998]
+[12:57:40] ===== 重起后端：监听 [8000] =====
+[12:57:40] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[12:57:40]   e3d_version = "e3d31"
+[12:57:40]   enable_log = false
+[12:57:40]   sync_graph_db = false
+[12:57:40]   sync_versioned = false
+[12:57:40]   sync_tidb = false
+[12:57:40]   replace_dbs = true
+[12:57:40]   enable_index = false
+[12:57:40]   sync_chunk_size = 10_0000
+[12:57:40]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[12:57:40]   included_projects = []
+[12:57:40]   project_search_paths = []
+[12:57:40]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[12:57:40]   mdb_name = "ALL"
+[12:57:40]   project_name = "AvevaMarineSample"
+[12:57:40]   project_code = 1516
+[12:57:40]   surreal_ns = 1516
+[12:57:40]   module = "DESI"
+[12:57:40]   gen_model = false
+[12:57:40]   gen_mesh = false
+[12:57:40]   replace_mesh = false
+[12:57:40]   save_db = true
+[12:57:40]   apply_boolean_operation = true
+[12:57:40]   mesh_tol_ratio = 3.0
+[12:57:40]   gen_spatial_tree = true
+[12:57:40]   load_spatial_tree = false
+[12:57:40]   save_spatial_tree_to_db = false
+[12:57:40]   gen_model_batch_size = 4
+[12:57:40]   build_cate_relate = false
+[12:57:40]   gen_noun_graph = false
+[12:57:40]   arangodb_database = "ams"
+[12:57:40]   multi_threads = false
+[12:57:40]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[12:57:40]   rebuild_ssc_tree = false
+[12:57:40]   arangodb_user = <已遮住>  ← 沙箱改写
+[12:57:40]   arangodb_password = <已遮住>  ← 沙箱改写
+[12:57:40]   ip = "127.0.0.1"
+[12:57:40]   user = <已遮住>  ← 沙箱改写
+[12:57:40]   password = <已遮住>  ← 沙箱改写
+[12:57:40]   port = "9"  ← 沙箱改写
+[12:57:40]   sql_threads_number = 10
+[12:57:40]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[12:57:40]   v_ip = "127.0.0.1"  ← 沙箱改写
+[12:57:40]   v_port = 8199  ← 沙箱改写
+[12:57:40]   v_user = <已遮住>  ← 沙箱改写
+[12:57:40]   v_password = <已遮住>  ← 沙箱改写
+[12:57:40]   model_cache_mode = "incremental-overlay"
+[12:57:40]   pe_chunk = 300
+[12:57:40]   att_chunk = 200
+[12:57:40]   kv_ip = "localhost"
+[12:57:40]   kv_port = "9"  ← 沙箱改写
+[12:57:40]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[12:57:40]   mqtt_port = 9  ← 沙箱改写
+[12:57:40]   location = "SJZ"
+[12:57:40]   location_dbs = [1112]
+[12:57:40]   server_release_ip = "127.0.0.1:9099"
+[12:57:40]   remote_file_server_hosts = []
+[12:57:40]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[12:57:40]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[12:57:40]   http_api_cors = ["*"]
+[12:57:40]   startup_autorun = true
+[12:57:40]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[12:57:40]   block_file_identity_conflicts = false
+[12:57:40]   data_incremental = true
+[12:57:40]   model_incremental = true
+[12:57:40]   model_design_reference_cascade = true
+[12:57:40]   model_cable_endpoint_cascade = true
+[12:57:40]   model_transform_cheap_path = true
+[12:57:40]   model_unit_level_publish = true
+[12:57:40]   group_scosel = false
+[12:57:40]   watch_dbnums = [8000]  ← 沙箱改写
+[12:57:40]   extra_element_dbnums = [251095, 251137, 251049]
+[12:57:40]   save_model_mesh_to_graph_db = true
+[12:57:40]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[12:57:40]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[12:57:40]   only_update_dbinfo = false
+[12:57:40]   debug_print_world_transform = false
+[12:57:40]   only_rebuild_pdms_element = false
+[12:57:40]   debug_refno_types = ["LOOP", "PRIM"]
+[12:57:40]   manual_db_nums = [7997, 7998, 7999, 8000]
+[12:57:40]   plat_url = ""
+[12:57:40]   puhua_database_ip = ""
+[12:57:40]   puhua_database_user = <已遮住>  ← 沙箱改写
+[12:57:40]   puhua_database_password = <已遮住>  ← 沙箱改写
+[12:57:40]   room_key_word = ["-RM"]
+[12:57:40]   gen_history_model = false
+[12:57:40]   model_concurrency_mode = "adaptive"
+[12:57:40]   model_regen_claim_page = 100
+[12:57:40]   model_post_regen_aabb_page = 256
+[12:57:40]   model_regen_execution_group = 16
+[12:57:40]   model_memory_slice_elements = 8000
+[12:57:40]   model_overlay_max_roots = 50000
+[12:57:40]   model_element_cache_max_entries = 200000
+[12:57:40]   model_generation_input_max_dbnums = 0
+[12:57:40]   model_historical_snapshots_max = 16
+[12:57:40]   model_root_inflight_max = 2
+[12:57:40]   model_full_rebuild_enabled = true
+[12:57:40] ---- 配置里所有像地址、路径的值 ----
+[12:57:40]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[12:57:40]   arangodb_url = "http://127.0.0.1:9"
+[12:57:40]   ip = "127.0.0.1"
+[12:57:40]   port = "9"
+[12:57:40]   v_ip = "127.0.0.1"
+[12:57:40]   v_port = 8199
+[12:57:40]   kv_ip = "localhost"
+[12:57:40]   kv_port = "9"
+[12:57:40]   mqtt_host = "127.0.0.1"
+[12:57:40]   mqtt_port = 9
+[12:57:40]   server_release_ip = "127.0.0.1:9099"
+[12:57:40]   remote_file_server_hosts = []
+[12:57:40]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[12:57:40]   http_api_addr = "127.0.0.1:9199"
+[12:57:40]   model_transform_cheap_path = true
+[12:57:40]   plat_url = ""
+[12:57:40]   puhua_database_ip = ""
+[12:57:40] ---- 后端子进程的环境变量 ----
+[12:57:40]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[12:57:40]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[12:57:40]   AIOS_STORE_MODE = rocksdb
+[12:57:40]   AIOS_DATA_FACE = ingest
+[12:57:40]   AIOS_STARTUP_AUTORUN = 1
+[12:57:40]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[12:57:40]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[12:57:40]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[12:57:40]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[12:57:40]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:57:40]   RUST_MIN_STACK = 134217728
+[12:57:40]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:57:40]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[12:57:40] ---- 两台进程 ----
+[12:57:40]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[12:57:40]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[12:57:40]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（75941888 字节，1 个名字）
+[12:57:44]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[12:57:44] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[12:57:44] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[12:57:44] 停了 server_pid 进程 11536（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[12:57:47] 内存闸门通过：空闲 12.5 GB ≥ 10 GB；C 盘可用 6.93 GB，D 盘可用 42.13 GB；别的会话的 rustc 4 个
+[12:57:47] 后端重起了：进程 10368，监听 [8000]，日志 stdout-r1.log
+[13:06:05] 停了 server_pid 进程 10368（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[13:06:05] 停了 surreal_pid 进程 16832（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[13:06:11] 端口：9199 没人在听，8199 没人在听
+[13:06:24] ===== 启动：监听 [8000, 7998] =====
+[13:06:24] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[13:06:24]   e3d_version = "e3d31"
+[13:06:24]   enable_log = false
+[13:06:24]   sync_graph_db = false
+[13:06:24]   sync_versioned = false
+[13:06:24]   sync_tidb = false
+[13:06:24]   replace_dbs = true
+[13:06:24]   enable_index = false
+[13:06:24]   sync_chunk_size = 10_0000
+[13:06:24]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[13:06:24]   included_projects = []
+[13:06:24]   project_search_paths = []
+[13:06:24]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[13:06:24]   mdb_name = "ALL"
+[13:06:24]   project_name = "AvevaMarineSample"
+[13:06:24]   project_code = 1516
+[13:06:24]   surreal_ns = 1516
+[13:06:24]   module = "DESI"
+[13:06:24]   gen_model = false
+[13:06:24]   gen_mesh = false
+[13:06:24]   replace_mesh = false
+[13:06:24]   save_db = true
+[13:06:24]   apply_boolean_operation = true
+[13:06:24]   mesh_tol_ratio = 3.0
+[13:06:24]   gen_spatial_tree = true
+[13:06:24]   load_spatial_tree = false
+[13:06:24]   save_spatial_tree_to_db = false
+[13:06:24]   gen_model_batch_size = 4
+[13:06:24]   build_cate_relate = false
+[13:06:24]   gen_noun_graph = false
+[13:06:24]   arangodb_database = "ams"
+[13:06:24]   multi_threads = false
+[13:06:24]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[13:06:24]   rebuild_ssc_tree = false
+[13:06:24]   arangodb_user = <已遮住>  ← 沙箱改写
+[13:06:24]   arangodb_password = <已遮住>  ← 沙箱改写
+[13:06:24]   ip = "127.0.0.1"
+[13:06:24]   user = <已遮住>  ← 沙箱改写
+[13:06:24]   password = <已遮住>  ← 沙箱改写
+[13:06:24]   port = "9"  ← 沙箱改写
+[13:06:24]   sql_threads_number = 10
+[13:06:24]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[13:06:24]   v_ip = "127.0.0.1"  ← 沙箱改写
+[13:06:24]   v_port = 8199  ← 沙箱改写
+[13:06:24]   v_user = <已遮住>  ← 沙箱改写
+[13:06:24]   v_password = <已遮住>  ← 沙箱改写
+[13:06:24]   model_cache_mode = "incremental-overlay"
+[13:06:24]   pe_chunk = 300
+[13:06:24]   att_chunk = 200
+[13:06:24]   kv_ip = "localhost"
+[13:06:24]   kv_port = "9"  ← 沙箱改写
+[13:06:24]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[13:06:24]   mqtt_port = 9  ← 沙箱改写
+[13:06:24]   location = "SJZ"
+[13:06:24]   location_dbs = [1112]
+[13:06:24]   server_release_ip = "127.0.0.1:9099"
+[13:06:24]   remote_file_server_hosts = []
+[13:06:24]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[13:06:24]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[13:06:24]   http_api_cors = ["*"]
+[13:06:24]   startup_autorun = true
+[13:06:24]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[13:06:24]   block_file_identity_conflicts = false
+[13:06:24]   data_incremental = true
+[13:06:24]   model_incremental = true
+[13:06:24]   model_design_reference_cascade = true
+[13:06:24]   model_cable_endpoint_cascade = true
+[13:06:24]   model_transform_cheap_path = true
+[13:06:24]   model_unit_level_publish = true
+[13:06:24]   group_scosel = false
+[13:06:24]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[13:06:24]   extra_element_dbnums = [251095, 251137, 251049]
+[13:06:24]   save_model_mesh_to_graph_db = true
+[13:06:24]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[13:06:24]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[13:06:24]   only_update_dbinfo = false
+[13:06:24]   debug_print_world_transform = false
+[13:06:24]   only_rebuild_pdms_element = false
+[13:06:24]   debug_refno_types = ["LOOP", "PRIM"]
+[13:06:24]   manual_db_nums = [7997, 7998, 7999, 8000]
+[13:06:24]   plat_url = ""
+[13:06:24]   puhua_database_ip = ""
+[13:06:24]   puhua_database_user = <已遮住>  ← 沙箱改写
+[13:06:24]   puhua_database_password = <已遮住>  ← 沙箱改写
+[13:06:24]   room_key_word = ["-RM"]
+[13:06:24]   gen_history_model = false
+[13:06:24]   model_concurrency_mode = "adaptive"
+[13:06:24]   model_regen_claim_page = 100
+[13:06:24]   model_post_regen_aabb_page = 256
+[13:06:24]   model_regen_execution_group = 16
+[13:06:24]   model_memory_slice_elements = 8000
+[13:06:24]   model_overlay_max_roots = 50000
+[13:06:24]   model_element_cache_max_entries = 200000
+[13:06:24]   model_generation_input_max_dbnums = 0
+[13:06:24]   model_historical_snapshots_max = 16
+[13:06:24]   model_root_inflight_max = 2
+[13:06:24]   model_full_rebuild_enabled = true
+[13:06:24] ---- 配置里所有像地址、路径的值 ----
+[13:06:24]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[13:06:24]   arangodb_url = "http://127.0.0.1:9"
+[13:06:24]   ip = "127.0.0.1"
+[13:06:24]   port = "9"
+[13:06:24]   v_ip = "127.0.0.1"
+[13:06:24]   v_port = 8199
+[13:06:24]   kv_ip = "localhost"
+[13:06:24]   kv_port = "9"
+[13:06:24]   mqtt_host = "127.0.0.1"
+[13:06:24]   mqtt_port = 9
+[13:06:24]   server_release_ip = "127.0.0.1:9099"
+[13:06:24]   remote_file_server_hosts = []
+[13:06:24]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[13:06:24]   http_api_addr = "127.0.0.1:9199"
+[13:06:24]   model_transform_cheap_path = true
+[13:06:24]   plat_url = ""
+[13:06:24]   puhua_database_ip = ""
+[13:06:24] ---- 后端子进程的环境变量 ----
+[13:06:24]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[13:06:24]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[13:06:24]   AIOS_STORE_MODE = rocksdb
+[13:06:24]   AIOS_DATA_FACE = ingest
+[13:06:24]   AIOS_STARTUP_AUTORUN = 1
+[13:06:24]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[13:06:24]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[13:06:24]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[13:06:24]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[13:06:24]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[13:06:24]   RUST_MIN_STACK = 134217728
+[13:06:24]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[13:06:24]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[13:06:24] ---- 两台进程 ----
+[13:06:24]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[13:06:24]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[13:06:24]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（69109760 字节，1 个名字）
+[13:06:24]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[13:06:27]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[13:06:27] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[13:06:27] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[13:06:31] 内存闸门通过：空闲 17 GB ≥ 10 GB；C 盘可用 6.81 GB，D 盘可用 41.88 GB；别的会话的 rustc 0 个
+[13:06:33] SurrealDB 起来了：进程 28240，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[13:06:33] 后端起来了：进程 29392，监听 [8000, 7998]
+[13:09:59] 停了 server_pid 进程 29392（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[13:09:59] 停了 surreal_pid 进程 28240（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[13:10:05] 端口：9199 没人在听，8199 没人在听
+[13:10:19] ===== 启动：监听 [8000, 7998] =====
+[13:10:19] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[13:10:19]   e3d_version = "e3d31"
+[13:10:19]   enable_log = false
+[13:10:19]   sync_graph_db = false
+[13:10:19]   sync_versioned = false
+[13:10:19]   sync_tidb = false
+[13:10:19]   replace_dbs = true
+[13:10:19]   enable_index = false
+[13:10:19]   sync_chunk_size = 10_0000
+[13:10:19]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[13:10:19]   included_projects = []
+[13:10:19]   project_search_paths = []
+[13:10:19]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[13:10:19]   mdb_name = "ALL"
+[13:10:19]   project_name = "AvevaMarineSample"
+[13:10:19]   project_code = 1516
+[13:10:19]   surreal_ns = 1516
+[13:10:19]   module = "DESI"
+[13:10:19]   gen_model = false
+[13:10:19]   gen_mesh = false
+[13:10:19]   replace_mesh = false
+[13:10:19]   save_db = true
+[13:10:19]   apply_boolean_operation = true
+[13:10:19]   mesh_tol_ratio = 3.0
+[13:10:19]   gen_spatial_tree = true
+[13:10:19]   load_spatial_tree = false
+[13:10:19]   save_spatial_tree_to_db = false
+[13:10:19]   gen_model_batch_size = 4
+[13:10:19]   build_cate_relate = false
+[13:10:19]   gen_noun_graph = false
+[13:10:19]   arangodb_database = "ams"
+[13:10:19]   multi_threads = false
+[13:10:19]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[13:10:19]   rebuild_ssc_tree = false
+[13:10:19]   arangodb_user = <已遮住>  ← 沙箱改写
+[13:10:19]   arangodb_password = <已遮住>  ← 沙箱改写
+[13:10:19]   ip = "127.0.0.1"
+[13:10:19]   user = <已遮住>  ← 沙箱改写
+[13:10:19]   password = <已遮住>  ← 沙箱改写
+[13:10:19]   port = "9"  ← 沙箱改写
+[13:10:19]   sql_threads_number = 10
+[13:10:19]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[13:10:19]   v_ip = "127.0.0.1"  ← 沙箱改写
+[13:10:19]   v_port = 8199  ← 沙箱改写
+[13:10:19]   v_user = <已遮住>  ← 沙箱改写
+[13:10:19]   v_password = <已遮住>  ← 沙箱改写
+[13:10:19]   model_cache_mode = "incremental-overlay"
+[13:10:19]   pe_chunk = 300
+[13:10:19]   att_chunk = 200
+[13:10:19]   kv_ip = "localhost"
+[13:10:19]   kv_port = "9"  ← 沙箱改写
+[13:10:19]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[13:10:19]   mqtt_port = 9  ← 沙箱改写
+[13:10:19]   location = "SJZ"
+[13:10:19]   location_dbs = [1112]
+[13:10:19]   server_release_ip = "127.0.0.1:9099"
+[13:10:19]   remote_file_server_hosts = []
+[13:10:19]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[13:10:19]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[13:10:19]   http_api_cors = ["*"]
+[13:10:19]   startup_autorun = true
+[13:10:19]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[13:10:19]   block_file_identity_conflicts = false
+[13:10:19]   data_incremental = true
+[13:10:19]   model_incremental = true
+[13:10:19]   model_design_reference_cascade = true
+[13:10:19]   model_cable_endpoint_cascade = true
+[13:10:19]   model_transform_cheap_path = true
+[13:10:19]   model_unit_level_publish = true
+[13:10:19]   group_scosel = false
+[13:10:19]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[13:10:19]   extra_element_dbnums = [251095, 251137, 251049]
+[13:10:19]   save_model_mesh_to_graph_db = true
+[13:10:19]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[13:10:19]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[13:10:19]   only_update_dbinfo = false
+[13:10:19]   debug_print_world_transform = false
+[13:10:19]   only_rebuild_pdms_element = false
+[13:10:19]   debug_refno_types = ["LOOP", "PRIM"]
+[13:10:19]   manual_db_nums = [7997, 7998, 7999, 8000]
+[13:10:19]   plat_url = ""
+[13:10:19]   puhua_database_ip = ""
+[13:10:19]   puhua_database_user = <已遮住>  ← 沙箱改写
+[13:10:19]   puhua_database_password = <已遮住>  ← 沙箱改写
+[13:10:19]   room_key_word = ["-RM"]
+[13:10:19]   gen_history_model = false
+[13:10:19]   model_concurrency_mode = "adaptive"
+[13:10:19]   model_regen_claim_page = 100
+[13:10:19]   model_post_regen_aabb_page = 256
+[13:10:19]   model_regen_execution_group = 16
+[13:10:19]   model_memory_slice_elements = 8000
+[13:10:19]   model_overlay_max_roots = 50000
+[13:10:19]   model_element_cache_max_entries = 200000
+[13:10:19]   model_generation_input_max_dbnums = 0
+[13:10:19]   model_historical_snapshots_max = 16
+[13:10:19]   model_root_inflight_max = 2
+[13:10:19]   model_full_rebuild_enabled = true
+[13:10:19] ---- 配置里所有像地址、路径的值 ----
+[13:10:19]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[13:10:19]   arangodb_url = "http://127.0.0.1:9"
+[13:10:19]   ip = "127.0.0.1"
+[13:10:19]   port = "9"
+[13:10:19]   v_ip = "127.0.0.1"
+[13:10:19]   v_port = 8199
+[13:10:19]   kv_ip = "localhost"
+[13:10:19]   kv_port = "9"
+[13:10:19]   mqtt_host = "127.0.0.1"
+[13:10:19]   mqtt_port = 9
+[13:10:19]   server_release_ip = "127.0.0.1:9099"
+[13:10:19]   remote_file_server_hosts = []
+[13:10:19]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[13:10:19]   http_api_addr = "127.0.0.1:9199"
+[13:10:19]   model_transform_cheap_path = true
+[13:10:19]   plat_url = ""
+[13:10:19]   puhua_database_ip = ""
+[13:10:19] ---- 后端子进程的环境变量 ----
+[13:10:19]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[13:10:19]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[13:10:19]   AIOS_STORE_MODE = rocksdb
+[13:10:19]   AIOS_DATA_FACE = ingest
+[13:10:19]   AIOS_STARTUP_AUTORUN = 1
+[13:10:19]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[13:10:19]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[13:10:19]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[13:10:19]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[13:10:19]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[13:10:19]   RUST_MIN_STACK = 134217728
+[13:10:19]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[13:10:19]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[13:10:19] ---- 两台进程 ----
+[13:10:19]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[13:10:19]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[13:10:19]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（69109760 字节，1 个名字）
+[13:10:19]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[13:10:23]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[13:10:23] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[13:10:23] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[13:10:27] 内存闸门通过：空闲 16.1 GB ≥ 10 GB；C 盘可用 6.72 GB，D 盘可用 41.36 GB；别的会话的 rustc 0 个
+[13:10:29] SurrealDB 起来了：进程 40288，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[13:10:29] 后端起来了：进程 6840，监听 [8000, 7998]
+[13:17:08] 停了 server_pid 进程 6840（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[13:17:09] 停了 surreal_pid 进程 40288（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[13:17:15] 端口：9199 没人在听，8199 没人在听
+[13:17:28] ===== 启动：监听 [8000, 7998] =====
+[13:17:28] ---- 实际生效的配置（run\DbOption.toml；账号密码类的值遮住）----
+[13:17:28]   e3d_version = "e3d31"
+[13:17:28]   enable_log = false
+[13:17:28]   sync_graph_db = false
+[13:17:28]   sync_versioned = false
+[13:17:28]   sync_tidb = false
+[13:17:28]   replace_dbs = true
+[13:17:28]   enable_index = false
+[13:17:28]   sync_chunk_size = 10_0000
+[13:17:28]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"  ← 沙箱改写
+[13:17:28]   included_projects = []
+[13:17:28]   project_search_paths = []
+[13:17:28]   catalogue_project_priority = ["AvevaMarineSample", "AvevaCatalogue", "ZDJ"]
+[13:17:28]   mdb_name = "ALL"
+[13:17:28]   project_name = "AvevaMarineSample"
+[13:17:28]   project_code = 1516
+[13:17:28]   surreal_ns = 1516
+[13:17:28]   module = "DESI"
+[13:17:28]   gen_model = false
+[13:17:28]   gen_mesh = false
+[13:17:28]   replace_mesh = false
+[13:17:28]   save_db = true
+[13:17:28]   apply_boolean_operation = true
+[13:17:28]   mesh_tol_ratio = 3.0
+[13:17:28]   gen_spatial_tree = true
+[13:17:28]   load_spatial_tree = false
+[13:17:28]   save_spatial_tree_to_db = false
+[13:17:28]   gen_model_batch_size = 4
+[13:17:28]   build_cate_relate = false
+[13:17:28]   gen_noun_graph = false
+[13:17:28]   arangodb_database = "ams"
+[13:17:28]   multi_threads = false
+[13:17:28]   arangodb_url = "http://127.0.0.1:9"  ← 沙箱改写
+[13:17:28]   rebuild_ssc_tree = false
+[13:17:28]   arangodb_user = <已遮住>  ← 沙箱改写
+[13:17:28]   arangodb_password = <已遮住>  ← 沙箱改写
+[13:17:28]   ip = "127.0.0.1"
+[13:17:28]   user = <已遮住>  ← 沙箱改写
+[13:17:28]   password = <已遮住>  ← 沙箱改写
+[13:17:28]   port = "9"  ← 沙箱改写
+[13:17:28]   sql_threads_number = 10
+[13:17:28]   batch_insert_sql_cnt = 100 #mysql 批量插入的数量
+[13:17:28]   v_ip = "127.0.0.1"  ← 沙箱改写
+[13:17:28]   v_port = 8199  ← 沙箱改写
+[13:17:28]   v_user = <已遮住>  ← 沙箱改写
+[13:17:28]   v_password = <已遮住>  ← 沙箱改写
+[13:17:28]   model_cache_mode = "incremental-overlay"
+[13:17:28]   pe_chunk = 300
+[13:17:28]   att_chunk = 200
+[13:17:28]   kv_ip = "localhost"
+[13:17:28]   kv_port = "9"  ← 沙箱改写
+[13:17:28]   mqtt_host = "127.0.0.1"  ← 沙箱改写
+[13:17:28]   mqtt_port = 9  ← 沙箱改写
+[13:17:28]   location = "SJZ"
+[13:17:28]   location_dbs = [1112]
+[13:17:28]   server_release_ip = "127.0.0.1:9099"
+[13:17:28]   remote_file_server_hosts = []
+[13:17:28]   file_server_host = "http://127.0.0.1:9/assets/archives"  ← 沙箱改写
+[13:17:28]   http_api_addr = "127.0.0.1:9199"  ← 沙箱改写
+[13:17:28]   http_api_cors = ["*"]
+[13:17:28]   startup_autorun = true
+[13:17:28]   auto_initialize_new_dbnums = true  ← 沙箱改写
+[13:17:28]   block_file_identity_conflicts = false
+[13:17:28]   data_incremental = true
+[13:17:28]   model_incremental = true
+[13:17:28]   model_design_reference_cascade = true
+[13:17:28]   model_cable_endpoint_cascade = true
+[13:17:28]   model_transform_cheap_path = true
+[13:17:28]   model_unit_level_publish = true
+[13:17:28]   group_scosel = false
+[13:17:28]   watch_dbnums = [8000, 7998]  ← 沙箱改写
+[13:17:28]   extra_element_dbnums = [251095, 251137, 251049]
+[13:17:28]   save_model_mesh_to_graph_db = true
+[13:17:28]   need_sync_refno_basic = false       #是否重新生成 refno_basic 缓存
+[13:17:28]   reset_mdb_project = false           #是否重新生成 mdb 缓存
+[13:17:28]   only_update_dbinfo = false
+[13:17:28]   debug_print_world_transform = false
+[13:17:28]   only_rebuild_pdms_element = false
+[13:17:28]   debug_refno_types = ["LOOP", "PRIM"]
+[13:17:28]   manual_db_nums = [7997, 7998, 7999, 8000]
+[13:17:28]   plat_url = ""
+[13:17:28]   puhua_database_ip = ""
+[13:17:28]   puhua_database_user = <已遮住>  ← 沙箱改写
+[13:17:28]   puhua_database_password = <已遮住>  ← 沙箱改写
+[13:17:28]   room_key_word = ["-RM"]
+[13:17:28]   gen_history_model = false
+[13:17:28]   model_concurrency_mode = "adaptive"
+[13:17:28]   model_regen_claim_page = 100
+[13:17:28]   model_post_regen_aabb_page = 256
+[13:17:28]   model_regen_execution_group = 16
+[13:17:28]   model_memory_slice_elements = 8000
+[13:17:28]   model_overlay_max_roots = 50000
+[13:17:28]   model_element_cache_max_entries = 200000
+[13:17:28]   model_generation_input_max_dbnums = 0
+[13:17:28]   model_historical_snapshots_max = 16
+[13:17:28]   model_root_inflight_max = 2
+[13:17:28]   model_full_rebuild_enabled = true
+[13:17:28] ---- 配置里所有像地址、路径的值 ----
+[13:17:28]   project_path = "<plant3d-web>/.scratch/incremental-sync/sandbox/projects/E3D3.1"
+[13:17:28]   arangodb_url = "http://127.0.0.1:9"
+[13:17:28]   ip = "127.0.0.1"
+[13:17:28]   port = "9"
+[13:17:28]   v_ip = "127.0.0.1"
+[13:17:28]   v_port = 8199
+[13:17:28]   kv_ip = "localhost"
+[13:17:28]   kv_port = "9"
+[13:17:28]   mqtt_host = "127.0.0.1"
+[13:17:28]   mqtt_port = 9
+[13:17:28]   server_release_ip = "127.0.0.1:9099"
+[13:17:28]   remote_file_server_hosts = []
+[13:17:28]   file_server_host = "http://127.0.0.1:9/assets/archives"
+[13:17:28]   http_api_addr = "127.0.0.1:9199"
+[13:17:28]   model_transform_cheap_path = true
+[13:17:28]   plat_url = ""
+[13:17:28]   puhua_database_ip = ""
+[13:17:28] ---- 后端子进程的环境变量 ----
+[13:17:28]   从当前环境摘掉的（不带给后端）：4 个与部署有关的变量（名字从略）
+[13:17:28]   DB_OPTION_FILE = <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption
+[13:17:28]   AIOS_STORE_MODE = rocksdb
+[13:17:28]   AIOS_DATA_FACE = ingest
+[13:17:28]   AIOS_STARTUP_AUTORUN = 1
+[13:17:28]   AIOS_MODEL_GENERATION_INPUT_MAX_DBNUMS = 1
+[13:17:28]   AIOS_MODEL_ELEMENT_CACHE_MAX_ENTRIES = 60000
+[13:17:28]   AIOS_WRITER_LOCK_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run\writer-locks
+[13:17:28]   PLANT_ASSET_ROOT = <plant3d-web>\.scratch\incremental-sync\sandbox\run\assets
+[13:17:28]   GEN_MODEL_RUN_DIR = <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[13:17:28]   RUST_MIN_STACK = 134217728
+[13:17:28]   TEMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[13:17:28]   TMP = <plant3d-web>\.scratch\incremental-sync\sandbox\run\tmp
+[13:17:28] ---- 两台进程 ----
+[13:17:28]   SurrealDB：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe start --bind 127.0.0.1:8199 rocksdb:<plant3d-web>\.scratch\incremental-sync\sandbox\run\store（账号密码走 SURREAL_USER / SURREAL_PASS 环境变量，不上命令行）
+[13:17:28]   后端：<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe（无参数），工作目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run
+[13:17:28]   被监听的库 8000 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001（69109760 字节，1 个名字）
+[13:17:28]   被监听的库 7998 的文件：<plant3d-web>\.scratch\incremental-sync\sandbox\projects\E3D3.1\AvevaMarineSample\ams000\ams7998_0001（15456256 字节，1 个名字）
+[13:17:32]   现网进程（只看不动）：8022 由进程 27180 监听，8009 由进程 2356 监听
+[13:17:32] 核对通过：配置、环境变量、命令行里没有一处指向 8009 / 8022、真实工程目录、gen-model 的库目录或 gen-model 检出。
+[13:17:32] 配置写到 <plant3d-web>\.scratch\incremental-sync\sandbox\run\DbOption.toml
+[13:17:37] 内存闸门通过：空闲 13.7 GB ≥ 10 GB；C 盘可用 6.48 GB，D 盘可用 40.78 GB；别的会话的 rustc 0 个
+[13:17:38] SurrealDB 起来了：进程 17320，127.0.0.1:8199，库目录 <plant3d-web>\.scratch\incremental-sync\sandbox\run\store
+[13:17:38] 后端起来了：进程 24132，监听 [8000, 7998]
+[13:20:28] 停了 server_pid 进程 24132（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[13:20:28] 停了 surreal_pid 进程 17320（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[13:20:34] 端口：9199 没人在听，8199 没人在听

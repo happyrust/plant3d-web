@@ -1,0 +1,151 @@
+{
+  "cwd": "<plant3d-web-worktree>",
+  "tests": [
+    "src/composables/modelGetWork.test.ts",
+    "src/composables/useModelGetWork.test.ts",
+    "src/components/model-tree/ModelGetWorkButton.test.ts"
+  ],
+  "out": "mutations-replay.result.json",
+  "mutations": [
+    {
+      "id": "X01",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "库里的模型比本页装的新也不算有更新（不重载）",
+      "find": "  return [{ sesno: sesnoOf(row?.model_sesno) ?? sinceSesno + 1, time: null, unitsChanged: 0 }];",
+      "replace": "  return [];"
+    },
+    {
+      "id": "X02",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "库状态里没有这个库的那一行时算不出有更新",
+      "find": "sesnoOf(row?.model_sesno) ?? sinceSesno + 1",
+      "replace": "sesnoOf(row?.model_sesno) ?? sinceSesno"
+    },
+    {
+      "id": "X03",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "不看库的模型水位、一律记在起点的下一个会话上（旧后端下凭空判成落后）",
+      "find": "sesnoOf(row?.model_sesno) ?? sinceSesno + 1",
+      "replace": "sinceSesno + 1"
+    },
+    {
+      "id": "X04",
+      "file": "src/composables/useModelGetWork.ts",
+      "note": "又去问节点版本表",
+      "find": "      listChangedSessions: async ({ sinceSesno }) => assumeChangedSince(sinceSesno, row),",
+      "replace": "      listChangedSessions: async ({ dbnum, refno, sinceSesno }) => {\n        const table = await (await loadModelSource()).getModelSource().versions.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno });\n        return table.versions.filter((version) => version.impact !== 'noop').map((version) => ({ sesno: version.sesno, time: version.sessionTime, unitsChanged: version.unitsChanged }));\n      },"
+    },
+    {
+      "id": "X05",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "挪了位置、还在别的节点名下的构件也算撤下",
+      "find": ".filter((refno) => !addedAll.has(refno) && !present.has(refno))",
+      "replace": ".filter((refno) => !addedAll.has(refno))"
+    },
+    {
+      "id": "X06",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "被删节点撤走的构件不记账（先重载的节点名下的被它撤走也不补）",
+      "find": "        steps.push({ root, removed: new Set(members), after: null, reloadedIndex: null });\n",
+      "replace": ""
+    },
+    {
+      "id": "X07",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "查空撤下的节点拿掉的构件不记账",
+      "find": "        steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });\n",
+      "replace": ""
+    },
+    {
+      "id": "X08",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "重载拿掉的构件不记账",
+      "find": "      steps.push({ root, removed: new Set(removed), after: afterSet, reloadedIndex: models.reloaded.length });",
+      "replace": "      steps.push({ root, removed: new Set<string>(), after: afterSet, reloadedIndex: models.reloaded.length });"
+    },
+    {
+      "id": "X09",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "先处理的节点拿掉的也算（丢构件的在前时多补一次）",
+      "find": "      return steps.slice(index + 1).some((later) => [...later.removed].some((refno) => mine.has(refno)));",
+      "replace": "      return steps.some((later) => [...later.removed].some((refno) => mine.has(refno)));"
+    },
+    {
+      "id": "X10",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "撤下的节点也去补重载",
+      "find": "      if (!mine) return false;\n      return steps.slice(index + 1)",
+      "replace": "      if (!mine) return true;\n      return steps.slice(index + 1)"
+    },
+    {
+      "id": "X11",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "补装之前不等别的装载",
+      "find": "      if (!(await waitLoadIdle())) {\n        models.failed.push({ refno: root.refno, reason: '有别的装载一直没结束，它名下被别的节点撤掉的构件这次没补装' });\n        continue;\n      }\n",
+      "replace": ""
+    },
+    {
+      "id": "X12",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "补装没做成不记失败",
+      "find": "      if (!ok) {\n        models.failed.push({ refno: root.refno, reason: '它名下有构件被别的节点的重载撤掉了，补装没有完成' });\n        continue;\n      }\n",
+      "replace": ""
+    },
+    {
+      "id": "X13",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "补装抛错不记失败",
+      "find": "        models.failed.push({ refno: root.refno, reason: `补装出错：${errorText(error)}` });\n",
+      "replace": ""
+    },
+    {
+      "id": "X14",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "补完之后现有构件数不更新",
+      "find": "      if (entry && now) entry.total = now.length;",
+      "replace": ""
+    },
+    {
+      "id": "X15",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "不补装（先重载的节点名下的构件被后来者拿掉就丢了）",
+      "find": "    for (let index = 0; index < repairs.length; index++) {",
+      "replace": "    for (let index = 0; index < 0; index++) {"
+    },
+    {
+      "id": "X16",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "补装时不说在做什么",
+      "find": "      ports.onProgress(`补装挪了位置的构件 ${index + 1}/${repairs.length}…`);\n",
+      "replace": ""
+    },
+    {
+      "id": "X17",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "查空撤下的也说成「已不存在」",
+      "find": "  const withdrawnDeleted = models.withdrawn.filter((item) => item.why === 'deleted').length;",
+      "replace": "  const withdrawnDeleted = models.withdrawn.length;"
+    },
+    {
+      "id": "X18",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "查空撤下的那一句里不说",
+      "find": "    withdrawnEmpty > 0 ? `撤下 ${withdrawnEmpty} 个名下已没有几何的节点` : '',",
+      "replace": "    '',"
+    },
+    {
+      "id": "X19",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "库里已经没有的节点那一句里不说",
+      "find": "    withdrawnDeleted > 0 ? `撤下 ${withdrawnDeleted} 个已不存在的节点` : '',",
+      "replace": "    '',"
+    },
+    {
+      "id": "X20",
+      "file": "src/components/model-tree/ModelGetWorkButton.vue",
+      "note": "那一句又画回按钮右边（按钮不在最右端，会被提示条盖住）",
+      "find": "    <span v-if=\"last && !running\"\n      data-testid=\"model-getwork-result\"\n      :data-level=\"last.level\"\n      :data-ok=\"last.ok ? 'true' : 'false'\"\n      class=\"min-w-0 max-w-[560px] truncate text-[11px]\"\n      :class=\"resultClass\"\n      :title=\"resultTitle\">{{ last.summary }}</span>\n    <button type=\"button\"\n      data-testid=\"model-getwork-button\"\n      :data-running=\"running ? 'true' : 'false'\"\n      :data-queued=\"getWork.state.queued ? 'true' : 'false'\"\n      class=\"inline-flex h-5 max-w-[360px] shrink-0 items-center gap-1 rounded-sm border border-border px-1.5 text-[11px] text-foreground hover:bg-muted\"\n      :title=\"buttonTitle\"\n      @mousedown.stop\n      @click=\"onClick\">\n      <RefreshCw class=\"h-3 w-3 shrink-0\"\n        :class=\"running ? 'animate-spin' : ''\" />\n      <span class=\"truncate\"\n        data-testid=\"model-getwork-label\">{{ label }}</span>\n    </button>",
+      "replace": "    <button type=\"button\"\n      data-testid=\"model-getwork-button\"\n      :data-running=\"running ? 'true' : 'false'\"\n      :data-queued=\"getWork.state.queued ? 'true' : 'false'\"\n      class=\"inline-flex h-5 max-w-[360px] shrink-0 items-center gap-1 rounded-sm border border-border px-1.5 text-[11px] text-foreground hover:bg-muted\"\n      :title=\"buttonTitle\"\n      @mousedown.stop\n      @click=\"onClick\">\n      <RefreshCw class=\"h-3 w-3 shrink-0\"\n        :class=\"running ? 'animate-spin' : ''\" />\n      <span class=\"truncate\"\n        data-testid=\"model-getwork-label\">{{ label }}</span>\n    </button>\n    <span v-if=\"last && !running\"\n      data-testid=\"model-getwork-result\"\n      :data-level=\"last.level\"\n      :data-ok=\"last.ok ? 'true' : 'false'\"\n      class=\"min-w-0 max-w-[560px] truncate text-[11px]\"\n      :class=\"resultClass\"\n      :title=\"resultTitle\">{{ last.summary }}</span>"
+    }
+  ]
+}

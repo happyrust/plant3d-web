@@ -95,7 +95,15 @@ import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
-import { useModelGeneration } from '@/composables/useModelGeneration';
+import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
+import {
+  captureGetWorkWatermarks,
+  loadedModelDbnums,
+  noteGetWorkRoot,
+  registerGetWorkDerived,
+  registerGetWorkScene,
+  resetGetWorkRegistry,
+} from '@/composables/useModelGetWork';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
@@ -3790,6 +3798,48 @@ function handleOpenProjectSettingsEvent(): void {
   toolbarSettingsOpen.value = false;
 }
 
+/**
+ * 「取最新」（GETWORK，2026-11-12）：查看器把三维场景登记给它——重载、撤下都走查看器这一份显示流程；
+ * 顺带登记「取最新之后重取 MBD 标注」。卸载时两个都撤。
+ */
+let offGetWorkScene: (() => void) | null = null;
+let offGetWorkMbd: (() => void) | null = null;
+
+function registerSceneForGetWork(): void {
+  offGetWorkScene?.();
+  offGetWorkMbd?.();
+  offGetWorkScene = registerGetWorkScene({
+    // 取最新发起的重载：不生成、不飞相机；每个节点各自的装载提示不弹（`quiet`），取最新做完自己说一句。
+    // 记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤——这一道所有的重载都过，不用另说
+    reload: async (refno) => (
+      await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, quiet: true })
+    ) === true,
+    withdraw: (refno, dbnum) => {
+      const withdrawn = modelGenerationRef.value?.withdrawRemovedRoot(refno, dbnum) ?? 0;
+      requestRender();
+      return withdrawn;
+    },
+    loadedRefnos: (refno, dbnum) => modelGenerationRef.value?.loadedRefnosOf(refno, dbnum) ?? null,
+    rootInScene: (refno, dbnum) => modelGenerationRef.value?.isRootInScene(refno, dbnum) ?? false,
+  });
+  offGetWorkMbd = registerGetWorkDerived({
+    name: 'MBD 标注',
+    // 地址栏带 `mbd_refno` 时才真的去取；没带只是把空的再清一遍
+    run: async () => {
+      if (dimensionSystem) await syncMbdExternalDimensions(dimensionSystem);
+    },
+  });
+}
+
+function unregisterSceneForGetWork(): void {
+  offGetWorkScene?.();
+  offGetWorkScene = null;
+  offGetWorkMbd?.();
+  offGetWorkMbd = null;
+  // 场景没了：整库显示 / 地址栏直装登记的那些也撤掉
+  resetGetWorkRegistry();
+}
+
 /** 重新部署完成后把场景里已装的根按最新记录重装一遍（与「数据已更新 → 重载」同一条 showModelByRefnos 路）。 */
 function reloadLoadedModelsAfterRedeploy(): void {
   const refnos = modelGenerationRef.value?.listLoadedRoots() ?? [];
@@ -4280,10 +4330,13 @@ onMounted(async () => {
   // 单元根自己多半没对象（几何在成员名下），探针沿属主链问装载器；`show_refno` 直装的路不进 loadedRoots，也靠这一条。
   setGenModelV1LoadedProbe(createGenModelV1LoadedProbe({
     activeDbnum: () => activeDbno,
+    // 页面上装着节点的库都算（不只是最后装的那个库）：哪个库有变化的批次落地都要出提示
+    loadedDbnums: loadedModelDbnums,
     isModelActuallyLoaded: (refno) => modelGenerationRef.value?.isModelActuallyLoaded(refno) ?? false,
     resolveUnitObjectIds: resolveDtxObjectIdsByUnitRefno,
   }));
   startGenModelV1UpdateNotice();
+  registerSceneForGetWork();
 
   const tools = useDtxTools({
     dtxViewerRef,
@@ -4636,6 +4689,8 @@ onMounted(async () => {
       // 编排（解析 dbnum → 按库分组 → 逐包查可见子实例 → 合并 refno）搬进
       // `multiBranLoadPlan.ts`，本组件只注入真实依赖并消费结果：这段逻辑没有三维副作用，
       // 却决定了「跨库分组有没有真的接进加载路径」，必须能脱离场景单测。
+      // 取最新：开始取数之前先记下各库的水位，装完按根登记（取早不取晚）
+      const getWorkMarkOf = captureGetWorkWatermarks();
       const plan = await prepareBranLoadPlan(
         loadRefnos,
         refno => resolveDbnoForRefno(refno, refnoCount),
@@ -4716,6 +4771,12 @@ onMounted(async () => {
         })),
       ];
       publishShowRefnoApplied();
+      // 取最新：地址栏直装的根登记在册；一组只有一个根时顺带记下它装了哪些构件（重载时比得出谁被删了）
+      for (const outcome of loadOutcome.succeeded) {
+        const groupRoots = loadRefnos.filter(refno => outcome.refnos.includes(refno));
+        for (const refno of groupRoots) noteGetWorkRoot(refno, outcome.dbno, getWorkMarkOf(outcome.dbno), 'show_refno');
+        if (groupRoots.length === 1) modelGenerationRef.value?.rememberLoadedRefnos(groupRoots[0]!, outcome.refnos);
+      }
       if (isStale()) return;
       for (const outcome of loadOutcome.succeeded) {
         const { dbno, value: result } = outcome;
@@ -4960,6 +5021,8 @@ onMounted(async () => {
         console.log(`[debug_refno] refno=${refnoStr} → dbnum=${dbno}`);
 
         // 2. 查询该 refno 下的可见实例（经数据源端口：gen-model-v1 = 以节点为祖先查 records，不生成）
+        // 取最新：开始取数之前先记下库的水位，装完登记（取早不取晚）
+        const getWorkMarkOf = captureGetWorkWatermarks();
         const visResp = await getModelSource().tree.visibleInsts(refnoStr);
         const refnos = mergeRefnoEntries(refnoStr, visResp?.refnos ?? []);
         console.log(`[debug_refno] visible-insts 合并根节点后返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
@@ -4990,6 +5053,9 @@ onMounted(async () => {
           }
         );
         (compat as any).__dtxAfterInstancesLoaded?.(dbno, refnos);
+        // 取最新：这个直装的根登记在册，并记下它装了哪些构件
+        noteGetWorkRoot(refnoStr, dbno, getWorkMarkOf(dbno), 'debug_refno');
+        modelGenerationRef.value?.rememberLoadedRefnos(refnoStr, refnos);
 
         // 4. 自适应视角
         requestRender();
@@ -5267,6 +5333,9 @@ onMounted(async () => {
         // 相机意图戳：开始加载前盖一次，落地时核对。与上面的 shouldApply 不是一回事——
         // 那个管「这条任务回执还该不该生效」，这个只管「相机还该不该动」。
         const cameraStamp = beginCameraIntent();
+        // 一次事件重载几个根（状态栏的「重载」、重新部署后的重装）：这几个根共用一份账，
+        // 先重载的根刚装上的构件，后重载的根不当成「我名下已经没有的」撤掉（构件在两个根之间挪了位置时会丢）
+        const reloadRound = (detail as any)?.refreshModel ? createModelReloadRound() : undefined;
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
@@ -5276,6 +5345,7 @@ onMounted(async () => {
             flyTo: singleFlyTo && !shouldApply,
             regenerate: !!(detail as any)?.regenModel,
             refresh: !!(detail as any)?.refreshModel,
+            round: reloadRound,
           });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =
@@ -5817,6 +5887,7 @@ onUnmounted(() => {
   setGenModelV1LoadedProbe(null);
   // 场景没了：已加载节点表（各节点「装的时候是哪一版」）跟着撤掉
   resetLoadedNodes();
+  unregisterSceneForGetWork();
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;

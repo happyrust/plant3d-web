@@ -1,0 +1,214 @@
+{
+  "cwd": "<plant3d-web-worktree>",
+  "tests": [
+    "src/composables/modelGetWork.test.ts",
+    "src/composables/useModelGetWork.test.ts",
+    "src/composables/useModelGeneration.genModelV1.test.ts"
+  ],
+  "out": "mutations-round3.result.json",
+  "mutations": [
+    {
+      "id": "H01",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "核对过不用动的节点下一轮照问（不记）",
+      "find": "          settledAt.set(root.refno, settleKey(root, row));",
+      "replace": ""
+    },
+    {
+      "id": "H02",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "后端重启过也不重问核对过的节点",
+      "find": "      if (row && !restarted && !root.staleReason && settledAt.get(root.refno) === settleKey(root, row)) return false;",
+      "replace": "      if (row && !root.staleReason && settledAt.get(root.refno) === settleKey(root, row)) return false;"
+    },
+    {
+      "id": "H03",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "带过期标记的节点也按「核对过」跳过",
+      "find": "      if (row && !restarted && !root.staleReason && settledAt.get(root.refno) === settleKey(root, row)) return false;",
+      "replace": "      if (row && !restarted && settledAt.get(root.refno) === settleKey(root, row)) return false;"
+    },
+    {
+      "id": "H04",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "动过的节点还留着「核对过不用动」的记号",
+      "find": "      settledAt.delete(root.refno);\n",
+      "replace": ""
+    },
+    {
+      "id": "H05",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "记号不带库的模型水位（库变了也跳过）",
+      "find": "    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`",
+      "replace": "    `|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`"
+    },
+    {
+      "id": "H06",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "记号不带节点装时的水位（重新装过也跳过）",
+      "find": "    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`",
+      "replace": "    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|`"
+    },
+    {
+      "id": "H07",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "合计的新增构件数不去重（各节点相加）",
+      "find": "      models.componentsAdded = [...addedAll].filter((refno) => !removedAll.has(refno)).length;",
+      "replace": "      models.componentsAdded = models.reloaded.reduce((sum, item) => sum + item.added, 0) + models.loadedNew.reduce((sum, item) => sum + item.total, 0);"
+    },
+    {
+      "id": "H08",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "合计的撤下构件数不去重（各节点相加）",
+      "find": "      models.componentsRemoved = [...removedAll].filter((refno) => !addedAll.has(refno) && !present.has(refno)).length + removedUnnamed;",
+      "replace": "      models.componentsRemoved = models.reloaded.reduce((sum, item) => sum + item.removed, 0) + models.withdrawn.reduce((sum, item) => sum + item.refnos, 0);"
+    },
+    {
+      "id": "H09",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "说不出装了什么的撤下不计数",
+      "find": "        else removedUnnamed += refnos;",
+      "replace": ""
+    },
+    {
+      "id": "H10",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "查空撤下的构件不计入合计",
+      "find": "        for (const refno of outcome.before) removedAll.add(refno);\n",
+      "replace": ""
+    },
+    {
+      "id": "H11",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新装入 SITE 的构件不计入合计",
+      "find": "          for (const refno of outcome.after) addedAll.add(refno);\n",
+      "replace": ""
+    },
+    {
+      "id": "H12",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "合计不落到回执里",
+      "find": "    settleCounts();\n  }",
+      "replace": "  }"
+    },
+    {
+      "id": "H13",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "问在不在场景时不带登记的库号",
+      "find": "!scene.rootInScene(root.refno, root.dbnum)",
+      "replace": "!scene.rootInScene(root.refno, 0)"
+    },
+    {
+      "id": "H14",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "撤下时不带登记的库号",
+      "find": "        const refnos = scene.withdraw(root.refno, root.dbnum);",
+      "replace": "        const refnos = scene.withdraw(root.refno, 0);"
+    },
+    {
+      "id": "H15",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "新 SITE 问装了什么时不带库号",
+      "find": "          outcome = await reloadOne(site.refno, scope.dbnum);",
+      "replace": "          outcome = await reloadOne(site.refno, 0);"
+    },
+    {
+      "id": "H16",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "节点问装了什么时不带库号",
+      "find": "        outcome = await reloadOne(root.refno, root.dbnum);",
+      "replace": "        outcome = await reloadOne(root.refno, 0);"
+    },
+    {
+      "id": "H17",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "给了库号也只按映射查",
+      "find": "    if (typeof given === 'number' && Number.isFinite(given) && given > 0) return given;\n",
+      "replace": ""
+    },
+    {
+      "id": "H18",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "给的库号是 0 也照用",
+      "find": "    if (typeof given === 'number' && Number.isFinite(given) && given > 0) return given;",
+      "replace": "    if (typeof given === 'number') return given;"
+    },
+    {
+      "id": "H19",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "isRootInScene 不用给的库号",
+      "find": "    if (loadedRoots.has(root)) return true;\n    const dbno = dbnoOfRoot(root, knownDbno);",
+      "replace": "    if (loadedRoots.has(root)) return true;\n    const dbno = dbnoOfRoot(root);"
+    },
+    {
+      "id": "H20",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "loadedRefnosOf 不用给的库号",
+      "find": "    if (known) return [...known];\n    const dbno = dbnoOfRoot(root, knownDbno);",
+      "replace": "    if (known) return [...known];\n    const dbno = dbnoOfRoot(root);"
+    },
+    {
+      "id": "H21",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "withdrawRemovedRoot 不用给的库号",
+      "find": "    if (!root) return 0;\n    const dbno = dbnoOfRoot(root, knownDbno);",
+      "replace": "    if (!root) return 0;\n    const dbno = dbnoOfRoot(root);"
+    },
+    {
+      "id": "H22",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "库状态没取到时不去要，直接按不知道登记",
+      "find": "      : getGenModelV1Dbnums().then(\n        (response) => markOfRow(response.dbnums?.find((item) => item.dbnum === dbno)),\n        () => markOfRow(null),\n      );",
+      "replace": "      : Promise.resolve(markOfRow(null));"
+    },
+    {
+      "id": "H23",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "缓存里有这一行也再要一份",
+      "find": "    const markAtStart: Promise<GetWorkWatermark> = rowAtStart\n      ? Promise.resolve(markOfRow(rowAtStart))\n      : getGenModelV1Dbnums()",
+      "replace": "    const markAtStart: Promise<GetWorkWatermark> = !rowAtStart && rowAtStart !== null\n      ? Promise.resolve(markOfRow(rowAtStart))\n      : getGenModelV1Dbnums()"
+    },
+    {
+      "id": "H24",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "/dbnums 失败拖垮整库显示",
+      "find": "        (response) => markOfRow(response.dbnums?.find((item) => item.dbnum === dbno)),\n        () => markOfRow(null),",
+      "replace": "        (response) => markOfRow(response.dbnums?.find((item) => item.dbnum === dbno)),"
+    },
+    {
+      "id": "H25",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "取水位取错库的那一行",
+      "find": "(response) => markOfRow(response.dbnums?.find((item) => item.dbnum === dbno)),",
+      "replace": "(response) => markOfRow(response.dbnums?.[0]),"
+    },
+    {
+      "id": "H26",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "等库状态不设上限",
+      "find": "          giveUp = setTimeout(() => resolve(markOfRow(null)), GETWORK_MARK_WAIT_MS);",
+      "replace": "          giveUp = setTimeout(() => resolve(markOfRow(null)), GETWORK_MARK_WAIT_MS * 1000);"
+    },
+    {
+      "id": "H27",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "等库状态的上限缩成 0（不等）",
+      "find": "          giveUp = setTimeout(() => resolve(markOfRow(null)), GETWORK_MARK_WAIT_MS);",
+      "replace": "          giveUp = setTimeout(() => resolve(markOfRow(null)), 0);"
+    },
+    {
+      "id": "H28",
+      "file": "src/composables/useModelGeneration.ts",
+      "note": "登记的水位不带库文件会话",
+      "find": "      fileLatestSesno: typeof row?.file_latest_sesno === 'number' ? row.file_latest_sesno : null,\n    });\n    const rowAtStart",
+      "replace": "      fileLatestSesno: null,\n    });\n    const rowAtStart"
+    },
+    {
+      "id": "H29",
+      "file": "src/composables/modelGetWork.ts",
+      "note": "记号不带库文件会话（只有库文件前进时也跳过）",
+      "find": "    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`",
+      "replace": "    `${row.model_sesno ?? ''}:|${root.loadedModelSesno ?? ''}:${root.loadedFileLatestSesno ?? ''}`"
+    }
+  ]
+}

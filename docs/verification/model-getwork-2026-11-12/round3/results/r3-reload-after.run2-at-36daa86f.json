@@ -1,0 +1,1179 @@
+{
+ "phase": "after",
+ "startedAt": "2026-11-12T09:21:53.657Z",
+ "parts": {
+  "A": {
+   "steps": {
+    "A1": {
+     "what": "PIPE 从 Z 挪到 Z2；次序 [Z2, Z]（得到管道的先重载）",
+     "caughtUp": {
+      "ok": true,
+      "fileSeenMs": 13,
+      "appliedMs": 16322,
+      "modelMs": 17144,
+      "row": {
+       "file": 1686,
+       "applied": 1686,
+       "model": 1686,
+       "initialized": true,
+       "excluded": false,
+       "excludedReason": null,
+       "verdict": "in_sync"
+      }
+     },
+     "noticeBefore": "库 8000 已更新到会话 1685→1686（改 12 项）",
+     "done": {
+      "ok": [
+       "24384_47500",
+       "24384_47463"
+      ],
+      "fail": [],
+      "error": null
+     },
+     "membersAfter": [
+      "24384_47463:14",
+      "24384_47500:10"
+     ],
+     "sceneObjectsBefore": 24,
+     "sceneObjectsAfter": 24,
+     "toasts": [
+      "[success] [成功] 已从 gen-model 加载 10 个几何实例",
+      "[success] [成功] 已从 gen-model 加载 14 个几何实例"
+     ],
+     "mismatches": []
+    },
+    "A2": {
+     "what": "PIPE 挪回 Z；次序 [Z, Z2]（得到管道的先重载）",
+     "caughtUp": {
+      "ok": true,
+      "fileSeenMs": 26,
+      "appliedMs": 26251,
+      "modelMs": 27063,
+      "row": {
+       "file": 1689,
+       "applied": 1689,
+       "model": 1689,
+       "initialized": true,
+       "excluded": false,
+       "excludedReason": null,
+       "verdict": "in_sync"
+      }
+     },
+     "noticeBefore": "库 8000 已更新到会话 1685→1689（改 24 项）",
+     "done": {
+      "ok": [
+       "24384_47463",
+       "24384_47500"
+      ],
+      "fail": [],
+      "error": null
+     },
+     "membersAfter": [
+      "24384_47463:23",
+      "24384_47500:1"
+     ],
+     "sceneObjectsBefore": 24,
+     "sceneObjectsAfter": 24,
+     "toasts": [
+      "[success] [成功] 已从 gen-model 加载 23 个几何实例",
+      "[success] [成功] 已从 gen-model 加载 1 个几何实例"
+     ],
+     "mismatches": []
+    },
+    "A3": {
+     "what": "设备 EQ-CP 从 Z 挪到 Z2；先点 Z2 那一行的「重载」（得到设备的），再点 Z 那一行",
+     "caughtUp": {
+      "ok": true,
+      "fileSeenMs": 20,
+      "appliedMs": 26533,
+      "modelMs": 27367,
+      "row": {
+       "file": 1692,
+       "applied": 1692,
+       "model": 1692,
+       "initialized": true,
+       "excluded": false,
+       "excludedReason": null,
+       "verdict": "in_sync"
+      }
+     },
+     "rowsShowedReloadAfterMs": 53260,
+     "noticeBefore": "库 8000 已更新到会话 1685→1692（改 29 项）",
+     "nodeVersions": [
+      {
+       "ms": 25652,
+       "outcome": "ok",
+       "query": "?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1689"
+      },
+      {
+       "ms": 25653,
+       "outcome": "ok",
+       "query": "?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1689"
+      }
+     ],
+     "toasts": [
+      "[success] [成功] 已从 gen-model 加载 2 个几何实例",
+      "[success] [成功] 已从 gen-model 加载 22 个几何实例"
+     ],
+     "mismatchesAfterRowClicks": [
+      "24384_47480：后端 1 个实例，场景里 0 个对象"
+     ],
+     "rowButtonsAfter": {
+      "24384_47463": {
+       "action": null,
+       "actionLabel": null,
+       "fill": null,
+       "status": "latest"
+      },
+      "24384_47500": {
+       "action": "reload",
+       "actionLabel": "重载",
+       "fill": null,
+       "status": "reloadable"
+      }
+     },
+     "loadedTableAfter": [
+      "24384_47463@1692",
+      "24384_47500@1692（记了一笔：名下有构件被别的节点的重载撤下了，屏幕上可能缺构件）"
+     ],
+     "sceneObjectsAfter": 23,
+     "getWork": {
+      "ms": 353,
+      "summary": "已取最新：模型树挪位置 1；模型重载 1 个节点。",
+      "toasts": [
+       "已取最新：模型树挪位置 1；模型重载 1 个节点。"
+      ],
+      "mismatches": []
+     }
+    },
+    "A4": {
+     "what": "EQ-CP 挪回 Z；先点 Z2 那一行（这回是失去设备的），再点 Z 那一行——次序反过来的对照",
+     "caughtUp": {
+      "ok": true,
+      "fileSeenMs": 20,
+      "appliedMs": 28783,
+      "modelMs": 29612,
+      "row": {
+       "file": 1695,
+       "applied": 1695,
+       "model": 1695,
+       "initialized": true,
+       "excluded": false,
+       "excludedReason": null,
+       "verdict": "in_sync"
+      }
+     },
+     "rowsShowedReloadAfterMs": 56518,
+     "noticeBefore": "库 8000 已更新到会话 1693→1695（改 5 项）",
+     "nodeVersions": [
+      {
+       "ms": 26098,
+       "outcome": "ok",
+       "query": "?dbnum=8000&refno=24384%2F47500&scope=subtree&since_sesno=1692"
+      },
+      {
+       "ms": 26114,
+       "outcome": "ok",
+       "query": "?dbnum=8000&refno=24384%2F47463&scope=subtree&since_sesno=1692"
+      }
+     ],
+     "toasts": [
+      "[success] [成功] 已从 gen-model 加载 1 个几何实例",
+      "[success] [成功] 已从 gen-model 加载 23 个几何实例"
+     ],
+     "mismatchesAfterRowClicks": [],
+     "rowButtonsAfter": {
+      "24384_47463": {
+       "action": null,
+       "actionLabel": null,
+       "fill": null,
+       "status": "latest"
+      },
+      "24384_47500": {
+       "action": null,
+       "actionLabel": null,
+       "fill": null,
+       "status": "latest"
+      }
+     },
+     "loadedTableAfter": [
+      "24384_47463@1695",
+      "24384_47500@1695"
+     ],
+     "sceneObjectsAfter": 24
+    }
+   }
+  },
+  "B": {
+   "task": {
+    "task_id": "db-20261112-172521-000043",
+    "kind": "data_batch",
+    "state": "succeeded",
+    "start_sesno": 1696,
+    "end_sesno": 1698,
+    "units": null
+   },
+   "backendAfter": {
+    "24384_47468": 2,
+    "24384_47470": 0
+   },
+   "B1": {
+    "notice": "库 8000 已更新到会话 1696→1698（改 4 项，场景内 2 根受影响）",
+    "noticeTitle": "gen-model 任务 db-20261112-172521-000043\n批次里的生成根：24384_47468, 24384_47470\n点「重载」按最新记录替换场景里的 24384_47468, 24384_47470；不重新生成、不动相机（经上层的 SITE / ZONE 装进来的单元不在这份名单里）\n要把模型树和已装的模型一起同步到最新，点右边的「取最新」",
+    "loadedRoots": [
+     "24384_47468",
+     "24384_47470"
+    ],
+    "overlay": {
+     "窗口宽 1600（普通菜单）": {
+      "viewport": 1600,
+      "menuMode": "hierarchical",
+      "statusBar": {
+       "left": 0,
+       "right": 1600,
+       "top": 972,
+       "bottom": 1000
+      },
+      "snackbars": [
+       {
+        "left": 464,
+        "right": 1136,
+        "top": 876,
+        "bottom": 964
+       }
+      ],
+      "snackbarOverStatusBar": false,
+      "reload": {
+       "rect": {
+        "left": 712,
+        "right": 734,
+        "top": 978,
+        "bottom": 995
+       },
+       "covered": false,
+       "clickable": true
+      },
+      "dismiss": {
+       "rect": {
+        "left": 738,
+        "right": 748,
+        "top": 978,
+        "bottom": 995
+       },
+       "covered": false,
+       "clickable": true
+      },
+      "getWork": {
+       "rect": {
+        "left": 1529,
+        "right": 1592,
+        "top": 977,
+        "bottom": 997
+       },
+       "covered": false,
+       "clickable": true
+      }
+     },
+     "窗口宽 1280（普通菜单）": {
+      "viewport": 1280,
+      "menuMode": "hierarchical",
+      "statusBar": {
+       "left": 0,
+       "right": 1600,
+       "top": 772,
+       "bottom": 800
+      },
+      "snackbars": [
+       {
+        "left": 304,
+        "right": 976,
+        "top": 676,
+        "bottom": 764
+       }
+      ],
+      "snackbarOverStatusBar": false,
+      "reload": {
+       "rect": {
+        "left": 712,
+        "right": 734,
+        "top": 778,
+        "bottom": 795
+       },
+       "covered": false,
+       "clickable": true
+      },
+      "dismiss": {
+       "rect": {
+        "left": 738,
+        "right": 748,
+        "top": 778,
+        "bottom": 795
+       },
+       "covered": false,
+       "clickable": true
+      },
+      "getWork": {
+       "rect": {
+        "left": 1529,
+        "right": 1592,
+        "top": 777,
+        "bottom": 797
+       },
+       "covered": false,
+       "clickable": false
+      }
+     },
+     "窗口宽 1600（Ribbon 菜单）": {
+      "viewport": 1600,
+      "menuMode": "ribbon",
+      "statusBar": {
+       "left": 0,
+       "right": 1600,
+       "top": 972,
+       "bottom": 1000
+      },
+      "snackbars": [
+       {
+        "left": 464,
+        "right": 1136,
+        "top": 876,
+        "bottom": 964
+       }
+      ],
+      "snackbarOverStatusBar": false,
+      "reload": {
+       "rect": {
+        "left": 712,
+        "right": 734,
+        "top": 978,
+        "bottom": 995
+       },
+       "covered": false,
+       "clickable": true
+      },
+      "dismiss": {
+       "rect": {
+        "left": 738,
+        "right": 748,
+        "top": 978,
+        "bottom": 995
+       },
+       "covered": false,
+       "clickable": true
+      },
+      "getWork": {
+       "rect": {
+        "left": 1529,
+        "right": 1592,
+        "top": 977,
+        "bottom": 997
+       },
+       "covered": false,
+       "clickable": true
+      }
+     }
+    },
+    "toasts": [
+     "[success] [成功] 已从 gen-model 加载 2 个几何实例",
+     "[info] [提示] 24384_47470 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下"
+    ],
+    "mismatches": [],
+    "registered": [
+     "24384_47468"
+    ],
+    "rowButtonsAfter": {
+     "24384_47468": {
+      "action": null,
+      "actionLabel": null,
+      "fill": null,
+      "status": "latest"
+     },
+     "24384_47470": {
+      "action": null,
+      "actionLabel": null,
+      "fill": null,
+      "status": null
+     }
+    }
+   },
+   "B2": {
+    "order": [
+     "24384_47468",
+     "24384_47470"
+    ],
+    "what": "得到 BOX 的 EQ-RN 先重载",
+    "done": {
+     "ok": [
+      "24384_47468",
+      "24384_47470"
+     ],
+     "fail": [],
+     "error": null
+    },
+    "toasts": [
+     "[success] [成功] 已从 gen-model 加载 2 个几何实例",
+     "[info] [提示] 24384_47470 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下"
+    ],
+    "mismatches": [],
+    "registered": [
+     "24384_47468"
+    ]
+   },
+   "B3": {
+    "order": [
+     "24384_47470",
+     "24384_47468"
+    ],
+    "what": "失去 BOX 的 EQ-CASE 先重载（对照）",
+    "done": {
+     "ok": [
+      "24384_47470",
+      "24384_47468"
+     ],
+     "fail": [],
+     "error": null
+    },
+    "toasts": [
+     "[info] [提示] 24384_47470 在最新记录里已没有几何（已删除或成员已删光），已从场景撤下",
+     "[success] [成功] 已从 gen-model 加载 2 个几何实例"
+    ],
+    "mismatches": [],
+    "registered": [
+     "24384_47468"
+    ]
+   }
+  },
+  "C": {
+   "library": {
+    "file": 1698,
+    "applied": 1698,
+    "model": 1698,
+    "initialized": true,
+    "excluded": false,
+    "excludedReason": null,
+    "verdict": "in_sync"
+   },
+   "calls": [
+    {
+     "label": "（开始之前：等后端闲下来 27639 ms）"
+    },
+    {
+     "label": "ZONE Z，库前进之后头一次问（scope=subtree），后端此刻没有别的事",
+     "refno": "24384_47463",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 20158,
+     "status": 200,
+     "versions": 1,
+     "sesnos": [
+      1697
+     ],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47463",
+      "noun": "ZONE",
+      "scope": "subtree",
+      "unit_root": null,
+      "unit_noun": null,
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": false,
+      "elapsed_ms": 20140,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 194,
+       "sets_built": 1699,
+       "index_diff_ms": 12074,
+       "set_build_ms": 6729,
+       "scope_ms": 1,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     },
+     "serverCpuMs": 19985
+    },
+    {
+     "label": "ZONE Z，紧接着再问一次",
+     "refno": "24384_47463",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 18,
+     "status": 200,
+     "versions": 1,
+     "sesnos": [
+      1697
+     ],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47463",
+      "noun": "ZONE",
+      "scope": "subtree",
+      "unit_root": null,
+      "unit_noun": null,
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": true,
+      "elapsed_ms": 20140,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 194,
+       "sets_built": 1699,
+       "index_diff_ms": 12074,
+       "set_build_ms": 6729,
+       "scope_ms": 1,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     }
+    },
+    {
+     "label": "ZONE Z2 与 PIPE 同时问——PIPE（scope=subtree）",
+     "refno": "24384_47481",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 26080,
+     "status": 200,
+     "versions": 0,
+     "sesnos": [],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47481",
+      "noun": "PIPE",
+      "scope": "subtree",
+      "unit_root": null,
+      "unit_noun": null,
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": false,
+      "elapsed_ms": 26064,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 143,
+       "sets_built": 1699,
+       "index_diff_ms": 15579,
+       "set_build_ms": 9048,
+       "scope_ms": 0,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     }
+    },
+    {
+     "label": "ZONE Z2 与 PIPE 同时问——ZONE Z2（scope=subtree）",
+     "refno": "24384_47500",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 26105,
+     "status": 200,
+     "versions": 0,
+     "sesnos": [],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47500",
+      "noun": "ZONE",
+      "scope": "subtree",
+      "unit_root": null,
+      "unit_noun": null,
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": false,
+      "elapsed_ms": 26089,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 20,
+       "sets_built": 1699,
+       "index_diff_ms": 15613,
+       "set_build_ms": 9045,
+       "scope_ms": 0,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     },
+     "serverCpuMsBoth": 48375
+    },
+    {
+     "label": "设备 EQ-CP，头一次问（scope=self）",
+     "refno": "24384_47479",
+     "scope": "self",
+     "since": 1695,
+     "ms": 12968,
+     "status": 200,
+     "versions": 0,
+     "sesnos": [],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47479",
+      "noun": "EQUI",
+      "scope": "self",
+      "unit_root": "24384/47479",
+      "unit_noun": "EQUI",
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": false,
+      "elapsed_ms": 12951,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 9,
+       "sets_built": 19,
+       "index_diff_ms": 12038,
+       "set_build_ms": 22,
+       "scope_ms": 0,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     }
+    },
+    {
+     "label": "（取消试验之前：等后端闲下来 7061 ms）"
+    },
+    {
+     "label": "SITE，头一次问——问到 2 秒客户端就取消",
+     "refno": "24384_47462",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 2015,
+     "aborted": true,
+     "error": "This operation was aborted",
+     "serverCpuAfterAbort": [
+      {
+       "afterAbortMs": 3001,
+       "serverCpuMsSinceStart": 5329
+      },
+      {
+       "afterAbortMs": 8007,
+       "serverCpuMsSinceStart": 10250
+      },
+      {
+       "afterAbortMs": 13002,
+       "serverCpuMsSinceStart": 15172
+      },
+      {
+       "afterAbortMs": 18002,
+       "serverCpuMsSinceStart": 20032
+      },
+      {
+       "afterAbortMs": 23008,
+       "serverCpuMsSinceStart": 20032
+      },
+      {
+       "afterAbortMs": 28011,
+       "serverCpuMsSinceStart": 20032
+      },
+      {
+       "afterAbortMs": 38010,
+       "serverCpuMsSinceStart": 20047
+      }
+     ]
+    },
+    {
+     "label": "SITE，取消 38 秒之后再问（后端要是算完并留着，这一问应当立刻回）",
+     "refno": "24384_47462",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 17,
+     "status": 200,
+     "versions": 1,
+     "sesnos": [
+      1697
+     ],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47462",
+      "noun": "SITE",
+      "scope": "subtree",
+      "unit_root": null,
+      "unit_noun": null,
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": true,
+      "elapsed_ms": 20211,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 215,
+       "sets_built": 1699,
+       "index_diff_ms": 11864,
+       "set_build_ms": 6940,
+       "scope_ms": 1,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     }
+    },
+    {
+     "label": "SITE，再问一次",
+     "refno": "24384_47462",
+     "scope": "subtree",
+     "since": 1695,
+     "ms": 14,
+     "status": 200,
+     "versions": 1,
+     "sesnos": [
+      1697
+     ],
+     "meta": {
+      "dbnum": 8000,
+      "refno": "24384/47462",
+      "noun": "SITE",
+      "scope": "subtree",
+      "unit_root": null,
+      "unit_noun": null,
+      "file_latest_sesno": 1698,
+      "truncated": false,
+      "cached": true,
+      "elapsed_ms": 20211,
+      "stats": {
+       "sessions": 1698,
+       "windows_with_changes": 1694,
+       "candidates": 51033,
+       "in_scope": 215,
+       "sets_built": 1699,
+       "index_diff_ms": 11864,
+       "set_build_ms": 6940,
+       "scope_ms": 1,
+       "classify_ms": 0,
+       "head_subtree_elements": 0
+      }
+     }
+    }
+   ],
+   "serverPid": 37384
+  },
+  "D": {
+   "statusBefore": {
+    "status": 200,
+    "verdict": "not_generated",
+    "reason": null,
+    "units": {
+     "total": 1,
+     "generated": 0,
+     "missing": 1,
+     "failed": 0,
+     "lagging": 0,
+     "exact": true
+    },
+    "code": null
+   },
+   "D0": {
+    "generatePosts": {
+     "/api/v1/model/generate": 1
+    },
+    "statusAfterGenerate": {
+     "status": 200,
+     "verdict": "latest",
+     "reason": null,
+     "units": {
+      "total": 1,
+      "generated": 1,
+      "missing": 0,
+      "failed": 0,
+      "lagging": 0,
+      "exact": true
+     },
+     "code": null
+    },
+    "backendRecords": 1,
+    "boxObjects": 1,
+    "table": {
+     "refno": "24382_1911",
+     "dbnum": 7998,
+     "loaded": true,
+     "modelSesno": 0,
+     "fileLatestSesno": 675,
+     "verdict": "latest",
+     "staleReason": null,
+     "checking": false
+    },
+    "row7998": {
+     "file": 675,
+     "applied": 0,
+     "model": 0,
+     "initialized": false,
+     "excluded": true,
+     "excludedReason": "watch_dbnums",
+     "verdict": "not_judged"
+    }
+   },
+   "restart": {
+    "ms": 14369,
+    "startedBefore": "2026-11-12T17:21:20.298546+08:00",
+    "startedAfter": "2026-11-12T17:28:10.716729+08:00",
+    "watch": [
+     8000
+    ]
+   },
+   "backendAfterRestart": {
+    "records": 0,
+    "complete": true,
+    "status": 200,
+    "nodeStatus": {
+     "status": 200,
+     "verdict": "not_generated",
+     "reason": null,
+     "units": {
+      "total": 1,
+      "generated": 0,
+      "missing": 1,
+      "failed": 0,
+      "lagging": 0,
+      "exact": true
+     },
+     "code": null
+    },
+    "row7998": {
+     "file": 675,
+     "applied": 0,
+     "model": 0,
+     "initialized": false,
+     "excluded": true,
+     "excludedReason": "watch_dbnums",
+     "verdict": "not_judged"
+    }
+   },
+   "D1": {
+    "done": {
+     "ok": [],
+     "fail": [
+      {
+       "refno": "24382_1911",
+       "error": null,
+       "status": "refno=24382_1911 记录查空，没有当成已删除，场景保持原样"
+      }
+     ],
+     "error": null
+    },
+    "boxObjects": 1,
+    "toasts": [
+     "[warning] [警告] 24382_1911 重载未完成：记录查空，但后端现在没有这个节点的完整模型（可能重启过，或还没生成）——没有当成已删除，场景保持原样"
+    ],
+    "table": {
+     "refno": "24382_1911",
+     "dbnum": 7998,
+     "loaded": true,
+     "modelSesno": 0,
+     "fileLatestSesno": 675,
+     "verdict": "not_generated",
+     "staleReason": null,
+     "checking": false
+    },
+    "rowButtons": {
+     "action": "generate",
+     "actionLabel": "生成",
+     "fill": null,
+     "status": "not_generated"
+    },
+    "inScene": true
+   },
+   "D2": {
+    "ms": 794,
+    "summary": "已取最新：1 个节点的模型没有动。",
+    "detail": [
+     "/AIOS-SUITE-T4-X-EQZ（24382_1911）：后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成",
+     "这次取最新之前后端重启过"
+    ],
+    "backendRestarted": true,
+    "kept": [
+     {
+      "refno": "24382_1911",
+      "reason": "后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成"
+     }
+    ],
+    "failed": [],
+    "withdrawn": [],
+    "boxObjects": 1,
+    "toasts": [
+     "已取最新：1 个节点的模型没有动。"
+    ],
+    "rowButtons": {
+     "action": "generate",
+     "actionLabel": "生成",
+     "fill": null,
+     "status": "not_generated"
+    }
+   },
+   "generatePostsTotal": {
+    "/api/v1/model/generate": 1
+   }
+  }
+ },
+ "backendHealth": {
+  "build_id": "0.1.44+ge8636c4a636f.1794402358.dirty",
+  "started_at": "2026-11-12T17:21:20.298546+08:00",
+  "watch_dbnums": [
+   8000
+  ],
+  "sul_db": "127.0.0.1:8199"
+ },
+ "rowsAtStart": {
+  "7998": {
+   "file": 675,
+   "applied": 0,
+   "model": 0,
+   "initialized": false,
+   "excluded": true,
+   "excludedReason": "watch_dbnums",
+   "verdict": "not_judged"
+  },
+  "8000": {
+   "file": 1684,
+   "applied": 1684,
+   "model": 1684,
+   "initialized": true,
+   "excluded": false,
+   "excludedReason": null,
+   "verdict": "in_sync"
+  }
+ },
+ "guard": {
+  "toLive": [],
+  "blocked": [],
+  "extraPost": {
+   "丁": {
+    "/api/v1/model/generate": 1
+   }
+  },
+  "requestsToSandbox": 417,
+  "allowedPost": {
+   "/api/v1/element/attributes": 13,
+   "/api/v1/model/records": 27,
+   "/api/v1/meshes/batch": 17
+  },
+  "pageErrors": []
+ },
+ "finishedAt": "2026-11-12T09:28:18.312Z",
+ "checks": [
+  {
+   "step": "摆法",
+   "name": "后端只监听 8000；7998 没初始化过、不在后端更新范围里",
+   "pass": true,
+   "detail": "{\"file\":675,\"applied\":0,\"model\":0,\"initialized\":false,\"excluded\":true,\"excludedReason\":\"watch_dbnums\",\"verdict\":\"not_judged\"}"
+  },
+  {
+   "step": "甲·基线",
+   "name": "装着 Z、Z2：三维和后端对上（24 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "A1",
+   "name": "后端批次追上：库 8000 三枚水位都到 1686",
+   "pass": true,
+   "detail": "数据 16322 ms，模型 17144 ms"
+  },
+  {
+   "step": "A1",
+   "name": "一次重载两个节点（PIPE 从 Z 挪到 Z2；次序 [Z2, Z]（得到管道的先重载））之后三维和后端对上（24 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "A2",
+   "name": "后端批次追上：库 8000 三枚水位都到 1689",
+   "pass": true,
+   "detail": "数据 26251 ms，模型 27063 ms"
+  },
+  {
+   "step": "A2",
+   "name": "一次重载两个节点（PIPE 挪回 Z；次序 [Z, Z2]（得到管道的先重载））之后三维和后端对上（24 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "A3",
+   "name": "后端批次追上：库 8000 三枚水位都到 1692",
+   "pass": true,
+   "detail": "数据 26533 ms，模型 27367 ms"
+  },
+  {
+   "step": "A3",
+   "name": "两行都出了「重载」",
+   "pass": true,
+   "detail": "文件写完后 53260 ms；行上：{\"24384_47463\":{\"action\":\"reload\",\"actionLabel\":\"重载\",\"fill\":null,\"status\":\"reloadable\"},\"24384_47500\":{\"action\":\"reload\",\"actionLabel\":\"重载\",\"fill\":null,\"status\":\"reloadable\"}}"
+  },
+  {
+   "step": "A3",
+   "name": "两行点完：屏幕上没缺构件；或者缺了、而缺构件的那个节点被记了一笔，行上又给了「重载」",
+   "pass": true,
+   "detail": "和后端对不上的 1 处：24384_47480：后端 1 个实例，场景里 0 个对象｜记了一笔的：24384_47500（名下有构件被别的节点的重载撤下了，屏幕上可能缺构件）｜行上：{\"24384_47463\":{\"action\":null,\"actionLabel\":null,\"fill\":null,\"status\":\"latest\"},\"24384_47500\":{\"action\":\"reload\",\"actionLabel\":\"重载\",\"fill\":null,\"status\":\"reloadable\"}}"
+  },
+  {
+   "step": "A3",
+   "name": "再点一次「取最新」之后三维和后端对上（24 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "A3",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代",
+   "pass": true,
+   "detail": "[\"已取最新：模型树挪位置 1；模型重载 1 个节点。\"]"
+  },
+  {
+   "step": "A4",
+   "name": "后端批次追上：库 8000 三枚水位都到 1695",
+   "pass": true,
+   "detail": "数据 28783 ms，模型 29612 ms"
+  },
+  {
+   "step": "A4",
+   "name": "两行都出了「重载」",
+   "pass": true,
+   "detail": "文件写完后 56518 ms；行上：{\"24384_47463\":{\"action\":\"reload\",\"actionLabel\":\"重载\",\"fill\":null,\"status\":\"reloadable\"},\"24384_47500\":{\"action\":\"reload\",\"actionLabel\":\"重载\",\"fill\":null,\"status\":\"reloadable\"}}"
+  },
+  {
+   "step": "A4",
+   "name": "行上逐个点「重载」（EQ-CP 挪回 Z；先点 Z2 那一行（这回是失去设备的），再点 Z 那一行——次序反过来的对照）之后三维和后端对上（24 个实例矩阵逐个对）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "B1·基线",
+   "name": "单独装着 EQ-RN、EQ-CASE：三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "B2·基线",
+   "name": "单独装着 EQ-RN、EQ-CASE：三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "B3·基线",
+   "name": "单独装着 EQ-RN、EQ-CASE：三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "乙",
+   "name": "后端批次追上：库 8000 三枚水位都到 1698",
+   "pass": true,
+   "detail": "数据 20997 ms，模型 22119 ms"
+  },
+  {
+   "step": "B1",
+   "name": "状态栏出了「数据已更新」的提示，带「重载」和「忽略」",
+   "pass": true,
+   "detail": "库 8000 已更新到会话 1696→1698（改 4 项，场景内 2 根受影响）｜重载名单 [\"24384_47468\",\"24384_47470\"]"
+  },
+  {
+   "step": "B1",
+   "name": "窗口宽 1600（普通菜单）：底部提示条正显示着，「重载」「忽略」「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":464,\"right\":1136,\"top\":876,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000} 重载 {\"rect\":{\"left\":712,\"right\":734,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 忽略 {\"rect\":{\"left\":738,\"right\":748,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"covered\":false,\"clickable\":true}"
+  },
+  {
+   "step": "B1",
+   "name": "窗口宽 1280（普通菜单）：底部提示条正显示着，「重载」「忽略」「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": false,
+   "detail": "提示条 [{\"left\":304,\"right\":976,\"top\":676,\"bottom\":764}] 状态栏 {\"left\":0,\"right\":1600,\"top\":772,\"bottom\":800} 重载 {\"rect\":{\"left\":712,\"right\":734,\"top\":778,\"bottom\":795},\"covered\":false,\"clickable\":true} 忽略 {\"rect\":{\"left\":738,\"right\":748,\"top\":778,\"bottom\":795},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1529,\"right\":1592,\"top\":777,\"bottom\":797},\"covered\":false,\"clickable\":false}"
+  },
+  {
+   "step": "B1",
+   "name": "窗口宽 1600（Ribbon 菜单）：底部提示条正显示着，「重载」「忽略」「取最新」都点得到，提示条没有压在状态栏上",
+   "pass": true,
+   "detail": "提示条 [{\"left\":464,\"right\":1136,\"top\":876,\"bottom\":964}] 状态栏 {\"left\":0,\"right\":1600,\"top\":972,\"bottom\":1000} 重载 {\"rect\":{\"left\":712,\"right\":734,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 忽略 {\"rect\":{\"left\":738,\"right\":748,\"top\":978,\"bottom\":995},\"covered\":false,\"clickable\":true} 取最新 {\"rect\":{\"left\":1529,\"right\":1592,\"top\":977,\"bottom\":997},\"covered\":false,\"clickable\":true}"
+  },
+  {
+   "step": "B1",
+   "name": "点提示上的「重载」（重载名单的次序 [\"24384_47468\",\"24384_47470\"]）之后三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "B1",
+   "name": "BOX-CASE 在场景里（它现在在 EQ-RN 名下）",
+   "pass": true,
+   "detail": "场景里 BOX-CASE 的对象 1 个"
+  },
+  {
+   "step": "B2",
+   "name": "一次重载两台设备（得到 BOX 的 EQ-RN 先重载）之后三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "B2",
+   "name": "BOX-CASE 在场景里（它现在在 EQ-RN 名下）",
+   "pass": true,
+   "detail": "场景里 BOX-CASE 的对象 1 个"
+  },
+  {
+   "step": "B3",
+   "name": "一次重载两台设备（失去 BOX 的 EQ-CASE 先重载（对照））之后三维和后端对上（2 个实例矩阵逐个对；场景里不许缺、不许多）",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "step": "B3",
+   "name": "BOX-CASE 在场景里（它现在在 EQ-RN 名下）",
+   "pass": true,
+   "detail": "场景里 BOX-CASE 的对象 1 个"
+  },
+  {
+   "step": "D0",
+   "name": "7998 的 ZONE 装上了：后端按需生成了它的模型，场景里有那个 BOX",
+   "pass": true,
+   "detail": "场景里 BOX 1 个对象；后端记录 1 条；生成请求 {\"/api/v1/model/generate\":1}；装之前后端说它 not_generated"
+  },
+  {
+   "step": "D1",
+   "name": "后端重起了；按需生成的模型没了：7998 那个 ZONE 的记录查空且收齐，后端说它没生成",
+   "pass": true,
+   "detail": "记录 0 条 complete=true；节点模型状态 {\"status\":200,\"verdict\":\"not_generated\",\"reason\":null,\"units\":{\"total\":1,\"generated\":0,\"missing\":1,\"failed\":0,\"lagging\":0,\"exact\":true},\"code\":null}"
+  },
+  {
+   "step": "D1",
+   "name": "经原有的「重载」（状态栏的重载、重新部署后的重装派发的那个事件）：查空没有当成已删除，BOX 还在场景里、节点还算装着",
+   "pass": true,
+   "detail": "场景里 BOX 1 个对象；已加载节点表 {\"refno\":\"24382_1911\",\"dbnum\":7998,\"loaded\":true,\"modelSesno\":0,\"fileLatestSesno\":675,\"verdict\":\"not_generated\",\"staleReason\":null,\"checking\":false}"
+  },
+  {
+   "step": "D1",
+   "name": "给人的提示没有说它「已删除」「已从场景撤下」，说的是没有当成已删除",
+   "pass": true,
+   "detail": "[\"[warning] [警告] 24382_1911 重载未完成：记录查空，但后端现在没有这个节点的完整模型（可能重启过，或还没生成）——没有当成已删除，场景保持原样\"]"
+  },
+  {
+   "step": "D2",
+   "name": "取最新认出后端重启过；7998 的 ZONE 没有被撤下，BOX 还在场景里",
+   "pass": true,
+   "detail": "已取最新：1 个节点的模型没有动。｜没动的：[{\"refno\":\"24382_1911\",\"reason\":\"后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成\"}]｜没成的：[]"
+  },
+  {
+   "step": "D2",
+   "name": "那句交代里说了它没有被当成已删除",
+   "pass": true,
+   "detail": "已取最新：1 个节点的模型没有动。｜/AIOS-SUITE-T4-X-EQZ（24382_1911）：后端重启过，后端现在没有这个节点的模型，屏幕上的保持原样（不当成已删除）；行上的「生成」可重新生成｜这次取最新之前后端重启过"
+  },
+  {
+   "step": "D2",
+   "name": "取最新期间只弹了一条提示，就是最后那句交代",
+   "pass": true,
+   "detail": "[\"已取最新：1 个节点的模型没有动。\"]"
+  },
+  {
+   "step": "护栏",
+   "name": "页面没有一个请求发往 8022 / 8009",
+   "pass": true,
+   "detail": "发往沙箱后端 417 个请求"
+  },
+  {
+   "step": "护栏",
+   "name": "页面对沙箱后端只发了 GET 和三种只读 POST；多放行的只有丁那一页的 model/generate（发给沙箱后端）",
+   "pass": true,
+   "detail": "只读 POST {\"/api/v1/element/attributes\":13,\"/api/v1/model/records\":27,\"/api/v1/meshes/batch\":17}；多放行 {\"丁\":{\"/api/v1/model/generate\":1}}"
+  }
+ ]
+}

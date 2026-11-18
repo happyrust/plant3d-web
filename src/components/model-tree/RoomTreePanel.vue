@@ -15,6 +15,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { registerGetWorkDerived } from '@/composables/useModelGetWork';
 import { openRoomInfo } from '@/composables/useRoomInfo';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { setGlobalSelectedRefno, useSelectionStore } from '@/composables/useSelectionStore';
@@ -97,6 +98,18 @@ function refreshRoots() {
   tree.reset();
   void tree.loadRoots(true);
 }
+
+// 「取最新」（GETWORK，2026-11-12）之后：这一轮树或模型有变化、而房间清单已经取过时，房间树整棵重取
+// （房间树没有逐层对账：展开的房间会收起）。页签不在前台就只清掉，切回来时自然取到新的。
+const offGetWorkRooms = registerGetWorkDerived({
+  name: '房间树',
+  run: ({ changed }) => {
+    if (!changed || status.value.status === 'idle') return;
+    tree.reset();
+    if (props.active ?? true) void tree.loadRoots(true);
+  },
+});
+onUnmounted(offGetWorkRooms);
 
 function onSearchInput(ev: Event) {
   tree.setFilter((ev.target as HTMLInputElement).value);

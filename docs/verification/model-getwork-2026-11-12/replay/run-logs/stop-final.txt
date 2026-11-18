@@ -1,0 +1,3 @@
+[13:20:28] 停了 server_pid 进程 24132（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\aios-database.exe）
+[13:20:28] 停了 surreal_pid 进程 17320（<plant3d-web>\.scratch\incremental-sync\sandbox\bin\surreal.exe）
+[13:20:34] 端口：9199 没人在听，8199 没人在听
