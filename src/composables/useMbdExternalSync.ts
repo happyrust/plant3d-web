@@ -179,11 +179,30 @@ function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensi
   const layout = record.layout;
   // Only explicit layouts carry the presentation hints.
   if (!('lines' in layout)) return record;
-  if (layout.dimension3d === undefined && layout.tag === undefined && layout.label3d === undefined) {
+  const has3dDeclutter = layout.declutter?.movable !== undefined
+    || layout.declutter?.parentId !== undefined;
+  if (
+    layout.dimension3d === undefined
+    && layout.tag === undefined
+    && layout.label3d === undefined
+    && !has3dDeclutter
+  ) {
     return record;
   }
-  const { dimension3d: _dimension3d, tag: _tag, label3d: _label3d, ...rest } = layout;
-  return { ...record, layout: rest };
+  const { dimension3d: _dimension3d, tag: _tag, label3d: _label3d, declutter, ...rest } = layout;
+  const flatDeclutter = declutter && declutter.parentId === undefined
+    ? {
+      rank: declutter.rank,
+      ...(declutter.group !== undefined ? { group: declutter.group } : {}),
+    }
+    : undefined;
+  return {
+    ...record,
+    layout: {
+      ...rest,
+      ...(flatDeclutter !== undefined ? { declutter: flatDeclutter } : {}),
+    },
+  };
 }
 
 /**
@@ -229,8 +248,15 @@ function qualifyGroups(
     ...(layout.polarObstacle
       ? { polarObstacle: { groupKey: qualify(layout.polarObstacle.groupKey) } }
       : {}),
-    ...(layout.declutter?.group !== undefined
-      ? { declutter: { ...layout.declutter, group: qualify(layout.declutter.group) } }
+    ...(layout.declutter !== undefined
+      && (layout.declutter.group !== undefined || layout.declutter.parentId !== undefined)
+      ? {
+        declutter: {
+          ...layout.declutter,
+          ...(layout.declutter.group !== undefined ? { group: qualify(layout.declutter.group) } : {}),
+          ...(layout.declutter.parentId !== undefined ? { parentId: qualify(layout.declutter.parentId) } : {}),
+        },
+      }
       : {}),
   };
 }

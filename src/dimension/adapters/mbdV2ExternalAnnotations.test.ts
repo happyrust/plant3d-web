@@ -875,7 +875,7 @@ describe('mbdV2ToExternalRecords', () => {
       ],
     });
     for (const id of ['b:isoline:0:angle:m:0', 'b:isoline:0:angle:m:0:dirtext1', 'b:isoline:0:angle:m:0:dirtext2']) {
-      expect(explicitLayout(result, id).declutter).toEqual({ rank: 500, group: 'b:isoline:0:angle:m:0' });
+      expect(explicitLayout(result, id).declutter).toEqual({ rank: 500, group: 'b:isoline:0:angle:m:0', movable: true });
       // The value and its notes only stand apart near true scale: the whole group is close-up detail.
       expect(explicitLayout(result, id).lod).toEqual({ tier: 'detail' });
     }
@@ -1465,7 +1465,9 @@ describe('mbdV2ToExternalRecords', () => {
         expect(lod(id), id).toEqual({ tier: 'detail' });
       }
       expect(explicitLayout(result, 'e:equi:rotation:dirtext1').declutter)
-        .toEqual({ rank: 500, group: 'e:equi:rotation' });
+        .toEqual({ rank: 500, group: 'e:equi:rotation', movable: true });
+      expect(explicitLayout(result, 'e:locate:ns:dirtext').declutter)
+        .toEqual({ rank: 0, parentId: 'e:locate:ns' });
       expect(lod('e:manual')).toBeUndefined();
       expect(lod('e:plain')).toBeUndefined();
     });
@@ -1864,9 +1866,10 @@ describe('mbdV2ToExternalRecords', () => {
       )).toBe(false);
     }
 
-    // 3D presentation: the pairwise declutter (S1) elides the lower-ranked
-    // copy for this view instead of moving it; the survivor is laid out
-    // exactly as it would be alone.
+    // 3D presentation (ADR 0057 revised #141): the winner stays on its
+    // preferred anchor, a colliding copy shifts to a non-overlapping 3D
+    // candidate first, and once every candidate is occupied any extra copy is
+    // elided (`lodHidden = 'overlap'`); companion `+50` notes follow their host.
     const alone = layoutsOf({ ...data, primitives: [source] });
     const pair = layoutsOf({
       ...data,
@@ -1874,9 +1877,44 @@ describe('mbdV2ToExternalRecords', () => {
     });
     expect(pair[0]!.labelBounds).toEqual(alone[0]!.labelBounds);
     expect(pair[0]!.derived.lodHidden).toBeUndefined();
-    expect(pair[1]!.derived.lodHidden).toBe('overlap');
-    expect(pair[1]!.primitives).toEqual([]);
+    expect(pair[1]!.derived.lodHidden).toBeUndefined();
+    expect(pair[1]!.primitives.length).toBeGreaterThan(0);
+    const box0 = pair[0]!.labelBounds;
+    const box1 = pair[1]!.labelBounds;
+    const overlaps = box0.x < box1.x + box1.width && box0.x + box0.width > box1.x
+      && box0.y < box1.y + box1.height && box0.y + box1.height > box1.y;
+    expect(overlaps).toBe(false);
     expect(pair.every(layout => layout.labelPinned)).toBe(true);
+
+    // Exhausting every candidate still elides the remaining copies (`overlap`),
+    // and an adjustweld `+50` attached to an elided host hides with its host.
+    const doomedAnchor: readonly [number, number, number] = [
+      source.label_anchor[0] + 0.001,
+      source.label_anchor[1],
+      source.label_anchor[2],
+    ];
+    const copies = Array.from({ length: 16 }, (_, idx) => ({
+      ...source,
+      id: `${source.id}-c${String(idx).padStart(2, '0')}`,
+      label_anchor: idx === 15 ? doomedAnchor : source.label_anchor,
+    }));
+    const adjustWeld = {
+      kind: 'aid_text' as const,
+      id: '24383_76302:isoline:0:adjustweld:24383_76303',
+      function: '调整焊附加长度',
+      text: ' +50',
+      position: doomedAnchor,
+      isoline_idx: source.isoline_idx,
+    };
+    const crowded = layoutsOf({
+      ...data,
+      primitives: [...copies, adjustWeld],
+    });
+    const lastHost = crowded.find(l => l.dimensionId === `${source.id}-c15`)!;
+    const weldLayout = crowded.find(l => l.dimensionId === adjustWeld.id)!;
+    expect(lastHost.derived.lodHidden).toBe('overlap');
+    expect(weldLayout.derived.lodHidden).toBe('overlap');
+    expect(weldLayout.primitives).toEqual([]);
   });
 
   it('derives the 3D presentation from the extension lines when the group declares cheight', () => {

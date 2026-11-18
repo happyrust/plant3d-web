@@ -416,8 +416,12 @@ describe('createMbdExternalSync', () => {
 
     const flat = await committed('?mbd_refno=A&mbd_3d=0');
     expect(flat[0].layout).not.toHaveProperty('label3d');
-    const { label3d: _label3d, ...flatPart } = kept[0].layout;
-    expect(flat[0].layout).toEqual(flatPart);
+    expect(flat[0].layout.declutter).toEqual({ rank: 500, group: 'angle-1' });
+    const { label3d: _label3d, declutter: _declutter, ...flatPart } = kept[0].layout;
+    expect(flat[0].layout).toEqual({
+      ...flatPart,
+      declutter: { rank: 500, group: 'angle-1' },
+    });
   });
 
   it('mbd_polar=1 is retired: records match the switch-off ones in both presentations, only a note is added', async () => {
@@ -782,7 +786,8 @@ describe('createMbdExternalSync', () => {
       .mock.calls[0]!;
     const layoutOf = (id: string) => records.find((record: { id: string }) => record.id === id).layout;
     for (const refno of ['A', 'B']) {
-      expect(layoutOf(`${refno}:ang-1:dirtext1`).declutter).toEqual({ rank: 500, group: `${refno}:ang-1` });
+      expect(layoutOf(`${refno}:ang-1:dirtext1`).declutter)
+        .toEqual({ rank: 500, group: `${refno}:ang-1`, movable: true });
     }
   });
 

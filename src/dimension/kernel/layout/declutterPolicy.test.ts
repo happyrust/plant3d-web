@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { convexQuadsOverlap, declutterOverlaps } from './declutterPolicy';
+import {
+  convexQuadsOverlap,
+  declutterOverlaps,
+  registerDeclutterAlternates,
+} from './declutterPolicy';
 
 import type { LayoutResult, ScreenRect, Vec2 } from '../types';
 
@@ -172,5 +176,77 @@ describe('declutterOverlaps', () => {
     ]);
     // 回落到包围盒判定后，低排名的被消隐，而不是两者都留在屏幕上。
     expect(results.map(result => result.derived.lodHidden)).toEqual([undefined, 'overlap']);
+  });
+
+  it('#141 tries registered 3D alternates and movable group offsets before eliding, and links companion notes to their host', () => {
+    const winner = layout('winner', { x: 0, y: 0, width: 40, height: 20 }, 1100);
+    const runnerBase = layout('runner', { x: 10, y: 0, width: 40, height: 20 }, 1050);
+    const runnerBlockedAlt = layout('runner', { x: 20, y: 0, width: 40, height: 20 }, 1050);
+    const runnerFreeAltBase = layout('runner', { x: 100, y: 0, width: 40, height: 20 }, 1050);
+    const runnerFreeAlt: LayoutResult = {
+      ...runnerFreeAltBase,
+      derived: {
+        ...runnerFreeAltBase.derived,
+        declutter: {
+          ...runnerFreeAltBase.derived.declutter!,
+          shiftPx: [90, 0],
+        },
+      },
+    };
+    registerDeclutterAlternates(runnerBase, () => [runnerBlockedAlt, runnerFreeAlt]);
+
+    // Companion `+50` note attached to `runner` follows its +90 px shift!
+    const companionBase = layout('runner:adjustweld', { x: 52, y: 0, width: 24, height: 14 }, 0);
+    const companion: LayoutResult = {
+      ...companionBase,
+      derived: {
+        formattedLabel: ' +50',
+        declutter: { rank: 0, quad: quadOf({ x: 52, y: 0, width: 24, height: 14 }), parentId: 'runner' },
+      },
+    };
+
+    // Movable 3D angle group colliding at (5, 0) steps clear together without eliding!
+    const angleBase = layout('ang', { x: 5, y: 0, width: 30, height: 18 }, 500, 'ang');
+    const angleMovable: LayoutResult = {
+      ...angleBase,
+      derived: { ...angleBase.derived, declutter: { ...angleBase.derived.declutter!, movable: true } },
+    };
+    const angleNoteBase = layout('ang:dirtext1', { x: 5, y: 20, width: 30, height: 14 }, 500, 'ang');
+    const angleNoteMovable: LayoutResult = {
+      ...angleNoteBase,
+      derived: { ...angleNoteBase.derived, declutter: { ...angleNoteBase.derived.declutter!, movable: true } },
+    };
+
+    const resolved = declutterOverlaps([winner, runnerBase, companion, angleMovable, angleNoteMovable]);
+    expect(resolved.map(r => r.derived.lodHidden)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(resolved[1]).toBe(runnerFreeAlt);
+    expect(resolved[2]!.labelBounds.x).toBe(52 + 90);
+    // Movable angle group moved clear of `winner` (x: 0..40, y: 0..20):
+    const angBox = resolved[3]!.labelBounds;
+    const collidesWinner = angBox.x < 40 && angBox.x + angBox.width > 0
+      && angBox.y < 20 && angBox.y + angBox.height > 0;
+    expect(collidesWinner).toBe(false);
+
+    // When every alternate still collides, BOTH the host and its companion `+50` hide!
+    const doomed = layout('doomed', { x: 10, y: 0, width: 40, height: 20 }, 900);
+    registerDeclutterAlternates(doomed, () => [layout('doomed', { x: 15, y: 0, width: 40, height: 20 }, 900)]);
+    const doomedCompanion: LayoutResult = {
+      ...companion,
+      dimensionId: 'doomed:adjustweld',
+      derived: {
+        formattedLabel: ' +50',
+        declutter: { rank: 0, quad: quadOf({ x: 52, y: 0, width: 24, height: 14 }), parentId: 'doomed' },
+      },
+    };
+    const hiddenOut = declutterOverlaps([winner, doomed, doomedCompanion]);
+    expect(hiddenOut[1]!.derived.lodHidden).toBe('overlap');
+    expect(hiddenOut[2]!.derived.lodHidden).toBe('overlap');
+    expect(hiddenOut[2]!.primitives).toEqual([]);
   });
 });

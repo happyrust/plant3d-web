@@ -344,6 +344,12 @@ export type LayoutResult = Readonly<{
        * absent = the layout is a group of its own.
        */
       group?: string;
+      /** Host dimension id a companion note (e.g. `+50` adjustweld) follows (#141). */
+      parentId?: string;
+      /** Allow screen-space glyph shifting for 3D angle groups before eliding (#141). */
+      movable?: boolean;
+      /** Screen-space shift relative to candidate 0 so companion notes follow (#141). */
+      shiftPx?: Vec2;
     }>;
     /**
      * Set by the billboard tag layout: the body rectangle on screen and the
@@ -756,10 +762,15 @@ export type ExplicitLayoutInput = Readonly<{
   /**
    * Take part in the pairwise declutter (`declutterOverlaps`) that the 3D
    * running dimensions go through: the text box competes by `rank` (higher
-   * wins) and a loser is elided for this view, never moved — the solver's
-   * placement stays authoritative. Records sharing a `group` win or lose
-   * together: an angle's value and its two direction notes are three records
-   * that only read as one. Absent = left to the moving declutter as before.
+   * wins); in 3D presentation a colliding loser tries candidate positions
+   * before being elided (`lodHidden = 'overlap'`, ADR 0057 rev, #141).
+   * Records sharing a `group` win, move, or lose together; a companion note
+   * with `parentId` follows its host dimension's visibility and shift.
    */
-  declutter?: Readonly<{ rank: number; group?: string }>;
+  declutter?: Readonly<{
+    rank: number;
+    group?: string;
+    parentId?: string;
+    movable?: boolean;
+  }>;
 }>;

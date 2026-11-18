@@ -1018,12 +1018,62 @@ const ANGLE_DIRECTION_NOTE_SUFFIX = /:dirtext\d+$/;
  */
 function angleDeclutter(primitive: MbdPrimitive): ExplicitLayoutInput['declutter'] | undefined {
   if (primitive.kind === 'angle_dim') {
-    return { rank: ANGLE_DECLUTTER_RANK, group: primitive.id };
+    return { rank: ANGLE_DECLUTTER_RANK, group: primitive.id, movable: true };
   }
   if (primitive.kind === 'aid_text' && ANGLE_DIRECTION_NOTE_SUFFIX.test(primitive.id)) {
-    return { rank: ANGLE_DECLUTTER_RANK, group: primitive.id.replace(ANGLE_DIRECTION_NOTE_SUFFIX, '') };
+    return {
+      rank: ANGLE_DECLUTTER_RANK,
+      group: primitive.id.replace(ANGLE_DIRECTION_NOTE_SUFFIX, ''),
+      movable: true,
+    };
   }
   return undefined;
+}
+
+/**
+ * Pair companion auxiliary notes (e.g. `调整焊附加长度` `+50` on pipe/support
+ * running dimensions, or `<dim_id>:dirtext` direction notes on locating
+ * dimensions) with their host `linear_dim` (#141) so they hide or shift
+ * together in 3D presentation rather than leaving an orphan `+50` on screen.
+ */
+function pairCompanionAidTexts(
+  data: MbdV2PipeData,
+  linearDims: readonly MbdV2LinearDim[],
+): ReadonlyMap<string, string> {
+  const hostByAidId = new Map<string, string>();
+  if (linearDims.length === 0) return hostByAidId;
+  const dimIds = new Set(linearDims.map(dim => dim.id));
+  for (const primitive of data.primitives) {
+    if (primitive.kind !== 'aid_text') continue;
+    if (primitive.id.endsWith(':dirtext')) {
+      const hostId = primitive.id.slice(0, -':dirtext'.length);
+      if (dimIds.has(hostId)) {
+        hostByAidId.set(primitive.id, hostId);
+        continue;
+      }
+    }
+    if (primitive.function === '调整焊附加长度' || primitive.id.includes(':adjustweld:')) {
+      const sameIsoline = linearDims.filter(dim => dim.isoline_idx === primitive.isoline_idx);
+      const pool = sameIsoline.length > 0 ? sameIsoline : linearDims;
+      let best: MbdV2LinearDim | null = null;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (const dim of pool) {
+        const dist = Math.hypot(
+          dim.label_anchor[0] - primitive.position[0],
+          dim.label_anchor[1] - primitive.position[1],
+          dim.label_anchor[2] - primitive.position[2],
+        );
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = dim;
+        }
+      }
+      if (best) {
+        hostByAidId.set(primitive.id, best.id);
+      }
+    }
+  }
+  return hostByAidId;
 }
 
 /**
@@ -1175,6 +1225,7 @@ export function mbdV2ToExternalRecords(
   const linearDims = data.primitives.filter(
     (primitive): primitive is MbdV2LinearDim => primitive.kind === 'linear_dim',
   );
+  const companionHostById = pairCompanionAidTexts(data, linearDims);
 
   for (const primitive of data.primitives) {
     if (seenIds.has(primitive.id)) {
@@ -1226,13 +1277,15 @@ export function mbdV2ToExternalRecords(
           primitive.text,
           textUp(primitive, transform, along),
         );
+        const companionHostId = companionHostById.get(primitive.id);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel,
           labelAnchor: position,
           ...(along ? { labelAlong: along } : {}),
           ...(labelBlock ? { labelBlock } : {}),
           ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
-          declutter: angleDeclutter(primitive),
+          declutter: angleDeclutter(primitive)
+            ?? (companionHostId !== undefined ? { rank: 0, parentId: companionHostId } : undefined),
         });
         break;
       }

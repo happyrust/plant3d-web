@@ -1,5 +1,6 @@
 import { stablePerpendicular } from '../geometry/planeBasis';
 import {
+  isClippedPrimitive,
   makeSceneLine,
   projectScenePrimitives,
   projectSceneVertex,
@@ -18,12 +19,14 @@ import {
   cross3,
   dot3,
   EPSILON,
+  length3,
   lerp3,
   scale3,
   sub3,
   tryNormalize3,
 } from '../vec';
 
+import { registerDeclutterAlternates } from './declutterPolicy';
 import { emptyLayout } from './linear';
 import {
   lodCloseUpLineScale,
@@ -206,109 +209,205 @@ export function layoutDimension3d(
   const arrowLengthPx = arrowLength / metresPerPixel;
   const fits = lineLengthPx
     >= labelWidthPx + 2 * arrowLengthPx + rules.outsideClearancePx;
-  const outside: ExplicitDimension3dInput['outside'] = spec.outside
+  const defaultOutside: ExplicitDimension3dInput['outside'] = spec.outside
     ?? (label.length > 0 && !fits ? 'end' : undefined);
-
-  const primitives: ScenePrimitive[] = [];
-  const line = (from: Vec3, to: Vec3, part: ScreenLinePart): void => {
-    primitives.push(makeSceneLine(sceneVertex(from), sceneVertex(to), part, styleRole));
-  };
-  line(lineStart, lineEnd, 'dimension');
+  const textWidthM = font.getWidth(h, label);
+  const segmentLengthM = length3(sub3(lineEnd, lineStart));
   const extensionStart = spec.surfaceM + rules.extensionStartH * h;
   const overshoot = rules.extensionOvershootH * h;
-  for (const [pipe, end] of [[spec.from, lineStart], [spec.to, lineEnd]] as const) {
-    line(
-      add3(pipe, scale3(normal, extensionStart)),
-      add3(end, scale3(normal, overshoot)),
-      'extension',
-    );
-  }
-  // Filled heads in the text plane; `outside` flips them to point inwards
-  // from beyond the extension lines and adds the tails they sit on.
-  const inward = outside ? -1 : 1;
-  const head = (tip: Vec3, towards: Vec3): SceneTriangle => {
-    const base = add3(tip, scale3(towards, arrowLength * inward));
-    return {
-      kind: 'scene-triangle',
-      points: [
-        sceneVertex(tip),
-        sceneVertex(add3(base, scale3(up, arrowHalfWidth))),
-        sceneVertex(add3(base, scale3(up, -arrowHalfWidth))),
-      ],
-      part: 'arrow',
-      styleRole,
-    };
-  };
-  primitives.push(head(lineStart, along), head(lineEnd, scale3(along, -1)));
   const tail = arrowLength + rules.outsideTailH * h;
-  if (outside) {
-    line(lineStart, add3(lineStart, scale3(along, -tail)), 'dimension');
-    line(lineEnd, add3(lineEnd, scale3(along, tail)), 'dimension');
-  }
-
-  const textWidthM = font.getWidth(h, label);
-  const textCentre = outside === 'start'
-    ? add3(lineStart, scale3(along, -(tail + textWidthM / 2)))
-    : outside === 'end'
-      ? add3(lineEnd, scale3(along, tail + textWidthM / 2))
-      : mid;
-  const origin = add3(textCentre, scale3(up, rules.textGapH * h));
-  let glyphScene: SceneGlyphRun;
-  let textQuad: Quad | null = null;
-  if (label.length > 0 && !foreshortened) {
-    const frame: SceneTextFrame = {
-      origin,
-      xAxis: scale3(reading, h),
-      yAxis: scale3(up, h),
-    };
-    glyphScene = sceneGlyphInFrame(
-      label,
-      frame,
-      idealHeightPx,
-      Math.atan2(baseline[1], baseline[0]),
-      styleRole,
-    );
-    textQuad = projectTextFrameQuad(label, frame, projector, font);
-  } else {
-    // Edge-on plane: view-plane text at the same anchor, viewport-horizontal
-    // (GB/T 4458.4 method 2), capped like any flat source text.
-    glyphScene = sceneGlyph(
-      label,
-      sceneVertex(origin),
-      Math.min(idealHeightPx, theme.sourceTextHeightMaxPx),
-      styleRole,
-    );
-  }
-  primitives.push(glyphScene);
-
-  const projected = projectScenePrimitives(primitives, projector, font);
-  const lines = projected.filter(
-    (primitive): primitive is ScreenLine => primitive.kind === 'line',
-  );
-  const glyph = projected.find(
-    (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
-  )!;
-  const hitRegions: HitRegion[] = [
-    ...lines.map(item => makeLineHitRegion(item, theme.dimensionStrokeWidthPx)),
-    makeGlyphHitRegion(glyph),
-  ];
   // Pairwise declutter (S1): main rows beat atta rows, then the longer line
   // per label width wins; `declutterOverlaps` breaks the remaining ties by id.
   const rank = (input.lod?.tier === 'secondary' ? 0 : 1000)
     + lineLengthPx / Math.max(1, labelWidthPx);
 
-  return {
-    dimensionId: input.id,
-    scenePrimitives: primitives,
-    primitives: projected,
-    hitRegions,
-    labelBounds: labelBoundsOf(glyph, theme),
-    labelPinned: input.labelPinned,
-    derived: {
-      formattedLabel: label,
-      ...(label.length > 0
-        ? { declutter: { rank, quad: textQuad ?? rectCorners(glyph.bounds) } }
-        : {}),
-    },
+  type CandidateSpec = Readonly<{
+    outside: ExplicitDimension3dInput['outside'];
+    alongOffsetM: number;
+    extraTailM: number;
+    extraLiftM: number;
+  }>;
+
+  const buildCandidate = (
+    cand: CandidateSpec,
+    baseGlyphOrigin: Vec2 | null,
+  ): Readonly<{ layout: LayoutResult; glyphOrigin: Vec2; clipped: boolean }> => {
+    const liftedStart = cand.extraLiftM > 0
+      ? add3(lineStart, scale3(normal, cand.extraLiftM))
+      : lineStart;
+    const liftedEnd = cand.extraLiftM > 0
+      ? add3(lineEnd, scale3(normal, cand.extraLiftM))
+      : lineEnd;
+    const liftedMid = cand.extraLiftM > 0 ? lerp3(liftedStart, liftedEnd, 0.5) : mid;
+
+    const primitives: ScenePrimitive[] = [];
+    const line = (from: Vec3, to: Vec3, part: ScreenLinePart): void => {
+      primitives.push(makeSceneLine(sceneVertex(from), sceneVertex(to), part, styleRole));
+    };
+    line(liftedStart, liftedEnd, 'dimension');
+    for (const [pipe, end] of [[spec.from, liftedStart], [spec.to, liftedEnd]] as const) {
+      line(
+        add3(pipe, scale3(normal, extensionStart)),
+        add3(end, scale3(normal, overshoot)),
+        'extension',
+      );
+    }
+    // Filled heads in the text plane; `outside` flips them to point inwards
+    // from beyond the extension lines and adds the tails they sit on.
+    const inward = cand.outside ? -1 : 1;
+    const head = (tip: Vec3, towards: Vec3): SceneTriangle => {
+      const base = add3(tip, scale3(towards, arrowLength * inward));
+      return {
+        kind: 'scene-triangle',
+        points: [
+          sceneVertex(tip),
+          sceneVertex(add3(base, scale3(up, arrowHalfWidth))),
+          sceneVertex(add3(base, scale3(up, -arrowHalfWidth))),
+        ],
+        part: 'arrow',
+        styleRole,
+      };
+    };
+    primitives.push(head(liftedStart, along), head(liftedEnd, scale3(along, -1)));
+    if (cand.outside) {
+      const startTail = cand.outside === 'start' ? tail + cand.extraTailM : tail;
+      const endTail = cand.outside === 'end' ? tail + cand.extraTailM : tail;
+      line(liftedStart, add3(liftedStart, scale3(along, -startTail)), 'dimension');
+      line(liftedEnd, add3(liftedEnd, scale3(along, endTail)), 'dimension');
+    }
+
+    const textCentre = cand.outside === 'start'
+      ? add3(liftedStart, scale3(along, -(tail + cand.extraTailM + textWidthM / 2)))
+      : cand.outside === 'end'
+        ? add3(liftedEnd, scale3(along, tail + cand.extraTailM + textWidthM / 2))
+        : cand.alongOffsetM !== 0
+          ? add3(liftedMid, scale3(along, cand.alongOffsetM))
+          : liftedMid;
+    const origin = add3(textCentre, scale3(up, rules.textGapH * h));
+    let glyphScene: SceneGlyphRun;
+    let textQuad: Quad | null = null;
+    if (label.length > 0 && !foreshortened) {
+      const frame: SceneTextFrame = {
+        origin,
+        xAxis: scale3(reading, h),
+        yAxis: scale3(up, h),
+      };
+      glyphScene = sceneGlyphInFrame(
+        label,
+        frame,
+        idealHeightPx,
+        Math.atan2(baseline[1], baseline[0]),
+        styleRole,
+      );
+      textQuad = projectTextFrameQuad(label, frame, projector, font);
+    } else {
+      // Edge-on plane: view-plane text at the same anchor, viewport-horizontal
+      // (GB/T 4458.4 method 2), capped like any flat source text.
+      glyphScene = sceneGlyph(
+        label,
+        sceneVertex(origin),
+        Math.min(idealHeightPx, theme.sourceTextHeightMaxPx),
+        styleRole,
+      );
+    }
+    primitives.push(glyphScene);
+
+    const projected = projectScenePrimitives(primitives, projector, font);
+    const lines = projected.filter(
+      (primitive): primitive is ScreenLine => primitive.kind === 'line',
+    );
+    const glyph = projected.find(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    )!;
+    const hitRegions: HitRegion[] = [
+      ...lines.map(item => makeLineHitRegion(item, theme.dimensionStrokeWidthPx)),
+      makeGlyphHitRegion(glyph),
+    ];
+    const shiftPx: Vec2 | undefined = baseGlyphOrigin
+      ? [glyph.origin[0] - baseGlyphOrigin[0], glyph.origin[1] - baseGlyphOrigin[1]]
+      : undefined;
+
+    return {
+      glyphOrigin: glyph.origin,
+      clipped: isClippedPrimitive(glyph),
+      layout: {
+        dimensionId: input.id,
+        scenePrimitives: primitives,
+        primitives: projected,
+        hitRegions,
+        labelBounds: labelBoundsOf(glyph, theme),
+        labelPinned: input.labelPinned,
+        derived: {
+          formattedLabel: label,
+          ...(label.length > 0
+            ? {
+              declutter: {
+                rank,
+                quad: textQuad ?? rectCorners(glyph.bounds),
+                ...(shiftPx !== undefined ? { shiftPx } : {}),
+              },
+            }
+            : {}),
+        },
+      },
+    };
   };
+
+  const baseBuilt = buildCandidate(
+    { outside: defaultOutside, alongOffsetM: 0, extraTailM: 0, extraLiftM: 0 },
+    null,
+  );
+  if (label.length === 0) {
+    return baseBuilt.layout;
+  }
+
+  return registerDeclutterAlternates(baseBuilt.layout, () => {
+    const stepM = textWidthM + 1.2 * h;
+    const specs: CandidateSpec[] = [];
+    if (defaultOutside === undefined) {
+      const maxSlide = (segmentLengthM - 2 * arrowLength - textWidthM) / 2 - 0.15 * h;
+      if (maxSlide >= 0.35 * h) {
+        specs.push(
+          { outside: undefined, alongOffsetM: maxSlide, extraTailM: 0, extraLiftM: 0 },
+          { outside: undefined, alongOffsetM: -maxSlide, extraTailM: 0, extraLiftM: 0 },
+        );
+        if (maxSlide >= 1.2 * h) {
+          specs.push(
+            { outside: undefined, alongOffsetM: maxSlide * 0.5, extraTailM: 0, extraLiftM: 0 },
+            { outside: undefined, alongOffsetM: -maxSlide * 0.5, extraTailM: 0, extraLiftM: 0 },
+          );
+        }
+      }
+      specs.push(
+        { outside: 'end', alongOffsetM: 0, extraTailM: 0, extraLiftM: 0 },
+        { outside: 'start', alongOffsetM: 0, extraTailM: 0, extraLiftM: 0 },
+        { outside: 'end', alongOffsetM: 0, extraTailM: stepM, extraLiftM: 0 },
+        { outside: 'start', alongOffsetM: 0, extraTailM: stepM, extraLiftM: 0 },
+        { outside: undefined, alongOffsetM: 0, extraTailM: 0, extraLiftM: 1.5 * h },
+        { outside: undefined, alongOffsetM: 0, extraTailM: 0, extraLiftM: 3.0 * h },
+      );
+    } else {
+      const primarySide: 'start' | 'end' = defaultOutside;
+      const oppositeSide: 'start' | 'end' = defaultOutside === 'end' ? 'start' : 'end';
+      specs.push(
+        { outside: oppositeSide, alongOffsetM: 0, extraTailM: 0, extraLiftM: 0 },
+        { outside: primarySide, alongOffsetM: 0, extraTailM: stepM, extraLiftM: 0 },
+        { outside: oppositeSide, alongOffsetM: 0, extraTailM: stepM, extraLiftM: 0 },
+        { outside: primarySide, alongOffsetM: 0, extraTailM: 2 * stepM, extraLiftM: 0 },
+        { outside: oppositeSide, alongOffsetM: 0, extraTailM: 2 * stepM, extraLiftM: 0 },
+        { outside: primarySide, alongOffsetM: 0, extraTailM: 0, extraLiftM: 1.6 * h },
+        { outside: oppositeSide, alongOffsetM: 0, extraTailM: 0, extraLiftM: 1.6 * h },
+        { outside: primarySide, alongOffsetM: 0, extraTailM: stepM, extraLiftM: 1.6 * h },
+        { outside: oppositeSide, alongOffsetM: 0, extraTailM: stepM, extraLiftM: 1.6 * h },
+        { outside: primarySide, alongOffsetM: 0, extraTailM: 0, extraLiftM: 3.2 * h },
+        { outside: oppositeSide, alongOffsetM: 0, extraTailM: 0, extraLiftM: 3.2 * h },
+      );
+    }
+    const out: LayoutResult[] = [];
+    for (const candidateSpec of specs) {
+      const built = buildCandidate(candidateSpec, baseBuilt.glyphOrigin);
+      if (!built.clipped) out.push(built.layout);
+    }
+    return out;
+  });
 }

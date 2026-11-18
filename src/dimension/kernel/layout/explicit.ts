@@ -1054,6 +1054,8 @@ export function layoutExplicit(
             rank: input.declutter.rank,
             quad: rectCorners(glyphsBounds(glyphs)),
             ...(input.declutter.group !== undefined ? { group: input.declutter.group } : {}),
+            ...(input.declutter.parentId !== undefined ? { parentId: input.declutter.parentId } : {}),
+            ...(input.declutter.movable !== undefined ? { movable: input.declutter.movable } : {}),
           },
         }
         : {}),
