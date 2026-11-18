@@ -16,6 +16,7 @@ import {
   judgeW6,
   judgeW7,
   loadKnownGaps,
+  readUpdateAnswer,
   rebuiltLayersToOpen,
   refnoKey,
   summarize,
@@ -454,6 +455,151 @@ describe('W2 点一次「取最新」就到位', () => {
 
   test('反例：点了两次', () => {
     assertFail(judgeW2(moved7998({ clicks: 2 })), 'clicks');
+  });
+
+  /** 手动路径：7998 的那台东移，后端不自动跟；点了行上的「更新」，后端从 650 追到 653，行上出「重载」 */
+  const manualUpdate = (overrides = {}) => ({
+    dbnum: 7998,
+    row: EQ_C,
+    libraryBefore: { file: 650, applied: 650, model: 650 },
+    libraryAtClick: { file: 653, applied: 650, model: 650 },
+    offered: true,
+    rowAtClick: { present: true, action: 'update', nodeStatus: 'lagging' },
+    clicked: true,
+    confirmed: true,
+    request: { status: 202, accepted: true, reason: '已排队：会话 651→653' },
+    caughtUp: { ok: true, waitedMs: 4200, library: { file: 653, applied: 653, model: 653 } },
+    rowsAfter: { [EQ_C]: { present: true, action: 'reload', nodeStatus: 'reloadable' } },
+    wantAfter: { [EQ_C.replace('_', '/')]: { nodeStatus: ['reloadable'], action: ['reload'] } },
+    sceneRoots: [EQ_A, EQ_B, PIPE_P, EQ_C.replace('_', '/')],
+    sceneBefore: sceneAtStart(),
+    sceneAtGetWork: sceneAtStart(),
+    ...overrides,
+  });
+  /** 第一下走到某一步就停了：后面各步都没有 */
+  const stoppedEarly = { clicked: false, confirmed: false, request: null, caughtUp: null, rowsAfter: {} };
+
+  test('手动路径：先点行上的「更新」，后端追上、行上出「重载」，再点一次「取最新」到位', () => {
+    const result = judgeW2(moved7998({ manual: manualUpdate() }));
+    assertPass(result);
+    assert.equal(result.title, '先点行上的「更新」，再点一次「取最新」就到位');
+    assert.equal(result.facts.manual.row, EQ_C);
+    assert.deepEqual(result.facts.manual.libraryAtClick, { file: 653, applied: 650, model: 650 });
+    assert.equal(result.facts.manual.caughtUp.waitedMs, 4200);
+    assert.equal(result.facts.manual.sceneObjects, 7);
+    assert.deepEqual(result.facts.manual.sceneChanged, []);
+    // 不走手动路径的腿，标题和事实都不变
+    const plain = judgeW2(moved7998());
+    assert.equal(plain.title, '点一次「取最新」就到位');
+    assert.equal(plain.facts.manual, undefined);
+  });
+
+  test('手动路径反例：点「更新」之前后端自己跟了', () => {
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ libraryAtClick: { file: 653, applied: 653, model: 652 } }) })), 'manual-backend-followed');
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ libraryAtClick: { file: 653, applied: 650, model: 653 } }) })), 'manual-backend-followed');
+    const text = problemOf(judgeW2(moved7998({ manual: manualUpdate({ libraryAtClick: { file: 653, applied: 653, model: 653 } }) })), 'manual-backend-followed').message;
+    assert.match(text, /存盘之前 文件 650 \/ 数据 650 \/ 模型 650，点之前 文件 653 \/ 数据 653 \/ 模型 653/);
+  });
+
+  test('手动路径反例：库文件并不比后端新；水位没采到', () => {
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ libraryAtClick: { file: 650, applied: 650, model: 650 } }) })), 'manual-nothing-to-update');
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ libraryAtClick: null }) })), 'manual-no-levels');
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ libraryBefore: null }) })), 'manual-no-levels');
+  });
+
+  test('手动路径反例：第一下没走通的各步，只报头一个', () => {
+    const behind = { file: 653, applied: 651, model: 650 };
+    const steps = [
+      [{ ...stoppedEarly, offered: false, rowAtClick: { present: true, action: null, nodeStatus: 'latest' } }, 'manual-update-not-offered'],
+      [{ ...stoppedEarly, clickError: '按钮一直是灰的' }, 'manual-not-clicked'],
+      [{ ...stoppedEarly, clicked: true }, 'manual-no-confirm'],
+      [{ ...stoppedEarly, clicked: true, confirmed: true }, 'manual-update-rejected'],
+      [{ request: { status: 202, accepted: false, reason: '后端拒绝：同号多文件' }, caughtUp: null, rowsAfter: {} }, 'manual-update-rejected'],
+      [{ caughtUp: { ok: false, waitedMs: 240_000, library: behind }, rowsAfter: {} }, 'manual-not-caught-up'],
+      [{ rowsAfter: { [EQ_C]: { present: true, action: null, nodeStatus: 'latest' } } }, 'manual-no-reload-signal'],
+      [{ rowsAfter: {} }, 'manual-no-reload-signal'],
+    ];
+    for (const [overrides, code] of steps) {
+      const result = judgeW2(moved7998({ manual: manualUpdate(overrides) }));
+      assertFail(result, code);
+      assert.deepEqual(codes(result).filter((item) => item.startsWith('manual-')), [code], `只该报 ${code}`);
+    }
+    const notClicked = problemOf(judgeW2(moved7998({ manual: manualUpdate({ ...stoppedEarly, clickError: '按钮一直是灰的' }) })), 'manual-not-clicked');
+    assert.match(notClicked.message, /按钮一直是灰的/);
+    const rejected = problemOf(judgeW2(moved7998({ manual: manualUpdate({ request: { status: 202, accepted: false, reason: '后端拒绝：同号多文件' } }) })), 'manual-update-rejected');
+    assert.match(rejected.message, /同号多文件/);
+    const late = problemOf(judgeW2(moved7998({ manual: manualUpdate({ caughtUp: { ok: false, waitedMs: 240_000, library: behind } }) })), 'manual-not-caught-up');
+    assert.match(late.message, /240 秒.*文件 653 \/ 数据 651 \/ 模型 650/);
+    // 「重载」出过、点「取最新」之前又没了，和从没出过分开说
+    const gone = { rowsAfter: { [EQ_C]: { present: true, action: null, nodeStatus: 'latest' } } };
+    const never = problemOf(judgeW2(moved7998({ manual: manualUpdate(gone) })), 'manual-no-reload-signal');
+    assert.match(never.message, /没有出现预期的信号/);
+    const withdrawn = problemOf(judgeW2(moved7998({ manual: manualUpdate({ ...gone, signalSeen: true }) })), 'manual-no-reload-signal');
+    assert.match(withdrawn.message, /出过预期的信号，点「取最新」之前又没了/);
+  });
+
+  test('手动路径：后端对更新请求的答复算不算受理', () => {
+    const batch = { task_id: 'task-1', dbnum: 7998, intent: 'apply_window', position: 1, start_sesno: 651, end_sesno: 653 };
+    const queued = readUpdateAnswer(7998, 202, { scanned: 2, enqueued: [batch], merged: [], already_covered: [], blocked: [], up_to_date: 1, warnings: [] });
+    assert.equal(queued.accepted, true);
+    assert.equal(queued.reason, '排上了：会话 651→653');
+    assert.deepEqual(queued.receipt.enqueued, [{ dbnum: 7998, intent: 'apply_window', startSesno: 651, endSesno: 653, position: 1, taskId: 'task-1' }]);
+    // 并进已有批次、本来就在队列里：都算受理
+    assert.equal(readUpdateAnswer(7998, 202, { merged: [batch] }).accepted, true);
+    assert.equal(readUpdateAnswer(7998, 202, { already_covered: [7998] }).accepted, true);
+    // 没有批次可排的后端形态：回的是一个 status
+    assert.equal(readUpdateAnswer(7998, 202, { status: 'model_refresh_queued' }).accepted, true);
+    assert.equal(readUpdateAnswer(7998, 202, { status: 'up_to_date' }).accepted, false);
+    // 排的是别的库、被阻断、告警点了名、说已经最新、什么都没排：都不算
+    const other = readUpdateAnswer(8000, 202, { enqueued: [batch] });
+    assert.equal(other.accepted, false);
+    assert.equal(other.reason, '后端没有为这个库排任何批次');
+    const blocked = readUpdateAnswer(7998, 202, { blocked: [{ dbnum: 7998, reason: '同号多文件' }] });
+    assert.equal(blocked.accepted, false);
+    assert.equal(blocked.reason, '后端拒绝：同号多文件');
+    const warned = readUpdateAnswer(7998, 202, { warnings: ['dbnum=7998: 在执行范围内，但本次扫描没有找到它的候选文件'] });
+    assert.equal(warned.accepted, false);
+    assert.match(warned.reason, /^后端没有受理：dbnum=7998/);
+    // 告警点的是 7998，不是 799
+    assert.equal(readUpdateAnswer(799, 202, { warnings: ['dbnum=7998: 没有找到候选文件'] }).reason, '后端没有为这个库排任何批次');
+    assert.equal(readUpdateAnswer(7998, 202, { up_to_date: 1 }).reason, '后端说这个库已经是最新');
+    // 后端回的是错误、正文读不出来
+    const refused = readUpdateAnswer(7998, 409, { code: 'conflict', message: '已有重新部署在运行' });
+    assert.equal(refused.accepted, false);
+    assert.equal(refused.reason, '后端回 409 conflict：已有重新部署在运行');
+    assert.equal(refused.receipt, undefined);
+    assert.equal(readUpdateAnswer(7998, 502, null).reason, '后端回 502，正文读不出来');
+  });
+
+  test('手动路径反例：还没点「取最新」，场景已经变了', () => {
+    const result = judgeW2(moved7998({ manual: manualUpdate({ sceneAtGetWork: moveRoot(sceneAtStart(), EQ_C, 500) }) }));
+    assertFail(result, 'manual-scene-changed');
+    assert.deepEqual(result.facts.manual.sceneChanged, [EQ_C]);
+    assert.match(problemOf(result, 'manual-scene-changed').actual[0].problems[0], /位置差 500\.000 mm/);
+    // 少了一个构件也算变了
+    const dropped = sceneAtStart();
+    delete dropped[EQ_A][BOX_A3];
+    assert.deepEqual(judgeW2(moved7998({ manual: manualUpdate({ sceneAtGetWork: dropped }) })).facts.manual.sceneChanged, [EQ_A]);
+    // 两份场景没有都采到，不能当成没变
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ sceneAtGetWork: null }) })), 'manual-scene-not-sampled');
+    assertFail(judgeW2(moved7998({ manual: manualUpdate({ sceneRoots: [] }) })), 'manual-scene-not-sampled');
+  });
+
+  test('手动路径：第一下没走通，「取最新」的回执照样判；没写追上之后行上该是什么就抛错', () => {
+    const notOffered = manualUpdate({ ...stoppedEarly, offered: false });
+    // 回执和预期对得上：只有第一下的问题
+    const result = judgeW2(moved7998({ manual: notOffered }));
+    assertFail(result, 'manual-update-not-offered');
+    assert.ok(!codes(result).includes('not-reloaded'));
+    // 回执里什么都没重载：两头的问题都在
+    const stuck = judgeW2(moved7998({ receipt: receiptOf(), manual: notOffered }));
+    assertFail(stuck, 'manual-update-not-offered');
+    assertFail(stuck, 'not-reloaded');
+    // 没拿到回执也要把第一下的问题带上
+    const noReceipt = judgeW2(moved7998({ receipt: null, manual: manualUpdate({ ...stoppedEarly, clicked: true }) }));
+    assertFail(noReceipt, 'no-receipt');
+    assertFail(noReceipt, 'manual-no-confirm');
+    assert.throws(() => judgeW2(moved7998({ manual: manualUpdate({ wantAfter: {} }) })), /行上该出现什么/);
   });
 
   test('反例：该重载的根没重载', () => {

@@ -501,8 +501,238 @@ function judgeReceiptModels(models, expected, rootsInfo, options, problems, gaps
   }
 }
 
+function libraryLevels(row) {
+  return row ? `文件 ${row.file} / 数据 ${row.applied} / 模型 ${row.model}` : '没有采到';
+}
+
+/**
+ * 手动路径：后端对页面发的更新请求（`POST /api/v1/update/execute { dbnums: [库] }`）的答复，对这一个库意味着什么。
+ * 只看后端回的状态码和正文，不取页面自己的解读。受理 = 给这个库排了批次（新排的、并进已有批次的、本来就在队列里的）；
+ * 没有批次可排的后端形态回的是一个 `status`，不是 `up_to_date` 就算受理。没受理的把后端给的缘由带出来。
+ *
+ * @param {number} dbnum
+ * @param {number} status HTTP 状态码
+ * @param {unknown} body 后端回的正文（JSON；读不出来给 null）
+ * @returns {{ status: number, accepted: boolean, reason: string, code?: string | null, receipt?: object }}
+ */
+export function readUpdateAnswer(dbnum, status, body) {
+  const answer = { status, accepted: false, reason: '' };
+  const brief = (text) => String(text ?? '').slice(0, 300);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    answer.reason = `后端回 ${status}，正文读不出来`;
+    return answer;
+  }
+  if (status < 200 || status >= 300) {
+    answer.code = typeof body.code === 'string' ? body.code : null;
+    const said = typeof body.message === 'string' && body.message !== '' ? `：${brief(body.message)}` : '';
+    answer.reason = `后端回 ${status}${answer.code ? ` ${answer.code}` : ''}${said}`;
+    return answer;
+  }
+  const list = (value) => (Array.isArray(value) ? value : []);
+  const batch = (item) => ({
+    dbnum: item?.dbnum ?? null,
+    intent: item?.intent ?? null,
+    startSesno: item?.start_sesno ?? null,
+    endSesno: item?.end_sesno ?? null,
+    position: item?.position ?? null,
+    taskId: item?.task_id ?? null,
+  });
+  const receipt = {
+    status: typeof body.status === 'string' && body.status !== '' ? body.status : null,
+    scanned: body.scanned ?? null,
+    enqueued: list(body.enqueued).map(batch),
+    merged: list(body.merged).map(batch),
+    alreadyCovered: list(body.already_covered),
+    blocked: list(body.blocked).map((item) => ({ dbnum: item?.dbnum ?? null, reason: brief(item?.reason) })),
+    upToDate: body.up_to_date ?? null,
+    unselected: list(body.unselected),
+    warnings: list(body.warnings).map(brief),
+    appliedSesnoChanged: body.applied_sesno_changed ?? null,
+  };
+  answer.receipt = receipt;
+  const mine = [...receipt.enqueued, ...receipt.merged].filter((item) => item.dbnum === dbnum);
+  const blocked = receipt.blocked.find((item) => item.dbnum === dbnum);
+  const named = new RegExp(`dbnum\\s*=\\s*${dbnum}(?!\\d)`);
+  const warning = receipt.warnings.find((text) => named.test(text));
+  if (mine.length > 0) {
+    const [first] = mine;
+    answer.accepted = true;
+    answer.reason = Number.isInteger(first.startSesno) && Number.isInteger(first.endSesno)
+      ? `排上了：会话 ${first.startSesno}→${first.endSesno}`
+      : '排上了';
+  } else if (blocked) {
+    answer.reason = `后端拒绝：${blocked.reason}`;
+  } else if (receipt.alreadyCovered.includes(dbnum)) {
+    answer.accepted = true;
+    answer.reason = '这个库本来就在后端的队列里';
+  } else if (receipt.status) {
+    answer.accepted = receipt.status !== 'up_to_date';
+    answer.reason = receipt.status === 'up_to_date' ? '后端说这个库已经是最新（up_to_date）' : `后端回执：${receipt.status}`;
+  } else if (warning) {
+    answer.reason = `后端没有受理：${warning}`;
+  } else if ((receipt.upToDate ?? 0) > 0) {
+    answer.reason = '后端说这个库已经是最新';
+  } else {
+    answer.reason = '后端没有为这个库排任何批次';
+  }
+  return answer;
+}
+
+/**
+ * 手动路径（后端不自动跟库）里点「取最新」之前的那一下：点行上的「更新」，让后端去跟库。问题记进 `problems`，经过记进 `facts.manual`。
+ *
+ * 先看前提（不成立就是这一腿验的不是手动路径）：点之前后端没有自己跟——数据、模型两枚水位还停在存盘之前；库文件确实比后端新。
+ * 再按次序看这一下走到了哪一步，只报头一个没走通的（后面的都是它带出来的）：行上有「更新」→ 点上了 → 确认框点了确定 →
+ * 后端受理了 → 后端追上了 → 受影响的行出了预期的信号（「重载」）。另有一样单独看：还没点「取最新」，场景不该已经变了
+ * （页面的规矩是更新完不替人换场景）——拿存盘之前和点「取最新」之前的两份场景逐个对象比，按浮点误差的量级判（和 W5 一样）。
+ *
+ * @param {object} manual
+ * @param {number} manual.dbnum 点的是哪个库的「更新」
+ * @param {string} manual.row 点的是哪一行
+ * @param {{ file: number, applied: number, model: number } | null} manual.libraryBefore 存盘之前后端这个库的水位
+ * @param {{ file: number, applied: number, model: number } | null} manual.libraryAtClick 点「更新」之前的
+ * @param {boolean} manual.offered 要点的那一刻，行上有没有库一级的「更新」
+ * @param {RowState | null} [manual.rowAtClick] 那一刻这一行的样子
+ * @param {boolean} [manual.clicked] 点上了没有
+ * @param {string} [manual.clickError]
+ * @param {boolean} [manual.confirmed] 确认框出了、点了确定
+ * @param {{ status: number | null, accepted: boolean, reason?: string } | null} [manual.request] 页面发的更新请求，后端怎么回的
+ * @param {{ ok: boolean, waitedMs?: number, library?: object } | null} [manual.caughtUp] 点了之后后端追上没有
+ * @param {Record<string, RowState>} [manual.rowsAfter] 后端追上之后、点「取最新」之前各行的样子
+ * @param {boolean} [manual.signalSeen] 后端追上之后行上出过预期的信号没有（只用来把「出过又没了」和「没出过」分开说）
+ * @param {Record<string, { nodeStatus?: string[], action?: string[] }>} [manual.wantAfter] 受影响的根 → 这时行上该是什么
+ * @param {string[]} [manual.sceneRoots] 场景里要比的根（装着的都算）
+ * @param {SceneByRoot | null} [manual.sceneBefore] 存盘之前的场景
+ * @param {SceneByRoot | null} [manual.sceneAtGetWork] 点「取最新」之前的场景
+ * @param {Problem[]} problems
+ * @param {Record<string, unknown>} facts
+ */
+function judgeManualUpdate(manual, problems, facts) {
+  const row = refnoKey(manual.row);
+  const before = manual.libraryBefore ?? null;
+  const atClick = manual.libraryAtClick ?? null;
+  const caughtUp = manual.caughtUp ?? null;
+  const sceneRoots = keyList(manual.sceneRoots);
+  const sceneSampled = Boolean(manual.sceneBefore && manual.sceneAtGetWork);
+  const sceneChanged = [];
+  let sceneObjects = 0;
+  if (sceneSampled) {
+    const sceneBefore = keyedMap(manual.sceneBefore);
+    const sceneAtGetWork = keyedMap(manual.sceneAtGetWork);
+    for (const root of sceneRoots) {
+      const result = compareComponents(root, sceneAtGetWork.get(root), sceneBefore.get(root), UNCHANGED_TOLERANCE);
+      sceneObjects += result.objects;
+      if (result.problems.length > 0) sceneChanged.push({ root, problems: result.problems.map((item) => item.message) });
+    }
+  }
+  facts.manual = {
+    dbnum: manual.dbnum,
+    row,
+    libraryBefore: before,
+    libraryAtClick: atClick,
+    offered: manual.offered === true,
+    clicked: manual.clicked === true,
+    confirmed: manual.confirmed === true,
+    request: manual.request ?? null,
+    caughtUp: caughtUp ? { ok: caughtUp.ok === true, waitedMs: caughtUp.waitedMs ?? null, library: caughtUp.library ?? null } : null,
+    signalSeen: manual.signalSeen === true,
+    sceneObjects,
+    sceneChanged: sceneChanged.map((item) => item.root),
+  };
+
+  if (!before || !atClick) {
+    problems.push({
+      code: 'manual-no-levels',
+      message: `库 ${manual.dbnum} 在后端上的水位没有采全（存盘之前：${libraryLevels(before)}；点「更新」之前：${libraryLevels(atClick)}）`,
+      actual: { before, atClick },
+      expected: '两次的水位',
+    });
+  } else if (atClick.applied !== before.applied || atClick.model !== before.model) {
+    problems.push({
+      code: 'manual-backend-followed',
+      message: `点「更新」之前后端自己跟了库 ${manual.dbnum}（存盘之前 ${libraryLevels(before)}，点之前 ${libraryLevels(atClick)}）：这一腿验的不是手动路径`,
+      actual: atClick,
+      expected: { applied: before.applied, model: before.model },
+    });
+  } else if (!(atClick.file > atClick.applied)) {
+    problems.push({
+      code: 'manual-nothing-to-update',
+      message: `点「更新」之前库 ${manual.dbnum} 的库文件并不比后端新（${libraryLevels(atClick)}）：没有可更新的`,
+      actual: atClick,
+      expected: '库文件的会话号大于数据的',
+    });
+  }
+
+  if (manual.offered !== true) {
+    problems.push({
+      code: 'manual-update-not-offered',
+      message: `要点「更新」的时候，${row} 的行上没有这颗按钮`,
+      actual: rowBrief(manual.rowAtClick),
+      expected: { action: ['update'] },
+    });
+  } else if (manual.clicked !== true) {
+    problems.push({
+      code: 'manual-not-clicked',
+      message: `${row} 行上的「更新」没有点上${manual.clickError ? `（${manual.clickError}）` : ''}`,
+      actual: rowBrief(manual.rowAtClick),
+      expected: '点上',
+    });
+  } else if (manual.confirmed !== true) {
+    problems.push({ code: 'manual-no-confirm', message: '点了「更新」，没有等到页面的确认框', actual: null, expected: '确认框' });
+  } else if (manual.request?.accepted !== true) {
+    problems.push({
+      code: 'manual-update-rejected',
+      message: `点了「更新」，后端没有受理${manual.request?.reason ? `：${manual.request.reason}` : ''}`,
+      actual: manual.request ?? null,
+      expected: '受理（排上了批次）',
+    });
+  } else if (caughtUp?.ok !== true) {
+    const waited = Number.isFinite(caughtUp?.waitedMs) ? ` ${Math.round(caughtUp.waitedMs / 1000)} 秒` : '';
+    problems.push({
+      code: 'manual-not-caught-up',
+      message: `点了「更新」之后，后端${waited}没有追上库 ${manual.dbnum}（${libraryLevels(caughtUp?.library)}）`,
+      actual: caughtUp?.library ?? null,
+      expected: '三枚水位齐平',
+    });
+  } else {
+    const want = keyedMap(manual.wantAfter);
+    if (want.size === 0) throw new TypeError('W2：手动路径没有写后端追上之后行上该出现什么');
+    const rows = keyedMap(manual.rowsAfter);
+    for (const [root, wanted] of want) {
+      if (rowShows(rows.get(root), wanted)) continue;
+      problems.push({
+        code: 'manual-no-reload-signal',
+        message: manual.signalSeen === true
+          ? `后端追上之后，${root} 的行出过预期的信号，点「取最新」之前又没了`
+          : `后端追上之后，${root} 的行没有出现预期的信号`,
+        actual: rowBrief(rows.get(root)),
+        expected: wanted,
+      });
+    }
+  }
+
+  if (!sceneSampled || sceneRoots.length === 0) {
+    problems.push({
+      code: 'manual-scene-not-sampled',
+      message: '存盘之前、点「取最新」之前的场景没有都采到，不能说这中间场景没变',
+      actual: { before: Boolean(manual.sceneBefore), atGetWork: Boolean(manual.sceneAtGetWork), roots: sceneRoots.length },
+      expected: '两份场景',
+    });
+  } else if (sceneChanged.length > 0) {
+    problems.push({
+      code: 'manual-scene-changed',
+      message: `还没点「取最新」，${sceneChanged.map((item) => item.root).join('、')} 在场景里已经变了`,
+      actual: sceneChanged,
+      expected: [],
+    });
+  }
+}
+
 /**
  * W2 点一次「取最新」就到位：回执里的数等于预期。预期由调用方拿后端接口在存盘前后的差算好传进来，不取页面自己的说法。
+ *
+ * 手动路径（`input.manual`，后端不自动跟库）多一下：点「取最新」之前先点行上的「更新」，让后端去跟库。两下各自的结果都在这一项里判
+ * （第一下见 `judgeManualUpdate`），「取最新」照样只该点一次。
  *
  * - `expected.tree` 的四个名单按页面树上已经取过的层算（没展开的层页面不知道，回执里也不会有）；`deleted` 只列被删子树的根。
  * - `expected.reload`：名下的后端记录前后有差的根（构件增减、位置变了都算）→ 构件的新增、撤下、现有个数。
@@ -512,6 +742,7 @@ function judgeReceiptModels(models, expected, rootsInfo, options, problems, gaps
  * @param {object} input
  * @param {object | null} input.receipt 页面的回执（`GetWorkReport`）
  * @param {number} [input.clicks] 这一腿点了几次「取最新」，缺省 1
+ * @param {object} [input.manual] 手动路径：点「取最新」之前点行上「更新」那一下的经过（字段见 `judgeManualUpdate`）
  * @param {Record<string, RootFacts>} [input.roots] 页面上装着的根
  * @param {object} input.expected
  * @param {{ added?: string[], deleted?: string[], renamed?: string[], moved?: string[] }} [input.expected.tree]
@@ -531,10 +762,11 @@ export function judgeW2(input, options = {}) {
   const { receipt, expected } = input;
   if (!expected) throw new TypeError('W2：没有给预期');
   const clicks = input.clicks ?? 1;
-  const title = '点一次「取最新」就到位';
+  const title = input.manual ? '先点行上的「更新」，再点一次「取最新」就到位' : '点一次「取最新」就到位';
   const problems = [];
   const gaps = [];
   const facts = { clicks };
+  if (input.manual) judgeManualUpdate(input.manual, problems, facts);
 
   if (clicks !== 1) {
     problems.push({ code: 'clicks', message: `「取最新」点了 ${clicks} 次`, actual: clicks, expected: 1 });

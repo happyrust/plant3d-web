@@ -4,10 +4,12 @@
  * 的 `r3-lib.mjs` 等）整理过来，写法没变，地址和节点改成由调用方给。
  *
  * 请求闸门：发往 8022 / 8009 的一律拦下并记数；写请求只放行发往隔离后端的几种只读 POST（调用方可以临时多放一条）；
- * 其余的读请求放行但逐条记下，发没发到别处由 W6 判。
+ * 其余的读请求放行但逐条记下，发没发到别处由 W6 判。页面弹的框一律取消并记下。
+ * 只有一处例外（手动路径，`clickRowUpdate`）：点行上「更新」的那一下，放行发往隔离后端的 `POST /api/v1/update/execute`、
+ * 接受这个库的那一种确认框，点完就收回。
  *
- * 驱动在页面上做的每一个操作（展开、滚动、选中、点眼睛、点取最新）都记在 `log.interactions` 里：W1 要求存盘之后、行上的信号出来之前
- * 什么都不碰。读行只读已经画出来的 DOM，不滚动、不选中。
+ * 驱动在页面上做的每一个操作（展开、滚动、选中、点眼睛、点行上的「更新」、点取最新）都记在 `log.interactions` 里：W1 要求存盘之后、
+ * 行上的信号出来之前什么都不碰。读行只读已经画出来的 DOM，不滚动、不选中。
  *
  * 闸门只管页面发的请求。浏览器进程自己发的（自带功能的探测、更新之类）闸门看不见，由启动参数上的联网锁管（`NETWORK_LOCK_ARGS`）。
  */
@@ -16,9 +18,11 @@ import net from 'node:net';
 import { chromium } from 'playwright';
 
 import { loopbackOrigin, sleep } from './backend.mjs';
-import { LIVE_PORTS, refnoKey } from './judge.mjs';
+import { LIVE_PORTS, readUpdateAnswer, refnoKey } from './judge.mjs';
 
 const READ_ONLY_POSTS = [/^\/api\/v1\/model\/records$/, /^\/api\/v1\/meshes\/batch$/, /^\/api\/v1\/element\/attributes$/];
+/** 手动路径：页面点「更新」发的那条写请求（让后端去跟库）。只在 `clickRowUpdate` 点的那一下放行 */
+const UPDATE_EXECUTE_POST = /^\/api\/v1\/update\/execute$/;
 const SENSITIVE_PARAM = /token|user|requester|pass|secret|key|login|auth/i;
 const ROW_HEIGHT = 32;
 const ROW_OVERSCAN = 10;
@@ -241,6 +245,9 @@ export async function createGuardedContext(browser, options) {
     interactions: [],
     allowedPost: {},
     extraPost: {},
+    // 这一刻临时放行的 POST（按路径）、临时接受的弹框（类型 + 文字）：平时都是空的，谁加的谁用完收回
+    openPosts: [],
+    acceptDialogs: [],
   };
   const livePorts = new Set(LIVE_PORTS.map(String));
   const count = (bucket, name) => {
@@ -272,7 +279,7 @@ export async function createGuardedContext(browser, options) {
         count(log.allowedPost, url.pathname);
         return route.continue();
       }
-      if (extraPosts().some((pattern) => pattern.test(url.pathname))) {
+      if ([...extraPosts(), ...log.openPosts].some((pattern) => pattern.test(url.pathname))) {
         count(log.extraPost, url.pathname);
         return route.continue();
       }
@@ -309,8 +316,11 @@ export async function newPage(context, log) {
     log.pageErrors.push({ t: Date.now(), text: maskText(String(error?.stack ?? error)).slice(0, 600) });
   });
   page.on('dialog', async (dialog) => {
-    log.dialogs.push({ t: Date.now(), type: dialog.type(), message: maskText(dialog.message()).slice(0, 400) });
-    await dialog.dismiss();
+    const message = dialog.message();
+    const accepted = log.acceptDialogs.some((rule) => rule.type === dialog.type() && rule.pattern.test(message));
+    log.dialogs.push({ t: Date.now(), type: dialog.type(), message: maskText(message).slice(0, 400), accepted });
+    if (accepted) await dialog.accept();
+    else await dialog.dismiss();
   });
   page.on('websocket', (socket) => {
     const t = Date.now();
@@ -457,6 +467,83 @@ export async function clickGetWork(page, log, timeoutMs = 240_000) {
 /** 这几行此刻的样子（只读已经画出来的行；没画出来的是 `present: false`） */
 export async function readRows(page, ids) {
   return page.evaluate((list) => window.__incrPml.readRows(list), ids.map(refnoKey));
+}
+
+/**
+ * 手动路径：点一行上的「更新」（让后端把这个库更新到最新）。页面先弹确认框，点了确定才发 `POST /api/v1/update/execute`。
+ * 这条写请求闸门平时不放、弹框平时一律取消：只在这一下的工夫里放行这一条、接受这个库的这一种确认框，完了（成没成都）收回。
+ * 行上不是这颗按钮（没有按钮、是别的动作）就不点，`offered` 为假。后端的答复只读状态码和正文；请求的正文不读不记
+ * （里面带着发起人的身份）。行要先画出来（`arrangeRows`），这里不滚动。
+ *
+ * @param {import('playwright').Page} page
+ * @param {object} log `createGuardedContext` 的 `log`
+ * @param {string} refno 点哪一行
+ * @param {object} options
+ * @param {number} options.dbnum 这一行所在的库（确认框里写的必须是它，答复也按它读）
+ * @param {number} [options.clickMs] 按钮灰着的时候最多等多久
+ * @param {number} [options.requestMs] 点了确定之后最多等多久后端的答复
+ * @returns {Promise<{ row: string, dbnum: number, rowAtClick: object | null, offered: boolean, clicked: boolean, clickedAt: number | null,
+ *   confirmed: boolean, dialog: string | null, request: ReturnType<typeof readUpdateAnswer> | null, error: string | null }>}
+ */
+export async function clickRowUpdate(page, log, refno, { dbnum, clickMs = 15_000, requestMs = 30_000 }) {
+  if (!Number.isInteger(dbnum)) throw new TypeError('点行上的「更新」：没有给这一行所在的库');
+  const id = refnoKey(refno);
+  const rowAtClick = (await readRows(page, [id]))[id] ?? null;
+  const out = { row: id, dbnum, rowAtClick, offered: false, clicked: false, clickedAt: null, confirmed: false, dialog: null, request: null, error: null };
+  if (rowAtClick?.present !== true || rowAtClick.action !== 'update') return out;
+  out.offered = true;
+
+  const rule = { type: 'confirm', pattern: new RegExp(`^让后端把库 ${dbnum} 更新到最新？`) };
+  const dialogsFrom = log.dialogs.length;
+  log.openPosts.push(UPDATE_EXECUTE_POST);
+  log.acceptDialogs.push(rule);
+  try {
+    const answered = page.waitForResponse((response) => {
+      if (response.request().method() !== 'POST' || !response.url().startsWith(`${log.backendOrigin}/`)) return false;
+      return UPDATE_EXECUTE_POST.test(new URL(response.url()).pathname);
+    }, { timeout: clickMs + requestMs }).catch(() => null);
+    touched(log, `点 ${id} 行上的「更新」`);
+    out.clickedAt = Date.now();
+    try {
+      const button = `[data-testid="model-tree-row"][data-refno="${id}"] [data-testid="model-tree-node-action"][data-action="update"]`;
+      await page.locator(button).click({ timeout: clickMs });
+      out.clicked = true;
+    } catch (error) {
+      out.error = maskText(String(error?.message ?? error)).split('\n')[0].slice(0, 300);
+      return out;
+    }
+    // 确认框是页面在点击里当场弹的，点击返回时一般已经处理完；多等一会儿只为稳妥
+    let dialog = null;
+    for (const from = Date.now(); !dialog && Date.now() - from < 3000;) {
+      dialog = log.dialogs.slice(dialogsFrom).find((item) => item.type === rule.type && rule.pattern.test(item.message)) ?? null;
+      if (!dialog) await sleep(100);
+    }
+    out.dialog = dialog?.message ?? null;
+    out.confirmed = dialog?.accepted === true;
+    if (!out.confirmed) return out;
+    const response = await answered;
+    if (!response) {
+      out.request = { status: null, accepted: false, reason: '点了确定之后没有等到后端对更新请求的答复' };
+      return out;
+    }
+    const body = await response.json().catch(() => null);
+    out.request = JSON.parse(maskText(JSON.stringify(readUpdateAnswer(dbnum, response.status(), body))));
+    return out;
+  } finally {
+    log.openPosts.splice(log.openPosts.indexOf(UPDATE_EXECUTE_POST), 1);
+    log.acceptDialogs.splice(log.acceptDialogs.indexOf(rule), 1);
+  }
+}
+
+/** 页面自己记的这个库「更新到最新」走到哪了（没发起过是 `null`）。给报告看的，不是判定的依据 */
+export async function readUpdateState(page, dbnum) {
+  const state = await page.evaluate(async (library) => {
+    const store = await import('/src/composables/updateToLatestState.ts');
+    const found = store.getUpdateToLatestState(library);
+    if (!found) return null;
+    return { phase: found.phase, message: String(found.message ?? ''), tasks: found.taskIds.length, startedAt: found.startedAt, finishedAt: found.finishedAt };
+  }, Number(dbnum));
+  return state ? { ...state, message: maskText(state.message).slice(0, 300) } : null;
 }
 
 /**

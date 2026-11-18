@@ -120,6 +120,28 @@ function configProblems() {
       if ((leg.judge ?? ['W4']).includes('W4') && (leg.truth?.groups ?? []).length === 0) {
         problems.push(`${at}：要判 W4，但没写拿哪几个节点去比（truth.groups）`);
       }
+      if (leg.manual !== undefined) {
+        // 手动路径：点「取最新」之前先点行上的「更新」——点哪个库的、哪一行上的、后端追上之后行上该出什么，三样都要写
+        const manual = leg.manual ?? {};
+        const listed = (value) => Array.isArray(value) && value.length > 0;
+        if (!Number.isInteger(manual.dbnum)) problems.push(`${at}：手动路径没写点哪个库的「更新」（manual.dbnum）`);
+        if (typeof manual.row !== 'string' || manual.row === '') {
+          problems.push(`${at}：手动路径没写点哪一行上的「更新」（manual.row）`);
+        } else {
+          const row = refnoKey(manual.row);
+          const root = (item.roots ?? []).find((entry) => refnoKey(entry.refno) === row);
+          if (!root) problems.push(`${at}：手动路径要点的行 ${manual.row} 不在要装的节点里`);
+          else if (Number.isInteger(manual.dbnum) && root.dbnum !== manual.dbnum) {
+            problems.push(`${at}：手动路径要点的行 ${manual.row} 在库 ${root.dbnum}，不在库 ${manual.dbnum}`);
+          }
+          if (!Object.keys(leg.affected ?? {}).some((id) => refnoKey(id) === row)) {
+            problems.push(`${at}：手动路径要点的行 ${manual.row} 不在受影响的节点里（affected），行上不会出「更新」`);
+          }
+        }
+        if (!listed(manual.then?.nodeStatus) && !listed(manual.then?.action)) {
+          problems.push(`${at}：手动路径没写后端追上之后行上该出什么（manual.then）`);
+        }
+      }
       legIds.add(leg.id);
     }
   }
@@ -184,7 +206,8 @@ function timelineText(states) {
   return states.map((state) => {
     const at = `${(state.atMs / 1000).toFixed(1)} 秒`;
     if (!state.present) return `${at} 行不在`;
-    const what = [state.nodeStatus ?? '没有标记', state.action ? `按钮 ${state.action}` : '', state.pending ? '核对中' : '', state.eyeLit ? '' : '眼睛灭'];
+    const button = state.action ? `按钮 ${state.action}${state.busy ? '（忙）' : ''}` : '';
+    const what = [state.nodeStatus ?? '没有标记', button, state.pending ? '核对中' : '', state.eyeLit ? '' : '眼睛灭'];
     return `${at} ${what.filter(Boolean).join('、')}`;
   }).join(' → ');
 }
@@ -249,6 +272,28 @@ function reportMarkdown() {
       }
       for (const [dbnum, follow] of Object.entries(leg.follow ?? {})) {
         lines.push(`- 存盘完成 → 后端跟上这次存盘（库 ${dbnum} 的会话 ${follow.target}）：看见文件 ${seconds(follow.fileSeenMs)}，数据 ${seconds(follow.appliedMs)}，模型 ${seconds(follow.modelMs)}`);
+      }
+      if (leg.manual) {
+        // 手动路径：后端不自动跟库，点「取最新」之前先点行上的「更新」。上面「后端跟上」的用时里包着等这一下的工夫
+        const manual = leg.manual;
+        const levels = (row) => (row ? `文件 ${row.file} / 数据 ${row.applied} / 模型 ${row.model}` : '（没采到）');
+        const rowText = (row) => (row ? `${row.nodeStatus ?? '没有标记'}${row.action ? `、按钮 ${row.action}${row.busy ? '（忙）' : ''}` : '、没有按钮'}` : '行不在');
+        const notReached = '（没走到这一步）';
+        lines.push(`- 手动路径（后端不自动跟库 ${manual.dbnum}，先点 ${nameOf(item, manual.row)} 行上的「更新」）：`);
+        lines.push(`  - 后端这个库的水位：存盘之前 ${levels(manual.libraryBefore)}；点「更新」之前 ${levels(manual.libraryAtClick)}`);
+        lines.push(`  - 存盘完成 → 点「更新」：${seconds(manual.durations.saveToUpdateClickMs)}；那一刻行上是 ${rowText(manual.rowAtClick)}`);
+        lines.push(`  - 点上没有：${!manual.offered ? '行上没有「更新」，没点' : manual.clicked ? '点上了' : `没点上${manual.error ? `（${cell(manual.error)}）` : ''}`}`
+          + `；确认框：${!manual.clicked ? notReached : manual.confirmed ? '出了，点了确定' : '没等到'}`);
+        lines.push(`  - 后端的答复：${manual.request ? `${manual.request.status ?? '没有答复'}，${manual.request.accepted ? '受理' : '没受理'}（${cell(manual.request.reason)}）` : notReached}`);
+        const caught = manual.caughtUp;
+        lines.push(`  - 点「更新」→ 后端追上：${!caught ? notReached : caught.ok
+          ? `数据 ${seconds(caught.appliedMs)}，模型 ${seconds(caught.modelMs)}（${levels(caught.library)}）`
+          : `${seconds(caught.waitedMs)} 没追上（${levels(caught.library)}）`}`);
+        const wanted = Object.entries(manual.wantAfter ?? {}).map(([root, want]) => `${nameOf(item, root)} ${[...(want.nodeStatus ?? []), ...(want.action ?? []).map((name) => `按钮 ${name}`)].join('、')}`).join('；');
+        lines.push(`  - 点「更新」→ 行上出预期的信号（${wanted}）：${!caught?.ok ? notReached : manual.durations.updateClickToSignalMs === null ? '没等到' : seconds(manual.durations.updateClickToSignalMs)}`
+          + `；点「取最新」之前行上是 ${Object.entries(manual.rowsAfter ?? {}).map(([root, row]) => `${nameOf(item, root)} ${rowText(row)}`).join('；')}`);
+        lines.push(`  - 页面自己记的这次更新（只记不判）：${manual.pageState ? `${manual.pageState.phase}（${cell(manual.pageState.message)}）` : '没有'}`);
+        lines.push(`  - 点「更新」→ 点「取最新」：${seconds(manual.durations.updateClickToGetWorkMs)}`);
       }
       lines.push(`- 存盘完成 → 点「取最新」：${seconds(leg.durations.saveToClickMs)}；取最新用时 ${seconds(leg.durations.clickMs)}；整条腿 ${seconds(leg.durations.legMs)}`);
       lines.push(`- 回执：${leg.receipt?.summary ?? '（没有）'}`);

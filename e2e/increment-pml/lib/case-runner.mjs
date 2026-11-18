@@ -457,6 +457,59 @@ export function judgementBrief(judgement) {
   };
 }
 
+/**
+ * 手动路径那一段（点行上的「更新」→ 后端追上 → 行上出「重载」）压成报告用的几格，完整的在腿的记录文件里。
+ * 用时都从点「更新」那一刻算：后端多久追上、行上多久出预期的信号（按采样里头一笔全对上的算）、隔多久点的「取最新」。
+ */
+export function manualBrief(manual, times) {
+  if (!manual) return null;
+  const update = manual.update ?? {};
+  const clickedAt = update.clickedAt ?? null;
+  const shows = (row, want) => !!row && row.present !== false
+    && (!want.nodeStatus || want.nodeStatus.includes(row.nodeStatus ?? null))
+    && (!want.action || want.action.includes(row.action ?? null));
+  const wants = Object.entries(manual.wantAfter ?? {});
+  const samples = manual.watch?.samples ?? [];
+  const hit = wants.length > 0 ? samples.find((sample) => wants.every(([id, want]) => shows(sample.rows[id], want))) : undefined;
+  const rowBrief = (row) => (row && row.present !== false
+    ? { action: row.action ?? null, label: row.label ?? null, busy: row.busy === true, nodeStatus: row.nodeStatus ?? null, pending: row.pending === true }
+    : null);
+  const levels = (row) => (row ? { file: row.file, applied: row.applied, model: row.model } : null);
+  return {
+    dbnum: manual.dbnum,
+    row: manual.row,
+    libraryBefore: manual.libraryBefore,
+    libraryAtClick: manual.libraryAtClick,
+    rowAtClick: rowBrief(update.rowAtClick),
+    offered: update.offered === true,
+    clicked: update.clicked === true,
+    confirmed: update.confirmed === true,
+    dialog: update.dialog ?? null,
+    request: update.request ?? null,
+    error: update.error ?? null,
+    caughtUp: manual.caughtUp ? {
+      ok: manual.caughtUp.ok,
+      target: manual.caughtUp.target,
+      fileSeenMs: manual.caughtUp.fileSeenMs,
+      appliedMs: manual.caughtUp.appliedMs,
+      modelMs: manual.caughtUp.modelMs,
+      waitedMs: manual.caughtUp.waitedMs,
+      library: levels(manual.caughtUp.library),
+    } : null,
+    wantAfter: manual.wantAfter,
+    signalSeen: manual.signal?.seen === true,
+    rowsAfter: Object.fromEntries(wants.map(([id]) => [id, rowBrief(manual.rowsAfter?.[id])])),
+    pageState: manual.pageState ?? null,
+    samples: samples.length,
+    durations: {
+      saveToUpdateClickMs: clickedAt === null ? null : clickedAt - times.startAt,
+      updateClickToCaughtUpMs: manual.caughtUp?.ok === true ? manual.caughtUp.modelMs ?? manual.caughtUp.waitedMs : null,
+      updateClickToSignalMs: hit && clickedAt !== null ? hit.t - clickedAt : null,
+      updateClickToGetWorkMs: clickedAt === null ? null : times.clickedAt - clickedAt,
+    },
+  };
+}
+
 export function verdictText(judgement) {
   if (!judgement) return '没有判';
   const first = judgement.problems[0]?.message ?? judgement.gaps[0]?.message ?? '';
@@ -720,6 +773,8 @@ export async function runCase(env, caseDef, caseDir) {
             return { savedAt, commandMs: ran.ms, evidence: legResult.evidence ?? null, libraries: legResult.libraries };
           },
           restore: base ? { base, mode: legDef.restoreMode ?? 'identical', rebuiltCount: legDef.rebuiltCount } : undefined,
+          // 手动路径：点行上的「更新」之前也截一张（行上该是「更新」）
+          manual: legDef.manual ? { ...legDef.manual, beforeUpdate: () => shot(`${legDef.id}-0-before-update`) } : undefined,
           beforeClick: async () => {
             cameraBefore = await readCamera(page).catch(() => null);
             await shot(`${legDef.id}-1-before-click`);
@@ -813,7 +868,11 @@ export async function runCase(env, caseDef, caseDir) {
         record: `${legDef.id}.record.json`,
         judgements: `${legDef.id}.judgements.json`,
         requests: `${legDef.id}.requests.json`,
-        shots: [`${legDef.id}-1-before-click.png`, `${legDef.id}-2-after.png`],
+        shots: [
+          ...(legDef.manual ? [`${legDef.id}-0-before-update.png`] : []),
+          `${legDef.id}-1-before-click.png`,
+          `${legDef.id}-2-after.png`,
+        ],
       };
       const span = { from: result.times.from, to: result.times.to };
       const inSpan = (item) => item.t >= span.from && item.t <= span.to;
@@ -876,6 +935,7 @@ export async function runCase(env, caseDef, caseDir) {
         signal: result.signal,
         timeline: result.timeline,
         samples: result.watch.samples.length,
+        ...(result.manual ? { manual: manualBrief(result.manual, result.times) } : {}),
         receipt: receiptBrief(result.receipt),
         expected: result.expected,
         judgements: Object.fromEntries(Object.entries(ordered).map(([id, judgement]) => [id, judgementBrief(judgement)])),
