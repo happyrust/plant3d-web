@@ -23,7 +23,7 @@ import fs from 'node:fs';
  * @typedef {number[] | { m: number[] | null, visible?: boolean }} SceneObject
  * @typedef {Record<string, Record<string, SceneObject[]>>} SceneByRoot 根 → 构件 → 对象
  * @typedef {Record<string, { name?: string, type?: string, parentId?: string | null, childrenIds?: string[] | null }>} Tree
- *   页面上的模型树；`childrenIds` 没取过（没展开）是 `null`
+ *   页面上的模型树；`childrenIds` 没取过成员是 `null`，取过、但一个成员都没有是空数组
  */
 
 export const VERDICT_LABEL = Object.freeze({

@@ -12,6 +12,7 @@ import {
   cleanlinessInput,
   clickGetWork,
   fetchedLayers,
+  layerCounts,
   readPageState,
   readScene,
   readSettledRows,
@@ -155,6 +156,12 @@ export async function runLeg(ctx, leg) {
   const arrangedBefore = await arrangeRows(page, log, rootIds);
   const pageBefore = await observePage(ctx);
   const layerIds = fetchedLayers(pageBefore.tree);
+  // 树的预期是按这几层在后端前后的差算的：脚本认出的层要是比页面取过的少，预期就会漏（页面照样重取那几层），这时不存盘
+  const layersBefore = await layerCounts(page, pageBefore.tree);
+  if (!layersBefore.ok) {
+    throw new Error(`存盘之前页面记的取过成员的层 ${layersBefore.pageLoadedLayers}，脚本认出的参考号层 ${layersBefore.refnoLayers}，`
+      + `最上面不是参考号的层 ${layersBefore.topLayers}：对不上，树的预期算不准`);
+  }
   const backendBefore = await observeBackend(backend, rootIds, layerIds);
   const sceneBefore = sceneForJudging(pageBefore, backendBefore);
   const settledBefore = await readSettledRows(page, rootIds);
@@ -305,7 +312,7 @@ export async function runLeg(ctx, leg) {
     caughtUp,
     watch,
     timeline: rowTimeline(watch.samples, startAt),
-    before: { rows: rowsBefore, page: pageBefore, backend: backendBefore, scene: sceneBefore },
+    before: { rows: rowsBefore, page: pageBefore, backend: backendBefore, scene: sceneBefore, layers: layersBefore },
     expected: { ...expected, unchanged: models.unchanged, detail: models.detail },
     click: { clickedAt: click.clickedAt, ms: click.ms },
     receipt,

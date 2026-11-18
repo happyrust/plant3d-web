@@ -733,30 +733,44 @@ export async function readPageState(page, roots) {
   }, roots.map((root) => ({ refno: refnoKey(root.refno), dbnum: root.dbnum })));
 }
 
-/** 页面上的模型树：参考号 → 名字、类型、上级、成员（没取过成员的是 `null`）。只收参考号样子的节点 */
+/**
+ * 页面上的模型树：参考号 → 名字、类型、上级、成员。只收参考号样子的节点。
+ *
+ * `childrenIds`：取过成员的层是数组（取过、但一个成员都没有的层是空数组），没取过的是 `null`。页面只对外给「取过成员的层」有几层，
+ * 不给是哪几层，空层靠两样认：它展开着（展开一个节点就会取它的成员）；或者这一场页面会话里以前认过它是取过的层——页面的规则是
+ * 取过的层只要节点还在树上就一直算（`pdmsTreeRefresh`），成员后来删光了「取最新」也照样重取它。认过的层记在页面里
+ * （`window.__incrPml.fetchedLayers`），页面重新载入时跟页面自己的记录一起清掉。没展开、被预取过的空层认不出来，由层数的核对
+ * （`layerCounts`）拦下。
+ */
 export async function readTree(page) {
   return page.evaluate(async () => {
     const treeStore = await import('/src/composables/useModelTreeStore.ts');
-    const nodes = treeStore.getModelTreeInstance()?.nodesById.value ?? {};
+    const tree = treeStore.getModelTreeInstance();
+    const nodes = tree?.nodesById.value ?? {};
+    const expanded = tree?.expandedIds.value ?? new Set();
     const isRefno = (id) => /^\d+_\d+$/.test(id);
+    const store = (window.__incrPml ??= {});
+    const known = (store.fetchedLayers ??= new Set());
+    for (const id of [...known]) if (!nodes[id]) known.delete(id);
     const out = {};
     for (const [id, node] of Object.entries(nodes)) {
       if (!isRefno(id)) continue;
       const children = (node.childrenIds ?? []).filter(isRefno);
+      if (children.length > 0 || expanded.has(id)) known.add(id);
       out[id] = {
         name: node.name ?? '',
         type: node.type ?? '',
         parentId: node.parentId && isRefno(node.parentId) ? node.parentId : null,
-        childrenIds: children.length > 0 ? children : null,
+        childrenIds: known.has(id) ? children : null,
       };
     }
     return out;
   });
 }
 
-/** 页面树上取过成员的那些层 */
+/** 页面树上取过成员的那些层（取过、但一个成员都没有的层也算：页面「取最新」时照样重取它们） */
 export function fetchedLayers(tree) {
-  return Object.entries(tree).filter(([, node]) => Array.isArray(node.childrenIds) && node.childrenIds.length > 0).map(([id]) => id).sort();
+  return Object.entries(tree).filter(([, node]) => Array.isArray(node.childrenIds)).map(([id]) => id).sort();
 }
 
 /** 页面树上不是参考号的节点（最上面的库、分组之类）：`readTree` 不收它们，这里列出来给报告看 */
@@ -776,8 +790,8 @@ export async function readTreeTops(page) {
 }
 
 /**
- * 页面自己记的「取过成员的层」有几层（「取最新」重取的就是这些层）。取过、但一个成员都没有的层也算在里面——`fetchedLayers` 数不到它们，
- * 两边的数对不上就说明脚本对账的层比页面少。读不到回 `null`。
+ * 页面自己记的「取过成员的层」有几层（「取最新」重取的就是这些层）。取过、但一个成员都没有的层也算在里面——`readTree` 靠展开状态和
+ * 以前认过的记录认它们，认漏了两边的数就对不上，说明脚本对账的层比页面少。读不到回 `null`。
  */
 export async function readLoadedLayerCount(page) {
   return page.evaluate(async () => {
@@ -785,6 +799,21 @@ export async function readLoadedLayerCount(page) {
     const tree = treeStore.getModelTreeInstance();
     return typeof tree?.loadedLayerCount === 'function' ? tree.loadedLayerCount() : null;
   });
+}
+
+/**
+ * 脚本认出的层和页面自己记的层数对不对得上。页面记的 = 参考号层 + 最上面不是参考号、有成员的层；页面多出来的要是比最上面那几层还多，
+ * 就是有取过的层脚本没认出来，这时按脚本认的层去算「树该怎么变」会漏（页面照样重取那几层）。
+ *
+ * @param {import('playwright').Page} page
+ * @param {Record<string, { childrenIds?: string[] | null }>} tree `readTree` 的结果
+ */
+export async function layerCounts(page, tree) {
+  const refnoLayers = fetchedLayers(tree).length;
+  const topLayers = (await readTreeTops(page)).filter((node) => node.children > 0).length;
+  const pageLoadedLayers = await readLoadedLayerCount(page);
+  const ok = pageLoadedLayers !== null && pageLoadedLayers >= refnoLayers && pageLoadedLayers - refnoLayers <= topLayers;
+  return { ok, refnoLayers, topLayers, pageLoadedLayers };
 }
 
 function unionBox(boxes) {
