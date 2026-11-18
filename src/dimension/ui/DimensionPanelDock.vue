@@ -43,6 +43,10 @@ import {
   useMbdDiagnosticsStore,
   type MbdDiagnosticsSnapshot,
 } from '@/composables/useMbdDiagnosticsStore';
+import {
+  MBD_INITIAL_OBJECT_LIMIT,
+  parseMbdObjectLimit,
+} from '@/composables/useMbdExternalSync';
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -638,6 +642,64 @@ function writeMbdRefnos(refnos: readonly string[]): void {
   const value = formatMbdRefnos(refnos);
   if (value === null) url.searchParams.delete('mbd_refno');
   else url.searchParams.set('mbd_refno', value);
+  // #136：面板增删或清空列表属于切换对象集合，分批上限复位回默认前 32 个对象。
+  url.searchParams.delete('mbd_limit');
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
+function readMbdObjectLimit(): number {
+  if (typeof window === 'undefined') return MBD_INITIAL_OBJECT_LIMIT;
+  return parseMbdObjectLimit(new URLSearchParams(window.location.search).get('mbd_limit'));
+}
+
+const mbdObjectLimit = ref(readMbdObjectLimit());
+
+/**
+ * #136：超过 32 个对象（不分 BRAN / 设备 / 支架 / 楼板 / 墙板）时先装前 32 个，
+ * 面板写明「已显示 N / M 个对象的标注」并给出「再加载 / 全部加载」入口；
+ * 32 个以内（且无延迟项）不出提示。
+ */
+const mbdBatchLimitBanner = computed(() => {
+  const hasSyncedSources = mbdDiagnostics.value.channel !== null
+    && (mbdDiagnostics.value.sources.length > 0 || mbdDiagnostics.value.deferredRefnos.length > 0);
+  const loaded = hasSyncedSources
+    ? mbdDiagnostics.value.sources.length
+    : Math.min(mbdRefnos.value.length, mbdObjectLimit.value);
+  const deferred = hasSyncedSources
+    ? mbdDiagnostics.value.deferredRefnos.length
+    : Math.max(0, mbdRefnos.value.length - loaded);
+  const total = loaded + deferred;
+  if (total === 0) return null;
+  if (deferred === 0 && total <= MBD_INITIAL_OBJECT_LIMIT) return null;
+  return {
+    loaded,
+    total,
+    deferred,
+    nextStep: Math.min(MBD_INITIAL_OBJECT_LIMIT, deferred),
+  };
+});
+
+/**
+ * #136：点「再加载 / 全部加载」使用 `history.pushState` 记一步浏览器历史，
+ * 与面板其它写地址栏入口（显隐类别、允许部分显示、增删对象列表）保持一致：
+ * 用户点多或误点「全部加载」后，点浏览器后退即可退回上一档对象上限。
+ */
+function loadMoreMbdObjects(): void {
+  const banner = mbdBatchLimitBanner.value;
+  if (!banner || banner.deferred <= 0) return;
+  const nextLimit = banner.loaded + banner.nextStep;
+  const url = new URL(window.location.href);
+  url.searchParams.set('mbd_limit', String(nextLimit));
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
+function loadAllMbdObjects(): void {
+  const banner = mbdBatchLimitBanner.value;
+  if (!banner || banner.deferred <= 0) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('mbd_limit', 'all');
   window.history.pushState({}, '', url);
   window.dispatchEvent(new Event('popstate'));
 }
@@ -794,6 +856,7 @@ function syncDisplayModeFromLocation(): void {
   showRefnoDraft.value = '';
   mbdKindFilter.value = readMbdKindFilter();
   mbdPartialEnabled.value = readMbdPartialEnabled();
+  mbdObjectLimit.value = readMbdObjectLimit();
   mbdLodDisabled.value = readMbdLodDisabled();
   mbd3dDisabled.value = readMbd3dDisabled();
   const mode = readMbdDisplayMode();
@@ -1074,6 +1137,28 @@ function act(
             :title="`移除 ${refno}`"
             @click="dropMbdRefno(refno)">
             ×
+          </button>
+        </span>
+      </div>
+      <div v-if="mbdBatchLimitBanner"
+        class="mt-1 flex flex-wrap items-center justify-between gap-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-sky-900"
+        role="status"
+        data-testid="mbd-batch-limit">
+        <span data-testid="mbd-batch-limit-summary">
+          已显示 {{ mbdBatchLimitBanner.loaded }} / {{ mbdBatchLimitBanner.total }} 个对象的标注<template v-if="mbdBatchLimitBanner.deferred > 0">，其余 {{ mbdBatchLimitBanner.deferred }} 个按需加载</template>
+        </span>
+        <span v-if="mbdBatchLimitBanner.deferred > 0" class="flex items-center gap-1.5">
+          <button type="button"
+            class="rounded border border-sky-400 bg-white px-1.5 py-0.5 hover:bg-sky-100"
+            data-testid="mbd-batch-load-more"
+            @click="loadMoreMbdObjects()">
+            再加载 {{ mbdBatchLimitBanner.nextStep }} 个
+          </button>
+          <button type="button"
+            class="rounded border border-sky-400 bg-white px-1.5 py-0.5 hover:bg-sky-100"
+            data-testid="mbd-batch-load-all"
+            @click="loadAllMbdObjects()">
+            全部加载
           </button>
         </span>
       </div>

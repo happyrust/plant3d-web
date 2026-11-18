@@ -1337,4 +1337,82 @@ describe('DimensionPanelDock', () => {
     expect(diagText).toContain('[data · adapter.no_members_with_geometry] every branch member was skipped for missing geometry');
     expect(diagText).toContain('[split] missing upstream port');
   });
+
+  describe('#136 按对象个数首屏限载前 32 个与按需加载', () => {
+    it('32 个对象以内不出分批提示', async () => {
+      mocks.dimensionSystem.value = createSystem();
+      const upTo32 = Array.from({ length: 32 }, (_, idx) => `OBJ_${idx + 1}`).join(',');
+      window.history.replaceState({}, '', `/?mbd_refno=${upTo32}`);
+      try {
+        const host = mountPanel();
+        await nextTick();
+        expect(host.querySelector('[data-testid="mbd-batch-limit"]')).toBeNull();
+      } finally {
+        window.history.replaceState({}, '', '/');
+      }
+    });
+
+    it('310 个对象（含楼板等非管道对象）显示「已显示 32 / 310 个对象」，支持再加载→64、全部加载→310，且换对象复位 mbd_limit', async () => {
+      mocks.dimensionSystem.value = createSystem();
+      const refnos = [
+        '17496_108516',
+        ...Array.from({ length: 309 }, (_, idx) => `24381_${140001 + idx}`),
+      ];
+      window.history.replaceState({}, '', `/?mbd_refno=${refnos.join(',')}`);
+      const pushSpy = vi.spyOn(window.history, 'pushState');
+      try {
+        const host = mountPanel();
+        await nextTick();
+
+        const banner = () => host.querySelector<HTMLElement>('[data-testid="mbd-batch-limit"]');
+        const summaryText = () =>
+          host.querySelector('[data-testid="mbd-batch-limit-summary"]')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+        expect(banner()).not.toBeNull();
+        expect(summaryText()).toBe('已显示 32 / 310 个对象的标注，其余 278 个按需加载');
+        expect(banner()!.textContent).not.toContain('BRAN');
+
+        // 点「再加载 32 个」→ pushState 写 mbd_limit=64，显示 64 / 310
+        const loadMore = host.querySelector<HTMLButtonElement>('[data-testid="mbd-batch-load-more"]')!;
+        expect(loadMore.textContent?.trim()).toBe('再加载 32 个');
+        loadMore.click();
+        await nextTick();
+        expect(pushSpy).toHaveBeenCalledTimes(1);
+        expect(new URL(window.location.href).searchParams.get('mbd_limit')).toBe('64');
+        expect(summaryText()).toBe('已显示 64 / 310 个对象的标注，其余 246 个按需加载');
+
+        // 点「全部加载」→ pushState 写 mbd_limit=all，显示 310 / 310 且按钮收起
+        const loadAll = host.querySelector<HTMLButtonElement>('[data-testid="mbd-batch-load-all"]')!;
+        loadAll.click();
+        await nextTick();
+        expect(pushSpy).toHaveBeenCalledTimes(2);
+        expect(new URL(window.location.href).searchParams.get('mbd_limit')).toBe('all');
+        expect(summaryText()).toBe('已显示 310 / 310 个对象的标注');
+        expect(host.querySelector('[data-testid="mbd-batch-load-more"]')).toBeNull();
+        expect(host.querySelector('[data-testid="mbd-batch-load-all"]')).toBeNull();
+
+        // 切换选择（清空并换成单个对象）：地址栏不再带 mbd_limit，分批提示消失
+        host.querySelector<HTMLButtonElement>('[data-testid="mbd-refno-hide"]')!.click();
+        await nextTick();
+        expect(new URL(window.location.href).searchParams.has('mbd_limit')).toBe(false);
+        expect(banner()).toBeNull();
+
+        window.history.replaceState({}, '', '/?mbd_refno=A,B&mbd_limit=all');
+        window.dispatchEvent(new Event('popstate'));
+        await nextTick();
+        // 在面板删除 B 剩单个对象 A：mbd_limit 被复位删掉，且单对象不出提示
+        host.querySelector<HTMLButtonElement>(
+          '[data-testid="mbd-refno-chip"][data-refno="B"] [data-testid="mbd-refno-chip-remove"]',
+        )!.click();
+        await nextTick();
+        const paramsAfterDrop = new URL(window.location.href).searchParams;
+        expect(paramsAfterDrop.get('mbd_refno')).toBe('A');
+        expect(paramsAfterDrop.has('mbd_limit')).toBe(false);
+        expect(banner()).toBeNull();
+      } finally {
+        pushSpy.mockRestore();
+        window.history.replaceState({}, '', '/');
+      }
+    });
+  });
 });

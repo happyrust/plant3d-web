@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { shallowRef } from 'vue';
 
-import { MBD_FETCH_CONCURRENCY, createMbdExternalSync } from './useMbdExternalSync';
+import {
+  MBD_FETCH_CONCURRENCY,
+  MBD_INITIAL_BRAN_LIMIT,
+  MBD_INITIAL_OBJECT_LIMIT,
+  createMbdExternalSync,
+  parseMbdObjectLimit,
+} from './useMbdExternalSync';
 
 import type {
   MbdDiagnosticsSnapshot,
@@ -64,6 +70,7 @@ function createDiagnostics(): MbdDiagnosticsStore {
       isolines: [],
       loadError: null,
       sources: [],
+      deferredRefnos: [],
     }),
     set: vi.fn(),
     clear: vi.fn(),
@@ -1140,5 +1147,92 @@ describe('createMbdExternalSync', () => {
     expect(failed.emitToast.mock.calls.map(([payload]) => payload)).toEqual([
       { message: 'MBD 标注装载失败：A — MBD V2 payload has invalid meta', level: 'error' },
     ]);
+  });
+
+  describe('#136 object batch limit (MBD_INITIAL_OBJECT_LIMIT = 32)', () => {
+    it('parses ?mbd_limit with positive integer, all, and safe fallback to 32', () => {
+      expect(MBD_INITIAL_OBJECT_LIMIT).toBe(32);
+      expect(MBD_INITIAL_BRAN_LIMIT).toBe(32);
+      expect(parseMbdObjectLimit(null)).toBe(32);
+      expect(parseMbdObjectLimit('')).toBe(32);
+      expect(parseMbdObjectLimit('0')).toBe(32);
+      expect(parseMbdObjectLimit('-5')).toBe(32);
+      expect(parseMbdObjectLimit('3.5')).toBe(32);
+      expect(parseMbdObjectLimit('bogus')).toBe(32);
+      expect(parseMbdObjectLimit('64')).toBe(64);
+      expect(parseMbdObjectLimit('all')).toBe(Number.POSITIVE_INFINITY);
+      expect(parseMbdObjectLimit('  ALL ')).toBe(Number.POSITIVE_INFINITY);
+    });
+
+    it('caps 310 mixed objects (BRAN + FLOOR + EQUI) at 32 initially, expands via mbd_limit=64 / all, and keeps record ids stable', async () => {
+      const refnos = Array.from({ length: 310 }, (_, idx) => {
+        if (idx === 0) return '17496_108516'; // FLOOR
+        if (idx === 1) return '24381_200001'; // EQUI
+        return `24381_${140000 + idx}`; // BRAN
+      });
+      let currentSearch = `?mbd_refno=${refnos.join(',')}`;
+      const requestedCalls: string[] = [];
+      const diagnostics = createDiagnostics();
+      const emitToast = vi.fn();
+      const fetchPipeData: MbdExternalSyncDeps['fetchPipeData'] = vi.fn(async refno => {
+        requestedCalls.push(refno);
+        return {
+          ok: true as const,
+          data: contractPayload({
+            input_refno: refno,
+            branch_refno: refno,
+            annotation_type: refno === '17496_108516' ? 'ArchitectureWindow' : 'PipingIsometric',
+          }),
+          diagnostics: [],
+        };
+      });
+      const sync = createMbdExternalSync({
+        fetchPipeData,
+        diagnostics,
+        getSearch: () => currentSearch,
+        emitToast,
+      });
+      const target = { replaceExternalSource: vi.fn() };
+
+      // 1) 缺省上限 32：只拉前 32 个，剩余 278 个进入 deferredRefnos
+      await sync.sync(target);
+      expect(requestedCalls).toEqual(refnos.slice(0, 32));
+      const initialRecords = target.replaceExternalSource.mock.calls.at(-1)?.[1] as readonly { id: string }[];
+      expect(initialRecords).toHaveLength(32);
+      const initialIds = initialRecords.map(r => r.id);
+      expect(initialIds[0]).toBe('17496_108516:dim-1');
+      const snap32 = (diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+      expect(snap32.sources).toHaveLength(32);
+      expect(snap32.deferredRefnos).toEqual(refnos.slice(32));
+
+      // 2) ?mbd_limit=1（极端小上限）：多对象列表下首条 id 依然带前缀，与 32 / 64 / all 完全一致
+      requestedCalls.length = 0;
+      currentSearch = `?mbd_refno=${refnos.join(',')}&mbd_limit=1`;
+      await sync.sync(target);
+      const oneRecords = target.replaceExternalSource.mock.calls.at(-1)?.[1] as readonly { id: string }[];
+      expect(oneRecords.map(r => r.id)).toEqual([initialIds[0]]);
+
+      // 3) 再加载 → ?mbd_limit=64：拉前 64 个，前 32 个记录 id 原封不动
+      requestedCalls.length = 0;
+      currentSearch = `?mbd_refno=${refnos.join(',')}&mbd_limit=64`;
+      await sync.sync(target);
+      expect(requestedCalls).toHaveLength(64);
+      const records64 = target.replaceExternalSource.mock.calls.at(-1)?.[1] as readonly { id: string }[];
+      expect(records64).toHaveLength(64);
+      expect(records64.slice(0, 32).map(r => r.id)).toEqual(initialIds);
+      const snap64 = (diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+      expect(snap64.deferredRefnos).toHaveLength(310 - 64);
+
+      // 4) 全部加载 → ?mbd_limit=all：310 个全部装入，deferredRefnos 清空，前 32 个记录 id 原封不动
+      requestedCalls.length = 0;
+      currentSearch = `?mbd_refno=${refnos.join(',')}&mbd_limit=all`;
+      await sync.sync(target);
+      expect(requestedCalls).toHaveLength(310);
+      const recordsAll = target.replaceExternalSource.mock.calls.at(-1)?.[1] as readonly { id: string }[];
+      expect(recordsAll).toHaveLength(310);
+      expect(recordsAll.slice(0, 32).map(r => r.id)).toEqual(initialIds);
+      const snapAll = (diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+      expect(snapAll.deferredRefnos).toEqual([]);
+    });
   });
 });

@@ -68,6 +68,21 @@ export type MbdExternalSync = Readonly<{
 export const MBD_FETCH_CONCURRENCY = 4;
 
 /**
+ * 一次打开大量对象的标注时，首屏缺省先装前 32 个对象，其余按需加载（#136）。
+ * 按对象个数算（不分 BRAN / 设备 / 支架 / 楼板 / 墙板），地址参数 `?mbd_limit=<正整数|all>` 可覆盖。
+ */
+export const MBD_INITIAL_OBJECT_LIMIT = 32;
+/** 兼容管道时代的旧常量名别名。 */
+export const MBD_INITIAL_BRAN_LIMIT = MBD_INITIAL_OBJECT_LIMIT;
+
+export function parseMbdObjectLimit(raw: string | null): number {
+  const value = raw?.trim().toLowerCase();
+  if (value === 'all') return Number.POSITIVE_INFINITY;
+  const parsed = value !== undefined && /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : MBD_INITIAL_OBJECT_LIMIT;
+}
+
+/**
  * 包级原子拒绝（ADR 0046，2026-11-02 改为逐包生效）：单包内映射未全量成功时
  * 该包不提交任何部分记录。错误对象携带该包的诊断明细，在包级 catch 里转成
  * 这一包的逐源诊断——不再抛到 sync 顶层掀翻其它包。
@@ -264,9 +279,9 @@ export function createMbdExternalSync(
 
       const search = deps.getSearch();
       const params = new URLSearchParams(search);
-      const refnos = parseMbdRefnos(search);
+      const requestedRefnos = parseMbdRefnos(search);
 
-      if (refnos.length === 0) {
+      if (requestedRefnos.length === 0) {
         if (cancelled()) return;
         target.replaceExternalSource('mbd', []);
         deps.diagnostics.clear();
@@ -274,6 +289,14 @@ export function createMbdExternalSync(
         lastEmptyToast = null;
         return;
       }
+
+      const objectLimit = parseMbdObjectLimit(params.get('mbd_limit'));
+      const refnos = Number.isFinite(objectLimit)
+        ? requestedRefnos.slice(0, objectLimit)
+        : requestedRefnos;
+      const deferredRefnos = Number.isFinite(objectLimit)
+        ? requestedRefnos.slice(objectLimit)
+        : [];
 
       const channel = 'api' as const;
       const partialEnabled = isMbdPartialEnabled(params.get('mbd_partial'));
@@ -284,11 +307,14 @@ export function createMbdExternalSync(
       const polarEnabled = isMbdPolarEnabled(params.get('mbd_polar'));
       const polarApplied = polarEnabled && presentation3dDisabled;
       /**
-       * 多 BRAN 同屏时给记录 id 加 `refno:` 前缀：各包的图元 id 编号空间各自
-       * 独立（两个 BRAN 都能叫 dim-1），`replaceSource` 又是整槽校验、遇重复
-       * id 直接抛——不加前缀合并必然失败。单包保持裸 id，与旧行为一致。
+       * 多对象同屏时给记录 id 加 `refno:` 前缀：各包的图元 id 编号空间各自
+       * 独立（两个对象都能叫 dim-1），`replaceSource` 又是整槽校验、遇重复
+       * id 直接抛——不加前缀合并必然失败。
+       * 注意按请求列表总长度 `requestedRefnos.length > 1` 判定（#136）：即使 `?mbd_limit=1`
+       * 首屏只装第 1 个对象，只要请求列表不止 1 个对象就统一加前缀，确保点「再加载 / 全部加载」
+       * 前后已有记录的 `id` 不变。单对象保持裸 id，与旧行为一致。
        */
-      const multiRefnos = refnos.length > 1;
+      const multiRefnos = requestedRefnos.length > 1;
 
       const loadSource = async (refno: string): Promise<MbdSourceLoadOutcome | null> => {
         try {
@@ -460,7 +486,7 @@ export function createMbdExternalSync(
       const summarizeFailures = (): string | null => {
         if (failed.length === 0) return null;
         // 单源时原样用那句错误，与多源改造前的文案一致。
-        if (refnos.length === 1) return failed[0]!.loadError;
+        if (refnos.length === 1 && !multiRefnos) return failed[0]!.loadError;
         const details = failed
           .map(source => `${source.refno} — ${source.loadError}`)
           .join('；');
@@ -471,6 +497,7 @@ export function createMbdExternalSync(
         channel,
         sourceId: refnos.join(','),
         sources,
+        deferredRefnos,
         issues: sources.flatMap(source => source.issues),
         skipped: sources.flatMap(source => source.skipped),
         layoutMode: sources.find(source => source.layoutMode !== null)?.layoutMode ?? null,

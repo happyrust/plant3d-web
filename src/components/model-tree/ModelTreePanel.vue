@@ -1325,6 +1325,8 @@ function viewMbdDimensions() {
     selection.setSelectedRefno(refno);
     const url = new URL(window.location.href);
     url.searchParams.set('mbd_refno', normalizeRefnoKeyLike(refno));
+    // #136：右键切换查看对象时复位分批上限，地址栏不再保留旧的 mbd_limit。
+    url.searchParams.delete('mbd_limit');
     window.history.replaceState({}, '', url);
     window.dispatchEvent(new Event('popstate'));
     ensurePanelAndActivate('dimension');
@@ -1372,6 +1374,8 @@ function addMbdDimensionsToView() {
   const url = new URL(window.location.href);
   if (encoded) url.searchParams.set('mbd_refno', encoded);
   else url.searchParams.delete('mbd_refno');
+  // #136：右键把新对象加入视图时同样复位分批上限，重新从前 32 个对象起算。
+  url.searchParams.delete('mbd_limit');
   window.history.replaceState({}, '', url);
   window.dispatchEvent(new Event('popstate'));
   ensurePanelAndActivate('dimension');

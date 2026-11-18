@@ -80,12 +80,17 @@ export type MbdDiagnosticsSnapshot = Readonly<{
   loadError: string | null;
   /** 按包拆开的逐源视图（多 BRAN 同屏）；单源时一项，无来源或旧调用方未给时为空数组。 */
   sources: readonly MbdDiagnosticsSourceSnapshot[];
+  /**
+   * 超过单次装载对象上限（#136，缺省前 32 个对象）而暂未拉取的对象 refno 列表（保序）；
+   * 全部已装载或未超限时为空数组。
+   */
+  deferredRefnos: readonly string[];
 }>;
 
 type MbdDiagnosticsUpdate =
   Omit<
     MbdDiagnosticsSnapshot,
-    'loadedAt' | 'loadError' | 'layoutMode' | 'notes' | 'sourceVersion' | 'isolines' | 'sources'
+    'loadedAt' | 'loadError' | 'layoutMode' | 'notes' | 'sourceVersion' | 'isolines' | 'sources' | 'deferredRefnos'
   >
   & Readonly<{
     layoutMode?: string | null;
@@ -94,6 +99,7 @@ type MbdDiagnosticsUpdate =
     isolines?: readonly MbdV2Isoline[] | null;
     loadError?: string | null;
     sources?: readonly MbdDiagnosticsSourceSnapshot[];
+    deferredRefnos?: readonly string[];
   }>;
 
 export type MbdDiagnosticsStore = Readonly<{
@@ -114,6 +120,7 @@ const EMPTY_SNAPSHOT: MbdDiagnosticsSnapshot = {
   isolines: [],
   loadError: null,
   sources: [],
+  deferredRefnos: [],
 };
 
 const snapshot = shallowRef<MbdDiagnosticsSnapshot>(EMPTY_SNAPSHOT);
@@ -131,6 +138,7 @@ export function useMbdDiagnosticsStore(): MbdDiagnosticsStore {
         isolines: next.isolines ?? [],
         loadError: next.loadError ?? null,
         sources: next.sources ?? [],
+        deferredRefnos: next.deferredRefnos ?? [],
         loadedAt: Date.now(),
       };
     },
