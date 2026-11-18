@@ -133,6 +133,7 @@ scripts/*
 !scripts/verify-pms-simulator-doc-preview.mjs
 !scripts/mbd-live-sweep.mjs
 !scripts/mbd-sweep-compare.mjs
+!scripts/mbd-closeup-unrendered-audit.mjs
 
 # Local live-gate evidence (contains generated macros, logs, and root snapshots).
 output/gen-model-v1-frozen-source-live/
