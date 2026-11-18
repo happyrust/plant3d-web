@@ -648,8 +648,9 @@ export async function runCase(env, caseDef, caseDir) {
       && !!idleBrief.tree
       && idleBrief.tree.added.length + idleBrief.tree.deleted.length + idleBrief.tree.relocated.length + idleBrief.tree.renamed.length + idleBrief.tree.moved.length === 0;
     check('后台没变时点「取最新」：一个模型都不重载，树不动', idleQuiet, idleBrief?.summary ?? '没有回执');
-    // 脚本对账的层 = 页面树上有成员的参考号层；页面重取的层 = 它自己记的「取过成员的层」（空层、最上面不是参考号的层也算）。
-    // 页面多出来的层数要是比最上面那几层还多，就是有取过的空层脚本没有对账
+    // 脚本对账的层 = 页面树上取过成员的参考号层（取过、但没有成员的空层也认，见 `readTree`）；页面重取的层 = 它自己记的
+    // 「取过成员的层」（最上面不是参考号的层也算）。页面多出来的层数要是比最上面那几层还多，就是有取过的层脚本没认出来
+    // （没展开、被预取过的空层）。各条腿存盘之前还会再核一遍（`runLeg`）
     const topLayers = treeTops.filter((node) => node.children > 0).length;
     const loadedLayers = await readLoadedLayerCount(page);
     const layersRequested = idleBrief?.tree?.layersRequested ?? null;
