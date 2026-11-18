@@ -282,7 +282,16 @@ export async function createGuardedContext(browser, options) {
   });
   context.on('response', (response) => {
     if (response.status() < 400 || log.httpFailures.length >= 500) return;
-    log.httpFailures.push({ t: Date.now(), status: response.status(), method: response.request().method(), url: maskUrl(response.url()) });
+    const failure = { t: Date.now(), status: response.status(), method: response.request().method(), url: maskUrl(response.url()) };
+    log.httpFailures.push(failure);
+    // 隔离后端回的错误，正文里有错误码和一句原因（同是 404，「节点找不到」和「读某个会话失败」是两回事）：
+    // 连同这个请求等了多久一起留下，归类的时候用，不参与判定。
+    if (!response.url().startsWith(`${backendOrigin}/`)) return;
+    const waited = response.request().timing().responseStart;
+    if (waited >= 0) failure.waitedMs = Math.round(waited);
+    response.text().then((text) => {
+      failure.body = maskText(text).slice(0, 600);
+    }).catch(() => undefined);
   });
   await context.addInitScript(pageTools);
   return { context, log };
