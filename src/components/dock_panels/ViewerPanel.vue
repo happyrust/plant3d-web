@@ -178,6 +178,7 @@ import {
   buildMeasurementValueText,
 } from '@/utils/xeokitMeasurementFormat';
 import { beginCameraIntent, isCameraIntentCurrent, supersedeCameraIntents } from '@/viewer/camera/cameraIntent';
+import { computeSceneClipPlanes } from '@/viewer/camera/clipPlanes';
 import { flyToScope } from '@/viewer/camera/focusScope';
 import { CadGrid } from '@/viewer/dtx/dtxCadGrid';
 import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
@@ -1429,19 +1430,6 @@ function getDefaultCadGridSizeByUnit(modelUnit: string): number {
   }
 }
 
-function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
-  const d = Math.max(0, Number(diag) || 0);
-
-  // 以 bbox 对角线长度为"分档"依据（单位：米）。
-  // 配合 logarithmicDepthBuffer，收紧 far 值以提升深度精度。
-  // far 只需覆盖"最远可视距离 ≈ 相机到模型最远点 ≈ 数倍对角线"。
-  if (d <= 1) return { near: 0.01, far: 20 };
-  if (d <= 10) return { near: 0.05, far: 100 };
-  if (d <= 100) return { near: 0.1, far: 1000 };
-  if (d <= 1000) return { near: 1, far: 10000 };
-  return { near: 5, far: Math.min(100000, Math.max(20000, d * 20)) };
-}
-
 type DtxFocusBoxResult = {
   box: Box3;
   source: 'full' | 'robust';
@@ -1635,32 +1623,50 @@ function fitToDtxLayerBBoxOnce(dbno: number, dtxViewer: DtxViewer, dtxLayer: DTX
   dtxAutoFitAppliedKey = key;
 }
 
-function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
+function computeMbdWorldBoundsBox(system: DimensionSystem | null): Box3 | null {
+  if (!system) return null;
+  const records = system.externalRegistry.snapshot.records.filter(record => record.source === 'mbd');
+  if (records.length === 0) return null;
+  const bounds = externalDimensionBounds(records);
+  if (!bounds) return null;
+  const designToWorld = dimensionViewerAdapter.getDesignToWorld();
+  const box = new Box3();
+  for (const x of [bounds.min[0], bounds.max[0]]) {
+    for (const y of [bounds.min[1], bounds.max[1]]) {
+      for (const z of [bounds.min[2], bounds.max[2]]) {
+        box.expandByPoint(new Vector3(x, y, z).applyMatrix4(designToWorld));
+      }
+    }
+  }
+  return box.isEmpty() ? null : box;
+}
+
+function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer): boolean {
   const { clip } = readDtxScaleConfigFromUrl();
-  if (!clip) return;
+  if (!clip) return false;
 
-  const box = dtxLayer.getBoundingBox();
-  if (box.isEmpty()) return;
+  const modelBox = dtxLayer.getBoundingBox();
+  const mbdBox = computeMbdWorldBoundsBox(dimensionSystem);
+  if (modelBox.isEmpty() && !mbdBox) return false;
 
-  const size = new Vector3();
-  box.getSize(size);
-  const diag = size.length();
-  const { near, far } = computeClipPlanesByDiag(diag);
-
-  // 额外保护：避免 far/near 比值过大导致深度精度崩溃
-  const maxRatio = 2e4;
-  let nextNear = near;
-  let nextFar = far;
-  if (nextFar / nextNear > maxRatio) {
-    nextNear = Math.max(nextNear, nextFar / maxRatio);
-  }
-  if (nextFar <= nextNear * 1.01) {
-    nextFar = nextNear * 100;
+  const modelDiagM = modelBox.isEmpty() ? 0 : getBoxDiag(modelBox);
+  let combinedDiagM: number | null = null;
+  if (mbdBox) {
+    const combinedBox = modelBox.isEmpty() ? mbdBox.clone() : modelBox.clone().union(mbdBox);
+    combinedDiagM = getBoxDiag(combinedBox);
   }
 
-  dtxViewer.camera.near = nextNear;
-  dtxViewer.camera.far = nextFar;
-  dtxViewer.camera.updateProjectionMatrix();
+  const { near: nextNear, far: nextFar } = computeSceneClipPlanes({
+    modelDiagM,
+    combinedDiagM,
+  });
+  const changed = dtxViewer.camera.near !== nextNear || dtxViewer.camera.far !== nextFar;
+  if (changed) {
+    dtxViewer.camera.near = nextNear;
+    dtxViewer.camera.far = nextFar;
+    dtxViewer.camera.updateProjectionMatrix();
+  }
+  return changed;
 }
 
 // 设置变更时，按需重算：全局矩阵、裁剪、网格与拾取索引（避免单位切换后不一致）。
@@ -2951,7 +2957,19 @@ const mbdExternalSync = createMbdExternalSync({
 function syncMbdExternalDimensions(system: DimensionSystem): Promise<void> {
   return mbdExternalSync.sync(system, {
     isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
-  }).then(() => frameMbdAnnotationsWhenSceneEmpty(system));
+  }).then(() => {
+    if (dimensionSystem !== system || dimensionMountDisposed) return;
+    const dtxViewer = dtxViewerRef.value;
+    const dtxLayer = dtxLayerRef.value;
+    const clipChanged = dtxViewer && dtxLayer
+      ? applyDtxCameraClipByLayerBBox(dtxViewer, dtxLayer)
+      : false;
+    frameMbdAnnotationsWhenSceneEmpty(system);
+    if (clipChanged) {
+      requestRender();
+      system.notifyViewerChanged();
+    }
+  });
 }
 
 /**
@@ -2981,18 +2999,8 @@ function frameMbdAnnotationsWhenSceneEmpty(system: DimensionSystem): void {
     sourceKey,
     framedSourceKey: framedMbdSourceKey,
   })) return;
-  const bounds = externalDimensionBounds(records);
-  if (!bounds) return;
-  const designToWorld = dimensionViewerAdapter.getDesignToWorld();
-  const box = new Box3();
-  for (const x of [bounds.min[0], bounds.max[0]]) {
-    for (const y of [bounds.min[1], bounds.max[1]]) {
-      for (const z of [bounds.min[2], bounds.max[2]]) {
-        box.expandByPoint(new Vector3(x, y, z).applyMatrix4(designToWorld));
-      }
-    }
-  }
-  if (box.isEmpty()) return;
+  const box = computeMbdWorldBoundsBox(system);
+  if (!box) return;
   framedMbdSourceKey = sourceKey;
   fitDtxViewerToBox(dtxViewer, box, 0);
   requestRender();
