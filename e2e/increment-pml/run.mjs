@@ -20,7 +20,16 @@ import { parseArgs, promisify } from 'node:util';
 import { createBackend, loopbackOrigin, sleep } from './lib/backend.mjs';
 import { CHECKPOINT_ORDER, runCase } from './lib/case-runner.mjs';
 import { loadKnownGaps, refnoKey, SIGNAL_WINDOW_MS, VERDICT_LABEL } from './lib/judge.mjs';
-import { clickGetWork, createGuardedContext, expandTree, launchBrowser, loadRoots, newPage, openApp } from './lib/page.mjs';
+import {
+  clickGetWork,
+  createGuardedContext,
+  expandTree,
+  launchBrowser,
+  loadRoots,
+  networkLockOf,
+  newPage,
+  openApp,
+} from './lib/page.mjs';
 
 const run = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -192,6 +201,10 @@ function reportMarkdown() {
   if (report.guard) {
     lines.push(`- 页面发出的请求 ${report.guard.total} 条：发往 8022 / 8009 的 ${report.guard.toLive} 条，守卫拦下 ${report.guard.blocked} 条；脚本自己问隔离后端 ${report.guard.scriptRequests} 次（只读）`);
   }
+  if (report.environment.networkLock) {
+    lines.push(`- 浏览器进程的联网锁（不走系统代理，127.0.0.1 以外的主机解析不到）：开跑前验了 ${report.environment.networkLock.probes.length} 个地址——`
+      + `${report.environment.networkLock.probes.map((probe) => `${probe.what} ${probe.outcome}`).join('，')}`);
+  }
   if (report.notRun.length > 0) lines.push(`- 没跑的用例：${report.notRun.join('、')}（前面有用例没跑完，停了）`);
 
   lines.push('', '## 总表', '', `| 用例 | 腿 | ${CHECKPOINT_ORDER.join(' | ')} | 这条腿 |`, `| --- | --- | ${CHECKPOINT_ORDER.map(() => '---').join(' | ')} | --- |`);
@@ -269,6 +282,7 @@ try {
   };
   browser = await launchBrowser({ headed: args.headed, cacheDir, channel: config.browser?.channel ?? 'chrome' });
   report.environment.browser = `${config.browser?.channel ?? 'chrome'} ${browser.version()}`;
+  report.environment.networkLock = networkLockOf(browser);
   const target = { pageOrigin, backendOrigin, project: config.project, query: config.query ?? {} };
 
   // 预开一遍：页面服务刚起来时，Vite 会边开边补打包依赖、让页面自己重新载入。把正式那一页要走的路（展开、装节点、取最新）

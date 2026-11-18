@@ -8,7 +8,11 @@
  *
  * 驱动在页面上做的每一个操作（展开、滚动、选中、点眼睛、点取最新）都记在 `log.interactions` 里：W1 要求存盘之后、行上的信号出来之前
  * 什么都不碰。读行只读已经画出来的 DOM，不滚动、不选中。
+ *
+ * 闸门只管页面发的请求。浏览器进程自己发的（自带功能的探测、更新之类）闸门看不见，由启动参数上的联网锁管（`NETWORK_LOCK_ARGS`）。
  */
+import net from 'node:net';
+
 import { chromium } from 'playwright';
 
 import { loopbackOrigin, sleep } from './backend.mjs';
@@ -44,10 +48,94 @@ export function maskText(text) {
   );
 }
 
+/**
+ * 浏览器进程的联网锁：不走系统代理，除 127.0.0.1 以外的主机一律解析不到——浏览器进程除了本机回环哪里都连不上。
+ * 不按功能一个个去关（关不全，换个版本又多出来），直接让它解析不了别的地址。
+ */
+export const NETWORK_LOCK_ARGS = Object.freeze(['--no-proxy-server', '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1']);
+
+const NETWORK_LOCKS = new WeakMap();
+
+/** 本机上一个这一刻没人听的端口（占一下就放） */
+function unusedPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * 验联网锁真的在起作用：另开一个空白上下文（不带闸门——闸门会抢在前面拦掉，验不到锁），访问三个不该连得上的地址，
+ * 三个都应当是「解析不到」：
+ *   回环上的另一个地址（127.0.0.2）—— 没放开的 IP 也挡住了；
+ *   localhost —— 没放开的名字也挡住了（不锁的话浏览器自己就把它算成回环，不问网络）；
+ *   一个保留的、永远解析不出来的外面名字（.invalid）—— 路上没有代理（走代理的话名字交给代理去查，这里就不是「解析不到」）。
+ * 前两个的端口没人听。锁在起作用时浏览器一个包都不发；不起作用时，前两个只是连本机被拒，第三个最多是去查一个保留的名字。
+ *
+ * @param {import('playwright').Browser} browser
+ * @returns {Promise<{ locked: boolean, probes: { what: string, outcome: string, locked: boolean }[] }>}
+ */
+export async function probeNetworkLock(browser) {
+  const port = await unusedPort();
+  const targets = [
+    ['回环上的另一个地址', `http://127.0.0.2:${port}/`],
+    ['localhost', `http://localhost:${port}/`],
+    ['外面的名字（保留的 .invalid）', 'http://increment-web-lock-probe.invalid/'],
+  ];
+  const context = await browser.newContext();
+  const probes = [];
+  try {
+    const page = await context.newPage();
+    for (const [what, address] of targets) {
+      let outcome = 'loaded';
+      try {
+        await page.goto(address, { timeout: 20000 });
+      } catch (error) {
+        outcome = /net::(ERR_[A-Z_]+)/.exec(String(error?.message ?? error))?.[1] ?? 'other-error';
+      }
+      probes.push({ what, outcome, locked: outcome === 'ERR_NAME_NOT_RESOLVED' });
+    }
+  } finally {
+    await context.close().catch(() => undefined);
+  }
+  return { locked: probes.every((probe) => probe.locked), probes };
+}
+
+/** 验联网锁：没起作用（或者验不成）就把浏览器关掉、报错；过了就记下结果（`networkLockOf` 取） */
+export async function requireNetworkLock(browser) {
+  let lock;
+  try {
+    lock = await probeNetworkLock(browser);
+  } catch (error) {
+    lock = { locked: false, probes: [], error: String(error?.message ?? error).split('\n')[0].slice(0, 300) };
+  }
+  if (!lock.locked) {
+    await browser.close().catch(() => undefined);
+    const seen = lock.error
+      ? `验锁出错：${lock.error}`
+      : lock.probes.filter((probe) => !probe.locked).map((probe) => `${probe.what}：${probe.outcome}`).join('；');
+    throw new Error(`验收用的浏览器的联网锁没有起作用（${seen}），不往下跑`);
+  }
+  NETWORK_LOCKS.set(browser, lock);
+  return lock;
+}
+
+/** 起验收用的浏览器。起来之后先验联网锁，没起作用就关掉、报错，不让调用方接着用 */
 export async function launchBrowser({ headed = false, cacheDir, channel = 'chrome' } = {}) {
-  const args = ['--disable-renderer-backgrounding', '--disable-background-timer-throttling'];
+  const args = ['--disable-renderer-backgrounding', '--disable-background-timer-throttling', ...NETWORK_LOCK_ARGS];
   if (cacheDir) args.push(`--disk-cache-dir=${cacheDir}`);
-  return chromium.launch({ channel, headless: !headed, args });
+  const browser = await chromium.launch({ channel, headless: !headed, args });
+  await requireNetworkLock(browser);
+  return browser;
+}
+
+/** `launchBrowser` 起浏览器时验联网锁的结果（验了哪几个地址、各是什么结果） */
+export function networkLockOf(browser) {
+  return NETWORK_LOCKS.get(browser) ?? null;
 }
 
 /** 这段在页面里跑（每个新文档都装一遍）：读行、行的定时采样、记应用弹过的提示。只读 DOM，不动页面 */

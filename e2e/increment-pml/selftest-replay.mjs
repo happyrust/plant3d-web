@@ -26,6 +26,7 @@ import {
   fetchedLayers,
   launchBrowser,
   loadRoots,
+  networkLockOf,
   newPage,
   openApp,
   readLoadedLayerCount,
@@ -354,6 +355,7 @@ try {
   // 开页面、展开、装节点
   browser = await launchBrowser({ headed: args.headed, cacheDir, channel: config.browser?.channel ?? 'chrome' });
   report.environment.browser = `${config.browser?.channel ?? 'chrome'} ${browser.version()}`;
+  report.environment.networkLock = networkLockOf(browser);
   const guarded = await createGuardedContext(browser, { pageOrigin, backendOrigin, viewport: config.browser?.viewport });
   log = guarded.log;
   const target = { pageOrigin, backendOrigin, project: config.project, query: config.query ?? {} };
