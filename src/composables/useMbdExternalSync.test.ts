@@ -595,7 +595,7 @@ describe('createMbdExternalSync', () => {
 
     expect(harness.emitToast).toHaveBeenCalledTimes(1);
     expect(harness.emitToast).toHaveBeenCalledWith({
-      message: 'MBD 标注装载失败：MBD V2 API responded with status 422',
+      message: 'MBD 标注装载失败：A — MBD V2 API responded with status 422',
       level: 'error',
     });
     // 去重只作用于弹窗：诊断每次都要照旧写入。
@@ -1138,7 +1138,7 @@ describe('createMbdExternalSync', () => {
     });
     await failed.sync.sync(failed.target);
     expect(failed.emitToast.mock.calls.map(([payload]) => payload)).toEqual([
-      { message: 'MBD 标注装载失败：MBD V2 payload has invalid meta', level: 'error' },
+      { message: 'MBD 标注装载失败：A — MBD V2 payload has invalid meta', level: 'error' },
     ]);
   });
 });

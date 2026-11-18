@@ -275,7 +275,8 @@ describe('parseMbdV2PipeData', () => {
       const legacy = parseMbdV2PipeData(payload({ kind, id: `legacy-${kind}`, text: 'x' }));
       expect(legacy.ok).toBe(false);
       if (legacy.ok) return;
-      expect(legacy.error).toContain(`${kind} "legacy-${kind}"`);
+      expect(legacy.error).toContain('对象 arc');
+      expect(legacy.error).toContain(`legacy-${kind}`);
       expect(legacy.error).not.toContain('frozen V2 contract');
     }
     for (const broken of [
@@ -340,7 +341,8 @@ describe('parseMbdV2PipeData', () => {
         const rejected = parseMbdV2PipeData(withStyle(kind, fields, style));
         expect(rejected.ok, `${kind} style ${JSON.stringify(style)}`).toBe(false);
         if (rejected.ok) return;
-        expect(rejected.error).toContain(`${kind} "${kind}-style"`);
+        expect(rejected.error).toContain('aid');
+        expect(rejected.error).toContain(`${kind}-style`);
       }
       for (const style of ['solid', 'dashed', 'dash_dot', undefined]) {
         const accepted = parseMbdV2PipeData(withStyle(kind, fields, style));
@@ -381,7 +383,9 @@ describe('parseMbdV2PipeData', () => {
       const rejected = parseMbdV2PipeData(payload({ ...aidText, text_height_mm: textHeight }));
       expect(rejected, `text_height_mm ${String(textHeight)}`).toMatchObject({ ok: false });
       if (rejected.ok) return;
-      expect(rejected.error).toContain('aid_text "angle:isoline:0:dir-text"');
+      expect(rejected.error).toContain('aid-text');
+      expect(rejected.error).toContain('angle:isoline:0:dir-text');
+      expect(rejected.error).toContain('字高');
     }
   });
 
@@ -406,8 +410,8 @@ describe('parseMbdV2PipeData', () => {
     expect(malformed).toMatchObject({ ok: false });
     expect(badIssue).toMatchObject({ ok: false });
     if (malformed.ok || badIssue.ok) return;
-    expect(malformed.error).toContain('"bad-geometry"');
-    expect(badIssue.error).toContain('"i-2"');
+    expect(malformed.error).toContain('bad-geometry');
+    expect(badIssue.error).toContain('i-2');
   });
 
   /**
@@ -439,10 +443,12 @@ describe('parseMbdV2PipeData', () => {
     }
 
     for (const malformed of ['linear_dim', 0, [1], ['linear_dim', ''], { linear_dim: true }]) {
-      expect(withMeta({ coverage: malformed })).toEqual({
-        ok: false,
-        error: 'MBD V2 payload has invalid meta',
-      });
+      const res = withMeta({ coverage: malformed });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error).toContain('对象 y');
+        expect(res.error).toContain('meta.coverage');
+      }
     }
   });
 
@@ -491,10 +497,12 @@ describe('parseMbdV2PipeData', () => {
       { ...version, databases: [...version.databases, { dbnum: 5054, sesno: 49, db_type: 'CATA' }] },
     ];
     for (const candidate of malformed) {
-      expect(withMeta({ source_version: candidate })).toEqual({
-        ok: false,
-        error: 'MBD V2 payload has invalid meta',
-      });
+      const res = withMeta({ source_version: candidate });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error).toContain('对象 y');
+        expect(res.error).toContain('meta.source_version');
+      }
     }
   });
 
@@ -543,9 +551,9 @@ describe('parseMbdV2PipeData', () => {
       const result = withPrimitives([{ ...primitive, text_dir: textDir }]);
       expect(result).toMatchObject({ ok: false });
       if (result.ok) continue;
-      expect(result.error).toContain(
-        `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
-      );
+      expect(result.error).toContain('对象 y');
+      expect(result.error).toContain(primitive.id as string);
+      expect(result.error).toContain('文字方向');
     }
 
     // 只属于这三种 kind：别的 kind 上出现 text_dir，默认模式当契约外字段忽略，strict 才拒。
@@ -622,18 +630,18 @@ describe('parseMbdV2PipeData', () => {
         expect(result, `${primitive.kind as string} object_refno ${String(refno)}`)
           .toMatchObject({ ok: false });
         if (result.ok) continue;
-        expect(result.error).toContain(
-          `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
-        );
+        expect(result.error).toContain('对象 y');
+        expect(result.error).toContain(`（${primitive.id as string}）`);
+        expect(result.error).toContain('object_refno');
       }
       for (const idx of [-1, 1.5, '0', null]) {
         const result = withPrimitives([{ ...primitive, isoline_idx: idx }]);
         expect(result, `${primitive.kind as string} isoline_idx ${String(idx)}`)
           .toMatchObject({ ok: false });
         if (result.ok) continue;
-        expect(result.error).toContain(
-          `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
-        );
+        expect(result.error).toContain('对象 y');
+        expect(result.error).toContain(`（${primitive.id as string}）`);
+        expect(result.error).toContain('isoline_idx');
       }
     }
   });
@@ -695,10 +703,12 @@ describe('parseMbdV2PipeData', () => {
       [{ index: 0, members: [], cheight_mm: 25 }],
     ];
     for (const candidate of malformed) {
-      expect(withMeta({ isolines: candidate })).toEqual({
-        ok: false,
-        error: 'MBD V2 payload has invalid meta',
-      });
+      const res = withMeta({ isolines: candidate });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error).toContain('对象 y');
+        expect(res.error).toMatch(/meta\.isolines|直段/);
+      }
     }
   });
 
@@ -733,10 +743,13 @@ describe('parseMbdV2PipeData', () => {
       { from: [5, 5, 5], to: [5, 5, 5] },
     ];
     for (const candidate of malformed) {
-      expect(withIsolines([{ ...row, axis: candidate }])).toEqual({
-        ok: false,
-        error: 'MBD V2 payload has invalid meta',
-      });
+      const res = withIsolines([{ ...row, axis: candidate }]);
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error).toContain('对象 y');
+        expect(res.error).toContain('第 0 号直段');
+        expect(res.error).toContain('轴线');
+      }
     }
   });
 
@@ -781,9 +794,8 @@ describe('parseMbdV2PipeData', () => {
       const result = withPrimitives([primitive]);
       expect(result, label).toMatchObject({ ok: false });
       if (result.ok) return;
-      expect(result.error).toContain(
-        `invalid primitive ${primitive.kind as string} "${primitive.id as string}"`,
-      );
+      expect(result.error).toContain('对象 y');
+      expect(result.error).toContain(`（${primitive.id as string}）`);
     };
 
     /**
@@ -830,16 +842,20 @@ describe('parseMbdV2PipeData', () => {
 
       // 词表外（拼错、大小写、空串）与 null / 非字符串都整包拒绝；null 不等于缺省。
       for (const annotationType of ['em9_supp', 'EM4_PIPE', 'pipe', '']) {
-        expect(withPackage({ annotation_type: annotationType })).toEqual({
-          ok: false,
-          error: `MBD V2 payload has an invalid annotation_type "${annotationType}"`,
-        });
+        const res = withPackage({ annotation_type: annotationType });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+          expect(res.error).toContain('对象 y');
+          expect(res.error).toContain(`annotation_type "${annotationType}"`);
+        }
       }
       for (const annotationType of [null, 4, ['civil']]) {
-        expect(withPackage({ annotation_type: annotationType })).toEqual({
-          ok: false,
-          error: 'MBD V2 payload has an invalid annotation_type',
-        });
+        const res = withPackage({ annotation_type: annotationType });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+          expect(res.error).toContain('对象 y');
+          expect(res.error).toContain('annotation_type');
+        }
       }
     });
 
@@ -858,10 +874,11 @@ describe('parseMbdV2PipeData', () => {
         '24383_91813',
         null,
       ]) {
-        expect(withPackage({ subject: malformed }), JSON.stringify(malformed)).toEqual({
-          ok: false,
-          error: 'MBD V2 payload has an invalid subject',
-        });
+        const res = withPackage({ subject: malformed });
+        expect(res.ok, JSON.stringify(malformed)).toBe(false);
+        if (!res.ok) {
+          expect(res.error).toContain('subject');
+        }
       }
     });
 
@@ -1002,6 +1019,91 @@ describe('parseMbdV2PipeData', () => {
         const stray = { ...byKind(kind), text_dir: [1, 0, 0] };
         expect(withPrimitives([stray]).ok, `${kind} default`).toBe(true);
         expect(withPrimitives([stray], { strict: true }), `${kind} strict`).toMatchObject({ ok: false });
+      }
+    });
+  });
+
+  describe('Chinese failure attribution for real live-sweep specimens (#135)', () => {
+    it('explains zero-length isoline axis, zero label height, and zero label text_dir in Chinese with refno and location', () => {
+      // 1) 24383_75665：第 4 号直段轴线两端重合
+      const sameAxis = parseMbdV2PipeData({
+        version: 'v2',
+        input_refno: '24383_75665',
+        branch_refno: '24383_75665',
+        primitives: [],
+        issues: [],
+        meta: {
+          geometry_space: 'design_m',
+          notes: [],
+          isolines: [{
+            index: 4,
+            members: ['24383_75666'],
+            cheight_mm: 25,
+            od_mm: 108,
+            axis: { from: [10, 20, 30], to: [10, 20, 30] },
+          }],
+        },
+      });
+      expect(sameAxis.ok).toBe(false);
+      if (!sameAxis.ok) {
+        expect(sameAxis.error).toContain('24383_75665');
+        expect(sameAxis.error).toContain('第 4 号直段');
+        expect(sameAxis.error).toContain('轴线');
+        expect(sameAxis.error).toContain('重合');
+      }
+
+      // 2) 24381_71247：「管道信息」标签字高为 0
+      const zeroHeightLabel = parseMbdV2PipeData({
+        version: 'v2',
+        annotation_type: 'em4_supp',
+        subject: { refno: '24381_71247', noun: 'STRU' },
+        input_refno: '24381_71247',
+        branch_refno: '24381_71247',
+        primitives: [{
+          kind: 'label',
+          id: '24381_71247:pipe_info',
+          function: '管道信息',
+          text: 'DN100',
+          position: [0, 0, 0],
+          text_height_mm: 0,
+        }],
+        issues: [],
+        meta: { geometry_space: 'design_m', notes: [] },
+      });
+      expect(zeroHeightLabel.ok).toBe(false);
+      if (!zeroHeightLabel.ok) {
+        expect(zeroHeightLabel.error).toContain('24381_71247');
+        expect(zeroHeightLabel.error).toContain('管道信息');
+        expect(zeroHeightLabel.error).toContain('标签');
+        expect(zeroHeightLabel.error).toContain('字高');
+        expect(zeroHeightLabel.error).toContain('0');
+      }
+
+      // 3) 24381_25804：墙名标签文字方向为零向量
+      const zeroDirLabel = parseMbdV2PipeData({
+        version: 'v2',
+        annotation_type: 'civil',
+        subject: { refno: '24381_25804', noun: 'STWALL' },
+        input_refno: '24381_25804',
+        branch_refno: '24381_25804',
+        primitives: [{
+          kind: 'label',
+          id: '24381_25804:name:A',
+          function: '墙名',
+          text: 'W-01',
+          position: [0, 0, 0],
+          text_dir: [0, 0, 0],
+        }],
+        issues: [],
+        meta: { geometry_space: 'design_m', notes: [] },
+      });
+      expect(zeroDirLabel.ok).toBe(false);
+      if (!zeroDirLabel.ok) {
+        expect(zeroDirLabel.error).toContain('24381_25804');
+        expect(zeroDirLabel.error).toContain('墙名');
+        expect(zeroDirLabel.error).toContain('标签');
+        expect(zeroDirLabel.error).toContain('文字方向');
+        expect(zeroDirLabel.error).toContain('零');
       }
     });
   });

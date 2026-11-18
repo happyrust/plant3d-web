@@ -1,6 +1,10 @@
-import type { MbdV2ParseResult } from '@/dimension';
+import type { MbdV2Issue, MbdV2ParseResult } from '@/dimension';
 
-import { parseMbdV2PipeData } from '@/dimension';
+import {
+  lookupMbdRuleWording,
+  parseMbdV2Issue,
+  parseMbdV2PipeData,
+} from '@/dimension';
 import { buildBackendUrl } from '@/utils/apiBase';
 import { parseJsonResponse } from '@/utils/fileValidation';
 
@@ -100,14 +104,67 @@ function getMbdApiBaseUrl(): string {
  * - 正文是带非空 `message` 的信封 → 原样透出 `message`；
  * - 不是（代理页、空正文、别的 JSON 形状）→ 仍按状态码兜底，正文非空就附前 200 字，别把线索吞掉。
  */
+const ENGLISH_ROOT_ERROR_PHRASES: readonly Readonly<[string, string]>[] = [
+  ['every branch member was skipped for missing geometry', '这条支管下的管件都缺少可用几何，已全部跳过'],
+  ['the branch has no members and no tube between its head and tail: there is nothing to dimension', '这条支管下面没有管件，首尾之间也没有隐含直管，没有可标注的内容'],
+  ['branch has neither HPOS/HDIR nor a member arrive port to seed Head', '这条支管既没有首端坐标与方向（HPOS / HDIR），也没有带到达端口的管件，定不出起点（Head）'],
+  ['branch has no members; nothing to split', '这条支管下面没有任何管件，没有可标注的内容'],
+];
+
+function extractEnvelopeIssues(detail: unknown): readonly MbdV2Issue[] {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return [];
+  const rawIssues = (detail as { issues?: unknown }).issues;
+  if (!Array.isArray(rawIssues)) return [];
+  return rawIssues
+    .map(item => parseMbdV2Issue(item))
+    .filter((item): item is MbdV2Issue => item !== null);
+}
+
+function localizeMbdEnvelopeMessage(
+  code: string | undefined,
+  rawMessage: string,
+  issues: readonly MbdV2Issue[],
+): string {
+  const trimmed = rawMessage.trim();
+  // 「不可标注」已经是完整中文，原样保留不变（#135）
+  if (code === 'not_annotatable') return trimmed;
+
+  let localized = trimmed;
+  for (const issue of issues) {
+    if (!issue.message.trim()) continue;
+    const wording = lookupMbdRuleWording(issue.rule_id);
+    if (wording?.text) {
+      const cleanCn = wording.text.replace(/[。.]$/, '');
+      localized = localized.split(issue.message.trim()).join(cleanCn);
+    }
+  }
+  for (const [en, cn] of ENGLISH_ROOT_ERROR_PHRASES) {
+    if (localized.includes(en)) {
+      localized = localized.split(en).join(cn);
+    }
+  }
+  return localized;
+}
+
 export function describeMbdV2HttpFailure(status: number, bodyText: string): string {
   const text = bodyText.trim();
   if (text) {
     try {
       const envelope = JSON.parse(text) as unknown;
-      if (envelope && typeof envelope === 'object') {
-        const message = (envelope as { message?: unknown }).message;
-        if (typeof message === 'string' && message.trim()) return message.trim();
+      if (envelope && typeof envelope === 'object' && !Array.isArray(envelope)) {
+        const { code, message, detail } = envelope as {
+          code?: unknown;
+          message?: unknown;
+          detail?: unknown;
+        };
+        if (typeof message === 'string' && message.trim()) {
+          const issues = extractEnvelopeIssues(detail);
+          return localizeMbdEnvelopeMessage(
+            typeof code === 'string' ? code : undefined,
+            message,
+            issues,
+          );
+        }
       }
     } catch {
       // 不是 JSON：走下面的兜底
@@ -227,9 +284,24 @@ async function fetchMbdV2Guarded(
 }
 
 function toParseResult(outcome: MbdV2GuardedOutcome): MbdV2ParseResult {
-  return outcome.kind === 'result'
-    ? outcome.result
-    : { ok: false, error: describeMbdV2HttpFailure(outcome.status, outcome.bodyText) };
+  if (outcome.kind === 'result') return outcome.result;
+  let issues: readonly MbdV2Issue[] = [];
+  const trimmed = outcome.bodyText.trim();
+  if (trimmed) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        issues = extractEnvelopeIssues((parsed as { detail?: unknown }).detail);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return {
+    ok: false,
+    error: describeMbdV2HttpFailure(outcome.status, outcome.bodyText),
+    ...(issues.length > 0 ? { issues } : {}),
+  };
 }
 
 /**

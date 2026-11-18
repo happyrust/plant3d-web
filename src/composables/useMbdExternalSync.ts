@@ -236,12 +236,22 @@ export function createMbdExternalSync(
    */
   const failureToasts = new Map<string, string>();
 
+  const containsRefnoToken = (text: string, target: string): boolean => {
+    const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^A-Za-z0-9_/])${escaped}(?:$|[^A-Za-z0-9_/])`).test(text);
+  };
+
   const toastFailure = (refno: string, message: string): void => {
     if (failureToasts.get(refno) === message) {
       return;
     }
     failureToasts.set(refno, message);
-    deps.emitToast({ message: `MBD 标注装载失败：${message}`, level: 'error' });
+    const slashRefno = refno.replace(/_/g, '/');
+    const hasRefno = !refno
+      || containsRefnoToken(message, refno)
+      || (slashRefno !== refno && containsRefnoToken(message, slashRefno));
+    const body = hasRefno ? message : `${refno} — ${message}`;
+    deps.emitToast({ message: `MBD 标注装载失败：${body}`, level: 'error' });
   };
   /** 上一次弹过的空包提示；同一句不重复弹，空包消失后复位。 */
   let lastEmptyToast: string | null = null;
@@ -285,7 +295,9 @@ export function createMbdExternalSync(
           const parsed = await deps.fetchPipeData(refno, { partial: partialEnabled });
           // 在途 sync 被新 sync 顶替或宿主作废：立刻收手，不白费映射，外层也会整体放弃。
           if (cancelled()) return null;
-          if (!parsed.ok) throw new Error(parsed.error);
+          if (!parsed.ok) {
+            throw new MbdAtomicRejectionError(parsed.error, parsed.issues ?? [], []);
+          }
           const payload: MbdV2PipeData = parsed.data;
           const channelSkipped = parsed.diagnostics;
           const mapped = mbdV2ToExternalRecords(
@@ -303,7 +315,7 @@ export function createMbdExternalSync(
           const mappedSkipped = mapped.skipped;
           if (mappedSkipped.length > 0 && !partialEnabled) {
             throw new MbdAtomicRejectionError(
-              `MBD 负载整包拒绝：${mappedSkipped.length} 个图元无法映射`
+              `对象 ${refno} 整包拒绝：${mappedSkipped.length} 个图元无法映射`
                 + `（首个：${mappedSkipped[0]!.id} — ${mappedSkipped[0]!.reason}）`,
               payload.issues,
               skipped,

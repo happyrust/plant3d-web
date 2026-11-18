@@ -4,6 +4,7 @@ import {
   MBD_FETCH_TIMEOUT_MS,
   MBD_RESPONSE_MAX_BYTES,
   describeMbdV2HttpFailure,
+  fetchMbdV2ObjectData,
   fetchMbdV2PipeData,
   resolveMbdApiBaseUrl,
 } from './mbdV2Api';
@@ -104,6 +105,37 @@ describe('describeMbdV2HttpFailure', () => {
       .toBe('MBD V2 API responded with status 422: "just a string"');
     expect(describeMbdV2HttpFailure(422, 'null'))
       .toBe('MBD V2 API responded with status 422: null');
+  });
+
+  it('#135 保持 not_annotatable 已中文化信封（如 17496_73858）原样不变', () => {
+    const notAnnotatable = JSON.stringify({
+      code: 'not_annotatable',
+      message: 'refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点',
+      detail: { refno: '17496_73858', kind: 'CMFI' },
+    });
+    expect(describeMbdV2HttpFailure(422, notAnnotatable))
+      .toBe('refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点');
+  });
+
+  it('#135 将旧后端 422 根错误半截英文信封（如 32573_1）按 detail.issues.rule_id 转译成完整中文', () => {
+    const legacyRootError = JSON.stringify({
+      code: 'precondition',
+      message: 'BRAN 32573/1 建不起可信的成员结点视图：every branch member was skipped for missing geometry',
+      detail: {
+        branch_refno: '32573_1',
+        issues: [{
+          id: 'issue-0',
+          severity: 'error',
+          category: 'data',
+          rule_id: 'adapter.no_members_with_geometry',
+          message: 'every branch member was skipped for missing geometry',
+        }],
+      },
+    });
+    const text = describeMbdV2HttpFailure(422, legacyRootError);
+    expect(text).toContain('32573/1');
+    expect(text).toContain('管件都缺少可用几何');
+    expect(text).not.toContain('every branch member was skipped');
   });
 });
 
@@ -251,5 +283,41 @@ describe('fetchMbdV2PipeData', () => {
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('#135 fetchMbdV2ObjectData 在 422 带 detail.issues 时同时返回完整中文 error 与原始 issues 列表', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 'precondition',
+          message: 'BRAN 32573/1 建不起可信的成员结点视图：every branch member was skipped for missing geometry',
+          detail: {
+            branch_refno: '32573_1',
+            issues: [{
+              id: 'issue-0',
+              severity: 'error',
+              category: 'data',
+              rule_id: 'adapter.no_members_with_geometry',
+              message: 'every branch member was skipped for missing geometry',
+            }],
+          },
+        }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      ),
+    ));
+
+    const result = await fetchMbdV2ObjectData('32573_1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('32573/1');
+    expect(result.error).toContain('管件都缺少可用几何');
+    expect(result.error).not.toContain('every branch member was skipped');
+    expect(result.issues).toEqual([{
+      id: 'issue-0',
+      severity: 'error',
+      category: 'data',
+      rule_id: 'adapter.no_members_with_geometry',
+      message: 'every branch member was skipped for missing geometry',
+    }]);
   });
 });

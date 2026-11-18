@@ -1291,4 +1291,50 @@ describe('DimensionPanelDock', () => {
       }
     });
   });
+
+  it('#135 在诊断面板的问题列表里同时展示 [category · rule_id] 与原因，无 rule_id 时保持 [category]', async () => {
+    mocks.dimensionSystem.value = createSystem();
+    const store = useMbdDiagnosticsStore();
+    const issues = [
+      {
+        id: 'issue-0',
+        severity: 'error' as const,
+        category: 'data' as const,
+        rule_id: 'adapter.no_members_with_geometry',
+        message: 'every branch member was skipped for missing geometry',
+      },
+      {
+        id: 'issue-1',
+        severity: 'warning' as const,
+        category: 'split' as const,
+        message: 'missing upstream port',
+      },
+    ];
+    store.set({
+      channel: 'api',
+      sourceId: '32573_1',
+      issues,
+      skipped: [],
+      loadError: 'BRAN 32573/1 建不起可信的成员结点视图：这条支管下的管件都缺少可用几何，已全部跳过',
+      sources: [{
+        refno: '32573_1',
+        issues,
+        skipped: [],
+        layoutMode: null,
+        notes: [],
+        sourceVersion: null,
+        isolines: [],
+        loadError: 'BRAN 32573/1 建不起可信的成员结点视图：这条支管下的管件都缺少可用几何，已全部跳过',
+      }],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    host.querySelector<HTMLElement>('[data-testid="mbd-diagnostics"]')?.setAttribute('open', '');
+    await nextTick();
+
+    const diagText = host.querySelector('[data-testid="mbd-diagnostics"]')?.textContent ?? '';
+    expect(diagText).toContain('[data · adapter.no_members_with_geometry] every branch member was skipped for missing geometry');
+    expect(diagText).toContain('[split] missing upstream port');
+  });
 });

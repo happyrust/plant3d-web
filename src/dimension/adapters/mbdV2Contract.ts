@@ -471,7 +471,7 @@ export type MbdV2ParseResult =
     data: MbdV2PipeData;
     diagnostics: readonly MbdV2ParseDiagnostic[];
   }>
-  | Readonly<{ ok: false; error: string }>;
+  | Readonly<{ ok: false; error: string; issues?: readonly MbdV2Issue[] }>;
 
 const ISSUE_SEVERITIES: readonly MbdV2IssueSeverity[] = [
   'info',
@@ -850,17 +850,178 @@ function classifyPrimitive(
   return { kind: 'ok' };
 }
 
-/** Names the offender so a rejected payload stays locatable (ADR 0046). */
-function describeEntry(value: unknown, index: number): string {
-  if (!isObject(value)) return `entry at index ${index}`;
-  const kind = typeof value.kind === 'string' ? `${value.kind} ` : '';
-  return isNonEmptyString(value.id)
-    ? `${kind}"${value.id}"`
-    : `${kind}entry at index ${index}`;
+const PRIMITIVE_KIND_CN: Readonly<Record<MbdPrimitiveKind, string>> = {
+  linear_dim: '线性尺寸',
+  angle_dim: '角度尺寸',
+  label: '标签',
+  leader_line: '引线',
+  aid_line: '辅助线',
+  aid_arc: '辅助圆弧',
+  aid_circle: '辅助圆',
+  aid_point: '辅助点',
+  aid_text: '辅助文字',
+  weld_mark: '焊点标记',
+  slope_mark: '坡度标记',
+};
+
+function payloadRefnoOf(payload: Record<string, unknown>): string {
+  if (isObject(payload.subject) && isNonEmptyString(payload.subject.refno)) {
+    return payload.subject.refno.trim();
+  }
+  if (isNonEmptyString(payload.branch_refno)) return payload.branch_refno.trim();
+  if (isNonEmptyString(payload.input_refno)) return payload.input_refno.trim();
+  return '';
 }
 
-function primitiveRejection(value: unknown, index: number): string {
-  return `MBD V2 payload has an invalid primitive ${describeEntry(value, index)}`;
+function summarizeTextTag(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const firstLine = raw.split(/\r?\n/)[0]?.trim() ?? '';
+  if (!firstLine) return '';
+  return firstLine.length > 16 ? `${firstLine.slice(0, 16)}…` : firstLine;
+}
+
+/** Names the offender in Chinese with category, function/text hint, and id (#135). */
+function describeEntry(value: unknown, index: number): string {
+  if (!isObject(value)) return `第 ${index} 项图元`;
+  const rawKind = typeof value.kind === 'string' ? value.kind : '';
+  const kindCn = isKnownPrimitiveKind(rawKind)
+    ? PRIMITIVE_KIND_CN[rawKind]
+    : (rawKind ? `图元(${rawKind})` : '图元');
+  const fnHint = isNonEmptyString(value.function) ? value.function.trim() : '';
+  const txtHint = !fnHint ? summarizeTextTag(value.text) : '';
+  const semantic = fnHint || txtHint;
+  const idPart = isNonEmptyString(value.id) ? `（${value.id}）` : `（第 ${index} 项）`;
+  return semantic ? `「${semantic}」${kindCn}${idPart}` : `${kindCn}${idPart}`;
+}
+
+function describePrimitiveFieldProblem(
+  value: unknown,
+  options: Readonly<{ strict: boolean }>,
+): string {
+  if (!isObject(value)) return '不是对象';
+  if (!isNonEmptyString(value.id)) return '缺少非空字符串 id';
+  if (typeof value.kind !== 'string' || !value.kind.trim()) return '缺少图元类别 kind';
+  if (!isKnownPrimitiveKind(value.kind)) return `包含不认识的图元类别 kind="${value.kind}"`;
+  if (!isOptionalNonEmptyString(value.object_refno)) return 'object_refno 必须是非空字符串';
+  if (!isOptionalIsolineIndex(value.isoline_idx)) return 'isoline_idx 必须是非负整数';
+  if (!isOptionalNonEmptyString(value.function)) return 'function 必须是非空字符串';
+  if (!isOptionalNonEmptyStringArray(value.node_refnos)) return 'node_refnos 必须是非空字符串数组';
+  if (!isOptionalChain(value.chain_id, value.chain_seq)) return '尺寸链字段 chain_id / chain_seq 格式不合法';
+
+  if (value.text_height_mm !== undefined && !isOptionalPositiveNumber(value.text_height_mm)) {
+    return value.text_height_mm === 0
+      ? '字高（text_height_mm）为 0，必须大于 0'
+      : `字高（text_height_mm = ${String(value.text_height_mm)}）无效，必须为正数`;
+  }
+  if ('text_dir' in value && value.text_dir !== undefined) {
+    if (!PRIMITIVE_FIELDS[value.kind].includes('text_dir')) {
+      if (options.strict) return '包含不属于该类别的契约外字段 text_dir';
+    } else if (!isOptionalAxisVec3(value.text_dir)) {
+      const zeroVec = isVec3(value.text_dir) && value.text_dir.every(n => n === 0);
+      return zeroVec ? '文字方向（text_dir）为零向量' : '文字方向（text_dir）格式无效';
+    }
+  }
+  if ('text_up' in value && value.text_up !== undefined && !isOptionalAxisVec3(value.text_up)) {
+    const zeroVec = isVec3(value.text_up) && value.text_up.every(n => n === 0);
+    return zeroVec ? '文字上方向（text_up）为零向量' : '文字上方向（text_up）格式无效';
+  }
+  if ((value.kind === 'angle_dim' || value.kind === 'aid_arc' || value.kind === 'aid_circle')
+    && !isPositiveRadius(value.radius)) {
+    return value.radius === 0
+      ? '弧/圆半径（radius）为 0，必须大于 0'
+      : `弧/圆半径（radius = ${String(value.radius)}）无效，必须为正数`;
+  }
+  if ((value.kind === 'angle_dim' || value.kind === 'aid_arc' || value.kind === 'aid_circle')
+    && !isAxisVec3(value.normal)) {
+    return '法向（normal）为零向量或格式无效';
+  }
+  if ((value.kind === 'angle_dim' || value.kind === 'aid_arc') && !isAxisVec3(value.x_axis)) {
+    return '基准轴（x_axis）为零向量或格式无效';
+  }
+  if (options.strict) {
+    const extra = hasUnknownPrimitiveFields(value);
+    if (extra) return `包含契约外字段（${extra}）`;
+  }
+  return '必填几何或文本字段缺失或格式非法';
+}
+
+function primitiveRejection(
+  value: unknown,
+  index: number,
+  refnoLabel: string,
+  strict: boolean,
+): string {
+  const prefix = refnoLabel ? `对象 ${refnoLabel} 契约校验未通过：` : '契约校验未通过：';
+  return `${prefix}${describeEntry(value, index)}的${describePrimitiveFieldProblem(value, { strict })}`;
+}
+
+function describeMetaProblem(value: unknown): string {
+  if (!isObject(value)) return 'meta 不是对象';
+  if (value.geometry_space !== 'source_mm' && value.geometry_space !== 'design_m') {
+    return 'meta.geometry_space 必须是 "source_mm" 或 "design_m"';
+  }
+  if (!Array.isArray(value.notes) || !value.notes.every(note => typeof note === 'string')) {
+    return 'meta.notes 必须是字符串数组';
+  }
+  if (value.source_to_design !== undefined && !isMatrix4(value.source_to_design)) {
+    return 'meta.source_to_design 必须是 16 位有限数矩阵';
+  }
+  if (value.geometry_space === 'source_mm' && value.source_to_design === undefined) {
+    return 'geometry_space 为 source_mm 时缺少 meta.source_to_design 变换矩阵';
+  }
+  if (value.cheight_mm !== undefined
+    && value.cheight_mm !== null
+    && (typeof value.cheight_mm !== 'number' || !Number.isFinite(value.cheight_mm))) {
+    return 'meta.cheight_mm 必须是有限数值或 null';
+  }
+  if (value.layout_mode !== undefined
+    && value.layout_mode !== null
+    && typeof value.layout_mode !== 'string') {
+    return 'meta.layout_mode 必须是字符串或 null';
+  }
+  if (value.coverage !== undefined
+    && value.coverage !== null
+    && !(Array.isArray(value.coverage) && value.coverage.every(kind => isNonEmptyString(kind)))) {
+    return 'meta.coverage 必须是非空字符串数组或 null';
+  }
+  if (value.source_version !== undefined
+    && value.source_version !== null
+    && !isSourceVersion(value.source_version)) {
+    return 'meta.source_version 版本结构或库号范围不合法';
+  }
+  if (value.isolines !== undefined && value.isolines !== null) {
+    if (!Array.isArray(value.isolines)) return 'meta.isolines 必须是数组或 null';
+    const seen = new Set<number>();
+    for (let i = 0; i < value.isolines.length; i += 1) {
+      const isoline = value.isolines[i];
+      if (!isObject(isoline) || !isIsolineIndex(isoline.index)) {
+        return `meta.isolines[${i}] 的直段编号（index）无效`;
+      }
+      const idx = isoline.index;
+      if (seen.has(idx)) return `第 ${idx} 号直段（meta.isolines）编号重复`;
+      seen.add(idx);
+      if (!Array.isArray(isoline.members) || !isoline.members.every(m => isNonEmptyString(m))) {
+        return `第 ${idx} 号直段（meta.isolines）的成员列表（members）格式无效`;
+      }
+      if (!isPositiveRadius(isoline.cheight_mm)) {
+        return `第 ${idx} 号直段（meta.isolines）的字高（cheight_mm）必须大于 0`;
+      }
+      if (!isPositiveRadius(isoline.od_mm)) {
+        return `第 ${idx} 号直段（meta.isolines）的外径（od_mm）必须大于 0`;
+      }
+      if (!isOptionalIsolineAxis(isoline.axis)) {
+        if (isObject(isoline.axis) && isVec3(isoline.axis.from) && isVec3(isoline.axis.to)) {
+          return `第 ${idx} 号直段的轴线（meta.isolines[index=${idx}].axis）两端重合，定不出方向`;
+        }
+        return `第 ${idx} 号直段的轴线（meta.isolines[index=${idx}].axis）坐标格式无效`;
+      }
+    }
+  }
+  return 'meta 字段格式不合法';
+}
+
+export function parseMbdV2Issue(value: unknown): MbdV2Issue | null {
+  return parseIssue(value);
 }
 
 function parseIssue(value: unknown): MbdV2Issue | null {
@@ -950,28 +1111,44 @@ export function parseMbdV2PipeData(
   const strict = options.strict === true;
   const partial = options.partial === true;
   if (!isObject(value)) {
-    return { ok: false, error: 'MBD V2 payload must be an object' };
+    return { ok: false, error: 'MBD V2 标注包格式错误：顶层不是 JSON 对象' };
   }
+  const refnoLabel = payloadRefnoOf(value);
+  const withRefno = (reason: string): string =>
+    refnoLabel ? `对象 ${refnoLabel} 契约校验未通过：${reason}` : `契约校验未通过：${reason}`;
+  const failWith = (reason: string): MbdV2ParseResult => {
+    const salvaged = Array.isArray(value.issues)
+      ? value.issues.map(parseIssue).filter((it): it is MbdV2Issue => it !== null)
+      : [];
+    return {
+      ok: false,
+      error: withRefno(reason),
+      ...(salvaged.length > 0 ? { issues: salvaged } : {}),
+    };
+  };
+
   if (value.version !== 'v2') {
-    return { ok: false, error: 'MBD V2 payload version must be "v2"' };
+    return failWith('协议版本 version 必须为 "v2"');
   }
   if (!isNonEmptyString(value.input_refno) || !isNonEmptyString(value.branch_refno)) {
-    return { ok: false, error: 'MBD V2 payload is missing input_refno or branch_refno' };
+    return failWith('缺少非空的对象标识 input_refno 或 branch_refno');
   }
   if (!isOptionalAnnotationType(value.annotation_type)) {
     const offender = typeof value.annotation_type === 'string' ? ` "${value.annotation_type}"` : '';
-    return { ok: false, error: `MBD V2 payload has an invalid annotation_type${offender}` };
+    return failWith(`标注类型 annotation_type${offender} 不在已知词表中`);
   }
   if (!isOptionalSubject(value.subject)) {
-    return { ok: false, error: 'MBD V2 payload has an invalid subject' };
+    return failWith('归属对象字段 subject 缺少有效的 refno 或 noun');
   }
   if (!Array.isArray(value.primitives)) {
-    return { ok: false, error: 'MBD V2 payload is missing primitives array' };
+    return failWith('缺少图元列表 primitives 数组');
   }
   const meta = parseMeta(value.meta);
-  if (!meta) return { ok: false, error: 'MBD V2 payload has invalid meta' };
+  if (!meta) {
+    return failWith(describeMetaProblem(value.meta));
+  }
   if (!Array.isArray(value.issues)) {
-    return { ok: false, error: 'MBD V2 payload is missing issues array' };
+    return { ok: false, error: withRefno('缺少诊断列表 issues 数组') };
   }
   const primitives: MbdPrimitive[] = [];
   const diagnostics: MbdV2ParseDiagnostic[] = [];
@@ -995,15 +1172,23 @@ export function parseMbdV2PipeData(
       });
       continue;
     }
-    return { ok: false, error: primitiveRejection(candidate, index) };
+    const salvaged = value.issues.map(parseIssue).filter((it): it is MbdV2Issue => it !== null);
+    return {
+      ok: false,
+      error: primitiveRejection(candidate, index, refnoLabel, strict),
+      ...(salvaged.length > 0 ? { issues: salvaged } : {}),
+    };
   }
   const parsedIssues = value.issues.map(parseIssue);
   const issueIndex = parsedIssues.findIndex(issue => issue === null);
   if (issueIndex >= 0) {
+    const badIssue = value.issues[issueIndex];
+    const badIssueId = isObject(badIssue) && isNonEmptyString(badIssue.id)
+      ? `（${badIssue.id}）`
+      : '';
     return {
       ok: false,
-      error: `MBD V2 payload has an invalid issue ${
-        describeEntry(value.issues[issueIndex], issueIndex)}`,
+      error: withRefno(`第 ${issueIndex} 条诊断 issues[${issueIndex}]${badIssueId} 字段格式不合法`),
     };
   }
 

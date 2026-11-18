@@ -884,8 +884,54 @@ type MappedArc = Readonly<{
 }>;
 
 const ARC_KINDS: ReadonlySet<string> = new Set(['angle_dim', 'aid_arc', 'aid_circle']);
-const DEGENERATE_ARC_REASON = 'degenerate arc frame: normal or x_axis collapses '
-  + 'or they are parallel after source_to_design';
+
+function describeDegenerateArcReason(
+  primitive: MbdPrimitive,
+  transform: FrameTransform,
+): string {
+  const fnLabel = primitive.function?.trim() ?? '';
+  const kindCn = primitive.kind === 'angle_dim'
+    ? (fnLabel || (/:angle(?::|$)/i.test(primitive.id) ? '安装角度' : '角度尺寸'))
+    : primitive.kind === 'aid_circle'
+      ? (fnLabel ? `「${fnLabel}」辅助圆` : '辅助圆')
+      : (fnLabel ? `「${fnLabel}」辅助圆弧` : '辅助圆弧');
+
+  if (primitive.kind === 'aid_circle') {
+    const center = transform.point(primitive.center);
+    const normal = transform.direction(primitive.normal);
+    if (!normal || !stablePlaneBasis(normal)) {
+      return `${kindCn}的法向（normal）退化，建不出圆的平面`;
+    }
+    const basis = stablePlaneBasis(normal)!;
+    const rim = transform.point(add3(primitive.center, scale3(basis.u, primitive.radius)));
+    const radiusM = length3(sub3(rim, center));
+    if (!(radiusM > 0)) {
+      return `${kindCn}的圆半径太小（${primitive.radius} mm），换算后退化为 0，建不出圆的平面`;
+    }
+    return `${kindCn}的圆平面退化，无法映射`;
+  }
+
+  if (primitive.kind === 'angle_dim' || primitive.kind === 'aid_arc') {
+    const center = transform.point(primitive.center);
+    const normal = transform.direction(primitive.normal);
+    const xAxisRaw = transform.direction(primitive.x_axis);
+    const unitXAxis = tryNormalize3(primitive.x_axis);
+    if (!normal || !xAxisRaw || !unitXAxis) {
+      return `${kindCn}的法向（normal）或基准轴（x_axis）退化为零向量，建不出弧的平面`;
+    }
+    const xAxis = tryNormalize3(sub3(xAxisRaw, scale3(normal, dot3(xAxisRaw, normal))));
+    const basis = stablePlaneBasis(normal);
+    if (!xAxis || !basis) {
+      return `${kindCn}的法向（normal）与基准轴（x_axis）平行或退化，建不出弧的平面`;
+    }
+    const rim = transform.point(add3(primitive.center, scale3(unitXAxis, primitive.radius)));
+    const radiusM = length3(sub3(rim, center));
+    if (!(radiusM > 0)) {
+      return `${kindCn}的弧半径太小（${primitive.radius} mm），换算后退化为 0，建不出弧的平面`;
+    }
+  }
+  return `${kindCn}的弧平面退化，建不出弧的平面`;
+}
 
 /**
  * Contract arc frame → kernel arc. The contract measures angles from its own
@@ -1305,8 +1351,8 @@ export function mbdV2ToExternalRecords(
       skipped.push({
         id: primitive.id,
         reason: ARC_KINDS.has(primitive.kind)
-          ? DEGENERATE_ARC_REASON
-          : `unsupported primitive kind ${primitive.kind}`,
+          ? describeDegenerateArcReason(primitive, transform)
+          : `不支持的图元类别 ${primitive.kind}`,
       });
     }
   }

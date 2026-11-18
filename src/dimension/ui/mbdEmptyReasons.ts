@@ -1,4 +1,8 @@
+import { MBD_EMPTY_REASON_WORDINGS } from '../adapters/mbdRuleWordings';
+
 import type { MbdDiagnosticsSnapshot } from '@/composables/useMbdDiagnosticsStore';
+
+export { MBD_EMPTY_REASON_WORDINGS };
 
 /**
  * 票 134（#103）：空包时尺寸面板在标题下直接写一两行中文的「为什么没有标注」。
@@ -31,27 +35,6 @@ export const MBD_EMPTY_REASON_MAX_LINES = 2;
  * `respond-final-b4-641284675` 的 260 个空包里是 147 个：1 个 EM4 的 REST，和 146 个 EM4 的 STRU 空支架（它们的服务端说明是
  * 「N 根型钢没有 SPRE」，现在让到第三位、留在诊断区）；另 7 个 em9_pipe_supp 的 REST 没有「没有点 ATTA」这一条，第二行不变。
  */
-export const MBD_EMPTY_REASON_WORDINGS: readonly Readonly<{ ruleId: string; text: string | null }>[] = [
-  // —— 为什么空 ——
-  { ruleId: 'data.empty_branch', text: '这条支管下面没有任何管件，没有可标注的内容。' },
-  { ruleId: 'civil.geometry_missing', text: '这个土建构件缺少出图要用的几何（面或轴线），标不出来。' },
-  { ruleId: 'adapter.civil_wall_without_solid', text: null },
-  { ruleId: 'support.no_parts', text: '这个支架下面没有能当作零件的元件，没有可标注的几何。' },
-  { ruleId: 'support.nothing_to_annotate', text: '这个支架的构件出不了尺寸，也出不了标签，没有可标注的内容。' },
-  {
-    ruleId: 'civil.nothing_to_annotate',
-    text: '这块建筑楼板上没有可标注的内容：建筑窗体只标墙名与门、房间号与标高、地沟开孔，这里三样都没有能标的。',
-  },
-  { ruleId: 'civil.arch_floor_only', text: '建筑窗体只给楼板（FLOOR）出标注，这个对象不是楼板。' },
-  // —— 陪着出现的细节 ——
-  { ruleId: 'support.em4_no_pipe_atta', text: '这个支架的管道上没有点 ATTA，找不了墙，也定不出参考视向。' },
-  { ruleId: 'data.view_issue', text: null },
-  { ruleId: 'support.part_geometry_missing', text: '有构件缺少可用的截面数据（POSS / POSE / 截面点），被跳过了。' },
-  { ruleId: 'civil.member_off_face', text: '随这个构件交来的成员里有不在它任何一个面上的，这些成员没有标注。' },
-  { ruleId: 'civil.arch_round_member', text: '有圆形的开孔，建筑窗体不标圆形开孔。' },
-  { ruleId: 'adapter.implied_tube_not_drawn', text: '首尾之间的隐含直管与端口不同轴，E3D 在这里不画管子，所以不标管长。' },
-];
-
 const WORDING_RANK = new Map(MBD_EMPTY_REASON_WORDINGS.map((entry, index) => [entry.ruleId, index] as const));
 const SEVERITY_RANK: Readonly<Record<Issue['severity'], number>> = { error: 0, warning: 1, info: 2 };
 

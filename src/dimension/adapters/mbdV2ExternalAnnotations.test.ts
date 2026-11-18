@@ -181,11 +181,37 @@ describe('mbdV2ToExternalRecords', () => {
     });
 
     expect(result.records).toEqual([]);
-    expect(result.skipped).toEqual([{
-      id: 'arc-parallel',
-      reason: 'degenerate arc frame: normal or x_axis collapses or they are '
-        + 'parallel after source_to_design',
-    }]);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]?.id).toBe('arc-parallel');
+    expect(result.skipped[0]?.reason).toContain('辅助圆弧');
+    expect(result.skipped[0]?.reason).toContain('平行');
+    expect(result.skipped[0]?.reason).toContain('建不出弧的平面');
+
+    // #135 样本 24383_97932：安装角度弧半径约 1e-13 mm，与远离原点的圆心相加后被浮点吞成 0
+    const tinyAngle = mbdV2ToExternalRecords({
+      ...data,
+      branch_refno: '24383_97932',
+      input_refno: '24383_97932',
+      primitives: [{
+        kind: 'angle_dim',
+        id: '24383_97932:isoline:0:angle:0',
+        function: '安装角度',
+        text: '45°',
+        center: [12000, -8500, 3400],
+        x_axis: [1, 0, 0],
+        normal: [0, 0, 1],
+        radius: 1e-13,
+        start_angle_deg: 0,
+        sweep_angle_deg: 45,
+        leg_lines: [],
+        label_anchor: [12000, -8500, 3400],
+      }],
+    });
+    expect(tinyAngle.records).toEqual([]);
+    expect(tinyAngle.skipped).toHaveLength(1);
+    expect(tinyAngle.skipped[0]?.reason).toContain('安装角度');
+    expect(tinyAngle.skipped[0]?.reason).toContain('弧半径太小');
+    expect(tinyAngle.skipped[0]?.reason).toContain('建不出弧的平面');
   });
 
   it('maps linear dims with superset geometry and reference role', () => {

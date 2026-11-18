@@ -1414,8 +1414,8 @@ function act(
                 :key="issue.id"
                 class="mt-1 flex items-center justify-between gap-2"
                 :data-issue-id="issue.id">
-                <span class="min-w-0 break-all">
-                  [{{ issue.category }}] {{ issue.message }}
+                <span class="min-w-0 break-all" :data-rule-id="issue.rule_id ?? ''">
+                  [{{ issue.category }}<template v-if="issue.rule_id"> · {{ issue.rule_id }}</template>] {{ issue.message }}
                 </span>
                 <button v-if="issue.refno"
                   type="button"
@@ -1455,8 +1455,8 @@ function act(
               :key="issue.id"
               class="mt-1 flex items-center justify-between gap-2"
               :data-issue-id="issue.id">
-              <span class="min-w-0 break-all">
-                [{{ issue.category }}] {{ issue.message }}
+              <span class="min-w-0 break-all" :data-rule-id="issue.rule_id ?? ''">
+                [{{ issue.category }}<template v-if="issue.rule_id"> · {{ issue.rule_id }}</template>] {{ issue.message }}
               </span>
               <button v-if="issue.refno"
                 type="button"
