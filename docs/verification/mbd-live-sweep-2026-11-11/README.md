@@ -304,3 +304,28 @@ node scripts/mbd-sweep-compare.mjs <基准目录> <当前目录> --out .scratch/
 | `page-p1.md` | 第四批之后的页面复查——〔待入库：写好后放进来〕 |
 | [wall-index-check.md](wall-index-check.md) | #108：找墙、楼板收墙与房间没有因设计库缺空间索引而漏库 |
 | [civil-unlabelled-members.md](civil-unlabelled-members.md)、[civil-misowned-sleeves.csv](civil-misowned-sleeves.csv) | #109：1019 个没标上的土建构件归因；118 根挂错属主的套管清单（交给建模） |
+
+## 服务端落地提交号对照
+
+本目录各份报告中引用的服务端开发分支提交号与合入 `refactor`（基点 `5e1ad86e3`）后的最终提交号一一对应如下（`plant-mbd` 为快进到 `3dbf13a`，提交号不变）：
+
+| 开发分支原提交 | `refactor` 落地提交 | 摘要 |
+|---|---|---|
+| `eff7d5fbd` | `7ed723cb3` | 管道 `WELD` 的 `DTXR` 沿目录链读取 |
+| `bf638ed3e` | `880a09fce` | 空支管回 `200` 空包；支架缺 `SPRE` 与附件命名诊断及空包清点 |
+| `6527092ea` | `3a24cfe2b` | 新增离线重放端点 `mbd_object_respond` 与子树属性探针 `mbd_subtree_probe` |
+| `21bec9bdc` | `46edebea7` | 管道交求解器的 `Head` / `Tail` 换算进世界系 |
+| `1308e46d7` | `7a220646b` | 焊口号 UDA `:ZD_WLDN` 扩展至 `ATTA` 与 KD 管件读取 |
+| `2c50ea7a2` | `314219939` | 无 `SPRE` 的 `STWALL` 不参与找墙与楼板收墙 |
+| `3d7d8eae2` | `20164645b` | 判型缺省表金样注释更正 |
+| `c0c84c65a` | `d674f429e` | 空支架包仅保留一条空因说明 |
+| `17299b471` | `a2464c828` | 无截面的墙直接打开时照 PML 返回空包与说明 |
+| `ff07dbc68` | `d012d60b8` | 建筑楼板收墙过滤 `/MDS` 站点与无 `SITE` 的墙 |
+| `15ea6df3f` | `4a3832074` | 设备原点离自身几何过远时写入 warning |
+| `0c4f64ca2` | `cc8c8924d` | 土建楼板收墙同样过滤 `/MDS` 站点与无 `SITE` 的墙 |
+| `f33cda88f` | `8716d2bba` | EM4 支架按名称未找到附件时回退读取吊挂件 `HREF` |
+| `7e85a109a` | `8afb0a4f3` | 判型缺省表注释对齐现状 |
+| `97f21bc8c` | `a6ed7516d` | 设备基准点过远 warning 去重并将阈值收敛至 `1 m`（`#121` / `#122`） |
+| `641284675` | `5c422fda2` | 楼板 `rooms` 按归属过滤，与求解器 `aa36949` 配对（`#125`） |
+| —（基点补齐） | `229f50329` | 补齐基点 `5e1ad86e3` 遗漏未暂存的 `DirectSchema::shared` 进程级单例 |
+
