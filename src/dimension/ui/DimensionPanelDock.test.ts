@@ -15,6 +15,7 @@ import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimen
 
 import * as v1Api from '@/api/genModelV1Api';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
+import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 
 const mocks = vi.hoisted(() => ({
@@ -1411,6 +1412,244 @@ describe('DimensionPanelDock', () => {
         expect(banner()).toBeNull();
       } finally {
         pushSpy.mockRestore();
+        window.history.replaceState({}, '', '/');
+      }
+    });
+  });
+
+  describe('#137 多对象有一包装载失败时面板常驻标出并可点击定位', () => {
+    const IDENTITY = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ] as const;
+
+    function buildPackageWithLinearCount(refno: string, count: number, annotationType: string) {
+      return {
+        version: 'v2' as const,
+        input_refno: refno,
+        branch_refno: refno,
+        annotation_type: annotationType as any,
+        primitives: Array.from({ length: count }, (_, idx) => ({
+          kind: 'linear_dim' as const,
+          id: `${refno}:dim:${idx}`,
+          start: [idx * 10, 0, 0] as const,
+          end: [idx * 10 + 5, 0, 0] as const,
+          text: '5',
+          extension_lines: [
+            { from: [idx * 10, 0, 0] as const, to: [idx * 10, 1, 0] as const },
+            { from: [idx * 10 + 5, 0, 0] as const, to: [idx * 10 + 5, 1, 0] as const },
+          ],
+          arrow_lines: [
+            { from: [idx * 10, 0, 0] as const, to: [idx * 10 + 0.5, 0.2, 0] as const },
+            { from: [idx * 10 + 5, 0, 0] as const, to: [idx * 10 + 4.5, 0.2, 0] as const },
+          ],
+          label_anchor: [idx * 10 + 2.5, 1, 0] as const,
+        })),
+        meta: {
+          geometry_space: 'source_mm' as const,
+          source_to_design: IDENTITY,
+          notes: [],
+        },
+        issues: [],
+      };
+    }
+
+    it('任一包失败（3 成功 56+14+34=104 条 + 1 映射拒收 24383_97932）：常驻「! 1 个对象装载失败」，点开定位到失败包与中文原因', async () => {
+      const system = createSystem();
+      system.externalRegistry.replaceSource('mbd', []);
+      mocks.dimensionSystem.value = system;
+      const store = useMbdDiagnosticsStore();
+      const target = {
+        replaceExternalSource: (source: 'mbd' | 'pipe-information', records: readonly ExternalDimensionRecord[]) => {
+          system.externalRegistry.replaceSource(source, records);
+        },
+      };
+
+      window.history.replaceState(
+        {},
+        '',
+        '/?mbd_refno=24383_93306,24384_24829,24381_46633,24383_97932',
+      );
+      try {
+        const sync = createMbdExternalSync({
+          diagnostics: store,
+          getSearch: () => window.location.search,
+          emitToast: mocks.emitToast,
+          fetchPipeData: vi.fn(async refno => {
+            if (refno === '24383_93306') {
+              return { ok: true as const, data: buildPackageWithLinearCount(refno, 56, 'PipingIsometric'), diagnostics: [] };
+            }
+            if (refno === '24384_24829') {
+              return { ok: true as const, data: buildPackageWithLinearCount(refno, 14, 'EquipmentPosition'), diagnostics: [] };
+            }
+            if (refno === '24381_46633') {
+              return { ok: true as const, data: buildPackageWithLinearCount(refno, 34, 'WallOpening'), diagnostics: [] };
+            }
+            return {
+              ok: true as const,
+              diagnostics: [],
+              data: {
+                version: 'v2' as const,
+                input_refno: refno,
+                branch_refno: refno,
+                primitives: [{
+                  kind: 'angle_dim' as const,
+                  id: `${refno}:angle:0`,
+                  function: '安装角度',
+                  text: '45°',
+                  center: [12000, -8500, 3400] as const,
+                  x_axis: [1, 0, 0] as const,
+                  normal: [0, 0, 1] as const,
+                  radius: 1e-13,
+                  start_angle_deg: 0,
+                  sweep_angle_deg: 45,
+                  leg_lines: [],
+                  label_anchor: [12000, -8500, 3400] as const,
+                }],
+                meta: { geometry_space: 'source_mm' as const, source_to_design: IDENTITY, notes: [] },
+                issues: [],
+              },
+            };
+          }),
+        });
+
+        await sync.sync(target);
+        // 其余三包照常显示 56 + 14 + 34 = 104 条
+        const mbdRecords = system.externalRegistry.snapshot.records.filter(r => r.source === 'mbd');
+        expect(mbdRecords).toHaveLength(104);
+
+        const host = mountPanel();
+        await nextTick();
+
+        const badges = host.querySelectorAll<HTMLButtonElement>('[data-testid="mbd-error-badge"]');
+        expect(badges).toHaveLength(1);
+        expect(badges[0]!.textContent?.trim()).toBe('! 1 个对象装载失败');
+        expect(host.querySelector('[data-testid="mbd-diagnostics"]')?.hasAttribute('open')).toBe(false);
+
+        const failedGroup = host.querySelector<HTMLDetailsElement>(
+          '[data-testid="mbd-diagnostics-source"][data-refno="24383_97932"]',
+        )!;
+        expect(failedGroup).not.toBeNull();
+        expect(failedGroup.getAttribute('data-failed')).toBe('true');
+        const scrollSpy = vi.fn();
+        failedGroup.scrollIntoView = scrollSpy;
+
+        badges[0]!.click();
+        await nextTick();
+        await nextTick();
+
+        expect(host.querySelector('[data-testid="mbd-diagnostics"]')?.hasAttribute('open')).toBe(true);
+        expect(scrollSpy).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(failedGroup.querySelector('summary'));
+        expect(failedGroup.textContent).toContain('24383_97932');
+        expect(failedGroup.textContent).toContain('安装角度');
+        expect(failedGroup.textContent).toContain('弧半径太小');
+      } finally {
+        window.history.replaceState({}, '', '/');
+      }
+    });
+
+    it('全部成功时不挂角标；全部失败时标出失败总数；单对象失败时只有一枚「! 装载失败」；混入 422 not_annotatable 时口径一致', async () => {
+      const system = createSystem();
+      system.externalRegistry.replaceSource('mbd', []);
+      mocks.dimensionSystem.value = system;
+      const store = useMbdDiagnosticsStore();
+
+      try {
+        // 1) 多对象全部成功 → 不出标记
+        window.history.replaceState({}, '', '/?mbd_refno=A,B');
+        store.set({
+          channel: 'api',
+          sourceId: 'A,B',
+          issues: [],
+          skipped: [],
+          loadError: null,
+          sources: [
+            { refno: 'A', issues: [], skipped: [], layoutMode: null, notes: [], sourceVersion: null, isolines: [], loadError: null },
+            { refno: 'B', issues: [], skipped: [], layoutMode: null, notes: [], sourceVersion: null, isolines: [], loadError: null },
+          ],
+        });
+        const host = mountPanel();
+        await nextTick();
+        expect(host.querySelector('[data-testid="mbd-error-badge"]')).toBeNull();
+
+        // 2) 多对象全部失败（2/2）→ 「! 2 个对象装载失败」
+        store.set({
+          channel: 'api',
+          sourceId: 'A,B',
+          issues: [],
+          skipped: [],
+          loadError: '2/2 个包装载失败：A — HTTP 502；B — HTTP 502',
+          sources: [
+            { refno: 'A', issues: [], skipped: [], layoutMode: null, notes: [], sourceVersion: null, isolines: [], loadError: 'HTTP 502' },
+            { refno: 'B', issues: [], skipped: [], layoutMode: null, notes: [], sourceVersion: null, isolines: [], loadError: 'HTTP 502' },
+          ],
+        });
+        await nextTick();
+        const allFailedBadges = host.querySelectorAll('[data-testid="mbd-error-badge"]');
+        expect(allFailedBadges).toHaveLength(1);
+        expect(allFailedBadges[0]!.textContent?.trim()).toBe('! 2 个对象装载失败');
+
+        // 3) 单对象失败 → 仍为同一枚「! 装载失败」，不出双标记
+        window.history.replaceState({}, '', '/?mbd_refno=17496_73858');
+        window.dispatchEvent(new Event('popstate'));
+        store.set({
+          channel: 'api',
+          sourceId: '17496_73858',
+          issues: [],
+          skipped: [],
+          loadError: 'refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点',
+          sources: [{
+            refno: '17496_73858',
+            issues: [],
+            skipped: [],
+            layoutMode: null,
+            notes: [],
+            sourceVersion: null,
+            isolines: [],
+            loadError: 'refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点',
+          }],
+        });
+        await nextTick();
+        const singleBadges = host.querySelectorAll('[data-testid="mbd-error-badge"]');
+        expect(singleBadges).toHaveLength(1);
+        expect(singleBadges[0]!.textContent?.trim()).toBe('! 装载失败');
+
+        // 4) 不可标注（422 not_annotatable）混在多对象里 → 与单对象判据一致，标出「! 1 个对象装载失败」并展示原文
+        window.history.replaceState({}, '', '/?mbd_refno=24383_93306,17496_73858');
+        window.dispatchEvent(new Event('popstate'));
+        store.set({
+          channel: 'api',
+          sourceId: '24383_93306,17496_73858',
+          issues: [],
+          skipped: [],
+          loadError: '1/2 个包装载失败：17496_73858 — refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点',
+          sources: [
+            { refno: '24383_93306', issues: [], skipped: [], layoutMode: null, notes: [], sourceVersion: null, isolines: [], loadError: null },
+            {
+              refno: '17496_73858',
+              issues: [],
+              skipped: [],
+              layoutMode: null,
+              notes: [],
+              sourceVersion: null,
+              isolines: [],
+              loadError: 'refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点',
+            },
+          ],
+        });
+        await nextTick();
+        const mixedBadges = host.querySelectorAll<HTMLButtonElement>('[data-testid="mbd-error-badge"]');
+        expect(mixedBadges).toHaveLength(1);
+        expect(mixedBadges[0]!.textContent?.trim()).toBe('! 1 个对象装载失败');
+        mixedBadges[0]!.click();
+        await nextTick();
+        await nextTick();
+        const cmfiGroup = host.querySelector('[data-testid="mbd-diagnostics-source"][data-refno="17496_73858"]')!;
+        expect(cmfiGroup.textContent).toContain('refno 17496_73858（CMFI）是不做尺寸标注的几何/容器节点');
+      } finally {
         window.history.replaceState({}, '', '/');
       }
     });

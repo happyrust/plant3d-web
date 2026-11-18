@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  nextTick,
   onUnmounted,
   ref,
   shallowRef,
@@ -423,6 +424,7 @@ const hiddenDiagnosticsCount = computed(() => {
 const diagnosticsVisible = computed(() =>
   diagnosticsCount.value > 0
   || mbdDiagnostics.value.loadError !== null
+  || mbdDiagnostics.value.sources.some(source => source.loadError !== null)
   || mbdDiagnostics.value.layoutMode !== null);
 /**
  * 「本分支标注不完整」的逐包判断，期望集按标注类型取（`expectedKindsFor`，#103 M7）：管道包和
@@ -584,16 +586,69 @@ function showAllMbdKinds(): void {
 }
 
 /**
- * B2：装载失败角标。视口空白的两种原因（「本分支没有标注」与「取数失败」）在
- * 界面上必须能区分，所以「一条 MBD 记录都没有 + 有 loadError」时在 BRAN 行上挂
- * 一个红色角标，点开直接展开下面的诊断面板。
+ * B2 + #137：装载失败常驻角标。
+ * - 单对象视图：失败时显示「! 装载失败」（与原有角标是同一枚按钮，不出双标记）。
+ * - 多对象同屏（`sources.length > 1` 或 `mbdRefnos.length > 1`）：只要任一包 `loadError !== null`
+ *   （即使其余对象正常画出了记录），面板顶部也常驻标出「! N 个对象装载失败」，点击即展开诊断区并定位到
+ *   首个失败包的明细与原因；全部成功时不出标记。
+ * - 不可标注对象（422 `not_annotatable`）口径说明：单对象打开时 HTTP 422 会写入该包的 `loadError` 并挂出角标；
+ *   混在多对象列表里时沿用完全一致的判据（`source.loadError !== null`），计入「! N 个对象装载失败」，
+ *   点开同样定位到该包并原样展示中文不可标注原因。
  */
-const mbdErrorBadgeVisible = computed(() =>
-  mbdDiagnostics.value.loadError !== null && mbdRecordCount.value === 0);
+const panelRootRef = ref<HTMLElement | null>(null);
+
+const mbdFailedSources = computed(() =>
+  mbdDiagnostics.value.sources.filter(source => source.loadError !== null));
+
+const mbdIsMultiSourceView = computed(() =>
+  mbdDiagnostics.value.sources.length > 1 || mbdRefnos.value.length > 1);
+
+const mbdErrorBadgeVisible = computed(() => {
+  if (mbdDiagnostics.value.sources.length > 0) {
+    return mbdFailedSources.value.length > 0 || mbdDiagnostics.value.loadError !== null;
+  }
+  return mbdDiagnostics.value.loadError !== null && mbdRecordCount.value === 0;
+});
+
+const mbdErrorBadgeText = computed(() => {
+  const failedCount = mbdFailedSources.value.length;
+  if (mbdIsMultiSourceView.value && failedCount > 0) {
+    return `! ${failedCount} 个对象装载失败`;
+  }
+  return '! 装载失败';
+});
+
+const mbdErrorBadgeTitle = computed(() => {
+  if (mbdDiagnostics.value.loadError) return mbdDiagnostics.value.loadError;
+  if (mbdFailedSources.value.length > 0) {
+    return mbdFailedSources.value
+      .map(source => `${source.refno} — ${source.loadError}`)
+      .join('；');
+  }
+  return '';
+});
+
 const diagnosticsOpen = ref(false);
 
-function openMbdDiagnostics(): void {
+async function openMbdDiagnostics(): Promise<void> {
   diagnosticsOpen.value = true;
+  await nextTick();
+  const root = panelRootRef.value;
+  if (!root) return;
+  const firstFailedRefno = mbdFailedSources.value[0]?.refno;
+  if (firstFailedRefno && diagnosticsSourceGroups.value) {
+    const sourceDetails = [...root.querySelectorAll<HTMLDetailsElement>('[data-testid="mbd-diagnostics-source"]')]
+      .find(node => node.getAttribute('data-refno') === firstFailedRefno);
+    if (sourceDetails) {
+      sourceDetails.open = true;
+      sourceDetails.scrollIntoView?.({ block: 'nearest' });
+      sourceDetails.querySelector<HTMLElement>('summary')?.focus?.();
+      return;
+    }
+  }
+  const summaryEl = root.querySelector<HTMLElement>('[data-testid="mbd-diagnostics"] > summary');
+  summaryEl?.scrollIntoView?.({ block: 'nearest' });
+  summaryEl?.focus?.();
 }
 
 /**
@@ -1044,7 +1099,8 @@ function act(
 </script>
 
 <template>
-  <div class="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden scroll-pt-40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-500"
+  <div ref="panelRootRef"
+    class="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden scroll-pt-40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-500"
     tabindex="0"
     role="region"
     aria-label="尺寸面板"
@@ -1095,9 +1151,9 @@ function act(
           type="button"
           class="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 font-semibold text-red-700"
           data-testid="mbd-error-badge"
-          :title="mbdDiagnostics.loadError ?? ''"
+          :title="mbdErrorBadgeTitle"
           @click="openMbdDiagnostics()">
-          ! 装载失败
+          {{ mbdErrorBadgeText }}
         </button>
         <input v-model="mbdRefnoDraft"
           class="min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 py-0.5"
@@ -1469,9 +1525,11 @@ function act(
         <details v-for="group in diagnosticsSourceGroups"
           :key="group.refno"
           open
-          class="mt-2 rounded border border-slate-200 bg-white p-1.5"
+          class="mt-2 rounded border p-1.5"
+          :class="group.failed ? 'border-red-300 bg-red-50/40' : 'border-slate-200 bg-white'"
           data-testid="mbd-diagnostics-source"
-          :data-refno="group.refno">
+          :data-refno="group.refno"
+          :data-failed="group.failed ? 'true' : 'false'">
           <summary class="cursor-pointer font-semibold">
             {{ group.refno }}<span v-if="group.annotationTypeLabel"
               class="font-normal"
