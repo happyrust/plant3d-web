@@ -65,4 +65,11 @@ describe('ViewerPanel 接线（源码钉）：状态栏「数据已更新」提�
     // `loadedModelDbnums` 是取最新接线里给的那一个（已加载节点表里装着的 + 取最新自己的登记表）
     expect(source).toMatch(/import \{[^}]*\bloadedModelDbnums,[^}]*\} from '@\/composables\/useModelGetWork';/);
   });
+
+  it('#142 取最新登记的 MBD 派生物按最新库水位增量刷新（latestRefresh: readGetWorkMbdRefresh()）', () => {
+    const mbd = section('offGetWorkMbd = registerGetWorkDerived({', 'function unregisterSceneForGetWork(): void {');
+    expect(mbd).toContain('name: \'MBD 标注\'');
+    expect(mbd).toContain('latestRefresh: readGetWorkMbdRefresh()');
+    expect(source).toMatch(/import \{[^}]*\breadGetWorkMbdRefresh,[^}]*\} from '@\/composables\/useModelGetWork';/);
+  });
 });

@@ -93,7 +93,10 @@ import {
 } from '@/composables/useGenModelV1UpdateNotice';
 import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
-import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
+import {
+  createMbdExternalSync,
+  type MbdLatestRefreshInput,
+} from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
 import {
@@ -101,6 +104,7 @@ import {
   forgetGetWorkRoot,
   loadedModelDbnums,
   noteGetWorkRoot,
+  readGetWorkMbdRefresh,
   registerGetWorkDerived,
   registerGetWorkScene,
   resetGetWorkRegistry,
@@ -2963,9 +2967,13 @@ const mbdExternalSync = createMbdExternalSync({
   emitToast,
 });
 
-function syncMbdExternalDimensions(system: DimensionSystem): Promise<void> {
+function syncMbdExternalDimensions(
+  system: DimensionSystem,
+  options?: Readonly<{ latestRefresh?: MbdLatestRefreshInput }>,
+): Promise<void> {
   return mbdExternalSync.sync(system, {
     isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
+    ...(options?.latestRefresh !== undefined ? { latestRefresh: options.latestRefresh } : {}),
   }).then(() => {
     if (dimensionSystem !== system || dimensionMountDisposed) return;
     const dtxViewer = dtxViewerRef.value;
@@ -3825,9 +3833,13 @@ function registerSceneForGetWork(): void {
   });
   offGetWorkMbd = registerGetWorkDerived({
     name: 'MBD 标注',
-    // 地址栏带 `mbd_refno` 时才真的去取；没带只是把空的再清一遍
+    // #142：取最新后按最新库水位增量重取受影响的 MBD 标注，撤下已删对象并核对模型会话号
     run: async () => {
-      if (dimensionSystem) await syncMbdExternalDimensions(dimensionSystem);
+      if (dimensionSystem) {
+        await syncMbdExternalDimensions(dimensionSystem, {
+          latestRefresh: readGetWorkMbdRefresh(),
+        });
+      }
     },
   });
 }

@@ -1333,6 +1333,26 @@ describe('createMbdExternalSync', () => {
       const snap = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
       expect(snap.sourceVersion.sesno).toBe(42);
       expect(snap.modelSessionsByDbnum).toEqual({ 7997: 42, 8001: 10 });
+
+      // 仅传 fileLatestSessionsByDbnum（首轮取最新实际传参）：7997 已是 42、8001 已是 12 → 两个都不重取！
+      calls.length = 0;
+      await harness.sync.sync(harness.target, {
+        latestRefresh: {
+          fileLatestSessionsByDbnum: { 7997: 42, 8001: 12 },
+          modelSessionsByDbnum: { 7997: 42, 8001: 10 },
+        },
+      });
+      expect(calls).toEqual([]);
+
+      // 7997 的库文件推进到 43 而 8001 仍在 12 → 自动只重取 24381_145018！
+      pipeSesno = 43;
+      await harness.sync.sync(harness.target, {
+        latestRefresh: {
+          fileLatestSessionsByDbnum: { 7997: 43, 8001: 12 },
+          modelSessionsByDbnum: { 7997: 43, 8001: 10 },
+        },
+      });
+      expect(calls).toEqual(['24381_145018']);
     });
 
     it('withdraws annotations and marks deleted (without loadError or error toast) when a loaded equipment disappears on latestRefresh', async () => {

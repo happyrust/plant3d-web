@@ -15,6 +15,7 @@ import { reactive, readonly } from 'vue';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
 import type { GetWorkWatermark } from '@/composables/modelGetWorkRegistry';
+import type { MbdLatestRefreshInput } from '@/composables/useMbdExternalSync';
 
 import {
   createModelGetWork,
@@ -97,6 +98,37 @@ export function captureGetWorkWatermarks(): (dbnum: number) => GetWorkWatermark 
     marks.set(row.dbnum, { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) });
   }
   return (dbnum) => marks.get(dbnum) ?? { modelSesno: null, fileLatestSesno: null };
+}
+
+/**
+ * 「取最新」跑完模型重载进入派生物阶段时，把刚刚强制重拉过的 `/dbnums` 各库水位整理给 MBD 增量同步（#142）：
+ * - `fileLatestSessionsByDbnum` 供 `useMbdExternalSync` 比对各已装标注包的 `sourceVersion` 是否落后（没变的库不重取）；
+ * - `modelSessionsByDbnum` 供尺寸面板核对标注会话与模型所在会话是否一致（如更新范围外的库）。
+ */
+export function readGetWorkMbdRefresh(): MbdLatestRefreshInput {
+  const rows = peekGenModelV1Dbnums()?.response.dbnums;
+  if (!rows || rows.length === 0) return {};
+  const fileLatestSessionsByDbnum: Record<number, number> = {};
+  const modelSessionsByDbnum: Record<number, number> = {};
+  let hasFileLatest = false;
+  let hasModelSesno = false;
+  for (const row of rows) {
+    if (typeof row.dbnum !== 'number') continue;
+    const fileSesno = sesnoOf(row.file_latest_sesno);
+    if (fileSesno !== null) {
+      fileLatestSessionsByDbnum[row.dbnum] = fileSesno;
+      hasFileLatest = true;
+    }
+    const modelSesno = sesnoOf(row.model_sesno);
+    if (modelSesno !== null) {
+      modelSessionsByDbnum[row.dbnum] = modelSesno;
+      hasModelSesno = true;
+    }
+  }
+  return {
+    ...(hasFileLatest ? { fileLatestSessionsByDbnum } : {}),
+    ...(hasModelSesno ? { modelSessionsByDbnum } : {}),
+  };
 }
 
 type GetWorkState = {

@@ -41,6 +41,8 @@ export type MbdLatestRefreshInput = Readonly<{
   affectedRefnos?: ReadonlySet<string> | readonly string[];
   /** 本轮「取最新」发生变动的数据库号集合。 */
   affectedDbnums?: ReadonlySet<number> | readonly number[];
+  /** 当前后台各库文件的最新会话号（`dbnum -> file_latest_sesno`），用于首轮即识别标注所读库是否前进。 */
+  fileLatestSessionsByDbnum?: ReadonlyMap<number, number> | Readonly<Record<number, number>>;
   /** 当前三维模型各库所在的模型会话号（`dbnum -> modelSesno`），供面板对比标注会话与模型会话。 */
   modelSessionsByDbnum?: ReadonlyMap<number, number> | Readonly<Record<number, number>>;
 }>;
@@ -362,17 +364,30 @@ export function createMbdExternalSync(
     cached: MbdSourceLoadOutcome,
     affectedRefnos: ReadonlySet<string> | null,
     affectedDbnums: ReadonlySet<number> | null,
+    fileLatestSessions: Readonly<Record<number, number>> | undefined,
   ): boolean => {
-    // 两者都没指定时（例如后端重启兜底）：全部重取。
-    if (affectedRefnos === null && affectedDbnums === null) return true;
+    // 筛选条件都没指定时（例如后端重启兜底）：全部重取。
+    if (affectedRefnos === null && affectedDbnums === null && fileLatestSessions === undefined) {
+      return true;
+    }
     if (affectedRefnos?.has(refno)) return true;
     const subjectRefno = cached.subject?.refno ? normalizeRefnoToken(cached.subject.refno) : null;
     if (subjectRefno && affectedRefnos?.has(subjectRefno)) return true;
-    if (affectedDbnums) {
-      const sv = cached.sourceVersion;
-      if (sv) {
-        if (affectedDbnums.has(sv.dbnum)) return true;
-        if (sv.databases.some(db => affectedDbnums.has(db.dbnum))) return true;
+    const sv = cached.sourceVersion;
+    if (affectedDbnums && sv) {
+      if (affectedDbnums.has(sv.dbnum)) return true;
+      if (sv.databases.some(db => affectedDbnums.has(db.dbnum))) return true;
+    }
+    if (fileLatestSessions) {
+      // 老标注包没声明 sourceVersion 时保守重取，否则比对主库及读取过的目录/关联库会话是否变化
+      if (!sv) return true;
+      const rootLatest = fileLatestSessions[sv.dbnum];
+      if (rootLatest !== undefined && rootLatest !== sv.sesno) return true;
+      if (sv.databases.some(db => {
+        const latest = fileLatestSessions[db.dbnum];
+        return latest !== undefined && latest !== db.sesno;
+      })) {
+        return true;
       }
     }
     return false;
@@ -445,6 +460,7 @@ export function createMbdExternalSync(
       const latestRefresh = options.latestRefresh;
       const affectedRefnoSet = toNormalizedRefnoSet(latestRefresh?.affectedRefnos);
       const affectedDbnumSet = toDbnumSet(latestRefresh?.affectedDbnums);
+      const fileLatestSessionsByDbnum = normalizeModelSessions(latestRefresh?.fileLatestSessionsByDbnum);
       const modelSessionsByDbnum = normalizeModelSessions(latestRefresh?.modelSessionsByDbnum);
 
       const loadSource = async (refno: string): Promise<MbdSourceLoadOutcome | null> => {
@@ -453,7 +469,13 @@ export function createMbdExternalSync(
           latestRefresh !== undefined
           && previousCached !== undefined
           && previousCached.optionsSignature === optionsSignature
-          && !isSourceAffectedByRefresh(refno, previousCached.outcome, affectedRefnoSet, affectedDbnumSet)
+          && !isSourceAffectedByRefresh(
+            refno,
+            previousCached.outcome,
+            affectedRefnoSet,
+            affectedDbnumSet,
+            fileLatestSessionsByDbnum,
+          )
         ) {
           return previousCached.outcome;
         }
