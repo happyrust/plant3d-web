@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
 import { filterRibbonItemsForUser, filterRibbonTabsForUser } from '@/ribbon/ribbonItemVisibility';
-import { onToast, type ToastLevel } from '@/ribbon/toastBus';
+import { useToastSnackbar } from '@/ribbon/toastQueue';
 
 const activeTabId = ref(RIBBON_TABS[0]?.id ?? '');
 const collapsed = ref(false);
@@ -35,40 +35,13 @@ function toggleCollapse() {
 
 defineExpose({ collapsed });
 
-const snackbarOpen = ref(false);
-const snackbarText = ref('');
-const snackbarColor = ref<string>('surface-variant');
-const snackbarTimeout = ref(2200);
-
-function mapToastLevel(level: ToastLevel | undefined): { color: string; timeout: number } {
-  switch (level) {
-    case 'success':
-      return { color: 'success', timeout: 2200 };
-    case 'warning':
-      return { color: 'warning', timeout: 4500 };
-    case 'error':
-      return { color: 'error', timeout: 6000 };
-    default:
-      return { color: 'primary', timeout: 2200 };
-  }
-}
-
-let offToast: (() => void) | null = null;
-
-onMounted(() => {
-  offToast = onToast(({ message, level }) => {
-    const m = mapToastLevel(level);
-    snackbarColor.value = m.color;
-    snackbarTimeout.value = m.timeout;
-    snackbarText.value = message;
-    snackbarOpen.value = true;
-  });
-});
-
-onUnmounted(() => {
-  if (offToast) offToast();
-  offToast = null;
-});
+const {
+  snackbarOpen,
+  snackbarText,
+  snackbarColor,
+  snackbarTimeout,
+  onSnackbarModelUpdate,
+} = useToastSnackbar();
 
 function onClickCommand(commandId: string) {
   console.log('[RibbonBar] onClickCommand:', commandId);
@@ -163,7 +136,7 @@ function onTabClick(tabId: string) {
       </div>
     </div>
 
-    <v-snackbar v-model="snackbarOpen" :timeout="snackbarTimeout" :color="snackbarColor" multi-line>
+    <v-snackbar :model-value="snackbarOpen" :timeout="snackbarTimeout" :color="snackbarColor" multi-line @update:model-value="onSnackbarModelUpdate">
       {{ snackbarText }}
     </v-snackbar>
   </div>

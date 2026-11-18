@@ -6,7 +6,7 @@ import { emitCommand } from '@/ribbon/commandBus';
 import { buildHierarchicalMenuTabs } from '@/ribbon/hierarchicalMenu';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
-import { onToast, type ToastLevel } from '@/ribbon/toastBus';
+import { useToastSnackbar } from '@/ribbon/toastQueue';
 
 const userStore = useUserStore();
 const menuTabs = computed(() => buildHierarchicalMenuTabs(RIBBON_TABS, userStore.currentUser.value?.role));
@@ -20,25 +20,14 @@ const activeTab = computed(() => {
   return menuTabs.value.find((tab) => tab.id === activeTabId.value) ?? menuTabs.value[0] ?? null;
 });
 
-const snackbarOpen = ref(false);
-const snackbarText = ref('');
-const snackbarColor = ref<string>('surface-variant');
-const snackbarTimeout = ref(2200);
+const {
+  snackbarOpen,
+  snackbarText,
+  snackbarColor,
+  snackbarTimeout,
+  onSnackbarModelUpdate,
+} = useToastSnackbar();
 
-function mapToastLevel(level: ToastLevel | undefined): { color: string; timeout: number } {
-  switch (level) {
-    case 'success':
-      return { color: 'success', timeout: 2200 };
-    case 'warning':
-      return { color: 'warning', timeout: 4500 };
-    case 'error':
-      return { color: 'error', timeout: 6000 };
-    default:
-      return { color: 'primary', timeout: 2200 };
-  }
-}
-
-let offToast: (() => void) | null = null;
 let closeTimer: number | null = null;
 
 function clearCloseTimer() {
@@ -69,13 +58,6 @@ function handleWindowKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
-  offToast = onToast(({ message, level }) => {
-    const m = mapToastLevel(level);
-    snackbarColor.value = m.color;
-    snackbarTimeout.value = m.timeout;
-    snackbarText.value = message;
-    snackbarOpen.value = true;
-  });
   document.addEventListener('pointerdown', handlePointerDownOutside, { capture: true });
   window.addEventListener('keydown', handleWindowKeydown);
 });
@@ -84,8 +66,6 @@ onUnmounted(() => {
   clearCloseTimer();
   document.removeEventListener('pointerdown', handlePointerDownOutside, { capture: true });
   window.removeEventListener('keydown', handleWindowKeydown);
-  if (offToast) offToast();
-  offToast = null;
 });
 
 function resolveIcon(name?: string) {
@@ -187,7 +167,7 @@ function onClickCommand(commandId: string) {
       </div>
     </div>
 
-    <v-snackbar v-model="snackbarOpen" :timeout="snackbarTimeout" :color="snackbarColor" multi-line>
+    <v-snackbar :model-value="snackbarOpen" :timeout="snackbarTimeout" :color="snackbarColor" multi-line @update:model-value="onSnackbarModelUpdate">
       {{ snackbarText }}
     </v-snackbar>
   </div>
