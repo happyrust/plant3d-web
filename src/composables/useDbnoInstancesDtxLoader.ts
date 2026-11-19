@@ -105,6 +105,8 @@ type DbnoRuntimeCache = {
   objectIdToSpecValue: Map<string, number | null>
   /** 每个对象槽对应的几何 hash + 实例矩阵指纹（不含自增 objectCounter），供取最新比对构件是否真发生了位移或几何重算 */
   objectIdToInstanceSig: Map<string, string>
+  /** 每个对象槽的 4×4 实例矩阵（DTX 毫米局部系 16 元数组），供取最新后点对点测量按刚体/仿射变换一键重测 */
+  objectIdToMatrix: Map<string, number[]>
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
   refnoToOwnerNoun: Map<string, string>
@@ -647,6 +649,37 @@ export function getDtxRefnoInstanceSignatureAcrossAllDbnos(refno: string): strin
   return parts.join('|');
 }
 
+/**
+ * 跨库：取构件自身（或其名下按键名升序首个已装子件）的 4×4 实例矩阵（DTX 毫米系 16 元数组）；不在场景中时回 `null`。
+ */
+export function getDtxRefnoPrimaryMatrixAcrossAllDbnos(refno: string): number[] | null {
+  const keys = refnoKeyCandidates(refno);
+  if (keys.length === 0) return null;
+  for (const cache of cachesByDbno.values()) {
+    for (const key of keys) {
+      const ownIds = cache.refnoToObjectIds.get(key) ?? [];
+      for (const id of ownIds) {
+        const mat = cache.objectIdToMatrix?.get(id);
+        if (mat && mat.length === 16) return [...mat];
+      }
+    }
+    const childLeaves: string[] = [];
+    for (const key of keys) {
+      for (const [leaf, ids] of cache.refnoToObjectIds) {
+        if (ids.length > 0 && isUnderUnit(cache, leaf, key)) childLeaves.push(leaf);
+      }
+    }
+    childLeaves.sort();
+    for (const leaf of childLeaves) {
+      for (const id of cache.refnoToObjectIds.get(leaf) ?? []) {
+        const mat = cache.objectIdToMatrix?.get(id);
+        if (mat && mat.length === 16) return [...mat];
+      }
+    }
+  }
+  return null;
+}
+
 /** 跨库：运行时索引是否认识该 refno（noun 已登记），与几何是否加载无关。 */
 export function isDtxRefnoKnownAcrossAllDbnos(refno: string): boolean {
   const keys = refnoKeyCandidates(refno);
@@ -686,6 +719,7 @@ function createRuntimeCache(): DbnoRuntimeCache {
     objectIdToRefno: new Map(),
     objectIdToSpecValue: new Map(),
     objectIdToInstanceSig: new Map(),
+    objectIdToMatrix: new Map(),
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
     refnoToOwnerNoun: new Map(),
@@ -704,6 +738,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
   if (existing) {
     if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map();
     if (!existing.objectIdToInstanceSig) existing.objectIdToInstanceSig = new Map();
+    if (!existing.objectIdToMatrix) existing.objectIdToMatrix = new Map();
     if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
     if (!existing.failedGeoHash) existing.failedGeoHash = new Set();
     if (!existing.invalidTubiObjectIds) existing.invalidTubiObjectIds = new Set();
@@ -1231,6 +1266,7 @@ export function evictDtxRefnos(
       cache.objectIdToRefno.delete(objectId);
       cache.objectIdToSpecValue.delete(objectId);
       cache.objectIdToInstanceSig.delete(objectId);
+      cache.objectIdToMatrix.delete(objectId);
       cache.invalidTubiObjectIds.delete(objectId);
       cache.tubiObjectIds.delete(objectId);
     }
@@ -1543,6 +1579,7 @@ export function loadDtxAabbProxyRefnos(
     cache.objectIdToRefno.set(objectId, refno);
     cache.objectIdToSpecValue.set(objectId, parseSpecValue(entry.specValue));
     cache.objectIdToInstanceSig.set(objectId, formatDtxInstanceSignature(AABB_PROXY_GEO_HASH, matrix.elements));
+    cache.objectIdToMatrix.set(objectId, matrix.toArray());
     cache.refnoTransform.set(refno, matrix.toArray());
     cache.refnoToNoun.set(refno, normalizeNounKey(entry.noun || '') || 'AABB_PROXY');
     if (!cache.refnoToSpecValue.has(refno)) {
@@ -1753,6 +1790,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       objectIdToRefno: new Map(cache.objectIdToRefno),
       objectIdToSpecValue: new Map(cache.objectIdToSpecValue),
       objectIdToInstanceSig: new Map(cache.objectIdToInstanceSig),
+      objectIdToMatrix: new Map(
+        [...cache.objectIdToMatrix].map(([objectId, elements]) => [objectId, [...elements]]),
+      ),
       refnoTransform: new Map(
         [...cache.refnoTransform].map(([refno, transform]) => [refno, [...transform]]),
       ),
@@ -1919,6 +1959,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         cache.objectIdToRefno.set(objectId, mappedRefnoKey);
         cache.objectIdToSpecValue.set(objectId, specValue);
         cache.objectIdToInstanceSig.set(objectId, formatDtxInstanceSignature(geoHash, matrix.elements));
+        cache.objectIdToMatrix.set(objectId, matrix.toArray());
         if (invalidTubi) {
           cache.invalidTubiObjectIds.add(objectId);
           invalidTubiObjects++;
@@ -2021,6 +2062,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.objectIdToRefno = replacementSnapshot.objectIdToRefno;
       cache.objectIdToSpecValue = replacementSnapshot.objectIdToSpecValue;
       cache.objectIdToInstanceSig = replacementSnapshot.objectIdToInstanceSig;
+      cache.objectIdToMatrix = replacementSnapshot.objectIdToMatrix;
       cache.refnoTransform = replacementSnapshot.refnoTransform;
       cache.refnoToNoun = replacementSnapshot.refnoToNoun;
       cache.refnoToOwnerNoun = replacementSnapshot.refnoToOwnerNoun;
@@ -2049,6 +2091,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.objectIdToRefno.delete(objectId);
       cache.objectIdToSpecValue.delete(objectId);
       cache.objectIdToInstanceSig.delete(objectId);
+      cache.objectIdToMatrix.delete(objectId);
       cache.invalidTubiObjectIds.delete(objectId);
       cache.tubiObjectIds.delete(objectId);
     }

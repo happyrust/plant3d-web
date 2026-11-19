@@ -385,7 +385,8 @@
                   </div>
                   <div class="ml-auto flex shrink-0 items-center gap-1">
                     <button v-if="row.candidateKey" type="button" :data-testid="`bran-refine-${row.candidateKey}`"
-                      :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading"
+                      :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading || isBranRowTargetMissing(row)"
+                      :title="isBranRowTargetMissing(row) ? '所测构件已不在场景中' : undefined"
                       class="whitespace-nowrap rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] disabled:opacity-50"
                       @click="refineBranCandidate(row.candidateKey)">
                       {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}
@@ -420,6 +421,7 @@
                     {{ formatDistanceMm(row.distanceMm) }}
                   </span>
                   <span v-if="row.intersects" class="inline-flex shrink-0 rounded bg-amber-100 px-1 py-0.5 align-middle text-[10px] font-bold text-amber-700">相交?</span>
+                  <span v-if="isBranRowTargetMissing(row)" class="shrink-0 rounded bg-rose-50 px-1 py-0.5 text-[10px] font-medium text-rose-700">所测构件已不在场景中</span>
                   <span class="truncate">{{ row.label || '-' }}</span>
                 </div>
               </div>
@@ -459,6 +461,7 @@ import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
 import { deliveryUnitSceneRefnos } from '@/composables/deliveryUnitScene';
+import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { branCandidateKey, findBranCandidateByKey, normalizeBranComputeRefno, useSpatialCompute } from '@/composables/useSpatialCompute';
@@ -472,6 +475,15 @@ defineEmits<{
 }>();
 
 const spatialCompute = useSpatialCompute();
+const getWorkMeasurementSync = useGetWorkMeasurementSync();
+
+function isBranRowTargetMissing(row: SpatialComputeResultRow): boolean {
+  void getWorkMeasurementSync.spatialComputeMissingRefnos?.value;
+  return Boolean(
+    getWorkMeasurementSync.isSpatialComputeRefnoMissing?.(spatialCompute.scenarios.branNearestClearance.queriedSourceRefno)
+    || getWorkMeasurementSync.isSpatialComputeRefnoMissing?.(row.refno),
+  );
+}
 const {
   panelMode,
   activeScenario,

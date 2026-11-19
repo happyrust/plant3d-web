@@ -35,6 +35,7 @@ import {
   resolveDtxNounByRefno,
   resolveDtxObjectIdsByRefno,
 } from './useDbnoInstancesDtxLoader';
+import { useGetWorkMeasurementSync } from './useGetWorkMeasurementSync';
 import { useMeasurementAidStore } from './useMeasurementAidStore';
 import {
   MEASUREMENT_PICK_SOURCE_IDS,
@@ -333,6 +334,7 @@ function xeokitMeasurementToExternalRecord(
   sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number],
   isDraft = false,
   showDirectLinearDimension = true,
+  stalePrefix = '',
 ): ExternalDimensionRecord | null {
   const visible = isDraft || rec.visible !== false;
   if (!visible) return null;
@@ -356,7 +358,7 @@ function xeokitMeasurementToExternalRecord(
         kind: 'linear',
         role: 'external',
         labelPinned: false,
-        authoritativeText: formatDistance(distance(a, b), format),
+        authoritativeText: `${stalePrefix}${formatDistance(distance(a, b), format)}`,
         a,
         b,
         placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
@@ -396,7 +398,7 @@ function xeokitMeasurementToExternalRecord(
         kind: 'linear',
         role: 'external',
         labelPinned: false,
-        authoritativeText: formatDistance(rec.deltaElevation, format),
+        authoritativeText: `${stalePrefix}${formatDistance(rec.deltaElevation, format)}`,
         a,
         b,
         placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
@@ -415,7 +417,7 @@ function xeokitMeasurementToExternalRecord(
       id,
       role: 'external',
       labelPinned: false,
-      formattedLabel: formatDistance(rec.absoluteElevation, format),
+      formattedLabel: `${stalePrefix}${formatDistance(rec.absoluteElevation, format)}`,
       lines: [],
       labelAnchor: at,
       arrowLines: [],
@@ -3470,18 +3472,22 @@ export function useXeokitMeasurementTools(options: {
     renderDesignAids();
     const dimensionSystem = options.getDimensionSystem?.() ?? null;
     if (!dimensionSystem) return;
+    const getWorkMeasurementSync = useGetWorkMeasurementSync();
     const records: ExternalDimensionRecord[] = [];
     const addRecord = (
       record: XeokitMeasurementRecord,
       isDraft = false,
       showDirectLinearDimension = true,
     ) => {
+      const staleEntry = !isDraft ? getWorkMeasurementSync.getMeasurementStale(record.id) : null;
+      const stalePrefix = staleEntry ? '（过期）' : '';
       const external = xeokitMeasurementToExternalRecord(
         record,
         distanceFormat(),
         options.sceneWorldToDesignMetres,
         isDraft,
         showDirectLinearDimension,
+        stalePrefix,
       );
       if (external) records.push(external);
       if (
@@ -4380,6 +4386,14 @@ export function useXeokitMeasurementTools(options: {
       requestRender?.();
     },
     { deep: true },
+  );
+
+  watch(
+    () => useGetWorkMeasurementSync().measurementStaleById.value,
+    () => {
+      syncFromStore();
+      requestRender?.();
+    },
   );
 
   // 勾掉 Keep dimensions 当场收起已画的尺寸（E3D `keepAids()` 回调里直接 `clearAids()`），

@@ -2116,6 +2116,14 @@ function updateMeasurementVisible(id: string, visible: boolean) {
   patchUnifiedMeasurement(id, (rec) => (rec.source === 'classic' ? { ...rec, visible } : rec));
 }
 
+function replaceMeasurementRecord(id: string, next: MeasurementRecord) {
+  patchUnifiedMeasurement(id, (rec) => (
+    rec.source === 'classic' && rec.id === id
+      ? fromClassicMeasurement(normalizeMeasurementRecord(next))
+      : rec
+  ));
+}
+
 function removeMeasurement(id: string) {
   unifiedMeasurementRecords.value = unifiedMeasurementRecords.value.filter(
     (rec) => !(rec.source === 'classic' && rec.id === id),
@@ -3530,6 +3538,7 @@ export function useToolStore() {
 
     addMeasurement,
     updateMeasurementVisible,
+    replaceMeasurementRecord,
     removeMeasurement,
     clearMeasurements,
 

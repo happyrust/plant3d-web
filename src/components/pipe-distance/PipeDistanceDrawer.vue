@@ -22,6 +22,7 @@ import type { Vec3 } from '@/types/vec3';
 import { pipeClearanceLeavesText } from '@/clearance/adapters/pipeDistanceRecords';
 import { pipeRowPairKey, pipeRowValueText } from '@/clearance/adapters/pipeRowRecords';
 import { isFormalPipeRowGroup, type PipeRowGroup } from '@/clearance/domain/pipeRowGeometry';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { clampedNumberInput, positiveMmInput } from '@/components/pipe-distance/numberInput';
 import { computationMethodLabel, computationWarningsText } from '@/composables/measurementMethodLabel';
 import { parseTubeKey } from '@/composables/spatialTree';
@@ -30,6 +31,7 @@ import {
   findOwnerBranRefnoAcrossAllDbnos,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import {
   needsAxisEstimateFallback,
@@ -60,6 +62,8 @@ const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
 
 const store = usePipeDistanceStore();
+const clearanceStore = useClearanceStore();
+const getWorkMeasurementSync = useGetWorkMeasurementSync();
 const toolStore = useToolStore();
 const selectionStore = useSelectionStore();
 const spatialQuery = useSpatialQuery();
@@ -254,8 +258,12 @@ async function handleDetect() {
 
 async function runNearbyForSource(source: string) {
   if (!source) return;
+  if (getWorkMeasurementSync.nearbyGroupStale.value?.state === 'missing') return;
   ensureBransLoadedInScene([source]);
   const ok = await store.detectNearbyBrans(source);
+  if (ok) {
+    getWorkMeasurementSync.clearNearbyGroupStale();
+  }
   const group = store.nearbyGroup.value;
   if (ok && group && group.records.length > 0) {
     const neighborRefnos = group.records.flatMap(record => [
@@ -595,9 +603,53 @@ function recordDistanceText(record: ClearanceRecord): string {
   return mm === null ? '—' : `${Math.round(mm)}`;
 }
 
-function recordStatusPrefix(record: ClearanceRecord): string {
-  return record.status === 'stale' ? '过期，待重算 · ' : record.status === 'failed' ? '重算失败，旧值 · ' : '';
+function recordMissingReason(record: ClearanceRecord): string | null {
+  void clearanceStore.missingReasonById?.value;
+  return clearanceStore.getMissingReason?.(record.id) ?? null;
 }
+
+function recordStatusPrefix(record: ClearanceRecord): string {
+  const missing = recordMissingReason(record);
+  if (missing) return `模型已变更，结果已过期 · ${missing} · `;
+  return record.status === 'stale' ? '模型已变更，结果已过期 · ' : record.status === 'failed' ? '重算失败，旧值 · ' : '';
+}
+
+function canRemeasurePipeRecord(record: ClearanceRecord): boolean {
+  if (record.status !== 'stale' && record.status !== 'failed') return false;
+  if (recordMissingReason(record)) return false;
+  if (record.provenance.method === 'parallel-centerline') return false;
+  return true;
+}
+
+async function remeasurePipeRecord(record: ClearanceRecord): Promise<void> {
+  if (!canRemeasurePipeRecord(record)) return;
+  if (record.pipeRow) {
+    const refnos = Array.from(new Set([
+      ...store.selectedBranRefnos.value,
+      record.provenance.source.refno || '',
+      record.provenance.target.refno || '',
+    ].filter(Boolean)));
+    if (refnos.length >= 2) {
+      await detectPipeRowsSelected(refnos);
+    }
+    return;
+  }
+  await getWorkMeasurementSync.remeasureClearance(record.id);
+}
+
+const nearbyGroupNotice = computed(() => {
+  const explicit = getWorkMeasurementSync.nearbyGroupStale.value;
+  if (explicit) return explicit;
+  const group = store.nearbyGroup.value;
+  if (!group) return null;
+  if (group.records.some(rec => !!recordMissingReason(rec))) {
+    return { state: 'changed' as const, reason: '模型已变更，结果已过期', canRedetect: true };
+  }
+  if (group.records.some(rec => rec.status === 'stale')) {
+    return { state: 'changed' as const, reason: '模型已变更，结果已过期', canRedetect: true };
+  }
+  return null;
+});
 
 const OD_EVIDENCE_LABELS: Readonly<Record<OutsideDiameterEvidence, string>> = Object.freeze({
   catalogue: '目录外径',
@@ -1130,14 +1182,21 @@ function onResultRowHover(id: string | null) {
                 <span class="font-medium text-foreground">
                   <span class="font-mono">{{ store.nearbyGroup.value.sourceRefno }}</span> 的周边：{{ store.nearbyGroup.value.records.length }} 根在 {{ store.nearbyGroup.value.radiusMm }} mm 内
                 </span>
+                <span v-if="nearbyGroupNotice"
+                  class="rounded border px-1.5 py-0.5 text-[10px] font-medium"
+                  :class="nearbyGroupNotice.state === 'missing' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-amber-200 bg-amber-50 text-amber-700'"
+                  data-testid="pipe-distance-nearby-stale-badge">
+                  {{ nearbyGroupNotice.reason }}
+                </span>
               </div>
               <div class="mt-1.5 flex items-center gap-3">
                 <button type="button"
                   class="font-medium text-brand hover:underline disabled:opacity-50"
-                  :disabled="store.isDetecting.value"
+                  :disabled="store.isDetecting.value || nearbyGroupNotice?.canRedetect === false"
+                  :title="nearbyGroupNotice?.canRedetect === false ? nearbyGroupNotice.reason : undefined"
                   data-testid="pipe-distance-nearby-redetect"
                   @click="handleRedetectNearby">
-                  重新检测周边
+                  {{ nearbyGroupNotice?.canRedetect ? '按最新模型重测' : '重新检测周边' }}
                 </button>
                 <button v-if="store.nearbyGroup.value.records.length > 0"
                   type="button"
@@ -1188,10 +1247,21 @@ function onResultRowHover(id: string | null) {
                   <span class="truncate text-xs text-muted-foreground">
                     {{ record.provenance.source.refno || record.inputs.sourceRefno }} ↔ {{ record.provenance.target.refno || record.inputs.targetRefno }}
                   </span>
-                  <span v-if="recordStatusPrefix(record) || record.pipeRow" class="truncate text-[11px] text-muted-foreground">
+                  <span v-if="recordStatusPrefix(record) || record.pipeRow"
+                    class="truncate text-[11px]"
+                    :class="recordMissingReason(record) ? 'text-rose-700' : record.status === 'stale' ? 'text-amber-700' : 'text-muted-foreground'">
                     {{ recordStatusPrefix(record) }}{{ record.pipeRow ? pipeRowSectionText(record) : '' }}
                   </span>
                 </span>
+                <button v-if="canRemeasurePipeRecord(record)"
+                  type="button"
+                  class="shrink-0 rounded border border-brand/30 bg-brand-subtle px-1.5 py-0.5 text-[11px] font-medium text-brand hover:bg-brand/15 disabled:opacity-50"
+                  :disabled="clearanceStore.isComputing.value || store.isDetecting.value"
+                  title="按最新模型重测"
+                  :data-testid="`pipe-distance-remeasure-${record.id}`"
+                  @click.stop="void remeasurePipeRecord(record)">
+                  重测
+                </button>
                 <button type="button"
                   class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-colors hover:bg-muted-foreground/20 hover:text-foreground group-hover:opacity-100"
                   :title="isResultHidden(record.id) ? '显示该条标注' : '隐藏该条标注'"

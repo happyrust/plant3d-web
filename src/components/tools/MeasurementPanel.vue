@@ -8,6 +8,7 @@ import {
   measurementMethodBadge,
 } from '@/composables/measurementMethodLabel';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
+import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
 import {
   MEASUREMENT_PICK_SOURCE_LABELS,
   clampMeasurementPickThreshold,
@@ -24,6 +25,7 @@ import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
 import { emitCommand } from '@/ribbon/commandBus';
+import { emitToast } from '@/ribbon/toastBus';
 import { convertLength } from '@/utils/unitFormat';
 import {
   formatMeasurementKindLabel,
@@ -43,7 +45,22 @@ const props = defineProps<{
 
 const store = useToolStore();
 const pipeDistanceStore = usePipeDistanceStore();
+const getWorkMeasurementSync = useGetWorkMeasurementSync();
 const ctx = useViewerContext();
+
+function measurementStaleOf(id: string) {
+  void getWorkMeasurementSync.measurementStaleById?.value;
+  return getWorkMeasurementSync.getMeasurementStale?.(id) ?? null;
+}
+
+function remeasure(id: string) {
+  const result = getWorkMeasurementSync.remeasureMeasurement(id, {
+    getGlobalMatrix: () => ctx.viewerRef.value?.__dtxLayer?.getGlobalModelMatrix().elements.slice() ?? null,
+  });
+  if (!result.ok) {
+    emitToast({ message: result.reason, level: 'warning' });
+  }
+}
 const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
 const measurementReferenceFrame = useMeasurementReferenceFrameStore();
@@ -782,6 +799,12 @@ watch(
                   class="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
                   {{ methodBadgeText(m) }}
                 </span>
+                <span v-if="measurementStaleOf(m.id)"
+                  :data-testid="`measurement-stale-badge-${m.id}`"
+                  class="rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="measurementStaleOf(m.id)!.state === 'missing' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'">
+                  {{ measurementStaleOf(m.id)!.reason }}
+                </span>
                 <span v-if="selectedMeasurementId === m.id"
                   :data-testid="`measurement-selected-badge-${m.id}`"
                   class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
@@ -810,6 +833,15 @@ watch(
             </div>
 
             <div class="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background/80 p-0.5">
+              <button v-if="measurementStaleOf(m.id)?.canRemeasure"
+                type="button"
+                :data-testid="`measurement-remeasure-button-${m.id}`"
+                class="h-7 rounded px-1.5 font-medium text-brand hover:bg-muted"
+                title="按最新模型重测"
+                @click.stop="remeasure(m.id)">
+                重测
+              </button>
+
               <button type="button"
                 :data-testid="`measurement-fly-button-${m.id}`"
                 class="h-7 rounded px-1.5"

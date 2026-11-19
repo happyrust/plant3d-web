@@ -447,11 +447,13 @@ export type SpatialComputeStoreOptions = Readonly<{
   resolveOwnerBran?: (refno: string) => string | null;
   /** 「跟随选中」防抖窗口（连点一串构件只发一次查询）；默认 350ms，测试给 0 */
   autoFollowDebounceMs?: number;
+  /** 可选注入选中态源（避免无组件上下文的单测调用 useSelectionStore 触发 vue-query 注入断言） */
+  selection?: Pick<ReturnType<typeof useSelectionStore>, 'selectedRefno'>;
 }>;
 
 export function createSpatialComputeStore(options: SpatialComputeStoreOptions = {}) {
   const viewerContext = useViewerContext();
-  const selection = useSelectionStore();
+  const selection = options.selection ?? useSelectionStore();
   const autoFollowDebounceMs = options.autoFollowDebounceMs ?? 350;
   /** 「跟随选中」开关：开着时选中 BRAN / 管件自动提交本场景；结果照常走 facet + 每类最近 1 条标注。 */
   const autoFollowSelection = ref(false);
@@ -930,6 +932,41 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     return false;
   }
 
+  /**
+   * 「取最新」后按本轮实际发生位移/几何变化或撤下的构件把受影响的 BRAN 周边净距候选标为 `stale`，
+   * 未受影响的候选保持现状；随后重刷 `resultRows` 与三维 `annotationCandidates`。
+   */
+  function markBranCandidatesStale(
+    shouldMarkStale: (info: { sourceRefno: string; candidateRefno: string; candidateKey: string }) => boolean,
+  ): string[] {
+    const state = scenarios.branNearestClearance;
+    if (!state.queriedSourceRefno || state.branGroups.length === 0) return [];
+    const marked: string[] = [];
+    const nextProvenance: Record<string, BranClearanceProvenance> = { ...state.candidateProvenance };
+    for (const group of state.branGroups) {
+      for (const candidate of group.candidates) {
+        const key = branCandidateKey(group.group, candidate);
+        if (!shouldMarkStale({
+          sourceRefno: state.queriedSourceRefno,
+          candidateRefno: candidate.refno,
+          candidateKey: key,
+        })) {
+          continue;
+        }
+        const prev = nextProvenance[key] ?? SERVER_BRAN_CLEARANCE_PROVENANCE;
+        if (prev.status !== 'stale') {
+          nextProvenance[key] = { ...prev, status: 'stale' };
+          marked.push(key);
+        }
+      }
+    }
+    if (marked.length > 0) {
+      state.candidateProvenance = nextProvenance;
+      applyBranSelection(state);
+    }
+    return marked;
+  }
+
   const onProjectChanged = () => {
     autoQueriedBranRefno = '';
     if (persistence.hasPersistenceContext.value) return;
@@ -970,6 +1007,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     runWithPreservedResults,
     handleInstancesLoaded,
     handleModelChanged,
+    markBranCandidatesStale,
     branRangeDistance,
     submitScenario,
     refineBranCandidate,
@@ -986,9 +1024,13 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
 
 let sharedSpatialComputeStore: ReturnType<typeof createSpatialComputeStore> | null = null;
 
-export function useSpatialCompute() {
+export function peekSpatialComputeStore() {
+  return sharedSpatialComputeStore;
+}
+
+export function useSpatialCompute(options?: SpatialComputeStoreOptions) {
   if (!sharedSpatialComputeStore) {
-    sharedSpatialComputeStore = createSpatialComputeStore();
+    sharedSpatialComputeStore = createSpatialComputeStore(options);
   }
   return sharedSpatialComputeStore;
 }

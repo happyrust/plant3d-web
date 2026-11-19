@@ -24,6 +24,8 @@ import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 const records = ref<ClearanceRecord[]>([]);
 const activeId = ref<string | null>(null);
 const hiddenIds = ref<Set<string>>(new Set());
+/** 「取最新」核对确认所测构件已不在场景中的记录 id → 原因文本（只放运行时内存，不落盘；重算前拦截无效请求） */
+const missingReasonById = ref<Map<string, string>>(new Map());
 /** 用户的「显示标注」偏好（落盘）。 */
 const showAnnotationsPref = ref(true);
 /** 本次会话从本机恢复了历史记录后默认不上屏（不落盘）；用户开启显示或新算一条即解除。 */
@@ -233,6 +235,11 @@ export function useClearanceStore() {
       next.delete(id);
       hiddenIds.value = next;
     }
+    if (missingReasonById.value.has(id)) {
+      const nextMissing = new Map(missingReasonById.value);
+      nextMissing.delete(id);
+      missingReasonById.value = nextMissing;
+    }
   }
 
   function clearRecords() {
@@ -243,6 +250,7 @@ export function useClearanceStore() {
     records.value = [];
     activeId.value = null;
     hiddenIds.value = new Set();
+    missingReasonById.value = new Map();
     lastError.value = null;
   }
 
@@ -278,6 +286,38 @@ export function useClearanceStore() {
     records.value = records.value.map(record => (
       wanted.has(record.id) && record.status === 'current' ? withClearanceStatus(record, 'stale') : record
     ));
+  }
+
+  /** 将所测构件已被撤下/删除的净距记录标为 stale 并记明缺失原因，禁止发起无效重测请求。 */
+  function markMissingInScene(ids: readonly string[], reason = '所测构件已不在场景中') {
+    if (ids.length === 0) return;
+    const wanted = new Set(ids);
+    records.value = records.value.map(record => (
+      wanted.has(record.id) && record.status !== 'stale' ? withClearanceStatus(record, 'stale') : record
+    ));
+    const existingIds = new Set(records.value.map(record => record.id));
+    const next = new Map(missingReasonById.value);
+    for (const id of wanted) {
+      if (existingIds.has(id)) next.set(id, reason);
+    }
+    missingReasonById.value = next;
+  }
+
+  function clearMissingInScene(ids?: readonly string[]) {
+    if (!ids) {
+      if (missingReasonById.value.size > 0) missingReasonById.value = new Map();
+      return;
+    }
+    const next = new Map(missingReasonById.value);
+    let changed = false;
+    for (const id of ids) {
+      if (next.delete(id)) changed = true;
+    }
+    if (changed) missingReasonById.value = next;
+  }
+
+  function getMissingReason(id: string): string | null {
+    return missingReasonById.value.get(id) ?? null;
   }
 
   /**
@@ -323,6 +363,7 @@ export function useClearanceStore() {
       const computed = await service.compute(input);
       if (epoch !== recordEpoch || pairRequests.get(id) !== request) return null;
       const record = upsertRecord(computed);
+      clearMissingInScene([record.id]);
       if (options.activate !== false) activeId.value = record.id;
       setHidden(record.id, false);
       return record;
@@ -344,6 +385,11 @@ export function useClearanceStore() {
   async function recompute(id: string, options: ClearanceComputeOptions = {}): Promise<ClearanceRecord | null> {
     const record = findRecord(id);
     if (!record) return null;
+    const missingReason = getMissingReason(id);
+    if (missingReason) {
+      lastError.value = missingReason;
+      return null;
+    }
     // 连排记录是截面中心距 / 名义推导间隔，按 inputs 走整构件外表面净距只会另起一条口径不同的记录。
     if (record.pipeRow) {
       lastError.value = '连排测量记录请在「管道距离 · 连排相邻」里重新检测，不能按整构件净距重算';
@@ -384,6 +430,7 @@ export function useClearanceStore() {
     activeId,
     activeRecord,
     hiddenIds,
+    missingReasonById,
     visibleRecords,
     showAnnotations,
     isComputing,
@@ -401,6 +448,9 @@ export function useClearanceStore() {
     toggleHidden,
     setHidden,
     markStale,
+    markMissingInScene,
+    clearMissingInScene,
+    getMissingReason,
     markStaleByModelSesno,
     setDerivedDimensionId,
     compute,

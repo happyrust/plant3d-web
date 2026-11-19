@@ -74,9 +74,17 @@ describe('ViewerPanel 接线（源码钉）：状态栏「数据已更新」提�
   });
 
   it('#158 取最新登记校审批注绑定派生物：重载前 captureBeforeGetWork、完成后 reconcileAfterGetWork', () => {
-    const annotations = section('offGetWorkAnnotations = registerGetWorkDerived({', 'function unregisterSceneForGetWork(): void {');
+    const annotations = section('offGetWorkAnnotations = registerGetWorkDerived({', 'offGetWorkMeasurements = registerGetWorkDerived({');
     expect(annotations).toContain('name: \'校审批注绑定\'');
     expect(annotations).toContain('annotationBindingResolve.captureBeforeGetWork()');
     expect(annotations).toContain('annotationBindingResolve.reconcileAfterGetWork(');
+  });
+
+  it('#159 取最新登记测量与净距派生物：重载前采集指纹、完成后核对过期并刷新尺寸锚点', () => {
+    const measurements = section('offGetWorkMeasurements = registerGetWorkDerived({', 'function unregisterSceneForGetWork(): void {');
+    expect(measurements).toContain('name: \'测量与净距\'');
+    expect(measurements).toContain('getWorkMeasurementSync.captureBeforeGetWork(');
+    expect(measurements).toContain('getWorkMeasurementSync.reconcileAfterGetWork(');
+    expect(measurements).toContain('dimensionSystem.refreshAnchors()');
   });
 });

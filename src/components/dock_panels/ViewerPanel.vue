@@ -92,6 +92,7 @@ import {
   setGenModelV1LoadedProbe,
   startGenModelV1UpdateNotice,
 } from '@/composables/useGenModelV1UpdateNotice';
+import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
 import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import {
@@ -3815,11 +3816,13 @@ function handleOpenProjectSettingsEvent(): void {
 let offGetWorkScene: (() => void) | null = null;
 let offGetWorkMbd: (() => void) | null = null;
 let offGetWorkAnnotations: (() => void) | null = null;
+let offGetWorkMeasurements: (() => void) | null = null;
 
 function registerSceneForGetWork(): void {
   offGetWorkScene?.();
   offGetWorkMbd?.();
   offGetWorkAnnotations?.();
+  offGetWorkMeasurements?.();
   offGetWorkScene = registerGetWorkScene({
     // 取最新发起的重载：不生成、不飞相机；每个节点各自的装载提示不弹（`quiet`），取最新做完自己说一句。
     // 记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤——这一道所有的重载都过，不用另说
@@ -3859,6 +3862,30 @@ function registerSceneForGetWork(): void {
       requestRender();
     },
   });
+  const getWorkMeasurementSync = useGetWorkMeasurementSync();
+  offGetWorkMeasurements = registerGetWorkDerived({
+    name: '测量与净距',
+    // #159：模型重载/撤下前后比对构件实例指纹，把命中位移或撤下的测量与净距标为过期（未变构件不误标）
+    beforeModels: () => {
+      getWorkMeasurementSync.captureBeforeGetWork({
+        getGlobalMatrix: () => dtxLayerRef.value?.getGlobalModelMatrix().elements.slice() ?? null,
+      });
+    },
+    run: async (context) => {
+      await getWorkMeasurementSync.reconcileAfterGetWork({
+        probeNodeGone: context.probeNodeGone,
+        getGlobalMatrix: () => dtxLayerRef.value?.getGlobalModelMatrix().elements.slice() ?? null,
+      });
+      if (dimensionSystem) {
+        try {
+          await dimensionSystem.refreshAnchors();
+        } catch (error) {
+          console.warn('[dimension-v2] getwork anchor refresh failed', error);
+        }
+      }
+      requestRender();
+    },
+  });
 }
 
 function unregisterSceneForGetWork(): void {
@@ -3868,6 +3895,8 @@ function unregisterSceneForGetWork(): void {
   offGetWorkMbd = null;
   offGetWorkAnnotations?.();
   offGetWorkAnnotations = null;
+  offGetWorkMeasurements?.();
+  offGetWorkMeasurements = null;
   // 场景没了：整库显示 / 地址栏直装登记的那些也撤掉
   resetGetWorkRegistry();
 }
