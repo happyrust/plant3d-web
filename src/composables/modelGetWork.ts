@@ -101,8 +101,6 @@ export type GetWorkDerivedContext = {
   changed: boolean;
   treeChanged: boolean;
   modelsChanged: boolean;
-  /** 探查某个 refno 在最新树中是否已不存在：`true` 已删、`false` 仍在、`null` 未知 */
-  probeNodeGone?: (refno: string) => Promise<boolean | null>;
 };
 
 /** 跟着模型走的东西（属性面板、MBD 标注、房间树、校审批注绑定、测量与净距……）：各自登记一个「取最新之后要做的事」 */
@@ -1009,7 +1007,6 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
         changed: treeChanged || modelsChanged || librariesMoved,
         treeChanged,
         modelsChanged,
-        probeNodeGone: ports.probeNodeGone,
       };
       for (const handler of derivedList) {
         try {

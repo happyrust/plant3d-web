@@ -220,6 +220,14 @@ function loadModelSource(): Promise<typeof import('@/model-source')> {
   return modelSourceModule;
 }
 
+/** 探查某个 refno 在最新树中是否已不存在：`true` 已删、`false` 仍在、`null` 未知（供选中项与派生物核对共用） */
+export async function probeGetWorkNodeGone(refno: string): Promise<boolean | null> {
+  const { getModelSource } = await loadModelSource();
+  const resp = await getModelSource().tree.ancestors(refno);
+  if (resp.success) return false;
+  return isTreeNodeGoneMessage(resp.error_message) ? true : null;
+}
+
 const engine = createModelGetWork({
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -284,12 +292,7 @@ const engine = createModelGetWork({
       if (raw && toRefnoKey(raw) === refno) setGlobalSelectedDeletedRefno(raw);
     },
   },
-  probeNodeGone: async (refno) => {
-    const { getModelSource } = await loadModelSource();
-    const resp = await getModelSource().tree.ancestors(refno);
-    if (resp.success) return false;
-    return isTreeNodeGoneMessage(resp.error_message) ? true : null;
-  },
+  probeNodeGone: probeGetWorkNodeGone,
   derived: () => [...derivedHandlers.values()],
   onProgress: (text) => {
     state.progress = text;

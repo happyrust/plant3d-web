@@ -106,6 +106,7 @@ import {
   forgetGetWorkRoot,
   loadedModelDbnums,
   noteGetWorkRoot,
+  probeGetWorkNodeGone,
   readGetWorkMbdRefresh,
   registerGetWorkDerived,
   registerGetWorkScene,
@@ -3855,9 +3856,9 @@ function registerSceneForGetWork(): void {
     beforeModels: () => {
       annotationBindingResolve.captureBeforeGetWork();
     },
-    run: async (context) => {
+    run: async () => {
       await annotationBindingResolve.reconcileAfterGetWork({
-        probeNodeGone: context.probeNodeGone,
+        probeNodeGone: probeGetWorkNodeGone,
       });
       requestRender();
     },
@@ -3871,9 +3872,9 @@ function registerSceneForGetWork(): void {
         getGlobalMatrix: () => dtxLayerRef.value?.getGlobalModelMatrix().elements.slice() ?? null,
       });
     },
-    run: async (context) => {
+    run: async () => {
       await getWorkMeasurementSync.reconcileAfterGetWork({
-        probeNodeGone: context.probeNodeGone,
+        probeNodeGone: probeGetWorkNodeGone,
         getGlobalMatrix: () => dtxLayerRef.value?.getGlobalModelMatrix().elements.slice() ?? null,
       });
       if (dimensionSystem) {
