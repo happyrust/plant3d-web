@@ -8,6 +8,7 @@ import { describe, test } from 'node:test';
 import {
   diffTree,
   gapApplies,
+  joinJudgements,
   judgeW1,
   judgeW2,
   judgeW3,
@@ -1532,6 +1533,57 @@ describe('合成一条腿的结论', () => {
     assert.deepEqual(summary.checkpoints, { W2: 'known-gap', W3: 'pass', W4: 'pass', W5: 'known-gap' });
     assert.equal(summary.verdict, 'known-gap');
     assert.deepEqual(summary.gaps, ['KG3']);
+  });
+});
+
+describe('同一个看点判了两回并成一格（加装节点之后再判一回）', () => {
+  const PREFIX = '加装 /AIOS-SUITE-EQ-B 之后：';
+  const one = (id, problems = [], gaps = [], facts = {}) => ({
+    id,
+    title: '场景 = 后端',
+    verdict: problems.length > 0 ? 'fail' : gaps.length > 0 ? 'known-gap' : 'pass',
+    label: '',
+    problems,
+    gaps,
+    facts,
+  });
+
+  test('两回都过：还是过，后一回的事实放在 afterLoad', () => {
+    const joined = joinJudgements(one('W3', [], [], { roots: 4 }), one('W3', [], [], { roots: 5 }), PREFIX);
+    assert.equal(joined.id, 'W3');
+    assert.equal(joined.verdict, 'pass');
+    assert.equal(joined.label, '过');
+    assert.deepEqual(joined.facts, { roots: 4, afterLoad: { roots: 5 } });
+  });
+
+  test('后一回不过：这一格不过，问题前面带着是哪一步之后看到的', () => {
+    const joined = joinJudgements(one('W3'), one('W3', [{ code: 'missing', message: '场景里少 1 个对象' }]), PREFIX);
+    assert.equal(joined.verdict, 'fail');
+    assert.deepEqual(joined.problems, [{ code: 'missing', message: `${PREFIX}场景里少 1 个对象` }]);
+  });
+
+  test('前一回不过、后一回过：还是不过，前一回的问题原样留着', () => {
+    const joined = joinJudgements(one('W4', [{ code: 'box', message: '差 3000 mm' }]), one('W4'), PREFIX);
+    assert.equal(joined.verdict, 'fail');
+    assert.deepEqual(joined.problems.map((problem) => problem.message), ['差 3000 mm']);
+  });
+
+  test('只有已知缺口：记已知缺口，后一回的也带上是哪一步', () => {
+    const hit = { gap: 'KG3', title: '', reason: '', message: '跟着重载了一次' };
+    const joined = joinJudgements(one('W3', [], [hit]), one('W3', [], [hit]), PREFIX);
+    assert.equal(joined.verdict, 'known-gap');
+    assert.deepEqual(joined.gaps.map((item) => item.message), ['跟着重载了一次', `${PREFIX}跟着重载了一次`]);
+  });
+
+  test('另外记的问题（要加装的节点没装进场景）：两回都过也判不过', () => {
+    const joined = joinJudgements(one('W3'), one('W3'), PREFIX, [{ code: 'then-load-not-in-scene', message: '加装的 /AIOS-SUITE-EQ-B 没有装进场景' }]);
+    assert.equal(joined.verdict, 'fail');
+    assert.deepEqual(joined.problems.map((problem) => problem.code), ['then-load-not-in-scene']);
+  });
+
+  test('两回不是同一个看点、或者少一回：不并', () => {
+    assert.throws(() => joinJudgements(one('W3'), one('W4'), PREFIX), /不是同一个看点/);
+    assert.throws(() => joinJudgements(one('W3'), undefined, PREFIX), /要两回/);
   });
 });
 

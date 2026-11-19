@@ -1782,6 +1782,29 @@ export function judgeW7(input, options = {}) {
 }
 
 /**
+ * 同一个看点在一条腿里判了两回（点完「取最新」一回，之后加装了节点又一回），并成一格：两回的问题、已知缺口接在一起，
+ * 后一回的每一条前面加上 `prefix`（说明是哪一步之后看到的）；后一回的事实放在 `facts.afterLoad`。哪一回有「不过」，这一格就是「不过」。
+ * `extraProblems` 是两回之外另记的问题（比如要加装的节点根本没装进场景），原样算进去。
+ *
+ * @param {Judgement} first 点完「取最新」那一回
+ * @param {Judgement} second 加装之后那一回
+ * @param {string} prefix
+ * @param {Problem[]} [extraProblems]
+ * @returns {Judgement}
+ */
+export function joinJudgements(first, second, prefix, extraProblems = []) {
+  if (!first || !second) throw new TypeError('并判定：要两回的判定');
+  if (first.id !== second.id) throw new TypeError(`并判定：两回不是同一个看点（${first.id}、${second.id}）`);
+  const problems = [
+    ...first.problems,
+    ...extraProblems,
+    ...second.problems.map((problem) => ({ ...problem, message: `${prefix}${problem.message}` })),
+  ];
+  const gaps = [...first.gaps, ...second.gaps.map((hit) => ({ ...hit, message: `${prefix}${hit.message}` }))];
+  return conclude(first.id, first.title, problems, gaps, { ...first.facts, afterLoad: second.facts });
+}
+
+/**
  * 一条腿的几个看点合成一个结论：有一个不过就是不过；没有不过、有已知缺口就是已知缺口；不适用的不参加。
  *
  * @param {Judgement[]} judgements

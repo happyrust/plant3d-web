@@ -18,10 +18,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { sleep } from './backend.mjs';
-import { judgeW3, judgeW4, refnoKey, summarize, VERDICT_LABEL } from './judge.mjs';
-import { observeBackend, observePage, runLeg, sceneForJudging, sceneTruth } from './leg.mjs';
+import { joinJudgements, judgeW3, judgeW4, judgeW6, refnoKey, summarize, VERDICT_LABEL } from './judge.mjs';
+import { loadMore, observeBackend, observePage, runLeg, sceneForJudging, sceneTruth } from './leg.mjs';
 import {
   cameraChange,
+  cleanlinessInput,
   clickGetWork,
   createGuardedContext,
   expandTree,
@@ -573,6 +574,8 @@ export async function runCase(env, caseDef, caseDir) {
     error: null,
     roots,
     expand: caseDef.expand ?? [],
+    // 中途加装的节点（哪条腿之后装的）：不在开头装的 `roots` 里
+    thenLoaded: [],
     setup: {},
     checks: [],
     legs: [],
@@ -808,6 +811,27 @@ export async function runCase(env, caseDef, caseDir) {
         afterClick: cameraAfter,
       };
 
+      // 加装（运行配置的 thenLoad，来自用例表的 apply.then_load）：这条腿的改动把几何搬到了起点时空着的节点名下。点完「取最新」、
+      // 相机也记完之后，在同一个页面里把它们装上，再把页面和后端记一遍——W3 按装着的全部节点再判一回，W4 拿它们去和这条腿的
+      // E3D 导出比，都并进这条腿原来的那一格（见下面）。这一步算在这条腿的时段里（W6 管到装完）；之后它们一直装着，
+      // 后面的腿把它们当装着的根。不开 E3D
+      let more = null;
+      if ((legDef.thenLoad?.roots ?? []).length > 0) {
+        const outside = legDef.thenLoad.roots.filter((root) => !dbnums.includes(root.dbnum)).map((root) => root.refno);
+        if (outside.length > 0) throw new Error(`腿 ${legDef.id} 要加装的节点 ${outside.join('、')} 不在开头装的节点所在的库里`);
+        say(`腿 ${legDef.id}：加装 ${legDef.thenLoad.roots.map((root) => root.name || root.refno).join('、')}`);
+        more = await loadMore(ctx, legDef.thenLoad.roots, { allowEmptyScene: legDef.allowEmptyScene === true });
+        for (const root of more.added) {
+          nameOf[root.refno] = root.name || root.refno;
+          dbnumOf[root.refno] = root.dbnum;
+          record.thenLoaded.push({ ...root, afterLeg: legDef.id });
+        }
+        result.times.to = more.finishedAt;
+        from = more.finishedAt;
+        await shot(`${legDef.id}-3-after-load`);
+        say(`腿 ${legDef.id}：加装用了 ${round3((more.finishedAt - more.startedAt) / 1000)} 秒${more.error ? `，没走完：${more.error.slice(0, 200)}` : ''}`);
+      }
+
       // W4：场景 = 这条腿导出的 E3D
       const judgements = { ...result.judgements };
       const truth = legResult.truth ?? null;
@@ -829,6 +853,30 @@ export async function runCase(env, caseDef, caseDir) {
         const built = truthGroups(exported, legDef.truth?.groups ?? [], result.after.scene.boxes, nameOf);
         judgements.W4 = judgeW4({ groups: built.groups, unplaced: built.unplaced, allowEmpty: legDef.truth?.allowEmpty === true });
         judgements.W4.facts.truth = { ...truthInfo, groups: built.facts };
+      }
+
+      // 加装之后再判的那一回，并进这条腿原来的格子：W3（装着的全部节点，场景 = 后端）、W4（加装的节点，场景 = 这条腿的导出）；
+      // W6 的时段延到装完，加装时页面发的请求、报的错也归这条腿
+      if (more) {
+        const names = more.added.map((root) => root.name || root.refno).join('、');
+        const prefix = `加装 ${names} 之后：`;
+        const notLoaded = [];
+        if (more.error) notLoaded.push({ code: 'then-load-failed', message: `加装 ${names} 没走完：${more.error}`, actual: more.error, expected: '装进场景' });
+        for (const id of more.notInScene) {
+          notLoaded.push({ code: 'then-load-not-in-scene', message: `加装的 ${nameOf[id] ?? id} 没有装进场景`, actual: false, expected: true });
+        }
+        if (judgements.W3) judgements.W3 = joinJudgements(judgements.W3, more.w3, prefix, notLoaded);
+        const groupsAfterLoad = legDef.thenLoad.truth?.groups ?? [];
+        if (judgements.W4 && groupsAfterLoad.length > 0) {
+          const built = truthGroups(exported, groupsAfterLoad, more.scene.boxes, nameOf);
+          const second = judgeW4({ groups: built.groups, unplaced: built.unplaced });
+          second.facts.truth = { groups: built.facts };
+          judgements.W4 = joinJudgements(judgements.W4, second, prefix);
+        }
+        if (judgements.W6) {
+          judgements.W6 = judgeW6(cleanlinessInput(log, { from: result.times.from, to: result.times.to, ignoreErrors: ctx.ignoreErrors ?? [] }));
+        }
+        result.requests = requestSummary(log, { from: result.times.from, to: result.times.to });
       }
 
       // X：和用例表写明的改动对一遍
@@ -872,6 +920,7 @@ export async function runCase(env, caseDef, caseDir) {
           ...(legDef.manual ? [`${legDef.id}-0-before-update.png`] : []),
           `${legDef.id}-1-before-click.png`,
           `${legDef.id}-2-after.png`,
+          ...(more ? [`${legDef.id}-3-after-load.png`] : []),
         ],
       };
       const span = { from: result.times.from, to: result.times.to };
@@ -889,7 +938,7 @@ export async function runCase(env, caseDef, caseDir) {
         dialogs: log.dialogs.filter(inSpan),
         interactions: log.interactions.filter(inSpan),
       }, 0);
-      writeJson(files.record, { ...result, judgements: ordered, summary, command, legResult, libraryLevels: levels, follow, camera }, 0);
+      writeJson(files.record, { ...result, judgements: ordered, summary, command, legResult, libraryLevels: levels, follow, camera, ...(more ? { thenLoad: more } : {}) }, 0);
       const legRecord = {
         id: legDef.id,
         title: legDef.title ?? '',
@@ -936,6 +985,18 @@ export async function runCase(env, caseDef, caseDir) {
         timeline: result.timeline,
         samples: result.watch.samples.length,
         ...(result.manual ? { manual: manualBrief(result.manual, result.times) } : {}),
+        // 加装：装了谁、用了多久、装上之后各自名下场景里几个构件、后端几个（完整的那一遍记录在 record 文件的 thenLoad 里）
+        ...(more ? {
+          thenLoad: {
+            roots: more.added,
+            startedAt: more.startedAt,
+            ms: more.finishedAt - more.startedAt,
+            error: more.error,
+            notInScene: more.notInScene,
+            sceneComponents: Object.fromEntries(more.added.map((root) => [root.refno, Object.keys(more.scene.byRoot[root.refno] ?? {}).length])),
+            backendComponents: Object.fromEntries(more.added.map((root) => [root.refno, Object.keys(more.backend.roots[root.refno]?.components ?? {}).length])),
+          },
+        } : {}),
         receipt: receiptBrief(result.receipt),
         expected: result.expected,
         judgements: Object.fromEntries(Object.entries(ordered).map(([id, judgement]) => [id, judgementBrief(judgement)])),

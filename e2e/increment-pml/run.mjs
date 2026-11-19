@@ -117,6 +117,36 @@ function configProblems() {
         ...(leg.stated?.reload ?? []),
         ...(leg.stated?.moves ?? []).map((move) => move.root),
       ]);
+      if (leg.thenLoad !== undefined) {
+        // 加装：这条腿点完「取最新」之后，在同一个页面里再装的节点。它们从这条腿之后才算装着——这条腿自己的 affected、truth.groups
+        // 这些还不能提它们（上面已经查过），后面的腿可以
+        const extra = Array.isArray(leg.thenLoad?.roots) ? leg.thenLoad.roots : [];
+        if (extra.length === 0) problems.push(`${at}：加装没写装哪几个节点（thenLoad.roots）`);
+        const libraries = new Set((item.roots ?? []).map((root) => root.dbnum));
+        const adding = new Set();
+        for (const root of extra) {
+          if (typeof root?.refno !== 'string' || root.refno === '') {
+            problems.push(`${at}：加装的节点没写参考号（thenLoad.roots[].refno）`);
+            continue;
+          }
+          const id = refnoKey(root.refno);
+          if (loaded.has(id) || adding.has(id)) problems.push(`${at}：加装的节点 ${root.refno} 已经装着`);
+          if (!Number.isInteger(root.dbnum)) problems.push(`${at}：加装的节点 ${root.refno} 没写库号（dbnum）`);
+          else if (!libraries.has(root.dbnum)) problems.push(`${at}：加装的节点 ${root.refno} 在库 ${root.dbnum}，开头装的节点里没有这个库的`);
+          adding.add(id);
+        }
+        const groupsAfterLoad = leg.thenLoad?.truth?.groups ?? [];
+        for (const group of groupsAfterLoad) {
+          if (!adding.has(refnoKey(group.root))) problems.push(`${at}：加装之后要和 E3D 比的 ${group.root} 不在加装的节点里`);
+        }
+        const judgedHere = leg.judge ?? ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'];
+        if (!judgedHere.includes('W3')) problems.push(`${at}：加装之后的场景并在 W3 里判，这条腿没判 W3`);
+        if (groupsAfterLoad.length > 0 && !judgedHere.includes('W4')) {
+          problems.push(`${at}：加装之后要和 E3D 比（thenLoad.truth.groups），这条腿没判 W4`);
+        }
+        if (leg.manual !== undefined) problems.push(`${at}：手动路径的腿不支持加装`);
+        for (const id of adding) loaded.add(id);
+      }
       if ((leg.judge ?? ['W4']).includes('W4') && (leg.truth?.groups ?? []).length === 0) {
         problems.push(`${at}：要判 W4，但没写拿哪几个节点去比（truth.groups）`);
       }
@@ -222,7 +252,7 @@ const RUN_VERDICT = {
 function reportMarkdown() {
   const lines = [];
   const cell = (text) => String(text).replaceAll('|', '／').replaceAll('\n', ' ').slice(0, 400);
-  const nameOf = (item, root) => item.roots.find((entry) => entry.refno === root)?.name || root;
+  const nameOf = (item, root) => [...item.roots, ...(item.thenLoaded ?? [])].find((entry) => entry.refno === root)?.name || root;
   lines.push(`# ${report.what}`, '');
   lines.push(`- 时间：${report.startedAt} → ${report.finishedAt}（${seconds(Date.parse(report.finishedAt) - Date.parse(report.startedAt))}）`);
   lines.push(`- 结论：${RUN_VERDICT[report.verdict] ?? report.verdict}${report.error ? `；出错：${report.error.message}` : ''}`);
@@ -253,6 +283,9 @@ function reportMarkdown() {
     lines.push('', `## ${item.id}：${item.title}`, '');
     lines.push(`- 结论：${item.completed ? VERDICT_LABEL[item.verdict] ?? item.verdict : '没跑完'}${item.error ? `（${item.error.message}）` : ''}；证据目录 ${item.dir}`);
     lines.push(`- 装的节点：${item.roots.map((root) => `${root.name || root.refno}（${root.refno}，库 ${root.dbnum}）`).join('、')}`);
+    if ((item.thenLoaded ?? []).length > 0) {
+      lines.push(`- 中途加装的节点：${item.thenLoaded.map((root) => `${root.name || root.refno}（${root.refno}，库 ${root.dbnum}；腿 ${root.afterLeg} 点完「取最新」之后装的）`).join('、')}`);
+    }
     const failedChecks = item.checks.filter((entry) => !entry.pass);
     lines.push(`- 开跑前的前提：${item.checks.length} 项，${failedChecks.length === 0 ? '全过' : `${failedChecks.length} 项没过`}`);
     for (const entry of item.checks) lines.push(`  - ${entry.pass ? '过' : '不过'}：${entry.name}${entry.detail ? `（${cell(entry.detail)}）` : ''}`);
@@ -297,6 +330,15 @@ function reportMarkdown() {
       }
       lines.push(`- 存盘完成 → 点「取最新」：${seconds(leg.durations.saveToClickMs)}；取最新用时 ${seconds(leg.durations.clickMs)}；整条腿 ${seconds(leg.durations.legMs)}`);
       lines.push(`- 回执：${leg.receipt?.summary ?? '（没有）'}`);
+      if (leg.thenLoad) {
+        // 加装：点完「取最新」、记完之后在同一个页面里装上的节点；装上之后再判的那一回并在这条腿的 W3、W4 里
+        const more = leg.thenLoad;
+        const counts = more.roots.map((root) => `${root.name || root.refno} 名下场景里 ${more.sceneComponents?.[root.refno] ?? 0} 个构件、后端 ${more.backendComponents?.[root.refno] ?? 0} 个`).join('；');
+        lines.push(`- 加装（点完「取最新」、记完之后在同一个页面里装上，之后一直装着；整条腿的用时里包着这一步）：用时 ${seconds(more.ms)}；${counts}`
+          + `${more.error ? `；没走完：${cell(more.error)}` : ''}`
+          + `${(more.notInScene ?? []).length > 0 ? `；没装进场景：${more.notInScene.map((root) => nameOf(item, root)).join('、')}` : ''}`);
+        lines.push('  - 装上之后再判的那一回并在这条腿的 W3（装着的全部节点）、W4（加装的节点）里，问题前面写着「加装 … 之后」；W6 管到装完');
+      }
       lines.push('- 行的变化（从存盘完成算起，负的是存盘之前）：');
       for (const [root, states] of Object.entries(leg.timeline)) lines.push(`  - ${nameOf(item, root)}：${timelineText(states)}`);
       if (leg.truth) {
@@ -324,7 +366,7 @@ function reportMarkdown() {
         }
       }
       const span = item.legs.indexOf(leg) === 0 ? '从开页面到这条腿判完' : '从上一条腿判完到这条腿判完';
-      lines.push(`- ${span}，页面发了 ${leg.requests.total} 条请求：发往 8022 / 8009 的 ${leg.requests.toLive} 条，守卫拦下 ${leg.requests.blocked} 条`);
+      lines.push(`- ${span}${leg.thenLoad ? '（连加装在内）' : ''}，页面发了 ${leg.requests.total} 条请求：发往 8022 / 8009 的 ${leg.requests.toLive} 条，守卫拦下 ${leg.requests.blocked} 条`);
       lines.push(`- 证据文件：${[leg.files.judgements, leg.files.record, leg.files.requests, ...leg.files.shots].join('、')}`);
     }
   }

@@ -29,6 +29,7 @@ import {
   expandTree,
   fetchedLayers,
   layerCounts,
+  loadRoots,
   readPageState,
   readScene,
   readSettledRows,
@@ -119,6 +120,52 @@ export async function openRebuiltLayers(ctx, treeBefore, treeAfter) {
     tree = await readTree(ctx.page);
   }
   return { tree, opened };
+}
+
+/**
+ * 加装：一条腿点完「取最新」、记完之后，在同一个页面的树上再装几个节点——这条腿的改动把几何搬到了它们名下，起点时它们是空的、
+ * 装不进场景。装上之后把页面和后端再记一遍，按装着的全部节点再判一回 W3（场景 = 后端）；和 E3D 导出比的那一回（W4）由调用方拿这里
+ * 记下的场景去判。从这以后它们算装着的根：后面的腿照样看它们的行、它们名下的对象。
+ *
+ * 装不上不抛错：记在 `error`、`notInScene` 里，照样往下记、照样判，由调用方报进 W3。`ctx.roots` 换成一个新数组，
+ * 调用方手里开头那份名单不动。
+ *
+ * @param {object} ctx `runLeg` 用的那个上下文
+ * @param {{ refno: string, dbnum: number, name?: string }[]} extra 要加装的节点
+ * @param {{ allowEmptyScene?: boolean }} [options]
+ */
+export async function loadMore(ctx, extra, { allowEmptyScene = false } = {}) {
+  const { page, log, backend } = ctx;
+  const added = extra.map((root) => ({ refno: refnoKey(root.refno), dbnum: root.dbnum, name: root.name ?? '' }));
+  const already = new Set(ctx.roots.map((root) => refnoKey(root.refno)));
+  const twice = added.filter((root) => already.has(root.refno)).map((root) => root.refno);
+  if (twice.length > 0) throw new Error(`要加装的节点已经装着：${twice.join('、')}`);
+
+  const startedAt = Date.now();
+  await waitIdle(page);
+  let error = null;
+  try {
+    await loadRoots(page, log, added);
+  } catch (failure) {
+    error = String(failure?.message ?? failure).slice(0, 500);
+  }
+  // 点过眼睛就算装着的根（装没装上由下面记的说话）：在树上点眼睛装的，一次点一个
+  ctx.roots = [...ctx.roots, ...added];
+  ctx.rootFacts ??= {};
+  for (const root of added) {
+    ctx.rootFacts[root.refno] = { dbnum: root.dbnum, loadedVia: 'tree', aloneInLibraryAtLoad: true, reloadsBefore: 0, withdrawnVia: null };
+  }
+
+  const rootIds = ctx.roots.map((root) => refnoKey(root.refno));
+  const pageSide = await observePage(ctx);
+  const backendSide = await observeBackend(backend, rootIds, fetchedLayers(pageSide.tree));
+  const scene = sceneForJudging(pageSide, backendSide);
+  const addedIds = new Set(added.map((root) => root.refno));
+  const notInScene = pageSide.state.roots
+    .filter((root) => addedIds.has(refnoKey(root.refno)) && !root.inScene)
+    .map((root) => refnoKey(root.refno));
+  const w3 = judgeW3({ ...sceneTruth(scene, backendSide, rootIds), allowEmpty: allowEmptyScene });
+  return { added, startedAt, finishedAt: Date.now(), error, notInScene, page: pageSide, backend: backendSide, scene, w3 };
 }
 
 /** 采样记录压成每一行的变化过程：行 → 变了的那几笔（`atMs` 从存盘完成算起，负的是存盘之前）。给报告看的 */
