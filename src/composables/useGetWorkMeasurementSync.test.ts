@@ -275,28 +275,23 @@ describe('useGetWorkMeasurementSync（#159 取最新后测量与净距核对与�
     state.branGroups = [
       {
         group: 'WALL',
-        label: '墙',
         candidates: [
           {
             refno: '17496_105912',
             noun: 'GWALL',
-            distanceMm: 312,
+            distance_mm: 312,
             intersects: false,
-            sourcePoint: [0, 0, 0],
-            targetPoint: [0, 0.312, 0],
           },
           {
             refno: '17496_105999',
             noun: 'GWALL',
-            distanceMm: 800,
+            distance_mm: 800,
             intersects: false,
-            sourcePoint: [1, 0, 0],
-            targetPoint: [1, 0.8, 0],
           },
         ],
       },
     ];
-    state.nounFacets = [{ noun: 'WALL', label: '墙', count: 2, selected: true }];
+    state.nounFacets = [{ noun: 'WALL', count: 2, selected: true }];
     state.drawnCandidateKeys = ['WALL:17496_105912'];
 
     const sigs = new Map<string, string | null>([
