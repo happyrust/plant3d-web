@@ -849,6 +849,10 @@ export type GenModelV1Capabilities = {
    * 要不要先让人确认（`nodeModelUpdate.decideNodeUpdate`）。
    */
   mesh_purge_keeps_shared?: boolean;
+  /** 节点版本表 `since_sesno` 走尾段快算与共享窗口差分/尾段缓存（gen-model #325） */
+  node_versions_since_fastpath?: boolean;
+  /** 节点版本表 `scope=subtree` 纳入严格祖先位姿与 OWNER 变更传播（gen-model #323） */
+  node_versions_ancestor_placement?: boolean;
   [key: string]: unknown;
 };
 

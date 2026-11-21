@@ -34,7 +34,10 @@ vi.mock('@/composables/useGenModelV1Dbnums', () => ({
   peekGenModelV1Dbnums: () => mocks.peekDbnums(),
 }));
 vi.mock('@/composables/useLoadedNodeStatus', () => ({ useLoadedNodeStatus: () => ({ entries: () => mocks.entries() }) }));
-vi.mock('@/composables/nodeModelFacts', () => ({ fetchNodeModelFacts: (query: { refno: string }) => mocks.facts(query) }));
+vi.mock('@/composables/nodeModelFacts', () => ({
+  backendSupportsPreciseNodeVersions: () => false,
+  fetchNodeModelFacts: (query: { refno: string }) => mocks.facts(query),
+}));
 vi.mock('@/composables/useGenModelV1UpdateNotice', () => ({ dismissGenModelV1UpdateNotice: () => mocks.dismissNotice() }));
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: (payload: unknown) => mocks.toast(payload) }));
 vi.mock('@/composables/useConsoleStore', () => ({ useConsoleStore: () => ({ addLog: mocks.addLog }) }));

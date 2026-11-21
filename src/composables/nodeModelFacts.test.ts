@@ -7,6 +7,7 @@ import {
   NODE_MODEL_STATUS_ROUTE_RECHECK_MS,
   __resetNodeModelFactsForTests,
   backendMeshPurgeKeepsShared,
+  backendSupportsPreciseNodeVersions,
   fetchGenerationFacts,
   fetchNodeModelFacts,
 } from './nodeModelFacts';
@@ -200,5 +201,25 @@ describe('backendMeshPurgeKeepsShared（后端有没有声明清几何不再带�
     expect(backendMeshPurgeKeepsShared()).toBe(false);
     health.capabilities = { mesh_batch_max_keys: 1024, mesh_purge_keeps_shared: true };
     expect(backendMeshPurgeKeepsShared()).toBe(true);
+  });
+});
+
+describe('backendSupportsPreciseNodeVersions（#323 + #325 联合能力协商）', () => {
+  afterEach(() => {
+    health.capabilities = null;
+  });
+
+  it('必须同时声明 node_versions_since_fastpath = true 与 node_versions_ancestor_placement = true 才返回 true', () => {
+    expect(backendSupportsPreciseNodeVersions()).toBe(false);
+    health.capabilities = { node_versions_since_fastpath: true };
+    expect(backendSupportsPreciseNodeVersions()).toBe(false);
+    health.capabilities = { node_versions_ancestor_placement: true };
+    expect(backendSupportsPreciseNodeVersions()).toBe(false);
+    health.capabilities = { node_versions_since_fastpath: true, node_versions_ancestor_placement: false };
+    expect(backendSupportsPreciseNodeVersions()).toBe(false);
+    health.capabilities = { node_versions_since_fastpath: 'true', node_versions_ancestor_placement: true };
+    expect(backendSupportsPreciseNodeVersions()).toBe(false);
+    health.capabilities = { node_versions_since_fastpath: true, node_versions_ancestor_placement: true };
+    expect(backendSupportsPreciseNodeVersions()).toBe(true);
   });
 });

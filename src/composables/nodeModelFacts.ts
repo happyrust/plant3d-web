@@ -89,6 +89,18 @@ export function backendMeshPurgeKeepsShared(): boolean {
   return useGenModelV1Health().state.capabilities?.mesh_purge_keeps_shared === true;
 }
 
+/**
+ * 后端是否同时声明了「节点版本表 `since_sesno` 尾段快算」（gen-model #325）与
+ * 「节点版本表纳入严格祖先位姿与 OWNER 变更传播」（gen-model #323）。
+ * 两项同时为 `true` 时，「取最新」才改查 `node/versions?since_sesno=` 只重载真改动节点；
+ * 缺任一项（旧后端或两项未同时合入）均安全沿用库水位全重载，既防长链超时也防 K32 漏重载。
+ */
+export function backendSupportsPreciseNodeVersions(): boolean {
+  const capabilities = useGenModelV1Health().state.capabilities;
+  return capabilities?.node_versions_since_fastpath === true
+    && capabilities?.node_versions_ancestor_placement === true;
+}
+
 export function __resetNodeModelFactsForTests(): void {
   routeMissingUntil = 0;
   inflight.clear();
