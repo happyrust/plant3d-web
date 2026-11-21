@@ -39,6 +39,7 @@ import { useClearanceDimensionSync } from '@/clearance/composables/useClearanceD
 import { useComponentToWallClearance } from '@/clearance/composables/useComponentToWallClearance';
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
+import { createDtxLoadOnceGuard } from '@/components/dock_panels/dtxLoadOnceGuard';
 import {
   formatGroupFailures,
   formatSideEffectFailures,
@@ -49,7 +50,6 @@ import {
   runBranLoadPlan,
   type AppliedShowGroup,
 } from '@/components/dock_panels/multiBranLoadPlan';
-import { createDtxLoadOnceGuard } from '@/components/dock_panels/dtxLoadOnceGuard';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import ModelGenerationDialog from '@/components/model-generation/ModelGenerationDialog.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
@@ -5419,39 +5419,39 @@ onMounted(async () => {
         const suppressAutoFit = !flyTo;
         if (suppressAutoFit) dtxLoadOnceGuard.beginSuppressAutoFit();
         try {
-        for (const r of unique) {
-          const dtxStatsBefore =
+          for (const r of unique) {
+            const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
-          // `showModelByRefnos {dbnum, sesno}` 把某版本装进主图层的那条路 2026-09-18 删了（Q18）：
-          // 版本只在隔离图层里看（单视口切换 / 双视口分屏），主层装旧版本会跟「最新环境模型」打架。
-          const ok = await mg.showModelByRefno(r, {
-            flyTo: singleFlyTo && !shouldApply,
-            regenerate: !!(detail as any)?.regenModel,
-            refresh: !!(detail as any)?.refreshModel,
-            round: reloadRound,
-          });
-          const loadDebug = mg.lastLoadDebug?.value ?? null;
-          const dtxStatsAfter =
+            // `showModelByRefnos {dbnum, sesno}` 把某版本装进主图层的那条路 2026-09-18 删了（Q18）：
+            // 版本只在隔离图层里看（单视口切换 / 双视口分屏），主层装旧版本会跟「最新环境模型」打架。
+            const ok = await mg.showModelByRefno(r, {
+              flyTo: singleFlyTo && !shouldApply,
+              regenerate: !!(detail as any)?.regenModel,
+              refresh: !!(detail as any)?.refreshModel,
+              round: reloadRound,
+            });
+            const loadDebug = mg.lastLoadDebug?.value ?? null;
+            const dtxStatsAfter =
                         (dtxLayer as any)?.getStats?.() ?? null;
-          if (ok) {
-            debugState.ok.push(r);
-          } else {
-            debugState.fail.push({
+            if (ok) {
+              debugState.ok.push(r);
+            } else {
+              debugState.fail.push({
+                refno: r,
+                error: mg.error.value || null,
+                status: mg.statusMessage.value || '',
+              });
+            }
+            debugState.items.push({
               refno: r,
+              ok,
               error: mg.error.value || null,
               status: mg.statusMessage.value || '',
+              loadDebug,
+              dtxStatsBefore,
+              dtxStatsAfter,
             });
           }
-          debugState.items.push({
-            refno: r,
-            ok,
-            error: mg.error.value || null,
-            status: mg.statusMessage.value || '',
-            loadDebug,
-            dtxStatsBefore,
-            dtxStatsAfter,
-          });
-        }
         } finally {
           if (suppressAutoFit) dtxLoadOnceGuard.endSuppressAutoFit();
         }

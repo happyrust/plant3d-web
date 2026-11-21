@@ -21,7 +21,7 @@ export function makeDtxAutoFitKey(dbno: number, scale: number, recenter: boolean
   return `${dbno}:${scale}:${recenter ? 1 : 0}`;
 }
 
-export interface DtxLoadOnceGuard {
+export type DtxLoadOnceGuard = {
   shouldApplyGlobalTransform(scale: number, recenter: boolean): boolean;
   markGlobalTransformApplied(scale: number, recenter: boolean): void;
   shouldAutoFit(dbno: number, scale: number, recenter: boolean, loadedCount: number): boolean;
