@@ -49,6 +49,7 @@ import {
   runBranLoadPlan,
   type AppliedShowGroup,
 } from '@/components/dock_panels/multiBranLoadPlan';
+import { createDtxLoadOnceGuard } from '@/components/dock_panels/dtxLoadOnceGuard';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import ModelGenerationDialog from '@/components/model-generation/ModelGenerationDialog.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
@@ -1322,8 +1323,7 @@ let offAnnotationInteraction: (() => void) | null = null;
 let offAnnotationVectorTextRebuilt: (() => void) | null = null;
 let annotationVectorTextRebuildCount = 0;
 
-let dtxGlobalTransformAppliedKey: string | null = null;
-let dtxAutoFitAppliedKey: string | null = null;
+const dtxLoadOnceGuard = createDtxLoadOnceGuard();
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
 
@@ -1587,12 +1587,11 @@ function fitDtxViewerToFocusBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer, durati
   return focus;
 }
 
-function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
+function applyDtxGlobalTransformOnce(_dbno: number, dtxLayer: DTXLayer): void {
   const { scale, recenter } = readDtxScaleConfigFromUrl();
   if (!Number.isFinite(scale) || scale <= 0) return;
 
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxGlobalTransformAppliedKey === key) return;
+  if (!dtxLoadOnceGuard.shouldApplyGlobalTransform(scale, recenter)) return;
 
   // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
   // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
@@ -1622,21 +1621,25 @@ function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
   dtxLayer.setGlobalModelMatrix(m);
   dimensionSystem?.notifyViewerChanged();
 
-  dtxGlobalTransformAppliedKey = key;
+  dtxLoadOnceGuard.markGlobalTransformApplied(scale, recenter);
 }
 
-function fitToDtxLayerBBoxOnce(dbno: number, dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
+function fitToDtxLayerBBoxOnce(
+  dbno: number,
+  dtxViewer: DtxViewer,
+  dtxLayer: DTXLayer,
+  loadedCount: number,
+): void {
   const { scale, recenter, autoFitOnLoad } = readDtxScaleConfigFromUrl();
   if (!autoFitOnLoad) return;
 
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxAutoFitAppliedKey === key) return;
+  if (!dtxLoadOnceGuard.shouldAutoFit(dbno, scale, recenter, loadedCount)) return;
 
   const box = dtxLayer.getBoundingBox();
   if (!box || box.isEmpty()) return;
 
   fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
-  dtxAutoFitAppliedKey = key;
+  dtxLoadOnceGuard.markAutoFitApplied(dbno, scale, recenter);
 }
 
 function computeMbdWorldBoundsBox(system: DimensionSystem | null): Box3 | null {
@@ -3827,13 +3830,25 @@ function registerSceneForGetWork(): void {
   offGetWorkScene = registerGetWorkScene({
     // 取最新发起的重载：不生成、不飞相机；每个节点各自的装载提示不弹（`quiet`），取最新做完自己说一句。
     // 记录查空时先确认后端是真的没有它的几何了（不是没有它的模型）才撤——这一道所有的重载都过，不用另说
-    reload: async (refno) => (
-      await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, quiet: true })
-    ) === true,
+    reload: async (refno) => {
+      dtxLoadOnceGuard.beginSuppressAutoFit();
+      try {
+        return (
+          await modelGenerationRef.value?.showModelByRefno(refno, { refresh: true, flyTo: false, quiet: true })
+        ) === true;
+      } finally {
+        dtxLoadOnceGuard.endSuppressAutoFit();
+      }
+    },
     withdraw: (refno, dbnum) => {
-      const withdrawn = modelGenerationRef.value?.withdrawRemovedRoot(refno, dbnum) ?? 0;
-      requestRender();
-      return withdrawn;
+      dtxLoadOnceGuard.beginSuppressAutoFit();
+      try {
+        const withdrawn = modelGenerationRef.value?.withdrawRemovedRoot(refno, dbnum) ?? 0;
+        requestRender();
+        return withdrawn;
+      } finally {
+        dtxLoadOnceGuard.endSuppressAutoFit();
+      }
     },
     loadedRefnos: (refno, dbnum) => modelGenerationRef.value?.loadedRefnosOf(refno, dbnum) ?? null,
     rootInScene: (refno, dbnum) => modelGenerationRef.value?.isRootInScene(refno, dbnum) ?? false,
@@ -4331,7 +4346,7 @@ onMounted(async () => {
 
     // 按需在首次加载后 auto-fit（需在单位归一化后执行）
     try {
-      fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer);
+      fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer, loadedRefnos.length);
     } catch (e) {
       console.warn('[ViewerPanel] auto-fit 失败', e);
     }
@@ -5401,6 +5416,9 @@ onMounted(async () => {
         // 一次事件重载几个根（状态栏的「重载」、重新部署后的重装）：这几个根共用一份账，
         // 先重载的根刚装上的构件，后重载的根不当成「我名下已经没有的」撤掉（构件在两个根之间挪了位置时会丢）
         const reloadRound = (detail as any)?.refreshModel ? createModelReloadRound() : undefined;
+        const suppressAutoFit = !flyTo;
+        if (suppressAutoFit) dtxLoadOnceGuard.beginSuppressAutoFit();
+        try {
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
@@ -5433,6 +5451,9 @@ onMounted(async () => {
             dtxStatsBefore,
             dtxStatsAfter,
           });
+        }
+        } finally {
+          if (suppressAutoFit) dtxLoadOnceGuard.endSuppressAutoFit();
         }
 
         // flyTo 对批量同样成立（房间「加载模型」一次几十个 refno）：单构件不带守卫的已经在加载里飞过，
@@ -5953,6 +5974,7 @@ onUnmounted(() => {
   // 场景没了：已加载节点表（各节点「装的时候是哪一版」）跟着撤掉
   resetLoadedNodes();
   unregisterSceneForGetWork();
+  dtxLoadOnceGuard.reset();
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;

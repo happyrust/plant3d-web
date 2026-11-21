@@ -24,7 +24,7 @@ function section(from: string, to: string): string {
 describe('ViewerPanel 接线（源码钉）：取最新登记的三维场景', () => {
   const scene = section('offGetWorkScene = registerGetWorkScene({', 'offGetWorkMbd = registerGetWorkDerived({');
 
-  it('取最新发起的重载：只重载（不生成）、不飞相机、不弹每个节点各自的提示', () => {
+  it('取最新发起的重载：只重载（不生成）、不飞相机、不弹每个节点各自的提示，且重载/撤下期间抑制首次 auto-fit（#324）', () => {
     const reload = scene.slice(scene.indexOf('reload:'), scene.indexOf('withdraw:'));
     expect(reload).toMatch(/showModelByRefno\(refno, \{[^}]*\}\)/);
     const options = reload.match(/showModelByRefno\(refno, \{([^}]*)\}\)/)![1]!;
@@ -32,6 +32,18 @@ describe('ViewerPanel 接线（源码钉）：取最新登记的三维场景', (
     expect(options).toMatch(/\bflyTo: false\b/);
     expect(options).toMatch(/\bquiet: true\b/);
     expect(options).not.toMatch(/regenerate|update|fill/);
+    expect(reload).toContain('dtxLoadOnceGuard.beginSuppressAutoFit()');
+    expect(reload).toContain('dtxLoadOnceGuard.endSuppressAutoFit()');
+    const withdraw = scene.slice(scene.indexOf('withdraw:'), scene.indexOf('loadedRefnos:'));
+    expect(withdraw).toContain('dtxLoadOnceGuard.beginSuppressAutoFit()');
+    expect(withdraw).toContain('dtxLoadOnceGuard.endSuppressAutoFit()');
+  });
+
+  it('#324 多库 auto-fit 与全局变换走 dtxLoadOnceGuard（不再用单值键覆盖已对焦过的旧库）', () => {
+    expect(source).toContain('const dtxLoadOnceGuard = createDtxLoadOnceGuard();');
+    expect(source).not.toContain('dtxAutoFitAppliedKey');
+    expect(source).not.toContain('dtxGlobalTransformAppliedKey');
+    expect(source).toContain('fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer, loadedRefnos.length);');
   });
 });
 
