@@ -1114,6 +1114,19 @@ describe('W7 还原之后回到原样', () => {
       assertPass(judgeW7(withGone(null, { ...lit, eyeLit: false })));
     });
 
+    test('#322 方案 A：节点仍在库里、经取最新撤空并留表跟踪（nodeStatus=empty、眼睛亮着、在已加载节点表里）算正常，不是错', () => {
+      const emptyTracked = { present: true, action: null, nodeStatus: 'empty', eyeLit: true };
+      const getworkEmpty = { dbnum: 8000, loadedVia: 'tree', aloneInLibraryAtLoad: true, reloadsBefore: 0, withdrawnVia: 'getwork' };
+      assertPass(judgeW7(withGone(getworkEmpty, emptyTracked, { loadedTableAfter: [EQ_A, GONE] })));
+      // 从地址栏撤下的仍命中 KG2，不因 nodeStatus=empty 放行
+      assertGap(judgeW7(withGone(withdrawnDirect, emptyTracked, { loadedTableAfter: [EQ_A, GONE] })), ['KG2']);
+      // 孤立亮眼（丢了已加载节点表跟踪，nodeStatus=null）仍判不过
+      assertFail(
+        judgeW7(withGone(getworkEmpty, { present: true, action: null, nodeStatus: null, eyeLit: true }, { loadedTableAfter: [EQ_A] })),
+        'eye-lit-without-objects',
+      );
+    });
+
     test('反例：行没有回到原样', () => {
       const rowsAfter = { [EQ_A]: { present: true, action: 'reload', nodeStatus: 'reloadable', eyeLit: true } };
       const result = judgeW7(input({ rowsBefore: { [EQ_A]: lit }, rowsAfter }));

@@ -5558,8 +5558,9 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
     });
 
-    it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下', async (verdict) => {
+    it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：撤下旧构件并以 empty 留在已加载节点表继续跟踪（#322 方案 A）', async (verdict) => {
       const { gen, viewer } = await loadedThenEmpty();
+      noteLoadedNodeMock.mockClear();
       nodeFactsMock.mockResolvedValue({ verdict });
 
       expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
@@ -5567,15 +5568,44 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
       expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [ROOT, ...MEMBERS], { release: true });
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
       expect(gen.loadedRefnosOf(ROOT)).toBeNull();
-      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+      expect(forgetLoadedNodeMock).not.toHaveBeenCalled();
+      expect(noteLoadedNodeMock).toHaveBeenCalledWith(ROOT, 8000, expect.anything(), { empty: true });
     });
 
-    it('后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下', async () => {
+    it('后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下并彻底撤表', async () => {
       const { gen } = await loadedThenEmpty();
+      noteLoadedNodeMock.mockClear();
       nodeFactsMock.mockRejectedValue(Object.assign(new Error('最新会话的索引里没有它'), { code: 'REFNO_NOT_FOUND' }));
       expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
       expect(evictMock).toHaveBeenCalledTimes(1);
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+      expect(noteLoadedNodeMock).not.toHaveBeenCalled();
+    });
+
+    it('跨实例同步清理 loadedRoots：模型树实例装过的节点经查看器实例撤下（删除或查空）或 forgetLoadedRootState（KG2）后，另一实例也立刻不再报已加载', async () => {
+      const { useModelGeneration, forgetLoadedRootState } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const treeGen = useModelGeneration({ viewer, db_num: 8000 });
+      const viewerGen = useModelGeneration({ viewer, db_num: 8000 });
+
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+      expect(await treeGen.showModelByRefno(ROOT)).toBe(true);
+      expect(treeGen.isModelActuallyLoaded(ROOT)).toBe(true);
+
+      viewerGen.withdrawRemovedRoot(ROOT, 8000);
+      expect(treeGen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(viewerGen.isModelActuallyLoaded(ROOT)).toBe(false);
+
+      // 重新装上后模拟地址栏撤下（KG2）
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: MEMBERS });
+      expect(await treeGen.showModelByRefno(ROOT)).toBe(true);
+      expect(treeGen.isModelActuallyLoaded(ROOT)).toBe(true);
+      expect(treeGen.loadedRefnosOf(ROOT)).toEqual(MEMBERS);
+
+      forgetLoadedRootState(ROOT);
+      expect(treeGen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(treeGen.loadedRefnosOf(ROOT)).toBeNull();
     });
 
     it('状态栏、行上的「重载」和重新部署后的重装（只带 refresh，不带别的）：一样先问，后端没有它的模型就不撤', async () => {

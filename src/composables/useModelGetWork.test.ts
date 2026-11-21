@@ -699,4 +699,27 @@ describe('useModelGetWork：头一次点取最新就认得出「本页打开之�
     expect(second.detail).not.toContain('这次取最新之前后端重启过');
     expect(scene.withdraw).not.toHaveBeenCalled();
   });
+
+  it('已加载节点表里以 empty: true 跟踪的节点：仍为空时不重复撤下，几何恢复后自动重载装回（#322 方案 A）', async () => {
+    const { getWork } = await load();
+    const EQUI = '24384_47469';
+    mocks.entries.mockReturnValue([tableEntry(EQUI, { empty: true, loadedModelSesno: 1143, loadedFileLatestSesno: 1143 })]);
+    const scene = scenePort({});
+    getWork.registerGetWorkScene(scene);
+
+    // 1. 库水位推进到 1146 但该节点依然为空：不再重复撤下
+    mocks.facts.mockResolvedValueOnce(facts('empty', 1146));
+    const first = await getWork.requestGetWork();
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(first.models.withdrawn).toEqual([]);
+    expect(first.models.reloaded).toEqual([]);
+
+    // 2. 几何回到该节点（会话 1147）：后端答 latest，取最新自动装回
+    mocks.dbnums.mockResolvedValueOnce({ dbnums: [{ ...ROW_8000, file_latest_sesno: 1147, applied_sesno: 1147, model_sesno: 1147 }] });
+    mocks.facts.mockResolvedValueOnce(facts('latest', 1147));
+    const second = await getWork.requestGetWork();
+    expect(scene.reload).toHaveBeenCalledWith(EQUI);
+    expect(second.models.reloaded).toEqual([{ refno: EQUI, added: 1, removed: 0, total: 1 }]);
+    expect(second.models).toMatchObject({ componentsAdded: 1, componentsRemoved: 0 });
+  });
 });

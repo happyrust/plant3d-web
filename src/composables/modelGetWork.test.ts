@@ -2164,3 +2164,99 @@ describe('取最新：构件在两个在册节点之间挪了位置', () => {
     expect(report.models.reloaded[0]).toEqual({ refno: Z, added: 1, removed: 0, total: 3 });
   });
 });
+
+describe('查空撤下后继续跟踪，几何回来自动装回（#322 方案 A）', () => {
+  const EQ_A = '24384_47469';
+  const EQ_B = '24384_47470';
+  const BOX = '24384_47471';
+  const BOX_REBUILT = '24384_47499';
+  const reloads = (log: string[]) => log.filter((line) => line.startsWith('reload '));
+
+  it('decideRootAction 与 screenHoldsBackendModel：已撤空节点遇 empty 不再重复撤下，遇 latest/lagging 触发重载', () => {
+    const emptyRoot = root(EQ_A, { empty: true });
+    expect(decideRootAction(emptyRoot, { status: status('empty'), gone: false }, { restarted: false })).toEqual({ kind: 'none' });
+    expect(decideRootAction(emptyRoot, { status: status('latest'), gone: false }, { restarted: false })).toEqual({ kind: 'reload', note: null });
+    expect(decideRootAction(emptyRoot, { status: status('lagging'), gone: false }, { restarted: false })).toMatchObject({ kind: 'reload' });
+    expect(decideRootAction(emptyRoot, { status: status('unknown'), gone: true }, { restarted: false })).toEqual({ kind: 'withdraw' });
+    expect(screenHoldsBackendModel(emptyRoot, status('latest', {
+      generated: { sesnoMin: 1146, sesnoMax: 1146, timeMin: null, basis: 'library_watermark' },
+    }))).toBe(false);
+  });
+
+  it('K20 全链路：唯一构件被删后撤空留表 → 同库别的会话推进时不重复撤下 → 构件重建回来时自动重载装回', async () => {
+    const world = makeWorld({
+      rows: [row(ROW_8000, { model_sesno: 1144, applied_sesno: 1144, file_latest_sesno: 1144 })],
+      roots: [root(EQ_A, { loadedModelSesno: 1143, loadedFileLatestSesno: 1143 })],
+      statuses: { [EQ_A]: { status: status('empty'), gone: false } },
+      loaded: { [EQ_A]: [BOX] },
+      afterReload: { [EQ_A]: null },
+    });
+    const { engine, log } = harness(world);
+
+    // 1. 删除唯一构件：撤下 1 个名下已没有几何的节点
+    const leg1 = await engine.getLatest();
+    expect(leg1.models.withdrawn).toEqual([{ refno: EQ_A, refnos: 1, why: 'empty' }]);
+    expect(leg1.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 1 });
+
+    // 模拟 useModelGeneration 以 empty: true 留在已加载节点表，随后同库别的节点推进到 1145、EQ_A 依然为空
+    world.roots = [root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true })];
+    world.rows = [row(ROW_8000, { model_sesno: 1145, applied_sesno: 1145, file_latest_sesno: 1145 })];
+    log.length = 0;
+
+    const idle = await engine.getLatest();
+    expect(idle.models.reloaded).toEqual([]);
+    expect(idle.models.withdrawn).toEqual([]);
+    expect(reloads(log)).toEqual([]);
+
+    // 2. 重建构件回到 EQ_A 名下（会话 1146）：后端答 latest，取最新自动重载装回
+    world.rows = [row(ROW_8000, { model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 })];
+    world.statuses = { [EQ_A]: { status: status('latest'), gone: false } };
+    world.afterReload = { [EQ_A]: [BOX_REBUILT] };
+    log.length = 0;
+
+    const leg2 = await engine.getLatest();
+    expect(reloads(log)).toEqual([`reload ${EQ_A}`]);
+    expect(leg2.models.reloaded).toEqual([{ refno: EQ_A, added: 1, removed: 0, total: 1 }]);
+    expect(leg2.models.withdrawn).toEqual([]);
+    expect(leg2.models).toMatchObject({ componentsAdded: 1, componentsRemoved: 0 });
+  });
+
+  it('K21 换回：已撤空跟踪的 EQ_A 重载装回盒子，EQ_B 查空撤下，整轮净增减 0 个构件且先装后撤自动补装', async () => {
+    const world = makeWorld({
+      rows: [row(ROW_8000, { model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 })],
+      roots: [
+        root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true }),
+        root(EQ_B, { loadedModelSesno: 1145, loadedFileLatestSesno: 1145 }),
+      ],
+      statuses: {
+        [EQ_A]: { status: status('latest'), gone: false },
+        [EQ_B]: { status: status('empty'), gone: false },
+      },
+      loaded: { [EQ_B]: [BOX] },
+      afterReload: { [EQ_A]: [BOX], [EQ_B]: null },
+    });
+    const { engine, log } = harness(world);
+
+    const report = await engine.getLatest();
+
+    // EQ_A 先装上 BOX，随后 EQ_B 查空撤下带走 BOX，引擎自动补重载 EQ_A
+    expect(reloads(log)).toEqual([`reload ${EQ_A}`, `reload ${EQ_B}`, `reload ${EQ_A}`]);
+    expect(report.models.reloaded).toEqual([{ refno: EQ_A, added: 1, removed: 0, total: 1 }]);
+    expect(report.models.withdrawn).toEqual([{ refno: EQ_B, refnos: 1, why: 'empty' }]);
+    expect(report.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 0 });
+  });
+
+  it('已撤空跟踪的节点后来整个从库里被删（REFNO_NOT_FOUND）：走撤下（deleted）并彻底清表', async () => {
+    const world = makeWorld({
+      rows: [row(ROW_8000, { model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 })],
+      roots: [root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true })],
+      statuses: { [EQ_A]: { status: status('unknown'), gone: true } },
+      loaded: {},
+    });
+    const { engine, log } = harness(world);
+
+    const report = await engine.getLatest();
+    expect(log).toContain(`withdraw ${EQ_A}`);
+    expect(report.models.withdrawn).toEqual([{ refno: EQ_A, refnos: 0, why: 'deleted' }]);
+  });
+});

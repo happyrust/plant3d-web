@@ -1372,7 +1372,11 @@ function compareRebuiltComponents(root, afterByComponent, beforeByComponent, tol
   return { problems, refnoChanges, maxPositionMm, objects };
 }
 
-/** 名下已经没有对象的根，行上的眼睛不该亮、已加载节点表里不该还有它 */
+/**
+ * 名下已经没有对象的根，行上的眼睛不该亮、已加载节点表里不该还有它；
+ * 例外（#322 方案 A）：节点仍在库里、仅名下已没有几何且未被从地址栏撤下时，眼睛保持亮着并留在已加载节点表里
+ * 由「取最新」继续跟踪（行上状态明确标为 `empty`），等几何回来自动装回。
+ */
 function judgeRowsAgainstScene(rows, scene, loadedTable, rootsInfo, options, problems, gaps) {
   const gap = knownGap(options, 'KG2');
   const table = loadedTable ? new Set(keyList(loadedTable)) : null;
@@ -1381,6 +1385,11 @@ function judgeRowsAgainstScene(rows, scene, loadedTable, rootsInfo, options, pro
     const eyeLit = row.eyeLit === true;
     const listed = table ? table.has(root) : null;
     if (!eyeLit && listed !== true) continue;
+    const trackedEmpty = row.nodeStatus === 'empty'
+      && rootsInfo.get(root)?.withdrawnVia !== 'address'
+      && eyeLit
+      && listed !== false;
+    if (trackedEmpty) continue;
     const actual = { objects: 0, eyeLit, inLoadedTable: listed };
     const expected = { objects: 0, eyeLit: false, inLoadedTable: table ? false : null };
     const what = [eyeLit ? '行上的眼睛还亮着' : '', listed ? '已加载节点表里还有它' : ''].filter(Boolean).join('，');

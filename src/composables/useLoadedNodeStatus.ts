@@ -60,6 +60,11 @@ export type LoadedNodeEntry = {
   dbnum: number;
   /** 装进了场景。`false` = 只是点过、没有模型可显示（没有「本页装的是哪一版」，也不会「有更新可重载」） */
   loaded: boolean;
+  /**
+   * 节点仍在库里、经重载确认名下当前已没有几何（旧构件已从场景撤下）：眼睛保持亮着并继续留在表里由「取最新」跟踪，
+   * 几何回来之后行上自动标「重载」、点「取最新」装回场景（#322 方案 A）。
+   */
+  empty?: boolean;
   loadedAt: number;
   /** 装的时候这个库的模型水位；当时库状态没取到为 `null` */
   loadedModelSesno: number | null;
@@ -389,6 +394,7 @@ export function noteLoadedNode(
   refno: string,
   dbnum: number,
   at: { modelSesno: number | null; fileLatestSesno: number | null },
+  options?: { empty?: boolean },
 ): void {
   const key = toRefnoKey(refno);
   if (!key || !Number.isFinite(dbnum)) return;
@@ -396,6 +402,7 @@ export function noteLoadedNode(
     refno: key,
     dbnum,
     loaded: true,
+    ...(options?.empty === true ? { empty: true } : {}),
     loadedAt: Date.now(),
     loadedModelSesno: at.modelSesno,
     loadedFileLatestSesno: at.fileLatestSesno,
@@ -515,6 +522,16 @@ export function loadedNodeView(refno: string): LoadedNodeView | null {
       verdict: 'reloadable',
       iconKind: 'reloadable',
       title: `本节点：有更新可重载：${entry.staleReason}\n点「重载」按后端现在的模型把屏幕上的换掉`,
+      action: 'reload',
+      checking: entry.checking,
+    };
+  }
+  // 先前重载查空撤下了旧构件（眼睛亮着继续跟踪），后端现在重新有了它的模型：行上直接给「重载」
+  if (entry.empty === true && status.verdict === 'latest') {
+    return {
+      verdict: 'reloadable',
+      iconKind: 'reloadable',
+      title: '本节点：有更新可重载：名下重新有了可显示的模型，屏幕上还没有装入\n点「重载」按后端现在的模型装入场景',
       action: 'reload',
       checking: entry.checking,
     };

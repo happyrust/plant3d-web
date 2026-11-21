@@ -219,9 +219,32 @@ const loadedRefnosByRoot = new Map<string, Set<string>>();
  */
 const hiddenByLoader = new Set<string>();
 
+/**
+ * 所有存活 `useModelGeneration` 实例的 `loadedRoots` 集合：模型树和查看器各自持有一份实例，
+ * 节点在某一侧被撤下（已删除 / 查空撤下 / 从地址栏移除）时同步从各实例移除，避免另一侧误报已加载（#322 / KG2）。
+ */
+const loadedRootSets = new Set<Set<string>>();
+
+function trackLoadedRootSet(roots: Set<string>): void {
+  loadedRootSets.add(roots);
+}
+
+function dropLoadedRootAcrossInstances(root: string): void {
+  for (const set of loadedRootSets) set.delete(root);
+}
+
+/** 从地址栏等外部入口撤下直装节点时，同步清理各实例的已加载根集合与成员记录（KG2）。 */
+export function forgetLoadedRootState(root: string): void {
+  const key = normalizeRefnoString(root);
+  if (!key) return;
+  dropLoadedRootAcrossInstances(key);
+  loadedRefnosByRoot.delete(key);
+}
+
 export function __resetLoadedRefnosByRootForTests(): void {
   loadedRefnosByRoot.clear();
   hiddenByLoader.clear();
+  loadedRootSets.clear();
 }
 
 /**
@@ -550,6 +573,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null);
 
   const loadedRoots = new Set<string>();
+  trackLoadedRootSet(loadedRoots);
   /**
    * 还没结束的普通显示（不带重新生成 / 重载 / 补齐 / 更新）：节点 → 那一次显示。同一个节点在排队或在跑的时候又被点了
    * 一次，搭上已有的那一次，不另起一条（#166）。只在这个实例里合并：「已加载」的账是按实例记的，别的实例发起的
@@ -1102,8 +1126,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   /**
    * 重载（`refresh`）时这根按祖先查空、记录查询本身收齐了、后端也确认过它名下确实没有几何了（调用方先过
-   * `emptyRefreshMeansRemoved`）：数据批次删了它，或删光了它名下带几何的成员。它和它名下的旧构件从场景撤下、
-   * 不再算已加载；没收齐（409 / 截断 / 出错）或只是退到子树查询时不下结论，场景保持原样。两种都不生成。
+   * `emptyRefreshMeansRemoved`）：数据批次删了它，或删光了它名下带几何的成员。它和它名下的旧构件从场景撤下：
+   * - `gone === true`（库里已经没有这个节点）：彻底撤表，不再跟踪；
+   * - `gone === false`（节点仍在库里、仅名下已没有几何）：以 `empty: true` 留在已加载节点表里，眼睛保持亮着并继续由
+   *   「取最新」跟踪，几何回来之后自动标「重载」并装回场景（#322 方案 A）。
+   * 没收齐（409 / 截断 / 出错）或只是退到子树查询时不下结论，场景保持原样。两种都不生成。
    */
   function finishRefreshOfEmptyRoot(
     dbno: number,
@@ -1116,6 +1143,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     toast: (payload: ToastPayload) => void,
     /** 这一次重载属于哪一轮：同一轮里先重载的节点刚装上的构件不跟着撤 */
     round: ModelReloadRound | undefined,
+    gone: boolean,
+    loadWatermark: { modelSesno: number | null; fileLatestSesno: number | null },
   ): boolean {
     if (
       incomplete
@@ -1146,9 +1175,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // 这一笔不可见是撤下时顺手记的，不是人藏的（见 `hiddenByLoader`）
     for (const refno of targets) hiddenByLoader.add(refno);
     if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
-    loadedRoots.delete(root);
+    dropLoadedRootAcrossInstances(root);
     loadedRefnosByRoot.delete(root);
-    forgetLoadedNode(root);
+    if (gone) forgetLoadedNode(root);
+    else noteLoadedNode(root, dbno, loadWatermark, { empty: true });
     flagRootsLosingRefnos(root, evicted);
     status.message = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
     status.progress = 100;
@@ -1169,13 +1199,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
    *
    * 所有的重载都过这一道（2026-11-12 用户定）：取最新、状态栏和行上的「重载」、重新部署后的重装、节点更新的后一半。
    */
-  async function emptyRefreshMeansRemoved(root: string): Promise<{ removed: boolean; why: string }> {
+  async function emptyRefreshMeansRemoved(root: string): Promise<{ removed: boolean; gone: boolean; why: string }> {
     try {
       const facts = await withTimeout(fetchNodeModelFacts({ refno: root }), NODE_UPDATE_FACTS_TIMEOUT_MS, '节点模型状态');
       if (!facts) return await goneFromLibraryPerTree(root);
-      if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };
+      if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') {
+        return { removed: true, gone: false, why: '' };
+      }
       return {
         removed: false,
+        gone: false,
         why: facts.verdict === 'updating'
           ? '所在的库正在更新'
           : facts.verdict === 'unknown'
@@ -1183,8 +1216,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             : '后端现在没有这个节点的完整模型（可能重启过，或还没生成）',
       };
     } catch (e) {
-      if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, why: '' };
-      return { removed: false, why: `节点模型状态没问到（${e instanceof Error ? e.message : String(e)}）` };
+      if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, gone: true, why: '' };
+      return { removed: false, gone: false, why: `节点模型状态没问到（${e instanceof Error ? e.message : String(e)}）` };
     }
   }
 
@@ -1193,14 +1226,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
    * （树直接读库文件，不看后端有没有它的模型），树明说没有这个节点才撤。节点还在、只是它名下带几何的成员删光了的，
    * 旧后端上分不清「删光了」和「后端没有它的模型」：保持原样。
    */
-  async function goneFromLibraryPerTree(root: string): Promise<{ removed: boolean; why: string }> {
+  async function goneFromLibraryPerTree(root: string): Promise<{ removed: boolean; gone: boolean; why: string }> {
     try {
       const resp = await withTimeout(getModelSource().tree.ancestors(root), NODE_UPDATE_FACTS_TIMEOUT_MS, '模型树');
-      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, why: '' };
+      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, gone: true, why: '' };
     } catch {
       // 树也没问到：按确认不了算
     }
-    return { removed: false, why: '后端没有节点模型状态接口，确认不了它名下是不是真的没有几何了' };
+    return { removed: false, gone: false, why: '后端没有节点模型状态接口，确认不了它名下是不是真的没有几何了' };
   }
 
   /**
@@ -1237,7 +1270,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       for (const target of targets) hiddenByLoader.add(target);
       if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     }
-    loadedRoots.delete(root);
+    dropLoadedRootAcrossInstances(root);
     loadedRefnosByRoot.delete(root);
     forgetLoadedNode(root);
     consoleStore.addLog('info', `[model-load] 取最新：${root} 在库里已经没有了，撤下 ${targets.length} 个 refno（${evicted.length} 个有对象）`);
@@ -2426,6 +2459,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             || scopeIncomplete.truncated_roots.length > 0
             || Object.keys(scopeIncomplete.errors).length > 0
           );
+          let goneFromLibrary = false;
           if (!notCollected) {
             const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);
             // 确认的这一会儿被叫停：还没开始撤，场景保持原样
@@ -2443,8 +2477,20 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               recheckLoadedNode(normalizedRoot);
               return false;
             }
+            goneFromLibrary = confirmed.gone;
           }
-          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, status, toast, loadOptions?.round);
+          return finishRefreshOfEmptyRoot(
+            dbno,
+            normalizedRoot,
+            previousLeaves,
+            scopeIncomplete,
+            visibleSource,
+            status,
+            toast,
+            loadOptions?.round,
+            goneFromLibrary,
+            loadWatermark,
+          );
         }
         if (visibleSource !== 'visible-insts') {
           // 记录查询失败后退到子树查询、子树也是空：这不是「查空」，同样不生成

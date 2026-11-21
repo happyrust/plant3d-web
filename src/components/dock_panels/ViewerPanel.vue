@@ -93,14 +93,14 @@ import {
   startGenModelV1UpdateNotice,
 } from '@/composables/useGenModelV1UpdateNotice';
 import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
-import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
+import { forgetLoadedNode, resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import {
   createMbdExternalSync,
   type MbdLatestRefreshInput,
 } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
-import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
+import { createModelReloadRound, forgetLoadedRootState, useModelGeneration } from '@/composables/useModelGeneration';
 import {
   captureGetWorkWatermarks,
   forgetGetWorkRoot,
@@ -4702,9 +4702,13 @@ onMounted(async () => {
       const removedRoots = delta.evict
         .flatMap(group => group.rootRefnos)
         .filter(refno => !nextRefnos.includes(refno));
-      // 撤下的直装节点当场从取最新的登记表撤掉：模型树上它和它下面中间节点的眼睛跟着灭。不撤的话，登记表要到
-      // 下一次取最新发现它不在场景里才撤（`modelGetWork` 的 `refreshModels`），这期间眼睛一直亮着。
-      for (const refno of removedRoots) forgetGetWorkRoot(refno);
+      // 撤下的直装节点当场从取最新登记表、已加载节点表与显示流程已加载集合一并撤掉（修复 KG2：重载过的直装节点从地址栏撤下后
+      // 眼睛和新旧标记照旧亮着）。
+      for (const refno of removedRoots) {
+        forgetGetWorkRoot(refno);
+        forgetLoadedNode(refno);
+        forgetLoadedRootState(refno);
+      }
       console.log('[show_refno] 撤下', { removedRoots, evictedRefnoCount });
       if (delta.load.length === 0) {
         emitToast({

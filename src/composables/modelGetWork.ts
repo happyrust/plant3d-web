@@ -60,6 +60,11 @@ export type GetWorkRoot = {
    * 只能拿这个比（见 `screenHoldsBackendModel`）。
    */
   loadedGenerated?: GetWorkLoadedGeneration | null;
+  /**
+   * 节点仍在库里、先前经重载确认名下已没有几何并撤下了旧构件（眼睛仍亮着继续归取最新管，#322 方案 A）：
+   * 后端仍说 `empty` 时不再重复撤下，一旦几何回来（`latest` / `reloadable` / `lagging`）即重装回场景。
+   */
+  empty?: boolean;
 };
 
 /** 整库显示过的库：取最新时看它有没有新出现的顶层 SITE */
@@ -334,6 +339,7 @@ export type GetWorkRootAction =
  * 比如装上之后别的页面让后端重新生成过它，后端说「最新」，屏幕上却还是原来那一版。
  */
 export function screenHoldsBackendModel(root: GetWorkRoot, status: NodeModelStatus): boolean {
+  if (root.empty) return false;
   if (status.source !== 'model-status') return false;
   const generated = status.generated;
   if (!generated) return false;
@@ -370,18 +376,19 @@ export function decideRootAction(
     case 'reloadable':
       return { kind: 'reload', note: null };
     case 'latest':
-      // 本页装的是哪一版没记下来：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
-      if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };
+      // 本页装的是哪一版没记下来，或先前名下查空撤下、如今重新有了模型：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
+      if (root.empty || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };
       return { kind: 'none' };
     case 'lagging': {
       const behind = '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上';
-      if (status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
+      if (root.empty || status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
         return { kind: 'reload', note: behind };
       }
       return { kind: 'keep', reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上' };
     }
     case 'empty':
-      // 这个节点下已经没有生成单元（成员删光了）：重载会查空，确认之后把它名下的旧构件撤下
+      // 已经撤空在册的节点若仍无几何，屏幕与后端一致、不再重复撤下；还有旧构件在场景的才重载撤下
+      if (root.empty) return { kind: 'none' };
       return { kind: 'reload', note: null };
     case 'updating':
       return { kind: 'keep', reason: '所在的库后台正在更新，屏幕上的没有动；稍后再点「取最新」' };
@@ -587,9 +594,14 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
    * `confirmedLatest`：那一次是后端的节点模型状态接口明说「最新」、屏幕上装的又核对得出就是那一版——不在后端更新范围里的库靠它判断「装着的节点都已是最新」
    * （过渡办法不问节点版本表，它说的「最新」不作数）。
    */
-  const settledAt = new Map<string, { key: string; confirmedLatest: boolean }>();
-  const settleKey = (row: DbnumRow, loadedModelSesno: number | null, loadedFileLatestSesno: number | null): string => (
-    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${loadedModelSesno ?? ''}:${loadedFileLatestSesno ?? ''}`
+  const settledAt = new Map<string, { key: string; confirmedLatest: boolean; confirmedEmpty?: boolean }>();
+  const settleKey = (
+    row: DbnumRow,
+    loadedModelSesno: number | null,
+    loadedFileLatestSesno: number | null,
+    empty = false,
+  ): string => (
+    `${row.model_sesno ?? ''}:${row.file_latest_sesno ?? ''}|${loadedModelSesno ?? ''}:${loadedFileLatestSesno ?? ''}${empty ? '|empty' : ''}`
   );
 
   /** 等装载 / 生成结束；等不到回 `false` */
@@ -653,7 +665,11 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       if (!gap && !rootNeedsCheck(root, row, restarted)) return false;
       // 上一轮核对过、不用动，库也没再变：不再问（后端重启过、或它带着过期标记时照问）
       const settled = settledAt.get(root.refno);
-      if (row && !restarted && !root.staleReason && settled?.key === settleKey(row, root.loadedModelSesno, root.loadedFileLatestSesno)) {
+      if (row && !restarted && !root.staleReason && settled?.key === settleKey(row, root.loadedModelSesno, root.loadedFileLatestSesno, root.empty === true)) {
+        if (settled.confirmedEmpty) {
+          standing.delete(root.refno);
+          return false;
+        }
         // 后台不会去追的库里，上一轮没敢说它最新的（装上时那一版还没记下、状态是过渡办法给的）照问：有把握了才改口
         if (gap && !settled.confirmedLatest) return true;
         if (gap) stand(root, 'latest');
@@ -700,17 +716,27 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       const status = answers[index]!.status;
       if (action.kind === 'none') {
         // 核对过、不用动：下一轮库没再变就不问它了——登记表里的把水位推进到现在，已加载节点表里的记在这边
+        const confirmedEmpty = root.empty === true && status.verdict === 'empty';
         const state = standingOf(status, screenHoldsBackendModel(root, status));
-        stand(root, state);
+        if (confirmedEmpty) standing.delete(root.refno);
+        else stand(root, state);
         if (root.source === 'registry' && row) {
           const at = { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) };
           ports.advanceRoot(root.refno, at);
           // 后台不会去追的库不看水位、每轮都问：登记表里的也在这边记一笔（按推进之后的水位），库没再变就不再问
           if (inGapLibrary(root.dbnum)) {
-            settledAt.set(root.refno, { key: settleKey(row, at.modelSesno, at.fileLatestSesno), confirmedLatest: state === 'latest' });
+            settledAt.set(root.refno, {
+              key: settleKey(row, at.modelSesno, at.fileLatestSesno, root.empty === true),
+              confirmedLatest: state === 'latest',
+              ...(confirmedEmpty ? { confirmedEmpty: true } : {}),
+            });
           }
         } else if (row) {
-          settledAt.set(root.refno, { key: settleKey(row, root.loadedModelSesno, root.loadedFileLatestSesno), confirmedLatest: state === 'latest' });
+          settledAt.set(root.refno, {
+            key: settleKey(row, root.loadedModelSesno, root.loadedFileLatestSesno, root.empty === true),
+            confirmedLatest: state === 'latest',
+            ...(confirmedEmpty ? { confirmedEmpty: true } : {}),
+          });
         }
         continue;
       }
@@ -754,9 +780,11 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       if (root.source === 'registry') ports.forgetRoot(root.refno);
       const after = outcome.after;
       if (!after || after.length === 0) {
-        for (const refno of outcome.before) removedAll.add(refno);
-        steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });
-        models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
+        if (!(root.empty && outcome.before.size === 0)) {
+          for (const refno of outcome.before) removedAll.add(refno);
+          steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });
+          models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
+        }
         standing.delete(root.refno);
         continue;
       }
