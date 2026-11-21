@@ -141,6 +141,12 @@ export type NodeModelStatus = {
   /** 这个库在不在后端的更新范围里；过渡办法不知道为 `null` */
   inWatchScope: boolean | null;
   checkedAt: number;
+  /**
+   * 仅在 `verdict === 'unknown'` 且失败属于瞬时可重试竞态（如 E3D 正在写库导致的 503 `SOURCE_CHANGED`、
+   * 带 `Retry-After` 或 `source changed while opening`，happyrust/gen-model#321）时存在：
+   * 提示调用方不要把它锁死为「已判过」，可在该毫秒后自动补问一次。
+   */
+  retryAfterMs?: number;
 };
 
 function sesnoOf(value: unknown): number | null {
@@ -413,8 +419,41 @@ function errorText(error: unknown): string {
 const FACTS_ERROR_TEXT: Record<string, string> = {
   REFNO_NOT_FOUND: '库文件最新会话上没有这个节点（可能已被删除）',
   SOURCE_NOT_FOUND: '库文件打不开，或水位暂时读不到',
+  SOURCE_CHANGED: '库文件正在写入，稍后自动重试',
   INVALID_REFNO: '节点编号解不出',
 };
+
+const DEFAULT_TRANSIENT_RETRY_MS = 2_000;
+const MIN_TRANSIENT_RETRY_MS = 1_000;
+const MAX_TRANSIENT_RETRY_MS = 10_000;
+
+/**
+ * 识别瞬时可重试的版本/状态读取失败（happyrust/gen-model#321）：
+ * 503 `SOURCE_CHANGED`、带 `Retry-After` 的 503、或旧后端的 `source changed while opening`。
+ * 返回建议退避毫秒数（夹在 1–10 s）；确定性失败（404 等）返回 `undefined`。
+ */
+export function transientStatusRetryAfterMs(error: unknown): number | undefined {
+  const err = error as { code?: unknown; status?: unknown; retryAfterMs?: unknown } | null;
+  const code = typeof err?.code === 'string' ? err.code : '';
+  const status = typeof err?.status === 'number' ? err.status : null;
+  const rawRetry = typeof err?.retryAfterMs === 'number' && Number.isFinite(err.retryAfterMs) && err.retryAfterMs > 0
+    ? err.retryAfterMs
+    : undefined;
+  const text = errorText(error);
+  const retryable = code === 'SOURCE_CHANGED'
+    || status === 503
+    || rawRetry !== undefined
+    || text.includes('source changed while opening');
+  if (!retryable) return undefined;
+  const ms = rawRetry ?? DEFAULT_TRANSIENT_RETRY_MS;
+  return Math.min(MAX_TRANSIENT_RETRY_MS, Math.max(MIN_TRANSIENT_RETRY_MS, Math.round(ms)));
+}
+
+function withRetryHint(status: NodeModelStatus, error: unknown): NodeModelStatus {
+  if (status.verdict !== 'unknown') return status;
+  const retryAfterMs = transientStatusRetryAfterMs(error);
+  return retryAfterMs !== undefined ? { ...status, retryAfterMs } : status;
+}
 
 function factsErrorText(error: unknown): string {
   const code = typeof (error as { code?: unknown } | null)?.code === 'string' ? (error as { code: string }).code : '';
@@ -454,7 +493,7 @@ export async function resolveNodeModelStatus(input: {
       const known = judgeNodeModelStatus({ dbnum, row, loadedModelSesno, changedSessions: null, error: reason, now: input.now });
       return known.verdict === 'updating'
         ? { ...known, source: 'model-status' }
-        : { ...known, verdict: 'unknown', reason, source: 'model-status' };
+        : withRetryHint({ ...known, verdict: 'unknown', reason, source: 'model-status' }, error);
     }
     if (facts) {
       const since = reloadCheckSince(facts, loadedModelSesno);
@@ -463,7 +502,10 @@ export async function resolveNodeModelStatus(input: {
         const changedSinceLoaded = await input.listChangedSessions({ dbnum: facts.dbnum, refno, sinceSesno: since, signal: input.signal });
         return judgeNodeModelFacts({ facts, loadedModelSesno, changedSinceLoaded, now: input.now });
       } catch (error) {
-        return judgeNodeModelFacts({ facts, loadedModelSesno, changedSinceLoaded: null, error: errorText(error), now: input.now });
+        return withRetryHint(
+          judgeNodeModelFacts({ facts, loadedModelSesno, changedSinceLoaded: null, error: factsErrorText(error), now: input.now }),
+          error,
+        );
       }
     }
   }
@@ -473,14 +515,17 @@ export async function resolveNodeModelStatus(input: {
     const changedSessions = await input.listChangedSessions({ dbnum, refno, sinceSesno: since, signal: input.signal });
     return judgeNodeModelStatus({ dbnum, row, loadedModelSesno, changedSessions, now: input.now });
   } catch (error) {
-    return judgeNodeModelStatus({
-      dbnum,
-      row,
-      loadedModelSesno,
-      changedSessions: null,
-      error: errorText(error),
-      now: input.now,
-    });
+    return withRetryHint(
+      judgeNodeModelStatus({
+        dbnum,
+        row,
+        loadedModelSesno,
+        changedSessions: null,
+        error: factsErrorText(error),
+        now: input.now,
+      }),
+      error,
+    );
   }
 }
 

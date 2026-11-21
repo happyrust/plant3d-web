@@ -640,4 +640,68 @@ describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () 
     expect(store.view('9304_2')).toMatchObject({ verdict: 'lagging', action: 'update' });
     expect(store.view('24381_535')).toMatchObject({ verdict: 'untracked', iconKind: null, action: null });
   });
+
+  it('#321：node/versions 遇 503 SOURCE_CHANGED（或旧后端 source changed while opening）不锁成已判过，按 Retry-After 自动补问并恢复最新', async () => {
+    vi.useFakeTimers();
+    try {
+      const { store, fetchFacts } = await loadStoreWithFacts();
+      fetchFacts.mockResolvedValue(null);
+      setRows({ ...ROW_1112, model_sesno: 748, file_latest_sesno: 748 });
+
+      h.listNodeVersions
+        .mockRejectedValueOnce(Object.assign(new Error('打开 dbnum 1112 会话 740 时库文件正在写入'), {
+          code: 'SOURCE_CHANGED',
+          status: 503,
+          retryAfterMs: 2_000,
+        }))
+        .mockResolvedValueOnce(timeline([]));
+
+      store.noteLoaded('9304_2', 1112, { modelSesno: 738, fileLatestSesno: 738 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.listNodeVersions).toHaveBeenCalledTimes(1);
+      expect(store.view('9304_2')?.verdict).toBe('unknown');
+
+      // 2 秒后自动补问并收敛到 latest，无需库水位再次变动或人工点击
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(h.listNodeVersions).toHaveBeenCalledTimes(2);
+      expect(store.view('9304_2')?.verdict).toBe('latest');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('#321：持续 503 SOURCE_CHANGED 最多自动补问 3 次后停止；确定性 404 不自动重试', async () => {
+    vi.useFakeTimers();
+    try {
+      const { store, fetchFacts } = await loadStoreWithFacts();
+      fetchFacts.mockResolvedValue(null);
+      setRows({ ...ROW_1112, model_sesno: 748, file_latest_sesno: 748 });
+
+      h.listNodeVersions.mockRejectedValue(Object.assign(new Error('source changed while opening frozen session'), {
+        code: 'SOURCE_CHANGED',
+        status: 503,
+        retryAfterMs: 2_000,
+      }));
+      store.noteLoaded('9304_2', 1112, { modelSesno: 738, fileLatestSesno: 738 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.listNodeVersions).toHaveBeenCalledTimes(1);
+
+      // 第 1/2/3 次自动重试（2s / 4s / 6s）后停止，不再无限轮询
+      await vi.advanceTimersByTimeAsync(2_000 + 4_000 + 6_000 + 10_000);
+      expect(h.listNodeVersions).toHaveBeenCalledTimes(4);
+      expect(store.view('9304_2')?.verdict).toBe('unknown');
+
+      // 确定性 404 SESSION_NOT_FOUND：零自动重试
+      h.listNodeVersions.mockClear();
+      h.listNodeVersions.mockRejectedValue(Object.assign(new Error('session 9999 not found'), {
+        code: 'SESSION_NOT_FOUND',
+        status: 404,
+      }));
+      store.noteLoaded('9304_3', 1112, { modelSesno: 738, fileLatestSesno: 738 });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(h.listNodeVersions).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

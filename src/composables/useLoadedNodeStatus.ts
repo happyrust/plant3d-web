@@ -44,6 +44,8 @@ export const LOADED_NODE_DBNUMS_POLL_MS = 60_000;
 export const LOADED_NODE_CHECK_CONCURRENCY = 2;
 /** 后端跑完的一批里重新生成的单元多于这个数，就不逐个查它们在哪些已装节点下面了（等逐会话的核对） */
 export const LOADED_NODE_BATCH_ROOTS_LIMIT = 40;
+/** 同一水位下遇瞬时可重试失败（如 503 `SOURCE_CHANGED`，happyrust/gen-model#321）最多自动补问几次 */
+export const LOADED_NODE_TRANSIENT_RETRY_MAX = 3;
 
 /** 后端的一版节点模型：已生成的那部分对应到哪些会话、当时有几个生成单元落后（后端没给为 `null`） */
 export type LoadedNodeGeneration = { sesnoMin: number; sesnoMax: number; laggingUnits: number | null };
@@ -119,6 +121,9 @@ const entries = reactive(new Map<string, LoadedNodeEntry>());
 const checkTokens = new Map<string, number>();
 /** 每个节点上一次判定时库的水位：变了才重问 */
 const checkedAgainst = new Map<string, string>();
+/** 每个节点在同一水位下的瞬时可重试失败计数与待触发定时器（#321） */
+const transientRetries = new Map<string, { against: string; count: number }>();
+const transientRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const inflight = new Map<string, AbortController>();
 const queue: string[] = [];
 let running = 0;
@@ -306,9 +311,16 @@ function stopWatchingIfIdle(): void {
   unsubscribeBatches = null;
 }
 
+function clearTransientRetryTimer(key: string): void {
+  const timer = transientRetryTimers.get(key);
+  if (timer !== undefined) clearTimeout(timer);
+  transientRetryTimers.delete(key);
+}
+
 function schedule(key: string): void {
   const entry = entries.get(key);
   if (!entry) return;
+  clearTransientRetryTimer(key);
   // 在路上的那一次作废（节点被重新登记，或水位又变了）
   inflight.get(key)?.abort();
   inflight.delete(key);
@@ -348,9 +360,15 @@ async function run(key: string): Promise<void> {
     if (!current || checkTokens.get(key) !== token) return;
     current.status = status;
     current.checking = false;
+    const transientRetryMs = status.verdict === 'unknown' ? status.retryAfterMs : undefined;
+    const prevRetry = transientRetries.get(key);
+    const nextAttempt = transientRetryMs !== undefined
+      ? (prevRetry?.against === against ? prevRetry.count + 1 : 1)
+      : 0;
+    const willRetry = transientRetryMs !== undefined && nextAttempt <= LOADED_NODE_TRANSIENT_RETRY_MAX;
     // 装上之后头一次问到的那一版记下来（见 `LoadedNodeEntry.loadedGenerated`）：说不出也记一笔，之后答上来的不补——
-    // 隔了一阵才问到的那一版，保不准还是装上时的
-    if (current.loaded && current.loadedGenerated === undefined && status.source === 'model-status') {
+    // 隔了一阵才问到的那一版，保不准还是装上时的；瞬时可重试（马上会补问）暂不落成 null。
+    if (current.loaded && current.loadedGenerated === undefined && status.source === 'model-status' && !willRetry) {
       current.loadedGenerated = status.generated
         ? { sesnoMin: status.generated.sesnoMin, sesnoMax: status.generated.sesnoMax, laggingUnits: status.units?.lagging ?? null }
         : null;
@@ -361,9 +379,26 @@ async function run(key: string): Promise<void> {
     if (status.source === 'model-status' && status.unitsToGenerate === 0 && !isGenerationFillActive(key)) {
       clearPendingGenerationFill(key);
     }
-    checkedAgainst.set(key, against);
-    // 判的这一会儿库的水位又变了（比如库状态刚取到）：按新的再判一次
-    if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key);
+    if (willRetry && transientRetryMs !== undefined) {
+      // #321：瞬时可重试失败不记成「按当前水位判过了」，按退避时长自动补问一次
+      transientRetries.set(key, { against, count: nextAttempt });
+      const delay = Math.min(10_000, transientRetryMs * nextAttempt);
+      clearTransientRetryTimer(key);
+      transientRetryTimers.set(key, setTimeout(() => {
+        transientRetryTimers.delete(key);
+        if (entries.has(key) && checkTokens.get(key) === token) schedule(key);
+      }, delay));
+      // 判的这一会儿库的水位已经动了就立刻按新的重问，不等退避
+      if (watermarkKey(rowOf(current.dbnum)) !== against) {
+        transientRetries.delete(key);
+        schedule(key);
+      }
+    } else {
+      transientRetries.delete(key);
+      checkedAgainst.set(key, against);
+      // 判的这一会儿库的水位又变了（比如库状态刚取到）：按新的再判一次
+      if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key);
+    }
   } finally {
     running -= 1;
     if (inflight.get(key) === controller) inflight.delete(key);
@@ -404,6 +439,8 @@ export function noteLoadedNode(
     staleReason: null,
   });
   checkedAgainst.delete(key);
+  transientRetries.delete(key);
+  clearTransientRetryTimer(key);
   startWatching();
   schedule(key);
 }
@@ -469,6 +506,8 @@ export function recheckLoadedNodeLater(refno: string, delaysMs: readonly number[
 
 function drop(key: string): void {
   clearFollowUps(key);
+  clearTransientRetryTimer(key);
+  transientRetries.delete(key);
   inflight.get(key)?.abort();
   inflight.delete(key);
   checkTokens.delete(key);
@@ -494,6 +533,7 @@ export function resetLoadedNodes(): void {
 export function recheckLoadedNode(refno: string): void {
   const key = toRefnoKey(refno);
   if (!entries.has(key)) return;
+  transientRetries.delete(key);
   refreshRows();
   schedule(key);
 }
