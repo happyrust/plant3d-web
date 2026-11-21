@@ -6,6 +6,7 @@ import {
   mergeRootRefnoWithVisibleRefnos,
   planShowRefnoDelta,
   prepareBranLoadPlan,
+  rememberableDirectLoadedRefnos,
   resolveShowDbnumOverride,
   runBranLoadPlan,
   type AppliedShowGroup,
@@ -433,5 +434,23 @@ describe('planShowRefnoDelta', () => {
       load: ['24381_1', '24381_2'],
       unchanged: ['24383_91813'],
     });
+  });
+});
+
+describe('rememberableDirectLoadedRefnos（KG1：地址栏直装不把无几何的容器根算进已装构件）', () => {
+  it('容器根无几何（出现在 noGeoRowsRefnos 或 missingRefnos）时自动剔除，只保留真正落成几何的构件', () => {
+    const requested = ['24384_47469', '24384_47471', '24384_47472'];
+    expect(rememberableDirectLoadedRefnos(requested, {
+      missingBreakdown: { noGeoRowsRefnos: ['24384/47469'] },
+      missingRefnos: ['24384_47469'],
+    })).toEqual(['24384_47471', '24384_47472']);
+  });
+
+  it('根自身就是带几何的叶子或含隐含直管的 BRAN（不在缺失名单里）时原样保留', () => {
+    const requested = ['24381_145018', '24381_145019'];
+    expect(rememberableDirectLoadedRefnos(requested, {
+      missingBreakdown: { noGeoRowsRefnos: [] },
+      missingRefnos: [],
+    })).toEqual(['24381_145018', '24381_145019']);
   });
 });

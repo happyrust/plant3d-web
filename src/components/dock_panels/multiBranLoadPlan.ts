@@ -328,3 +328,27 @@ export async function runBranLoadPlan<T>(
 
   return { succeeded, failures, sideEffectFailures };
 }
+
+/**
+ * 地址栏直装（`show_refno`）记进 `rememberLoadedRefnos` 的构件名单（修复 KG1）：
+ * `prepareBranLoadPlan` 为兜底「节点自身带几何」会把容器根拼进请求名单，但容器本身无几何行
+ * （装载器记在 `noGeoRowsRefnos` / `missingRefnos`）。过滤掉未落成几何的 refno，避免头一次
+ * 「取最新」重载与后端几何构件名单相减时把容器自身多算成「撤下 1 个构件」。
+ */
+export function rememberableDirectLoadedRefnos(
+  requestedRefnos: readonly string[],
+  loadOutcome: {
+    missingBreakdown?: { noGeoRowsRefnos?: readonly string[] };
+    missingRefnos?: readonly string[];
+  },
+): string[] {
+  const normalized = normalizeRefnoList(requestedRefnos);
+  const excluded = new Set(
+    normalizeRefnoList([
+      ...(loadOutcome.missingBreakdown?.noGeoRowsRefnos ?? []),
+      ...(loadOutcome.missingRefnos ?? []),
+    ]),
+  );
+  if (excluded.size === 0) return [...normalized];
+  return normalized.filter(refno => !excluded.has(refno));
+}

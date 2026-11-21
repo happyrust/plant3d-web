@@ -45,6 +45,7 @@ import {
   mergeRootRefnoWithVisibleRefnos as mergeRefnoEntries,
   planShowRefnoDelta,
   prepareBranLoadPlan,
+  rememberableDirectLoadedRefnos,
   resolveShowDbnumOverride,
   runBranLoadPlan,
   type AppliedShowGroup,
@@ -4836,11 +4837,16 @@ onMounted(async () => {
         })),
       ];
       publishShowRefnoApplied();
-      // 取最新：地址栏直装的根登记在册；一组只有一个根时顺带记下它装了哪些构件（重载时比得出谁被删了）
+      // 取最新：地址栏直装的根登记在册；一组只有一个根时顺带记下实际落成几何的构件（修复 KG1：不把无几何的容器根自身算进去）
       for (const outcome of loadOutcome.succeeded) {
         const groupRoots = loadRefnos.filter(refno => outcome.refnos.includes(refno));
         for (const refno of groupRoots) noteGetWorkRoot(refno, outcome.dbno, getWorkMarkOf(outcome.dbno), 'show_refno');
-        if (groupRoots.length === 1) modelGenerationRef.value?.rememberLoadedRefnos(groupRoots[0]!, outcome.refnos);
+        if (groupRoots.length === 1) {
+          modelGenerationRef.value?.rememberLoadedRefnos(
+            groupRoots[0]!,
+            rememberableDirectLoadedRefnos(outcome.refnos, outcome.value),
+          );
+        }
       }
       if (isStale()) return;
       for (const outcome of loadOutcome.succeeded) {
