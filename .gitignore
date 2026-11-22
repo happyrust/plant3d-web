@@ -94,6 +94,7 @@ e2e/*
 !e2e/dimension-camera-baseline.spec.ts
 !e2e/multi-bran-show-refno.spec.ts
 !e2e/mbd-label-overlap.spec.ts
+!e2e/rule-check-workbench.spec.ts
 scripts/*
 !scripts/p0-live-smoke.mjs
 !scripts/run-dimension-browser-perf.mjs
