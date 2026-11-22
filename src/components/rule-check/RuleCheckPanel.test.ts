@@ -55,6 +55,7 @@ vi.mock('@/composables/useSpatialQuery', () => ({
 import RuleCheckPanel from './RuleCheckPanel.vue';
 
 import { resetRuleCheckStore } from '@/composables/useRuleCheck';
+import { resetRuleCheckOverlayStore } from '@/composables/useRuleCheckOverlay';
 
 async function flushUi() {
   await Promise.resolve();
@@ -69,6 +70,7 @@ describe('RuleCheckPanel', () => {
 
   beforeEach(() => {
     resetRuleCheckStore();
+    resetRuleCheckOverlayStore();
     host = document.createElement('div');
     document.body.appendChild(host);
     selectionStub.setSelectedRefno.mockReset();
@@ -193,5 +195,63 @@ describe('RuleCheckPanel', () => {
     expect(setObjectsVisible).toHaveBeenCalledWith(['24381_10', '24381_20'], true);
     expect(setObjectsSelected).toHaveBeenCalledWith(['24381_10', '24381_20'], true);
     expect(flyTo).toHaveBeenCalledWith({ aabb: [0, 0, 0, 10, 10, 10], fit: true, duration: 0.8 });
+  });
+
+  it('applies and restores firezone 3D overlay and exports CSV/JSON reports', async () => {
+    const setObjectColor = vi.fn();
+    const resetObjectColor = vi.fn();
+    const setObjectsXRayed = vi.fn();
+    const requestRender = vi.fn();
+
+    viewerContextStub.viewerRef.value = {
+      __dtxLayer: {
+        getAllObjectIds: () => ['o:24381_500:0', 'o:24381_501:0', 'o:24381_10:0'],
+        setObjectColor,
+        resetObjectColor,
+      },
+      requestRender,
+      scene: {
+        getLoadedRefnos: () => ['24381_500', '24381_501', '24381_10'],
+        ensureRefnos: vi.fn(),
+        setObjectsVisible: vi.fn(),
+        setObjectsSelected: vi.fn(),
+        setObjectsXRayed,
+        getAABB: vi.fn(() => null),
+      },
+      cameraFlight: { flyTo: vi.fn() },
+    };
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const fireBtn = host.querySelector<HTMLButtonElement>('[data-testid="rule-check-firezone-overlay-btn"]');
+    expect(fireBtn).not.toBeNull();
+    fireBtn!.click();
+    await flushUi();
+
+    expect(setObjectColor).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-testid="rule-check-overlay-legend"]')?.textContent).toContain('已着色 2 构件 / 2 图元');
+
+    const clearBtn = host.querySelector<HTMLButtonElement>('[data-testid="rule-check-clear-overlay-btn"]');
+    expect(clearBtn).not.toBeNull();
+    clearBtn!.click();
+    await flushUi();
+    expect(resetObjectColor).toHaveBeenCalledTimes(2);
+
+    const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-export-csv-btn"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-export-json-btn"]')!.click();
+    expect(createSpy).toHaveBeenCalledTimes(2);
+    expect(clickSpy).toHaveBeenCalledTimes(2);
+    expect(revokeSpy).toHaveBeenCalledTimes(2);
+    createSpy.mockRestore();
+    revokeSpy.mockRestore();
+    clickSpy.mockRestore();
   });
 });

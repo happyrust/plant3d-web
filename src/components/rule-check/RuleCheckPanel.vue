@@ -1,7 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-import { CheckSquare, Crosshair, Loader2, Play, RefreshCw, Search, Square, X } from 'lucide-vue-next';
+import {
+  CheckSquare,
+  Crosshair,
+  Download,
+  FileJson,
+  Flame,
+  Loader2,
+  Palette,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Square,
+  X,
+} from 'lucide-vue-next';
 
 import type { UnifiedRuleViolation } from '@/api/ruleCheckApi';
 
@@ -11,9 +25,21 @@ import {
   useRuleCheck,
   type RuleCheckEngineFilter,
 } from '@/composables/useRuleCheck';
+import {
+  RULE_CHECK_OVERLAY_PALETTE,
+  useRuleCheckOverlay,
+  type RuleCheckOverlayCategory,
+  type RuleCheckOverlayMode,
+} from '@/composables/useRuleCheckOverlay';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useViewerContext } from '@/composables/useViewerContext';
+import {
+  buildRuleCheckCsv,
+  buildRuleCheckJson,
+  formatExportTimestamp,
+  triggerTextDownload,
+} from '@/utils/ruleCheckExport';
 
 const ruleCheck = useRuleCheck();
 const {
@@ -37,6 +63,15 @@ const {
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
 const spatialQuery = useSpatialQuery();
+const { overlayState, applyOverlay, clearOverlay } = useRuleCheckOverlay();
+
+const OVERLAY_LEGEND_CATEGORIES: RuleCheckOverlayCategory[] = [
+  'firezone_red',
+  'firezone_yellow',
+  'violation',
+  'semi_auto',
+  'reminder',
+];
 
 const activeTab = ref<'catalog' | 'results'>('catalog');
 const onlyViolationsFilter = ref(true);
@@ -60,8 +95,49 @@ onMounted(() => {
 });
 
 async function handleRunChecks() {
+  clearOverlay();
   activeTab.value = 'results';
   await runChecks();
+}
+
+function handleClearResults() {
+  clearOverlay();
+  clearResults();
+}
+
+async function handleToggleOverlay(mode: RuleCheckOverlayMode) {
+  if (overlayState.activeMode === mode) {
+    clearOverlay();
+    return;
+  }
+  await applyOverlay(allViolations.value, { mode, xrayOthers: overlayState.xrayOthers });
+}
+
+function handleExportCsv() {
+  const csv = buildRuleCheckCsv(allViolations.value);
+  triggerTextDownload(
+    csv,
+    `rule-check-report-${formatExportTimestamp()}.csv`,
+    'text/csv;charset=utf-8;',
+  );
+}
+
+function handleExportJson() {
+  const json = buildRuleCheckJson({
+    summary: {
+      ...summaryStats.value,
+      totalElapsedMs: state.totalElapsedMs,
+    },
+    warnings: [...state.catalogWarnings, ...state.runWarnings],
+    batches: state.batches,
+    results: state.results,
+    violations: allViolations.value,
+  });
+  triggerTextDownload(
+    json,
+    `rule-check-report-${formatExportTimestamp()}.json`,
+    'application/json;charset=utf-8;',
+  );
 }
 
 function handleFillBranFromSelection() {
@@ -262,7 +338,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
           <input v-model="onlyViolationsFilter" type="checkbox" class="rounded" />
           仅看有检出
         </label>
-        <button type="button" class="text-muted-foreground hover:underline" @click="clearResults()">清空</button>
+        <button type="button" class="text-muted-foreground hover:underline" @click="handleClearResults()">清空</button>
       </div>
     </div>
 
@@ -341,6 +417,93 @@ async function focusViolation(violation: UnifiedRuleViolation) {
         <div class="rounded border border-border bg-card py-1">
           <div class="font-mono text-sm font-semibold">{{ state.totalElapsedMs }} ms</div>
           <div class="text-[10px] text-muted-foreground">耗时</div>
+        </div>
+      </div>
+
+      <!-- 三维着色覆盖层与报告导出工具条 -->
+      <div v-if="state.results.length > 0"
+        class="space-y-1.5 border-b border-border bg-card/60 px-3 py-1.5">
+        <div class="flex flex-wrap items-center justify-between gap-1.5">
+          <div class="flex flex-wrap items-center gap-1">
+            <button type="button"
+              data-testid="rule-check-firezone-overlay-btn"
+              class="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40"
+              :class="
+                overlayState.activeMode === 'firezone'
+                  ? 'border-red-500 bg-red-500/15 font-medium text-red-600'
+                  : 'border-border bg-background hover:bg-muted'
+              "
+              :disabled="overlayState.applying || summaryStats.firezones === 0"
+              title="按火灾分区红（扩散性）/黄（局部性）对三维构件批量着色"
+              @click="handleToggleOverlay('firezone')">
+              <Flame class="h-3 w-3" />
+              火灾着色 ({{ summaryStats.firezones }})
+            </button>
+            <button type="button"
+              data-testid="rule-check-all-overlay-btn"
+              class="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40"
+              :class="
+                overlayState.activeMode === 'all'
+                  ? 'border-primary bg-primary/15 font-medium text-primary'
+                  : 'border-border bg-background hover:bg-muted'
+              "
+              :disabled="overlayState.applying || allViolations.length === 0"
+              title="按火灾色与违规分级对全部涉事构件批量着色"
+              @click="handleToggleOverlay('all')">
+              <Palette class="h-3 w-3" />
+              分级着色
+            </button>
+            <label class="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+              <input v-model="overlayState.xrayOthers" type="checkbox" class="rounded" />
+              背景透视
+            </label>
+            <button v-if="overlayState.activeMode !== null"
+              type="button"
+              data-testid="rule-check-clear-overlay-btn"
+              class="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              @click="clearOverlay()">
+              <RotateCcw class="h-3 w-3" />
+              还原
+            </button>
+          </div>
+          <div class="flex items-center gap-1">
+            <button type="button"
+              data-testid="rule-check-export-csv-btn"
+              class="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"
+              title="导出中文 Excel 兼容 UTF-8 BOM CSV 报告"
+              @click="handleExportCsv()">
+              <Download class="h-3 w-3" />
+              CSV
+            </button>
+            <button type="button"
+              data-testid="rule-check-export-json-btn"
+              class="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"
+              title="导出完整结构化 JSON 校验报告"
+              @click="handleExportJson()">
+              <FileJson class="h-3 w-3" />
+              JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- 激活着色时的实时图例 -->
+        <div v-if="overlayState.activeMode !== null"
+          data-testid="rule-check-overlay-legend"
+          class="flex flex-wrap items-center gap-2 rounded bg-muted/50 px-2 py-1 text-[10px]">
+          <span v-for="cat in OVERLAY_LEGEND_CATEGORIES.filter((c) => overlayState.categoryCounts[c] > 0)"
+            :key="cat"
+            class="inline-flex items-center gap-1">
+            <span class="inline-block h-2 w-2 rounded-full"
+              :style="{ backgroundColor: RULE_CHECK_OVERLAY_PALETTE[cat].hex }" />
+            {{ RULE_CHECK_OVERLAY_PALETTE[cat].label }}
+            <span class="font-mono text-muted-foreground">{{ overlayState.categoryCounts[cat] }}</span>
+          </span>
+          <span class="ml-auto font-mono text-muted-foreground">
+            已着色 {{ overlayState.paintedRefnoCount }} 构件 / {{ overlayState.paintedObjectCount }} 图元
+          </span>
+        </div>
+        <div v-if="overlayState.lastNotice" class="text-[10px] text-amber-700 dark:text-amber-300">
+          {{ overlayState.lastNotice }}
         </div>
       </div>
 
