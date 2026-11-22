@@ -635,6 +635,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'modelVersionCompare');
   closePanelIfExists(dockApi, 'reviewAttachmentPreview');
   closePanelIfExists(dockApi, 'spatialCompute');
+  closePanelIfExists(dockApi, 'ruleCheck');
   closePanelIfExists(dockApi, 'incrementRecords');
   closePanelIfExists(dockApi, 'rvmCheck');
 
@@ -718,6 +719,7 @@ function createEmbedFocusedLayout(
     'reviewAttachmentPreview',
     'materialConfig',
     'spatialCompute',
+    'ruleCheck',
     'incrementRecords',
     'rvmCheck',
   ].forEach((panelId) => {
@@ -971,6 +973,14 @@ function ensurePanel(panelId: string) {
       id: 'spatialCompute',
       component: 'SpatialComputePanel',
       title: '中心线净距',
+      ...rightZoneExtras(),
+    });
+  }
+  if (normalizedPanelId === 'ruleCheck') {
+    return addPanelSafely(dockApi, {
+      id: 'ruleCheck',
+      component: 'RuleCheckPanel',
+      title: '规范校验',
       ...rightZoneExtras(),
     });
   }
@@ -1285,6 +1295,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.spatialCompute':
       openPanel('spatialCompute');
+      return;
+    case 'panel.ruleCheck':
+      openPanel('ruleCheck');
       return;
     case 'panel.ptset':
       togglePanel('ptset');
