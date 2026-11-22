@@ -360,6 +360,11 @@ function ownGenerationNewer(root: GetWorkRoot, status: NodeModelStatus): boolean
   return root.loadedFileLatestSesno !== null && generated.sesnoMax > root.loadedFileLatestSesno;
 }
 
+/** 先前按无生成单元撤空的节点（`loadedGenerated === null`），如今后端重新长出了生成单元 */
+function emptyRootRegainedModel(root: GetWorkRoot, status: NodeModelStatus): boolean {
+  return root.empty === true && root.loadedGenerated === null && status.generated !== null;
+}
+
 /**
  * 一个节点这一轮怎么办（纯函数）。原则：后端现在有它的模型、而且和本页装的不一样 → 重载；库里没有它了 → 撤下；
  * 后端没有它的（完整）模型、库在更新、判不了 → 屏幕上的不动，照实说（**后端没有模型不等于它被删了**）。
@@ -376,12 +381,15 @@ export function decideRootAction(
     case 'reloadable':
       return { kind: 'reload', note: null };
     case 'latest':
-      // 本页装的是哪一版没记下来，或先前名下查空撤下、如今重新有了模型：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
-      if (root.empty || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };
+      // 本页装的是哪一版没记下来，或先前按无单元撤空、如今重新有了生成单元：换一次最稳；
+      // 仍是空生成单元且自撤空以来没有任何会话变动（未判成 `reloadable`）的节点不重复重载。
+      if (emptyRootRegainedModel(root, status) || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
+        return { kind: 'reload', note: null };
+      }
       return { kind: 'none' };
     case 'lagging': {
       const behind = '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上';
-      if (root.empty || status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
+      if (emptyRootRegainedModel(root, status) || status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
         return { kind: 'reload', note: behind };
       }
       return { kind: 'keep', reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上' };

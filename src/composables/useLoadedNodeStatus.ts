@@ -509,6 +509,24 @@ export function loadedNodeEntry(refno: string): LoadedNodeEntry | null {
   return entries.get(toRefnoKey(refno)) ?? null;
 }
 
+/**
+ * 已撤空跟踪的节点（`entry.empty === true`）在后端答 `latest` 时，是否真的重新长出了可显示的模型：
+ * - 先前是无生成单元的空容器（`loadedGenerated === null`，如删空后的 ZONE），如今有了生成单元（`status.generated !== null`）；
+ * - 或是按需生成库里出现了比撤空时更新的一版 `own_generation`；
+ * 其余情况（例如空 EQUI 本身仍是 1/1 已生成单元、自撤空以来没有任何新会话变动）仍按名下无几何的 `empty` 展示，
+ * 避免撤空后立刻误亮「重载」；等几何真正回归存盘后，后端会给出 `lagging` → `reloadable`。
+ */
+function emptyNodeRegainedModel(entry: LoadedNodeEntry, status: NodeModelStatus): boolean {
+  const generated = status.generated;
+  if (!generated) return false;
+  if (entry.loadedGenerated === null) return true;
+  if (generated.basis === 'own_generation') {
+    if (entry.loadedGenerated != null && generated.sesnoMax > entry.loadedGenerated.sesnoMax) return true;
+    if (entry.loadedFileLatestSesno !== null && generated.sesnoMax > entry.loadedFileLatestSesno) return true;
+  }
+  return false;
+}
+
 /** 行尾要画的东西；这个节点不在表里回 `null`。 */
 export function loadedNodeView(refno: string): LoadedNodeView | null {
   const entry = entries.get(toRefnoKey(refno));
@@ -526,13 +544,23 @@ export function loadedNodeView(refno: string): LoadedNodeView | null {
       checking: entry.checking,
     };
   }
-  // 先前重载查空撤下了旧构件（眼睛亮着继续跟踪），后端现在重新有了它的模型：行上直接给「重载」
+  // 先前重载查空撤下了旧构件（眼睛亮着继续跟踪）：后端仍答 `latest` 且没有新变动时保持 `empty`（不误亮「重载」），
+  // 只有确认重新长出模型时才直接给「重载」。
   if (entry.empty === true && status.verdict === 'latest') {
+    if (emptyNodeRegainedModel(entry, status)) {
+      return {
+        verdict: 'reloadable',
+        iconKind: 'reloadable',
+        title: '本节点：有更新可重载：名下重新有了可显示的模型，屏幕上还没有装入\n点「重载」按后端现在的模型装入场景',
+        action: 'reload',
+        checking: entry.checking,
+      };
+    }
     return {
-      verdict: 'reloadable',
-      iconKind: 'reloadable',
-      title: '本节点：有更新可重载：名下重新有了可显示的模型，屏幕上还没有装入\n点「重载」按后端现在的模型装入场景',
-      action: 'reload',
+      verdict: 'empty',
+      iconKind: 'nothing',
+      title: '本节点：当前名下已没有可显示的几何（已从场景撤下，保持跟踪；几何恢复后自动提示重载）',
+      action: null,
       checking: entry.checking,
     };
   }

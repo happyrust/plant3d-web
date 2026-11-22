@@ -2172,18 +2172,20 @@ describe('查空撤下后继续跟踪，几何回来自动装回（#322 方案 A
   const BOX_REBUILT = '24384_47499';
   const reloads = (log: string[]) => log.filter((line) => line.startsWith('reload '));
 
-  it('decideRootAction 与 screenHoldsBackendModel：已撤空节点遇 empty 不再重复撤下，遇 latest/lagging 触发重载', () => {
-    const emptyRoot = root(EQ_A, { empty: true });
-    expect(decideRootAction(emptyRoot, { status: status('empty'), gone: false }, { restarted: false })).toEqual({ kind: 'none' });
-    expect(decideRootAction(emptyRoot, { status: status('latest'), gone: false }, { restarted: false })).toEqual({ kind: 'reload', note: null });
-    expect(decideRootAction(emptyRoot, { status: status('lagging'), gone: false }, { restarted: false })).toMatchObject({ kind: 'reload' });
-    expect(decideRootAction(emptyRoot, { status: status('unknown'), gone: true }, { restarted: false })).toEqual({ kind: 'withdraw' });
-    expect(screenHoldsBackendModel(emptyRoot, status('latest', {
-      generated: { sesnoMin: 1146, sesnoMax: 1146, timeMin: null, basis: 'library_watermark' },
-    }))).toBe(false);
+  it('decideRootAction 与 screenHoldsBackendModel：已撤空节点遇 empty 或无变动的空生成单元 latest 不重复重载，遇 reloadable 或无单元容器恢复生成单元时触发重载', () => {
+    const emptyUnitRoot = root(EQ_A, { empty: true, loadedGenerated: { sesnoMin: 1144, sesnoMax: 1144, laggingUnits: 0 } });
+    const emptyContainerRoot = root(EQ_A, { empty: true, loadedGenerated: null });
+    const generated = { sesnoMin: 1146, sesnoMax: 1146, timeMin: null, basis: 'library_watermark' as const };
+    expect(decideRootAction(emptyUnitRoot, { status: status('empty'), gone: false }, { restarted: false })).toEqual({ kind: 'none' });
+    expect(decideRootAction(emptyUnitRoot, { status: status('latest', { generated }), gone: false }, { restarted: false })).toEqual({ kind: 'none' });
+    expect(decideRootAction(emptyUnitRoot, { status: status('reloadable', { generated }), gone: false }, { restarted: false })).toEqual({ kind: 'reload', note: null });
+    expect(decideRootAction(emptyContainerRoot, { status: status('latest', { generated }), gone: false }, { restarted: false })).toEqual({ kind: 'reload', note: null });
+    expect(decideRootAction(emptyContainerRoot, { status: status('lagging', { generated }), gone: false }, { restarted: false })).toMatchObject({ kind: 'reload' });
+    expect(decideRootAction(emptyUnitRoot, { status: status('unknown'), gone: true }, { restarted: false })).toEqual({ kind: 'withdraw' });
+    expect(screenHoldsBackendModel(emptyUnitRoot, status('latest', { generated }))).toBe(false);
   });
 
-  it('K20 全链路：唯一构件被删后撤空留表 → 同库别的会话推进时不重复撤下 → 构件重建回来时自动重载装回', async () => {
+  it('K20 全链路：唯一构件被删后撤空留表 → 同库别的会话推进且本节点无变动时不重复重载 → 构件重建回来（reloadable）时自动重载装回', async () => {
     const world = makeWorld({
       rows: [row(ROW_8000, { model_sesno: 1144, applied_sesno: 1144, file_latest_sesno: 1144 })],
       roots: [root(EQ_A, { loadedModelSesno: 1143, loadedFileLatestSesno: 1143 })],
@@ -2198,9 +2200,10 @@ describe('查空撤下后继续跟踪，几何回来自动装回（#322 方案 A
     expect(leg1.models.withdrawn).toEqual([{ refno: EQ_A, refnos: 1, why: 'empty' }]);
     expect(leg1.models).toMatchObject({ componentsAdded: 0, componentsRemoved: 1 });
 
-    // 模拟 useModelGeneration 以 empty: true 留在已加载节点表，随后同库别的节点推进到 1145、EQ_A 依然为空
-    world.roots = [root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true })];
+    // 模拟 useModelGeneration 以 empty: true 留在已加载节点表，随后同库别的节点推进到 1145、EQ_A 依然为空（哪怕后端作为空 EQUI 单元答 latest）
+    world.roots = [root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true, loadedGenerated: { sesnoMin: 1144, sesnoMax: 1144, laggingUnits: 0 } })];
     world.rows = [row(ROW_8000, { model_sesno: 1145, applied_sesno: 1145, file_latest_sesno: 1145 })];
+    world.statuses = { [EQ_A]: { status: status('latest'), gone: false } };
     log.length = 0;
 
     const idle = await engine.getLatest();
@@ -2208,9 +2211,9 @@ describe('查空撤下后继续跟踪，几何回来自动装回（#322 方案 A
     expect(idle.models.withdrawn).toEqual([]);
     expect(reloads(log)).toEqual([]);
 
-    // 2. 重建构件回到 EQ_A 名下（会话 1146）：后端答 latest，取最新自动重载装回
+    // 2. 重建构件回到 EQ_A 名下（会话 1146）：后端版本表报有变动（reloadable），取最新自动重载装回
     world.rows = [row(ROW_8000, { model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 })];
-    world.statuses = { [EQ_A]: { status: status('latest'), gone: false } };
+    world.statuses = { [EQ_A]: { status: RELOADABLE, gone: false } };
     world.afterReload = { [EQ_A]: [BOX_REBUILT] };
     log.length = 0;
 
@@ -2225,12 +2228,12 @@ describe('查空撤下后继续跟踪，几何回来自动装回（#322 方案 A
     const world = makeWorld({
       rows: [row(ROW_8000, { model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 })],
       roots: [
-        root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true }),
+        root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, empty: true, loadedGenerated: { sesnoMin: 1144, sesnoMax: 1144, laggingUnits: 0 } }),
         root(EQ_B, { loadedModelSesno: 1145, loadedFileLatestSesno: 1145 }),
       ],
       statuses: {
-        [EQ_A]: { status: status('latest'), gone: false },
-        [EQ_B]: { status: status('empty'), gone: false },
+        [EQ_A]: { status: RELOADABLE, gone: false },
+        [EQ_B]: { status: RELOADABLE, gone: false },
       },
       loaded: { [EQ_B]: [BOX] },
       afterReload: { [EQ_A]: [BOX], [EQ_B]: null },
