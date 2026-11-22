@@ -546,8 +546,8 @@ async function focusViolation(violation: UnifiedRuleViolation) {
             </div>
             <div class="text-[11px] leading-snug text-foreground">{{ v.detail }}</div>
             <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] text-muted-foreground">
-              <span v-if="v.measuredMm !== undefined">实测 {{ v.measuredMm.toFixed(1) }}</span>
-              <span v-if="v.thresholdMm !== undefined">阈值 {{ v.thresholdMm.toFixed(1) }}</span>
+              <span v-if="v.measuredMm !== undefined">实测 {{ v.measuredMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
+              <span v-if="v.thresholdMm !== undefined">阈值 {{ v.thresholdMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
               <span v-if="v.highlightRefnos.length > 0">高亮 {{ v.highlightRefnos.join(', ') }}</span>
             </div>
           </div>

@@ -231,6 +231,7 @@ export interface UnifiedRuleViolation {
   measuredMm?: number;
   thresholdMm?: number;
   marginMm?: number;
+  unit?: string;
   hasColumn?: boolean;
   severity: RuleCheckSeverity;
   highlightColor?: RuleCheckHighlightColor;
@@ -486,6 +487,7 @@ export function normalizeSpatialResponse(res: SpatialRuleCheckResponse): Unified
           measuredMm: v.measured_mm,
           thresholdMm: v.threshold_mm,
           marginMm: v.margin_mm,
+          unit: r.unit,
           severity: 'violation',
           highlightRefnos: (v.highlight_refnos ?? []).map(normalizeRuleRefnoToken).filter(Boolean),
           detail: `${v.source.noun} ${srcRef} ↔ ${v.target.noun} ${tgtRef} 实测 ${v.measured_mm.toFixed(1)} ${r.unit}（规范 ${r.requirement}，阈值 ${v.threshold_mm.toFixed(1)} ${r.unit}）`,
@@ -493,6 +495,31 @@ export function normalizeSpatialResponse(res: SpatialRuleCheckResponse): Unified
       }),
     })),
   };
+}
+
+function extractRealRefnoTokens(raw?: string): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  for (const part of raw.split('~')) {
+    const token = normalizeRuleRefnoToken(part);
+    if (/^\d+_\d+$/.test(token) && !out.includes(token)) {
+      out.push(token);
+    }
+  }
+  return out;
+}
+
+function resolveBranHighlightRefnos(v: BranViolationJson, branchRefno: string): string[] {
+  const direct = (v.highlight_refnos ?? []).map(normalizeRuleRefnoToken).filter(Boolean);
+  if (direct.length > 0) return direct;
+  const fallback = [
+    ...extractRealRefnoTokens(v.source?.refno),
+    ...extractRealRefnoTokens(v.target?.refno),
+  ];
+  const unique = Array.from(new Set(fallback));
+  if (unique.length > 0) return unique;
+  const branch = normalizeRuleRefnoToken(branchRefno);
+  return branch ? [branch] : [];
 }
 
 export function normalizeBranResponse(res: BranRuleCheckResponse): UnifiedRuleCheckBatchResult {
@@ -525,8 +552,9 @@ export function normalizeBranResponse(res: BranRuleCheckResponse): UnifiedRuleCh
         measuredMm: v.measured_mm,
         thresholdMm: v.threshold_mm,
         marginMm: v.margin_mm,
+        unit: r.unit,
         severity: normalizeSeverity(v.severity),
-        highlightRefnos: (v.highlight_refnos ?? []).map(normalizeRuleRefnoToken).filter(Boolean),
+        highlightRefnos: resolveBranHighlightRefnos(v, res.branch_refno),
         detail: v.detail,
       })),
     })),
@@ -566,6 +594,7 @@ export function normalizeRoomResponse(res: RoomRuleCheckResponse): UnifiedRuleCh
         measuredMm: v.measured_mm,
         thresholdMm: v.threshold_mm,
         marginMm: v.margin_mm,
+        unit: r.unit,
         hasColumn: v.has_column,
         severity: 'violation',
         highlightRefnos: (v.highlight_refnos ?? []).map(normalizeRuleRefnoToken).filter(Boolean),
