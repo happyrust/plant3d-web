@@ -214,6 +214,21 @@ const OBJECTS_TEXTURE_WIDTH = 512;
 const PIXELS_PER_OBJECT = 4;
 /** 材质调色板最大容量 */
 const MAX_MATERIAL_PALETTE_SIZE = 256;
+/** colorsAndFlags pixel0.g 覆盖标志位：bit0=颜色覆盖，bit1=透明度覆盖（调色板满 256 种时的独立回退） */
+const OVERRIDE_FLAG_COLOR = 1;
+const OVERRIDE_FLAG_OPACITY = 2;
+
+function encodeOpacityByte(opacity: number): number {
+  const clamped = Math.min(1, Math.max(0, opacity));
+  if (clamped >= 0.999) return 255;
+  if (clamped <= 0.001) return 0;
+  return Math.min(254, Math.max(1, Math.round(clamped * 255)));
+}
+
+function opacityNeedsOverride(paletteOpacity: number, targetOpacity: number): boolean {
+  return dtxRenderPassOf(paletteOpacity) !== dtxRenderPassOf(targetOpacity)
+    || Math.abs(paletteOpacity - targetOpacity) > 0.01;
+}
 
 // ========== DTXLayer 类 ==========
 
@@ -277,6 +292,8 @@ export class DTXLayer {
   private _materialPaletteBuffer: Float32Array;
   /** 当前材质数量 */
   private _materialCount = 0;
+  /** 调色板满告警只打一次，避免 10 万构件 demo 等场景刷屏 */
+  private _paletteFullWarned = false;
 
   // ========== 几何注册表 ==========
 
@@ -666,13 +683,14 @@ export class DTXLayer {
   // ========== 对象管理 ==========
 
   /**
-   * 获取或创建材质调色板条目
-   * @param color 颜色
-   * @param metalness 金属度
-   * @param roughness 粗糙度
-   * @returns 材质索引
+   * 尝试获取或创建材质调色板条目；调色板已满且无命中时返回 null（调用方保留原材质并走透明度覆盖通道）。
    */
-  private _getOrCreateMaterialIndex(color: Color, metalness: number, roughness: number, opacity: number): number {
+  private _tryGetOrCreateMaterialIndex(
+    color: Color,
+    metalness: number,
+    roughness: number,
+    opacity: number,
+  ): number | null {
     // 生成材质键 (颜色精度降低到 0-255，PBR 精度降低到 0-100)
     const r = Math.floor(color.r * 255);
     const g = Math.floor(color.g * 255);
@@ -687,8 +705,7 @@ export class DTXLayer {
     }
 
     if (this._materialCount >= MAX_MATERIAL_PALETTE_SIZE) {
-      console.warn(`⚠️ 材质调色板已满 (${MAX_MATERIAL_PALETTE_SIZE})，复用最后一个材质`);
-      return MAX_MATERIAL_PALETTE_SIZE - 1;
+      return null;
     }
 
     const index = this._materialCount;
@@ -712,6 +729,24 @@ export class DTXLayer {
     }
 
     return index;
+  }
+
+  /**
+   * 获取或创建材质调色板条目
+   * @param color 颜色
+   * @param metalness 金属度
+   * @param roughness 粗糙度
+   * @returns 材质索引
+   */
+  private _getOrCreateMaterialIndex(color: Color, metalness: number, roughness: number, opacity: number): number {
+    const index = this._tryGetOrCreateMaterialIndex(color, metalness, roughness, opacity);
+    if (index !== null) return index;
+
+    if (!this._paletteFullWarned) {
+      this._paletteFullWarned = true;
+      console.warn(`⚠️ 材质调色板已满 (${MAX_MATERIAL_PALETTE_SIZE})，复用最后一个材质`);
+    }
+    return MAX_MATERIAL_PALETTE_SIZE - 1;
   }
 
   private _ensureVertexCapacity(requiredVertices: number): void {
@@ -832,9 +867,11 @@ export class DTXLayer {
     // 存储颜色/标志数据 (4 pixels * 4 channels = 16 bytes)
     const flagsOffset = objectIndex * 16;
 
-    // pixel 0: [materialIndex, hasColorOverride, visible, selected]
+    // pixel 0: [materialIndex, overrideFlags (bit0=color, bit1=opacity), visible, selected]
+    const paletteOpacity = this._materialPaletteBuffer[materialIndex * 8 + 5]!;
+    const useOpacityOverride = opacityNeedsOverride(paletteOpacity, opacity);
     this._colorsAndFlagsBuffer[flagsOffset + 0] = materialIndex;
-    this._colorsAndFlagsBuffer[flagsOffset + 1] = 0; // hasColorOverride = false
+    this._colorsAndFlagsBuffer[flagsOffset + 1] = useOpacityOverride ? OVERRIDE_FLAG_OPACITY : 0;
     this._colorsAndFlagsBuffer[flagsOffset + 2] = 1; // visible = true
     this._colorsAndFlagsBuffer[flagsOffset + 3] = 0; // selected = false
 
@@ -847,12 +884,12 @@ export class DTXLayer {
     // pixel 3: indexOffset (packed as 4 bytes)
     this._packUint32(this._colorsAndFlagsBuffer, flagsOffset + 12, geoHandle.indexBase);
 
-    // 初始化颜色覆盖为默认值
+    // 初始化颜色覆盖为默认值（a 通道在调色板满时承载逐对象透明度）
     const overrideOffset = objectIndex * 4;
     this._colorOverrideBuffer[overrideOffset + 0] = 255;
     this._colorOverrideBuffer[overrideOffset + 1] = 255;
     this._colorOverrideBuffer[overrideOffset + 2] = 255;
-    this._colorOverrideBuffer[overrideOffset + 3] = 255;
+    this._colorOverrideBuffer[overrideOffset + 3] = useOpacityOverride ? encodeOpacityByte(opacity) : 255;
 
     // 注册对象
     this._objects.set(objectId, obj);
@@ -1605,7 +1642,7 @@ export class DTXLayer {
 
   /**
    * 按当前透明度重建每构件的通道号，并同步两条通道网格的 visible（没有构件的通道整趟不画）。
-   * 透明度取调色板里的值：着色器读的就是它（调色板键按百分比量化，可能和 obj.opacity 有出入）。
+   * 口径与着色器一致：置了透明度覆盖位时读 colorOverrideTexture.a，否则读调色板里的透明度。
    */
   private _syncRenderPassVisibility(): void {
     if (this._passFlagsRevision === this._passRevision && this._passFlags.length === this._objectsArray.length) return;
@@ -1614,10 +1651,17 @@ export class DTXLayer {
     const flags = this._passFlags;
     const scale = this._styleOpacityScale;
     const palette = this._materialPaletteBuffer;
+    const flagsBuf = this._colorsAndFlagsBuffer;
+    const overrideBuf = this._colorOverrideBuffer;
     let opaque = 0;
     let transparent = 0;
     for (let i = 0; i < n; i++) {
-      const pass = dtxRenderPassOf(palette[this._objectsArray[i]!.materialIndex * 8 + 5]! * scale);
+      const obj = this._objectsArray[i]!;
+      const hasOpacityOverride = (flagsBuf[obj.objectIndex * 16 + 1]! & OVERRIDE_FLAG_OPACITY) !== 0;
+      const objOpacity = hasOpacityOverride
+        ? overrideBuf[obj.objectIndex * 4 + 3]! / 255
+        : palette[obj.materialIndex * 8 + 5]!;
+      const pass = dtxRenderPassOf(objOpacity * scale);
       flags[i] = pass;
       if (pass === DTX_PASS_OPAQUE) opaque++;
       else if (pass === DTX_PASS_TRANSPARENT) transparent++;
@@ -2203,53 +2247,81 @@ export class DTXLayer {
     const nextColor = params.color ?? current.color;
     const nextMetalness = params.metalness ?? current.metalness;
     const nextRoughness = params.roughness ?? current.roughness;
-    const nextOpacity = Math.min(1, Math.max(0, params.opacity ?? current.opacity));
+    const nextOpacity = Math.min(1, Math.max(0, params.opacity ?? obj.opacity));
 
-    const nextMaterialIndex = this._getOrCreateMaterialIndex(
+    const onlyOpacityRequested = params.color === undefined
+      && params.metalness === undefined
+      && params.roughness === undefined;
+    const triedMaterialIndex = this._tryGetOrCreateMaterialIndex(
       nextColor,
       nextMetalness,
       nextRoughness,
-      nextOpacity
+      nextOpacity,
     );
+    const nextMaterialIndex = triedMaterialIndex !== null
+      ? triedMaterialIndex
+      : onlyOpacityRequested
+        ? obj.materialIndex
+        : this._getOrCreateMaterialIndex(nextColor, nextMetalness, nextRoughness, nextOpacity);
+
+    const flagsOffset = obj.objectIndex * 16;
+    let colorsTextureChanged = false;
 
     if (nextMaterialIndex !== obj.materialIndex) {
       obj.materialIndex = nextMaterialIndex;
-
-      const flagsOffset = obj.objectIndex * 16;
       this._colorsAndFlagsBuffer[flagsOffset + 0] = nextMaterialIndex;
+      colorsTextureChanged = true;
+    }
 
-      if (this._colorsAndFlagsTexture) {
-        const pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
-        const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
-        const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
-        const dstOffset = (objY * pixelsPerRow + objX) * 4 + 0; // pixel 0, byte 0 (materialIndex)
-        const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
-        texData[dstOffset] = nextMaterialIndex;
-        this._colorsAndFlagsTexture.needsUpdate = true;
+    const paletteOpacity = this._materialPaletteBuffer[obj.materialIndex * 8 + 5]!;
+    const useOpacityOverride = triedMaterialIndex === null && opacityNeedsOverride(paletteOpacity, nextOpacity);
+    const prevOverrideFlags = this._colorsAndFlagsBuffer[flagsOffset + 1]!;
+    let nextOverrideFlags = useOpacityOverride
+      ? (prevOverrideFlags | OVERRIDE_FLAG_OPACITY)
+      : (prevOverrideFlags & ~OVERRIDE_FLAG_OPACITY);
+
+    if (!options.keepColorOverride) {
+      obj.hasColorOverride = false;
+      nextOverrideFlags &= ~OVERRIDE_FLAG_COLOR;
+    }
+
+    if (nextOverrideFlags !== prevOverrideFlags) {
+      this._colorsAndFlagsBuffer[flagsOffset + 1] = nextOverrideFlags;
+      colorsTextureChanged = true;
+    }
+
+    const nextAlphaByte = useOpacityOverride ? encodeOpacityByte(nextOpacity) : 255;
+    const overrideOffset = obj.objectIndex * 4;
+    if (this._colorOverrideBuffer[overrideOffset + 3] !== nextAlphaByte) {
+      this._colorOverrideBuffer[overrideOffset + 3] = nextAlphaByte;
+      if (this._colorOverrideTexture) {
+        const width = OBJECTS_TEXTURE_WIDTH;
+        const objX = obj.objectIndex % width;
+        const objY = Math.floor(obj.objectIndex / width);
+        const texData = textureData<Uint8Array>(this._colorOverrideTexture);
+        texData[(objY * width + objX) * 4 + 3] = nextAlphaByte;
+        this._colorOverrideTexture.needsUpdate = true;
       }
+    }
+
+    if (colorsTextureChanged && this._colorsAndFlagsTexture) {
+      const pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
+      const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
+      const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
+      const dstOffset = (objY * pixelsPerRow + objX) * 4;
+      const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
+      texData[dstOffset + 0] = this._colorsAndFlagsBuffer[flagsOffset + 0]!;
+      texData[dstOffset + 1] = this._colorsAndFlagsBuffer[flagsOffset + 1]!;
+      this._colorsAndFlagsTexture.needsUpdate = true;
     }
 
     obj.opacity = nextOpacity;
     // 逐构件调用的热路径：只标脏，通道号和网格 visible 在下一次选段 / update 时统一重建
     this._markPassDirty();
 
-    if (!options.keepColorOverride) {
-      obj.hasColorOverride = false;
-      const flagsOffset = obj.objectIndex * 16;
-      this._colorsAndFlagsBuffer[flagsOffset + 1] = 0; // hasColorOverride = false
-
-      if (this._colorsAndFlagsTexture) {
-        const pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
-        const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
-        const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
-        const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1; // pixel 0, byte 1 (hasColorOverride)
-        const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
-        texData[dstOffset] = 0;
-        this._colorsAndFlagsTexture.needsUpdate = true;
-      }
+    if (triedMaterialIndex !== null) {
+      this._syncMaterialPaletteTexture(nextMaterialIndex);
     }
-
-    this._syncMaterialPaletteTexture(nextMaterialIndex);
   }
 
   /**
@@ -2262,11 +2334,12 @@ export class DTXLayer {
     obj.hasColorOverride = true;
     obj.colorOverride.copy(color);
 
-    // 设置 hasColorOverride 标志到缓冲区
+    // 设置 hasColorOverride 位（保留 bit1 透明度覆盖位）
     const flagsOffset = obj.objectIndex * 16;
-    this._colorsAndFlagsBuffer[flagsOffset + 1] = 1; // hasColorOverride = true
+    const nextFlags = this._colorsAndFlagsBuffer[flagsOffset + 1]! | OVERRIDE_FLAG_COLOR;
+    this._colorsAndFlagsBuffer[flagsOffset + 1] = nextFlags;
 
-    // 更新颜色覆盖缓冲区
+    // 更新颜色覆盖缓冲区（保留 alpha 通道）
     const overrideOffset = obj.objectIndex * 4;
     const r = Math.floor(color.r * 255);
     const g = Math.floor(color.g * 255);
@@ -2274,20 +2347,19 @@ export class DTXLayer {
     this._colorOverrideBuffer[overrideOffset + 0] = r;
     this._colorOverrideBuffer[overrideOffset + 1] = g;
     this._colorOverrideBuffer[overrideOffset + 2] = b;
-    this._colorOverrideBuffer[overrideOffset + 3] = 255;
 
-    // 同步 hasColorOverride 标志到纹理 image.data
+    // 同步 overrideFlags 到纹理 image.data
     if (this._colorsAndFlagsTexture) {
       const pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
       const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
-      const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1; // pixel 0, byte 1 (hasColorOverride)
+      const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1;
       const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
-      texData[dstOffset] = 1;
+      texData[dstOffset] = nextFlags;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
 
-    // 同步颜色覆盖数据到纹理 image.data
+    // 同步颜色覆盖数据到纹理 image.data（保留 alpha 通道）
     if (this._colorOverrideTexture) {
       const width = OBJECTS_TEXTURE_WIDTH;
       const objX = obj.objectIndex % width;
@@ -2297,7 +2369,6 @@ export class DTXLayer {
       texData[texOffset + 0] = r;
       texData[texOffset + 1] = g;
       texData[texOffset + 2] = b;
-      texData[texOffset + 3] = 255;
       this._colorOverrideTexture.needsUpdate = true;
     }
   }
@@ -2311,18 +2382,19 @@ export class DTXLayer {
 
     obj.hasColorOverride = false;
 
-    // 清除 hasColorOverride 标志到缓冲区
+    // 只清除 hasColorOverride 位，保留 bit1 透明度覆盖位
     const flagsOffset = obj.objectIndex * 16;
-    this._colorsAndFlagsBuffer[flagsOffset + 1] = 0; // hasColorOverride = false
+    const nextFlags = this._colorsAndFlagsBuffer[flagsOffset + 1]! & ~OVERRIDE_FLAG_COLOR;
+    this._colorsAndFlagsBuffer[flagsOffset + 1] = nextFlags;
 
-    // 同步 hasColorOverride 标志到纹理 image.data
+    // 同步 overrideFlags 到纹理 image.data
     if (this._colorsAndFlagsTexture) {
       const pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
       const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
-      const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1; // pixel 0, byte 1 (hasColorOverride)
+      const dstOffset = (objY * pixelsPerRow + objX) * 4 + 1;
       const texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
-      texData[dstOffset] = 0;
+      texData[dstOffset] = nextFlags;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
   }
@@ -2415,6 +2487,15 @@ export class DTXLayer {
       texData = textureData<Uint8Array>(this._colorsAndFlagsTexture);
     }
 
+    let overrideTexData: Uint8Array | null = null;
+    let overrideTextureChanged = false;
+    if (this._colorOverrideTexture) {
+      overrideTexData = textureData<Uint8Array>(this._colorOverrideTexture);
+    }
+
+    let passDirty = false;
+    const encodedAlpha = encodeOpacityByte(nextOpacity);
+
     for (const objectId of objectIds) {
       const obj = this._objects.get(objectId);
       if (!obj) continue;
@@ -2430,7 +2511,7 @@ export class DTXLayer {
       const shouldClearColorOverride = !keepColorOverride && obj.hasColorOverride;
       if (!hasOpacityChanged && !shouldClearColorOverride) continue;
 
-      const nextMaterialIndex = this._getOrCreateMaterialIndex(
+      const triedMaterialIndex = this._tryGetOrCreateMaterialIndex(
         current.color,
         current.metalness,
         current.roughness,
@@ -2438,41 +2519,72 @@ export class DTXLayer {
       );
 
       obj.opacity = nextOpacity;
+      if (hasOpacityChanged) passDirty = true;
 
       const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
       const dstOffset = (objY * pixelsPerRow + objX) * 4;
       const flagsOffset = obj.objectIndex * 16;
 
-      if (nextMaterialIndex !== obj.materialIndex) {
-        obj.materialIndex = nextMaterialIndex;
-        this._colorsAndFlagsBuffer[flagsOffset + 0] = nextMaterialIndex;
+      if (triedMaterialIndex !== null && triedMaterialIndex !== obj.materialIndex) {
+        obj.materialIndex = triedMaterialIndex;
+        this._colorsAndFlagsBuffer[flagsOffset + 0] = triedMaterialIndex;
         if (texData) {
-          texData[dstOffset + 0] = nextMaterialIndex;
+          texData[dstOffset + 0] = triedMaterialIndex;
         }
         colorsTextureChanged = true;
       }
+
+      const paletteOpacity = this._materialPaletteBuffer[obj.materialIndex * 8 + 5]!;
+      const useOpacityOverride = triedMaterialIndex === null && opacityNeedsOverride(paletteOpacity, nextOpacity);
+
+      const prevFlags = this._colorsAndFlagsBuffer[flagsOffset + 1]!;
+      let nextFlags = useOpacityOverride
+        ? (prevFlags | OVERRIDE_FLAG_OPACITY)
+        : (prevFlags & ~OVERRIDE_FLAG_OPACITY);
 
       if (shouldClearColorOverride) {
         obj.hasColorOverride = false;
-        this._colorsAndFlagsBuffer[flagsOffset + 1] = 0;
+        nextFlags &= ~OVERRIDE_FLAG_COLOR;
+      }
+
+      if (nextFlags !== prevFlags) {
+        this._colorsAndFlagsBuffer[flagsOffset + 1] = nextFlags;
         if (texData) {
-          texData[dstOffset + 1] = 0;
+          texData[dstOffset + 1] = nextFlags;
         }
         colorsTextureChanged = true;
       }
 
-      updatedMaterialIndices.add(nextMaterialIndex);
+      const nextAlphaByte = useOpacityOverride ? encodedAlpha : 255;
+      const overrideOffset = obj.objectIndex * 4;
+      if (this._colorOverrideBuffer[overrideOffset + 3] !== nextAlphaByte) {
+        this._colorOverrideBuffer[overrideOffset + 3] = nextAlphaByte;
+        if (overrideTexData) {
+          const ovX = obj.objectIndex % OBJECTS_TEXTURE_WIDTH;
+          const ovY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
+          overrideTexData[(ovY * OBJECTS_TEXTURE_WIDTH + ovX) * 4 + 3] = nextAlphaByte;
+          overrideTextureChanged = true;
+        }
+      }
+
+      if (triedMaterialIndex !== null) {
+        updatedMaterialIndices.add(triedMaterialIndex);
+      }
     }
 
     if (colorsTextureChanged && this._colorsAndFlagsTexture) {
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
 
+    if (overrideTextureChanged && this._colorOverrideTexture) {
+      this._colorOverrideTexture.needsUpdate = true;
+    }
+
     for (const materialIndex of updatedMaterialIndices) {
       this._syncMaterialPaletteTexture(materialIndex);
     }
-    if (updatedMaterialIndices.size > 0) this._markPassDirty();
+    if (updatedMaterialIndices.size > 0 || passDirty) this._markPassDirty();
     this._syncRenderPassVisibility();
   }
 
@@ -2951,7 +3063,7 @@ export class DTXLayer {
 
       return {
         materialIndex: colorsTexData[base0 + 0] ?? 0,
-        hasColorOverride: (colorsTexData[base0 + 1] ?? 0) > 0,
+        hasColorOverride: ((colorsTexData[base0 + 1] ?? 0) & OVERRIDE_FLAG_COLOR) !== 0,
         visibleFlag: colorsTexData[base0 + 2] ?? 0,
         selectedFlag: colorsTexData[base0 + 3] ?? 0,
         primitiveOffset: unpack32(base1),
@@ -3344,6 +3456,8 @@ export class DTXLayer {
     this._objects.clear();
     this._objectsArray = [];
     this._materialPalette.clear();
+    this._materialCount = 0;
+    this._paletteFullWarned = false;
 
     if (this._debug) {
       console.log('🗑️ DTXLayer 已释放');
