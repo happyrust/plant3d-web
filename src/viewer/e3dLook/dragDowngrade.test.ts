@@ -6,6 +6,7 @@ import {
   DEFAULT_WARM_START_MS,
   DRAG_DOWNGRADE_GRACE_MS,
   createDragDowngradeState,
+  createDragPoseTracker,
   effectiveBudgetMs,
   isDragDowngradeEnabled,
   readDragDowngradeOptions,
@@ -422,5 +423,158 @@ describe('readFrameMetric', () => {
     expect(readFrameMetric(new URLSearchParams('dtx_frame_metric=cpu'), () => null)).toBe('cpu');
     expect(readFrameMetric(new URLSearchParams(''), (k) => (k === 'dtx_frame_metric' ? 'CPU' : null))).toBe('cpu');
     expect(readFrameMetric(new URLSearchParams('dtx_frame_metric=interval'), () => 'cpu')).toBe('interval');
+  });
+});
+
+describe('createDragPoseTracker 与装载静止帧护栏（#102）', () => {
+  const proj = (far: number, aspect = 1.5): number[] => [
+    1 / aspect, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, -far / (far - 0.1), -1,
+    0, 0, (-0.1 * far) / (far - 0.1), 0,
+  ];
+
+  it('空画布首帧后异步加载更新裁剪面并 auto-fit：同步基线后静止帧保持 L0，不掉入降级段表', () => {
+    const tracker = createDragPoseTracker();
+    let state = createDragDowngradeState();
+    const eps = 3e-4;
+
+    // 帧 0：模型未到达时的空白初始视角
+    const initMoved = tracker.consumeMoved({
+      position: { x: -21.93, y: 1.35, z: 29.45 },
+      target: { x: 0, y: 0, z: 0 },
+      projectionElements: proj(1000),
+    }, eps);
+    expect(initMoved).toBe(false);
+
+    // 模型首批落地：先调整裁剪面 near/far，再瞬时 auto-fit，并同步非交互基线
+    const loadedProj = proj(4500);
+    tracker.syncProjection(loadedProj);
+    const loadedPose = {
+      position: { x: 80, y: 60, z: 120 },
+      target: { x: 10, y: 5, z: 0 },
+      projectionElements: loadedProj,
+    };
+    tracker.sync(loadedPose);
+
+    // 装载完成后下一帧静止出画（非 E3D 模式 floorLevel=1）：不得误触发 L1/minPx 降级
+    const moved = tracker.consumeMoved(loadedPose, eps);
+    expect(moved).toBe(false);
+    const step = stepDragDowngrade(state, {
+      ...base,
+      cameraMoving: moved,
+      floorLevel: 1,
+      now: 100,
+    });
+    state = step.state;
+    expect(step.level).toBe(0);
+    expect(state.inGesture).toBe(false);
+    expect(state.warmLevel).toBe(0);
+  });
+
+  it('窗口 resize 同步投影基线后，后续静止帧不会因残留 projChanged 误降级', () => {
+    const tracker = createDragPoseTracker();
+    const eps = 3e-4;
+    const pose0 = {
+      position: { x: 10, y: 10, z: 10 },
+      target: { x: 0, y: 0, z: 0 },
+      projectionElements: proj(2000, 1.5),
+    };
+    tracker.consumeMoved(pose0, eps);
+
+    // renderFrameImmediate 处理 resize：aspect 变化并同步投影基线
+    const resizedProj = proj(2000, 1.2);
+    tracker.syncProjection(resizedProj);
+
+    const moved = tracker.consumeMoved({
+      ...pose0,
+      projectionElements: resizedProj,
+    }, eps);
+    expect(moved).toBe(false);
+  });
+
+  it('用户正在拖动时若后台批次更新裁剪面，syncProjection 不吞掉真实相机位移', () => {
+    const tracker = createDragPoseTracker();
+    const eps = 3e-4;
+    tracker.consumeMoved({
+      position: { x: 0, y: 0, z: 100 },
+      target: { x: 0, y: 0, z: 0 },
+      projectionElements: proj(1000),
+    }, eps);
+
+    const nextProj = proj(3000);
+    tracker.syncProjection(nextProj);
+    const moved = tracker.consumeMoved({
+      position: { x: 5, y: 0, z: 100 },
+      target: { x: 0, y: 0, z: 0 },
+      projectionElements: nextProj,
+    }, eps);
+    expect(moved).toBe(true);
+  });
+
+  it('单帧瞬时位移触发 L1 后相机静止，在宽限期满后恢复 L0 且释放 held（如窗口 blur）不会永久锁死', () => {
+    let state = createDragDowngradeState();
+    // 单帧触发 L1 且模拟按下鼠标拖动
+    const s1 = stepDragDowngrade(state, {
+      ...base,
+      held: true,
+      cameraMoving: true,
+      floorLevel: 1,
+      now: 1000,
+    });
+    state = s1.state;
+    expect(s1.level).toBe(1);
+    expect(state.inGesture).toBe(true);
+    expect(state.lastActiveAt).toBe(1000);
+
+    // 仍按住不动：保持 L1
+    const s2 = stepDragDowngrade(state, {
+      ...base,
+      held: true,
+      cameraMoving: false,
+      floorLevel: 1,
+      now: 1250,
+    });
+    state = s2.state;
+    expect(s2.level).toBe(1);
+
+    // 窗口 blur / 松手清除 held：宽限期内给 restoreAt，满宽限期回 L0 并报 restored
+    const s3 = stepDragDowngrade(state, {
+      ...base,
+      held: false,
+      cameraMoving: false,
+      floorLevel: 1,
+      now: 1300,
+    });
+    state = s3.state;
+    expect(s3.level).toBe(1);
+    expect(s3.restoreAt).toBe(1250 + DRAG_DOWNGRADE_GRACE_MS);
+
+    const s4 = stepDragDowngrade(state, {
+      ...base,
+      held: false,
+      cameraMoving: false,
+      floorLevel: 1,
+      now: 1250 + DRAG_DOWNGRADE_GRACE_MS,
+    });
+    expect(s4.level).toBe(0);
+    expect(s4.restored).toBe(true);
+    expect(s4.state.inGesture).toBe(false);
+  });
+
+  it('reset 清空基线后首帧重新视为静止', () => {
+    const tracker = createDragPoseTracker();
+    const eps = 3e-4;
+    tracker.sync({
+      position: { x: 0, y: 0, z: 10 },
+      target: { x: 0, y: 0, z: 0 },
+      projectionElements: proj(500),
+    });
+    tracker.reset();
+    expect(tracker.consumeMoved({
+      position: { x: 999, y: 0, z: 10 },
+      target: { x: 0, y: 0, z: 0 },
+      projectionElements: proj(5000),
+    }, eps)).toBe(false);
   });
 });

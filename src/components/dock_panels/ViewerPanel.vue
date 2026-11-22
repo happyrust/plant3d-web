@@ -211,6 +211,7 @@ import {
   SglLookPipeline,
   applySglLookPresetToPipelineParams,
   createDragDowngradeState,
+  createDragPoseTracker,
   frameSampleMs,
   isDragDowngradeEnabled,
   loadSgl31EnvCube,
@@ -1289,9 +1290,7 @@ let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
 
-let dragPoseValid = false;
-const dragPosePos = new Vector3();
-const dragPoseTarget = new Vector3();
+const dragPoseTracker = createDragPoseTracker();
 const tmpCameraPos = new Vector3();
 const tmpCameraTarget = new Vector3();
 const tmpProjMatrix = new Matrix4();
@@ -1681,6 +1680,7 @@ function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer)
     dtxViewer.camera.near = nextNear;
     dtxViewer.camera.far = nextFar;
     dtxViewer.camera.updateProjectionMatrix();
+    syncDragProjectionBaseline(dtxViewer);
   }
   return changed;
 }
@@ -3434,6 +3434,8 @@ function renderFrameImmediate() {
   // 同步出帧插在 rAF 链中间：下一帧的出帧间隔不再代表上一帧的耗时
   lastFrameTiming = null;
   renderedFrameCount += 1;
+  // resize 改了 aspect/projectionMatrix，只同步投影基线，避免下一次静止出帧误判为拖动（#102）
+  syncDragProjectionBaseline(dtxViewer);
 
   cadGridRef.value?.update(dtxViewer.controls.target);
   ensureLayerAttached();
@@ -3510,17 +3512,30 @@ function requestRender() {
  * 按需出帧时停下之后未必还有下一帧（视图立方体、定位构件这类一步到位的相机变化，或按住不动后松手），
  * 状态机看不到「已停」就会停在降画质那一帧上，所以交互期间一直挂着定时器，到点补一帧让它重新判断。
  */
-function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean, frameStart: number): boolean {
-  const viewDist = Math.max(1e-9, viewer.camera.position.distanceTo(viewer.controls.target));
-  const motion = Math.max(
-    dragPosePos.distanceTo(viewer.camera.position),
-    dragPoseTarget.distanceTo(viewer.controls.target),
-  ) / viewDist;
-  // 首帧没有上一次位姿可比，不算在动（否则一打开就先出 200ms 降画质）
-  const moved = dragPoseValid && (projChanged || motion > DRAG_MOTION_EPS);
-  dragPosePos.copy(viewer.camera.position);
-  dragPoseTarget.copy(viewer.controls.target);
-  dragPoseValid = true;
+function syncDragProjectionBaseline(viewer: DtxViewer): void {
+  dragPoseTracker.syncProjection(viewer.camera.projectionMatrix.elements);
+}
+
+function syncDragPoseBaseline(viewer: DtxViewer): void {
+  if (orbitControlsHeld || gizmoHeld) {
+    syncDragProjectionBaseline(viewer);
+    return;
+  }
+  dragPoseTracker.sync({
+    position: viewer.camera.position,
+    target: viewer.controls.target,
+    projectionElements: viewer.camera.projectionMatrix.elements,
+  });
+}
+
+function updateDragDowngrade(viewer: DtxViewer, frameStart: number): boolean {
+  // 首帧没有上一次位姿可比，不算在动（否则一打开就先出 200ms 降画质）；
+  // 非交互的裁剪面调整、加载 auto-fit、窗口 resize 已提前同步进基线，不会误触发降级（#102）
+  const moved = dragPoseTracker.consumeMoved({
+    position: viewer.camera.position,
+    target: viewer.controls.target,
+    projectionElements: viewer.camera.projectionMatrix.elements,
+  }, DRAG_MOTION_EPS);
 
   const now = performance.now();
   const timing = lastFrameTiming;
@@ -3567,7 +3582,9 @@ function updateDragDowngrade(viewer: DtxViewer, projChanged: boolean, frameStart
   const cullRestored = updateCullDrag(dragDowngradeLevel);
   const wakeAt = step.restoreAt
     ?? (step.state.inGesture ? step.state.lastActiveAt + dragDowngradeOptions.graceMs : null);
-  if (wakeAt !== null && dragDowngradeTimer === null) {
+  if (wakeAt === null) {
+    clearDragDowngradeTimer();
+  } else if (dragDowngradeTimer === null) {
     dragDowngradeTimer = setTimeout(() => {
       dragDowngradeTimer = null;
       // 只要一帧重新判断：真恢复时 restored 为真会自己出画，仍在交互（按住不动）就不重画
@@ -3660,7 +3677,7 @@ function renderFrame() {
             posDeltaSq > CAMERA_EPS_SQ || targetDeltaSq > CAMERA_EPS_SQ || projChanged;
     if (projChanged) tmpProjMatrix.copy(dtxViewer.camera.projectionMatrix);
 
-    const qualityRestored = updateDragDowngrade(dtxViewer, projChanged, frameStart);
+    const qualityRestored = updateDragDowngrade(dtxViewer, frameStart);
     // 这一帧不画：不留出帧记录，下一帧按当前档位继续判断
     if (!needsRender && !cameraChanged && !continuousRender && !qualityRestored) return;
 
@@ -4259,6 +4276,7 @@ onMounted(async () => {
         center.z + distance * 0.8,
       );
       dtxViewer.flyTo(position, center, { duration: 0 });
+      syncDragPoseBaseline(dtxViewer);
       requestRender();
     } catch (e) {
       console.warn('[ViewerPanel] primitives demo 初始化失败', e);
@@ -4346,6 +4364,7 @@ onMounted(async () => {
     toolsRef.value?.refreshReadyState();
     xeokitMeasurementToolsRef.value?.refreshReadyState();
     try {
+      syncDragPoseBaseline(dtxViewer);
       viewCullControllerRef.value?.refreshSpatialIndex();
       viewCullControllerRef.value?.update(dtxViewer.camera, viewportCssHeight());
     } catch {
@@ -5158,14 +5177,23 @@ onMounted(async () => {
   };
   const onControlsEnd = () => {
     orbitControlsHeld = false;
+    if (dragDowngradeState.inGesture) scheduleFrame();
+  };
+  const onWindowBlur = () => {
+    const wasHeld = orbitControlsHeld || gizmoHeld;
+    orbitControlsHeld = false;
+    gizmoHeld = false;
+    if (wasHeld && dragDowngradeState.inGesture) scheduleFrame();
   };
   dtxViewer.controls.addEventListener('change', onControlsChange);
   dtxViewer.controls.addEventListener('start', onControlsStart);
   dtxViewer.controls.addEventListener('end', onControlsEnd);
+  window.addEventListener('blur', onWindowBlur);
   offControlsChange = () => {
     dtxViewer.controls.removeEventListener('change', onControlsChange);
     dtxViewer.controls.removeEventListener('start', onControlsStart);
     dtxViewer.controls.removeEventListener('end', onControlsEnd);
+    window.removeEventListener('blur', onWindowBlur);
   };
 
   // gizmo 交互/动画期间需要持续触发渲染（否则按需渲染会"停帧"）
@@ -5781,7 +5809,7 @@ onUnmounted(() => {
     refreshProbeTimer = null;
   }
   cullDragApplied = false;
-  dragPoseValid = false;
+  dragPoseTracker.reset();
   orbitControlsHeld = false;
   gizmoHeld = false;
   detachPicking();

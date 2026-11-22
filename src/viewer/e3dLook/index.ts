@@ -71,6 +71,7 @@ export {
   DEFAULT_WARM_START_MS,
   DRAG_DOWNGRADE_GRACE_MS,
   createDragDowngradeState,
+  createDragPoseTracker,
   effectiveBudgetMs,
   isDragDowngradeEnabled,
   readDragDowngradeOptions,
@@ -80,6 +81,9 @@ export {
   type DragDowngradeOptions,
   type DragDowngradeState,
   type DragDowngradeStep,
+  type DragPosePoint,
+  type DragPoseSnapshot,
+  type DragPoseTracker,
   type FrameMetric,
   type SglDowngradeLevel
 } from './dragDowngrade';
