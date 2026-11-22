@@ -59,7 +59,7 @@ function createInitialState() {
   };
 }
 
-let state = reactive(createInitialState());
+const state = reactive(createInitialState());
 const activeController = ref<AbortController | null>(null);
 
 export function resetRuleCheckStore() {
