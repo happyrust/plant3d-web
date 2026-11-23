@@ -42,4 +42,12 @@ test('dimension_demo mounts the dimension system and starts a typed creation ses
   await expect.poll(() => page.evaluate(() => (
     (window as any).__viewerContext.dimensionSystem.value.pointer.hasActiveSession
   ))).toBe(false);
+
+  await page.getByTestId('dimension.create.angular').click();
+  await expect(page.getByTestId('dimension.angular.orthogonal-snap')).toBeEnabled();
+  await page.getByTestId('dimension.angular.orthogonal-snap').click();
+  await expect.poll(() => page.evaluate(() => (
+    (window as any).__viewerContext.dimensionSystem.value.pointer.sessionStatus?.kind ?? ''
+  ))).toBe('angular');
+  await page.getByTestId('dimension.cancel').click();
 });
