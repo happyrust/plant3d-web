@@ -6,7 +6,7 @@ import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { layoutRadial } from './radial';
 
-import type { NormalizedDimensionInput, ScreenLine, Vec2 } from '../types';
+import type { NormalizedDimensionInput, SceneLine, ScreenLine, Vec2 } from '../types';
 import type { LayoutContext } from './context';
 
 import { present } from '@/testing/present';
@@ -38,6 +38,42 @@ function input(
 }
 
 describe('layoutRadial', () => {
+  it('#72 引线端点在设计空间里，换相机只改投影', () => {
+    const angle = Math.PI / 5;
+    const right: [number, number, number] = [Math.cos(angle), 0, -Math.sin(angle)];
+    const rotated: LayoutContext = {
+      ...context,
+      projector: {
+        ...createTestProjector(),
+        right,
+        forward: [-Math.sin(angle), 0, -Math.cos(angle)],
+        project: point => ({
+          x: 200 + (point[0] * right[0] + point[2] * right[2]) * 100,
+          y: 200 - point[1] * 100,
+          depth: 0,
+        }),
+      },
+    };
+    const leaderAnchors = (view: LayoutContext) => {
+      const result = layoutRadial(input('diameter'), view);
+      expect(result.derived.valueM).toBe(1);
+      return result.scenePrimitives
+        .filter((primitive): primitive is SceneLine => primitive.kind === 'scene-line')
+        .flatMap(line => [line.from.anchor, line.to.anchor]);
+    };
+    for (const anchor of [...leaderAnchors(context), ...leaderAnchors(rotated)]) {
+      expect(anchor[2]).toBeCloseTo(0, 6);
+      expect(anchor[0]).toBeCloseTo(anchor[1], 5);
+    }
+    const front = layoutRadial(input('diameter'), context).primitives.find(item => item.kind === 'line');
+    const side = layoutRadial(input('diameter'), rotated).primitives.find(item => item.kind === 'line');
+    expect(front?.kind).toBe('line');
+    expect(side?.kind).toBe('line');
+    if (front?.kind === 'line' && side?.kind === 'line') {
+      expect(side.from[0]).not.toBeCloseTo(front.from[0]);
+    }
+  });
+
   it('uses identical geometry with radius and diameter formatting', () => {
     const radius = roundNumbers(layoutRadial(input('radius'), context));
     const diameter = roundNumbers(layoutRadial(input('diameter'), context));
@@ -93,6 +129,8 @@ describe('layoutRadial', () => {
       context,
     );
 
+    expect(layoutRadial(input('radius', { rim: [0, 0, 0] }), context).derived.validationErrors)
+      .toEqual(['DEGENERATE_RADIAL_RADIUS']);
     expect(result.derived.formattedLabel).toBe('SOURCE-R');
     expect(result.primitives.at(-1)).toMatchObject({
       kind: 'glyph-run',

@@ -936,6 +936,7 @@ class RadialEditSession extends BaseEditSession
       rim,
       normal,
       display: this.display,
+      referencedRadiusM: Math.hypot(...leaderDirection),
       placement: this.placement ?? {
         leaderDirection,
         labelDistanceM: 0.25,
@@ -1015,10 +1016,55 @@ class PlacementEditSession implements DimensionEditSession {
   }
 }
 
+function radialCircleFromCandidate(candidate: SnapCandidate): Readonly<{
+  center: DimensionAnchor;
+  rim: DimensionAnchor;
+  normal: ProjectionAxisRef;
+  referencedRadiusM: number;
+}> | null {
+  if (
+    (candidate.capability !== 'circle' && candidate.capability !== 'arc')
+    || !candidate.anchor.snapshot
+    || !candidate.direction
+    || !candidate.normal
+  ) {
+    return null;
+  }
+  const source = candidate.capability;
+  const referencedRadiusM = Math.hypot(...candidate.direction);
+  if (referencedRadiusM <= 1e-9) return null;
+  const baseCandidateId = (
+    candidate.anchor.semanticRef?.candidateId
+    ?? candidate.id.replace(/:(?:circle|arc)$/, '')
+  ).replace(/:(?:center|rim|normal)$/, '');
+  const semanticRef = (part: 'center' | 'rim' | 'normal'): SemanticAnchorRef => ({
+    source,
+    ...(candidate.anchor.semanticRef?.refno
+      ? { refno: candidate.anchor.semanticRef.refno }
+      : {}),
+    candidateId: `${baseCandidateId}:${part}`,
+  });
+  return {
+    center: { ...candidate.anchor, semanticRef: semanticRef('center') },
+    rim: {
+      snapshot: add(candidate.anchor.snapshot, candidate.direction),
+      accuracy: candidate.anchor.accuracy,
+      semanticRef: semanticRef('rim'),
+    },
+    normal: {
+      kind: 'semantic-direction',
+      snapshot: candidate.normal,
+      semanticRef: semanticRef('normal'),
+    },
+    referencedRadiusM,
+  };
+}
+
 class RebindEditSession implements DimensionEditSession {
   readonly kind: DimensionKind;
   private currentPhase: DimensionEditPhase = 'pick-first';
   private anchor: DimensionAnchor | null = null;
+  private circle: ReturnType<typeof radialCircleFromCandidate> = null;
 
   readonly validationErrors: readonly string[] = [];
 
@@ -1033,6 +1079,7 @@ class RebindEditSession implements DimensionEditSession {
   back(): boolean {
     if (this.currentPhase !== 'ready') return false;
     this.anchor = null;
+    this.circle = null;
     this.currentPhase = 'pick-first';
     this.input.onPreview(null);
     return true;
@@ -1041,28 +1088,37 @@ class RebindEditSession implements DimensionEditSession {
   pointerMove(screen: Vec2): void {
     if (this.currentPhase !== 'pick-first') return;
     const candidate = this.selectedCandidate(screen);
-    const preview = candidate?.anchor.snapshot
-      ? replacePreviewAnchor(
-        this.input.record,
-        this.input.anchorSlot,
-        candidate.anchor,
-      )
-      : null;
-    this.input.onPreview(preview ? normalizeUserDimension(preview) : null);
+    this.input.onPreview(this.previewFor(candidate));
   }
 
   pointerDown(screen: Vec2): void {
     if (this.currentPhase !== 'pick-first') return;
     const candidate = this.selectedCandidate(screen);
     if (!candidate?.anchor.snapshot) return;
-    this.anchor = candidate.anchor;
+    const circle = this.input.record.kind === 'radial'
+      ? radialCircleFromCandidate(candidate)
+      : null;
+    this.circle = circle;
+    this.anchor = circle?.center ?? candidate.anchor;
     this.currentPhase = 'ready';
-    const preview = replacePreviewAnchor(
-      this.input.record,
-      this.input.anchorSlot,
-      candidate.anchor,
-    );
-    this.input.onPreview(preview ? normalizeUserDimension(preview) : null);
+    this.input.onPreview(this.previewFor(candidate));
+  }
+
+  private previewFor(candidate: SnapCandidate | null) {
+    if (!candidate?.anchor.snapshot) return null;
+    const circle = this.input.record.kind === 'radial'
+      ? radialCircleFromCandidate(candidate)
+      : null;
+    const preview = circle && this.input.record.kind === 'radial'
+      ? {
+        ...this.input.record,
+        center: circle.center,
+        rim: circle.rim,
+        normal: circle.normal,
+        referencedRadiusM: circle.referencedRadiusM,
+      }
+      : replacePreviewAnchor(this.input.record, this.input.anchorSlot, candidate.anchor);
+    return preview ? normalizeUserDimension(preview) : null;
   }
 
   flip(): void {
@@ -1073,6 +1129,20 @@ class RebindEditSession implements DimensionEditSession {
     if (this.currentPhase !== 'ready' || !this.anchor) return null;
     this.currentPhase = 'committed';
     this.input.onPreview(null);
+    if (this.circle && this.input.record.kind === 'radial') {
+      return {
+        type: 'rebind-radial-circle',
+        commandId: this.input.createCommandId(),
+        actorId: this.input.actor.actorId,
+        actorRole: this.input.actor.actorRole,
+        at: this.input.now(),
+        dimensionId: this.input.record.id,
+        center: this.circle.center,
+        rim: this.circle.rim,
+        normal: this.circle.normal,
+        referencedRadiusM: this.circle.referencedRadiusM,
+      };
+    }
     return {
       type: 'rebind-anchor',
       commandId: this.input.createCommandId(),
@@ -1092,11 +1162,18 @@ class RebindEditSession implements DimensionEditSession {
   }
 
   private selectedCandidate(screen: Vec2): SnapCandidate | null {
-    return this.input.snapPort.query({
+    const capabilities: SnapCapability[] = this.input.record.kind === 'radial'
+      ? ['circle', 'arc', 'point']
+      : ['point'];
+    const candidates = this.input.snapPort.query({
       screen,
-      capabilities: ['point'],
+      capabilities,
       thresholdPx: this.input.thresholdPx ?? 18,
-    })[0] ?? null;
+    });
+    return candidates.find(candidate =>
+      candidate.capability === 'circle' || candidate.capability === 'arc')
+      ?? candidates.find(candidate => candidate.capability === 'point')
+      ?? null;
   }
 }
 

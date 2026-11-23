@@ -17,6 +17,14 @@ describe('validateDimensionRecord（DMCHEK-like 布局前校验）', () => {
     expect(validateDimensionRecord(linearRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(projectedRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(radialRecord())).toEqual({ ok: true });
+    expect(codes(validateDimensionRecord(radialRecord({
+      rim: exactAnchor([0, 0, 0]),
+    })))).toEqual(['DEGENERATE_RADIAL_RADIUS']);
+    expect(codes(validateDimensionRecord(radialRecord({
+      rim: { snapshot: null, accuracy: 'exact' },
+      validity: 'invalid',
+      referencedRadiusM: 0.5,
+    })))).toContain('UNRESOLVED_DIMENSION_POINT');
   });
 
   it('UNRESOLVED_DIMENSION_POINT：端点没有快照', () => {

@@ -107,4 +107,9 @@ export type UserDimensionRecord =
     normal: ProjectionAxisRef;
     display: RadialDisplay;
     placement: RadialPlacementIntent;
+    /**
+     * 拾取时的半径（设计系 m）。圆周点还在时布局用圆周点；圆周点丢了仍留着这份，
+     * 让半径/直径切换和校审回放知道原来的圆有多大，但不拿它编一个新的圆周点。
+     */
+    referencedRadiusM?: number;
   }>;

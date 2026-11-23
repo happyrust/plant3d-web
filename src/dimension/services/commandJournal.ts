@@ -111,6 +111,14 @@ function isDimensionCommand(value: unknown): value is DimensionCommand {
       return isNonEmptyString(command.dimensionId)
         && isNonEmptyString(command.anchorSlot)
         && asObject(command.anchor) !== null;
+    case 'rebind-radial-circle':
+      return isNonEmptyString(command.dimensionId)
+        && asObject(command.center) !== null
+        && asObject(command.rim) !== null
+        && asObject(command.normal) !== null
+        && (command.referencedRadiusM === undefined
+          || (typeof command.referencedRadiusM === 'number'
+            && Number.isFinite(command.referencedRadiusM)));
     default:
       return false;
   }
