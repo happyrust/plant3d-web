@@ -5,7 +5,7 @@ import {
   formatDimensionLabel,
   type DimensionFormatPolicy,
 } from './format';
-import { deriveDimensionValue } from './value';
+import { deriveDimensionValue, type DerivedDimensionValue } from './value';
 
 import type { NormalizedDimensionInput } from './types';
 
@@ -89,6 +89,44 @@ describe('formatDimensionLabel', () => {
         DEFAULT_DIMENSION_FORMAT,
       ),
     ).toEqual({ ok: true, text: 'STALE 1000.00' });
+  });
+
+  it('#73 单位、尾零、角度和 MBD 原文走同一张表，不读区域设置', () => {
+    const oneMetre = deriveDimensionValue(linear());
+    const angle: NormalizedDimensionInput = {
+      id: 'angle',
+      kind: 'angular',
+      role: 'normal',
+      labelPinned: false,
+      vertex: [0, 0, 0],
+      rayA: [1, 0, 0],
+      rayB: [0, 1, 0],
+      placement: { labelT: 0.5, arcChoice: 'minor' },
+    };
+    const rightAngle = deriveDimensionValue(angle);
+    const table: readonly (readonly [DimensionFormatPolicy, NormalizedDimensionInput, DerivedDimensionValue, string])[] = [
+      [{ ...DEFAULT_DIMENSION_FORMAT, lengthUnit: 'm', lengthDecimals: 3 }, linear(), oneMetre, '1.000'],
+      [{ ...DEFAULT_DIMENSION_FORMAT, lengthUnit: 'in', lengthDecimals: 3, trailingZeros: false }, linear(), oneMetre, '39.37'],
+      [{ ...DEFAULT_DIMENSION_FORMAT, lengthUnit: 'ft', lengthDecimals: 4, trailingZeros: false }, linear(), oneMetre, '3.2808'],
+      [{ ...DEFAULT_DIMENSION_FORMAT, angleUnit: 'rad', angleDecimals: 4, trailingZeros: false }, angle, rightAngle, '1.5708 rad'],
+      [{ ...DEFAULT_DIMENSION_FORMAT, lengthDecimals: 2, trailingZeros: false }, linear(), oneMetre, '1000'],
+    ];
+    for (const [policy, input, value, text] of table) {
+      expect(formatDimensionLabel(input, value, policy)).toEqual({ ok: true, text });
+    }
+    expect(formatDimensionLabel(
+      linear('external', 'MBD-TEXT'),
+      oneMetre,
+      { ...DEFAULT_DIMENSION_FORMAT, lengthUnit: 'in', trailingZeros: false },
+    )).toEqual({ ok: true, text: 'MBD-TEXT' });
+    expect(formatDimensionLabel(linear(), oneMetre, {
+      ...DEFAULT_DIMENSION_FORMAT,
+      locale: 'zh-CN',
+    })).toEqual({ ok: false, reason: 'unsupported-locale' });
+    expect(formatDimensionLabel(linear(), oneMetre, DEFAULT_DIMENSION_FORMAT)).toEqual({
+      ok: true,
+      text: '1000.00',
+    });
   });
 
   it('accepts authoritative text only for external dimensions', () => {
