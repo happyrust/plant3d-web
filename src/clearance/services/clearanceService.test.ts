@@ -3,8 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createClearanceService,
   parseServerWarning,
+  pipeClearanceRecordId,
+  pipeClearanceToRecord,
+  pointToSurfaceToRecord,
   surfaceClearanceToRecord,
 } from './clearanceService';
+
+import type { PipeClearanceResponse, PointToSurfaceResponse } from '@/api/genModelV1Api';
 
 import {
   beyondMaxDistanceResponse,
@@ -159,5 +164,160 @@ describe('createClearanceService', () => {
       }),
     });
     await expect(service.computeComponentToWall({ sourceRefno: '1_2', targetRefno: '1_3' })).rejects.toThrow(/target_not_wall/);
+  });
+});
+
+function pointToSurfaceResponse(overrides: Partial<PointToSurfaceResponse> = {}): PointToSurfaceResponse {
+  return {
+    success: true,
+    unit: 'mm',
+    method: 'point_to_surface',
+    accuracy_class: 'exact-surface',
+    error_bound_mm: 0.5,
+    query_point: { x: 1000, y: 2000, z: 3500 },
+    target: { refno: '24384/24830', noun: 'EQUI', leaf_count: 2, triangle_count: 24 },
+    result: {
+      distance_mm: 500,
+      target_point: { x: 1000, y: 2000, z: 3000 },
+      vector: { dx: 0, dy: 0, dz: -500 },
+      normal: { x: 0, y: 0, z: 1 },
+      feature: 'face',
+      target_leaf_refno: '24384/24831',
+      target_leaf_noun: 'BOX',
+    },
+    model: { source_sesno: null, target_sesno: 731 },
+    timing_ms: { load: 2, query: 1, total: 4 },
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function pipeClearanceResponse(overrides: Partial<PipeClearanceResponse> = {}): PipeClearanceResponse {
+  const segment = (refno: string, y: number) => ({
+    refno,
+    order: 1,
+    start: { x: 0, y, z: 0 },
+    end: { x: 4000, y, z: 0 },
+    outside_diameter_mm: 114.3,
+    effective_radius_mm: 57.15,
+  });
+  return {
+    success: true,
+    unit: 'mm',
+    method: 'pipe_to_pipe_analytic',
+    accuracy_class: 'exact-analytic',
+    error_bound_mm: 0.01,
+    source: { refno: '24381_145018', straight_segment_count: 3, insulation_mm: null, model_version: { dbnum: 24381, sesno: 812 } },
+    target: { refno: '24381_145100', straight_segment_count: 2, insulation_mm: null, model_version: { dbnum: 24381, sesno: 812 } },
+    result: {
+      distance_mm: 385.7,
+      intersects: false,
+      penetration_mm: null,
+      axis_distance_mm: 500,
+      source_point: { x: 2000, y: 57.15, z: 0 },
+      target_point: { x: 2000, y: 442.85, z: 0 },
+      vector: { dx: 0, dy: 385.7, dz: 0 },
+      source_axis_point: { x: 2000, y: 0, z: 0 },
+      target_axis_point: { x: 2000, y: 500, z: 0 },
+      source_segment: segment('24381_145018~24381_145019', 0),
+      target_segment: segment('24381_145100~24381_145101', 500),
+    },
+    pairs_evaluated: 6,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+describe('pointToSurfaceToRecord', () => {
+  it('converts a face hit into metres with exact-surface provenance', () => {
+    const record = pointToSurfaceToRecord(pointToSurfaceResponse(), { targetRefno: '24384/24830', point: [1, 2, 3.5] }, AT);
+    expect(record.targetRefno).toBe('24384_24830');
+    expect(record.queryPoint).toEqual([1, 2, 3.5]);
+    expect(record.snapshot?.distanceM).toBeCloseTo(0.5, 9);
+    expect(record.snapshot?.targetPoint).toEqual([1, 2, 3]);
+    expect(record.snapshot?.normal).toEqual([0, 0, 1]);
+    expect(record.snapshot?.feature).toBe('face');
+    expect(record.provenance.method).toBe('point-to-triangle-mesh');
+    expect(record.provenance.accuracyClass).toBe('exact-surface');
+    expect(record.provenance.sourceModelVersion).toBe('tgt:731');
+    expect(record.targetSesno).toBe(731);
+  });
+
+  it('keeps an empty answer with its beyond_max_distance warning', () => {
+    const record = pointToSurfaceToRecord(
+      pointToSurfaceResponse({ result: null, warnings: ['beyond_max_distance: 1000 mm 内没有面'] }),
+      { targetRefno: '24384_24830', point: [0, 0, 0], maxDistanceMm: 1000 },
+      AT,
+    );
+    expect(record.snapshot).toBeNull();
+    expect(record.provenance.warnings.map(w => w.code)).toEqual(['beyond_max_distance']);
+  });
+
+  it('refuses a response that claims a different method', () => {
+    expect(() => pointToSurfaceToRecord(
+      pointToSurfaceResponse({ method: 'surface_to_surface' }),
+      { targetRefno: '1_2', point: [0, 0, 0] },
+      AT,
+    )).toThrow(/method/);
+  });
+});
+
+describe('pipeClearanceToRecord', () => {
+  it('labels the analytic answer derived-nominal (axis exact, OD nominal) under its own record id', () => {
+    const record = pipeClearanceToRecord(
+      pipeClearanceResponse(),
+      { sourceRefno: '24381/145018', targetRefno: '24381_145100' },
+      AT,
+    );
+    expect(record.id).toBe(pipeClearanceRecordId('24381_145018', '24381_145100'));
+    expect(record.id).toBe('pipe-clearance:24381_145018:24381_145100');
+    expect(record.kind).toBe('component-to-component');
+    expect(record.inputs.targetKind).toBe('any');
+    expect(record.provenance.method).toBe('pipe-centerline-analytic');
+    expect(record.provenance.accuracyClass).toBe('derived-nominal');
+    expect(record.provenance.errorBoundM).toBeCloseTo(0.00001, 9);
+    expect(record.provenance.sourceModelVersion).toBe('src:24381:812;tgt:24381:812');
+    expect(record.snapshot?.distanceM).toBeCloseTo(0.3857, 9);
+    expect(record.snapshot?.sourcePoint).toEqual([2, 0.05715, 0]);
+    expect(record.modelVersion).toEqual({ sourceSesno: 812, targetSesno: 812 });
+  });
+
+  it('labels the end-cap answer as an approximate lower bound and reports penetration', () => {
+    const base = pipeClearanceResponse();
+    const record = pipeClearanceToRecord(
+      pipeClearanceResponse({
+        accuracy_class: 'approximate-capsule',
+        warnings: ['capsule_end_approximation: 最近点在管端'],
+        result: { ...base.result!, distance_mm: 0, intersects: true, penetration_mm: 12.5 },
+      }),
+      { sourceRefno: '24381_145018', targetRefno: '24381_145100' },
+      AT,
+    );
+    expect(record.provenance.method).toBe('pipe-capsule-bound');
+    expect(record.provenance.accuracyClass).toBe('approximate-bounds');
+    expect(record.snapshot?.intersects).toBe(true);
+    expect(record.provenance.warnings.map(w => w.code)).toEqual(['capsule_end_approximation', 'pipe_intersection']);
+  });
+});
+
+describe('createClearanceService point / pipe', () => {
+  it('sends the query point back in mm and forwards the abort signal', async () => {
+    const fetchPointToSurface = vi.fn(async () => pointToSurfaceResponse());
+    const fetchPipeClearance = vi.fn(async () => pipeClearanceResponse());
+    const service = createClearanceService({ fetchPointToSurface, fetchPipeClearance, now: () => AT });
+    const controller = new AbortController();
+
+    await service.computePointToSurface({ targetRefno: '24384_24830', point: [1, 2, 3.5], maxDistanceMm: 800 }, { signal: controller.signal });
+    expect(fetchPointToSurface).toHaveBeenCalledWith(
+      { targetRefno: '24384_24830', point: { x: 1000, y: 2000, z: 3500 }, maxDistanceMm: 800 },
+      { signal: controller.signal },
+    );
+
+    const record = await service.computePipeToPipe({ sourceRefno: '24381_145018', targetRefno: '24381_145100', sourceInsulationMm: 50 });
+    expect(record.provenance.method).toBe('pipe-centerline-analytic');
+    expect(fetchPipeClearance).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceRefno: '24381_145018', targetRefno: '24381_145100', sourceInsulationMm: 50 }),
+      undefined,
+    );
   });
 });

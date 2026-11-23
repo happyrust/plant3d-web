@@ -8,6 +8,14 @@ import type {
 } from '@/api/genModelSpatialApi';
 
 import { genModelV1SpatialNearestClearance, genModelV1SurfaceClearance } from '@/api/genModelV1Api';
+import {
+  assertNearestClearanceResponse,
+  assertSurfaceClearanceResponse,
+  ClearanceContractError,
+  enforceClearanceContract,
+  summarizeClearanceWarnings,
+} from '@/clearance/services/clearanceContract';
+import { createClearanceRequestGate } from '@/clearance/services/clearanceRequestGate';
 import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -403,7 +411,7 @@ type BranNearestClearanceQuery = {
  * （负几何服务端默认剔）、`max_per_group` 每类多取几条供列表勾选、`scope=all_loaded`、`surface=1`（2026-10-17 拍板：
  * 距离从管外表面起算、标注起点推到管表面——比中心线起算少报一个管半径；BRAN 无外径时服务端出 warning 退回中心线起算）。
  */
-async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Promise<BranNearestClearanceResponse> {
+async function fetchBranNearestClearance(query: BranNearestClearanceQuery, signal?: AbortSignal): Promise<BranNearestClearanceResponse> {
   return await genModelV1SpatialNearestClearance({
     sourceRefno: query.sourceRefno,
     sourceMode: 'bran_centerline',
@@ -419,7 +427,11 @@ async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Prom
     maxPerGroup: BRAN_CLEARANCE_MAX_PER_NOUN,
     scope: 'all_loaded',
     surface: true,
-  });
+  }, signal ? { signal } : undefined);
+}
+
+function contractWarningTexts(check: () => void): string[] {
+  return enforceClearanceContract(check).map(warning => `${warning.code}: ${warning.message}`);
 }
 
 function splitCsv(raw: string): string[] {
@@ -465,6 +477,8 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
   const scenarioExpanded = ref(false);
   const requestTokens: Record<string, number> = {};
   let nextRequestToken = 0;
+  /** 在途请求掐断（旧查询 / 同一条候选的旧精算）与模型版本回退闸；`requestTokens` 仍是结果写回的 epoch。 */
+  const requestGate = createClearanceRequestGate();
   let calculationsAllowed = true;
   const scenarios = reactive<Record<SpatialComputeScenarioKey, SpatialComputeScenarioState>>({
     branNearestClearance: createScenarioState('branNearestClearance'),
@@ -573,6 +587,8 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     invalidate: allowed => {
       calculationsAllowed = allowed;
       requestTokens.branNearestClearance = ++nextRequestToken;
+      requestGate.cancel();
+      requestGate.resetModelVersions();
       scenarios.branNearestClearance.loading = false;
       scenarios.branNearestClearance.refiningKeys = [];
     },
@@ -588,6 +604,8 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     if (state.responseText) return '已返回结果';
     return `${currentScenarioMeta.value.endpoint} · 只需完整 Refno`;
   });
+  /** 降级告警（包围盒近似 / 候选截断 / 版本未知 / 契约降级）单独成条醒目显示，其余 warning 原文列出。 */
+  const currentWarningSummary = computed(() => summarizeClearanceWarnings(currentScenarioState.value.warnings));
 
   function setPanelMode(mode: 'query' | 'compute') {
     panelMode.value = mode;
@@ -599,6 +617,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
 
   function resetScenario(key: SpatialComputeScenarioKey = activeScenario.value) {
     requestTokens[key] = ++nextRequestToken;
+    requestGate.cancel();
     Object.assign(scenarios[key], createScenarioState(key));
     autoQueriedBranRefno = '';
   }
@@ -636,25 +655,36 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     try {
       const structuralAngleDeg = parseOptionalNumber(state.structuralAngleDeg, '分类角度') ?? 5;
       if (structuralAngleDeg < 0 || structuralAngleDeg > 45) throw new Error('分类角度必须在 0 到 45 度之间');
-      const branResponse = await fetchBranNearestClearance({
+      const radius = parseOptionalNumber(state.searchRadius, 'radius') ?? 5000;
+      const outcome = await requestGate.run(`query:${key}`, signal => fetchBranNearestClearance({
         structureCategory: state.structureCategory,
         structuralAngleDeg,
         sourceRefno: refno,
         targetNouns: splitCsv(state.targetNouns),
         verticalNouns: splitCsv(state.verticalNouns),
         excludeNouns: splitCsv(state.excludeNouns),
-        radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
-      });
-      if (requestTokens[key] !== token) return;
+        radius,
+      }, signal));
+      if (outcome.status === 'superseded' || requestTokens[key] !== token) return;
+      const branResponse = outcome.value;
       state.responseText = JSON.stringify(branResponse, null, 2);
       if (!branResponse.success) {
         state.error = branResponse.error || branResponse.message || '请求失败';
         clearScenarioResults(state);
         return;
       }
+      // 只有带 `unit` 的 v1 信封才验契约；老对象形态的响应（无 unit）沿用宽松解析。
+      const contractWarnings = branResponse.unit === undefined
+        ? []
+        : contractWarningTexts(() => assertNearestClearanceResponse(branResponse));
+      if (!requestGate.acceptModelVersion(`bran:${refno}`, branResponse.model_version)) {
+        state.error = `响应来自更早的模型版本（会话 ${branResponse.model_version?.sesno}），已丢弃；请重新查询。`;
+        clearScenarioResults(state);
+        return;
+      }
       state.branGroups = normalizeBranNearestGroups(branResponse.nearest_by_group);
       state.queriedSourceRefno = refno;
-      state.warnings = [...(branResponse.warnings ?? [])];
+      state.warnings = [...(branResponse.warnings ?? []), ...contractWarnings];
       state.nounFacets = buildBranNounFacets(state.branGroups, branResponse.noun_counts);
       state.drawnCandidateKeys = defaultDrawnCandidateKeys(state.branGroups);
       state.excludedSelfMembers = branResponse.excluded_self_members ?? 0;
@@ -684,26 +714,22 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     state.error = '';
     try {
       // 垂直距候选（楼板类）的精算也走垂直口径：竖直射线网格测距，不是三维最近点。
-      const response = await genModelV1SurfaceClearance({
+      const outcome = await requestGate.run(`refine:${sourceRefno}:${candidateKey}`, signal => genModelV1SurfaceClearance({
         sourceRefno,
         targetRefno: candidate.refno,
         targetKind: 'any',
         vertical: candidate.vertical === true ? true : undefined,
-      });
-      if (requestTokens.branNearestClearance !== token) return;
-      const result = response.result;
-      const VERTICAL_WITNESSES = new Set(['vertical-ray', 'vertical-ray-miss', 'vertical-aabb']);
-      const validWitness = candidate.vertical === true
-        ? result?.vertical === true && VERTICAL_WITNESSES.has(result.witness ?? '')
-        : result?.witness === 'closest-points'
-          || (result?.witness === 'aabb-overlap-center' && result.intersects === true && result.distance_mm === 0);
-      if (!response.success || response.unit !== 'mm' || response.accuracy_class !== 'exact-surface'
-        || !Number.isFinite(response.error_bound_mm) || response.error_bound_mm < 0 || response.error_bound_mm > 10
-        || !result || !Number.isFinite(result.distance_mm) || result.distance_mm < 0
-        || !validWitness
-        || [result.source_point, result.target_point].some((point) => !point || ![point.x, point.y, point.z].every(Number.isFinite))) {
-        throw new Error('未取得可靠的外表面最近点，保留包围盒估算；请检查网格或相交状态。');
+      }, { signal }));
+      if (outcome.status === 'superseded' || requestTokens.branNearestClearance !== token) return;
+      const response = outcome.value;
+      // 精算是把候选升级为「精确」的唯一入口：契约不放宽（不吃 lenient），违约就保留包围盒估算。
+      try {
+        assertSurfaceClearanceResponse(response, { vertical: candidate.vertical === true, requireResult: true });
+      } catch (error) {
+        if (!(error instanceof ClearanceContractError)) throw error;
+        throw new Error(`未取得可靠的外表面最近点，保留包围盒估算；请检查网格或相交状态。（${error.field}）`);
       }
+      const result = response.result!;
       const samePoint = result.source_point.x === result.target_point.x
         && result.source_point.y === result.target_point.y
         && result.source_point.z === result.target_point.z;
@@ -987,7 +1013,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
       const apply = prepareSnapshotRestore(value);
       return () => persistence.applyPreparedRestore(apply);
     },
-    dispose: () => { persistence.dispose(); stopAutoFollowWatch(); clearAutoFollowTimer(); if (typeof window !== 'undefined') window.removeEventListener('modelProjectChanged', onProjectChanged); },
+    dispose: () => { requestGate.cancel(); persistence.dispose(); stopAutoFollowWatch(); clearAutoFollowTimer(); if (typeof window !== 'undefined') window.removeEventListener('modelProjectChanged', onProjectChanged); },
     panelMode,
     activeScenario,
     scenarioList,
@@ -997,6 +1023,7 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
     currentScenarioState,
     isBusy,
     currentSummary,
+    currentWarningSummary,
     setPanelMode,
     setActiveScenario,
     resetScenario,

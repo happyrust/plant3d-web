@@ -35,6 +35,10 @@ export function computationMethodLabel(method: ComputationMethod): string {
       return '连排截面中心距';
     case 'pipe-row-derived-gap':
       return '连排外径推导间隔';
+    case 'pipe-centerline-analytic':
+      return '直管轴线解析净距（名义外径）';
+    case 'pipe-capsule-bound':
+      return '管端胶囊体下界（真实净距更大）';
     case 'legacy-unknown':
       return '近似（口径未知）';
     default: {

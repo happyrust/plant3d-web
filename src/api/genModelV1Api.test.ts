@@ -15,6 +15,8 @@ import {
   genModelV1SpatialNearestClearance,
   genModelV1SpatialNegativeNouns,
   genModelV1SurfaceClearance,
+  genModelV1PipeClearance,
+  genModelV1PointToSurface,
   genModelV1TaskGet,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
@@ -491,6 +493,54 @@ describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
     expect(error?.status).toBe(422);
     expect(error?.code).toBe('precondition');
     expect(error?.detail).toEqual({ reason: 'target_not_wall', refno: '24384/22678', noun: 'BEND' });
+  });
+
+  it('point-to-surface：GET，目标 refno 转 a/b，点坐标按 mm 平铺 x/y/z，可选格缺省不出现', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { success: true, result: null, warnings: [] }));
+    await genModelV1PointToSurface(
+      { targetRefno: '24384_24830', point: { x: 1000, y: -2.5, z: 3500 } },
+      { baseUrl: BASE, fetchImpl },
+    );
+    let parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/spatial/point-to-surface`);
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ target_refno: '24384/24830', x: '1000', y: '-2.5', z: '3500' });
+
+    const fetchAll = fetchMockReturning(jsonResponse(200, { success: true, result: null, warnings: [] }));
+    await genModelV1PointToSurface(
+      { targetRefno: '24384/24830', point: { x: 0, y: 0, z: 0 }, maxDistanceMm: 800, debug: true },
+      { baseUrl: BASE, fetchImpl: fetchAll },
+    );
+    parsed = new URL(String(fetchAll.mock.calls[0]![0]));
+    expect(parsed.searchParams.get('max_distance_mm')).toBe('800');
+    expect(parsed.searchParams.get('debug')).toBe('true');
+  });
+
+  it('pipe-clearance：GET，两条 BRAN refno 转 a/b，段与保温厚可选', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { success: true, result: null, warnings: [] }));
+    await genModelV1PipeClearance(
+      { sourceRefno: '24381_145018', targetRefno: '24381/145100' },
+      { baseUrl: BASE, fetchImpl },
+    );
+    let parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/spatial/pipe-clearance`);
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ source_refno: '24381/145018', target_refno: '24381/145100' });
+
+    const fetchAll = fetchMockReturning(jsonResponse(200, { success: true, result: null, warnings: [] }));
+    await genModelV1PipeClearance(
+      {
+        sourceRefno: '24381_145018',
+        targetRefno: '24381_145100',
+        sourceSegment: '24381_145018~24381_145019',
+        sourceInsulationMm: 50,
+        targetInsulationMm: 0,
+      },
+      { baseUrl: BASE, fetchImpl: fetchAll },
+    );
+    parsed = new URL(String(fetchAll.mock.calls[0]![0]));
+    expect(parsed.searchParams.get('source_segment')).toBe('24381_145018~24381_145019');
+    expect(parsed.searchParams.get('source_insulation_mm')).toBe('50');
+    expect(parsed.searchParams.get('target_insulation_mm')).toBe('0');
+    expect(parsed.searchParams.has('target_segment')).toBe(false);
   });
 
   it('nearest-clearance：只给 source_refno 时 URL 里只有它（缺省全部交给服务端），空清单不出现', async () => {

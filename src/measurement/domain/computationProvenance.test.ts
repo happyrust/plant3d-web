@@ -30,6 +30,8 @@ const METHOD_ACCURACY_CASES = [
   ['parallel-centerline', 'exact-centerline'],
   ['pipe-row-center-distance', 'exact-centerline'],
   ['pipe-row-derived-gap', 'derived-nominal'],
+  ['pipe-centerline-analytic', 'derived-nominal'],
+  ['pipe-capsule-bound', 'approximate-bounds'],
   ['legacy-unknown', 'legacy-unknown'],
 ] as const;
 

@@ -2876,6 +2876,29 @@ export type SpatialClearanceDistanceMethod =
   | 'aabb_clearance_mm';
 
 /**
+ * 服务端净距精度口径（gen-model #61）：`nearest-clearance` 恒为 `approximate-aabb`（目标侧只有包围盒）；
+ * `surface-clearance` / `point-to-surface` 为 `exact-surface`；`pipe-clearance` 为 `exact-analytic`，
+ * 管端处退为胶囊体下界 `approximate-capsule`。
+ */
+export type SpatialClearanceAccuracyClass =
+  | 'approximate-aabb'
+  | 'approximate-capsule'
+  | 'exact-analytic'
+  | 'exact-surface';
+
+/** 源所在库被读到的那一版（`branch_query` 钉住的会话）。 */
+export type SpatialClearanceModelVersion = { dbnum: number; sesno: number };
+
+export type SpatialClearanceGeometryInputs = {
+  outside_diameter_mm: number | null;
+  /** 中心线走廊不带保温：恒为 null（距离不扣保温） */
+  insulation_mm: number | null;
+  /** 实际从距离里扣掉的源侧半径；没扣为 null */
+  source_radius_mm: number | null;
+  target_geometry: 'aabb' | (string & {});
+};
+
+/**
  * 出参与 legacy `/api/sqlite-spatial/nearest-clearance` 同形（plan §3.2），`useSpatialCompute` /
  * `branExternalDimensions` 不做转换直接吃；多出来的 `dbnum` / `outside_diameter_mm` / `resolved_filters.surface` /
  * `spatial_state` / `coverage` 是 v1 独有。
@@ -2885,6 +2908,13 @@ export type SpatialNearestClearanceResponse = {
   success: boolean;
   source: SpatialClearanceSource;
   distance_method: SpatialClearanceDistanceMethod | (string & {});
+  /** gen-model #61 起有；旧服务端缺省按 `approximate-aabb` 读 */
+  accuracy_class?: SpatialClearanceAccuracyClass | (string & {});
+  /** `aabb` 模式不读成员序，为 null（warnings 里有 `model_version_unavailable`）；旧服务端没有这一格 */
+  model_version?: SpatialClearanceModelVersion | null;
+  /** 半径内候选超过空间树单次上限被截断：没进来的候选可能更近 */
+  truncated_candidates?: boolean;
+  geometry_inputs?: SpatialClearanceGeometryInputs;
   unit: 'mm' | (string & {});
   /** 源盒 / 中心线盒外扩 `radius` 的查询盒 */
   query_bbox: SpatialClearanceAabb | null;
@@ -3135,6 +3165,152 @@ export function genModelV1SurfaceClearance(
   return genModelV1Fetch<SurfaceClearanceResponse>('/api/v1/spatial/surface-clearance', {
     ...options,
     query: surfaceClearanceQuery(req),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 点到面 / 直管-直管解析净距（gen-model #61）
+// ---------------------------------------------------------------------------
+
+export type GenModelV1PointToSurfaceRequest = {
+  targetRefno: string;
+  /** E3D 世界 mm，与 `surface-clearance` 的结果点同一坐标系 */
+  point: SpatialPosition;
+  /** mm；缺省 50000，上限 1e6 */
+  maxDistanceMm?: number;
+  debug?: boolean;
+};
+
+export type PointToSurfaceResult = {
+  distance_mm: number;
+  target_point: SpatialPosition;
+  /** `target_point − query_point` */
+  vector: SpatialClearanceVector;
+  /** 单位法向，指向查询点；取不到为 null */
+  normal: SpatialPosition | null;
+  /** `face`：最近点是面上的垂足；`edge`：最近点在棱 / 角上 */
+  feature: 'face' | 'edge' | (string & {});
+  target_leaf_refno: string;
+  target_leaf_noun: string;
+};
+
+export type PointToSurfaceResponse = {
+  success: boolean;
+  unit: 'mm' | (string & {});
+  method: 'point_to_surface' | (string & {});
+  accuracy_class: 'exact-surface' | (string & {});
+  error_bound_mm: number;
+  query_point: SpatialPosition;
+  target: SurfaceClearanceEndpoint;
+  /** `null` = `max_distance_mm` 内没有面（warning `beyond_max_distance`） */
+  result: PointToSurfaceResult | null;
+  /** 只有目标侧：`source_sesno` 恒为 null */
+  model: { source_sesno: number | null; target_sesno: number | null };
+  timing_ms: { load: number; query: number; total: number };
+  warnings: string[];
+  debug?: unknown;
+  [key: string]: unknown;
+};
+
+/**
+ * `GET /api/v1/spatial/point-to-surface`：一个世界点到构件真实三角网格外表面的最近点与法向。网格与 `surface-clearance`
+ * 同源同缓存，目标不限墙族；404 `no_model_mesh` 同 `surface-clearance`。
+ */
+export function genModelV1PointToSurface(
+  req: GenModelV1PointToSurfaceRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<PointToSurfaceResponse> {
+  return genModelV1Fetch<PointToSurfaceResponse>('/api/v1/spatial/point-to-surface', {
+    ...options,
+    query: {
+      target_refno: toV1Refno(req.targetRefno),
+      x: req.point.x,
+      y: req.point.y,
+      z: req.point.z,
+      max_distance_mm: req.maxDistanceMm,
+      debug: req.debug,
+    },
+  });
+}
+
+export type GenModelV1PipeClearanceRequest = {
+  /** 两条 BRAN；相同 → 400 */
+  sourceRefno: string;
+  targetRefno: string;
+  /** 只量这一段直管身（`a_b~c_d`）；缺省整条 BRAN 的全部直管身 */
+  sourceSegment?: string;
+  targetSegment?: string;
+  /** 保温厚（mm，0..1000）；缺省不扣 */
+  sourceInsulationMm?: number;
+  targetInsulationMm?: number;
+};
+
+export type PipeClearanceSegment = {
+  refno: string;
+  order: number;
+  start: SpatialPosition;
+  end: SpatialPosition;
+  outside_diameter_mm: number;
+  /** 外径 / 2 + 保温厚 */
+  effective_radius_mm: number;
+};
+
+export type PipeClearanceResult = {
+  distance_mm: number;
+  intersects: boolean;
+  /** 相交时的穿透深度（两侧有效半径和 − 轴距）；不相交为 null。距离从不为负 */
+  penetration_mm: number | null;
+  axis_distance_mm: number;
+  source_point: SpatialPosition;
+  target_point: SpatialPosition;
+  vector: SpatialClearanceVector;
+  source_axis_point: SpatialPosition;
+  target_axis_point: SpatialPosition;
+  source_segment: PipeClearanceSegment;
+  target_segment: PipeClearanceSegment;
+};
+
+export type PipeClearanceEndpoint = {
+  /** `a_b` */
+  refno: string;
+  straight_segment_count: number;
+  insulation_mm: number | null;
+  model_version: SpatialClearanceModelVersion;
+};
+
+export type PipeClearanceResponse = {
+  success: boolean;
+  unit: 'mm' | (string & {});
+  method: 'pipe_to_pipe_analytic' | (string & {});
+  accuracy_class: 'exact-analytic' | 'approximate-capsule' | (string & {});
+  error_bound_mm: number;
+  source: PipeClearanceEndpoint;
+  target: PipeClearanceEndpoint;
+  /** 任一侧没有可量的直管身为 null（warning `no_straight_pipe`） */
+  result: PipeClearanceResult | null;
+  pairs_evaluated: number;
+  warnings: string[];
+  [key: string]: unknown;
+};
+
+/**
+ * `GET /api/v1/spatial/pipe-clearance`：两条 BRAN 直管身之间的解析外表面净距（轴线与段外径取 `branch_query`，
+ * 与 `/centerline` 同源）。不是 BRAN → 422 `precondition`。
+ */
+export function genModelV1PipeClearance(
+  req: GenModelV1PipeClearanceRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<PipeClearanceResponse> {
+  return genModelV1Fetch<PipeClearanceResponse>('/api/v1/spatial/pipe-clearance', {
+    ...options,
+    query: {
+      source_refno: toV1Refno(req.sourceRefno),
+      target_refno: toV1Refno(req.targetRefno),
+      source_segment: req.sourceSegment,
+      target_segment: req.targetSegment,
+      source_insulation_mm: req.sourceInsulationMm,
+      target_insulation_mm: req.targetInsulationMm,
+    },
   });
 }
 

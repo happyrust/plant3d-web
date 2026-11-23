@@ -24,6 +24,10 @@ export const COMPUTATION_METHODS = Object.freeze([
   'parallel-centerline',
   'pipe-row-center-distance',
   'pipe-row-derived-gap',
+  // gen-model `pipe-clearance`：两条直管身轴线的解析最近距扣两侧名义外径（+ 保温）。
+  'pipe-centerline-analytic',
+  // 同一接口在管端处的胶囊体下界：真实净距只会更大。
+  'pipe-capsule-bound',
   'legacy-unknown',
 ] as const);
 
@@ -118,6 +122,7 @@ export function accuracyClassForMethod(
       return 'exact-surface';
     case 'centerline-to-aabb':
     case 'aabb-to-aabb':
+    case 'pipe-capsule-bound':
       return 'approximate-bounds';
     case 'sampled-object':
       return 'approximate-sampled';
@@ -127,6 +132,7 @@ export function accuracyClassForMethod(
     case 'pipe-row-center-distance':
       return 'exact-centerline';
     case 'pipe-row-derived-gap':
+    case 'pipe-centerline-analytic':
       return 'derived-nominal';
     case 'legacy-unknown':
       return 'legacy-unknown';

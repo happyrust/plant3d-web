@@ -298,7 +298,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
   });
 
   const surfaceResponse = () => ({
-    success: true, unit: 'mm', accuracy_class: 'exact-surface', error_bound_mm: 0.5, warnings: [],
+    success: true, unit: 'mm', method: 'surface_to_surface', accuracy_class: 'exact-surface', error_bound_mm: 0.5, warnings: [],
     result: { distance_mm: 600, intersects: false, witness: 'closest-points',
       source_leaf_refno: '24381/145019', source_point: { x: 100, y: 0, z: 0 }, target_point: { x: 100, y: 600, z: 0 } },
   });
@@ -605,6 +605,88 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     await store.submitScenario('branNearestClearance');
     expect(state.drawnCandidateKeys).toEqual(['WALL:24381_1', 'COLU:24381_2', 'SCTN:24381_3']);
     expect(state.annotationCandidates).toHaveLength(3);
+  });
+
+  describe('clearance contract (#65)', () => {
+    const v1Envelope = (overrides: Record<string, unknown> = {}) => ({
+      ...nounGroupedResponse,
+      unit: 'mm',
+      distance_method: 'centerline_surface_aabb_clearance_mm',
+      accuracy_class: 'approximate-aabb',
+      model_version: { dbnum: 24381, sesno: 812 },
+      truncated_candidates: false,
+      warnings: ['approximate_aabb: 目标侧按包围盒量距'],
+      ...overrides,
+    });
+
+    it('surfaces approximate / truncated warnings as degraded labels', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(v1Envelope({
+        truncated_candidates: true,
+        warnings: ['approximate_aabb: 目标侧按包围盒量距', 'truncated_candidates: 超过扫描上限', 'other: note'],
+      })), { status: 200 })));
+      const store = createSpatialComputeStore();
+      await store.submitScenario('branNearestClearance');
+      expect(store.currentScenarioState.value.error).toBe('');
+      expect(store.currentWarningSummary.value.degraded).toHaveLength(2);
+      expect(store.currentWarningSummary.value.other).toEqual(['other: note']);
+      store.dispose();
+    });
+
+    it('rejects a v1 response that labels box distances as exact', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(v1Envelope({
+        accuracy_class: 'exact-surface',
+      })), { status: 200 })));
+      const store = createSpatialComputeStore();
+      await store.submitScenario('branNearestClearance');
+      const state = store.scenarios.branNearestClearance;
+      expect(state.error).toMatch(/accuracy_class/);
+      expect(state.resultRows).toEqual([]);
+      store.dispose();
+    });
+
+    it('drops an answer from an older model session than one already shown for the same BRAN', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(v1Envelope()), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(v1Envelope({ model_version: { dbnum: 24381, sesno: 811 } })), { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+      const store = createSpatialComputeStore();
+      const state = store.scenarios.branNearestClearance;
+      await store.submitScenario('branNearestClearance');
+      expect(state.resultRows.length).toBeGreaterThan(0);
+      await store.submitScenario('branNearestClearance');
+      expect(state.error).toMatch(/更早的模型版本/);
+      expect(state.resultRows).toEqual([]);
+      store.dispose();
+    });
+
+    it('aborts the in-flight query when a newer one starts', async () => {
+      const signals: AbortSignal[] = [];
+      let resolveB!: (value: Response) => void;
+      const fetchMock = vi.fn()
+        .mockImplementationOnce((_url: string, init: RequestInit) => {
+          signals.push(init.signal!);
+          return new Promise<Response>((_, reject) => {
+            init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          });
+        })
+        .mockImplementationOnce((_url: string, init: RequestInit) => {
+          signals.push(init.signal!);
+          return new Promise<Response>((resolve) => { resolveB = resolve; });
+        });
+      vi.stubGlobal('fetch', fetchMock);
+      const store = createSpatialComputeStore();
+      const state = store.scenarios.branNearestClearance;
+      const requestA = store.submitScenario('branNearestClearance');
+      await vi.waitFor(() => expect(signals).toHaveLength(1));
+      const requestB = store.submitScenario('branNearestClearance');
+      await vi.waitFor(() => expect(signals).toHaveLength(2));
+      expect(signals[0]!.aborted).toBe(true);
+      resolveB(new Response(JSON.stringify(v1Envelope()), { status: 200 }));
+      await Promise.all([requestA, requestB]);
+      expect(state.error).toBe('');
+      expect(state.resultRows.length).toBeGreaterThan(0);
+      store.dispose();
+    });
   });
 
   it('also supports legacy object-shaped nearest_by_group responses', async () => {
