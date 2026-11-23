@@ -26,8 +26,8 @@ export type MbdDiagnosticsSourceSnapshot = Readonly<{
   /** 该包求解器自报的直段表（`meta.isolines`）；缺省 / `null` 时为空数组。 */
   isolines: readonly MbdV2Isoline[];
   /**
-   * 该包求解器声明的产出类别（`meta.coverage`）；缺省 / `null` = 没声明（老后端），
-   * 面板据此退回按 `layoutMode` 的兜底判断。
+   * 该包求解器声明的产出类别（`meta.coverage`）；缺省 / `null` = 未声明，
+   * 面板只按覆盖声明判不完整，未声明的不报（#144）。
    */
   coverage?: readonly string[] | null;
   /**

@@ -88,10 +88,11 @@ function crowdedSource(refno: string): MbdDiagnosticsSourceSnapshot {
       issue(refno, 'support.part_geometry_missing', 2),
     ],
     skipped: [],
-    layoutMode: 'linear_mvp',
+    layoutMode: 'isodim_main',
     notes: [],
     sourceVersion: null,
     isolines: [],
+    coverage: ['linear_dim'],
     loadError: null,
   };
 }

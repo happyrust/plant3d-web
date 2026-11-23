@@ -504,51 +504,45 @@ describe('DimensionPanelDock', () => {
   });
 
   /**
-   * 「本分支标注不完整」横幅：求解器恒报 `isodim_main`，而它同样只产出 11 种图元
-   * 里的 7 种，所以白名单必须含它，否则横幅永不触发（缺陷 C4）。
+   * #144：退掉按排版模式名兜底的逻辑——没有 `meta.coverage` 时（无论是单源缺省还是
+   * 老后端传 `isodim_main` / `linear_mvp`），警示条一律不报不完整。
    */
-  it('warns about an incomplete annotation set for every partial layout mode the solver reports', async () => {
+  it('shows no incomplete-annotation banner when meta.coverage is absent, regardless of layoutMode', async () => {
     const system = createSystem();
     mocks.dimensionSystem.value = system;
     window.history.replaceState({}, '', '/');
 
     const banner = (host: HTMLElement) => host.querySelector('[data-testid="mbd-incomplete-annotation"]');
-    const withMode = (layoutMode: string | null) => {
+    for (const mode of ['isodim_main', 'linear_mvp', null, 'some_future_mode']) {
       useMbdDiagnosticsStore().set({
         channel: 'api',
         sourceId: '24381_145018',
         issues: [],
         skipped: [],
-        layoutMode,
+        layoutMode: mode,
+        sources: [{
+          refno: '24381_145018',
+          issues: [],
+          skipped: [],
+          layoutMode: mode,
+          notes: [],
+          sourceVersion: null,
+          isolines: [],
+          coverage: null,
+          loadError: null,
+        }],
       });
-    };
-
-    // 生产路径恒报的值，以及仓内 fixture 仍在用的旧值。
-    for (const mode of ['isodim_main', 'linear_mvp']) {
-      withMode(mode);
       const host = mountPanel();
       await nextTick();
-      const node = banner(host);
-      expect(node, `${mode} should be flagged as partial`).not.toBeNull();
-      expect(node!.textContent).toContain(mode);
-      apps.splice(0).forEach(app => app.unmount());
-      document.body.innerHTML = '';
-    }
-
-    // 没有自报模式、或自报了未知模式时不替求解器下「不完整」的结论。
-    for (const mode of [null, 'some_future_mode']) {
-      withMode(mode);
-      const host = mountPanel();
-      await nextTick();
-      expect(banner(host), `${mode} must not be flagged`).toBeNull();
+      expect(banner(host), `mode=${String(mode)} without coverage must not be flagged`).toBeNull();
       apps.splice(0).forEach(app => app.unmount());
       document.body.innerHTML = '';
     }
   });
 
   /**
-   * `meta.coverage` 优先于排版模式名：声明齐了管道应有的 8 种就不报（哪怕模式名是
-   * `isodim_main`），缺哪种列哪种；没声明的老后端包照旧按模式名兜底；多包逐包归因。
+   * `meta.coverage` 唯一决定「本分支标注不完整」警示条（#144）：声明齐了管道应有的 8 种
+   * 就不报，缺哪种列哪种；不带覆盖声明的包（`coverage: null`）不报；多包逐包归因。
    */
   it('reads the incomplete-annotation banner from meta.coverage per source', async () => {
     const system = createSystem();
@@ -583,6 +577,7 @@ describe('DimensionPanelDock', () => {
     };
 
     expect(await show([source('A', full)])).toBeNull();
+    expect(await show([source('C', null)])).toBeNull();
 
     const single = await show([source('A', full.filter(kind => kind !== 'angle_dim'))]);
     expect(single).not.toBeNull();
@@ -595,10 +590,9 @@ describe('DimensionPanelDock', () => {
       source('C', null),
     ]);
     const rows = [...multi!.querySelectorAll('[data-incomplete-refno]')];
-    expect(rows.map(row => row.getAttribute('data-incomplete-refno'))).toEqual(['B', 'C']);
+    expect(rows.map(row => row.getAttribute('data-incomplete-refno'))).toEqual(['B']);
     expect(rows[0]!.textContent).toContain('B：');
     expect(rows[0]!.textContent).toContain('weld_mark');
-    expect(rows[1]!.textContent).toContain('isodim_main');
   });
 
   /**

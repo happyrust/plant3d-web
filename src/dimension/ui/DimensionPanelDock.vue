@@ -68,13 +68,6 @@ import {
 
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
 
-/**
- * 没有 `meta.coverage` 的老后端只能靠阶段性排版模式名兜住同一个事实：
- * `isodim_main` 是 plant-mbd `cb046f7` 之前生产路径恒报的值（只产出 8 种里的一部分），
- * `linear_mvp` 是仓内 fixture 用的。宿主部署带 coverage 之后整段退休。
- */
-const PARTIAL_LAYOUT_MODES: readonly string[] = ['linear_mvp', 'isodim_main'];
-
 defineProps<{
   params?: {
     params: unknown;
@@ -455,45 +448,25 @@ const diagnosticsVisible = computed(() =>
   || mbdDiagnostics.value.sources.some(source => source.loadError !== null || source.deleted === true)
   || mbdDiagnostics.value.layoutMode !== null);
 /**
- * 「本分支标注不完整」的逐包判断，期望集按标注类型取（`expectedKindsFor`，#103 M7）：管道包和
- * 没声明类型的老后端包照旧——声明了 `coverage` 的列缺失类别，没声明的退回按排版模式名兜底，
- * `missing` 为 null；其它类型暂不判。装载失败的包另有失败提示，不在这里重复。
+ * 「本分支标注不完整」的逐包判断（#144）：只读标注包自己的覆盖声明（`meta.coverage`），
+ * 期望集按标注类型取（`expectedKindsFor`，#103 M7）；不带覆盖声明的包不报不完整，其它
+ * 类型暂不判。装载失败的包另有失败提示，不在这里重复。
  */
-type IncompleteSourceInput = Readonly<{
-  refno: string;
-  layoutMode: string | null;
-  coverage?: readonly string[] | null;
-  annotationType?: string | null;
-  loadError: string | null;
-}>;
 type IncompleteSource = Readonly<{
   refno: string;
-  missing: readonly string[] | null;
-  layoutMode: string | null;
+  missing: readonly string[];
 }>;
 
 const incompleteSources = computed((): readonly IncompleteSource[] => {
-  const snapshot = mbdDiagnostics.value;
-  const sources: readonly IncompleteSourceInput[] = snapshot.sources.length > 0
-    ? snapshot.sources
-    : snapshot.sourceId !== null
-      ? [{ refno: snapshot.sourceId, layoutMode: snapshot.layoutMode, loadError: snapshot.loadError }]
-      : [];
   const flagged: IncompleteSource[] = [];
-  for (const source of sources) {
+  for (const source of mbdDiagnostics.value.sources) {
     if (source.loadError !== null) continue;
     const expected = expectedKindsFor(source.annotationType);
     if (expected === null) continue;
     const coverage = source.coverage ?? null;
-    if (coverage !== null) {
-      const missing = expected.filter(kind => !coverage.includes(kind));
-      if (missing.length > 0) flagged.push({ refno: source.refno, missing, layoutMode: null });
-      continue;
-    }
-    const mode = source.layoutMode;
-    if (mode !== null && PARTIAL_LAYOUT_MODES.includes(mode)) {
-      flagged.push({ refno: source.refno, missing: null, layoutMode: mode });
-    }
+    if (coverage === null) continue;
+    const missing = expected.filter(kind => !coverage.includes(kind));
+    if (missing.length > 0) flagged.push({ refno: source.refno, missing });
   }
   return flagged;
 });
@@ -1351,12 +1324,7 @@ function act(
         class="mt-1"
         :data-incomplete-refno="source.refno">
         <template v-if="multiSourceIncomplete">{{ source.refno }}：</template>
-        <template v-if="source.missing">
-          求解器声明本次未产出：<span data-testid="mbd-incomplete-kinds">{{ source.missing.join('、') }}</span>。
-        </template>
-        <template v-else>
-          求解器以 {{ source.layoutMode }} 模式产出，只覆盖部分标注类别。
-        </template>
+        求解器声明本次未产出：<span data-testid="mbd-incomplete-kinds">{{ source.missing.join('、') }}</span>。
       </div>
       <div class="mt-1">未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。</div>
     </div>
