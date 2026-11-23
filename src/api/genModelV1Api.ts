@@ -1150,6 +1150,33 @@ export type ElementPlineSnapPoint = {
 };
 
 /** `POST /api/v1/element/plines` 的响应：SCTN / GENSEC 的目录 p-line 线（E3D `EDGPLINE.line`）。 */
+/** GENSEC SPINE 路径的拐点（世界系 mm，#77）。 */
+export type ElementSpineVertex = {
+  /** `SPINE:<a_b>:V<order>` */
+  point_id: string;
+  order: number;
+  position: [number, number, number];
+};
+
+/** GENSEC SPINE 路径的一段弧（世界系 mm）：从 `rim` 绕 `normal` 右手转 `sweep_deg` 到 `end`。 */
+export type ElementSpineArc = {
+  /** `SPINE:<a_b>:A<order>` */
+  point_id: string;
+  order: number;
+  center: [number, number, number];
+  rim: [number, number, number];
+  end: [number, number, number];
+  normal: [number, number, number];
+  radius: number;
+  sweep_deg: number;
+};
+
+export type ElementSpineSemantics = {
+  vertices: ElementSpineVertex[];
+  arcs: ElementSpineArc[];
+  notes: string[];
+};
+
 export type ElementPlinesResponse = {
   source: 'e3d-model' | (string & {});
   /** `a/b` */
@@ -1168,6 +1195,8 @@ export type ElementPlinesResponse = {
   reason?: string;
   notes: string[];
   source_version?: ElementSourceVersion | null;
+  /** GENSEC 的 SPINE 拐点与弧（老构建 / 其它 noun 没有这一格）。含弧的 SPINE 没有 p-line，但照样有这两类语义点。 */
+  spine?: ElementSpineSemantics;
 };
 
 export type GenModelV1ElementPlinesRequest = {

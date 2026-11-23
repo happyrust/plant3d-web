@@ -107,6 +107,81 @@ export function elementPlinesToKeypointCandidates(resp: ElementPlinesResponse): 
   return out;
 }
 
+const SPINE_KEYPOINT_SOURCE = 'gen-model-v1 element/plines spine';
+
+type Triple = [number, number, number];
+
+/** 绕单位轴 `axis` 右手转 `angle`（罗德里格斯），与 gen-model `rotate_about` 同式。 */
+function rotateAbout(v: Triple, axis: Triple, angle: number): Triple {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dot = v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2];
+  const cross: Triple = [
+    axis[1] * v[2] - axis[2] * v[1],
+    axis[2] * v[0] - axis[0] * v[2],
+    axis[0] * v[1] - axis[1] * v[0],
+  ];
+  return [0, 1, 2].map(i => v[i]! * cos + cross[i]! * sin + axis[i]! * dot * (1 - cos)) as Triple;
+}
+
+/**
+ * `element/plines` 的 `spine`（GENSEC SPINE 拐点与弧，#77）→ 语义点候选。坐标服务端已乘过 GENSEC 世界矩阵，
+ * 这里不再折算。弧候选的点取弧中点（光标贴着弧拾），`arc` 带权威圆心 / 起点 / 转轴，直接驱动径向尺寸；
+ * 弧几何不全的只出拐点，不补几何。
+ */
+export function elementSpineToKeypointCandidates(resp: ElementPlinesResponse): PrimitiveKeyPointCandidate[] {
+  const spine = resp.spine;
+  if (!spine) return [];
+  const refno = fromV1Refno(resp.refno);
+  const objectId = `o:${refno}:0`;
+  const base = { refno, objectId, geoHash: '', geoIndex: -1, source: SPINE_KEYPOINT_SOURCE };
+  const out: PrimitiveKeyPointCandidate[] = [];
+  for (const vertex of spine.vertices ?? []) {
+    if (!vertex || typeof vertex.point_id !== 'string' || !finiteTriple(vertex.position)) continue;
+    const world: Triple = [vertex.position[0], vertex.position[1], vertex.position[2]];
+    out.push({
+      ...base,
+      id: vertex.point_id,
+      keypointIndex: vertex.order,
+      kind: 'spine_vertex',
+      label: `SPINE 拐点 #${vertex.order}`,
+      local: world,
+      world: [...world],
+      hasDir: false,
+      dir: null,
+    });
+  }
+  for (const arc of spine.arcs ?? []) {
+    if (!arc || typeof arc.point_id !== 'string') continue;
+    if (!finiteTriple(arc.center) || !finiteTriple(arc.rim) || !finiteTriple(arc.normal)) continue;
+    const normalLength = Math.hypot(...arc.normal);
+    const sweep = (arc.sweep_deg * Math.PI) / 180;
+    if (!(normalLength > 1e-9) || !(sweep > 0) || !Number.isFinite(sweep)) continue;
+    const axis = arc.normal.map(value => value / normalLength) as Triple;
+    const radial = [0, 1, 2].map(i => arc.rim[i]! - arc.center[i]!) as Triple;
+    if (!(Math.hypot(...radial) > 1e-9)) continue;
+    const midRadial = rotateAbout(radial, axis, sweep / 2);
+    const mid = [0, 1, 2].map(i => arc.center[i]! + midRadial[i]!) as Triple;
+    out.push({
+      ...base,
+      id: arc.point_id,
+      keypointIndex: arc.order,
+      kind: 'spine_arc',
+      label: `SPINE 弧 #${arc.order} R${Math.round(arc.radius * 100) / 100}`,
+      local: mid,
+      world: [...mid],
+      hasDir: false,
+      dir: null,
+      arc: {
+        center: [arc.center[0], arc.center[1], arc.center[2]],
+        rim: [arc.rim[0], arc.rim[1], arc.rim[2]],
+        normal: axis,
+      },
+    });
+  }
+  return out;
+}
+
 const PLINE_SNAP_POINT_KINDS = new Set(['fitting', 'joint', 'node']);
 
 /**
@@ -310,7 +385,7 @@ export function createGenModelV1KeypointSource(options: GenModelV1KeypointSource
     async primitiveKeypoints(_dbno, refno): Promise<PrimitiveKeypointsResult> {
       try {
         const resp = await api.elementPlines({ refno });
-        const items = elementPlinesToKeypointCandidates(resp);
+        const items = [...elementPlinesToKeypointCandidates(resp), ...elementSpineToKeypointCandidates(resp)];
         const versionKey = sourceVersionKey(resp.source_version);
         if (items.length > 0) {
           return { items, errors: [], plineSnapPoints: elementPlinesToSnapPoints(resp), sourceVersionKey: versionKey };

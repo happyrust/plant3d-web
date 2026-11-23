@@ -8,6 +8,7 @@ import {
   elementPlinesToSnapPoints,
   elementPtsetToChildrenResponse,
   elementPtsetToPtsetResponse,
+  elementSpineToKeypointCandidates,
   elementTubiEndpointsToCandidates,
   emptyPtsetReason,
 } from './keypointSource';
@@ -341,6 +342,58 @@ describe('gen-model-v1 keypointSource', () => {
       expect(result.items).toEqual([]);
       expect(result.errors[0]).toContain('不支持');
       expect(result.sourceVersionKey).toBeNull();
+    });
+  });
+
+  describe('GENSEC SPINE 拐点与弧（#77）', () => {
+    const gensec = (): ElementPlinesResponse => sctnPlines({
+      refno: '24381/200001',
+      noun: 'GENSEC',
+      plines: [],
+      reason: 'GENSEC 的 SPINE 不是单一直段（3 段，弧型 CENT）：E3D 把它的 p-line 当弧（edgPline.arc），未接',
+      spine: {
+        vertices: [
+          { point_id: 'SPINE:24381_200001:V0', order: 0, position: [0, 0, 0] },
+          { point_id: 'SPINE:24381_200001:V1', order: 1, position: [1000, 0, 0] },
+          { point_id: 'SPINE:bad:V9', order: 9, position: [Number.NaN, 0, 0] },
+        ],
+        arcs: [
+          {
+            point_id: 'SPINE:24381_200001:A1', order: 1, center: [1000, 500, 0], rim: [1000, 0, 0], end: [1500, 500, 0],
+            normal: [0, 0, 2], radius: 500, sweep_deg: 90,
+          },
+          {
+            point_id: 'SPINE:24381_200001:A3', order: 3, center: [0, 0, 0], rim: [1, 0, 0], end: [0, 1, 0],
+            normal: [0, 0, 0], radius: 1, sweep_deg: 90,
+          },
+        ],
+        notes: [],
+      },
+    });
+
+    it('拐点按 point_id 出；弧带权威圆心 / 起点 / 单位转轴，点取弧中点；退化弧不出', () => {
+      const items = elementSpineToKeypointCandidates(gensec());
+      expect(items.map(item => [item.id, item.kind])).toEqual([
+        ['SPINE:24381_200001:V0', 'spine_vertex'],
+        ['SPINE:24381_200001:V1', 'spine_vertex'],
+        ['SPINE:24381_200001:A1', 'spine_arc'],
+      ]);
+      const arc = items[2]!;
+      expect(arc).toMatchObject({ refno: '24381_200001', objectId: 'o:24381_200001:0', label: 'SPINE 弧 #1 R500' });
+      expect(arc.arc).toEqual({ center: [1000, 500, 0], rim: [1000, 0, 0], normal: [0, 0, 1] });
+      const half = 500 * Math.SQRT1_2;
+      expect(arc.world[0]).toBeCloseTo(1000 + half, 9);
+      expect(arc.world[1]).toBeCloseTo(500 - half, 9);
+      expect(elementSpineToKeypointCandidates(sctnPlines())).toEqual([]);
+    });
+
+    it('含弧 GENSEC 没有 p-line 也给出 SPINE 候选，不再只回原因', async () => {
+      const source = createGenModelV1KeypointSource({
+        api: { elementPtset: vi.fn(), elementPlines: vi.fn(async () => gensec()) },
+      });
+      const result = await source.primitiveKeypoints(0, '24381_200001');
+      expect(result.items.map(item => item.kind)).toEqual(['spine_vertex', 'spine_vertex', 'spine_arc']);
+      expect(result.errors).toEqual([]);
     });
   });
 });
