@@ -19,8 +19,31 @@ test('dimension WebGL scene demo renders four types plus MBD and exports SVG', a
     'demo-projected',
     'demo-angular',
     'demo-radial',
+    'demo-radial-zero',
     'demo-mbd-explicit',
   ]);
+  const radialFacts = await page.evaluate(() => (
+    (window as any).__dimensionDemo.getLayouts()
+      .filter((layout: any) => String(layout.dimensionId).startsWith('demo-radial'))
+      .map((layout: any) => ({
+        id: layout.dimensionId,
+        label: layout.derived.formattedLabel,
+        primitives: layout.primitives.length,
+        errors: layout.derived.validationErrors ?? [],
+      }))
+  ));
+  expect(radialFacts[0]).toMatchObject({
+    id: 'demo-radial',
+    label: 'STALE ⌀1400.00',
+    errors: [],
+  });
+  expect(radialFacts[0].primitives).toBeGreaterThan(0);
+  expect(radialFacts[1]).toEqual({
+    id: 'demo-radial-zero',
+    label: '',
+    primitives: 0,
+    errors: ['DEGENERATE_RADIAL_RADIUS'],
+  });
   // 画家 group 固定四个 mesh：stroke cores / stroke edges / filled arrows / filled tag bodies
   // （scenePainter.ts:956-970，getStats 返回 group.children.length）。
   expect(await page.evaluate(

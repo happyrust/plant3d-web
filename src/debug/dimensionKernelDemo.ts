@@ -101,6 +101,17 @@ const inputs: readonly (
     },
   },
   {
+    id: 'demo-radial-zero',
+    kind: 'radial',
+    role: 'normal',
+    labelPinned: false,
+    center: [2.6, -1.1, 0],
+    rim: [2.6, -1.1, 0],
+    normal: [0, 0, 1],
+    display: 'radius',
+    placement: { leaderDirection: [1, 0, 0], labelDistanceM: 0.2 },
+  },
+  {
     id: 'demo-mbd-explicit',
     role: 'external',
     labelPinned: true,
