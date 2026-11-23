@@ -496,6 +496,12 @@ export type BranNearestClearanceResponse = {
   message?: string;
   unit?: string;
   distance_method?: string;
+  /** 目标侧按包围盒量：恒为 `approximate-aabb`（老服务端缺这一格） */
+  accuracy_class?: string;
+  /** 源 BRAN 所在库在应答时的会话号；服务端答不出为 null（warning `model_version_unavailable`） */
+  model_version?: { dbnum: number; sesno: number } | null;
+  /** 半径内候选超过服务端扫描上限：可能漏掉更近的目标（warning `truncated_candidates`） */
+  truncated_candidates?: boolean;
   source?: BranNearestClearanceSource;
   query_bbox?: BranNearestClearanceAabb | null;
   resolved_filters?: BranNearestClearanceResolvedFilters | null;

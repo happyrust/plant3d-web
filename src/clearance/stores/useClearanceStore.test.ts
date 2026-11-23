@@ -152,7 +152,7 @@ describe('useClearanceStore', () => {
   it('blocks current-mesh calculations in historical comparison contexts', async () => {
     const store = useClearanceStore();
     const compute = vi.fn(serviceReturning([elboToCurvedWallResponse()]).compute);
-    const service = { compute, computeComponentToWall: compute };
+    const service = { ...serviceReturning([]), compute, computeComponentToWall: compute };
     store.bindPersistence('historical-626-630', memoryStorage(), false);
     expect(await store.compute({ sourceRefno: '1_2', targetRefno: '1_3' }, { service })).toBeNull();
     expect(compute).not.toHaveBeenCalled();

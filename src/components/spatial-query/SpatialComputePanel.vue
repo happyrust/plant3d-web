@@ -347,7 +347,8 @@
 
           <!-- Result Table -->
           <div v-if="computeState.warnings.length" data-testid="clearance-warnings" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            <p v-for="warning in computeState.warnings" :key="warning">{{ warning }}</p>
+            <p v-for="label in warningSummary.degraded" :key="label" data-testid="clearance-degraded-warning" class="font-bold text-amber-950">降级：{{ label }}</p>
+            <p v-for="warning in warningSummary.other" :key="warning">{{ warning }}</p>
           </div>
           <div v-if="computeState.resultRows.length > 0 || computeState.error || computeState.responseText" class="mt-3">
             <div class="flex items-center justify-between pb-2">
@@ -460,6 +461,7 @@ import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
+import { summarizeClearanceWarnings } from '@/clearance/services/clearanceContract';
 import { deliveryUnitSceneRefnos } from '@/composables/deliveryUnitScene';
 import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
@@ -517,6 +519,7 @@ const {
 const spatialQuery = useSpatialQuery();
 
 const computeState = currentScenarioState;
+const warningSummary = computed(() => summarizeClearanceWarnings(computeState.value.warnings));
 const isBranScenario = computed(() => activeScenario.value === 'branNearestClearance');
 /** facet 上的候选总数（`noun_counts` 之和，截断前口径）。 */
 const branFacetTotal = computed(() => computeState.value.nounFacets.reduce((sum, facet) => sum + facet.count, 0));
