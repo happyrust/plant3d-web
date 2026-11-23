@@ -150,6 +150,16 @@ const inputs: readonly (
       },
     ],
   },
+  {
+    id: 'demo-chain',
+    kind: 'chain',
+    role: 'normal',
+    labelPinned: false,
+    anchors: [[-2.4, 2.5, 0], [-1.4, 2.5, 0], [0.1, 2.5, 0]],
+    placement: { offsetM: 0.25, labelT: 0.5, side: 1 },
+    showOverall: true,
+    directions: { dimensionDirection: [1, 0, 0] },
+  },
 ];
 
 async function main(): Promise<void> {

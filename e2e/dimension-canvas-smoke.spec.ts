@@ -20,7 +20,14 @@ test('dimension WebGL scene demo renders four types plus MBD and exports SVG', a
     'demo-angular',
     'demo-radial',
     'demo-mbd-explicit',
+    'demo-chain',
   ]);
+  const chainLabel = await page.evaluate(() => (
+    (window as any).__dimensionDemo.getLayouts()
+      .find((layout: any) => layout.dimensionId === 'demo-chain')
+      ?.derived.formattedLabel
+  ));
+  expect(chainLabel).toBe('1000.00 · 1500.00 · 2500.00');
   // 画家 group 固定四个 mesh：stroke cores / stroke edges / filled arrows / filled tag bodies
   // （scenePainter.ts:956-970，getStats 返回 group.children.length）。
   expect(await page.evaluate(

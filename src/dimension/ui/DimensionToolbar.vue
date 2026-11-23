@@ -89,7 +89,7 @@ const validationMessages = computed(() =>
         重做
       </button>
       <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
-        :disabled="disabled || session?.kind !== 'chain' || session.step !== 'pick'"
+        :disabled="disabled || session?.canFinish !== true"
         data-testid="dimension.chain.finish"
         @click="emitCommand('dimension.chain.finish')">
         结束拾点

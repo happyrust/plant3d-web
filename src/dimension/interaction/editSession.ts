@@ -65,6 +65,8 @@ export type DimensionEditSession = {
   flip(): void;
   /** 链式尺寸结束拾点，进入放置。其它种类没有这一步。 */
   finish?(): boolean;
+  /** 已经够点，可以结束拾点。 */
+  readonly canFinish?: boolean;
   /** 退回上一步；已在第一步（或会话结束）时返回 false。 */
   back(): boolean;
   commit(): DimensionCommand | null;
@@ -1148,6 +1150,10 @@ class ChainEditSession extends BaseEditSession {
     this.emitPreview(this.anchors.length >= 2
       ? this.recordFrom(this.anchors, this.input.now())
       : null);
+  }
+
+  get canFinish(): boolean {
+    return this.currentPhase === 'pick-first' && this.anchors.length >= 2;
   }
 
   /** 拾点结束，定下共享方向并进入放置。少于两个点时不结束。 */
