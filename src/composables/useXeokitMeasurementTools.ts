@@ -175,6 +175,7 @@ import {
   type MeasurementDistanceFormat,
 } from '@/measurement/units/measurementUnits';
 import { getModelSource } from '@/model-source';
+import { createSemanticPointVersionTracker } from '@/model-source/semanticPointVersion';
 import { emitToast, type ToastLevel } from '@/ribbon/toastBus';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
@@ -617,6 +618,7 @@ export function useXeokitMeasurementTools(options: {
   }
 
   const requestedPtsetRefnos = new Set<string>();
+  const semanticPointVersions = createSemanticPointVersionTracker();
   const ptsetResponseByRefno = new Map<string, PtsetResponse>();
   const ptsetErrorByRefno = new Map<string, string>();
   const ptsetLoadStateByRefno = new Map<string, PtsetLoadState>();
@@ -1060,8 +1062,28 @@ export function useXeokitMeasurementTools(options: {
     return childRefnos;
   }
 
+  /** 同库会话变了（#66）：按旧 `dbnum:sesno` 缓存的语义点全部作废，下次 hover / 重绑定重新拉。 */
+  function evictSemanticRefno(refno: string): void {
+    requestedPtsetRefnos.delete(refno);
+    ptsetResponseByRefno.delete(refno);
+    ptsetErrorByRefno.delete(refno);
+    ptsetLoadStateByRefno.delete(refno);
+    ptsetChildRefnosByOwner.delete(refno);
+    requestedPrimitiveKeypointRefnos.delete(refno);
+    primitiveKeypointsByRefno.delete(refno);
+    plineSnapPointsByRefno.delete(refno);
+    primitiveKeypointErrorByRefno.delete(refno);
+    ptsetSnap.remove(refno);
+  }
+
+  function observeSemanticVersion(refno: string, key: string | null | undefined): void {
+    for (const stale of semanticPointVersions.observe(refno, key)) evictSemanticRefno(stale);
+  }
+
   async function queryPtsetForMeasurement(dbno: number, refno: string): Promise<PtsetResponse> {
-    return await keypointSource().ptset(dbno, refno);
+    const response = await keypointSource().ptset(dbno, refno);
+    observeSemanticVersion(refno, response.source_version_key);
+    return response;
   }
 
   /** 基本体 + PLINE 语义关键点：候选、失败原因与 PLINE 的 Significant Snap 分段点一起回，调用方决定提示。 */
@@ -1069,7 +1091,25 @@ export function useXeokitMeasurementTools(options: {
     dbno: number,
     refno: string,
   ): Promise<PrimitiveKeypointsResult> {
-    return await keypointSource().primitiveKeypoints(dbno, refno);
+    const result = await keypointSource().primitiveKeypoints(dbno, refno);
+    observeSemanticVersion(refno, result.sourceVersionKey);
+    return result;
+  }
+
+  /** 管身 ARRIVE / LEAVE 语义点（#62）：老服务端或非管道构件给空，不挡基本体关键点。 */
+  async function queryTubiEndpointsForMeasurement(
+    dbno: number,
+    refno: string,
+  ): Promise<PrimitiveKeyPointCandidate[]> {
+    const source = keypointSource();
+    if (!source.tubiEndpoints) return [];
+    try {
+      const result = await source.tubiEndpoints(dbno, refno);
+      observeSemanticVersion(refno, result.sourceVersionKey);
+      return result.items;
+    } catch {
+      return [];
+    }
   }
 
   function isPtsetPickPending(refno: string | null): boolean {
@@ -1178,8 +1218,12 @@ export function useXeokitMeasurementTools(options: {
       return;
     }
 
-    queryPrimitiveKeypointsForMeasurement(dbno, refno)
-      .then(({ items, errors, plineSnapPoints }) => {
+    Promise.all([
+      queryPrimitiveKeypointsForMeasurement(dbno, refno),
+      queryTubiEndpointsForMeasurement(dbno, refno),
+    ])
+      .then(([{ items: primitiveItems, errors, plineSnapPoints }, tubiItems]) => {
+        const items = [...primitiveItems, ...tubiItems];
         primitiveKeypointsByRefno.set(refno, items);
         plineSnapPointsByRefno.set(refno, plineSnapPoints ?? []);
         if (items.length > 0) {
@@ -3084,23 +3128,27 @@ export function useXeokitMeasurementTools(options: {
   ): Promise<readonly MeasurementViewerSnapCandidate[]> {
     const normalizedRefno = String(refno || '').trim().replace(/\//g, '_');
     if (!normalizedRefno) return [];
-    const dbno = getDbnumByRefno(normalizedRefno);
-    const response = ptsetResponseByRefno.get(normalizedRefno)
-      ?? await queryPtsetForMeasurement(dbno, normalizedRefno);
+    let dbno = 0;
+    try {
+      dbno = getDbnumByRefno(normalizedRefno);
+    } catch {
+      dbno = 0;
+    }
+    // 重绑定一律按服务端当前版本重拉，不用 hover 缓存：缓存可能是旧会话的坐标（#66）。
+    const [response, primitives, tubi] = await Promise.all([
+      queryPtsetForMeasurement(dbno, normalizedRefno),
+      queryPrimitiveKeypointsForMeasurement(dbno, normalizedRefno).catch(() => null),
+      queryTubiEndpointsForMeasurement(dbno, normalizedRefno),
+    ]);
+    ptsetSnap.remove(normalizedRefno);
     if (response.success && response.ptset.length > 0) {
       ptsetResponseByRefno.set(normalizedRefno, response);
       ptsetSnap.upsertCandidates(normalizedRefno, response);
+    } else {
+      ptsetResponseByRefno.delete(normalizedRefno);
     }
-    if (!primitiveKeypointsByRefno.has(normalizedRefno)) {
-      try {
-        const result = await queryPrimitiveKeypointsForMeasurement(dbno, normalizedRefno);
-        primitiveKeypointsByRefno.set(normalizedRefno, result.items);
-        plineSnapPointsByRefno.set(normalizedRefno, result.plineSnapPoints ?? []);
-      } catch {
-        primitiveKeypointsByRefno.set(normalizedRefno, []);
-        plineSnapPointsByRefno.set(normalizedRefno, []);
-      }
-    }
+    primitiveKeypointsByRefno.set(normalizedRefno, [...(primitives?.items ?? []), ...tubi]);
+    plineSnapPointsByRefno.set(normalizedRefno, primitives?.plineSnapPoints ?? []);
     const objectId = `o:${normalizedRefno}:0`;
     const ptsetCandidates: MeasurementPickCandidate[] = ptsetSnap
       .getCandidates([normalizedRefno])

@@ -14,6 +14,7 @@ import type {
 import {
   DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS,
   MEASUREMENT_PICK_SOURCE_LABELS,
+  rankSnapCandidates,
   type MeasurementPickSourceId,
 } from '@/composables/useMeasurementPickSources';
 
@@ -56,10 +57,6 @@ const SOURCE_SEMANTICS: Readonly<Record<
 
 function subtract(a: Vec3, b: Vec3): Vec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export class DtxDimensionSnapPort implements DimensionSnapPort {
@@ -191,10 +188,10 @@ export class DtxDimensionSnapPort implements DimensionSnapPort {
       }
     }
 
-    ranked.sort((a, b) =>
-      a.priority - b.priority
-      || a.candidate.distancePx - b.candidate.distancePx
-      || compareText(a.candidate.id, b.candidate.id));
-    return ranked.map(entry => entry.candidate);
+    return rankSnapCandidates(ranked, entry => ({
+      distancePx: entry.candidate.distancePx,
+      priority: entry.priority,
+      id: entry.candidate.id,
+    })).map(entry => entry.candidate);
   }
 }

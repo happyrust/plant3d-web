@@ -1045,16 +1045,55 @@ export type ElementPtsetItem = {
   unresolved: ElementPtsetUnresolved[];
 };
 
+/**
+ * 读取版本令牌（gen-model #62，与 MBD v2 `meta.source_version` 同口径）：本次读所钉的会话与读过的全部库。
+ * 前端只拿 `dbnum:sesno` 当语义点缓存的失效键；老构建没有这一格。
+ */
+export type ElementSourceVersion = {
+  dbnum: number;
+  sesno: number;
+  databases?: { dbnum: number; sesno: number; db_type: string }[];
+};
+
+/** 隐式管身（`TUBI`）的一个端点，世界系 mm（gen-model #62）。 */
+export type ElementTubiEndpoint = {
+  /** `TUBI:<instance_refno>:ARRIVE|LEAVE`，拓扑不变时跨会话稳定 */
+  point_id: string;
+  end: 'arrive' | 'leave';
+  /** 管身 refno `A~B`（两端站名） */
+  instance_refno: string;
+  /** 所属 BRAN，`a_b` */
+  owner_refno: string;
+  order: number;
+  position: [number, number, number];
+  /** 朝外单位方向：`arrive` 指向上游，`leave` 指向下游 */
+  direction: [number, number, number];
+  outside_diameter_mm: number | null;
+};
+
+export type ElementTubiEndpoints = {
+  branch_refno: string | null;
+  endpoints: ElementTubiEndpoint[];
+  /** 坐标 / 方向缺失或非有限的端点：不填零，只说明 */
+  unresolved: { instance_refno: string; end: 'arrive' | 'leave'; reason: string }[];
+  reason?: string;
+};
+
 export type ElementPtsetResponse = ElementPtsetItem & {
   source: 'e3d-model' | (string & {});
   /** 仅 `include_members=true` 时出现：直属成员逐个一条 */
   members?: ElementPtsetItem[];
+  source_version?: ElementSourceVersion | null;
+  /** 仅 `include_tubi_endpoints=true` 时出现 */
+  tubi_endpoints?: ElementTubiEndpoints;
 };
 
 export type GenModelV1ElementPtsetRequest = {
   refno: string;
   /** 一并解直属成员的点集（BRAN / EQUI 这类容器自身没有 P 点，测量悬停显示的是成员的点） */
   includeMembers?: boolean;
+  /** 一并给隐式管身端点（BRAN → 全部管身；BRAN 直属成员 → 与它相接的管身） */
+  includeTubiEndpoints?: boolean;
 };
 
 /** `POST /api/v1/element/ptset`：直读 dabacon 的目录 P 点集（E3D PTSET），测量捕捉的 P-Point 来源。 */
@@ -1065,9 +1104,11 @@ export function genModelV1ElementPtset(
   return genModelV1Fetch<ElementPtsetResponse>('/api/v1/element/ptset', {
     ...options,
     method: 'POST',
-    body: req.includeMembers
-      ? { refno: toV1Refno(req.refno), include_members: true }
-      : { refno: toV1Refno(req.refno) },
+    body: {
+      refno: toV1Refno(req.refno),
+      ...(req.includeMembers ? { include_members: true } : {}),
+      ...(req.includeTubiEndpoints ? { include_tubi_endpoints: true } : {}),
+    },
   });
 }
 
@@ -1109,6 +1150,33 @@ export type ElementPlineSnapPoint = {
 };
 
 /** `POST /api/v1/element/plines` 的响应：SCTN / GENSEC 的目录 p-line 线（E3D `EDGPLINE.line`）。 */
+/** GENSEC SPINE 路径的拐点（世界系 mm，#77）。 */
+export type ElementSpineVertex = {
+  /** `SPINE:<a_b>:V<order>` */
+  point_id: string;
+  order: number;
+  position: [number, number, number];
+};
+
+/** GENSEC SPINE 路径的一段弧（世界系 mm）：从 `rim` 绕 `normal` 右手转 `sweep_deg` 到 `end`。 */
+export type ElementSpineArc = {
+  /** `SPINE:<a_b>:A<order>` */
+  point_id: string;
+  order: number;
+  center: [number, number, number];
+  rim: [number, number, number];
+  end: [number, number, number];
+  normal: [number, number, number];
+  radius: number;
+  sweep_deg: number;
+};
+
+export type ElementSpineSemantics = {
+  vertices: ElementSpineVertex[];
+  arcs: ElementSpineArc[];
+  notes: string[];
+};
+
 export type ElementPlinesResponse = {
   source: 'e3d-model' | (string & {});
   /** `a/b` */
@@ -1126,6 +1194,9 @@ export type ElementPlinesResponse = {
   /** `plines` 为空时的原因（不是 SCTN / GENSEC、无 SPRE、链断、无 PSTR、GENSEC 含弧）——E3D 同样没有 p-line 可拾 */
   reason?: string;
   notes: string[];
+  source_version?: ElementSourceVersion | null;
+  /** GENSEC 的 SPINE 拐点与弧（老构建 / 其它 noun 没有这一格）。含弧的 SPINE 没有 p-line，但照样有这两类语义点。 */
+  spine?: ElementSpineSemantics;
 };
 
 export type GenModelV1ElementPlinesRequest = {

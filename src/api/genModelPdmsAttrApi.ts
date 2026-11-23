@@ -83,6 +83,8 @@ export type PtsetResponse = {
     | 'PTSET_QUERY_FAILED'
     | null;
   error_message?: string | null;
+  /** 读取版本令牌 `dbnum:sesno`（gen-model #62）：缓存按它失效；旧后端没有。 */
+  source_version_key?: string | null;
 }
 
 export type PtsetQueryContext = {

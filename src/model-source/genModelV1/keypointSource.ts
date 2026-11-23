@@ -22,7 +22,14 @@
  * 一切 `GenModelV1ApiError` 折成 `success:false + error_message`（与属性源同一做法）；`not_found` 也是
  * 一种「没有」——refno 不在所钉会话里，测量工具把它当无 P-Point 处理即可，不抛。
  */
-import type { KeypointQueryOptions, KeypointSource, PlineSnapPointCandidate, PrimitiveKeyPointCandidate, PrimitiveKeypointsResult } from '../ports';
+import type {
+  KeypointQueryOptions,
+  KeypointSource,
+  PlineSnapPointCandidate,
+  PrimitiveKeyPointCandidate,
+  PrimitiveKeypointsResult,
+  TubiEndpointsResult,
+} from '../ports';
 import type { PtsetChildrenResponse, PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
 import {
@@ -33,7 +40,9 @@ import {
   type ElementPlinesResponse,
   type ElementPtsetItem,
   type ElementPtsetResponse,
+  type ElementTubiEndpoints,
 } from '@/api/genModelV1Api';
+import { sourceVersionKey } from '@/model-source/semanticPointVersion';
 
 export type KeypointApi = {
   elementPtset: typeof genModelV1ElementPtset;
@@ -98,6 +107,81 @@ export function elementPlinesToKeypointCandidates(resp: ElementPlinesResponse): 
   return out;
 }
 
+const SPINE_KEYPOINT_SOURCE = 'gen-model-v1 element/plines spine';
+
+type Triple = [number, number, number];
+
+/** 绕单位轴 `axis` 右手转 `angle`（罗德里格斯），与 gen-model `rotate_about` 同式。 */
+function rotateAbout(v: Triple, axis: Triple, angle: number): Triple {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dot = v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2];
+  const cross: Triple = [
+    axis[1] * v[2] - axis[2] * v[1],
+    axis[2] * v[0] - axis[0] * v[2],
+    axis[0] * v[1] - axis[1] * v[0],
+  ];
+  return [0, 1, 2].map(i => v[i]! * cos + cross[i]! * sin + axis[i]! * dot * (1 - cos)) as Triple;
+}
+
+/**
+ * `element/plines` 的 `spine`（GENSEC SPINE 拐点与弧，#77）→ 语义点候选。坐标服务端已乘过 GENSEC 世界矩阵，
+ * 这里不再折算。弧候选的点取弧中点（光标贴着弧拾），`arc` 带权威圆心 / 起点 / 转轴，直接驱动径向尺寸；
+ * 弧几何不全的只出拐点，不补几何。
+ */
+export function elementSpineToKeypointCandidates(resp: ElementPlinesResponse): PrimitiveKeyPointCandidate[] {
+  const spine = resp.spine;
+  if (!spine) return [];
+  const refno = fromV1Refno(resp.refno);
+  const objectId = `o:${refno}:0`;
+  const base = { refno, objectId, geoHash: '', geoIndex: -1, source: SPINE_KEYPOINT_SOURCE };
+  const out: PrimitiveKeyPointCandidate[] = [];
+  for (const vertex of spine.vertices ?? []) {
+    if (!vertex || typeof vertex.point_id !== 'string' || !finiteTriple(vertex.position)) continue;
+    const world: Triple = [vertex.position[0], vertex.position[1], vertex.position[2]];
+    out.push({
+      ...base,
+      id: vertex.point_id,
+      keypointIndex: vertex.order,
+      kind: 'spine_vertex',
+      label: `SPINE 拐点 #${vertex.order}`,
+      local: world,
+      world: [...world],
+      hasDir: false,
+      dir: null,
+    });
+  }
+  for (const arc of spine.arcs ?? []) {
+    if (!arc || typeof arc.point_id !== 'string') continue;
+    if (!finiteTriple(arc.center) || !finiteTriple(arc.rim) || !finiteTriple(arc.normal)) continue;
+    const normalLength = Math.hypot(...arc.normal);
+    const sweep = (arc.sweep_deg * Math.PI) / 180;
+    if (!(normalLength > 1e-9) || !(sweep > 0) || !Number.isFinite(sweep)) continue;
+    const axis = arc.normal.map(value => value / normalLength) as Triple;
+    const radial = [0, 1, 2].map(i => arc.rim[i]! - arc.center[i]!) as Triple;
+    if (!(Math.hypot(...radial) > 1e-9)) continue;
+    const midRadial = rotateAbout(radial, axis, sweep / 2);
+    const mid = [0, 1, 2].map(i => arc.center[i]! + midRadial[i]!) as Triple;
+    out.push({
+      ...base,
+      id: arc.point_id,
+      keypointIndex: arc.order,
+      kind: 'spine_arc',
+      label: `SPINE 弧 #${arc.order} R${Math.round(arc.radius * 100) / 100}`,
+      local: mid,
+      world: [...mid],
+      hasDir: false,
+      dir: null,
+      arc: {
+        center: [arc.center[0], arc.center[1], arc.center[2]],
+        rim: [arc.rim[0], arc.rim[1], arc.rim[2]],
+        normal: axis,
+      },
+    });
+  }
+  return out;
+}
+
 const PLINE_SNAP_POINT_KINDS = new Set(['fitting', 'joint', 'node']);
 
 /**
@@ -117,6 +201,38 @@ export function elementPlinesToSnapPoints(resp: ElementPlinesResponse): PlineSna
       zdis: typeof point.zdis === 'number' && Number.isFinite(point.zdis) ? point.zdis : Number.NaN,
       world: [point.position[0], point.position[1], point.position[2]],
       label: refno ? `${noun} ${refno}` : noun,
+    });
+  }
+  return out;
+}
+
+const TUBI_KEYPOINT_SOURCE = 'gen-model-v1 element/ptset tubi_endpoints';
+
+/**
+ * `element/ptset` 的 `tubi_endpoints` → 测量 / 尺寸共用的语义点候选（世界系 mm）。`id` 原样用服务端
+ * `point_id`，`refno` 是管身 refno `A~B`，`objectId` 挂在所属 BRAN 上（管身不是 E3D 元素，没有自己的实例）。
+ */
+export function elementTubiEndpointsToCandidates(tubi: ElementTubiEndpoints | undefined): PrimitiveKeyPointCandidate[] {
+  const out: PrimitiveKeyPointCandidate[] = [];
+  for (const endpoint of tubi?.endpoints ?? []) {
+    if (!endpoint || typeof endpoint.point_id !== 'string' || !endpoint.point_id) continue;
+    if (!finiteTriple(endpoint.position) || !finiteTriple(endpoint.direction)) continue;
+    const owner = typeof endpoint.owner_refno === 'string' ? fromV1Refno(endpoint.owner_refno) : '';
+    const leave = endpoint.end === 'leave';
+    out.push({
+      id: endpoint.point_id,
+      refno: endpoint.instance_refno,
+      objectId: owner ? `o:${owner}:0` : '',
+      geoHash: '',
+      geoIndex: -1,
+      keypointIndex: leave ? 1 : 0,
+      kind: leave ? 'tubi_leave' : 'tubi_arrive',
+      source: TUBI_KEYPOINT_SOURCE,
+      label: `TUBI ${leave ? 'LEAVE' : 'ARRIVE'}`,
+      local: [endpoint.position[0], endpoint.position[1], endpoint.position[2]],
+      world: [endpoint.position[0], endpoint.position[1], endpoint.position[2]],
+      hasDir: true,
+      dir: [endpoint.direction[0], endpoint.direction[1], endpoint.direction[2]],
     });
   }
   return out;
@@ -244,7 +360,7 @@ export function createGenModelV1KeypointSource(options: GenModelV1KeypointSource
       const key = fromV1Refno(refno);
       try {
         const resp = await api.elementPtset({ refno });
-        return elementPtsetToPtsetResponse(resp);
+        return { ...elementPtsetToPtsetResponse(resp), source_version_key: sourceVersionKey(resp.source_version) };
       } catch (error) {
         return failedPtset(key, errorMessage(error));
       }
@@ -269,15 +385,38 @@ export function createGenModelV1KeypointSource(options: GenModelV1KeypointSource
     async primitiveKeypoints(_dbno, refno): Promise<PrimitiveKeypointsResult> {
       try {
         const resp = await api.elementPlines({ refno });
-        const items = elementPlinesToKeypointCandidates(resp);
-        if (items.length > 0) return { items, errors: [], plineSnapPoints: elementPlinesToSnapPoints(resp) };
+        const items = [...elementPlinesToKeypointCandidates(resp), ...elementSpineToKeypointCandidates(resp)];
+        const versionKey = sourceVersionKey(resp.source_version);
+        if (items.length > 0) {
+          return { items, errors: [], plineSnapPoints: elementPlinesToSnapPoints(resp), sourceVersionKey: versionKey };
+        }
         const noun = resp.noun ? `${resp.noun} ` : '';
         return {
           items: [],
           errors: [resp.reason ?? `构件 ${noun}${fromV1Refno(resp.refno)} 没有 PLINE`],
+          sourceVersionKey: versionKey,
         };
       } catch (error) {
         return { items: [], errors: [`PLINE 查询失败：${errorMessage(error)}`] };
+      }
+    },
+    async tubiEndpoints(_dbno, refno): Promise<TubiEndpointsResult> {
+      try {
+        const resp = await api.elementPtset({ refno, includeTubiEndpoints: true });
+        const tubi = resp.tubi_endpoints;
+        const items = elementTubiEndpointsToCandidates(tubi);
+        const errors = [
+          ...(items.length === 0 ? [tubi?.reason ?? '服务端没有返回管身端点（老版本 gen-model 不支持）'] : []),
+          ...(tubi?.unresolved ?? []).map(entry => `${entry.instance_refno} ${entry.end}：${entry.reason}`),
+        ];
+        return {
+          items,
+          errors,
+          ownerRefno: tubi?.branch_refno ? fromV1Refno(tubi.branch_refno) : null,
+          sourceVersionKey: sourceVersionKey(resp.source_version),
+        };
+      } catch (error) {
+        return { items: [], errors: [`管身端点查询失败：${errorMessage(error)}`], ownerRefno: null, sourceVersionKey: null };
       }
     },
   };
