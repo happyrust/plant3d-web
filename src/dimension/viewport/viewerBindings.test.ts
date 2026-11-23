@@ -54,6 +54,7 @@ describe('createDimensionViewerBindings', () => {
       consumed: true as const,
       requestRender: true as const,
     }));
+    const onView = vi.fn();
     const bindings = createDimensionViewerBindings({
       enabled: true,
       mainCanvas: canvas,
@@ -67,9 +68,14 @@ describe('createDimensionViewerBindings', () => {
       getCamera: () => camera,
       getDesignToWorld: () => new Matrix4(),
       getSize: () => ({ widthCssPx: 400, heightCssPx: 300, dpr: 2 }),
+      onView,
     });
 
     bindings?.syncProjector();
+    expect(onView).toHaveBeenCalledTimes(1);
+    const forward = present(onView.mock.calls[0], 'view forward')[0] as readonly number[];
+    expect(forward).toHaveLength(3);
+    expect(forward.every(component => Number.isFinite(component))).toBe(true);
 
     const projector = present(
       setProjector.mock.calls[0],

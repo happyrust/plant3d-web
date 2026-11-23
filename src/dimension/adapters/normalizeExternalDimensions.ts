@@ -17,7 +17,8 @@ export type ExternalDimensionSource =
   | 'measurement'
   | 'pipe-distance'
   | 'pipe-information'
-  | 'xeokit-measurement';
+  | 'xeokit-measurement'
+  | 'grid';
 
 /**
  * 谁决定标签落点（S1，计划 §6.2）：

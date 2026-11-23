@@ -1,3 +1,4 @@
+import { GridAnnotationSource } from '../adapters/gridAnnotations';
 import { refreshDocumentAnchors } from '../domain/anchors';
 import { createEmptyDimensionDocument } from '../domain/document';
 import { layoutResultsToSvg } from '../export/svgOverlay';
@@ -97,6 +98,8 @@ export type DimensionSystem = Readonly<{
   /** Injected snap seam for upcoming creation commands; null until wired. */
   snapPort: DimensionSnapPort | null;
   externalRegistry: ExternalDimensionRegistry;
+  /** GRIDPL / GRIDCY 自动标注。绘制列表由宿主喂，视线在每次投影同步时更新。 */
+  gridAnnotations: GridAnnotationSource;
   /**
    * Crash-recovery commands found in the journal at composition time.
    * Detected but never auto-replayed (ADR 0034); replay is a caller decision.
@@ -218,6 +221,9 @@ export async function createDimensionSystem(
   });
   viewport.setDocument(session.state);
   const externalRegistry = new ExternalDimensionRegistry();
+  const gridAnnotations = new GridAnnotationSource(records => {
+    externalRegistry.replaceSource('grid', records);
+  });
   const unsubscribeExternalRegistry = externalRegistry.subscribe(
     snapshot => viewport.setExternalDimensions(snapshot.visibleRecords),
   );
@@ -237,6 +243,7 @@ export async function createDimensionSystem(
     getCamera: () => input.viewer.getCamera(),
     getDesignToWorld: () => input.viewer.getDesignToWorld(),
     getSize: () => input.viewer.getSize(),
+    onView: forward => gridAnnotations.setView({ forward }),
   })!;
 
   let disposed = false;
@@ -278,6 +285,7 @@ export async function createDimensionSystem(
       pointer,
       snapPort: input.snapPort ?? null,
       externalRegistry,
+      gridAnnotations,
       pendingRecoveryCommands,
       hasPendingRecovery(): boolean {
         return recoveryCommands !== null;
@@ -356,6 +364,7 @@ export async function createDimensionSystem(
       dispose(): void {
         if (disposed) return;
         disposed = true;
+        gridAnnotations.clear();
         bindings.dispose();
         unsubscribe();
         unsubscribeExternalRegistry();
