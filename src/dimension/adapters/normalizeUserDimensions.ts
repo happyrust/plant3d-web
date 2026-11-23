@@ -1,9 +1,10 @@
-import { projectionAxisVector as axisVector } from '../domain/directions';
+import { projectionAxisVector as axisVector, unitVec3 } from '../domain/directions';
 import { validateDimensionRecord } from '../domain/validation';
 
 import type {
   DimensionDirections,
   UserDimensionRecord,
+  Vec3,
 } from '../domain/types';
 import type {
   DimensionSemanticRole,
@@ -11,13 +12,27 @@ import type {
   NormalizedDimensionInput,
 } from '../kernel/types';
 
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
 function normalizedDirections(
   directions: DimensionDirections | undefined,
 ): Readonly<{ directions?: NormalizedDimensionDirections }> {
   if (!directions) return {};
-  const out: { dimensionDirection?: NormalizedDimensionDirections['dimensionDirection']; projectionDirection?: NormalizedDimensionDirections['projectionDirection'] } = {};
+  const out: { -readonly [K in keyof NormalizedDimensionDirections]: NormalizedDimensionDirections[K] } = {};
   if (directions.dimensionDirection) out.dimensionDirection = directions.dimensionDirection;
   if (directions.projectionDirection) out.projectionDirection = directions.projectionDirection;
+  // 用户定下的尺寸平面才驱动设计空间偏移；迁移推出来的旧记录仍按屏幕法向偏，画法不变。
+  const normal = directions.dimensionPlane?.normal;
+  if (directions.source === 'explicit' && normal && directions.dimensionDirection) {
+    const offset = unitVec3(cross(normal, directions.dimensionDirection));
+    if (offset) out.offsetDirection = offset;
+  }
   return Object.keys(out).length > 0 ? { directions: out } : {};
 }
 

@@ -75,6 +75,9 @@ describe('dimension edit sessions', () => {
     expect(input.onPreview).toHaveBeenCalledTimes(101);
     expect(input.createCommandId).not.toHaveBeenCalled();
     session.pointerDown({ x: 2, y: 0 });
+    expect(session.phase).toBe('place');
+    expect(session.commit()).toBeNull();
+    session.pointerDown({ x: 2, y: 5 });
     expect(session.phase).toBe('ready');
 
     const command = session.commit();
@@ -117,6 +120,8 @@ describe('dimension edit sessions', () => {
     session.pointerDown({ x: 1, y: 0 });
     session.pointerDown({ x: 2, y: 0 });
     session.pointerDown({ x: 3, y: 0 });
+    expect(session.phase).toBe('place');
+    session.pointerDown({ x: 3, y: 5 });
 
     expect(session.commit()).toMatchObject({
       record: {
@@ -173,6 +178,8 @@ describe('dimension edit sessions', () => {
 
     session.pointerDown({ x: 1, y: 0 });
 
+    expect(session.phase).toBe('place');
+    session.pointerDown({ x: 1, y: 5 });
     expect(session.phase).toBe('ready');
     expect(session.commit()).toMatchObject({
       record: {
@@ -196,6 +203,8 @@ describe('dimension edit sessions', () => {
     session.pointerDown({ x: 1, y: 0 });
     session.pointerDown({ x: 2, y: 0 });
     session.selectDesignAxis('z');
+    expect(session.phase).toBe('place');
+    session.pointerDown({ x: 2, y: 5 });
 
     expect(session.commit()).toMatchObject({
       record: {
@@ -283,5 +292,80 @@ describe('dimension edit sessions', () => {
     expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({
       b: [5, 0, 0],
     }));
+  });
+
+  it('#75 第二点之后进入设计空间 place：定显式方向与尺寸平面，放置跟宿主算的结果，单条 create 命令', () => {
+    const snapPort = createSnapPort(x => (x < 2 ? point('a', [0, 0, 0]) : point('b', [2, 0, 0])));
+    const placementAt = vi.fn((_record: unknown, screen: { x: number; y: number }) => ({
+      offsetM: screen.y / 100,
+      labelT: 0.25,
+      side: -1 as const,
+    }));
+    const input = {
+      ...createInput(snapPort),
+      placementAt,
+      viewDirection: () => [0, 0, -1] as const,
+    };
+    const session = createLinearEditSession(input);
+    const lastPreview = () => input.onPreview.mock.calls.at(-1)?.[0];
+    session.pointerDown({ x: 1, y: 0 });
+    session.pointerDown({ x: 3, y: 0 });
+
+    expect(session.phase).toBe('place');
+    expect(session.validationErrors).toEqual([]);
+    session.pointerMove({ x: 50, y: 30 });
+    expect(lastPreview()).toMatchObject({
+      placement: { offsetM: 0.3, labelT: 0.25, side: -1 },
+    });
+    session.pointerDown({ x: 50, y: 30 });
+    expect(session.phase).toBe('ready');
+    expect(session.back()).toBe(true);
+    expect(session.phase).toBe('place');
+    session.pointerDown({ x: 50, y: 30 });
+
+    expect(session.commit()).toMatchObject({
+      type: 'create',
+      record: {
+        placement: { offsetM: 0.3, labelT: 0.25, side: -1 },
+        directions: {
+          schema: 1,
+          source: 'explicit',
+          dimensionDirection: [1, 0, 0],
+          dimensionPlane: { normal: [0, 0, -1] },
+        },
+      },
+    });
+    expect(input.createCommandId).toHaveBeenCalledTimes(1);
+  });
+
+  it('#75 Backspace 从 place 逐步退回到第一步，不产生命令', () => {
+    const snapPort = createSnapPort(x => (x < 2 ? point('a', [0, 0, 0]) : point('b', [2, 0, 0])));
+    const input = createInput(snapPort);
+    const session = createLinearEditSession(input);
+    const lastPreview = () => input.onPreview.mock.calls.at(-1)?.[0];
+    session.pointerDown({ x: 1, y: 0 });
+    session.pointerDown({ x: 3, y: 0 });
+
+    expect(session.back()).toBe(true);
+    expect(session.phase).toBe('pick-second');
+    expect(lastPreview()).toBeNull();
+    expect(session.back()).toBe(true);
+    expect(session.phase).toBe('pick-first');
+    expect(session.back()).toBe(false);
+    expect(session.commit()).toBeNull();
+    expect(input.createCommandId).not.toHaveBeenCalled();
+  });
+
+  it('#75 place 阶段视向与尺寸方向平行时报校验码，而不是静默接受', () => {
+    const snapPort = createSnapPort(x => (x < 2 ? point('a', [0, 0, 0]) : point('b', [0, 0, 2])));
+    const session = createLinearEditSession({
+      ...createInput(snapPort),
+      viewDirection: () => [0, 0, -1] as const,
+    });
+    session.pointerDown({ x: 1, y: 0 });
+    session.pointerDown({ x: 3, y: 0 });
+
+    expect(session.phase).toBe('place');
+    expect(session.validationErrors).toContain('DIMENSION_DIRECTION_PARALLEL_VIEW');
   });
 });

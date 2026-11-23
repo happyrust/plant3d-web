@@ -58,7 +58,7 @@ function createSystem() {
       getLayouts: () => [] as readonly unknown[],
       subscribeLayouts: () => vi.fn(),
     },
-    pointer: { start: vi.fn() },
+    pointer: { start: vi.fn(), subscribeSessionStatus: vi.fn(() => () => undefined) },
     snapPort: null,
     getRecoveryPreview: () => null,
     acceptRecovery: vi.fn(),

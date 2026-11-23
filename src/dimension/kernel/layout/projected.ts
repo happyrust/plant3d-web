@@ -43,6 +43,7 @@ export function layoutProjected(
     {
       dimensionDirection: input.directions?.dimensionDirection ?? axis,
       projectionDirection: input.directions?.projectionDirection ?? null,
+      offsetDirection: input.directions?.offsetDirection ?? null,
     },
   );
 }

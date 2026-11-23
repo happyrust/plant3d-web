@@ -101,7 +101,7 @@ function createSystem() {
     emitLayouts(layouts: readonly unknown[]) {
       layoutListeners.forEach(listener => listener(layouts));
     },
-    pointer: { start: vi.fn() },
+    pointer: { start: vi.fn(), subscribeSessionStatus: vi.fn(() => () => undefined) },
     snapPort: null,
     getRecoveryPreview: () => null,
     acceptRecovery: vi.fn(),

@@ -16,7 +16,7 @@ import {
 import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { deriveDimensionValue } from '../value';
-import { EPSILON, lerp3, sub3 } from '../vec';
+import { add3, EPSILON, lerp3, scale3, sub3, tryNormalize3 } from '../vec';
 
 import {
   backProjectedSegment,
@@ -67,7 +67,12 @@ export function layoutLinearBetween(
   geometry: Readonly<{ a: Vec3; b: Vec3; placement: LinearPlacement }>,
   context: LayoutContext,
   leadingLines: readonly SceneLine[] = [],
-  directions: Readonly<{ dimensionDirection: Vec3 | null; projectionDirection?: Vec3 | null }> = {
+  directions: Readonly<{
+    dimensionDirection: Vec3 | null;
+    projectionDirection?: Vec3 | null;
+    /** 尺寸平面里垂直于尺寸线的设计系方向（#75）：给了就沿它偏移 `offsetM`，转相机不动；不给按屏幕法向偏。 */
+    offsetDirection?: Vec3 | null;
+  }> = {
     dimensionDirection: sub3(geometry.b, geometry.a),
   },
 ): LayoutResult {
@@ -100,27 +105,61 @@ export function layoutLinearBetween(
     return emptyLayout(input.id, input.labelPinned, formatted.text);
   }
 
-  const alongX = screenDx / screenLength;
-  const alongY = screenDy / screenLength;
-  const outwardX = alongY * geometry.placement.side;
-  const outwardY = -alongX * geometry.placement.side;
+  let alongX = screenDx / screenLength;
+  let alongY = screenDy / screenLength;
+  let outwardX = alongY * geometry.placement.side;
+  let outwardY = -alongX * geometry.placement.side;
   const offsetPx = geometry.placement.offsetM / worldPerPixel;
-  const arrowA: Vec2 =
+  let arrowA: Vec2 =
     offsetPx === 0
       ? aScreen
       : [aScreen[0] + outwardX * offsetPx, aScreen[1] + outwardY * offsetPx];
-  const arrowB: Vec2 =
+  let arrowB: Vec2 =
     offsetPx === 0
       ? bScreen
       : [bScreen[0] + outwardX * offsetPx, bScreen[1] + outwardY * offsetPx];
+  let lineA = geometry.a;
+  let lineB = geometry.b;
+  let lineDelta: Vec2 = [screenDx, screenDy];
+  const designOffset = directions.offsetDirection
+    ? tryNormalize3(directions.offsetDirection)
+    : null;
+  if (designOffset) {
+    const offset = scale3(designOffset, geometry.placement.offsetM * geometry.placement.side);
+    const offsetA = add3(geometry.a, offset);
+    const offsetB = add3(geometry.b, offset);
+    const designArrowA = toScreen(offsetA, context.projector);
+    const designArrowB = toScreen(offsetB, context.projector);
+    const designDelta: Vec2 = [designArrowB[0] - designArrowA[0], designArrowB[1] - designArrowA[1]];
+    const designLength = Math.hypot(designDelta[0], designDelta[1]);
+    if (designLength > EPSILON) {
+      lineA = offsetA;
+      lineB = offsetB;
+      arrowA = designArrowA;
+      arrowB = designArrowB;
+      lineDelta = designDelta;
+      alongX = designDelta[0] / designLength;
+      alongY = designDelta[1] / designLength;
+      const outward: Vec2 = [designArrowA[0] - aScreen[0], designArrowA[1] - aScreen[1]];
+      const outwardLength = Math.hypot(outward[0], outward[1]);
+      // 偏移方向正对视线时屏幕上看不出往哪偏：延伸线的出头按屏幕法向，与无平面时一致。
+      if (outwardLength > EPSILON) {
+        outwardX = outward[0] / outwardLength;
+        outwardY = outward[1] / outwardLength;
+      } else {
+        outwardX = alongY * geometry.placement.side;
+        outwardY = -alongX * geometry.placement.side;
+      }
+    }
+  }
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
   const labelCenter: Vec2 = [
     arrowA[0] + (arrowB[0] - arrowA[0]) * geometry.placement.labelT,
     arrowA[1] + (arrowB[1] - arrowA[1]) * geometry.placement.labelT,
   ];
   const labelAnchor = lerp3(
-    geometry.a,
-    geometry.b,
+    lineA,
+    lineB,
     geometry.placement.labelT,
   );
   const glyphScene = sceneGlyph(
@@ -175,10 +214,10 @@ export function layoutLinearBetween(
   // `arrowA`), with the a → b screen delta; no degenerate guard here because
   // the zero-length case already returned above.
   const dimensionSegment = backProjectedSegment(
-    geometry.a,
-    geometry.b,
+    lineA,
+    lineB,
     arrowA,
-    [screenDx, screenDy],
+    lineDelta,
   );
   const sceneVertexOnDimension = (point: Vec2) =>
     sceneVertexOnSegment(dimensionSegment, point, context.projector, false);
@@ -273,5 +312,6 @@ export function layoutLinear(
 ): LayoutResult {
   return layoutLinearBetween(input, input, context, [], {
     dimensionDirection: input.directions?.dimensionDirection ?? sub3(input.b, input.a),
+    offsetDirection: input.directions?.offsetDirection ?? null,
   });
 }

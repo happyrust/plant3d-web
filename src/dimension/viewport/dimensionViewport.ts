@@ -137,6 +137,53 @@ function axisVector(record: Extract<
   return [0, 0, 1];
 }
 
+function cross(a: DomainVec3, b: DomainVec3): DomainVec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function unit(vector: DomainVec3): DomainVec3 | null {
+  const vectorLength = length(vector);
+  return vectorLength > 1e-12
+    ? [vector[0] / vectorLength, vector[1] / vectorLength, vector[2] / vectorLength]
+    : null;
+}
+
+/**
+ * 线性 / 投影尺寸的设计空间放置（#75）：光标射线交到记录定下的尺寸平面上，交点相对基线的
+ * 沿线参数是 `labelT`、垂直于尺寸线的有符号距离是 `offsetM` / `side`。射线与平面平行（侧看）
+ * 时交不出，返回 null，由调用方退回屏幕法。
+ */
+export function linearPlacementOnPlane(
+  baseline: Readonly<{ a: DomainVec3; b: DomainVec3 }>,
+  plane: Readonly<{ normal: DomainVec3; dimensionDirection: DomainVec3 }>,
+  ray: Readonly<{ origin: DomainVec3; direction: DomainVec3 }>,
+): Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }> | null {
+  const normal = unit(plane.normal);
+  const along = unit(plane.dimensionDirection);
+  const rayDirection = unit(ray.direction);
+  if (!normal || !along || !rayDirection) return null;
+  const denominator = dot(rayDirection, normal);
+  if (Math.abs(denominator) < 1e-6) return null;
+  const t = dot(subtract(baseline.a, ray.origin), normal) / denominator;
+  if (!Number.isFinite(t)) return null;
+  const hit = addScaled(ray.origin, rayDirection, t);
+  const relative = subtract(hit, baseline.a);
+  const span = dot(subtract(baseline.b, baseline.a), along);
+  if (Math.abs(span) < 1e-12) return null;
+  const offsetDirection = unit(cross(normal, along));
+  if (!offsetDirection) return null;
+  const signed = dot(relative, offsetDirection);
+  return {
+    offsetM: Math.abs(signed),
+    labelT: dot(relative, along) / span,
+    side: signed >= 0 ? 1 : -1,
+  };
+}
+
 function restyleLayout(
   result: LayoutResult,
   styleRole: string,
@@ -516,6 +563,11 @@ export class DimensionViewport {
     this.render(new Set(['camera']));
   }
 
+  /** 当帧相机视向（设计系）；还没有投影时为 null。只给交互定尺寸平面与做视向校验，不入库。 */
+  viewDirection(): DomainVec3 | null {
+    return this.projector ? [...this.projector.forward] as DomainVec3 : null;
+  }
+
   placementAtScreen(
     record: UserDimensionRecord,
     screen: Readonly<{ x: number; y: number }>,
@@ -539,6 +591,24 @@ export class DimensionViewport {
           rawAxis[2] / axisLength,
         ];
         baselineB = addScaled(a, axis, dot(subtract(b, a), axis));
+      }
+      const directions = record.directions;
+      if (
+        directions?.source === 'explicit'
+        && directions.dimensionPlane
+        && directions.dimensionDirection
+      ) {
+        const origin = projector.unproject({ x: screen.x, y: screen.y, depth: -1 });
+        const far = projector.unproject({ x: screen.x, y: screen.y, depth: 1 });
+        const onPlane = linearPlacementOnPlane(
+          { a: baselineA, b: baselineB },
+          {
+            normal: directions.dimensionPlane.normal,
+            dimensionDirection: directions.dimensionDirection,
+          },
+          { origin, direction: subtract(far, origin) },
+        );
+        if (onPlane) return onPlane;
       }
       const projectedA = projector.project(baselineA);
       const projectedB = projector.project(baselineB);

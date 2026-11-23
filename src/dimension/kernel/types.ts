@@ -435,6 +435,8 @@ export type NormalizedDimensionBase = Readonly<{
 export type NormalizedDimensionDirections = Readonly<{
   dimensionDirection?: Vec3;
   projectionDirection?: Vec3;
+  /** 尺寸平面里垂直于尺寸方向的单位向量（`side = 1` 那一侧）；只在方向是 `explicit` 且带平面时给。 */
+  offsetDirection?: Vec3;
 }>;
 
 export type NormalizedDimensionInput =
