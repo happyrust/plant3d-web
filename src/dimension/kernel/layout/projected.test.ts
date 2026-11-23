@@ -62,4 +62,13 @@ describe('layoutProjected', () => {
     expect(result.hitRegions).toEqual([]);
     expect(result.derived.formattedLabel).toBe('');
   });
+
+  it('存的投影方向在当帧视向下退化（平行于视向）时给 PROJECTION_DIRECTION_PARALLEL_VIEW，不画', () => {
+    const result = layoutProjected({
+      ...projected,
+      directions: { dimensionDirection: [1, 0, 0], projectionDirection: [0, 0, 1] },
+    }, context);
+    expect(result.primitives).toEqual([]);
+    expect(result.derived.validationErrors).toEqual(['PROJECTION_DIRECTION_PARALLEL_VIEW']);
+  });
 });

@@ -1,3 +1,4 @@
+import { withDimensionDirections } from './directions';
 import { createEmptyDimensionDocument, type DimensionDocumentState } from './document';
 
 import type {
@@ -360,7 +361,7 @@ export function migrateLegacyDimensionArchives(
         );
         return;
     }
-    if (record) records.push(record);
+    if (record) records.push(withDimensionDirections(record));
   });
 
   const state = createEmptyDimensionDocument({

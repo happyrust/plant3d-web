@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { projectedRecord } from '../domain/testFixtures';
+
 import {
   dimensionCommandJournalKey,
   DimensionCommandJournalBaseVersionError,
@@ -89,6 +91,32 @@ describe('LocalStorageDimensionCommandJournal', () => {
       at: 15,
       dimensionId: 'dimension-1',
       labelPinned: true,
+    };
+
+    journal.append('document-1', 0, command);
+
+    expect(journal.load('document-1')?.commands).toEqual([command]);
+  });
+
+  it('round-trips a create command carrying #68 direction fields', () => {
+    const harness = storageHarness();
+    const journal = new LocalStorageDimensionCommandJournal(harness.storage);
+    const command: DimensionCommand = {
+      type: 'create',
+      commandId: 'create-1',
+      actorId: 'owner',
+      actorRole: 'designer',
+      at: 30,
+      record: projectedRecord({
+        directions: {
+          schema: 1,
+          source: 'explicit',
+          measuredAxis: [1, 0, 0],
+          dimensionDirection: [1, 0, 0],
+          projectionDirection: [0, 1, 0],
+          dimensionPlane: { normal: [0, 0, 1] },
+        },
+      }),
     };
 
     journal.append('document-1', 0, command);

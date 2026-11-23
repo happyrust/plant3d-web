@@ -138,4 +138,12 @@ describe('layoutLinear', () => {
     expect(invalid.derived.formattedLabel).toBe('STALE 1000.00');
     expect(invalid.primitives.every((primitive) => primitive.styleRole === 'selected')).toBe(true);
   });
+
+  it('布局前按当帧视向校验：尺寸线与视向平行时不画，给稳定错误码而不是退回几何', () => {
+    const endOn = layoutLinear(input({ a: [0, 0, 0], b: [0, 0, 1] }), context);
+    expect(endOn.primitives).toEqual([]);
+    expect(endOn.derived.validationErrors).toEqual(['DIMENSION_DIRECTION_PARALLEL_VIEW']);
+    expect(endOn.derived.formattedLabel).not.toBe('');
+    expect(layoutLinear(input(), context).derived).not.toHaveProperty('validationErrors');
+  });
 });

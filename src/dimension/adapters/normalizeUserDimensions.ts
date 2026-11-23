@@ -1,23 +1,24 @@
+import { projectionAxisVector as axisVector } from '../domain/directions';
+import { validateDimensionRecord } from '../domain/validation';
+
 import type {
-  ProjectionAxisRef,
+  DimensionDirections,
   UserDimensionRecord,
-  Vec3,
 } from '../domain/types';
 import type {
   DimensionSemanticRole,
+  NormalizedDimensionDirections,
   NormalizedDimensionInput,
 } from '../kernel/types';
 
-function axisVector(axis: ProjectionAxisRef): Vec3 {
-  if (axis.kind === 'semantic-direction') return axis.snapshot;
-  switch (axis.axis) {
-    case 'x':
-      return [1, 0, 0];
-    case 'y':
-      return [0, 1, 0];
-    case 'z':
-      return [0, 0, 1];
-  }
+function normalizedDirections(
+  directions: DimensionDirections | undefined,
+): Readonly<{ directions?: NormalizedDimensionDirections }> {
+  if (!directions) return {};
+  const out: { dimensionDirection?: NormalizedDimensionDirections['dimensionDirection']; projectionDirection?: NormalizedDimensionDirections['projectionDirection'] } = {};
+  if (directions.dimensionDirection) out.dimensionDirection = directions.dimensionDirection;
+  if (directions.projectionDirection) out.projectionDirection = directions.projectionDirection;
+  return Object.keys(out).length > 0 ? { directions: out } : {};
 }
 
 function semanticRole(record: UserDimensionRecord): DimensionSemanticRole {
@@ -32,9 +33,14 @@ function semanticRole(record: UserDimensionRecord): DimensionSemanticRole {
     : 'normal';
 }
 
+/**
+ * 记录 → 布局输入。布局前先过与视向无关的校验（`validation.ts`）：点没解析、点类型不对、方向退化的
+ * 一律不进布局（返回 null），与视向有关的那几条由布局按当帧视向判。
+ */
 export function normalizeUserDimension(
   record: UserDimensionRecord,
 ): NormalizedDimensionInput | null {
+  if (!validateDimensionRecord(record).ok) return null;
   const role = semanticRole(record);
   const base = {
     id: record.id,
@@ -51,6 +57,7 @@ export function normalizeUserDimension(
         a: record.a.snapshot,
         b: record.b.snapshot,
         placement: record.placement,
+        ...normalizedDirections(record.directions),
       };
     case 'projected':
       if (!record.a.snapshot || !record.b.snapshot) return null;
@@ -61,6 +68,7 @@ export function normalizeUserDimension(
         b: record.b.snapshot,
         axis: axisVector(record.axis),
         placement: record.placement,
+        ...normalizedDirections(record.directions),
       };
     case 'angular':
       if (

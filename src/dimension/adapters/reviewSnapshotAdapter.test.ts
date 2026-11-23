@@ -9,8 +9,10 @@ import {
 } from '../domain/testFixtures';
 
 import {
+  DimensionSnapshotValidationError,
   dimensionDocumentFromSnapshot,
   dimensionDocumentToSnapshot,
+  validateDimensionDocumentSnapshot,
 } from './reviewSnapshotAdapter';
 
 import type { SnapshotDimensionDocument } from './reviewSnapshotAdapter';
@@ -42,6 +44,41 @@ describe('review dimension snapshot adapter', () => {
       formId: 'form-1',
       baseVersion: 7,
     })).toEqual(state);
+  });
+
+  it('round-trips the #68 direction fields and rejects a persisted view direction', () => {
+    const state = emptyDimensionDocument([
+      linearRecord({
+        id: 'linear',
+        directions: { schema: 1, source: 'explicit', measuredAxis: [1, 0, 0], dimensionDirection: [1, 0, 0] },
+      }),
+      projectedRecord({
+        id: 'projected',
+        directions: {
+          schema: 1,
+          source: 'legacy-derived',
+          measuredAxis: [1, 0, 0],
+          dimensionDirection: [1, 0, 0],
+          projectionDirection: [0, 1, 0],
+          dimensionPlane: { normal: [0, 0, 1] },
+        },
+      }),
+    ], { documentId: 'document-directions', baseVersion: 1 });
+
+    const snapshot = dimensionDocumentToSnapshot(state);
+    const restored = dimensionDocumentFromSnapshot(
+      JSON.parse(JSON.stringify(snapshot)),
+      { baseVersion: 1 },
+    );
+    expect(restored.records).toEqual(state.records);
+
+    expect(() => validateDimensionDocumentSnapshot({
+      schemaVersion: 2,
+      documentId: 'document-directions',
+      records: [linearRecord({
+        directions: { schema: 1, source: 'explicit', viewDirection: [0, 0, -1] } as never,
+      })],
+    })).toThrow(DimensionSnapshotValidationError);
   });
 
   it('rejects an unsupported schema version', () => {

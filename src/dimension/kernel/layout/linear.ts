@@ -1,3 +1,4 @@
+import { checkDirectionsAgainstView } from '../../domain/validation';
 import { formatDimensionLabel } from '../format';
 import {
   engineeringTextRotation,
@@ -15,7 +16,7 @@ import {
 import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { deriveDimensionValue } from '../value';
-import { EPSILON, lerp3 } from '../vec';
+import { EPSILON, lerp3, sub3 } from '../vec';
 
 import {
   backProjectedSegment,
@@ -44,6 +45,7 @@ export function emptyLayout(
   labelPinned: boolean,
   formattedLabel = '',
   lodHidden?: LayoutResult['derived']['lodHidden'],
+  validationErrors?: readonly string[],
 ): LayoutResult {
   return {
     dimensionId,
@@ -52,7 +54,11 @@ export function emptyLayout(
     hitRegions: [],
     labelBounds: { x: 0, y: 0, width: 0, height: 0 },
     labelPinned,
-    derived: { formattedLabel, ...(lodHidden ? { lodHidden } : {}) },
+    derived: {
+      formattedLabel,
+      ...(lodHidden ? { lodHidden } : {}),
+      ...(validationErrors && validationErrors.length > 0 ? { validationErrors } : {}),
+    },
   };
 }
 
@@ -61,10 +67,23 @@ export function layoutLinearBetween(
   geometry: Readonly<{ a: Vec3; b: Vec3; placement: LinearPlacement }>,
   context: LayoutContext,
   leadingLines: readonly SceneLine[] = [],
+  directions: Readonly<{ dimensionDirection: Vec3 | null; projectionDirection?: Vec3 | null }> = {
+    dimensionDirection: sub3(geometry.b, geometry.a),
+  },
 ): LayoutResult {
   const value = deriveDimensionValue(input);
   const formatted = formatDimensionLabel(input, value, context.format);
   if (!value.ok || !formatted.ok) return emptyLayout(input.id, input.labelPinned);
+  const viewErrors = checkDirectionsAgainstView(directions, context.projector.forward);
+  if (viewErrors.length > 0) {
+    return emptyLayout(
+      input.id,
+      input.labelPinned,
+      formatted.text,
+      undefined,
+      viewErrors.map(error => error.code),
+    );
+  }
 
   const aScreen = toScreen(geometry.a, context.projector);
   const bScreen = toScreen(geometry.b, context.projector);
@@ -252,5 +271,7 @@ export function layoutLinear(
   input: Extract<NormalizedDimensionInput, { kind: 'linear' }>,
   context: LayoutContext,
 ): LayoutResult {
-  return layoutLinearBetween(input, input, context);
+  return layoutLinearBetween(input, input, context, [], {
+    dimensionDirection: input.directions?.dimensionDirection ?? sub3(input.b, input.a),
+  });
 }
