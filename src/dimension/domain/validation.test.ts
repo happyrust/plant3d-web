@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { exactAnchor, linearRecord, projectedRecord, radialRecord } from './testFixtures';
+import { angularRecord, exactAnchor, linearRecord, projectedRecord, radialRecord } from './testFixtures';
 import {
   checkDirectionsAgainstView,
   DIMENSION_VALIDATION_TOLERANCES,
@@ -17,6 +17,7 @@ describe('validateDimensionRecord（DMCHEK-like 布局前校验）', () => {
     expect(validateDimensionRecord(linearRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(projectedRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(radialRecord())).toEqual({ ok: true });
+    expect(validateDimensionRecord(angularRecord())).toEqual({ ok: true });
   });
 
   it('UNRESOLVED_DIMENSION_POINT：端点没有快照', () => {
@@ -76,6 +77,19 @@ describe('validateDimensionRecord（DMCHEK-like 布局前校验）', () => {
     expect(validateDimensionRecord(record, { viewDirection: [0, 0, -1] })).toEqual({ ok: true });
     expect(record).not.toHaveProperty('viewDirection');
     expect(record.directions).not.toHaveProperty('viewDirection');
+  });
+
+  it('角度：零长度射线和共线射线给出不同的错误码', () => {
+    expect(codes(validateDimensionRecord(angularRecord({
+      rayA: exactAnchor([0, 0, 0]),
+    })))).toEqual(['DEGENERATE_ANGULAR_RAY']);
+    expect(codes(validateDimensionRecord(angularRecord({
+      rayB: exactAnchor([2, 0, 0]),
+    })))).toEqual(['COLLINEAR_ANGULAR_RAYS']);
+    const almost = (Math.PI / 180) * 1.5;
+    expect(validateDimensionRecord(angularRecord({
+      rayB: exactAnchor([Math.cos(almost), Math.sin(almost), 0]),
+    }))).toEqual({ ok: true });
   });
 
   it('容差集中在一张表里，可整体替换（Phase 4 金样回填）', () => {

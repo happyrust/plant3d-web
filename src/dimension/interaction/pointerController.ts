@@ -242,6 +242,18 @@ export class DimensionPointerController {
     return CONSUMED;
   }
 
+  /** 角度创建会话的近 90° 吸附开关。没有角度会话时不消费。 */
+  toggleOrthogonalSnap(): PointerDispatchResult {
+    if (this.disposed || !this.activeSession) return NOT_CONSUMED;
+    const session = this.activeSession as DimensionEditSession & {
+      toggleOrthogonalSnap?: () => void;
+    };
+    if (!session.toggleOrthogonalSnap) return NOT_CONSUMED;
+    session.toggleOrthogonalSnap();
+    this.publishStatus();
+    return CONSUMED;
+  }
+
   selectDesignAxis(axis: 'x' | 'y' | 'z'): PointerDispatchResult {
     if (this.disposed || !this.activeSession) return NOT_CONSUMED;
     const session = this.activeSession as DimensionEditSession & {

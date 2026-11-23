@@ -11,6 +11,7 @@ export type DimensionBoundAction =
   | 'select'
   | 'delete'
   | 'flip-angle'
+  | 'toggle-orthogonal-snap'
   | 'toggle-radial-display'
   | 'restore-auto-layout'
   | 'hide-external'
@@ -51,7 +52,9 @@ export function getDimensionBoundActions(
   ];
   if (item.labelPinned) actions.push('restore-auto-layout');
   actions.push('delete');
-  if (item.kind === 'angular') actions.push('flip-angle');
+  if (item.kind === 'angular') {
+    actions.push('flip-angle', 'toggle-orthogonal-snap');
+  }
   if (item.kind === 'radial') actions.push('toggle-radial-display');
   return actions;
 }

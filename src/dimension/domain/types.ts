@@ -56,10 +56,25 @@ export type LinearPlacementIntent = Readonly<{
   side: 1 | -1;
 }>;
 
+/**
+ * 角度所在的设计平面（#71）。法向定死弧的旋向，转相机不改。
+ * `explicit` 是创建时由三条射线叉积定下的；`legacy-derived` 是旧记录迁移时补的，重绑后重算。
+ */
+export type AngularPlane = Readonly<{
+  schema: 1;
+  source: 'explicit' | 'legacy-derived';
+  normal: Vec3;
+}>;
+
 export type AngularPlacementIntent = Readonly<{
   radiusM?: number;
   labelT: number;
   arcChoice: DimensionArcChoice;
+  /**
+   * 近 90° 正交吸附。缺省或 false 表示关：显示角就是两条射线的真实夹角。
+   * 打开后按 `ANGULAR_ORTHOGONAL_SNAP` 吸到 90° 的整数倍，锚点坐标不动。
+   */
+  orthogonalSnap?: boolean;
 }>;
 
 export type RadialPlacementIntent = Readonly<{
@@ -99,6 +114,8 @@ export type UserDimensionRecord =
     rayA: DimensionAnchor;
     rayB: DimensionAnchor;
     placement: AngularPlacementIntent;
+    /** 缺省的旧记录按两条射线现算平面；有值时布局用这份，不跟相机走。 */
+    anglePlane?: AngularPlane;
   }>
   | Readonly<UserDimensionCommon & {
     kind: 'radial';

@@ -100,6 +100,7 @@ export function normalizeUserDimension(
         rayA: record.rayA.snapshot,
         rayB: record.rayB.snapshot,
         placement: record.placement,
+        ...(record.anglePlane ? { planeNormal: record.anglePlane.normal } : {}),
       };
     case 'radial':
       if (!record.center.snapshot || !record.rim.snapshot) return null;

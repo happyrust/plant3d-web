@@ -1096,6 +1096,18 @@ function act(
     }
     return;
   }
+  if (action === 'toggle-orthogonal-snap' && item.kind === 'angular') {
+    const result = session.apply({
+      ...metadata,
+      type: 'set-angular-orthogonal-snap',
+      dimensionId: item.id,
+      enabled: item.placement.orthogonalSnap !== true,
+    });
+    if (!result.ok) {
+      emitToast({ message: `切换正交吸附失败：${result.reason}`, level: 'warning' });
+    }
+    return;
+  }
   if (action === 'toggle-radial-display' && item.kind === 'radial') {
     const result = session.apply({
       ...metadata,

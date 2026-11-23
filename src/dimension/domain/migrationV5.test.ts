@@ -196,6 +196,11 @@ describe('migrateLegacyDimensionArchives', () => {
         labelT: 0.25,
         arcChoice: 'major',
       },
+      anglePlane: {
+        schema: 1,
+        source: 'legacy-derived',
+        normal: [0, 0, 1],
+      },
       authorId: 'migration-user',
       authorRole: 'designer',
       createdAt: 123,

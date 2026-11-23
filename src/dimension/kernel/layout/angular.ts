@@ -55,27 +55,38 @@ export function layoutAngular(
   input: Extract<NormalizedDimensionInput, { kind: 'angular' }>,
   context: LayoutContext,
 ): LayoutResult {
+  const rawA = sub3(input.rayA, input.vertex);
+  const rawB = sub3(input.rayB, input.vertex);
+  if (length3(rawA) <= EPSILON || length3(rawB) <= EPSILON) {
+    return emptyLayout(input.id, input.labelPinned, '', undefined, ['DEGENERATE_ANGULAR_RAY']);
+  }
+  const unitA = normalize3(rawA);
+  const unitB = normalize3(rawB);
+  const rawNormal = cross3(unitA, unitB);
+  if (length3(rawNormal) <= EPSILON) {
+    return emptyLayout(input.id, input.labelPinned, '', undefined, ['COLLINEAR_ANGULAR_RAYS']);
+  }
+
   const value = deriveDimensionValue(input);
   const formatted = formatDimensionLabel(input, value, context.format);
   if (!value.ok || value.valueRad === undefined || !formatted.ok) {
     return emptyLayout(input.id, input.labelPinned);
   }
 
-  const rawA = sub3(input.rayA, input.vertex);
-  const rawB = sub3(input.rayB, input.vertex);
-  if (length3(rawA) <= EPSILON || length3(rawB) <= EPSILON) {
-    return emptyLayout(input.id, input.labelPinned);
-  }
-  const unitA = normalize3(rawA);
-  const unitB = normalize3(rawB);
-  const rawNormal = cross3(unitA, unitB);
-  if (length3(rawNormal) <= EPSILON) return emptyLayout(input.id, input.labelPinned);
-
-  const normal = normalize3(rawNormal);
+  const computedNormal = normalize3(rawNormal);
+  const storedNormal = input.planeNormal && length3(input.planeNormal) > EPSILON
+    ? normalize3(input.planeNormal)
+    : null;
+  // 有持久化法向就用它定旋向，这样换相机不会把弧翻到另一侧。
+  const normal = storedNormal ?? computedNormal;
   const planeV = normalize3(cross3(normal, unitA));
-  const minorAngle = Math.acos(clamp(dot3(unitA, unitB), -1, 1));
-  const sweep =
-    input.placement.arcChoice === 'minor' ? minorAngle : minorAngle - 2 * Math.PI;
+  const signedMinor = Math.atan2(dot3(unitB, planeV), clamp(dot3(unitA, unitB), -1, 1));
+  if (!Number.isFinite(signedMinor) || Math.abs(signedMinor) <= EPSILON) {
+    return emptyLayout(input.id, input.labelPinned, '', undefined, ['COLLINEAR_ANGULAR_RAYS']);
+  }
+  const sweep = input.placement.arcChoice === 'minor'
+    ? signedMinor
+    : signedMinor - Math.sign(signedMinor) * 2 * Math.PI;
   const worldPerPixel = context.projector.worldPerPixelAt(input.vertex);
   if (!Number.isFinite(worldPerPixel) || worldPerPixel <= EPSILON) {
     return emptyLayout(input.id, input.labelPinned);

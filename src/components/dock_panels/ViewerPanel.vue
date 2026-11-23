@@ -2464,6 +2464,10 @@ function handleRibbonCommand(commandId: string) {
       dimensionSystem?.pointer.flipActiveSession();
       requestRender();
       return;
+    case 'dimension.angular.orthogonal-snap':
+      dimensionSystem?.pointer.toggleOrthogonalSnap();
+      requestRender();
+      return;
     case 'dimension.undo':
       dimensionHistoryAction('undo');
       return;

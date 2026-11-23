@@ -52,6 +52,23 @@ describe('deriveDimensionValue', () => {
       ok: true,
       valueRad: (3 * Math.PI) / 2,
     });
+
+    const nearRight = (89.2 * Math.PI) / 180;
+    const near: Extract<NormalizedDimensionInput, { kind: 'angular' }> = {
+      ...base,
+      id: 'angular-near',
+      kind: 'angular',
+      vertex: [0, 0, 0],
+      rayA: [1, 0, 0],
+      rayB: [Math.cos(nearRight), Math.sin(nearRight), 0],
+      placement: { labelT: 0.5, arcChoice: 'minor', orthogonalSnap: true },
+    };
+    expect(deriveDimensionValue(near)).toEqual({ ok: true, valueRad: Math.PI / 2 });
+    const unsnapped = deriveDimensionValue({
+      ...near,
+      placement: { ...near.placement, orthogonalSnap: false },
+    });
+    expect(unsnapped.ok && unsnapped.valueRad).toBeCloseTo(nearRight);
   });
 
   it('derives radial radius and diameter from geometry', () => {

@@ -38,6 +38,11 @@ export type DimensionCommandIntent =
     arcChoice: DimensionArcChoice;
   }>
   | Readonly<{
+    type: 'set-angular-orthogonal-snap';
+    dimensionId: string;
+    enabled: boolean;
+  }>
+  | Readonly<{
     type: 'set-radial-display';
     dimensionId: string;
     display: RadialDisplay;
@@ -90,6 +95,13 @@ export type DimensionEvent =
     dimensionId: string;
     previous: DimensionArcChoice;
     next: DimensionArcChoice;
+  }>
+  | Readonly<{
+    type: 'angular-orthogonal-snap-set';
+    commandId: string;
+    dimensionId: string;
+    previous: boolean;
+    next: boolean;
   }>
   | Readonly<{
     type: 'radial-display-set';

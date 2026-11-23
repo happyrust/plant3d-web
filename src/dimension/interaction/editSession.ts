@@ -1,4 +1,5 @@
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
+import { deriveAngularPlane } from '../domain/angularPlane';
 import { projectionAxisVector, unitVec3 } from '../domain/directions';
 import { dimensionRecordHasResolvedGeometry } from '../domain/invariants';
 import { validateDimensionRecord } from '../domain/validation';
@@ -8,6 +9,8 @@ import type {
   DimensionCommand,
 } from '../domain/commands';
 import type {
+  AngularPlacementIntent,
+  AngularPlane,
   DimensionAnchor,
   DimensionDirections,
   DimensionKind,
@@ -63,6 +66,8 @@ export type DimensionEditSession = {
   pointerMove(screen: Vec2): void;
   pointerDown(screen: Vec2): void;
   flip(): void;
+  /** 近 90° 吸附。只有角度会话实现它。 */
+  toggleOrthogonalSnap?(): void;
   /** 退回上一步；已在第一步（或会话结束）时返回 false。 */
   back(): boolean;
   commit(): DimensionCommand | null;
@@ -296,6 +301,10 @@ abstract class BaseEditSession implements DimensionEditSession {
 
   flip(): void {
     // Most edit sessions have no reversible orientation.
+  }
+
+  toggleOrthogonalSnap(): void {
+    // Only the angular session opts into near-right-angle snapping.
   }
 
   get validationErrors(): readonly string[] {
@@ -629,8 +638,15 @@ class AngularEditSession extends BaseEditSession {
   private rayA: DimensionAnchor | null = null;
   private rayB: DimensionAnchor | null = null;
   private arcChoice: 'minor' | 'major' = 'minor';
+  private orthogonalSnap = false;
+  private radiusM: number | undefined;
+  private anglePlane: AngularPlane | undefined;
 
   pointerMove(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      return;
+    }
     if (
       this.currentPhase !== 'pick-first'
       && this.currentPhase !== 'pick-second'
@@ -659,6 +675,11 @@ class AngularEditSession extends BaseEditSession {
   }
 
   pointerDown(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      if (this.validationErrors.length === 0) this.currentPhase = 'ready';
+      return;
+    }
     const candidate = selectedCandidate(this.input, screen, ['point']);
     if (!candidate?.anchor.snapshot) return;
     if (this.currentPhase === 'pick-first') {
@@ -675,17 +696,41 @@ class AngularEditSession extends BaseEditSession {
     }
     if (this.currentPhase === 'pick-third' && this.vertex && this.rayA) {
       this.rayB = candidate.anchor;
-      this.currentPhase = 'ready';
+      const vertex = this.vertex.snapshot;
+      const rayA = this.rayA.snapshot;
+      const rayB = candidate.anchor.snapshot;
+      this.anglePlane = vertex && rayA && rayB
+        ? deriveAngularPlane(vertex, rayA, rayB, 'explicit') ?? undefined
+        : undefined;
+      this.currentPhase = 'place';
       this.emitPreview(
         this.recordFrom(this.vertex, this.rayA, this.rayB, this.input.now()),
       );
     }
   }
 
+  /** 近 90° 吸附是显式开关：默认关，创建过程中打开后写进记录。 */
+  override toggleOrthogonalSnap(): void {
+    this.orthogonalSnap = !this.orthogonalSnap;
+    if (this.vertex && this.rayA && this.rayB) {
+      this.emitPreview(this.recordFrom(this.vertex, this.rayA, this.rayB, this.input.now()));
+    }
+  }
+
+  override commit(): DimensionCommand | null {
+    if (this.validationErrors.length > 0) return null;
+    return super.commit();
+  }
+
   back(): boolean {
     switch (this.currentPhase) {
       case 'ready':
+        this.currentPhase = 'place';
+        return true;
+      case 'place':
         this.rayB = null;
+        this.anglePlane = undefined;
+        this.radiusM = undefined;
         this.currentPhase = 'pick-third';
         this.emitPreview(null);
         return true;
@@ -732,10 +777,22 @@ class AngularEditSession extends BaseEditSession {
       rayA,
       rayB,
       placement: {
+        ...(this.radiusM === undefined ? {} : { radiusM: this.radiusM }),
         labelT: 0.5,
         arcChoice: this.arcChoice,
+        orthogonalSnap: this.orthogonalSnap,
       },
+      ...(this.anglePlane ? { anglePlane: this.anglePlane } : {}),
     };
+  }
+
+  private followCursor(screen: Vec2): void {
+    const placement = this.placementFromScreen<AngularPlacementIntent>(
+      this.buildRecord(this.input.now()),
+      screen,
+    );
+    if (placement?.radiusM !== undefined) this.radiusM = placement.radiusM;
+    this.emitPreview(this.buildRecord(this.input.now()));
   }
 }
 

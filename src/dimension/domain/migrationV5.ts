@@ -1,3 +1,4 @@
+import { deriveAngularPlane } from './angularPlane';
 import { withDimensionDirections } from './directions';
 import { createEmptyDimensionDocument, type DimensionDocumentState } from './document';
 
@@ -262,12 +263,16 @@ function mapAngularRecord(
   }
   appendIgnoredFieldDiagnostics(raw, legacyId, diagnostics);
   const radiusM = finiteNumber(raw.offset);
+  const plane = vertex.anchor.snapshot && rayA.anchor.snapshot && rayB.anchor.snapshot
+    ? deriveAngularPlane(vertex.anchor.snapshot, rayA.anchor.snapshot, rayB.anchor.snapshot, 'legacy-derived')
+    : null;
   return {
     id: legacyId,
     kind: 'angular',
     vertex: vertex.anchor,
     rayA: rayA.anchor,
     rayB: rayB.anchor,
+    ...(plane ? { anglePlane: plane } : {}),
     placement: {
       ...(radiusM === null ? {} : { radiusM: Math.abs(radiusM) }),
       labelT: finiteNumber(raw.labelT) ?? 0.5,

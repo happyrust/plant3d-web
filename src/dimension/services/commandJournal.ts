@@ -104,6 +104,9 @@ function isDimensionCommand(value: unknown): value is DimensionCommand {
     case 'set-angle-arc':
       return isNonEmptyString(command.dimensionId)
         && (command.arcChoice === 'minor' || command.arcChoice === 'major');
+    case 'set-angular-orthogonal-snap':
+      return isNonEmptyString(command.dimensionId)
+        && typeof command.enabled === 'boolean';
     case 'set-radial-display':
       return isNonEmptyString(command.dimensionId)
         && (command.display === 'radius' || command.display === 'diameter');
