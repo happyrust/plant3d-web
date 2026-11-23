@@ -254,4 +254,47 @@ describe('RuleCheckPanel', () => {
     revokeSpy.mockRestore();
     clickSpy.mockRestore();
   });
+
+  it('filters results by severity/keyword, toggles rule grouping with collapse, and focuses group refnos', async () => {
+    const setObjectsSelected = vi.fn();
+    const flyTo = vi.fn();
+    viewerContextStub.viewerRef.value = {
+      scene: {
+        ensureRefnos: vi.fn(),
+        setObjectsVisible: vi.fn(),
+        setObjectsSelected,
+        getAABB: vi.fn(() => [1, 2, 3, 4, 5, 6]),
+      },
+      cameraFlight: { flyTo },
+    };
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(2);
+
+    // 切到「火灾分区」结果快筛 → 仅剩 1 条，并展示 1/2 过滤计数
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-result-filter-firezone"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(1);
+    expect(host.querySelector('[data-testid="rule-check-result-filtered-count"]')?.textContent?.trim()).toBe('1/2');
+
+    // 切到「按规则分组」→ 展开/折叠组，点击「定位本组」聚焦该组全部 refno
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-group-toggle-btn"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-group"]').length).toBe(1);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-focus-group-btn"]')!.click();
+    await flushUi();
+    expect(setObjectsSelected).toHaveBeenCalledWith(['24381_500', '24381_501'], true);
+    expect(flyTo).toHaveBeenCalledWith({ aabb: [1, 2, 3, 4, 5, 6], fit: true, duration: 0.8 });
+
+    // 折叠组头后子违规行隐藏
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-group-header"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(0);
+  });
 });
