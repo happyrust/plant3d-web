@@ -12,6 +12,7 @@ export type DimensionBoundAction =
   | 'delete'
   | 'flip-angle'
   | 'toggle-radial-display'
+  | 'remove-last-chain-anchor'
   | 'restore-auto-layout'
   | 'hide-external'
   | DimensionRebindAction;
@@ -53,5 +54,6 @@ export function getDimensionBoundActions(
   actions.push('delete');
   if (item.kind === 'angular') actions.push('flip-angle');
   if (item.kind === 'radial') actions.push('toggle-radial-display');
+  if (item.kind === 'chain' && item.anchors.length > 2) actions.push('remove-last-chain-anchor');
   return actions;
 }

@@ -111,6 +111,20 @@ function isDimensionCommand(value: unknown): value is DimensionCommand {
       return isNonEmptyString(command.dimensionId)
         && isNonEmptyString(command.anchorSlot)
         && asObject(command.anchor) !== null;
+    case 'add-chain-anchor': {
+      const index = command.index;
+      return isNonEmptyString(command.dimensionId)
+        && asObject(command.anchor) !== null
+        && (index === undefined
+          || (typeof index === 'number' && Number.isInteger(index) && index >= 0));
+    }
+    case 'remove-chain-anchor': {
+      const index = command.index;
+      return isNonEmptyString(command.dimensionId)
+        && typeof index === 'number'
+        && Number.isInteger(index)
+        && index >= 0;
+    }
     default:
       return false;
   }

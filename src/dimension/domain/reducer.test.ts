@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { reduceDimensionDocument } from './reducer';
 import {
   angularRecord,
+  chainRecord,
   emptyDimensionDocument,
   exactAnchor,
   linearRecord,
@@ -12,6 +13,47 @@ import {
 import { present } from '@/testing/present';
 
 describe('reduceDimensionDocument', () => {
+  it('#74 删掉中间点后顺序保持，撤销把该点放回原位', () => {
+    const record = chainRecord();
+    const removed = reduceDimensionDocument(emptyDimensionDocument([record]), {
+      type: 'remove-chain-anchor',
+      commandId: 'rm',
+      actorId: record.authorId,
+      actorRole: record.authorRole,
+      at: 2,
+      dimensionId: record.id,
+      index: 1,
+    });
+    expect(removed.ok).toBe(true);
+    if (!removed.ok) return;
+    const saved = present(removed.state.records[0], 'chain');
+    if (saved.kind !== 'chain') throw new Error('expected a chain');
+    expect(saved.anchors.map(anchor => anchor.snapshot)).toEqual([
+      [0, 0, 0],
+      [2, 0, 0],
+      [4, 0, 0],
+    ]);
+    expect(removed.inverse).toMatchObject({ type: 'add-chain-anchor', index: 1 });
+
+    const restored = reduceDimensionDocument(removed.state, {
+      ...removed.inverse,
+      commandId: 'add',
+      actorId: record.authorId,
+      actorRole: record.authorRole,
+      at: 3,
+    });
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) return;
+    const back = present(restored.state.records[0], 'restored chain');
+    if (back.kind !== 'chain') throw new Error('expected a chain');
+    expect(back.anchors.map(anchor => anchor.snapshot)).toEqual([
+      [0, 0, 0],
+      [1, 0, 0],
+      [2, 0, 0],
+      [4, 0, 0],
+    ]);
+  });
+
   it('creates one immutable record', () => {
     const state = emptyDimensionDocument();
     const record = linearRecord({ id: 'd1', authorId: 'u1' });

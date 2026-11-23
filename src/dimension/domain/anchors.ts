@@ -12,7 +12,7 @@ import type {
 } from './types';
 import type { DimensionAnchorResolver } from '../ports/anchorResolver';
 
-type AnchorSlot = 'a' | 'b' | 'vertex' | 'rayA' | 'rayB' | 'center' | 'rim';
+type AnchorSlot = 'a' | 'b' | 'vertex' | 'rayA' | 'rayB' | 'center' | 'rim' | `chain:${number}`;
 type DirectionSlot = 'axis' | 'normal';
 
 type ResolutionTarget =
@@ -71,6 +71,11 @@ function collectResolutionTargets(
         pushAnchorTarget(targets, recordIndex, 'rayA', record.rayA);
         pushAnchorTarget(targets, recordIndex, 'rayB', record.rayB);
         break;
+      case 'chain':
+        record.anchors.forEach((anchor, index) => {
+          pushAnchorTarget(targets, recordIndex, `chain:${index}`, anchor);
+        });
+        break;
       case 'radial':
         pushAnchorTarget(targets, recordIndex, 'center', record.center);
         pushAnchorTarget(targets, recordIndex, 'rim', record.rim);
@@ -107,6 +112,16 @@ function replaceAnchor(
       return slot === 'center' || slot === 'rim'
         ? { ...record, [slot]: anchor }
         : record;
+    case 'chain': {
+      const match = /^chain:(\d+)$/.exec(slot);
+      if (!match) return record;
+      const index = Number(match[1]);
+      if (!Number.isInteger(index) || index < 0 || index >= record.anchors.length) return record;
+      return {
+        ...record,
+        anchors: record.anchors.map((item, itemIndex) => (itemIndex === index ? anchor : item)),
+      };
+    }
   }
 }
 

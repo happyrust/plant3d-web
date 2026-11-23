@@ -48,5 +48,8 @@ export function dimensionRecordHasResolvedGeometry(
         && anchorIsResolved(record.rim)
         && directionIsResolved(record.normal)
         && isNonZeroVec3(record.placement.leaderDirection);
+    case 'chain':
+      return record.anchors.length >= 2
+        && record.anchors.every(anchorIsResolved);
   }
 }

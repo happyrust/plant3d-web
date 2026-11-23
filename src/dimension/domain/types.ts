@@ -1,6 +1,6 @@
 export type Vec2 = Readonly<{ x: number; y: number }>;
 export type Vec3 = readonly [number, number, number];
-export type DimensionKind = 'linear' | 'projected' | 'angular' | 'radial';
+export type DimensionKind = 'linear' | 'projected' | 'angular' | 'radial' | 'chain';
 export type DimensionAccuracy = 'exact' | 'approximate';
 export type DimensionValidity = 'valid' | 'invalid';
 export type DimensionArcChoice = 'minor' | 'major';
@@ -107,4 +107,13 @@ export type UserDimensionRecord =
     normal: ProjectionAxisRef;
     display: RadialDisplay;
     placement: RadialPlacementIntent;
+  }>
+  | Readonly<UserDimensionCommon & {
+    kind: 'chain';
+    /** 拾取顺序。相邻两点是一段，首尾是可选总长。少于 2 个点不是一条链。 */
+    anchors: readonly DimensionAnchor[];
+    placement: LinearPlacementIntent;
+    /** 再画一条从第一点到最后一点的总长，偏得比各段更远。 */
+    showOverall: boolean;
+    directions?: DimensionDirections;
   }>;

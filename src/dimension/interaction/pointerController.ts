@@ -235,6 +235,13 @@ export class DimensionPointerController {
     return CONSUMED;
   }
 
+  finishActiveSession(): PointerDispatchResult {
+    if (this.disposed || !this.activeSession?.finish) return NOT_CONSUMED;
+    const finished = this.activeSession.finish();
+    this.publishStatus();
+    return finished ? CONSUMED : NOT_CONSUMED;
+  }
+
   flipActiveSession(): PointerDispatchResult {
     if (this.disposed || !this.activeSession) return NOT_CONSUMED;
     this.activeSession.flip();

@@ -477,6 +477,14 @@ export type NormalizedDimensionInput =
         normal: Vec3;
         display: 'radius' | 'diameter';
         placement: Readonly<{ leaderDirection: Vec3; labelDistanceM: number }>;
+      }>)
+  | (NormalizedDimensionBase &
+      Readonly<{
+        kind: 'chain';
+        anchors: readonly Vec3[];
+        placement: Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }>;
+        showOverall: boolean;
+        directions?: NormalizedDimensionDirections;
       }>);
 
 /** Design-space arc; omit both angles for a full circle (radians otherwise). */

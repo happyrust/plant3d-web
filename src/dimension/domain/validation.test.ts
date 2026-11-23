@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { exactAnchor, linearRecord, projectedRecord, radialRecord } from './testFixtures';
+import { chainRecord, exactAnchor, linearRecord, projectedRecord, radialRecord } from './testFixtures';
 import {
   checkDirectionsAgainstView,
   DIMENSION_VALIDATION_TOLERANCES,
@@ -17,6 +17,10 @@ describe('validateDimensionRecord（DMCHEK-like 布局前校验）', () => {
     expect(validateDimensionRecord(linearRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(projectedRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(radialRecord())).toEqual({ ok: true });
+    expect(validateDimensionRecord(chainRecord())).toEqual({ ok: true });
+    expect(codes(validateDimensionRecord(chainRecord({
+      anchors: [exactAnchor([0, 0, 0]), exactAnchor([0, 0, 0]), exactAnchor([1, 0, 0])],
+    })))).toContain('DEGENERATE_DIMENSION_DIRECTION');
   });
 
   it('UNRESOLVED_DIMENSION_POINT：端点没有快照', () => {

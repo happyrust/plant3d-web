@@ -36,6 +36,21 @@ export function deriveDimensionValue(input: NormalizedDimensionInput): DerivedDi
         valueRad: input.placement.arcChoice === 'minor' ? minor : 2 * Math.PI - minor,
       };
     }
+    case 'chain': {
+      if (input.anchors.length < 2) return { ok: false, reason: 'degenerate' };
+      const origin = input.anchors[0]!;
+      const last = input.anchors[input.anchors.length - 1]!;
+      const rawDirection = input.directions?.dimensionDirection ?? sub3(last, origin);
+      if (length3(rawDirection) <= EPSILON) return { ok: false, reason: 'degenerate' };
+      const direction = normalize3(rawDirection);
+      let sum = 0;
+      for (let index = 0; index < input.anchors.length - 1; index += 1) {
+        const span = Math.abs(dot3(sub3(input.anchors[index + 1]!, input.anchors[index]!), direction));
+        if (span <= EPSILON) return { ok: false, reason: 'degenerate' };
+        sum += span;
+      }
+      return { ok: true, valueM: sum };
+    }
     case 'radial': {
       const radius = length3(sub3(input.rim, input.center));
       if (radius <= EPSILON) return { ok: false, reason: 'degenerate' };

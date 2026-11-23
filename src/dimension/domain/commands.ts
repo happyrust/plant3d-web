@@ -47,6 +47,18 @@ export type DimensionCommandIntent =
     dimensionId: string;
     anchorSlot: string;
     anchor: DimensionAnchor;
+  }>
+  | Readonly<{
+    type: 'add-chain-anchor';
+    dimensionId: string;
+    anchor: DimensionAnchor;
+    /** 缺省加到末尾。撤销删除中间点时带回原来的序号。 */
+    index?: number;
+  }>
+  | Readonly<{
+    type: 'remove-chain-anchor';
+    dimensionId: string;
+    index: number;
   }>;
 
 export type DimensionCommand = Readonly<{
@@ -105,6 +117,19 @@ export type DimensionEvent =
     anchorSlot: string;
     previous: DimensionAnchor;
     next: DimensionAnchor;
+  }>
+  | Readonly<{
+    type: 'chain-anchor-added';
+    commandId: string;
+    dimensionId: string;
+    anchor: DimensionAnchor;
+  }>
+  | Readonly<{
+    type: 'chain-anchor-removed';
+    commandId: string;
+    dimensionId: string;
+    index: number;
+    anchor: DimensionAnchor;
   }>;
 
 export type ReduceDimensionResult =
