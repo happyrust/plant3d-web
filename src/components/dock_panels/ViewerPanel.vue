@@ -28,7 +28,7 @@ import {
 
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
-import { fetchMbdV2ObjectData } from '@/api/mbdV2Api';
+import { fetchMbdV2ObjectData, fetchMbdV2ObjectsData } from '@/api/mbdV2Api';
 import {
   reviewRecordCreate,
   reviewRecordGetByTaskId,
@@ -184,7 +184,6 @@ import {
 } from '@/utils/modelUnitVersionCompare';
 import { toRefnoKey } from '@/utils/refnoKey';
 import { parseRefnoList, SHOW_REFNO_PARAM } from '@/utils/refnoListParam';
-import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController, readViewCullOptions } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
@@ -2974,6 +2973,7 @@ function bindLocalDimensionAutosave(system: DimensionSystem): void {
 
 const mbdExternalSync = createMbdExternalSync({
   fetchPipeData: fetchMbdV2ObjectData,
+  fetchObjectsData: fetchMbdV2ObjectsData,
   diagnostics: mbdDiagnosticsStore,
   getSearch: () => window.location.search,
   emitToast,

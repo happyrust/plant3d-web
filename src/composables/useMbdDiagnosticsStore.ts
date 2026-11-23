@@ -49,6 +49,11 @@ export type MbdDiagnosticsSourceSnapshot = Readonly<{
    */
   deleted?: boolean;
   /**
+   * 同一轮多对象同步中，该输入子构件与前面某个输入归属到同一个 `subject.refno`（例如同一台设备下的多个 NOZZ
+   * 或同一支架下的多根 SCTN），已归并去重不再重复提交图元。
+   */
+  deduplicatedInto?: string | null;
+  /**
    * 该包通道级装载失败原因（API 传输、契约错误或单包原子拒绝）；成功时为 null。
    * 逐包拒绝（2026-11-02）下一包失败只记在这里，不掀翻其它包。
    */

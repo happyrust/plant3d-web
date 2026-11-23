@@ -14,7 +14,7 @@ MBD（Model-Based Definition）尺寸标注在 `plant3d-web` 里的完整链路�
 | 触发 | `src/components/model-tree/ModelTreePanel.vue:1128-1146` | BRAN 节点「查看尺寸标注」写 `?mbd_refno=` 并派发 `popstate` |
 | 宿主 | `src/components/dock_panels/ViewerPanel.vue:2837`、`:2912` | 创建 `createMbdExternalSync`、`createDimensionSystem` |
 | 通道 | `src/composables/useMbdExternalSync.ts:115-219` | 通道选择、竞态守卫、原子拒绝、诊断写入 |
-| HTTP | `src/api/mbdV2Api.ts:92-115` | `GET /api/mbd/v2/pipe/{refno}`；基址解析见 `:32-56` |
+| HTTP | `src/api/mbdV2Api.ts` | `GET /api/mbd/v2/object/{refno}`、`POST /api/mbd/v2/objects`（旧后端回退 `/pipe` 或逐对象 `GET`，含流式上限与 `503 SOURCE_CHANGED` 退避重试） |
 | 契约 | `src/dimension/adapters/mbdV2Contract.ts:427-474` | 逐图元校验，产出 `MbdV2ParseResult` 与逐条诊断 |
 | 映射 | `src/dimension/adapters/mbdV2ExternalAnnotations.ts:754-762` | 契约图元 → 只读 `ExternalDimensionRecord` |
 | 注册表 | `src/dimension/services/externalDimensionRegistry.ts:24-70` | 按 source 分组，跨源 id 冲突即抛错 |

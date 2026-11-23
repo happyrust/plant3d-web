@@ -232,7 +232,8 @@ test('an invalid injected payload atomically clears the mbd source and surfaces 
   const loadError = page.getByTestId('mbd-load-error');
   await expect(loadError).toBeVisible();
   await expect(loadError).toContainText('装载失败');
-  await expect(loadError).toContainText('invalid primitive');
+  await expect(loadError).toContainText('契约校验未通过');
+  await expect(loadError).toContainText('angle-1');
 
   // 恢复到有效 fixture：来源可重新装载（替换语义）。
   await switchMbdBranch(page, FIXTURE_REFNO);

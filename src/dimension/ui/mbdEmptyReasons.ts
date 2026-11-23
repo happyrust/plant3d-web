@@ -110,7 +110,7 @@ export function mbdEmptyReasonLines(issues: readonly Issue[]): readonly MbdEmpty
  */
 export function summarizeMbdEmptyReasons(snapshot: MbdDiagnosticsSnapshot): MbdEmptyReasonSummary | null {
   const sources = snapshot.sources
-    .filter(source => source.empty === true && source.loadError === null)
+    .filter(source => source.empty === true && source.loadError === null && !source.deduplicatedInto)
     .map(source => ({ refno: source.refno, lines: mbdEmptyReasonLines(source.issues) }));
   if (sources.length === 0) return null;
   return { multiSource: snapshot.sources.length > 1, sources };

@@ -302,18 +302,56 @@ function listGroupLabel(item: DimensionListItem): string | null {
     : isolineGroupLabel(item.isolineIndex, sourceRefnoOf(item));
 }
 
-/** 负载的数据时点（T4.5）：标题行徽标写 `dbnum@sesno`，悬停列出求解器读过的各库会话。 */
+/** 负载的数据时点（T4.5）：按所有非空源的 `dbnum` 去重保序，单库写 `数据 dbnum@sesno`，多库写 `数据 dbnum@sesno 等 N 库`。 */
+const uniqueSourceVersions = computed(() => {
+  const raw = mbdDiagnostics.value.sources.length > 0
+    ? mbdDiagnostics.value.sources.map(source => source.sourceVersion).filter(
+      (version): version is NonNullable<typeof version> => version !== null && version !== undefined,
+    )
+    : mbdDiagnostics.value.sourceVersion
+      ? [mbdDiagnostics.value.sourceVersion]
+      : [];
+  const seen = new Set<number>();
+  const out: NonNullable<MbdDiagnosticsSnapshot['sourceVersion']>[] = [];
+  for (const version of raw) {
+    if (seen.has(version.dbnum)) continue;
+    seen.add(version.dbnum);
+    out.push(version);
+  }
+  return out;
+});
+
 const sourceVersionBadge = computed(() => {
-  const version = mbdDiagnostics.value.sourceVersion;
-  return version ? `数据 ${version.dbnum}@${version.sesno}` : null;
+  const versions = uniqueSourceVersions.value;
+  if (versions.length === 0) return null;
+  const first = versions[0]!;
+  return versions.length === 1
+    ? `数据 ${first.dbnum}@${first.sesno}`
+    : `数据 ${first.dbnum}@${first.sesno} 等 ${versions.length} 库`;
 });
 const sourceVersionTitle = computed(() => {
-  const version = mbdDiagnostics.value.sourceVersion;
-  if (!version) return '';
-  const databases = version.databases.map(
-    database => `${database.dbnum}@${database.sesno} (${database.db_type})`,
-  );
-  return `求解器读取的数据库会话：${databases.length > 0 ? databases.join('、') : `${version.dbnum}@${version.sesno}`}`;
+  const versions = uniqueSourceVersions.value;
+  if (versions.length === 0) return '';
+  const seenDb = new Set<string>();
+  const databases: string[] = [];
+  for (const version of versions) {
+    if (version.databases.length > 0) {
+      for (const database of version.databases) {
+        const entry = `${database.dbnum}@${database.sesno} (${database.db_type})`;
+        if (!seenDb.has(entry)) {
+          seenDb.add(entry);
+          databases.push(entry);
+        }
+      }
+    } else {
+      const entry = `${version.dbnum}@${version.sesno}`;
+      if (!seenDb.has(entry)) {
+        seenDb.add(entry);
+        databases.push(entry);
+      }
+    }
+  }
+  return `求解器读取的数据库会话：${databases.join('、')}`;
 });
 
 /**

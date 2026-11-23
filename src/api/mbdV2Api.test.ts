@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  MBD_BATCH_ROUTE_FALLBACK_NOTE,
   MBD_FETCH_TIMEOUT_MS,
   MBD_RESPONSE_MAX_BYTES,
   describeMbdV2HttpFailure,
   fetchMbdV2ObjectData,
+  fetchMbdV2ObjectsData,
   fetchMbdV2PipeData,
+  resetMbdBatchFallbackCacheForTests,
   resolveMbdApiBaseUrl,
 } from './mbdV2Api';
 
@@ -319,5 +322,151 @@ describe('fetchMbdV2PipeData', () => {
       rule_id: 'adapter.no_members_with_geometry',
       message: 'every branch member was skipped for missing geometry',
     }]);
+  });
+
+  it('无 Content-Length 的 chunked 流超过 MBD_RESPONSE_MAX_BYTES 时立即取消并返回 ok:false', async () => {
+    const cancelSpy = vi.fn().mockResolvedValue(undefined);
+    let readCount = 0;
+    const chunk = new Uint8Array(Math.ceil(MBD_RESPONSE_MAX_BYTES / 2) + 16);
+    const stream = {
+      getReader: () => ({
+        read: async () => {
+          readCount += 1;
+          if (readCount <= 3) return { done: false, value: chunk };
+          return { done: true, value: undefined };
+        },
+        cancel: cancelSpy,
+        releaseLock: () => {},
+      }),
+    };
+    const response = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: stream,
+      text: vi.fn(),
+    } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+    const result = await fetchMbdV2PipeData('24381_145018');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('响应过大');
+    }
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    expect(readCount).toBe(2);
+  });
+
+  it('503 SOURCE_CHANGED 按 Retry-After 自动退避重拉并在恢复后成功', async () => {
+    vi.useFakeTimers();
+    const validPayload = {
+      version: 'v2',
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      primitives: [],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ code: 'SOURCE_CHANGED', message: '库 7999 在读取期间变化，请重新读取', detail: null }),
+        { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '1' } },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify(validPayload),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = fetchMbdV2ObjectData('24381_145018');
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(true);
+    vi.useRealTimers();
+  });
+});
+
+describe('fetchMbdV2ObjectsData', () => {
+  afterEach(() => {
+    resetMbdBatchFallbackCacheForTests();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('多对象走 POST /api/mbd/v2/objects 并按入参顺序返回成功与单条失败', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        items: [
+          {
+            input_refno: 'A',
+            ok: true,
+            data: {
+              version: 'v2',
+              input_refno: 'A',
+              branch_refno: 'A',
+              primitives: [],
+              meta: { geometry_space: 'design_m', notes: [] },
+              issues: [],
+            },
+          },
+          {
+            input_refno: 'B',
+            ok: false,
+            status: 422,
+            code: 'not_annotatable',
+            message: 'PIPE B 没有 MBD 标注',
+            detail: { refno: 'B', noun: 'PIPE' },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await fetchMbdV2ObjectsData(['A', 'B']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [rawUrl, init] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(rawUrl), 'http://localhost').pathname).toBe('/api/mbd/v2/objects');
+    expect((init as RequestInit).method).toBe('POST');
+    expect(out.fallbackNote).toBeUndefined();
+    expect(out.results).toHaveLength(2);
+    expect(out.results[0]?.ok).toBe(true);
+    expect(out.results[1]).toEqual({ ok: false, error: 'PIPE B 没有 MBD 标注' });
+  });
+
+  it('老后端批量端点回裸 404 时透明回退到逐对象 GET /object/{refno} 并记住降级', async () => {
+    const okPkg = (refno: string) => new Response(
+      JSON.stringify({
+        version: 'v2',
+        input_refno: refno,
+        branch_refno: refno,
+        primitives: [],
+        meta: { geometry_space: 'design_m', notes: [] },
+        issues: [],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+    const fetchMock = vi.fn(async (rawUrl: unknown) => {
+      const pathname = new URL(String(rawUrl), 'http://localhost').pathname;
+      if (pathname === '/api/mbd/v2/objects') return new Response('', { status: 404 });
+      if (pathname.endsWith('/A')) return okPkg('A');
+      if (pathname.endsWith('/B')) return okPkg('B');
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await fetchMbdV2ObjectsData(['A', 'B']);
+    expect(first.fallbackNote).toBe(MBD_BATCH_ROUTE_FALLBACK_NOTE);
+    expect(first.results.every(r => r.ok)).toBe(true);
+
+    // 第二次直接跳过 /objects
+    fetchMock.mockClear();
+    const second = await fetchMbdV2ObjectsData(['A', 'B']);
+    expect(second.fallbackNote).toBe(MBD_BATCH_ROUTE_FALLBACK_NOTE);
+    const calledPaths = fetchMock.mock.calls.map(c => new URL(String(c[0]), 'http://localhost').pathname);
+    expect(calledPaths).not.toContain('/api/mbd/v2/objects');
   });
 });

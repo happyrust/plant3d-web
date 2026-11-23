@@ -1377,4 +1377,28 @@ describe('label frame', () => {
     expect(glyph!.bounds.y + glyph!.bounds.height).toBeLessThan(150);
     expectFrameAround(frames(result)[0]!, glyph!);
   });
+
+  it('offsets rotated extra texts along the rotated baseline normal instead of fixed screen Y', () => {
+    const base: ExplicitLayoutInput = {
+      id: 'rotated-extra-texts',
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: '',
+      lines: [],
+      labelAnchor: [0, 0, 0],
+      arrowLines: [],
+      texts: [
+        { text: 'L0', anchor: [0, 0, 0], along: [0, 1, 0], stackIndex: 0 },
+        { text: 'L1', anchor: [0, 0, 0], along: [0, 1, 0], stackIndex: 1 },
+      ],
+    };
+    const result = layoutExplicit(base, context());
+    const runs = glyphRuns(result);
+    const first = runs.find(run => run.text === 'L0')!;
+    const second = runs.find(run => run.text === 'L1')!;
+    const advance = SOLVESPACE_DIMENSION_THEME.textHeightPx * SOLVESPACE_DIMENSION_THEME.labelLineAdvance;
+    // along=[0,1,0] projects vertically upward (rot = -pi/2), so its rotated normal steps along +X.
+    expect(Math.abs(second.origin[0] - first.origin[0])).toBeCloseTo(advance, 4);
+    expect(Math.abs(second.origin[1] - first.origin[1])).toBeLessThan(1e-4);
+  });
 });
