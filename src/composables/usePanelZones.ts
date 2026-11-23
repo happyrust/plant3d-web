@@ -16,7 +16,7 @@ export const ZONE_PANELS: Record<ZoneName, string[]> = {
     'measurement', 'dimension', 'annotation', 'manager', 'properties',
     'ptset', 'annotationStyle', 'materialConfig', 'review',
     'initiateReview', 'reviewerTasks', 'myTasks', 'designerCommentHandling',
-    'modelVersionCompare', 'hydraulic', 'spatialCompute',
+    'modelVersionCompare', 'hydraulic', 'spatialCompute', 'ruleCheck',
   ],
   bottom: ['console', 'incrementRecords', 'rvmCheck'],
 };

@@ -167,6 +167,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'space_calc.range_query', label: '空间查询', icon: 'search', commandId: 'panel.spatialQuery' },
           // 旧后端 `/api/space/*` 的六个支架场景与 `/api/room-tree` 房间计算 2026-09-20 随 legacy 退役（D1），Dock 只剩 BRAN 中心线净距。
           { kind: 'button', id: 'space_calc.bran_clearance', label: '中心线净距', icon: 'calculator', commandId: 'panel.spatialCompute' },
+          { kind: 'button', id: 'space_calc.rule_check', label: '规范校验', icon: 'clipboard_list', commandId: 'panel.ruleCheck' },
         ],
       },
     ],
