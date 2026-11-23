@@ -322,6 +322,11 @@ export type LayoutResult = Readonly<{
   labelBounds: ScreenRect;
   labelPinned: boolean;
   derived: Readonly<{
+    /**
+     * 布局前校验没过（#68 `validation.ts` 的稳定错误码）：图元为空是因为几何在当前视向下画不出，
+     * 不是退回了一份错的几何。
+     */
+    validationErrors?: readonly string[];
     valueM?: number;
     valueRad?: number;
     formattedLabel: string;
@@ -426,6 +431,14 @@ export type NormalizedDimensionBase = Readonly<{
   authoritativeText?: string;
 }>;
 
+/** 记录里存的设计系方向（#68）；布局用它们做与视向有关的预校验，缺省时按端点 / 轴推。 */
+export type NormalizedDimensionDirections = Readonly<{
+  dimensionDirection?: Vec3;
+  projectionDirection?: Vec3;
+  /** 尺寸平面里垂直于尺寸方向的单位向量（`side = 1` 那一侧）；只在方向是 `explicit` 且带平面时给。 */
+  offsetDirection?: Vec3;
+}>;
+
 export type NormalizedDimensionInput =
   | (NormalizedDimensionBase &
       Readonly<{
@@ -433,6 +446,7 @@ export type NormalizedDimensionInput =
         a: Vec3;
         b: Vec3;
         placement: Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }>;
+        directions?: NormalizedDimensionDirections;
       }>)
   | (NormalizedDimensionBase &
       Readonly<{
@@ -441,6 +455,7 @@ export type NormalizedDimensionInput =
         b: Vec3;
         axis: Vec3;
         placement: Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }>;
+        directions?: NormalizedDimensionDirections;
       }>)
   | (NormalizedDimensionBase &
       Readonly<{

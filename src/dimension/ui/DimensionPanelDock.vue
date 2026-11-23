@@ -38,6 +38,7 @@ import type { MbdDroppedPrimitive } from './mbdDroppedPrimitives';
 import type { MbdPrimitive } from '../adapters/mbdV2Contract';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '../domain/types';
+import type { DimensionSessionStatus } from '../interaction/pointerController';
 import type { LayoutResult } from '../kernel/types';
 
 import {
@@ -109,6 +110,8 @@ let unsubscribeDocument: (() => void) | null = null;
 let unsubscribeSelection: (() => void) | null = null;
 let unsubscribeExternal: (() => void) | null = null;
 let unsubscribeLayouts: (() => void) | null = null;
+let unsubscribeSession: (() => void) | null = null;
+const sessionStatus = shallowRef<DimensionSessionStatus | null>(null);
 
 watch(
   () => viewerContext.dimensionSystem.value,
@@ -121,6 +124,9 @@ watch(
     unsubscribeExternal = null;
     unsubscribeLayouts?.();
     unsubscribeLayouts = null;
+    unsubscribeSession?.();
+    unsubscribeSession = null;
+    sessionStatus.value = null;
     documentState.value = system?.document.state ?? null;
     externalRecords.value = system?.externalRegistry.snapshot.records ?? [];
     hiddenExternalIds.value = [
@@ -142,6 +148,9 @@ watch(
       unsubscribeLayouts = system.viewport.subscribeLayouts((layouts) => {
         viewportLayouts.value = layouts;
       });
+      unsubscribeSession = system.pointer.subscribeSessionStatus((status) => {
+        sessionStatus.value = status;
+      });
       // The display mode lives in the URL; a (re)created viewport starts in
       // engineering and is brought in line here.
       system.viewport.setDisplayMode(mbdDisplayMode.value);
@@ -159,6 +168,8 @@ onUnmounted(() => {
   unsubscribeExternal = null;
   unsubscribeLayouts?.();
   unsubscribeLayouts = null;
+  unsubscribeSession?.();
+  unsubscribeSession = null;
 });
 
 const mbdDiagnostics = useMbdDiagnosticsStore().snapshot;
@@ -1118,6 +1129,7 @@ function act(
       :disabled="!viewerContext.dimensionSystem.value"
       :can-undo="viewerContext.dimensionSystem.value?.document.canUndo ?? false"
       :can-redo="viewerContext.dimensionSystem.value?.document.canRedo ?? false"
+      :session="sessionStatus"
       @export-svg="exportSvg" />
     <div class="max-h-[45%] shrink-0 overflow-auto"><PipeInformationPanel /></div>
     <div v-if="recoveryPreview"

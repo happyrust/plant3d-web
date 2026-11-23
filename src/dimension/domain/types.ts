@@ -33,6 +33,23 @@ export type ProjectionAxisRef =
     semanticRef: SemanticAnchorRef;
   }>;
 
+/**
+ * 线性 / 投影尺寸的三类方向（#68，E3D DMCHEK 的口径）：量的是哪根轴（`measuredAxis`）、尺寸线沿哪个方向画
+ * （`dimensionDirection`）、点沿哪个方向投到尺寸线上（`projectionDirection`，只投影尺寸有），以及尺寸线与偏移所在
+ * 的平面（`dimensionPlane`，法向）。都是设计系单位向量，与相机无关——视向（`viewDirection`）是瞬态的，不入库。
+ *
+ * `source = 'legacy-derived'`：旧记录没有这几项，由迁移从端点 / 轴快照推出来；端点重绑后随之重推。
+ * `source = 'explicit'`：创建 / 编辑时用户（或交互）定下的，重绑不改。
+ */
+export type DimensionDirections = Readonly<{
+  schema: 1;
+  source: 'explicit' | 'legacy-derived';
+  measuredAxis?: Vec3;
+  dimensionDirection?: Vec3;
+  projectionDirection?: Vec3;
+  dimensionPlane?: Readonly<{ normal: Vec3 }>;
+}>;
+
 export type LinearPlacementIntent = Readonly<{
   offsetM: number;
   labelT: number;
@@ -66,6 +83,7 @@ export type UserDimensionRecord =
     a: DimensionAnchor;
     b: DimensionAnchor;
     placement: LinearPlacementIntent;
+    directions?: DimensionDirections;
   }>
   | Readonly<UserDimensionCommon & {
     kind: 'projected';
@@ -73,6 +91,7 @@ export type UserDimensionRecord =
     b: DimensionAnchor;
     axis: ProjectionAxisRef;
     placement: LinearPlacementIntent;
+    directions?: DimensionDirections;
   }>
   | Readonly<UserDimensionCommon & {
     kind: 'angular';

@@ -75,7 +75,13 @@ describe('DimensionPointerController', () => {
 
     expect(applyCommand).not.toHaveBeenCalled();
     controller.pointerDown(event(120, 30));
-    const result = controller.pointerUp(event(120, 30));
+    controller.pointerUp(event(120, 30));
+    // 第二点之后进 place：抬起不提交，再点一下定放置才提交。
+    expect(applyCommand).not.toHaveBeenCalled();
+    expect(controller.sessionStatus).toMatchObject({ phase: 'place', step: 'place' });
+    controller.pointerMove(event(130, 60));
+    controller.pointerDown(event(130, 60));
+    const result = controller.pointerUp(event(130, 60));
 
     expect(result).toEqual({ consumed: true, requestRender: true });
     expect(applyCommand).toHaveBeenCalledTimes(1);
@@ -125,8 +131,10 @@ describe('DimensionPointerController', () => {
     controller.start(createSession(viewport.setPreview));
     controller.pointerDown(event(20, 30));
     controller.pointerDown(event(120, 30));
-
     controller.pointerUp(event(120, 30));
+    controller.pointerDown(event(130, 60));
+
+    controller.pointerUp(event(130, 60));
 
     expect(controller.getLastCommitResult()).toEqual({
       ok: false,
@@ -221,8 +229,10 @@ describe('DimensionPointerController', () => {
     controller.start(createSession());
     controller.pointerDown(event(20, 30));
     controller.pointerDown(event(120, 30));
-
     controller.pointerUp(event(120, 30));
+    controller.pointerDown(event(130, 60));
+
+    controller.pointerUp(event(130, 60));
 
     expect(controller.hasActiveSession).toBe(false);
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
@@ -305,5 +315,33 @@ describe('DimensionPointerController', () => {
       requestRender: true,
     });
     expect(viewport.setSelection).toHaveBeenCalledWith('xeokit-measurement:m1');
+  });
+
+  it('Backspace 退回上一步并发布步骤；第一步时不消费', () => {
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport: {
+        hitTest: vi.fn(() => null),
+        setHover: vi.fn(),
+        setSelection: vi.fn(),
+        setPreview: vi.fn(),
+      },
+      applyCommand: vi.fn(() => ({ ok: true as const })),
+    });
+    const statuses: (string | null)[] = [];
+    const unsubscribe = controller.subscribeSessionStatus(status => statuses.push(status?.phase ?? null));
+    controller.start(createSession());
+    controller.pointerDown(event(20, 30));
+    controller.pointerDown(event(120, 30));
+
+    expect(controller.keyDown({ key: 'Backspace' })).toEqual({ consumed: true, requestRender: true });
+    expect(controller.sessionStatus?.phase).toBe('pick-second');
+    expect(controller.keyDown({ key: 'Backspace' })).toEqual({ consumed: true, requestRender: true });
+    expect(controller.keyDown({ key: 'Backspace' })).toEqual({ consumed: false });
+    expect(controller.hasActiveSession).toBe(true);
+    controller.pointerCancel();
+    unsubscribe();
+
+    expect(statuses).toEqual([null, 'pick-first', 'pick-second', 'place', 'pick-second', 'pick-first', null]);
   });
 });

@@ -15,7 +15,7 @@ import { createTestFont, createTestProjector } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 import { layoutViewport } from '../kernel/viewport/layoutViewport';
 
-import { DimensionViewport } from './dimensionViewport';
+import { DimensionViewport, linearPlacementOnPlane } from './dimensionViewport';
 import { ThreeSceneDimensionPainter } from './scenePainter';
 
 import type { DimensionFrameBreakdown } from './dimensionViewport';
@@ -1079,5 +1079,32 @@ describe('DimensionViewport', () => {
     expect(tight).toBeGreaterThanOrEqual(10);
     // 两条一起看：批数确实随预算变，不是固定切三份。
     expect(tight).toBeGreaterThan(loose);
+  });
+
+  describe('linearPlacementOnPlane (#75)', () => {
+    const baseline = { a: [0, 0, 0] as const, b: [2, 0, 0] as const };
+    const plane = { normal: [0, 0, 1] as const, dimensionDirection: [1, 0, 0] as const };
+
+    it('把光标射线交到尺寸平面上，换出沿线参数与有符号偏移', () => {
+      expect(linearPlacementOnPlane(baseline, plane, {
+        origin: [0.5, -0.3, 10],
+        direction: [0, 0, -1],
+      })).toEqual({ offsetM: 0.3, labelT: 0.25, side: -1 });
+      // 斜射线：交点仍是 (1, 0.4, 0)，与相机怎么摆无关。
+      const placement = linearPlacementOnPlane(baseline, plane, {
+        origin: [4, 0.4, 3],
+        direction: [-3, 0, -3],
+      });
+      expect(placement?.side).toBe(1);
+      expect(placement?.offsetM).toBeCloseTo(0.4);
+      expect(placement?.labelT).toBeCloseTo(0.5);
+    });
+
+    it('射线平行于尺寸平面时交不出，返回 null 让调用方退回屏幕法', () => {
+      expect(linearPlacementOnPlane(baseline, plane, {
+        origin: [0, 0, 0.5],
+        direction: [1, 1, 0],
+      })).toBeNull();
+    });
   });
 });

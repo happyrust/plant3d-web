@@ -1,3 +1,4 @@
+import { isDimensionDirections, refreshDerivedDirections } from './directions';
 import {
   dimensionRecordHasResolvedGeometry,
   isFiniteVec3,
@@ -133,13 +134,15 @@ function isUserDimensionRecord(value: unknown): value is UserDimensionRecord {
     case 'linear':
       structurallyValid = isDimensionAnchor(record.a)
         && isDimensionAnchor(record.b)
-        && isLinearPlacement(record.placement);
+        && isLinearPlacement(record.placement)
+        && (record.directions === undefined || isDimensionDirections(record.directions));
       break;
     case 'projected':
       structurallyValid = isDimensionAnchor(record.a)
         && isDimensionAnchor(record.b)
         && isProjectionAxisRef(record.axis)
-        && isLinearPlacement(record.placement);
+        && isLinearPlacement(record.placement)
+        && (record.directions === undefined || isDimensionDirections(record.directions));
       break;
     case 'angular':
       structurallyValid = isDimensionAnchor(record.vertex)
@@ -229,11 +232,11 @@ function rebindRecord(
     case 'linear':
     case 'projected':
       if (anchorSlot !== 'a' && anchorSlot !== 'b') return null;
-      return withResolvedValidity({
+      return withResolvedValidity(refreshDerivedDirections({
         ...record,
         [anchorSlot]: anchor,
         updatedAt,
-      } as UserDimensionRecord);
+      } as UserDimensionRecord));
     case 'angular':
       if (
         anchorSlot !== 'vertex'

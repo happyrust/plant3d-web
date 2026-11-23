@@ -95,6 +95,12 @@ describe('migrateLegacyDimensionArchives', () => {
       updatedAt: 1700000000000,
       labelPinned: false,
       validity: 'valid',
+      directions: {
+        schema: 1,
+        source: 'legacy-derived',
+        measuredAxis: [3 / Math.hypot(3, 3, 3), 3 / Math.hypot(3, 3, 3), 3 / Math.hypot(3, 3, 3)],
+        dimensionDirection: [3 / Math.hypot(3, 3, 3), 3 / Math.hypot(3, 3, 3), 3 / Math.hypot(3, 3, 3)],
+      },
     });
   });
 

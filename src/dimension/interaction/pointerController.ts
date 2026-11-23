@@ -1,4 +1,5 @@
-import type { DimensionEditSession } from './editSession';
+import { dimensionEditStep, type DimensionEditSession, type DimensionEditStep } from './editSession';
+
 import type { DimensionCommand } from '../domain/commands';
 import type { Vec2 } from '../domain/types';
 import type { HitTarget } from '../kernel/hit/hitIndex';
@@ -23,6 +24,14 @@ export type DimensionCommandApplyResult =
 export type DimensionCommitOutcome =
   | DimensionCommandApplyResult
   | Readonly<{ ok: false; reason: 'exception'; error: unknown }>;
+
+/** 进行中的编辑会话给工具栏看的状态：哪一步、预校验没过的原因。没有会话时为 null。 */
+export type DimensionSessionStatus = Readonly<{
+  kind: DimensionEditSession['kind'];
+  phase: DimensionEditSession['phase'];
+  step: DimensionEditStep;
+  validationErrors: readonly string[];
+}>;
 
 export type DimensionEditSessionFactory = (
   target: HitTarget,
@@ -62,6 +71,8 @@ export class DimensionPointerController {
   private interactionGate: (() => boolean) | null = null;
   private hoverId: string | null = null;
   private disposed = false;
+  private readonly statusListeners = new Set<(status: DimensionSessionStatus | null) => void>();
+  private lastStatusKey = '';
 
   constructor(private readonly input: Readonly<{
     canvas: HTMLCanvasElement;
@@ -80,6 +91,28 @@ export class DimensionPointerController {
     this.activeSession = session;
     this.lastCommitResult = null;
     this.setHover(null);
+    this.publishStatus();
+  }
+
+  get sessionStatus(): DimensionSessionStatus | null {
+    const session = this.activeSession;
+    if (!session) return null;
+    return {
+      kind: session.kind,
+      phase: session.phase,
+      step: dimensionEditStep(session.phase),
+      validationErrors: session.validationErrors ?? [],
+    };
+  }
+
+  subscribeSessionStatus(
+    listener: (status: DimensionSessionStatus | null) => void,
+  ): () => void {
+    this.statusListeners.add(listener);
+    listener(this.sessionStatus);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
   }
 
   setEditSessionFactory(factory: DimensionEditSessionFactory | null): void {
@@ -107,6 +140,7 @@ export class DimensionPointerController {
     const screen = this.toScreen(event);
     if (this.activeSession) {
       this.activeSession.pointerMove(screen);
+      this.publishStatus();
       return CONSUMED;
     }
     if (this.interactionGate && !this.interactionGate()) {
@@ -127,6 +161,7 @@ export class DimensionPointerController {
     const screen = this.toScreen(event);
     if (this.activeSession) {
       this.activeSession.pointerDown(screen);
+      this.publishStatus();
       return CONSUMED;
     }
     if (this.interactionGate && !this.interactionGate()) {
@@ -150,6 +185,7 @@ export class DimensionPointerController {
     const screen = this.toScreen(event);
     if (this.activeSession.phase !== 'ready') {
       this.activeSession.pointerMove(screen);
+      this.publishStatus();
       return CONSUMED;
     }
 
@@ -171,6 +207,7 @@ export class DimensionPointerController {
     } finally {
       this.activeSession = null;
       this.input.viewport.setPreview(null);
+      this.publishStatus();
     }
     return CONSUMED;
   }
@@ -180,17 +217,28 @@ export class DimensionPointerController {
     this.activeSession.cancel();
     this.activeSession = null;
     this.input.viewport.setPreview(null);
+    this.publishStatus();
     return CONSUMED;
   }
 
   keyDown(event: KeyboardLikeEvent): PointerDispatchResult {
+    if (event.key === 'Backspace') return this.backActiveSession();
     if (event.key !== 'Escape') return NOT_CONSUMED;
     return this.pointerCancel();
+  }
+
+  /** 退回上一步；会话已在第一步时不消费（交给宿主，比如退出工具）。 */
+  backActiveSession(): PointerDispatchResult {
+    if (this.disposed || !this.activeSession) return NOT_CONSUMED;
+    if (!this.activeSession.back()) return NOT_CONSUMED;
+    this.publishStatus();
+    return CONSUMED;
   }
 
   flipActiveSession(): PointerDispatchResult {
     if (this.disposed || !this.activeSession) return NOT_CONSUMED;
     this.activeSession.flip();
+    this.publishStatus();
     return CONSUMED;
   }
 
@@ -201,6 +249,7 @@ export class DimensionPointerController {
     };
     if (!session.selectDesignAxis) return NOT_CONSUMED;
     session.selectDesignAxis(axis);
+    this.publishStatus();
     return CONSUMED;
   }
 
@@ -214,7 +263,19 @@ export class DimensionPointerController {
     this.activeSession = null;
     this.input.viewport.setPreview(null);
     this.setHover(null);
+    this.publishStatus();
+    this.statusListeners.clear();
     this.disposed = true;
+  }
+
+  private publishStatus(): void {
+    const status = this.sessionStatus;
+    const key = status
+      ? `${status.kind}|${status.phase}|${status.validationErrors.join(',')}`
+      : '';
+    if (key === this.lastStatusKey) return;
+    this.lastStatusKey = key;
+    for (const listener of this.statusListeners) listener(status);
   }
 
   private toScreen(event: PointerLikeEvent): Vec2 {

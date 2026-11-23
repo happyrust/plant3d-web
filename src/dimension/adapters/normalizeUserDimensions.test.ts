@@ -97,7 +97,7 @@ describe('normalizeUserDimension', () => {
       ['z', [0, 0, 1]],
     ] as const;
     for (const [axis, expected] of cases) {
-      expect(normalizeUserDimension(projected({ kind: 'design-axis', axis })))
+      expect(normalizeUserDimension(projected({ kind: 'design-axis', axis }, anchor([0, 0, 0]), anchor([1, 1, 1]))))
         .toMatchObject({ kind: 'projected', axis: expected });
     }
   });
@@ -116,10 +116,26 @@ describe('normalizeUserDimension', () => {
     expect(normalizeUserDimension(projected({ kind: 'design-axis', axis: 'x' }, undefined, anchor(null)))).toBeNull();
   });
 
-  it('设计轴取联合类型之外的值时 axis 落为 undefined（现状钉住）', () => {
-    const result = normalizeUserDimension(projected({ kind: 'design-axis', axis: 'w' as unknown as 'x' }));
-    expect(result?.kind).toBe('projected');
-    expect(result && 'axis' in result ? result.axis : 'not-projected').toBeUndefined();
+  it('设计轴取联合类型之外的值、或两点沿轴投影重合：布局前校验拦下，不进布局', () => {
+    expect(normalizeUserDimension(projected({ kind: 'design-axis', axis: 'w' as unknown as 'x' }))).toBeNull();
+    expect(normalizeUserDimension(projected({ kind: 'design-axis', axis: 'y' }))).toBeNull();
+  });
+
+  it('记录里存的方向透传给布局（视向相关的校验在布局时按当帧视向做）', () => {
+    const record = {
+      ...projected({ kind: 'design-axis', axis: 'x' }, anchor([0, 0, 0]), anchor([1, 1, 0])),
+      directions: {
+        schema: 1,
+        source: 'legacy-derived',
+        measuredAxis: [1, 0, 0],
+        dimensionDirection: [1, 0, 0],
+        projectionDirection: [0, 1, 0],
+        dimensionPlane: { normal: [0, 0, 1] },
+      },
+    } as UserDimensionRecord;
+    expect(normalizeUserDimension(record)).toMatchObject({
+      directions: { dimensionDirection: [1, 0, 0], projectionDirection: [0, 1, 0] },
+    });
   });
 
   it('angular：三锚点齐全时透传 vertex/rayA/rayB 与 placement', () => {

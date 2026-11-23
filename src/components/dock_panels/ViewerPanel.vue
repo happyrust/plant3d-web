@@ -2351,6 +2351,11 @@ function startDimensionCreation(
     onPreview: (preview: Parameters<typeof system.viewport.setPreview>[0]) => {
       system.viewport.setPreview(preview);
     },
+    placementAt: (
+      record: Parameters<typeof system.viewport.placementAtScreen>[0],
+      screen: Parameters<typeof system.viewport.placementAtScreen>[1],
+    ) => system.viewport.placementAtScreen(record, screen),
+    viewDirection: () => system.viewport.viewDirection(),
   };
   const session = kind === 'linear'
     ? createLinearEditSession(input)
@@ -2467,6 +2472,10 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'dimension.cancel':
       dimensionSystem?.pointer.pointerCancel();
+      requestRender();
+      return;
+    case 'dimension.back':
+      dimensionSystem?.pointer.backActiveSession();
       requestRender();
       return;
     case 'annotation.create':

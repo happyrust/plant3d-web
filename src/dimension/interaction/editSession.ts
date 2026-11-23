@@ -1,5 +1,7 @@
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
+import { projectionAxisVector, unitVec3 } from '../domain/directions';
 import { dimensionRecordHasResolvedGeometry } from '../domain/invariants';
+import { validateDimensionRecord } from '../domain/validation';
 
 import type {
   DimensionActor,
@@ -7,8 +9,11 @@ import type {
 } from '../domain/commands';
 import type {
   DimensionAnchor,
+  DimensionDirections,
   DimensionKind,
+  LinearPlacementIntent,
   ProjectionAxisRef,
+  RadialPlacementIntent,
   SemanticAnchorRef,
   UserDimensionRecord,
   Vec2,
@@ -30,12 +35,36 @@ export type DimensionEditPhase =
   | 'cancelled'
   | 'committed';
 
+/** 工具栏显示的步骤：拾点 / 定轴（框架）/ 放置 / 待提交。 */
+export type DimensionEditStep = 'pick' | 'frame' | 'place' | 'ready' | 'done';
+
+export function dimensionEditStep(phase: DimensionEditPhase): DimensionEditStep {
+  switch (phase) {
+    case 'pick-first':
+    case 'pick-second':
+    case 'pick-third':
+      return 'pick';
+    case 'pick-axis':
+      return 'frame';
+    case 'place':
+      return 'place';
+    case 'ready':
+      return 'ready';
+    default:
+      return 'done';
+  }
+}
+
 export type DimensionEditSession = {
   readonly kind: DimensionKind;
   readonly phase: DimensionEditPhase;
+  /** 当前草稿过不了布局前校验的错误码（`validation.ts`），按当帧视向判；没有草稿为空。 */
+  readonly validationErrors: readonly string[];
   pointerMove(screen: Vec2): void;
   pointerDown(screen: Vec2): void;
   flip(): void;
+  /** 退回上一步；已在第一步（或会话结束）时返回 false。 */
+  back(): boolean;
   commit(): DimensionCommand | null;
   cancel(): void;
 }
@@ -50,6 +79,16 @@ export type DimensionEditSessionInput = Readonly<{
     input: ReturnType<typeof normalizeUserDimension>,
   ) => void;
   thresholdPx?: number;
+  /**
+   * place 阶段：光标 → 设计空间放置（线性 / 投影按草稿的 `dimensionPlane` 求射线交点，径向按圆心深度）。
+   * 不给时用缺省放置，再点一下即就绪。
+   */
+  placementAt?: (
+    record: UserDimensionRecord,
+    screen: Vec2,
+  ) => UserDimensionRecord['placement'] | null;
+  /** 当帧相机视向（设计系）：只用来定尺寸平面的朝向与做视向校验，不入库。 */
+  viewDirection?: () => Vec3 | null;
 }>;
 
 export type DimensionAnchorSlot =
@@ -93,6 +132,48 @@ function add(a: Vec3, b: Vec3): Vec3 {
 
 function subtract(a: Vec3, b: Vec3): Vec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function dot(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+/**
+ * 尺寸平面（#75）：含尺寸方向、且最正对相机的那张——法向取视向垂直于尺寸方向的分量。视向与尺寸方向平行
+ * （或没有视向）时退到与尺寸方向夹角最大的设计轴。定下后作为 `explicit` 方向入库，之后转相机不再改它。
+ */
+export function dimensionPlaneNormal(dimensionDirection: Vec3, view: Vec3 | null): Vec3 | null {
+  const along = unitVec3(dimensionDirection);
+  if (!along) return null;
+  const perpendicularTo = (vector: Vec3): Vec3 | null => {
+    const unit = unitVec3(vector);
+    if (!unit) return null;
+    const k = dot(unit, along);
+    return unitVec3([unit[0] - along[0] * k, unit[1] - along[1] * k, unit[2] - along[2] * k]);
+  };
+  const fromView = view ? perpendicularTo(view) : null;
+  if (fromView) return fromView;
+  const axes: Vec3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  axes.sort((p, q) => Math.abs(dot(p, along)) - Math.abs(dot(q, along)));
+  return perpendicularTo(axes[0]!);
+}
+
+function explicitDirections(
+  dimensionDirection: Vec3 | null,
+  view: Vec3 | null,
+  projectionDirection?: Vec3 | null,
+): DimensionDirections | undefined {
+  const along = dimensionDirection ? unitVec3(dimensionDirection) : null;
+  if (!along) return undefined;
+  const normal = dimensionPlaneNormal(along, view);
+  return {
+    schema: 1,
+    source: 'explicit',
+    measuredAxis: along,
+    dimensionDirection: along,
+    ...(projectionDirection ? { projectionDirection } : {}),
+    ...(normal ? { dimensionPlane: { normal } } : {}),
+  };
 }
 
 function nonZero(vector: Vec3 | undefined): vector is Vec3 {
@@ -211,9 +292,31 @@ abstract class BaseEditSession implements DimensionEditSession {
   abstract pointerMove(screen: Vec2): void;
   abstract pointerDown(screen: Vec2): void;
   abstract buildRecord(at: number): UserDimensionRecord | null;
+  abstract back(): boolean;
 
   flip(): void {
     // Most edit sessions have no reversible orientation.
+  }
+
+  get validationErrors(): readonly string[] {
+    if (this.currentPhase !== 'place' && this.currentPhase !== 'ready') return [];
+    const record = this.buildRecord(this.input.now());
+    if (!record) return [];
+    const result = validateDimensionRecord(record, { viewDirection: this.view() ?? undefined });
+    return result.ok ? [] : result.errors.map(error => error.code);
+  }
+
+  protected view(): Vec3 | null {
+    return this.input.viewDirection?.() ?? null;
+  }
+
+  /** place 阶段跟光标：交给宿主按设计平面算放置；算不出就保持上一次的。 */
+  protected placementFromScreen<P extends UserDimensionRecord['placement']>(
+    record: UserDimensionRecord | null,
+    screen: Vec2,
+  ): P | null {
+    if (!record || !this.input.placementAt) return null;
+    return this.input.placementAt(record, screen) as P | null;
   }
 
   commit(): DimensionCommand | null {
@@ -239,6 +342,10 @@ abstract class BaseEditSession implements DimensionEditSession {
     this.input.onPreview(null);
   }
 
+  protected isFinished(): boolean {
+    return this.currentPhase === 'committed' || this.currentPhase === 'cancelled';
+  }
+
   protected emitPreview(record: UserDimensionRecord | null): void {
     this.input.onPreview(record ? normalizeUserDimension(record) : null);
   }
@@ -256,13 +363,24 @@ abstract class BaseEditSession implements DimensionEditSession {
   }
 }
 
+const DEFAULT_LINEAR_PLACEMENT: LinearPlacementIntent = {
+  offsetM: 0.15,
+  labelT: 0.5,
+  side: 1,
+};
+
 class LinearEditSession extends BaseEditSession {
   readonly kind = 'linear' as const;
   private a: DimensionAnchor | null = null;
   private b: DimensionAnchor | null = null;
-  private side: 1 | -1 = 1;
+  private directions: DimensionDirections | undefined;
+  private placement: LinearPlacementIntent = DEFAULT_LINEAR_PLACEMENT;
 
   pointerMove(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      return;
+    }
     if (this.currentPhase !== 'pick-first' && this.currentPhase !== 'pick-second') {
       return;
     }
@@ -275,6 +393,11 @@ class LinearEditSession extends BaseEditSession {
   }
 
   pointerDown(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      this.currentPhase = 'ready';
+      return;
+    }
     const candidate = selectedCandidate(this.input, screen, ['point']);
     if (!candidate?.anchor.snapshot) return;
     if (this.currentPhase === 'pick-first') {
@@ -283,15 +406,41 @@ class LinearEditSession extends BaseEditSession {
       this.emitPreview(null);
       return;
     }
-    if (this.currentPhase === 'pick-second' && this.a) {
+    if (this.currentPhase === 'pick-second' && this.a?.snapshot) {
       this.b = candidate.anchor;
-      this.currentPhase = 'ready';
+      this.directions = explicitDirections(
+        subtract(candidate.anchor.snapshot, this.a.snapshot),
+        this.view(),
+      );
+      this.currentPhase = 'place';
       this.emitPreview(this.recordFrom(this.a, this.b, this.input.now()));
     }
   }
 
+  back(): boolean {
+    switch (this.currentPhase) {
+      case 'ready':
+        this.currentPhase = 'place';
+        return true;
+      case 'place':
+        this.b = null;
+        this.directions = undefined;
+        this.placement = { ...DEFAULT_LINEAR_PLACEMENT, side: this.placement.side };
+        this.currentPhase = 'pick-second';
+        this.emitPreview(null);
+        return true;
+      case 'pick-second':
+        this.a = null;
+        this.currentPhase = 'pick-first';
+        this.emitPreview(null);
+        return true;
+      default:
+        return false;
+    }
+  }
+
   flip(): void {
-    this.side = this.side === 1 ? -1 : 1;
+    this.placement = { ...this.placement, side: this.placement.side === 1 ? -1 : 1 };
     if (this.a && this.b) {
       this.emitPreview(this.recordFrom(this.a, this.b, this.input.now()));
     }
@@ -299,6 +448,15 @@ class LinearEditSession extends BaseEditSession {
 
   buildRecord(at: number): UserDimensionRecord | null {
     return this.a && this.b ? this.recordFrom(this.a, this.b, at) : null;
+  }
+
+  private followCursor(screen: Vec2): void {
+    const placement = this.placementFromScreen<LinearPlacementIntent>(
+      this.buildRecord(this.input.now()),
+      screen,
+    );
+    if (placement) this.placement = placement;
+    this.emitPreview(this.buildRecord(this.input.now()));
   }
 
   private recordFrom(
@@ -311,11 +469,8 @@ class LinearEditSession extends BaseEditSession {
       kind: 'linear',
       a,
       b,
-      placement: {
-        offsetM: 0.15,
-        labelT: 0.5,
-        side: this.side,
-      },
+      placement: this.placement,
+      ...(this.directions && b === this.b ? { directions: this.directions } : {}),
     };
   }
 }
@@ -326,9 +481,14 @@ class ProjectedEditSession extends BaseEditSession
   private a: DimensionAnchor | null = null;
   private b: DimensionAnchor | null = null;
   private axis: ProjectionAxisRef | null = null;
-  private side: 1 | -1 = 1;
+  private directions: DimensionDirections | undefined;
+  private placement: LinearPlacementIntent = DEFAULT_LINEAR_PLACEMENT;
 
   pointerMove(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      return;
+    }
     if (this.currentPhase === 'pick-second' && this.a) {
       const candidate = selectedCandidate(this.input, screen, ['point']);
       if (candidate?.anchor.snapshot) {
@@ -346,6 +506,11 @@ class ProjectedEditSession extends BaseEditSession
   }
 
   pointerDown(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      this.currentPhase = 'ready';
+      return;
+    }
     if (this.currentPhase === 'pick-first' || this.currentPhase === 'pick-second') {
       const candidate = selectedCandidate(this.input, screen, ['point']);
       if (!candidate?.anchor.snapshot) return;
@@ -363,21 +528,44 @@ class ProjectedEditSession extends BaseEditSession
       const candidate = selectedCandidate(this.input, screen, ['direction']);
       const axis = candidate ? semanticAxis(candidate) : null;
       if (!axis) return;
-      this.axis = axis;
-      this.currentPhase = 'ready';
-      this.emitPreview(this.recordFrom(this.a, this.b, axis, this.input.now()));
+      this.enterPlace(axis);
     }
   }
 
   selectDesignAxis(axis: 'x' | 'y' | 'z'): void {
     if (this.currentPhase !== 'pick-axis' || !this.a || !this.b) return;
-    this.axis = { kind: 'design-axis', axis };
-    this.currentPhase = 'ready';
-    this.emitPreview(this.recordFrom(this.a, this.b, this.axis, this.input.now()));
+    this.enterPlace({ kind: 'design-axis', axis });
+  }
+
+  back(): boolean {
+    switch (this.currentPhase) {
+      case 'ready':
+        this.currentPhase = 'place';
+        return true;
+      case 'place':
+        this.axis = null;
+        this.directions = undefined;
+        this.placement = { ...DEFAULT_LINEAR_PLACEMENT, side: this.placement.side };
+        this.currentPhase = 'pick-axis';
+        this.emitPreview(null);
+        return true;
+      case 'pick-axis':
+        this.b = null;
+        this.currentPhase = 'pick-second';
+        this.emitPreview(null);
+        return true;
+      case 'pick-second':
+        this.a = null;
+        this.currentPhase = 'pick-first';
+        this.emitPreview(null);
+        return true;
+      default:
+        return false;
+    }
   }
 
   flip(): void {
-    this.side = this.side === 1 ? -1 : 1;
+    this.placement = { ...this.placement, side: this.placement.side === 1 ? -1 : 1 };
     if (this.a && this.b && this.axis) {
       this.emitPreview(
         this.recordFrom(this.a, this.b, this.axis, this.input.now()),
@@ -389,6 +577,32 @@ class ProjectedEditSession extends BaseEditSession
     return this.a && this.b && this.axis
       ? this.recordFrom(this.a, this.b, this.axis, at)
       : null;
+  }
+
+  private enterPlace(axis: ProjectionAxisRef): void {
+    if (!this.a || !this.b) return;
+    this.axis = axis;
+    const along = unitVec3(projectionAxisVector(axis));
+    const a = this.a.snapshot;
+    const b = this.b.snapshot;
+    let projectionDirection: Vec3 | null = null;
+    if (along && a && b) {
+      const span = subtract(b, a);
+      const k = dot(span, along);
+      projectionDirection = unitVec3([span[0] - along[0] * k, span[1] - along[1] * k, span[2] - along[2] * k]);
+    }
+    this.directions = explicitDirections(along, this.view(), projectionDirection);
+    this.currentPhase = 'place';
+    this.emitPreview(this.recordFrom(this.a, this.b, axis, this.input.now()));
+  }
+
+  private followCursor(screen: Vec2): void {
+    const placement = this.placementFromScreen<LinearPlacementIntent>(
+      this.buildRecord(this.input.now()),
+      screen,
+    );
+    if (placement) this.placement = placement;
+    this.emitPreview(this.buildRecord(this.input.now()));
   }
 
   private recordFrom(
@@ -403,11 +617,8 @@ class ProjectedEditSession extends BaseEditSession
       a,
       b,
       axis,
-      placement: {
-        offsetM: 0.15,
-        labelT: 0.5,
-        side: this.side,
-      },
+      placement: this.placement,
+      ...(this.directions && axis === this.axis ? { directions: this.directions } : {}),
     };
   }
 }
@@ -471,6 +682,28 @@ class AngularEditSession extends BaseEditSession {
     }
   }
 
+  back(): boolean {
+    switch (this.currentPhase) {
+      case 'ready':
+        this.rayB = null;
+        this.currentPhase = 'pick-third';
+        this.emitPreview(null);
+        return true;
+      case 'pick-third':
+        this.rayA = null;
+        this.currentPhase = 'pick-second';
+        this.emitPreview(null);
+        return true;
+      case 'pick-second':
+        this.vertex = null;
+        this.currentPhase = 'pick-first';
+        this.emitPreview(null);
+        return true;
+      default:
+        return false;
+    }
+  }
+
   flip(): void {
     this.arcChoice = this.arcChoice === 'minor' ? 'major' : 'minor';
     if (this.vertex && this.rayA && this.rayB) {
@@ -513,8 +746,15 @@ class RadialEditSession extends BaseEditSession
   private rim: DimensionAnchor | null = null;
   private normal: ProjectionAxisRef | null = null;
   private display: 'radius' | 'diameter' = 'radius';
+  private placement: RadialPlacementIntent | null = null;
+  /** 圆 / 弧一次拾全了圆心、圆周、法向：退回时直接回到拾取第一步。 */
+  private pickedCircular = false;
 
   pointerMove(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      return;
+    }
     if (this.currentPhase === 'pick-first') {
       this.emitPreview(null);
       return;
@@ -536,6 +776,11 @@ class RadialEditSession extends BaseEditSession
   }
 
   pointerDown(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      this.currentPhase = 'ready';
+      return;
+    }
     if (this.currentPhase === 'pick-first') {
       const candidates = this.input.snapPort.query({
         screen,
@@ -575,15 +820,8 @@ class RadialEditSession extends BaseEditSession
           snapshot: circular.normal,
           semanticRef: semanticRef('normal'),
         };
-        this.currentPhase = 'ready';
-        this.emitPreview(
-          this.recordFrom(
-            this.center,
-            this.rim,
-            this.normal,
-            this.input.now(),
-          ),
-        );
+        this.pickedCircular = true;
+        this.enterPlace();
         return;
       }
 
@@ -610,20 +848,61 @@ class RadialEditSession extends BaseEditSession
       const normal = candidate ? semanticAxis(candidate) : null;
       if (!normal) return;
       this.normal = normal;
-      this.currentPhase = 'ready';
-      this.emitPreview(
-        this.recordFrom(this.center, this.rim, normal, this.input.now()),
-      );
+      this.enterPlace();
     }
+  }
+
+  back(): boolean {
+    switch (this.currentPhase) {
+      case 'ready':
+        this.currentPhase = 'place';
+        return true;
+      case 'place':
+        this.placement = null;
+        this.normal = null;
+        if (this.pickedCircular) {
+          this.center = null;
+          this.rim = null;
+          this.pickedCircular = false;
+          this.currentPhase = 'pick-first';
+        } else {
+          this.currentPhase = 'pick-axis';
+        }
+        this.emitPreview(null);
+        return true;
+      case 'pick-axis':
+        this.rim = null;
+        this.currentPhase = 'pick-second';
+        this.emitPreview(null);
+        return true;
+      case 'pick-second':
+        this.center = null;
+        this.currentPhase = 'pick-first';
+        this.emitPreview(null);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private enterPlace(): void {
+    this.currentPhase = 'place';
+    this.emitPreview(this.buildRecord(this.input.now()));
+  }
+
+  private followCursor(screen: Vec2): void {
+    const placement = this.placementFromScreen<RadialPlacementIntent>(
+      this.buildRecord(this.input.now()),
+      screen,
+    );
+    if (placement) this.placement = placement;
+    this.emitPreview(this.buildRecord(this.input.now()));
   }
 
   selectDesignAxis(axis: 'x' | 'y' | 'z'): void {
     if (this.currentPhase !== 'pick-axis' || !this.center || !this.rim) return;
     this.normal = { kind: 'design-axis', axis };
-    this.currentPhase = 'ready';
-    this.emitPreview(
-      this.recordFrom(this.center, this.rim, this.normal, this.input.now()),
-    );
+    this.enterPlace();
   }
 
   flip(): void {
@@ -657,7 +936,7 @@ class RadialEditSession extends BaseEditSession
       rim,
       normal,
       display: this.display,
-      placement: {
+      placement: this.placement ?? {
         leaderDirection,
         labelDistanceM: 0.25,
       },
@@ -671,6 +950,8 @@ class PlacementEditSession implements DimensionEditSession {
   private placement: UserDimensionRecord['placement'];
   private moved = false;
 
+  readonly validationErrors: readonly string[] = [];
+
   constructor(private readonly input: DimensionPlacementEditSessionInput) {
     this.kind = input.record.kind;
     this.placement = input.record.placement;
@@ -678,6 +959,15 @@ class PlacementEditSession implements DimensionEditSession {
 
   get phase(): DimensionEditPhase {
     return this.currentPhase;
+  }
+
+  /** 拖放置只有一步；退回 = 恢复编辑前的放置（取消前的那一份），会话仍在。 */
+  back(): boolean {
+    if (this.currentPhase !== 'ready' || !this.moved) return false;
+    this.placement = this.input.record.placement;
+    this.moved = false;
+    this.input.onPreview(null);
+    return true;
   }
 
   pointerMove(screen: Vec2): void {
@@ -730,12 +1020,22 @@ class RebindEditSession implements DimensionEditSession {
   private currentPhase: DimensionEditPhase = 'pick-first';
   private anchor: DimensionAnchor | null = null;
 
+  readonly validationErrors: readonly string[] = [];
+
   constructor(private readonly input: DimensionRebindEditSessionInput) {
     this.kind = input.record.kind;
   }
 
   get phase(): DimensionEditPhase {
     return this.currentPhase;
+  }
+
+  back(): boolean {
+    if (this.currentPhase !== 'ready') return false;
+    this.anchor = null;
+    this.currentPhase = 'pick-first';
+    this.input.onPreview(null);
+    return true;
   }
 
   pointerMove(screen: Vec2): void {

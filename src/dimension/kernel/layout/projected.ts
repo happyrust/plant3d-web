@@ -40,5 +40,10 @@ export function layoutProjected(
     { a: input.a, b: projectedB, placement: input.placement },
     context,
     projectionLines,
+    {
+      dimensionDirection: input.directions?.dimensionDirection ?? axis,
+      projectionDirection: input.directions?.projectionDirection ?? null,
+      offsetDirection: input.directions?.offsetDirection ?? null,
+    },
   );
 }

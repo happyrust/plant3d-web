@@ -138,4 +138,48 @@ describe('layoutLinear', () => {
     expect(invalid.derived.formattedLabel).toBe('STALE 1000.00');
     expect(invalid.primitives.every((primitive) => primitive.styleRole === 'selected')).toBe(true);
   });
+
+  it('布局前按当帧视向校验：尺寸线与视向平行时不画，给稳定错误码而不是退回几何', () => {
+    const endOn = layoutLinear(input({ a: [0, 0, 0], b: [0, 0, 1] }), context);
+    expect(endOn.primitives).toEqual([]);
+    expect(endOn.derived.validationErrors).toEqual(['DIMENSION_DIRECTION_PARALLEL_VIEW']);
+    expect(endOn.derived.formattedLabel).not.toBe('');
+    expect(layoutLinear(input(), context).derived).not.toHaveProperty('validationErrors');
+  });
+
+  it('#75 给了设计系偏移方向时尺寸线落在尺寸平面里，转相机不改它在设计空间的位置', () => {
+    const planar = input({
+      placement: { offsetM: 0.2, labelT: 0.5, side: -1 },
+      directions: { dimensionDirection: [1, 0, 0], offsetDirection: [0, 1, 0] },
+    });
+    // 绕设计系 Y 轴转 30° 的正交相机：同一条记录换一个视角。
+    const angle = Math.PI / 6;
+    const right: [number, number, number] = [Math.cos(angle), 0, -Math.sin(angle)];
+    const rotated: LayoutContext = {
+      ...context,
+      projector: {
+        ...createTestProjector(),
+        right,
+        forward: [-Math.sin(angle), 0, -Math.cos(angle)],
+        project: point => ({
+          x: 200 + (point[0] * right[0] + point[2] * right[2]) * 100,
+          y: 200 - point[1] * 100,
+          depth: 0,
+        }),
+      },
+    };
+    for (const view of [context, rotated]) {
+      const dimensionLines = layoutLinear(planar, view).primitives.filter(
+        (primitive): primitive is ScreenLine => primitive.kind === 'line' && primitive.part === 'dimension',
+      );
+      const start = view.projector.project([0, -0.2, 0]);
+      const end = view.projector.project([1, -0.2, 0]);
+      expect(roundNumbers(present(dimensionLines[0], 'first dimension line').from)).toEqual(
+        roundNumbers([start.x, start.y]),
+      );
+      expect(roundNumbers(present(dimensionLines.at(-1), 'last dimension line').to)).toEqual(
+        roundNumbers([end.x, end.y]),
+      );
+    }
+  });
 });
