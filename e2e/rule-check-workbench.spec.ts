@@ -440,6 +440,16 @@ test('全量运行四套引擎校验，验证徽标渲染、火灾分区着色�
   expect(report.summary.totalReported).toBe(5);
   expect(report.violations).toHaveLength(5);
 
+  // 结果分级快筛（火灾分区 → 2/5）+ 按规则分组折叠与组级定位
+  await page.getByTestId('rule-check-result-filter-firezone').click();
+  await expect(page.getByTestId('rule-check-result-filtered-count')).toHaveText('2/5');
+  await expect(page.getByTestId('rule-check-violation-row')).toHaveCount(2);
+
+  await page.getByTestId('rule-check-group-toggle-btn').click();
+  await expect(page.getByTestId('rule-check-violation-group')).toHaveCount(1);
+  await page.getByTestId('rule-check-group-header').first().click();
+  await expect(page.getByTestId('rule-check-violation-row')).toHaveCount(0);
+
   expect(pageErrors).toEqual([]);
 });
 
