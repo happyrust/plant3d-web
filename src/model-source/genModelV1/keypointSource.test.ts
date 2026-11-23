@@ -8,6 +8,7 @@ import {
   elementPlinesToSnapPoints,
   elementPtsetToChildrenResponse,
   elementPtsetToPtsetResponse,
+  elementTubiEndpointsToCandidates,
   emptyPtsetReason,
 } from './keypointSource';
 
@@ -16,6 +17,7 @@ import {
   type ElementPlinesResponse,
   type ElementPtsetItem,
   type ElementPtsetResponse,
+  type ElementTubiEndpoints,
 } from '@/api/genModelV1Api';
 import { attachPlineSegments, type MeasurementPickCandidate } from '@/composables/useMeasurementPickSources';
 import { ptsetResponseToSceneCandidates } from '@/utils/three/ptsetTransform';
@@ -268,5 +270,77 @@ describe('gen-model-v1 keypointSource', () => {
     const result = await source.primitiveKeypoints(7997, '24381_177301');
     expect(result.plineSnapPoints).toHaveLength(3);
     expect(result.plineSnapPoints![0]).toMatchObject({ kind: 'node', refno: '24381_177316' });
+  });
+
+  describe('版本令牌与管身端点（#62 / #66）', () => {
+    const tubi = (): ElementTubiEndpoints => ({
+      branch_refno: '24381_145018',
+      endpoints: [
+        {
+          point_id: 'TUBI:24381_145019~24381_145020:ARRIVE', end: 'arrive', instance_refno: '24381_145019~24381_145020',
+          owner_refno: '24381_145018', order: 2, position: [1100, 100, 0], direction: [0, -1, 0], outside_diameter_mm: 114.3,
+        },
+        {
+          point_id: 'TUBI:24381_145019~24381_145020:LEAVE', end: 'leave', instance_refno: '24381_145019~24381_145020',
+          owner_refno: '24381_145018', order: 2, position: [1100, 900, 0], direction: [0, 1, 0], outside_diameter_mm: 114.3,
+        },
+        {
+          point_id: 'TUBI:bad:LEAVE', end: 'leave', instance_refno: 'bad', owner_refno: '24381_145018', order: 3,
+          position: [Number.NaN, 0, 0], direction: [0, 1, 0], outside_diameter_mm: null,
+        },
+      ],
+      unresolved: [{ instance_refno: 'Head~24381_145019', end: 'arrive', reason: '端点坐标不是有限数' }],
+    });
+
+    it('管身端点 → 语义点候选：id 原样用 point_id，挂在所属 BRAN 上，非有限的跳过', () => {
+      const items = elementTubiEndpointsToCandidates(tubi());
+      expect(items.map(item => item.id)).toEqual([
+        'TUBI:24381_145019~24381_145020:ARRIVE',
+        'TUBI:24381_145019~24381_145020:LEAVE',
+      ]);
+      expect(items[1]).toMatchObject({
+        refno: '24381_145019~24381_145020',
+        objectId: 'o:24381_145018:0',
+        kind: 'tubi_leave',
+        label: 'TUBI LEAVE',
+        world: [1100, 900, 0],
+        dir: [0, 1, 0],
+        hasDir: true,
+      });
+      expect(elementTubiEndpointsToCandidates(undefined)).toEqual([]);
+    });
+
+    it('适配器：ptset / plines 带回 dbnum:sesno，tubiEndpoints 发 include_tubi_endpoints 并报 unresolved', async () => {
+      const version = { dbnum: 24381, sesno: 812, databases: [] };
+      const elementPtset = vi.fn(async (req: { refno: string; includeTubiEndpoints?: boolean }) => ({
+        source: 'e3d-model',
+        ...elbo(),
+        source_version: version,
+        ...(req.includeTubiEndpoints ? { tubi_endpoints: tubi() } : {}),
+      }) satisfies ElementPtsetResponse);
+      const elementPlines = vi.fn(async () => sctnPlines({ source_version: version }));
+      const source = createGenModelV1KeypointSource({ api: { elementPtset, elementPlines } });
+
+      expect((await source.ptset(0, '24381_145031')).source_version_key).toBe('24381:812');
+      expect((await source.primitiveKeypoints(0, '24381_177301')).sourceVersionKey).toBe('24381:812');
+
+      const result = await source.tubiEndpoints!(0, '24381_145019');
+      expect(elementPtset).toHaveBeenLastCalledWith({ refno: '24381_145019', includeTubiEndpoints: true });
+      expect(result.items).toHaveLength(2);
+      expect(result.ownerRefno).toBe('24381_145018');
+      expect(result.sourceVersionKey).toBe('24381:812');
+      expect(result.errors).toEqual(['Head~24381_145019 arrive：端点坐标不是有限数']);
+    });
+
+    it('老服务端没有版本 / 管身端点：版本为 null，管身给一句原因', async () => {
+      const elementPtset = vi.fn(async () => ({ source: 'e3d-model', ...elbo() }) satisfies ElementPtsetResponse);
+      const elementPlines = vi.fn(async () => sctnPlines());
+      const source = createGenModelV1KeypointSource({ api: { elementPtset, elementPlines } });
+      expect((await source.ptset(0, '24381_145031')).source_version_key).toBeNull();
+      const result = await source.tubiEndpoints!(0, '24381_145031');
+      expect(result.items).toEqual([]);
+      expect(result.errors[0]).toContain('不支持');
+      expect(result.sourceVersionKey).toBeNull();
+    });
   });
 });

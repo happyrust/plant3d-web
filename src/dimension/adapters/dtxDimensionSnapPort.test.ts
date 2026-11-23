@@ -38,7 +38,7 @@ const candidates: readonly ViewerSnapCandidate[] = [
 ];
 
 describe('DtxDimensionSnapPort', () => {
-  it('maps source semantics and sorts by the shared measurement priorities', () => {
+  it('maps source semantics and sorts like measurement picking: 4px distance cohorts, then priority', () => {
     const port = new DtxDimensionSnapPort({
       queryMeasurementCandidates: () => candidates,
       sceneWorldToDesignMetres: point => point,
@@ -51,19 +51,19 @@ describe('DtxDimensionSnapPort', () => {
     });
 
     expect(result.map(candidate => candidate.id)).toEqual([
-      'primitive',
-      'ptset',
       'position',
       'mesh',
+      'primitive',
+      'ptset',
     ]);
     expect(result.map(candidate => [
       candidate.anchor.semanticRef?.source,
       candidate.anchor.accuracy,
     ])).toEqual([
-      ['primitive-key-point', 'exact'],
-      ['p-point', 'exact'],
       ['instance-origin', 'exact'],
       ['model-surface', 'approximate'],
+      ['primitive-key-point', 'exact'],
+      ['p-point', 'exact'],
     ]);
   });
 
@@ -173,6 +173,28 @@ describe('DtxDimensionSnapPort', () => {
         capability: 'direction',
         direction: [0, 1, 0],
       }),
+    ]);
+  });
+
+  it('keeps coincident semantic points apart, each with its own id and refno', () => {
+    const port = new DtxDimensionSnapPort({
+      queryMeasurementCandidates: () => [
+        { id: 'ptset:24381_145031#1', source: 'ptset', sceneWorld: [1, 0, 0], refno: '24381_145031', distancePx: 2 },
+        {
+          id: 'TUBI:24381_145019~24381_145031:LEAVE',
+          source: 'primitive_key_point',
+          sceneWorld: [1, 0, 0],
+          refno: '24381_145019~24381_145031',
+          distancePx: 2,
+        },
+      ],
+      sceneWorldToDesignMetres: point => point,
+    });
+
+    const result = port.query({ screen: { x: 0, y: 0 }, capabilities: ['point'], thresholdPx: 10 });
+    expect(result.map(candidate => candidate.anchor.semanticRef)).toEqual([
+      { source: 'primitive-key-point', refno: '24381_145019~24381_145031', candidateId: 'TUBI:24381_145019~24381_145031:LEAVE' },
+      { source: 'p-point', refno: '24381_145031', candidateId: 'ptset:24381_145031#1' },
     ]);
   });
 });

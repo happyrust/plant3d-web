@@ -220,6 +220,20 @@ export type PrimitiveKeypointsResult = {
   errors: string[];
   /** 与 PLINE 候选同一构件的 Significant Snap 分段点（只有 gen-model-v1 的 SCTN 给；legacy 与 GENSEC 没有） */
   plineSnapPoints?: PlineSnapPointCandidate[];
+  /** 读取版本令牌 `dbnum:sesno`（gen-model #62）；没有为 null */
+  sourceVersionKey?: string | null;
+};
+
+/**
+ * 隐式管身（TUBI）端点候选（gen-model #62，`element/ptset?include_tubi_endpoints`）：`items[].id` 就是服务端的
+ * `point_id`（`TUBI:<A~B>:ARRIVE|LEAVE`），跨会话稳定，可直接当尺寸锚点的 `candidateId` 重绑定。
+ */
+export type TubiEndpointsResult = {
+  items: PrimitiveKeyPointCandidate[];
+  errors: string[];
+  /** 管身所属 BRAN（`a_b`）；请求的构件不在 BRAN 下时为 null */
+  ownerRefno: string | null;
+  sourceVersionKey: string | null;
 };
 
 /**
@@ -240,6 +254,8 @@ export type KeypointSource = {
   memberPtsets(dbno: number, ownerRefno: string, options?: KeypointQueryOptions): Promise<PtsetChildrenResponse>;
   /** 基本体 / PLINE 语义关键点候选（世界坐标已按 world_transform × geo_local 折叠）。 */
   primitiveKeypoints(dbno: number, refno: string, options?: KeypointQueryOptions): Promise<PrimitiveKeypointsResult>;
+  /** BRAN → 它的全部管身端点；BRAN 直属成员 → 与它相接的管身端点。legacy 源没有。 */
+  tubiEndpoints?(dbno: number, refno: string, options?: KeypointQueryOptions): Promise<TubiEndpointsResult>;
 };
 
 /** 空间查询源在两种后端下的能力差异，抽屉据此增减 UI。 */

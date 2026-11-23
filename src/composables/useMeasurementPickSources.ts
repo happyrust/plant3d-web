@@ -825,44 +825,44 @@ function projectCandidate(input: {
   };
 }
 
+/**
+ * 测量拾取与尺寸 SnapPort 共用的候选次序（#66）：先按屏幕距离分成 `MEASUREMENT_SNAP_TIE_PX` 内的并列组，
+ * 组内按来源优先级、再距离、再 id。重合（同一屏幕位置）的语义点各自保留自己的 id，不合并。
+ */
+export function rankSnapCandidates<T>(
+  items: readonly T[],
+  key: (item: T) => Readonly<{ distancePx: number; priority: number; id: string }>,
+): T[] {
+  const keyed = items.map(item => ({ item, ...key(item) }));
+  keyed.sort((a, b) => a.distancePx - b.distancePx || a.id.localeCompare(b.id));
+
+  const sorted: T[] = [];
+  for (let start = 0; start < keyed.length;) {
+    const minimumDistance = keyed[start]!.distancePx;
+    let end = start + 1;
+    while (end < keyed.length && keyed[end]!.distancePx - minimumDistance <= MEASUREMENT_SNAP_TIE_PX) {
+      end += 1;
+    }
+    const cohort = keyed.slice(start, end).sort((a, b) => (
+      a.priority - b.priority
+      || a.distancePx - b.distancePx
+      || a.id.localeCompare(b.id)
+    ));
+    sorted.push(...cohort.map(entry => entry.item));
+    start = end;
+  }
+  return sorted;
+}
+
 function sortProjectedCandidates(
   candidates: ProjectedMeasurementPickCandidate[],
   settings: MeasurementPickSourceSettings,
 ): ProjectedMeasurementPickCandidate[] {
-  candidates.sort((a, b) => (
-    a.pixelDistance - b.pixelDistance || a.id.localeCompare(b.id)
-  ));
-
-  const sorted: ProjectedMeasurementPickCandidate[] = [];
-  for (let start = 0; start < candidates.length;) {
-    const first = candidates[start];
-    if (!first) break;
-    const minimumDistance = first.pixelDistance;
-    let end = start + 1;
-    while (end < candidates.length) {
-      const candidate = candidates[end];
-      if (
-        !candidate
-        || candidate.pixelDistance - minimumDistance > MEASUREMENT_SNAP_TIE_PX
-      ) {
-        break;
-      }
-      end += 1;
-    }
-
-    const cohort = candidates.slice(start, end).sort((a, b) => {
-      const priorityDelta =
-        (settings[a.source]?.priority ?? 999) - (settings[b.source]?.priority ?? 999);
-      return (
-        priorityDelta
-        || a.pixelDistance - b.pixelDistance
-        || a.id.localeCompare(b.id)
-      );
-    });
-    sorted.push(...cohort);
-    start = end;
-  }
-
+  const sorted = rankSnapCandidates(candidates, candidate => ({
+    distancePx: candidate.pixelDistance,
+    priority: settings[candidate.source]?.priority ?? 999,
+    id: candidate.id,
+  }));
   candidates.splice(0, candidates.length, ...sorted);
   return candidates;
 }

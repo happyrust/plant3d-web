@@ -22,7 +22,14 @@
  * 一切 `GenModelV1ApiError` 折成 `success:false + error_message`（与属性源同一做法）；`not_found` 也是
  * 一种「没有」——refno 不在所钉会话里，测量工具把它当无 P-Point 处理即可，不抛。
  */
-import type { KeypointQueryOptions, KeypointSource, PlineSnapPointCandidate, PrimitiveKeyPointCandidate, PrimitiveKeypointsResult } from '../ports';
+import type {
+  KeypointQueryOptions,
+  KeypointSource,
+  PlineSnapPointCandidate,
+  PrimitiveKeyPointCandidate,
+  PrimitiveKeypointsResult,
+  TubiEndpointsResult,
+} from '../ports';
 import type { PtsetChildrenResponse, PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
 import {
@@ -33,7 +40,9 @@ import {
   type ElementPlinesResponse,
   type ElementPtsetItem,
   type ElementPtsetResponse,
+  type ElementTubiEndpoints,
 } from '@/api/genModelV1Api';
+import { sourceVersionKey } from '@/model-source/semanticPointVersion';
 
 export type KeypointApi = {
   elementPtset: typeof genModelV1ElementPtset;
@@ -117,6 +126,38 @@ export function elementPlinesToSnapPoints(resp: ElementPlinesResponse): PlineSna
       zdis: typeof point.zdis === 'number' && Number.isFinite(point.zdis) ? point.zdis : Number.NaN,
       world: [point.position[0], point.position[1], point.position[2]],
       label: refno ? `${noun} ${refno}` : noun,
+    });
+  }
+  return out;
+}
+
+const TUBI_KEYPOINT_SOURCE = 'gen-model-v1 element/ptset tubi_endpoints';
+
+/**
+ * `element/ptset` 的 `tubi_endpoints` → 测量 / 尺寸共用的语义点候选（世界系 mm）。`id` 原样用服务端
+ * `point_id`，`refno` 是管身 refno `A~B`，`objectId` 挂在所属 BRAN 上（管身不是 E3D 元素，没有自己的实例）。
+ */
+export function elementTubiEndpointsToCandidates(tubi: ElementTubiEndpoints | undefined): PrimitiveKeyPointCandidate[] {
+  const out: PrimitiveKeyPointCandidate[] = [];
+  for (const endpoint of tubi?.endpoints ?? []) {
+    if (!endpoint || typeof endpoint.point_id !== 'string' || !endpoint.point_id) continue;
+    if (!finiteTriple(endpoint.position) || !finiteTriple(endpoint.direction)) continue;
+    const owner = typeof endpoint.owner_refno === 'string' ? fromV1Refno(endpoint.owner_refno) : '';
+    const leave = endpoint.end === 'leave';
+    out.push({
+      id: endpoint.point_id,
+      refno: endpoint.instance_refno,
+      objectId: owner ? `o:${owner}:0` : '',
+      geoHash: '',
+      geoIndex: -1,
+      keypointIndex: leave ? 1 : 0,
+      kind: leave ? 'tubi_leave' : 'tubi_arrive',
+      source: TUBI_KEYPOINT_SOURCE,
+      label: `TUBI ${leave ? 'LEAVE' : 'ARRIVE'}`,
+      local: [endpoint.position[0], endpoint.position[1], endpoint.position[2]],
+      world: [endpoint.position[0], endpoint.position[1], endpoint.position[2]],
+      hasDir: true,
+      dir: [endpoint.direction[0], endpoint.direction[1], endpoint.direction[2]],
     });
   }
   return out;
@@ -244,7 +285,7 @@ export function createGenModelV1KeypointSource(options: GenModelV1KeypointSource
       const key = fromV1Refno(refno);
       try {
         const resp = await api.elementPtset({ refno });
-        return elementPtsetToPtsetResponse(resp);
+        return { ...elementPtsetToPtsetResponse(resp), source_version_key: sourceVersionKey(resp.source_version) };
       } catch (error) {
         return failedPtset(key, errorMessage(error));
       }
@@ -270,14 +311,37 @@ export function createGenModelV1KeypointSource(options: GenModelV1KeypointSource
       try {
         const resp = await api.elementPlines({ refno });
         const items = elementPlinesToKeypointCandidates(resp);
-        if (items.length > 0) return { items, errors: [], plineSnapPoints: elementPlinesToSnapPoints(resp) };
+        const versionKey = sourceVersionKey(resp.source_version);
+        if (items.length > 0) {
+          return { items, errors: [], plineSnapPoints: elementPlinesToSnapPoints(resp), sourceVersionKey: versionKey };
+        }
         const noun = resp.noun ? `${resp.noun} ` : '';
         return {
           items: [],
           errors: [resp.reason ?? `构件 ${noun}${fromV1Refno(resp.refno)} 没有 PLINE`],
+          sourceVersionKey: versionKey,
         };
       } catch (error) {
         return { items: [], errors: [`PLINE 查询失败：${errorMessage(error)}`] };
+      }
+    },
+    async tubiEndpoints(_dbno, refno): Promise<TubiEndpointsResult> {
+      try {
+        const resp = await api.elementPtset({ refno, includeTubiEndpoints: true });
+        const tubi = resp.tubi_endpoints;
+        const items = elementTubiEndpointsToCandidates(tubi);
+        const errors = [
+          ...(items.length === 0 ? [tubi?.reason ?? '服务端没有返回管身端点（老版本 gen-model 不支持）'] : []),
+          ...(tubi?.unresolved ?? []).map(entry => `${entry.instance_refno} ${entry.end}：${entry.reason}`),
+        ];
+        return {
+          items,
+          errors,
+          ownerRefno: tubi?.branch_refno ? fromV1Refno(tubi.branch_refno) : null,
+          sourceVersionKey: sourceVersionKey(resp.source_version),
+        };
+      } catch (error) {
+        return { items: [], errors: [`管身端点查询失败：${errorMessage(error)}`], ownerRefno: null, sourceVersionKey: null };
       }
     },
   };
