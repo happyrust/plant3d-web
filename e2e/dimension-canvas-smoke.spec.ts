@@ -20,6 +20,17 @@ test('dimension WebGL scene demo renders four types plus MBD and exports SVG', a
     'demo-angular',
     'demo-radial',
     'demo-mbd-explicit',
+    'grid:plane',
+    'grid:cyl',
+  ]);
+  const gridLabels = await page.evaluate(() => (
+    (window as any).__dimensionDemo.getLayouts()
+      .filter((layout: any) => String(layout.dimensionId).startsWith('grid:'))
+      .map((layout: any) => [layout.dimensionId, layout.derived.formattedLabel])
+  ));
+  expect(gridLabels).toEqual([
+    ['grid:plane', '1500.00'],
+    ['grid:cyl', 'R300.00'],
   ]);
   // 画家 group 固定四个 mesh：stroke cores / stroke edges / filled arrows / filled tag bodies
   // （scenePainter.ts:956-970，getStats 返回 group.children.length）。
@@ -46,5 +57,7 @@ test('dimension WebGL scene demo renders four types plus MBD and exports SVG', a
   expect(exported.svg).toContain('<path');
   expect(exported.svg).toContain('<line');
   expect(exported.svg).not.toContain('<text');
+  expect(exported.svg).toContain('data-dimension-id="grid:plane"');
+  expect(exported.svg).toContain('data-dimension-id="grid:cyl"');
   expect(exported.pngSize).toBeGreaterThan(0);
 });
