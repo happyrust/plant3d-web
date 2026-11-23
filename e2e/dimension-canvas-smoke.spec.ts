@@ -47,4 +47,9 @@ test('dimension WebGL scene demo renders four types plus MBD and exports SVG', a
   expect(exported.svg).toContain('<line');
   expect(exported.svg).not.toContain('<text');
   expect(exported.pngSize).toBeGreaterThan(0);
+
+  const inches = await page.evaluate(() => (window as any).__dimensionDemo.setLengthUnit('in'));
+  expect(inches).toBe('78.74');
+  const millimetres = await page.evaluate(() => (window as any).__dimensionDemo.setLengthUnit('mm'));
+  expect(millimetres).toBe('2000.00');
 });
