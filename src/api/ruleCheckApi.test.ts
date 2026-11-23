@@ -249,4 +249,51 @@ describe('ruleCheckApi', () => {
     expect(attrs.results[0]!.violations[0]!.highlightColor).toBe('red');
     expect(attrs.results[0]!.violations[0]!.highlightRefnos).toEqual(['24381_500', '24381_501']);
   });
+
+  it('extracts endpoint refnos from implicit TUBI spans, falls back to branch_refno, and preserves rule unit', () => {
+    const bran = normalizeBranResponse({
+      branch_refno: '24381/145018',
+      flow_direction: null,
+      elem_count: 4,
+      rules_run: 1,
+      warnings: [],
+      results: [
+        {
+          id: 'inst-024',
+          issue: 224,
+          discipline: '仪控',
+          title: '仪表管坡度',
+          requirement: '>=2%',
+          unit: '%',
+          checked_pairs: 2,
+          violation_total: 2,
+          truncated: false,
+          warnings: [],
+          violations: [
+            {
+              source: { refno: '24381_145033~24381_145035', noun: 'TUBI', order: 1 },
+              target: { refno: '24381_145033~24381_145035', noun: 'TUBI', order: 1 },
+              measured_mm: 0.3,
+              threshold_mm: 2.0,
+              margin_mm: -1.7,
+              highlight_refnos: [],
+              detail: '坡度不足',
+            },
+            {
+              source: { refno: 'HEAD~TAIL', noun: 'TUBI', order: 2 },
+              target: { refno: 'HEAD~TAIL', noun: 'TUBI', order: 2 },
+              measured_mm: 0.0,
+              threshold_mm: 2.0,
+              margin_mm: -2.0,
+              highlight_refnos: [],
+              detail: '整支无拟合件',
+            },
+          ],
+        },
+      ],
+    });
+    expect(bran.results[0]!.violations[0]!.unit).toBe('%');
+    expect(bran.results[0]!.violations[0]!.highlightRefnos).toEqual(['24381_145033', '24381_145035']);
+    expect(bran.results[0]!.violations[1]!.highlightRefnos).toEqual(['24381_145018']);
+  });
 });
