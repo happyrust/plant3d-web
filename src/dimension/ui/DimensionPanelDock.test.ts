@@ -821,6 +821,56 @@ describe('DimensionPanelDock', () => {
     expect(bare.querySelector('[data-testid="mbd-source-version"]')).toBeNull();
   });
 
+  it('summarizes multiple distinct design databases in the MBD source-version badge', async () => {
+    const system = createSystem();
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A,B');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A,B',
+      issues: [],
+      skipped: [],
+      sourceVersion: { dbnum: 7997, sesno: 42, databases: [{ dbnum: 7997, sesno: 42, db_type: 'DESI' }] },
+      sources: [
+        {
+          refno: 'A',
+          issues: [],
+          skipped: [],
+          layoutMode: 'isodim_main',
+          notes: [],
+          sourceVersion: { dbnum: 7997, sesno: 42, databases: [{ dbnum: 7997, sesno: 42, db_type: 'DESI' }] },
+          isolines: [],
+          loadError: null,
+        },
+        {
+          refno: 'B',
+          issues: [],
+          skipped: [],
+          layoutMode: 'em4_equi',
+          notes: [],
+          sourceVersion: {
+            dbnum: 8000,
+            sesno: 118,
+            databases: [
+              { dbnum: 8000, sesno: 118, db_type: 'DESI' },
+              { dbnum: 7001, sesno: 12, db_type: 'CATA' },
+            ],
+          },
+          isolines: [],
+          loadError: null,
+        },
+      ],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+    const badge = host.querySelector('[data-testid="mbd-refno"] [data-testid="mbd-source-version"]');
+    expect(badge?.textContent?.replace(/\s+/g, ' ').trim()).toBe('数据 7997@42 等 2 库');
+    expect(badge?.getAttribute('title')).toContain('7997@42 (DESI)');
+    expect(badge?.getAttribute('title')).toContain('8000@118 (DESI)');
+    expect(badge?.getAttribute('title')).toContain('7001@12 (CATA)');
+  });
+
   /**
    * W3-6（T4.6）：MBD 记录带 `isolineIndex` 时列表按直段成组——组头报编号、成员数、
    * 字高、OD（表里没有这一行就只报编号），没归属的殿后归「未分段」，组可折叠；

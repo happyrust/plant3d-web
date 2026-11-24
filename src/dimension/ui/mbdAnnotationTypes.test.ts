@@ -52,18 +52,63 @@ describe('expectedKindsFor', () => {
     ]);
   });
 
-  it('does not judge completeness for the other types until their solvers define it', () => {
-    for (const annotationType of [
-      'em4_supp',
-      'em9_inst_supp',
-      'em9_pipe_supp',
-      'civil',
-      'arch',
-      'em4_equi',
-      'em9_equi',
-      'em5_pipe',
-    ]) {
-      expect(expectedKindsFor(annotationType), annotationType).toBeNull();
-    }
+  it('returns the solver-aligned expected kinds for all seven non-pipe annotation types', () => {
+    expect(expectedKindsFor('em4_supp')).toEqual([
+      'linear_dim',
+      'label',
+      'leader_line',
+      'aid_text',
+      'aid_line',
+      'aid_circle',
+      'angle_dim',
+    ]);
+    expect(expectedKindsFor('em9_pipe_supp')).toEqual([
+      'linear_dim',
+      'label',
+      'leader_line',
+    ]);
+    expect(expectedKindsFor('em9_inst_supp')).toEqual([
+      'linear_dim',
+      'label',
+      'leader_line',
+      'aid_text',
+    ]);
+    expect(expectedKindsFor('civil')).toEqual([
+      'linear_dim',
+      'label',
+      'leader_line',
+      'aid_line',
+      'aid_text',
+      'aid_arc',
+      'aid_circle',
+    ]);
+    expect(expectedKindsFor('arch')).toEqual([
+      'linear_dim',
+      'label',
+      'leader_line',
+      'aid_text',
+      'aid_circle',
+    ]);
+    expect(expectedKindsFor('em4_equi')).toEqual([
+      'linear_dim',
+      'angle_dim',
+      'label',
+      'leader_line',
+      'aid_line',
+      'aid_text',
+    ]);
+    expect(expectedKindsFor('em9_equi')).toEqual([
+      'linear_dim',
+      'angle_dim',
+      'label',
+      'leader_line',
+      'aid_line',
+      'aid_text',
+    ]);
+  });
+
+  it('returns null for unknown annotation types outside the closed vocabulary', () => {
+    expect(expectedKindsFor('em5_pipe')).toBeNull();
+    expect(expectedKindsFor('constructor')).toBeNull();
   });
 });

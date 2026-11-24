@@ -984,17 +984,20 @@ export function layoutExplicit(
       input.textHalo,
     )];
   const lineAdvancePx = textHeightPx * context.theme.labelLineAdvance;
-  const extraGlyphScenes = (input.texts ?? []).map((text) =>
-    sceneGlyph(
+  const extraGlyphScenes = (input.texts ?? []).map((text) => {
+    const rot = textRotation(text.anchor, text.along, context);
+    const stackOffset = (text.stackIndex ?? 0) * lineAdvancePx;
+    const dx = -Math.sin(rot) * stackOffset;
+    const dy = Math.cos(rot) * stackOffset;
+    const offsetPx: Vec2 = [dx === 0 ? 0 : dx, dy === 0 ? 0 : dy];
+    return sceneGlyph(
       text.text,
-      sceneVertex(
-        text.anchor,
-        [0, (text.stackIndex ?? 0) * lineAdvancePx],
-      ),
+      sceneVertex(text.anchor, offsetPx),
       textHeightPx,
       styleRole,
-      textRotation(text.anchor, text.along, context),
-    ));
+      rot,
+    );
+  });
   // Built after the `above` guard: the frame goes round the row where it ends
   // up, and is no obstacle to the row it wraps.
   const frameRow = framedRow(input, blockRows, liftOffsetPx);

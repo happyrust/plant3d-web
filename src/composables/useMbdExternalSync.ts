@@ -28,8 +28,16 @@ export type MbdExternalSyncDeps = Readonly<{
    */
   fetchPipeData(
     refno: string,
-    options?: Readonly<{ partial?: boolean }>,
+    options?: Readonly<{ partial?: boolean; signal?: AbortSignal }>,
   ): Promise<MbdV2ParseResult>;
+  /**
+   * 可选的批量对象取数通道（`POST /api/mbd/v2/objects`，不支持时自动回退逐包 `GET`）。
+   * 未注入（如旧单测替身）时，同步层自动走 `fetchPipeData` 并发池。
+   */
+  fetchObjectsData?(
+    refnos: readonly string[],
+    options?: Readonly<{ partial?: boolean; signal?: AbortSignal }>,
+  ): Promise<Readonly<{ results: readonly MbdV2ParseResult[]; fallbackNote?: string }>>;
   diagnostics: MbdDiagnosticsStore;
   /** 通常为 () => window.location.search。 */
   getSearch(): string;
@@ -118,6 +126,10 @@ class MbdAtomicRejectionError extends Error {
  */
 type MbdSourceLoadOutcome = MbdDiagnosticsSourceSnapshot & Readonly<{
   records: readonly ExternalDimensionRecord[];
+  /**
+   * 规范化后的归属对象键（`subject.refno ?? branch_refno ?? refno`），用于多输入子构件去重。
+   */
+  subjectKey?: string;
   /**
    * 空包：取数、契约、映射都过了，负载里一个图元都没有（真实库里 7059 个归属对象有 261 个）。
    * 按负载判，不按提交的记录数——`mbd_kinds` 把记录滤光不算空包。这里必给；随逐包快照写进诊断（票 134）。
@@ -219,34 +231,16 @@ function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensi
 }
 
 /**
- * 调试开关 `?mbd_polar=1`（T3.6a）：接入极坐标放置层——标签锚点改由
- * `polarPlace` + 屏幕净空校验挑选，而不是求解器原位 `label_anchor`。
- * **默认关闭**：mapper 给带同直段 `linear_dim` + 外径的 `label` 打的
- * `polar` 字段、以及给同 isoline 的 `linear_dim` 打的 `polarObstacle`
- * 字段（T3.6b），在这里一并被剥掉，内核回到原位呈现；缺省 / 其它值 = 剥掉。
- *
- * **只在 `mbd_3d=0` 下生效**：三维呈现里标签是 billboard 卡片，卡片有自己的
- * 避让轮；极坐标的屏幕校验看不到长度数值的文字框，接进来只会把卡片换成压在
- * 数值上的平面文字（真实 BRAN 远景重叠 2 → 39 对）。平面呈现里标签本来就是
- * 原位文字，全部候选被否决时退回原位，与不开时逐字段相同，不丢任何东西。
+ * 已退役的调试参数 `?mbd_polar=1`：管道极坐标摆位已全部收敛到求解器（plant-mbd ADR-0016），
+ * 前端不再二次放置；此处只保留参数识别以便在诊断 notes 里提示退役事实。
  */
 function isMbdPolarEnabled(raw: string | null): boolean {
   return raw?.trim() === '1';
 }
 
-function withoutPolar(record: ExternalDimensionRecord): ExternalDimensionRecord {
-  const layout = record.layout;
-  // Only explicit layouts carry the polar opt-in.
-  if (!('lines' in layout)) return record;
-  if (layout.polar === undefined && layout.polarObstacle === undefined) return record;
-  const { polar: _polar, polarObstacle: _polarObstacle, ...rest } = layout;
-  return { ...record, layout: rest };
-}
-
 /**
- * 多 BRAN 时，跨记录的分组键也要和 id 一样加 `refno:` 前缀：polar 的
- * `groupKey`（`isoline:<idx>`）在每个包里都从 0 编号，不加前缀两个 BRAN 的
- * 0 号直段会被当成同一根管互相当障碍；去重的 `group` 同理。
+ * 多对象同屏时，跨记录的去重分组键（`declutter.group` / `declutter.parentId`）也要加前缀，
+ * 避免不同对象里同号组名互相碰撞。
  */
 function qualifyGroups(
   layout: ExternalDimensionRecord['layout'],
@@ -255,12 +249,6 @@ function qualifyGroups(
   if (!('lines' in layout)) return layout;
   return {
     ...layout,
-    ...(layout.polar?.groupKey !== undefined
-      ? { polar: { ...layout.polar, groupKey: qualify(layout.polar.groupKey) } }
-      : {}),
-    ...(layout.polarObstacle
-      ? { polarObstacle: { groupKey: qualify(layout.polarObstacle.groupKey) } }
-      : {}),
     ...(layout.declutter !== undefined
       && (layout.declutter.group !== undefined || layout.declutter.parentId !== undefined)
       ? {
@@ -282,6 +270,10 @@ export function createMbdExternalSync(
   deps: MbdExternalSyncDeps,
 ): MbdExternalSync {
   let syncVersion = 0;
+  let activeAbortController: AbortController | null = null;
+
+  const isAbortError = (error: unknown): boolean =>
+    error instanceof Error && error.name === 'AbortError';
   /**
    * 失败提示按 refno 去重：同一 refno 的同一句原因只弹一次。取数失败往往是持续性
    * 的（后端 422 / 网关 502），每次 popstate 都弹会在用户眼前刷屏；换源或
@@ -402,8 +394,13 @@ export function createMbdExternalSync(
   return {
     async sync(target, options = {}) {
       const version = ++syncVersion;
+      activeAbortController?.abort();
+      const abortController = new AbortController();
+      activeAbortController = abortController;
       const cancelled = (): boolean =>
-        version !== syncVersion || (options.isCancelled?.() ?? false);
+        version !== syncVersion
+        || abortController.signal.aborted
+        || (options.isCancelled?.() ?? false);
 
       const search = deps.getSearch();
       const params = new URLSearchParams(search);
@@ -438,9 +435,8 @@ export function createMbdExternalSync(
       const lodDisabled = isMbdLodDisabled(params.get('mbd_lod'));
       const presentation3dDisabled = isMbd3dDisabled(params.get('mbd_3d'));
       const polarEnabled = isMbdPolarEnabled(params.get('mbd_polar'));
-      const polarApplied = polarEnabled && presentation3dDisabled;
       /**
-       * 多对象同屏时给记录 id 加 `refno:` 前缀：各包的图元 id 编号空间各自
+       * 多对象同屏时给记录 id 加 `subjectKey:` 前缀：各包的图元 id 编号空间各自
        * 独立（两个对象都能叫 dim-1），`replaceSource` 又是整槽校验、遇重复
        * id 直接抛——不加前缀合并必然失败。
        * 注意按请求列表总长度 `requestedRefnos.length > 1` 判定（#136）：即使 `?mbd_limit=1`
@@ -454,7 +450,7 @@ export function createMbdExternalSync(
         kindFilter ? [...kindFilter].sort().join(',') : '',
         lodDisabled ? '0' : '1',
         presentation3dDisabled ? '0' : '1',
-        polarApplied ? '1' : '0',
+        polarEnabled ? '1' : '0',
         multiRefnos ? 'm' : 's',
       ].join('|');
       const latestRefresh = options.latestRefresh;
@@ -463,26 +459,12 @@ export function createMbdExternalSync(
       const fileLatestSessionsByDbnum = normalizeModelSessions(latestRefresh?.fileLatestSessionsByDbnum);
       const modelSessionsByDbnum = normalizeModelSessions(latestRefresh?.modelSessionsByDbnum);
 
-      const loadSource = async (refno: string): Promise<MbdSourceLoadOutcome | null> => {
-        const previousCached = cachedOutcomes.get(refno);
-        if (
-          latestRefresh !== undefined
-          && previousCached !== undefined
-          && previousCached.optionsSignature === optionsSignature
-          && !isSourceAffectedByRefresh(
-            refno,
-            previousCached.outcome,
-            affectedRefnoSet,
-            affectedDbnumSet,
-            fileLatestSessionsByDbnum,
-          )
-        ) {
-          return previousCached.outcome;
-        }
+      const processParsedOutcome = (
+        refno: string,
+        parsed: MbdV2ParseResult,
+        previousCached: Readonly<{ optionsSignature: string; outcome: MbdSourceLoadOutcome }> | undefined,
+      ): MbdSourceLoadOutcome => {
         try {
-          const parsed = await deps.fetchPipeData(refno, { partial: partialEnabled });
-          // 在途 sync 被新 sync 顶替或宿主作废：立刻收手，不白费映射，外层也会整体放弃。
-          if (cancelled()) return null;
           if (!parsed.ok) {
             if (
               latestRefresh !== undefined
@@ -514,13 +496,6 @@ export function createMbdExternalSync(
             labelPresentation === 'above' ? { labelPresentation } : {},
           );
           const skipped = [...channelSkipped, ...mapped.skipped];
-          // ADR 0046：先校验、后提交。原子拒绝只针对**映射失败**（契约认可、
-          // 但映射不出来 —— 这是代码缺陷，半对的数据不可信），且现在按包生效
-          // （2026-11-02 多 BRAN）：只剔除这一包，不掀翻其它包。
-          //
-          // 契约层的逐条诊断（`channelSkipped`，A3 起是「还不认识的图元 kind」）不再
-          // 触发整包拒绝：那是后端向前演进的信息，不是本地能判对错的错。它们照旧
-          // 进 diagnostics.skipped（面板可见、常驻提示），其余图元照常提交。
           const mappedSkipped = mapped.skipped;
           if (mappedSkipped.length > 0 && !partialEnabled) {
             throw new MbdAtomicRejectionError(
@@ -537,14 +512,15 @@ export function createMbdExternalSync(
             ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
             : mapped.records;
           const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
-          const withPresentation3d = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
-          const stripped = polarApplied ? withPresentation3d : withPresentation3d.map(withoutPolar);
-          // 真实后端的图元 id 已经带 refno 前缀（`24381_145018:isoline:0:...`），
-          // 跨 BRAN 天然不冲突；只有那些不带前缀的 id 才需要补，否则会得到
-          // `24381_145018:24381_145018:isoline:...` 这种重复噪声。尺寸链 `chainId`
-          // 同理：各包的链各自编号，不补前缀两个包的 `chain:0` 会被当成同一条链。
+          const stripped = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
+          // 只有通用端点明确声明了 `payload.subject.refno` 时才按归属对象跨输入去重；
+          // 未声明 `subject` 的老管道包 / 合成夹具按输入 `refno` 各自隔离，避免被占位 `branch_refno` 误并。
+          const declaredSubjectKey = payload.subject?.refno
+            ? normalizeRefnoToken(payload.subject.refno)
+            : '';
+          const qualifyPrefix = declaredSubjectKey || refno;
           const qualify = (id: string): string =>
-            id.startsWith(`${refno}:`) ? id : `${refno}:${id}`;
+            id.startsWith(`${qualifyPrefix}:`) ? id : `${qualifyPrefix}:${id}`;
           const records = multiRefnos
             ? stripped.map(record => ({
               ...record,
@@ -557,6 +533,7 @@ export function createMbdExternalSync(
           const empty = payload.primitives.length === 0;
           const okOutcome: MbdSourceLoadOutcome = {
             refno,
+            ...(declaredSubjectKey ? { subjectKey: declaredSubjectKey } : {}),
             records,
             empty,
             issues: payload.issues,
@@ -610,8 +587,6 @@ export function createMbdExternalSync(
           return okOutcome;
         } catch (error) {
           cachedOutcomes.delete(refno);
-          // 逐包拒绝的出口：取数失败、契约错误、映射未全量成功都转成这一包的
-          // loadError——只有它不提交，其余包照常。
           const rejection = error instanceof MbdAtomicRejectionError ? error : null;
           return {
             refno,
@@ -628,32 +603,127 @@ export function createMbdExternalSync(
         }
       };
 
-      // 后端没有批量接口：固定大小的 worker 池逐包拉取，结果按 `mbd_refno`
-      // 顺序落位（与并发完成的先后无关）。
+      const errorToOutcome = (refno: string, error: unknown): MbdSourceLoadOutcome => {
+        cachedOutcomes.delete(refno);
+        const rejection = error instanceof MbdAtomicRejectionError ? error : null;
+        return {
+          refno,
+          records: [],
+          empty: false,
+          issues: rejection?.issues ?? [],
+          skipped: rejection?.skipped ?? [],
+          layoutMode: null,
+          notes: [],
+          sourceVersion: null,
+          isolines: [],
+          loadError: error instanceof Error ? error.message : String(error),
+        };
+      };
+
       const outcomes: (MbdSourceLoadOutcome | null)[] = Array.from(
         { length: refnos.length },
         () => null,
       );
-      let nextIndex = 0;
-      const workers = Array.from(
-        { length: Math.min(MBD_FETCH_CONCURRENCY, refnos.length) },
-        async () => {
-          while (nextIndex < refnos.length) {
-            const index = nextIndex;
-            nextIndex += 1;
-            outcomes[index] = await loadSource(refnos[index]!);
+      const toFetch: { index: number; refno: string }[] = [];
+      for (let i = 0; i < refnos.length; i += 1) {
+        const refno = refnos[i]!;
+        const previousCached = cachedOutcomes.get(refno);
+        if (
+          latestRefresh !== undefined
+          && previousCached !== undefined
+          && previousCached.optionsSignature === optionsSignature
+          && !isSourceAffectedByRefresh(
+            refno,
+            previousCached.outcome,
+            affectedRefnoSet,
+            affectedDbnumSet,
+            fileLatestSessionsByDbnum,
+          )
+        ) {
+          outcomes[i] = previousCached.outcome;
+        } else {
+          toFetch.push({ index: i, refno });
+        }
+      }
+
+      let batchFallbackNote: string | undefined;
+      if (toFetch.length >= 2 && deps.fetchObjectsData) {
+        try {
+          const batch = await deps.fetchObjectsData(
+            toFetch.map(item => item.refno),
+            { partial: partialEnabled, signal: abortController.signal },
+          );
+          if (cancelled()) return;
+          batchFallbackNote = batch.fallbackNote;
+          for (let i = 0; i < toFetch.length; i += 1) {
+            const { index, refno } = toFetch[i]!;
+            const parsed = batch.results[i] ?? { ok: false as const, error: '批量响应缺少对应条目' };
+            outcomes[index] = processParsedOutcome(refno, parsed, cachedOutcomes.get(refno));
           }
-        },
-      );
-      await Promise.all(workers);
+        } catch (error) {
+          if (cancelled() || isAbortError(error)) return;
+          for (const { index, refno } of toFetch) {
+            outcomes[index] = errorToOutcome(refno, error);
+          }
+        }
+      } else if (toFetch.length > 0) {
+        let nextCursor = 0;
+        const workers = Array.from(
+          { length: Math.min(MBD_FETCH_CONCURRENCY, toFetch.length) },
+          async () => {
+            while (nextCursor < toFetch.length) {
+              if (cancelled()) return;
+              const cursor = nextCursor;
+              nextCursor += 1;
+              const { index, refno } = toFetch[cursor]!;
+              try {
+                const parsed = await deps.fetchPipeData(refno, {
+                  partial: partialEnabled,
+                  signal: abortController.signal,
+                });
+                if (cancelled()) return;
+                outcomes[index] = processParsedOutcome(refno, parsed, cachedOutcomes.get(refno));
+              } catch (error) {
+                if (cancelled() || isAbortError(error)) return;
+                outcomes[index] = errorToOutcome(refno, error);
+              }
+            }
+          },
+        );
+        await Promise.all(workers);
+      }
+
       // 中途被顶替 / 宿主作废 / 任一包因取消而中途收手：整体放弃，不提交半批。
       if (cancelled() || outcomes.includes(null)) return;
-      const results = outcomes as readonly MbdSourceLoadOutcome[];
+
+      // 归属对象去重：多个子构件（例如同一台设备下的多个 NOZZ，或同一支架下的多根 SCTN）
+      // 解析到同一个 `subjectKey` 时，只保留首次出现的记录，后续包归并说明而不重复提交图元。
+      const seenSubjects = new Set<string>();
+      const results: MbdSourceLoadOutcome[] = (outcomes as readonly MbdSourceLoadOutcome[]).map(
+        (result) => {
+          if (result.loadError !== null || result.deleted === true) return result;
+          const subjectKey = result.subjectKey;
+          if (!subjectKey) return result;
+          if (seenSubjects.has(subjectKey)) {
+            return {
+              ...result,
+              records: [],
+              empty: false,
+              deduplicatedInto: subjectKey,
+              notes: [
+                ...result.notes,
+                `已归并至归属对象 ${subjectKey}，不重复绘制图元`,
+              ],
+            };
+          }
+          seenSubjects.add(subjectKey);
+          return result;
+        },
+      );
 
       const allRecords = results.flatMap(result => result.records);
-      // `empty` 随逐包快照带出去（票 134）：尺寸面板据它在标题下写「为什么没有标注」。
       const sources: MbdDiagnosticsSourceSnapshot[] = results.map(
-        ({ records: _records, ...source }) => source,
+        ({ records: _records, subjectKey: _subjectKey, ...source }) => source,
       );
       const failed = sources.filter(source => source.loadError !== null);
 
@@ -671,7 +741,6 @@ export function createMbdExternalSync(
       // 也能工作），逐源明细进 `sources`。
       const summarizeFailures = (): string | null => {
         if (failed.length === 0) return null;
-        // 单源时原样用那句错误，与多源改造前的文案一致。
         if (refnos.length === 1 && !multiRefnos) return failed[0]!.loadError;
         const details = failed
           .map(source => `${source.refno} — ${source.loadError}`)
@@ -679,6 +748,9 @@ export function createMbdExternalSync(
         return `${failed.length}/${refnos.length} 个包装载失败：${details}`;
       };
       const loadError = commitError ?? summarizeFailures();
+      const sourceNotes = sources.flatMap(
+        source => source.notes.map(note => (multiRefnos ? `${source.refno}：${note}` : note)),
+      );
       deps.diagnostics.set({
         channel,
         sourceId: refnos.join(','),
@@ -687,20 +759,13 @@ export function createMbdExternalSync(
         issues: sources.flatMap(source => source.issues),
         skipped: sources.flatMap(source => source.skipped),
         layoutMode: sources.find(source => source.layoutMode !== null)?.layoutMode ?? null,
-        // 各包按自己的视角生成提示、再拼接；多源时补 refno 前缀归因，否则
-        // 几条来源不同的「调试过滤」拼在一起分不清是谁的。
-        notes: sources.flatMap(
-          source => source.notes.map(note => (multiRefnos ? `${source.refno}：${note}` : note)),
-        ),
+        notes: batchFallbackNote ? [...sourceNotes, batchFallbackNote] : sourceNotes,
         sourceVersion: sources.find(source => source.sourceVersion !== null)?.sourceVersion ?? null,
         isolines: sources.flatMap(source => source.isolines),
         ...(modelSessionsByDbnum !== undefined ? { modelSessionsByDbnum } : {}),
         ...(loadError !== null ? { loadError } : {}),
       });
 
-      // 视口空白 + 无提示 = 现场分不清「本分支没有标注」与「取数失败」，所以失败
-      // 必须有一次可见提示（诊断面板默认收起，光写诊断等于没提示）。按 refno
-      // 分别去重；成功的包复位自己的记忆，下一次真失败仍要看得见。
       for (const source of sources) {
         if (source.loadError !== null) toastFailure(source.refno, source.loadError);
         else failureToasts.delete(source.refno);
@@ -715,13 +780,7 @@ export function createMbdExternalSync(
         console.warn('[dimension-v2] MBD annotations unavailable', commitError);
       }
 
-      // 空包也是「视口空白」：取数成功、没有失败提示、面板只写「显示 0 条」，现场分不清是没装上、
-      // 标注在画面外，还是这个对象本来就没有可标的内容（真实库里 261 个，其中 43 个连一条诊断都没有）。
-      // 每次同步合成一句；同一句不重复弹（popstate 很频繁），空包消失后复位。排在 error 诊断的提示
-      // 之前：提示条只有一个槽位，后发的盖掉先发的，更要紧的那句留到最后。
-      // 票 134 之后，每个空包的原因就写在尺寸面板的标题下（`mbdEmptyReasons`），所以这两句只指到
-      // 「尺寸面板」——不再叫人去翻缺省收起、排在面板最底下的诊断区。
-      const emptySources = results.filter(result => result.empty);
+      const emptySources = results.filter(result => result.empty && !result.deduplicatedInto);
       const describeEmpty = (): string | null => {
         if (emptySources.length === 0) return null;
         if (emptySources.length === 1) {
@@ -753,6 +812,8 @@ export function createMbdExternalSync(
     },
     invalidate() {
       syncVersion += 1;
+      activeAbortController?.abort();
+      activeAbortController = null;
     },
   };
 }

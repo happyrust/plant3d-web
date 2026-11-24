@@ -14,7 +14,7 @@ import type {
   MbdDiagnosticsStore,
 } from './useMbdDiagnosticsStore';
 import type { MbdExternalSyncDeps } from './useMbdExternalSync';
-import type { MbdV2PipeData } from '@/dimension';
+import type { MbdV2ParseResult, MbdV2PipeData } from '@/dimension';
 
 const IDENTITY = [
   1, 0, 0, 0,
@@ -111,7 +111,10 @@ describe('createMbdExternalSync', () => {
 
     await harness.sync.sync(harness.target);
 
-    expect(harness.fetchPipeData).toHaveBeenCalledWith('24381_145712', { partial: false });
+    expect(harness.fetchPipeData).toHaveBeenCalledWith(
+      '24381_145712',
+      expect.objectContaining({ partial: false, signal: expect.any(AbortSignal) }),
+    );
     expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
     const [source, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
       .mock.calls[0]!;
@@ -677,7 +680,10 @@ describe('createMbdExternalSync', () => {
     // 部分显示不是失败，不该弹错误提示。
     expect(partial.emitToast).not.toHaveBeenCalled();
     // 部分显示必须一路传到契约解析层，否则「不认识的 kind」在解析阶段就已整包失败。
-    expect(partial.fetchPipeData).toHaveBeenCalledWith('A', { partial: true });
+    expect(partial.fetchPipeData).toHaveBeenCalledWith(
+      'A',
+      expect.objectContaining({ partial: true, signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('re-arms the failure toast after a successful sync', async () => {
@@ -718,8 +724,14 @@ describe('createMbdExternalSync', () => {
 
     await harness.sync.sync(harness.target);
 
-    expect(fetchPipeData).toHaveBeenCalledWith('A', { partial: false });
-    expect(fetchPipeData).toHaveBeenCalledWith('B', { partial: false });
+    expect(fetchPipeData).toHaveBeenCalledWith(
+      'A',
+      expect.objectContaining({ partial: false, signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchPipeData).toHaveBeenCalledWith(
+      'B',
+      expect.objectContaining({ partial: false, signal: expect.any(AbortSignal) }),
+    );
     expect(harness.target.replaceExternalSource).toHaveBeenCalledTimes(1);
     const [source, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
       .mock.calls[0]!;
@@ -1396,5 +1408,102 @@ describe('createMbdExternalSync', () => {
       expect(equiSource.loadError).toBeNull();
       expect(equiSource.notes.join('；')).toContain('对象已删除');
     });
+  });
+
+  it('aborts in-flight fetch signals on invalidate() and superseding sync() without error toast', async () => {
+    const signals: AbortSignal[] = [];
+    const fetchPipeData = vi.fn((_refno: string, opts?: { signal?: AbortSignal }) => {
+      if (opts?.signal) signals.push(opts.signal);
+      return new Promise<MbdV2ParseResult>((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+      });
+    });
+    const harness = createHarness({
+      search: '?mbd_refno=A,B',
+      fetchPipeData,
+    });
+
+    const first = harness.sync.sync(harness.target);
+    await Promise.resolve();
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every(s => !s.aborted)).toBe(true);
+
+    harness.sync.invalidate();
+    await first;
+
+    expect(signals.every(s => s.aborted)).toBe(true);
+    expect(harness.target.replaceExternalSource).not.toHaveBeenCalled();
+    expect(harness.emitToast).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates records when two child refnos resolve to the same subject.refno', async () => {
+    const fetchPipeData = vi.fn(async (refno: string): Promise<MbdV2ParseResult> => ({
+      ok: true,
+      diagnostics: [],
+      data: contractPayload({
+        input_refno: refno,
+        branch_refno: '24381_100',
+        annotation_type: 'em4_equi',
+        subject: { refno: '24381_100', noun: 'EQUI' },
+      }),
+    }));
+    const harness = createHarness({
+      search: '?mbd_refno=24381_101,24381_102',
+      fetchPipeData,
+    });
+
+    await harness.sync.sync(harness.target);
+
+    const [, records] = harness.target.replaceExternalSource.mock.calls[0] as [
+      string,
+      readonly { id: string }[],
+    ];
+    expect(records.map(r => r.id)).toEqual(['24381_100:dim-1']);
+    const snap = (harness.diagnostics.set as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(snap.sources[0].deduplicatedInto).toBeUndefined();
+    expect(snap.sources[1].deduplicatedInto).toBe('24381_100');
+    expect(snap.sources[1].empty).toBe(false);
+    expect(snap.sources[1].notes.join('；')).toContain('已归并至归属对象 24381_100');
+    expect(harness.emitToast).not.toHaveBeenCalled();
+  });
+
+  it('uses fetchObjectsData batch channel when provided for multi-refno sync', async () => {
+    const fetchPipeData = vi.fn();
+    const fetchObjectsData = vi.fn(async (refnos: readonly string[]) => ({
+      results: refnos.map(refno => ({
+        ok: true as const,
+        diagnostics: [],
+        data: contractPayload({
+          input_refno: refno,
+          branch_refno: refno,
+          subject: { refno, noun: 'BRAN' },
+        }),
+      })),
+    }));
+    const diagnostics = {
+      snapshot: { value: {} },
+      set: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as MbdDiagnosticsStore;
+    const target = { replaceExternalSource: vi.fn() };
+    const sync = createMbdExternalSync({
+      fetchPipeData,
+      fetchObjectsData,
+      diagnostics,
+      getSearch: () => '?mbd_refno=A,B',
+      emitToast: vi.fn(),
+    });
+
+    await sync.sync(target);
+
+    expect(fetchPipeData).not.toHaveBeenCalled();
+    expect(fetchObjectsData).toHaveBeenCalledTimes(1);
+    const [, records] = target.replaceExternalSource.mock.calls[0] as [
+      string,
+      readonly { id: string }[],
+    ];
+    expect(records.map(r => r.id)).toEqual(['A:dim-1', 'B:dim-1']);
   });
 });

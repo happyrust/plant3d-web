@@ -34,7 +34,39 @@ export const PIPE_EXPECTED_KINDS: readonly MbdPrimitiveKind[] = [
   'slope_mark',
 ];
 
-const PIPE_ANNOTATION_TYPES: ReadonlySet<string> = new Set<MbdV2AnnotationType>(['em4_pipe', 'em9_pipe']);
+/**
+ * 九种标注类型各自对应的求解器产出类别期望集（镜像 `vendor/plant-mbd` 各模块的 `PRODUCED_KINDS`）。
+ * `Record` 钉住契约的封闭词表，新增标注类型时必须同步补齐。
+ */
+export const EXPECTED_KINDS_BY_ANNOTATION_TYPE: Readonly<
+  Record<MbdV2AnnotationType, readonly MbdPrimitiveKind[]>
+> = {
+  em4_pipe: PIPE_EXPECTED_KINDS,
+  em9_pipe: PIPE_EXPECTED_KINDS,
+  em4_supp: [
+    'linear_dim',
+    'label',
+    'leader_line',
+    'aid_text',
+    'aid_line',
+    'aid_circle',
+    'angle_dim',
+  ],
+  em9_pipe_supp: ['linear_dim', 'label', 'leader_line'],
+  em9_inst_supp: ['linear_dim', 'label', 'leader_line', 'aid_text'],
+  civil: [
+    'linear_dim',
+    'label',
+    'leader_line',
+    'aid_line',
+    'aid_text',
+    'aid_arc',
+    'aid_circle',
+  ],
+  arch: ['linear_dim', 'label', 'leader_line', 'aid_text', 'aid_circle'],
+  em4_equi: ['linear_dim', 'angle_dim', 'label', 'leader_line', 'aid_line', 'aid_text'],
+  em9_equi: ['linear_dim', 'angle_dim', 'label', 'leader_line', 'aid_line', 'aid_text'],
+};
 
 function isMbdAnnotationType(value: string): value is MbdV2AnnotationType {
   return Object.prototype.hasOwnProperty.call(MBD_ANNOTATION_TYPE_LABELS, value);
@@ -50,14 +82,14 @@ export function mbdAnnotationTypeLabel(annotationType: string | null | undefined
 }
 
 /**
- * 一个包应有的产出类别，`null` = 不判「标注不完整」：
- * - 两种管道与缺省（老后端只出管道包）→ {@link PIPE_EXPECTED_KINDS}；
- * - 其它类型 → `null`。它们的期望集随各自的求解器模块一起来；在那之前服务端回的是只有信封、
- *   带一条 `layout.not_implemented` issue 的包，诊断列表里已经看得见，再亮横幅只是重复。
+ * 一个包应有的产出类别，`null` = 未知类型不判「标注不完整」：
+ * - 缺省（老后端只出管道包）→ {@link PIPE_EXPECTED_KINDS}；
+ * - 九种已知标注类型 → {@link EXPECTED_KINDS_BY_ANNOTATION_TYPE}；
+ * - 词表外取值 → `null`。
  */
 export function expectedKindsFor(
   annotationType: string | null | undefined,
 ): readonly MbdPrimitiveKind[] | null {
   if (annotationType === null || annotationType === undefined) return PIPE_EXPECTED_KINDS;
-  return PIPE_ANNOTATION_TYPES.has(annotationType) ? PIPE_EXPECTED_KINDS : null;
+  return isMbdAnnotationType(annotationType) ? EXPECTED_KINDS_BY_ANNOTATION_TYPE[annotationType] : null;
 }

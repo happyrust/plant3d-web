@@ -157,37 +157,4 @@ describe('layoutViewport', () => {
       ),
     ).toBe(true);
   });
-
-  it('ignores the retired `polar` / `polarObstacle` fields: every label stays on its solver anchor', () => {
-    const label: ExplicitLayoutInput = {
-      id: 'label',
-      role: 'external',
-      labelPinned: true,
-      formattedLabel: 'X',
-      lines: [],
-      labelAnchor: [0.5, 0, 0],
-      arrowLines: [],
-    };
-    const sibling: ExplicitLayoutInput = { ...label, id: 'sibling', formattedLabel: 'Y', labelAnchor: [0, 0.07, 0] };
-    const plain = layoutViewport([label, sibling], baseContext, new Map()).layouts;
-    const tagged = layoutViewport([
-      {
-        ...label,
-        polar: {
-          origin: [0, 0, 0],
-          axis: [1, 0, 0],
-          disRange: [-1, 1],
-          basicRadiusM: 0.05,
-          textHeightM: 0.02,
-          groupKey: 'isoline:0',
-        },
-      },
-      { ...sibling, polarObstacle: { groupKey: 'isoline:0' } },
-    ], baseContext, new Map()).layouts;
-
-    expect(tagged).toEqual(plain);
-    // The test projector's 100 px/m puts the solver anchor [0.5, 0, 0] at x = 250.
-    const labelBounds = present(tagged[0], 'label layout').labelBounds;
-    expect(labelBounds.x + labelBounds.width / 2).toBeCloseTo(250, 0);
-  });
 });

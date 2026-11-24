@@ -6,7 +6,7 @@ import {
   parseMbdV2PipeData,
 } from '@/dimension';
 import { buildBackendUrl } from '@/utils/apiBase';
-import { parseJsonResponse } from '@/utils/fileValidation';
+import { parseJsonText } from '@/utils/fileValidation';
 
 export type ResolveMbdApiBaseUrlOptions = Readonly<{
   search: string;
@@ -177,6 +177,13 @@ export function describeMbdV2HttpFailure(status: number, bodyText: string): stri
 /** MBD V2 取数通道的资源护栏：单次请求超时、响应体上限（导出便于测试引用）。 */
 export const MBD_FETCH_TIMEOUT_MS = 15_000;
 export const MBD_RESPONSE_MAX_BYTES = 20 * 1024 * 1024;
+export const MBD_BATCH_RESPONSE_MAX_BYTES = 64 * 1024 * 1024;
+export const MBD_BATCH_MAX_SIZE = 128;
+export const MBD_SOURCE_CHANGED_MAX_RETRIES = 2;
+const MBD_SOURCE_CHANGED_DEFAULT_RETRY_MS = 1_000;
+const MBD_SOURCE_CHANGED_MIN_RETRY_MS = 500;
+const MBD_SOURCE_CHANGED_MAX_RETRY_MS = 5_000;
+const MBD_BATCH_FALLBACK_CONCURRENCY = 4;
 
 /** `partial` 只放宽「不认识的图元 kind」一件事（面板「允许部分显示」）。 */
 export type MbdV2FetchOptions = Readonly<{ signal?: AbortSignal; partial?: boolean }>;
@@ -187,31 +194,126 @@ export type MbdV2FetchOptions = Readonly<{ signal?: AbortSignal; partial?: boole
  */
 type MbdV2GuardedOutcome =
   | Readonly<{ kind: 'result'; result: MbdV2ParseResult }>
-  | Readonly<{ kind: 'http_error'; status: number; bodyText: string }>;
+  | Readonly<{ kind: 'http_error'; status: number; bodyText: string; retryAfterHeader: string | null }>;
+
+type MbdV2RawJsonOutcome =
+  | Readonly<{ kind: 'json'; payload: unknown }>
+  | Readonly<{ kind: 'too_large'; bytes: number; maxBytes: number }>
+  | Readonly<{ kind: 'timeout'; url: string }>
+  | Readonly<{ kind: 'http_error'; status: number; bodyText: string; retryAfterHeader: string | null }>;
 
 function mbdV2Path(route: 'pipe' | 'object', refno: string): string {
   return `/api/mbd/v2/${route}/${encodeURIComponent(refno)}`;
 }
 
+function mbdV2BatchPath(): string {
+  return '/api/mbd/v2/objects';
+}
+
+function parseRetryAfterMs(headerValue: string | null): number {
+  if (!headerValue) return MBD_SOURCE_CHANGED_DEFAULT_RETRY_MS;
+  const seconds = Number(headerValue.trim());
+  if (!Number.isFinite(seconds) || seconds < 0) return MBD_SOURCE_CHANGED_DEFAULT_RETRY_MS;
+  const ms = Math.round(seconds * 1000);
+  return Math.min(MBD_SOURCE_CHANGED_MAX_RETRY_MS, Math.max(MBD_SOURCE_CHANGED_MIN_RETRY_MS, ms));
+}
+
+function isSourceChangedHttpError(status: number, bodyText: string): boolean {
+  if (status !== 503) return false;
+  const trimmed = bodyText.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return Boolean(
+      parsed
+      && typeof parsed === 'object'
+      && !Array.isArray(parsed)
+      && (parsed as { code?: unknown }).code === 'SOURCE_CHANGED',
+    );
+  } catch {
+    return false;
+  }
+}
+
+function createAbortError(reason?: unknown): Error {
+  if (reason instanceof Error) return reason;
+  return new DOMException('This operation was aborted', 'AbortError');
+}
+
+function waitWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(createAbortError(signal.reason));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(createAbortError(signal?.reason));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function readBoundedResponseText(
+  response: Response,
+  maxBytes: number,
+): Promise<Readonly<{ ok: true; text: string } | { ok: false; bytes: number }>> {
+  const contentLengthHeader = response.headers?.get?.('content-length') ?? null;
+  const declaredBytes = contentLengthHeader === null ? NaN : Number(contentLengthHeader);
+  if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+    return { ok: false, bytes: declaredBytes };
+  }
+
+  const body = response.body;
+  if (body && typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let totalBytes = 0;
+    let text = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          totalBytes += value.byteLength;
+          if (totalBytes > maxBytes) {
+            await reader.cancel().catch(() => {});
+            return { ok: false, bytes: totalBytes };
+          }
+          text += decoder.decode(value, { stream: true });
+        }
+      }
+      text += decoder.decode();
+      return { ok: true, text };
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  const text = await response.text();
+  const actualBytes = new TextEncoder().encode(text).byteLength;
+  if (actualBytes > maxBytes) {
+    return { ok: false, bytes: actualBytes };
+  }
+  return { ok: true, text };
+}
+
 /**
- * 管道端点与通用端点共用的单次取数。两道护栏：
- * - 超时：`MBD_FETCH_TIMEOUT_MS` 内整条请求不 settle 就内部 abort，收敛成
- *   `ok: false`（中文原因），不把裸 AbortError 抛给调用方；
- * - 体积：2xx 后先看 `Content-Length`，超 `MBD_RESPONSE_MAX_BYTES` 直接拒收
- *   不读正文；header 缺失（chunked）或不可解析时放行。
- * 调用方 `options.signal` 主动取消不在护栏范围：原样抛出 AbortError。
+ * 管道端点、通用端点与批量端点共用的受护栏 HTTP JSON 请求：
+ * - 超时：`MBD_FETCH_TIMEOUT_MS` 内未完成则内部 abort 并返回 `timeout`；
+ * - 体积：先验 `Content-Length`，再用流式 `getReader()` 累加字节数，chunked 缺头时同样截断；
+ * - 调用方 `options.signal` 主动取消时原样抛出 AbortError。
  */
-async function fetchMbdV2Guarded(
+async function fetchMbdV2JsonOnce(
   path: string,
+  init: RequestInit,
+  maxBytes: number,
   options: MbdV2FetchOptions,
-): Promise<MbdV2GuardedOutcome> {
+): Promise<MbdV2RawJsonOutcome> {
   const mbdApiBase = getMbdApiBaseUrl();
   const url = mbdApiBase ? `${mbdApiBase}${path}` : buildBackendUrl(path);
 
-  // 内部 AbortController 汇流两路取消：超时定时器与调用方 signal 都能中断 fetch；
-  // guardPromise 与 load() 赛跑，保证被 mock 成永不 settle 的 fetch 也会被截断。
-  // timedOut 区分 abort 来源：超时是通道自己的失败 → ok:false；
-  // 调用方主动取消 → 保留 AbortError 语义原样抛出。
   const controller = new AbortController();
   const callerSignal = options.signal;
   let timedOut = false;
@@ -225,9 +327,7 @@ async function fetchMbdV2Guarded(
     }, MBD_FETCH_TIMEOUT_MS);
     onCallerAbort = () => {
       controller.abort(callerSignal?.reason);
-      reject(
-        callerSignal?.reason ?? new DOMException('This operation was aborted', 'AbortError'),
-      );
+      reject(createAbortError(callerSignal?.reason));
     };
   });
   if (callerSignal?.aborted) {
@@ -236,8 +336,8 @@ async function fetchMbdV2Guarded(
     callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
   }
 
-  const load = async (): Promise<MbdV2GuardedOutcome> => {
-    const response = await fetch(url, { signal: controller.signal });
+  const load = async (): Promise<MbdV2RawJsonOutcome> => {
+    const response = await fetch(url, { ...init, signal: controller.signal });
     if (!response.ok) {
       let bodyText = '';
       try {
@@ -245,42 +345,81 @@ async function fetchMbdV2Guarded(
       } catch {
         // 正文读不出来就只剩状态码，照旧兜底
       }
-      return { kind: 'http_error', status: response.status, bodyText };
-    }
-    // 体积护栏：能解析出 Content-Length 且超限就直接拒收，不读正文；
-    // header 缺失（chunked 传输）或不可解析时放行，照常走 parseJsonResponse。
-    const contentLengthHeader = response.headers.get('content-length');
-    const declaredBytes = contentLengthHeader === null ? NaN : Number(contentLengthHeader);
-    if (Number.isFinite(declaredBytes) && declaredBytes > MBD_RESPONSE_MAX_BYTES) {
       return {
-        kind: 'result',
-        result: {
-          ok: false,
-          error: `MBD V2 API 响应过大：${declaredBytes} 字节，超过上限 ${MBD_RESPONSE_MAX_BYTES} 字节`,
-        },
+        kind: 'http_error',
+        status: response.status,
+        bodyText,
+        retryAfterHeader: response.headers?.get?.('retry-after') ?? null,
       };
     }
-    const payload = await parseJsonResponse<unknown>(response, url);
-    return { kind: 'result', result: parseMbdV2PipeData(payload, { partial: options.partial === true }) };
+    const bounded = await readBoundedResponseText(response, maxBytes);
+    if (!bounded.ok) {
+      return { kind: 'too_large', bytes: bounded.bytes, maxBytes };
+    }
+    const payload = parseJsonText<unknown>(bounded.text, {
+      source: url,
+      expectedRoot: 'object-or-array',
+    });
+    return { kind: 'json', payload };
   };
 
   try {
     return await Promise.race([load(), guardPromise]);
   } catch (error) {
     if (timedOut) {
-      return {
-        kind: 'result',
-        result: {
-          ok: false,
-          error: `MBD V2 API 请求超时（${MBD_FETCH_TIMEOUT_MS / 1000} 秒）：${url}`,
-        },
-      };
+      return { kind: 'timeout', url };
     }
     throw error;
   } finally {
     clearTimeout(timeoutTimer);
     callerSignal?.removeEventListener('abort', onCallerAbort);
   }
+}
+
+/**
+ * 管道端点与通用端点共用的单次取数（含 `503 SOURCE_CHANGED` 自动退避重拉最多 2 次）。
+ */
+async function fetchMbdV2Guarded(
+  path: string,
+  options: MbdV2FetchOptions,
+): Promise<MbdV2GuardedOutcome> {
+  for (let attempt = 0; attempt <= MBD_SOURCE_CHANGED_MAX_RETRIES; attempt += 1) {
+    const raw = await fetchMbdV2JsonOnce(path, {}, MBD_RESPONSE_MAX_BYTES, options);
+    if (raw.kind === 'http_error') {
+      if (attempt < MBD_SOURCE_CHANGED_MAX_RETRIES
+        && isSourceChangedHttpError(raw.status, raw.bodyText)) {
+        await waitWithAbort(parseRetryAfterMs(raw.retryAfterHeader), options.signal);
+        continue;
+      }
+      return raw;
+    }
+    if (raw.kind === 'too_large') {
+      return {
+        kind: 'result',
+        result: {
+          ok: false,
+          error: `MBD V2 API 响应过大：${raw.bytes} 字节，超过上限 ${raw.maxBytes} 字节`,
+        },
+      };
+    }
+    if (raw.kind === 'timeout') {
+      return {
+        kind: 'result',
+        result: {
+          ok: false,
+          error: `MBD V2 API 请求超时（${MBD_FETCH_TIMEOUT_MS / 1000} 秒）：${raw.url}`,
+        },
+      };
+    }
+    return {
+      kind: 'result',
+      result: parseMbdV2PipeData(raw.payload, { partial: options.partial === true }),
+    };
+  }
+  return {
+    kind: 'result',
+    result: { ok: false, error: 'MBD V2 API 重试次数已用尽' },
+  };
 }
 
 function toParseResult(outcome: MbdV2GuardedOutcome): MbdV2ParseResult {
@@ -388,4 +527,183 @@ export async function fetchMbdV2ObjectData(
       meta: { ...meta, notes: [...meta.notes, MBD_OBJECT_ROUTE_FALLBACK_NOTE] },
     },
   };
+}
+
+export const MBD_BATCH_ROUTE_FALLBACK_NOTE =
+  '后端未部署批量端点 /api/mbd/v2/objects（404/405 且正文不是错误信封），已改走逐对象端点 /api/mbd/v2/object';
+
+export type MbdV2BatchFetchResult = Readonly<{
+  results: readonly MbdV2ParseResult[];
+  fallbackNote?: string;
+}>;
+
+const batchUnsupportedBases = new Set<string>();
+
+/** 仅供测试重置批量端点降级记忆。 */
+export function resetMbdBatchFallbackCacheForTests(): void {
+  batchUnsupportedBases.clear();
+}
+
+function batchBaseCacheKey(): string {
+  return getMbdApiBaseUrl() || '__default__';
+}
+
+async function fetchObjectsFallbackPool(
+  refnos: readonly string[],
+  options: MbdV2FetchOptions,
+): Promise<readonly MbdV2ParseResult[]> {
+  const results = new Array<MbdV2ParseResult>(refnos.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(MBD_BATCH_FALLBACK_CONCURRENCY, refnos.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < refnos.length) {
+      if (options.signal?.aborted) {
+        throw createAbortError(options.signal.reason);
+      }
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await fetchMbdV2ObjectData(refnos[index]!, options);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function batchErrorItemToParseResult(
+  status: number,
+  code: string | undefined,
+  message: string | undefined,
+  detail: unknown,
+): MbdV2ParseResult {
+  const bodyText = JSON.stringify({
+    ...(code !== undefined ? { code } : {}),
+    ...(message !== undefined ? { message } : {}),
+    ...(detail !== undefined ? { detail } : {}),
+  });
+  return toParseResult({
+    kind: 'http_error',
+    status,
+    bodyText,
+    retryAfterHeader: null,
+  });
+}
+
+/**
+ * 批量按对象取 MBD V2 数据：`POST /api/mbd/v2/objects`（按 128 分块），
+ * 返回与入参 `refnos` 一一对应且保序的 `MbdV2ParseResult[]`。
+ *
+ * - 单对象直接走 `fetchMbdV2ObjectData`；
+ * - 若服务端回 404/405 且正文不是错误信封，按当前基址记下不支持标记并透明回退并发 `GET /object/{refno}`；
+ * - 批量单条遇 `503 SOURCE_CHANGED` 时，单独走 `fetchMbdV2ObjectData` 自动退避重拉。
+ */
+export async function fetchMbdV2ObjectsData(
+  refnos: readonly string[],
+  options: MbdV2FetchOptions = {},
+): Promise<MbdV2BatchFetchResult> {
+  if (refnos.length === 0) return { results: [] };
+  if (refnos.length === 1) {
+    return { results: [await fetchMbdV2ObjectData(refnos[0]!, options)] };
+  }
+
+  const baseKey = batchBaseCacheKey();
+  if (batchUnsupportedBases.has(baseKey)) {
+    return {
+      results: await fetchObjectsFallbackPool(refnos, options),
+      fallbackNote: MBD_BATCH_ROUTE_FALLBACK_NOTE,
+    };
+  }
+
+  const results: MbdV2ParseResult[] = [];
+  for (let offset = 0; offset < refnos.length; offset += MBD_BATCH_MAX_SIZE) {
+    const chunk = refnos.slice(offset, offset + MBD_BATCH_MAX_SIZE);
+    const raw = await fetchMbdV2JsonOnce(
+      mbdV2BatchPath(),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refnos: chunk }),
+      },
+      MBD_BATCH_RESPONSE_MAX_BYTES,
+      options,
+    );
+
+    if (raw.kind === 'http_error') {
+      if ((raw.status === 404 || raw.status === 405) && !isMbdV2ErrorEnvelope(raw.bodyText)) {
+        batchUnsupportedBases.add(baseKey);
+        const remaining = refnos.slice(offset);
+        const fallbackResults = await fetchObjectsFallbackPool(remaining, options);
+        return {
+          results: [...results, ...fallbackResults],
+          fallbackNote: MBD_BATCH_ROUTE_FALLBACK_NOTE,
+        };
+      }
+      const chunkError = toParseResult(raw);
+      for (let i = 0; i < chunk.length; i += 1) {
+        results.push(chunkError);
+      }
+      continue;
+    }
+
+    if (raw.kind === 'too_large') {
+      const err: MbdV2ParseResult = {
+        ok: false,
+        error: `MBD V2 批量响应过大：${raw.bytes} 字节，超过上限 ${raw.maxBytes} 字节`,
+      };
+      for (let i = 0; i < chunk.length; i += 1) results.push(err);
+      continue;
+    }
+
+    if (raw.kind === 'timeout') {
+      const err: MbdV2ParseResult = {
+        ok: false,
+        error: `MBD V2 API 请求超时（${MBD_FETCH_TIMEOUT_MS / 1000} 秒）：${raw.url}`,
+      };
+      for (let i = 0; i < chunk.length; i += 1) results.push(err);
+      continue;
+    }
+
+    const body = raw.payload as { items?: unknown };
+    if (!body || typeof body !== 'object' || !Array.isArray(body.items) || body.items.length !== chunk.length) {
+      const err: MbdV2ParseResult = {
+        ok: false,
+        error: 'MBD V2 批量响应格式无效：缺少与请求等长的 items 数组',
+      };
+      for (let i = 0; i < chunk.length; i += 1) results.push(err);
+      continue;
+    }
+
+    for (let i = 0; i < chunk.length; i += 1) {
+      const item = body.items[i] as {
+        ok?: unknown;
+        data?: unknown;
+        status?: unknown;
+        code?: unknown;
+        message?: unknown;
+        detail?: unknown;
+      } | null;
+      if (!item || typeof item !== 'object') {
+        results.push({ ok: false, error: 'MBD V2 批量响应条目格式无效' });
+        continue;
+      }
+      if (item.ok === true) {
+        results.push(parseMbdV2PipeData(item.data, { partial: options.partial === true }));
+        continue;
+      }
+      const status = typeof item.status === 'number' ? item.status : 500;
+      const code = typeof item.code === 'string' ? item.code : undefined;
+      if (status === 503 && code === 'SOURCE_CHANGED') {
+        await waitWithAbort(MBD_SOURCE_CHANGED_DEFAULT_RETRY_MS, options.signal);
+        results.push(await fetchMbdV2ObjectData(chunk[i]!, options));
+        continue;
+      }
+      results.push(batchErrorItemToParseResult(
+        status,
+        code,
+        typeof item.message === 'string' ? item.message : undefined,
+        item.detail,
+      ));
+    }
+  }
+
+  return { results };
 }

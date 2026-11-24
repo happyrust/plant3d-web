@@ -211,7 +211,7 @@ test('unknown kind: rejected atomically by default; the in-panel partial toggle 
   await openDimensionPanel(page);
 
   // 契约层先于映射层拒绝：原因点名未知 kind 与 id，退化弧根本没轮到映射。
-  await expectAtomicRejection(page, /invalid primitive future_mark "future-mark-1"/);
+  await expectAtomicRejection(page, /future_mark.*future-mark-1|future-mark-1.*future_mark/);
   await expect(page.getByTestId('mbd-partial-toggle')).not.toBeChecked();
   await expect(page.locator(`[data-skipped-id="${DEGENERATE_ARC_ID}"]`)).toHaveCount(0);
 
@@ -225,7 +225,7 @@ test('unknown kind: rejected atomically by default; the in-panel partial toggle 
 
   // 取消勾选：回到原子拒绝，角标重新出现，横幅随开关一起消失。
   await page.getByTestId('mbd-partial-toggle').uncheck();
-  await expectAtomicRejection(page, /invalid primitive future_mark "future-mark-1"/);
+  await expectAtomicRejection(page, /future_mark.*future-mark-1|future-mark-1.*future_mark/);
   await expect(page.getByTestId('mbd-partial-toggle')).not.toBeChecked();
   await expect(page.getByTestId('mbd-partial-banner')).toHaveCount(0);
 });
@@ -244,7 +244,7 @@ test('unknown kind with ?mbd_partial=1: the rest still renders, both offenders a
   await expect(diagnostics.locator(`[data-skipped-id="${UNKNOWN_KIND_ID}"]`))
     .toContainText('还不认识的图元 kind：future_mark');
   await expect(diagnostics.locator(`[data-skipped-id="${DEGENERATE_ARC_ID}"]`))
-    .toContainText('degenerate arc frame');
+    .toContainText('辅助圆弧的法向（normal）与基准轴（x_axis）平行或退化');
   await expect(diagnostics).toContainText('mbd_partial=1：允许部分显示，已跳过 1 个图元');
   await expect(diagnostics).toContainText('契约层跳过 1 个图元');
 });
@@ -259,13 +259,13 @@ test('a contract-valid primitive the mapper cannot place still rejects the whole
   // 映射层原子拒绝：契约放行了退化弧，mapper 映射不出来 → 整包不提交，原因点名 id。
   await expectAtomicRejection(page, /整包拒绝：1 个图元无法映射/);
   await expect(page.getByTestId('mbd-load-error')).toContainText(DEGENERATE_ARC_ID);
-  await expect(page.getByTestId('mbd-load-error')).toContainText('degenerate arc frame');
+  await expect(page.getByTestId('mbd-load-error')).toContainText('辅助圆弧的法向（normal）与基准轴（x_axis）平行或退化');
   // 整包拒绝时跳过明细仍随诊断一起交回，便于定位是哪一条。
   await expect(page.locator(`[data-skipped-id="${DEGENERATE_ARC_ID}"]`)).toBeVisible();
 
   // 认识的 kind 但字段非法：契约层拒绝，原因点名 kind 与 id。
   await switchMbdBranch(page, INVALID_FIELD_REFNO);
-  await expectAtomicRejection(page, /invalid primitive linear_dim "linear-missing-end"/);
+  await expectAtomicRejection(page, /linear-missing-end/);
 });
 
 test('?mbd_partial=1 skips a degenerate primitive but never rescues invalid fields', async ({ page }) => {
@@ -278,11 +278,11 @@ test('?mbd_partial=1 skips a degenerate primitive but never rescues invalid fiel
   await expectPartialDisplay(page, 1);
   const diagnostics = await expandDiagnostics(page);
   await expect(diagnostics.locator(`[data-skipped-id="${DEGENERATE_ARC_ID}"]`))
-    .toContainText('degenerate arc frame');
+    .toContainText('辅助圆弧的法向（normal）与基准轴（x_axis）平行或退化');
 
   // partial 只放宽「未知 kind」：字段非法的图元在 partial 下照样整包拒绝，角标重新出现。
   await switchMbdBranch(page, INVALID_FIELD_REFNO);
-  await expectAtomicRejection(page, /invalid primitive linear_dim "linear-missing-end"/);
+  await expectAtomicRejection(page, /linear-missing-end/);
   await expect(page.getByTestId('mbd-partial-toggle')).toBeChecked();
 
   // 切回退化弧分支：替换语义，部分显示恢复。

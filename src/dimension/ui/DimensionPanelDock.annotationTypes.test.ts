@@ -117,16 +117,16 @@ afterEach(() => {
 });
 
 /**
- * #103 M7：「标注不完整」按标注类型挑期望集——管道两类与没声明类型的老后端包照旧，其它类型暂不判
- * （它们的期望集随各自求解器来，读取器到位前只有 `layout.not_implemented`，诊断里已经看得见）。
+ * #103 M7 + 全九类覆盖声明对齐：「标注不完整」按九种标注类型各自挑期望集；
+ * 不带覆盖声明（`coverage: null`）的包照旧不报。
  */
 describe('DimensionPanelDock per-type completeness banner', () => {
-  it('flags only pipe packages and packages without a declared type', async () => {
+  it('flags pipe, non-pipe, and untyped packages whenever declared coverage misses expected kinds', async () => {
     mocks.dimensionSystem.value = createSystem();
 
     const host = await show([
       source('P', { annotationType: 'em9_pipe', coverage: PIPE_KINDS.filter(kind => kind !== 'angle_dim') }),
-      source('E', { annotationType: 'em4_equi', coverage: [] }),
+      source('E', { annotationType: 'em4_equi', coverage: ['linear_dim', 'label', 'leader_line', 'aid_line', 'aid_text'] }),
       source('W', { annotationType: 'civil', coverage: null, layoutMode: 'isodim_main' }),
       source('L', { coverage: PIPE_KINDS.filter(kind => kind !== 'weld_mark') }),
     ]);
@@ -134,20 +134,24 @@ describe('DimensionPanelDock per-type completeness banner', () => {
     const banner = host.querySelector('[data-testid="mbd-incomplete-annotation"]');
     expect(banner).not.toBeNull();
     const rows = [...banner!.querySelectorAll('[data-incomplete-refno]')];
-    expect(rows.map(row => row.getAttribute('data-incomplete-refno'))).toEqual(['P', 'L']);
+    expect(rows.map(row => row.getAttribute('data-incomplete-refno'))).toEqual(['P', 'E', 'L']);
     expect(rows[0]!.textContent).toContain('angle_dim');
-    expect(rows[1]!.textContent).toContain('weld_mark');
+    expect(rows[1]!.textContent).toContain('angle_dim');
+    expect(rows[2]!.textContent).toContain('weld_mark');
   });
 
-  it('shows no banner for a lone non-pipe package, whatever coverage or layout mode it reports', async () => {
+  it('shows no banner when a non-pipe package declares its full expected coverage or omits coverage', async () => {
     mocks.dimensionSystem.value = createSystem();
     const banner = (host: HTMLElement) => host.querySelector('[data-testid="mbd-incomplete-annotation"]');
 
-    expect(banner(await show([source('E', { annotationType: 'em4_equi', coverage: [] })]))).toBeNull();
+    expect(banner(await show([source('E', {
+      annotationType: 'em4_equi',
+      coverage: ['linear_dim', 'angle_dim', 'label', 'leader_line', 'aid_line', 'aid_text'],
+    })]))).toBeNull();
     expect(banner(await show([
       source('S', { annotationType: 'em4_supp', coverage: null, layoutMode: 'isodim_main' }),
     ]))).toBeNull();
-    // 同样的声明放在管道包上照旧报。
+    expect(banner(await show([source('E2', { annotationType: 'em4_equi', coverage: [] })]))).not.toBeNull();
     expect(banner(await show([source('P', { annotationType: 'em4_pipe', coverage: [] })]))).not.toBeNull();
   });
 });

@@ -663,25 +663,6 @@ export type ExplicitTagInput = Readonly<{
   dot?: boolean;
 }>;
 
-/**
- * @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。管道标签的
- * 极坐标摆位由求解器完成（plant-mbd ADR-0016），前端不再二次放置。
- */
-export type ExplicitPolarInput = Readonly<{
-  /** Pipe axis origin (PML `polarsystem.pos`), Design Space metres. */
-  origin: Vec3;
-  /** Pipe axis direction (PML `polarsystem.dir`). */
-  axis: Vec3;
-  /** Placement range along the axis (PML `limitMinDis`..`limitMaxDis`), metres. */
-  disRange: readonly [min: number, max: number];
-  /** Basic radius (PML `basicRadius`), usually the pipe's outer radius, metres. */
-  basicRadiusM: number;
-  /** Text height, Design Space metres. */
-  textHeightM: number;
-  /** Same-pipe placement group, e.g. `isoline:<idx>`. */
-  groupKey?: string;
-}>;
-
 export type ExplicitLayoutInput = Readonly<{
   id: string;
   role: DimensionSemanticRole;
@@ -776,10 +757,6 @@ export type ExplicitLayoutInput = Readonly<{
    * the source's text plane, kept for the legacy presentation.
    */
   label3d?: ExplicitLabel3dInput;
-  /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
-  polar?: ExplicitPolarInput;
-  /** @deprecated 已退役，内核忽略；保留到 useMbdExternalSync 的开关清理。 */
-  polarObstacle?: Readonly<{ groupKey: string }>;
   /**
    * Take part in the pairwise declutter (`declutterOverlaps`) that the 3D
    * running dimensions go through: the text box competes by `rank` (higher
