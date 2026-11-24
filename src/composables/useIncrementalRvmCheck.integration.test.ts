@@ -611,4 +611,50 @@ describe('增量 RVM 校验 · 自动校验', () => {
     expect(inc.autoSkipped.value).toEqual([{ taskId: 'b-big', label: '第 1417 轮增量', count: m.inc.AUTO_ROUND_LIMIT + 1 }]);
     expect(recordsHost.querySelector('[data-testid="increment-rvm-auto-skipped"]')?.textContent).toContain(`${m.inc.AUTO_ROUND_LIMIT + 1} 根待校验`);
   });
+
+  it('增量记录支持按库号筛选、关键字搜构件号并展示批次耗时与变更统计汇总', async () => {
+    const m = await load();
+    const inc = m.inc.useIncrementalRvmCheck();
+    loginReady(m);
+    const recordsHost = mount(() => h(m.IncrementRecordsPanel));
+    net.tasks = [
+      {
+        ...batch('b-7352', '2026-11-05T06:40:10Z', ['24381/145018'], 1418),
+        dbnum: 7352,
+        started_at: '2026-11-05T06:40:00Z',
+        result: {
+          batch: { status: 'applied', added_elements: 2, modified_elements: 3, deleted_elements: 1 },
+          units: [{ root_refno: '24381/145018', noun: 'BRAN', status: 'generated', kind: 'regen' }],
+        },
+      } as TaskListEntryDto,
+      {
+        ...batch('b-1112', '2026-11-05T06:35:30Z', ['17496/100'], 1417),
+        dbnum: 1112,
+        started_at: '2026-11-05T06:35:00Z',
+        result: {
+          batch: { status: 'applied', added_elements: 5, modified_elements: 0, deleted_elements: 0 },
+          units: [{ root_refno: '17496/100', noun: 'EQUI', status: 'generated', kind: 'regen' }],
+        },
+      } as TaskListEntryDto,
+    ];
+    await inc.refresh();
+    await nextTick();
+
+    const summaryEl = recordsHost.querySelector('[data-testid="increment-overview-summary"]');
+    expect(summaryEl?.textContent).toContain('完成 2');
+    expect(summaryEl?.textContent).toContain('累计 增 7 · 改 3 · 删 1');
+    expect(summaryEl?.textContent).toContain('生成 2 根');
+    expect(summaryEl?.textContent).toContain('最慢 00:30（库 1112）');
+
+    const dbnumSelect = recordsHost.querySelector('[data-testid="increment-dbnum-filter"]') as HTMLSelectElement | null;
+    expect(dbnumSelect).not.toBeNull();
+
+    const searchInput = recordsHost.querySelector('[data-testid="increment-search-input"]') as HTMLInputElement;
+    searchInput.value = '17496/100';
+    searchInput.dispatchEvent(new Event('input'));
+    await nextTick();
+    expect(recordsHost.textContent).toContain('1 条记录');
+    expect(recordsHost.textContent).toContain('会话 1417 → 1417');
+    expect(recordsHost.textContent).not.toContain('会话 1418 → 1418');
+  });
 });

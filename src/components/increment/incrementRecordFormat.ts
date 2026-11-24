@@ -180,6 +180,104 @@ export function elapsedLabel(entry: TaskListEntryDto, now: number = Date.now()):
   return ms >= 0 ? clock(ms) : '';
 }
 
+/** 已收口批次的真实耗时毫秒数；还在跑或时间戳不全时返回 null。 */
+export function entryElapsedMs(entry: TaskListEntryDto): number | null {
+  const started = parseTime(entry.started_at);
+  const finished = parseTime(entry.finished_at);
+  if (!started || !finished) return null;
+  const ms = finished.getTime() - started.getTime();
+  return ms >= 0 ? ms : null;
+}
+
+/** 增量记录关键字匹配：支持搜库号、任务号、会话号、批次说明、单元构件号（root_refno / noun）与告警。 */
+export function matchesIncrementQuery(entry: TaskListEntryDto, rawQuery: string): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  if (entry.task_id?.toLowerCase().includes(q)) return true;
+  if (entry.dbnum != null && (`${entry.dbnum}`.includes(q) || `库${entry.dbnum}`.includes(q) || `库 ${entry.dbnum}`.includes(q))) {
+    return true;
+  }
+  if (entry.start_sesno != null && `${entry.start_sesno}`.includes(q)) return true;
+  if (entry.end_sesno != null && `${entry.end_sesno}`.includes(q)) return true;
+  const batch = batchOf(entry);
+  if (batch?.message?.toLowerCase().includes(q)) return true;
+  for (const unit of unitsOf(entry)) {
+    if (unit.root_refno?.toLowerCase().includes(q)) return true;
+    if (unit.noun?.toLowerCase().includes(q)) return true;
+    if (unit.message?.toLowerCase().includes(q)) return true;
+  }
+  for (const warning of warningsOf(entry)) {
+    if (warning.toLowerCase().includes(q)) return true;
+  }
+  return false;
+}
+
+export type IncrementOverviewSummary = {
+  succeededCount: number;
+  failedCount: number;
+  addedElements: number;
+  modifiedElements: number;
+  deletedElements: number;
+  generatedUnits: number;
+  avgElapsedLabel: string;
+  slowestLabel: string;
+};
+
+/** 汇总当前筛选记录的批次统计与耗时对比（只读汇总，不推算缺席字段）。 */
+export function summarizeIncrementEntries(entries: TaskListEntryDto[]): IncrementOverviewSummary {
+  let succeededCount = 0;
+  let failedCount = 0;
+  let addedElements = 0;
+  let modifiedElements = 0;
+  let deletedElements = 0;
+  let generatedUnits = 0;
+  let elapsedSum = 0;
+  let elapsedCount = 0;
+  let slowestMs = -1;
+  let slowestDbnum: number | null | undefined = null;
+
+  for (const entry of entries) {
+    if (entry.state === 'succeeded') succeededCount += 1;
+    else if (entry.state === 'failed' || entry.state === 'partial') failedCount += 1;
+
+    const batch = batchOf(entry);
+    if (batch) {
+      addedElements += batch.added_elements ?? 0;
+      modifiedElements += batch.modified_elements ?? 0;
+      deletedElements += batch.deleted_elements ?? 0;
+    }
+    for (const unit of unitsOf(entry)) {
+      if (unit.status === 'generated') generatedUnits += 1;
+    }
+
+    const ms = entryElapsedMs(entry);
+    if (ms != null) {
+      elapsedSum += ms;
+      elapsedCount += 1;
+      if (ms > slowestMs) {
+        slowestMs = ms;
+        slowestDbnum = entry.dbnum;
+      }
+    }
+  }
+
+  const avgElapsedLabel = elapsedCount > 0 ? clock(Math.round(elapsedSum / elapsedCount)) : '';
+  const slowestLabel = elapsedCount > 1 && slowestMs >= 0
+    ? `最慢 ${clock(slowestMs)}${slowestDbnum != null ? `（库 ${slowestDbnum}）` : ''}`
+    : '';
+
+  return {
+    succeededCount,
+    failedCount,
+    addedElements,
+    modifiedElements,
+    deletedElements,
+    generatedUnits,
+    avgElapsedLabel,
+    slowestLabel,
+  };
+}
+
 function clock(ms: number): string {
   const s = Math.floor(ms / 1000);
   const mm = Math.floor(s / 60);

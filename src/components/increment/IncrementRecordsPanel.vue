@@ -34,12 +34,14 @@ import {
   changeSummary,
   elapsedLabel,
   isAbsorbed,
+  matchesIncrementQuery,
   mergedSavesLabel,
   recordKindLabel,
   recordStateChip,
   roomCounts,
   saveWindowLabel,
   sesnoRangeLabel,
+  summarizeIncrementEntries,
   terminalTimes,
   transformRoots,
   unitKindLabel,
@@ -63,6 +65,8 @@ const rvm = useRvmCheckStore();
 const selected = ref(new Set<string>());
 const expanded = ref(new Set<string>());
 const filter = ref<RecordKind | 'all'>('all');
+const dbnumFilter = ref<number | 'all'>('all');
+const searchQuery = ref('');
 
 const filters: { key: RecordKind | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -71,10 +75,33 @@ const filters: { key: RecordKind | 'all'; label: string }[] = [
   { key: 'model_rebuild', label: '模型重建' },
 ];
 
+/** 当前账本中出现过的库号列表（升序去重），供按库筛选 */
+const availableDbnums = computed(() => {
+  const set = new Set<number>();
+  for (const entry of tasks.value) {
+    if (entry.kind !== 'rvm_check' && typeof entry.dbnum === 'number') {
+      set.add(entry.dbnum);
+    }
+  }
+  return Array.from(set).sort((a, b) => a - b);
+});
+
 const entries = computed(() =>
   tasks.value.filter((entry) => entry.kind !== 'rvm_check'
-    && (filter.value === 'all' || recordKindLabel(entry.kind).key === filter.value)),
+    && (filter.value === 'all' || recordKindLabel(entry.kind).key === filter.value)
+    && (dbnumFilter.value === 'all' || entry.dbnum === dbnumFilter.value)
+    && matchesIncrementQuery(entry, searchQuery.value)),
 );
+
+/** 当前筛选结果下的只读批次与耗时汇总 */
+const overviewSummary = computed(() => summarizeIncrementEntries(entries.value));
+const hasOverviewMetrics = computed(() => {
+  const s = overviewSummary.value;
+  return s.succeededCount + s.failedCount > 0
+    || s.addedElements + s.modifiedElements + s.deletedElements > 0
+    || s.generatedUnits > 0
+    || Boolean(s.avgElapsedLabel);
+});
 
 /** 一次全量重建能有上千根，模板里每行要读好几次，按任务缓存一份 */
 const summaries = computed(() => {
@@ -255,8 +282,8 @@ const chipTone: Record<string, string> = {
       </button>
     </div>
 
-    <!-- 类型筛 -->
-    <div class="flex items-center gap-1.5 border-b border-border px-5 py-2">
+    <!-- 类型与库号筛选 + 关键字搜索 -->
+    <div class="flex flex-wrap items-center gap-1.5 border-b border-border px-5 py-2">
       <input v-if="checkableEntries.length > 0" type="checkbox" class="mr-1 h-3 w-3"
         :checked="allSelected"
         aria-label="全选可校验的记录"
@@ -270,7 +297,38 @@ const chipTone: Record<string, string> = {
         @click="filter = item.key">
         {{ item.label }}
       </button>
+      <select v-if="availableDbnums.length > 1"
+        v-model="dbnumFilter"
+        aria-label="按库号筛选"
+        data-testid="increment-dbnum-filter"
+        class="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-700 focus:border-brand focus:outline-none">
+        <option value="all">全部库</option>
+        <option v-for="db in availableDbnums" :key="db" :value="db">库 {{ db }}</option>
+      </select>
+      <input v-model="searchQuery" type="search"
+        placeholder="搜库号 / 构件号 / 会话…"
+        aria-label="搜索增量记录"
+        data-testid="increment-search-input"
+        class="w-36 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-700 placeholder:text-gray-400 focus:border-brand focus:outline-none" />
       <span class="ml-auto text-[11px] text-muted-foreground">{{ entries.length }} 条记录</span>
+    </div>
+
+    <!-- 批次耗时与变更汇总条 -->
+    <div v-if="loaded && entries.length > 0 && hasOverviewMetrics"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-gray-50/70 px-5 py-1.5 text-[11px] text-muted-foreground"
+      data-testid="increment-overview-summary">
+      <span v-if="overviewSummary.succeededCount + overviewSummary.failedCount > 0">
+        完成 {{ overviewSummary.succeededCount }}<template v-if="overviewSummary.failedCount > 0"> · <span class="text-red-600">失败 {{ overviewSummary.failedCount }}</span></template>
+      </span>
+      <span v-if="overviewSummary.addedElements + overviewSummary.modifiedElements + overviewSummary.deletedElements > 0">
+        累计 增 {{ overviewSummary.addedElements }} · 改 {{ overviewSummary.modifiedElements }} · 删 {{ overviewSummary.deletedElements }}
+      </span>
+      <span v-if="overviewSummary.generatedUnits > 0">
+        生成 {{ overviewSummary.generatedUnits }} 根
+      </span>
+      <span v-if="overviewSummary.avgElapsedLabel" class="ml-auto font-mono">
+        平均耗时 {{ overviewSummary.avgElapsedLabel }}<template v-if="overviewSummary.slowestLabel"> · {{ overviewSummary.slowestLabel }}</template>
+      </span>
     </div>
 
     <!-- 列表 -->
