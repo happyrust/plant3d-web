@@ -40,6 +40,10 @@ import { useComponentToWallClearance } from '@/clearance/composables/useComponen
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import {
+  createDtxLoadViewportState,
+  type DtxAfterInstancesLoadedOptions,
+} from '@/components/dock_panels/dtxLoadViewportState';
+import {
   formatGroupFailures,
   formatSideEffectFailures,
   mergeRootRefnoWithVisibleRefnos as mergeRefnoEntries,
@@ -1312,8 +1316,7 @@ let offAnnotationInteraction: (() => void) | null = null;
 let offAnnotationVectorTextRebuilt: (() => void) | null = null;
 let annotationVectorTextRebuildCount = 0;
 
-let dtxGlobalTransformAppliedKey: string | null = null;
-let dtxAutoFitAppliedKey: string | null = null;
+const dtxLoadViewportState = createDtxLoadViewportState();
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
 
@@ -1590,12 +1593,9 @@ function fitDtxViewerToFocusBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer, durati
   return focus;
 }
 
-function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
+function applyDtxGlobalTransformOnce(_dbno: number, dtxLayer: DTXLayer): void {
   const { scale, recenter } = readDtxScaleConfigFromUrl();
-  if (!Number.isFinite(scale) || scale <= 0) return;
-
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxGlobalTransformAppliedKey === key) return;
+  if (!dtxLoadViewportState.shouldApplyGlobalTransform({ scale, recenter })) return;
 
   // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
   // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
@@ -1625,21 +1625,23 @@ function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
   dtxLayer.setGlobalModelMatrix(m);
   dimensionSystem?.notifyViewerChanged();
 
-  dtxGlobalTransformAppliedKey = key;
+  dtxLoadViewportState.markGlobalTransformApplied({ scale, recenter });
 }
 
-function fitToDtxLayerBBoxOnce(dbno: number, dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
-  const { scale, recenter, autoFitOnLoad } = readDtxScaleConfigFromUrl();
-  if (!autoFitOnLoad) return;
-
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxAutoFitAppliedKey === key) return;
+function fitToDtxLayerBBoxOnce(
+  dbno: number,
+  dtxViewer: DtxViewer,
+  dtxLayer: DTXLayer,
+  options?: { autoFit?: boolean; loadedCount?: number },
+): void {
+  const config = readDtxScaleConfigFromUrl();
+  if (!dtxLoadViewportState.shouldAutoFit(dbno, config, options)) return;
 
   const box = dtxLayer.getBoundingBox();
   if (!box || box.isEmpty()) return;
 
   fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
-  dtxAutoFitAppliedKey = key;
+  dtxLoadViewportState.markAutoFitApplied(dbno, config);
 }
 
 function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
@@ -4164,6 +4166,7 @@ onMounted(async () => {
   (compat as any).__dtxAfterInstancesLoaded = (
     _dbno: number,
     loadedRefnos: string[],
+    options?: DtxAfterInstancesLoadedOptions,
   ) => {
     // 回调里的 _dbno 是**这批实例属于哪个库**，不是「用户换模型」的信号：一个工程有多个库
     //（MDB /ALL），按需补装别的库的构件同样会带另一个 _dbno 过来——那属于增量补装，
@@ -4213,9 +4216,12 @@ onMounted(async () => {
       console.warn('[ViewerPanel] 相机裁剪面自适应失败', e);
     }
 
-    // 按需在首次加载后 auto-fit（需在单位归一化后执行）
+    // 按需在首次加载后 auto-fit（需在单位归一化后执行）；显式 `autoFit: false`（如取最新重载）或撤下对象时不触发
     try {
-      fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer);
+      fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer, {
+        autoFit: options?.autoFit,
+        loadedCount: loadedRefnos.length,
+      });
     } catch (e) {
       console.warn('[ViewerPanel] auto-fit 失败', e);
     }
@@ -5834,8 +5840,9 @@ onUnmounted(() => {
   }
   compatViewerRef.value = null;
   setGenModelV1LoadedProbe(null);
-  // 场景没了：已加载节点表（各节点「装的时候是哪一版」）跟着撤掉
+  // 场景没了：已加载节点表（各节点「装的时候是哪一版」）与视口自动对焦状态跟着撤掉
   resetLoadedNodes();
+  dtxLoadViewportState.reset();
   unregisterSceneForGetWork();
   try {
     delete (window as any).__xeokitViewer;

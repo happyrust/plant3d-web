@@ -10,6 +10,8 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { createDtxLoadViewportState } from '@/components/dock_panels/dtxLoadViewportState';
+
 const source = readFileSync(resolve(__dirname, 'ViewerPanel.vue'), 'utf8');
 
 /** 从 `from` 起到 `to` 之前的那一段源码；找不到就抛（钉的位置挪了要跟着改这里） */
@@ -64,5 +66,69 @@ describe('ViewerPanel 接线（源码钉）：状态栏「数据已更新」提�
     expect(probe).toMatch(/\bactiveDbnum: \(\) => activeDbno,/);
     // `loadedModelDbnums` 是取最新接线里给的那一个（已加载节点表里装着的 + 取最新自己的登记表）
     expect(source).toMatch(/import \{[^}]*\bloadedModelDbnums,[^}]*\} from '@\/composables\/useModelGetWork';/);
+  });
+});
+
+describe('ViewerPanel 接线与视口状态（#324）：多库同屏 + 取最新重载（flyTo: false）不触发自动对焦拉远镜头', () => {
+  const afterLoaded = section('(compat as any).__dtxAfterInstancesLoaded = (', 'compatViewerRef.value = compat;');
+
+  it('源码钉：__dtxAfterInstancesLoaded 透传 autoFit 与 loadedCount 给 fitToDtxLayerBBoxOnce', () => {
+    expect(afterLoaded).toMatch(/options\?: DtxAfterInstancesLoadedOptions/);
+    expect(afterLoaded).toContain('fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer, {');
+    expect(afterLoaded).toContain('autoFit: options?.autoFit');
+    expect(afterLoaded).toContain('loadedCount: loadedRefnos.length');
+  });
+
+  it('先装库 8000、再装库 7998、随后重载库 8000（flyTo: false / autoFit: false）：不触发自动对焦、不重算全局矩阵', () => {
+    const state = createDtxLoadViewportState();
+    const cfg = { scale: 0.001, recenter: true, autoFitOnLoad: true };
+
+    // 首次装库 8000：应用一次全局矩阵并自动对焦
+    expect(state.shouldApplyGlobalTransform(cfg)).toBe(true);
+    state.markGlobalTransformApplied(cfg);
+    expect(state.shouldAutoFit(8000, cfg, { loadedCount: 5 })).toBe(true);
+    state.markAutoFitApplied(8000, cfg);
+
+    // 接着装库 7998：共享同一 DTXLayer 坐标系，不再重算全局矩阵；首次手动装新库仍可自动对焦
+    expect(state.shouldApplyGlobalTransform(cfg)).toBe(false);
+    expect(state.shouldAutoFit(7998, cfg, { loadedCount: 3 })).toBe(true);
+    state.markAutoFitApplied(7998, cfg);
+
+    // 凑近观察后点「取最新」重载库 8000（flyTo: false -> autoFit: false）：不触发自动对焦
+    expect(state.shouldAutoFit(8000, cfg, { autoFit: false, loadedCount: 5 })).toBe(false);
+    // 即使后续无 autoFit: false 选项再加载库 8000（已对焦过），也不被误判成首次加载
+    expect(state.shouldAutoFit(8000, cfg, { loadedCount: 5 })).toBe(false);
+    expect(state.shouldApplyGlobalTransform(cfg)).toBe(false);
+  });
+
+  it('从未对焦过的新库，在显式 flyTo: false（autoFit: false）或撤下（loadedCount=0）时不移动镜头，后续手动首次加载仍正常对焦', () => {
+    const state = createDtxLoadViewportState();
+    const cfg = { scale: 0.001, recenter: false, autoFitOnLoad: true };
+
+    expect(state.shouldAutoFit(8000, cfg, { autoFit: false, loadedCount: 2 })).toBe(false);
+    expect(state.shouldAutoFit(8000, cfg, { loadedCount: 0 })).toBe(false);
+    // 上面两次都没消耗首次对焦资格：用户主动手动勾选加载时照常对焦一次
+    expect(state.shouldAutoFit(8000, cfg, { loadedCount: 2 })).toBe(true);
+    state.markAutoFitApplied(8000, cfg);
+    expect(state.shouldAutoFit(8000, cfg, { loadedCount: 2 })).toBe(false);
+  });
+
+  it('autoFitOnLoad 为关时不触发对焦；单位或 recenter 设置变更后允许重算全局矩阵；reset 后恢复初始状态', () => {
+    const state = createDtxLoadViewportState();
+    const cfgOff = { scale: 0.001, recenter: true, autoFitOnLoad: false };
+    expect(state.shouldAutoFit(8000, cfgOff, { loadedCount: 2 })).toBe(false);
+
+    const cfgMm = { scale: 0.001, recenter: true, autoFitOnLoad: true };
+    const cfgM = { scale: 1, recenter: true, autoFitOnLoad: true };
+    expect(state.shouldApplyGlobalTransform(cfgMm)).toBe(true);
+    state.markGlobalTransformApplied(cfgMm);
+    expect(state.shouldApplyGlobalTransform(cfgMm)).toBe(false);
+    expect(state.shouldApplyGlobalTransform(cfgM)).toBe(true);
+    state.markGlobalTransformApplied(cfgM);
+
+    state.markAutoFitApplied(8000, cfgM);
+    state.reset();
+    expect(state.shouldApplyGlobalTransform(cfgM)).toBe(true);
+    expect(state.shouldAutoFit(8000, cfgM, { loadedCount: 1 })).toBe(true);
   });
 });
