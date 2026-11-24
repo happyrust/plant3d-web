@@ -58,8 +58,14 @@ export type LoadedNodeEntry = {
   /** `a_b` */
   refno: string;
   dbnum: number;
-  /** 装进了场景。`false` = 只是点过、没有模型可显示（没有「本页装的是哪一版」，也不会「有更新可重载」） */
+  /** 装进了场景。`false` = 只是点过、没有模型可显示，或因上次重载/取最新查空被暂时撤下几何 */
   loaded: boolean;
+  /**
+   * 曾经装进场景、因上次重载/「取最新」时名下暂时查空（`empty`）而被撤下几何，但节点仍在库里、用户未主动关闭眼睛：
+   * `loaded` 记为 `false`（场景里无对象、眼睛不亮），但保留在「取最新」和行状态追踪里；
+   * 几何恢复后行上能出「重载」信号，点「取最新」可重新装回场景。
+   */
+  withdrawnEmpty?: boolean;
   loadedAt: number;
   /** 装的时候这个库的模型水位；当时库状态没取到为 `null` */
   loadedModelSesno: number | null;
@@ -339,7 +345,9 @@ async function run(key: string): Promise<void> {
       dbnum: entry.dbnum,
       refno: entry.refno,
       row,
-      loadedModelSesno: entry.loadedModelSesno,
+      // 因名下查空暂时撤下的节点（`withdrawnEmpty`）：一旦后端回复 `latest` / `lagging` 就代表已有模型可装回，
+      // 不需要再走慢的 `node/versions` 逐会话核对（`loadedNodeView` 对 `withdrawnEmpty + latest` 直接出 `reloadable`）。
+      loadedModelSesno: entry.withdrawnEmpty ? null : entry.loadedModelSesno,
       ...(factsQuery ? { fetchFacts: factsQuery } : {}),
       listChangedSessions,
       signal: controller.signal,
@@ -409,6 +417,35 @@ export function noteLoadedNode(
 }
 
 /**
+ * 曾经装进场景的节点，在重载 /「取最新」时名下暂时查空（节点仍在库里，只是成员被删光或移走）：
+ * 几何已经从场景撤下，所以 `loaded = false`（眼睛不亮、不冒充场景里有对象），但标成 `withdrawnEmpty = true`
+ * 并记下此刻的水位，继续留在「取最新」与行状态追踪范围里——后续几何恢复时行上能出重载信号、点「取最新」能装回。
+ */
+export function noteWithdrawnEmptyNode(
+  refno: string,
+  dbnum: number,
+  at: { modelSesno: number | null; fileLatestSesno: number | null },
+): void {
+  const key = toRefnoKey(refno);
+  if (!key || !Number.isFinite(dbnum)) return;
+  entries.set(key, {
+    refno: key,
+    dbnum,
+    loaded: false,
+    withdrawnEmpty: true,
+    loadedAt: Date.now(),
+    loadedModelSesno: at.modelSesno,
+    loadedFileLatestSesno: at.fileLatestSesno,
+    status: null,
+    checking: false,
+    staleReason: null,
+  });
+  checkedAgainst.delete(key);
+  startWatching();
+  schedule(key);
+}
+
+/**
  * 记一笔「本页装的不是后端现在的那一版」（见 `LoadedNodeEntry.staleReason`）。节点不在表里、或只是点过没装进场景的
  * 不记（没有「本页装的」可言）。
  */
@@ -421,13 +458,13 @@ export function markLoadedNodeStale(refno: string, reason: string): void {
 /**
  * 点过、但没有模型可显示的节点（没生成过、选了不生成、生成到一半停了、后端还在后台算）：登记一行并在后台问一次状态，
  * 行上就说得出「未生成 / 部分生成」并给「生成」。它不算已加载：没有「本页装的是哪一版」。
- * 这个节点已经装在场景里（先显示了已有的、再补齐）时不改它那一行，只重问一次。
+ * 这个节点已经装在场景里（先显示了已有的、再补齐）或因查空被暂时撤下（`withdrawnEmpty`）时不改它那一行，只重问一次。
  */
 export function noteNodeWithoutModel(refno: string, dbnum: number): void {
   const key = toRefnoKey(refno);
   if (!key || !Number.isFinite(dbnum)) return;
   const existing = entries.get(key);
-  if (!existing?.loaded) {
+  if (!existing?.loaded && !existing?.withdrawnEmpty) {
     entries.set(key, {
       refno: key,
       dbnum,
@@ -519,6 +556,18 @@ export function loadedNodeView(refno: string): LoadedNodeView | null {
       checking: entry.checking,
     };
   }
+  // 之前因名下查空被撤下几何，现在后端说「最新」或「已有部分/全部模型但仍落后」（说明后端已有模型可装回）：
+  // 屏幕上仍空着，行上标成可重载（`latest` 直接出 `reloadable`，`lagging` 照旧给更新，不压掉落后提示）
+  if (entry.withdrawnEmpty && status.verdict === 'latest') {
+    return {
+      verdict: 'reloadable',
+      iconKind: 'reloadable',
+      title: '本节点：有更新可重载：之前因名下没有几何被撤下，现在后端已有模型\n点「重载」或「取最新」装回场景',
+      action: 'reload',
+      actionHolds: true,
+      checking: entry.checking,
+    };
+  }
   // 页面已经知道库里的模型比本页装的新、而且改到了这个节点（见 `LoadedNodeEntry.reloadHint`）：不等逐会话的核对，先给「重载」。
   // 依据成立时，后端还没有按不早于门槛的库给过确定的结论（给过，依据就作废了）：手上那个结论是旧的，按页面知道的写。
   // 上一次说「部分生成」的行除外：那一行要紧的是把缺的补上，照后端说的画，等它重新判（缺的还缺着的话，毫秒级就答得出）。
@@ -561,6 +610,7 @@ export function useLoadedNodeStatus() {
     provideFactsQuery: provideLoadedNodeFactsQuery,
     provideAncestorsQuery: provideLoadedNodeAncestorsQuery,
     noteLoaded: noteLoadedNode,
+    noteWithdrawnEmpty: noteWithdrawnEmptyNode,
     noteWithoutModel: noteNodeWithoutModel,
     forget: forgetLoadedNode,
     markStale: markLoadedNodeStale,

@@ -115,8 +115,8 @@ const state = reactive<GetWorkState>({ running: false, queued: false, progress: 
 function currentRoots(): GetWorkRoot[] {
   const out = new Map<string, GetWorkRoot>();
   for (const entry of useLoadedNodeStatus().entries()) {
-    // 只是点过、没有模型可显示的不算装着的
-    if (!entry.loaded) continue;
+    // 只是点过、没有模型可显示的不算装着的；但曾经装过、因上次重载/取最新查空被暂时撤下的仍留在追踪范围里
+    if (!entry.loaded && !entry.withdrawnEmpty) continue;
     out.set(entry.refno, {
       refno: entry.refno,
       dbnum: entry.dbnum,
@@ -124,6 +124,7 @@ function currentRoots(): GetWorkRoot[] {
       loadedFileLatestSesno: entry.loadedFileLatestSesno,
       staleReason: entry.staleReason,
       source: 'table',
+      ...(entry.withdrawnEmpty ? { withdrawnEmpty: true } : {}),
       // 装上之后头一次问到的后端那一版（表里记下了才带）：引擎拿它核对屏幕上装的是不是后端现在的那一版
       ...(entry.loadedGenerated !== undefined ? { loadedGenerated: entry.loadedGenerated } : {}),
     });

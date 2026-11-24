@@ -44,6 +44,8 @@ const releaseLod1Mock = vi.fn();
 const holdLod1Mock = vi.fn(() => releaseLod1Mock);
 const noteLoadedNodeMock = vi.fn();
 const forgetLoadedNodeMock = vi.fn();
+/** 曾经装进场景、重载时名下暂时查空而被撤下几何的节点：留在追踪表里，几何恢复后能出信号并装回（#322） */
+const noteWithdrawnEmptyNodeMock = vi.fn();
 /** 已加载节点表里现有的那一条（表是全页面共用的，别的 useModelGeneration 实例也往里登记）：缺省表里没有 */
 const loadedNodeEntryMock = vi.fn((_refno: string): { loaded: boolean } | null => null);
 /** 点过、但没有模型可显示的节点登记进表（行上说得出「未生成 / 部分生成」） */
@@ -186,6 +188,7 @@ vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
 vi.mock('@/composables/useLoadedNodeStatus', () => ({
   noteLoadedNode: (...args: unknown[]) => noteLoadedNodeMock(...args),
   forgetLoadedNode: (...args: unknown[]) => forgetLoadedNodeMock(...args),
+  noteWithdrawnEmptyNode: (...args: unknown[]) => noteWithdrawnEmptyNodeMock(...args),
   loadedNodeEntry: (refno: string) => loadedNodeEntryMock(refno),
   noteNodeWithoutModel: (...args: unknown[]) => noteNodeWithoutModelMock(...args),
   recheckLoadedNode: (...args: unknown[]) => recheckLoadedNodeMock(...args),
@@ -5558,7 +5561,7 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(true);
     });
 
-    it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下', async (verdict) => {
+    it.each(['latest', 'lagging', 'empty'])('后端说这个节点 %s（单元都生成过 / 没有生成单元）：它名下确实没有几何了，撤下并保留空载追踪', async (verdict) => {
       const { gen, viewer } = await loadedThenEmpty();
       nodeFactsMock.mockResolvedValue({ verdict });
 
@@ -5567,15 +5570,51 @@ describe('「取最新」用到的显示流程出口（2026-11-12）', () => {
       expect(evictMock).toHaveBeenCalledWith(viewer.__dtxLayer, 8000, [ROOT, ...MEMBERS], { release: true });
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
       expect(gen.loadedRefnosOf(ROOT)).toBeNull();
-      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+      expect(noteWithdrawnEmptyNodeMock).toHaveBeenCalledWith(ROOT, 8000, expect.anything());
+      expect(forgetLoadedNodeMock).not.toHaveBeenCalled();
     });
 
-    it('后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下', async () => {
+    it('后端说库里没有这个节点（REFNO_NOT_FOUND）：撤下并彻底退出追踪', async () => {
       const { gen } = await loadedThenEmpty();
       nodeFactsMock.mockRejectedValue(Object.assign(new Error('最新会话的索引里没有它'), { code: 'REFNO_NOT_FOUND' }));
       expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
       expect(evictMock).toHaveBeenCalledTimes(1);
       expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+      expect(noteWithdrawnEmptyNodeMock).not.toHaveBeenCalled();
+    });
+
+    it('用户主动关闭眼睛/隐藏了节点后，再因 empty 被撤下：直接退出追踪，不记 withdrawnEmpty', async () => {
+      const { gen, viewer } = await loadedThenEmpty();
+      // 模拟用户在模型树上点关闭眼睛，scene.objects 写下 visible: false
+      viewer.scene.objects = { [ROOT]: { visible: false }, [MEMBERS[0]!]: { visible: false } };
+      nodeFactsMock.mockResolvedValue({ verdict: 'empty' });
+
+      expect(await gen.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
+
+      expect(gen.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(forgetLoadedNodeMock).toHaveBeenCalledWith(ROOT);
+      expect(noteWithdrawnEmptyNodeMock).not.toHaveBeenCalled();
+    });
+
+    it('另一份 useModelGeneration（模型树侧）曾装过节点，查看器侧重载查空撤下后，模型树侧 isModelActuallyLoaded 立即变 false（眼睛灭）', async () => {
+      const { useModelGeneration } = await import('./useModelGeneration');
+      const viewer = makeViewer();
+      const treeSide = useModelGeneration({ viewer, db_num: 8000 });
+      const viewerSide = useModelGeneration({ viewer, db_num: 8000 });
+      typeInfoMock.mockResolvedValue({ success: true, refno: ROOT, noun: 'EQUI' });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [...MEMBERS] });
+      expect(await treeSide.showModelByRefno(ROOT)).toBe(true);
+      expect(treeSide.isModelActuallyLoaded(ROOT)).toBe(true);
+
+      nodeFactsMock.mockResolvedValue({ verdict: 'empty' });
+      visibleInstsMock.mockResolvedValueOnce({ success: true, refno: ROOT, refnos: [] });
+      evictMock.mockImplementation((_layer, _dbno, refnos) => [...refnos]);
+      expect(await viewerSide.showModelByRefno(ROOT, { refresh: true, flyTo: false })).toBe(true);
+
+      expect(viewerSide.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(treeSide.isModelActuallyLoaded(ROOT)).toBe(false);
+      expect(noteWithdrawnEmptyNodeMock).toHaveBeenCalledWith(ROOT, 8000, expect.anything());
     });
 
     it('状态栏、行上的「重载」和重新部署后的重装（只带 refresh，不带别的）：一样先问，后端没有它的模型就不撤', async () => {

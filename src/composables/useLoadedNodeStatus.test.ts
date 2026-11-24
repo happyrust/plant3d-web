@@ -640,4 +640,37 @@ describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () 
     expect(store.view('9304_2')).toMatchObject({ verdict: 'lagging', action: 'update' });
     expect(store.view('24381_535')).toMatchObject({ verdict: 'untracked', iconKind: null, action: null });
   });
+
+  it('因名下暂时查空被撤下的节点（withdrawnEmpty，#322）：留在追踪表里，空着时显示 empty，几何恢复后行上出现可重载信号', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    const EQ_A = '24384_30010';
+    setRows({ ...ROW_8000, file_latest_sesno: 1144, applied_sesno: 1144, model_sesno: 1144 });
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'empty', dbnum: 8000, noun: 'EQUI',
+      units: { total: 0, generated: 0, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: null,
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 1144, modelSesno: 1144, modelSesnoTime: null, inWatchScope: true },
+    }));
+
+    store.noteWithdrawnEmpty(EQ_A, 8000, { modelSesno: 1144, fileLatestSesno: 1144 });
+    await settled(store, EQ_A);
+    expect(store.entry(EQ_A)).toMatchObject({ loaded: false, withdrawnEmpty: true, loadedModelSesno: 1144 });
+    expect(store.view(EQ_A)).toMatchObject({ verdict: 'empty', iconKind: 'nothing', action: null });
+
+    // 几何恢复后库水位推进到 1145，后端返回 latest：直接给行上标 reloadable（不走慢的 node/versions）
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'latest', dbnum: 8000, noun: 'EQUI',
+      units: { total: 1, generated: 1, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: { sesnoMin: 1145, sesnoMax: 1145, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 1145, modelSesno: 1145, modelSesnoTime: null, inWatchScope: true },
+    }));
+    setRows({ ...ROW_8000, file_latest_sesno: 1145, applied_sesno: 1145, model_sesno: 1145 });
+    await nextTick();
+    await settled(store, EQ_A);
+
+    expect(h.listNodeVersions).not.toHaveBeenCalled();
+    expect(store.view(EQ_A)).toMatchObject({ verdict: 'reloadable', iconKind: 'reloadable', action: 'reload' });
+  });
 });
