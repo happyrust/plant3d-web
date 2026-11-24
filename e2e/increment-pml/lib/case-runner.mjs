@@ -181,25 +181,29 @@ export function followTimes(changes, dbnum, target, since) {
 
 /**
  * 拼 W4 的分组：每个要比的根，一边是场景里它名下各构件的包围盒，一边是 E3D 导出里它下面带几何的成员。
- * `per-item` 逐件比，导出里认不出参考号的成员比不了，列进 `unplaced`（W4 会判不过，这样的根要改用 `count-union`）；
- * `count-union` 比件数和合起来的包围盒。
+ * `per-item` 逐件比。有参考号的按参考号；没有参考号但快照写了 `compare_key` 的（`tube:` / `path:`）按那把键，不再列进 `unplaced`。
+ * 两样都没有的成员才列进 `unplaced`（W4 会判不过；旧快照没有 `compare_key` 时仍是这样，这种根继续用 `count-union`）。
+ * `count-union` 比件数和合起来的包围盒，用的是构件合盒，不拆管段。
  *
  * @param {object} snapshot `loadRvmSnapshot()` 的结果
  * @param {{ root: string, mode?: 'per-item' | 'count-union' }[]} defs
- * @param {Record<string, Record<string, number[]>>} sceneBoxes 根 → 构件 → 包围盒（mm）
+ * @param {Record<string, Record<string, number[]>>} sceneBoxes 根 → 构件 → 包围盒（mm），count-union 用它
  * @param {Record<string, string>} [nameOf] 根 → 报告里用的名字
+ * @param {Record<string, Record<string, number[]>> | null} [perItemBoxes] 根 → 逐件键（含 `tube:`）→ 包围盒。给了才在 per-item 里用；不给就仍用构件合盒
  */
-export function truthGroups(snapshot, defs, sceneBoxes, nameOf = {}) {
+export function truthGroups(snapshot, defs, sceneBoxes, nameOf = {}, perItemBoxes = undefined) {
   const groups = [];
   const unplaced = [];
   const facts = [];
+  const useItems = perItemBoxes != null;
   for (const def of defs ?? []) {
     const root = refnoKey(def.root);
     const name = nameOf[root] ?? root;
     const mode = def.mode ?? 'per-item';
     const members = membersUnder(snapshot, root);
     const truth = truthBoxes(members);
-    const scene = sceneBoxes?.[root] ?? {};
+    const componentScene = sceneBoxes?.[root] ?? {};
+    const scene = mode === 'per-item' && useItems ? (perItemBoxes[root] ?? {}) : componentScene;
     facts.push({
       root,
       name,
@@ -211,9 +215,12 @@ export function truthGroups(snapshot, defs, sceneBoxes, nameOf = {}) {
     });
     if (mode === 'per-item') {
       groups.push({ name, mode, scene, truth: truth.byRefno });
-      for (const item of truth.anonymous) unplaced.push(`${name}：${item.path}（认不出参考号，逐件比不了）`);
+      for (const item of truth.anonymous) {
+        if (item.compareKey) continue;
+        unplaced.push(`${name}：${item.path}（认不出参考号，逐件比不了）`);
+      }
     } else if (mode === 'count-union') {
-      groups.push({ name, mode, scene: Object.values(scene), truth: [...Object.values(truth.byRefno), ...truth.anonymous.map((item) => item.box)] });
+      groups.push({ name, mode, scene: Object.values(componentScene), truth: [...Object.values(truth.byRefno), ...truth.anonymous.map((item) => item.box)] });
     } else {
       throw new TypeError(`W4：不认识的比法 ${mode}`);
     }
@@ -588,6 +595,9 @@ export async function runCase(env, caseDef, caseDir) {
       sceneToMm: env.sceneToMm ?? 1000,
       ignoreErrors: env.ignoreErrors ?? [],
       knownGaps: env.knownGaps,
+      // 写了才收紧 W2/W5。没写时 runLeg 不带这两项，判定与旧用例一致。
+      disallowGaps: Array.isArray(caseDef.disallowGaps) ? caseDef.disallowGaps : undefined,
+      zero_signal: caseDef.zero_signal ?? caseDef.zeroSignal,
     };
 
     // 前提：装好之后场景先对一遍，空点一次「取最新」。这几样不对就不开 E3D
@@ -628,7 +638,7 @@ export async function runCase(env, caseDef, caseDir) {
           continue;
         }
         sources[dbnum] = entry.file;
-        const built = truthGroups(entry.snapshot, defs, sceneBase.boxes, nameOf);
+        const built = truthGroups(entry.snapshot, defs, sceneBase.boxes, nameOf, sceneBase.perItemBoxes);
         groups.push(...built.groups);
         unplaced.push(...built.unplaced);
         groupFacts.push(...built.facts);
@@ -771,7 +781,7 @@ export async function runCase(env, caseDef, caseDir) {
       }
       if (judged.includes('W4')) {
         if (!exported) throw new Error(`腿 ${legDef.id} 要判 W4，但腿命令的结果里没有导出的快照`);
-        const built = truthGroups(exported, legDef.truth?.groups ?? [], result.after.scene.boxes, nameOf);
+        const built = truthGroups(exported, legDef.truth?.groups ?? [], result.after.scene.boxes, nameOf, result.after.scene.perItemBoxes);
         judgements.W4 = judgeW4({ groups: built.groups, unplaced: built.unplaced, allowEmpty: legDef.truth?.allowEmpty === true });
         judgements.W4.facts.truth = { ...truthInfo, groups: built.facts };
       }

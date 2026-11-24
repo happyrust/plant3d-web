@@ -59,10 +59,47 @@ function keyList(values) {
   return [...new Set((values ?? []).map(refnoKey))].sort();
 }
 
-function keyedMap(record) {
+function keyedMap(record, normalize = refnoKey) {
   const out = new Map();
-  for (const [key, value] of Object.entries(record ?? {})) out.set(refnoKey(key), value);
+  for (const [key, value] of Object.entries(record ?? {})) out.set(normalize(key), value);
   return out;
+}
+
+/**
+ * 逐件包围盒的键。参考号仍过 `refnoKey`（`24384/22404` 与 `24384_22404` 是同一件）。
+ * `tube:` / `path:` 是快照上的 `compare_key`，已经是规范形式，原样比，不再过 `refnoKey`
+ * （`tube:24384/9#2` 的斜杠是属主参考号的一部分；`path:` 里还有路径上的斜杠）。
+ */
+function boxCompareKey(value) {
+  const text = String(value).trim();
+  if (text.startsWith('tube:') || text.startsWith('path:')) return text;
+  return refnoKey(text);
+}
+
+/**
+ * 这一腿禁止放行的已知缺口。`disallowGaps` 点名拿掉哪些；`zero_signal.w5 === 'strict'` 额外拿掉 KG3
+ * （同库无关节点陪着重载不再记成已知缺口）。两项都没写时是空表，旧用例的缺口表原样生效。
+ *
+ * @param {{ disallowGaps?: string[], zero_signal?: { w5?: string }, zeroSignal?: { w5?: string } }} [spec]
+ * @returns {string[]}
+ */
+export function disallowedGapIds(spec) {
+  const ids = [];
+  for (const id of spec?.disallowGaps ?? []) {
+    if (typeof id === 'string' && id) ids.push(id);
+  }
+  const zero = spec?.zero_signal ?? spec?.zeroSignal;
+  if (zero?.w5 === 'strict') ids.push('KG3');
+  return [...new Set(ids)];
+}
+
+/** 判定 W2 / W5 之前：从生效的已知缺口表里剔除被禁的项。没禁任何一项时原样返回，连缺省表的缓存都不惊动。 */
+function applyDisallowGaps(options) {
+  const banned = disallowedGapIds(options);
+  if (banned.length === 0) return options;
+  const ban = new Set(banned);
+  const source = options.knownGaps ?? (registeredGaps ??= loadKnownGaps());
+  return { ...options, knownGaps: source.filter((gap) => !ban.has(gap.id)) };
 }
 
 function listedByRefno(items) {
@@ -502,10 +539,12 @@ function judgeReceiptModels(models, expected, rootsInfo, options, problems, gaps
  * @param {number[]} [input.expected.movedLibraries]
  * @param {{ dbnum: number, kind: string }[]} [input.expected.libraries] 回执里该说「没跟到最新」的库
  * @param {boolean} [input.expected.backendRestarted]
- * @param {{ knownGaps?: object[] }} [options]
+ * @param {{ knownGaps?: object[], disallowGaps?: string[], zero_signal?: { w5?: string } }} [options]
+ *   `disallowGaps` / `zero_signal.w5 === 'strict'` 在判定前从生效的已知缺口里剔除（strict 拿掉 KG3）
  * @returns {Judgement}
  */
 export function judgeW2(input, options = {}) {
+  options = applyDisallowGaps(options);
   const { receipt, expected } = input;
   if (!expected) throw new TypeError('W2：没有给预期');
   const clicks = input.clicks ?? 1;
@@ -789,8 +828,8 @@ function boxProblem(code, where, actual, expected, toleranceMm) {
 }
 
 function compareBoxesPerItem(group, toleranceMm, problems) {
-  const scene = keyedMap(group.scene);
-  const truth = keyedMap(group.truth);
+  const scene = keyedMap(group.scene, boxCompareKey);
+  const truth = keyedMap(group.truth, boxCompareKey);
   const have = [...scene.keys()].sort();
   const want = [...truth.keys()].sort();
   const diff = setDiff(have, want);
@@ -1058,10 +1097,12 @@ function sameRowAndEye(a, b) {
  * @param {Record<string, RowState>} [input.rowsBefore] 对照根的行，存盘之前
  * @param {Record<string, RowState>} [input.rowsAfter] 对照根的行，取最新之后
  * @param {{ positionMm?: number, linearAbs?: number, linearRel?: number }} [input.tolerance]
- * @param {{ knownGaps?: object[] }} [options]
+ * @param {{ knownGaps?: object[], disallowGaps?: string[], zero_signal?: { w5?: string } }} [options]
+ *   与 W2 一样：判定前先按 `disallowGaps` / `zero_signal.w5 === 'strict'` 拿掉被禁的缺口
  * @returns {Judgement}
  */
 export function judgeW5(input, options = {}) {
+  options = applyDisallowGaps(options);
   const expected = input.expected ?? {};
   const controls = keyList(input.controlRoots);
   const rootsInfo = keyedMap(input.roots);

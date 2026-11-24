@@ -3,8 +3,12 @@
  * 跑法：`node --test e2e/increment-pml/lib/judge.selftest.mjs`（不开浏览器、不连后端）。
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, test } from 'node:test';
 
+import { truthGroups } from './case-runner.mjs';
 import {
   diffTree,
   gapApplies,
@@ -19,6 +23,8 @@ import {
   refnoKey,
   summarize,
 } from './judge.mjs';
+import { sceneByRoot } from './page.mjs';
+import { loadRvmSnapshot, truthBoxes } from './rvm.mjs';
 
 const ZONE = '24384_30000';
 const EQ_A = '24384_30001';
@@ -551,6 +557,25 @@ describe('W2 点一次「取最新」就到位', () => {
     assertFail(judgeW2(directLoadOvercount(), { knownGaps: [] }), 'root-removed');
     assertFail(judgeW2(movedWithNeighbours(), { knownGaps: [] }), 'unexpected-reload');
   });
+
+  test('disallowGaps 拿掉 KG3：同库无关节点被误重载，直接判不过，不记已知缺口', () => {
+    const result = judgeW2(movedWithNeighbours(), { disallowGaps: ['KG3'] });
+    assertFail(result, 'unexpected-reload');
+    assert.deepEqual(gapIds(result), []);
+  });
+
+  test('zero_signal.w5 = strict 同样不放行 KG3；不是 strict、或没写这项时仍记已知缺口', () => {
+    const strict = judgeW2(movedWithNeighbours(), { zero_signal: { changed: '/AIOS-SUITE-EQ-A', control: '/AIOS-SUITE-EQ-NBX', w5: 'strict' } });
+    assertFail(strict, 'unexpected-reload');
+    assert.deepEqual(gapIds(strict), []);
+    assertGap(judgeW2(movedWithNeighbours(), { zero_signal: { w5: 'kg3' } }), ['KG3', 'KG3']);
+    assertGap(judgeW2(movedWithNeighbours(), { disallowGaps: [] }), ['KG3', 'KG3']);
+  });
+
+  test('只禁 KG3 时，预期内重载的 KG1 仍记；点名禁 KG1 才把那一格判不过', () => {
+    assertGap(judgeW2(directLoadOvercount(), { disallowGaps: ['KG3'], zero_signal: { w5: 'strict' } }), ['KG1']);
+    assertFail(judgeW2(directLoadOvercount(), { disallowGaps: ['KG1'] }), 'root-removed');
+  });
 });
 
 describe('W3 场景 = 后端', () => {
@@ -829,6 +854,20 @@ describe('W5 不该动的没动', () => {
     const result = judgeW5(withNeighbours());
     assertGap(result, ['KG3', 'KG3']);
     assert.equal(result.facts.objects, 4);
+  });
+
+  test('零信号过：对照根没有重载，strict 也过', () => {
+    assertPass(judgeW5(input(), { disallowGaps: ['KG3'], zero_signal: { w5: 'strict' } }));
+  });
+
+  test('disallowGaps / zero_signal strict：无关节点被误重载不再归入 KG3，直接判不过', () => {
+    const byList = judgeW5(withNeighbours(), { disallowGaps: ['KG3'] });
+    assertFail(byList, 'unexpected-reload');
+    assert.deepEqual(gapIds(byList), []);
+    const bySignal = judgeW5(withNeighbours(), { zero_signal: { w5: 'strict' } });
+    assertFail(bySignal, 'unexpected-reload');
+    assert.deepEqual(gapIds(bySignal), []);
+    assertGap(judgeW5(withNeighbours(), { zero_signal: { w5: 'loose' } }), ['KG3', 'KG3']);
   });
 
   test('KG3 命中但对照根的一个对象动了：判不过', () => {
@@ -1249,5 +1288,152 @@ describe('小工具', () => {
     assert.deepEqual(diff.renamed, [{ id: EQ_A, before: '/AIOS-SUITE-EQ-A', after: '/RENAMED' }]);
     assert.deepEqual(diff.moved, [{ id: BOX_A1, before: EQ_A, after: EQ_B }]);
     assert.deepEqual(diff.childrenChanged.map((item) => item.id), [EQ_B]);
+  });
+});
+
+describe('管道 compare_key 逐件比对', () => {
+  const TUBE_1 = [0, 0, 0, 10, 1, 1];
+  const TUBE_2 = [10, 0, 0, 20, 1, 1];
+  const FIT = [20, 0, 0, 21, 1, 1];
+  const KEY_1 = 'tube:24384/9#1';
+  const KEY_2 = 'tube:24384/9#2';
+  const PATH_KEY = 'path:/P/FTUBE 1 of BRANCH /X#1';
+
+  function writeSnapshot(members) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incr-tube-'));
+    const file = path.join(dir, 'sample.snapshot.json');
+    fs.writeFileSync(file, JSON.stringify({ meta: {}, members }));
+    return { dir, file };
+  }
+
+  test('有 compare_key 的隐式管段按原键建盒，tube: 与 path: 都不过 refnoKey；旧快照仍进 anonymous', () => {
+    const saved = writeSnapshot([
+      { path: '/P', name: '/AIOS-SUITE-PIPE-P', noun: 'PIPE', refno: '24384/20', resolved: true, aabb_world_mm: [0, 0, 0, 21, 1, 1], compare_key: '24384/20' },
+      { path: '/P/BRAN', name: '/AIOS-SUITE-BRAN-S', noun: 'BRAN', refno: '24384/9', resolved: true, aabb_world_mm: null, compare_key: '24384/9' },
+      {
+        path: '/P/BRAN/FTUBE 2 of BRANCH /AIOS-SUITE-BRAN-S',
+        name: 'FTUBE 2 of BRANCH /AIOS-SUITE-BRAN-S',
+        noun: 'FTUB',
+        refno: null,
+        resolved: false,
+        ordinal: 2,
+        aabb_world_mm: TUBE_2,
+        compare_key: KEY_2,
+      },
+      {
+        path: '/P/BRAN/FTUBE 1 of BRANCH /AIOS-SUITE-BRAN-S',
+        name: 'FTUBE 1 of BRANCH /AIOS-SUITE-BRAN-S',
+        noun: 'FTUB',
+        refno: null,
+        resolved: false,
+        ordinal: 1,
+        aabb_world_mm: TUBE_1,
+        compare_key: KEY_1,
+      },
+      {
+        path: '/P/FTUBE 1 of BRANCH /X',
+        name: 'FTUBE 1 of BRANCH /X',
+        noun: 'TUBE',
+        refno: null,
+        resolved: false,
+        ordinal: 1,
+        aabb_world_mm: [30, 0, 0, 40, 1, 1],
+        compare_key: PATH_KEY,
+      },
+      {
+        path: '/P/BRAN/TUBE 9 of BRANCH /OLD',
+        name: 'TUBE 9 of BRANCH /OLD',
+        noun: 'TUBE',
+        refno: null,
+        resolved: false,
+        ordinal: 9,
+        aabb_world_mm: [40, 0, 0, 50, 1, 1],
+      },
+    ]);
+    try {
+      const snapshot = loadRvmSnapshot(saved.file);
+      const tube = snapshot.members.find((member) => member.ordinal === 2);
+      assert.equal(tube.compareKey, KEY_2);
+      assert.equal(tube.refno, null);
+      const boxes = truthBoxes(snapshot.members);
+      assert.deepEqual(boxes.byRefno[refnoKey('24384/20')], [0, 0, 0, 21, 1, 1]);
+      assert.deepEqual(boxes.byRefno[KEY_1], TUBE_1);
+      assert.deepEqual(boxes.byRefno[KEY_2], TUBE_2);
+      assert.deepEqual(boxes.byRefno[PATH_KEY], [30, 0, 0, 40, 1, 1]);
+      assert.equal(boxes.byRefno['tube:24384_9#1'], undefined);
+      assert.equal(boxes.byRefno['path:_P/FTUBE 1 of BRANCH /X#1'], undefined);
+      assert.deepEqual(boxes.anonymous.map((item) => item.path), ['/P/BRAN/TUBE 9 of BRANCH /OLD']);
+      const built = truthGroups(snapshot, [{ root: '24384/20', mode: 'per-item' }], {});
+      assert.equal(built.unplaced.length, 1);
+      assert.match(built.unplaced[0], /TUBE 9 of BRANCH \/OLD/);
+      assert.deepEqual(built.groups[0].truth[KEY_1], TUBE_1);
+      assert.equal(built.groups[0].truth['tube:24384_9#2'], undefined);
+    } finally {
+      fs.rmSync(saved.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('per-item：tube:<属主>#<FTUBE n> 对上就过；件数和总包围盒不变但某段换键或挪到合盒里面，判不过', () => {
+    const truth = { [KEY_1]: TUBE_1, [KEY_2]: TUBE_2, '24384/10': FIT };
+    const matched = {
+      applicable: true,
+      groups: [{ name: 'PIPE-P', mode: 'per-item', scene: { [KEY_1]: TUBE_1, [KEY_2]: TUBE_2, '24384_10': FIT }, truth }],
+    };
+    assertPass(judgeW4(matched));
+    const swapped = {
+      applicable: true,
+      groups: [{ name: 'PIPE-P', mode: 'per-item', scene: { [KEY_1]: TUBE_2, [KEY_2]: TUBE_1, '24384_10': FIT }, truth }],
+    };
+    assertFail(judgeW4(swapped), 'box');
+    assert.equal(problemOf(judgeW4(swapped), 'box').message.includes(KEY_1), true);
+    const shifted = {
+      applicable: true,
+      groups: [{
+        name: 'PIPE-P',
+        mode: 'per-item',
+        scene: { [KEY_1]: [0, 0, 0, 8, 1, 1], [KEY_2]: [8, 0, 0, 20, 1, 1], '24384_10': FIT },
+        truth,
+      }],
+    };
+    assertFail(judgeW4(shifted), 'box');
+    assertPass(judgeW4({
+      groups: [{
+        name: 'PIPE-P',
+        mode: 'count-union',
+        scene: [[0, 0, 0, 8, 1, 1], [8, 0, 0, 20, 1, 1], FIT],
+        truth: [TUBE_1, TUBE_2, FIT],
+      }],
+    }));
+  });
+
+  test('场景逐件盒：纯管段属主不再留合盒，改成 tube: 键；构件合盒保持原样', () => {
+    const scene = {
+      byDbnum: {
+        8000: {
+          '24384_9': [
+            { id: 'a', m: null, visible: true, box: TUBE_1, implicitTube: true },
+            { id: 'b', m: null, visible: true, box: TUBE_2, implicitTube: true },
+          ],
+          '24384_10': [
+            { id: 'e', m: null, visible: true, box: FIT, implicitTube: false },
+          ],
+        },
+      },
+      tubeBoxes: {
+        8000: { [KEY_1]: TUBE_1, [KEY_2]: TUBE_2 },
+      },
+    };
+    const sorted = sceneByRoot({
+      scene,
+      roots: [{ refno: '24384/20', dbnum: 8000, members: ['24384/9', '24384_10'] }],
+    });
+    const root = '24384_20';
+    assert.deepEqual(sorted.boxes[root]['24384_9'], [0, 0, 0, 20, 1, 1]);
+    assert.deepEqual(sorted.boxes[root]['24384_10'], FIT);
+    assert.equal(sorted.perItemBoxes[root]['24384_9'], undefined);
+    assert.deepEqual(sorted.perItemBoxes[root][KEY_1], TUBE_1);
+    assert.deepEqual(sorted.perItemBoxes[root][KEY_2], TUBE_2);
+    assert.deepEqual(sorted.perItemBoxes[root]['24384_10'], FIT);
+    assert.deepEqual(sorted.byRoot[root]['24384_9'].map((object) => object.visible), [true, true]);
   });
 });

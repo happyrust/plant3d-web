@@ -593,15 +593,26 @@ export async function waitRowSignal(page, { affected, startAt, windowMs, settleM
 
 /**
  * 场景里的全部对象，按库、按构件收：世界矩阵（列主序，mm）、可见不可见、世界包围盒（mm；场景给的是米，乘 `sceneToMm`）。
+ * 隐式管段仍归在属主构件名下（渲染和合盒不变），另外在 `tubeBoxes` 里按 `tube:<属主>#<FTUBE n>` 逐件收一份。
  * 哪个库都不认的对象记在 `unresolved`。
  */
 export async function readScene(page, dbnums, { sceneToMm = 1000 } = {}) {
   return page.evaluate(async ({ libs, scale }) => {
     const loader = await import('/src/composables/useDbnoInstancesDtxLoader.ts');
+    const treeStore = await import('/src/composables/useModelTreeStore.ts');
     const layer = window.__dtxLayer;
     const objectIds = layer?.getAllObjectIds?.() ?? [];
     const byDbnum = {};
     for (const dbno of libs) byDbnum[dbno] = {};
+    // 属主成员表：给隐式管段排 FTUBE n（属主自己由加载器排在最前，这里只送子成员）。没展开的层没有成员，那些段退回按槽位和装入先后排。
+    const isRefno = (id) => /^\d+_\d+$/.test(id);
+    const nodes = treeStore.getModelTreeInstance()?.nodesById.value ?? {};
+    const membersByOwner = {};
+    for (const [id, node] of Object.entries(nodes)) {
+      if (!isRefno(id)) continue;
+      const children = (node.childrenIds ?? []).filter(isRefno);
+      if (children.length > 0) membersByOwner[id] = children;
+    }
     let unresolved = 0;
     for (const objectId of objectIds) {
       let placed = false;
@@ -618,13 +629,21 @@ export async function readScene(page, dbnums, { sceneToMm = 1000 } = {}) {
           m: matrix ? Array.from(matrix.elements) : null,
           visible: !!layer.isObjectVisible(objectId),
           box,
+          // 带直段身份的隐式管段。构件合盒照旧算在属主名下；逐件盒另按 tube:<属主>#<FTUBE n> 收。
+          implicitTube: !!loader.describeDtxImplicitTube(dbno, objectId),
         });
         placed = true;
         break;
       }
       if (!placed) unresolved += 1;
     }
-    return { at: Date.now(), objects: objectIds.length, unresolved, byDbnum };
+    const tubeBoxes = {};
+    if (layer) {
+      for (const dbno of libs) {
+        tubeBoxes[dbno] = loader.collectImplicitTubeCompareBoxes(layer, Number(dbno), membersByOwner, scale);
+      }
+    }
+    return { at: Date.now(), objects: objectIds.length, unresolved, byDbnum, tubeBoxes };
   }, { libs: dbnums, scale: sceneToMm });
 }
 
@@ -828,20 +847,28 @@ function unionBox(boxes) {
   return out;
 }
 
+function tubeOwnerKey(compareKey) {
+  const match = /^tube:([^#]+)#\d+$/.exec(String(compareKey));
+  return match ? refnoKey(match[1]) : null;
+}
+
 /**
  * 把 `readScene` 的结果按根分好，给判定函数用：根 → 构件 → 对象（`byRoot`），根 → 构件 → 可见对象合起来的包围盒（`boxes`）。
+ * `perItemBoxes` 是逐件盒：普通构件仍按参考号；纯由隐式管段组成的属主不再留合盒，改成 `tube:<属主>#<FTUBE n>`。
+ * `boxes` 始终是构件合盒，count-union 和「跟用例表对平移」继续用它。
  *
  * 一个构件归哪个根：页面说这个根名下装着它（`roots[].members`），或者调用方说后端记录里这个根名下有它（`claims`）。
  * 场景里有对象、却哪个根都不认的构件列在 `strays`（库 → 构件 → 对象数）：不归到哪个根名下，由调用方单独报。
  *
  * @param {object} input
- * @param {{ byDbnum: Record<string, Record<string, object[]>> }} input.scene
+ * @param {{ byDbnum: Record<string, Record<string, object[]>>, tubeBoxes?: Record<string, Record<string, number[]>> }} input.scene
  * @param {{ refno: string, dbnum: number, members?: string[] | null }[]} input.roots
  * @param {Record<string, string[]>} [input.claims]
  */
 export function sceneByRoot({ scene, roots, claims = {} }) {
   const byRoot = {};
   const boxes = {};
+  const perItemBoxes = {};
   const claimed = {};
   for (const root of roots) {
     const id = refnoKey(root.refno);
@@ -858,13 +885,28 @@ export function sceneByRoot({ scene, roots, claims = {} }) {
       const box = unionBox(list.filter((object) => object.visible && object.box).map((object) => object.box));
       if (box) boxes[id][component] = box;
     }
+    const perItem = { ...boxes[id] };
+    for (const component of components) {
+      const visible = (objects[component] ?? []).filter((object) => object.visible && object.box);
+      const rest = visible.filter((object) => object.implicitTube !== true);
+      if (rest.length === 0) delete perItem[component];
+      else if (rest.length !== visible.length) perItem[component] = unionBox(rest.map((object) => object.box));
+    }
+    const tubeBoxes = scene.tubeBoxes?.[root.dbnum] ?? scene.tubeBoxes?.[String(root.dbnum)] ?? {};
+    for (const [key, box] of Object.entries(tubeBoxes)) {
+      const owner = tubeOwnerKey(key);
+      if (!owner || !components.has(owner)) continue;
+      if (!Array.isArray(box) || box.length !== 6) continue;
+      perItem[key] = box;
+    }
+    perItemBoxes[id] = perItem;
   }
   const strays = {};
   for (const [dbnum, objects] of Object.entries(scene.byDbnum)) {
     const extra = Object.keys(objects).filter((component) => !claimed[dbnum]?.has(component));
     if (extra.length > 0) strays[dbnum] = Object.fromEntries(extra.map((component) => [component, objects[component].length]));
   }
-  return { byRoot, boxes, strays };
+  return { byRoot, boxes, perItemBoxes, strays };
 }
 
 /**
