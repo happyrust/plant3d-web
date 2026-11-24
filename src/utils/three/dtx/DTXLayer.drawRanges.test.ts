@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { BufferAttribute, BufferGeometry, Matrix4, PerspectiveCamera } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Matrix4, PerspectiveCamera, Vector3 } from 'three';
 
-import { DTXLayer } from './DTXLayer';
+import { DTXViewCullController } from './culling/DTXViewCullController';
+import { DTX_PASS_OPAQUE, DTX_PASS_TRANSPARENT, DTXLayer } from './DTXLayer';
 
 import type { DTXMultiDrawMesh } from './DTXMultiDrawMesh';
+
+import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
 
 function tri(): BufferGeometry {
   const g = new BufferGeometry();
@@ -273,6 +276,100 @@ describe('DTXLayer 不透明 / 透明分表选段', () => {
     select(layer);
     // 两张表各重算一次
     expect(layer.getCullStats().selectCount).toBe(n + 2);
+  });
+
+  it('调色板满 256 种后（如 dtxPrimitiveDemo 360 色）设 10% 半透明：透明通道统计非零且不污染原色（#101）', () => {
+    const layer = new DTXLayer({ maxVertices: 4096, maxIndices: 16384, maxObjects: 1024 });
+    loadDtxPrimitiveDemo(layer, { objectCount: 1000 });
+
+    const box = layer.getBoundingBox();
+    const center = box.getCenter(new Vector3());
+    const size = box.getSize(new Vector3());
+    const dist = Math.max(size.x, size.y, size.z) * 2.5;
+    const cam = new PerspectiveCamera(60, 1.5, 0.1, dist * 10);
+    cam.position.set(center.x, center.y, center.z + dist);
+    cam.lookAt(center);
+    cam.updateMatrixWorld();
+
+    const ctl = new DTXViewCullController({ dtxLayer: layer });
+    const ids = layer.getAllObjectIds();
+    const tenPercent = ids.filter((_, idx) => idx % 10 === 0);
+    const beforeColor = layer.getObjectColor(tenPercent[0]!)!.clone();
+    const beforeMatIdx = layer.getObject(tenPercent[0]!)!.materialIndex;
+
+    layer.setObjectsOpacity(tenPercent, 0.5);
+    layer.update(cam);
+    ctl.update(cam, 800);
+
+    const stats = ctl.getStats();
+    const layerStats = layer.getCullStats();
+    const flags = (layer as unknown as { _passFlags: Uint8Array })._passFlags;
+    const transparentCount = Array.from(flags).filter((f) => f === DTX_PASS_TRANSPARENT).length;
+    const opaqueCount = Array.from(flags).filter((f) => f === DTX_PASS_OPAQUE).length;
+
+    expect(transparentCount).toBe(tenPercent.length);
+    expect(opaqueCount).toBe(ids.length - tenPercent.length);
+    expect(stats.transparentSegments).toBeGreaterThan(0);
+    expect(stats.transparentTriangles).toBeGreaterThan(0);
+    expect(stats.opaqueSegments).toBeGreaterThan(0);
+    expect(stats.opaqueTriangles).toBeGreaterThan(0);
+    expect(layerStats.passes.transparent.segments).toBe(stats.transparentSegments);
+    expect(layerStats.passes.transparent.triangles).toBe(stats.transparentTriangles);
+    expect(layer.getObject(tenPercent[0]!)!.materialIndex).toBe(beforeMatIdx);
+    expect(layer.getObjectColor(tenPercent[0]!)!.getHex()).toBe(beforeColor.getHex());
+
+    // 恢复不透明后透明通道清零
+    layer.setObjectsOpacity(tenPercent, 1);
+    layer.update(cam);
+    ctl.update(cam, 800);
+    expect(ctl.getStats().transparentSegments).toBe(0);
+    expect(ctl.getStats().transparentTriangles).toBe(0);
+  });
+
+  it('调色板满 256 种后：setObjectMaterial / addObject 设半透明及 setObjectColor/resetObjectColor 互不覆盖（#101）', () => {
+    const layer = new DTXLayer({ maxVertices: 64, maxIndices: 256, maxObjects: 320 });
+    layer.addGeometry('tri', tri());
+    const c = new Color();
+    for (let i = 0; i < 260; i++) {
+      c.setHSL(i / 260, 0.7, 0.5);
+      layer.addObject(`o${i}`, 'tri', new Matrix4().makeTranslation(0, 0, -20 - i * 0.1), c, { metalness: 0, roughness: 1 });
+    }
+    // 调色板已满时继续 addObject 带半透明
+    layer.addObject('late-trans', 'tri', new Matrix4().makeTranslation(0, 0, -50), new Color(0x112233), { opacity: 0.4 });
+    layer.compile();
+
+    // 调色板已满时 setObjectMaterial 仅改透明度
+    layer.setObjectMaterial('o5', { opacity: 0.35 });
+    // 同时叠加与清除颜色覆盖，不得抹掉已生效的透明度覆盖
+    layer.setObjectColor('o5', new Color(0xff0000));
+    layer.resetObjectColor('o5');
+
+    select(layer);
+    const flags = (layer as unknown as { _passFlags: Uint8Array })._passFlags;
+    expect(flags[5]).toBe(DTX_PASS_TRANSPARENT);
+    expect(flags[260]).toBe(DTX_PASS_TRANSPARENT);
+    expect(layer.getCullStats().passes.transparent.triangles).toBeGreaterThanOrEqual(2);
+    // 校验上传到 GPU 的纹理字节：bit0=0（颜色覆盖已清除）、bit1=2（透明度覆盖保留）、alpha 字节与目标一致
+    const raw = layer as unknown as {
+      _colorsAndFlagsTexture: { image: { data: Uint8Array } };
+      _colorOverrideTexture: { image: { data: Uint8Array } };
+    };
+    const flagsTex = raw._colorsAndFlagsTexture.image.data;
+    const overrideTex = raw._colorOverrideTexture.image.data;
+    expect(flagsTex[5 * 16 + 1]).toBe(2);
+    expect(overrideTex[5 * 4 + 3]).toBe(Math.round(0.35 * 255));
+    expect(flagsTex[260 * 16 + 1]).toBe(2);
+    expect(overrideTex[260 * 4 + 3]).toBe(Math.round(0.4 * 255));
+  });
+
+  it('调色板未满（如真实库 7997）时走调色板快路径，不置透明度覆盖位', () => {
+    const { layer } = passSetup();
+    layer.setObjectsOpacity(['b'], 0.5);
+    select(layer);
+    const buf = (layer as unknown as { _colorsAndFlagsBuffer: Uint8Array })._colorsAndFlagsBuffer;
+    // b 是第 1 个对象：pixel0.g 的 bit1（opacity override）应仍为 0
+    expect((buf[1 * 16 + 1]! & 2)).toBe(0);
+    expect(layer.getCullStats().passes.transparent.triangles).toBeGreaterThanOrEqual(1);
   });
 });
 

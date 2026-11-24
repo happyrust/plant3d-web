@@ -106,10 +106,11 @@ void main() {
   // 3.1 读取标志和材质索引 (4 pixels per object)
   int flagsBaseX = objX * 4;
 
-  // pixel 0: [materialIndex, hasColorOverride, visible, selected]
+  // pixel 0: [materialIndex, overrideFlags (bit0=color, bit1=opacity), visible, selected]
   uvec4 pixel0 = texelFetch(colorsAndFlagsTexture, ivec2(flagsBaseX + 0, objY), 0);
   uint materialIndex = pixel0.r;
-  bool hasColorOverride = pixel0.g > 0u;
+  bool hasColorOverride = (pixel0.g & 1u) != 0u;
+  bool hasOpacityOverride = (pixel0.g & 2u) != 0u;
   uint visibleFlag = pixel0.b;
 
   // pixel 1: [primitiveOffset] (packed as 4 bytes)
@@ -143,11 +144,16 @@ void main() {
   float roughness = matRow1.r;
   float opacity = matRow1.g;
 
-  // 3.3 检查颜色覆盖
-  if (hasColorOverride) {
-    // 从颜色覆盖纹理读取
+  // 3.3 检查颜色与透明度覆盖（调色板满 256 种时透明度通过 colorOverrideTexture.a 生效）
+  if (hasColorOverride || hasOpacityOverride) {
+    // 从颜色覆盖纹理读取 (rgb = 覆盖色, a = 覆盖透明度)
     vec4 overrideColor = texelFetch(colorOverrideTexture, ivec2(objX, objY), 0);
-    baseColor = overrideColor.rgb;
+    if (hasColorOverride) {
+      baseColor = overrideColor.rgb;
+    }
+    if (hasOpacityOverride) {
+      opacity = overrideColor.a;
+    }
   }
 
   vColor = vec4(baseColor, opacity);
