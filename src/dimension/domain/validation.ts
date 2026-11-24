@@ -19,6 +19,7 @@ export type DimensionValidationCode =
   | 'PROJECTION_DIRECTION_PARALLEL_DIMENSION'
   | 'DEGENERATE_DIMENSION_DIRECTION'
   | 'DEGENERATE_PROJECTION_DIRECTION'
+  | 'DEGENERATE_RADIAL_RADIUS'
   | 'UNRESOLVED_DIMENSION_POINT'
   | 'INVALID_DIMENSION_POINT_TYPE';
 
@@ -169,6 +170,15 @@ export function validateDimensionRecord(
       const normal = projectionAxisVector(record.normal);
       if (!isFiniteVec3(normal) || length(normal) <= tolerances.minDirectionLengthM) {
         errors.push({ code: 'DEGENERATE_PROJECTION_DIRECTION', slot: 'normal' });
+      }
+      const center = record.center.snapshot;
+      const rim = record.rim.snapshot;
+      if (
+        isFiniteVec3(center)
+        && isFiniteVec3(rim)
+        && length(sub(rim, center)) <= tolerances.minDirectionLengthM
+      ) {
+        errors.push({ code: 'DEGENERATE_RADIAL_RADIUS', slot: 'rim' });
       }
       break;
     }

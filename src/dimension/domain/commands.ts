@@ -4,6 +4,7 @@ import type {
   DimensionAnchor,
   DimensionArcChoice,
   LinearPlacementIntent,
+  ProjectionAxisRef,
   RadialDisplay,
   RadialPlacementIntent,
   UserDimensionRecord,
@@ -47,6 +48,14 @@ export type DimensionCommandIntent =
     dimensionId: string;
     anchorSlot: string;
     anchor: DimensionAnchor;
+  }>
+  | Readonly<{
+    type: 'rebind-radial-circle';
+    dimensionId: string;
+    center: DimensionAnchor;
+    rim: DimensionAnchor;
+    normal: ProjectionAxisRef;
+    referencedRadiusM?: number;
   }>;
 
 export type DimensionCommand = Readonly<{
@@ -105,6 +114,19 @@ export type DimensionEvent =
     anchorSlot: string;
     previous: DimensionAnchor;
     next: DimensionAnchor;
+  }>
+  | Readonly<{
+    type: 'radial-circle-rebound';
+    commandId: string;
+    dimensionId: string;
+    previousCenter: DimensionAnchor;
+    previousRim: DimensionAnchor;
+    previousNormal: ProjectionAxisRef;
+    previousReferencedRadiusM: number | undefined;
+    nextCenter: DimensionAnchor;
+    nextRim: DimensionAnchor;
+    nextNormal: ProjectionAxisRef;
+    nextReferencedRadiusM: number | undefined;
   }>;
 
 export type ReduceDimensionResult =

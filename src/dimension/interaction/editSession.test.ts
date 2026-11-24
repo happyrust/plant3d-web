@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { linearRecord } from '../domain/testFixtures';
+import { linearRecord, radialRecord } from '../domain/testFixtures';
 
 import {
   createAngularEditSession,
@@ -292,6 +292,48 @@ describe('dimension edit sessions', () => {
     expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({
       b: [5, 0, 0],
     }));
+  });
+
+  it('#72 重绑圆时一次换掉圆心、圆周和法向，半径/直径和引线保留', () => {
+    const record = radialRecord({
+      id: 'radial-rebind',
+      display: 'diameter',
+      placement: { leaderDirection: [0, 1, 0], labelDistanceM: 0.4 },
+    });
+    const session = createRebindEditSession({
+      record,
+      anchorSlot: 'center',
+      snapPort: {
+        query: () => [{
+          id: 'pipe',
+          capability: 'circle',
+          anchor: {
+            snapshot: [1, 2, 3],
+            accuracy: 'exact',
+            semanticRef: { source: 'circle', candidateId: 'pipe', refno: 'R1' },
+          },
+          direction: [0.2, 0, 0],
+          normal: [0, 0, 1],
+          label: 'circle',
+          distancePx: 1,
+        }],
+      },
+      actor: { actorId: 'designer-1', actorRole: 'designer' },
+      createCommandId: () => 'rebind-circle',
+      now: () => 300,
+      onPreview: vi.fn(),
+    });
+
+    session?.pointerDown({ x: 1, y: 1 });
+
+    expect(session?.commit()).toMatchObject({
+      type: 'rebind-radial-circle',
+      dimensionId: 'radial-rebind',
+      referencedRadiusM: 0.2,
+      center: { snapshot: [1, 2, 3], semanticRef: { candidateId: 'pipe:center', refno: 'R1' } },
+      rim: { snapshot: [1.2, 2, 3], semanticRef: { candidateId: 'pipe:rim' } },
+      normal: { kind: 'semantic-direction', snapshot: [0, 0, 1], semanticRef: { candidateId: 'pipe:normal' } },
+    });
   });
 
   it('#75 第二点之后进入设计空间 place：定显式方向与尺寸平面，放置跟宿主算的结果，单条 create 命令', () => {

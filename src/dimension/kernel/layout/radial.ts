@@ -46,15 +46,17 @@ export function layoutRadial(
   input: Extract<NormalizedDimensionInput, { kind: 'radial' }>,
   context: LayoutContext,
 ): LayoutResult {
+  const radiusM = length3(sub3(input.rim, input.center));
+  if (radiusM <= EPSILON) {
+    return emptyLayout(input.id, input.labelPinned, '', undefined, ['DEGENERATE_RADIAL_RADIUS']);
+  }
+  if (length3(input.normal) <= EPSILON) {
+    return emptyLayout(input.id, input.labelPinned, '', undefined, ['DEGENERATE_PROJECTION_DIRECTION']);
+  }
+
   const value = deriveDimensionValue(input);
   const formatted = formatDimensionLabel(input, value, context.format);
   if (!value.ok || value.valueM === undefined || !formatted.ok) {
-    return emptyLayout(input.id, input.labelPinned);
-  }
-
-  const normalLength = length3(input.normal);
-  const radiusM = length3(sub3(input.rim, input.center));
-  if (normalLength <= EPSILON || radiusM <= EPSILON) {
     return emptyLayout(input.id, input.labelPinned);
   }
   const normal = normalize3(input.normal);

@@ -40,6 +40,7 @@ const VALIDATION_MESSAGES: Readonly<Record<string, string>> = {
   PROJECTION_DIRECTION_PARALLEL_DIMENSION: '投影方向与尺寸方向平行',
   DEGENERATE_DIMENSION_DIRECTION: '两点在尺寸方向上重合，长度为零',
   DEGENERATE_PROJECTION_DIRECTION: '投影轴 / 法向为零向量',
+  DEGENERATE_RADIAL_RADIUS: '圆的半径为零',
   UNRESOLVED_DIMENSION_POINT: '有尺寸点没解析出坐标',
   INVALID_DIMENSION_POINT_TYPE: '拾到的点类型不能用于该尺寸',
 };

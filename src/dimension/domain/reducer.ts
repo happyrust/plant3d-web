@@ -155,7 +155,9 @@ function isUserDimensionRecord(value: unknown): value is UserDimensionRecord {
         && isDimensionAnchor(record.rim)
         && isProjectionAxisRef(record.normal)
         && (record.display === 'radius' || record.display === 'diameter')
-        && isRadialPlacement(record.placement);
+        && isRadialPlacement(record.placement)
+        && (record.referencedRadiusM === undefined
+          || (isFiniteNumber(record.referencedRadiusM) && record.referencedRadiusM >= 0));
       break;
     default:
       return false;
@@ -479,6 +481,61 @@ export function reduceDimensionDocument(
           type: 'set-radial-display',
           dimensionId: command.dimensionId,
           display: previous,
+        },
+      };
+    }
+    case 'rebind-radial-circle': {
+      if (
+        !isDimensionAnchor(command.center)
+        || command.center.snapshot === null
+        || !isDimensionAnchor(command.rim)
+        || command.rim.snapshot === null
+        || !isProjectionAxisRef(command.normal)
+        || (command.referencedRadiusM !== undefined
+          && (!isFiniteNumber(command.referencedRadiusM) || command.referencedRadiusM < 0))
+      ) {
+        return failure('invalid-command');
+      }
+      const found = findMutableRecord(state, command);
+      if (!found.ok) return found.result;
+      if (found.record.kind !== 'radial') return failure('kind-mismatch');
+      const previous = found.record;
+      const { referencedRadiusM: _previousRadius, ...withoutRadius } = previous;
+      const next: UserDimensionRecord = withResolvedValidity({
+        ...withoutRadius,
+        center: command.center,
+        rim: command.rim,
+        normal: command.normal,
+        ...(command.referencedRadiusM === undefined
+          ? {}
+          : { referencedRadiusM: command.referencedRadiusM }),
+        updatedAt: command.at,
+      });
+      return {
+        ok: true,
+        state: replaceRecord(state, found.index, next),
+        event: {
+          type: 'radial-circle-rebound',
+          commandId: command.commandId,
+          dimensionId: command.dimensionId,
+          previousCenter: previous.center,
+          previousRim: previous.rim,
+          previousNormal: previous.normal,
+          previousReferencedRadiusM: previous.referencedRadiusM,
+          nextCenter: command.center,
+          nextRim: command.rim,
+          nextNormal: command.normal,
+          nextReferencedRadiusM: command.referencedRadiusM,
+        },
+        inverse: {
+          type: 'rebind-radial-circle',
+          dimensionId: command.dimensionId,
+          center: previous.center,
+          rim: previous.rim,
+          normal: previous.normal,
+          ...(previous.referencedRadiusM === undefined
+            ? {}
+            : { referencedRadiusM: previous.referencedRadiusM }),
         },
       };
     }

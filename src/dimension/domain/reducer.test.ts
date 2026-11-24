@@ -293,6 +293,46 @@ describe('reduceDimensionDocument', () => {
     }
   });
 
+  it('#72 重绑整圆时保留半径/直径和引线，撤销回到原来的三点', () => {
+    const record = radialRecord({
+      id: 'radial-circle',
+      display: 'diameter',
+      placement: { leaderDirection: [0, 1, 0], labelDistanceM: 0.4 },
+    });
+    const result = reduceDimensionDocument(emptyDimensionDocument([record]), {
+      type: 'rebind-radial-circle',
+      commandId: 'circle-1',
+      actorId: record.authorId,
+      actorRole: record.authorRole,
+      at: 50,
+      dimensionId: record.id,
+      center: exactAnchor([1, 2, 3], { source: 'circle', candidateId: 'pipe:center' }),
+      rim: exactAnchor([1.2, 2, 3], { source: 'circle', candidateId: 'pipe:rim' }),
+      normal: {
+        kind: 'semantic-direction',
+        snapshot: [0, 0, 1],
+        semanticRef: { source: 'circle', candidateId: 'pipe:normal' },
+      },
+      referencedRadiusM: 0.2,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const saved = present(result.state.records[0], 'rebound radial');
+    if (saved.kind !== 'radial') throw new Error('expected a radial record');
+    expect(saved.display).toBe('diameter');
+    expect(saved.placement).toEqual(record.placement);
+    expect(saved.referencedRadiusM).toBe(0.2);
+    expect(saved.center.snapshot).toEqual([1, 2, 3]);
+    expect(result.inverse).toMatchObject({
+      type: 'rebind-radial-circle',
+      center: record.center,
+      rim: record.rim,
+      normal: record.normal,
+    });
+    expect(result.inverse).not.toHaveProperty('referencedRadiusM');
+  });
+
   it('rebinds a valid slot and rejects a slot from another kind', () => {
     const record = angularRecord({ id: 'angle-1', validity: 'invalid' });
     const anchor = exactAnchor([5, 6, 7]);
