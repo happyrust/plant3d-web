@@ -12,9 +12,9 @@
  * 两轮不并发：运行中再点，合并成「这一轮完了再跑一轮」。
  *
  * 刷新范围按库发现、按节点动手：模型这一半只核对「所在库的模型水位或库文件最新会话和装的时候不一样」的节点，问后端它的节点模型状态
- * 之后才决定换不换；别的库的节点不碰。接线那一层（`useModelGetWork`）给的状态里，库的模型水位比本页装的新就算
- * 「有更新可重载」——不再逐个节点去问其间改没改到它（那条查询在真实库上一次要几十秒），所以水位动过的库里在册的
- * 节点各重载一次。树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
+ * 之后才决定换不换；别的库的节点不碰。接线那一层（`useModelGetWork`）在新后端声明支持 `node/versions` 尾段快算（#325）与
+ * 祖先位姿传播（#323）时，会按 `since_sesno` 查尾段版本表，零几何影响的未改节点不再陪着重载；旧后端或查表失败时保守回退到重载。
+ * 树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
  *
  * 例外（2026-11-17）：不在后端更新范围里、库一级的模型又落后于库文件的库。后台不会去追它，新旧只能按页面上装着的
  * 节点说——节点装上的时候就可能已经落后，做过节点一级更新的又已经是最新。所以这种库里在册的节点哪怕库的水位和装的
@@ -59,6 +59,8 @@ export type GetWorkRoot = {
    * 继续留在追踪范围里；几何恢复后重载装回场景，仍为空时不再重复撤下。
    */
   withdrawnEmpty?: boolean;
+  /** 已加载节点表已明确要求重载（例如任务批次点名或之前落后的改动已生成） */
+  reloadHint?: boolean;
   /**
    * 装上之后头一次问到的后端那一版模型（已加载节点表记的）。`null` = 当时后端说不出；不给 = 没记下
    * （登记表里的节点、状态还没问回来、旧后端）。后端按需生成的模型不动库的水位，屏幕上的是不是它现在的那一版
@@ -369,17 +371,28 @@ export function decideRootAction(
   if (answer.gone) return { kind: 'withdraw' };
   const status = answer.status;
   const watermarkUnknown = root.loadedModelSesno === null && root.loadedFileLatestSesno === null;
+  // 库模型水位回退（例如重建 / 回滚），或靠库水位担保但装入时没记到有效模型水位基线：保守重载，绝不漏更新
+  const modelRolledBack = root.loadedModelSesno !== null
+    && status.modelSesno !== null
+    && status.modelSesno < root.loadedModelSesno;
+  const modelBaselineMissing = status.modelSesno !== null
+    && status.modelSesno > 0
+    && status.generated?.basis !== 'own_generation'
+    && (root.loadedModelSesno === null || root.loadedModelSesno <= 0);
   const mustReload = Boolean(
     root.withdrawnEmpty
     || root.staleReason
+    || root.reloadHint
     || ownGenerationNewer(root, status)
-    || watermarkUnknown,
+    || watermarkUnknown
+    || modelRolledBack
+    || modelBaselineMissing,
   );
   switch (status.verdict) {
     case 'reloadable':
       return { kind: 'reload', note: null };
     case 'latest':
-      // 本页装的是哪一版没记下来、或上次查空撤下后现在后端又有模型了：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
+      // 本页装的是哪一版没记下来、水位回退、或上次查空撤下后现在后端又有模型了：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
       if (mustReload) return { kind: 'reload', note: null };
       return { kind: 'none' };
     case 'lagging': {

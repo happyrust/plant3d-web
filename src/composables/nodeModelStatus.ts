@@ -15,8 +15,13 @@
  * 服务端没有那条路由（旧构建）时退回过渡办法：`/dbnums` 那一行的水位加节点版本表现算——那时未初始化的库说不出结论
  * （`untracked`），`partial` / `not_generated` / `empty` 也给不出。
  */
-import type { DbnumRow, NodeModelStatusResponse } from '@/api/genModelV1Api';
-
+import {
+  isSourceChangedError,
+  retryOnSourceChanged,
+  type DbnumRow,
+  type NodeModelStatusResponse,
+  type SourceChangedRetrySleep,
+} from '@/api/genModelV1Api';
 import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
 import { toRefnoKey } from '@/utils/refnoKey';
 
@@ -114,6 +119,8 @@ export type NodeModelStatus = {
   verdict: NodeModelVerdict;
   /** `unknown` 的原因（给人看） */
   reason: string | null;
+  /** 仅在接口返回明确错误码（如瞬态 503 `SOURCE_CHANGED`）时附带，用于上层区分瞬态写盘冲突与真实错误 */
+  errorCode?: string | null;
   dbnum: number;
   /** 事实从哪来：`model-status` = 后端的节点模型状态接口；`versions` = 过渡办法（库水位 + 节点版本表） */
   source: 'model-status' | 'versions';
@@ -251,6 +258,7 @@ export function judgeNodeModelStatus(input: {
   loadedModelSesno: number | null;
   changedSessions: NodeChangedSession[] | null;
   error?: string | null;
+  errorCode?: string | null;
   now?: number;
 }): NodeModelStatus {
   const { dbnum, row } = input;
@@ -284,7 +292,13 @@ export function judgeNodeModelStatus(input: {
     fileLatestSesno: fileLatest,
     librarySessionsAhead: Math.max(0, fileLatest - model),
   };
-  if (input.changedSessions === null) return { ...known, reason: input.error || '变化查询没有应答' };
+  if (input.changedSessions === null) {
+    return {
+      ...known,
+      reason: input.error || '变化查询没有应答',
+      ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+    };
+  }
   const laggingSessions = input.changedSessions.filter((item) => item.sesno > model);
   const reloadableSessions = loadedModelSesno !== null && loadedModelSesno < model
     ? input.changedSessions.filter((item) => item.sesno > loadedModelSesno && item.sesno <= model)
@@ -322,6 +336,7 @@ export function judgeNodeModelFacts(input: {
   loadedModelSesno: number | null;
   changedSinceLoaded?: NodeChangedSession[] | null;
   error?: string | null;
+  errorCode?: string | null;
   now?: number;
 }): NodeModelStatus {
   const { facts } = input;
@@ -379,7 +394,11 @@ export function judgeNodeModelFacts(input: {
     : [];
   if (facts.verdict === 'lagging') return { ...base, verdict: 'lagging', reloadableSessions };
   if (input.changedSinceLoaded === null) {
-    return { ...base, reason: input.error || '库里的模型比本页装的新，其间改没改到本节点没有问到' };
+    return {
+      ...base,
+      reason: input.error || '库里的模型比本页装的新，其间改没改到本节点没有问到',
+      ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+    };
   }
   return { ...base, verdict: reloadableSessions.length > 0 ? 'reloadable' : 'latest', reloadableSessions };
 }
@@ -413,15 +432,28 @@ function errorText(error: unknown): string {
 const FACTS_ERROR_TEXT: Record<string, string> = {
   REFNO_NOT_FOUND: '库文件最新会话上没有这个节点（可能已被删除）',
   SOURCE_NOT_FOUND: '库文件打不开，或水位暂时读不到',
+  SOURCE_CHANGED: '库文件正在写入，请稍后重试',
   INVALID_REFNO: '节点编号解不出',
 };
 
+function errorCodeOf(error: unknown): string | null {
+  const code = typeof (error as { code?: unknown } | null)?.code === 'string'
+    ? (error as { code: string }).code.trim()
+    : '';
+  return code || null;
+}
+
 function factsErrorText(error: unknown): string {
-  const code = typeof (error as { code?: unknown } | null)?.code === 'string' ? (error as { code: string }).code : '';
+  const code = errorCodeOf(error) ?? '';
   const known = FACTS_ERROR_TEXT[code];
   if (known) return known;
   const text = errorText(error);
   return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+}
+
+function versionsErrorText(error: unknown): string {
+  if (isSourceChangedError(error)) return '库文件正在写入，版本核对暂不可用（请稍后重试）';
+  return errorText(error);
 }
 
 /**
@@ -440,9 +472,20 @@ export async function resolveNodeModelStatus(input: {
   fetchFacts?: FetchNodeModelFacts;
   listChangedSessions: ListNodeChangedSessions;
   signal?: AbortSignal;
+  /** `node/versions` 遇 503 `SOURCE_CHANGED` 时的退避重试上限（缺省 3；下层已重试耗尽时不再叠加） */
+  maxSourceChangedRetries?: number;
+  /** 可注入延迟器（单测用） */
+  sleep?: SourceChangedRetrySleep;
   now?: number;
 }): Promise<NodeModelStatus> {
   const { dbnum, refno, row, loadedModelSesno } = input;
+  const queryChanged = (query: { dbnum: number; refno: string; sinceSesno: number; signal?: AbortSignal }) => (
+    retryOnSourceChanged(() => input.listChangedSessions(query), {
+      maxRetries: input.maxSourceChangedRetries,
+      signal: input.signal,
+      sleep: input.sleep,
+    })
+  );
   if (input.fetchFacts) {
     let facts: NodeModelFacts | null;
     try {
@@ -451,26 +494,42 @@ export async function resolveNodeModelStatus(input: {
       // 接口在、但这一次没答上来：不下结论（也不退回过渡办法——库文件或水位读不到时那边一样答不上）。
       // 库状态那一行说库正在被写的，照实说「更新中」。
       const reason = factsErrorText(error);
-      const known = judgeNodeModelStatus({ dbnum, row, loadedModelSesno, changedSessions: null, error: reason, now: input.now });
+      const code = isSourceChangedError(error) ? 'SOURCE_CHANGED' : null;
+      const known = judgeNodeModelStatus({
+        dbnum,
+        row,
+        loadedModelSesno,
+        changedSessions: null,
+        error: reason,
+        errorCode: code,
+        now: input.now,
+      });
       return known.verdict === 'updating'
         ? { ...known, source: 'model-status' }
-        : { ...known, verdict: 'unknown', reason, source: 'model-status' };
+        : { ...known, verdict: 'unknown', reason, source: 'model-status', ...(code ? { errorCode: code } : {}) };
     }
     if (facts) {
       const since = reloadCheckSince(facts, loadedModelSesno);
       if (since === null) return judgeNodeModelFacts({ facts, loadedModelSesno, now: input.now });
       try {
-        const changedSinceLoaded = await input.listChangedSessions({ dbnum: facts.dbnum, refno, sinceSesno: since, signal: input.signal });
+        const changedSinceLoaded = await queryChanged({ dbnum: facts.dbnum, refno, sinceSesno: since, signal: input.signal });
         return judgeNodeModelFacts({ facts, loadedModelSesno, changedSinceLoaded, now: input.now });
       } catch (error) {
-        return judgeNodeModelFacts({ facts, loadedModelSesno, changedSinceLoaded: null, error: errorText(error), now: input.now });
+        return judgeNodeModelFacts({
+          facts,
+          loadedModelSesno,
+          changedSinceLoaded: null,
+          error: versionsErrorText(error),
+          errorCode: isSourceChangedError(error) ? 'SOURCE_CHANGED' : null,
+          now: input.now,
+        });
       }
     }
   }
   const since = nodeStatusQuerySince(row, loadedModelSesno);
   if (since === null) return judgeNodeModelStatus({ dbnum, row, loadedModelSesno, changedSessions: [], now: input.now });
   try {
-    const changedSessions = await input.listChangedSessions({ dbnum, refno, sinceSesno: since, signal: input.signal });
+    const changedSessions = await queryChanged({ dbnum, refno, sinceSesno: since, signal: input.signal });
     return judgeNodeModelStatus({ dbnum, row, loadedModelSesno, changedSessions, now: input.now });
   } catch (error) {
     return judgeNodeModelStatus({
@@ -478,7 +537,8 @@ export async function resolveNodeModelStatus(input: {
       row,
       loadedModelSesno,
       changedSessions: null,
-      error: errorText(error),
+      error: versionsErrorText(error),
+      errorCode: isSourceChangedError(error) ? 'SOURCE_CHANGED' : null,
       now: input.now,
     });
   }

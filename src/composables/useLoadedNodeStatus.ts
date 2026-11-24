@@ -17,7 +17,7 @@
  */
 import { reactive, watch } from 'vue';
 
-import type { DbnumRow } from '@/api/genModelV1Api';
+import type { DbnumRow, SourceChangedRetrySleep } from '@/api/genModelV1Api';
 
 import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
 import { clearPendingGenerationFill, isGenerationFillActive } from '@/composables/generationFillState';
@@ -29,6 +29,7 @@ import {
   resolveNodeModelStatus,
   type FetchNodeModelFacts,
   type ListNodeChangedSessions,
+  type NodeChangedSession,
   type NodeModelStatus,
   type NodeModelStatusAction,
   type NodeModelStatusIconKind,
@@ -96,6 +97,15 @@ export type LoadedNodeEntry = {
   reloadHint?: LoadedNodeReloadHint | null;
   /** 正在重问、而且已经走到慢的那一问（节点版本表）：判定回来时收起；被新的一次顶掉的那次走到那一问不记 */
   awaitingChanges?: boolean;
+  /**
+   * 最近一次成功核对 `node/versions?since_sesno=` 的尾段结论缓存：
+   * 「取最新」在同一次模型水位上可直接复用（`sinceSesno` 与装入基线一致且 `throughModelSesno >= targetModelSesno`），避免重复打后端（#325）。
+   */
+  versionsChecked?: {
+    sinceSesno: number;
+    throughModelSesno: number;
+    changedSessions: NodeChangedSession[];
+  } | null;
 };
 
 export type LoadedNodeView = {
@@ -132,6 +142,24 @@ let tokenSeq = 0;
 let stopWatching: (() => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeBatches: (() => void) | null = null;
+let retrySleepOverride: SourceChangedRetrySleep | undefined;
+let retryMaxOverride: number | undefined;
+/** 503 SOURCE_CHANGED 重试耗尽后，后台再补查一次的默认延迟（毫秒）与每节点连续补查上限 */
+const DEFAULT_SOURCE_CHANGED_FOLLOWUP_MS = 3_000;
+const SOURCE_CHANGED_MAX_FOLLOWUPS = 2;
+let sourceChangedFollowUpDelayMs = DEFAULT_SOURCE_CHANGED_FOLLOWUP_MS;
+const sourceChangedFollowUpCount = new Map<string, number>();
+
+/** 测试用：注入 `503 SOURCE_CHANGED` 重试等待与耗尽后补查延迟，避免单测真等数秒。 */
+export function __setLoadedNodeStatusRetryOptionsForTests(options?: {
+  sleep?: SourceChangedRetrySleep;
+  maxSourceChangedRetries?: number;
+  followUpDelayMs?: number;
+}): void {
+  retrySleepOverride = options?.sleep;
+  retryMaxOverride = options?.maxSourceChangedRetries;
+  sourceChangedFollowUpDelayMs = options?.followUpDelayMs ?? DEFAULT_SOURCE_CHANGED_FOLLOWUP_MS;
+}
 
 function rowOf(dbnum: number): DbnumRow | null {
   return (useGenModelV1Health().state.verdict.rows?.[dbnum] as DbnumRow | undefined) ?? null;
@@ -341,6 +369,7 @@ async function run(key: string): Promise<void> {
   inflight.set(key, controller);
   running += 1;
   try {
+    const versionsOutcome: { value: { sinceSesno: number; sessions: NodeChangedSession[] } | null } = { value: null };
     const status = await resolveNodeModelStatus({
       dbnum: entry.dbnum,
       refno: entry.refno,
@@ -349,13 +378,51 @@ async function run(key: string): Promise<void> {
       // 不需要再走慢的 `node/versions` 逐会话核对（`loadedNodeView` 对 `withdrawnEmpty + latest` 直接出 `reloadable`）。
       loadedModelSesno: entry.withdrawnEmpty ? null : entry.loadedModelSesno,
       ...(factsQuery ? { fetchFacts: factsQuery } : {}),
-      listChangedSessions,
+      listChangedSessions: async (query) => {
+        const sessions = await listChangedSessions(query);
+        versionsOutcome.value = { sinceSesno: query.sinceSesno, sessions };
+        return sessions;
+      },
       signal: controller.signal,
+      ...(retrySleepOverride ? { sleep: retrySleepOverride } : {}),
+      ...(retryMaxOverride !== undefined ? { maxSourceChangedRetries: retryMaxOverride } : {}),
     });
     const current = entries.get(key);
     if (!current || checkTokens.get(key) !== token) return;
+    // 503 SOURCE_CHANGED 重试耗尽（E3D 仍在写盘）：
+    // - 该行此前已有有效状态时保留既有状态，不草率翻成「新旧未知」；
+    // - 首次核对尚无有效状态时写入带 `errorCode: 'SOURCE_CHANGED'` 的未知结论以区分瞬态写盘冲突；
+    // - 两种情形都不写入 `checkedAgainst`，受限安排一次后台补查待写盘结束后自动恢复。
+    if (status.verdict === 'unknown' && status.errorCode === 'SOURCE_CHANGED') {
+      current.checking = false;
+      current.awaitingChanges = false;
+      if (!current.status || current.status.verdict === 'unknown') {
+        current.status = status;
+      }
+      const attempts = sourceChangedFollowUpCount.get(key) ?? 0;
+      if (attempts < SOURCE_CHANGED_MAX_FOLLOWUPS && sourceChangedFollowUpDelayMs >= 0) {
+        sourceChangedFollowUpCount.set(key, attempts + 1);
+        recheckLoadedNodeLater(key, [sourceChangedFollowUpDelayMs]);
+      }
+      if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key);
+      return;
+    }
+    sourceChangedFollowUpCount.delete(key);
     current.status = status;
     current.checking = false;
+    if (
+      versionsOutcome.value
+      && status.verdict !== 'unknown'
+      && status.verdict !== 'updating'
+      && status.modelSesno !== null
+      && status.modelSesno > 0
+    ) {
+      current.versionsChecked = {
+        sinceSesno: versionsOutcome.value.sinceSesno,
+        throughModelSesno: status.modelSesno,
+        changedSessions: versionsOutcome.value.sessions,
+      };
+    }
     // 装上之后头一次问到的那一版记下来（见 `LoadedNodeEntry.loadedGenerated`）：说不出也记一笔，之后答上来的不补——
     // 隔了一阵才问到的那一版，保不准还是装上时的
     if (current.loaded && current.loadedGenerated === undefined && status.source === 'model-status') {
@@ -412,6 +479,7 @@ export function noteLoadedNode(
     staleReason: null,
   });
   checkedAgainst.delete(key);
+  sourceChangedFollowUpCount.delete(key);
   startWatching();
   schedule(key);
 }
@@ -441,6 +509,7 @@ export function noteWithdrawnEmptyNode(
     staleReason: null,
   });
   checkedAgainst.delete(key);
+  sourceChangedFollowUpCount.delete(key);
   startWatching();
   schedule(key);
 }
@@ -506,6 +575,7 @@ export function recheckLoadedNodeLater(refno: string, delaysMs: readonly number[
 
 function drop(key: string): void {
   clearFollowUps(key);
+  sourceChangedFollowUpCount.delete(key);
   inflight.get(key)?.abort();
   inflight.delete(key);
   checkTokens.delete(key);

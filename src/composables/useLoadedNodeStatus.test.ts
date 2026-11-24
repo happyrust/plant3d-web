@@ -673,4 +673,99 @@ describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () 
     expect(h.listNodeVersions).not.toHaveBeenCalled();
     expect(store.view(EQ_A)).toMatchObject({ verdict: 'reloadable', iconKind: 'reloadable', action: 'reload' });
   });
+
+  it('503 SOURCE_CHANGED（#321）：首次返回 503 重试后 200 静默恢复正常判定，并写入 versionsChecked 供取最新复用', async () => {
+    const mod = await import('./useLoadedNodeStatus');
+    const delays: number[] = [];
+    mod.__setLoadedNodeStatusRetryOptionsForTests({
+      sleep: async (ms) => { delays.push(ms); },
+      maxSourceChangedRetries: 2,
+      followUpDelayMs: -1,
+    });
+    const store = mod.useLoadedNodeStatus();
+    store.provideChangeQuery(async ({ dbnum, refno, sinceSesno, signal }) => changedSessionsOfNodeVersions(
+      (await h.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal })).versions,
+    ));
+    const fetchFacts = vi.fn(async (): Promise<NodeModelFacts | null> => facts({
+      verdict: 'latest', dbnum: 8000, noun: 'EQUI',
+      units: { total: 1, generated: 1, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: { sesnoMin: 1146, sesnoMax: 1146, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 1146, modelSesno: 1146, modelSesnoTime: null, inWatchScope: true },
+    }));
+    store.provideFactsQuery(fetchFacts);
+    setRows({ ...ROW_8000, file_latest_sesno: 1146, applied_sesno: 1146, model_sesno: 1146 });
+    const transient = Object.assign(new Error('库文件正在写入'), { code: 'SOURCE_CHANGED', status: 503, retryAfterMs: 2_000 });
+    h.listNodeVersions
+      .mockRejectedValueOnce(transient)
+      .mockResolvedValueOnce(timeline([{ sesno: 1145, impact: 'noop' }]));
+
+    store.noteLoaded('24384_26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 });
+    await settled(store, '24384_26547');
+
+    expect(h.listNodeVersions).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2_000]);
+    expect(store.view('24384_26547')).toMatchObject({ verdict: 'latest', iconKind: 'current', action: null });
+    expect(store.entry('24384_26547')!.versionsChecked).toEqual({
+      sinceSesno: 1143,
+      throughModelSesno: 1146,
+      changedSessions: [],
+    });
+  });
+
+  it('503 SOURCE_CHANGED 重试耗尽（#321）：已有有效状态的行不翻成「新旧未知」；首次未知的行清晰区分瞬态写盘冲突', async () => {
+    const mod = await import('./useLoadedNodeStatus');
+    mod.__setLoadedNodeStatusRetryOptionsForTests({
+      sleep: async () => {},
+      maxSourceChangedRetries: 2,
+      followUpDelayMs: -1,
+    });
+    const store = mod.useLoadedNodeStatus();
+    store.provideChangeQuery(async ({ dbnum, refno, sinceSesno, signal }) => changedSessionsOfNodeVersions(
+      (await h.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal })).versions,
+    ));
+    const fetchFacts = vi.fn(async (): Promise<NodeModelFacts | null> => facts({
+      verdict: 'latest', dbnum: 8000, noun: 'EQUI',
+      units: { total: 1, generated: 1, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: { sesnoMin: 1143, sesnoMax: 1143, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 1143, modelSesno: 1143, modelSesnoTime: null, inWatchScope: true },
+    }));
+    store.provideFactsQuery(fetchFacts);
+
+    // 1. 已有有效状态（latest）的行：水位推进后遇持续 503 SOURCE_CHANGED → 保留既有 latest，不翻成 unknown
+    setRows(ROW_8000);
+    store.noteLoaded('24384_26547', 8000, { modelSesno: 1143, fileLatestSesno: 1143 });
+    await settled(store, '24384_26547');
+    expect(store.view('24384_26547')!.verdict).toBe('latest');
+
+    const transient = () => Object.assign(new Error('库文件正在写入'), { code: 'SOURCE_CHANGED', status: 503, retryAfterMs: 2_000 });
+    fetchFacts.mockResolvedValue(facts({
+      verdict: 'latest', dbnum: 8000, noun: 'EQUI',
+      units: { total: 1, generated: 1, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: { sesnoMin: 1146, sesnoMax: 1146, timeMin: null, timeMax: null, basis: 'library_watermark' },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      library: { fileLatestSesno: 1146, modelSesno: 1146, modelSesnoTime: null, inWatchScope: true },
+    }));
+    h.listNodeVersions.mockImplementation(async () => { throw transient(); });
+    setRows({ ...ROW_8000, file_latest_sesno: 1146, applied_sesno: 1146, model_sesno: 1146 });
+    await nextTick();
+    await settled(store, '24384_26547');
+
+    // 共尝试 1 + 2 = 3 次后耗尽，但未改行仍保留 latest，不草率翻坏
+    expect(h.listNodeVersions).toHaveBeenCalledTimes(3);
+    expect(store.view('24384_26547')).toMatchObject({ verdict: 'latest', iconKind: 'current', action: null, checking: false });
+
+    // 2. 首次核对尚无有效状态的行遇持续 503 SOURCE_CHANGED → 标 unknown 且携带 errorCode = SOURCE_CHANGED 清晰区分写盘冲突
+    h.listNodeVersions.mockClear();
+    store.noteLoaded('24384_26548', 8000, { modelSesno: 1143, fileLatestSesno: 1143 });
+    await settled(store, '24384_26548');
+    expect(h.listNodeVersions).toHaveBeenCalledTimes(3);
+    expect(store.entry('24384_26548')!.status).toMatchObject({
+      verdict: 'unknown',
+      errorCode: 'SOURCE_CHANGED',
+      reason: '库文件正在写入，版本核对暂不可用（请稍后重试）',
+    });
+    expect(store.view('24384_26548')!.title).toContain('库文件正在写入');
+  });
 });

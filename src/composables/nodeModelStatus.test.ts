@@ -529,4 +529,43 @@ describe('resolveNodeModelStatus（过渡办法：没有接上节点模型状态
     expect(status.verdict).toBe('unknown');
     expect(status.reason).toContain('SESSION_NOT_FOUND');
   });
+
+  it('node/versions 遇 503 SOURCE_CHANGED：短退避重试后 200 正常恢复；重试耗尽时标明瞬态写盘冲突（errorCode = SOURCE_CHANGED）', async () => {
+    const delays: number[] = [];
+    const transientError = () => Object.assign(new Error('库文件正在写入'), { code: 'SOURCE_CHANGED', status: 503, retryAfterMs: 2_000 });
+    const listChangedSessions = vi.fn()
+      .mockRejectedValueOnce(transientError())
+      .mockResolvedValueOnce([session(210, 1)]);
+
+    const recovered = await resolveNodeModelStatus({
+      dbnum: 7999,
+      refno: '24383_80211',
+      row: null,
+      loadedModelSesno: 205,
+      fetchFacts: async () => facts(SITE_LATEST),
+      listChangedSessions,
+      sleep: async (ms) => { delays.push(ms); },
+    });
+    expect(listChangedSessions).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2_000]);
+    expect(recovered.verdict).toBe('reloadable');
+
+    const alwaysBusy = vi.fn(async () => { throw transientError(); });
+    const exhausted = await resolveNodeModelStatus({
+      dbnum: 7999,
+      refno: '24383_80211',
+      row: null,
+      loadedModelSesno: 205,
+      fetchFacts: async () => facts(SITE_LATEST),
+      listChangedSessions: alwaysBusy,
+      maxSourceChangedRetries: 2,
+      sleep: async () => {},
+    });
+    expect(alwaysBusy).toHaveBeenCalledTimes(3);
+    expect(exhausted).toMatchObject({
+      verdict: 'unknown',
+      errorCode: 'SOURCE_CHANGED',
+      reason: '库文件正在写入，版本核对暂不可用（请稍后重试）',
+    });
+  });
 });
