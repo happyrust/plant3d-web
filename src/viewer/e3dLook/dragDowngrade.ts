@@ -288,3 +288,106 @@ export function readDragDowngradeOptions(
     warmMs: readNumber(pick('dtx_downgrade_warm_ms'), DEFAULT_WARM_START_MS, n => n >= 0),
   };
 }
+
+export interface DragPosePoint {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface DragPoseSnapshot {
+  readonly position: DragPosePoint;
+  readonly target: DragPosePoint;
+  readonly projectionElements: ArrayLike<number>;
+}
+
+export interface DragPoseTracker {
+  /** 同步非交互的完整相机基线（如模型加载后的瞬时 auto-fit），避免下一帧误判为拖动 */
+  sync(snapshot: DragPoseSnapshot): void;
+  /** 仅同步非交互的投影矩阵基线（如加载批次更新 near/far 或 resize 改 aspect），不吞掉正在进行的拖动位移 */
+  syncProjection(projectionElements: ArrayLike<number>): void;
+  /** 判定本帧相对上次基线是否发生了交互相机变化，并推进基线；首帧（尚未同步过）返回 false */
+  consumeMoved(snapshot: DragPoseSnapshot, eps: number): boolean;
+  /** 场景重置 / 卸载时清空基线 */
+  reset(): void;
+}
+
+function copyProj16(dst: Float64Array, src: ArrayLike<number>): void {
+  for (let i = 0; i < 16; i++) dst[i] = src[i] ?? 0;
+}
+
+function proj16Equal(a: Float64Array, b: ArrayLike<number>): boolean {
+  for (let i = 0; i < 16; i++) {
+    if (a[i] !== (b[i] ?? 0)) return false;
+  }
+  return true;
+}
+
+/**
+ * 追踪「交互降画质」所看到的相机位姿与投影基线（独立于渲染循环的 `cameraChanged`）。
+ *
+ * 将非交互的投影/取景变化（加载批次调整裁剪面、首次加载 auto-fit、窗口 resize）显式同步进基线，
+ * 防止静止加载完成的画面被误判为「拖动中」而掉入 `minPx > 0` 的降级段表（#102）。
+ */
+export function createDragPoseTracker(): DragPoseTracker {
+  let valid = false;
+  let projValid = false;
+  let px = 0, py = 0, pz = 0;
+  let tx = 0, ty = 0, tz = 0;
+  const proj = new Float64Array(16);
+
+  return {
+    sync(snapshot: DragPoseSnapshot): void {
+      px = snapshot.position.x;
+      py = snapshot.position.y;
+      pz = snapshot.position.z;
+      tx = snapshot.target.x;
+      ty = snapshot.target.y;
+      tz = snapshot.target.z;
+      copyProj16(proj, snapshot.projectionElements);
+      valid = true;
+      projValid = true;
+    },
+
+    syncProjection(projectionElements: ArrayLike<number>): void {
+      copyProj16(proj, projectionElements);
+      projValid = true;
+    },
+
+    consumeMoved(snapshot: DragPoseSnapshot, eps: number): boolean {
+      const dxp = snapshot.position.x - px;
+      const dyp = snapshot.position.y - py;
+      const dzp = snapshot.position.z - pz;
+      const dxt = snapshot.target.x - tx;
+      const dyt = snapshot.target.y - ty;
+      const dzt = snapshot.target.z - tz;
+      const viewDist = Math.max(
+        1e-9,
+        Math.hypot(
+          snapshot.position.x - snapshot.target.x,
+          snapshot.position.y - snapshot.target.y,
+          snapshot.position.z - snapshot.target.z,
+        ),
+      );
+      const motion = Math.max(Math.hypot(dxp, dyp, dzp), Math.hypot(dxt, dyt, dzt)) / viewDist;
+      const projChanged = projValid && !proj16Equal(proj, snapshot.projectionElements);
+      const moved = valid && (projChanged || motion > eps);
+
+      px = snapshot.position.x;
+      py = snapshot.position.y;
+      pz = snapshot.position.z;
+      tx = snapshot.target.x;
+      ty = snapshot.target.y;
+      tz = snapshot.target.z;
+      copyProj16(proj, snapshot.projectionElements);
+      valid = true;
+      projValid = true;
+      return moved;
+    },
+
+    reset(): void {
+      valid = false;
+      projValid = false;
+    },
+  };
+}
