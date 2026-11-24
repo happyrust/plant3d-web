@@ -16,6 +16,13 @@ import { UserRole, UserStatus } from '@/types/auth';
 
 vi.mock('@/api/reviewApi', () => ({
   authGetToken: vi.fn(),
+  getAuthToken: () => {
+    try {
+      return localStorage.getItem('review_auth_token');
+    } catch {
+      return null;
+    }
+  },
   reviewTaskCreate: vi.fn(),
   reviewTaskGetList: vi.fn(),
   reviewTaskGetById: vi.fn(),
@@ -546,6 +553,34 @@ describe('loadReviewTasks', () => {
     expect(store.currentUser.value?.role).toBe(UserRole.PROOFREADER);
   });
 
+  it('嵌入模式初始化不在本地铸 token', async () => {
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-EMBED',
+      userToken: 'embed-token',
+      isEmbedMode: true,
+    }));
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+    await store.initialize();
+
+    expect(authGetTokenMock).not.toHaveBeenCalled();
+  });
+
+  it('已有 review token 时初始化不再铸一次', async () => {
+    localStorage.setItem('review_auth_token', 'already-minted');
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+    await store.initialize();
+
+    expect(authGetTokenMock).not.toHaveBeenCalled();
+  });
+
   it('clears backend debug identity when an embed session is invalidated', async () => {
     userGetCurrentMock.mockResolvedValue({
       success: true,
@@ -567,6 +602,13 @@ describe('loadReviewTasks', () => {
     const store = useUserStore();
 
     await store.initialize();
+    expect(authGetTokenMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'SJ',
+      projectId: 'debug-project',
+    }));
+    expect(authGetTokenMock.mock.invocationCallOrder[0]).toBeLessThan(
+      userGetCurrentMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
     expect(store.currentUser.value?.id).toBe('debug-user');
 
     store.clearCurrentUserSelection();

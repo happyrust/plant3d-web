@@ -32,6 +32,12 @@ vi.mock('./workflowBridge', () => ({
   notifyParentWorkflowAction: (): boolean => notifyParentWorkflowActionMock(),
 }));
 
+const workflowModeMock = vi.hoisted(() => ({ passive: false }));
+
+vi.mock('./workflowMode', () => ({
+  resolvePassiveWorkflowMode: () => workflowModeMock.passive,
+}));
+
 describe('TaskReviewDetail', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -43,6 +49,7 @@ describe('TaskReviewDetail', () => {
     emitToastMock.mockReset();
     reviewTasksRef.value = [];
     reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [] });
+    workflowModeMock.passive = false;
   });
 
   afterEach(() => {
@@ -400,6 +407,22 @@ describe('TaskReviewDetail', () => {
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1');
     expect(reviewTaskGetWorkflowMock).toHaveBeenCalledTimes(2);
     expect(reviewRecordGetByTaskIdMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('外部流程模式不提供再次提交', async () => {
+    workflowModeMock.passive = true;
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [],
+    });
+    reviewTasksRef.value = [createTask({ status: 'draft', currentNode: 'sj' })];
+
+    await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(button).toBeUndefined();
   });
 
   it('resubmit always goes through the internal submitTaskToNextNode; TaskReviewDetail no longer talks to the parent workflow bridge', async () => {

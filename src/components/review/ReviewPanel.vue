@@ -46,11 +46,8 @@ import ReviewDataSync from './ReviewDataSync.vue';
 import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
   buildSubmitBlockingReviewConfirmPayload,
-  buildReviewConfirmSnapshotPayload,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
-  buildReviewConfirmSnapshotKey,
-  buildReviewConfirmSnapshotPayloadFromRecords,
   confirmCurrentDataSafely,
   getSubmitActionLabel,
   getWorkflowSubmitBridgeAction,
@@ -88,22 +85,20 @@ import {
   clearReviewAttachmentPreview,
   openReviewAttachmentPreview,
 } from '@/composables/useReviewAttachmentPreview';
+import { useReviewConfirmSession } from '@/composables/useReviewConfirmSession';
+import { useReviewPolling } from '@/composables/useReviewPolling';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import {
   useToolStore,
-  type AnnotationRecord,
   type AnnotationType,
-  type CloudAnnotationRecord,
   type MeasurementRecord,
-  type ObbAnnotationRecord,
-  type RectAnnotationRecord,
 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { isReviewFlagEnabled } from '@/review/flags';
-import { emitCommand } from '@/ribbon/commandBus';
+import { emitCommand, onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   canEditAnnotationSeverity,
@@ -1128,7 +1123,16 @@ watch(
   { immediate: true }
 );
 
+/** 外部单据计数要等表格 scope 算完才读得到，先挂一个可替换的读法 */
+const externalScopedAnnotationCount = {
+  read: (): number | null => null,
+};
+
 const pendingAnnotationCount = computed(() => {
+  if (isExternalFormFocused.value) {
+    const scoped = externalScopedAnnotationCount.read();
+    if (scoped !== null) return scoped;
+  }
   return (
     toolStore.annotationCount.value +
     toolStore.cloudAnnotationCount.value +
@@ -1200,29 +1204,19 @@ const hasPendingData = computed(() => {
     || pendingMeasurementCount.value > 0
     || reviewStore.dimensionDocumentDirty?.value === true;
 });
-const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
-  annotations: [...toolStore.annotations.value],
-  cloudAnnotations: [...toolStore.cloudAnnotations.value],
-  rectAnnotations: [...toolStore.rectAnnotations.value],
-  obbAnnotations: [...toolStore.obbAnnotations.value],
-  measurements: [...toolStore.measurements.value],
-  unifiedMeasurements: [...(toolStore.unifiedMeasurements?.value ?? [])],
-  legacyMeasurements: [...(toolStore.legacyMeasurements?.value ?? [])],
-  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
-  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
-  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
-  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
-  ...(reviewStore.getBoundDimensionConfirmPayload?.() ?? {}),
-}));
-const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
-const confirmedSnapshotPayload = computed(() => (
-  buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
-));
-const hasUnsavedChanges = computed(() => {
-  return buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
-    !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
+const {
+  currentDraftConfirmPayload,
+  confirmedSnapshotPayload,
+  hasUnsavedChanges,
+  buildConfirmRecord,
+  captureReceiptStamp,
+  shouldClearDraftAfterConfirm,
+  isReceiptCurrent,
+} = useReviewConfirmSession({
+  confirmedRecords: () => currentTaskConfirmedRecords.value,
 });
-const hasUnsavedPendingData = computed(() => hasUnsavedChanges.value);
+const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
+const hasUnsavedPendingData = hasUnsavedChanges;
 const submitBlockingConfirmPayload = computed(() => (
   buildSubmitBlockingReviewConfirmPayload(
     currentDraftConfirmPayload.value,
@@ -1241,29 +1235,16 @@ async function confirmCurrentData() {
   confirmSaving.value = true;
   confirmError.value = null;
   // U0 回执守卫：POST /records 期间用户可能切到别的任务——清草稿 / 回放 / 重拉状态都不能落到别的任务上
-  const confirmStamp = draftSession.currentStamp();
+  const confirmStamp = captureReceiptStamp();
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: hasUnsavedPendingData.value,
-      // 快照类型上四个批注数组是 unknown[]（历史记录结构可能更旧，见 ConfirmedRecordData 注释），
-      // 写入侧由 buildReviewConfirmSnapshotPayload 保证形状；这里按 Store 的真实类型标注，
-      // 与 ReviewConfirmation.vue 同路径写法一致。
-      payload: {
-        type: 'batch' as const,
-        annotations: [...currentDraftConfirmPayload.value.annotations] as AnnotationRecord[],
-        cloudAnnotations: [...currentDraftConfirmPayload.value.cloudAnnotations] as CloudAnnotationRecord[],
-        rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations] as RectAnnotationRecord[],
-        obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations] as ObbAnnotationRecord[],
-        measurements: [...currentDraftConfirmPayload.value.measurements] as MeasurementRecord[],
-        dimensionDocument: currentDraftConfirmPayload.value.dimensionDocument,
-        dimensionDocumentVersion: currentDraftConfirmPayload.value.dimensionDocumentVersion,
-        note: confirmNote.value.trim(),
-      },
+      payload: buildConfirmRecord(confirmNote.value),
       addConfirmedRecord: reviewStore.addConfirmedRecord,
       clearDraftData: () => {
         // 仍在出发时的任务里才清内存；已切到别的任务就不动它的草稿——原任务容器里那些刚确认的条目
         // 与服务端记录同 id，下次回到它时分层恢复会用已确认层覆盖，不会重复。
-        if (draftSession.routeDataReceipt(confirmStamp).kind !== 'other-scope') {
+        if (shouldClearDraftAfterConfirm(confirmStamp)) {
           toolStore.clearAll();
         }
       },
@@ -1273,7 +1254,7 @@ async function confirmCurrentData() {
     });
     if (saved) {
       emitToast({ message: '确认数据已保存', level: 'success' });
-      if (!draftSession.isTransientReceiptCurrent(confirmStamp)) return;
+      if (!isReceiptCurrent(confirmStamp)) return;
       await nextTick();
       await restoreConfirmedRecordsIntoScene(true);
       await refreshAnnotationReviewStatesForCurrentTask();
@@ -1363,7 +1344,18 @@ function getAutomationAnnotationRecord(annotationType: AnnotationType, annotatio
     : records[0] ?? null;
 }
 
+let offReviewPanelCommand: (() => void) | undefined;
+
 onMounted(() => {
+  offReviewPanelCommand = onCommand((commandId) => {
+    if (commandId === 'review.confirm') {
+      void confirmCurrentData();
+      return;
+    }
+    if (commandId === 'review.clear') {
+      void handleClearConfirmedRecords();
+    }
+  });
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   syncEmbedLandingStateFromStorage();
   window.setTimeout(syncEmbedLandingStateFromStorage, 0);
@@ -1515,6 +1507,8 @@ function beforeUnloadGuard(e: BeforeUnloadEvent) {
 window.addEventListener('beforeunload', beforeUnloadGuard);
 
 onUnmounted(() => {
+  offReviewPanelCommand?.();
+  offReviewPanelCommand = undefined;
   taskViewerSyncSeq++;
   window.removeEventListener('beforeunload', beforeUnloadGuard);
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
@@ -1542,6 +1536,20 @@ const confirmedRecordListCount = computed(() => reviewStore.sortedConfirmedRecor
 
 const expandedAnnotationId = ref<string | null>(null);
 const expandedAnnotationType = ref<AnnotationType | null>(null);
+useReviewPolling({
+  taskId: () => currentTask.value?.id ?? null,
+  formId: () => currentTask.value?.formId?.trim() || activeReviewFormId.value,
+  stateTaskId: () => (isExternalFormFocused.value ? null : currentTask.value?.id ?? null),
+  expandedAnnotation: () => {
+    if (!expandedAnnotationId.value || !expandedAnnotationType.value) return null;
+    return {
+      annotationType: expandedAnnotationType.value,
+      annotationId: expandedAnnotationId.value,
+      formId: activeReviewFormId.value,
+      taskId: currentTask.value?.id ?? null,
+    };
+  },
+});
 const savingSeverityKeys = ref<string[]>([]);
 const savingTitleKeys = ref<string[]>([]);
 
@@ -1568,6 +1576,11 @@ const reviewerAnnotationItems = computed<AnnotationWorkspaceItem[]>(() =>
 const scopedReviewerItems = computed<AnnotationWorkspaceItem[]>(() => {
   if (!isExternalFormFocused.value) return reviewerAnnotationItems.value;
   return scopeAnnotationWorkspaceItemsByFormId(reviewerAnnotationItems.value, activeReviewFormId.value);
+});
+externalScopedAnnotationCount.read = () => scopedReviewerItems.value.length;
+const unboundDraftCount = computed(() => {
+  if (!isExternalFormFocused.value) return 0;
+  return Math.max(0, reviewerAnnotationItems.value.length - scopedReviewerItems.value.length);
 });
 
 watch(
@@ -1767,7 +1780,6 @@ function handleAnnotationQueueCompleted() {
           <h2 class="truncate text-base font-semibold text-slate-950">{{ currentTask.title }}</h2>
           <span class="shrink-0 rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-medium text-brand">
             {{ currentTaskNodeLabel }}
-            <span class="ml-0.5 text-brand">{{ taskContext?.currentNodeCode }}</span>
           </span>
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
@@ -1836,7 +1848,7 @@ function handleAnnotationQueueCompleted() {
             :class="isDock ? 'min-w-0 flex-1 truncate' : ''"
             :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
             @click="toggleReturnDialog">
-            驳回到设计
+            驳回…
           </button>
           <button v-if="!isFilteringByTask || !isDock" type="button"
             class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
@@ -1869,7 +1881,7 @@ function handleAnnotationQueueCompleted() {
         <div v-if="embedLandingState.formId"
           data-testid="reviewer-lineage-form-id"
           class="rounded-full bg-white px-3 py-1 text-xs text-brand">
-          Lineage: {{ embedLandingState.formId }}
+          单据编号：{{ embedLandingState.formId }}
         </div>
       </div>
       <div class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm text-brand">
@@ -2097,6 +2109,11 @@ function handleAnnotationQueueCompleted() {
       data-guide="annotation-list-zone"
       data-testid="reviewer-annotation-sheet-container">
       <UnattributedDraftNotice />
+      <p v-if="unboundDraftCount > 0"
+        class="px-3 py-1 text-xs text-muted-foreground"
+        data-testid="unbound-draft-notice">
+        {{ unboundDraftCount }} 条草稿未绑定本单据，不计入确认
+      </p>
       <AnnotationSheetWorkspace class="min-h-0 flex-1"
         :items="scopedReviewerItems"
         :density="props.density"

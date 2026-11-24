@@ -474,4 +474,60 @@ describe('useReviewStore - confirm without OBB', () => {
     expect(exported.records[0].annotations[0].severity).toBe('principle');
     expect(exported.records[0].cloudAnnotations[0].severity).toBe('general');
   });
+
+  it('PMS 预保存遇到只有模型上下文和空净距时不写确认记录', async () => {
+    const review = useReviewStore();
+    await review.setCurrentTask({
+      id: 'empty-evidence-task',
+      formId: 'FORM-EMPTY',
+      title: 'Empty',
+      description: '',
+      modelName: 'Fixture',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer',
+      requesterName: 'Designer',
+      checkerId: 'reviewer-1',
+      checkerName: 'Reviewer',
+      reviewerId: 'reviewer-1',
+      reviewerName: 'Reviewer',
+      approverId: 'approver',
+      approverName: 'Approver',
+      components: [],
+      createdAt: 1,
+      updatedAt: 1,
+      currentNode: 'jd',
+    });
+    const context = {
+      schemaVersion: 1 as const,
+      project: 'P',
+      dbnum: 7997,
+      taskId: 'empty-evidence-task',
+      formId: 'FORM-EMPTY',
+      node: 'jd' as const,
+      comparison: null,
+    };
+    const emptyClearance: ReviewClearanceSnapshot = {
+      schemaVersion: 1,
+      modelContext: context,
+      coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+      component: { records: [] },
+      pipe: { results: [] },
+      bran: { branGroups: [] },
+    };
+    const offContext = review.bindModelContextProvider(() => context);
+    const offClearance = review.bindClearanceSnapshotProvider({
+      capture: () => emptyClearance,
+      prepare: vi.fn(),
+    });
+    vi.mocked(reviewRecordCreate).mockClear();
+    try {
+      const result = await review.flushPendingConfirmForExternalAction('FORM-EMPTY');
+      expect(result).toEqual({ ok: true });
+      expect(reviewRecordCreate).not.toHaveBeenCalled();
+    } finally {
+      offClearance();
+      offContext();
+    }
+  });
 });

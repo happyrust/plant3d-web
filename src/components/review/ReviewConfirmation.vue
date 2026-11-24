@@ -5,27 +5,14 @@ import { AlertCircle, CheckCircle, MessageSquare, RotateCw, Ruler, X } from 'luc
 
 import { readPersistedEmbedModeParams } from './embedRoleLanding';
 import {
-  buildReviewEvidenceSnapshotKey,
-  buildReviewConfirmSnapshotPayload,
-  buildUnsavedReviewEvidencePayload,
-  buildReviewConfirmSnapshotPayloadFromRecords,
   confirmCurrentDataSafely,
-  hasReviewConfirmPayloadData,
   resolveReviewEvidenceSaveErrorMessage,
 } from './reviewPanelActions';
 import { resolvePassiveWorkflowMode } from './workflowMode';
 
-import type { ConfirmedRecord } from '@/composables/useReviewStore';
-
+import { useReviewConfirmSession } from '@/composables/useReviewConfirmSession';
 import { useReviewStore } from '@/composables/useReviewStore';
-import {
-  useToolStore,
-  type AnnotationRecord,
-  type CloudAnnotationRecord,
-  type MeasurementRecord,
-  type ObbAnnotationRecord,
-  type RectAnnotationRecord,
-} from '@/composables/useToolStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { emitToast } from '@/ribbon/toastBus';
 
 const props = withDefaults(defineProps<{
@@ -76,50 +63,19 @@ const hasPendingData = computed(() => {
     || reviewStore.dimensionDocumentDirty.value;
 });
 
-const currentDraftConfirmPayload = computed(() => {
-  const dimensionPayload = reviewStore.getBoundDimensionConfirmPayload();
-  return buildReviewConfirmSnapshotPayload({
-    annotations: [...toolStore.annotations.value],
-    cloudAnnotations: [...toolStore.cloudAnnotations.value],
-    rectAnnotations: [...toolStore.rectAnnotations.value],
-    obbAnnotations: [...toolStore.obbAnnotations.value],
-    measurements: [...toolStore.measurements.value],
-    unifiedMeasurements: [...(toolStore.unifiedMeasurements?.value ?? [])],
-    legacyMeasurements: [...(toolStore.legacyMeasurements?.value ?? [])],
-    xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
-    xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
-    xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
-    xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
-    ...dimensionPayload,
-  });
+const {
+  currentDraftConfirmPayload,
+  hasPendingConfirmation,
+  buildConfirmRecord,
+} = useReviewConfirmSession({
+  confirmedRecords: () => {
+    const taskId = reviewStore.currentTask.value?.id;
+    if (!taskId) return [];
+    return reviewStore.sortedConfirmedRecords.value.filter((record) => record.taskId === taskId);
+  },
 });
 const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
-
-const currentTaskConfirmedRecords = computed(() => {
-  const taskId = reviewStore.currentTask.value?.id;
-  if (!taskId) return [];
-  return reviewStore.sortedConfirmedRecords.value.filter((record) => record.taskId === taskId);
-});
-
-const confirmedSnapshotPayload = computed(() => (
-  buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
-));
-
-const unsavedConfirmPayload = computed(() => (
-  buildUnsavedReviewEvidencePayload(
-    currentDraftConfirmPayload.value,
-    confirmedSnapshotPayload.value,
-  )
-));
-
-const hasUnsavedChanges = computed(() => {
-  return buildReviewEvidenceSnapshotKey(currentDraftConfirmPayload.value)
-    !== buildReviewEvidenceSnapshotKey(confirmedSnapshotPayload.value);
-});
-
-const hasUnsavedPendingData = computed(() => (
-  hasReviewConfirmPayloadData(unsavedConfirmPayload.value)
-));
+const hasUnsavedPendingData = hasPendingConfirmation;
 
 const canCreateReviewEvidence = computed(() => {
   const embedParams = readPersistedEmbedModeParams();
@@ -148,24 +104,10 @@ async function confirmCurrentData() {
 
   confirmSaving.value = true;
   confirmError.value = null;
-  // 证据快照里的批注/测量在 ReviewConfirmSnapshotPayload 上是 unknown[]（历史记录结构可能更旧），
-  // 写入侧由 buildReviewConfirmSnapshotPayload 保证形状；这里按 ConfirmedRecord 的字段类型标注，
-  // 与 useReviewStore 内部同路径的写法一致。
-  const payload: Omit<ConfirmedRecord, 'id' | 'confirmedAt'> = {
-    type: 'batch' as const,
-    annotations: [...unsavedConfirmPayload.value.annotations] as AnnotationRecord[],
-    cloudAnnotations: [...unsavedConfirmPayload.value.cloudAnnotations] as CloudAnnotationRecord[],
-    rectAnnotations: [...unsavedConfirmPayload.value.rectAnnotations] as RectAnnotationRecord[],
-    obbAnnotations: [...unsavedConfirmPayload.value.obbAnnotations] as ObbAnnotationRecord[],
-    measurements: [...unsavedConfirmPayload.value.measurements] as MeasurementRecord[],
-    dimensionDocument: unsavedConfirmPayload.value.dimensionDocument,
-    dimensionDocumentVersion: unsavedConfirmPayload.value.dimensionDocumentVersion,
-    note: confirmNote.value.trim(),
-  };
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: hasUnsavedPendingData.value,
-      payload,
+      payload: buildConfirmRecord(confirmNote.value),
       addConfirmedRecord: reviewStore.addConfirmedRecord,
       clearDraftData: () => {},
       resetNote: () => {

@@ -14,6 +14,7 @@ import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import RoomInfoDialog from '@/components/room/RoomInfoDialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
+import SelectionHistoryButtons from '@/components/ui/SelectionHistoryButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useMenuMode } from '@/composables/useMenuMode';
 import { useModelProjects } from '@/composables/useModelProjects';
@@ -120,6 +121,9 @@ onMounted(() => {
           :extension-height="extensionHeight">
           <template #extension>
             <RibbonBar v-if="isRibbonMode" ref="ribbonBarRef" class="w-full">
+              <template #header-left>
+                <SelectionHistoryButtons class="mr-1" />
+              </template>
               <template #header-right>
                 <div class="flex items-center gap-2 px-2">
                   <v-btn size="small" variant="text" title="切换到普通菜单" @click="toggleMenuMode">
@@ -136,6 +140,9 @@ onMounted(() => {
               </template>
             </RibbonBar>
             <HierarchicalMenuBar v-else class="w-full">
+              <template #header-left>
+                <SelectionHistoryButtons />
+              </template>
               <template #header-right>
                 <div class="flex items-center gap-2 px-2">
                   <v-btn size="small" variant="text" title="切换到 Ribbon 菜单" @click="toggleMenuMode">

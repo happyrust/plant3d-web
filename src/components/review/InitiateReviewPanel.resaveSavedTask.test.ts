@@ -226,6 +226,8 @@ describe('InitiateReviewPanel 二次保存文案（外部流程 + 已保存单�
       formId: 'FORM-RESAVE-UI',
       title: '包A',
     });
+    expect(userStoreMock.createReviewTask.mock.calls[0]?.[0]).not.toHaveProperty('checkerId');
+    expect(userStoreMock.createReviewTask.mock.calls[0]?.[0]).not.toHaveProperty('approverId');
     const text = document.body.textContent || '';
     expect(text).toContain('编校审单保存失败');
     expect(text).toContain(backendMessage);

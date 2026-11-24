@@ -43,6 +43,25 @@ describe('WorkflowSubmitDialog', () => {
     expect(document.body.textContent).toContain('确认提交流转');
   });
 
+  it('批准节点的下一环节显示完成', async () => {
+    mount(
+      createApp({
+        render: () =>
+          h(WorkflowSubmitDialog, {
+            visible: true,
+            currentNode: 'pz',
+            targetNode: 'pz',
+          }),
+      })
+    );
+
+    await nextTick();
+
+    expect(document.body.textContent).toContain('当前环节');
+    expect(document.body.textContent).toContain('下一环节');
+    expect(document.body.textContent).toContain('完成');
+  });
+
   it('emits trimmed comment and clears the field after closing and reopening', async () => {
     const visible = ref(true);
     const emittedComments: (string | undefined)[] = [];

@@ -35,6 +35,11 @@ import { DISPLAY_THEME_PRESETS, useDisplayThemeStore, type DisplayTheme } from '
 import { dockPanelExists, ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
+  MODEL_TREE_SOURCE_PRESETS,
+  useModelTreeSourceStore,
+  type ModelTreeDataSource,
+} from '@/composables/useModelTreeSourceStore';
+import {
   initPanelZones,
   disposePanelZones,
   getCollapsedZones,
@@ -52,7 +57,7 @@ import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
-import { onCommand } from '@/ribbon/commandBus';
+import { emitCommand, onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { shouldOpenModelUnitVersionCompareFromUrl } from '@/utils/modelUnitVersionCompare';
 
@@ -107,6 +112,7 @@ const toolStore = useToolStore();
 const userStore = useUserStore();
 const viewerContext = useViewerContext();
 const displayThemeStore = useDisplayThemeStore();
+const modelTreeSourceStore = useModelTreeSourceStore();
 const renderStyleStore = useRenderStyleStore();
 
 let offCommand: (() => void) | null = null;
@@ -691,6 +697,18 @@ function createDefaultLayout(dockApi: DockApi) {
   console.log('[DockLayout] Default layout created');
 }
 
+function reviewEmbedPanelWidth(windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1280): number {
+  return Math.min(520, Math.max(420, Math.round(windowWidth * 0.36)));
+}
+
+/** 校审嵌入页：模型树收起、控制台不开、右侧校审面板留出至少一半宽度给三维视口。 */
+function applyReviewEmbedLayout(dockApi: DockApi): void {
+  closePanelIfExists(dockApi, 'modelTree');
+  closePanelIfExists(dockApi, 'console');
+  const reviewGroup = dockApi.getPanel('review')?.group;
+  if (reviewGroup) reviewGroup.api.setSize({ width: reviewEmbedPanelWidth() });
+}
+
 function createEmbedFocusedLayout(
   dockApi: DockApi,
   options: { primaryPanelId?: 'review' | 'initiateReview' | 'designerCommentHandling' } = {},
@@ -733,13 +751,16 @@ function createEmbedFocusedLayout(
     renderer: 'always',
   });
 
-  dockApi.addPanel({
-    id: 'modelTree',
-    component: 'ModelTreePanel',
-    title: '模型树',
-    renderer: 'always',
-    position: { referencePanel: viewerPanel, direction: 'left' },
-  });
+  const reviewOnly = options.primaryPanelId === 'review';
+  if (!reviewOnly) {
+    dockApi.addPanel({
+      id: 'modelTree',
+      component: 'ModelTreePanel',
+      title: '模型树',
+      renderer: 'always',
+      position: { referencePanel: viewerPanel, direction: 'left' },
+    });
+  }
 
   if (options.primaryPanelId) {
     ensurePanel(options.primaryPanelId);
@@ -750,7 +771,11 @@ function createEmbedFocusedLayout(
   const leftGroup = dockApi.getPanel('modelTree')?.group;
   const rightGroup = options.primaryPanelId ? dockApi.getPanel(options.primaryPanelId)?.group : undefined;
   if (leftGroup) leftGroup.api.setSize({ width: 350 });
-  if (rightGroup) rightGroup.api.setSize({ width: 420 });
+  if (reviewOnly) {
+    applyReviewEmbedLayout(dockApi);
+  } else if (rightGroup) {
+    rightGroup.api.setSize({ width: 420 });
+  }
 
   console.log('[DockLayout] Embed-focused layout created', {
     primaryPanelId: options.primaryPanelId ?? null,
@@ -1227,6 +1252,20 @@ async function testE3dConnection(): Promise<void> {
   }
 }
 
+let deliveringReviewPanelCommand = false;
+
+async function deliverReviewPanelCommand(commandId: 'review.confirm' | 'review.clear') {
+  if (!dockPanelExists('review')) {
+    openPanel('review');
+    await nextTick();
+    deliveringReviewPanelCommand = true;
+    emitCommand(commandId);
+    deliveringReviewPanelCommand = false;
+    return;
+  }
+  ensurePanelAndActivate('review');
+}
+
 function handleRibbonCommand(commandId: string) {
   console.log('[DockLayout] handleRibbonCommand:', commandId);
   switch (commandId) {
@@ -1334,6 +1373,14 @@ function handleRibbonCommand(commandId: string) {
     case 'settings.renderMode':
       togglePanel('renderModeSettings');
       return;
+    case 'treeSource.direct':
+    case 'treeSource.db': {
+      const source = commandId.slice('treeSource.'.length) as ModelTreeDataSource;
+      modelTreeSourceStore.setSource(source);
+      const label = MODEL_TREE_SOURCE_PRESETS.find((preset) => preset.source === source)?.fullLabel ?? source;
+      emitToast({ message: `模型树数据源已切换为「${label}」`, level: 'info' });
+      return;
+    }
     case 'panel.review':
       togglePanel('review');
       return;
@@ -1427,38 +1474,9 @@ function handleRibbonCommand(commandId: string) {
       return;
 
     // review commands
-    case 'review.start':
-      console.log('[DockLayout] review.start opening reviewer task panel', {
-        currentUserId: userStore.currentUserId.value,
-        currentUserRole: userStore.currentUser.value?.role ?? null,
-      });
-      openPanel('reviewerTasks');
-      return;
     case 'review.confirm':
-      if (
-        toolStore.annotationCount.value > 0 ||
-        toolStore.cloudAnnotationCount.value > 0 ||
-        toolStore.rectAnnotationCount.value > 0 ||
-        toolStore.obbAnnotationCount.value > 0 ||
-        toolStore.measurementCount.value > 0
-      ) {
-        void (async () => {
-          try {
-            await reviewStore.addConfirmedRecord({
-              type: 'batch',
-              annotations: [...toolStore.annotations.value],
-              cloudAnnotations: [...toolStore.cloudAnnotations.value],
-              rectAnnotations: [...toolStore.rectAnnotations.value],
-              obbAnnotations: [...toolStore.obbAnnotations.value],
-              measurements: [...toolStore.measurements.value],
-              note: '',
-            });
-            toolStore.clearAll();
-          } catch (error) {
-            console.error('[DockLayout] review.confirm failed:', error);
-          }
-        })();
-      }
+      if (deliveringReviewPanelCommand) return;
+      void deliverReviewPanelCommand('review.confirm');
       return;
     case 'review.export': {
       const json = reviewStore.exportReviewData();
@@ -1474,7 +1492,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     }
     case 'review.clear':
-      reviewStore.clearConfirmedRecords();
+      if (deliveringReviewPanelCommand) return;
+      if (resolvePassiveWorkflowMode()) return;
+      void deliverReviewPanelCommand('review.clear');
       return;
   }
 }
@@ -1824,10 +1844,11 @@ async function applyInitialLanding() {
             : shouldShowSavedDraftInitiate
               ? 'initiateReview'
               : null;
+        const visiblePanelIds = landingPanelOverride ? [landingPanelOverride] : landingState.visiblePanelIds;
         persistEmbedLandingState({
           ...landingState,
           primaryPanelId: landingPanelOverride ?? landingState.primaryPanelId,
-          visiblePanelIds: landingPanelOverride ? [landingPanelOverride] : landingState.visiblePanelIds,
+          visiblePanelIds,
           formId: verifiedFormId,
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,
@@ -1836,6 +1857,9 @@ async function applyInitialLanding() {
           matchedSource: restoreResult.matchedSource,
           missReason: restoreResult.missReason,
         });
+        if (visiblePanelIds.length === 1 && visiblePanelIds[0] === 'review' && api.value) {
+          applyReviewEmbedLayout(api.value);
+        }
         if (shouldShowSavedDraftInitiate) {
           // 落点状态（含 restoredTaskDraft）先写好再开面板，面板挂载时直接按「修改已保存的编校审单」回填
           openPanel('initiateReview');

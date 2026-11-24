@@ -188,10 +188,10 @@ export type ReviewTaskCreateRequest = {
   title: string;
   description?: string;
   modelName: string;
-  /** 校核人（第二段） */
-  checkerId: string;
-  /** 审核人（第三段） */
-  approverId: string;
+  /** 校核人（第二段）。外部流程由 PMS 指定，可以不传。 */
+  checkerId?: string;
+  /** 审核人（第三段）。外部流程由 PMS 指定，可以不传。 */
+  approverId?: string;
   /** 兼容旧接口字段（语义同 checkerId） */
   reviewerId?: string;
   /** 外部已创建单据时传入，后端会沿用；不传则由后端生成 */
@@ -419,6 +419,9 @@ export type WorkflowSyncData = {
   taskStatus?: string;
   nextStepDetail?: WorkflowNextStepDetail;
   annotationStates?: AnnotationReviewStateView[];
+  returned?: boolean;
+  returnReason?: string;
+  lastAction?: string;
 };
 
 export type WorkflowSyncResponse = {
@@ -609,6 +612,11 @@ type RawWorkflowSyncData = {
   currentNode?: string;
   task_status?: string;
   taskStatus?: string;
+  returned?: boolean;
+  return_reason?: string;
+  returnReason?: string;
+  last_action?: string;
+  lastAction?: string;
   next_step_detail?: RawWorkflowNextStepDetail;
   nextStepDetail?: RawWorkflowNextStepDetail;
 };
@@ -821,12 +829,19 @@ function buildReviewApiHttpError(
   });
 }
 
+function localizeReviewApiMessage(message: string): string {
+  if (message.includes('不是 approver 节点负责人')) {
+    return '当前节点（审核）负责人是 PZ';
+  }
+  return message;
+}
+
 export function getReviewApiErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof ReviewApiHttpError) {
-    return error.errorMessage || error.message || fallbackMessage;
+    return localizeReviewApiMessage(error.errorMessage || error.message || fallbackMessage);
   }
   if (error instanceof Error && error.message.trim()) {
-    return error.message;
+    return localizeReviewApiMessage(error.message);
   }
   return fallbackMessage;
 }
@@ -844,7 +859,7 @@ export function getReviewEvidenceSaveErrorMessage(
       return '保存超时，请重试；服务器繁忙或网络较慢，你的批注仍保留';
     }
     if (error.status < 500 && typeof businessMessage === 'string' && businessMessage.trim()) {
-      return businessMessage.trim();
+      return localizeReviewApiMessage(businessMessage.trim());
     }
     if (error.status === 504) {
       return '校审服务暂时不可用，未保存证据仍已保留，请稍后重试';
@@ -943,6 +958,9 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
       taskCreated: data.taskCreated ?? data.task_created,
       currentNode: data.currentNode || data.current_node,
       taskStatus: data.taskStatus || data.task_status,
+      returned: typeof data.returned === 'boolean' ? data.returned : undefined,
+      returnReason: data.returnReason || data.return_reason,
+      lastAction: data.lastAction || data.last_action,
       nextStepDetail: normalizeWorkflowNextStepDetail(
         data.nextStepDetail || data.next_step_detail
       ),

@@ -153,4 +153,19 @@ describe('RIBBON_TABS', () => {
     expect(commandIds).not.toContain('help.docs');
     expect(commandIds).toContain('panel.modelVersionCompare');
   });
+
+  it('设置菜单提供模型树数据源切换入口', async () => {
+    vi.resetModules();
+    window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
+
+    const { RIBBON_TABS } = await import('./ribbonConfig');
+    const settingsTab = RIBBON_TABS.find((tab) => tab.id === 'settings');
+    const sourceGroup = settingsTab?.groups.find((group) => group.id === 'settings.treeSource');
+
+    expect(sourceGroup?.label).toBe('模型树数据源');
+    expect(sourceGroup?.items).toHaveLength(2);
+    expect(collectCommandIds([settingsTab!])).toEqual(
+      expect.arrayContaining(['treeSource.direct', 'treeSource.db']),
+    );
+  });
 });

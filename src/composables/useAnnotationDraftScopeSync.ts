@@ -1,4 +1,4 @@
-import { getCurrentScope, onScopeDispose, ref, watch, type WatchStopHandle } from 'vue';
+import { getCurrentScope, onScopeDispose, ref, shallowRef, watch, type WatchStopHandle } from 'vue';
 
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
@@ -7,6 +7,7 @@ import { useToolStore, type AnnotationDraftJournal } from '@/composables/useTool
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/currentProject';
 import {
+  annotationScopeKey,
   buildAnnotationScope,
   canonicalizeReviewRound,
   createDraftSessionId,
@@ -53,6 +54,28 @@ export type AnnotationDraftScopeInput = {
  */
 export function deriveTaskReviewRound(task: AnnotationDraftScopeTask | null | undefined): number {
   return canonicalizeReviewRound(task?.reviewRound);
+}
+
+/** 净距 / 管段 / BRAN 结果的本机 key。user 与 draft 来自同一次 scope，避免切用户时写成两套身份。 */
+export type ReviewPersistenceScope = {
+  project: string | null;
+  dbnum: string;
+  user: string;
+  draft: string | null;
+  taskId: string | null;
+  formId: string | null;
+  node: string | null;
+};
+
+export const reviewPersistenceScope = shallowRef<ReviewPersistenceScope | null>(null);
+
+function readShowDbnum(): string {
+  if (typeof window === 'undefined') return '__all__';
+  try {
+    return new URLSearchParams(window.location.search).get('show_dbnum')?.trim() || '__all__';
+  } catch {
+    return '__all__';
+  }
 }
 
 export function computeAnnotationDraftScope(input: AnnotationDraftScopeInput): AnnotationScope {
@@ -130,6 +153,7 @@ type Host = { id: symbol; options: AnnotationDraftScopeSyncOptions };
 
 type ToolStoreForScopeSync = {
   setAnnotationDraftScope?: (scope: AnnotationScope | null) => boolean;
+  setAnnotationDraftFormId?: (formId: string | null) => void;
   annotationDraftJournal?: { value: AnnotationDraftJournal };
 };
 
@@ -208,21 +232,38 @@ function startSharedSync(): void {
     () => {
       void hostsVersion.value;
       void projectRevision.value;
-      const task = reviewStore.currentTask.value as (AnnotationDraftScopeTask & { workflowHistory?: unknown }) | null;
+      const task = reviewStore.currentTask.value as (AnnotationDraftScopeTask & {
+        formId?: string | null;
+        currentNode?: string | null;
+      }) | null;
       return {
         taskId: task?.id ?? null,
+        formId: trimmedOrNull(task?.formId),
+        node: trimmedOrNull(task?.currentNode),
         reviewRound: deriveTaskReviewRound(task),
         userId: readUserId(),
         projectId: readProjectId(),
+        dbnum: readShowDbnum(),
       };
     },
     (snapshot) => {
-      apply(computeAnnotationDraftScope({
+      const scope = computeAnnotationDraftScope({
         projectId: snapshot.projectId,
         task: snapshot.taskId ? { id: snapshot.taskId, reviewRound: snapshot.reviewRound } : null,
         userId: snapshot.userId,
         draftSessionId: readDraftSessionId(),
-      }));
+      });
+      apply(scope);
+      reviewPersistenceScope.value = {
+        project: snapshot.projectId,
+        dbnum: snapshot.dbnum,
+        user: scope.userId,
+        draft: annotationScopeKey(scope),
+        taskId: snapshot.taskId,
+        formId: snapshot.formId,
+        node: snapshot.node,
+      };
+      toolStore.setAnnotationDraftFormId?.(snapshot.formId);
     },
     { immediate: true, flush: 'sync' },
   );
@@ -256,7 +297,10 @@ function stopSharedSync(): void {
   stopProjectSignals?.();
   stopProjectSignals = null;
   currentScope = null;
-  (useToolStore() as unknown as ToolStoreForScopeSync).setAnnotationDraftScope?.(null);
+  reviewPersistenceScope.value = null;
+  const toolStore = useToolStore() as unknown as ToolStoreForScopeSync;
+  toolStore.setAnnotationDraftScope?.(null);
+  toolStore.setAnnotationDraftFormId?.(null);
   useAnnotationDraftSession().leaveScope();
 }
 

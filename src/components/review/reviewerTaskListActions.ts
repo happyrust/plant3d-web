@@ -15,6 +15,8 @@ export type StartReviewerTaskOptions = {
   getTasksSnapshot?: () => ReviewTask[];
   scheduleOpenReviewPanel?: (callback: () => void) => void;
   onTaskSelected?: (task: ReviewTask) => void;
+  /** 外部流程模式下状态归 PMS 管，打开校审面板时不把 submitted 改成 in_review。 */
+  skipStatusMutation?: boolean;
 };
 
 function resolveTaskToOpen(task: ReviewTask, refreshedTasks: ReviewTask[] = []): ReviewTask {
@@ -43,7 +45,7 @@ export async function refreshReviewerTasksSafely(
 export async function startReviewerTask(options: StartReviewerTaskOptions): Promise<void> {
   let taskToOpen = options.task;
 
-  if (options.task.status === 'submitted') {
+  if (!options.skipStatusMutation && options.task.status === 'submitted') {
     const response = await reviewTaskStartReview(options.task.id);
     if (!response.success) {
       throw new Error(response.error_message || response.message || '开始审核失败');

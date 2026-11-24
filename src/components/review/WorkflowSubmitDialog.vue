@@ -24,7 +24,9 @@ const emit = defineEmits<{
 const comment = ref('');
 
 const currentNodeLabel = computed(() => WORKFLOW_NODE_NAMES[props.currentNode]);
-const targetNodeLabel = computed(() => WORKFLOW_NODE_NAMES[props.targetNode]);
+const targetNodeLabel = computed(() => (
+  props.currentNode === 'pz' ? '完成' : WORKFLOW_NODE_NAMES[props.targetNode]
+));
 
 watch(
   () => props.visible,

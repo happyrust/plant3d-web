@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   authGetToken,
   authVerifyToken,
+  getReviewApiErrorMessage,
   getReviewEvidenceSaveErrorMessage,
   getReviewUserWebSocketUrl,
   getReviewWebSocketUrl,
@@ -1639,5 +1640,12 @@ describe('Debug-shaped ids coming back from the review backend', () => {
     expect(result.success).toBe(true);
     expect(result.history.map((item) => item.id)).toEqual(['history-1', 'history-2']);
     expect(result.history[0]).toMatchObject({ action: 'created', timestamp: 1 });
+  });
+});
+
+describe('getReviewApiErrorMessage', () => {
+  it('把 approver 节点负责人错误说成当前审核负责人', () => {
+    expect(getReviewApiErrorMessage(new Error('SH 不是 approver 节点负责人'), '保存失败'))
+      .toBe('当前节点（审核）负责人是 PZ');
   });
 });

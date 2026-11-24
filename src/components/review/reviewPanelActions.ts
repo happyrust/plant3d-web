@@ -1,5 +1,5 @@
-import { reviewClearanceSnapshotKey, type ReviewClearanceSnapshot } from './reviewClearanceSnapshot';
-import { reviewModelContextKey } from './reviewModelContext';
+import { hasReviewClearanceResults, reviewClearanceSnapshotKey, type ReviewClearanceSnapshot } from './reviewClearanceSnapshot';
+import { reviewModelVersionKey } from './reviewModelContext';
 
 import type { ReviewModelContext } from './reviewModelContext';
 import type { UnifiedMeasurementRecord } from '@/composables/unifiedMeasurement';
@@ -366,10 +366,26 @@ function normalizeDimensionDocumentForComparison(
   return normalizeSnapshotForComparison(document);
 }
 
+/** 无结果的净距快照视同不存在；内嵌模型上下文只保留版本键，节点和查看方式不参与比较。 */
+function reviewClearanceEvidenceKey(snapshot: ReviewClearanceSnapshot | undefined): string | undefined {
+  if (!snapshot || !hasReviewClearanceResults(snapshot)) return undefined;
+  const comparison = snapshot.modelContext.comparison;
+  return reviewClearanceSnapshotKey({
+    ...snapshot,
+    modelContext: {
+      ...snapshot.modelContext,
+      node: 'sj',
+      comparison: comparison
+        ? { ...comparison, viewMode: 'single', activeSide: 'after', diffOnly: false }
+        : null,
+    },
+  });
+}
+
 export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
   return JSON.stringify({
-    clearanceSnapshot: payload.clearanceSnapshot ? reviewClearanceSnapshotKey(payload.clearanceSnapshot) : undefined,
-    modelContext: payload.modelContext ? reviewModelContextKey(payload.modelContext) : undefined,
+    clearanceSnapshot: reviewClearanceEvidenceKey(payload.clearanceSnapshot),
+    modelContext: payload.modelContext ? reviewModelVersionKey(payload.modelContext) : undefined,
     annotations: normalizeSnapshotForComparison(payload.annotations),
     cloudAnnotations: normalizeSnapshotForComparison(payload.cloudAnnotations),
     rectAnnotations: normalizeSnapshotForComparison(payload.rectAnnotations),
@@ -429,10 +445,14 @@ export function buildUnsavedReviewConfirmPayload(
   current: ReviewConfirmSnapshotPayload,
   baseline: ReviewConfirmSnapshotPayload
 ): ReviewConfirmSnapshotPayload {
+  const currentClearanceKey = reviewClearanceEvidenceKey(current.clearanceSnapshot);
+  const baselineClearanceKey = reviewClearanceEvidenceKey(baseline.clearanceSnapshot);
+  const currentVersionKey = current.modelContext ? reviewModelVersionKey(current.modelContext) : undefined;
+  const baselineVersionKey = baseline.modelContext ? reviewModelVersionKey(baseline.modelContext) : undefined;
   return {
-    ...(current.clearanceSnapshot && reviewClearanceSnapshotKey(current.clearanceSnapshot) !== reviewClearanceSnapshotKey(baseline.clearanceSnapshot)
+    ...(current.clearanceSnapshot && currentClearanceKey !== baselineClearanceKey
       ? { clearanceSnapshot: current.clearanceSnapshot } : {}),
-    ...(current.modelContext && (!baseline.modelContext || reviewModelContextKey(current.modelContext) !== reviewModelContextKey(baseline.modelContext))
+    ...(current.modelContext && currentVersionKey !== baselineVersionKey
       ? { modelContext: current.modelContext } : {}),
     annotations: diffSnapshotCollection(current.annotations, baseline.annotations),
     cloudAnnotations: diffSnapshotCollection(current.cloudAnnotations, baseline.cloudAnnotations),
@@ -485,7 +505,8 @@ export function buildReviewEvidenceSnapshotPayload(
 }
 
 export function buildReviewEvidenceSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
-  return buildReviewConfirmSnapshotKey(buildReviewEvidenceSnapshotPayload(payload));
+  const evidence = buildReviewEvidenceSnapshotPayload(payload);
+  return buildReviewConfirmSnapshotKey({ ...evidence, modelContext: undefined });
 }
 
 export function buildUnsavedReviewEvidencePayload(
@@ -520,6 +541,17 @@ export function hasReviewConfirmPayloadData(payload: ReviewConfirmSnapshotPayloa
     || payload.clearanceSnapshot !== undefined;
 }
 
+/** 用户证据：四类批注、测量、已落版尺寸、有结果的净距。模型上下文永远不算证据。 */
+export function hasReviewEvidenceData(payload: ReviewConfirmSnapshotPayload): boolean {
+  return payload.annotations.length > 0
+    || payload.cloudAnnotations.length > 0
+    || payload.rectAnnotations.length > 0
+    || payload.obbAnnotations.length > 0
+    || payload.measurements.length > 0
+    || normalizeDimensionDocumentForComparison(payload) !== undefined
+    || (payload.clearanceSnapshot !== undefined && hasReviewClearanceResults(payload.clearanceSnapshot));
+}
+
 export function hasSubmitBlockingReviewConfirmPayloadData(
   payload: ReviewConfirmSnapshotPayload
 ): boolean {
@@ -527,8 +559,8 @@ export function hasSubmitBlockingReviewConfirmPayloadData(
     || payload.cloudAnnotations.length > 0
     || payload.rectAnnotations.length > 0
     || payload.measurements.length > 0
-    || payload.dimensionDocument !== undefined
-    || payload.modelContext !== undefined
+    || normalizeDimensionDocumentForComparison(payload) !== undefined
+    // 差异 payload 里出现净距快照，表示结果有增删；空快照只在「删光结果」时被放进来。
     || payload.clearanceSnapshot !== undefined;
 }
 

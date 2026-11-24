@@ -5,6 +5,7 @@ const webSocketCtor = vi.fn(() => {
 });
 
 vi.mock('@/api/reviewApi', () => ({
+  getAuthToken: () => null,
   authGetToken: vi.fn(),
   reviewTaskCreate: vi.fn(),
   reviewTaskGetList: vi.fn(),

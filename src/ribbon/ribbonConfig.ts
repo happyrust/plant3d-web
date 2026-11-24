@@ -3,6 +3,7 @@ import type { RibbonGroupConfig, RibbonItem, RibbonTabConfig } from '@/ribbon/ri
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
 import { DISPLAY_THEME_PRESETS, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
+import { MODEL_TREE_SOURCE_PRESETS, useModelTreeSourceStore } from '@/composables/useModelTreeSourceStore';
 import { RENDER_STYLE_PRESETS, useRenderStyleStore } from '@/composables/useRenderStyleStore';
 import { UserRole } from '@/types/auth';
 
@@ -10,6 +11,7 @@ const showDebugUi = isReviewDebugUiEnabled();
 const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
 
 const displayThemeStore = useDisplayThemeStore();
+const modelTreeSourceStore = useModelTreeSourceStore();
 const renderStyleStore = useRenderStyleStore();
 
 /** ribbon「设置 → 模型显示」按钮图标（与 ViewerPanel 弹层共用 DISPLAY_THEME_PRESETS 的 mode/label） */
@@ -180,7 +182,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         id: 'review.mode',
         label: '模式',
         items: [
-          { kind: 'button', id: 'review.start', label: '开始校审', icon: 'clipboard_check', commandId: 'review.start' },
           { kind: 'button', id: 'review.confirm', label: '确认数据', icon: 'check_circle', commandId: 'review.confirm' },
         ],
       },
@@ -312,6 +313,18 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           },
         ],
       },
+      {
+        id: 'settings.treeSource',
+        label: '模型树数据源',
+        items: MODEL_TREE_SOURCE_PRESETS.map((preset) => ({
+          kind: 'button' as const,
+          id: `settings.treeSource.${preset.source}`,
+          label: preset.label,
+          icon: preset.source === 'direct' ? 'tree' : 'database',
+          commandId: `treeSource.${preset.source}`,
+          active: () => modelTreeSourceStore.source.value === preset.source,
+        })),
+      },
     ],
   },
   {
@@ -365,7 +378,8 @@ function filterPassiveWorkflowEntries(tabs: RibbonTabConfig[]): RibbonTabConfig[
       // 无法满足 RibbonGroupConfig.items 的 RibbonItem[]。逻辑与原来一致。
       items: group.items.flatMap((item): RibbonItem[] => {
         if (item.kind === 'button') {
-          return item.commandId === 'panel.myTasks' ? [] : [item];
+          if (item.commandId === 'panel.myTasks' || item.commandId === 'review.clear') return [];
+          return [item];
         }
         if (item.kind === 'stack') {
           const nextItems = item.items.filter((subItem) => subItem.commandId !== 'panel.myTasks');

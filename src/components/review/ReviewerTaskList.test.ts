@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 
 import ReviewerTaskList from './ReviewerTaskList.vue';
+import { startReviewerTask } from './reviewerTaskListActions';
 
 import { UserRole, type ReviewTask } from '@/types/auth';
 
@@ -54,6 +55,7 @@ const toolStoreMock = {
 
 const mockUserStore = {
   pendingReviewTasks: { value: [] as ReviewTask[] },
+  availableUsers: { value: [] as { id: string; name: string; username?: string }[] },
   currentUser: { value: { id: 'checker-1', name: '张校对员', role: UserRole.PROOFREADER } },
   isChecker: { value: true },
   isApprover: { value: false },
@@ -133,6 +135,16 @@ vi.mock('@/ribbon/toastBus', () => ({
   emitToast: mocks.emitToast,
 }));
 
+const workflowModeMock = vi.hoisted(() => ({ passive: false }));
+
+vi.mock('./workflowMode', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./workflowMode')>();
+  return {
+    ...actual,
+    resolvePassiveWorkflowMode: () => workflowModeMock.passive,
+  };
+});
+
 describe('ReviewerTaskList', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -163,6 +175,7 @@ describe('ReviewerTaskList', () => {
     openReviewAttachmentPreviewMock.mockClear();
     openReviewAttachmentPreviewMock.mockReturnValue(true);
     mockUserStore.pendingReviewTasks.value = [];
+    mockUserStore.availableUsers.value = [];
     mockUserStore.submitTaskToNextNode.mockClear();
     mockUserStore.returnTaskToNode.mockClear();
     currentWorkbenchTask.value = null;
@@ -174,6 +187,8 @@ describe('ReviewerTaskList', () => {
     toolStoreMock.measurements.value = [];
     toolStoreMock.xeokitDistanceMeasurements.value = [];
     toolStoreMock.xeokitAngleMeasurements.value = [];
+    workflowModeMock.passive = false;
+    vi.mocked(startReviewerTask).mockClear();
   });
 
   afterEach(() => {
@@ -424,5 +439,66 @@ describe('ReviewerTaskList', () => {
       node.textContent?.trim() === '驳回'
     );
     expect(rejectBtn).toBeFalsy();
+  });
+
+  it('外部流程模式不渲染驳回和确认流转，并提示去 PMS 操作', async () => {
+    workflowModeMock.passive = true;
+    const task = createTask({ id: 'external-task', title: '外部任务', currentNode: 'jd', status: 'submitted' });
+    await mountComponent([task]);
+    await openTaskDetail('外部任务');
+
+    expect(document.body.textContent).toContain('流转请在 PMS 操作');
+    expect(document.body.textContent).not.toContain('确认流转至审核');
+    expect(Array.from(document.querySelectorAll('button')).some((node) => node.textContent?.trim() === '驳回')).toBe(false);
+  });
+
+  it('外部流程模式把开始审核改成打开校审，且不改任务状态', async () => {
+    workflowModeMock.passive = true;
+    const task = createTask({ id: 'external-open', title: '外部打开', currentNode: 'jd', status: 'submitted' });
+    await mountComponent([task]);
+
+    const openButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.includes('打开校审'));
+    expect(openButton).toBeTruthy();
+    expect(document.body.textContent).not.toContain('开始审核');
+    openButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(startReviewerTask).toHaveBeenCalledWith(expect.objectContaining({
+      skipStatusMutation: true,
+      task: expect.objectContaining({ id: 'external-open', status: 'submitted' }),
+    }));
+  });
+
+  it('发起人是用户 id 时显示姓名，模型名与标题相同时不重复', async () => {
+    mockUserStore.availableUsers.value = [{ id: 'SJ', name: '王设计师', username: 'SJ' }];
+    await mountComponent([
+      createTask({
+        id: 'named-task',
+        title: '主装置模型',
+        modelName: '主装置模型',
+        requesterId: 'SJ',
+        requesterName: 'SJ',
+      }),
+    ]);
+
+    expect(document.body.textContent).toContain('发起人: 王设计师 (SJ)');
+    expect(document.body.textContent).not.toContain('发起人: SJ (SJ)');
+    const modelLines = Array.from(document.querySelectorAll('.text-\\[11px\\]')).map((node) => node.textContent?.trim());
+    expect(modelLines).not.toContain('主装置模型');
+
+    const refreshButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.includes('刷新'));
+    expect(refreshButton).toBeTruthy();
+    expect(refreshButton?.className).not.toContain('hidden');
+    expect(document.querySelector('[aria-label="筛选任务"]')).toBeNull();
+  });
+
+  it('外部流程模式继续审核也显示打开校审', async () => {
+    workflowModeMock.passive = true;
+    await mountComponent([
+      createTask({ id: 'external-continue', title: '外部继续', currentNode: 'sh', status: 'in_review' }),
+    ]);
+
+    expect(document.body.textContent).toContain('打开校审');
+    expect(document.body.textContent).not.toContain('继续审核');
   });
 });

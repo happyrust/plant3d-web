@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/api/reviewApi', () => ({
+  getAuthToken: () => null,
   authGetToken: vi.fn(async () => ({ success: true, token: 'token-proofreader' })),
   reviewTaskCreate: vi.fn(),
   reviewTaskGetList: vi.fn(),

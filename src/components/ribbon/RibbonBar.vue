@@ -73,6 +73,7 @@ function onTabClick(tabId: string) {
   <div class="ribbon-root">
     <!-- Tab Header -->
     <div class="ribbon-tab-header">
+      <slot name="header-left" />
       <button v-for="tab in visibleTabs"
         :key="tab.id"
         type="button"

@@ -18,7 +18,12 @@ vi.hoisted(() => {
   vi.stubGlobal('sessionStorage', createMemoryStorage());
 });
 
-const currentTask = ref<{ id: string; reviewRound?: number } | null>(null);
+const currentTask = ref<{
+  id: string;
+  reviewRound?: number;
+  currentNode?: string;
+  formId?: string;
+} | null>(null);
 const currentUser = ref<{ id: string } | null>({ id: 'JH' });
 const setAnnotationDraftScopeMock = vi.fn((_scope: AnnotationScope | null) => true);
 const emptyJournal = (): AnnotationDraftJournal => ({
@@ -42,6 +47,7 @@ import {
   DRAFT_SESSION_ID_STORAGE_KEY,
   getAnnotationDraftScopeSyncHostCount,
   resolveTabDraftSessionId,
+  reviewPersistenceScope,
   useAnnotationDraftScopeSync,
 } from './useAnnotationDraftScopeSync';
 import { resetAnnotationDraftSessionForTests, useAnnotationDraftSession } from './useAnnotationDraftSession';
@@ -130,6 +136,26 @@ describe('useAnnotationDraftScopeSync（接线：任务 / 用户变化 → store
     // 重复 stop 幂等
     sync.stop();
     expect(setAnnotationDraftScopeMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('持久化作用域的用户和草稿 key 同一次取齐，并带上节点', () => {
+    const sync = useAnnotationDraftScopeSync({ userId: () => 'SJ', projectId: () => 'ams' });
+    currentTask.value = { id: 'task-A', currentNode: 'sh', formId: 'FORM-1' };
+
+    const scope = reviewPersistenceScope.value;
+    expect(scope).toMatchObject({
+      project: 'ams',
+      user: 'SJ',
+      taskId: 'task-A',
+      formId: 'FORM-1',
+      node: 'sh',
+    });
+    expect(scope?.draft).toContain('user=SJ');
+    expect(scope?.draft).not.toContain('user=JH');
+    expect(scope?.user).toBe('SJ');
+
+    sync.stop();
+    expect(reviewPersistenceScope.value).toBeNull();
   });
 
   it('用户身份优先用传入的取法（嵌入模式的可信身份），没有再回用户库', () => {

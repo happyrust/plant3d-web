@@ -37,6 +37,7 @@ const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
   currentTask.value = task;
 });
 const clearConfirmedRecordsMock = vi.fn(async () => true);
+const addConfirmedRecordMock = vi.fn(async (..._args: unknown[]) => 'record-command');
 const clearCurrentTaskMock = vi.fn(() => {
   currentTask.value = null;
 });
@@ -96,7 +97,7 @@ vi.mock('@/composables/useReviewStore', () => ({
     sortedConfirmedRecords,
     toggleReviewMode: vi.fn(),
     clearCurrentTask: clearCurrentTaskMock,
-    addConfirmedRecord: vi.fn(),
+    addConfirmedRecord: (...args: unknown[]) => addConfirmedRecordMock(...args),
     clearConfirmedRecords: clearConfirmedRecordsMock,
     removeConfirmedRecord: vi.fn(),
     exportReviewData: vi.fn(() => '{}'),
@@ -154,6 +155,7 @@ vi.mock('@/api/reviewApi', () => ({
   reviewAnnotationCheck: (...args: any[]) => (reviewAnnotationCheckMock as any)(...args),
   annotationReviewStatesQuery: vi.fn(async () => ({ success: true, states: [] })),
   reviewAttachmentDelete: (...args: unknown[]) => (reviewAttachmentDeleteMock as any)(...args),
+  reviewTaskGetById: vi.fn(async () => ({ success: false })),
   reviewAttachmentUploadWithProgress: vi.fn(async () => ({
     success: true,
     attachment: { id: 'att-new', url: '/files/review_attachments/att-new.pdf' },
@@ -232,7 +234,9 @@ const reviewAttachmentPreviewMock = vi.hoisted(() => ({
 
 const commandBusMock = vi.hoisted(() => ({
   emitCommand: vi.fn(),
+  onCommand: vi.fn((_handler: (commandId: string) => void) => () => undefined),
 }));
+let reviewPanelCommandHandler: ((commandId: string) => void) | null = null;
 
 let ReviewPanel: Component;
 
@@ -250,6 +254,7 @@ vi.mock('@/composables/useReviewAttachmentPreview', () => ({
 
 vi.mock('@/ribbon/commandBus', () => ({
   emitCommand: commandBusMock.emitCommand,
+  onCommand: (handler: (commandId: string) => void) => commandBusMock.onCommand(handler),
 }));
 
 vi.mock('@/composables/useSelectionStore', () => ({
@@ -485,6 +490,15 @@ describe('ReviewPanel', () => {
     showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });
     dockApiMock.ensurePanelAndActivate.mockClear();
     commandBusMock.emitCommand.mockClear();
+    reviewPanelCommandHandler = null;
+    commandBusMock.onCommand.mockImplementation((handler: (commandId: string) => void) => {
+      reviewPanelCommandHandler = handler;
+      return () => {
+        if (reviewPanelCommandHandler === handler) reviewPanelCommandHandler = null;
+      };
+    });
+    addConfirmedRecordMock.mockReset();
+    addConfirmedRecordMock.mockResolvedValue('record-command');
     emitToastMock.mockClear();
     reviewAnnotationCheckMock.mockReset();
     reviewAnnotationCheckMock.mockResolvedValue({
@@ -908,6 +922,91 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('当前单据批注');
     expect(document.body.textContent).not.toContain('其他单据批注');
     expect(document.body.textContent).not.toContain('确认当前数据');
+
+    mounted.unmount();
+  });
+
+  it('外部单据的待确认批注数只数本单据，未绑定草稿单独提示', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-001',
+      userId: 'checker-1',
+      workflowRole: 'jd',
+      projectId: 'project-1',
+      workflowMode: 'external',
+      isEmbedMode: true,
+    }));
+    currentTask.value = createTask({
+      id: 'task-jd-count',
+      formId: 'FORM-001',
+      currentNode: 'jd',
+      status: 'in_review',
+    });
+    toolStoreMock.annotationCount.value = 2;
+    toolStoreMock.annotations.value = [
+      {
+        id: 'anno-bound',
+        formId: 'FORM-001',
+        refno: 'V-01',
+        title: '本单据批注',
+        description: '计入',
+        visible: true,
+        createdAt: 1,
+      },
+      {
+        id: 'anno-unbound',
+        refno: 'P-02',
+        title: '未绑定草稿',
+        description: '不计入',
+        visible: true,
+        createdAt: 2,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[title="待确认批注"] strong')?.textContent?.trim()).toBe('1');
+    expect(document.querySelector('[data-testid="unbound-draft-notice"]')?.textContent).toContain('1 条草稿未绑定本单据，不计入确认');
+    expect(document.body.textContent).toContain('本单据批注');
+    expect(document.body.textContent).not.toContain('未绑定草稿');
+
+    mounted.unmount();
+  });
+
+  it('外部单据的批注全部绑定本单据时不提示未绑定草稿', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-001',
+      userId: 'checker-1',
+      workflowRole: 'jd',
+      projectId: 'project-1',
+      workflowMode: 'external',
+      isEmbedMode: true,
+    }));
+    currentTask.value = createTask({
+      id: 'task-jd-bound',
+      formId: 'FORM-001',
+      currentNode: 'jd',
+      status: 'in_review',
+    });
+    toolStoreMock.annotations.value = [
+      {
+        id: 'anno-only',
+        formId: 'FORM-001',
+        refno: 'V-01',
+        title: '仅本单据',
+        description: '',
+        visible: true,
+        createdAt: 1,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[title="待确认批注"] strong')?.textContent?.trim()).toBe('1');
+    expect(document.querySelector('[data-testid="unbound-draft-notice"]')).toBeNull();
 
     mounted.unmount();
   });
@@ -1380,6 +1479,8 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('FORM-B');
     expect(document.body.textContent).toContain('审核乙');
     expect(document.body.textContent).toContain('确认流转至批准');
+    expect(document.body.textContent).toContain('驳回…');
+    expect(document.body.textContent).not.toContain('驳回到设计');
     expect(document.body.textContent).not.toContain('FORM-A');
     expect(document.body.textContent).not.toContain('确认流转至审核');
     mounted.unmount();
@@ -1417,6 +1518,59 @@ describe('ReviewPanel', () => {
       message: '后端清空失败',
       level: 'error',
     });
+
+    mounted.unmount();
+  });
+
+  it('Ribbon 确认命令与面板确认按钮走同一条保存', async () => {
+    toolStoreMock.annotations.value = [{ id: 'anno-command', formId: 'FORM-001', title: '命令批注' }];
+    toolStoreMock.annotationCount.value = 1;
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const confirmButton = Array.from(document.querySelectorAll('button')).find((button) => (
+      button.textContent?.includes('确认当前数据')
+    )) as HTMLButtonElement | undefined;
+    expect(confirmButton).toBeTruthy();
+    confirmButton?.click();
+    await settlePanel();
+    const buttonCalls = addConfirmedRecordMock.mock.calls.length;
+    expect(buttonCalls).toBeGreaterThan(0);
+
+    addConfirmedRecordMock.mockClear();
+    reviewPanelCommandHandler?.('review.confirm');
+    await settlePanel();
+    expect(addConfirmedRecordMock).toHaveBeenCalledTimes(buttonCalls);
+
+    mounted.unmount();
+  });
+
+  it('Ribbon 清空命令与面板清空按钮走同一条确认', async () => {
+    sortedConfirmedRecords.value = [{
+      id: 'record-1',
+      confirmedAt: new Date('2026-03-16T09:30:00+08:00').getTime(),
+      note: '待清空',
+      annotations: [{ id: 'a-1' }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [],
+    }] as never[];
+    confirmedRecordCount.value = 1;
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const clearButton = Array.from(document.querySelectorAll('button')).find((button) => (
+      button.textContent?.includes('清空')
+    )) as HTMLButtonElement | undefined;
+    clearButton?.click();
+    await settlePanel();
+    expect(clearConfirmedRecordsMock).toHaveBeenCalledTimes(1);
+
+    clearConfirmedRecordsMock.mockClear();
+    reviewPanelCommandHandler?.('review.clear');
+    await settlePanel();
+    expect(clearConfirmedRecordsMock).toHaveBeenCalledTimes(1);
 
     mounted.unmount();
   });

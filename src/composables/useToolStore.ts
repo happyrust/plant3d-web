@@ -463,6 +463,9 @@ export type AnnotationRecord = {
   /** 批注创建者 ID（用于权限判断：作者可编辑严重度） */
   authorId?: string;
   screenshot?: AnnotationScreenshot;
+  /** 创建时所属单据；缺省由当前草稿 scope 补上 */
+  formId?: string;
+  taskId?: string;
 };
 
 export type Obb = {
@@ -512,6 +515,9 @@ export type ObbAnnotationRecord = {
    * true 时只渲染 box + pin（图钉），不渲染文字框 / 引线。双击图钉切换。
    */
   collapsed?: boolean;
+  /** 创建时所属单据；缺省由当前草稿 scope 补上 */
+  formId?: string;
+  taskId?: string;
 };
 
 /** 云线关联元素的角色：`anchor` 为图钉参考中心，`member` 为问题目标元素。 */
@@ -585,6 +591,9 @@ export type CloudAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   screenshot?: AnnotationScreenshot;
+  /** 创建时所属单据；缺省由当前草稿 scope 补上 */
+  formId?: string;
+  taskId?: string;
 };
 
 export type RectAnnotationRecord = {
@@ -615,6 +624,9 @@ export type RectAnnotationRecord = {
    * 不渲染文字框 / 引线。双击图钉切换。
    */
   collapsed?: boolean;
+  /** 创建时所属单据；缺省由当前草稿 scope 补上 */
+  formId?: string;
+  taskId?: string;
 };
 
 export type PickedQueryCenter = {
@@ -754,6 +766,8 @@ function withStorageScope(storageKey: string, scope = getCurrentStorageScope()):
 
 /** 当前批注草稿 scope；null = 不在校审任务上下文里（沿用旧 `project=…|db=…` 作用域） */
 const annotationDraftScope = shallowRef<AnnotationScope | null>(null);
+/** 当前单据号，跟草稿 scope 一起由 scope sync 写入；不进 scope key */
+const annotationDraftFormId = shallowRef<string | null>(null);
 
 function isScopedDraftsEnabled(): boolean {
   return isAnnotationUxFlagEnabled('scopedDraftsV1');
@@ -1867,6 +1881,21 @@ function setAnnotationDraftScope(scope: AnnotationScope | null): boolean {
   return true;
 }
 
+function setAnnotationDraftFormId(formId: string | null): void {
+  annotationDraftFormId.value = typeof formId === 'string' && formId.trim() ? formId.trim() : null;
+}
+
+function withReviewDraftStamp<T extends { formId?: string; taskId?: string }>(rec: T): T {
+  const formId = rec.formId?.trim() || annotationDraftFormId.value || undefined;
+  const taskId = rec.taskId?.trim() || annotationDraftScope.value?.taskId?.trim() || undefined;
+  if (formId === rec.formId && taskId === rec.taskId) return rec;
+  return {
+    ...rec,
+    ...(formId ? { formId } : {}),
+    ...(taskId ? { taskId } : {}),
+  };
+}
+
 function getAnnotationDraftScope(): AnnotationScope | null {
   return annotationDraftScope.value;
 }
@@ -2298,7 +2327,8 @@ function setXeokitPointerLensState(state: XeokitPointerLensState) {
 }
 
 function addAnnotation(rec: AnnotationRecord) {
-  const withAuthor: AnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  const stamped = withReviewDraftStamp(rec);
+  const withAuthor: AnnotationRecord = stamped.authorId ? stamped : { ...stamped, authorId: resolveCurrentAuthorId() };
   annotations.value = [...annotations.value, normalizeAnnotationRecord(withAuthor)];
   activeAnnotationId.value = rec.id;
   pendingTextAnnotationEditId.value = rec.id;
@@ -2342,7 +2372,8 @@ function clearAnnotations() {
 }
 
 function addObbAnnotation(rec: ObbAnnotationRecord) {
-  const withAuthor: ObbAnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  const stamped = withReviewDraftStamp(rec);
+  const withAuthor: ObbAnnotationRecord = stamped.authorId ? stamped : { ...stamped, authorId: resolveCurrentAuthorId() };
   obbAnnotations.value = [...obbAnnotations.value, normalizeObbAnnotationRecord(withAuthor)];
   activeObbAnnotationId.value = rec.id;
   // 不再自动弹出编辑框，用户点击图钉后再编辑
@@ -2373,7 +2404,8 @@ function clearObbAnnotations() {
 }
 
 function addCloudAnnotation(rec: CloudAnnotationRecord) {
-  const withAuthor: CloudAnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  const stamped = withReviewDraftStamp(rec);
+  const withAuthor: CloudAnnotationRecord = stamped.authorId ? stamped : { ...stamped, authorId: resolveCurrentAuthorId() };
   cloudAnnotations.value = [...cloudAnnotations.value, normalizeCloudAnnotationRecord(withAuthor)];
   activeCloudAnnotationId.value = rec.id;
   pendingCloudAnnotationEditId.value = rec.id;
@@ -2577,7 +2609,8 @@ function findAnnotationsByMemberRefnosAcrossTypes(
 }
 
 function addRectAnnotation(rec: RectAnnotationRecord) {
-  const withAuthor: RectAnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  const stamped = withReviewDraftStamp(rec);
+  const withAuthor: RectAnnotationRecord = stamped.authorId ? stamped : { ...stamped, authorId: resolveCurrentAuthorId() };
   rectAnnotations.value = [...rectAnnotations.value, normalizeRectAnnotationRecord(withAuthor)];
   activeRectAnnotationId.value = rec.id;
   pendingRectAnnotationEditId.value = rec.id;
@@ -3619,6 +3652,7 @@ export function useToolStore() {
     // U0 草稿 scope（方案 2026-09-14 §3.6）
     annotationDraftScope,
     setAnnotationDraftScope,
+    setAnnotationDraftFormId,
     getAnnotationDraftScope,
     getUnattributedDraftSummary,
     annotationDraftJournal,

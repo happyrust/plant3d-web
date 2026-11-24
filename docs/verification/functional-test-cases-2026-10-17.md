@@ -85,7 +85,7 @@
 | ANN-04 | 相机随动 | 批注轮廓相机运动/快速环绕 | `dtx-cloud-outline-camera-motion` / `fast-orbit` | 可执行 |
 | ANN-05 | 标签轨道稳定 | 快速环绕时 overlay 标签不抖 | `e2e/dtx-overlay-labels-fast-orbit.spec.ts` | 可执行 |
 | ANN-06 | 真模型标签 | overlay 标签在真模型上定位 | `e2e/dtx-overlay-labels-real-model.spec.ts` | 可执行 |
-| ANN-07 | 长按枢轴 | 长按设观察枢轴 | `e2e/dtx-long-press-pivot.spec.ts` | 可执行 |
+| ANN-07 | 长按枢轴 | 长按设观察枢轴：旋转中心记到按住的点，画面不动 | `e2e/dtx-long-press-pivot.spec.ts`（真模型）、`e2e/dtx-view-focus.spec.ts`（演示场景，不需要后台） | 可执行 |
 | ANN-08 | 批注显隐 | 批注层显隐切换 | `e2e/dtx-visibility.spec.ts` | 可执行 |
 
 ## 7. 测量与尺寸（MES）

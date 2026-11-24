@@ -95,6 +95,7 @@ vi.mock('@/composables/useDockApi', () => ({
 
 vi.mock('@/ribbon/commandBus', () => ({
   emitCommand: mocks.emitCommand,
+  onCommand: vi.fn(() => () => {}),
 }));
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));

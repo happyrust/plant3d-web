@@ -23,6 +23,7 @@ import {
   type ReviewTaskCreateRequest,
 } from '@/api/reviewApi';
 import { normalizeWorkflowSteps } from '@/api/workflowStepNormalize';
+import { readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import {
   fromBackendRole,
@@ -763,7 +764,7 @@ async function switchUser(userId: string): Promise<void> {
   currentUserId.value = userId;
   console.log(`[useUserStore] Switched to user: ${user.name} (${user.role})`);
   await loadReviewTasks();
-  connectWebSocket();
+  // 实时更新改由 useReviewPolling 拉取；connectWebSocket 留到下个发布周期再删。
 }
 
 // ============ 任务管理 ============
@@ -900,8 +901,8 @@ async function createReviewTask(data: {
   title: string;
   description: string;
   modelName: string;
-  checkerId: string;
-  approverId: string;
+  checkerId?: string;
+  approverId?: string;
   priority?: ReviewTask['priority'];
   components: ReviewComponent[];
   dueDate?: number;
@@ -913,10 +914,10 @@ async function createReviewTask(data: {
   const priority = data.priority ?? 'medium';
 
   const buildLocalTask = (): ReviewTask => {
-    const checker = users.value.find((u) => u.id === data.checkerId);
-    if (!checker) throw new Error('Checker not found');
-    const approver = users.value.find((u) => u.id === data.approverId);
-    if (!approver) throw new Error('Approver not found');
+    const checker = data.checkerId ? users.value.find((u) => u.id === data.checkerId) : undefined;
+    if (data.checkerId && !checker) throw new Error('Checker not found');
+    const approver = data.approverId ? users.value.find((u) => u.id === data.approverId) : undefined;
+    if (data.approverId && !approver) throw new Error('Approver not found');
 
     return {
       id: `task-${Date.now()}`,
@@ -928,12 +929,12 @@ async function createReviewTask(data: {
       priority,
       requesterId: user.id,
       requesterName: user.name,
-      checkerId: data.checkerId,
-      checkerName: checker.name,
-      approverId: data.approverId,
-      approverName: approver.name,
-      reviewerId: data.checkerId,
-      reviewerName: checker.name,
+      checkerId: data.checkerId || '',
+      checkerName: checker?.name || '',
+      approverId: data.approverId || '',
+      approverName: approver?.name || '',
+      reviewerId: data.checkerId || user.id,
+      reviewerName: checker?.name || user.name,
       components: data.components,
       attachments: data.attachments,
       createdAt: Date.now(),
@@ -952,9 +953,8 @@ async function createReviewTask(data: {
         title: data.title,
         description: data.description,
         modelName: data.modelName,
-        checkerId: data.checkerId,
-        approverId: data.approverId,
-        reviewerId: data.checkerId,
+        ...(data.checkerId ? { checkerId: data.checkerId, reviewerId: data.checkerId } : {}),
+        ...(data.approverId ? { approverId: data.approverId } : {}),
         formId: data.formId,
         priority,
         components: data.components,
@@ -1506,13 +1506,30 @@ function setEmbedUser(externalUserId: string, externalWorkflowRole?: string, opt
 
 // ============ 初始化 ============
 
+async function ensureDesktopReviewToken(): Promise<void> {
+  if (!USE_BACKEND.value) return;
+  if (readPersistedEmbedModeParams()?.isEmbedMode) return;
+  const storedToken = typeof localStorage !== 'undefined'
+    ? localStorage.getItem('review_auth_token')
+    : null;
+  if (storedToken) return;
+  const user = currentUser.value;
+  if (!user) return;
+  try {
+    await authGetToken(buildSwitchUserTokenRequest(user, resolveReviewProjectIdFromSession()));
+  } catch (error) {
+    console.warn('[useUserStore] Failed to mint review token before loading the current user:', error);
+  }
+}
+
 async function initialize(): Promise<void> {
   if (USE_BACKEND.value) {
     await loadUsers();
     await loadReviewers();
+    await ensureDesktopReviewToken();
     await loadCurrentUser();
     await loadReviewTasks();
-    connectWebSocket();
+    // 实时更新改由 useReviewPolling 拉取；connectWebSocket 留到下个发布周期再删。
   }
 }
 

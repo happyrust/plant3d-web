@@ -307,8 +307,6 @@ describe('InitiateReviewPanel form binding', () => {
 
     expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       title: '外部流程编校审包',
-      checkerId: 'JH',
-      approverId: 'SH',
       priority: undefined,
       components: [
         expect.objectContaining({
@@ -316,6 +314,9 @@ describe('InitiateReviewPanel form binding', () => {
         }),
       ],
     }));
+    const createdPayload = createTaskMock.mock.calls.at(-1)?.[0] as { checkerId?: string; approverId?: string };
+    expect(createdPayload.checkerId).toBeUndefined();
+    expect(createdPayload.approverId).toBeUndefined();
     expect(submitTaskToNextNodeSpy).not.toHaveBeenCalled();
     expect(setCurrentTaskMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'task-1' }));
     expect(host.textContent).toContain('编校审单保存成功');
@@ -593,7 +594,8 @@ describe('InitiateReviewPanel form binding', () => {
     expect(host.textContent).toContain('FORM-DESIGNER-1');
     expect(host.textContent).toContain('外部单据已绑定任务');
     expect(host.textContent).toContain('draft');
-    expect(host.textContent).toContain('sj');
+    expect(host.textContent).toContain('编制');
+    expect(host.textContent).toContain('单据编号');
 
     app.unmount();
     host.remove();

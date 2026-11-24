@@ -275,6 +275,8 @@ vi.mock('@/composables/useViewerContext', () => ({
 vi.mock('@/api/reviewApi', () => ({
   reviewAnnotationCheck: (...args: unknown[]) => reviewAnnotationCheckMock(...args),
   getReviewAnnotationCheckFromError: vi.fn(() => undefined),
+  reviewTaskGetById: vi.fn(async () => ({ success: false })),
+  reviewCommentGetByAnnotation: vi.fn(async () => ({ success: true, comments: [] })),
 }));
 
 const syncAnnotationReviewStatesMock = vi.fn(async (_options: unknown) => ({ ok: true, appliedCount: 0, totalCount: 0 }));

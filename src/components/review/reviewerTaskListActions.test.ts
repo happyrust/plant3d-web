@@ -157,6 +157,31 @@ describe('reviewerTaskListActions', () => {
     expect(setCurrentTask).toHaveBeenCalledWith(task);
   });
 
+  it('外部流程模式打开已提交任务时不调用 start-review', async () => {
+    const task = createTask({
+      id: 'task-external-open',
+      status: 'submitted',
+      currentNode: 'jd',
+    });
+    const setCurrentTask = vi.fn(async () => {});
+    const emitCommand = vi.fn();
+
+    await startReviewerTask({
+      task,
+      setCurrentTask,
+      emitCommand,
+      skipStatusMutation: true,
+      scheduleOpenReviewPanel: (callback) => callback(),
+    });
+
+    expect(reviewTaskStartReviewMock).not.toHaveBeenCalled();
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(emitCommand.mock.calls).toEqual([
+      ['panel.reviewerTasks'],
+      ['panel.review'],
+    ]);
+  });
+
   it('bubbles backend start-review failures without opening the workbench', async () => {
     reviewTaskStartReviewMock.mockResolvedValueOnce({
       success: false,

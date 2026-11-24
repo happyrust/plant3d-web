@@ -119,45 +119,48 @@ function onClickCommand(commandId: string) {
 <template>
   <div ref="menuRootRef" class="hierarchical-menu-root">
     <div class="hierarchical-menu-bar">
-      <div class="hierarchical-menu-tabs" role="menubar">
-        <div v-for="tab in menuTabs"
-          :key="tab.id"
-          class="hierarchical-menu-tab"
-          :data-hierarchical-tab="tab.id"
-          @mouseenter="openTab(tab.id)"
-          @mouseleave="closeMenu(tab.id)">
-          <button type="button"
-            class="hierarchical-menu-tab__trigger"
-            :class="{ 'hierarchical-menu-tab__trigger--active': activeTab?.id === tab.id }"
-            :aria-expanded="openTabId === tab.id ? 'true' : 'false'"
-            :data-ribbon-tab="tab.id"
-            @click="toggleTab(tab.id)">
-            {{ tab.label }}
-          </button>
-
-          <div v-if="openTabId === tab.id"
-            class="hierarchical-menu-dropdown"
+      <div class="hierarchical-menu-start">
+        <slot name="header-left" />
+        <div class="hierarchical-menu-tabs" role="menubar">
+          <div v-for="tab in menuTabs"
+            :key="tab.id"
+            class="hierarchical-menu-tab"
+            :data-hierarchical-tab="tab.id"
             @mouseenter="openTab(tab.id)"
             @mouseleave="closeMenu(tab.id)">
-            <section v-for="group in tab.groups"
-              :key="group.id"
-              class="hierarchical-menu-group">
-              <div class="hierarchical-menu-group__label">{{ group.label }}</div>
-              <button v-for="command in group.commands"
-                :key="command.id"
-                type="button"
-                class="hierarchical-menu-item"
-                :class="{ 'hierarchical-menu-item--current': command.active?.() === true }"
-                :data-command="command.commandId"
-                :disabled="command.disabled"
-                @click="onClickCommand(command.commandId)">
-                <component :is="resolveIcon(command.icon)" v-if="command.icon" class="hierarchical-menu-item__icon" />
-                <span class="hierarchical-menu-item__text">{{ command.label }}</span>
-                <component :is="ribbonIcons.check"
-                  v-if="command.active?.() === true"
-                  class="hierarchical-menu-item__check" />
-              </button>
-            </section>
+            <button type="button"
+              class="hierarchical-menu-tab__trigger"
+              :class="{ 'hierarchical-menu-tab__trigger--active': activeTab?.id === tab.id }"
+              :aria-expanded="openTabId === tab.id ? 'true' : 'false'"
+              :data-ribbon-tab="tab.id"
+              @click="toggleTab(tab.id)">
+              {{ tab.label }}
+            </button>
+
+            <div v-if="openTabId === tab.id"
+              class="hierarchical-menu-dropdown"
+              @mouseenter="openTab(tab.id)"
+              @mouseleave="closeMenu(tab.id)">
+              <section v-for="group in tab.groups"
+                :key="group.id"
+                class="hierarchical-menu-group">
+                <div class="hierarchical-menu-group__label">{{ group.label }}</div>
+                <button v-for="command in group.commands"
+                  :key="command.id"
+                  type="button"
+                  class="hierarchical-menu-item"
+                  :class="{ 'hierarchical-menu-item--current': command.active?.() === true }"
+                  :data-command="command.commandId"
+                  :disabled="command.disabled"
+                  @click="onClickCommand(command.commandId)">
+                  <component :is="resolveIcon(command.icon)" v-if="command.icon" class="hierarchical-menu-item__icon" />
+                  <span class="hierarchical-menu-item__text">{{ command.label }}</span>
+                  <component :is="ribbonIcons.check"
+                    v-if="command.active?.() === true"
+                    class="hierarchical-menu-item__check" />
+                </button>
+              </section>
+            </div>
           </div>
         </div>
       </div>
@@ -192,6 +195,13 @@ function onClickCommand(commandId: string) {
   min-height: 46px;
   padding: 0 10px 0 8px;
   gap: 16px;
+}
+
+.hierarchical-menu-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .hierarchical-menu-tabs {

@@ -41,7 +41,7 @@ import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { getModelSource } from '@/model-source';
 import { emitToast } from '@/ribbon/toastBus';
-import { getRoleDisplayName, type ReviewAttachment } from '@/types/auth';
+import { getRoleDisplayName, WORKFLOW_NODE_NAMES, type ReviewAttachment, type WorkflowNode } from '@/types/auth';
 
 type InitiateReviewAutomationCreateResult = {
   taskId: string | null;
@@ -86,8 +86,6 @@ const formData = reactive({
   priority: 'medium' as 'low' | 'medium' | 'high',
   dueDate: '',
 });
-const DEFAULT_EXTERNAL_CHECKER_ID = 'JH';
-const DEFAULT_EXTERNAL_APPROVER_ID = 'SH';
 const selectedComponents = ref<ReviewComponent[]>([]);
 const selectedComponentRefno = ref<string | null>(null);
 const addingComponent = ref(false);
@@ -648,10 +646,6 @@ const availableApprovers = computed(() => {
   return approvers.length > 0 ? approvers : userStore.availableReviewers.value;
 });
 
-function isPmsHumanCode(value: string): boolean {
-  return /^[A-Z]{2,6}$/.test(value.trim());
-}
-
 const resolvedAssignees = computed(() => {
   if (!externalWorkflowMode.value) {
     const checkerId = formData.checkerId;
@@ -663,17 +657,10 @@ const resolvedAssignees = computed(() => {
     };
   }
 
-  const checkerId = formData.checkerId || availableCheckers.value[0]?.id || DEFAULT_EXTERNAL_CHECKER_ID;
-  const approverPool = availableApprovers.value.length > 0 ? availableApprovers.value : reviewerOptions.value;
-  const approverId =
-    formData.approverId
-    || approverPool.find((user) => user.id !== checkerId)?.id
-    || (DEFAULT_EXTERNAL_APPROVER_ID !== checkerId ? DEFAULT_EXTERNAL_APPROVER_ID : 'PZ');
-
   return {
-    checkerId,
-    approverId,
-    valid: isPmsHumanCode(checkerId) && isPmsHumanCode(approverId) && checkerId !== approverId,
+    checkerId: '',
+    approverId: '',
+    valid: true,
   };
 });
 
@@ -700,7 +687,7 @@ function validateForm() {
   const assignees = resolvedAssignees.value;
   const nextErrors: FormErrors = {
     packageName: formData.packageName.trim() ? '' : '请输入数据包名称',
-    checkerId: assignees.valid ? '' : 'HumanCode 须为 2-6 位大写字母（如 SJ、JH），请检查校核人和审核人配置',
+    checkerId: assignees.valid ? '' : 'HumanCode 须为 2-6 位大写字母（如 SJ、JH），请检查校对人和审核·批准人配置',
   };
   formErrors.value = nextErrors;
   return !nextErrors.packageName && !nextErrors.checkerId;
@@ -732,9 +719,9 @@ const missingFields = computed(() => {
   if (selectedComponents.value.length === 0) fields.push('选择模型构件');
   if (!formData.packageName.trim()) fields.push('数据包名称');
   if (!externalWorkflowMode.value) {
-    if (!formData.checkerId) fields.push('校核人员');
-    if (!formData.approverId) fields.push('审核人员');
-    if (samePersonError.value) fields.push('校核人和审核人不能为同一人');
+    if (!formData.checkerId) fields.push('校对人');
+    if (!formData.approverId) fields.push('审核·批准人');
+    if (samePersonError.value) fields.push('校对人和审核·批准人不能为同一人');
   }
   return fields;
 });
@@ -766,8 +753,8 @@ const submitLoadingLabel = computed(() => (
 ));
 const attachmentUploadHint = computed(() => (
   externalWorkflowMode.value
-    ? '当前将在保存编校审单后自动上传附件，避免缺少 lineage 导致上传失败。'
-    : '当前将在创建编校审单后自动上传附件，避免缺少 lineage 导致上传失败。'
+    ? '当前将在保存编校审单后自动上传附件，避免缺少单据编号导致上传失败。'
+    : '当前将在创建编校审单后自动上传附件，避免缺少单据编号导致上传失败。'
 ));
 const submitSuccessTitle = computed(() => (
   externalWorkflowMode.value ? '编校审单保存成功' : '编校审单创建成功'
@@ -853,10 +840,10 @@ async function handleSubmit() {
       throw new Error('缺少业务单据号，请重新从编校审入口打开当前单据');
     }
 
-    const checkerIdToSubmit = resolvedAssignees.value.checkerId;
-    const approverIdToSubmit = resolvedAssignees.value.approverId;
-    if (!resolvedAssignees.value.valid) {
-      throw new Error('校核人与审核人配置无效，请检查后重试');
+    const checkerIdToSubmit = isExternal ? '' : resolvedAssignees.value.checkerId;
+    const approverIdToSubmit = isExternal ? '' : resolvedAssignees.value.approverId;
+    if (!isExternal && !resolvedAssignees.value.valid) {
+      throw new Error('校对人与审核·批准人配置无效，请检查后重试');
     }
 
     const attachments = getUploadedAttachments();
@@ -870,8 +857,10 @@ async function handleSubmit() {
       title: formData.packageName,
       description: formData.description || `模型数据包：${formData.packageName}`,
       modelName: formData.packageName,
-      checkerId: checkerIdToSubmit,
-      approverId: approverIdToSubmit,
+      ...(isExternal ? {} : {
+        checkerId: checkerIdToSubmit,
+        approverId: approverIdToSubmit,
+      }),
       formId: requestFormId,
       priority: isExternal ? undefined : formData.priority,
       components: [...selectedComponents.value],
@@ -1039,8 +1028,13 @@ function closePanel() {
         <div class="mt-3 space-y-2 text-sm text-green-800">
           <p>数据包「<span class="font-medium">{{ lastCreatedTask.title }}</span>」{{ submitSuccessDetails }}</p>
           <div class="rounded-lg bg-white/60 px-3 py-2 text-xs text-green-700">
-            <p>校核人：{{ lastCreatedTask.checkerName }}</p>
-            <p>审核人：{{ lastCreatedTask.approverName }}</p>
+            <template v-if="externalWorkflowMode">
+              <p>负责人由 PMS 送审时指定</p>
+            </template>
+            <template v-else>
+              <p>校对人：{{ lastCreatedTask.checkerName }}</p>
+              <p>审核·批准人：{{ lastCreatedTask.approverName }}</p>
+            </template>
             <p>构件数：{{ lastCreatedTask.componentCount }} 个</p>
             <p v-if="lastCreatedTask.attachments.length > 0">附件数：{{ lastCreatedTask.attachments.length }} 个</p>
           </div>
@@ -1098,14 +1092,14 @@ function closePanel() {
         <span v-if="embedLandingState?.formId"
           data-testid="designer-lineage-form-id"
           class="rounded-full bg-indigo-100 px-2 py-1 text-indigo-800">
-          Lineage: {{ embedLandingState.formId }}
+          单据编号：{{ embedLandingState.formId }}
         </span>
       </div>
       <div v-if="showDebugUi && embedModeParams.isEmbedMode && restoredTaskSummary"
         class="rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
         data-testid="designer-restored-task-summary">
         <p class="font-medium">当前绑定任务：{{ restoredTaskSummary.title }}</p>
-        <p class="mt-1">状态：{{ restoredTaskSummary.status }} · 当前节点：{{ restoredTaskSummary.currentNode }}</p>
+        <p class="mt-1">状态：{{ restoredTaskSummary.status }} · 当前节点：{{ WORKFLOW_NODE_NAMES[restoredTaskSummary.currentNode as WorkflowNode] || restoredTaskSummary.currentNode }}</p>
       </div>
       <div v-else-if="showDebugUi && embedModeParams.isEmbedMode && embedLandingState?.restoreStatus === 'missing'"
         class="rounded-[8px] border border-warning bg-warning-subtle px-3 py-2 text-xs text-warning"
@@ -1231,7 +1225,7 @@ function closePanel() {
       <template v-if="!externalWorkflowMode">
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
-            <label class="text-[13px] font-medium text-[#6B7280]">审核人</label>
+            <label class="text-[13px] font-medium text-[#6B7280]">校对人</label>
             <div :class="[
               'relative rounded-[6px] border transition',
               formErrors.checkerId ? 'border-[#EF4444]' : 'border-transparent',
@@ -1242,7 +1236,7 @@ function closePanel() {
                 data-testid="initiate-checker-select"
                 class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]"
                 :class="formErrors.checkerId ? 'border-[#EF4444] focus:border-[#EF4444]' : ''">
-                <option value="">选择审核人</option>
+                <option value="">选择校对人</option>
                 <option v-for="r in reviewerOptions" :key="r.id" :value="r.id">
                   {{ r.name }} ({{ getRoleDisplayName(r.role) }})
                 </option>
@@ -1274,13 +1268,13 @@ function closePanel() {
         </div>
 
         <div class="space-y-2">
-          <label class="text-[13px] font-medium text-[#6B7280]">批准人</label>
+          <label class="text-[13px] font-medium text-[#6B7280]">审核·批准人</label>
           <div class="relative">
             <User class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
             <select v-model="formData.approverId"
               data-testid="initiate-approver-select"
               class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]">
-              <option value="">选择批准人</option>
+              <option value="">选择审核·批准人</option>
               <option v-for="r in availableApprovers" :key="r.id" :value="r.id">
                 {{ r.name }} ({{ getRoleDisplayName(r.role) }})
               </option>
@@ -1291,7 +1285,7 @@ function closePanel() {
             已选择：{{ selectedApprover.name }}
           </p>
           <p v-if="samePersonError" class="text-xs text-[#EF4444]">
-            校核人和审核人不能为同一人
+            校对人和审核·批准人不能为同一人
           </p>
         </div>
 

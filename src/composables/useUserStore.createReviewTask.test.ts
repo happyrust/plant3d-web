@@ -5,6 +5,7 @@ const reviewTaskUpdateMock = vi.fn();
 const reviewTaskSubmitToNextMock = vi.fn();
 
 vi.mock('@/api/reviewApi', () => ({
+  getAuthToken: () => null,
   reviewTaskCreate: reviewTaskCreateMock,
   reviewTaskGetList: vi.fn(async () => ({ success: true, tasks: [], total: 0 })),
   reviewTaskGetById: vi.fn(),
@@ -98,6 +99,48 @@ describe('useUserStore.createReviewTask', () => {
     ).rejects.toThrow('backend failed');
 
     expect(store.reviewTasks.value).toHaveLength(0);
+  });
+
+  it('未传校核人和审核人时请求里不回填 JH/SH', async () => {
+    reviewTaskCreateMock.mockResolvedValue({
+      success: true,
+      task: {
+        id: 'task-external-assignees',
+        title: 'task-external',
+        description: 'desc',
+        modelName: 'model',
+        status: 'draft',
+        priority: 'medium',
+        requesterId: 'SJ',
+        requesterName: '王设计师',
+        checkerId: '',
+        checkerName: '',
+        approverId: '',
+        approverName: '',
+        reviewerId: 'SJ',
+        reviewerName: '王设计师',
+        components: [],
+        createdAt: 1,
+        updatedAt: 1,
+        currentNode: 'sj',
+      },
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+    store.setEmbedUser('SJ', 'sj', { verified: true });
+
+    await store.createReviewTask({
+      title: 'task-external',
+      description: 'desc',
+      modelName: 'model',
+      components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
+    });
+
+    const request = reviewTaskCreateMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(request.checkerId).toBeUndefined();
+    expect(request.approverId).toBeUndefined();
+    expect(request.reviewerId).toBeUndefined();
   });
 
   it('显式禁用开发回退后，网络异常也必须抛错', async () => {

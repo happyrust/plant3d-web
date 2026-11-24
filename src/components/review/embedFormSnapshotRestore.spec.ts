@@ -428,4 +428,54 @@ describe('restoreEmbedFormSnapshot', () => {
       ],
     }));
   });
+
+  it('query 带回 returned 时优先标成退回，没有该字段仍留给历史推断', async () => {
+    const request = vi.fn().mockResolvedValue({
+      code: 200,
+      message: 'success',
+      data: {
+        models: [],
+        records: [],
+        annotationComments: [],
+        attachments: [],
+        returned: true,
+        returnReason: '请补充焊缝',
+        lastAction: 'return',
+      },
+    });
+    const task: ReviewTask = {
+      id: 'task-returned',
+      formId: 'FORM-RETURNED',
+      title: '退回单',
+      description: '',
+      modelName: '模型',
+      status: 'draft',
+      priority: 'medium',
+      requesterId: 'SJ',
+      requesterName: 'SJ',
+      checkerId: 'JH',
+      checkerName: 'JH',
+      approverId: 'SH',
+      approverName: 'SH',
+      reviewerId: 'JH',
+      reviewerName: 'JH',
+      components: [],
+      attachments: [],
+      createdAt: 1,
+      updatedAt: 2,
+      currentNode: 'sj',
+      workflowHistory: [],
+    };
+
+    const result = await restoreEmbedFormSnapshotContext({
+      formId: 'FORM-RETURNED',
+      token: 'token-returned',
+      actor: { id: 'SJ', name: 'SJ', roles: 'sj' },
+      request,
+      task,
+    });
+
+    expect(result.task?.returnReason).toBe('请补充焊缝');
+    expect(result.task?.workflowHistory?.[0]?.action).toBe('return');
+  });
 });

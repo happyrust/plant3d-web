@@ -22,12 +22,12 @@ function buildReviewStartStep(isRibbon: boolean): GuideStep {
   return isRibbon
     ? {
       id: 'review-start-btn',
-      targetSelector: '[data-command="review.start"]',
+      targetSelector: '[data-command="panel.reviewerTasks"]',
       title: '查看待处理任务',
-      description: '点击「开始校审」进入待处理任务列表，查看分配给你的任务。',
+      description: '点击「待审核」进入待处理任务列表，查看分配给你的任务。',
       placement: 'bottom',
       menuMode: 'ribbon',
-      actionHint: '请先点击「校审」标签页，找到「开始校审」按钮并点击。',
+      actionHint: '请先点击「校审」标签页，找到「待审核」按钮并点击。',
     }
     : {
       id: 'reviewer-task-list',

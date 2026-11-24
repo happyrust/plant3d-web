@@ -16,6 +16,7 @@ describe('buildHierarchicalMenuTabs', () => {
 
   it('keeps unrestricted commands for every role', () => {
     const view = buildHierarchicalMenuTabs(RIBBON_TABS, UserRole.DESIGNER).find((tab) => tab.id === 'review');
-    expect(view?.groups.flatMap((group) => group.commands.map((command) => command.id))).toContain('review.start');
+    expect(view?.groups.flatMap((group) => group.commands.map((command) => command.id))).toContain('review.confirm');
+    expect(view?.groups.flatMap((group) => group.commands.map((command) => command.id))).not.toContain('review.start');
   });
 });

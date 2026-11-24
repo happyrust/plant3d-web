@@ -26,6 +26,9 @@ const {
   ensurePanelAndActivateMock,
   dockPanelExistsMock,
   setAttributeDisplayModeMock,
+  emitCommandMock,
+  addConfirmedRecordMock,
+  clearConfirmedRecordsMock,
 } = vi.hoisted(() => ({
   authVerifyTokenMock: vi.fn(),
   clearAuthTokenMock: vi.fn(),
@@ -49,6 +52,9 @@ const {
   ensurePanelAndActivateMock: vi.fn(),
   dockPanelExistsMock: vi.fn((_panelId: string) => false),
   setAttributeDisplayModeMock: vi.fn(),
+  emitCommandMock: vi.fn(),
+  addConfirmedRecordMock: vi.fn(),
+  clearConfirmedRecordsMock: vi.fn(),
 }));
 
 let ribbonCommandHandler: ((commandId: string) => void) | null = null;
@@ -217,8 +223,8 @@ vi.mock('@/composables/useReviewStore', () => ({
     // mock 必须暴露 currentTask ref，否则触发 TypeError: Cannot read properties of undefined (reading 'value')。
     currentTask: currentTaskRef,
     setCurrentTask: (task: ReviewTask | null) => setCurrentTaskMock(task),
-    addConfirmedRecord: vi.fn(),
-    clearConfirmedRecords: vi.fn(),
+    addConfirmedRecord: (...args: unknown[]) => addConfirmedRecordMock(...args),
+    clearConfirmedRecords: (...args: unknown[]) => clearConfirmedRecordsMock(...args),
     exportReviewData: vi.fn(() => '{}'),
   }),
 }));
@@ -279,6 +285,7 @@ vi.mock('@/composables/useViewerContext', () => ({
 
 vi.mock('@/ribbon/commandBus', () => ({
   onCommand: (handler: (commandId: string) => void) => onCommandMock(handler),
+  emitCommand: (...args: unknown[]) => emitCommandMock(...args),
 }));
 
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
@@ -363,6 +370,7 @@ describe('DockLayout embed bootstrap', () => {
     groupAddedHandler = null;
     groupRemovedHandler = null;
     document.body.innerHTML = '';
+    window.history.replaceState({}, '', '/');
     Object.defineProperty(globalThis, 'localStorage', {
       value: createStorageMock(),
       configurable: true,
@@ -749,9 +757,13 @@ describe('DockLayout embed bootstrap', () => {
     expect(lastDockApi?.fromJSON).not.toHaveBeenCalled();
     expect(Array.from(dockPanels.keys())).toEqual(expect.arrayContaining([
       'viewer',
-      'modelTree',
+      'review',
     ]));
+    expect(dockPanels.get('modelTree')?.api.close).toHaveBeenCalled();
     expect(dockPanels.has('console')).toBe(false);
+    const reviewWidth = dockPanels.get('review')?.group.api.width ?? 0;
+    expect(reviewWidth).toBeGreaterThanOrEqual(420);
+    expect(reviewWidth).toBeLessThanOrEqual(520);
     expect(dockPanels.has('mbdPipe')).toBe(false);
     expect(dockPanels.has('reviewerTasks')).toBe(false);
     expect(dockPanels.has('measurement')).toBe(false);
@@ -982,6 +994,46 @@ describe('DockLayout embed bootstrap', () => {
     expect(sessionStorage.getItem('embed_landing_state')).toBeNull();
     expect(mounted.host.textContent).toContain('嵌入链接校验失败');
     expect(mounted.host.textContent).toContain('ExpiredSignature');
+
+    mounted.unmount();
+  });
+
+  it('review.confirm 打开校审面板后交给面板处理，不直接写确认记录', async () => {
+    const mounted = await mountDockLayout();
+    addConfirmedRecordMock.mockClear();
+    emitCommandMock.mockClear();
+    ensurePanelAndActivateMock.mockClear();
+
+    dockPanelExistsMock.mockImplementation((panelId: string) => panelId === 'review');
+    ribbonCommandHandler?.('review.confirm');
+    await nextTick();
+
+    expect(ensurePanelAndActivateMock).toHaveBeenCalledWith('review');
+    expect(addConfirmedRecordMock).not.toHaveBeenCalled();
+    expect(emitCommandMock).not.toHaveBeenCalled();
+
+    dockPanelExistsMock.mockReturnValue(false);
+    emitCommandMock.mockClear();
+    ribbonCommandHandler?.('review.confirm');
+    await nextTick();
+    expect(emitCommandMock).toHaveBeenCalledWith('review.confirm');
+    expect(addConfirmedRecordMock).not.toHaveBeenCalled();
+
+    mounted.unmount();
+  });
+
+  it('review.clear 在外部流程模式不清空确认记录', async () => {
+    const mounted = await mountDockLayout();
+    clearConfirmedRecordsMock.mockClear();
+    ensurePanelAndActivateMock.mockClear();
+    emitCommandMock.mockClear();
+
+    ribbonCommandHandler?.('review.clear');
+    await nextTick();
+
+    expect(clearConfirmedRecordsMock).not.toHaveBeenCalled();
+    expect(ensurePanelAndActivateMock).not.toHaveBeenCalled();
+    expect(emitCommandMock).not.toHaveBeenCalled();
 
     mounted.unmount();
   });

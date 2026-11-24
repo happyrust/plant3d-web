@@ -265,4 +265,17 @@ describe('useToolStore · U0 草稿 scope 隔离', () => {
     expect(store.annotations.value).toEqual([]);
     expect(store.getUnattributedDraftSummary()?.counts.text).toBe(2);
   });
+
+  it('新建批注缺省盖上当前单据 formId 和任务 taskId，已有戳不被覆盖', () => {
+    store.setAnnotationDraftScope(scopeA);
+    store.setAnnotationDraftFormId('FORM-A');
+    store.addAnnotation(textAnnotation('stamped'));
+    expect(store.annotations.value[0]?.formId).toBe('FORM-A');
+    expect(store.annotations.value[0]?.taskId).toBe('task-A');
+
+    store.addAnnotation({ ...textAnnotation('kept'), formId: 'FORM-KEEP', taskId: 'task-KEEP' });
+    const kept = store.annotations.value.find((item) => item.id === 'kept');
+    expect(kept?.formId).toBe('FORM-KEEP');
+    expect(kept?.taskId).toBe('task-KEEP');
+  });
 });

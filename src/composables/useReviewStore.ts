@@ -32,14 +32,14 @@ import {
   readPersistedEmbedModeParams,
   resolveTrustedEmbedIdentity,
 } from '@/components/review/embedRoleLanding';
-import { ReviewClearanceConflictError, reviewClearanceSnapshotKey, type ReviewClearanceConflict, type ReviewClearanceResolution, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
+import { hasReviewClearanceResults, ReviewClearanceConflictError, reviewClearanceSnapshotKey, type ReviewClearanceConflict, type ReviewClearanceResolution, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
 import { isReviewModelContext, reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { groupReviewRecordsByModelVersion } from '@/components/review/reviewModelVersionGroups';
 import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
   buildUnsavedReviewConfirmPayload,
-  hasReviewConfirmPayloadData,
+  hasReviewEvidenceData,
 } from '@/components/review/reviewPanelActions';
 import { useUserStore } from '@/composables/useUserStore';
 import {
@@ -738,13 +738,29 @@ async function setCurrentTask(task: ReviewTask | null) {
     await loadConfirmedRecords(task.id, { formId: task.formId });
     if (activationEpoch !== taskActivationEpoch) return;
     void loadReviewHistory(task.id);
-    // 连接 WebSocket 获取实时更新
-    connectWebSocket(resolveRealtimeUserId());
+    // 实时更新改由 useReviewPolling 拉取；connectWebSocket 留到下个发布周期再删。
   } else {
     disconnectWebSocket();
     confirmedRecords.value = [];
     reviewHistory.value = [];
   }
+}
+
+function applyPolledReviewTask(task: {
+  id?: string;
+  currentNode?: ReviewTask['currentNode'];
+  status?: ReviewTask['status'];
+  returnReason?: string;
+}): void {
+  const current = currentTask.value;
+  const taskId = task.id?.trim();
+  if (!current || !taskId || current.id !== taskId) return;
+  currentTask.value = {
+    ...current,
+    ...(task.currentNode ? { currentNode: task.currentNode } : {}),
+    ...(task.status ? { status: task.status } : {}),
+    ...(task.returnReason !== undefined ? { returnReason: task.returnReason } : {}),
+  };
 }
 
 function clearCurrentTask() {
@@ -1000,7 +1016,9 @@ async function flushPendingConfirmForExternalAction(
     sortedConfirmedRecords.value,
   );
   const unsavedPayload = buildUnsavedReviewConfirmPayload(draftPayload, confirmedSnapshot);
-  if (!hasReviewConfirmPayloadData(unsavedPayload)) {
+  const clearanceRemoved = unsavedPayload.clearanceSnapshot !== undefined
+    && !hasReviewClearanceResults(unsavedPayload.clearanceSnapshot);
+  if (!hasReviewEvidenceData(unsavedPayload) && !clearanceRemoved) {
     return { ok: true };
   }
 
@@ -1365,6 +1383,7 @@ export function useReviewStore() {
     loadReviewHistory,
     exportReviewData,
     setCurrentTask,
+    applyPolledReviewTask,
     clearCurrentTask,
     bindDimensionDocumentSession,
     bindModelContextProvider,

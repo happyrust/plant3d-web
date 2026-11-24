@@ -3,7 +3,7 @@ import {
   extractWorkflowModelRefnos,
 } from './reviewRecordReplay';
 
-import type { ReviewAttachment, ReviewTask } from '@/types/auth';
+import type { ReviewAttachment, ReviewTask, WorkflowStep } from '@/types/auth';
 
 import {
   normalizeReviewAttachment,
@@ -33,6 +33,9 @@ export type EmbedFormSnapshotRestoreResult = {
   recordCount: number;
   attachmentCount: number;
   attachments: ReviewAttachment[];
+  returned?: boolean;
+  returnReason?: string;
+  lastAction?: string;
 };
 
 export type EmbedFormSnapshotContextOptions = EmbedFormSnapshotRestoreOptions & {
@@ -176,6 +179,40 @@ export async function restoreEmbedFormSnapshot(
     recordCount: records.length,
     attachmentCount: attachments.length,
     attachments,
+    returned: typeof data?.returned === 'boolean' ? data.returned : undefined,
+    returnReason: data?.returnReason,
+    lastAction: data?.lastAction,
+  };
+}
+
+function applyWorkflowReturnMarker(task: ReviewTask, snapshot: EmbedFormSnapshotRestoreResult): ReviewTask {
+  if (typeof snapshot.returned !== 'boolean') return task;
+  if (!snapshot.returned) {
+    return {
+      ...task,
+      returnReason: '',
+      workflowHistory: (task.workflowHistory || []).filter((step) => step.action !== 'return'),
+    };
+  }
+  const action: WorkflowStep['action'] = snapshot.lastAction === 'submit'
+    || snapshot.lastAction === 'approve'
+    || snapshot.lastAction === 'reject'
+    || snapshot.lastAction === 'return'
+    ? snapshot.lastAction
+    : 'return';
+  const history: WorkflowStep[] = task.workflowHistory?.length
+    ? task.workflowHistory
+    : [{
+      node: task.currentNode || 'sj',
+      action,
+      operatorId: '',
+      operatorName: '',
+      timestamp: task.updatedAt || Date.now(),
+    }];
+  return {
+    ...task,
+    returnReason: snapshot.returnReason?.trim() || task.returnReason || '',
+    workflowHistory: history,
   };
 }
 
@@ -200,6 +237,11 @@ export async function restoreEmbedFormSnapshotContext(
 
   if (nextTask && snapshot.attachments.length > 0) {
     nextTask = mergeSnapshotAttachmentsIntoTask(nextTask, snapshot.attachments);
+    await options.updateTask?.(nextTask);
+  }
+
+  if (nextTask && typeof snapshot.returned === 'boolean') {
+    nextTask = applyWorkflowReturnMarker(nextTask, snapshot);
     await options.updateTask?.(nextTask);
   }
 

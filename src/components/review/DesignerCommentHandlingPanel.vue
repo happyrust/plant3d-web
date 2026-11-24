@@ -30,12 +30,7 @@ import { createReviewClearanceConflictActions } from './reviewClearanceConflictA
 import ReviewClearanceConflictNotice from './ReviewClearanceConflictNotice.vue';
 import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
-  buildReviewConfirmSnapshotKey,
-  buildReviewConfirmSnapshotPayload,
-  buildReviewConfirmSnapshotPayloadFromRecords,
-  buildUnsavedReviewConfirmPayload,
   confirmCurrentDataSafely,
-  hasReviewConfirmPayloadData,
   resolveReviewEvidenceSaveErrorMessage,
 } from './reviewPanelActions';
 import {
@@ -57,6 +52,8 @@ import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables
 import { useContainerQuery } from '@/composables/useContainerQuery';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { openReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
+import { useReviewConfirmSession } from '@/composables/useReviewConfirmSession';
+import { useReviewPolling } from '@/composables/useReviewPolling';
 import { useReviewStore } from '@/composables/useReviewStore';
 import {
   useToolStore,
@@ -298,33 +295,16 @@ const hasUnmatchedExternalEntry = computed(() => {
   return !currentTask.value || currentTask.value.formId?.trim() !== targetFormId;
 });
 
-const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
-  annotations: [...toolStore.annotations.value],
-  cloudAnnotations: [...toolStore.cloudAnnotations.value],
-  rectAnnotations: [...toolStore.rectAnnotations.value],
-  obbAnnotations: [...toolStore.obbAnnotations.value],
-  measurements: [...toolStore.measurements.value],
-  unifiedMeasurements: [...(toolStore.unifiedMeasurements?.value ?? [])],
-  legacyMeasurements: [...(toolStore.legacyMeasurements?.value ?? [])],
-  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
-  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
-  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
-  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
-  ...(reviewStore.getBoundDimensionConfirmPayload?.() ?? {}),
-}));
-const confirmedSnapshotPayload = computed(() => (
-  buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
-));
-const unsavedConfirmPayload = computed(() => (
-  buildUnsavedReviewConfirmPayload(
-    currentDraftConfirmPayload.value,
-    confirmedSnapshotPayload.value,
-  )
-));
-const hasUnsavedPendingData = computed(() => (
-  buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
-    !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value)
-));
+const {
+  unsavedConfirmPayload,
+  hasUnsavedChanges,
+  hasPendingConfirmation,
+  hasDraftEvidence,
+  buildConfirmRecord,
+} = useReviewConfirmSession({
+  confirmedRecords: () => currentTaskConfirmedRecords.value,
+});
+const hasUnsavedPendingData = hasUnsavedChanges;
 const unsavedAnnotationCount = computed(() => (
   unsavedConfirmPayload.value.annotations.length
   + unsavedConfirmPayload.value.cloudAnnotations.length
@@ -332,9 +312,9 @@ const unsavedAnnotationCount = computed(() => (
   + unsavedConfirmPayload.value.obbAnnotations.length
 ));
 const unsavedMeasurementCount = computed(() => unsavedConfirmPayload.value.measurements.length);
-const canConfirmCurrentData = computed(() => hasUnsavedPendingData.value && hasReviewConfirmPayloadData(unsavedConfirmPayload.value));
-// 单据上没有任何批注 / 测量可确认时，「确认」永远点不了；不放行流转就会两头卡死（后端批注检查仍会把关）
-const hasNothingToConfirm = computed(() => !hasReviewConfirmPayloadData(currentDraftConfirmPayload.value));
+const canConfirmCurrentData = computed(() => hasUnsavedPendingData.value && hasPendingConfirmation.value);
+// 单据上没有任何用户证据可确认时，「确认」永远点不了；不放行流转就会两头卡死（后端批注检查仍会把关）
+const hasNothingToConfirm = computed(() => !hasDraftEvidence.value);
 const canResubmitTask = computed(() => (
   !!currentTask.value
   && !hasUnsavedPendingData.value
@@ -570,17 +550,7 @@ async function confirmCurrentData() {
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: canConfirmCurrentData.value,
-      payload: {
-        type: 'batch' as const,
-        annotations: [...currentDraftConfirmPayload.value.annotations],
-        cloudAnnotations: [...currentDraftConfirmPayload.value.cloudAnnotations],
-        rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations],
-        obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations],
-        measurements: [...currentDraftConfirmPayload.value.measurements],
-        dimensionDocument: currentDraftConfirmPayload.value.dimensionDocument,
-        dimensionDocumentVersion: currentDraftConfirmPayload.value.dimensionDocumentVersion,
-        note: confirmNote.value.trim(),
-      } as never,
+      payload: buildConfirmRecord(confirmNote.value),
       addConfirmedRecord: reviewStore.addConfirmedRecord,
       clearDraftData: () => {
         toolStore.clearAll();
@@ -745,6 +715,25 @@ watch(
   },
   { immediate: true },
 );
+
+useReviewPolling({
+  taskId: () => currentTask.value?.id ?? null,
+  formId: () => activeReviewFormId.value,
+  stateTaskId: () => {
+    const task = currentTask.value;
+    const formId = activeReviewFormId.value;
+    return task && !embeddedLandingFormId.value && task.formId?.trim() === formId ? task.id : null;
+  },
+  expandedAnnotation: () => {
+    if (!selectedAnnotationId.value || !selectedAnnotationType.value) return null;
+    return {
+      annotationType: selectedAnnotationType.value,
+      annotationId: selectedAnnotationId.value,
+      formId: activeReviewFormId.value,
+      taskId: currentTask.value?.id ?? null,
+    };
+  },
+});
 
 onMounted(() => {
   void loadTasks();

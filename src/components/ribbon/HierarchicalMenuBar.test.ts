@@ -46,13 +46,13 @@ describe('HierarchicalMenuBar', () => {
     reviewTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();
 
-    const reviewCommand = host.querySelector('[data-command="review.start"]') as HTMLButtonElement | null;
+    const reviewCommand = host.querySelector('[data-command="review.confirm"]') as HTMLButtonElement | null;
     expect(reviewCommand).toBeTruthy();
 
     reviewCommand?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();
 
-    expect(emitCommand).toHaveBeenCalledWith('review.start');
+    expect(emitCommand).toHaveBeenCalledWith('review.confirm');
   });
 
   it('帮助菜单应包含更新说明命令', async () => {

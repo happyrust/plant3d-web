@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { Clock, FileText, Filter, HelpCircle, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
+import { Clock, FileText, HelpCircle, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
@@ -15,6 +15,7 @@ import {
   runReviewSubmitPreflight,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
+import { resolvePassiveWorkflowMode } from './workflowMode';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 
 import { reviewAnnotationCheck, reviewTaskGetById } from '@/api/reviewApi';
@@ -37,6 +38,7 @@ import {
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
+const isPassiveWorkflow = computed(() => resolvePassiveWorkflowMode());
 const onboarding = useOnboardingGuide();
 const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-reviewer-tasks-v1');
 
@@ -238,6 +240,7 @@ async function handleStartReview(task: ReviewTask) {
     onTaskSelected: (currentTask) => {
       selectedTask.value = currentTask;
     },
+    skipStatusMutation: isPassiveWorkflow.value,
   });
 }
 
@@ -340,7 +343,34 @@ function closeTaskDetail() {
   showReturnDialog.value = false;
 }
 
+type DirectoryUser = { id?: string; username?: string; name?: string };
+
+function directoryUsers(): DirectoryUser[] {
+  const source = (userStore as { availableUsers?: { value?: DirectoryUser[] } | DirectoryUser[] }).availableUsers;
+  if (Array.isArray(source)) return source;
+  return source?.value ?? [];
+}
+
+function requesterDisplayName(task: ReviewTask): string {
+  const name = task.requesterName?.trim() ?? '';
+  const id = task.requesterId?.trim() ?? '';
+  const matched = directoryUsers().find((user) => (
+    (!!id && (user.id === id || user.username === id))
+    || (!!name && (user.id === name || user.username === name))
+  ));
+  const looksLikeId = !name || name === id || name === matched?.id || name === matched?.username;
+  if (matched?.name && looksLikeId) return matched.name;
+  return name || matched?.name || id || '未知';
+}
+
+function showModelName(task: Pick<ReviewTask, 'modelName' | 'title'>): boolean {
+  const model = task.modelName?.trim() ?? '';
+  const title = task.title?.trim() ?? '';
+  return model.length > 0 && model !== title;
+}
+
 function getStartActionLabel(task: ReviewTask): string {
+  if (isPassiveWorkflow.value) return '打开校审';
   return task.status === 'in_review' ? '继续审核' : '开始审核';
 }
 
@@ -374,13 +404,8 @@ onMounted(() => {
           <HelpCircle class="h-4 w-4" />
           操作指南
         </button>
-        <button class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
-          type="button"
-          aria-label="筛选任务">
-          <Filter class="h-4 w-4" />
-        </button>
       </div>
-      <button class="hidden items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50"
+      <button class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50"
         :disabled="isLoading"
         @click="refreshTasks">
         <RefreshCw :class="['h-4 w-4', isLoading && 'animate-spin']" />
@@ -441,13 +466,13 @@ onMounted(() => {
             <div class="space-y-1.5 text-xs text-gray-500">
               <div class="flex items-center gap-1.5">
                 <User class="h-3.5 w-3.5 text-gray-400" />
-                <span>发起人: {{ task.requesterName }} ({{ task.requesterId || 'sj' }})</span>
+                <span>发起人: {{ requesterDisplayName(task) }} ({{ task.requesterId || 'sj' }})</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <Clock class="h-3.5 w-3.5 text-gray-400" />
                 <span>提交于: {{ formatRelativeSubmitTime(task.createdAt) }}</span>
               </div>
-              <div v-if="task.modelName" class="text-[11px] text-gray-400">
+              <div v-if="showModelName(task)" class="text-[11px] text-gray-400">
                 <span>{{ task.modelName }}</span>
               </div>
             </div>
@@ -511,13 +536,13 @@ onMounted(() => {
                 <label class="text-sm text-gray-500">任务名称</label>
                 <p class="font-medium">{{ selectedTask.title }}</p>
               </div>
-              <div>
+              <div v-if="showModelName(selectedTask)">
                 <label class="text-sm text-gray-500">模型名称</label>
                 <p class="font-medium">{{ selectedTask.modelName }}</p>
               </div>
               <div>
                 <label class="text-sm text-gray-500">发起人</label>
-                <p class="font-medium">{{ selectedTask.requesterName }}</p>
+                <p class="font-medium">{{ requesterDisplayName(selectedTask) }}</p>
               </div>
               <div>
                 <label class="text-sm text-gray-500">编校审包编号</label>
@@ -559,7 +584,11 @@ onMounted(() => {
             </div>
           </div>
           <div class="p-4 border-t flex justify-end gap-2">
-            <template v-if="selectedTask.status === 'submitted' || selectedTask.status === 'in_review'">
+            <p v-if="isPassiveWorkflow && (selectedTask.status === 'submitted' || selectedTask.status === 'in_review')"
+              class="mr-auto self-center text-sm text-gray-500">
+              流转请在 PMS 操作
+            </p>
+            <template v-else-if="selectedTask.status === 'submitted' || selectedTask.status === 'in_review'">
               <div class="flex gap-2">
                 <button v-if="canReturnAtCurrentNode(selectedTask.currentNode)"
                   class="px-4 py-2 text-sm border border-danger text-danger rounded-lg hover:bg-danger-subtle"
@@ -582,7 +611,7 @@ onMounted(() => {
       </div>
     </Teleport>
 
-    <WorkflowReturnDialog v-if="selectedTask"
+    <WorkflowReturnDialog v-if="selectedTask && !isPassiveWorkflow"
       :visible="showReturnDialog"
       :current-node="selectedTask.currentNode ?? 'sj'"
       :loading="taskActionLoading"

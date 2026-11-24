@@ -98,7 +98,7 @@ describe('ReviewConfirmation', () => {
     await nextTick();
   }
 
-  it('二次确认时只提交本次新增的数据', async () => {
+  it('二次确认提交当前完整草稿，避免同槽已确认批注被覆盖', async () => {
     reviewStoreMock.sortedConfirmedRecords.value = [
       {
         id: 'record-1',
@@ -130,7 +130,10 @@ describe('ReviewConfirmation', () => {
 
     expect(addConfirmedRecordMock).toHaveBeenCalledTimes(1);
     expect(addConfirmedRecordMock).toHaveBeenCalledWith(expect.objectContaining({
-      annotations: [{ id: 'anno-new', title: '新批注' }],
+      annotations: [
+        { id: 'anno-old', title: '旧批注' },
+        { id: 'anno-new', title: '新批注' },
+      ],
       cloudAnnotations: [],
       rectAnnotations: [],
       obbAnnotations: [],
@@ -309,6 +312,33 @@ describe('ReviewConfirmation', () => {
     await vi.waitFor(() => {
       expect(emitToastMock).toHaveBeenCalledWith({ message: '新增证据已保存', level: 'success' });
     });
+  });
+
+  it('只有模型上下文和空净距时不显示待保存证据浮窗', async () => {
+    const context = {
+      schemaVersion: 1,
+      project: 'P',
+      dbnum: 7997,
+      taskId: 'task-1',
+      formId: 'F',
+      node: 'jd',
+      comparison: null,
+    };
+    reviewStoreMock.getBoundDimensionConfirmPayload.mockReturnValue({
+      modelContext: context,
+      clearanceSnapshot: {
+        schemaVersion: 1,
+        modelContext: context,
+        coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+        component: { records: [] },
+        pipe: { results: [] },
+        bran: { branGroups: [] },
+      },
+    });
+
+    await mountComponent();
+
+    expect(document.querySelector('[data-testid="review-confirmation"]')).toBeNull();
   });
 
   it('外部流程 SJ 入口聚焦单据时隐藏待保存证据浮窗，不允许新增确认证据', async () => {

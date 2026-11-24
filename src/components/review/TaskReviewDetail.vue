@@ -21,6 +21,7 @@ import {
   getCanonicalReturnedTaskView,
   isCanonicalReturnedTask,
 } from './reviewTaskFilters';
+import { resolvePassiveWorkflowMode } from './workflowMode';
 
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type { ReviewAttachment, ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
@@ -167,7 +168,7 @@ const measurementRecords = computed(() => {
     .filter((record) => record.measurements.length > 0);
 });
 const isReturnedTask = computed(() => isCanonicalReturnedTask(canonicalTask.value));
-const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft');
+const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft' && !resolvePassiveWorkflowMode());
 
 function formatMeasurementKind(kind: ConfirmedRecord['measurements'][number]['kind']): string {
   return formatMeasurementKindLabel(kind);

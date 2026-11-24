@@ -48,7 +48,7 @@ function getStepClasses(state: 'completed' | 'current' | 'upcoming') {
           class="h-3.5 w-3.5 text-success" />
         <span class="text-xs"
           :class="getStepClasses(getStepState(step))">
-          {{ WORKFLOW_NODE_NAMES[step.code] }} ({{ step.code }})
+          {{ WORKFLOW_NODE_NAMES[step.code] }}
         </span>
       </div>
       <ArrowRight v-if="idx < steps.length - 1"

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/api/reviewApi', () => ({
+  getAuthToken: () => null,
   reviewTaskCreate: vi.fn(),
   reviewTaskGetList: vi.fn(),
   reviewTaskGetById: vi.fn(),

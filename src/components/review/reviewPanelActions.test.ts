@@ -5,6 +5,7 @@ import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
   buildReviewConfirmSnapshotKey,
+  buildReviewEvidenceSnapshotKey,
   buildUnsavedReviewConfirmPayload,
   buildUnsavedReviewEvidencePayload,
   canFinalizeAtCurrentNode,
@@ -17,6 +18,7 @@ import {
   getSubmitActionLabel,
   getWorkflowSubmitBridgeAction,
   hasReviewConfirmPayloadData,
+  hasReviewEvidenceData,
   hasSubmitBlockingReviewConfirmPayloadData,
   mapWorkflowHistoryToTaskDetailItems,
   runReviewSubmitPreflight,
@@ -36,14 +38,15 @@ function deferred<T>() {
 }
 
 describe('reviewPanelActions', () => {
-  it('pins context-only changes in dirty detection and blocks submit until confirmed', () => {
+  it('pins model version changes in the confirm payload without treating them as user evidence', () => {
     const context = { schemaVersion: 1 as const, project: 'P', dbnum: 7997, taskId: 'T', formId: 'F', node: 'sj', comparison: null };
     const baseline = buildReviewConfirmSnapshotPayload({ modelContext: context });
     const current = buildReviewConfirmSnapshotPayload({ modelContext: { ...context, comparison: { dbnum: 7997, refno: '24381_145018', a: 626, b: 630, units: [], viewMode: 'split' as const, activeSide: 'after' as const, diffOnly: false } } });
     expect(buildReviewConfirmSnapshotKey(current)).not.toBe(buildReviewConfirmSnapshotKey(baseline));
     const unsaved = buildSubmitBlockingReviewConfirmPayload(current, baseline);
     expect(hasReviewConfirmPayloadData(unsaved)).toBe(true);
-    expect(hasSubmitBlockingReviewConfirmPayloadData(unsaved)).toBe(true);
+    expect(hasReviewEvidenceData(unsaved)).toBe(false);
+    expect(hasSubmitBlockingReviewConfirmPayloadData(unsaved)).toBe(false);
     expect(unsaved.modelContext).toEqual(current.modelContext);
     expect(hasReviewConfirmPayloadData(buildUnsavedReviewConfirmPayload(current, current))).toBe(false);
     expect(buildReviewConfirmSnapshotPayloadFromRecords([{ ...current, confirmedAt: 2 }, { ...baseline, confirmedAt: 1 }]).modelContext).toEqual(current.modelContext);
@@ -58,6 +61,56 @@ describe('reviewPanelActions', () => {
     expect(hasSubmitBlockingReviewConfirmPayloadData(buildSubmitBlockingReviewConfirmPayload(changed, cloud))).toBe(true);
     expect(buildReviewConfirmSnapshotPayloadFromRecords([{ ...cloud, confirmedAt: 1 }, { ...changed, confirmedAt: 2 }]).clearanceSnapshot).toEqual(changed.clearanceSnapshot);
   });
+
+  it('节点变化和空净距不算证据，版本变化进入上下文，有结果的净距才算证据', () => {
+    const context = { schemaVersion: 1 as const, project: 'P', dbnum: 7997, taskId: 'T', formId: 'F', node: 'sj' as const, comparison: null };
+    const spaces = { component: 'design-world-m' as const, pipe: 'e3d-world-mm' as const, bran: 'e3d-world-mm' as const };
+    const emptyClearance = {
+      schemaVersion: 1 as const,
+      modelContext: context,
+      coordinateSpaces: spaces,
+      component: { records: [] as { id: string }[] },
+      pipe: { results: [] as { distance: number }[] },
+      bran: { branGroups: [] as unknown[] },
+    };
+    const baseline = buildReviewConfirmSnapshotPayload({ modelContext: context, clearanceSnapshot: emptyClearance });
+    const nodeOnly = buildReviewConfirmSnapshotPayload({
+      modelContext: { ...context, node: 'jd' },
+      clearanceSnapshot: { ...emptyClearance, modelContext: { ...context, node: 'jd' } },
+    });
+    expect(buildReviewConfirmSnapshotKey(nodeOnly)).toBe(buildReviewConfirmSnapshotKey(baseline));
+    expect(buildReviewEvidenceSnapshotKey(nodeOnly)).toBe(buildReviewEvidenceSnapshotKey(baseline));
+    const nodeUnsaved = buildUnsavedReviewConfirmPayload(nodeOnly, baseline);
+    expect(nodeUnsaved.modelContext).toBeUndefined();
+    expect(nodeUnsaved.clearanceSnapshot).toBeUndefined();
+    expect(hasReviewEvidenceData(nodeOnly)).toBe(false);
+
+    const versionChanged = buildReviewConfirmSnapshotPayload({ modelContext: { ...context, dbnum: 8000 } });
+    expect(buildReviewConfirmSnapshotKey(versionChanged)).not.toBe(buildReviewConfirmSnapshotKey(baseline));
+    expect(buildReviewEvidenceSnapshotKey(versionChanged)).toBe(buildReviewEvidenceSnapshotKey(baseline));
+    expect(buildUnsavedReviewConfirmPayload(versionChanged, baseline).modelContext).toMatchObject({ dbnum: 8000 });
+    expect(hasReviewEvidenceData(buildUnsavedReviewConfirmPayload(versionChanged, baseline))).toBe(false);
+    expect(hasSubmitBlockingReviewConfirmPayloadData(buildSubmitBlockingReviewConfirmPayload(versionChanged, baseline))).toBe(false);
+
+    const missingClearance = buildReviewConfirmSnapshotPayload({ modelContext: context });
+    expect(buildReviewEvidenceSnapshotKey(missingClearance)).toBe(buildReviewEvidenceSnapshotKey(baseline));
+    expect(buildUnsavedReviewConfirmPayload(baseline, missingClearance).clearanceSnapshot).toBeUndefined();
+    expect(hasReviewEvidenceData(baseline)).toBe(false);
+
+    const withResults = buildReviewConfirmSnapshotPayload({
+      modelContext: { ...context, node: 'sh' },
+      clearanceSnapshot: { ...emptyClearance, modelContext: { ...context, node: 'sh' }, pipe: { results: [{ distance: 12 }] } },
+    });
+    expect(hasReviewEvidenceData(withResults)).toBe(true);
+    expect(buildReviewEvidenceSnapshotKey(withResults)).not.toBe(buildReviewEvidenceSnapshotKey(baseline));
+    expect(buildUnsavedReviewEvidencePayload(withResults, baseline).clearanceSnapshot).toMatchObject({ pipe: { results: [{ distance: 12 }] } });
+    const sameResultsOtherNode = buildReviewConfirmSnapshotPayload({
+      modelContext: { ...context, node: 'pz' },
+      clearanceSnapshot: { ...emptyClearance, modelContext: { ...context, node: 'pz' }, pipe: { results: [{ distance: 12 }] } },
+    });
+    expect(buildReviewEvidenceSnapshotKey(sameResultsOtherNode)).toBe(buildReviewEvidenceSnapshotKey(withResults));
+  });
+
   it('canFinalizeAtCurrentNode 仅在 pz 节点允许最终通过/驳回', () => {
     expect(canFinalizeAtCurrentNode(undefined)).toBe(false);
     expect(canFinalizeAtCurrentNode('sj')).toBe(false);
