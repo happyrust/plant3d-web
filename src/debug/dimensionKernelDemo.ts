@@ -180,6 +180,20 @@ const inputs: readonly (
       radiusM: 0.3,
     },
   ], { forward: [0, 0, -1] }).map(record => record.layout),
+  {
+    id: 'demo-angular-snap',
+    kind: 'angular',
+    role: 'normal',
+    labelPinned: false,
+    vertex: [1.2, 2.3, 0],
+    rayA: [2.2, 2.3, 0],
+    rayB: [
+      1.2 + Math.cos((89.2 * Math.PI) / 180),
+      2.3 + Math.sin((89.2 * Math.PI) / 180),
+      0,
+    ],
+    placement: { radiusM: 0.45, labelT: 0.5, arcChoice: 'minor', orthogonalSnap: true },
+  },
 ];
 
 async function main(): Promise<void> {

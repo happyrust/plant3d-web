@@ -148,14 +148,25 @@ describe('dimension edit sessions', () => {
     session.pointerDown({ x: 1, y: 0 });
     session.pointerDown({ x: 2, y: 0 });
     session.pointerDown({ x: 3, y: 0 });
+    expect(session.phase).toBe('place');
+    expect(session.commit()).toBeNull();
     session.flip();
+    session.toggleOrthogonalSnap?.();
+    session.pointerDown({ x: 3, y: 4 });
 
+    expect(session.phase).toBe('ready');
     expect(session.commit()).toMatchObject({
+      type: 'create',
       record: {
         kind: 'angular',
-        placement: { arcChoice: 'major' },
+        vertex: { semanticRef: { candidateId: 'vertex' } },
+        rayA: { semanticRef: { candidateId: 'ray-a' } },
+        rayB: { semanticRef: { candidateId: 'ray-b' } },
+        placement: { arcChoice: 'major', orthogonalSnap: true },
+        anglePlane: { schema: 1, source: 'explicit', normal: [0, 0, 1] },
       },
     });
+    expect(session.commit()).toBeNull();
   });
 
   it('creates a radial record from one exact circle candidate', () => {

@@ -212,6 +212,8 @@ function actionLabel(
       return '删除';
     case 'flip-angle':
       return '翻转角度';
+    case 'toggle-orthogonal-snap':
+      return '近 90° 吸附';
     case 'toggle-radial-display':
       return '切换半径/直径';
     case 'restore-auto-layout':

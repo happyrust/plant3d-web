@@ -20,6 +20,8 @@ export type DimensionValidationCode =
   | 'DEGENERATE_DIMENSION_DIRECTION'
   | 'DEGENERATE_PROJECTION_DIRECTION'
   | 'DEGENERATE_RADIAL_RADIUS'
+  | 'DEGENERATE_ANGULAR_RAY'
+  | 'COLLINEAR_ANGULAR_RAYS'
   | 'UNRESOLVED_DIMENSION_POINT'
   | 'INVALID_DIMENSION_POINT_TYPE';
 
@@ -40,6 +42,7 @@ export type DimensionValidationTolerances = Readonly<{
   minDirectionLengthM: number;
   parallelViewDeg: number;
   parallelDimensionDeg: number;
+  angularCollinearDeg: number;
 }>;
 
 export const DIMENSION_VALIDATION_TOLERANCES: DimensionValidationTolerances = Object.freeze({
@@ -49,6 +52,8 @@ export const DIMENSION_VALIDATION_TOLERANCES: DimensionValidationTolerances = Ob
   parallelViewDeg: 1,
   /** 投影方向与尺寸方向的最小夹角（度）：小于它投影线与尺寸线重合，投影无意义。 */
   parallelDimensionDeg: 1,
+  /** 角度尺寸两条射线的最小夹角（度）：小于它两条射线共线，没有唯一的角度平面。 */
+  angularCollinearDeg: 1,
 });
 
 export type DimensionValidationContext = Readonly<{
@@ -78,6 +83,14 @@ const DIRECTION_SOURCES: ReadonlySet<SemanticAnchorRef['source']> = new Set([
 
 function sub(a: Vec3, b: Vec3): Vec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
 }
 
 function dot(a: Vec3, b: Vec3): number {
@@ -161,9 +174,35 @@ export function validateDimensionRecord(
   const errors: DimensionValidationError[] = [];
 
   switch (record.kind) {
-    case 'angular':
+    case 'angular': {
       checkPoints({ vertex: record.vertex, rayA: record.rayA, rayB: record.rayB }, errors);
+      const vertex = record.vertex.snapshot;
+      const rayA = record.rayA.snapshot;
+      const rayB = record.rayB.snapshot;
+      if (!isFiniteVec3(vertex) || !isFiniteVec3(rayA) || !isFiniteVec3(rayB)) break;
+      const alongA = sub(rayA, vertex);
+      const alongB = sub(rayB, vertex);
+      const lengthA = length(alongA);
+      const lengthB = length(alongB);
+      if (lengthA <= tolerances.minDirectionLengthM) {
+        errors.push({ code: 'DEGENERATE_ANGULAR_RAY', slot: 'rayA' });
+      }
+      if (lengthB <= tolerances.minDirectionLengthM) {
+        errors.push({ code: 'DEGENERATE_ANGULAR_RAY', slot: 'rayB' });
+      }
+      if (
+        lengthA > tolerances.minDirectionLengthM
+        && lengthB > tolerances.minDirectionLengthM
+        && length(cross(alongA, alongB))
+          <= lengthA * lengthB * Math.sin((tolerances.angularCollinearDeg * Math.PI) / 180)
+      ) {
+        errors.push({ code: 'COLLINEAR_ANGULAR_RAYS', slot: 'rayB' });
+      }
+      if (record.anglePlane && length(record.anglePlane.normal) <= tolerances.minDirectionLengthM) {
+        errors.push({ code: 'COLLINEAR_ANGULAR_RAYS', slot: 'anglePlane' });
+      }
       break;
+    }
     case 'radial': {
       checkPoints({ center: record.center, rim: record.rim }, errors);
       checkAxisSource(record.normal, 'normal', errors);

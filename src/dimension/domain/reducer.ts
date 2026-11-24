@@ -1,3 +1,4 @@
+import { isAngularPlane, refreshAngularPlane } from './angularPlane';
 import { isDimensionDirections, refreshDerivedDirections } from './directions';
 import {
   dimensionRecordHasResolvedGeometry,
@@ -93,7 +94,8 @@ function isAngularPlacement(value: unknown): value is AngularPlacementIntent {
   return (candidate.radiusM === undefined
       || (isFiniteNumber(candidate.radiusM) && candidate.radiusM >= 0))
     && isFiniteNumber(candidate.labelT)
-    && (candidate.arcChoice === 'minor' || candidate.arcChoice === 'major');
+    && (candidate.arcChoice === 'minor' || candidate.arcChoice === 'major')
+    && (candidate.orthogonalSnap === undefined || typeof candidate.orthogonalSnap === 'boolean');
 }
 
 function isRadialPlacement(value: unknown): value is RadialPlacementIntent {
@@ -148,7 +150,8 @@ function isUserDimensionRecord(value: unknown): value is UserDimensionRecord {
       structurallyValid = isDimensionAnchor(record.vertex)
         && isDimensionAnchor(record.rayA)
         && isDimensionAnchor(record.rayB)
-        && isAngularPlacement(record.placement);
+        && isAngularPlacement(record.placement)
+        && (record.anglePlane === undefined || isAngularPlane(record.anglePlane));
       break;
     case 'radial':
       structurallyValid = isDimensionAnchor(record.center)
@@ -245,11 +248,11 @@ function rebindRecord(
         && anchorSlot !== 'rayA'
         && anchorSlot !== 'rayB'
       ) return null;
-      return withResolvedValidity({
+      return withResolvedValidity(refreshAngularPlane({
         ...record,
         [anchorSlot]: anchor,
         updatedAt,
-      } as UserDimensionRecord);
+      } as UserDimensionRecord));
     case 'radial':
       if (anchorSlot !== 'center' && anchorSlot !== 'rim') return null;
       return withResolvedValidity({
@@ -449,6 +452,34 @@ export function reduceDimensionDocument(
           type: 'set-angle-arc',
           dimensionId: command.dimensionId,
           arcChoice: previous,
+        },
+      };
+    }
+    case 'set-angular-orthogonal-snap': {
+      if (typeof command.enabled !== 'boolean') return failure('invalid-command');
+      const found = findMutableRecord(state, command);
+      if (!found.ok) return found.result;
+      if (found.record.kind !== 'angular') return failure('kind-mismatch');
+      const previous = found.record.placement.orthogonalSnap === true;
+      const next: UserDimensionRecord = {
+        ...found.record,
+        placement: { ...found.record.placement, orthogonalSnap: command.enabled },
+        updatedAt: command.at,
+      };
+      return {
+        ok: true,
+        state: replaceRecord(state, found.index, next),
+        event: {
+          type: 'angular-orthogonal-snap-set',
+          commandId: command.commandId,
+          dimensionId: command.dimensionId,
+          previous,
+          next: command.enabled,
+        },
+        inverse: {
+          type: 'set-angular-orthogonal-snap',
+          dimensionId: command.dimensionId,
+          enabled: previous,
         },
       };
     }

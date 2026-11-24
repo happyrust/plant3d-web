@@ -41,6 +41,8 @@ const VALIDATION_MESSAGES: Readonly<Record<string, string>> = {
   DEGENERATE_DIMENSION_DIRECTION: '两点在尺寸方向上重合，长度为零',
   DEGENERATE_PROJECTION_DIRECTION: '投影轴 / 法向为零向量',
   DEGENERATE_RADIAL_RADIUS: '圆的半径为零',
+  DEGENERATE_ANGULAR_RAY: '角度的一条射线长度为零',
+  COLLINEAR_ANGULAR_RAYS: '两条射线共线，没有角度',
   UNRESOLVED_DIMENSION_POINT: '有尺寸点没解析出坐标',
   INVALID_DIMENSION_POINT_TYPE: '拾到的点类型不能用于该尺寸',
 };
@@ -78,6 +80,12 @@ const validationMessages = computed(() =>
       <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
         :disabled="disabled" data-testid="dimension.flip" @click="emitCommand('dimension.flip')">
         翻面
+      </button>
+      <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
+        :disabled="disabled || session?.kind !== 'angular'"
+        data-testid="dimension.angular.orthogonal-snap"
+        @click="emitCommand('dimension.angular.orthogonal-snap')">
+        近 90° 吸附
       </button>
       <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
         :disabled="disabled || !canUndo" data-testid="dimension.undo" @click="emitCommand('dimension.undo')">

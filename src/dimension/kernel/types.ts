@@ -471,7 +471,10 @@ export type NormalizedDimensionInput =
           radiusM?: number;
           labelT: number;
           arcChoice: 'minor' | 'major';
+          orthogonalSnap?: boolean;
         }>;
+        /** 创建时定下的角度平面法向。缺省时布局用两条射线的叉积。 */
+        planeNormal?: Vec3;
       }>)
   | (NormalizedDimensionBase &
       Readonly<{

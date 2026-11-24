@@ -1,3 +1,5 @@
+import { snapAngleToRightAngle } from '../domain/angularPlane';
+
 import { clamp, dot3, EPSILON, length3, normalize3, sub3 } from './vec';
 
 import type { NormalizedDimensionInput } from './types';
@@ -31,9 +33,12 @@ export function deriveDimensionValue(input: NormalizedDimensionInput): DerivedDi
         return { ok: false, reason: 'degenerate' };
       }
       const minor = Math.acos(clamp(dot3(normalize3(rayA), normalize3(rayB)), -1, 1));
+      const snapped = input.placement.orthogonalSnap === true
+        ? snapAngleToRightAngle(minor)
+        : minor;
       return {
         ok: true,
-        valueRad: input.placement.arcChoice === 'minor' ? minor : 2 * Math.PI - minor,
+        valueRad: input.placement.arcChoice === 'minor' ? snapped : 2 * Math.PI - snapped,
       };
     }
     case 'radial': {

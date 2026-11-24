@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { deriveAngularPlane } from './angularPlane';
 import { reduceDimensionDocument } from './reducer';
 import {
   angularRecord,
@@ -255,6 +256,28 @@ describe('reduceDimensionDocument', () => {
       });
     }
 
+    const snapped = reduceDimensionDocument(emptyDimensionDocument([record]), {
+      type: 'set-angular-orthogonal-snap',
+      commandId: 'c4b',
+      actorId: record.authorId,
+      actorRole: record.authorRole,
+      at: 41,
+      dimensionId: record.id,
+      enabled: true,
+    });
+    expect(snapped.ok).toBe(true);
+    if (snapped.ok) {
+      const saved = present(snapped.state.records[0], 'snapped record');
+      if (saved.kind !== 'angular') throw new Error('expected an angular record');
+      expect(saved.placement.orthogonalSnap).toBe(true);
+      expect(saved.placement.arcChoice).toBe('minor');
+      expect(snapped.inverse).toEqual({
+        type: 'set-angular-orthogonal-snap',
+        dimensionId: record.id,
+        enabled: false,
+      });
+    }
+
     const linear = linearRecord({ id: 'linear-1' });
     expect(reduceDimensionDocument(emptyDimensionDocument([linear]), {
       type: 'set-angle-arc',
@@ -355,6 +378,12 @@ describe('reduceDimensionDocument', () => {
         vertex: anchor,
         updatedAt: 60,
         validity: 'valid',
+        anglePlane: deriveAngularPlane(
+          [5, 6, 7],
+          [1, 0, 0],
+          [0, 1, 0],
+          'legacy-derived',
+        ),
       });
       expect(result.inverse).toEqual({
         type: 'rebind-anchor',

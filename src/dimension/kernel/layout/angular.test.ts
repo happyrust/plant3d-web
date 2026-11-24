@@ -8,6 +8,7 @@ import { layoutAngular } from './angular';
 
 import type {
   NormalizedDimensionInput,
+  SceneLine,
   ScreenGlyphRun,
   ScreenLine,
   Vec2,
@@ -173,9 +174,47 @@ describe('layoutAngular', () => {
   });
 
   it('produces no trusted numeric layout for degenerate rays', () => {
-    const result = layoutAngular(input('minor', { rayA: [0, 0, 0] }), context);
+    const zero = layoutAngular(input('minor', { rayA: [0, 0, 0] }), context);
+    expect(zero.primitives).toEqual([]);
+    expect(zero.derived.formattedLabel).toBe('');
+    expect(zero.derived.validationErrors).toEqual(['DEGENERATE_ANGULAR_RAY']);
 
-    expect(result.primitives).toEqual([]);
-    expect(result.derived.formattedLabel).toBe('');
+    const collinear = layoutAngular(input('minor', { rayB: [2, 0, 0] }), context);
+    expect(collinear.primitives).toEqual([]);
+    expect(collinear.derived.validationErrors).toEqual(['COLLINEAR_ANGULAR_RAYS']);
+  });
+
+  it('#71 持久化的角度平面让弧留在设计平面里，换相机不改角度值', () => {
+    const planar = input('minor', { planeNormal: [0, 0, 1] });
+    const angle = Math.PI / 6;
+    const right: [number, number, number] = [Math.cos(angle), 0, -Math.sin(angle)];
+    const rotated: LayoutContext = {
+      ...context,
+      projector: {
+        ...createTestProjector(),
+        right,
+        forward: [-Math.sin(angle), 0, -Math.cos(angle)],
+        project: point => ({
+          x: 200 + (point[0] * right[0] + point[2] * right[2]) * 100,
+          y: 200 - point[1] * 100,
+          depth: 0,
+        }),
+      },
+    };
+    const front = layoutAngular(planar, context);
+    const side = layoutAngular(planar, rotated);
+    expect(front.derived.valueRad).toBeCloseTo(Math.PI / 2);
+    expect(side.derived.valueRad).toBeCloseTo(present(front.derived.valueRad, 'front angle'));
+    for (const result of [front, side]) {
+      const arcs = result.scenePrimitives.filter(
+        (primitive): primitive is SceneLine =>
+          primitive.kind === 'scene-line' && primitive.part === 'arc',
+      );
+      expect(arcs.length).toBeGreaterThan(0);
+      for (const line of arcs) {
+        expect(line.from.anchor[2]).toBeCloseTo(0, 6);
+        expect(line.to.anchor[2]).toBeCloseTo(0, 6);
+      }
+    }
   });
 });
