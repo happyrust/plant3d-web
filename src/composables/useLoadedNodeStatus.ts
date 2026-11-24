@@ -432,7 +432,7 @@ async function run(key: string): Promise<void> {
     // - 两种情形都不写入 `checkedAgainst`，受限安排一次后台补查待写盘结束后自动恢复。
     if (status.verdict === 'unknown' && status.errorCode === 'SOURCE_CHANGED') {
       current.checking = false;
-      current.awaitingChanges = false;
+      if (currentLoaded) currentLoaded.awaitingChanges = false;
       if (!current.status || current.status.verdict === 'unknown') {
         current.status = status;
       }
@@ -441,20 +441,21 @@ async function run(key: string): Promise<void> {
         sourceChangedFollowUpCount.set(key, attempts + 1);
         recheckLoadedNodeLater(key, [sourceChangedFollowUpDelayMs]);
       }
-      if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key);
+      if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key, !currentLoaded);
       return;
     }
     sourceChangedFollowUpCount.delete(key);
     current.status = status;
     current.checking = false;
     if (
-      versionsOutcome.value
+      currentLoaded
+      && versionsOutcome.value
       && status.verdict !== 'unknown'
       && status.verdict !== 'updating'
       && status.modelSesno !== null
       && status.modelSesno > 0
     ) {
-      current.versionsChecked = {
+      currentLoaded.versionsChecked = {
         sinceSesno: versionsOutcome.value.sinceSesno,
         throughModelSesno: status.modelSesno,
         changedSessions: versionsOutcome.value.sessions,
