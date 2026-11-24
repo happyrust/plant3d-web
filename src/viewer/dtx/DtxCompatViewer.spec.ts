@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BoxGeometry, Matrix4 } from 'three';
 
-import { DtxCompatScene } from './DtxCompatViewer';
+import { computeFlyToPositionFromAabb, DtxCompatScene } from './DtxCompatViewer';
 
 import { DTXLayer } from '@/utils/three/dtx';
 
 const {
   hasDtxDbnoCacheMock,
   resolveDtxObjectIdsByRefnoMock,
+  resolveDtxRefnosByUnitRefnoMock,
   resolveDtxTubeObjectIdsByKeysMock,
   markDtxTubeSegmentsHiddenMock,
   clearDtxTubeSegmentOverridesMock,
@@ -16,6 +17,7 @@ const {
 } = vi.hoisted(() => ({
   hasDtxDbnoCacheMock: vi.fn(),
   resolveDtxObjectIdsByRefnoMock: vi.fn(),
+  resolveDtxRefnosByUnitRefnoMock: vi.fn(),
   resolveDtxTubeObjectIdsByKeysMock: vi.fn(),
   markDtxTubeSegmentsHiddenMock: vi.fn(),
   clearDtxTubeSegmentOverridesMock: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   hasDtxDbnoCache: hasDtxDbnoCacheMock,
   resolveDtxObjectIdsByRefno: resolveDtxObjectIdsByRefnoMock,
   resolveDtxObjectIdsByUnitRefno: vi.fn(() => []),
+  resolveDtxRefnosByUnitRefno: resolveDtxRefnosByUnitRefnoMock,
   resolveDtxTubeObjectIdsByKeys: resolveDtxTubeObjectIdsByKeysMock,
   markDtxTubeSegmentsHidden: markDtxTubeSegmentsHiddenMock,
   clearDtxTubeSegmentOverrides: clearDtxTubeSegmentOverridesMock,
@@ -41,6 +44,8 @@ describe('DtxCompatScene', () => {
     hasDtxDbnoCacheMock.mockReturnValue(false);
     resolveDtxObjectIdsByRefnoMock.mockReset();
     resolveDtxObjectIdsByRefnoMock.mockReturnValue([]);
+    resolveDtxRefnosByUnitRefnoMock.mockReset();
+    resolveDtxRefnosByUnitRefnoMock.mockReturnValue([]);
     resolveDtxTubeObjectIdsByKeysMock.mockReset();
     resolveDtxTubeObjectIdsByKeysMock.mockReturnValue([]);
     markDtxTubeSegmentsHiddenMock.mockReset();
@@ -247,5 +252,104 @@ describe('DtxCompatScene', () => {
     expect(selection.deselect).toHaveBeenCalledWith(['o:100_1:1']);
     expect(scene.getTubeSegmentAABB('100_1#100_5-100_6#0')).toEqual([1.5, -0.5, -0.5, 2.5, 0.5, 0.5]);
     expect(scene.getTubeSegmentAABB('100_1#nope-x#0')).toBeNull();
+  });
+
+  it('测量 X 光半透明：保留相关构件及子树实体，其余降透明度，不破坏隐藏/选中，清除与增量加载均正确回放', () => {
+    const layer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4()); // 相关 BRAN 直管
+    layer.addObject('o:100_2:0', 'box', new Matrix4().makeTranslation(2, 0, 0)); // 相关 BRAN 的弯头叶子
+    layer.addObject('o:100_3:0', 'box', new Matrix4().makeTranslation(4, 0, 0)); // 无关可见构件
+    layer.addObject('o:100_4:0', 'box', new Matrix4().makeTranslation(6, 0, 0)); // 无关但用户原本隐藏的构件
+
+    resolveDtxRefnosByUnitRefnoMock.mockImplementation((_db: number, unit: string) => (
+      unit === '100_1' ? ['100_2'] : []
+    ));
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+    scene.setObjectsVisible(['100_4'], false);
+    scene.setObjectsSelected(['100_1'], true);
+
+    scene.setMeasurementXrayKeepRefnos(['100_1'], { dimOpacity: 0.18 });
+    expect(layer.getObjectOpacity('o:100_1:0')).toBeCloseTo(1, 5);
+    expect(layer.getObjectOpacity('o:100_2:0')).toBeCloseTo(1, 5);
+    expect(layer.getObjectOpacity('o:100_3:0')).toBeCloseTo(0.18, 2);
+    // 原本隐藏的对象保持隐藏
+    expect(layer.isObjectVisible('o:100_4:0')).toBe(false);
+    // 选中状态保留
+    expect(scene.selectedObjectIds).toEqual(['100_1']);
+
+    // 增量装入新无关构件 → 自动同步半透明；装入相关 BRAN 的新叶子 → 保持实体
+    layer.addObject('o:100_5:0', 'box', new Matrix4().makeTranslation(8, 0, 0));
+    layer.addObject('o:100_6:0', 'box', new Matrix4().makeTranslation(10, 0, 0));
+    resolveDtxRefnosByUnitRefnoMock.mockImplementation((_db: number, unit: string) => (
+      unit === '100_1' ? ['100_2', '100_6'] : []
+    ));
+    scene.applyStateToRefnos(['100_5', '100_6']);
+    expect(layer.getObjectOpacity('o:100_5:0')).toBeCloseTo(0.18, 2);
+    expect(layer.getObjectOpacity('o:100_6:0')).toBeCloseTo(1, 5);
+
+    // 清除测量 X 光 → 完整还原全部不透明度，且原本隐藏的 100_4 仍隐藏
+    scene.clearMeasurementXray();
+    expect(layer.getObjectOpacity('o:100_3:0')).toBeCloseTo(1, 5);
+    expect(layer.getObjectOpacity('o:100_5:0')).toBeCloseTo(1, 5);
+    expect(layer.isObjectVisible('o:100_4:0')).toBe(false);
+  });
+
+  it('测量 X 光与选中聚焦半透明及显式 X-Ray 和平共存', () => {
+    const layer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 8 });
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+    layer.addObject('o:100_2:0', 'box', new Matrix4().makeTranslation(2, 0, 0));
+    layer.addObject('o:100_3:0', 'box', new Matrix4().makeTranslation(4, 0, 0));
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+    scene.setObjectsSelected(['100_1'], true);
+    scene.setAutoFocusTransparencyEnabled(true, { dimOpacity: 0.3 });
+    scene.syncFocusTransparencyFromSelection({ immediate: true });
+    expect(layer.getObjectOpacity('o:100_2:0')).toBeCloseTo(0.3, 2);
+
+    // 测量 X 光生效时优先保留测量相关集（100_1 + 100_2），不受选中聚焦覆盖
+    scene.setMeasurementXrayKeepRefnos(['100_1', '100_2'], { dimOpacity: 0.15 });
+    expect(layer.getObjectOpacity('o:100_2:0')).toBeCloseTo(1, 5);
+    expect(layer.getObjectOpacity('o:100_3:0')).toBeCloseTo(0.15, 2);
+
+    // 退出测量 X 光后，自动退回到选中聚焦半透明（只保 100_1，100_2 恢复 0.3）
+    scene.clearMeasurementXray();
+    expect(layer.getObjectOpacity('o:100_1:0')).toBeCloseTo(1, 5);
+    expect(layer.getObjectOpacity('o:100_2:0')).toBeCloseTo(0.3, 2);
+  });
+
+  it('places the camera orthogonally to the clearance segment when segmentPoints are provided', () => {
+    const aabb: [number, number, number, number, number, number] = [0, 0, 0, 10, 2, 0];
+    const { position, target } = computeFlyToPositionFromAabb(aabb, [
+      [0, 1, 0],
+      [10, 1, 0],
+    ]);
+    // 连线沿 X 轴（Z=0），正交方向应沿 +Z（水平 X 偏移为 0），避免视线与连线平行
+    expect(target.x).toBeCloseTo(5, 5);
+    expect(position.x).toBeCloseTo(5, 5);
+    expect(position.z).toBeGreaterThan(10);
+  });
+
+  it('updates only newly dimmed objects when measurement X-ray keep set shifts', () => {
+    const layer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 8 });
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+    layer.addObject('o:100_2:0', 'box', new Matrix4().makeTranslation(2, 0, 0));
+    layer.addObject('o:100_3:0', 'box', new Matrix4().makeTranslation(4, 0, 0));
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+    const spy = vi.spyOn(layer, 'setObjectsOpacity');
+
+    // 初次保留 100_1：100_2 与 100_3 降为 0.2
+    scene.setMeasurementXrayKeepRefnos(['100_1'], { dimOpacity: 0.2 });
+    expect(spy).toHaveBeenCalledWith(['o:100_2:0', 'o:100_3:0'], 0.2, { keepColorOverride: true });
+    spy.mockClear();
+
+    // 切换保留 100_2：100_3 已处于 0.2 不重复更新，仅恢复 100_2 并把 100_1 降为 0.2
+    scene.setMeasurementXrayKeepRefnos(['100_2'], { dimOpacity: 0.2 });
+    const dimmedCalls = spy.mock.calls.filter((call) => call[1] === 0.2);
+    expect(dimmedCalls).toEqual([[['o:100_1:0'], 0.2, { keepColorOverride: true }]]);
   });
 });

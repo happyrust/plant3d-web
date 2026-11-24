@@ -25,7 +25,16 @@ function fixture(name: string): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }
 
-function boundsOf(positions: number[]): { min: number[]; max: number[] } {
+function maxValue(values: ArrayLike<number>): number {
+  let max = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index] ?? 0;
+    if (value > max) max = value;
+  }
+  return max;
+}
+
+function boundsOf(positions: ArrayLike<number>): { min: number[]; max: number[] } {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < positions.length; i += 3) {
@@ -47,7 +56,7 @@ describe('parseMeshGeometry（rkyv 布局金样）', () => {
     expect(parsed!.positions).toHaveLength(36 * 3);
     expect(parsed!.indices).toHaveLength(36);
     expect(parsed!.normals).toHaveLength(36 * 3);
-    expect(Math.max(...parsed!.indices)).toBeLessThan(36);
+    expect(maxValue(parsed!.indices)).toBeLessThan(36);
     const { min, max } = boundsOf(parsed!.positions);
     expect(min).toEqual([-0.5, -0.5, -0.5]);
     expect(max).toEqual([0.5, 0.5, 0.5]);
@@ -68,7 +77,7 @@ describe('parseMeshGeometry（rkyv 布局金样）', () => {
     expect(parsed!.positions).toHaveLength(629 * 3);
     expect(parsed!.indices).toHaveLength(3240);
     expect(parsed!.normals).toHaveLength(629 * 3);
-    expect(Math.max(...parsed!.indices)).toBeLessThan(629);
+    expect(maxValue(parsed!.indices)).toBeLessThan(629);
     const { min, max } = boundsOf(parsed!.positions);
     expect(min).toEqual([-0.5, -0.5, -0.5]);
     expect(max).toEqual([0.5, 0.5, 0.5]);

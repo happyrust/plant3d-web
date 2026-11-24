@@ -2,6 +2,8 @@ import { computed, ref, shallowRef } from 'vue';
 
 import { useQuery } from '@tanstack/vue-query';
 
+import { recordSelectionHistory, registerSelectionHistoryApplier } from './useSelectionHistory';
+
 import type { PdmsUiAttrResponse } from '@/api/genModelPdmsAttrApi';
 
 const selectedRefno = ref<string | null>(null);
@@ -54,6 +56,7 @@ function setSelectionState(
   options?: { deleted?: boolean; versionPin?: SelectedVersionPin | null },
 ) {
   const next = normalizeSelection(refnos);
+  const before = selectedRefno.value;
   selectedRefnos.value = next;
   selectedIsDeleted.value = next.length > 0 && options?.deleted === true;
   selectedVersionPin.value = next.length > 0 ? options?.versionPin ?? null : null;
@@ -63,7 +66,13 @@ function setSelectionState(
   }
   const active = String(activeRefno ?? '').trim();
   selectedRefno.value = active && next.includes(active) ? active : next[next.length - 1] ?? null;
+  // 已删除登记与版本钉住都依赖差异 / 对比现场（`pin.load` 退出对比就失效），回放不出来，不进历史
+  if (selectedRefno.value && selectedRefno.value !== before && !selectedIsDeleted.value && !selectedVersionPin.value) {
+    recordSelectionHistory(next, selectedRefno.value);
+  }
 }
+
+registerSelectionHistoryApplier((refnos, active) => setSelectionState(refnos, active));
 
 /**
  * 在不需要 Vue 注入上下文的场景（如异步回调、命令处理器）中直接修改 selectedRefno。

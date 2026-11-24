@@ -17,12 +17,19 @@ import {
 import { toRefnoKey } from '@/utils/refnoKey';
 
 export type Aabb6 = [number, number, number, number, number, number]
+export type FlyToSegmentPoints = readonly [
+  readonly [number, number, number],
+  readonly [number, number, number],
+]
 
 function aabbFromBox3(box: Box3): Aabb6 {
   return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
 }
 
-function computeFlyToPositionFromAabb(aabb: Aabb6): { position: Vector3; target: Vector3 } {
+export function computeFlyToPositionFromAabb(
+  aabb: Aabb6,
+  segmentPoints?: FlyToSegmentPoints | null,
+): { position: Vector3; target: Vector3 } {
   const [xmin, ymin, zmin, xmax, ymax, zmax] = aabb;
   const center = new Vector3((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2);
   const dx = xmax - xmin;
@@ -30,6 +37,25 @@ function computeFlyToPositionFromAabb(aabb: Aabb6): { position: Vector3; target:
   const dz = zmax - zmin;
   const maxDim = Math.max(dx, dy, dz);
   const distance = Math.max(maxDim * 2.5, 5);
+  // 若提供了净距线段两端点且水平投影长度有效，沿垂直于线段的水平正交方向放置相机，避免视线与连线共线导致透视压扁
+  if (segmentPoints) {
+    const [p0, p1] = segmentPoints;
+    const segX = p1[0] - p0[0];
+    const segZ = p1[2] - p0[2];
+    const horizLen = Math.hypot(segX, segZ);
+    if (Number.isFinite(horizLen) && horizLen > 1e-3) {
+      const nx = -segZ / horizLen;
+      const nz = segX / horizLen;
+      // 保持正交法向朝向 +X/+Z 半空间，避免相邻管对定位视角 180° 翻转
+      const sign = nx + nz < 0 ? -1 : 1;
+      const position = new Vector3(
+        center.x + distance * 0.95 * nx * sign,
+        center.y + distance * 0.55,
+        center.z + distance * 0.95 * nz * sign,
+      );
+      return { position, target: center };
+    }
+  }
   const position = new Vector3(center.x + distance * 0.8, center.y + distance * 0.6, center.z + distance * 0.8);
   return { position, target: center };
 }
@@ -63,9 +89,13 @@ export class DtxCompatScene {
   private _xrayDimOpacity = 0.2;
   private _focusKeepRefnos = new Set<string>();
   private _focusOriginalOpacityByObjectId = new Map<string, number>();
+  private _focusCurrentDimmedOpacityByObjectId = new Map<string, number>();
   private _focusDimOpacity = 0.2;
   private _autoFocusTransparencyEnabled = false;
   private _focusSyncRafId: number | null = null;
+  private _measurementXraySeedRefnos: string[] | null = null;
+  private _measurementXrayKeepRefnos: Set<string> | null = null;
+  private _measurementXrayDimOpacity = 0.2;
 
   constructor(options: { dtxLayer: DTXLayer; selection?: DTXSelectionController | null; onDirty?: (() => void) | null }) {
     this._dtxLayer = options.dtxLayer;
@@ -330,6 +360,8 @@ export class DtxCompatScene {
 
     if (this._hasXRayedObjects()) {
       this._onDirty?.();
+    } else if (this._measurementXrayKeepRefnos && this._measurementXrayKeepRefnos.size > 0) {
+      this._flushFocusTransparencySync();
     } else {
       this.syncFocusTransparencyFromSelection();
     }
@@ -457,17 +489,100 @@ export class DtxCompatScene {
   }
 
   replayFocusTransparency(refnos: string[]): void {
-    if (this._hasXRayedObjects() || this._focusKeepRefnos.size === 0 || !refnos || refnos.length === 0) return;
+    if (this._hasXRayedObjects() || !refnos || refnos.length === 0) return;
     const uniqueRefnos = Array.from(new Set(refnos.filter((refno) => !!refno)));
     if (uniqueRefnos.length === 0) return;
+    if (this._measurementXraySeedRefnos && this._measurementXrayKeepRefnos) {
+      const expanded = this._expandKeepRefnosWithSubtree(this._measurementXraySeedRefnos);
+      this._measurementXrayKeepRefnos = expanded;
+      this._focusKeepRefnos = new Set(expanded);
+      this._applyFocusTransparencyToRefnos(uniqueRefnos, {
+        partial: true,
+        dimOpacity: this._measurementXrayDimOpacity,
+      });
+      return;
+    }
+    if (this._focusKeepRefnos.size === 0) return;
     this._applyFocusTransparencyToRefnos(uniqueRefnos, { partial: true });
   }
 
   reapplyFocusTransparency(): void {
+    if (this._hasXRayedObjects()) return;
+    if (this._measurementXrayKeepRefnos && this._measurementXrayKeepRefnos.size > 0) {
+      this._focusKeepRefnos = new Set(this._measurementXrayKeepRefnos);
+      this._focusOriginalOpacityByObjectId.clear();
+      this._focusCurrentDimmedOpacityByObjectId.clear();
+      this._applyFocusTransparencyToRefnos(this.getLoadedRefnos(), {
+        partial: false,
+        dimOpacity: this._measurementXrayDimOpacity,
+      });
+      this._onDirty?.();
+      return;
+    }
     if (this._focusKeepRefnos.size === 0) return;
     this._focusOriginalOpacityByObjectId.clear();
+    this._focusCurrentDimmedOpacityByObjectId.clear();
     this._applyFocusTransparencyToRefnos(this.getLoadedRefnos(), { partial: false });
     this._onDirty?.();
+  }
+
+  /**
+   * 测量时无关模型 X 光半透明：保留 `keepRefnos`（自动展开已加载子树）为实体，其余已加载构件降为半透明。
+   * 不修改 `visible`（不显示原本隐藏的构件）、不修改 `selected`、不影响 GPU 拾取；与显式 `setObjectsXRayed`
+   * 隔离（显式 X-ray 存在时不互相覆盖），清除时完整还原每对象原始不透明度。
+   */
+  setMeasurementXrayKeepRefnos(
+    keepRefnos: string[] | null,
+    options?: { dimOpacity?: number },
+  ): void {
+    const uniqueSeeds = Array.from(
+      new Set((keepRefnos ?? []).map((refno) => toRefnoKey(refno)).filter(Boolean)),
+    );
+    if (uniqueSeeds.length === 0) {
+      this.clearMeasurementXray();
+      return;
+    }
+
+    const nextOpacity =
+      typeof options?.dimOpacity === 'number' && Number.isFinite(options.dimOpacity)
+        ? Math.min(1, Math.max(0, options.dimOpacity))
+        : this._measurementXrayDimOpacity;
+    const expanded = this._expandKeepRefnosWithSubtree(uniqueSeeds);
+
+    const sameOpacity = Math.abs(nextOpacity - this._measurementXrayDimOpacity) < 1e-6;
+    const sameKeep =
+      this._measurementXrayKeepRefnos !== null
+      && this._measurementXrayKeepRefnos.size === expanded.size
+      && Array.from(expanded).every((refno) => this._measurementXrayKeepRefnos!.has(refno));
+    this._measurementXraySeedRefnos = uniqueSeeds;
+    this._measurementXrayDimOpacity = nextOpacity;
+    if (sameOpacity && sameKeep && (this._hasXRayedObjects() || this._focusOriginalOpacityByObjectId.size > 0)) {
+      return;
+    }
+
+    this._measurementXrayKeepRefnos = expanded;
+    if (this._hasXRayedObjects()) return;
+
+    this._cancelFocusTransparencySync();
+    this.ensureRefnos(Array.from(expanded), { computeAabb: false });
+    this._focusKeepRefnos = new Set(expanded);
+    this._applyFocusTransparencyToRefnos(this.getLoadedRefnos(), {
+      partial: false,
+      dimOpacity: this._measurementXrayDimOpacity,
+    });
+    this._onDirty?.();
+  }
+
+  clearMeasurementXray(): void {
+    if (this._measurementXrayKeepRefnos === null && this._measurementXraySeedRefnos === null) return;
+    this._measurementXraySeedRefnos = null;
+    this._measurementXrayKeepRefnos = null;
+    if (this._hasXRayedObjects()) return;
+    if (this._autoFocusTransparencyEnabled && this.selectedObjectIds.length > 0) {
+      this.applyFocusTransparency(this.selectedObjectIds);
+      return;
+    }
+    this.clearFocusTransparency();
   }
 
   clearFocusTransparency(): void {
@@ -481,12 +596,29 @@ export class DtxCompatScene {
     this._onDirty?.();
   }
 
+  private _expandKeepRefnosWithSubtree(seeds: string[]): Set<string> {
+    const out = new Set<string>(seeds);
+    for (const refno of this.getSubtreeRefnos(seeds)) {
+      if (refno) out.add(refno);
+    }
+    return out;
+  }
+
   private _flushFocusTransparencySync(): void {
-    if (!this._autoFocusTransparencyEnabled) return;
     if (this._hasXRayedObjects()) {
       this.clearFocusTransparency();
       return;
     }
+    if (this._measurementXrayKeepRefnos && this._measurementXrayKeepRefnos.size > 0) {
+      this._focusKeepRefnos = new Set(this._measurementXrayKeepRefnos);
+      this._applyFocusTransparencyToRefnos(this.getLoadedRefnos(), {
+        partial: false,
+        dimOpacity: this._measurementXrayDimOpacity,
+      });
+      this._onDirty?.();
+      return;
+    }
+    if (!this._autoFocusTransparencyEnabled) return;
     const selectedRefnos = this.selectedObjectIds;
     if (selectedRefnos.length === 0) {
       this.clearFocusTransparency();
@@ -551,14 +683,22 @@ export class DtxCompatScene {
     }
   }
 
-  private _applyFocusTransparencyToRefnos(refnos: string[], options?: { partial?: boolean }): void {
+  private _applyFocusTransparencyToRefnos(
+    refnos: string[],
+    options?: { partial?: boolean; dimOpacity?: number },
+  ): void {
     if (!refnos || refnos.length === 0) {
       this._restoreTrackedObjectOpacities(this._focusOriginalOpacityByObjectId, Array.from(this._focusOriginalOpacityByObjectId.keys()));
       return;
     }
 
     const partial = options?.partial === true;
+    const targetDimOpacity =
+      typeof options?.dimOpacity === 'number' && Number.isFinite(options.dimOpacity)
+        ? Math.min(1, Math.max(0, options.dimOpacity))
+        : this._focusDimOpacity;
     const dimObjectIds = new Set<string>();
+    const newlyDimmedIds: string[] = [];
     for (const refno of refnos) {
       const objectIds = this._getDtxObjectIds(refno);
       if (objectIds.length === 0) continue;
@@ -576,6 +716,12 @@ export class DtxCompatScene {
           }
         }
         dimObjectIds.add(objectId);
+        // 差量跳过：已处于相同目标半透明度的对象不重复发 GPU 更新
+        const prevDimmed = this._focusCurrentDimmedOpacityByObjectId.get(objectId);
+        if (prevDimmed === undefined || Math.abs(prevDimmed - targetDimOpacity) > 1e-6) {
+          newlyDimmedIds.push(objectId);
+          this._focusCurrentDimmedOpacityByObjectId.set(objectId, targetDimOpacity);
+        }
       }
     }
 
@@ -591,8 +737,8 @@ export class DtxCompatScene {
       }
     }
 
-    if (dimObjectIds.size > 0) {
-      this._dtxLayer.setObjectsOpacity(Array.from(dimObjectIds), this._focusDimOpacity, { keepColorOverride: true });
+    if (newlyDimmedIds.length > 0) {
+      this._dtxLayer.setObjectsOpacity(newlyDimmedIds, targetDimOpacity, { keepColorOverride: true });
     }
   }
 
@@ -616,6 +762,9 @@ export class DtxCompatScene {
 
     for (const objectId of objectIds) {
       store.delete(objectId);
+      if (store === this._focusOriginalOpacityByObjectId) {
+        this._focusCurrentDimmedOpacityByObjectId.delete(objectId);
+      }
     }
   }
 
@@ -702,6 +851,8 @@ export class DtxCompatScene {
   }
 
   clear(): void {
+    this._measurementXraySeedRefnos = null;
+    this._measurementXrayKeepRefnos = null;
     this.clearFocusTransparency();
     if (this._xrayOriginalOpacityByObjectId.size > 0) {
       this._restoreTrackedObjectOpacities(
@@ -726,8 +877,16 @@ export class DtxCompatViewer {
   readonly requestRender: (() => void) | null;
 
   readonly cameraFlight: {
-    flyTo: (options: { aabb?: Aabb6 | number[] | null; duration?: number; fit?: boolean }) => void
-    jumpTo: (options: { aabb?: Aabb6 | number[] | null }) => void
+    flyTo: (options: {
+      aabb?: Aabb6 | number[] | null;
+      duration?: number;
+      fit?: boolean;
+      segmentPoints?: FlyToSegmentPoints | null;
+    }) => void
+    jumpTo: (options: {
+      aabb?: Aabb6 | number[] | null;
+      segmentPoints?: FlyToSegmentPoints | null;
+    }) => void
     /** 撤掉在途飞行（相机停在当前帧）。相机意图收口与显式取消都走这里。 */
     cancel: () => void
   };
@@ -749,7 +908,11 @@ export class DtxCompatViewer {
       onDirty: this.requestRender,
     });
 
-    const flyToImpl = (aabbInput: Aabb6 | number[] | null | undefined, durationSeconds?: number) => {
+    const flyToImpl = (
+      aabbInput: Aabb6 | number[] | null | undefined,
+      durationSeconds?: number,
+      segmentPoints?: FlyToSegmentPoints | null,
+    ) => {
       if (!aabbInput) return;
       if (!Array.isArray(aabbInput) || aabbInput.length !== 6) return;
       const aabb = aabbInput as Aabb6;
@@ -763,7 +926,7 @@ export class DtxCompatViewer {
       } catch {
         // ignore
       }
-      const { position, target } = computeFlyToPositionFromAabb(aabb);
+      const { position, target } = computeFlyToPositionFromAabb(aabb, segmentPoints);
       const durationMs =
         typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) * 1000 : 800;
       this.__dtxViewer.flyTo(position, target, { duration: durationMs });
@@ -772,10 +935,10 @@ export class DtxCompatViewer {
     this.cameraFlight = {
       flyTo: (options) => {
         void options.fit;
-        flyToImpl(options.aabb as any, options.duration);
+        flyToImpl(options.aabb as any, options.duration, options.segmentPoints);
       },
       jumpTo: (options) => {
-        flyToImpl(options.aabb as any, 0);
+        flyToImpl(options.aabb as any, 0, options.segmentPoints);
       },
       cancel: () => {
         this.__dtxViewer.cancelFlyTo();

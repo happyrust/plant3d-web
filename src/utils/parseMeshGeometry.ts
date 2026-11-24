@@ -32,9 +32,9 @@ import { FileValidationError, failFileValidation } from './fileValidation';
  */
 
 export type ParsedMeshGeometry = {
-  positions: number[];
-  indices: number[];
-  normals?: number[];
+  positions: Float32Array;
+  indices: Uint32Array;
+  normals?: Float32Array;
 };
 
 export type MeshGeometryParseResult =
@@ -170,12 +170,12 @@ export function parseMeshGeometryResult(
     const indicesArr = new Uint32Array(meshData, layout.indices.at, layout.indices.len);
     const positionsArr = new Float32Array(meshData, layout.vertices.at, layout.vertices.len * 3);
 
-    const positions = Array.from(positionsArr);
-    const indices = Array.from(indicesArr);
+    const positions = new Float32Array(positionsArr);
+    const indices = new Uint32Array(indicesArr);
 
-    let normals: number[] | undefined;
+    let normals: Float32Array | undefined;
     if (layout.normals.len === layout.vertices.len && layout.normals.len > 0) {
-      normals = Array.from(new Float32Array(meshData, layout.normals.at, layout.normals.len * 3));
+      normals = new Float32Array(new Float32Array(meshData, layout.normals.at, layout.normals.len * 3));
     }
     return { ok: true, data: { positions, indices, normals } };
   } catch (error) {

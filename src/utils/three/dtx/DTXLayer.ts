@@ -3149,14 +3149,24 @@ export class DTXLayer {
   }
 
   /**
-   * 计算点到指定对象的最近点（用于点到面测量）
-   * - 基于 getObjectGeometryData() 的缓存几何体数据
-   * - 返回最近点、距离与对应三角形
+   * 计算点到指定对象的最近点（用于点到面测量 / 构件最近点采样）
+   * - 支持传入 `maxDistance` 上界：先用对象世界 AABB 距离下界剪枝，遍历三角形时再用每三角形 AABB 距离下界剪枝；
+   *   剪枝在数学上与全量遍历完全等价（不丢解），显著减少大网格上的 `closestPointToPoint` 调用。
+   * - 返回最近点、距离与对应三角形；无解或超出 `maxDistance` 返回 `null`。
    */
   closestPointToObject(
     objectId: string,
-    point: Vector3
+    point: Vector3,
+    maxDistance?: number,
   ): { point: Vector3; distance: number; triangle: [Vector3, Vector3, Vector3] } | null {
+    const hasMaxDistance = typeof maxDistance === 'number' && Number.isFinite(maxDistance) && maxDistance >= 0;
+    let bestDistSq = hasMaxDistance ? maxDistance * maxDistance : Infinity;
+
+    const worldBox = this.getObjectBoundingBox(objectId);
+    if (worldBox && !worldBox.isEmpty() && worldBox.distanceToPoint(point) ** 2 > bestDistSq) {
+      return null;
+    }
+
     const data = this.getObjectGeometryData(objectId);
     if (!data) return null;
 
@@ -3171,7 +3181,11 @@ export class DTXLayer {
     const c = new Vector3();
     const tmp = new Vector3();
 
-    let bestDistSq = Infinity;
+    const px = point.x;
+    const py = point.y;
+    const pz = point.z;
+
+    let found = false;
     const bestPoint = new Vector3();
     const bestA = new Vector3();
     const bestB = new Vector3();
@@ -3187,11 +3201,32 @@ export class DTXLayer {
       b.fromBufferAttribute(posAttr, ib).applyMatrix4(matrix);
       c.fromBufferAttribute(posAttr, ic).applyMatrix4(matrix);
 
+      // 三角形 AABB 距离下界剪枝：若点到三角形外接盒的平方距离已超过当前最优，无需执行点到三角形投影
+      if (Number.isFinite(bestDistSq)) {
+        const minX = a.x < b.x ? (a.x < c.x ? a.x : c.x) : (b.x < c.x ? b.x : c.x);
+        const maxX = a.x > b.x ? (a.x > c.x ? a.x : c.x) : (b.x > c.x ? b.x : c.x);
+        const dx = px < minX ? minX - px : (px > maxX ? px - maxX : 0);
+        const dx2 = dx * dx;
+        if (dx2 > bestDistSq) continue;
+
+        const minY = a.y < b.y ? (a.y < c.y ? a.y : c.y) : (b.y < c.y ? b.y : c.y);
+        const maxY = a.y > b.y ? (a.y > c.y ? a.y : c.y) : (b.y > c.y ? b.y : c.y);
+        const dy = py < minY ? minY - py : (py > maxY ? py - maxY : 0);
+        const dxy2 = dx2 + dy * dy;
+        if (dxy2 > bestDistSq) continue;
+
+        const minZ = a.z < b.z ? (a.z < c.z ? a.z : c.z) : (b.z < c.z ? b.z : c.z);
+        const maxZ = a.z > b.z ? (a.z > c.z ? a.z : c.z) : (b.z > c.z ? b.z : c.z);
+        const dz = pz < minZ ? minZ - pz : (pz > maxZ ? pz - maxZ : 0);
+        if (dxy2 + dz * dz > bestDistSq) continue;
+      }
+
       tri.set(a, b, c);
       tri.closestPointToPoint(point, tmp);
 
       const d2 = tmp.distanceToSquared(point);
-      if (d2 < bestDistSq) {
+      if (d2 < bestDistSq || (!found && d2 <= bestDistSq)) {
+        found = true;
         bestDistSq = d2;
         bestPoint.copy(tmp);
         bestA.copy(a);
@@ -3200,7 +3235,7 @@ export class DTXLayer {
       }
     }
 
-    if (!Number.isFinite(bestDistSq)) return null;
+    if (!found || !Number.isFinite(bestDistSq)) return null;
 
     return {
       point: bestPoint.clone(),

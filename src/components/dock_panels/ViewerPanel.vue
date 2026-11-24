@@ -36,6 +36,7 @@ import {
   type ReviewSnapshotMeasurementPayload,
 } from '@/api/reviewApi';
 import { useClearanceDimensionSync } from '@/clearance/composables/useClearanceDimensionSync';
+import { useClearanceXraySync } from '@/clearance/composables/useClearanceXraySync';
 import { useComponentToWallClearance } from '@/clearance/composables/useComponentToWallClearance';
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
@@ -72,6 +73,7 @@ import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
 import { modelLoadSessionView, requestStopModelLoad } from '@/composables/modelLoadSession';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
+import { reviewPersistenceScope } from '@/composables/useAnnotationDraftScopeSync';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { hasPersistedBackgroundMode, useBackgroundStore } from '@/composables/useBackgroundStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
@@ -177,7 +179,6 @@ import {
 } from '@/dimension';
 import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/currentProject';
 import { getModelSource } from '@/model-source';
-import { annotationScopeKey } from '@/review/domain/annotationScope';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { DEFAULT_DROPDOWN_PLACEMENT, measureNaturalHeight, resolveDropdownPlacement, type DropdownPlacement } from '@/utils/dropdownPlacement';
@@ -194,6 +195,7 @@ import { toRefnoKey } from '@/utils/refnoKey';
 import { parseRefnoList, SHOW_REFNO_PARAM } from '@/utils/refnoListParam';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController, readViewCullOptions } from '@/utils/three/dtx';
+import { bindDynamicPivotToCanvas, createRememberedPivotMarker } from '@/utils/three/dtx/DynamicPivotCanvasBinding';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
@@ -909,13 +911,20 @@ const clearanceStorageContext = computed(() => {
   const project = clearanceProject.value || params.get('project_id');
   const task = reviewStore.currentTask.value;
   const comparison = modelUnitCompareState.value?.detail;
-  const draftScope = store.annotationDraftScope.value;
-  return {
+  const atomic = reviewPersistenceScope.value;
+  const identity = atomic ?? {
     project,
+    dbnum: params.get('show_dbnum') || '__all__',
+    user: userStore.currentUser.value?.id || 'anonymous',
+    draft: null as string | null,
+    taskId: task?.id || null,
+    formId: task?.formId || null,
+    node: task?.currentNode || null,
+  };
+  return {
+    project: identity.project,
     key: JSON.stringify({
-      project, dbnum: params.get('show_dbnum') || '__all__', user: userStore.currentUser.value?.id || 'anonymous',
-      draft: draftScope ? annotationScopeKey(draftScope) : null,
-      taskId: task?.id || null, formId: task?.formId || null, node: task?.currentNode || null,
+      ...identity,
       comparison: comparison ? { dbnum: comparison.dbnum, refno: comparison.unitRefno,
         a: comparison.before.sesno, b: comparison.after.sesno,
         units: comparison.units?.map(unit => [unit.unitRefno, unit.before.sesno, unit.after.sesno]).sort() ?? [] } : null,
@@ -2265,6 +2274,7 @@ function syncBranClearanceDimensions(): void {
   const result = branClearanceToExternalDimensions(
     candidates,
     point => [point[0] / 1000, point[1] / 1000, point[2] / 1000],
+    { showConfirmedIntersectionMarkers: true },
   );
   system.replaceExternalSource('bran-clearance', result.records);
   if (result.skipped.length > 0) {
@@ -2301,6 +2311,10 @@ function flyToClearanceRecord(record: ClearanceRecord): void {
     ],
     duration: 0.8,
     fit: true,
+    segmentPoints: [
+      [a.x, a.y, a.z],
+      [b.x, b.y, b.z],
+    ],
   });
   requestRender();
 }
@@ -2315,6 +2329,19 @@ const componentToWallClearance = useComponentToWallClearance({
 useClearanceDimensionSync(viewerContext.dimensionSystem, clearanceStore, requestRender, {
   pipeRowBothMetrics: pipeDistanceStore.pipeRowBothMetrics,
   pipeRowKeyPoints: pipeDistanceStore.pipeRowKeyPoints,
+  showIntersectionMarkers: ref(true),
+  surfaceEndMarkers: ref(true),
+});
+const clearanceXraySync = useClearanceXraySync(compatViewerRef, {
+  clearanceStore,
+  branClearance: {
+    getQueriedSourceRefno: () => spatialComputeStore.scenarios.branNearestClearance.queriedSourceRefno,
+    getAnnotationCandidates: () => spatialComputeStore.scenarios.branNearestClearance.annotationCandidates,
+  },
+  toolMode: store.toolMode,
+  pipeDrawerOpen: pipeDistDrawerOpen,
+  dimOpacity: computed(() => focusDimOpacityPercent.value / 100),
+  requestRender,
 });
 watch(selectionStore.selectedRefno, value => { pipeInformationStore.suggestedRefno.value = value ?? ''; });
 watch([viewerContext.dimensionSystem, pipeInformationStore.visibleRecords], ([system, records]) => {
@@ -2499,6 +2526,8 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'clearance.clear':
       clearanceStore.clearRecords();
+      spatialComputeStore.resetScenario('branNearestClearance');
+      clearBranClearanceAnnotations();
       requestRender();
       return;
     case 'tools.clear_all':
@@ -3204,8 +3233,15 @@ async function initializeDimensionViewport(): Promise<void> {
   // 反向选择绑定：场景中点选尺寸图形 → 选中对应 xeokit 测量记录；
   // BRAN 净距标注（external，不挂测量记录）点中 = 拾取目标构件，跟点模型本体同一套选中路径。
   offDimensionSelectionBinding = result.system.viewport.subscribeSelection((id) => {
-    if (id && id.startsWith('clearance:')) {
-      clearanceStore.setActive(id.slice('clearance:'.length));
+    if (!id) {
+      clearanceStore.setActive(null);
+    } else if (id.startsWith('clearance:')) {
+      const recordId = id.slice('clearance:'.length);
+      if (!recordId.endsWith(':key-points')) {
+        clearanceStore.setActive(recordId);
+      }
+    } else {
+      clearanceStore.setActive(null);
     }
     const branTargetRefno = branClearanceTargetRefno(id);
     if (branTargetRefno) {
@@ -4246,8 +4282,12 @@ onMounted(async () => {
               .addScaledVector(raycaster.ray.direction, comparePick.distance);
           }
         }
-        return primaryHit ? primaryHit.point.clone() : null;
+        return primaryHit ? { point: primaryHit.point.clone(), objectId: primaryHit.objectId } : null;
       },
+      // 长按记住的旋转中心画成叠加层里的一个小圆点；叠加层在分屏对比时整体隐藏，圆点跟着隐藏
+      rememberedPivotMarker: overlayContainer.value
+        ? createRememberedPivotMarker(overlayContainer.value, canvas)
+        : undefined,
     }
   );
   pivotControllerRef.value = pivotController;
@@ -4630,6 +4670,7 @@ onMounted(async () => {
   if (typeof window !== 'undefined') {
     (window as any).__xeokitViewer = compat;
     (window as any).__dtxViewer = dtxViewer;
+    (window as any).__dtxPivot = pivotController;
     (window as any).__dtxViewCull = viewCullControllerRef.value;
     (window as any).__viewerContext = viewerContext;
     (window as any).__viewerToolStore = store;
@@ -5225,63 +5266,13 @@ onMounted(async () => {
     dtxViewer.flyTo(ev.position, ev.target, { duration: ev.duration });
   });
 
-  // 添加鼠标与滚轮事件监听器（捕获阶段先于 OrbitControls 执行）：
-  // - 旋转/缩放/平移起手时按 Hover 优先、选中构件兜底对齐操作焦点
-  // - 导航态（toolMode === 'none'）下长按 300ms 仍将旋转中心设到命中点
-  let pivotDownSeq = 0;
-  let pivotPointerDownReachedBubble = false;
-  const onCanvasMouseDown = (e: PointerEvent) => {
-    if (isModelUnitSplitCompareReady()) return;
-    const rect = canvas.getBoundingClientRect();
-    const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
-    const seq = ++pivotDownSeq;
-    pivotPointerDownReachedBubble = false;
-    pivotControllerRef.value?.handleMouseDown(canvasPos, e);
-    queueMicrotask(() => {
-      if (seq === pivotDownSeq && !pivotPointerDownReachedBubble) {
-        pivotControllerRef.value?.handleMouseUp();
-      }
-    });
-  };
-
-  const onCanvasMouseDownBubble = () => {
-    pivotPointerDownReachedBubble = true;
-  };
-
-  const onCanvasMouseMove = (e: PointerEvent) => {
-    if (isModelUnitSplitCompareReady()) return;
-    const rect = canvas.getBoundingClientRect();
-    const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
-    pivotControllerRef.value?.handleMouseMove(canvasPos, e);
-  };
-
-  const onCanvasMouseUp = () => {
-    pivotPointerDownReachedBubble = true;
-    pivotControllerRef.value?.handleMouseUp();
-  };
-
-  const onCanvasWheel = (e: WheelEvent) => {
-    if (isModelUnitSplitCompareReady()) return;
-    const rect = canvas.getBoundingClientRect();
-    const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
-    pivotControllerRef.value?.handleWheel(canvasPos, e);
-  };
-
-  canvas.addEventListener('pointerdown', onCanvasMouseDown, { capture: true });
-  canvas.addEventListener('pointerdown', onCanvasMouseDownBubble);
-  canvas.addEventListener('pointermove', onCanvasMouseMove, { capture: true });
-  canvas.addEventListener('pointerup', onCanvasMouseUp, { capture: true });
-  canvas.addEventListener('pointercancel', onCanvasMouseUp, { capture: true });
-  canvas.addEventListener('wheel', onCanvasWheel, { capture: true, passive: true });
-
-  offPivotEvents = () => {
-    canvas.removeEventListener('pointerdown', onCanvasMouseDown, { capture: true });
-    canvas.removeEventListener('pointerdown', onCanvasMouseDownBubble);
-    canvas.removeEventListener('pointermove', onCanvasMouseMove, { capture: true });
-    canvas.removeEventListener('pointerup', onCanvasMouseUp, { capture: true });
-    canvas.removeEventListener('pointercancel', onCanvasMouseUp, { capture: true });
-    canvas.removeEventListener('wheel', onCanvasWheel, { capture: true });
-  };
+  // 焦点控制器的鼠标与滚轮接线（捕获阶段先于 OrbitControls）：按下只登记，OrbitControls 认了这次按下才算数
+  offPivotEvents = bindDynamicPivotToCanvas({
+    canvas,
+    controls: dtxViewer.controls,
+    getController: () => pivotControllerRef.value,
+    isSuspended: isModelUnitSplitCompareReady,
+  });
 
   const onXeokitToolsPointerDown = (e: PointerEvent) => {
     if (isModelUnitSplitCompareReady()) return;
@@ -5967,6 +5958,7 @@ onUnmounted(() => {
   dtxViewerRef.value = null;
 
   try {
+    clearanceXraySync.stop();
     compatViewerRef.value?.scene.setAutoFocusTransparencyEnabled(false);
   } catch {
     // ignore
@@ -5980,6 +5972,7 @@ onUnmounted(() => {
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;
+    delete (window as any).__dtxPivot;
     delete (window as any).__dtxViewCull;
     delete (window as any).__dtxLayer;
     delete (window as any).__viewerContext;
