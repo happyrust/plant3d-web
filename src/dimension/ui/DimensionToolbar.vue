@@ -24,6 +24,7 @@ const creationCommands = [
   ['dimension.create.projected', '投影'],
   ['dimension.create.angular', '角度'],
   ['dimension.create.radial', '半径/直径'],
+  ['dimension.create.chain', '链式'],
 ] as const;
 
 const steps = [
@@ -45,6 +46,7 @@ const VALIDATION_MESSAGES: Readonly<Record<string, string>> = {
   COLLINEAR_ANGULAR_RAYS: '两条射线共线，没有角度',
   UNRESOLVED_DIMENSION_POINT: '有尺寸点没解析出坐标',
   INVALID_DIMENSION_POINT_TYPE: '拾到的点类型不能用于该尺寸',
+  CHAIN_TOO_SHORT: '链式尺寸至少要两个点',
 };
 
 const validationMessages = computed(() =>
@@ -94,6 +96,12 @@ const validationMessages = computed(() =>
       <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
         :disabled="disabled || !canRedo" data-testid="dimension.redo" @click="emitCommand('dimension.redo')">
         重做
+      </button>
+      <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
+        :disabled="disabled || session?.canFinish !== true"
+        data-testid="dimension.chain.finish"
+        @click="emitCommand('dimension.chain.finish')">
+        结束拾点
       </button>
       <button type="button" class="rounded border px-2 py-1 text-xs disabled:opacity-50"
         :disabled="disabled || !session" data-testid="dimension.back" @click="emitCommand('dimension.back')">

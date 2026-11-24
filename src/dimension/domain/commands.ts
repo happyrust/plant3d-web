@@ -61,6 +61,18 @@ export type DimensionCommandIntent =
     rim: DimensionAnchor;
     normal: ProjectionAxisRef;
     referencedRadiusM?: number;
+  }>
+  | Readonly<{
+    type: 'add-chain-anchor';
+    dimensionId: string;
+    anchor: DimensionAnchor;
+    /** 缺省加到末尾。撤销删除中间点时带回原来的序号。 */
+    index?: number;
+  }>
+  | Readonly<{
+    type: 'remove-chain-anchor';
+    dimensionId: string;
+    index: number;
   }>;
 
 export type DimensionCommand = Readonly<{
@@ -139,6 +151,19 @@ export type DimensionEvent =
     nextRim: DimensionAnchor;
     nextNormal: ProjectionAxisRef;
     nextReferencedRadiusM: number | undefined;
+  }>
+  | Readonly<{
+    type: 'chain-anchor-added';
+    commandId: string;
+    dimensionId: string;
+    anchor: DimensionAnchor;
+  }>
+  | Readonly<{
+    type: 'chain-anchor-removed';
+    commandId: string;
+    dimensionId: string;
+    index: number;
+    anchor: DimensionAnchor;
   }>;
 
 export type ReduceDimensionResult =

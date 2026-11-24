@@ -157,6 +157,7 @@ import {
   branClearanceToExternalDimensions,
   canEditUserDimension,
   createAngularEditSession,
+  createChainEditSession,
   createDimensionSystem,
   createDtxDimensionViewerAdapter,
   createEmptyDimensionDocument,
@@ -2356,7 +2357,7 @@ function nextDimensionId(prefix: string): string {
 }
 
 function startDimensionCreation(
-  kind: 'linear' | 'projected' | 'angular' | 'radial',
+  kind: 'linear' | 'projected' | 'angular' | 'radial' | 'chain',
 ): void {
   const system = dimensionSystem;
   const snapPort = system?.snapPort;
@@ -2395,7 +2396,9 @@ function startDimensionCreation(
       ? createProjectedEditSession(input)
       : kind === 'angular'
         ? createAngularEditSession(input)
-        : createRadialEditSession(input);
+        : kind === 'chain'
+          ? createChainEditSession(input)
+          : createRadialEditSession(input);
   system.pointer.start(session);
   requestRender();
 }
@@ -2485,6 +2488,13 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'dimension.create.radial':
       startDimensionCreation('radial');
+      return;
+    case 'dimension.create.chain':
+      startDimensionCreation('chain');
+      return;
+    case 'dimension.chain.finish':
+      dimensionSystem?.pointer.finishActiveSession();
+      requestRender();
       return;
     case 'dimension.axis.x':
     case 'dimension.axis.y':

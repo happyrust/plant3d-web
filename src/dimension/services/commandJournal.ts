@@ -122,6 +122,20 @@ function isDimensionCommand(value: unknown): value is DimensionCommand {
         && (command.referencedRadiusM === undefined
           || (typeof command.referencedRadiusM === 'number'
             && Number.isFinite(command.referencedRadiusM)));
+    case 'add-chain-anchor': {
+      const index = command.index;
+      return isNonEmptyString(command.dimensionId)
+        && asObject(command.anchor) !== null
+        && (index === undefined
+          || (typeof index === 'number' && Number.isInteger(index) && index >= 0));
+    }
+    case 'remove-chain-anchor': {
+      const index = command.index;
+      return isNonEmptyString(command.dimensionId)
+        && typeof index === 'number'
+        && Number.isInteger(index)
+        && index >= 0;
+    }
     default:
       return false;
   }

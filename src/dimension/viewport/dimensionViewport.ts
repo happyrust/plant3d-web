@@ -575,6 +575,18 @@ export class DimensionViewport {
     const projector = this.projector;
     if (!projector) return null;
 
+    if (record.kind === 'chain') {
+      const first = record.anchors[0];
+      const last = record.anchors[record.anchors.length - 1];
+      if (!first || !last) return null;
+      return this.placementAtScreen({
+        ...record,
+        kind: 'linear',
+        a: first,
+        b: last,
+      }, screen);
+    }
+
     if (record.kind === 'linear' || record.kind === 'projected') {
       const a = record.a.snapshot;
       const b = record.b.snapshot;

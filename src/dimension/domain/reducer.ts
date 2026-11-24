@@ -153,6 +153,14 @@ function isUserDimensionRecord(value: unknown): value is UserDimensionRecord {
         && isAngularPlacement(record.placement)
         && (record.anglePlane === undefined || isAngularPlane(record.anglePlane));
       break;
+    case 'chain':
+      structurallyValid = Array.isArray(record.anchors)
+        && record.anchors.length >= 2
+        && record.anchors.every(anchor => isDimensionAnchor(anchor))
+        && isLinearPlacement(record.placement)
+        && typeof record.showOverall === 'boolean'
+        && (record.directions === undefined || isDimensionDirections(record.directions));
+      break;
     case 'radial':
       structurallyValid = isDimensionAnchor(record.center)
         && isDimensionAnchor(record.rim)
@@ -242,6 +250,17 @@ function rebindRecord(
         [anchorSlot]: anchor,
         updatedAt,
       } as UserDimensionRecord));
+    case 'chain': {
+      const match = /^chain:(\d+)$/.exec(anchorSlot);
+      if (!match) return null;
+      const index = Number(match[1]);
+      if (!Number.isInteger(index) || index < 0 || index >= record.anchors.length) return null;
+      return withResolvedValidity(refreshDerivedDirections({
+        ...record,
+        anchors: record.anchors.map((item, itemIndex) => (itemIndex === index ? anchor : item)),
+        updatedAt,
+      }));
+    }
     case 'angular':
       if (
         anchorSlot !== 'vertex'
@@ -283,6 +302,12 @@ function anchorAt(
       return anchorSlot === 'center' || anchorSlot === 'rim'
         ? record[anchorSlot]
         : null;
+    case 'chain': {
+      const match = /^chain:(\d+)$/.exec(anchorSlot);
+      if (!match) return null;
+      const index = Number(match[1]);
+      return record.anchors[index] ?? null;
+    }
   }
 }
 
@@ -567,6 +592,72 @@ export function reduceDimensionDocument(
           ...(previous.referencedRadiusM === undefined
             ? {}
             : { referencedRadiusM: previous.referencedRadiusM }),
+        },
+      };
+    }
+    case 'add-chain-anchor': {
+      if (!isDimensionAnchor(command.anchor) || command.anchor.snapshot === null) {
+        return failure('invalid-command');
+      }
+      const found = findMutableRecord(state, command);
+      if (!found.ok) return found.result;
+      if (found.record.kind !== 'chain') return failure('kind-mismatch');
+      const index = command.index ?? found.record.anchors.length;
+      if (!Number.isInteger(index) || index < 0 || index > found.record.anchors.length) {
+        return failure('invalid-command');
+      }
+      const anchors = [...found.record.anchors];
+      anchors.splice(index, 0, command.anchor);
+      const next: UserDimensionRecord = withResolvedValidity(refreshDerivedDirections({
+        ...found.record,
+        anchors,
+        updatedAt: command.at,
+      }));
+      return {
+        ok: true,
+        state: replaceRecord(state, found.index, next),
+        event: {
+          type: 'chain-anchor-added',
+          commandId: command.commandId,
+          dimensionId: command.dimensionId,
+          anchor: command.anchor,
+        },
+        inverse: {
+          type: 'remove-chain-anchor',
+          dimensionId: command.dimensionId,
+          index,
+        },
+      };
+    }
+    case 'remove-chain-anchor': {
+      if (!Number.isInteger(command.index) || command.index < 0) return failure('invalid-command');
+      const found = findMutableRecord(state, command);
+      if (!found.ok) return found.result;
+      if (found.record.kind !== 'chain') return failure('kind-mismatch');
+      if (found.record.anchors.length <= 2 || command.index >= found.record.anchors.length) {
+        return failure('invalid-command');
+      }
+      const removed = found.record.anchors[command.index]!;
+      const next: UserDimensionRecord = withResolvedValidity(refreshDerivedDirections({
+        ...found.record,
+        anchors: found.record.anchors.filter((_, index) => index !== command.index),
+        updatedAt: command.at,
+      }));
+      return {
+        ok: true,
+        state: replaceRecord(state, found.index, next),
+        event: {
+          type: 'chain-anchor-removed',
+          commandId: command.commandId,
+          dimensionId: command.dimensionId,
+          index: command.index,
+          anchor: removed,
+        },
+        inverse: {
+          type: 'add-chain-anchor',
+          dimensionId: command.dimensionId,
+          anchor: removed,
+          index: command.index,
         },
       };
     }

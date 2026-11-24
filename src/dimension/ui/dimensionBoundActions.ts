@@ -13,6 +13,7 @@ export type DimensionBoundAction =
   | 'flip-angle'
   | 'toggle-orthogonal-snap'
   | 'toggle-radial-display'
+  | 'remove-last-chain-anchor'
   | 'restore-auto-layout'
   | 'hide-external'
   | DimensionRebindAction;
@@ -56,5 +57,6 @@ export function getDimensionBoundActions(
     actions.push('flip-angle', 'toggle-orthogonal-snap');
   }
   if (item.kind === 'radial') actions.push('toggle-radial-display');
+  if (item.kind === 'chain' && item.anchors.length > 2) actions.push('remove-last-chain-anchor');
   return actions;
 }

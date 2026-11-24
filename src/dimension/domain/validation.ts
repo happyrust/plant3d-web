@@ -23,7 +23,8 @@ export type DimensionValidationCode =
   | 'DEGENERATE_ANGULAR_RAY'
   | 'COLLINEAR_ANGULAR_RAYS'
   | 'UNRESOLVED_DIMENSION_POINT'
-  | 'INVALID_DIMENSION_POINT_TYPE';
+  | 'INVALID_DIMENSION_POINT_TYPE'
+  | 'CHAIN_TOO_SHORT';
 
 export type DimensionValidationError = Readonly<{
   code: DimensionValidationCode;
@@ -219,6 +220,43 @@ export function validateDimensionRecord(
       ) {
         errors.push({ code: 'DEGENERATE_RADIAL_RADIUS', slot: 'rim' });
       }
+      break;
+    }
+    case 'chain': {
+      if (record.anchors.length < 2) {
+        errors.push({ code: 'CHAIN_TOO_SHORT', slot: 'anchors' });
+        break;
+      }
+      const anchors: Record<string, DimensionAnchor> = {};
+      record.anchors.forEach((anchor, index) => {
+        anchors[`chain:${index}`] = anchor;
+      });
+      checkPoints(anchors, errors);
+      const resolved = record.anchors.map(anchor => anchor.snapshot).filter(isFiniteVec3);
+      if (resolved.length < 2) break;
+      const origin = resolved[0]!;
+      const last = resolved[resolved.length - 1]!;
+      const span = sub(last, origin);
+      const direction = finiteOr(record.directions?.dimensionDirection, span);
+      if (!direction || length(direction) <= tolerances.minDirectionLengthM) {
+        errors.push({ code: 'DEGENERATE_DIMENSION_DIRECTION', slot: 'dimensionDirection' });
+        break;
+      }
+      const unit = unitVec3(direction)!;
+      for (let index = 0; index < resolved.length - 1; index += 1) {
+        const segment = Math.abs(dot(sub(resolved[index + 1]!, resolved[index]!), unit));
+        if (segment <= tolerances.minDirectionLengthM) {
+          errors.push({ code: 'DEGENERATE_DIMENSION_DIRECTION', slot: `chain:${index + 1}` });
+        }
+      }
+      errors.push(...checkDirectionsAgainstView(
+        {
+          dimensionDirection: direction,
+          projectionDirection: record.directions?.projectionDirection ?? null,
+        },
+        context.viewDirection,
+        tolerances,
+      ));
       break;
     }
     case 'linear':

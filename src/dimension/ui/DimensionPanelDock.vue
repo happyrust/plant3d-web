@@ -1146,6 +1146,18 @@ function act(
     }
     return;
   }
+  if (action === 'remove-last-chain-anchor' && item.kind === 'chain') {
+    const result = session.apply({
+      ...metadata,
+      type: 'remove-chain-anchor',
+      dimensionId: item.id,
+      index: item.anchors.length - 1,
+    });
+    if (!result.ok) {
+      emitToast({ message: `删除链点失败：${result.reason}`, level: 'warning' });
+    }
+    return;
+  }
   if (action === 'toggle-radial-display' && item.kind === 'radial') {
     const result = session.apply({
       ...metadata,

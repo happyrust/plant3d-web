@@ -14,6 +14,7 @@ type LinearRecord = Extract<UserDimensionRecord, { kind: 'linear' }>;
 type ProjectedRecord = Extract<UserDimensionRecord, { kind: 'projected' }>;
 type AngularRecord = Extract<UserDimensionRecord, { kind: 'angular' }>;
 type RadialRecord = Extract<UserDimensionRecord, { kind: 'radial' }>;
+type ChainRecord = Extract<UserDimensionRecord, { kind: 'chain' }>;
 
 export function exactAnchor(
   snapshot: Vec3 = [0, 0, 0],
@@ -127,6 +128,35 @@ export function radialRecord(
     placement: {
       leaderDirection: [1, 0, 0],
       labelDistanceM: 0.25,
+    },
+    labelPinned: false,
+    authorId: 'owner',
+    authorRole: 'designer',
+    createdAt: 1,
+    updatedAt: 1,
+    validity: 'valid',
+    ...overrides,
+  };
+}
+
+export function chainRecord(
+  overrides: Partial<ChainRecord> = {},
+): ChainRecord {
+  return {
+    id: 'chain-1',
+    kind: 'chain',
+    anchors: [
+      exactAnchor([0, 0, 0]),
+      exactAnchor([1, 0, 0]),
+      exactAnchor([2, 0, 0]),
+      exactAnchor([4, 0, 0]),
+    ],
+    placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
+    showOverall: true,
+    directions: {
+      schema: 1,
+      source: 'explicit',
+      dimensionDirection: [1, 0, 0],
     },
     labelPinned: false,
     authorId: 'owner',

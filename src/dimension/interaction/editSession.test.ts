@@ -4,6 +4,7 @@ import { linearRecord, radialRecord } from '../domain/testFixtures';
 
 import {
   createAngularEditSession,
+  createChainEditSession,
   createLinearEditSession,
   createPlacementEditSession,
   createProjectedEditSession,
@@ -420,5 +421,39 @@ describe('dimension edit sessions', () => {
 
     expect(session.phase).toBe('place');
     expect(session.validationErrors).toContain('DIMENSION_DIRECTION_PARALLEL_VIEW');
+  });
+
+  it('#74 链式拾点可以退回一步，结束放置后只产生一条 create', () => {
+    const snapPort = createSnapPort(x => point(`p${x}`, [x, 0, 0]));
+    const input = createInput(snapPort);
+    const session = createChainEditSession(input);
+
+    session.pointerDown({ x: 0, y: 0 });
+    session.pointerDown({ x: 1, y: 0 });
+    session.pointerDown({ x: 2, y: 0 });
+    session.pointerDown({ x: 4, y: 0 });
+    expect(session.back()).toBe(true);
+    expect(session.finish?.()).toBe(true);
+    expect(session.phase).toBe('place');
+    expect(session.commit()).toBeNull();
+    session.pointerDown({ x: 4, y: 2 });
+
+    const command = session.commit();
+    expect(command).toMatchObject({
+      type: 'create',
+      record: {
+        kind: 'chain',
+        showOverall: true,
+        anchors: [
+          { snapshot: [0, 0, 0] },
+          { snapshot: [1, 0, 0] },
+          { snapshot: [2, 0, 0] },
+        ],
+        directions: { source: 'explicit', dimensionDirection: [1, 0, 0] },
+      },
+    });
+    expect(session.commit()).toBeNull();
+    expect(input.createCommandId).toHaveBeenCalledTimes(1);
+    expect(session.back()).toBe(false);
   });
 });

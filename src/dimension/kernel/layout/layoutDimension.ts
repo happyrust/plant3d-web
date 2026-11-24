@@ -1,4 +1,5 @@
 import { layoutAngular } from './angular';
+import { layoutChain } from './chain';
 import { layoutExplicit } from './explicit';
 import { layoutLinear } from './linear';
 import { layoutProjected } from './projected';
@@ -82,6 +83,8 @@ export function layoutDimension(
         return layoutAngular(input, context);
       case 'radial':
         return layoutRadial(input, context);
+      case 'chain':
+        return layoutChain(input, context);
     }
   })();
   return rememberLayout(input, context, result);

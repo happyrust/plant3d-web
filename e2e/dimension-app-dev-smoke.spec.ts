@@ -50,4 +50,18 @@ test('dimension_demo mounts the dimension system and starts a typed creation ses
     (window as any).__viewerContext.dimensionSystem.value.pointer.sessionStatus?.kind ?? ''
   ))).toBe('angular');
   await page.getByTestId('dimension.cancel').click();
+  await expect.poll(() => page.evaluate(() => (
+    (window as any).__viewerContext.dimensionSystem.value.pointer.hasActiveSession
+  ))).toBe(false);
+
+  await page.getByTestId('dimension.create.chain').click();
+  await expect.poll(() => page.evaluate(() => {
+    const status = (window as any).__viewerContext.dimensionSystem.value.pointer.sessionStatus;
+    return status ? `${status.kind}:${status.step}` : '';
+  })).toBe('chain:pick');
+  await expect(page.getByTestId('dimension.chain.finish')).toBeDisabled();
+  await page.getByTestId('dimension.cancel').click();
+  await expect.poll(() => page.evaluate(() => (
+    (window as any).__viewerContext.dimensionSystem.value.pointer.hasActiveSession
+  ))).toBe(false);
 });

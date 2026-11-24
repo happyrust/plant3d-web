@@ -31,6 +31,8 @@ export type DimensionSessionStatus = Readonly<{
   phase: DimensionEditSession['phase'];
   step: DimensionEditStep;
   validationErrors: readonly string[];
+  /** 链式尺寸已经有至少两个点，可以结束拾点。其它会话为 false。 */
+  canFinish: boolean;
 }>;
 
 export type DimensionEditSessionFactory = (
@@ -102,6 +104,7 @@ export class DimensionPointerController {
       phase: session.phase,
       step: dimensionEditStep(session.phase),
       validationErrors: session.validationErrors ?? [],
+      canFinish: session.canFinish === true,
     };
   }
 
@@ -235,6 +238,13 @@ export class DimensionPointerController {
     return CONSUMED;
   }
 
+  finishActiveSession(): PointerDispatchResult {
+    if (this.disposed || !this.activeSession?.finish) return NOT_CONSUMED;
+    const finished = this.activeSession.finish();
+    this.publishStatus();
+    return finished ? CONSUMED : NOT_CONSUMED;
+  }
+
   flipActiveSession(): PointerDispatchResult {
     if (this.disposed || !this.activeSession) return NOT_CONSUMED;
     this.activeSession.flip();
@@ -283,7 +293,7 @@ export class DimensionPointerController {
   private publishStatus(): void {
     const status = this.sessionStatus;
     const key = status
-      ? `${status.kind}|${status.phase}|${status.validationErrors.join(',')}`
+      ? `${status.kind}|${status.phase}|${status.canFinish}|${status.validationErrors.join(',')}`
       : '';
     if (key === this.lastStatusKey) return;
     this.lastStatusKey = key;

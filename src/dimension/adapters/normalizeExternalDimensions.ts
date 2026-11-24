@@ -137,6 +137,8 @@ export function externalDimensionBounds(
     } else if (layout.kind === 'radial') {
       add(layout.center);
       add(layout.rim);
+    } else if (layout.kind === 'chain') {
+      for (const anchor of layout.anchors) add(anchor);
     } else {
       add(layout.a);
       add(layout.b);

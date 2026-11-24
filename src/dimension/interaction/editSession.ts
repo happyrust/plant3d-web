@@ -68,6 +68,10 @@ export type DimensionEditSession = {
   flip(): void;
   /** 近 90° 吸附。只有角度会话实现它。 */
   toggleOrthogonalSnap?(): void;
+  /** 链式尺寸结束拾点，进入放置。其它种类没有这一步。 */
+  finish?(): boolean;
+  /** 已经够点，可以结束拾点。 */
+  readonly canFinish?: boolean;
   /** 退回上一步；已在第一步（或会话结束）时返回 false。 */
   back(): boolean;
   commit(): DimensionCommand | null;
@@ -103,7 +107,8 @@ export type DimensionAnchorSlot =
   | 'rayA'
   | 'rayB'
   | 'center'
-  | 'rim';
+  | 'rim'
+  | `chain:${number}`;
 
 export type DimensionPlacementEditSessionInput = Readonly<{
   record: UserDimensionRecord;
@@ -240,6 +245,8 @@ export function dimensionAnchorSlots(
       return ['vertex', 'rayA', 'rayB'];
     case 'radial':
       return ['center', 'rim'];
+    case 'chain':
+      return record.anchors.map((_, index) => `chain:${index}` as const);
   }
 }
 
@@ -263,6 +270,16 @@ function replacePreviewAnchor(
     && (slot === 'vertex' || slot === 'rayA' || slot === 'rayB')
   ) {
     const next = { ...record, [slot]: anchor };
+    return {
+      ...next,
+      validity: dimensionRecordHasResolvedGeometry(next) ? 'valid' : 'invalid',
+    };
+  }
+  if (record.kind === 'chain' && slot.startsWith('chain:')) {
+    const index = Number(slot.slice('chain:'.length));
+    if (!Number.isInteger(index) || index < 0 || index >= record.anchors.length) return null;
+    const anchors = record.anchors.map((item, itemIndex) => (itemIndex === index ? anchor : item));
+    const next = { ...record, anchors };
     return {
       ...next,
       validity: dimensionRecordHasResolvedGeometry(next) ? 'valid' : 'invalid',
@@ -1234,6 +1251,109 @@ class RebindEditSession implements DimensionEditSession {
   }
 }
 
+class ChainEditSession extends BaseEditSession {
+  readonly kind = 'chain' as const;
+  private anchors: DimensionAnchor[] = [];
+  private placement: LinearPlacementIntent = { offsetM: 0.15, labelT: 0.5, side: 1 };
+  private showOverall = true;
+  private directions: DimensionDirections | undefined;
+
+  pointerMove(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      return;
+    }
+    if (this.currentPhase !== 'pick-first') return;
+    const candidate = selectedCandidate(this.input, screen, ['point']);
+    const draft = candidate?.anchor.snapshot
+      ? [...this.anchors, candidate.anchor]
+      : this.anchors;
+    this.emitPreview(draft.length >= 2 ? this.recordFrom(draft, this.input.now()) : null);
+  }
+
+  pointerDown(screen: Vec2): void {
+    if (this.currentPhase === 'place') {
+      this.followCursor(screen);
+      if (this.validationErrors.length === 0) this.currentPhase = 'ready';
+      return;
+    }
+    if (this.currentPhase !== 'pick-first') return;
+    const candidate = selectedCandidate(this.input, screen, ['point']);
+    if (!candidate?.anchor.snapshot) return;
+    this.anchors = [...this.anchors, candidate.anchor];
+    this.emitPreview(this.anchors.length >= 2
+      ? this.recordFrom(this.anchors, this.input.now())
+      : null);
+  }
+
+  get canFinish(): boolean {
+    return this.currentPhase === 'pick-first' && this.anchors.length >= 2;
+  }
+
+  /** 拾点结束，定下共享方向并进入放置。少于两个点时不结束。 */
+  finish(): boolean {
+    if (this.currentPhase !== 'pick-first' || this.anchors.length < 2) return false;
+    const first = this.anchors[0]?.snapshot;
+    const last = this.anchors[this.anchors.length - 1]?.snapshot;
+    this.directions = first && last
+      ? explicitDirections(subtract(last, first), this.view())
+      : undefined;
+    this.currentPhase = 'place';
+    this.emitPreview(this.recordFrom(this.anchors, this.input.now()));
+    return true;
+  }
+
+  override commit(): DimensionCommand | null {
+    if (this.validationErrors.length > 0) return null;
+    return super.commit();
+  }
+
+  back(): boolean {
+    if (this.currentPhase === 'ready') {
+      this.currentPhase = 'place';
+      return true;
+    }
+    if (this.currentPhase === 'place') {
+      this.directions = undefined;
+      this.currentPhase = 'pick-first';
+      this.emitPreview(this.recordFrom(this.anchors, this.input.now()));
+      return true;
+    }
+    if (this.currentPhase === 'pick-first' && this.anchors.length > 0) {
+      this.anchors = this.anchors.slice(0, -1);
+      this.emitPreview(this.anchors.length >= 2
+        ? this.recordFrom(this.anchors, this.input.now())
+        : null);
+      return true;
+    }
+    return false;
+  }
+
+  buildRecord(at: number): UserDimensionRecord | null {
+    return this.anchors.length >= 2 ? this.recordFrom(this.anchors, at) : null;
+  }
+
+  private followCursor(screen: Vec2): void {
+    const placement = this.placementFromScreen<LinearPlacementIntent>(
+      this.buildRecord(this.input.now()),
+      screen,
+    );
+    if (placement) this.placement = placement;
+    this.emitPreview(this.buildRecord(this.input.now()));
+  }
+
+  private recordFrom(anchors: readonly DimensionAnchor[], at: number): Extract<UserDimensionRecord, { kind: 'chain' }> {
+    return {
+      ...this.common(at),
+      kind: 'chain',
+      anchors,
+      placement: this.placement,
+      showOverall: this.showOverall,
+      ...(this.directions ? { directions: this.directions } : {}),
+    };
+  }
+}
+
 export function createLinearEditSession(
   input: DimensionEditSessionInput,
 ): DimensionEditSession {
@@ -1250,6 +1370,12 @@ export function createAngularEditSession(
   input: DimensionEditSessionInput,
 ): DimensionEditSession {
   return new AngularEditSession(input);
+}
+
+export function createChainEditSession(
+  input: DimensionEditSessionInput,
+): DimensionEditSession {
+  return new ChainEditSession(input);
 }
 
 export function createRadialEditSession(

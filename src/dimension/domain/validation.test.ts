@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { angularRecord, exactAnchor, linearRecord, projectedRecord, radialRecord } from './testFixtures';
+import { angularRecord, chainRecord, exactAnchor, linearRecord, projectedRecord, radialRecord } from './testFixtures';
 import {
   checkDirectionsAgainstView,
   DIMENSION_VALIDATION_TOLERANCES,
@@ -18,6 +18,7 @@ describe('validateDimensionRecord（DMCHEK-like 布局前校验）', () => {
     expect(validateDimensionRecord(projectedRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(radialRecord())).toEqual({ ok: true });
     expect(validateDimensionRecord(angularRecord())).toEqual({ ok: true });
+    expect(validateDimensionRecord(chainRecord())).toEqual({ ok: true });
     expect(codes(validateDimensionRecord(radialRecord({
       rim: exactAnchor([0, 0, 0]),
     })))).toEqual(['DEGENERATE_RADIAL_RADIUS']);
@@ -26,6 +27,9 @@ describe('validateDimensionRecord（DMCHEK-like 布局前校验）', () => {
       validity: 'invalid',
       referencedRadiusM: 0.5,
     })))).toContain('UNRESOLVED_DIMENSION_POINT');
+    expect(codes(validateDimensionRecord(chainRecord({
+      anchors: [exactAnchor([0, 0, 0]), exactAnchor([0, 0, 0]), exactAnchor([1, 0, 0])],
+    })))).toContain('DEGENERATE_DIMENSION_DIRECTION');
   });
 
   it('UNRESOLVED_DIMENSION_POINT：端点没有快照', () => {

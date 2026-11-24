@@ -196,7 +196,11 @@ function actionLabel(
   item: DimensionListItem,
 ): string {
   if (isDimensionRebindAction(action)) {
-    const labels = {
+    const slot = rebindActionSlot(action);
+    if (slot.startsWith('chain:')) {
+      return `重绑点 ${Number(slot.slice('chain:'.length)) + 1}`;
+    }
+    const labels: Readonly<Record<string, string>> = {
       a: '重绑起点',
       b: '重绑终点',
       vertex: '重绑顶点',
@@ -204,8 +208,8 @@ function actionLabel(
       rayB: '重绑第二射线',
       center: '重绑圆心',
       rim: '重绑圆周点',
-    } as const;
-    return labels[rebindActionSlot(action)];
+    };
+    return labels[slot] ?? '重绑锚点';
   }
   switch (action) {
     case 'delete':
@@ -216,6 +220,8 @@ function actionLabel(
       return '近 90° 吸附';
     case 'toggle-radial-display':
       return '切换半径/直径';
+    case 'remove-last-chain-anchor':
+      return '删除末点';
     case 'restore-auto-layout':
       return '恢复自动布局';
     case 'hide-external':

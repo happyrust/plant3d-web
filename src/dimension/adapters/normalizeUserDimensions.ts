@@ -42,7 +42,9 @@ function semanticRole(record: UserDimensionRecord): DimensionSemanticRole {
     ? [record.a, record.b]
     : record.kind === 'angular'
       ? [record.vertex, record.rayA, record.rayB]
-      : [record.center, record.rim];
+      : record.kind === 'chain'
+        ? record.anchors
+        : [record.center, record.rim];
   return anchors.some(anchor => anchor.accuracy === 'approximate')
     ? 'approximate'
     : 'normal';
@@ -102,6 +104,18 @@ export function normalizeUserDimension(
         placement: record.placement,
         ...(record.anglePlane ? { planeNormal: record.anglePlane.normal } : {}),
       };
+    case 'chain': {
+      const points = record.anchors.map(anchor => anchor.snapshot);
+      if (points.some(point => point === null)) return null;
+      return {
+        ...base,
+        kind: 'chain',
+        anchors: points.filter((point): point is Vec3 => point !== null),
+        placement: record.placement,
+        showOverall: record.showOverall,
+        ...normalizedDirections(record.directions),
+      };
+    }
     case 'radial':
       if (!record.center.snapshot || !record.rim.snapshot) return null;
       return {
