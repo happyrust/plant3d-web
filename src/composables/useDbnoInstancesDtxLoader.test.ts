@@ -225,6 +225,53 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.dtxHiddenTubeKeys.value.size).toBe(0);
   });
 
+  it('隐式管段逐件盒用 tube:<属主>#<FTUBE n>：序号从 1 起，按 leave 在成员表里的位置而不是 route_ordinal', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99041;
+    const bran = '24384_9';
+    const elbow = '24384_10';
+    const tube = (from: string, to: string, routeOrdinal: number, min: number[], max: number[]) => ({
+      ...makeInstanceEntry(bran, '1', 'TUBI'),
+      aabb: { min, max },
+      uniforms: {
+        refno: bran, noun: 'TUBI', owner_refno: bran, owner_noun: 'BRAN', is_tubi: true, spec_value: 0,
+        tube: { ordinal: routeOrdinal, from, to },
+      },
+    });
+    const dtxLayer = new DTXLayer({ maxVertices: 512, maxIndices: 1024, maxObjects: 16 });
+    // 装入顺序故意和 FTUBE 次序相反：弯头流出的两段在前，属主头管段在后。
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[bran, [
+      tube(elbow, '24384_11', 0, [10, 0, 0], [20, 1, 1]),
+      tube(elbow, '24384_11', 1, [20, 0, 0], [30, 1, 1]),
+      tube(bran, elbow, 0, [0, 0, 0], [10, 1, 1]),
+      { ...makeInstanceEntry(elbow, '1', 'ELBO'), uniforms: { refno: elbow, noun: 'ELBO', owner_refno: bran, owner_noun: 'BRAN', spec_value: 0 } },
+    ]]]));
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [bran], { dataSource: 'gen-model-v1' });
+
+    expect(mod.webTubeCompareKey('24384_9', 2)).toBe('tube:24384/9#2');
+    expect(mod.webTubeCompareKey('=24384/9', 1)).toBe('tube:24384/9#1');
+    expect(mod.assignFtubeOrdinals(bran, [elbow], [
+      { from: elbow, routeOrdinal: 0 },
+      { from: bran, routeOrdinal: 0 },
+    ])).toEqual([2, 1]);
+    expect(() => mod.webTubeCompareKey(bran, 0)).toThrow(RangeError);
+
+    const boxes = mod.collectImplicitTubeCompareBoxes(dtxLayer, dbno, { [bran]: [elbow] }, 1000);
+    expect(Object.keys(boxes).sort()).toEqual(['tube:24384/9#1', 'tube:24384/9#2', 'tube:24384/9#3']);
+    expect(boxes['tube:24384/9#1']).toEqual([0, 0, 0, 10000, 1000, 1000]);
+    expect(boxes['tube:24384/9#2']).toEqual([10000, 0, 0, 20000, 1000, 1000]);
+    expect(boxes['tube:24384/9#3']).toEqual([20000, 0, 0, 30000, 1000, 1000]);
+    expect(boxes['tube:24384_9#1']).toBeUndefined();
+
+    const hidden = mod.listDtxTubeObjects().find((item) => mod.describeDtxImplicitTube(dbno, item.objectId)?.routeOrdinal === 1);
+    expect(hidden).toBeTruthy();
+    dtxLayer.setObjectVisible(hidden!.objectId, false);
+    const visible = mod.collectImplicitTubeCompareBoxes(dtxLayer, dbno, { [bran]: [elbow] }, 1000);
+    expect(Object.keys(visible).sort()).toEqual(['tube:24384/9#1', 'tube:24384/9#2']);
+    expect(mod.resolveDtxRefnoByObjectId(dbno, hidden!.objectId)).toBe(bran);
+  });
+
   it('版本对比的隔离图层（isolated）加载不推进 dtxLoaderRevision——主模型没变，不该触发批注重解析', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');

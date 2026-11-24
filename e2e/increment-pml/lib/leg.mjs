@@ -69,7 +69,7 @@ export function sceneForJudging(pageSide, backendSide) {
       [`共 ${pageSide.scene.unresolved} 个`]: Array.from({ length: pageSide.scene.unresolved }, () => ({ m: null, visible: true })),
     };
   }
-  return { byRoot: sorted.byRoot, boxes: sorted.boxes, strays: sorted.strays, extra };
+  return { byRoot: sorted.byRoot, boxes: sorted.boxes, perItemBoxes: sorted.perItemBoxes, strays: sorted.strays, extra };
 }
 
 /** 拼 W3 的输入：场景（连同假根）对后端记录；库里已经没有的根，后端那边算收齐、名下什么都没有 */
@@ -143,7 +143,13 @@ export function rowTimeline(samples, startAt) {
 export async function runLeg(ctx, leg) {
   const { page, log, backend } = ctx;
   const judged = new Set(leg.judge ?? ['W1', 'W2', 'W3', 'W5', 'W6']);
-  const options = ctx.knownGaps ? { knownGaps: ctx.knownGaps } : {};
+  const gapOptions = ctx.knownGaps ? { knownGaps: ctx.knownGaps } : {};
+  // W2/W5 在判定前自己剔除。W7 仍用完整的已知缺口表（KG2 不在这次门控里）。
+  const strictGapOptions = {
+    ...gapOptions,
+    ...(ctx.disallowGaps ? { disallowGaps: ctx.disallowGaps } : {}),
+    ...(ctx.zero_signal ? { zero_signal: ctx.zero_signal } : {}),
+  };
   const windowMs = leg.windowMs ?? SIGNAL_WINDOW_MS;
   const catchUpMs = leg.catchUpMs ?? CATCH_UP_MS;
   const rootIds = ctx.roots.map((root) => refnoKey(root.refno));
@@ -252,7 +258,7 @@ export async function runLeg(ctx, leg) {
       interactions: log.interactions,
     });
   }
-  if (judged.has('W2')) judgements.W2 = judgeW2({ receipt, clicks: 1, roots: rootFacts, expected }, options);
+  if (judged.has('W2')) judgements.W2 = judgeW2({ receipt, clicks: 1, roots: rootFacts, expected }, strictGapOptions);
   if (judged.has('W3')) {
     judgements.W3 = judgeW3({ ...sceneTruth(sceneAfter, backendAfter, rootIds), allowEmpty: leg.allowEmptyScene === true });
   }
@@ -268,7 +274,7 @@ export async function runLeg(ctx, leg) {
       treeAfter: pageAfter.tree,
       rowsBefore,
       rowsAfter,
-    }, options);
+    }, strictGapOptions);
   }
   if (judged.has('W6')) {
     judgements.W6 = judgeW6(cleanlinessInput(log, { from: times.from, to: times.to, ignoreErrors: ctx.ignoreErrors ?? [] }));
@@ -287,7 +293,7 @@ export async function runLeg(ctx, leg) {
       rowsAfter,
       loadedTableAfter: pageAfter.state.loadedTable.filter((entry) => entry.loaded).map((entry) => entry.refno),
       rootsInfo: rootFacts,
-    }, options);
+    }, gapOptions);
   }
 
   // 各根的事实跟着这条腿往前走（上面判的时候用的是这条腿之前的）

@@ -2,7 +2,7 @@ import { ref, shallowRef } from 'vue';
 
 import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
-import { tubeKey } from '@/composables/spatialTree';
+import { parseTubeKey, tubeKey } from '@/composables/spatialTree';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { getModelSource, type MeshSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
@@ -219,6 +219,156 @@ export function listDtxTubeObjects(): { key: string; objectId: string }[] {
   const out: { key: string; objectId: string }[] = [];
   for (const cache of cachesByDbno.values()) {
     for (const [key, objectId] of cache.tubeObjectIdByKey ?? []) out.push({ key, objectId });
+  }
+  return out;
+}
+
+/**
+ * 网页验收 `compare_key` 里的参考号，与 gen-model `canonical_refno` 相同：有斜杠就留下，否则下划线改成斜杠。
+ * 整条 `tube:` / `path:` 键不再过 `refnoKey`。
+ */
+export function slashRefnoForCompare(value: string): string {
+  const trimmed = String(value ?? '').trim().replace(/^=/, '');
+  if (!trimmed) return '';
+  if (trimmed.includes('/')) return trimmed;
+  return trimmed.replace(/_/g, '/');
+}
+
+/**
+ * 隐式管段的逐件键：`tube:<属主参考号>#<FTUBE n>`。
+ * `ftubeOrdinal` 是 E3D 默认名 `FTUBE n` 的 n，从 1 起；不是 `uniforms.tube.ordinal`（那是同 `(from, to)` 内的 `route_ordinal`，从 0 起）。
+ */
+export function webTubeCompareKey(ownerRefno: string, ftubeOrdinal: number): string {
+  if (!Number.isInteger(ftubeOrdinal) || ftubeOrdinal < 1) {
+    throw new RangeError(`FTUBE 序号从 1 起，得到 ${String(ftubeOrdinal)}`);
+  }
+  const owner = slashRefnoForCompare(ownerRefno);
+  if (!owner) throw new RangeError('隐式管段缺少属主参考号');
+  return `tube:${owner}#${ftubeOrdinal}`;
+}
+
+/**
+ * 给同一属主下的隐式管段排 `FTUBE n`。
+ *
+ * 次序与 `rvm_baseline` 读 `tubi_relate` 的次序一致：leave 在「属主自己，然后成员表」里的位置，其次 `route_ordinal`。
+ * 属主自己排在最前（头管段的 leave 是 BRAN / HANG）。`routeOrdinal` 是同 `(from, to)` 内从 0 起的槽位，不是返回值。
+ * 返回值与入参逐项对齐，从 1 起。成员表没覆盖到的 leave 排在最后，再按槽位和原来的先后稳定排序。
+ */
+export function assignFtubeOrdinals(
+  ownerRefno: string,
+  memberRefnos: readonly string[],
+  tubes: readonly { from: string; routeOrdinal: number }[],
+): number[] {
+  const rank = new Map<string, number>();
+  const owner = toRefnoKey(ownerRefno);
+  if (owner) rank.set(owner, 0);
+  let next = 1;
+  for (const member of memberRefnos) {
+    const key = toRefnoKey(member);
+    if (!key || rank.has(key)) continue;
+    rank.set(key, next);
+    next += 1;
+  }
+  const decorated = tubes.map((tube, index) => ({
+    index,
+    leave: rank.get(toRefnoKey(tube.from)) ?? Number.MAX_SAFE_INTEGER,
+    slot: Number.isInteger(tube.routeOrdinal) ? tube.routeOrdinal : 0,
+  }));
+  decorated.sort((a, b) => a.leave - b.leave || a.slot - b.slot || a.index - b.index);
+  const ordinals = new Array<number>(tubes.length);
+  decorated.forEach((item, at) => {
+    ordinals[item.index] = at + 1;
+  });
+  return ordinals;
+}
+
+export type ImplicitTubeIdentity = {
+  /** 属主 BRAN / HANG，归一成 `a_b` */
+  ownerRefno: string;
+  from: string;
+  to: string;
+  /** 同 `(from, to)` 内的 `route_ordinal`，从 0 起 */
+  routeOrdinal: number;
+};
+
+/** 这个场景对象若是带直段身份的隐式管段，返回四元组；否则 null。不改场景。 */
+export function describeDtxImplicitTube(dbno: number, objectId: string): ImplicitTubeIdentity | null {
+  const key = cachesByDbno.get(dbno)?.objectIdToTubeKey?.get(objectId);
+  if (!key) return null;
+  const parsed = parseTubeKey(key);
+  if (!parsed) return null;
+  return {
+    ownerRefno: parsed.unitRefno,
+    from: parsed.from,
+    to: parsed.to,
+    routeOrdinal: parsed.ordinal,
+  };
+}
+
+type SceneBounds = {
+  isEmpty(): boolean;
+  min: { x: number; y: number; z: number };
+  max: { x: number; y: number; z: number };
+};
+
+type SceneBoundsLayer = {
+  getObjectBoundingBox?: (objectId: string) => SceneBounds | null;
+  isObjectVisible?: (objectId: string) => boolean;
+};
+
+function unionCompareBox(left: number[], right: number[]): number[] {
+  const out = left.slice();
+  for (let axis = 0; axis < 3; axis += 1) {
+    out[axis] = Math.min(out[axis]!, right[axis]!);
+    out[axis + 3] = Math.max(out[axis + 3]!, right[axis + 3]!);
+  }
+  return out;
+}
+
+function membersOfOwner(
+  membersByOwner: Readonly<Record<string, readonly string[]>>,
+  owner: string,
+): readonly string[] {
+  return membersByOwner[owner]
+    ?? membersByOwner[toRefnoKey(owner)]
+    ?? membersByOwner[slashRefnoForCompare(owner)]
+    ?? [];
+}
+
+/**
+ * 调试 / 验收读取：同一库里隐式管段的逐件世界包围盒，键是 `tube:<属主>#<FTUBE n>`。
+ * 只读场景，不改对象归属、显隐或绘制。看不见的段不收。`sceneToMm` 与 `readScene` 一样，把场景单位乘成毫米。
+ * `membersByOwner` 是属主 → 成员表（属主自己不要写进去）。没给成员表时，leave 不是属主的段只按槽位和装入先后排。
+ */
+export function collectImplicitTubeCompareBoxes(
+  layer: SceneBoundsLayer,
+  dbno: number,
+  membersByOwner: Readonly<Record<string, readonly string[]>> = {},
+  sceneToMm = 1000,
+): Record<string, number[]> {
+  const cache = cachesByDbno.get(dbno);
+  if (!cache || !layer?.getObjectBoundingBox) return {};
+  const byOwner = new Map<string, { objectId: string; from: string; routeOrdinal: number }[]>();
+  for (const [objectId, key] of cache.objectIdToTubeKey ?? []) {
+    const parsed = parseTubeKey(key);
+    if (!parsed) continue;
+    const list = byOwner.get(parsed.unitRefno) ?? [];
+    list.push({ objectId, from: parsed.from, routeOrdinal: parsed.ordinal });
+    byOwner.set(parsed.unitRefno, list);
+  }
+  const out: Record<string, number[]> = {};
+  for (const [owner, tubes] of byOwner) {
+    const ordinals = assignFtubeOrdinals(owner, membersOfOwner(membersByOwner, owner), tubes);
+    tubes.forEach((tube, index) => {
+      if (layer.isObjectVisible && !layer.isObjectVisible(tube.objectId)) return;
+      const bounds = layer.getObjectBoundingBox?.(tube.objectId) ?? null;
+      if (!bounds || bounds.isEmpty()) return;
+      const box = [bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z]
+        .map((value) => value * sceneToMm);
+      const compareKey = webTubeCompareKey(owner, ordinals[index]!);
+      const existing = out[compareKey];
+      out[compareKey] = existing ? unionCompareBox(existing, box) : box;
+    });
   }
   return out;
 }

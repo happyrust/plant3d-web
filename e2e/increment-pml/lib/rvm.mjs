@@ -37,6 +37,9 @@ export function loadRvmSnapshot(file) {
       name: member.name ?? '',
       noun: member.noun ?? null,
       refno: member.resolved !== false && member.refno ? refnoKey(member.refno) : null,
+      // 快照上的逐件键。有参考号时是 `24384/22404`；隐式管段是 `tube:<属主>#<FTUBE n>`；属主也没有参考号时是 `path:<路径>#<序号>`。
+      // `tube:` / `path:` 带冒号，这里原样留下，不过 `refnoKey`。旧快照没有这一格时是 null，后面的分拣和以前一样。
+      compareKey: typeof member.compare_key === 'string' && member.compare_key.trim() ? member.compare_key.trim() : null,
       identitySource: member.identity_source ?? null,
       ownerDesc: member.owner_desc ?? null,
       ordinal: member.ordinal ?? null,
@@ -57,8 +60,9 @@ export function membersUnder(snapshot, refnoOrName) {
 }
 
 /**
- * 带几何的成员的包围盒：认得出参考号的按参考号（`byRefno`），认不出的（没起名的隐式直管段之类）列在 `anonymous`，
- * 带着它的上级路径，调用方按上级归组。同一个参考号出现两次就抛错，不悄悄覆盖。
+ * 带几何的成员的包围盒。有参考号的照旧用 `refnoKey(refno)` 作键。没有参考号、但快照写了非空 `compare_key` 的
+ * （隐式管段 `tube:<属主>#<FTUBE n>`，或 `path:<路径>#<序号>`）直接用这把键，不过 `refnoKey`，也不再丢进 `anonymous`。
+ * 两样都没有的才进 `anonymous`（旧快照没有 `compare_key` 时就是这条路）。同一个键出现两次就抛错，不悄悄覆盖。
  *
  * @param {object[]} members `loadRvmSnapshot().members` 或 `membersUnder()` 的结果
  */
@@ -67,12 +71,21 @@ export function truthBoxes(members) {
   const anonymous = [];
   for (const member of members) {
     if (!member.box) continue;
-    if (!member.refno) {
-      anonymous.push({ path: member.path, parentPath: member.parentPath, name: member.name, noun: member.noun, box: member.box });
-    } else if (byRefno[member.refno]) {
-      throw new Error(`RVM 快照里 ${member.refno} 出现了两次（${member.path}）`);
+    const compareKey = typeof member.compareKey === 'string' && member.compareKey.trim() ? member.compareKey.trim() : null;
+    const key = member.refno || compareKey;
+    if (!key) {
+      anonymous.push({
+        path: member.path,
+        parentPath: member.parentPath,
+        name: member.name,
+        noun: member.noun,
+        box: member.box,
+        compareKey: null,
+      });
+    } else if (byRefno[key]) {
+      throw new Error(`RVM 快照里 ${key} 出现了两次（${member.path}）`);
     } else {
-      byRefno[member.refno] = member.box;
+      byRefno[key] = member.box;
     }
   }
   return { byRefno, anonymous };
