@@ -3,6 +3,7 @@ import { ThreeViewportProjector } from './threeViewportProjector';
 
 import type { PointerDispatchResult } from '../interaction/pointerController';
 import type { ViewportProjector } from '../kernel/projector';
+import type { Vec3 } from '../kernel/types';
 import type { Camera, Matrix4 } from 'three';
 
 type PointerHandler = (event: PointerEvent) => PointerDispatchResult;
@@ -33,6 +34,8 @@ export function createDimensionViewerBindings(input: Readonly<{
     heightCssPx: number;
     dpr: number;
   }>;
+  /** 投影同步后的设计系视线，给网格自动标注这类跟视图走的外部来源。 */
+  onView?: (forward: Vec3) => void;
 }>): DimensionViewerBindings | null {
   if (!input.enabled) return null;
 
@@ -78,13 +81,15 @@ export function createDimensionViewerBindings(input: Readonly<{
       }
       const designToWorld = input.getDesignToWorld();
       input.viewport.setDesignToWorld(designToWorld);
-      input.viewport.setProjector(new ThreeViewportProjector({
+      const projector = new ThreeViewportProjector({
         camera,
         designToWorld,
         widthCssPx: size.widthCssPx,
         heightCssPx: size.heightCssPx,
         dpr: size.dpr,
-      }));
+      });
+      input.viewport.setProjector(projector);
+      input.onView?.(projector.forward);
     },
     dispose(): void {
       if (disposed) return;

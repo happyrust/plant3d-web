@@ -12,6 +12,7 @@ import type {
   NormalizedDimensionInput,
 } from '@/dimension/kernel/types';
 
+import { layoutGridAnnotations } from '@/dimension/adapters/gridAnnotations';
 import { layoutResultsToSvg } from '@/dimension/export/svgOverlay';
 import { DEFAULT_DIMENSION_FORMAT } from '@/dimension/kernel/format';
 import { SOLVESPACE_DIMENSION_THEME } from '@/dimension/kernel/theme';
@@ -151,6 +152,23 @@ const inputs: readonly (
       },
     ],
   },
+  // #78：正对相机的 GRIDPL / GRIDCY，经同一套布局和画家画出来。
+  ...layoutGridAnnotations([
+    {
+      id: 'plane',
+      noun: 'GRIDPL',
+      origin: [0, 2.6, 0],
+      axisU: [1.5, 0, 0],
+      axisV: [0, 0.4, 0],
+    },
+    {
+      id: 'cyl',
+      noun: 'GRIDCY',
+      origin: [2.2, 2.4, 0],
+      axis: [0, 0, 1],
+      radiusM: 0.3,
+    },
+  ], { forward: [0, 0, -1] }).map(record => record.layout),
 ];
 
 async function main(): Promise<void> {
