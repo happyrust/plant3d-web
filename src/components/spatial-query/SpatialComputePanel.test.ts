@@ -431,9 +431,9 @@ describe('SpatialComputePanel · 行与三维标注联动', () => {
     await nextTick();
 
     const rows = host.querySelectorAll<HTMLElement>('[data-testid="bran-result-row"]');
-    // 第一行 24381_1 已标注（WALL 桶 index 0）→ 悬停高亮它的尺寸
+    // 第一行 24381_1 已标注（WALL 桶稳定 ID）→ 悬停高亮它的尺寸
     rows[0]!.dispatchEvent(new MouseEvent('mouseenter'));
-    expect(setHover).toHaveBeenLastCalledWith('bran-clearance:wall:24381_1:0');
+    expect(setHover).toHaveBeenLastCalledWith('bran-clearance:wall:24381_1');
     rows[0]!.dispatchEvent(new MouseEvent('mouseleave'));
     expect(setHover).toHaveBeenLastCalledWith(null);
 

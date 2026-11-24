@@ -602,6 +602,7 @@ export function sceneGlyph(
   styleRole: string,
   rotationRad = 0,
   tone?: SceneTone,
+  halo?: boolean,
 ): SceneGlyphRun {
   return {
     kind: 'scene-glyph-run',
@@ -611,6 +612,7 @@ export function sceneGlyph(
     rotationRad,
     styleRole,
     ...(tone ? { tone } : {}),
+    ...(halo ? { halo: true } : {}),
   };
 }
 

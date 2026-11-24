@@ -16,19 +16,23 @@ function idPart(value: unknown): string {
 /**
  * 一条 BRAN 净距候选画出来的 external 尺寸 id——面板行 ↔ 三维标注联动要拿同一个 id
  * （行悬停高亮尺寸、点击行飞向净距段），规则必须只此一处。
+ * 基于稳定的业务键（targetGroup + refno + 可选 variant）生成，不依赖数组下标，避免精算后重排导致 ID 漂移。
  */
-export function branClearanceDimensionId(targetGroup: string, refno: string, index: number): string {
-  return `bran-clearance:${idPart(targetGroup)}:${idPart(refno)}:${Math.max(0, index)}`;
+export function branClearanceDimensionId(targetGroup: string, refno: string, variant?: string): string {
+  const base = `bran-clearance:${idPart(targetGroup)}:${idPart(refno)}`;
+  const variantText = typeof variant === 'string' ? variant.trim() : '';
+  return variantText ? `${base}:${idPart(variantText)}` : base;
 }
 
 /**
- * 反解净距尺寸 id 里的目标 refno（`bran-clearance:<group>:<refno>:<index>`）——
+ * 反解净距尺寸 id 里的目标 refno（`bran-clearance:<group>:<refno>` 或带 variant / 旧序号的 4 段格式）——
  * 三维里点中净距标注时选中目标构件用；不是这个来源的 id 返回 null。
  */
 export function branClearanceTargetRefno(dimensionId: string | null | undefined): string | null {
   if (!dimensionId) return null;
   const parts = dimensionId.split(':');
-  if (parts.length !== 4 || parts[0] !== 'bran-clearance') return null;
+  if ((parts.length !== 3 && parts.length !== 4) || parts[0] !== 'bran-clearance') return null;
+  if (!parts[1]) return null;
   return parts[2] && parts[2] !== 'unknown' ? parts[2] : null;
 }
 
@@ -71,6 +75,21 @@ function sourceLabelSuffix(item: BranNearestClearanceAnnotationCandidate): strin
   }
 }
 
+/** 根据候选状态与精度档位映射 3D 语义角色：过期走 invalid（琥珀虚线），估算走 approximate（点虚线），精确走 external（实线红）。 */
+function resolveBranCandidateRole(
+  item: BranNearestClearanceAnnotationCandidate,
+  approximate: boolean,
+): ExternalDimensionRecord['role'] {
+  if (item.provenance?.status === 'stale') return 'invalid';
+  if (approximate) return 'approximate';
+  return 'external';
+}
+
+export type BranExternalDimensionOptions = Readonly<{
+  /** 对精算确认的真相交（`surface-to-surface + intersects`）也在 3D 视口输出碰撞点靶心标记，而非静默跳过。 */
+  showConfirmedIntersectionMarkers?: boolean;
+}>;
+
 /**
  * BRAN 净距候选 → 只读 external 线性尺寸（与「测量」工具同一形态：a→b 尺寸线 + 线上值字）。
  * `annotation` 两端点是 **E3D 世界 mm**（两个后端、三维点选写进来的估算候选都是），
@@ -83,42 +102,93 @@ function sourceLabelSuffix(item: BranNearestClearanceAnnotationCandidate): strin
 export function branClearanceToExternalDimensions(
   candidates: readonly BranNearestClearanceAnnotationCandidate[],
   millimetresToDesignMetres: (point: Vec3) => Vec3,
+  options: BranExternalDimensionOptions = {},
 ): ExternalDimensionMappingResult {
   const records: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
   for (const item of candidates) {
-    const id = branClearanceDimensionId(item.targetGroup, item.candidate.refno, item.index);
+    const id = branClearanceDimensionId(item.targetGroup, item.candidate.refno, item.candidate.variant);
     const start = point(item.candidate.annotation?.start_point);
     const end = point(item.candidate.annotation?.end_point);
     if (!start || !end) {
       skipped.push({ id, reason: 'Missing finite annotation start/end point' });
       continue;
     }
-    // 精算确认的真相交（surface-to-surface + intersects）：两点重合、没有可画的净距线。
-    // 画出来的是包围盒那一段、线上写 0，会被读成「净距 0mm」而不是「相交」——
-    // 按 legacy clearance 口径（clearanceExternalDimensions.ts）进 skipped，由列表 UI 的
-    // 「相交?」徽标用文字表达。
-    // 未精算的包围盒假相交仍照旧画估算线（0mm + 徽标提示可能假相交），口径不变。
-    if (item.candidate.intersects === true && item.provenance?.method === 'surface-to-surface') {
-      skipped.push({ id, reason: 'Confirmed intersecting pair has no drawable clearance line' });
-      continue;
-    }
     const approximate = !item.provenance || item.provenance.accuracyClass.startsWith('approximate-');
+    const role = resolveBranCandidateRole(item, approximate);
     const labelMm = Number(item.candidate.annotation?.label_mm);
     // 垂直距口径（楼板类）：线上标「垂直」与三维最近距区分开。
     const verticalMark = item.candidate.vertical === true ? '垂直' : '';
+    const staleMark = item.provenance?.status === 'stale' ? '（过期）' : '';
+    // 精算确认的真相交（surface-to-surface + intersects）：不画 0mm 尺寸线；
+    // 开启 showConfirmedIntersectionMarkers 时输出显式碰撞靶心标记 ⊗ + 抬升的「相交」标签，默认进 skipped。
+    if (item.candidate.intersects === true && item.provenance?.method === 'surface-to-surface') {
+      if (options.showConfirmedIntersectionMarkers) {
+        const at = millimetresToDesignMetres(start);
+        records.push({
+          id,
+          source: 'bran-clearance',
+          sourceLabel: `${item.targetGroup}: ${item.candidate.refno}${sourceLabelSuffix(item)}`,
+          role: 'invalid',
+          category: 'annotation',
+          layout: {
+            id,
+            role: 'invalid',
+            labelPinned: true,
+            textHalo: true,
+            labelPresentation: 'above',
+            formattedLabel: `${item.targetGroup} ${verticalMark}${staleMark}相交`,
+            lines: [],
+            labelAnchor: at,
+            arrowLines: [],
+            markers: [
+              { at, shape: 'cross' },
+              { at, shape: 'circle', radiusPx: 6 },
+            ],
+          },
+        });
+        continue;
+      }
+      skipped.push({ id, reason: 'Confirmed intersecting pair has no drawable clearance line' });
+      continue;
+    }
+    const spanMm = Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+    if (item.candidate.intersects === true && spanMm <= 1e-3) {
+      const at = millimetresToDesignMetres(start);
+      records.push({
+        id,
+        source: 'bran-clearance',
+        sourceLabel: `${item.targetGroup}: ${item.candidate.refno}${sourceLabelSuffix(item)}`,
+        role,
+        category: 'annotation',
+        layout: {
+          id,
+          role,
+          labelPinned: true,
+          textHalo: true,
+          labelPresentation: 'above',
+          formattedLabel: `${item.targetGroup} ${verticalMark}${staleMark}${approximate ? '≈' : ''}相交?`,
+          lines: [],
+          labelAnchor: at,
+          arrowLines: [],
+          markers: [{ at, shape: 'cross' }],
+        },
+      });
+      continue;
+    }
     records.push({
       id,
       source: 'bran-clearance',
       sourceLabel: `${item.targetGroup}: ${item.candidate.refno}${sourceLabelSuffix(item)}`,
-      role: 'external',
+      role,
       layout: {
         id,
         kind: 'linear',
-        role: 'external',
+        role,
         labelPinned: false,
+        textHalo: true,
         ...(Number.isFinite(labelMm)
-          ? { authoritativeText: `${item.targetGroup} ${verticalMark}${item.provenance?.status === 'stale' ? '（过期）' : ''}${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
+          ? { authoritativeText: `${item.targetGroup} ${verticalMark}${staleMark}${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
           : {}),
         a: millimetresToDesignMetres(start),
         b: millimetresToDesignMetres(end),

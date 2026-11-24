@@ -20,6 +20,7 @@ import {
   resolveDimensionLineDash,
   resolveTagToneColor,
   resolveTagToneStrokeWidth,
+  SOLVESPACE_DIMENSION_THEME,
 } from '../kernel/theme';
 
 import type { GlyphSegment, LffFont } from '../kernel/glyph/lffParser';
@@ -548,10 +549,18 @@ type GlyphCaches = {
  * the heavier glyph strokes on top (`theme.dimension3d`) — or one of the
  * billboard tag tones (`theme.tag`).
  */
-type SegmentStroke = 'text' | 'text-3d' | 'halo-3d' | SceneTone;
+type SegmentStroke = 'text' | 'halo-text' | 'text-3d' | 'halo-3d' | SceneTone;
 
 function isTagTone(stroke: SegmentStroke | undefined): stroke is SceneTone {
   return stroke !== undefined && stroke.startsWith('tag-');
+}
+
+/** 开启了 `halo: true` 的屏幕空间文字（无 tag 底板卡片）绘制底层白色描边光晕，防止在深色构件或 X 光半透明墙体上重影。 */
+function hasScreenTextHalo(primitive: SceneGlyphRun, theme: DimensionTheme): boolean {
+  return primitive.halo === true
+    && !primitive.frame
+    && !isTagTone(primitive.tone)
+    && theme.dimension3d.textHaloWidthPx > 0;
 }
 
 function strokeWidthPx(theme: DimensionTheme, stroke: SegmentStroke | undefined): number {
@@ -559,6 +568,8 @@ function strokeWidthPx(theme: DimensionTheme, stroke: SegmentStroke | undefined)
   switch (stroke) {
     case 'text':
       return theme.textStrokeWidthPx;
+    case 'halo-text':
+      return theme.textStrokeWidthPx + 2 * theme.dimension3d.textHaloWidthPx;
     case 'text-3d':
       return theme.dimension3d.textStrokeWidthPx;
     case 'halo-3d':
@@ -647,6 +658,7 @@ function visitPrimitiveSegments(
   primitive: ScenePrimitive,
   font: LffFont,
   caches: GlyphCaches,
+  theme: DimensionTheme,
   visit: SegmentVisitor,
 ): void {
   switch (primitive.kind) {
@@ -746,6 +758,18 @@ function visitPrimitiveSegments(
         return;
       }
       const segments = cachedScreenGlyphSegments(font, primitive, caches);
+      if (hasScreenTextHalo(primitive, theme)) {
+        for (const segment of segments) {
+          visit(
+            offsetVertex(primitive.at, segment.from),
+            offsetVertex(primitive.at, segment.to),
+            primitive.styleRole,
+            'solid',
+            'halo-text',
+            'text',
+          );
+        }
+      }
       for (const segment of segments) {
         // Glyph strokes stay solid: role dash patterns (external-reference,
         // invalid, approximate) must never break up label text. Screen-space
@@ -788,6 +812,7 @@ function countPrimitiveSegments(
   primitive: ScenePrimitive,
   font: LffFont,
   caches: GlyphCaches,
+  theme: DimensionTheme = SOLVESPACE_DIMENSION_THEME,
 ): number {
   switch (primitive.kind) {
     case 'scene-line':
@@ -811,7 +836,8 @@ function countPrimitiveSegments(
         // Halo and glyph pass, per run.
         return unit.length * 2;
       }
-      return cachedScreenGlyphSegments(font, primitive, caches).length;
+      const count = cachedScreenGlyphSegments(font, primitive, caches).length;
+      return hasScreenTextHalo(primitive, theme) ? count * 2 : count;
     }
     case 'scene-triangle':
     case 'scene-fill':
@@ -857,11 +883,12 @@ function visitSegments(
   layouts: readonly LayoutResult[],
   font: LffFont,
   caches: GlyphCaches,
+  theme: DimensionTheme,
   visit: SegmentVisitor,
 ): void {
   for (const layout of layouts) {
     for (const primitive of layout.scenePrimitives) {
-      visitPrimitiveSegments(primitive, font, caches, visit);
+      visitPrimitiveSegments(primitive, font, caches, theme, visit);
     }
   }
 }
@@ -886,7 +913,7 @@ function colorComponents(
   styleRole: string,
   stroke: SegmentStroke | undefined,
 ): readonly [number, number, number] {
-  if (stroke === 'halo-3d') return srgbComponents(theme.dimension3d.textHaloColor);
+  if (stroke === 'halo-3d' || stroke === 'halo-text') return srgbComponents(theme.dimension3d.textHaloColor);
   if (isTagTone(stroke)) return srgbComponents(resolveTagToneColor(theme, styleRole, stroke));
   const roleKey = styleRole as keyof typeof theme.colors;
   const textColor = stroke !== undefined ? theme.textColors[roleKey] : undefined;
@@ -1220,6 +1247,7 @@ export class ThreeSceneDimensionPainter {
           primitive,
           this.font,
           this.glyphCaches,
+          theme,
         );
         segmentCount += primitiveSegments;
         if (profiling) {
@@ -1403,6 +1431,7 @@ export class ThreeSceneDimensionPainter {
           primitive,
           this.font,
           this.glyphCaches,
+          theme,
         );
       }
     }
@@ -1656,6 +1685,7 @@ export class ThreeSceneDimensionPainter {
         [layout],
         this.font,
         this.glyphCaches,
+        theme,
         (segmentFrom, segmentTo, styleRole, lineStyle, stroke, hint) => {
           // One bounds check per segment — its four vertices are written
           // consecutively, so a single comparison covers them all. On a
@@ -1677,9 +1707,9 @@ export class ThreeSceneDimensionPainter {
             : hint === 'line'
               ? hintedLineStrokeWidthPx(nominalWidthPx, pixelRatio)
               : nominalWidthPx;
-          // The 3D-text halo sits on the farther depth layer so the glyph
-          // strokes drawn over it pass the depth test.
-          const layer = stroke === 'halo-3d' ? 1 : 0;
+          // The 3D-text halo and screen-text halo sit on the farther depth layer
+          // so the glyph strokes drawn over them pass the depth test.
+          const layer = stroke === 'halo-3d' || stroke === 'halo-text' ? 1 : 0;
           // The screen normal flips with the projected direction, so the
           // vertices at the far end negate `side` to stay on the same
           // world-space edge of the quad.
@@ -1735,6 +1765,7 @@ export class ThreeSceneDimensionPainter {
           primitive,
           this.font,
           this.glyphCaches,
+          theme,
         ) * 4;
       }
       let triangleVertexCount = 0;
@@ -1772,6 +1803,7 @@ export class ThreeSceneDimensionPainter {
         [layout],
         this.font,
         this.glyphCaches,
+        theme,
         (_from, _to, styleRole, lineStyle, stroke) => {
           const code = dashCode(styleRole, lineStyle);
           const color = resolveColor(styleRole, stroke);

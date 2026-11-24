@@ -55,14 +55,15 @@ vi.mock('@/composables/useSelectionStore', () => ({
 
 /** 管-管间距：点到的构件 → 所属 BRAN，用 DTX 缓存；这里直接给表。 */
 const ownerBranByRefno = new Map<string, string>();
-/** refno → 已加载 DTX objectId 表（`resolveDtxObjectIdsByRefno` 桩）。 */
+/** refno → 已加载 DTX objectId 表（`resolveDtxObjectIdsByRefno` 桩；记录调用的 dbnum 以校验跨库查找）。 */
 const objectIdsByRefno = new Map<string, string[]>();
+const resolveDtxObjectIdsByRefnoSpy = vi.fn((_dbnum: number, refno: string) => objectIdsByRefno.get(refno) ?? []);
 /** refno → 16 位变换矩阵（`getDtxRefnoTransform` 桩；不给回 null）。 */
 const refnoTransformByRefno = new Map<string, number[] | null>();
 vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/composables/useDbnoInstancesDtxLoader')>()),
   findOwnerBranRefnoAcrossAllDbnos: (refno: string) => ownerBranByRefno.get(refno) ?? null,
-  resolveDtxObjectIdsByRefno: (_dbnum: number, refno: string) => objectIdsByRefno.get(refno) ?? [],
+  resolveDtxObjectIdsByRefno: (dbnum: number, refno: string) => resolveDtxObjectIdsByRefnoSpy(dbnum, refno),
   getDtxRefnoTransform: (_dbnum: number, refno: string) => refnoTransformByRefno.get(refno) ?? null,
 }));
 
@@ -509,7 +510,9 @@ describe('useDtxTools object measure tree flow', () => {
       const request = genModelV1SpatialNearestClearance.mock.calls[0]![0] as Record<string, unknown>;
       expect(request.sourceRefno).toBe('24381_1000');
       expect(request.sourceMode).toBe('bran_centerline');
-      expect(request.targetNouns).toEqual(['WALL', 'COLUMN']);
+      expect(request.groupBy).toBe('target_groups');
+      expect(request.targetGroups).toEqual(['wall', 'column']);
+      expect(request.targetNouns).toBeUndefined();
 
       const records = useClearanceStore().records.value;
       expect(records).toHaveLength(1);
@@ -561,6 +564,91 @@ describe('useDtxTools object measure tree flow', () => {
       await clickOnce(toolsNoGeom);
       expect(toolsNoGeom.statusText.value).toBe('最近点计算失败');
       expect(useClearanceStore().records.value).toHaveLength(0);
+    });
+
+    it('支持跨库目标（按目标 refno 解析目标 dbnum）并接受 COLU / SCTN / PANE 候选', async () => {
+      const CROSS_DB_COLU = '17496_8800';
+      const layer = createLayerWithWall();
+      layer.addGeometry('colu-geo', new BoxGeometry(0.4, 0.4, 4));
+      layer.addObject(`o:${CROSS_DB_COLU}:0`, 'colu-geo', new Matrix4().makeTranslation(3.5, 0, 0));
+
+      resolveDtxObjectIdsByRefnoSpy.mockClear();
+      installPipeToStructure([{ refno: CROSS_DB_COLU, noun: 'COLU', distance_mm: 1500 }]);
+      objectIdsByRefno.set(CROSS_DB_COLU, [`o:${CROSS_DB_COLU}:0`]);
+
+      const tools = createPipeMeasureTools('measure_pipe_to_structure', [
+        { objectId: `o:${PIPE_REFNO}:0`, point: new Vector3(0, 0, 0) },
+      ], layer);
+      await nextTick();
+
+      await clickOnce(tools);
+      expect(resolveDtxObjectIdsByRefnoSpy).toHaveBeenCalledWith(17496, CROSS_DB_COLU);
+      const records = useClearanceStore().records.value;
+      expect(records).toHaveLength(1);
+      expect(records[0]?.inputs.targetRefno).toBe(CROSS_DB_COLU);
+      expect(records[0]?.targetNoun).toBe('COLU');
+    });
+
+    it('取消或切换模式后，迟到的管-墙/柱异步回包会被丢弃而不写入记录', async () => {
+      installPipeToStructure();
+      let resolveReq!: (value: { nearest_by_group: { noun: string; candidates: { refno: string; noun: string; distance_mm: number }[] }[] }) => void;
+      genModelV1SpatialNearestClearance.mockImplementationOnce(() => new Promise((resolve) => {
+        resolveReq = resolve;
+      }));
+
+      const tools = createPipeMeasureTools('measure_pipe_to_structure', [
+        { objectId: `o:${PIPE_REFNO}:0`, point: new Vector3(0, 0, 0) },
+      ], createLayerWithWall());
+      await nextTick();
+
+      const pendingClick = clickOnce(tools);
+      // 计算进行中按 ESC / 切出工具
+      useToolStore().setToolMode('none');
+      await nextTick();
+
+      resolveReq({
+        nearest_by_group: [{ noun: 'WALL', candidates: [{ refno: WALL_REFNO, noun: 'WALL', distance_mm: 2000 }] }],
+      });
+      await pendingClick;
+      expect(useClearanceStore().records.value).toHaveLength(0);
+    });
+
+    it('ESC 取消 pick_refno / pick_refno_box 应调用 cancelPickRefno 触发 onCancel 并清空 pickedRefnos', async () => {
+      const store = useToolStore();
+      const tools = createPipeMeasureTools('measure_pipe_to_structure', [], createLayerWithWall());
+      store.setToolMode('none');
+      await nextTick();
+
+      const onCancelPick = vi.fn();
+      store.startPickRefno(['WALL'], vi.fn(), onCancelPick);
+      store.addPickedRefno('24381_5000');
+      tools.cancelMeasurementInteraction();
+      expect(onCancelPick).toHaveBeenCalledTimes(1);
+      expect(store.toolMode.value).toBe('none');
+      expect(store.pickedRefnos.value).toEqual([]);
+
+      const onCancelBox = vi.fn();
+      store.startBoxPickRefno(['BRAN'], vi.fn(), onCancelBox);
+      store.addPickedRefno('24381_1000');
+      tools.cancelMeasurementInteraction();
+      expect(onCancelBox).toHaveBeenCalledTimes(1);
+      expect(store.toolMode.value).toBe('none');
+      expect(store.pickedRefnos.value).toEqual([]);
+    });
+
+    it('DTXLayer.closestPointToObject 带 maxDistance 剪枝时与全量遍历数学等价，超出上界返回 null', () => {
+      const layer = createLayerWithWall();
+      const queryPoint = new Vector3(0.5, 0.2, -0.3);
+      const full = layer.closestPointToObject(`o:${WALL_REFNO}:0`, queryPoint);
+      expect(full).not.toBeNull();
+
+      const pruned = layer.closestPointToObject(`o:${WALL_REFNO}:0`, queryPoint, full!.distance + 0.5);
+      expect(pruned).not.toBeNull();
+      expect(pruned!.distance).toBeCloseTo(full!.distance, 9);
+      expect(pruned!.point.distanceTo(full!.point)).toBeLessThan(1e-9);
+
+      const rejected = layer.closestPointToObject(`o:${WALL_REFNO}:0`, queryPoint, full!.distance - 0.1);
+      expect(rejected).toBeNull();
     });
 
     it('接口抛错只报状态，不落半成品记录', async () => {

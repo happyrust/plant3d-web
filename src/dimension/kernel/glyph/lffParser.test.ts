@@ -72,10 +72,13 @@ describe('LffFont', () => {
     expect(font.getGlyph('x'.codePointAt(0)!)).toBe(font.getGlyph(0xfffd));
   });
 
-  it('draws a missing approximate mark ≈ with the tilde instead of the replacement box', () => {
+  it('synthesizes a missing approximate mark ≈ as a double tilde instead of the replacement box', () => {
     const font = LffFont.fromText(INLINE_LFF);
+    const tilde = font.getGlyph(0x7e);
+    const approx = font.getGlyph(0x2248);
 
-    expect(font.getGlyph(0x2248)).toBe(font.getGlyph(0x7e));
+    expect(approx.contours).toHaveLength(tilde.contours.length * 2);
+    expect(approx.advanceWidth).toBe(tilde.advanceWidth);
     expect(font.getWidth(20, '≈1')).toBe(font.getWidth(20, '~1'));
   });
 

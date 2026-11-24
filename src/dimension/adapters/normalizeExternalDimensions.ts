@@ -1,4 +1,5 @@
 import type {
+  DimensionSemanticRole,
   ExplicitLayoutInput,
   NormalizedDimensionInput,
   Vec3,
@@ -32,7 +33,7 @@ export type ExternalDimensionRecord = Readonly<{
   id: string;
   source: ExternalDimensionSource;
   sourceLabel: string;
-  role: 'external' | 'external-reference';
+  role: Exclude<DimensionSemanticRole, 'normal'>;
   /** Omitted means 'dimension' (pre-existing records are all dimensions). */
   category?: ExternalDimensionCategory;
   /**

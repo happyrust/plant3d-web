@@ -154,10 +154,29 @@ function getGlyphBounds(glyph: Glyph): Readonly<{
 }
 
 /**
- * Readable stand-ins for code points the bundled font lacks. Falling back to U+FFFD would draw
- * the approximate mark ≈ as a box, so the label would no longer say it is an estimate.
+ * Readable stand-ins for code points the bundled font lacks. U+2248 (≈) is
+ * synthesized as a stacked double tilde when U+007E (~) is available so 3D
+ * approximate labels match the UI's ≈ instead of degrading to a single ~.
  */
 const MISSING_GLYPH_STAND_INS: ReadonlyMap<number, number> = new Map([[0x2248, 0x7e]]);
+
+/** 基于单波浪 `~` 轮廓上下对称偏移合成双波浪 `≈`，保持原有的水平边界与步进宽度不变。 */
+function synthesizeDoubleTildeGlyph(tilde: Glyph, capHeight: number): Glyph {
+  if (tilde.contours.length === 0) return tilde;
+  const halfGap = Math.max(0.8, (capHeight > 0 ? capHeight : 10) * 0.14);
+  const shiftContour = (contour: GlyphContour, dy: number): GlyphContour => ({
+    points: contour.points.map(([x, y]) => [x, y + dy] as Vec2),
+  });
+  return {
+    contours: [
+      ...tilde.contours.map((c) => shiftContour(c, -halfGap)),
+      ...tilde.contours.map((c) => shiftContour(c, halfGap)),
+    ],
+    leftSideBearing: tilde.leftSideBearing,
+    boundingWidth: tilde.boundingWidth,
+    advanceWidth: tilde.advanceWidth,
+  };
+}
 
 /**
  * The glyph a code point degrades to when its body does not parse: no strokes,
@@ -229,7 +248,15 @@ export class LffFont {
     const source = this.glyphSources.get(codePoint);
     if (!source) {
       const standIn = MISSING_GLYPH_STAND_INS.get(codePoint);
-      if (standIn !== undefined && this.glyphSources.has(standIn)) return this.getGlyph(standIn);
+      if (standIn !== undefined && this.glyphSources.has(standIn)) {
+        const baseGlyph = this.getGlyph(standIn);
+        if (codePoint === 0x2248) {
+          const synthesized = synthesizeDoubleTildeGlyph(baseGlyph, this.capHeight);
+          this.glyphCache.set(codePoint, synthesized);
+          return synthesized;
+        }
+        return baseGlyph;
+      }
       if (codePoint === 0xfffd) throw new RangeError('LFF font has no replacement glyph');
       return this.getGlyph(0xfffd);
     }

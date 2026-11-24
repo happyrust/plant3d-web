@@ -65,6 +65,29 @@ const store = usePipeDistanceStore();
 const clearanceStore = useClearanceStore();
 const getWorkMeasurementSync = useGetWorkMeasurementSync();
 const toolStore = useToolStore();
+
+const effectivePersistenceError = computed(() => {
+  const errors = [clearanceStore.persistenceError.value, store.persistenceError.value].filter(Boolean);
+  return errors.length > 0 ? [...new Set(errors)].join('；') : null;
+});
+
+const effectivePersistenceLabel = computed(() => {
+  const clearanceLabel = clearanceStore.persistenceLabel.value;
+  if (
+    clearanceStore.persistenceError.value
+    || clearanceLabel.includes('未覆盖')
+    || clearanceLabel.includes('失败')
+    || clearanceLabel.includes('未落盘')
+  ) {
+    return clearanceLabel;
+  }
+  return store.persistenceLabel.value;
+});
+
+function retryPersistRecords() {
+  clearanceStore.persistRecords();
+  store.persistRecords();
+}
 const selectionStore = useSelectionStore();
 const spatialQuery = useSpatialQuery();
 const spatialCompute = useSpatialCompute();
@@ -486,8 +509,11 @@ function focusDesignPoints(points: readonly Vec3[], refnos: readonly string[], e
       viewer.scene.setObjectsSelected(unique, true);
       const transform = createSceneTransformPoint();
       const aabb = transform && points.length > 0 ? paddedSceneAabb(points, transform) : viewer.scene.getAABB(unique);
+      const segmentPoints = transform && points.length === 2
+        ? [transform(points[0]!), transform(points[1]!)] as const
+        : null;
       if (aabb) {
-        viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+        viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8, segmentPoints });
       }
     };
     applyFocus();
@@ -527,23 +553,21 @@ function onResultClick(record: ClearanceRecord) {
       // 高亮选中的管道对
       viewer.scene.ensureRefnos(refnos);
       viewer.scene.setObjectsSelected(refnos, true);
-      // 飞行定位：优先飞到净距快照的两端点（design 米 → mm → 场景），没有快照退回构件包围盒
+      // 飞行定位：优先飞到净距快照的两端点（design 米 → mm → 外扩 FOCUS_MARGIN_MM 后转场景），没有快照退回构件包围盒
       const transform = createSceneTransformPoint();
       const [s, e] = record.snapshot
         ? [record.snapshot.sourcePoint, record.snapshot.targetPoint]
         : [null, null];
-      const aabb = transform && s && e
-        ? (() => {
-          const sp = transform([s[0] * 1000, s[1] * 1000, s[2] * 1000] as Vec3);
-          const ep = transform([e[0] * 1000, e[1] * 1000, e[2] * 1000] as Vec3);
-          return [
-            Math.min(sp[0], ep[0]), Math.min(sp[1], ep[1]), Math.min(sp[2], ep[2]),
-            Math.max(sp[0], ep[0]), Math.max(sp[1], ep[1]), Math.max(sp[2], ep[2]),
-          ] as [number, number, number, number, number, number];
-        })()
+      const sMm: Vec3 | null = s ? [s[0] * 1000, s[1] * 1000, s[2] * 1000] : null;
+      const eMm: Vec3 | null = e ? [e[0] * 1000, e[1] * 1000, e[2] * 1000] : null;
+      const aabb = transform && sMm && eMm
+        ? paddedSceneAabb([sMm, eMm], transform)
         : viewer.scene.getAABB(refnos);
+      const segmentPoints = transform && sMm && eMm
+        ? [transform(sMm), transform(eMm)] as const
+        : null;
       if (aabb) {
-        viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+        viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8, segmentPoints });
       }
     };
     applyFocus();
@@ -651,6 +675,13 @@ const nearbyGroupNotice = computed(() => {
   return null;
 });
 
+/** 非连排、非相交净距记录的三轴分量摘要（mm），便于判断管线走向调整量。 */
+function recordVectorText(record: ClearanceRecord): string {
+  if (record.pipeRow || !record.snapshot || record.snapshot.intersects) return '';
+  const [vx, vy, vz] = record.snapshot.vector;
+  if (!Number.isFinite(vx) || !Number.isFinite(vy) || !Number.isFinite(vz)) return '';
+  return `ΔX ${Math.round(Math.abs(vx) * 1000)} · ΔY ${Math.round(Math.abs(vy) * 1000)} · ΔZ ${Math.round(Math.abs(vz) * 1000)} mm`;
+}
 const OD_EVIDENCE_LABELS: Readonly<Record<OutsideDiameterEvidence, string>> = Object.freeze({
   catalogue: '目录外径',
   'bore-estimate': '通径估算',
@@ -835,7 +866,7 @@ function onResultRowHover(id: string | null) {
         <!-- scrollable content -->
         <div class="flex-1 overflow-auto">
           <!-- 1. 显示控制 -->
-          <div class="border-b border-border/60 px-4 py-3">
+          <div class="space-y-2 border-b border-border/60 px-4 py-3">
             <label class="flex cursor-pointer items-center gap-2">
               <span class="flex h-4 w-4 items-center justify-center rounded"
                 :class="store.showAnnotations.value
@@ -845,6 +876,20 @@ function onResultRowHover(id: string | null) {
               </span>
               <input v-model="store.showAnnotations.value" type="checkbox" class="sr-only" />
               <span class="text-sm">显示管道间距离标注</span>
+            </label>
+            <label class="flex cursor-pointer items-center gap-2"
+              title="开启后，测量相关的管道与目标构件保持实体显示，其余无关模型转为 X 光半透明；无结果或关闭后自动还原">
+              <span class="flex h-4 w-4 items-center justify-center rounded"
+                :class="clearanceStore.xrayUnrelatedModels.value
+                  ? 'bg-brand'
+                  : 'border border-gray-300 bg-white'">
+                <Check v-if="clearanceStore.xrayUnrelatedModels.value" class="h-3 w-3 text-white" />
+              </span>
+              <input v-model="clearanceStore.xrayUnrelatedModels.value"
+                type="checkbox"
+                data-testid="clearance-xray-unrelated-toggle"
+                class="sr-only" />
+              <span class="text-sm">无关模型 X 光半透明</span>
             </label>
           </div>
 
@@ -1110,9 +1155,9 @@ function onResultRowHover(id: string | null) {
 
             <!-- 错误提示 -->
             <div class="text-[11px] text-muted-foreground" data-testid="pipe-distance-persistence">
-              {{ store.persistenceLabel.value }}
-              <span v-if="store.persistenceError.value" class="text-danger">：{{ store.persistenceError.value }}</span>
-              <button v-if="store.persistenceError.value || store.persistenceLabel.value.includes('未落盘')" type="button" class="ml-2 rounded border px-2 py-1" @click="store.persistRecords()">重试保存</button>
+              {{ effectivePersistenceLabel }}
+              <span v-if="effectivePersistenceError" class="text-danger">：{{ effectivePersistenceError }}</span>
+              <button v-if="effectivePersistenceError || effectivePersistenceLabel.includes('未落盘')" type="button" class="ml-2 rounded border px-2 py-1" @click="retryPersistRecords()">重试保存</button>
             </div>
             <div v-if="store.detectError.value"
               class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1247,10 +1292,10 @@ function onResultRowHover(id: string | null) {
                   <span class="truncate text-xs text-muted-foreground">
                     {{ record.provenance.source.refno || record.inputs.sourceRefno }} ↔ {{ record.provenance.target.refno || record.inputs.targetRefno }}
                   </span>
-                  <span v-if="recordStatusPrefix(record) || record.pipeRow"
+                  <span v-if="recordStatusPrefix(record) || record.pipeRow || recordVectorText(record)"
                     class="truncate text-[11px]"
                     :class="recordMissingReason(record) ? 'text-rose-700' : record.status === 'stale' ? 'text-amber-700' : 'text-muted-foreground'">
-                    {{ recordStatusPrefix(record) }}{{ record.pipeRow ? pipeRowSectionText(record) : '' }}
+                    {{ recordStatusPrefix(record) }}{{ record.pipeRow ? pipeRowSectionText(record) : recordVectorText(record) }}
                   </span>
                 </span>
                 <button v-if="canRemeasurePipeRecord(record)"

@@ -27,7 +27,12 @@ export function useClearanceDimensionSync(
     activeId?: Ref<string | null>;
   },
   requestRender?: () => void,
-  display: Readonly<{ pipeRowBothMetrics?: Ref<boolean>; pipeRowKeyPoints?: Ref<boolean> }> = {},
+  display: Readonly<{
+    pipeRowBothMetrics?: Ref<boolean>;
+    pipeRowKeyPoints?: Ref<boolean>;
+    showIntersectionMarkers?: Ref<boolean>;
+    surfaceEndMarkers?: Ref<boolean>;
+  }> = {},
 ) {
   let lastSkipped = 0;
 
@@ -42,6 +47,8 @@ export function useClearanceDimensionSync(
     const result = clearanceRecordsToExternalDimensions(clearanceStore.visibleRecords.value, {
       pipeRowBothMetrics: display.pipeRowBothMetrics?.value ?? false,
       pipeRowKeyPoints: display.pipeRowKeyPoints?.value ?? false,
+      showIntersectionMarkers: display.showIntersectionMarkers?.value ?? false,
+      surfaceEndMarkers: display.surfaceEndMarkers?.value ?? false,
     });
     system.replaceExternalSource(CLEARANCE_EXTERNAL_SOURCE, result.records);
     if (result.skipped.length !== lastSkipped) {

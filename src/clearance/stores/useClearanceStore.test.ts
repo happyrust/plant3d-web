@@ -377,6 +377,132 @@ describe('useClearanceStore', () => {
     expect(store.lastError.value).toContain('管-管');
   });
 
+  it('persists and restores mixed surface clearance and piperow records, and supports review clearance snapshot capture/restore', async () => {
+    const storage = memoryStorage();
+    const store = useClearanceStore();
+    store.bindPersistence('mixed-piperow-scope', storage);
+
+    const surfaceRecord = await store.compute(
+      { sourceRefno: '24384_22582', targetRefno: '17496_105912' },
+      { service: serviceReturning([elboToCurvedWallResponse()]) },
+    );
+    const pipeRowRecord = createClearanceRecord({
+      id: 'piperow:center:derived-gap:24381_1001~0_1:24381_1002~0_1@14463.2-15065.4',
+      kind: 'component-to-component',
+      inputs: { sourceRefno: '24381_1001~0_1', targetRefno: '24381_1002~0_1', targetKind: 'any' },
+      sourceNoun: 'BRAN',
+      targetNoun: 'BRAN',
+      provenance: createComputationProvenance({
+        method: 'pipe-row-derived-gap',
+        accuracyClass: accuracyClassForMethod('pipe-row-derived-gap'),
+        coordinateSpace: 'design-world',
+        source: { entityId: '24381_1001', refno: '24381_1001', segmentRefno: '24381_1001~0_1' },
+        target: { entityId: '24381_1002', refno: '24381_1002', segmentRefno: '24381_1002~0_1' },
+      }),
+      snapshot: {
+        distanceM: 0.8963,
+        intersects: false,
+        sourcePoint: [1, 2, 3],
+        targetPoint: [1, 2.8963, 3],
+        vector: [0, 0.8963, 0],
+        sourceLeafRefno: '24381_1001~0_1',
+        targetLeafRefno: '24381_1002~0_1',
+        targetLeafNoun: 'TUBI',
+        targetFace: null,
+        perpendicular: null,
+        witness: 'closest-points',
+      },
+      pipeRow: {
+        alignMode: 'center',
+        metric: 'derived-gap',
+        signedGapM: 0.8963,
+        section: { point: [1, 2.45, 3], normal: [1, 0, 0], axialStartM: 14.4632, axialEndM: 15.0654 },
+        rowGroupId: 'row:24381_1001~0_1|24381_1002~0_1@14463.2-15065.4:center',
+        sourceOd: { odM: 0.1143, evidence: 'catalogue' },
+        targetOd: { odM: 0.1143, evidence: 'catalogue' },
+      },
+      modelVersion: { sourceSesno: 10, targetSesno: 10 },
+      computedAt: AT.toISOString(),
+    });
+    store.upsertRecord(pipeRowRecord);
+    expect(store.records.value).toHaveLength(2);
+
+    // 切换 scope 再切回，验证 bindPersistence 能无报错完整恢复两条记录
+    store.bindPersistence('other-scope', storage);
+    expect(store.records.value).toEqual([]);
+    store.bindPersistence('mixed-piperow-scope', storage);
+    expect(store.persistenceError.value).toBeNull();
+    expect(store.records.value.map(r => r.id)).toEqual([surfaceRecord!.id, pipeRowRecord.id]);
+    expect(store.records.value.every(r => r.status === 'stale')).toBe(true);
+
+    // 验证 prepareSnapshotRestore 对合法 piperow ID 放行、对篡改或重复 ID 拒绝
+    const snapshot = store.captureSnapshot();
+    const apply = store.prepareSnapshotRestore(snapshot);
+    apply();
+    expect(store.records.value).toHaveLength(2);
+
+    expect(() => store.prepareSnapshotRestore({
+      ...snapshot,
+      records: [
+        snapshot.records[0],
+        { ...snapshot.records[1], id: 'piperow:bottom:derived-gap:24381_1001~0_1:24381_1002~0_1@14463.2-15065.4' },
+      ],
+    })).toThrow('净距记录标识重复或不匹配');
+
+    expect(() => store.prepareSnapshotRestore({
+      ...snapshot,
+      records: [snapshot.records[1], snapshot.records[1]],
+    })).toThrow('净距记录标识重复或不匹配');
+  });
+
+  it('failed recompute preserves restoredHidden gate and recompute forwards original optional compute params', async () => {
+    const storage = memoryStorage();
+    const store = useClearanceStore();
+    store.bindPersistence('recompute-opts-scope', storage);
+
+    const fetchSurfaceClearance = vi.fn(async () => elboToCurvedWallResponse());
+    const service = createClearanceService({ fetchSurfaceClearance, now: () => AT });
+    const record = await store.compute(
+      { sourceRefno: '24384_22582', targetRefno: '17496_105912', perpendicular: false, maxDistanceMm: 2500 },
+      { service },
+    );
+    expect(fetchSurfaceClearance).toHaveBeenLastCalledWith(
+      expect.objectContaining({ perpendicular: false, maxDistanceMm: 2500 }),
+      undefined,
+    );
+
+    // 重算应保留并透传 perpendicular / maxDistanceMm
+    await store.recompute(record!.id, { service });
+    expect(fetchSurfaceClearance).toHaveBeenLastCalledWith(
+      expect.objectContaining({ perpendicular: false, maxDistanceMm: 2500 }),
+      undefined,
+    );
+
+    // 模拟本机恢复后的默认隐藏闸门：重算失败时不应意外解除 restoredHidden
+    store.bindPersistence('other-scope', storage);
+    store.bindPersistence('recompute-opts-scope', storage);
+    expect(store.showAnnotations.value).toBe(false);
+    const failing = createClearanceService({
+      fetchSurfaceClearance: vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    });
+    expect(await store.recompute(record!.id, { service: failing })).toBeNull();
+    expect(store.findRecord(record!.id)?.status).toBe('failed');
+    expect(store.showAnnotations.value).toBe(false);
+  });
+
+  it('xrayUnrelatedModels defaults to false and toggles cleanly without affecting review snapshot shape', () => {
+    const store = useClearanceStore();
+    store.setXrayUnrelatedModels(false);
+    expect(store.xrayUnrelatedModels.value).toBe(false);
+    store.setXrayUnrelatedModels(true);
+    expect(store.xrayUnrelatedModels.value).toBe(true);
+    const snapshot = store.captureSnapshot() as Record<string, unknown>;
+    expect('xrayUnrelatedModels' in snapshot).toBe(false);
+    store.setXrayUnrelatedModels(false);
+  });
+
   it('removeRecord drops active / hidden bookkeeping and clearRecords resets everything', async () => {
     const store = useClearanceStore();
     const service = serviceReturning([elboToCurvedWallResponse()]);

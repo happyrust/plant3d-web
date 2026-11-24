@@ -10,7 +10,7 @@ import { BufferAttribute, Vector3 } from 'three';
 
 import { nowId, parseRefnoFromDtxObjectId, vec3ToTuple } from '../geometry';
 import { isTubePickFilter } from '../pickCandidates';
-import { type ObjectMeasureCandidate, PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES, PIPE_STRUCTURE_DEFAULT_NOUNS, PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES, PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT, type PipeMeasureResult, type PipeMeasureSeed, type PipeToPipeBranCandidate, type PipeWallDistanceCandidate, buildObjectMeasurePairKey, choosePipeMeasureBetterSeed, collectOrderedPipeReferencePointSeeds, computeApproxNearestBetweenObjects, fromSeed, normalizeRefnoKey, parseDbnumFromRefno, resolveLoadedVisibleObjectCandidateByRefno, vec3ByMatrix } from '../pipeMeasureMath';
+import { type ObjectMeasureCandidate, PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES, PIPE_STRUCTURE_DEFAULT_NOUNS, PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES, PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT, PIPE_STRUCTURE_TARGET_GROUPS, type PipeMeasureResult, type PipeMeasureSeed, type PipeToPipeBranCandidate, type PipeWallDistanceCandidate, buildObjectMeasurePairKey, choosePipeMeasureBetterSeed, collectOrderedPipeReferencePointSeeds, computeApproxNearestBetweenObjects, fromSeed, normalizeRefnoKey, parseDbnumFromRefno, resolveLoadedVisibleObjectCandidateByRefno, vec3ByMatrix } from '../pipeMeasureMath';
 
 import type { DtxToolsContext } from '../context';
 import type { MeasurementPoint, Vec3 } from '@/composables/useToolStore';
@@ -40,6 +40,7 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
   const pipeMeasureBusy = ref(false);
   const pipeMeasureStatus = ref<string>('');
   const pipeToPipeSourceCandidate = ref<PipeToPipeBranCandidate | null>(null);
+  let pipeMeasureRequestSeq = 0;
 
   function setPipeMeasureStatus(message: string): void {
     pipeMeasureStatus.value = message;
@@ -334,14 +335,15 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
   }
 
   function resolveTargetObjectPairs(
-    dbnum: number,
+    fallbackDbnum: number,
     candidates: PipeWallDistanceCandidate[],
   ): { targetRefno: string; targetObjectId: string }[] {
     const out: { targetRefno: string; targetObjectId: string }[] = [];
     const seen = new Set<string>();
     for (const candidate of candidates) {
       const targetRefno = normalizeRefnoKey(candidate.refno);
-      const objectIds = resolveDtxObjectIdsByRefno(dbnum, targetRefno);
+      const targetDbnum = parseDbnumFromRefno(targetRefno) ?? fallbackDbnum;
+      const objectIds = resolveDtxObjectIdsByRefno(targetDbnum, targetRefno);
       for (const objectId of objectIds) {
         if (!objectId || seen.has(objectId)) continue;
         seen.add(objectId);
@@ -355,13 +357,15 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
     layer: DTXLayer,
     sourcePoints: Vector3[],
     targetPairs: { targetRefno: string; targetObjectId: string }[],
+    initialMaxDistance?: number,
   ): PipeMeasureResult | null {
     let best: { seed: PipeMeasureSeed; targetRefno: string; targetObjectId: string } | null = null;
+    let bestDistance = initialMaxDistance;
 
     for (const sourcePoint of sourcePoints) {
       const sourceTuple = vec3ToTuple(sourcePoint);
       for (const targetPair of targetPairs) {
-        const closest = layer.closestPointToObject(targetPair.targetObjectId, sourcePoint);
+        const closest = layer.closestPointToObject(targetPair.targetObjectId, sourcePoint, bestDistance);
         if (!closest) continue;
         const nextSeed: PipeMeasureSeed = {
           distance: closest.distance,
@@ -375,6 +379,7 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
             targetObjectId: targetPair.targetObjectId,
             targetRefno: targetPair.targetRefno,
           };
+          bestDistance = nextSeed.distance;
         }
       }
     }
@@ -398,13 +403,17 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
   async function completePipeToPipeSpacing(
     source: PipeToPipeBranCandidate,
     target: PipeToPipeBranCandidate,
+    requestSeq: number,
   ): Promise<boolean> {
+    const isStale = () =>
+      requestSeq !== pipeMeasureRequestSeq || ctx.store.toolMode.value !== 'measure_pipe_to_pipe';
     const pair = `${source.branRefno} ↔ ${target.branRefno}`;
     setPipeMeasureStatus(`管-管间距：正在取 ${pair} 两条 BRAN 的中心线…`);
     const [sourceLine, targetLine] = await Promise.all([
       genModelV1SpatialCenterline(source.branRefno),
       genModelV1SpatialCenterline(target.branRefno),
     ]);
+    if (isStale()) return false;
     const sourceRuns = buildStraightRuns(sourceLine);
     const targetRuns = buildStraightRuns(targetLine);
     const pairs = findParallelRunPairs(sourceRuns, targetRuns);
@@ -429,6 +438,7 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
         removeRecord: ctx.clearanceStore.removeRecord,
       });
     } catch (error) {
+      if (isStale()) return false;
       setPipeMeasureStatus(`管-管间距：${pair} 中心距记录生成失败：${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
@@ -502,6 +512,7 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
       return;
     }
 
+    const requestSeq = ++pipeMeasureRequestSeq;
     pipeMeasureBusy.value = true;
     try {
       const candidate = resolvePipeToPipeBranCandidate(hit);
@@ -521,11 +532,14 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
         return;
       }
 
-      await completePipeToPipeSpacing(source, candidate);
+      await completePipeToPipeSpacing(source, candidate, requestSeq);
     } catch (error) {
+      if (requestSeq !== pipeMeasureRequestSeq || ctx.store.toolMode.value !== 'measure_pipe_to_pipe') return;
       setPipeMeasureStatus(`管-管间距计算失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      pipeMeasureBusy.value = false;
+      if (requestSeq === pipeMeasureRequestSeq) {
+        pipeMeasureBusy.value = false;
+      }
     }
   }
 
@@ -561,20 +575,24 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
       return;
     }
 
+    const requestSeq = ++pipeMeasureRequestSeq;
+    const isStale = () =>
+      requestSeq !== pipeMeasureRequestSeq || ctx.store.toolMode.value !== 'measure_pipe_to_structure';
     pipeMeasureBusy.value = true;
     try {
       setPipeMeasureStatus('正在查询墙/柱候选…');
-      // 候选来自 gen-model `/api/v1/spatial/nearest-clearance`：沿所属 BRAN 中心线按类型找半径内最近的墙 / 柱
+      // 候选来自 gen-model `/api/v1/spatial/nearest-clearance`：沿所属 BRAN 中心线按 wall/column 预置组找最近的墙 / 柱
       // （旧后端 `/api/space/wall-distance` 2026-09-20 随 legacy 退役）。拾中的是管件时先找它所属的 BRAN。
       const sourceBranRefno = findOwnerBranRefnoAcrossAllDbnos(sourceRefno) ?? sourceRefno;
       const response = await genModelV1SpatialNearestClearance({
         sourceRefno: sourceBranRefno,
         sourceMode: 'bran_centerline',
-        targetNouns: PIPE_STRUCTURE_DEFAULT_NOUNS,
-        groupBy: 'noun',
+        targetGroups: [...PIPE_STRUCTURE_TARGET_GROUPS],
+        groupBy: 'target_groups',
         maxPerGroup: PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES,
         scope: 'all_loaded',
       });
+      if (isStale()) return;
       // 失败走 HTTP 错误信封（`GenModelV1ApiError`，由外层 catch 报状态），200 里 success 恒为 true
       const candidates: PipeWallDistanceCandidate[] = (response.nearest_by_group ?? [])
         .flatMap((group) => group.candidates ?? [])
@@ -617,7 +635,12 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
       );
       if (samplePoints.length > 0) {
         setPipeMeasureStatus('阶段B：采样点精化…');
-        const refined = findBestPipeMeasureResult(layer, samplePoints, targetPairs);
+        const refined = findBestPipeMeasureResult(
+          layer,
+          samplePoints,
+          targetPairs,
+          best?.distance,
+        );
         if (refined && (!best || refined.distance < best.distance)) {
           best = refined;
         }
@@ -638,9 +661,12 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
         targetPoint: best.targetPoint,
       });
     } catch (error) {
+      if (isStale()) return;
       setPipeMeasureStatus(`计算失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      pipeMeasureBusy.value = false;
+      if (requestSeq === pipeMeasureRequestSeq) {
+        pipeMeasureBusy.value = false;
+      }
     }
   }
 
@@ -732,6 +758,7 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
   });
 
   function resetProgress() {
+    pipeMeasureRequestSeq += 1;
     pointToObjectStart.value = null;
     clearObjectMeasureCandidates({ clearStatus: true, clearLastPairKey: true });
     clearPipeToPipeCandidate({ clearStatus: true });
@@ -741,8 +768,13 @@ export function createMeasureController(ctx: DtxToolsContext, hooks: MeasureCont
 
   function cancelMeasurementInteraction(): void {
     const mode = ctx.store.toolMode.value;
-    if (mode === 'pick_query_center' || mode === 'pick_refno') {
+    if (mode === 'pick_query_center') {
       ctx.store.setToolMode('none');
+      return;
+    }
+    if (mode === 'pick_refno' || mode === 'pick_refno_box') {
+      ctx.store.cancelPickRefno();
+      hooks.hideMarquee();
       return;
     }
     if (mode === 'measure_object_to_object') {

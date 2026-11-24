@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type ComponentPublicInstance, type Ref } from 'vue';
 
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import MeasurementAidPanel from '@/components/tools/MeasurementAidPanel.vue';
 import MeasurementResultInspector from '@/components/tools/MeasurementResultInspector.vue';
 import {
@@ -44,6 +45,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const clearanceStore = useClearanceStore();
 const pipeDistanceStore = usePipeDistanceStore();
 const getWorkMeasurementSync = useGetWorkMeasurementSync();
 const ctx = useViewerContext();
@@ -357,6 +359,10 @@ async function clearMeasurements() {
 }
 
 function openPipeDistanceTool(): void {
+  emitCommand('panel.pipeDistance.open');
+}
+
+function startPipeToPipeSpacingTool(): void {
   emitCommand('measurement.pipe_to_pipe');
 }
 
@@ -513,9 +519,9 @@ watch(
           class="mt-2 rounded-md border border-border bg-background px-2 py-1">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="font-semibold">管-管净距</div>
+              <div class="font-semibold">管道距离（批量 / 连排）</div>
               <div class="mt-0.5 text-muted-foreground">
-                选择多根 BRAN 管道后检测并展示管道间最近净距。
+                选择多根 BRAN 管道后批量检测外表面净距或连排相邻间距。
               </div>
               <div data-testid="measurement-pipe-distance-status"
                 class="mt-0.5 text-muted-foreground">
@@ -539,13 +545,30 @@ watch(
                   条
                 </span>
               </div>
+              <label class="mt-1.5 flex cursor-pointer items-center gap-1.5 text-muted-foreground"
+                title="开启后，间距/净距测量相关构件保持实体显示，其余无关模型转为 X 光半透明">
+                <input v-model="clearanceStore.xrayUnrelatedModels.value"
+                  type="checkbox"
+                  data-testid="measurement-clearance-xray-unrelated"
+                  class="h-3.5 w-3.5 accent-brand" />
+                <span>无关模型 X 光半透明</span>
+              </label>
             </div>
-            <button type="button"
-              data-testid="measurement-open-pipe-distance"
-              class="h-7 shrink-0 rounded-md border border-input bg-background px-2 hover:bg-muted"
-              @click="openPipeDistanceTool">
-              打开
-            </button>
+            <div class="flex shrink-0 flex-col gap-1">
+              <button type="button"
+                data-testid="measurement-open-pipe-distance"
+                class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
+                @click="openPipeDistanceTool">
+                打开面板
+              </button>
+              <button type="button"
+                data-testid="measurement-start-pipe-to-pipe"
+                class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
+                title="交互式点选两根 BRAN 管道量平行直段中心距"
+                @click="startPipeToPipeSpacingTool">
+                点选管-管
+              </button>
+            </div>
           </div>
         </div>
       </details>

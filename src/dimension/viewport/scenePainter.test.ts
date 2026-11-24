@@ -440,6 +440,29 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(tip[2]).toBeCloseTo(3 + 0.2, 5);
   });
 
+  it('draws screen-space text with halo: true under a white halo pass on layer 1', () => {
+    const parent = new Group();
+    const font = createTestFont();
+    const painter = new ThreeSceneDimensionPainter(parent, font);
+    painter.resize(800, 600);
+    painter.paint(
+      [layout('ext-halo', [sceneGlyph('A', { anchor: [1, 2, 3], offsetPx: [0, -10] }, 13, 'external', 0, undefined, true)])],
+      SOLVESPACE_DIMENSION_THEME,
+    );
+
+    const lines = painter.group.children[0] as any;
+    const vertexCount = painter.getStats().lineVertexCount;
+    expect(vertexCount).toBe(2 * 2 * 4);
+    const layers = Array.from(lines.geometry.getAttribute('strokeLayer').array.slice(0, vertexCount)) as number[];
+    expect(layers.slice(0, 8)).toEqual(Array(8).fill(1));
+    expect(layers.slice(8)).toEqual(Array(8).fill(0));
+    const colors = Array.from(lines.geometry.getAttribute('batchColor').array.slice(0, vertexCount * 3)) as number[];
+    const halo = srgb(SOLVESPACE_DIMENSION_THEME.dimension3d.textHaloColor);
+    expect(colors[0]).toBeCloseTo(halo.r, 5);
+    expect(colors[1]).toBeCloseTo(halo.g, 5);
+    expect(colors[2]).toBeCloseTo(halo.b, 5);
+  });
+
   it('gives glyph strokes the hinted text stroke width and label text color', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());

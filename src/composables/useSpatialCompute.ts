@@ -143,6 +143,12 @@ export const BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS = 'WELD,ATTA';
  */
 export const BRAN_CLEARANCE_DEFAULT_TARGET_NOUNS = 'WALL,PANE,GWALL,STWALL,FLOOR,COLU,SCTN,GENSEC';
 /**
+ * 服务端 `preset_group` 目前仅支持 `wall` / `column`；选「梁」「板」时前端直接映射为对应 NOUN 白名单走 `group_by=noun`，
+ * 避免向不支持的 `target_groups=beam|slab` 发请求导致 HTTP 400。
+ */
+export const BRAN_CLEARANCE_BEAM_TARGET_NOUNS: readonly string[] = Object.freeze(['SCTN', 'GENSEC', 'BEAM']);
+export const BRAN_CLEARANCE_SLAB_TARGET_NOUNS: readonly string[] = Object.freeze(['FLOOR', 'SLAB']);
+/**
  * 垂直距口径的默认 NOUN：楼板板面是水平的，三维最近距会量到板边侧棱而不是设计要的
  * 「管底到板面净高」——命中的候选按 Z 向高差量（`vertical_nouns`），精算也走竖直射线网格测距。
  * 面板可改成逗号分隔清单；留空 = 不启用垂直口径。
@@ -412,13 +418,20 @@ type BranNearestClearanceQuery = {
  * 距离从管外表面起算、标注起点推到管表面——比中心线起算少报一个管半径；BRAN 无外径时服务端出 warning 退回中心线起算）。
  */
 async function fetchBranNearestClearance(query: BranNearestClearanceQuery, signal?: AbortSignal): Promise<BranNearestClearanceResponse> {
+  const usesPresetGroup = query.structureCategory === 'wall' || query.structureCategory === 'column';
+  const resolvedTargetNouns = query.structureCategory === 'beam'
+    ? [...BRAN_CLEARANCE_BEAM_TARGET_NOUNS]
+    : query.structureCategory === 'slab'
+      ? [...BRAN_CLEARANCE_SLAB_TARGET_NOUNS]
+      : query.structureCategory === 'all'
+        ? query.targetNouns
+        : undefined;
   return await genModelV1SpatialNearestClearance({
     sourceRefno: query.sourceRefno,
     sourceMode: 'bran_centerline',
-    groupBy: query.structureCategory === 'all' ? 'noun' : 'target_groups',
-    targetGroups: query.structureCategory === 'all' ? undefined : [query.structureCategory],
-    // 白名单只在「全部构件类型」（group_by=noun）下生效；选了具体结构类别时它就是目标本身
-    targetNouns: query.structureCategory === 'all' ? query.targetNouns : undefined,
+    groupBy: usesPresetGroup ? 'target_groups' : 'noun',
+    targetGroups: usesPresetGroup ? [query.structureCategory] : undefined,
+    targetNouns: resolvedTargetNouns,
     // 垂直口径与目标过滤无关：任何分桶下命中名单内的 noun 都按 Z 向高差量
     verticalNouns: query.verticalNouns,
     structuralAngleDeg: query.structuralAngleDeg,
@@ -529,7 +542,9 @@ export function createSpatialComputeStore(options: SpatialComputeStoreOptions = 
       for (const candidate of group.candidates) {
         if (!candidate || typeof candidate.refno !== 'string' || !candidate.refno || typeof candidate.noun !== 'string'
             || !Number.isFinite(candidate.distance_mm) || candidate.distance_mm < 0 || typeof candidate.intersects !== 'boolean'
-            || !candidate.annotation || candidate.annotation.label_mm !== candidate.distance_mm
+            || !candidate.annotation
+            || !Number.isFinite(candidate.annotation.label_mm)
+            || Math.abs(candidate.annotation.label_mm - candidate.distance_mm) > 1e-3
             || !pointValid(candidate.annotation.start_point) || !pointValid(candidate.annotation.end_point)
             || (candidate.variant !== undefined && typeof candidate.variant !== 'string')
             || (candidate.vertical !== undefined && typeof candidate.vertical !== 'boolean')) throw new Error('BRAN净距结果或世界坐标无效');

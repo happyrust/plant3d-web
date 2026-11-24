@@ -168,6 +168,8 @@ export function layoutLinearBetween(
     context.theme.textHeightPx,
     styleRole,
     engineeringTextRotation(arrowA, arrowB),
+    undefined,
+    input.textHalo,
   );
   const glyph = projectScenePrimitives(
     [glyphScene],

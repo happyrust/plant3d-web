@@ -281,6 +281,8 @@ export type SceneGlyphRun = Readonly<{
    */
   frame?: SceneTextFrame;
   tone?: SceneTone;
+  /** 开启屏幕空间文字的底层白色描边光晕（`STROKE_HALO_DEPTH`），防深色/半透明背景重影。 */
+  halo?: boolean;
 }>;
 
 export type ScenePrimitive =
@@ -429,6 +431,8 @@ export type NormalizedDimensionBase = Readonly<{
   role: DimensionSemanticRole;
   labelPinned: boolean;
   authoritativeText?: string;
+  /** 为屏幕空间标注文字绘制白色描边光晕底衬。 */
+  textHalo?: boolean;
 }>;
 
 /** 记录里存的设计系方向（#68）；布局用它们做与视向有关的预校验，缺省时按端点 / 轴推。 */
@@ -683,6 +687,8 @@ export type ExplicitLayoutInput = Readonly<{
   role: DimensionSemanticRole;
   labelPinned: boolean;
   formattedLabel: string;
+  /** 为屏幕空间标注文字绘制白色描边光晕底衬。 */
+  textHalo?: boolean;
   lines: readonly Readonly<{
     from: Vec3;
     to: Vec3;

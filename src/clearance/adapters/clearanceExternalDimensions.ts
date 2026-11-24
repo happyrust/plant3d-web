@@ -92,6 +92,10 @@ export type ClearanceExternalDimensionOptions = Readonly<{
   pipeRowBothMetrics?: boolean;
   /** 连排每对加一组关键点标注：截面上两管中心（×）、推导间隔两端的外表面点（○）、管底对齐的管底点（○）与虚线支承线。 */
   pipeRowKeyPoints?: boolean;
+  /** 对相交记录（`snapshot.intersects === true`）输出 3D 碰撞点靶心标记 `⊗` + 抬升「相交」标签，而非静默跳过。 */
+  showIntersectionMarkers?: boolean;
+  /** 对非连排净距记录的两端真实表面落点（`sourcePoint` / `targetPoint`）输出 3D 圆点标记。 */
+  surfaceEndMarkers?: boolean;
 }>;
 
 /** 显式布局（标注图元）与其中的点标记：`@/dimension` 门面不导出内核类型，从外部尺寸记录的 layout 里取。 */
@@ -156,15 +160,40 @@ function pipeRowKeyPointRecords(records: readonly ClearanceRecord[]): ExternalDi
 const PIPE_ROW_OFFSET_TIERS_M: readonly number[] = [0.22, 0.36];
 const PIPE_ROW_LABEL_TS: readonly number[] = [0.5, 0.36, 0.64];
 
+/** 非连排多条净距同屏交错摆位：首条保持默认 `{ offsetM: 0.5, labelT: 0.5, side: 1 }`，后续按序号错开避免重叠。 */
+const NON_ROW_STAGGERED_PLACEMENTS: readonly Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }>[] = [
+  { offsetM: 0.5, labelT: 0.5, side: 1 },
+  { offsetM: 0.5, labelT: 0.5, side: -1 },
+  { offsetM: 0.85, labelT: 0.36, side: 1 },
+  { offsetM: 0.85, labelT: 0.64, side: -1 },
+  { offsetM: 1.2, labelT: 0.64, side: 1 },
+  { offsetM: 1.2, labelT: 0.36, side: -1 },
+];
+
+/** 根据记录状态与精度档位映射 3D 语义角色：过期/失败走 invalid（琥珀虚线），估算走 approximate（点虚线），精确走 external（实线红）。 */
+export function resolveClearanceSemanticRole(
+  record: ClearanceRecord,
+): ExternalDimensionRecord['role'] {
+  if (record.status === 'stale' || record.status === 'failed') return 'invalid';
+  const approximate = record.pipeRow?.metric === 'derived-gap'
+    ? pipeRowGapEstimated(record.pipeRow)
+    : toLegacyApproximate(record.provenance.accuracyClass);
+  return approximate ? 'approximate' : 'external';
+}
+
 function resolvePipeRowPlacement(
   record: ClearanceRecord,
   rowIndex: number,
+  nonRowIndex: number,
   defaultOffsetM: number,
   explicitOffset: boolean,
 ): Readonly<{ offsetM: number; labelT: number; side: 1 | -1 }> {
   const side: 1 | -1 = record.pipeRow?.metric === 'derived-gap' ? -1 : 1;
-  if (!record.pipeRow || explicitOffset) {
+  if (explicitOffset) {
     return { offsetM: defaultOffsetM, labelT: 0.5, side };
+  }
+  if (!record.pipeRow) {
+    return NON_ROW_STAGGERED_PLACEMENTS[nonRowIndex % NON_ROW_STAGGERED_PLACEMENTS.length]!;
   }
   const tierOffset = PIPE_ROW_OFFSET_TIERS_M[rowIndex % PIPE_ROW_OFFSET_TIERS_M.length]!;
   const labelT = PIPE_ROW_LABEL_TS[rowIndex % PIPE_ROW_LABEL_TS.length]!;
@@ -194,6 +223,8 @@ export function clearanceRecordsToExternalDimensions(
     }
     if (!rowPairs.has(pairKey)) rowPairs.set(pairKey, rowPairs.size);
   }
+  let nonRowCount = 0;
+  const surfaceMarkers: ExplicitMarker[] = [];
   for (const record of records) {
     const id = `${CLEARANCE_EXTERNAL_SOURCE}:${record.id}`;
     const snapshot = record.snapshot;
@@ -212,11 +243,38 @@ export function clearanceRecordsToExternalDimensions(
       continue;
     }
     if (snapshot.intersects) {
+      if (options.showIntersectionMarkers) {
+        const at = snapshot.sourcePoint;
+        out.push({
+          id,
+          source: CLEARANCE_EXTERNAL_SOURCE,
+          sourceLabel: clearanceSourceLabel(record),
+          role: 'invalid',
+          category: 'annotation',
+          layout: {
+            id,
+            role: 'invalid',
+            labelPinned: true,
+            textHalo: true,
+            labelPresentation: 'above',
+            formattedLabel: clearanceDimensionText(record),
+            lines: [],
+            labelAnchor: at,
+            arrowLines: [],
+            markers: [
+              { at, shape: 'cross' },
+              { at, shape: 'circle', radiusPx: 6 },
+            ],
+          },
+        });
+        continue;
+      }
       skipped.push({ id, reason: 'Intersecting objects have no dimension line' });
       continue;
     }
     const a: Vec3 = snapshot.sourcePoint;
     const b: Vec3 = snapshot.targetPoint;
+    const role = resolveClearanceSemanticRole(record);
     const siblingSummary = (() => {
       if (!pairKey) return '';
       if (record.pipeRow!.metric === 'derived-gap') {
@@ -232,21 +290,49 @@ export function clearanceRecordsToExternalDimensions(
     const rowPairIndex = pairKey && record.pipeRow
       ? (pairIndexByRow.get(record.pipeRow.rowGroupId)?.get(pairKey) ?? 0)
       : 0;
+    const currentNonRowIndex = record.pipeRow ? 0 : nonRowCount++;
     out.push({
       id,
       source: CLEARANCE_EXTERNAL_SOURCE,
       sourceLabel: `${clearanceSourceLabel(record)}${siblingSummary}`,
-      role: 'external',
+      role,
       layout: {
         id,
         kind: 'linear',
-        role: 'external',
+        role,
         labelPinned: false,
+        textHalo: true,
         authoritativeText: clearanceDimensionText(record),
         a,
         b,
-        // 连排双度量同连线：推导间隔画到另一侧，同一排内相邻对交错偏移，不互相叠字。
-        placement: resolvePipeRowPlacement(record, rowPairIndex, offsetM, explicitOffset),
+        // 连排双度量同连线：推导间隔画到另一侧，同一排内相邻对交错偏移，不互相叠字；非连排多条同样按序交错。
+        placement: resolvePipeRowPlacement(record, rowPairIndex, currentNonRowIndex, offsetM, explicitOffset),
+      },
+    });
+    if (options.surfaceEndMarkers && !record.pipeRow) {
+      surfaceMarkers.push(
+        { at: a, shape: 'circle', radiusPx: KEY_POINT_RADIUS_PX },
+        { at: b, shape: 'circle', radiusPx: KEY_POINT_RADIUS_PX },
+      );
+    }
+  }
+  if (surfaceMarkers.length > 0) {
+    const id = `${CLEARANCE_EXTERNAL_SOURCE}:surface-end-points`;
+    out.push({
+      id,
+      source: CLEARANCE_EXTERNAL_SOURCE,
+      sourceLabel: '净距两端表面落点',
+      role: 'external',
+      category: 'annotation',
+      layout: {
+        id,
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '',
+        lines: [],
+        labelAnchor: surfaceMarkers[0]!.at,
+        arrowLines: [],
+        markers: surfaceMarkers,
       },
     });
   }

@@ -14,7 +14,20 @@ import { resolveDtxObjectIdsByRefno } from '@/composables/useDbnoInstancesDtxLoa
 export const PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES = 20;
 export const PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES = 5;
 export const PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT = 128;
-export const PIPE_STRUCTURE_DEFAULT_NOUNS = ['WALL', 'COLUMN'];
+/** 交互式「管-墙/柱」使用的后端预置目标组（与 gen-model `spatial_clearance::preset_group` 一致） */
+export const PIPE_STRUCTURE_TARGET_GROUPS: readonly string[] = Object.freeze(['wall', 'column']);
+/** 预置组 `wall` / `column` 展开后的全部构件 NOUN 白名单（用于前端二次校验） */
+export const PIPE_STRUCTURE_DEFAULT_NOUNS: readonly string[] = Object.freeze([
+  'WALL',
+  'PANE',
+  'GWALL',
+  'STWALL',
+  'CWALL',
+  'COLU',
+  'SCTN',
+  'GENSEC',
+  'COLUMN',
+]);
 
 /** 管-墙/柱候选的最小形状（退役前 `/api/space/wall-distance` 的候选行，现由 v1 `nearest-clearance` 的候选折出来）。 */
 export type PipeWallDistanceCandidate = {
@@ -249,7 +262,11 @@ export function computeApproxNearestBetweenObjects(
   let best: ApproxNearestBetweenObjectsResult | null = null;
 
   for (const sourceSeed of sourceSeeds) {
-    const closest = layer.closestPointToObject(input.targetObjectId, sourceSeed);
+    const closest = layer.closestPointToObject(
+      input.targetObjectId,
+      sourceSeed,
+      best ? best.distance : undefined,
+    );
     if (!closest) continue;
     const candidate: ApproxNearestBetweenObjectsResult = {
       sourcePoint: vec3ToTuple(sourceSeed),
@@ -262,7 +279,11 @@ export function computeApproxNearestBetweenObjects(
   }
 
   for (const targetSeed of targetSeeds) {
-    const closest = layer.closestPointToObject(input.sourceObjectId, targetSeed);
+    const closest = layer.closestPointToObject(
+      input.sourceObjectId,
+      targetSeed,
+      best ? best.distance : undefined,
+    );
     if (!closest) continue;
     const candidate: ApproxNearestBetweenObjectsResult = {
       sourcePoint: vec3ToTuple(closest.point),

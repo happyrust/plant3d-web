@@ -429,8 +429,20 @@ function labelClearance(
  * touching it, plus half a pixel so a sub-pixel projection cannot make them
  * coincide.
  */
-function labelLiftPx(textHeightPx: number, theme: LayoutContext['theme']): number {
-  return textHeightPx / 2 + theme.labelPaddingPx / 2 + 0.5;
+function labelLiftPx(
+  textHeightPx: number,
+  theme: LayoutContext['theme'],
+  input?: ExplicitLayoutInput,
+): number {
+  const baseLift = textHeightPx / 2 + theme.labelPaddingPx / 2 + 0.5;
+  if (!input || input.lines.some(line => line.part === 'dimension') || !input.markers?.length) {
+    return baseLift;
+  }
+  // 零线段点标注（如相交十字/靶心标记）：锚点处有 marker，抬升量需跨过 marker 半径与安全间隙，避免文字压住十字中心
+  const maxMarkerRadiusPx = Math.max(
+    ...input.markers.map(marker => marker.radiusPx ?? theme.markerRadiusPx),
+  );
+  return baseLift + maxMarkerRadiusPx + theme.aboveRowClearancePx + 2;
 }
 
 /**
@@ -837,7 +849,7 @@ export function layoutExplicit(
   // the line draw as one untouched segment (see `explicitSceneLines`).
   let above = drawsLabelAbove(input);
   let liftOffsetPx: Vec2 = above
-    ? labelLiftOffset(input, context, labelLiftPx(textHeightPx, context.theme))
+    ? labelLiftOffset(input, context, labelLiftPx(textHeightPx, context.theme, input))
     : [0, 0];
   let clearance = above
     ? null
@@ -959,6 +971,8 @@ export function layoutExplicit(
       textHeightPx,
       styleRole,
       labelRotationRad,
+      undefined,
+      input.textHalo,
     ))
     : [sceneGlyph(
       input.formattedLabel,
@@ -966,6 +980,8 @@ export function layoutExplicit(
       textHeightPx,
       styleRole,
       labelRotationRad,
+      undefined,
+      input.textHalo,
     )];
   const lineAdvancePx = textHeightPx * context.theme.labelLineAdvance;
   const extraGlyphScenes = (input.texts ?? []).map((text) =>

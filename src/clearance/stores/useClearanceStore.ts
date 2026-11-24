@@ -14,6 +14,7 @@ import {
   type ComputeClearanceInput,
 } from '@/clearance/services/clearanceService';
 import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
+import { pruneScopedPersistenceKeys } from '@/clearance/services/scopedResultPersistence';
 
 /**
  * Clearance 记录的状态（09-11 PR1.1：拾取流与抽屉共享同一个 store——选择、隐藏、删除、定位、精度标签都在这里）。
@@ -38,6 +39,32 @@ const showAnnotations = computed<boolean>({
   },
 });
 const showAnnotationsPreference = computed(() => showAnnotationsPref.value);
+const XRAY_UNRELATED_STORAGE_KEY = 'plant3d-clearance-xray-unrelated-v1';
+
+function readXrayUnrelatedPref(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(XRAY_UNRELATED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeXrayUnrelatedPref(enabled: boolean): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(XRAY_UNRELATED_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {
+    // 忽略本机存储不可用
+  }
+}
+
+/** 测量时无关模型 X 光半透明显示选项（默认关闭，跨管道距离 / 中心线净距 / 测量面板共享并落盘）。 */
+const xrayUnrelatedModels = ref(readXrayUnrelatedPref());
+watch(xrayUnrelatedModels, (enabled) => {
+  writeXrayUnrelatedPref(enabled);
+}, { flush: 'sync' });
+
 const isComputing = ref(false);
 const lastError = ref<string | null>(null);
 const persistenceError = ref<string | null>(null);
@@ -50,13 +77,40 @@ let restoring = false;
 let loadBlocked = false;
 let calculationsAllowed = true;
 const pairRequests = new Map<string, number>();
+const computeOptionsById = new Map<string, Pick<ComputeClearanceInput, 'perpendicular' | 'maxDistanceMm'>>();
 let nextRequest = 0;
 const unsavedScopes = new Map<string, { raw: string; blocked: boolean }>();
+
+/**
+ * 校验持久化/快照里的记录标识是否与载荷一致：
+ * - 普通净距记录：`clearance:<source>:<target>`（与 `clearanceRecordId(inputs)` 逐字一致）；
+ * - 连排相邻记录：`piperow:<alignMode>:<metric>:<a_sorted>:<b_sorted>@<startMm>-<endMm>`
+ *   （允许 ±0.11 mm 容差以覆盖 0.1 mm 格式化与米↔毫米往返舍入）。
+ */
+function isValidClearanceRecordId(record: ClearanceRecord): boolean {
+  if (!record.pipeRow) return record.id === clearanceRecordId(record.inputs);
+  const [a, b] = [record.inputs.sourceRefno, record.inputs.targetRefno].sort();
+  const expectedPrefix = `piperow:${record.pipeRow.alignMode}:${record.pipeRow.metric}:${a}:${b}@`;
+  if (!record.id.startsWith(expectedPrefix)) return false;
+  const range = record.id.slice(expectedPrefix.length);
+  const match = /^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/.exec(range);
+  if (!match) return false;
+  const startMm = Number(match[1]);
+  const endMm = Number(match[2]);
+  const expectedStartMm = record.pipeRow.section.axialStartM * 1000;
+  const expectedEndMm = record.pipeRow.section.axialEndM * 1000;
+  return Number.isFinite(startMm) && Number.isFinite(endMm)
+    && Math.abs(startMm - expectedStartMm) <= 0.11
+    && Math.abs(endMm - expectedEndMm) <= 0.11;
+}
 
 function persistRecords(): boolean {
   if (restoring || !persistenceScope) return false;
   const raw = JSON.stringify({
-    version: 1, scope: persistenceScope, records: records.value,
+    version: 1,
+    scope: persistenceScope,
+    savedAt: new Date().toISOString(),
+    records: records.value,
     hiddenIds: [...hiddenIds.value], activeId: activeId.value, showAnnotations: showAnnotationsPref.value,
   });
   unsavedScopes.set(persistenceScope, { raw, blocked: loadBlocked });
@@ -66,7 +120,9 @@ function persistRecords(): boolean {
     return false;
   }
   try {
-    persistenceStorage.setItem(`plant3d-clearance-v1:${persistenceScope}`, raw);
+    const fullKey = `plant3d-clearance-v1:${persistenceScope}`;
+    persistenceStorage.setItem(fullKey, raw);
+    pruneScopedPersistenceKeys(persistenceStorage, 'plant3d-clearance-v1', fullKey);
     unsavedScopes.delete(persistenceScope);
     persistenceError.value = null;
     persistenceLabel.value = '本机已保存（未提交校审）';
@@ -111,7 +167,7 @@ export function useClearanceStore() {
     }
     const loaded: ClearanceRecord[] = data.records.map((record: Parameters<typeof createClearanceRecord>[0]) => createClearanceRecord(record));
     if (new Set(loaded.map(record => record.id)).size !== loaded.length
-      || loaded.some(record => record.id !== clearanceRecordId(record.inputs))) throw new Error('净距记录标识重复或不匹配');
+      || loaded.some(record => !isValidClearanceRecordId(record))) throw new Error('净距记录标识重复或不匹配');
     const stale = loaded.map(record => withClearanceStatus(record, 'stale'));
     const ids = new Set(stale.map(record => record.id));
     const hidden = new Set<string>(data.hiddenIds.filter((id: string) => ids.has(id)));
@@ -121,6 +177,7 @@ export function useClearanceStore() {
       recordEpoch += 1;
       pendingComputations = 0;
       pairRequests.clear();
+      computeOptionsById.clear();
       isComputing.value = false;
       try {
         records.value = stale;
@@ -147,11 +204,13 @@ export function useClearanceStore() {
     recordEpoch += 1;
     pendingComputations = 0;
     pairRequests.clear();
+    computeOptionsById.clear();
     isComputing.value = false;
     restoring = true;
     try {
       persistenceScope = scope;
       persistenceStorage = storage;
+      if (storage) pruneScopedPersistenceKeys(storage, 'plant3d-clearance-v1', `plant3d-clearance-v1:${scope}`);
       loadBlocked = false;
       records.value = [];
       hiddenIds.value = new Set();
@@ -173,7 +232,7 @@ export function useClearanceStore() {
       }
       const loaded = data.records.map((record: Parameters<typeof createClearanceRecord>[0]) => createClearanceRecord(record));
       if (new Set(loaded.map((record: ClearanceRecord) => record.id)).size !== loaded.length
-        || loaded.some((record: ClearanceRecord) => record.id !== clearanceRecordId(record.inputs))) throw new Error('净距记录标识重复或不匹配');
+        || loaded.some((record: ClearanceRecord) => !isValidClearanceRecordId(record))) throw new Error('净距记录标识重复或不匹配');
       // 同一上下文重开也不能证明服务器模型未变；快照保留，显式标记待重算。
       records.value = loaded.map((record: ClearanceRecord) => withClearanceStatus(record, 'stale'));
       const ids = new Set(records.value.map(record => record.id));
@@ -201,6 +260,7 @@ export function useClearanceStore() {
     recordEpoch += 1;
     pendingComputations = 0;
     pairRequests.clear();
+    computeOptionsById.clear();
     isComputing.value = false;
   }
 
@@ -209,9 +269,11 @@ export function useClearanceStore() {
   }
 
   /** 同 id 覆盖（保留原 `createdAt`），否则追加。 */
-  function upsertRecord(record: ClearanceRecord): ClearanceRecord {
-    // 新算出的结果是用户主动操作，解除「恢复后默认隐藏」。
-    restoredHidden.value = false;
+  function upsertRecord(record: ClearanceRecord, options?: { keepRestoredHidden?: boolean }): ClearanceRecord {
+    // 新算出的结果是用户主动操作，解除「恢复后默认隐藏」；重算失败标 failed 时不误解除。
+    if (!options?.keepRestoredHidden) {
+      restoredHidden.value = false;
+    }
     const index = records.value.findIndex(existing => existing.id === record.id);
     if (index < 0) {
       records.value = [...records.value, record];
@@ -229,6 +291,7 @@ export function useClearanceStore() {
 
   function removeRecord(id: string) {
     records.value = records.value.filter(record => record.id !== id);
+    computeOptionsById.delete(id);
     if (activeId.value === id) activeId.value = null;
     if (hiddenIds.value.has(id)) {
       const next = new Set(hiddenIds.value);
@@ -246,6 +309,7 @@ export function useClearanceStore() {
     recordEpoch += 1;
     pendingComputations = 0;
     pairRequests.clear();
+    computeOptionsById.clear();
     isComputing.value = false;
     records.value = [];
     activeId.value = null;
@@ -356,6 +420,14 @@ export function useClearanceStore() {
     const id = clearanceRecordId(input);
     const request = ++nextRequest;
     pairRequests.set(id, request);
+    const savedOptions: { perpendicular?: boolean; maxDistanceMm?: number } = {};
+    if (input.perpendicular !== undefined) savedOptions.perpendicular = input.perpendicular;
+    if (input.maxDistanceMm !== undefined) savedOptions.maxDistanceMm = input.maxDistanceMm;
+    if (savedOptions.perpendicular !== undefined || savedOptions.maxDistanceMm !== undefined) {
+      computeOptionsById.set(id, savedOptions);
+    } else {
+      computeOptionsById.delete(id);
+    }
     pendingComputations += 1;
     isComputing.value = true;
     lastError.value = null;
@@ -371,7 +443,7 @@ export function useClearanceStore() {
       if (epoch !== recordEpoch || pairRequests.get(id) !== request) return null;
       lastError.value = errorText(error);
       const previous = findRecord(id);
-      if (previous) upsertRecord(withClearanceStatus(previous, 'failed'));
+      if (previous) upsertRecord(withClearanceStatus(previous, 'failed'), { keepRestoredHidden: true });
       return null;
     } finally {
       if (epoch === recordEpoch) {
@@ -399,11 +471,14 @@ export function useClearanceStore() {
       lastError.value = '平行直段中心距记录请用「测量 → 管-管」工具重新测量，不能按整构件净距重算';
       return null;
     }
+    const preserved = computeOptionsById.get(id);
     return compute(
       {
         sourceRefno: record.inputs.sourceRefno,
         targetRefno: record.inputs.targetRefno,
         targetKind: record.inputs.targetKind,
+        ...(preserved?.perpendicular !== undefined ? { perpendicular: preserved.perpendicular } : {}),
+        ...(preserved?.maxDistanceMm !== undefined ? { maxDistanceMm: preserved.maxDistanceMm } : {}),
       },
       { ...options, activate: options.activate ?? (activeId.value === id) },
     );
@@ -419,6 +494,10 @@ export function useClearanceStore() {
     restoredHidden.value = records.value.length > 0;
   }
 
+  function setXrayUnrelatedModels(enabled: boolean) {
+    xrayUnrelatedModels.value = Boolean(enabled);
+  }
+
   return {
     captureSnapshot,
     prepareSnapshotRestore,
@@ -426,6 +505,8 @@ export function useClearanceStore() {
     /** 落盘偏好（不含会话闸门）；快照保存用它，免得把「本次隐藏」写成用户偏好。 */
     showAnnotationsPreference,
     markRestoredHidden,
+    xrayUnrelatedModels,
+    setXrayUnrelatedModels,
     records,
     activeId,
     activeRecord,

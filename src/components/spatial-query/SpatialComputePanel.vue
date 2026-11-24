@@ -208,6 +208,26 @@
             </div>
           </label>
 
+          <!-- 测量时无关模型 X 光半透明（与管道距离抽屉、测量面板共享同一开关） -->
+          <label v-if="isBranScenario"
+            class="mt-2 flex cursor-pointer items-start gap-2.5 rounded-[10px] border px-3 py-2 transition-colors"
+            :class="clearanceStore.xrayUnrelatedModels.value ? 'border-brand bg-brand-subtle' : 'border-gray-200 bg-white'"
+            data-testid="bran-xray-unrelated-label">
+            <input v-model="clearanceStore.xrayUnrelatedModels.value"
+              type="checkbox"
+              data-testid="bran-xray-unrelated-toggle"
+              class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-brand" />
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold leading-snug"
+                :class="clearanceStore.xrayUnrelatedModels.value ? 'text-brand' : 'text-foreground'">
+                无关模型 X 光半透明
+              </div>
+              <div class="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                仅保留当前净距测量相关构件实体，其余模型半透明（无结果或关闭后自动还原）
+              </div>
+            </div>
+          </label>
+
           <!-- 查看方式：算出候选后可用——只留源 BRAN 与最近目标可看，其余 X 光半透明或隐藏；随标注集自动重放 -->
           <div v-if="isBranScenario" class="mt-2 flex items-center gap-2" data-testid="bran-inspect-block">
             <span class="shrink-0 text-xs font-semibold text-muted-foreground">查看方式</span>
@@ -362,6 +382,14 @@
               {{ computeState.error }}
             </div>
 
+            <div v-if="computeState.refiningKeys.length > 0"
+              data-testid="bran-refining-notice"
+              class="mb-2 flex items-center gap-1.5 rounded-[10px] border border-brand/25 bg-brand-subtle px-3 py-1.5 text-[11px] font-medium text-brand"
+              role="status">
+              <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span>正在进行网格外表面精算（{{ computeState.refiningKeys.length }} 项，复杂构件可能需要数秒）…</span>
+            </div>
+
             <div v-if="computeState.resultRows.length > 0" class="overflow-hidden rounded-[10px] border border-gray-200">
               <!-- Table Header -->
               <div class="flex h-8 items-center justify-between bg-gray-50 px-2.5 text-[11px] font-semibold text-muted-foreground">
@@ -387,10 +415,10 @@
                   <div class="ml-auto flex shrink-0 items-center gap-1">
                     <button v-if="row.candidateKey" type="button" :data-testid="`bran-refine-${row.candidateKey}`"
                       :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading || isBranRowTargetMissing(row)"
-                      :title="isBranRowTargetMissing(row) ? '所测构件已不在场景中' : undefined"
+                      :title="isBranRowTargetMissing(row) ? '所测构件已不在场景中' : computeState.refiningKeys.includes(row.candidateKey) ? '正在进行网格外表面精算，复杂构件可能需要数秒' : '按真实三角网格精算外表面净距'"
                       class="whitespace-nowrap rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] disabled:opacity-50"
                       @click="refineBranCandidate(row.candidateKey)">
-                      {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}
+                      {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中…' : '精算' }}
                     </button>
                     <button v-if="isBranScenario && row.candidateKey"
                       type="button"
@@ -455,13 +483,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 import { Check, ChevronDown, Loader2 } from 'lucide-vue-next';
 
 import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
 import { summarizeClearanceWarnings } from '@/clearance/services/clearanceContract';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { deliveryUnitSceneRefnos } from '@/composables/deliveryUnitScene';
 import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
@@ -517,6 +546,7 @@ const {
 // useSpatialQuery 是单例 store，但其工厂内部会建 selection/viewer 依赖（首建需 setup 注入上下文）——
 // 与 useSelectionStore 同理必须在 setup 期取一次复用，事件处理器里再 import+调会在单例未建时抛注入错。
 const spatialQuery = useSpatialQuery();
+const clearanceStore = useClearanceStore();
 
 const computeState = currentScenarioState;
 const warningSummary = computed(() => summarizeClearanceWarnings(computeState.value.warnings));
@@ -529,12 +559,26 @@ const refinableDrawnCount = computed(() => isBranScenario.value
     !item.candidate.parallel && (item.provenance?.method ?? 'centerline-to-aabb') !== 'surface-to-surface').length
   : 0);
 
+let focusTransformTimer: number | null = null;
+
+function clearFocusTransformTimer(): void {
+  if (focusTransformTimer !== null) {
+    window.clearInterval(focusTransformTimer);
+    focusTransformTimer = null;
+  }
+}
+
+onUnmounted(() => {
+  clearFocusTransformTimer();
+});
+
 /**
  * 「执行计算并定位」：算完把相机框到「源 BRAN 整根管道 + 本次画出的最近目标」。
  * 之前这个按钮只发查询、根本不动相机（面板的 flyTo 能力只在行「跳转」里用过）——
  * 算完眼前还是原来那一屏，看不到自己那根管道，也看不出尺寸线量的是谁。
  */
 function focusSourceBran(): void {
+  clearFocusTransformTimer();
   const viewer = viewerContext.viewerRef.value;
   if (!viewer?.scene) return;
   const state = computeState.value;
@@ -592,15 +636,16 @@ function focusSourceBran(): void {
     if (aabb) flyToAabb(aabb);
   };
   flyNow();
+  if (!resolveSceneWorldTransform(viewer).identity) return;
   let ticks = 0;
-  const timer = window.setInterval(() => {
+  focusTransformTimer = window.setInterval(() => {
     ticks += 1;
     if (!resolveSceneWorldTransform(viewer).identity) {
-      window.clearInterval(timer);
+      clearFocusTransformTimer();
       flyNow();
       return;
     }
-    if (ticks >= 40) window.clearInterval(timer);
+    if (ticks >= 40) clearFocusTransformTimer();
   }, 150);
 }
 
@@ -754,13 +799,23 @@ watch(() => currentScenarioState.value.annotationCandidates, candidates => {
   if (!mode) return;
   const keep = candidates.length > 0 ? branInspectKeepRefnos() : [];
   // 集合暂时为空（补装几何触发的自动重查会先清再回填）：只恢复场景、保留模式，
-  // 候选回填后下一次触发会按当前模式自动重放；用户想退出随时点按钮即可（模式开着时按钮不禁用）。
+  // 候选回填后下一次触发会按当前模式自动重放；若源 BRAN 已清空（如点击「清空净距」/ 重置场景），同时退出模式。
   if (keep.length === 0) {
     // 作废在途应用——本次空集恢复必须盖过异步补装中的上一帧应用
     branInspectSeq += 1;
     spatialQuery.restoreScene();
+    if (!currentScenarioState.value.queriedSourceRefno) {
+      branInspectMode.value = '';
+    }
   } else {
     void applyBranInspect(mode, keep);
+  }
+});
+
+watch(clearanceStore.xrayUnrelatedModels, (enabled, prev) => {
+  // 关闭全局「无关模型 X 光半透明」时，如当前面板正处于自动/手动 X 光查看态则一并退出还原场景。
+  if (prev === true && !enabled && branInspectMode.value === 'xray') {
+    void setBranInspectMode('');
   }
 });
 
@@ -774,7 +829,7 @@ function branRowDimensionId(row: SpatialComputeResultRow): string | null {
   const match = computeState.value.annotationCandidates.find(
     item => branCandidateKey(item.targetGroup, item.candidate) === row.candidateKey,
   );
-  return match ? branClearanceDimensionId(match.targetGroup, match.candidate.refno, match.index) : null;
+  return match ? branClearanceDimensionId(match.targetGroup, match.candidate.refno, match.candidate.variant) : null;
 }
 
 /** 悬停结果行 → 三维里那条净距尺寸进 hovered 样式（viewport.setHover 对外部记录同样生效）。 */

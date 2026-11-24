@@ -254,7 +254,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     store.dispose();
   });
 
-  it.each(['wall', 'column', 'beam', 'slab'] as const)('queries the independent %s structure group and preserves warnings', async (category) => {
+  it.each(['wall', 'column'] as const)('queries the independent %s structure preset group and preserves warnings', async (category) => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ...nounGroupedResponse, warnings: ['unclassified sections'] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const store = createSpatialComputeStore();
@@ -266,6 +266,39 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(query.get('target_groups')).toBe(category);
     expect(query.get('structural_angle_deg')).toBe('3');
     expect(store.currentScenarioState.value.warnings).toEqual(['unclassified sections']);
+  });
+
+  it.each([
+    ['beam', 'SCTN,GENSEC,BEAM'],
+    ['slab', 'FLOOR,SLAB'],
+  ] as const)('maps %s category to group_by=noun + target_nouns=%s for backend contract compatibility', async (category, expectedNouns) => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ...nounGroupedResponse, warnings: ['mapped'] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = createSpatialComputeStore();
+    store.currentScenarioState.value.structureCategory = category;
+    await store.submitScenario();
+    const query = new URL(String(fetchMock.mock.calls[0]?.[0]), 'http://localhost').searchParams;
+    expect(query.get('group_by')).toBe('noun');
+    expect(query.get('target_groups')).toBeNull();
+    expect(query.get('target_nouns')).toBe(expectedNouns);
+    expect(store.currentScenarioState.value.warnings).toEqual(['mapped']);
+  });
+
+  it('tolerates minor floating-point rounding drift (<= 1e-3 mm) between label_mm and distance_mm during snapshot restore', async () => {
+    const store = createSpatialComputeStore();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    const snapshot = store.captureSnapshot() as {
+      branGroups: { candidates: { distance_mm: number; annotation: { label_mm: number } }[] }[];
+    };
+    snapshot.branGroups[0]!.candidates[0]!.annotation.label_mm =
+      snapshot.branGroups[0]!.candidates[0]!.distance_mm + 0.0004;
+    expect(() => store.prepareSnapshotRestore(snapshot)).not.toThrow();
+
+    snapshot.branGroups[0]!.candidates[0]!.annotation.label_mm =
+      snapshot.branGroups[0]!.candidates[0]!.distance_mm + 0.01;
+    expect(() => store.prepareSnapshotRestore(snapshot)).toThrow('BRAN净距结果或世界坐标无效');
+    store.dispose();
   });
 
   it('指定结构类别时不发 target_nouns（类别本身就是目标），留空白名单回到半径内全类型', async () => {

@@ -337,7 +337,7 @@ describe('MeasurementPanel', () => {
       '[data-testid="measurement-open-pipe-distance"]',
     ) as HTMLButtonElement | null;
 
-    expect(card?.textContent).toContain('管-管净距');
+    expect(card?.textContent).toContain('管道距离（批量 / 连排）');
     expect(card?.textContent).toContain('选择多根 BRAN 管道');
     expect(selectedCount?.textContent).toContain('2');
     expect(resultCount?.textContent).toContain('1');
@@ -354,7 +354,13 @@ describe('MeasurementPanel', () => {
 
     openButton?.click();
     await nextTick();
+    expect(emitCommand).toHaveBeenCalledWith('panel.pipeDistance.open');
 
+    const interactivePipeButton = host.querySelector(
+      '[data-testid="measurement-start-pipe-to-pipe"]',
+    ) as HTMLButtonElement | null;
+    interactivePipeButton?.click();
+    await nextTick();
     expect(emitCommand).toHaveBeenCalledWith('measurement.pipe_to_pipe');
 
     app.unmount();

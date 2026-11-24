@@ -206,4 +206,39 @@ describe('clearanceExternalDimensions', () => {
       'Intersecting objects have no dimension line',
     ]);
   });
+
+  it('开启 showIntersectionMarkers 与 surfaceEndMarkers 时输出碰撞靶心标记、表面落点圆点及语义角色', () => {
+    const exact = surfaceClearanceToRecord(elboToCurvedWallResponse(), INPUT, AT);
+    const stale = withClearanceStatus(exact, 'stale');
+    const approxGap = pipeRowRecord('derived-gap', 50, 'bore-estimate');
+    const hit = surfaceClearanceToRecord(
+      intersectingResponse(),
+      { sourceRefno: '24384_99999', targetRefno: '17496_105912' },
+      AT,
+    );
+
+    expect(clearanceRecordsToExternalDimensions([exact]).records[0]!.role).toBe('external');
+    expect(clearanceRecordsToExternalDimensions([stale]).records[0]!.role).toBe('invalid');
+    expect(clearanceRecordsToExternalDimensions([approxGap]).records[0]!.role).toBe('approximate');
+
+    const withMarkers = clearanceRecordsToExternalDimensions([exact, hit], {
+      showIntersectionMarkers: true,
+      surfaceEndMarkers: true,
+    });
+    expect(withMarkers.skipped).toEqual([]);
+    const intersectionRecord = withMarkers.records.find(r => r.id === `clearance:${hit.id}`);
+    expect(intersectionRecord).toMatchObject({
+      role: 'invalid',
+      category: 'annotation',
+      layout: {
+        role: 'invalid',
+        textHalo: true,
+        labelPresentation: 'above',
+        formattedLabel: '相交',
+      },
+    });
+    const endPointRecord = withMarkers.records.find(r => r.id === 'clearance:surface-end-points');
+    expect(endPointRecord).toBeDefined();
+    expect((endPointRecord!.layout as ExplicitLayout).markers).toHaveLength(2);
+  });
 });
