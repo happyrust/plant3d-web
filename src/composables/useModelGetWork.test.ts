@@ -699,4 +699,26 @@ describe('useModelGetWork：头一次点取最新就认得出「本页打开之�
     expect(second.detail).not.toContain('这次取最新之前后端重启过');
     expect(scene.withdraw).not.toHaveBeenCalled();
   });
+
+  it('withdrawnEmpty 的节点纳入取最新与 loadedModelDbnums，几何恢复时重新装回；单纯没装过的节点（loaded=false 且非 withdrawnEmpty）仍不纳入', async () => {
+    const { getWork } = await load();
+    const EQ_A = '24384_30010';
+    const NEVER_LOADED = '24384_30099';
+    mocks.entries.mockReturnValue([
+      tableEntry(EQ_A, { loaded: false, withdrawnEmpty: true, loadedModelSesno: 1144, loadedFileLatestSesno: 1144 }),
+      tableEntry(NEVER_LOADED, { loaded: false, loadedModelSesno: null, loadedFileLatestSesno: null }),
+    ]);
+    expect(getWork.loadedModelDbnums()).toEqual([8000]);
+
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 }] });
+    mocks.facts.mockResolvedValue(facts('latest', 1146));
+    const scene = scenePort();
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+    expect(report.models.rootsTotal).toBe(1);
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(EQ_A);
+    expect(report.models.reloaded).toEqual([{ refno: EQ_A, added: 1, removed: 0, total: 1 }]);
+  });
 });

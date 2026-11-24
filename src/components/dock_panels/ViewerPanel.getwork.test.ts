@@ -94,11 +94,16 @@ describe('ViewerPanel 接线（源码钉）：状态栏「数据已更新」提�
 describe('ViewerPanel 接线与视口状态（#324）：多库同屏 + 取最新重载（flyTo: false）不触发自动对焦拉远镜头', () => {
   const afterLoaded = section('(compat as any).__dtxAfterInstancesLoaded = (', 'compatViewerRef.value = compat;');
 
-  it('源码钉：__dtxAfterInstancesLoaded 透传 autoFit 与 loadedCount 给 fitToDtxLayerBBoxOnce', () => {
+  it('源码钉：__dtxAfterInstancesLoaded 透传 autoFit 与 loadedCount 给 fitToDtxLayerBBoxOnce，且地址栏撤下同时收口已加载节点表与场景根', () => {
     expect(afterLoaded).toMatch(/options\?: DtxAfterInstancesLoadedOptions/);
     expect(afterLoaded).toContain('fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer, {');
     expect(afterLoaded).toContain('autoFit: options?.autoFit');
     expect(afterLoaded).toContain('loadedCount: loadedRefnos.length');
+
+    const evictSection = section('const removedRoots = delta.evict', 'console.log(\'[show_refno] 撤下\'');
+    expect(evictSection).toContain('forgetGetWorkRoot(refno)');
+    expect(evictSection).toContain('forgetLoadedNode(refno)');
+    expect(evictSection).toContain('forgetLoadedRootInScene(refno)');
   });
 
   it('先装库 8000、再装库 7998、随后重载库 8000（flyTo: false / autoFit: false）：不触发自动对焦、不重算全局矩阵', () => {

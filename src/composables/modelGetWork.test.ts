@@ -2164,3 +2164,86 @@ describe('取最新：构件在两个在册节点之间挪了位置', () => {
     expect(report.models.reloaded[0]).toEqual({ refno: Z, added: 1, removed: 0, total: 3 });
   });
 });
+
+describe('取最新：因查空暂时撤下的节点在几何恢复后能装回（#322，K20 / K21）', () => {
+  const EQ_A = '24384_30010';
+  const EQ_B = '24384_30020';
+  const BOX_A1 = '24384_30011';
+  const BOX_REBUILT = '24384_30099';
+
+  it('K20 形态：节点因 empty 被撤下后保留追踪（withdrawnEmpty）；空着再点不重复撤；几何恢复后点取最新重新装回', async () => {
+    const world = makeWorld({
+      rows: [row(ROW_8000, { model_sesno: 1144, applied_sesno: 1144, file_latest_sesno: 1144 })],
+      roots: [root(EQ_A, { loadedModelSesno: 1143, loadedFileLatestSesno: 1143 })],
+      statuses: { [EQ_A]: { status: status('empty'), gone: false } },
+      loaded: { [EQ_A]: [BOX_A1] },
+      afterReload: { [EQ_A]: null },
+    });
+    const { engine } = harness(world);
+
+    // 第一轮（apply）：EQ_A 查空被撤下，模拟显示流程把它记为 withdrawnEmpty（保留在追踪表里）
+    const first = await engine.getLatest();
+    expect(first.models.withdrawn).toEqual([{ refno: EQ_A, refnos: 1, why: 'empty' }]);
+    expect(first.models.componentsRemoved).toBe(1);
+
+    world.roots = [root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, withdrawnEmpty: true })];
+    // 仍然为空时再点一次「取最新」：不重复重载、不重复报撤下
+    const idle = await engine.getLatest();
+    expect(idle.models.reloaded).toEqual([]);
+    expect(idle.models.withdrawn).toEqual([]);
+
+    // 第二轮（restore）：后端重建了盒子，库水位推进到 1145，后端返回 latest
+    world.rows = [row(ROW_8000, { model_sesno: 1145, applied_sesno: 1145, file_latest_sesno: 1145 })];
+    world.statuses = { [EQ_A]: { status: status('latest'), gone: false } };
+    world.afterReload = { [EQ_A]: [BOX_REBUILT] };
+
+    const restored = await engine.getLatest();
+    expect(restored.models.withdrawn).toEqual([]);
+    expect(restored.models.reloaded).toEqual([{ refno: EQ_A, added: 1, removed: 0, total: 1 }]);
+    expect(restored.models.componentsAdded).toBe(1);
+    expect(restored.models.componentsRemoved).toBe(0);
+    expect(world.loaded[EQ_A]).toEqual([BOX_REBUILT]);
+  });
+
+  it('K21 形态：BOX 从 A 移到 B（A 查空撤下、随后加装 B），再移回 A 并点取最新：A 装回、B 撤下，构件不丢失且净增减为 0', async () => {
+    const world = makeWorld({
+      rows: [row(ROW_8000, { model_sesno: 1144, applied_sesno: 1144, file_latest_sesno: 1144 })],
+      roots: [root(EQ_A, { loadedModelSesno: 1143, loadedFileLatestSesno: 1143 })],
+      statuses: { [EQ_A]: { status: status('empty'), gone: false } },
+      loaded: { [EQ_A]: [BOX_A1] },
+      afterReload: { [EQ_A]: null },
+    });
+    const { engine, log } = harness(world);
+
+    // apply：BOX 从 A 移到 B，A 查空撤下
+    const apply = await engine.getLatest();
+    expect(apply.models.withdrawn).toEqual([{ refno: EQ_A, refnos: 1, why: 'empty' }]);
+    expect(apply.models.componentsRemoved).toBe(1);
+
+    // 加装 B（页面上现在同时追踪着 withdrawnEmpty 的 A 和已装的 B）
+    world.loaded[EQ_B] = [BOX_A1];
+    world.roots = [
+      root(EQ_A, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144, withdrawnEmpty: true }),
+      root(EQ_B, { loadedModelSesno: 1144, loadedFileLatestSesno: 1144 }),
+    ];
+
+    // restore：BOX 移回 A，库水位推进到 1145；先重载 A（装回 BOX_A1）、后重载 B（查空撤下 BOX_A1），引擎自动补装 A
+    world.rows = [row(ROW_8000, { model_sesno: 1145, applied_sesno: 1145, file_latest_sesno: 1145 })];
+    world.statuses = {
+      [EQ_A]: { status: status('latest'), gone: false },
+      [EQ_B]: { status: status('empty'), gone: false },
+    };
+    world.afterReload = { [EQ_A]: [BOX_A1], [EQ_B]: null };
+    log.length = 0;
+
+    const restore = await engine.getLatest();
+    expect(restore.models.reloaded).toEqual([{ refno: EQ_A, added: 1, removed: 0, total: 1 }]);
+    expect(restore.models.withdrawn).toEqual([{ refno: EQ_B, refnos: 1, why: 'empty' }]);
+    // BOX_A1 只是从 B 挪回 A：页面净增 0、净撤 0
+    expect(restore.models.componentsAdded).toBe(0);
+    expect(restore.models.componentsRemoved).toBe(0);
+    expect(world.loaded[EQ_A]).toEqual([BOX_A1]);
+    // 先装 A、后撤 B 时会补装一次 A，防止共用对象被 B 撤掉
+    expect(log.filter((line) => line.startsWith('reload '))).toEqual([`reload ${EQ_A}`, `reload ${EQ_B}`, `reload ${EQ_A}`]);
+  });
+});

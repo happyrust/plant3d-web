@@ -20,7 +20,7 @@ import { provideTreeHiddenScope } from '@/composables/treeHiddenScope';
 import { dtxLoaderRevision } from '@/composables/useDbnoInstancesDtxLoader';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
-import { loadedNodeEntry } from '@/composables/useLoadedNodeStatus';
+import { forgetLoadedNode, loadedNodeEntry, useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { registerGetWorkTree } from '@/composables/useModelGetWork';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
@@ -311,6 +311,21 @@ async function setVisible(id: string, visible: boolean) {
         setNodeLoading(id, false);
       }
       // 失败时继续调用 setVisible 显示部分加载的数据
+    }
+  }
+
+  // 用户主动关闭眼睛 / 隐藏：之前因查空被暂时撤下但仍留在追踪表里的节点（含子孙）一并退出追踪，
+  // 绝不被下一次「取最新」悄悄装回来（#322）
+  if (!visible && isRefnoLike(id)) {
+    const targetKey = normalizeRefnoKeyLike(id);
+    for (const entry of useLoadedNodeStatus().entries?.() ?? []) {
+      if (!entry.withdrawnEmpty) continue;
+      if (
+        entry.refno === targetKey
+        || pdmsTree.hasAncestorWhere(entry.refno, (refno) => normalizeRefnoKeyLike(refno) === targetKey)
+      ) {
+        forgetLoadedNode(entry.refno);
+      }
     }
   }
 
