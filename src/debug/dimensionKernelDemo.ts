@@ -37,6 +37,7 @@ declare global {
         dpr: number;
       };
       getSceneObjectCount(): number;
+      setLengthUnit(unit: 'mm' | 'in' | 'ft'): string | null;
     };
   }
 }
@@ -195,13 +196,14 @@ async function main(): Promise<void> {
   painter.setDesignToWorld(designToWorld);
   const interactions = new Map<string, InteractionState>();
   let layouts: readonly LayoutResult[] = [];
+  let format = DEFAULT_DIMENSION_FORMAT;
 
   const render = (): void => {
     layouts = layoutViewport(inputs, {
       projector,
       font,
       theme: SOLVESPACE_DIMENSION_THEME,
-      format: DEFAULT_DIMENSION_FORMAT,
+      format,
     }, interactions).layouts;
     painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
     renderer.render(scene, camera);
@@ -238,6 +240,11 @@ async function main(): Promise<void> {
       dpr,
     }),
     getSceneObjectCount: () => painter.getStats().sceneObjectCount,
+    setLengthUnit(unit) {
+      format = { ...DEFAULT_DIMENSION_FORMAT, lengthUnit: unit };
+      render();
+      return layouts.find(layout => layout.dimensionId === 'demo-linear')?.derived.formattedLabel ?? null;
+    },
   };
 
   window.addEventListener('beforeunload', () => {
