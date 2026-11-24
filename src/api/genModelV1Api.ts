@@ -51,6 +51,8 @@ export type GenModelV1ErrorCode =
   | 'generation_failed'
   /** `spatial/*`：进程内空间树还没 Ready（Loading / Rebuilding / Degraded），503 + `Retry-After`（spec §4.13） */
   | 'spatial_not_ready'
+  /** 版本表 / 历史接口打开冻结会话时库文件正在被写入，503 + `Retry-After`（gen-model #321 / PR #341） */
+  | 'SOURCE_CHANGED'
   | 'internal'
   | 'network'
   | 'cancelled'
@@ -129,13 +131,14 @@ export class GenModelV1ApiError extends Error {
     return this.code === 'cancelled';
   }
 
-  /** 稍后重试有意义的一档（依赖暂时不可用 / 归属暂时解不出 / 空间树未就绪 / 网络）；不得负缓存。 */
+  /** 稍后重试有意义的一档（依赖暂时不可用 / 归属暂时解不出 / 空间树未就绪 / 库文件写入冲突 / 网络）；不得负缓存。 */
   get isRetryable(): boolean {
     return (
       this.code === 'ref0_affiliation_unavailable' ||
       this.code === 'model_dependency_unavailable' ||
       this.code === 'initialization_not_ready' ||
       this.code === 'spatial_not_ready' ||
+      this.code === 'SOURCE_CHANGED' ||
       this.code === 'network'
     );
   }
@@ -143,6 +146,107 @@ export class GenModelV1ApiError extends Error {
 
 export function isGenModelV1ApiError(error: unknown): error is GenModelV1ApiError {
   return error instanceof GenModelV1ApiError;
+}
+
+/** 版本表遇 503 `SOURCE_CHANGED`（库文件正在被写入，gen-model #321）时的默认最大重试次数（不含首次） */
+export const SOURCE_CHANGED_MAX_RETRIES = 3;
+/** `Retry-After` 钳位下限 / 上限（毫秒） */
+export const SOURCE_CHANGED_RETRY_MIN_MS = 200;
+export const SOURCE_CHANGED_RETRY_MAX_MS = 5_000;
+/** 响应未带 `Retry-After` 时的短退避阶梯（毫秒） */
+export const SOURCE_CHANGED_FALLBACK_DELAYS_MS = [500, 1_000, 2_000] as const;
+
+const SOURCE_CHANGED_EXHAUSTED = Symbol('sourceChangedRetriesExhausted');
+
+/** 识别 503 `SOURCE_CHANGED`（兼容 `GenModelV1ApiError` 与单测伪造的带 `code` 错误对象）。 */
+export function isSourceChangedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; status?: unknown };
+  if (candidate.code !== 'SOURCE_CHANGED') return false;
+  return candidate.status === undefined || candidate.status === 503;
+}
+
+/** 该 `SOURCE_CHANGED` 错误是否已经在下层耗尽退避重试（避免多层叠加重试）。 */
+export function isSourceChangedExhausted(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && (error as Record<symbol, unknown>)[SOURCE_CHANGED_EXHAUSTED] === true);
+}
+
+function markSourceChangedExhausted(error: unknown): void {
+  if (!error || typeof error !== 'object') return;
+  try {
+    Object.defineProperty(error, SOURCE_CHANGED_EXHAUSTED, {
+      value: true,
+      configurable: true,
+      enumerable: false,
+    });
+  } catch {
+    // 不可扩展对象忽略标记，照常抛出
+  }
+}
+
+/** 根据 `Retry-After`（毫秒）与重试次数计算下一次退避时长：尊重 `Retry-After` 并钳位在 [200ms, 5000ms]。 */
+export function sourceChangedRetryDelayMs(error: unknown, attempt: number): number {
+  const raw = error && typeof error === 'object' ? (error as { retryAfterMs?: unknown }).retryAfterMs : null;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+    return Math.min(SOURCE_CHANGED_RETRY_MAX_MS, Math.max(SOURCE_CHANGED_RETRY_MIN_MS, Math.round(raw)));
+  }
+  const index = Math.max(0, Math.min(attempt, SOURCE_CHANGED_FALLBACK_DELAYS_MS.length - 1));
+  return SOURCE_CHANGED_FALLBACK_DELAYS_MS[index] ?? 2_000;
+}
+
+export type SourceChangedRetrySleep = (ms: number, signal?: AbortSignal) => Promise<void>;
+
+function defaultSourceChangedSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const abortReason = () => signal?.reason ?? new Error('已取消');
+    if (signal?.aborted) {
+      reject(abortReason());
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export type SourceChangedRetryOptions = {
+  /** 首次失败后最多重试次数，缺省 3 */
+  maxRetries?: number;
+  signal?: AbortSignal;
+  /** 可注入延迟器（测试用，避免真等数秒） */
+  sleep?: SourceChangedRetrySleep;
+};
+
+/**
+ * 遇 503 `SOURCE_CHANGED`（库文件正在被 E3D 写入，gen-model #321 / PR #341）时做受限短退避重试；
+ * 其它错误（如 404 `SESSION_NOT_FOUND` / `REFNO_NOT_FOUND` / 超时）立刻原样抛出不重试。
+ * 已在下层耗尽重试的 `SOURCE_CHANGED` 错误不再重复叠加重试。
+ */
+export async function retryOnSourceChanged<T>(
+  run: () => Promise<T>,
+  options: SourceChangedRetryOptions = {},
+): Promise<T> {
+  const maxRetries = Math.max(0, Math.floor(options.maxRetries ?? SOURCE_CHANGED_MAX_RETRIES));
+  const sleep = options.sleep ?? defaultSourceChangedSleep;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      if (!isSourceChangedError(error) || isSourceChangedExhausted(error)) throw error;
+      if (attempt >= maxRetries || options.signal?.aborted) {
+        markSourceChangedExhausted(error);
+        throw error;
+      }
+      const delayMs = sourceChangedRetryDelayMs(error, attempt);
+      await sleep(delayMs, options.signal);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -849,6 +953,10 @@ export type GenModelV1Capabilities = {
    * 要不要先让人确认（`nodeModelUpdate.decideNodeUpdate`）。
    */
   mesh_purge_keeps_shared?: boolean;
+  /** 节点版本表纳入严格祖先位姿与 OWNER 变更传播（gen-model #323 / PR #342） */
+  node_versions_ancestor_placement?: boolean;
+  /** 节点版本表 `since_sesno` 走尾段快算与共享窗口差分/尾段缓存（gen-model #325 / PR #344） */
+  node_versions_since_fastpath?: boolean;
   [key: string]: unknown;
 };
 
@@ -1847,26 +1955,38 @@ export type GenModelV1NodeVersionsRequest = GenModelV1ModelVersionsRequest & {
   scope: NodeDiffScopeDto;
 };
 
+export type GenModelV1NodeVersionsOptions = GenModelV1RequestOptions & {
+  /** 遇 503 `SOURCE_CHANGED` 时的最大重试次数（不含首次），缺省 `SOURCE_CHANGED_MAX_RETRIES`（3） */
+  maxSourceChangedRetries?: number;
+  /** 测试注入重试等待函数 */
+  sleep?: SourceChangedRetrySleep;
+};
+
 /**
  * 某节点按对比范围折叠的**版本表**（gen-model-refactor ADR-081 追记三；plant3d-web ADR 0066 / CONTEXT「节点版本表」）。
  * `subtree` 每行 = 节点自身或其下整棵子树里任何记录变过的会话，附 `units_changed` / `units_touched`；`self` 每行 = 它自身变过的会话。
- * 任意 refno 都受理；整条链里没有它 → 404 `REFNO_NOT_FOUND`。旧服务端没有这条路由（无信封 404）由调用方回落。
+ * 任意 refno 都受理；整条链里没有它 → 404 `REFNO_NOT_FOUND`；带 `since_sesno` 时新版后端走尾段快算（#325 / PR #344）；
+ * 遇 E3D 写盘冲突回 503 `SOURCE_CHANGED` + `Retry-After` 时短退避重试（#321 / PR #341）。旧服务端没有这条路由（无信封 404）由调用方回落。
  */
 export function genModelV1NodeVersions(
   req: GenModelV1NodeVersionsRequest,
-  options?: GenModelV1RequestOptions,
+  options?: GenModelV1NodeVersionsOptions,
 ): Promise<NodeVersionsResponse> {
-  return genModelV1Fetch<NodeVersionsResponse>('/api/v1/node/versions', {
-    ...options,
-    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
-    query: {
-      dbnum: req.dbnum,
-      refno: toV1Refno(req.refno),
-      scope: req.scope,
-      since_sesno: req.sinceSesno,
-      limit: req.limit,
-    },
-  });
+  const { maxSourceChangedRetries, sleep, ...fetchOptions } = options ?? {};
+  return retryOnSourceChanged(
+    () => genModelV1Fetch<NodeVersionsResponse>('/api/v1/node/versions', {
+      ...fetchOptions,
+      timeoutMs: fetchOptions.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+      query: {
+        dbnum: req.dbnum,
+        refno: toV1Refno(req.refno),
+        scope: req.scope,
+        since_sesno: req.sinceSesno,
+        limit: req.limit,
+      },
+    }),
+    { maxRetries: maxSourceChangedRetries, signal: fetchOptions.signal, sleep },
+  );
 }
 
 export type NodeDiffStatusDto = 'added' | 'deleted' | 'modified' | 'noop';

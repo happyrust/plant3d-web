@@ -9,6 +9,7 @@ import {
   genModelV1MeshUrl,
   genModelV1ModelGenerate,
   genModelV1ModelRecords,
+  genModelV1NodeVersions,
   genModelV1SpatialNearby,
   genModelV1SpatialCenterline,
   genModelV1SpatialNearbyRefnos,
@@ -21,8 +22,11 @@ import {
   genModelV1TreeChildren,
   isGenModelV1ApiError,
   isResolvedTreeView,
+  isSourceChangedExhausted,
   isValidGeoHash,
   MAX_MODEL_RECORDS_ROOTS,
+  SOURCE_CHANGED_MAX_RETRIES,
+  SOURCE_CHANGED_RETRY_MAX_MS,
   toV1Refno,
 } from './genModelV1Api';
 
@@ -600,5 +604,88 @@ describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
     expect(isGenModelV1ApiError(error)).toBe(true);
     expect(error?.code).toBe('precondition');
     expect(error?.status).toBe(422);
+  });
+});
+
+describe('genModelV1NodeVersions（#325 since_sesno 与 #321 503 SOURCE_CHANGED 重试）', () => {
+  const okBody = {
+    dbnum: 8000,
+    refno: '24384/26547',
+    noun: 'EQUI',
+    scope: 'subtree',
+    unit_root: '24384/26547',
+    unit_noun: 'EQUI',
+    file_latest_sesno: 102,
+    truncated: false,
+    versions: [{ sesno: 102, session_time: null, impact: 'mesh', self_impact: 'mesh', units_changed: 1, units_touched: 1 }],
+  };
+
+  it('透传 since_sesno 查询参数并正确返回尾段版本表', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, okBody));
+    const resp = await genModelV1NodeVersions(
+      { dbnum: 8000, refno: '24384_26547', scope: 'subtree', sinceSesno: 100 },
+      { baseUrl: BASE, fetchImpl },
+    );
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/node/versions`);
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      dbnum: '8000',
+      refno: '24384/26547',
+      scope: 'subtree',
+      since_sesno: '100',
+    });
+    expect(resp.versions).toHaveLength(1);
+    expect(resp.versions[0]?.sesno).toBe(102);
+  });
+
+  it('遇 503 SOURCE_CHANGED + Retry-After 退避重试后 200 成功；尊重 Retry-After 并钳位上限', async () => {
+    const delays: number[] = [];
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(503, { code: 'SOURCE_CHANGED', message: '库文件正在写入' }, { 'Retry-After': '2' }))
+      .mockResolvedValueOnce(jsonResponse(503, { code: 'SOURCE_CHANGED', message: '库文件正在写入' }, { 'Retry-After': '30' }))
+      .mockResolvedValueOnce(jsonResponse(200, okBody));
+
+    const resp = await genModelV1NodeVersions(
+      { dbnum: 8000, refno: '24384_26547', scope: 'subtree', sinceSesno: 100 },
+      { baseUrl: BASE, fetchImpl, sleep: async (ms) => { delays.push(ms); } },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(delays).toEqual([2_000, SOURCE_CHANGED_RETRY_MAX_MS]);
+    expect(resp.file_latest_sesno).toBe(102);
+  });
+
+  it('连续 503 SOURCE_CHANGED 达到重试上限后抛出可重试错误并带耗尽标记；404 SESSION_NOT_FOUND 不重试', async () => {
+    const delays: number[] = [];
+    const fetchImpl = vi.fn<typeof fetch>(async () => (
+      jsonResponse(503, { code: 'SOURCE_CHANGED', message: '库文件正在写入，请稍后重试' }, { 'Retry-After': '2' })
+    ));
+
+    const error = await genModelV1NodeVersions(
+      { dbnum: 8000, refno: '24384_26547', scope: 'subtree', sinceSesno: 100 },
+      { baseUrl: BASE, fetchImpl, sleep: async (ms) => { delays.push(ms); } },
+    ).then(() => null, (e: unknown) => e as GenModelV1ApiError);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(SOURCE_CHANGED_MAX_RETRIES + 1);
+    expect(delays).toHaveLength(SOURCE_CHANGED_MAX_RETRIES);
+    expect(isGenModelV1ApiError(error)).toBe(true);
+    expect(error?.status).toBe(503);
+    expect(error?.code).toBe('SOURCE_CHANGED');
+    expect(error?.isRetryable).toBe(true);
+    expect(error?.retryAfterMs).toBe(2_000);
+    expect(isSourceChangedExhausted(error)).toBe(true);
+
+    const notFoundFetch = vi.fn<typeof fetch>(async () => (
+      jsonResponse(404, { code: 'SESSION_NOT_FOUND', message: 'session 9999 not found' })
+    ));
+    const notFoundError = await genModelV1NodeVersions(
+      { dbnum: 8000, refno: '24384_26547', scope: 'subtree', sinceSesno: 9999 },
+      { baseUrl: BASE, fetchImpl: notFoundFetch, sleep: async () => {} },
+    ).then(() => null, (e: unknown) => e as GenModelV1ApiError);
+
+    expect(notFoundFetch).toHaveBeenCalledTimes(1);
+    expect(notFoundError?.status).toBe(404);
+    expect(notFoundError?.code).toBe('SESSION_NOT_FOUND');
+    expect(notFoundError?.isRetryable).toBe(false);
   });
 });

@@ -13,10 +13,15 @@
  */
 import { reactive, readonly } from 'vue';
 
-import type { DbnumRow } from '@/api/genModelV1Api';
 import type { GetWorkWatermark } from '@/composables/modelGetWorkRegistry';
 import type { MbdLatestRefreshInput } from '@/composables/useMbdExternalSync';
 
+import {
+  retryOnSourceChanged,
+  type DbnumRow,
+  type GenModelV1Capabilities,
+  type SourceChangedRetrySleep,
+} from '@/api/genModelV1Api';
 import {
   createModelGetWork,
   type GetWorkDerived,
@@ -35,13 +40,13 @@ import {
 } from '@/composables/modelGetWorkRegistry';
 import { hasActiveModelLoad } from '@/composables/modelLoadSession';
 import { fetchNodeModelFacts } from '@/composables/nodeModelFacts';
-import { resolveNodeModelStatus, type NodeChangedSession } from '@/composables/nodeModelStatus';
+import { changedSessionsOfNodeVersions, resolveNodeModelStatus, type NodeChangedSession } from '@/composables/nodeModelStatus';
 import { isTreeNodeGoneMessage } from '@/composables/pdmsTreeRefresh';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { getGenModelV1Dbnums, peekGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { ensureGenModelV1Freshness, useGenModelV1Health } from '@/composables/useGenModelV1Health';
 import { dismissGenModelV1UpdateNotice } from '@/composables/useGenModelV1UpdateNotice';
-import { useLoadedNodeStatus } from '@/composables/useLoadedNodeStatus';
+import { useLoadedNodeStatus, type LoadedNodeEntry } from '@/composables/useLoadedNodeStatus';
 import {
   getGlobalSelectedIsDeleted,
   getGlobalSelectedRefno,
@@ -197,20 +202,63 @@ function selectedRefnoKey(): string | null {
 }
 
 /**
- * 「本页装的那一版之后，谁改到了这个节点」——取最新**不去问节点版本表**（`node/versions`），一律按改到了算：
- * 回一条记在库现在的模型水位上的会话。`resolveNodeModelStatus` 只认落在「本页装的那一版之后、库的模型水位之内」的
- * 会话，所以库里的模型比本页装的新时这个节点判成「有更新可重载」、直接重载；库的模型水位没动（只有库文件前进了、
- * 后台没跟上）时这条会话不在那个范围里，等于没有可换的新版。
- *
- * 为什么不问：那条查询每来一个新会话都要把整条会话链现算一遍，不同节点之间不共用。2026-11-12 真实回放实测
- * （1663 个会话的库）一次 17–28 秒，几个节点一起问会超过 120 秒的请求上限——结果是「新旧判不了、屏幕上的没有动」，
- * 树换了、新增的构件却没装进来。重载只是重新查记录、和场景做差（同一个节点几十毫秒），记录才是准的。
- * 代价：这个库在册的节点，在库的模型水位每动一次之后各重载一次（哪怕这次改动没碰到它）。
- *
- * 库状态里没有这个库的那一行（没取到）而后端答得出节点的状态时，记在起点的下一个会话上：照样算有更新。
+ * 保守回退：把节点视为在 `(sinceSesno, targetModelSesno]` 内改到了（旧后端不支持尾段快算/祖先位姿传播，
+ * 或已有 `reloadHint`，或查 `node/versions` 失败/超时/503 重试耗尽时用）。
+ * 库状态里没有这个库的那一行而后端答得出节点的状态时，记在目标水位或起点的下一个会话上：照样算有更新。
  */
-function assumeChangedSince(sinceSesno: number, row: DbnumRow | null): NodeChangedSession[] {
-  return [{ sesno: sesnoOf(row?.model_sesno) ?? sinceSesno + 1, time: null, unitsChanged: 0 }];
+function assumeChangedSince(sinceSesno: number, row: DbnumRow | null, targetModelSesno?: number | null): NodeChangedSession[] {
+  const target = targetModelSesno ?? sesnoOf(row?.model_sesno);
+  return [{ sesno: target ?? sinceSesno + 1, time: null, unitsChanged: 0 }];
+}
+
+/**
+ * 后端是否同时具备 #325（`node/versions?since_sesno=` 尾段快算与共享窗口差分/尾段缓存，PR #344）
+ * 与 #323（严格祖先位姿与 OWNER 变更传播，PR #342）能力：两者齐全时「取最新」才按节点版本表精准判定，
+ * 避免旧后端全链慢算超时或漏掉动上级装下级（K32）。
+ */
+export function supportsFastNodeVersions(
+  capabilities: Readonly<Pick<GenModelV1Capabilities, 'node_versions_since_fastpath' | 'node_versions_ancestor_placement'>> | null | undefined,
+): boolean {
+  return capabilities?.node_versions_since_fastpath === true
+    && capabilities?.node_versions_ancestor_placement === true;
+}
+
+/** 已加载节点表里是否已有在目标水位上成立的 `reloadHint`（任务批次点名或之前标落后的改动已生成） */
+function hasActiveReloadHint(entry: LoadedNodeEntry | undefined, targetModelSesno: number | null): boolean {
+  const hint = entry?.reloadHint;
+  const loaded = entry?.loadedModelSesno ?? null;
+  if (!hint || loaded === null || loaded <= 0 || loaded >= hint.modelSesno) return false;
+  return targetModelSesno !== null && targetModelSesno >= hint.modelSesno;
+}
+
+/**
+ * 复用 `useLoadedNodeStatus` 已经核对到 `>= targetModelSesno` 的尾段版本结论，避免「取最新」重复打后端。
+ * 仅在节点未处于 `checking`、装入基线完全一致、且存在确切成功核对结论时复用；其余回 `null` 走实时查询。
+ */
+function reusableCheckedSessions(
+  entry: LoadedNodeEntry | undefined,
+  sinceSesno: number,
+  targetModelSesno: number | null,
+): NodeChangedSession[] | null {
+  if (!entry || entry.checking) return null;
+  if (entry.loadedModelSesno !== sinceSesno) return null;
+  if (targetModelSesno === null || targetModelSesno <= 0) return null;
+  const cached = entry.versionsChecked;
+  if (cached && cached.sinceSesno === sinceSesno && cached.throughModelSesno >= targetModelSesno) {
+    return cached.changedSessions;
+  }
+  const st = entry.status;
+  if (!st || st.loadedModelSesno !== sinceSesno || st.modelSesno === null || st.modelSesno < targetModelSesno) return null;
+  if (st.verdict === 'latest' || st.verdict === 'reloadable') return st.reloadableSessions;
+  if (st.verdict === 'lagging' && st.reloadableSessions.length > 0) return st.reloadableSessions;
+  return null;
+}
+
+let retrySleepOverride: SourceChangedRetrySleep | undefined;
+
+/** 测试用：注入 `503 SOURCE_CHANGED` 重试等待函数，便于单测秒跑。 */
+export function __setGetWorkRetrySleepForTests(sleep?: SourceChangedRetrySleep): void {
+  retrySleepOverride = sleep;
 }
 
 /** 数据源适配器的大包：用到时才引入，引入一次（状态栏不把它拖进首屏） */
@@ -262,6 +310,7 @@ const engine = createModelGetWork({
   },
   nodeStatus: async (root, row) => {
     let gone = false;
+    let factsModelSesno: number | null = null;
     const status = await resolveNodeModelStatus({
       dbnum: root.dbnum,
       refno: root.refno,
@@ -269,14 +318,42 @@ const engine = createModelGetWork({
       loadedModelSesno: root.loadedModelSesno,
       fetchFacts: async (query) => {
         try {
-          return await fetchNodeModelFacts(query);
+          const result = await fetchNodeModelFacts(query);
+          factsModelSesno = result?.library.modelSesno ?? null;
+          return result;
         } catch (error) {
           // 后端明说库文件最新会话上没有这个节点：记下来（`resolveNodeModelStatus` 只会把它折成「判不了」）
           if ((error as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') gone = true;
           throw error;
         }
       },
-      listChangedSessions: async ({ sinceSesno }) => assumeChangedSince(sinceSesno, row),
+      listChangedSessions: async ({ dbnum, refno, sinceSesno, signal }) => {
+        const targetModelSesno = factsModelSesno ?? sesnoOf(row?.model_sesno);
+        // 1. 节点已经确定必须重载（查空恢复 / 过期标记）：无需再查版本表，交由 `decideRootAction` 直接重载
+        if (root.withdrawnEmpty || root.staleReason) return [];
+        // 2. 已加载节点表记有在目标水位上成立的 `reloadHint`（批次点名 / 之前落后改动已生成）：保守直接重载
+        const entry = useLoadedNodeStatus().entries().find((item) => item.refno === root.refno);
+        if (hasActiveReloadHint(entry, targetModelSesno)) return assumeChangedSince(sinceSesno, row, targetModelSesno);
+        // 3. 旧后端未同时具备 #325 尾段快算与 #323 祖先位姿传播能力：保守回退到整库水位判定
+        if (!supportsFastNodeVersions(useGenModelV1Health().state.capabilities)) {
+          return assumeChangedSince(sinceSesno, row, targetModelSesno);
+        }
+        // 4. 复用 `useLoadedNodeStatus` 已核对到 `>= targetModelSesno` 的缓存结论，避免重复请求
+        const cached = reusableCheckedSessions(entry, sinceSesno, targetModelSesno);
+        if (cached !== null) return cached;
+        // 5. 调 `node/versions?since_sesno=` 查 `(sinceSesno, targetModelSesno]` 尾段几何变化（含 503 SOURCE_CHANGED 短退避重试）；
+        // 任何查询失败 / 超时 / 503 耗尽时保守回退到重载，绝不漏更新。
+        try {
+          const { getModelSource } = await loadModelSource();
+          const table = await retryOnSourceChanged(
+            () => getModelSource().versions.listNodeVersions(dbnum, refno, 'subtree', { sinceSesno, signal }),
+            { signal, sleep: retrySleepOverride },
+          );
+          return changedSessionsOfNodeVersions(table.versions);
+        } catch {
+          return assumeChangedSince(sinceSesno, row, targetModelSesno);
+        }
+      },
     });
     return { status, gone };
   },

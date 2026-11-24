@@ -748,6 +748,14 @@ describe('取最新：后端重启之后的护栏', () => {
     // 靠库水位担保的不看这一条（库里比本页新不新由「有更新可重载」判）
     const byWatermark = status('latest', { generated: { sesnoMin: 1146, sesnoMax: 1146, timeMin: null, basis: 'library_watermark' } });
     expect(decideRootAction(root(SITE), { status: byWatermark, gone: false }, { restarted: false }).kind).toBe('none');
+    // 会话回退（targetModelSesno < loadedModelSesno）→ 保守重载
+    const rolledBack = status('latest', { modelSesno: 1140, generated: { sesnoMin: 1140, sesnoMax: 1140, timeMin: null, basis: 'library_watermark' } });
+    expect(decideRootAction(root(SITE, { loadedModelSesno: 1146, loadedFileLatestSesno: 1146 }), { status: rolledBack, gone: false }, { restarted: false }).kind).toBe('reload');
+    // 靠库水位担保但缺少有效模型水位基线（loadedModelSesno 为 null 或 0）→ 保守重载
+    expect(decideRootAction(root(SITE, { loadedModelSesno: null, loadedFileLatestSesno: 1143 }), { status: byWatermark, gone: false }, { restarted: false }).kind).toBe('reload');
+    expect(decideRootAction(root(SITE, { loadedModelSesno: 0, loadedFileLatestSesno: 1143 }), { status: byWatermark, gone: false }, { restarted: false }).kind).toBe('reload');
+    // 已有 reloadHint → 保守重载
+    expect(decideRootAction(root(SITE, { reloadHint: true }), { status: byWatermark, gone: false }, { restarted: false }).kind).toBe('reload');
   });
 });
 
