@@ -665,9 +665,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     totals.noGeoRefnos.push(...result.missingBreakdown.noGeoRowsRefnos.map((r) => normalizeRefnoString(String(r ?? ''))));
   }
 
+  type DtxAfterInstancesLoadedOptions = { autoFit?: boolean };
+
   type ProgressiveViewer = {
     __dtxViewer?: { canvas?: unknown }
-    __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+    __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
     scene?: {
       objects?: Record<string, { visible?: boolean } | undefined>
       getAABB?: (ids: string[]) => unknown
@@ -849,6 +851,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dtxLayer: Parameters<typeof loadDbnoInstancesForVisibleRefnosDtx>[0]
     anyViewer: ProgressiveViewer
     flyTo: boolean
+    autoFit: boolean
     cameraStamp: number
     onBatchLoaded: (shownRefnos: number) => void
     /** 被叫停时要收回去的账；装载带着会话的取消信号 */
@@ -903,7 +906,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           accepting = false;
           return;
         }
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
+        if (params.autoFit) anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
+        else anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos, { autoFit: false });
         addLoadResult(totals, result);
         batchesDone += 1;
         if (first && params.flyTo) {
@@ -995,11 +999,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dtxLayer: any,
     dbno: number,
     refnos: string[],
-    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void },
+    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void },
     mode: {
       replace: boolean
       /** 不分批：边取边画之后的收尾用——场景里已经有东西了，不需要「先出 1000 个」，一批装完少跑几轮重建与回放钩子 */
       singleBatch?: boolean
+      /** 是否允许本次装载触发首次加载的自动对焦；缺省 `true`。`flyTo: false` / 重载传 `false`。 */
+      autoFit?: boolean
       /**
        * 整套替换时：这些构件的记录刚按祖先重新查过（重载），或刚生成完查回来（重新生成），缓存里已经是最新的——
        * 直接交给装载器，不让它逐个构件清掉重问（2026-11-11：一个 1888 件的 ZONE 重载要多发 1708 个请求、多等 4 秒）。
@@ -1067,7 +1073,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       });
       // 整套替换的那一次不进「新装的」账：被叫停时它要么还没开始换（什么都没动），要么已经换完了
       if (noteLoaderOutcome(mode.replace ? null : undo, result)) throw new ModelLoadStoppedError(undo?.session.root ?? '');
-      anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
+      if (mode.autoFit === false) anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch, { autoFit: false });
+      else anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
       addLoadResult(totals, result);
       if (index + 1 < batches) {
         await sleep(0);
@@ -1494,6 +1501,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     };
     // 轮到的这一刻节点算不算已经加载过（排队期间前面的加载可能已经把它装上了）：被叫停时据此决定撤不撤「已加载」
     const genuinelyLoaded = loadedRoots.has(normalizedRoot);
+    const allowAutoFit = (): boolean => camera.flyTo || (loadOptions?.flyTo !== false && !refresh);
 
     isGenerating.value = true;
     lastLoadDebug.value = null;
@@ -1877,6 +1885,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           anyViewer: viewer as ProgressiveViewer,
           // 第一批装好时现问：同一个节点又被点了一次的话，以后点的那一下为准
           get flyTo() { return camera.flyTo; },
+          get autoFit() { return allowAutoFit(); },
           get cameraStamp() { return camera.stamp; },
           onBatchLoaded: (shown) => { shownEarly = shown; },
           undo,
@@ -1963,7 +1972,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 真产不出（NoRenderableGeometry / 确定性的失败）的范围本页面里不再自动重发，照旧给提示。
       const fillViewer = viewer as unknown as {
         __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
         scene?: {
           objects?: Record<string, { visible?: boolean } | undefined>
           ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
@@ -2100,7 +2109,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 「显示」= 保证可见（同收尾路径）：先把这一块的 refno 级可见态拉回 true，装完的回放才不会把它们再藏掉
         showRefnosTracked(fillViewer.scene, uniqStrings([normalizedRoot, ...fresh]), undo);
         // 这一块装载期间状态条归分块执行写（「第几块已生成，正在显示」），装载自己不写
-        const totals = await loadGenModelV1Refnos(layer, dbno, fresh, fillViewer, { replace: false, singleBatch: true }, null, undo);
+        const totals = await loadGenModelV1Refnos(
+          layer,
+          dbno,
+          fresh,
+          fillViewer,
+          { replace: false, singleBatch: true, ...(allowAutoFit() ? {} : { autoFit: false }) },
+          null,
+          undo,
+        );
         mergeLoadTotals(fillTotals, totals);
         fillViewer.scene?.ensureRefnos?.(fresh, { computeAabb: false });
         // 一个模型都没有的节点：第一块出来就飞一次（全部做完后收尾路径会对整体再对一次焦）
@@ -2500,7 +2517,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
       const anyViewer = viewer as unknown as {
         __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
         scene?: {
           objects?: Record<string, { visible?: boolean } | undefined>
           ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
@@ -2574,6 +2591,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           {
             replace: regenerate || refresh,
             singleBatch: shownEarlyRefnos !== null,
+            ...(allowAutoFit() ? {} : { autoFit: false }),
             // 重载 / 重新生成：范围查询回来的构件，记录都是刚查的那一份（根自己也是：没有记录的根在缓存里记的是空）
             ...(regenerate || refresh ? { freshRefnos: new Set([normalizedRoot, ...visibleRefnos]) } : {}),
           },
@@ -2809,7 +2827,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   ): Promise<ShowModelByDbnumResult> {
     const anyViewer = viewer as unknown as {
       __dtxLayer?: unknown
-      __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+      __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
       scene?: { getAABB?: (ids: string[]) => unknown }
       cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
     };
@@ -2924,7 +2942,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           dbno,
           refnos,
           anyViewer,
-          { replace: false },
+          { replace: false, ...(loadOptions?.flyTo === false ? { autoFit: false } : {}) },
           { status, range: [from, to], label: `gen-model 整库 dbnum=${dbno} 第 ${liveBatches} 批`, stageText: false },
         ));
         for (const refno of refnos) loadedRefnos.add(refno);
@@ -3005,7 +3023,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno,
         remaining,
         anyViewer,
-        { replace: false },
+        { replace: false, ...(loadOptions?.flyTo === false ? { autoFit: false } : {}) },
         { status, range: [Math.max(55, status.progress), 95], label: `gen-model 整库 dbnum=${dbno}`, stageText: true },
       ));
     }

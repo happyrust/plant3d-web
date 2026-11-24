@@ -2214,7 +2214,7 @@ describe('重载不是「显示」：藏着的构件换完还藏着，新增的�
     // 藏着的那个没有被拉回可见：换上去的新对象由装完的回放（applyStateToRefnos）照状态表藏回去
     expect(viewer.scene.setObjectsVisible.mock.calls).toEqual([[[ROOT, M1], true]]);
     expect(viewer.scene.objects[M2]).toEqual({ visible: false });
-    expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenCalledWith(8000, [M1, M2]);
+    expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenCalledWith(8000, [M1, M2], { autoFit: false });
   });
 
   it('整个节点藏着（树上点了节点的眼睛）：重载后一个也不拉回可见，这一次新增的成员跟着藏', async () => {
