@@ -17,7 +17,7 @@
  */
 import { reactive, watch } from 'vue';
 
-import type { DbnumRow } from '@/api/genModelV1Api';
+import type { DbnumRow, SourceChangedRetrySleep } from '@/api/genModelV1Api';
 
 import { judgeDbnumFreshness } from '@/composables/dbnumFreshness';
 import { clearPendingGenerationFill, isGenerationFillActive } from '@/composables/generationFillState';
@@ -29,6 +29,7 @@ import {
   resolveNodeModelStatus,
   type FetchNodeModelFacts,
   type ListNodeChangedSessions,
+  type NodeChangedSession,
   type NodeModelStatus,
   type NodeModelStatusAction,
   type NodeModelStatusIconKind,
@@ -58,8 +59,14 @@ export type LoadedNodeEntry = {
   /** `a_b` */
   refno: string;
   dbnum: number;
-  /** 装进了场景。`false` = 只是点过、没有模型可显示（没有「本页装的是哪一版」，也不会「有更新可重载」） */
+  /** 装进了场景。`false` = 只是点过、没有模型可显示，或因上次重载/取最新查空被暂时撤下几何 */
   loaded: boolean;
+  /**
+   * 曾经装进场景、因上次重载/「取最新」时名下暂时查空（`empty`）而被撤下几何，但节点仍在库里、用户未主动关闭眼睛：
+   * `loaded` 记为 `false`（场景里无对象、眼睛不亮），但保留在「取最新」和行状态追踪里；
+   * 几何恢复后行上能出「重载」信号，点「取最新」可重新装回场景。
+   */
+  withdrawnEmpty?: boolean;
   loadedAt: number;
   /** 装的时候这个库的模型水位；当时库状态没取到为 `null` */
   loadedModelSesno: number | null;
@@ -90,6 +97,15 @@ export type LoadedNodeEntry = {
   reloadHint?: LoadedNodeReloadHint | null;
   /** 正在重问、而且已经走到慢的那一问（节点版本表）：判定回来时收起；被新的一次顶掉的那次走到那一问不记 */
   awaitingChanges?: boolean;
+  /**
+   * 最近一次成功核对 `node/versions?since_sesno=` 的尾段结论缓存：
+   * 「取最新」在同一次模型水位上可直接复用（`sinceSesno` 与装入基线一致且 `throughModelSesno >= targetModelSesno`），避免重复打后端（#325）。
+   */
+  versionsChecked?: {
+    sinceSesno: number;
+    throughModelSesno: number;
+    changedSessions: NodeChangedSession[];
+  } | null;
 };
 
 export type LoadedNodeView = {
@@ -126,6 +142,24 @@ let tokenSeq = 0;
 let stopWatching: (() => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeBatches: (() => void) | null = null;
+let retrySleepOverride: SourceChangedRetrySleep | undefined;
+let retryMaxOverride: number | undefined;
+/** 503 SOURCE_CHANGED 重试耗尽后，后台再补查一次的默认延迟（毫秒）与每节点连续补查上限 */
+const DEFAULT_SOURCE_CHANGED_FOLLOWUP_MS = 3_000;
+const SOURCE_CHANGED_MAX_FOLLOWUPS = 2;
+let sourceChangedFollowUpDelayMs = DEFAULT_SOURCE_CHANGED_FOLLOWUP_MS;
+const sourceChangedFollowUpCount = new Map<string, number>();
+
+/** 测试用：注入 `503 SOURCE_CHANGED` 重试等待与耗尽后补查延迟，避免单测真等数秒。 */
+export function __setLoadedNodeStatusRetryOptionsForTests(options?: {
+  sleep?: SourceChangedRetrySleep;
+  maxSourceChangedRetries?: number;
+  followUpDelayMs?: number;
+}): void {
+  retrySleepOverride = options?.sleep;
+  retryMaxOverride = options?.maxSourceChangedRetries;
+  sourceChangedFollowUpDelayMs = options?.followUpDelayMs ?? DEFAULT_SOURCE_CHANGED_FOLLOWUP_MS;
+}
 
 function rowOf(dbnum: number): DbnumRow | null {
   return (useGenModelV1Health().state.verdict.rows?.[dbnum] as DbnumRow | undefined) ?? null;
@@ -335,19 +369,60 @@ async function run(key: string): Promise<void> {
   inflight.set(key, controller);
   running += 1;
   try {
+    const versionsOutcome: { value: { sinceSesno: number; sessions: NodeChangedSession[] } | null } = { value: null };
     const status = await resolveNodeModelStatus({
       dbnum: entry.dbnum,
       refno: entry.refno,
       row,
-      loadedModelSesno: entry.loadedModelSesno,
+      // 因名下查空暂时撤下的节点（`withdrawnEmpty`）：一旦后端回复 `latest` / `lagging` 就代表已有模型可装回，
+      // 不需要再走慢的 `node/versions` 逐会话核对（`loadedNodeView` 对 `withdrawnEmpty + latest` 直接出 `reloadable`）。
+      loadedModelSesno: entry.withdrawnEmpty ? null : entry.loadedModelSesno,
       ...(factsQuery ? { fetchFacts: factsQuery } : {}),
-      listChangedSessions,
+      listChangedSessions: async (query) => {
+        const sessions = await listChangedSessions(query);
+        versionsOutcome.value = { sinceSesno: query.sinceSesno, sessions };
+        return sessions;
+      },
       signal: controller.signal,
+      ...(retrySleepOverride ? { sleep: retrySleepOverride } : {}),
+      ...(retryMaxOverride !== undefined ? { maxSourceChangedRetries: retryMaxOverride } : {}),
     });
     const current = entries.get(key);
     if (!current || checkTokens.get(key) !== token) return;
+    // 503 SOURCE_CHANGED 重试耗尽（E3D 仍在写盘）：
+    // - 该行此前已有有效状态时保留既有状态，不草率翻成「新旧未知」；
+    // - 首次核对尚无有效状态时写入带 `errorCode: 'SOURCE_CHANGED'` 的未知结论以区分瞬态写盘冲突；
+    // - 两种情形都不写入 `checkedAgainst`，受限安排一次后台补查待写盘结束后自动恢复。
+    if (status.verdict === 'unknown' && status.errorCode === 'SOURCE_CHANGED') {
+      current.checking = false;
+      current.awaitingChanges = false;
+      if (!current.status || current.status.verdict === 'unknown') {
+        current.status = status;
+      }
+      const attempts = sourceChangedFollowUpCount.get(key) ?? 0;
+      if (attempts < SOURCE_CHANGED_MAX_FOLLOWUPS && sourceChangedFollowUpDelayMs >= 0) {
+        sourceChangedFollowUpCount.set(key, attempts + 1);
+        recheckLoadedNodeLater(key, [sourceChangedFollowUpDelayMs]);
+      }
+      if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key);
+      return;
+    }
+    sourceChangedFollowUpCount.delete(key);
     current.status = status;
     current.checking = false;
+    if (
+      versionsOutcome.value
+      && status.verdict !== 'unknown'
+      && status.verdict !== 'updating'
+      && status.modelSesno !== null
+      && status.modelSesno > 0
+    ) {
+      current.versionsChecked = {
+        sinceSesno: versionsOutcome.value.sinceSesno,
+        throughModelSesno: status.modelSesno,
+        changedSessions: versionsOutcome.value.sessions,
+      };
+    }
     // 装上之后头一次问到的那一版记下来（见 `LoadedNodeEntry.loadedGenerated`）：说不出也记一笔，之后答上来的不补——
     // 隔了一阵才问到的那一版，保不准还是装上时的
     if (current.loaded && current.loadedGenerated === undefined && status.source === 'model-status') {
@@ -404,6 +479,37 @@ export function noteLoadedNode(
     staleReason: null,
   });
   checkedAgainst.delete(key);
+  sourceChangedFollowUpCount.delete(key);
+  startWatching();
+  schedule(key);
+}
+
+/**
+ * 曾经装进场景的节点，在重载 /「取最新」时名下暂时查空（节点仍在库里，只是成员被删光或移走）：
+ * 几何已经从场景撤下，所以 `loaded = false`（眼睛不亮、不冒充场景里有对象），但标成 `withdrawnEmpty = true`
+ * 并记下此刻的水位，继续留在「取最新」与行状态追踪范围里——后续几何恢复时行上能出重载信号、点「取最新」能装回。
+ */
+export function noteWithdrawnEmptyNode(
+  refno: string,
+  dbnum: number,
+  at: { modelSesno: number | null; fileLatestSesno: number | null },
+): void {
+  const key = toRefnoKey(refno);
+  if (!key || !Number.isFinite(dbnum)) return;
+  entries.set(key, {
+    refno: key,
+    dbnum,
+    loaded: false,
+    withdrawnEmpty: true,
+    loadedAt: Date.now(),
+    loadedModelSesno: at.modelSesno,
+    loadedFileLatestSesno: at.fileLatestSesno,
+    status: null,
+    checking: false,
+    staleReason: null,
+  });
+  checkedAgainst.delete(key);
+  sourceChangedFollowUpCount.delete(key);
   startWatching();
   schedule(key);
 }
@@ -421,13 +527,13 @@ export function markLoadedNodeStale(refno: string, reason: string): void {
 /**
  * 点过、但没有模型可显示的节点（没生成过、选了不生成、生成到一半停了、后端还在后台算）：登记一行并在后台问一次状态，
  * 行上就说得出「未生成 / 部分生成」并给「生成」。它不算已加载：没有「本页装的是哪一版」。
- * 这个节点已经装在场景里（先显示了已有的、再补齐）时不改它那一行，只重问一次。
+ * 这个节点已经装在场景里（先显示了已有的、再补齐）或因查空被暂时撤下（`withdrawnEmpty`）时不改它那一行，只重问一次。
  */
 export function noteNodeWithoutModel(refno: string, dbnum: number): void {
   const key = toRefnoKey(refno);
   if (!key || !Number.isFinite(dbnum)) return;
   const existing = entries.get(key);
-  if (!existing?.loaded) {
+  if (!existing?.loaded && !existing?.withdrawnEmpty) {
     entries.set(key, {
       refno: key,
       dbnum,
@@ -469,6 +575,7 @@ export function recheckLoadedNodeLater(refno: string, delaysMs: readonly number[
 
 function drop(key: string): void {
   clearFollowUps(key);
+  sourceChangedFollowUpCount.delete(key);
   inflight.get(key)?.abort();
   inflight.delete(key);
   checkTokens.delete(key);
@@ -519,6 +626,18 @@ export function loadedNodeView(refno: string): LoadedNodeView | null {
       checking: entry.checking,
     };
   }
+  // 之前因名下查空被撤下几何，现在后端说「最新」或「已有部分/全部模型但仍落后」（说明后端已有模型可装回）：
+  // 屏幕上仍空着，行上标成可重载（`latest` 直接出 `reloadable`，`lagging` 照旧给更新，不压掉落后提示）
+  if (entry.withdrawnEmpty && status.verdict === 'latest') {
+    return {
+      verdict: 'reloadable',
+      iconKind: 'reloadable',
+      title: '本节点：有更新可重载：之前因名下没有几何被撤下，现在后端已有模型\n点「重载」或「取最新」装回场景',
+      action: 'reload',
+      actionHolds: true,
+      checking: entry.checking,
+    };
+  }
   // 页面已经知道库里的模型比本页装的新、而且改到了这个节点（见 `LoadedNodeEntry.reloadHint`）：不等逐会话的核对，先给「重载」。
   // 依据成立时，后端还没有按不早于门槛的库给过确定的结论（给过，依据就作废了）：手上那个结论是旧的，按页面知道的写。
   // 上一次说「部分生成」的行除外：那一行要紧的是把缺的补上，照后端说的画，等它重新判（缺的还缺着的话，毫秒级就答得出）。
@@ -561,6 +680,7 @@ export function useLoadedNodeStatus() {
     provideFactsQuery: provideLoadedNodeFactsQuery,
     provideAncestorsQuery: provideLoadedNodeAncestorsQuery,
     noteLoaded: noteLoadedNode,
+    noteWithdrawnEmpty: noteWithdrawnEmptyNode,
     noteWithoutModel: noteNodeWithoutModel,
     forget: forgetLoadedNode,
     markStale: markLoadedNodeStale,

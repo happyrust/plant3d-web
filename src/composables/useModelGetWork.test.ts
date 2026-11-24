@@ -21,13 +21,14 @@ const mocks = vi.hoisted(() => ({
   dismissNotice: vi.fn(),
   toast: vi.fn(),
   addLog: vi.fn(),
+  capabilities: null as Record<string, unknown> | null,
   /** 用例要用到的树数据源别的方法（根名单） */
   treeExtras: {} as Record<string, unknown>,
 }));
 
 vi.mock('@/composables/useGenModelV1Health', () => ({
   ensureGenModelV1Freshness: () => mocks.health(),
-  useGenModelV1Health: () => ({ refreshVerdict: mocks.refreshVerdict, state: { capabilities: null } }),
+  useGenModelV1Health: () => ({ refreshVerdict: mocks.refreshVerdict, state: { capabilities: mocks.capabilities } }),
 }));
 vi.mock('@/composables/useGenModelV1Dbnums', () => ({
   getGenModelV1Dbnums: (options: unknown) => mocks.dbnums(options),
@@ -105,6 +106,7 @@ beforeEach(() => {
     if (typeof mock === 'function') mock.mockReset();
   }
   mocks.treeExtras = {};
+  mocks.capabilities = null;
   // 服务代次从 0 起（页面打开以来没见过后端换）
   mocks.health.mockResolvedValue({ generation: 0 });
   mocks.refreshVerdict.mockResolvedValue(undefined);
@@ -698,5 +700,244 @@ describe('useModelGetWork：头一次点取最新就认得出「本页打开之�
     expect(second.backendRestarted).toBe(false);
     expect(second.detail).not.toContain('这次取最新之前后端重启过');
     expect(scene.withdraw).not.toHaveBeenCalled();
+  });
+
+  it('withdrawnEmpty 的节点纳入取最新与 loadedModelDbnums，几何恢复时重新装回；单纯没装过的节点（loaded=false 且非 withdrawnEmpty）仍不纳入', async () => {
+    const { getWork } = await load();
+    const EQ_A = '24384_30010';
+    const NEVER_LOADED = '24384_30099';
+    mocks.entries.mockReturnValue([
+      tableEntry(EQ_A, { loaded: false, withdrawnEmpty: true, loadedModelSesno: 1144, loadedFileLatestSesno: 1144 }),
+      tableEntry(NEVER_LOADED, { loaded: false, loadedModelSesno: null, loadedFileLatestSesno: null }),
+    ]);
+    expect(getWork.loadedModelDbnums()).toEqual([8000]);
+
+    mocks.dbnums.mockResolvedValue({ dbnums: [{ ...ROW_8000, model_sesno: 1146, applied_sesno: 1146, file_latest_sesno: 1146 }] });
+    mocks.facts.mockResolvedValue(facts('latest', 1146));
+    const scene = scenePort();
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+    expect(report.models.rootsTotal).toBe(1);
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(EQ_A);
+    expect(report.models.reloaded).toEqual([{ refno: EQ_A, added: 1, removed: 0, total: 1 }]);
+  });
+});
+
+describe('useModelGetWork：#325（KG3 同库精准重载）与 #321（503 SOURCE_CHANGED 重试）', () => {
+  const FAST_CAPS = { node_versions_since_fastpath: true, node_versions_ancestor_placement: true };
+  const NODE_A = '24384_30001';
+  const NODE_B = '24384_30002';
+  const NODE_C = '24384_30003';
+  const ROW_102 = { ...ROW_8000, file_latest_sesno: 102, applied_sesno: 102, model_sesno: 102 };
+
+  it('同库 3 个已装节点，水位 100 → 102，仅节点 A 有几何变化、B/C 为 noop：只重载 A（1 个节点），B/C 零重载，且透传 sinceSesno=100', async () => {
+    const { getWork } = await load();
+    mocks.capabilities = FAST_CAPS;
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([
+      tableEntry(NODE_A, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+      tableEntry(NODE_B, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+      tableEntry(NODE_C, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+    ]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    mocks.listNodeVersions.mockImplementation(async (_dbnum, refno) => {
+      if (refno === NODE_A) return { versions: [{ sesno: 102, sessionTime: null, impact: 'mesh', unitsChanged: 1 }] };
+      if (refno === NODE_B) return { versions: [{ sesno: 102, sessionTime: null, impact: 'noop', unitsChanged: 0 }] };
+      return { versions: [] };
+    });
+    const scene = scenePort({ [NODE_A]: ['a1'], [NODE_B]: ['b1'], [NODE_C]: ['c1'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.listNodeVersions).toHaveBeenCalledTimes(3);
+    expect(mocks.listNodeVersions).toHaveBeenCalledWith(8000, NODE_A, 'subtree', expect.objectContaining({ sinceSesno: 100 }));
+    expect(mocks.listNodeVersions).toHaveBeenCalledWith(8000, NODE_B, 'subtree', expect.objectContaining({ sinceSesno: 100 }));
+    expect(mocks.listNodeVersions).toHaveBeenCalledWith(8000, NODE_C, 'subtree', expect.objectContaining({ sinceSesno: 100 }));
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(NODE_A);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([NODE_A]);
+    expect(report.summary).toBe('已取最新：模型重载 1 个节点（新增 1 个构件）。');
+  });
+
+  it('纯改名（K22 形态）：树有改名、节点版本表仅 noop → 只更新树名，模型重载 0 个节点', async () => {
+    const { getWork } = await load();
+    mocks.capabilities = FAST_CAPS;
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([tableEntry(NODE_A, { loadedModelSesno: 100, loadedFileLatestSesno: 100 })]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    mocks.listNodeVersions.mockResolvedValue({ versions: [{ sesno: 102, sessionTime: null, impact: 'noop', unitsChanged: 0 }] });
+    const scene = scenePort({ [NODE_A]: ['a1'] });
+    getWork.registerGetWorkScene(scene);
+    getWork.registerGetWorkTree({
+      touchedDbnums: () => [8000],
+      refresh: vi.fn(async () => treeReport({
+        changed: true,
+        renamed: [{ id: NODE_A, name: '/EQ-NEW', type: 'EQUI', dbnum: 8000, previousName: '/EQ-OLD', previousType: 'EQUI' }],
+      })),
+      nameOf: () => '/EQ-NEW',
+    });
+
+    const report = await getWork.requestGetWork();
+
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(report.models.reloaded).toEqual([]);
+    expect(report.summary).toBe('已取最新：模型树改名 1。');
+    expect(report.level).toBe('success');
+  });
+
+  it('同值写回（K23 形态）：库水位动了但树无变更且所有节点 noop → 不重载，回执「已是最新」', async () => {
+    const { getWork } = await load();
+    mocks.capabilities = FAST_CAPS;
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([
+      tableEntry(NODE_A, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+      tableEntry(NODE_B, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+    ]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    mocks.listNodeVersions.mockResolvedValue({ versions: [{ sesno: 102, sessionTime: null, impact: 'noop', unitsChanged: 0 }] });
+    const scene = scenePort({ [NODE_A]: ['a1'], [NODE_B]: ['b1'] });
+    getWork.registerGetWorkScene(scene);
+    getWork.registerGetWorkTree({
+      touchedDbnums: () => [8000],
+      refresh: vi.fn(async () => treeReport({ changed: false })),
+      nameOf: () => null,
+    });
+
+    const report = await getWork.requestGetWork();
+
+    expect(scene.reload).not.toHaveBeenCalled();
+    expect(report.models.reloaded).toEqual([]);
+    expect(report.summary).toBe('已是最新：模型树和已装的模型都没有变化（核对了 2 层树、2 个已装的节点）。');
+    expect(report.level).toBe('info');
+  });
+
+  it('动上级装下级（K32 形态，PR #342 祖先位姿传播）：版本表报 placement 影响 → 准确重载', async () => {
+    const { getWork } = await load();
+    mocks.capabilities = FAST_CAPS;
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([tableEntry(NODE_A, { loadedModelSesno: 100, loadedFileLatestSesno: 100 })]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    mocks.listNodeVersions.mockResolvedValue({ versions: [{ sesno: 102, sessionTime: null, impact: 'placement', unitsChanged: 1 }] });
+    const scene = scenePort({ [NODE_A]: ['a1'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(NODE_A);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([NODE_A]);
+  });
+
+  it('复用 useLoadedNodeStatus 已核对到 >= targetModelSesno 的缓存结论：避免重复打后端 node/versions', async () => {
+    const { getWork } = await load();
+    mocks.capabilities = FAST_CAPS;
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([
+      // NODE_A：versionsChecked 已经确认 (100, 102] 有几何变化
+      tableEntry(NODE_A, {
+        loadedModelSesno: 100,
+        loadedFileLatestSesno: 100,
+        versionsChecked: { sinceSesno: 100, throughModelSesno: 102, changedSessions: [{ sesno: 102, time: null, unitsChanged: 1 }] },
+      }),
+      // NODE_B：status 已经确认到 102 且为 latest（零几何变化）
+      tableEntry(NODE_B, {
+        loadedModelSesno: 100,
+        loadedFileLatestSesno: 100,
+        status: {
+          verdict: 'latest', reason: null, dbnum: 8000, source: 'model-status', modelSesno: 102, modelSavedAt: null,
+          fileLatestSesno: 102, loadedModelSesno: 100, laggingSessions: [], reloadableSessions: [],
+          librarySessionsAhead: 0, units: null, unitsToGenerate: 0, generated: null, changes: null, inWatchScope: true, checkedAt: 0,
+        },
+      }),
+    ]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    const scene = scenePort({ [NODE_A]: ['a1'], [NODE_B]: ['b1'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(mocks.listNodeVersions).not.toHaveBeenCalled();
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(NODE_A);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([NODE_A]);
+  });
+
+  it('保守兜底：无基线 loadedModelSesno / 会话回退 / node/versions 失败 / reloadHint / withdrawnEmpty 恢复几何 → 均安全重载不漏更新', async () => {
+    const { getWork } = await load();
+    mocks.capabilities = FAST_CAPS;
+    const NO_BASELINE = '24384_30011';
+    const ROLLED_BACK = '24384_30012';
+    const QUERY_FAILED = '24384_30013';
+    const WITH_HINT = '24384_30014';
+    const WITHDRAWN = '24384_30015';
+
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([
+      tableEntry(NO_BASELINE, { loadedModelSesno: null, loadedFileLatestSesno: 100 }),
+      tableEntry(ROLLED_BACK, { loadedModelSesno: 110, loadedFileLatestSesno: 110 }),
+      tableEntry(QUERY_FAILED, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+      tableEntry(WITH_HINT, { loadedModelSesno: 100, loadedFileLatestSesno: 100, reloadHint: { modelSesno: 102, reason: '批次点名' } }),
+      tableEntry(WITHDRAWN, { loaded: false, withdrawnEmpty: true, loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+    ]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    mocks.listNodeVersions.mockRejectedValue(new Error('timeout: node/versions'));
+
+    const scene = scenePort({
+      [NO_BASELINE]: ['a'],
+      [ROLLED_BACK]: ['b'],
+      [QUERY_FAILED]: ['c'],
+      [WITH_HINT]: ['d'],
+    });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    expect(report.models.reloaded.map((item) => item.refno).sort()).toEqual(
+      [NO_BASELINE, ROLLED_BACK, QUERY_FAILED, WITH_HINT, WITHDRAWN].sort(),
+    );
+    // 只有 QUERY_FAILED 实际发了 node/versions 请求并失败回退，其余均直接保守判定，零多余请求
+    expect(mocks.listNodeVersions).toHaveBeenCalledTimes(1);
+    expect(mocks.listNodeVersions).toHaveBeenCalledWith(8000, QUERY_FAILED, 'subtree', expect.objectContaining({ sinceSesno: 100 }));
+  });
+
+  it('503 SOURCE_CHANGED（#321）：首次返回 503 重试后 200 无几何变化 → 静默恢复且不重载；连续 503 耗尽 → 保守回退到重载', async () => {
+    const { getWork } = await load();
+    const delays: number[] = [];
+    getWork.__setGetWorkRetrySleepForTests(async (ms) => { delays.push(ms); });
+    mocks.capabilities = FAST_CAPS;
+    mocks.dbnums.mockResolvedValue({ dbnums: [ROW_102] });
+    mocks.entries.mockReturnValue([
+      tableEntry(NODE_A, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+      tableEntry(NODE_B, { loadedModelSesno: 100, loadedFileLatestSesno: 100 }),
+    ]);
+    mocks.facts.mockResolvedValue(facts('latest', 102));
+    const transient = () => Object.assign(new Error('库文件正在写入'), { code: 'SOURCE_CHANGED', status: 503, retryAfterMs: 2_000 });
+    let aCalls = 0;
+    let bCalls = 0;
+    mocks.listNodeVersions.mockImplementation(async (_dbnum, refno) => {
+      if (refno === NODE_A) {
+        aCalls += 1;
+        if (aCalls === 1) throw transient();
+        return { versions: [{ sesno: 102, sessionTime: null, impact: 'noop', unitsChanged: 0 }] };
+      }
+      bCalls += 1;
+      throw transient();
+    });
+
+    const scene = scenePort({ [NODE_A]: ['a1'], [NODE_B]: ['b1'] });
+    getWork.registerGetWorkScene(scene);
+
+    const report = await getWork.requestGetWork();
+
+    // NODE_A 重试 1 次成功（共 2 次），确认为 noop → 不重载；NODE_B 重试 3 次耗尽（共 4 次）→ 保守重载
+    expect(aCalls).toBe(2);
+    expect(bCalls).toBe(4);
+    expect(delays).toEqual([2_000, 2_000, 2_000, 2_000]);
+    expect(scene.reload).toHaveBeenCalledTimes(1);
+    expect(scene.reload).toHaveBeenCalledWith(NODE_B);
+    expect(report.models.reloaded.map((item) => item.refno)).toEqual([NODE_B]);
   });
 });

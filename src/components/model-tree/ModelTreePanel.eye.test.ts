@@ -37,7 +37,8 @@ const fake = vi.hoisted(() => ({
   /** 树上的父节点（子 → 父） */
   parentOf: new Map<string, string>(),
   /** 已加载节点表：真的那张是响应式的，这里在替换那个模块时换成响应式的 Map */
-  loadedNodes: new Map<string, { loaded: boolean }>(),
+  loadedNodes: new Map<string, { refno?: string; loaded: boolean; withdrawnEmpty?: boolean }>(),
+  forgetLoadedNode: vi.fn((refno: string) => { fake.loadedNodes.delete(refno); }),
   /** 树对「藏着的那部分名下现在有哪些构件」的回答（`hiddenScopeUnder`）：用到的用例自己定 */
   hiddenScopeUnder: vi.fn<(id: string, signal?: AbortSignal) => Promise<TreeHiddenScope | null>>(),
 }));
@@ -154,10 +155,15 @@ vi.mock('@/composables/useGenModelV1DbnumStatus', () => ({
 }));
 vi.mock('@/composables/useLoadedNodeStatus', async () => {
   const { reactive } = await import('vue');
-  fake.loadedNodes = reactive(new Map<string, { loaded: boolean }>());
+  fake.loadedNodes = reactive(new Map<string, { refno?: string; loaded: boolean; withdrawnEmpty?: boolean }>());
   return {
     loadedNodeEntry: (refno: string) => fake.loadedNodes.get(refno) ?? null,
-    useLoadedNodeStatus: () => ({ view: vi.fn(() => null), recheck: vi.fn() }),
+    forgetLoadedNode: (refno: string) => fake.forgetLoadedNode(refno),
+    useLoadedNodeStatus: () => ({
+      view: vi.fn(() => null),
+      recheck: vi.fn(),
+      entries: () => [...fake.loadedNodes.entries()].map(([refno, entry]) => ({ refno, ...entry })),
+    }),
   };
 });
 vi.mock('@/composables/useModelGetWork', () => ({ registerGetWorkTree: vi.fn(() => vi.fn()) }));
@@ -481,6 +487,28 @@ describe('整库显示、地址栏直接装进来的模型（不进已加载节�
     expect(eyeOf(host, SITE.id)).toBe('on');
     expect(eyeOf(host, PIPE.id)).toBe('on');
     expect(eyeOf(host, BRAN.id)).toBe('on');
+  });
+
+  it('因名下查空暂时撤下的节点（loaded=false, withdrawnEmpty=true，#322）：眼睛灭着；用户主动关掉其上级眼睛时，一并退出追踪表', async () => {
+    showSite();
+    fake.loadedNodes.set(SITE.id, { loaded: true });
+    fake.loadedNodes.set(BRAN.id, { loaded: false, withdrawnEmpty: true });
+    fake.forgetLoadedNode.mockClear();
+    const host = await mountPanel();
+
+    // BRAN 因查空撤下、自身 loaded=false；只有 SITE 亮着时 BRAN 继承上级，把 SITE 去掉后 BRAN 自己眼睛灭
+    fake.loadedNodes.delete(SITE.id);
+    await nextTick();
+    expect(eyeOf(host, BRAN.id)).toBe('off');
+
+    // 重新挂上 SITE 并点关闭 SITE 的眼睛：挂在它下面的 withdrawnEmpty 节点 BRAN 退出追踪
+    fake.loadedNodes.set(SITE.id, { loaded: true });
+    await nextTick();
+    const siteEye = host.querySelector(`[data-testid="model-tree-row"][data-refno="${SITE.id}"] [data-testid="model-tree-eye"]`) as HTMLButtonElement;
+    siteEye.click();
+    await nextTick();
+    expect(fake.forgetLoadedNode).toHaveBeenCalledWith(BRAN.id);
+    expect(fake.loadedNodes.has(BRAN.id)).toBe(false);
   });
 });
 

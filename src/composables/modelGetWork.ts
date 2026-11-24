@@ -12,9 +12,9 @@
  * 两轮不并发：运行中再点，合并成「这一轮完了再跑一轮」。
  *
  * 刷新范围按库发现、按节点动手：模型这一半只核对「所在库的模型水位或库文件最新会话和装的时候不一样」的节点，问后端它的节点模型状态
- * 之后才决定换不换；别的库的节点不碰。接线那一层（`useModelGetWork`）给的状态里，库的模型水位比本页装的新就算
- * 「有更新可重载」——不再逐个节点去问其间改没改到它（那条查询在真实库上一次要几十秒），所以水位动过的库里在册的
- * 节点各重载一次。树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
+ * 之后才决定换不换；别的库的节点不碰。接线那一层（`useModelGetWork`）在新后端声明支持 `node/versions` 尾段快算（#325）与
+ * 祖先位姿传播（#323）时，会按 `since_sesno` 查尾段版本表，零几何影响的未改节点不再陪着重载；旧后端或查表失败时保守回退到重载。
+ * 树那一半把取过子节点的层都重取一遍（请求小，见 `pdmsTreeRefresh`）。
  *
  * 例外（2026-11-17）：不在后端更新范围里、库一级的模型又落后于库文件的库。后台不会去追它，新旧只能按页面上装着的
  * 节点说——节点装上的时候就可能已经落后，做过节点一级更新的又已经是最新。所以这种库里在册的节点哪怕库的水位和装的
@@ -54,6 +54,13 @@ export type GetWorkRoot = {
   staleReason: string | null;
   /** `table` = 已加载节点表里的；`registry` = 整库显示 / 地址栏直装登记的 */
   source: 'table' | 'registry';
+  /**
+   * 曾经装进场景、因上次「取最新」/重载名下查空（`empty`）被撤下几何，但节点仍在库里、用户未主动关闭眼睛：
+   * 继续留在追踪范围里；几何恢复后重载装回场景，仍为空时不再重复撤下。
+   */
+  withdrawnEmpty?: boolean;
+  /** 已加载节点表已明确要求重载（例如任务批次点名或之前落后的改动已生成） */
+  reloadHint?: boolean;
   /**
    * 装上之后头一次问到的后端那一版模型（已加载节点表记的）。`null` = 当时后端说不出；不给 = 没记下
    * （登记表里的节点、状态还没问回来、旧后端）。后端按需生成的模型不动库的水位，屏幕上的是不是它现在的那一版
@@ -366,21 +373,40 @@ export function decideRootAction(
   if (answer.gone) return { kind: 'withdraw' };
   const status = answer.status;
   const watermarkUnknown = root.loadedModelSesno === null && root.loadedFileLatestSesno === null;
+  // 库模型水位回退（例如重建 / 回滚），或靠库水位担保但装入时没记到有效模型水位基线：保守重载，绝不漏更新
+  const modelRolledBack = root.loadedModelSesno !== null
+    && status.modelSesno !== null
+    && status.modelSesno < root.loadedModelSesno;
+  const modelBaselineMissing = status.modelSesno !== null
+    && status.modelSesno > 0
+    && status.generated?.basis !== 'own_generation'
+    && (root.loadedModelSesno === null || root.loadedModelSesno <= 0);
+  const mustReload = Boolean(
+    root.withdrawnEmpty
+    || root.staleReason
+    || root.reloadHint
+    || ownGenerationNewer(root, status)
+    || watermarkUnknown
+    || modelRolledBack
+    || modelBaselineMissing,
+  );
   switch (status.verdict) {
     case 'reloadable':
       return { kind: 'reload', note: null };
     case 'latest':
-      // 本页装的是哪一版没记下来：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
-      if (root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) return { kind: 'reload', note: null };
+      // 本页装的是哪一版没记下来、水位回退、或上次查空撤下后现在后端又有模型了：换一次最稳（重载不生成，只是按后端现在的记录整套替换）
+      if (mustReload) return { kind: 'reload', note: null };
       return { kind: 'none' };
     case 'lagging': {
       const behind = '这个节点落后（模型生成之后又有会话改到了它）：这次换上的是后台现有的那一版；行上的「更新」可让后端追上';
-      if (status.reloadableSessions.length > 0 || root.staleReason || ownGenerationNewer(root, status) || watermarkUnknown) {
+      if (status.reloadableSessions.length > 0 || mustReload) {
         return { kind: 'reload', note: behind };
       }
       return { kind: 'keep', reason: '这个节点落后（模型生成之后又有会话改到了它），屏幕上的没有可换的新版；行上的「更新」可让后端追上' };
     }
     case 'empty':
+      // 上次查空已经撤下过、现在依然没有生成单元：不再重复撤下
+      if (root.withdrawnEmpty) return { kind: 'none' };
       // 这个节点下已经没有生成单元（成员删光了）：重载会查空，确认之后把它名下的旧构件撤下
       return { kind: 'reload', note: null };
     case 'updating':
@@ -634,7 +660,9 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
     type Standing = 'latest' | 'lagging' | 'unsure';
     /** 这种库里页面上装着的节点这一轮各是什么样（这一轮撤下的不在里面） */
     const standing = new Map<string, { dbnum: number; state: Standing }>();
-    for (const root of roots) if (inGapLibrary(root.dbnum)) standing.set(root.refno, { dbnum: root.dbnum, state: 'unsure' });
+    for (const root of roots) {
+      if (!root.withdrawnEmpty && inGapLibrary(root.dbnum)) standing.set(root.refno, { dbnum: root.dbnum, state: 'unsure' });
+    }
     const stand = (root: { refno: string; dbnum: number }, state: Standing): void => {
       if (inGapLibrary(root.dbnum)) standing.set(root.refno, { dbnum: root.dbnum, state });
     };
@@ -701,7 +729,8 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       if (action.kind === 'none') {
         // 核对过、不用动：下一轮库没再变就不问它了——登记表里的把水位推进到现在，已加载节点表里的记在这边
         const state = standingOf(status, screenHoldsBackendModel(root, status));
-        stand(root, state);
+        if (root.withdrawnEmpty && status.verdict === 'empty') standing.delete(root.refno);
+        else stand(root, state);
         if (root.source === 'registry' && row) {
           const at = { modelSesno: sesnoOf(row.model_sesno), fileLatestSesno: sesnoOf(row.file_latest_sesno) };
           ports.advanceRoot(root.refno, at);
@@ -756,7 +785,9 @@ export function createModelGetWork(ports: GetWorkPorts): ModelGetWork {
       if (!after || after.length === 0) {
         for (const refno of outcome.before) removedAll.add(refno);
         steps.push({ root, removed: outcome.before, after: null, reloadedIndex: null });
-        models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
+        if (!root.withdrawnEmpty || outcome.before.size > 0) {
+          models.withdrawn.push({ refno: root.refno, refnos: outcome.before.size, why: 'empty' });
+        }
         standing.delete(root.refno);
         continue;
       }

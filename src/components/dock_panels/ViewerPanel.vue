@@ -40,6 +40,10 @@ import { useComponentToWallClearance } from '@/clearance/composables/useComponen
 import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import {
+  createDtxLoadViewportState,
+  type DtxAfterInstancesLoadedOptions,
+} from '@/components/dock_panels/dtxLoadViewportState';
+import {
   formatGroupFailures,
   formatSideEffectFailures,
   mergeRootRefnoWithVisibleRefnos as mergeRefnoEntries,
@@ -93,14 +97,18 @@ import {
   startGenModelV1UpdateNotice,
 } from '@/composables/useGenModelV1UpdateNotice';
 import { useGetWorkMeasurementSync } from '@/composables/useGetWorkMeasurementSync';
-import { resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
+import { forgetLoadedNode, resetLoadedNodes } from '@/composables/useLoadedNodeStatus';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
 import {
   createMbdExternalSync,
   type MbdLatestRefreshInput,
 } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
-import { createModelReloadRound, useModelGeneration } from '@/composables/useModelGeneration';
+import {
+  createModelReloadRound,
+  forgetLoadedRootInScene,
+  useModelGeneration,
+} from '@/composables/useModelGeneration';
 import {
   captureGetWorkWatermarks,
   forgetGetWorkRoot,
@@ -1322,8 +1330,7 @@ let offAnnotationInteraction: (() => void) | null = null;
 let offAnnotationVectorTextRebuilt: (() => void) | null = null;
 let annotationVectorTextRebuildCount = 0;
 
-let dtxGlobalTransformAppliedKey: string | null = null;
-let dtxAutoFitAppliedKey: string | null = null;
+const dtxLoadViewportState = createDtxLoadViewportState();
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
 
@@ -1587,12 +1594,9 @@ function fitDtxViewerToFocusBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer, durati
   return focus;
 }
 
-function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
+function applyDtxGlobalTransformOnce(_dbno: number, dtxLayer: DTXLayer): void {
   const { scale, recenter } = readDtxScaleConfigFromUrl();
-  if (!Number.isFinite(scale) || scale <= 0) return;
-
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxGlobalTransformAppliedKey === key) return;
+  if (!dtxLoadViewportState.shouldApplyGlobalTransform({ scale, recenter })) return;
 
   // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
   // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
@@ -1622,21 +1626,23 @@ function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
   dtxLayer.setGlobalModelMatrix(m);
   dimensionSystem?.notifyViewerChanged();
 
-  dtxGlobalTransformAppliedKey = key;
+  dtxLoadViewportState.markGlobalTransformApplied({ scale, recenter });
 }
 
-function fitToDtxLayerBBoxOnce(dbno: number, dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
-  const { scale, recenter, autoFitOnLoad } = readDtxScaleConfigFromUrl();
-  if (!autoFitOnLoad) return;
-
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxAutoFitAppliedKey === key) return;
+function fitToDtxLayerBBoxOnce(
+  dbno: number,
+  dtxViewer: DtxViewer,
+  dtxLayer: DTXLayer,
+  options?: { autoFit?: boolean; loadedCount?: number },
+): void {
+  const config = readDtxScaleConfigFromUrl();
+  if (!dtxLoadViewportState.shouldAutoFit(dbno, config, options)) return;
 
   const box = dtxLayer.getBoundingBox();
   if (!box || box.isEmpty()) return;
 
   fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
-  dtxAutoFitAppliedKey = key;
+  dtxLoadViewportState.markAutoFitApplied(dbno, config);
 }
 
 function computeMbdWorldBoundsBox(system: DimensionSystem | null): Box3 | null {
@@ -4289,6 +4295,7 @@ onMounted(async () => {
   (compat as any).__dtxAfterInstancesLoaded = (
     _dbno: number,
     loadedRefnos: string[],
+    options?: DtxAfterInstancesLoadedOptions,
   ) => {
     // 回调里的 _dbno 是**这批实例属于哪个库**，不是「用户换模型」的信号：一个工程有多个库
     //（MDB /ALL），按需补装别的库的构件同样会带另一个 _dbno 过来——那属于增量补装，
@@ -4338,9 +4345,12 @@ onMounted(async () => {
       console.warn('[ViewerPanel] 相机裁剪面自适应失败', e);
     }
 
-    // 按需在首次加载后 auto-fit（需在单位归一化后执行）
+    // 按需在首次加载后 auto-fit（需在单位归一化后执行）；显式 `autoFit: false`（如取最新重载）或撤下对象时不触发
     try {
-      fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer);
+      fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer, {
+        autoFit: options?.autoFit,
+        loadedCount: loadedRefnos.length,
+      });
     } catch (e) {
       console.warn('[ViewerPanel] auto-fit 失败', e);
     }
@@ -4711,9 +4721,13 @@ onMounted(async () => {
       const removedRoots = delta.evict
         .flatMap(group => group.rootRefnos)
         .filter(refno => !nextRefnos.includes(refno));
-      // 撤下的直装节点当场从取最新的登记表撤掉：模型树上它和它下面中间节点的眼睛跟着灭。不撤的话，登记表要到
-      // 下一次取最新发现它不在场景里才撤（`modelGetWork` 的 `refreshModels`），这期间眼睛一直亮着。
-      for (const refno of removedRoots) forgetGetWorkRoot(refno);
+      // 撤下的直装节点当场从取最新的登记表、已加载节点表和场景已装根集合撤掉（含被「取最新」重载接管过的节点，收口 KG2）：
+      // 模型树上它和它下面中间节点的眼睛与新旧标记跟着灭，也不会被下一次「取最新」装回。
+      for (const refno of removedRoots) {
+        forgetGetWorkRoot(refno);
+        forgetLoadedNode(refno);
+        forgetLoadedRootInScene(refno);
+      }
       console.log('[show_refno] 撤下', { removedRoots, evictedRefnoCount });
       if (delta.load.length === 0) {
         emitToast({
@@ -5959,8 +5973,9 @@ onUnmounted(() => {
   }
   compatViewerRef.value = null;
   setGenModelV1LoadedProbe(null);
-  // 场景没了：已加载节点表（各节点「装的时候是哪一版」）跟着撤掉
+  // 场景没了：已加载节点表（各节点「装的时候是哪一版」）与视口自动对焦状态跟着撤掉
   resetLoadedNodes();
+  dtxLoadViewportState.reset();
   unregisterSceneForGetWork();
   try {
     delete (window as any).__xeokitViewer;

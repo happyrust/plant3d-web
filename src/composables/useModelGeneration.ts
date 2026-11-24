@@ -58,6 +58,7 @@ import {
   markLoadedNodeStale,
   noteLoadedNode,
   noteNodeWithoutModel,
+  noteWithdrawnEmptyNode,
   provideLoadedNodeAncestorsQuery,
   provideLoadedNodeChangeQuery,
   provideLoadedNodeFactsQuery,
@@ -219,9 +220,24 @@ const loadedRefnosByRoot = new Map<string, Set<string>>();
  */
 const hiddenByLoader = new Set<string>();
 
+/**
+ * 跨 `useModelGeneration` 实例同步「节点已撤下」的代次表：模型树和查看器各有自己的 `loadedRoots`（见 #166 并发排队），
+ * 查看器里的「取最新」或地址栏撤下把节点撤掉时，模型树那一份 `loadedRoots` 必须同步失效，否则树上的眼睛一直亮着（#322 / KG2）。
+ */
+let rootLifecycleSeq = 0;
+const rootWithdrawnAt = new Map<string, number>();
+
+export function forgetLoadedRootInScene(root: string): void {
+  const key = normalizeRefnoString(root);
+  if (!key) return;
+  loadedRefnosByRoot.delete(key);
+  rootWithdrawnAt.set(key, ++rootLifecycleSeq);
+}
+
 export function __resetLoadedRefnosByRootForTests(): void {
   loadedRefnosByRoot.clear();
   hiddenByLoader.clear();
+  rootWithdrawnAt.clear();
 }
 
 /**
@@ -549,7 +565,21 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const currentRefno = ref('');
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null);
 
-  const loadedRoots = new Set<string>();
+  const loadedRoots = new Map<string, number>();
+  const hasLoadedRoot = (root: string): boolean => {
+    const addedAt = loadedRoots.get(root);
+    return addedAt !== undefined && addedAt > (rootWithdrawnAt.get(root) ?? 0);
+  };
+  const markRootLoaded = (root: string): void => {
+    loadedRoots.set(root, ++rootLifecycleSeq);
+  };
+  const markRootWithdrawn = (root: string): void => {
+    loadedRoots.delete(root);
+    rootWithdrawnAt.set(root, ++rootLifecycleSeq);
+  };
+  const listActiveLoadedRoots = (): string[] => (
+    [...loadedRoots.keys()].filter(hasLoadedRoot)
+  );
   /**
    * 还没结束的普通显示（不带重新生成 / 重载 / 补齐 / 更新）：节点 → 那一次显示。同一个节点在排队或在跑的时候又被点了
    * 一次，搭上已有的那一次，不另起一条（#166）。只在这个实例里合并：「已加载」的账是按实例记的，别的实例发起的
@@ -665,9 +695,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     totals.noGeoRefnos.push(...result.missingBreakdown.noGeoRowsRefnos.map((r) => normalizeRefnoString(String(r ?? ''))));
   }
 
+  type DtxAfterInstancesLoadedOptions = { autoFit?: boolean };
+
   type ProgressiveViewer = {
     __dtxViewer?: { canvas?: unknown }
-    __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+    __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
     scene?: {
       objects?: Record<string, { visible?: boolean } | undefined>
       getAABB?: (ids: string[]) => unknown
@@ -849,6 +881,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dtxLayer: Parameters<typeof loadDbnoInstancesForVisibleRefnosDtx>[0]
     anyViewer: ProgressiveViewer
     flyTo: boolean
+    autoFit: boolean
     cameraStamp: number
     onBatchLoaded: (shownRefnos: number) => void
     /** 被叫停时要收回去的账；装载带着会话的取消信号 */
@@ -903,7 +936,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           accepting = false;
           return;
         }
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
+        if (params.autoFit) anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
+        else anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos, { autoFit: false });
         addLoadResult(totals, result);
         batchesDone += 1;
         if (first && params.flyTo) {
@@ -995,11 +1029,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dtxLayer: any,
     dbno: number,
     refnos: string[],
-    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void },
+    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void },
     mode: {
       replace: boolean
       /** 不分批：边取边画之后的收尾用——场景里已经有东西了，不需要「先出 1000 个」，一批装完少跑几轮重建与回放钩子 */
       singleBatch?: boolean
+      /** 是否允许本次装载触发首次加载的自动对焦；缺省 `true`。`flyTo: false` / 重载传 `false`。 */
+      autoFit?: boolean
       /**
        * 整套替换时：这些构件的记录刚按祖先重新查过（重载），或刚生成完查回来（重新生成），缓存里已经是最新的——
        * 直接交给装载器，不让它逐个构件清掉重问（2026-11-11：一个 1888 件的 ZONE 重载要多发 1708 个请求、多等 4 秒）。
@@ -1067,7 +1103,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       });
       // 整套替换的那一次不进「新装的」账：被叫停时它要么还没开始换（什么都没动），要么已经换完了
       if (noteLoaderOutcome(mode.replace ? null : undo, result)) throw new ModelLoadStoppedError(undo?.session.root ?? '');
-      anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
+      if (mode.autoFit === false) anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch, { autoFit: false });
+      else anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
       addLoadResult(totals, result);
       if (index + 1 < batches) {
         await sleep(0);
@@ -1081,7 +1118,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // 调用方（模型树的 autoLocate）常拿 `a/b` 来问；loadedRoots 与场景状态表都按 `a_b` 记
     const key = normalizeRefnoString(refno);
     if (!key) return false;
-    if (loadedRoots.has(key)) return true;
+    if (hasLoadedRoot(key)) return true;
     const v = viewer as any;
     return !!v?.scene?.objects?.[key];
   }
@@ -1089,7 +1126,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   function isModelActuallyLoaded(refno: string): boolean {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
-    if (loadedRoots.has(normalizedRoot)) return true;
+    if (hasLoadedRoot(normalizedRoot)) return true;
     const dbno = tryGetDbnumByRefno(normalizedRoot);
     // 「构件号 → 库号」的映射没装上（地址栏只带 `show_dbnum` 打开时启动不预拉它）或查不到这个节点时，不能就此当它没装：
     // 整库显示装进来的构件在装载器里记着，只是这里问不出它属于哪个库——那就各库都问一遍。不然模型树上这些构件行
@@ -1116,6 +1153,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     toast: (payload: ToastPayload) => void,
     /** 这一次重载属于哪一轮：同一轮里先重载的节点刚装上的构件不跟着撤 */
     round: ModelReloadRound | undefined,
+    /** `deleted` = 库里已没有这个节点（彻底退出追踪）；`empty` = 节点还在，只是名下暂时无几何 */
+    kind: 'deleted' | 'empty' = 'deleted',
+    watermark: { modelSesno: number | null; fileLatestSesno: number | null } = { modelSesno: null, fileLatestSesno: null },
   ): boolean {
     if (
       incomplete
@@ -1136,6 +1176,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       return false;
     }
     const anyViewer = viewer as any;
+    // 在写 `visible=false` 之前先记下用户是否已主动关闭该节点的眼睛 / 隐藏了它：
+    // 用户主动隐藏过的节点撤下后直接退出追踪，绝不被「取最新」悄悄装回来。
+    const sceneObjects = anyViewer?.scene?.objects;
+    const isHiddenByUser = (id: string): boolean => sceneObjects?.[id]?.visible === false && !hiddenByLoader.has(id);
+    const hiddenByUser = isHiddenByUser(root) || (previousLeaves.length > 0 && previousLeaves.every(isHiddenByUser));
     // 它名下的旧构件里，同一轮里别的节点刚按最新记录装上的不撤（构件挪到了那个节点名下）
     const targets = uniqStrings([root, ...previousLeaves, ...resolveDtxRefnosByUnitRefno(dbno, root)])
       .filter((refno) => !round?.installed.has(refno));
@@ -1146,9 +1191,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // 这一笔不可见是撤下时顺手记的，不是人藏的（见 `hiddenByLoader`）
     for (const refno of targets) hiddenByLoader.add(refno);
     if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
-    loadedRoots.delete(root);
+    markRootWithdrawn(root);
     loadedRefnosByRoot.delete(root);
-    forgetLoadedNode(root);
+    if (kind === 'empty' && !hiddenByUser) {
+      // 节点仍在库里、用户未主动关闭眼睛：留在追踪与「取最新」范围里，几何恢复时能出信号并自动装回（#322）
+      noteWithdrawnEmptyNode(root, dbno, watermark);
+    } else {
+      forgetLoadedNode(root);
+    }
     flagRootsLosingRefnos(root, evicted);
     status.message = `refno=${root} 最新记录里已没有几何，已从场景撤下`;
     status.progress = 100;
@@ -1169,11 +1219,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
    *
    * 所有的重载都过这一道（2026-11-12 用户定）：取最新、状态栏和行上的「重载」、重新部署后的重装、节点更新的后一半。
    */
-  async function emptyRefreshMeansRemoved(root: string): Promise<{ removed: boolean; why: string }> {
+  async function emptyRefreshMeansRemoved(root: string): Promise<{ removed: boolean; why: string; kind?: 'deleted' | 'empty' }> {
     try {
       const facts = await withTimeout(fetchNodeModelFacts({ refno: root }), NODE_UPDATE_FACTS_TIMEOUT_MS, '节点模型状态');
       if (!facts) return await goneFromLibraryPerTree(root);
-      if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') return { removed: true, why: '' };
+      if (facts.verdict === 'latest' || facts.verdict === 'lagging' || facts.verdict === 'empty') {
+        return { removed: true, why: '', kind: 'empty' };
+      }
       return {
         removed: false,
         why: facts.verdict === 'updating'
@@ -1183,7 +1235,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             : '后端现在没有这个节点的完整模型（可能重启过，或还没生成）',
       };
     } catch (e) {
-      if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, why: '' };
+      if ((e as { code?: unknown } | null)?.code === 'REFNO_NOT_FOUND') return { removed: true, why: '', kind: 'deleted' };
       return { removed: false, why: `节点模型状态没问到（${e instanceof Error ? e.message : String(e)}）` };
     }
   }
@@ -1193,10 +1245,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
    * （树直接读库文件，不看后端有没有它的模型），树明说没有这个节点才撤。节点还在、只是它名下带几何的成员删光了的，
    * 旧后端上分不清「删光了」和「后端没有它的模型」：保持原样。
    */
-  async function goneFromLibraryPerTree(root: string): Promise<{ removed: boolean; why: string }> {
+  async function goneFromLibraryPerTree(root: string): Promise<{ removed: boolean; why: string; kind?: 'deleted' | 'empty' }> {
     try {
       const resp = await withTimeout(getModelSource().tree.ancestors(root), NODE_UPDATE_FACTS_TIMEOUT_MS, '模型树');
-      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, why: '' };
+      if (!resp.success && isTreeNodeGoneMessage(resp.error_message)) return { removed: true, why: '', kind: 'deleted' };
     } catch {
       // 树也没问到：按确认不了算
     }
@@ -1237,7 +1289,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       for (const target of targets) hiddenByLoader.add(target);
       if (evicted.length > 0) anyViewer?.__dtxAfterInstancesLoaded?.(dbno, []);
     }
-    loadedRoots.delete(root);
+    markRootWithdrawn(root);
     loadedRefnosByRoot.delete(root);
     forgetLoadedNode(root);
     consoleStore.addLog('info', `[model-load] 取最新：${root} 在库里已经没有了，撤下 ${targets.length} 个 refno（${evicted.length} 个有对象）`);
@@ -1258,7 +1310,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   function isRootInScene(refno: string, knownDbno?: number): boolean {
     const root = normalizeRefnoString(refno);
     if (!root) return false;
-    if (loadedRoots.has(root)) return true;
+    if (hasLoadedRoot(root)) return true;
     const dbno = dbnoOfRoot(root, knownDbno);
     if (dbno == null) return false;
     if (isDtxRefnoLoaded(dbno, root)) return true;
@@ -1356,7 +1408,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // 相机意图戳：本次加载要飞的话，加载前盖一次；落地时核对，期间用户点了别处就不动相机。
     const cameraStamp = loadOptions?.flyTo ? beginCameraIntent() : 0;
 
-    const genuinelyLoaded = loadedRoots.has(normalizedRoot);
+    const genuinelyLoaded = hasLoadedRoot(normalizedRoot);
     if (!loadOptions?.regenerate && !refresh && !explicitFill && checkRefnoExists(normalizedRoot)) {
       if (loadOptions?.flyTo) {
         try {
@@ -1493,7 +1545,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (loadOptions?.quiet !== true) emitToast(payload);
     };
     // 轮到的这一刻节点算不算已经加载过（排队期间前面的加载可能已经把它装上了）：被叫停时据此决定撤不撤「已加载」
-    const genuinelyLoaded = loadedRoots.has(normalizedRoot);
+    const genuinelyLoaded = hasLoadedRoot(normalizedRoot);
+    const allowAutoFit = (): boolean => camera.flyTo || (loadOptions?.flyTo !== false && !refresh);
 
     isGenerating.value = true;
     lastLoadDebug.value = null;
@@ -1877,6 +1930,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           anyViewer: viewer as ProgressiveViewer,
           // 第一批装好时现问：同一个节点又被点了一次的话，以后点的那一下为准
           get flyTo() { return camera.flyTo; },
+          get autoFit() { return allowAutoFit(); },
           get cameraStamp() { return camera.stamp; },
           onBatchLoaded: (shown) => { shownEarly = shown; },
           undo,
@@ -1963,7 +2017,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 真产不出（NoRenderableGeometry / 确定性的失败）的范围本页面里不再自动重发，照旧给提示。
       const fillViewer = viewer as unknown as {
         __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
         scene?: {
           objects?: Record<string, { visible?: boolean } | undefined>
           ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
@@ -2100,7 +2154,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         // 「显示」= 保证可见（同收尾路径）：先把这一块的 refno 级可见态拉回 true，装完的回放才不会把它们再藏掉
         showRefnosTracked(fillViewer.scene, uniqStrings([normalizedRoot, ...fresh]), undo);
         // 这一块装载期间状态条归分块执行写（「第几块已生成，正在显示」），装载自己不写
-        const totals = await loadGenModelV1Refnos(layer, dbno, fresh, fillViewer, { replace: false, singleBatch: true }, null, undo);
+        const totals = await loadGenModelV1Refnos(
+          layer,
+          dbno,
+          fresh,
+          fillViewer,
+          { replace: false, singleBatch: true, ...(allowAutoFit() ? {} : { autoFit: false }) },
+          null,
+          undo,
+        );
         mergeLoadTotals(fillTotals, totals);
         fillViewer.scene?.ensureRefnos?.(fresh, { computeAabb: false });
         // 一个模型都没有的节点：第一块出来就飞一次（全部做完后收尾路径会对整体再对一次焦）
@@ -2426,6 +2488,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             || scopeIncomplete.truncated_roots.length > 0
             || Object.keys(scopeIncomplete.errors).length > 0
           );
+          let emptyKind: 'deleted' | 'empty' = 'deleted';
           if (!notCollected) {
             const confirmed = await emptyRefreshMeansRemoved(normalizedRoot);
             // 确认的这一会儿被叫停：还没开始撤，场景保持原样
@@ -2443,8 +2506,20 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               recheckLoadedNode(normalizedRoot);
               return false;
             }
+            emptyKind = confirmed.kind ?? 'deleted';
           }
-          return finishRefreshOfEmptyRoot(dbno, normalizedRoot, previousLeaves, scopeIncomplete, visibleSource, status, toast, loadOptions?.round);
+          return finishRefreshOfEmptyRoot(
+            dbno,
+            normalizedRoot,
+            previousLeaves,
+            scopeIncomplete,
+            visibleSource,
+            status,
+            toast,
+            loadOptions?.round,
+            emptyKind,
+            loadWatermark,
+          );
         }
         if (visibleSource !== 'visible-insts') {
           // 记录查询失败后退到子树查询、子树也是空：这不是「查空」，同样不生成
@@ -2500,7 +2575,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
       const anyViewer = viewer as unknown as {
         __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
         scene?: {
           objects?: Record<string, { visible?: boolean } | undefined>
           ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
@@ -2574,6 +2649,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           {
             replace: regenerate || refresh,
             singleBatch: shownEarlyRefnos !== null,
+            ...(allowAutoFit() ? {} : { autoFit: false }),
             // 重载 / 重新生成：范围查询回来的构件，记录都是刚查的那一份（根自己也是：没有记录的根在缓存里记的是空）
             ...(regenerate || refresh ? { freshRefnos: new Set([normalizedRoot, ...visibleRefnos]) } : {}),
           },
@@ -2660,7 +2736,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           });
           return true;
         }
-        loadedRoots.add(normalizedRoot);
+        markRootLoaded(normalizedRoot);
         // 重新登记：行上的状态跟着重问一次（节点一级的更新做完，落后 → 最新）；「本页装的不是后端现在的那一版」那一笔也随之清掉
         noteLoadedNode(normalizedRoot, dbno, loadWatermark);
         markedLoadedHere = true;
@@ -2696,17 +2772,17 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (collectionIncomplete) {
           consoleStore.addLog('warning', `[model-load] gen-model-v1 refno=${normalizedRoot} 已取得的构件都在场景中，但收集未完成（${incompleteTail}）`);
         } else if (onlyInjectedRootLacksGeometry) {
-          loadedRoots.add(normalizedRoot);
+          markRootLoaded(normalizedRoot);
           noteLoadedNode(normalizedRoot, dbno, loadWatermark);
           markedLoadedHere = true;
           consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 成员已在场景中，根自身无几何，按已加载收口`);
-        } else if (!loadedRoots.has(normalizedRoot)) {
+        } else if (!hasLoadedRoot(normalizedRoot)) {
           // 收齐了、要装的构件全都已经在场景里（先点亮过它下面的节点，或者别的 useModelGeneration 实例 / 别的入口装的）：
           // 这个节点就是「已加载」，照样记。不记的话模型树上它的眼睛一直是灭的（再点还是「显示」、藏不掉），
           // 已加载节点表里也没有它（取最新不核对它）。
           // 这个实例已经记过的不重记（已加载的节点在行上点「生成」也走到这里）：这一次什么都没换，
           // 它「装的时候是哪一版」不能跟着挪到此刻。
-          loadedRoots.add(normalizedRoot);
+          markRootLoaded(normalizedRoot);
           // 表里已经有它（别的实例登记的）：那一条记的是构件装上去时的那一版，不拿此刻的水位盖掉；被叫停时也不撤那一条
           if (loadedNodeEntry(normalizedRoot)?.loaded !== true) {
             noteLoadedNode(normalizedRoot, dbno, loadWatermark);
@@ -2739,7 +2815,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const withdrawn = withdrawStoppedLoad(undo);
         // 这一次才记成「已加载」的（先显示已有的、再补齐时被叫停）一起撤掉；点之前就已加载的节点照旧算已加载
         if (markedLoadedHere && !genuinelyLoaded) {
-          loadedRoots.delete(normalizedRoot);
+          markRootWithdrawn(normalizedRoot);
           loadedRefnosByRoot.delete(normalizedRoot);
           forgetLoadedNode(normalizedRoot);
         }
@@ -2809,7 +2885,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   ): Promise<ShowModelByDbnumResult> {
     const anyViewer = viewer as unknown as {
       __dtxLayer?: unknown
-      __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+      __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[], options?: DtxAfterInstancesLoadedOptions) => void
       scene?: { getAABB?: (ids: string[]) => unknown }
       cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
     };
@@ -2924,7 +3000,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           dbno,
           refnos,
           anyViewer,
-          { replace: false },
+          { replace: false, ...(loadOptions?.flyTo === false ? { autoFit: false } : {}) },
           { status, range: [from, to], label: `gen-model 整库 dbnum=${dbno} 第 ${liveBatches} 批`, stageText: false },
         ));
         for (const refno of refnos) loadedRefnos.add(refno);
@@ -3005,7 +3081,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno,
         remaining,
         anyViewer,
-        { replace: false },
+        { replace: false, ...(loadOptions?.flyTo === false ? { autoFit: false } : {}) },
         { status, range: [Math.max(55, status.progress), 95], label: `gen-model 整库 dbnum=${dbno}`, stageText: true },
       ));
     }
@@ -3138,7 +3214,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     showModelByRefno,
     isModelActuallyLoaded,
     checkRefnoExists,
-    listLoadedRoots: () => [...loadedRoots],
+    listLoadedRoots: listActiveLoadedRoots,
     // 「取最新」用的几个出口（见 `useModelGetWork`）
     withdrawRemovedRoot,
     loadedRefnosOf,
