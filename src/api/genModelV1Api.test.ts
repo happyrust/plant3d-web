@@ -10,6 +10,7 @@ import {
   genModelV1ModelGenerate,
   genModelV1ModelRecords,
   genModelV1NodeVersions,
+  genModelV1Search,
   genModelV1SpatialNearby,
   genModelV1SpatialCenterline,
   genModelV1SpatialNearbyRefnos,
@@ -19,7 +20,9 @@ import {
   genModelV1PipeClearance,
   genModelV1PointToSurface,
   genModelV1TaskGet,
+  genModelV1TreeAncestors,
   genModelV1TreeChildren,
+  genModelV1TreeRoots,
   isGenModelV1ApiError,
   isResolvedTreeView,
   isSourceChangedExhausted,
@@ -604,6 +607,47 @@ describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
     expect(isGenModelV1ApiError(error)).toBe(true);
     expect(error?.code).toBe('precondition');
     expect(error?.status).toBe(422);
+  });
+
+  it('tree/* 与 search：source=db 时透传查询参数，direct / 缺省时不出现', async () => {
+    const fetchDb = vi.fn<typeof fetch>(async () =>
+      jsonResponse(200, {
+        source: 'db',
+        nodes: [],
+        refnos: [],
+        items: [],
+        total: 0,
+        truncated: false,
+        next_cursor: null,
+        project: 'P',
+        mdb: '/ALL',
+      }),
+    );
+    await genModelV1TreeRoots({ baseUrl: BASE, fetchImpl: fetchDb, source: 'db', nouns: 'SITE' });
+    await genModelV1TreeChildren('24381_2', { baseUrl: BASE, fetchImpl: fetchDb, source: 'db', resolved: true });
+    await genModelV1TreeAncestors('24381_2', { baseUrl: BASE, fetchImpl: fetchDb, source: 'db' });
+    await genModelV1Search({ query: 'PIPE', source: 'db' }, { baseUrl: BASE, fetchImpl: fetchDb });
+
+    expect(new URL(String(fetchDb.mock.calls[0]![0])).searchParams.get('source')).toBe('db');
+    expect(new URL(String(fetchDb.mock.calls[1]![0])).searchParams.get('source')).toBe('db');
+    expect(new URL(String(fetchDb.mock.calls[2]![0])).searchParams.get('source')).toBe('db');
+    expect(new URL(String(fetchDb.mock.calls[3]![0])).searchParams.get('source')).toBe('db');
+
+    const fetchDirect = vi.fn<typeof fetch>(async () =>
+      jsonResponse(200, {
+        source: 'direct',
+        nodes: [],
+        refnos: [],
+        items: [],
+        total: 0,
+        truncated: false,
+        next_cursor: null,
+        project: 'P',
+        mdb: '/ALL',
+      }),
+    );
+    await genModelV1TreeRoots({ baseUrl: BASE, fetchImpl: fetchDirect, source: 'direct' });
+    expect(new URL(String(fetchDirect.mock.calls[0]![0])).searchParams.has('source')).toBe(false);
   });
 });
 

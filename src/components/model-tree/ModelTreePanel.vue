@@ -24,6 +24,11 @@ import { forgetLoadedNode, loadedNodeEntry, useLoadedNodeStatus } from '@/compos
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { registerGetWorkTree } from '@/composables/useModelGetWork';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
+import {
+  MODEL_TREE_SOURCE_PRESETS,
+  useModelTreeSourceStore,
+  type ModelTreeDataSource,
+} from '@/composables/useModelTreeSourceStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { openRoomInfo, useRoomInfo } from '@/composables/useRoomInfo';
 import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
@@ -137,6 +142,17 @@ const filteredTypes = computed(() => pdmsTree.filteredTypes.value);
 const searchLoading = computed(() => pdmsTree.searchLoading.value);
 const searchError = computed(() => pdmsTree.searchError.value);
 const searchItems = computed(() => pdmsTree.searchItems.value);
+const treeLoadError = computed(() => pdmsTree.treeLoadError.value);
+
+const modelTreeSourceStore = useModelTreeSourceStore();
+const activeTreeDataSource = computed(() => modelTreeSourceStore.source.value);
+
+function switchTreeDataSource(source: ModelTreeDataSource) {
+  if (modelTreeSourceStore.setSource(source)) {
+    const label = MODEL_TREE_SOURCE_PRESETS.find((preset) => preset.source === source)?.fullLabel ?? source;
+    emitToast({ message: `模型树数据源已切换为「${label}」`, level: 'info' });
+  }
+}
 
 // ------- 版本差异模式：模板用扁平状态（嵌套 ref 在模板中不会自动解包） -------
 const diffActive = computed(() => treeDiff.isActive.value);
@@ -1483,6 +1499,23 @@ function onSearchEnter(value: string) {
         <div class="flex-1" />
 
         <div v-if="isPdmsTab" class="flex items-center gap-0.5">
+          <div class="mr-1 inline-flex h-7 items-center rounded-md border border-border bg-muted/60 p-0.5 text-[11px]"
+            data-testid="model-tree-source-switch">
+            <button v-for="preset in MODEL_TREE_SOURCE_PRESETS"
+              :key="preset.source"
+              type="button"
+              class="inline-flex h-full items-center rounded-sm px-1.5 font-medium transition-colors"
+              :class="activeTreeDataSource === preset.source
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'"
+              :title="`${preset.fullLabel}：${preset.description}`"
+              :data-testid="`model-tree-source-${preset.source}`"
+              @mousedown.stop
+              @click="switchTreeDataSource(preset.source)">
+              {{ preset.shortLabel }}
+            </button>
+          </div>
+
           <button type="button"
             data-model-tree-popover-trigger="true"
             class="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1688,6 +1721,19 @@ function onSearchEnter(value: string) {
     <div v-show="isPdmsTab"
       ref="containerRef"
       class="relative min-h-0 flex-1 overflow-auto rounded-md border border-border bg-background p-2">
+      <div v-if="treeLoadError && displayRows.length === 0"
+        class="mb-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive"
+        data-testid="model-tree-load-error">
+        <div class="font-medium">模型树加载失败</div>
+        <div class="mt-1 break-words leading-relaxed text-muted-foreground">{{ treeLoadError }}</div>
+        <button v-if="activeTreeDataSource === 'db'"
+          type="button"
+          class="mt-2 rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
+          data-testid="model-tree-fallback-direct"
+          @click="switchTreeDataSource('direct')">
+          切回 E3D 直读
+        </button>
+      </div>
       <div class="relative w-full"
         :style="{ height: `${totalSize}px` }">
         <div v-for="vr in virtualRows"

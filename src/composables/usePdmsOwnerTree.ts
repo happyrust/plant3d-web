@@ -14,6 +14,7 @@ import {
   type TreeRefreshReport,
 } from '@/composables/pdmsTreeRefresh';
 import { aggregateCheckState, recomputeViewAncestors } from '@/composables/useModelTree';
+import { useModelTreeSourceStore } from '@/composables/useModelTreeSourceStore';
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 import { getModelSource } from '@/model-source';
 import { flyToScope } from '@/viewer/camera/focusScope';
@@ -81,9 +82,11 @@ function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
 
 export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const sceneGraph = useSceneGraphOps(viewerRef);
+  const treeSourceStore = useModelTreeSourceStore();
   // 取数一律经数据源端口（plan 2026-09-06 P2-2）：`legacy` 下每个方法就是原来那个 e3d* 函数的一次转发，
   // `gen-model-v1` 下换成 /api/v1 适配器（虚拟根 + 节点映射）。状态机本身不动。
   const treeSource = getModelSource().tree;
+  const treeLoadError = ref<string | null>(null);
 
   const nodesById = shallowRef<Record<string, TreeNode>>({});
   const rootIds = ref<string[]>([]);
@@ -173,6 +176,10 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
   const SUBTREE_MAX_DEPTH = 256;
   const SUBTREE_LIMIT = 200_000;
+
+  /** 眼睛把可见态同步到场景：每批 refno 数与每帧最多占用的主线程时间 */
+  const SCENE_VISIBLE_BATCH = 256;
+  const SCENE_VISIBLE_FRAME_BUDGET_MS = 8;
 
   // 缓存 queryVisibleInstRefnos 结果，避免选中组节点时重复请求后端
   const visibleInstCache = new Map<string, string[]>();
@@ -747,20 +754,21 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     return { refnos, failed };
   }
 
-  async function setSceneVisibleInBatches(refnos: string[], visible: boolean, batchSize = 50): Promise<void> {
+  async function setSceneVisibleInBatches(refnos: string[], visible: boolean): Promise<void> {
     const viewer = viewerRef.value;
     if (!viewer) return;
     if (!refnos || refnos.length === 0) return;
 
     // 关键：不要把大量 refno 堆进 useSceneGraphOps.pendingVisible（否则 flush 会一次性 setObjectsVisible 导致长时间阻塞）。
-    // 直接分批调用 compat.scene.setObjectsVisible，把“重同步”工作切小并穿插让出帧。
-    for (let i = 0; i < refnos.length; i += batchSize) {
-      const batch = refnos.slice(i, i + batchSize);
-      viewer.scene.setObjectsVisible(batch, visible);
+    // 直接分批调用 compat.scene.setObjectsVisible，每帧做满时间预算就让出一帧（每批只改对象标志字节，纹理下一帧才上传）。
+    let frameStart = performance.now();
+    for (let i = 0; i < refnos.length; i += SCENE_VISIBLE_BATCH) {
+      viewer.scene.setObjectsVisible(refnos.slice(i, i + SCENE_VISIBLE_BATCH), visible);
 
-      if (i + batchSize < refnos.length) {
+      if (i + SCENE_VISIBLE_BATCH < refnos.length && performance.now() - frameStart >= SCENE_VISIBLE_FRAME_BUDGET_MS) {
         // 让浏览器有机会渲染与响应输入，避免“看起来卡死”
         await yieldToNextFrame();
+        frameStart = performance.now();
       }
     }
   }
@@ -1289,6 +1297,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
   async function initTree(seq: number) {
     try {
+      treeLoadError.value = null;
       const resp = await treeSource.worldRoot();
       if (!resp.success || !resp.node) throw new Error(resp.error_message || 'world-root api failed');
       if (seq !== initSeq) return;
@@ -1309,10 +1318,12 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       expandedIds.value = new Set([root.id]);
       void attachGroupRoot(seq);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       if (import.meta.env.DEV) {
         console.error('[pdms-tree] initTree failed', e);
       }
       if (seq === initSeq) {
+        treeLoadError.value = msg;
         resetAllState();
         scheduleInitRetry(seq);
       }
@@ -1320,18 +1331,22 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   }
 
   watch(
-    () => viewerRef.value,
-    (viewer) => {
+    () => [viewerRef.value, treeSourceStore.source.value] as const,
+    ([viewer]) => {
       initSeq++;
       const seq = initSeq;
 
       clearInitRetry();
 
       if (!viewer) {
+        treeLoadError.value = null;
         resetAllState();
         return;
       }
 
+      if ('invalidate' in treeSource && typeof treeSource.invalidate === 'function') {
+        treeSource.invalidate();
+      }
       resetAllState();
       void initTree(seq);
     },
@@ -1460,6 +1475,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     searchItems,
     searchLoading,
     searchError,
+    treeLoadError,
     focusNodeById,
     expandPathToNode,
 

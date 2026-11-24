@@ -983,6 +983,12 @@ export type HealthResponse = {
   model_cache?: GenModelV1ModelCacheHealth;
   /** 数据库架构版本（顶层，handlers.rs::storage_version_health）。`null` = 启动核对未跑；缺省 = 旧后端，不支持一键重新部署。 */
   storage_version?: StorageVersionHealth | null;
+  /** 模型树双数据源支持状态（direct / db）。 */
+  tree_sources?: {
+    direct?: boolean;
+    db?: boolean;
+    default?: string;
+  };
   [key: string]: unknown;
 };
 
@@ -1038,26 +1044,40 @@ export function genModelV1Health(options?: GenModelV1RequestOptions): Promise<He
   return genModelV1Fetch<HealthResponse>('/api/v1/health', { ...options, timeoutMs: options?.timeoutMs ?? 10_000 });
 }
 
+export type TreeDataSourceParam = 'direct' | 'db';
+
 export type GenModelV1TreeRootsOptions = GenModelV1RequestOptions & {
   /** 只列这些类型的 WORLD 直接成员（逗号分隔，服务端缺省 `SITE`）；`GPWL` 是分组入口，老服务端不认、回 400。 */
   nouns?: string;
+  /** 模型树数据源：缺省或 `'direct'` 不传参数（保持向后兼容），`'db'` 时附加 `source=db`。 */
+  source?: TreeDataSourceParam;
 };
 
 export function genModelV1TreeRoots(options?: GenModelV1TreeRootsOptions): Promise<TreeRootsResponse> {
-  const { nouns, ...requestOptions }: GenModelV1TreeRootsOptions = options ?? {};
-  return genModelV1Fetch<TreeRootsResponse>('/api/v1/tree/roots', nouns ? { ...requestOptions, query: { nouns } } : requestOptions);
+  const { nouns, source, ...requestOptions }: GenModelV1TreeRootsOptions = options ?? {};
+  const query: Record<string, string | number | undefined> = {};
+  if (nouns) query.nouns = nouns;
+  if (source === 'db') query.source = 'db';
+  return genModelV1Fetch<TreeRootsResponse>(
+    '/api/v1/tree/roots',
+    Object.keys(query).length > 0 ? { ...requestOptions, query } : requestOptions,
+  );
 }
 
 export type GenModelV1TreeChildrenOptions = GenModelV1RequestOptions & {
   /** 要解析视图（`resolved=1`）：分组节点的 GPITEM 换成真实成员；非分组节点后端原样直通。 */
   resolved?: boolean;
+  source?: TreeDataSourceParam;
 };
 
 export function genModelV1TreeChildren(refno: string, options?: GenModelV1TreeChildrenOptions): Promise<TreeChildrenResponse> {
-  const { resolved, ...requestOptions }: GenModelV1TreeChildrenOptions = options ?? {};
+  const { resolved, source, ...requestOptions }: GenModelV1TreeChildrenOptions = options ?? {};
+  const query: Record<string, string | number | undefined> = { refno: toV1Refno(refno) };
+  if (resolved) query.resolved = '1';
+  if (source === 'db') query.source = 'db';
   return genModelV1Fetch<TreeChildrenResponse>('/api/v1/tree/children', {
     ...requestOptions,
-    query: resolved ? { refno: toV1Refno(refno), resolved: '1' } : { refno: toV1Refno(refno) },
+    query,
   });
 }
 
@@ -1066,10 +1086,17 @@ export function isResolvedTreeView(response: Pick<TreeChildrenResponse, 'view'>)
   return response.view === 'resolved';
 }
 
-export function genModelV1TreeAncestors(refno: string, options?: GenModelV1RequestOptions): Promise<TreeAncestorsResponse> {
+export type GenModelV1TreeAncestorsOptions = GenModelV1RequestOptions & {
+  source?: TreeDataSourceParam;
+};
+
+export function genModelV1TreeAncestors(refno: string, options?: GenModelV1TreeAncestorsOptions): Promise<TreeAncestorsResponse> {
+  const { source, ...requestOptions }: GenModelV1TreeAncestorsOptions = options ?? {};
+  const query: Record<string, string | number | undefined> = { refno: toV1Refno(refno) };
+  if (source === 'db') query.source = 'db';
   return genModelV1Fetch<TreeAncestorsResponse>('/api/v1/tree/ancestors', {
-    ...options,
-    query: { refno: toV1Refno(refno) },
+    ...requestOptions,
+    query,
   });
 }
 
@@ -1078,12 +1105,19 @@ export type GenModelV1SearchRequest = {
   /** 服务端夹在 1..=500，默认 100 */
   limit?: number;
   cursor?: number;
+  source?: TreeDataSourceParam;
 };
 
 export function genModelV1Search(req: GenModelV1SearchRequest, options?: GenModelV1RequestOptions): Promise<SearchResponse> {
+  const query: Record<string, string | number | undefined> = {
+    query: req.query,
+    limit: req.limit,
+    cursor: req.cursor,
+  };
+  if (req.source === 'db') query.source = 'db';
   return genModelV1Fetch<SearchResponse>('/api/v1/search', {
     ...options,
-    query: { query: req.query, limit: req.limit, cursor: req.cursor },
+    query,
   });
 }
 
@@ -1663,15 +1697,48 @@ export type TaskListEntryDto = TaskEntryDto & {
 
 export type TaskListDto = { tasks?: TaskListEntryDto[] };
 
+/** `GET /api/v1/tasks` 的一页；`has_more` 为真时用最老那条的 `created_at` 作 `before` 翻下一页。 */
+export type TaskListPageDto = { tasks?: TaskListEntryDto[]; has_more?: boolean };
+
+/** 服务端每页封顶 160 条（单响应体积契约，gen-model `tasks_list`）；请求更多也只回 160。 */
+export const GEN_MODEL_V1_TASKS_PAGE_LIMIT = 160;
+
+export type GenModelV1TasksPageQuery = {
+  /** 不给就是所有种类混排：`rvm_check` 一多会把数据批次挤出窗口，账本按种类拉 */
+  kind?: string;
+  state?: string;
+  /** 服务端缺省 50、封顶 160 */
+  limit?: number;
+  /** 入队时刻上界（RFC3339，不含）：上一页最老那条的 `created_at` */
+  before?: string | null;
+};
+
 /**
  * `GET /api/v1/tasks`：服务端任务表（200 条窗口，含终态摘要）。
- *
- * 只供「增量记录」面板做账本服——d-195 的口径没松：不拿它反推别人改了什么、
- * 不订阅、不据此重载已加载的根。轮询节拍由面板自己管（打开才打）。
  */
 export function genModelV1Tasks(options?: GenModelV1RequestOptions): Promise<TaskListDto> {
-  // `limit=200` 与 plant-ui 的轮询同一口径：服务端列表本来就封顶 200 条，写明是契约而不是巧合。
   return genModelV1Fetch<TaskListDto>('/api/v1/tasks', { ...options, query: { limit: '200' } });
+}
+
+/**
+ * `GET /api/v1/tasks` 的一页（含终态摘要，按入队时刻从新到旧，注册表之外的翻落盘归档）。
+ *
+ * 只供「增量记录」账本与 RVM 增量校验用——d-195 的口径没松：不拿它反推别人改了什么、不据此重载已加载的根。
+ * 数据批次的回执带全部单元，一条整库批次就有 1–2 MB：终态任务不会再变，调用方按 task_id 缓存，别反复拉整页。
+ */
+export function genModelV1TasksPage(
+  query: GenModelV1TasksPageQuery = {},
+  options?: GenModelV1RequestOptions,
+): Promise<TaskListPageDto> {
+  return genModelV1Fetch<TaskListPageDto>('/api/v1/tasks', {
+    ...options,
+    query: {
+      kind: query.kind || undefined,
+      state: query.state || undefined,
+      limit: query.limit ? Math.min(query.limit, GEN_MODEL_V1_TASKS_PAGE_LIMIT) : undefined,
+      before: query.before || undefined,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

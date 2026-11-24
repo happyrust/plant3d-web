@@ -39,6 +39,7 @@ import {
   noteGenModelV1RequestFailure,
   useGenModelV1Health,
 } from '@/composables/useGenModelV1Health';
+import { subscribeModelTreeDataSourceChange } from '@/composables/useModelTreeSourceStore';
 import {
   createGenModelV1GenerationGuard,
   subscribeGenModelV1GenerationChange,
@@ -100,6 +101,7 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
   });
   let releaseHealth: (() => void) | null = null;
   let unsubscribeGeneration: (() => void) | null = null;
+  let unsubscribeTreeSource: (() => void) | null = null;
 
   function activate(): void {
     if (releaseHealth) return;
@@ -112,10 +114,15 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
       invalidateGenModelV1DbMetaInfo();
       resetDbnumServerEntrySupport();
     });
+    unsubscribeTreeSource = subscribeModelTreeDataSourceChange(() => {
+      tree.invalidate();
+    });
     releaseHealth = useGenModelV1Health().activateDataSource();
   }
 
   function dispose(): void {
+    unsubscribeTreeSource?.();
+    unsubscribeTreeSource = null;
     unsubscribeGeneration?.();
     unsubscribeGeneration = null;
     releaseHealth?.();

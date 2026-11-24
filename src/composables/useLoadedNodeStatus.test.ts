@@ -768,4 +768,110 @@ describe('useLoadedNodeStatus（接上后端的节点模型状态接口）', () 
     });
     expect(store.view('24384_26548')!.title).toContain('库文件正在写入');
   });
+
+  it('未初始化库的 dbBoundary 探测（probe）：最新给绿实心圆、部分生成/落后给对应状态和按钮；未生成只画空心圆不刷「生成」且点过后升为「生成」', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+
+    // latest -> 绿实心圆，无按钮，且不算「已加载」（entry 仍为 null）
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'latest', units: { total: 35, generated: 35, missing: 0, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.probe('2013286720_1', 7997);
+    await vi.waitFor(() => {
+      const v = store.view('2013286720_1');
+      if (!v || v.checking) throw new Error('wait probe latest');
+    });
+    expect(store.entry('2013286720_1')).toBeNull();
+    expect(store.view('2013286720_1')).toMatchObject({ verdict: 'latest', iconKind: 'current', action: null });
+
+    // partial -> 半圆 + 生成
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'partial', verdictReason: 'missing',
+      units: { total: 10, generated: 4, missing: 6, failed: 0, lagging: 0, exact: true },
+      generatedAt: OWN_447, precheck: { unitsToGenerate: 6, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.probe('24381_536', 7997);
+    await vi.waitFor(() => {
+      const v = store.view('24381_536');
+      if (!v || v.checking) throw new Error('wait probe partial');
+    });
+    expect(store.view('24381_536')).toMatchObject({ verdict: 'partial', iconKind: 'partial', action: 'generate' });
+
+    // lagging -> 琥珀圆 + 节点级更新
+    fetchFacts.mockResolvedValueOnce(facts({
+      verdict: 'lagging', verdictReason: 'units_changed',
+      units: { total: 21, generated: 21, missing: 0, failed: 0, lagging: 2, exact: true },
+      generatedAt: { ...OWN_447, sesnoMin: 445, sesnoMax: 445 },
+      changes: { fromSesno: 445, toSesno: 447, unitsChanged: 2, unitsAdded: 0, unitsRemoved: 0, unattributed: false },
+      precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+    }));
+    store.probe('24381_537', 7997);
+    await vi.waitFor(() => {
+      const v = store.view('24381_537');
+      if (!v || v.checking) throw new Error('wait probe lagging');
+    });
+    expect(store.view('24381_537')).toMatchObject({ verdict: 'lagging', iconKind: 'stale', action: 'update-node' });
+
+    // not_generated -> 仅画空心圆，不给整棵树刷满「生成」按钮；点过 noteWithoutModel 后升级为带「生成」按钮
+    const notGen = facts({
+      verdict: 'not_generated',
+      units: { total: 12, generated: 0, missing: 12, failed: 0, lagging: 0, exact: true },
+      precheck: { unitsToGenerate: 12, needsConfirm: false, thresholdUnits: 20 },
+    });
+    fetchFacts.mockResolvedValueOnce(notGen);
+    store.probe('24381_538', 7997);
+    await vi.waitFor(() => {
+      const v = store.view('24381_538');
+      if (!v || v.checking) throw new Error('wait probe not_generated');
+    });
+    expect(store.view('24381_538')).toMatchObject({ verdict: 'not_generated', iconKind: 'empty', action: null });
+
+    fetchFacts.mockResolvedValueOnce(notGen);
+    store.noteWithoutModel('24381_538', 7997);
+    await settled(store, '24381_538');
+    expect(store.view('24381_538')).toMatchObject({ verdict: 'not_generated', iconKind: 'empty', action: 'generate' });
+
+    // untracked 或服务端未提供接口（null）-> 退回 null，由 dbStatus 接管
+    fetchFacts.mockResolvedValueOnce(null);
+    store.probe('24381_539', 7997);
+    await vi.waitFor(() => expect(fetchFacts).toHaveBeenCalledWith(expect.objectContaining({ refno: '24381_539' })));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(store.view('24381_539')).toBeNull();
+
+    // reset() 清空探测表
+    store.reset();
+    expect(store.view('2013286720_1')).toBeNull();
+  });
+
+  it('高优先级点选检查（noteLoaded）优先于后台探测队列（probe）执行', async () => {
+    const { store, fetchFacts } = await loadStoreWithFacts();
+    setRows(ROW_7997);
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    fetchFacts.mockImplementation(async ({ refno }: { refno: string }) => {
+      order.push(refno);
+      if (order.length === 1) {
+        await new Promise<void>((r) => { releaseFirst = r; });
+      }
+      return facts({
+        verdict: 'latest', units: { total: 5, generated: 5, missing: 0, failed: 0, lagging: 0, exact: true },
+        generatedAt: OWN_447, precheck: { unitsToGenerate: 0, needsConfirm: false, thresholdUnits: 20 },
+      });
+    });
+
+    // CONCURRENCY = 2：先排 4 个 probe，占用 2 个并发槽后剩 2 个在 probeQueue，再插 1 个 noteLoaded
+    store.probe('24381_1', 7997);
+    store.probe('24381_2', 7997);
+    store.probe('24381_3', 7997);
+    store.probe('24381_4', 7997);
+    store.noteLoaded('24381_99', 7997, { modelSesno: 0, fileLatestSesno: 447 });
+    releaseFirst();
+    await settled(store, '24381_99');
+    await vi.waitFor(() => expect(order).toHaveLength(5));
+    // '24381_99' 必须排在积压的 probe ('24381_3', '24381_4') 之前
+    expect(order.indexOf('24381_99')).toBeLessThan(order.indexOf('24381_3'));
+    expect(order.indexOf('24381_99')).toBeLessThan(order.indexOf('24381_4'));
+  });
 });

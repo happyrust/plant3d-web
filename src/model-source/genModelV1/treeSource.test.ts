@@ -491,4 +491,31 @@ describe('createGenModelV1TreeSource', () => {
     expect(fresh.node?.name).toContain('FreshProject');
     expect(roots).toHaveBeenCalledTimes(2);
   });
+
+  it('当数据源为 db 时向 tree/* 与 search 透传 source=db，为 direct 时不传', async () => {
+    let currentSource: 'direct' | 'db' = 'db';
+    const api = fakeApi();
+    const tree = createGenModelV1TreeSource({ api, getTreeSource: () => currentSource });
+
+    await tree.worldRoot();
+    expect(api.roots).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'db' }));
+
+    await tree.children('9304_2');
+    expect(api.children).toHaveBeenLastCalledWith('9304_2', expect.objectContaining({ resolved: true, source: 'db' }));
+
+    await tree.ancestors('17496_8518');
+    expect(api.ancestors).toHaveBeenLastCalledWith('17496_8518', expect.objectContaining({ source: 'db' }));
+
+    await tree.search({ keyword: 'PIPE', limit: 10 });
+    expect(api.search).toHaveBeenLastCalledWith(
+      { query: 'PIPE', limit: 100, cursor: undefined, source: 'db' },
+      expect.anything(),
+    );
+
+    currentSource = 'direct';
+    tree.invalidate();
+    await tree.worldRoot();
+    const lastRootsArg = vi.mocked(api.roots).mock.calls.at(-1)?.[0];
+    expect(lastRootsArg).not.toHaveProperty('source');
+  });
 });

@@ -420,11 +420,11 @@ function fetchLod1Geometry(geoHash: string, url: string): Promise<Lod1FetchOutco
         return absent(buffer.byteLength === original.bytes);
       }
       const g = new BufferGeometry();
-      g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.data.positions), 3));
+      g.setAttribute('position', new BufferAttribute(parsed.data.positions, 3));
       if (parsed.data.normals && parsed.data.normals.length > 0) {
-        g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.data.normals), 3));
+        g.setAttribute('normal', new BufferAttribute(parsed.data.normals, 3));
       }
-      g.setIndex(new BufferAttribute(new Uint32Array(parsed.data.indices), 1));
+      g.setIndex(new BufferAttribute(parsed.data.indices, 1));
       lod1GeometryByGeoHash.set(geoHash, g);
       return { geometry: g, sameAsOriginal: false };
     } catch {
@@ -960,11 +960,11 @@ async function ensureGeometryForGeoHash(
       const parsed = parseResult.data;
       originalMeshSizeByGeoHash.set(geoHash, { bytes: meshData.byteLength, indexCount: parsed.indices.length });
       const g = new BufferGeometry();
-      g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
+      g.setAttribute('position', new BufferAttribute(parsed.positions, 3));
       if (parsed.normals && parsed.normals.length > 0) {
-        g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
+        g.setAttribute('normal', new BufferAttribute(parsed.normals, 3));
       }
-      g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
+      g.setIndex(new BufferAttribute(parsed.indices, 1));
       g.computeBoundingBox();
       return g;
     };

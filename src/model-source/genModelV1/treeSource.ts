@@ -43,6 +43,10 @@ import {
   type TreeRootsResponse,
 } from '@/api/genModelV1Api';
 import {
+  getActiveModelTreeDataSource,
+  type ModelTreeDataSource,
+} from '@/composables/useModelTreeSourceStore';
+import {
   createGenModelV1GenerationGuard,
   type GenModelV1GenerationGuard,
 } from '@/model-source/genModelV1/serviceLifecycle';
@@ -162,6 +166,8 @@ export type GenModelV1TreeSourceOptions = {
   /** 生产组装点注入 health freshness；低层单测缺省不发额外请求。 */
   ensureFreshness?: () => Promise<unknown>;
   noteRequestFailure?: (error: unknown) => void;
+  /** 读取当前模型树数据源（`direct` / `db`），缺省读全局 `useModelTreeSourceStore`。 */
+  getTreeSource?: () => ModelTreeDataSource;
 };
 
 export type GenModelV1TreeSource = TreeSource & {
@@ -189,6 +195,11 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
   const now = options.now ?? (() => Date.now());
   const ensureFreshness = options.ensureFreshness ?? (() => Promise.resolve());
   const noteRequestFailure = options.noteRequestFailure ?? ((error: unknown) => { void error; });
+  const getTreeSource = options.getTreeSource ?? getActiveModelTreeDataSource;
+
+  function withDbSource<T extends Record<string, unknown>>(opts: T): T & { source?: 'db' } {
+    return getTreeSource() === 'db' ? { ...opts, source: 'db' } : opts;
+  }
 
   let rootsCache: { at: number; generation: number; value: Promise<TreeRootsResponse> } | null = null;
   let groupRootsCache: { at: number; generation: number; value: Promise<TreeRootsResponse> } | null = null;
@@ -208,7 +219,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       && rootsCache.generation === guard.generation
       && at - rootsCache.at < rootsCacheMs
     ) return rootsCache.value;
-    const value = api.roots({ signal: guard.signal })
+    const value = api.roots(withDbSource({ signal: guard.signal }))
       .then((response) => {
         guard.assertCurrent();
         return response;
@@ -230,7 +241,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       && groupRootsCache.generation === guard.generation
       && at - groupRootsCache.at < rootsCacheMs
     ) return groupRootsCache.value;
-    const value = api.roots({ signal: guard.signal, nouns: 'GPWL' })
+    const value = api.roots(withDbSource({ signal: guard.signal, nouns: 'GPWL' }))
       .then((response) => {
         guard.assertCurrent();
         const nodes = response.nodes.filter((node) => isGroupNoun(node.noun));
@@ -301,7 +312,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         nodes = roots.nodes;
       } else {
         parentId = fromV1Refno(refno);
-        const resp = await api.children(parentId, { signal: guard.signal, resolved: true });
+        const resp = await api.children(parentId, withDbSource({ signal: guard.signal, resolved: true }));
         nodes = resp.nodes;
         view = isResolvedTreeView(resp) ? 'resolved' : 'stored';
         unresolved = (resp.unresolved ?? []).map((slot) => ({
@@ -334,7 +345,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       await ensureFreshness();
       guard = createGenModelV1GenerationGuard();
       const [resp, roots] = await Promise.all([
-        api.ancestors(fromV1Refno(refno), { signal: guard.signal }),
+        api.ancestors(fromV1Refno(refno), withDbSource({ signal: guard.signal })),
         loadRoots(guard),
       ]);
       guard.assertCurrent();
@@ -375,10 +386,10 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       await ensureFreshness();
       guard = createGenModelV1GenerationGuard();
       const self = fromV1Refno(refno);
-      const chain = await api.ancestors(self, { signal: guard.signal });
+      const chain = await api.ancestors(self, withDbSource({ signal: guard.signal }));
       const owner = chain.refnos.map((item) => fromV1Refno(String(item))).find((item) => item !== self);
       if (!owner) return { success: false, node: null, error_message: `找不到 ${self} 的属主，无法定位节点` };
-      const siblings = await api.children(owner, { signal: guard.signal });
+      const siblings = await api.children(owner, withDbSource({ signal: guard.signal }));
       guard.assertCurrent();
       const hit = siblings.nodes.find((item) => fromV1Refno(item.refno) === self);
       if (!hit) return { success: false, node: null, error_message: `${owner} 的成员表里没有 ${self}` };
@@ -407,8 +418,11 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       let cursor: number | undefined;
       let scanned = 0;
       for (let page = 0; page < 64 && items.length < limit && scanned < SEARCH_SCAN_CAP; page++) {
+        const searchReq = getTreeSource() === 'db'
+          ? { query: keyword, limit: pageSize, cursor, source: 'db' as const }
+          : { query: keyword, limit: pageSize, cursor };
         const resp = await api.search(
-          { query: keyword, limit: pageSize, cursor },
+          searchReq,
           { signal: guard.signal },
         );
         guard.assertCurrent();
@@ -488,7 +502,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         const responses = await mapWithConcurrency(
           batch,
           SUBTREE_CONCURRENCY,
-          (refno) => api.children(refno, { signal: activeGuard.signal }),
+          (refno) => api.children(refno, withDbSource({ signal: activeGuard.signal })),
         );
         activeGuard.assertCurrent();
         const next: string[] = [];
@@ -585,7 +599,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         ? await rootsCache.value
         : await loadRoots(guard);
       if (!roots.nodes.some((node) => fromV1Refno(node.refno) === key)) return null;
-      const resp = await api.children(key, { signal: guard.signal });
+      const resp = await api.children(key, withDbSource({ signal: guard.signal }));
       guard.assertCurrent();
       const members = resp.nodes.map((node) => fromV1Refno(node.refno)).filter(Boolean);
       return members.length > 0 ? members : null;

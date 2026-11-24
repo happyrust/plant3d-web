@@ -15,6 +15,7 @@ const dbViewMock = vi.hoisted(() => vi.fn((): { kind: string; title: string } =>
 const dbRefreshMock = vi.hoisted(() => vi.fn());
 const nodeViewMock = vi.hoisted(() => vi.fn((_refno: string): NodeView | null => null));
 const nodeRecheckMock = vi.hoisted(() => vi.fn());
+const nodeProbeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/composables/useGenModelV1DbnumStatus', () => ({
   useGenModelV1DbnumStatus: () => ({
@@ -23,7 +24,7 @@ vi.mock('@/composables/useGenModelV1DbnumStatus', () => ({
   }),
 }));
 vi.mock('@/composables/useLoadedNodeStatus', () => ({
-  useLoadedNodeStatus: () => ({ view: nodeViewMock, recheck: nodeRecheckMock }),
+  useLoadedNodeStatus: () => ({ view: nodeViewMock, recheck: nodeRecheckMock, probe: nodeProbeMock }),
 }));
 
 async function mountRow(row: FlatRow, extra: Record<string, unknown> = {}) {
@@ -483,5 +484,35 @@ describe('ModelTreeRow 节点一级的「更新」（方案第 12 节：按需�
       busy.unmount();
       state.__resetUpdateToLatestStateForTests();
     }
+  });
+});
+
+describe('ModelTreeRow 未初始化库的 dbBoundary 自动探测（刷新后恢复绿点）', () => {
+  const SITE_UNINIT: FlatRow = { id: '2013286720_1', name: 'SITE-CABLE-AREA03', type: 'SITE', depth: 1, hasChildren: true, dbnum: 250176, dbBoundary: true };
+  const ZONE_UNINIT: FlatRow = { id: '2013286720_2', name: 'ZONE-1', type: 'ZONE', depth: 2, hasChildren: false, dbnum: 250176 };
+
+  beforeEach(() => {
+    nodeProbeMock.mockReset();
+    nodeViewMock.mockReturnValue(null);
+  });
+
+  it('dbBoundary 且库未初始化（kind === empty）时触发 probe(id, dbnum)；非边界、幽灵行或已初始化库不触发', async () => {
+    dbViewMock.mockReturnValue({ kind: 'empty', title: 'DB 250176 · 库未初始化' });
+    const site = await mountRow(SITE_UNINIT, { checkState: 'unchecked' });
+    site.unmount();
+    expect(nodeProbeMock).toHaveBeenCalledTimes(1);
+    expect(nodeProbeMock).toHaveBeenCalledWith('2013286720_1', 250176);
+
+    nodeProbeMock.mockReset();
+    const zone = await mountRow(ZONE_UNINIT, { checkState: 'unchecked' });
+    zone.unmount();
+    const ghost = await mountRow(SITE_UNINIT, { ghost: true, checkState: 'unchecked' });
+    ghost.unmount();
+    expect(nodeProbeMock).not.toHaveBeenCalled();
+
+    dbViewMock.mockReturnValue({ kind: 'current', title: 'DB 250176 · 最新' });
+    const initialized = await mountRow(SITE_UNINIT, { checkState: 'unchecked' });
+    initialized.unmount();
+    expect(nodeProbeMock).not.toHaveBeenCalled();
   });
 });

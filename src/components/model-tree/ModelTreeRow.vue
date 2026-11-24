@@ -238,6 +238,16 @@ watch(statusDbnum, (dbnum) => {
   releaseDbStatus = dbnum === null ? null : dbStatusStore.acquire(dbnum);
 }, { immediate: true });
 const dbStatus = computed(() => (statusDbnum.value === null ? null : dbStatusStore.view(statusDbnum.value)));
+const probeTarget = computed(() =>
+  !props.ghost && props.row.dbBoundary === true && statusDbnum.value !== null && dbStatus.value?.kind === 'empty'
+    ? { id: props.row.id, dbnum: statusDbnum.value }
+    : null
+);
+watch(probeTarget, (target, prev) => {
+  if (target && (target.id !== prev?.id || target.dbnum !== prev?.dbnum)) {
+    nodeStatusStore.probe?.(target.id, target.dbnum);
+  }
+}, { immediate: true });
 /** 图标按节点自己的结论画；节点说不出结论（没装过 / 核对中 / 未知 / 未跟踪）时沿用库一级的圆点 */
 const generationKind = computed(() => nodeStatus.value?.iconKind ?? dbStatus.value?.kind ?? null);
 const statusTitle = computed(() => {

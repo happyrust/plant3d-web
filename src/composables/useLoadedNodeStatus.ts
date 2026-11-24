@@ -130,13 +130,23 @@ export type LoadedNodeView = {
   checking: boolean;
 };
 
+type ProbedNodeEntry = {
+  refno: string;
+  dbnum: number;
+  status: NodeModelStatus | null;
+  checking: boolean;
+};
+
 const entries = reactive(new Map<string, LoadedNodeEntry>());
+/** 未初始化库里的边界节点在刷新/重绘后按需探测的状态缓存，页面未点击前不上「已加载节点表」。 */
+const probedEntries = reactive(new Map<string, ProbedNodeEntry>());
 /** 每个节点最近一次发起判定的序号：判定回来时序号对不上（节点被撤、被重新登记）就丢掉 */
 const checkTokens = new Map<string, number>();
 /** 每个节点上一次判定时库的水位：变了才重问 */
 const checkedAgainst = new Map<string, string>();
 const inflight = new Map<string, AbortController>();
 const queue: string[] = [];
+const probeQueue: string[] = [];
 let running = 0;
 let tokenSeq = 0;
 let stopWatching: (() => void) | null = null;
@@ -310,58 +320,84 @@ function refreshRows(): void {
   void useGenModelV1Health().refreshVerdict();
 }
 
-function startWatching(): void {
+function ensureWatermarkWatch(): void {
   if (stopWatching) return;
   const health = useGenModelV1Health();
   // `/dbnums` 每重拉一次 `lastCheckedAt` 就变：看看哪些库的水位动了
   stopWatching = watch(() => health.state.verdict.lastCheckedAt, () => recheckChanged());
-  pollTimer = setInterval(() => {
-    if (entries.size === 0) return;
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-    refreshRows();
-  }, LOADED_NODE_DBNUMS_POLL_MS);
-  unsubscribeBatches = subscribeGenModelV1FinishedBatches((batch) => {
-    for (const entry of entries.values()) {
-      if (entry.dbnum === batch.dbnum) {
-        refreshRows();
-        return;
+}
+
+function startWatching(): void {
+  ensureWatermarkWatch();
+  if (pollTimer === null) {
+    pollTimer = setInterval(() => {
+      if (entries.size === 0) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      refreshRows();
+    }, LOADED_NODE_DBNUMS_POLL_MS);
+  }
+  if (!unsubscribeBatches) {
+    unsubscribeBatches = subscribeGenModelV1FinishedBatches((batch) => {
+      for (const entry of entries.values()) {
+        if (entry.dbnum === batch.dbnum) {
+          refreshRows();
+          return;
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 function stopWatchingIfIdle(): void {
-  if (entries.size > 0) return;
-  stopWatching?.();
-  stopWatching = null;
-  if (pollTimer !== null) clearInterval(pollTimer);
-  pollTimer = null;
-  unsubscribeBatches?.();
-  unsubscribeBatches = null;
+  if (entries.size === 0) {
+    if (pollTimer !== null) clearInterval(pollTimer);
+    pollTimer = null;
+    unsubscribeBatches?.();
+    unsubscribeBatches = null;
+  }
+  if (entries.size === 0 && probedEntries.size === 0) {
+    stopWatching?.();
+    stopWatching = null;
+  }
 }
 
-function schedule(key: string): void {
-  const entry = entries.get(key);
+function removeFromQueues(key: string): void {
+  const qIdx = queue.indexOf(key);
+  if (qIdx >= 0) queue.splice(qIdx, 1);
+  const pIdx = probeQueue.indexOf(key);
+  if (pIdx >= 0) probeQueue.splice(pIdx, 1);
+}
+
+function schedule(key: string, lowPriority = false): void {
+  const entry = entries.get(key) ?? probedEntries.get(key);
   if (!entry) return;
   // 在路上的那一次作废（节点被重新登记，或水位又变了）
   inflight.get(key)?.abort();
   inflight.delete(key);
   checkTokens.set(key, ++tokenSeq);
   entry.checking = true;
-  if (!queue.includes(key)) queue.push(key);
+  if (lowPriority) {
+    if (!queue.includes(key) && !probeQueue.includes(key)) probeQueue.push(key);
+  } else {
+    const pIdx = probeQueue.indexOf(key);
+    if (pIdx >= 0) probeQueue.splice(pIdx, 1);
+    if (!queue.includes(key)) queue.push(key);
+  }
   pump();
 }
 
 function pump(): void {
-  while (running < LOADED_NODE_CHECK_CONCURRENCY && queue.length > 0) {
-    const key = queue.shift()!;
-    if (entries.has(key)) void run(key);
+  while (running < LOADED_NODE_CHECK_CONCURRENCY && (queue.length > 0 || probeQueue.length > 0)) {
+    const key = queue.length > 0 ? queue.shift()! : probeQueue.shift()!;
+    if (entries.has(key) || probedEntries.has(key)) void run(key);
   }
 }
 
 async function run(key: string): Promise<void> {
-  const entry = entries.get(key);
+  const loadedEntry = entries.get(key);
+  const entry = loadedEntry ?? probedEntries.get(key);
   if (!entry) return;
+  const isLoadedEntry = !!loadedEntry;
   const token = checkTokens.get(key);
   const row = rowOf(entry.dbnum);
   const against = watermarkKey(row);
@@ -376,7 +412,7 @@ async function run(key: string): Promise<void> {
       row,
       // 因名下查空暂时撤下的节点（`withdrawnEmpty`）：一旦后端回复 `latest` / `lagging` 就代表已有模型可装回，
       // 不需要再走慢的 `node/versions` 逐会话核对（`loadedNodeView` 对 `withdrawnEmpty + latest` 直接出 `reloadable`）。
-      loadedModelSesno: entry.withdrawnEmpty ? null : entry.loadedModelSesno,
+      loadedModelSesno: loadedEntry && !loadedEntry.withdrawnEmpty ? loadedEntry.loadedModelSesno : null,
       ...(factsQuery ? { fetchFacts: factsQuery } : {}),
       listChangedSessions: async (query) => {
         const sessions = await listChangedSessions(query);
@@ -387,7 +423,8 @@ async function run(key: string): Promise<void> {
       ...(retrySleepOverride ? { sleep: retrySleepOverride } : {}),
       ...(retryMaxOverride !== undefined ? { maxSourceChangedRetries: retryMaxOverride } : {}),
     });
-    const current = entries.get(key);
+    const currentLoaded = entries.get(key);
+    const current = currentLoaded ?? probedEntries.get(key);
     if (!current || checkTokens.get(key) !== token) return;
     // 503 SOURCE_CHANGED 重试耗尽（E3D 仍在写盘）：
     // - 该行此前已有有效状态时保留既有状态，不草率翻成「新旧未知」；
@@ -425,8 +462,8 @@ async function run(key: string): Promise<void> {
     }
     // 装上之后头一次问到的那一版记下来（见 `LoadedNodeEntry.loadedGenerated`）：说不出也记一笔，之后答上来的不补——
     // 隔了一阵才问到的那一版，保不准还是装上时的
-    if (current.loaded && current.loadedGenerated === undefined && status.source === 'model-status') {
-      current.loadedGenerated = status.generated
+    if (currentLoaded?.loaded && currentLoaded.loadedGenerated === undefined && status.source === 'model-status') {
+      currentLoaded.loadedGenerated = status.generated
         ? { sesnoMin: status.generated.sesnoMin, sesnoMax: status.generated.sesnoMax, laggingUnits: status.units?.lagging ?? null }
         : null;
     }
@@ -438,7 +475,7 @@ async function run(key: string): Promise<void> {
     }
     checkedAgainst.set(key, against);
     // 判的这一会儿库的水位又变了（比如库状态刚取到）：按新的再判一次
-    if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key);
+    if (watermarkKey(rowOf(current.dbnum)) !== against) schedule(key, !currentLoaded);
   } finally {
     running -= 1;
     if (inflight.get(key) === controller) inflight.delete(key);
@@ -452,6 +489,11 @@ function recheckChanged(): void {
     // 还没判过第一次的（在排队 / 在路上）不用再排
     if (entry.checking && !checkedAgainst.has(key) && (queue.includes(key) || inflight.has(key))) continue;
     schedule(key);
+  }
+  for (const [key, entry] of probedEntries) {
+    if (checkedAgainst.get(key) === watermarkKey(rowOf(entry.dbnum))) continue;
+    if (entry.checking && !checkedAgainst.has(key) && (probeQueue.includes(key) || inflight.has(key))) continue;
+    schedule(key, true);
   }
 }
 
@@ -467,6 +509,7 @@ export function noteLoadedNode(
 ): void {
   const key = toRefnoKey(refno);
   if (!key || !Number.isFinite(dbnum)) return;
+  probedEntries.delete(key);
   entries.set(key, {
     refno: key,
     dbnum,
@@ -532,8 +575,10 @@ export function markLoadedNodeStale(refno: string, reason: string): void {
 export function noteNodeWithoutModel(refno: string, dbnum: number): void {
   const key = toRefnoKey(refno);
   if (!key || !Number.isFinite(dbnum)) return;
-  const existing = entries.get(key);
-  if (!existing?.loaded && !existing?.withdrawnEmpty) {
+  const existingLoaded = entries.get(key);
+  const existing = existingLoaded ?? probedEntries.get(key);
+  if (!existingLoaded?.loaded && !existingLoaded?.withdrawnEmpty) {
+    probedEntries.delete(key);
     entries.set(key, {
       refno: key,
       dbnum,
@@ -550,6 +595,26 @@ export function noteNodeWithoutModel(refno: string, dbnum: number): void {
     startWatching();
   }
   schedule(key);
+}
+
+/**
+ * 未建立文件水位的 dbBoundary 行首次渲染时做一次低优先级探测：
+ * 如果该节点此前按需持久化生成过（`latest` / `partial` / `lagging` 等），刷新后也能在树上看到真实圆点；
+ * 若仍为 `not_generated` / `untracked`，保持灰空圆点，不给整棵树刷满「生成」按钮。
+ */
+export function probeNodeStatus(refno: string, dbnum: number): void {
+  const key = toRefnoKey(refno);
+  if (!key || !Number.isFinite(dbnum) || !factsQuery) return;
+  if (entries.has(key) || probedEntries.has(key)) return;
+  probedEntries.set(key, {
+    refno: key,
+    dbnum,
+    status: null,
+    checking: false,
+  });
+  checkedAgainst.delete(key);
+  ensureWatermarkWatch();
+  schedule(key, true);
 }
 
 /** 每个节点排着的「过一会儿再问」 */
@@ -580,9 +645,9 @@ function drop(key: string): void {
   inflight.delete(key);
   checkTokens.delete(key);
   checkedAgainst.delete(key);
-  const queued = queue.indexOf(key);
-  if (queued >= 0) queue.splice(queued, 1);
+  removeFromQueues(key);
   entries.delete(key);
+  probedEntries.delete(key);
 }
 
 /** 节点从场景撤下了（重载时发现它已被删）：撤表。 */
@@ -593,16 +658,17 @@ export function forgetLoadedNode(refno: string): void {
 
 /** 场景清空 / 查看器卸载：整张表撤掉。 */
 export function resetLoadedNodes(): void {
-  for (const key of [...entries.keys()]) drop(key);
+  for (const key of [...new Set([...entries.keys(), ...probedEntries.keys()])]) drop(key);
   stopWatchingIfIdle();
 }
 
 /** 人点一下：重问这个节点（先重拉一次 `/dbnums`，水位变了会连带重问同库的其它节点）。 */
 export function recheckLoadedNode(refno: string): void {
   const key = toRefnoKey(refno);
-  if (!entries.has(key)) return;
+  const lowPriority = !entries.has(key);
+  if (lowPriority && !probedEntries.has(key)) return;
   refreshRows();
-  schedule(key);
+  schedule(key, lowPriority);
 }
 
 export function loadedNodeEntry(refno: string): LoadedNodeEntry | null {
@@ -611,8 +677,31 @@ export function loadedNodeEntry(refno: string): LoadedNodeEntry | null {
 
 /** 行尾要画的东西；这个节点不在表里回 `null`。 */
 export function loadedNodeView(refno: string): LoadedNodeView | null {
-  const entry = entries.get(toRefnoKey(refno));
-  if (!entry) return null;
+  const key = toRefnoKey(refno);
+  const entry = entries.get(key);
+  if (!entry) {
+    const probed = probedEntries.get(key);
+    if (!probed) return null;
+    const status = probed.status;
+    if (!status || status.verdict === 'untracked' || status.verdict === 'unknown') return null;
+    const text = describeNodeModelStatus(status);
+    if (status.verdict === 'not_generated') {
+      return {
+        verdict: status.verdict,
+        iconKind: 'empty',
+        title: [`本节点：${text.headline}`, text.detail].filter(Boolean).join('\n'),
+        action: null,
+        checking: probed.checking,
+      };
+    }
+    return {
+      verdict: status.verdict,
+      iconKind: nodeModelStatusIconKind(status),
+      title: [`本节点：${text.headline}`, text.detail].filter(Boolean).join('\n'),
+      action: nodeModelStatusAction(status),
+      checking: probed.checking,
+    };
+  }
   const status = entry.status;
   if (!status) return { verdict: null, iconKind: null, title: '本节点：正在核对新旧…', action: null, checking: entry.checking };
   // 后端说「最新」，可本页装的不是它现在的那一版（节点一级的更新让后端重新生成了、屏幕上没换成）：给「重载」。
@@ -682,6 +771,7 @@ export function useLoadedNodeStatus() {
     noteLoaded: noteLoadedNode,
     noteWithdrawnEmpty: noteWithdrawnEmptyNode,
     noteWithoutModel: noteNodeWithoutModel,
+    probe: probeNodeStatus,
     forget: forgetLoadedNode,
     markStale: markLoadedNodeStale,
     reset: resetLoadedNodes,
