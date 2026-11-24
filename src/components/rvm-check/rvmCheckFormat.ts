@@ -274,7 +274,10 @@ export type RvmNodeStatus = {
   verdict: RvmNodeVerdict;
   taskId: string | null;
   at: string | null;
+  /** 这次核对生成时读的会话号（报告的 `sesno`）；没走到解析节点那一步时为 null */
   sesno: number | null;
+  /** `sesno` 所属的库；与增量轮次比会话号前先核对同一个库 */
+  dbnum?: number | null;
   message: string;
   name: string | null;
   stage: string | null;
@@ -294,6 +297,7 @@ export type RvmRunLike = {
   started_at?: string | null;
   finished_at?: string | null;
   created_at?: string | null;
+  dbnum?: number | null;
 };
 
 export function rvmRefnoKey(refno: string | null | undefined): string {
@@ -340,6 +344,7 @@ export function statusFromRun(run: RvmRunLike): RvmNodeStatus | null {
     taskId: run.task_id,
     at: run.finished_at ?? run.started_at ?? run.created_at ?? null,
     sesno: int(result.sesno) ?? int(detail.sesno),
+    dbnum: int(result.dbnum) ?? int(detail.dbnum) ?? int(run.dbnum),
     message: text(result.message) ?? '',
     name: text(result.name) ?? text(detail.name),
     stage: run.stage ?? run.current_stage ?? text(result.stage),

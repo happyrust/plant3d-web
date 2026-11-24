@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from 'vue';
 
 import { ChevronDown, ChevronRight, CornerLeftUp, Crosshair, Download, RefreshCw, ScanEye, TriangleAlert } from 'lucide-vue-next';
 
+import { roundAfterCheck, roundLabel } from './incrementalRvmTargets';
 import {
   bannerCounts,
   categoryLabel,
@@ -29,6 +30,8 @@ import {
 } from './rvmMismatchReason';
 import RvmStatusIcon from './RvmStatusIcon.vue';
 import { useRvmMismatchLocate } from './useRvmMismatchLocate';
+import { useRvmStoreBrowser } from './useRvmStoreBrowser';
+import { RVM_STORE_PAGE_RUNS } from './useRvmStoreQueries';
 
 import { downloadRvmCheckFile, RVM_CHECK_E3D_LOG, type RvmCheckReport, type RvmMismatch } from '@/api/rvmCheckApi';
 import { useRvmNodeBadge } from '@/composables/useIncrementalRvmCheck';
@@ -45,6 +48,12 @@ const props = defineProps<{
 
 const store = useRvmCheckStore();
 const locator = useRvmMismatchLocate();
+const storeBrowser = useRvmStoreBrowser();
+
+/** 这次核对跑完也落进了库里（`run_id` 就是任务号），库里那份差异清单不截断。 */
+function openInStore(): void {
+  storeBrowser.showInStore({ batchId: RVM_STORE_PAGE_RUNS, run: { refno: props.report.refno, runId: props.taskId } });
+}
 
 const reasonFilter = ref<RvmReason | 'all'>('all');
 const sortMode = ref<'delta_desc' | 'delta_asc' | 'reason'>('delta_desc');
@@ -132,23 +141,20 @@ const rechecking = computed(() => {
 });
 
 /**
- * 这次结论之后该根又被增量重算过。看的是旧任务时按这次的完成时刻判，不按树上最新的结论判：
- * 树上最新结论可能已经是新的，但这一份确实早于那一轮。
+ * 这次结论之后该根又被重算过。按这一份报告自己的会话号（比不了时按完成时刻）判，不按树上最新的结论判：
+ * 树上最新结论可能已经是新的，但看的这一份确实覆盖不到那一轮。
  */
 const badge = useRvmNodeBadge(() => props.report.refno);
 const outdatedRound = computed(() => {
-  const root = badge.value.root;
-  if (!root || rechecking.value) return null;
-  const finished = new Date(root.finishedAt).getTime();
-  const at = props.at ? new Date(props.at).getTime() : Number.NaN;
-  if (!Number.isNaN(at) && at >= finished) return null;
-  return root;
+  const rounds = badge.value.rounds;
+  if (!rounds || rechecking.value) return null;
+  return roundAfterCheck({ at: props.at ?? null, sesno: props.report.sesno, dbnum: props.report.dbnum }, rounds);
 });
 const outdatedHint = computed(() => {
   const root = outdatedRound.value;
   if (!root) return '';
-  const round = root.sesno != null ? `第 ${root.sesno} 轮增量` : '一轮增量';
-  return `这个结论早于${round}（${formatAt(root.finishedAt)} 落地），该根之后又被重算过，结论可能已不适用`;
+  const checked = props.report.sesno != null ? `（会话 ${props.report.sesno}）` : '';
+  return `这个结论${checked}早于${roundLabel(root)}（${formatAt(root.finishedAt)} 落地），该根之后又被重算过，结论可能已不适用`;
 });
 
 async function recheck(): Promise<void> {
@@ -468,6 +474,12 @@ const btnBase = 'inline-flex items-center gap-1 rounded border border-border bg-
         <TriangleAlert class="h-3 w-3" />
         不一致清单只保留了前 400 条
       </span>
+      <button v-if="report.mismatches_truncated" type="button"
+        class="text-foreground underline underline-offset-2 hover:no-underline"
+        data-testid="rvm-check-open-store"
+        @click="openInStore">
+        在库内结果里看完整清单
+      </button>
       <span v-if="report.centreline_only_baseline.length">中心线只在 E3D 一侧：{{ report.centreline_only_baseline.join('、') }}，这不算失败。</span>
     </div>
   </section>

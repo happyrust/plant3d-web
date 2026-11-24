@@ -7,19 +7,22 @@
  *   两者都只报总数或不画，绝不把 0/0/0 摆成「无变化」）；
  * - 保存窗口时刻对不齐就整格不画，不回落成 sesno；
  * - 并入清单漏任何一条就只报条数；
- * - `kind=transform`（ADR-066 刚体前移）单独标出来，旧回执缺省是 `regen`。
+ * - `kind=transform`（ADR-066 刚体前移）、`kind=unit`（ADR-080 单元级发布）单独标出来，旧回执缺省是 `regen`。
  */
 
 import type { TaskBatchDto, TaskListEntryDto, TaskOutcomeDto, TaskUnitDto } from '@/api/genModelV1Api';
 
-export type RecordKind = 'data_batch' | 'room_recalc' | 'model_rebuild' | 'model_drain' | 'other';
+export type RecordKind = 'data_batch' | 'room' | 'model_rebuild' | 'model_drain' | 'other';
 
 /** 服务端 `kind` 串 → 账本里的类型名。认不出的串按原样透出，不藏。 */
 export function recordKindLabel(kind: string | undefined): { key: RecordKind; label: string } {
   switch (kind) {
     case 'data_batch': return { key: 'data_batch', label: '数据批次' };
-    case 'room_recalc': return { key: 'room_recalc', label: '房间重算' };
+    // `room_recalc`（随批房间轮）已退役，现在的是按库的整库房间重算 `room_rebuild`
+    case 'room_rebuild':
+    case 'room_recalc': return { key: 'room', label: '房间重算' };
     case 'model_rebuild': return { key: 'model_rebuild', label: '模型重建' };
+    case 'dbnum_model_ensure': return { key: 'model_rebuild', label: '整库即时生成' };
     case 'model_drain': return { key: 'model_drain', label: '模型排水' };
     default: return { key: 'other', label: kind || '任务' };
   }
@@ -124,14 +127,21 @@ export function mergedSavesLabel(batch: TaskBatchDto): string | null {
   return list.map((at, i) => (sameDay && i > 0 ? fmtHm(at) : fmtMdHm(at))).join(' / ');
 }
 
-/** 单元一行的发布方式标注；`transform` 才单独说，缺省/老回执按整根重算不标。 */
+/** 单元一行的发布方式：刚体前移、单元级发布单独说，缺省 / 老回执按整根重算。 */
 export function unitKindLabel(kind: string | undefined): string {
-  return kind === 'transform' ? '刚体前移' : '整根重算';
+  if (kind === 'transform') return '刚体前移';
+  if (kind === 'unit') return '单元级发布';
+  return '整根重算';
 }
 
 /** 刚体前移便宜路交付的根数（只数生成成功的 transform 单元）。 */
 export function transformRoots(entry: TaskListEntryDto): number {
   return unitsOf(entry).filter((u) => u.status === 'generated' && u.kind === 'transform').length;
+}
+
+/** 单元级发布交付的根数（只数生成成功的 unit 单元）。 */
+export function unitPublishRoots(entry: TaskListEntryDto): number {
+  return unitsOf(entry).filter((u) => u.status === 'generated' && u.kind === 'unit').length;
 }
 
 export type RoomCountsDto = { panels: number; elements: number; dead_letters: number };

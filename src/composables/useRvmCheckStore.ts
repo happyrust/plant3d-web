@@ -10,8 +10,8 @@
 import { computed, reactive, ref, shallowRef, watch } from 'vue';
 
 import {
-  genModelV1Fetch,
   genModelV1TaskGet,
+  genModelV1TasksPage,
   genModelV1TreeChildren,
   genModelV1TreeRoots,
   isGenModelV1ApiError,
@@ -76,6 +76,16 @@ export type RvmQueueItem = {
 };
 
 export type RvmNodeTarget = { refno: string; name?: string; noun?: string };
+
+/**
+ * 队列里一项的去向：`accepted` 后端接下了（有了 task_id）、`done` 出了结论、`error` 请求失败（结论放回原样）、
+ * `cancelled` 没开跑就被取消。增量自动校验按它给每个根记账。
+ */
+export type RvmQueueEvent = {
+  type: 'accepted' | 'done' | 'error' | 'cancelled';
+  refno: string;
+  taskId: string | null;
+};
 
 function readStored(): RvmCheckConfig {
   const empty: RvmCheckConfig = {
@@ -185,6 +195,7 @@ const runCache = new Map<string, RvmCheckRun>();
 /** 跑完的任务 e3d.log 不会再变，按任务缓存解析结果 */
 const e3dLogCache = new Map<string, Promise<E3dLogInfo | null>>();
 const followed = new Set<string>();
+const queueListeners = new Set<(event: RvmQueueEvent) => void>();
 let loginWaiters: ((ok: boolean) => void)[] = [];
 let defaultsRequest: Promise<void> | null = null;
 let historyRequest: Promise<void> | null = null;
@@ -306,6 +317,24 @@ function statusOf(refno: string): RvmNodeStatus | null {
   return statusByRefno.value[rvmRefnoKey(refno)] ?? null;
 }
 
+function emitQueueEvent(event: RvmQueueEvent): void {
+  for (const listener of queueListeners) {
+    try {
+      listener(event);
+    } catch {
+      // 单个监听方的异常不能打断队列
+    }
+  }
+}
+
+/** 订阅队列各项的去向；返回退订函数。 */
+export function subscribeRvmQueueEvents(listener: (event: RvmQueueEvent) => void): () => void {
+  queueListeners.add(listener);
+  return () => {
+    queueListeners.delete(listener);
+  };
+}
+
 function rememberRun(run: RvmCheckRun): void {
   runCache.set(run.task_id, run);
   const status = statusFromRun(run);
@@ -356,6 +385,7 @@ async function startTask(item: RvmQueueItem): Promise<string | null> {
   for (;;) {
     try {
       const accepted = await startRvmCheckRun(connection(), toV1Refno(item.refno));
+      emitQueueEvent({ type: 'accepted', refno: item.refno, taskId: accepted.task_id });
       return accepted.task_id;
     } catch (cause) {
       if (isGenModelV1ApiError(cause) && cause.status === 409 && !stopRequested) {
@@ -363,9 +393,11 @@ async function startTask(item: RvmQueueItem): Promise<string | null> {
         await sleep(BUSY_RETRY_MS);
         continue;
       }
-      item.state = stopRequested ? 'cancelled' : 'error';
+      const outcome = stopRequested ? 'cancelled' : 'error';
+      item.state = outcome;
       item.message = stopRequested ? '已取消' : errorText(cause);
       setStatus(item.refno, item.previous);
+      emitQueueEvent({ type: outcome, refno: item.refno, taskId: null });
       return null;
     }
   }
@@ -408,6 +440,7 @@ async function runOne(item: RvmQueueItem): Promise<void> {
           loggedIn.value = false;
           queueNotice.value = 'E3D 登录没有通过，重新登录后队列会接着跑';
         }
+        emitQueueEvent({ type: 'done', refno: item.refno, taskId });
         return;
       }
     } catch (cause) {
@@ -415,6 +448,7 @@ async function runOne(item: RvmQueueItem): Promise<void> {
       if (isGenModelV1ApiError(cause) && cause.status === 404) {
         item.state = 'error';
         setStatus(item.refno, item.previous);
+        emitQueueEvent({ type: 'error', refno: item.refno, taskId });
         return;
       }
     }
@@ -460,6 +494,7 @@ function cancelQueue(): void {
     item.state = 'cancelled';
     item.message = '已取消';
     setStatus(item.refno, item.previous);
+    emitQueueEvent({ type: 'cancelled', refno: item.refno, taskId: null });
     cancelled += 1;
   }
   const running = queue.value.some((item) => item.state === 'running');
@@ -564,9 +599,7 @@ function restoreFromHistory(force = false): Promise<void> {
   if (historyRequest && !force) return historyRequest;
   historyRequest = (async () => {
     try {
-      const response = await genModelV1Fetch<{ tasks?: TaskListEntryDto[] }>('/api/v1/tasks', {
-        query: { kind: 'rvm_check', limit: HISTORY_LIMIT },
-      });
+      const response = await genModelV1TasksPage({ kind: 'rvm_check', limit: HISTORY_LIMIT });
       absorbTasks(response.tasks ?? []);
       historyError.value = null;
     } catch (cause) {

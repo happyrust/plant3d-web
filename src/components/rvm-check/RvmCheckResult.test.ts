@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 
 import RvmCheckResult from './RvmCheckResult.vue';
+import { useRvmStoreBrowser } from './useRvmStoreBrowser';
 
 import type { RvmCheckReport, RvmMismatch } from '@/api/rvmCheckApi';
 
@@ -117,6 +118,31 @@ describe('RvmCheckResult', () => {
       expect(host.querySelector('[data-testid="rvm-check-banner-counts"]')).toBeNull();
     } finally {
       unmount();
+    }
+  });
+
+  it('offers the untruncated list in the store view when the report was cut at 400 rows', async () => {
+    const browser = useRvmStoreBrowser();
+    browser.openBatches();
+    browser.view.value = 'check';
+    const whole = await mount(Promise.resolve(null));
+    try {
+      expect(whole.host.querySelector('[data-testid="rvm-check-open-store"]')).toBeNull();
+    } finally {
+      whole.unmount();
+    }
+
+    const { host, unmount } = await mount(Promise.resolve(null), report({ mismatches_truncated: true }));
+    try {
+      (host.querySelector('[data-testid="rvm-check-open-store"]') as HTMLButtonElement).click();
+      await nextTick();
+      // 页面单根的运行不属于任何批次，库里的 run_id 就是任务号
+      expect(browser.view.value).toBe('store');
+      expect(browser.place).toMatchObject({ batchId: '@page', rootRefno: null, run: { refno: '23705/289', runId: 'rvm-check-1' } });
+    } finally {
+      unmount();
+      browser.openBatches();
+      browser.view.value = 'check';
     }
   });
 

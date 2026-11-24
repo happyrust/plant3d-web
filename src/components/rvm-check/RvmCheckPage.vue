@@ -6,10 +6,14 @@ import { rvmRefnoKey } from './rvmCheckFormat';
 import RvmCheckLoginDialog from './RvmCheckLoginDialog.vue';
 import RvmCheckPanel from './RvmCheckPanel.vue';
 import RvmCheckTree from './RvmCheckTree.vue';
+import RvmStoreBrowser from './RvmStoreBrowser.vue';
+import RvmStoreTabs from './RvmStoreTabs.vue';
+import { RVM_CHECK_VIEW_TABS, useRvmStoreBrowser } from './useRvmStoreBrowser';
 
 import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 
 const store = useRvmCheckStore();
+const { view } = useRvmStoreBrowser();
 const selected = ref<{ refno: string; name: string; noun: string } | null>(null);
 
 function choose(node: { refno: string; name: string; noun: string }): void {
@@ -39,14 +43,17 @@ onMounted(() => {
 <template>
   <div class="flex h-screen flex-col bg-background text-foreground">
     <RvmCheckLoginDialog />
-    <header class="flex items-center justify-between border-b border-border px-4 py-2">
-      <div>
+    <header class="flex flex-wrap items-center gap-x-6 border-b border-border px-4">
+      <div class="py-2">
         <div class="text-sm font-semibold">RVM 核对</div>
         <div class="text-[11px] text-muted-foreground">我们生成的 RVM 与 E3D TTY 导出的 RVM</div>
       </div>
-      <button type="button" class="rounded border border-border px-2 py-1 text-xs" @click="backToWorkbench">返回工作台</button>
+      <RvmStoreTabs v-model="view" class="self-end" :tabs="RVM_CHECK_VIEW_TABS" label="RVM 核对的两个视图" />
+      <button type="button" class="ml-auto rounded border border-border px-2 py-1 text-xs" @click="backToWorkbench">返回工作台</button>
     </header>
-    <div class="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)]">
+    <RvmStoreBrowser v-if="view === 'store'" class="min-h-0 flex-1" :locatable="false" />
+    <!-- 切到库内结果时只藏起来不卸载：选中的节点、展开的树、正在跑的队列都留着 -->
+    <div v-show="view === 'check'" class="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)]">
       <aside class="flex min-h-0 flex-col gap-3 overflow-auto border-r border-border p-3">
         <RvmCheckConfigForm />
         <RvmCheckTree @select="choose" />

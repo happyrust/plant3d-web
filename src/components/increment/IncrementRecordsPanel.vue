@@ -7,9 +7,9 @@
  * 面板 / 成员 / 死信计数。d-195 的口径没松——纯展示，不订阅、不反推、不据此
  * 重载任何已加载的根。
  *
- * 轮询走 `useIncrementalRvmCheck` 的共享订阅（5s，面板活着或自动校验打开时才打）；`/tasks` 服务端是
- * 200 条窗口，更早的批次看不到了就照实说，不猜。数据批次 / 模型重建落地后，可以对本轮重算过的
- * 生成根发起 RVM 校验：单条、勾选批量，或打开自动校验。
+ * 任务表走 `useIncrementalRvmCheck` 的共享缓存（按种类拉、WS 事件逐条补）；`/tasks` 每类只留最近 160 条，
+ * 更早的批次看不到了就照实说，不猜。数据批次 / 模型重建落地后，可以对本轮重算过的生成根发起 RVM 校验：
+ * 单条、勾选批量，或打开自动校验。整库从头生成的一轮（基线）不逐根列待校验，只有结论落后于它的根才算。
  */
 import { computed, ref } from 'vue';
 
@@ -43,6 +43,7 @@ import {
   terminalTimes,
   transformRoots,
   unitKindLabel,
+  unitPublishRoots,
   unitsOf,
   warningsOf,
   type RecordKind,
@@ -50,14 +51,14 @@ import {
 
 import type { TaskListEntryDto } from '@/api/genModelV1Api';
 
-import { batchCheckSummary, rootsOfTask, taskPendingRoots } from '@/components/rvm-check/incrementalRvmTargets';
+import { batchCheckSummary, isBaselineTask, rootsOfTask, taskPendingRoots } from '@/components/rvm-check/incrementalRvmTargets';
 import RvmStatusIcon from '@/components/rvm-check/RvmStatusIcon.vue';
-import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
+import { AUTO_ROUND_LIMIT, incrementalAncestorPasses, rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
 import { useRvmCheckStore } from '@/composables/useRvmCheckStore';
 
 const incremental = useIncrementalRvmCheck();
 /** `loaded` 还没成功取到过一次时为 false（画「还没连上」而不是空账本） */
-const { tasks, loaded, loading, error, autoEnabled, autoQueued, waitingLogin, refresh } = incremental;
+const { tasks, loaded, loading, error, autoEnabled, autoQueued, autoSkipped, waitingLogin, refresh } = incremental;
 const rvm = useRvmCheckStore();
 const selected = ref(new Set<string>());
 const expanded = ref(new Set<string>());
@@ -66,7 +67,7 @@ const filter = ref<RecordKind | 'all'>('all');
 const filters: { key: RecordKind | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'data_batch', label: '数据批次' },
-  { key: 'room_recalc', label: '房间' },
+  { key: 'room', label: '房间' },
   { key: 'model_rebuild', label: '模型重建' },
 ];
 
@@ -80,12 +81,12 @@ const summaries = computed(() => {
   const statuses = rvm.statusByRefno.value;
   const map = new Map<string, ReturnType<typeof batchCheckSummary>>();
   for (const entry of tasks.value) {
-    if (rootsOfTask(entry).length > 0) map.set(entry.task_id, batchCheckSummary(entry, statuses));
+    if (rootsOfTask(entry).length > 0) map.set(entry.task_id, batchCheckSummary(entry, statuses, incrementalAncestorPasses));
   }
   return map;
 });
 
-const EMPTY_SUMMARY = { total: 0, pending: 0, running: 0, pass: 0, mismatch: 0, failed: 0, other: 0 };
+const EMPTY_SUMMARY = { total: 0, pending: 0, running: 0, pass: 0, mismatch: 0, failed: 0, other: 0, unchecked: 0 };
 
 function summaryOf(entry: TaskListEntryDto) {
   return summaries.value.get(entry.task_id) ?? EMPTY_SUMMARY;
@@ -94,6 +95,15 @@ function summaryOf(entry: TaskListEntryDto) {
 function pendingCount(entry: TaskListEntryDto): number {
   return summaryOf(entry).pending;
 }
+
+/** 校验按钮的字：基线轮里没核对过的根不逐根列，整库核对走 RVM 核对页的「全部 SITE」 */
+function checkLabel(entry: TaskListEntryDto): string {
+  const pending = pendingCount(entry);
+  if (pending > 0) return `RVM 校验 ${pending} 根`;
+  return isBaselineTask(entry) && summaryOf(entry).unchecked > 0 ? '整库生成' : '已全部校验';
+}
+
+const BASELINE_HINT = '整库从头生成的一轮（初始化 / 重新初始化 / 全量重建）：没核对过的根不逐根列为待校验，整库核对请用 RVM 核对页的「全部 SITE 依次核对」；只有结论落后于这一轮的根算待校验';
 
 /** 能勾选的：落地后有生成根的记录 */
 function checkable(entry: TaskListEntryDto): boolean {
@@ -111,7 +121,7 @@ const selectedEntries = computed(() => entries.value.filter((entry) => selected.
 const selectedPending = computed(() => {
   const seen = new Set<string>();
   for (const entry of selectedEntries.value) {
-    for (const root of taskPendingRoots(entry, rvm.statusByRefno.value)) seen.add(root.refno);
+    for (const root of taskPendingRoots(entry, rvm.statusByRefno.value, incrementalAncestorPasses)) seen.add(root.refno);
   }
   return seen.size;
 });
@@ -164,7 +174,7 @@ function toggle(id: string): void {
 function kindIcon(key: RecordKind) {
   switch (key) {
     case 'data_batch': return GitCommitHorizontal;
-    case 'room_recalc': return DoorOpen;
+    case 'room': return DoorOpen;
     case 'model_rebuild': return Package;
     default: return FilePlus2;
   }
@@ -186,13 +196,13 @@ const chipTone: Record<string, string> = {
       <div>
         <div class="text-sm font-bold text-foreground">增量记录</div>
         <div class="mt-0.5 text-[11px] text-muted-foreground">
-          每一轮保存窗口落地的账：数据批次、模型生成、房间重算。`/tasks` 只留最近 200 条。
+          每一轮保存窗口落地的账：数据批次、模型生成、房间重算。`/tasks` 每类只留最近 160 条。
         </div>
       </div>
       <div class="flex items-center gap-2">
         <LoaderCircle v-if="loading" class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
         <label class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-700"
-          title="增量落地后自动把本轮重算过的生成根排进 RVM 核对队列；只处理打开之后落地的批次">
+          :title="`增量落地后自动把本轮重算过、还没核对到的生成根排进 RVM 核对队列；只处理打开之后落地的批次，一轮超过 ${AUTO_ROUND_LIMIT} 根不自动入队`">
           自动校验
           <input v-model="autoEnabled" type="checkbox" role="switch" class="peer sr-only" data-testid="increment-rvm-auto" />
           <span class="relative inline-flex h-3.5 w-6 items-center rounded-full bg-gray-300 transition-colors peer-checked:bg-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-brand">
@@ -223,6 +233,11 @@ const chipTone: Record<string, string> = {
     <div v-else-if="autoEnabled" class="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-5 py-1.5 text-[11px] text-sky-800" role="status">
       增量落地后自动入队 · 本次已入队 {{ autoQueued }} 根
       <button v-if="rvm.queueActive.value" type="button" class="ml-auto rounded border border-sky-300 bg-white px-2 py-0.5 font-semibold hover:bg-sky-100" @click="rvm.cancelQueue()">停止队列</button>
+    </div>
+    <div v-if="autoEnabled && autoSkipped.length > 0" class="border-b border-amber-200 bg-amber-50 px-5 py-1.5 text-[11px] text-amber-800" role="status" data-testid="increment-rvm-auto-skipped">
+      <div v-for="item in autoSkipped" :key="item.taskId">
+        {{ item.label }}有 {{ item.count }} 根待校验，超过自动校验上限 {{ AUTO_ROUND_LIMIT }} 根，没有自动入队；要逐根核对请点该记录的「RVM 校验」。
+      </div>
     </div>
 
     <!-- 批量栏 -->
@@ -284,6 +299,10 @@ const chipTone: Record<string, string> = {
               <component :is="kindIcon(recordKindLabel(entry.kind).key)" class="h-3.5 w-3.5 shrink-0 text-brand" />
               <span class="text-xs font-bold text-foreground">{{ recordKindLabel(entry.kind).label }}</span>
               <span v-if="entry.dbnum != null" class="text-[11px] text-muted-foreground">库 {{ entry.dbnum }}</span>
+              <span v-if="checkable(entry) && isBaselineTask(entry)"
+                class="rounded border border-gray-200 bg-gray-50 px-1.5 text-[10px] text-gray-600"
+                :title="BASELINE_HINT"
+                data-testid="increment-rvm-baseline">整库生成</span>
               <span v-if="saveWindowLabel(entry)" class="font-mono text-[11px] text-muted-foreground">{{ saveWindowLabel(entry) }}</span>
               <span class="ml-auto flex items-center gap-1.5">
                 <span class="rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="chipTone[recordStateChip(entry.state).tone]">
@@ -307,15 +326,17 @@ const chipTone: Record<string, string> = {
               <span v-if="summaryOf(entry).mismatch" class="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700">不一致 {{ summaryOf(entry).mismatch }}</span>
               <span v-if="summaryOf(entry).failed" class="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-gray-600">失败 {{ summaryOf(entry).failed }}</span>
               <span v-if="summaryOf(entry).other" class="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-gray-600">其它 {{ summaryOf(entry).other }}</span>
+              <span v-if="summaryOf(entry).unchecked" class="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-gray-500" :title="BASELINE_HINT">未核对 {{ summaryOf(entry).unchecked }}</span>
             </div>
           </button>
           <button v-if="checkable(entry)" type="button"
             class="mr-3 mt-2 inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
             :disabled="pendingCount(entry) === 0"
+            :title="pendingCount(entry) === 0 && isBaselineTask(entry) ? BASELINE_HINT : undefined"
             data-testid="increment-rvm-check"
             @click="checkOne(entry)">
             <ScanSearch class="h-3 w-3" />
-            {{ pendingCount(entry) > 0 ? `RVM 校验 ${pendingCount(entry)} 根` : '已全部校验' }}
+            {{ checkLabel(entry) }}
           </button>
         </div>
 
@@ -367,6 +388,12 @@ const chipTone: Record<string, string> = {
           </div>
           <div v-if="transformRoots(entry) > 0" class="py-0.5 pl-5 text-muted-foreground">
             其中 {{ transformRoots(entry) }} 根走刚体前移便宜路（只动方位，网格未重算）
+          </div>
+          <div v-if="unitPublishRoots(entry) > 0" class="py-0.5 pl-5 text-muted-foreground">
+            其中 {{ unitPublishRoots(entry) }} 根走单元级发布（只重建点名的构件）
+          </div>
+          <div v-if="transformRoots(entry) + unitPublishRoots(entry) > 0" class="py-0.5 pl-5 text-muted-foreground">
+            RVM 校验按当前会话把整根重新生成后与 E3D 导出比对，不直接检查这两条便宜路的发布结果
           </div>
 
           <div v-for="(warning, wi) in warningsOf(entry)" :key="wi" class="py-0.5 font-mono text-[10px] leading-relaxed text-muted-foreground">

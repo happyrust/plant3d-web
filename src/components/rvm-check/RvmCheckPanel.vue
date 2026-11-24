@@ -3,11 +3,11 @@ import { computed, onMounted, ref } from 'vue';
 
 import { ChevronDown, ChevronRight, ExternalLink, ListChecks, ListPlus, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
 
+import { roundLabel, type IncrementalRoot } from './incrementalRvmTargets';
 import { formatAt as formatStamp, stageLabel, verdictTone, type RvmNodeVerdict } from './rvmCheckFormat';
 import RvmCheckResult from './RvmCheckResult.vue';
 import RvmStatusIcon from './RvmStatusIcon.vue';
 
-import type { IncrementalRoot } from './incrementalRvmTargets';
 import type { IncrementalGroup } from '@/composables/useIncrementalRvmCheck';
 
 import { rvmNodeBadge, useIncrementalRvmCheck } from '@/composables/useIncrementalRvmCheck';
@@ -35,8 +35,7 @@ function toggleGroup(taskId: string): void {
 }
 
 function groupTitle(group: IncrementalGroup): string {
-  const round = group.sesno != null ? `第 ${group.sesno} 轮` : (group.taskKind === 'model_rebuild' ? '模型重建' : '数据批次');
-  return `${round} · ${formatStamp(group.finishedAt)}`;
+  return `${roundLabel(group)} · ${formatStamp(group.finishedAt)}`;
 }
 
 function rootNote(root: IncrementalRoot): string {
@@ -272,7 +271,9 @@ onMounted(() => {
               </ul>
             </li>
           </ul>
-          <p class="mt-auto border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">按 /api/v1/tasks 最近 200 条推导；更早的批次不在这里</p>
+          <p class="mt-auto border-t border-border px-3 py-1.5 text-[10px] leading-relaxed text-muted-foreground" data-testid="rvm-check-incremental-footer">
+            按最近 160 个数据批次推导，更早的不在这里。整库从头生成的一轮只列结论落后于它的根，没核对过的根请用「全部 SITE 依次核对」。核对按当前会话整根重新生成后与 E3D 导出比对。
+          </p>
         </template>
         <p v-else-if="queue.length === 0" class="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           在模型树里右键一个节点选「核对 RVM」，或点上面的「全部 SITE 依次核对」。核对过的节点在树上会带一个状态图标，点图标看结果。
