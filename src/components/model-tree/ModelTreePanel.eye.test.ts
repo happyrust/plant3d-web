@@ -79,6 +79,7 @@ vi.mock('@/composables/usePdmsOwnerTree', async () => {
       searchLoading: ref(false),
       searchError: ref(null),
       searchItems: ref([]),
+      treeLoadError: ref(null),
       selectedIds: ref(new Set()),
       selectedTypes: ref(new Set()),
       customTypes: ref(new Set()),

@@ -370,7 +370,7 @@ describe('useReviewStore websocket fallback', () => {
     ]);
   });
 
-  it('uses current login user for reviewer websocket subscriptions', async () => {
+  it('keeps the reviewer websocket closed on task selection and subscribes as the login user on an explicit connect', async () => {
     getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/reviewer-live-1');
     const webSocketInstance = {
       readyState: 1,
@@ -411,7 +411,16 @@ describe('useReviewStore websocket fallback', () => {
       currentNode: 'sh',
     } as never);
 
+    // 实时更新改由 useReviewPolling 拉取：选中任务不再连 WebSocket。
+    expect(getReviewUserWebSocketUrlMock).not.toHaveBeenCalled();
+    expect(fakeWebSocket).not.toHaveBeenCalled();
+
+    // connectWebSocket 还留着：按传入的登录用户订阅，不看任务上的 reviewerId。
+    store.connectWebSocket(currentUserRef.value.id);
+
+    expect(getReviewUserWebSocketUrlMock).toHaveBeenCalledTimes(1);
     expect(getReviewUserWebSocketUrlMock).toHaveBeenCalledWith('reviewer-live-1');
+    expect(fakeWebSocket).toHaveBeenCalledTimes(1);
     expect(fakeWebSocket).toHaveBeenCalledWith('ws://localhost/ws/review/user/reviewer-live-1');
   });
 });
