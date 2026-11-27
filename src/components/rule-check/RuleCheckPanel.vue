@@ -284,7 +284,7 @@ function exactSurfaceNote(v: UnifiedRuleViolation): string | null {
 function groupPreciseLabel(groupKey: string): string | null {
   const stats = preciseStatsByRule.value.get(groupKey);
   if (!stats) return null;
-  return `估算 ${stats.aabbFindings} → 剔除 ${stats.cleared}`;
+  return `估算 ${stats.aabbFindings} → 精算剔除 ${stats.cleared}`;
 }
 
 /** 装载/可见/高亮指定构件集合，并将三维相机飞至联合包围盒。 */
@@ -774,33 +774,37 @@ async function focusViolation(violation: UnifiedRuleViolation) {
               :key="group.key"
               data-testid="rule-check-violation-group"
               class="divide-y divide-border/60">
-              <div class="flex items-center justify-between gap-2 bg-muted/40 px-3 py-1.5">
-                <button type="button"
-                  data-testid="rule-check-group-header"
-                  class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                  @click="toggleGroupCollapsed(group.key)">
-                  <component :is="collapsedGroups.includes(group.key) ? ChevronRight : ChevronDown"
-                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span class="font-mono font-semibold text-foreground">{{ group.ruleId }}</span>
-                  <span class="rounded bg-muted px-1 text-[10px] text-muted-foreground">{{ group.discipline }}</span>
-                  <span class="truncate text-[11px] text-muted-foreground">{{ group.title }}</span>
-                  <span v-if="groupPreciseLabel(group.key)"
-                    data-testid="rule-check-group-precise"
-                    class="shrink-0 font-mono text-[10px] text-emerald-700">
-                    {{ groupPreciseLabel(group.key) }}
-                  </span>
-                  <span class="shrink-0 rounded bg-destructive/15 px-1.5 font-mono text-[10px] text-destructive">
-                    {{ group.violations.length }}
-                  </span>
-                </button>
-                <button type="button"
-                  data-testid="rule-check-focus-group-btn"
-                  class="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:border-primary hover:text-primary disabled:opacity-40"
-                  :disabled="group.allHighlightRefnos.length === 0"
-                  @click="focusRefnos(group.allHighlightRefnos)">
-                  <Crosshair class="h-3 w-3" />
-                  定位本组
-                </button>
+              <div class="bg-muted/40 px-3 py-1.5">
+                <div class="flex items-center justify-between gap-2">
+                  <button type="button"
+                    data-testid="rule-check-group-header"
+                    class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    @click="toggleGroupCollapsed(group.key)">
+                    <component :is="collapsedGroups.includes(group.key) ? ChevronRight : ChevronDown"
+                      class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span class="shrink-0 whitespace-nowrap font-mono font-semibold text-foreground">{{ group.ruleId }}</span>
+                    <span class="shrink-0 whitespace-nowrap rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                      {{ group.discipline }}
+                    </span>
+                    <span class="truncate text-[11px] text-muted-foreground">{{ group.title }}</span>
+                    <span class="shrink-0 rounded bg-destructive/15 px-1.5 font-mono text-[10px] text-destructive">
+                      {{ group.violations.length }}
+                    </span>
+                  </button>
+                  <button type="button"
+                    data-testid="rule-check-focus-group-btn"
+                    class="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:border-primary hover:text-primary disabled:opacity-40"
+                    :disabled="group.allHighlightRefnos.length === 0"
+                    @click="focusRefnos(group.allHighlightRefnos)">
+                    <Crosshair class="h-3 w-3" />
+                    定位本组
+                  </button>
+                </div>
+                <div v-if="groupPreciseLabel(group.key)"
+                  data-testid="rule-check-group-precise"
+                  class="mt-0.5 pl-5 font-mono text-[10px] text-emerald-700">
+                  {{ groupPreciseLabel(group.key) }}
+                </div>
               </div>
               <template v-if="!collapsedGroups.includes(group.key)">
                 <div v-for="v in group.violations"
