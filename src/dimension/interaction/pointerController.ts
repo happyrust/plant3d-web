@@ -43,6 +43,10 @@ export type DimensionEditSessionFactory = (
 type PointerLikeEvent = Readonly<{
   clientX: number;
   clientY: number;
+  /** `PointerEvent.button`：按下、抬起的是哪个键。缺省按主键。 */
+  button?: number;
+  /** `PointerEvent.buttons`：此刻按着哪些键的位掩码。缺省按没有键按着。 */
+  buttons?: number;
 }>;
 
 type KeyboardLikeEvent = Readonly<{
@@ -56,6 +60,17 @@ type DimensionPointerViewport = Readonly<{
   setSelection(id: string | null): void;
   setPreview(input: null): void;
 }>;
+
+const PRIMARY_BUTTON = 0;
+const PRIMARY_BUTTON_HELD = 1;
+
+/**
+ * 尺寸只认主键（#205）。右键、中键是相机的平移、缩放和宿主的右键菜单：算成尺寸操作的话，
+ * 按在标注上相机动不了，创建过程中还会被当成一次拾点。
+ */
+function isSecondaryButton(event: PointerLikeEvent): boolean {
+  return (event.button ?? PRIMARY_BUTTON) !== PRIMARY_BUTTON;
+}
 
 const NOT_CONSUMED: PointerDispatchResult = { consumed: false };
 const CONSUMED: PointerDispatchResult = {
@@ -140,12 +155,18 @@ export class DimensionPointerController {
 
   pointerMove(event: PointerLikeEvent): PointerDispatchResult {
     if (this.disposed) return NOT_CONSUMED;
+    const buttons = event.buttons ?? 0;
+    const primaryHeld = (buttons & PRIMARY_BUTTON_HELD) !== 0;
+    // 只有右键或中键按着：相机的平移、缩放，有会话也不接。
+    if (buttons !== 0 && !primaryHeld) return NOT_CONSUMED;
     const screen = this.toScreen(event);
     if (this.activeSession) {
       this.activeSession.pointerMove(screen);
       this.publishStatus();
       return CONSUMED;
     }
+    // 主键按着而尺寸这边没有会话：是别人的拖动（相机旋转）。拦下来的话，光标经过标注的那几步相机收不到。
+    if (primaryHeld) return NOT_CONSUMED;
     if (this.interactionGate && !this.interactionGate()) {
       this.setHover(null);
       return NOT_CONSUMED;
@@ -160,7 +181,7 @@ export class DimensionPointerController {
   }
 
   pointerDown(event: PointerLikeEvent): PointerDispatchResult {
-    if (this.disposed) return NOT_CONSUMED;
+    if (this.disposed || isSecondaryButton(event)) return NOT_CONSUMED;
     const screen = this.toScreen(event);
     if (this.activeSession) {
       this.activeSession.pointerDown(screen);
@@ -184,7 +205,7 @@ export class DimensionPointerController {
   }
 
   pointerUp(event: PointerLikeEvent): PointerDispatchResult {
-    if (this.disposed || !this.activeSession) return NOT_CONSUMED;
+    if (this.disposed || !this.activeSession || isSecondaryButton(event)) return NOT_CONSUMED;
     const screen = this.toScreen(event);
     if (this.activeSession.phase !== 'ready') {
       this.activeSession.pointerMove(screen);
