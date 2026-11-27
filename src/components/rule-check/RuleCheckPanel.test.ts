@@ -490,4 +490,262 @@ describe('RuleCheckPanel', () => {
     expect(host.querySelector('[data-testid="rule-check-active-filter"]')?.textContent).toContain('规则：LAY-189');
     expect(host.querySelector('[data-testid="rule-check-result-filtered-count"]')?.textContent?.trim()).toBe('1/2');
   });
+
+  it('walks the results with the keyboard: arrows move, Enter flies to the row, Esc folds the details', async () => {
+    const flyTo = vi.fn();
+    viewerContextStub.viewerRef.value = {
+      scene: {
+        ensureRefnos: vi.fn(),
+        setObjectsVisible: vi.fn(),
+        setObjectsSelected: vi.fn(),
+        getAABB: vi.fn(() => [0, 0, 0, 1, 1, 1]),
+      },
+      cameraFlight: { flyTo },
+    };
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const list = host.querySelector<HTMLElement>('[data-testid="rule-check-result-list"]')!;
+    const press = async (key: string) => {
+      list.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await flushUi();
+    };
+    const rowKeys = Array.from(host.querySelectorAll('[data-testid="rule-check-violation-row"]'))
+      .map((el) => el.getAttribute('data-violation-key'));
+    const activeKey = () =>
+      host.querySelector('[data-testid="rule-check-violation-row"][data-active="true"]')?.getAttribute('data-violation-key');
+
+    await press('ArrowDown');
+    expect(activeKey()).toBe(rowKeys[0]);
+    await press('ArrowDown');
+    expect(activeKey()).toBe(rowKeys[1]);
+    expect(host.querySelector('[data-testid="rule-check-result-position"]')?.textContent?.trim()).toBe('第 2 / 2 项');
+
+    await press('Enter');
+    await flushUi();
+    expect(flyTo).toHaveBeenCalledTimes(1);
+
+    host.querySelectorAll<HTMLElement>('[data-testid="rule-check-violation-row"]')[1]!.click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="rule-check-violation-details"]')).not.toBeNull();
+    await press('Escape');
+    expect(host.querySelector('[data-testid="rule-check-violation-details"]')).toBeNull();
+  });
+
+  it('renders long lists 50 rows at a time and says when the backend cut a rule short', async () => {
+    const violations = Array.from({ length: 60 }, (_, i) => ({
+      source: { refno: `24381_${1000 + i}`, noun: 'PIPE' },
+      target: { refno: '24381_20', noun: 'WALL' },
+      measured_mm: 100 + i,
+      threshold_mm: 500,
+      margin_mm: -400 + i,
+      highlight_refnos: [`24381_${1000 + i}`, '24381_20'],
+    }));
+    runSpatialRuleCheckMock.mockResolvedValue({
+      tree_state: 'ready',
+      rules_run: 1,
+      elapsed_ms: 9,
+      warnings: [],
+      results: [
+        {
+          id: 'LAY-189',
+          issue: 189,
+          discipline: '布置',
+          title: '净距规则',
+          requirement: '>=500mm',
+          unit: 'mm',
+          source_items: 900,
+          target_items: 9,
+          violation_total: 532,
+          truncated: true,
+          violations,
+        },
+      ],
+    });
+    runAttrRuleCheckMock.mockResolvedValue({ tree_state: 'ready', rules_run: 0, elapsed_ms: 1, warnings: [], results: [] });
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const rowCount = () => host.querySelectorAll('[data-testid="rule-check-violation-row"]').length;
+    expect(rowCount()).toBe(50);
+    expect(host.querySelector('[data-testid="rule-check-show-more"]')?.textContent).toContain('再显示 10 条');
+    expect(host.querySelector('[data-testid="rule-check-truncated-notice"]')?.textContent).toContain('LAY-189 共 532 项，后端只返回前 60 项');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-show-more"]')!.click();
+    await flushUi();
+    expect(rowCount()).toBe(60);
+    expect(host.querySelector('[data-testid="rule-check-show-more"]')).toBeNull();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-group-toggle-btn"]')!.click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="rule-check-group-truncated"]')?.textContent).toContain('只列前 60 / 532');
+    expect(rowCount()).toBe(50);
+    expect(host.querySelector('[data-testid="rule-check-group-show-more"]')).not.toBeNull();
+  });
+
+  it('groups the catalog by discipline, selects a whole discipline, and shows each rule result after a run', async () => {
+    const spatialBase = await runSpatialRuleCheckMock();
+    runSpatialRuleCheckMock.mockClear();
+    runSpatialRuleCheckMock.mockResolvedValue({
+      ...spatialBase,
+      results: [
+        ...spatialBase.results,
+        {
+          id: 'LAY-190',
+          issue: 190,
+          discipline: '布置',
+          title: '上方净空',
+          requirement: '>=300mm',
+          unit: 'mm',
+          source_items: 1,
+          target_items: 1,
+          violation_total: 0,
+          truncated: false,
+          violations: [],
+        },
+      ],
+    });
+    fetchAllRuleCatalogsMock.mockResolvedValue({
+      rules: [
+        { engine: 'spatial', id: 'LAY-189', issue: 189, discipline: '布置', title: '净距规则', requirement: '>=500mm' },
+        { engine: 'spatial', id: 'LAY-190', issue: 190, discipline: '布置', title: '上方净空', requirement: '>=300mm' },
+        { engine: 'attrs', id: 'ELEC-282', issue: 282, discipline: '电气', title: '火灾分区', requirement: '红黄高亮' },
+      ],
+      warnings: [],
+    });
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+
+    const sections = Array.from(host.querySelectorAll('[data-testid="rule-check-catalog-section"]'));
+    expect(sections.map((s) => s.textContent?.includes('布置') && s.textContent.includes('2 条'))).toEqual([true, false]);
+    expect(sections[1]!.textContent).toContain('电气');
+
+    const runBtn = () => host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!;
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-catalog-section-select"]')!.click();
+    await flushUi();
+    expect(runBtn().textContent).toContain('运行已选 (2)');
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-catalog-section-select"]')!.click();
+    await flushUi();
+    expect(runBtn().textContent).toContain('执行校验');
+
+    runBtn().click();
+    await flushUi();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-catalog-tab"]')!.click();
+    await flushUi();
+
+    const outcomes = Array.from(host.querySelectorAll('[data-testid="rule-check-catalog-result"]'))
+      .map((el) => el.getAttribute('data-outcome'));
+    expect(outcomes).toEqual(['hit', 'pass', 'hit']);
+    expect(host.querySelector('[data-testid="rule-check-catalog-section"]')?.textContent).toContain('1 条有检出');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-catalog-only-hit"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-catalog-row"]').length).toBe(2);
+  });
+
+  it('explains failures in plain words, folds run notices, and retries a catalog that could not load', async () => {
+    const catalog = await fetchAllRuleCatalogsMock();
+    const offline = (name: string) => `${name}规则目录加载失败：gen-model 请求失败 GET http://localhost:8022/api/v1/rule-check/rules: Failed to fetch`;
+    fetchAllRuleCatalogsMock.mockReset()
+      .mockResolvedValueOnce({ rules: [], warnings: [offline('空间'), offline('BRAN 拓扑'), offline('房间语义'), offline('属性')] })
+      .mockResolvedValue(catalog);
+    const spatialBase = await runSpatialRuleCheckMock();
+    runSpatialRuleCheckMock.mockClear();
+    runSpatialRuleCheckMock.mockResolvedValue({ ...spatialBase, warnings: ['空间树缓存过期，已重新载入', '3 个构件缺少网格'] });
+    runRoomRuleCheckMock.mockRejectedValueOnce(new Error('HTTP 503 Service Unavailable: {"error":"rooms offline"}'));
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+
+    expect(host.querySelector('[data-testid="rule-check-catalog-error"]')?.textContent).toContain('连不上 gen-model（后端没有响应）');
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-catalog-retry"]')!.click();
+    await flushUi();
+    expect(fetchAllRuleCatalogsMock).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-testid="rule-check-catalog-error"]')).toBeNull();
+    expect(host.querySelector('[data-testid="rule-check-total-count"]')?.textContent?.trim()).toBe('2 条');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-results-tab"]')!.click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="rule-check-empty-not-run"]')?.textContent).toContain('没勾选规则时运行当前筛选的全部 2 条');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const failure = host.querySelector('[data-testid="rule-check-engine-failure"]');
+    expect(failure?.textContent).toContain('房间语义 没有跑完');
+    expect(failure?.textContent).toContain('gen-model 服务出错（HTTP 503）');
+    expect(failure?.textContent).toContain('其余 2 个引擎的结果照常显示');
+    expect(host.querySelector('[data-testid="rule-check-run-error"]')).toBeNull();
+
+    expect(host.querySelector('[data-testid="rule-check-warnings-toggle"]')?.textContent).toContain('3 条提示');
+    expect(host.querySelector('[data-testid="rule-check-warnings-list"]')).toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-warnings-toggle"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-warnings-list"] li').length).toBe(3);
+  });
+
+  it('says when every rule passed and links to the passed rules', async () => {
+    runSpatialRuleCheckMock.mockResolvedValue({
+      tree_state: 'ready',
+      rules_run: 1,
+      elapsed_ms: 9,
+      warnings: [],
+      results: [
+        {
+          id: 'LAY-189',
+          issue: 189,
+          discipline: '布置',
+          title: '净距规则',
+          requirement: '>=500mm',
+          unit: 'mm',
+          source_items: 2,
+          target_items: 2,
+          violation_total: 0,
+          truncated: false,
+          violations: [],
+        },
+      ],
+    });
+    runAttrRuleCheckMock.mockResolvedValue({
+      tree_state: 'ready',
+      rules_run: 1,
+      elapsed_ms: 3,
+      warnings: [],
+      results: [
+        {
+          id: 'ELEC-282',
+          issue: 282,
+          discipline: '电气',
+          title: '火灾分区',
+          requirement: '红黄高亮',
+          checked_items: 1,
+          violation_total: 0,
+          truncated: false,
+          violations: [],
+        },
+      ],
+    });
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const passed = host.querySelector('[data-testid="rule-check-all-passed"]');
+    expect(passed?.textContent).toContain('2 条规则全部通过');
+    passed!.querySelector<HTMLButtonElement>('button')!.click();
+    await flushUi();
+    expect(host.textContent).toContain('通过规则（0 违规）');
+  });
 });

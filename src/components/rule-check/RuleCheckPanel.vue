@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import {
   ArrowRight,
   CheckSquare,
   ChevronDown,
   ChevronRight,
+  ChevronsDown,
   ChevronUp,
   CircleCheck,
+  CirclePlay,
   CircleStop,
   CircleX,
+  Copy,
   Crosshair,
   Download,
   FileJson,
@@ -19,6 +22,7 @@ import {
   ListFilter,
   LoaderCircle,
   Play,
+  PlugZap,
   RefreshCw,
   RotateCcw,
   Search,
@@ -26,12 +30,19 @@ import {
   SlidersHorizontal,
   Sparkles,
   Square,
+  SquareMinus,
+  TriangleAlert,
   X,
 } from 'lucide-vue-next';
 
 import RuleCheckViolationRow from './RuleCheckViolationRow.vue';
 
-import type { RuleCheckEngine, UnifiedPreciseStats, UnifiedRuleViolation } from '@/api/ruleCheckApi';
+import type {
+  RuleCheckEngine,
+  UnifiedPreciseStats,
+  UnifiedRuleCatalogRow,
+  UnifiedRuleViolation,
+} from '@/api/ruleCheckApi';
 
 import {
   parseScopeRefnoList,
@@ -61,6 +72,7 @@ import {
   countViolationsByAccuracy,
   countViolationsByDiscipline,
   countViolationsByResultSeverity,
+  describeRuleCheckError,
   filterRuleViolations,
   formatRuleCheckClock,
   formatRuleCheckDuration,
@@ -162,6 +174,16 @@ const groupByRule = ref(false);
 const collapsedGroups = ref<string[]>([]);
 const expandedKey = ref<string | null>(null);
 const nowMs = ref(Date.now());
+const listRef = ref<HTMLElement | null>(null);
+const warningsOpen = ref(false);
+const catalogOnlyHit = ref(false);
+const collapsedSections = ref<string[]>([]);
+const catalogErrorCopied = ref(false);
+
+/** 长列表一次渲染的条数；平铺和每组各自「再显示」一批。 */
+const PAGE_SIZE = 50;
+const flatLimit = ref(PAGE_SIZE);
+const groupLimits = ref<Record<string, number>>({});
 
 const runLabel = computed(() =>
   state.selectedRuleIds.length > 0 ? `运行已选 (${state.selectedRuleIds.length})` : '执行校验',
@@ -237,6 +259,41 @@ const visibleViolations = computed(() =>
 
 const groupedViolations = computed(() => groupViolationsByRule(visibleViolations.value));
 
+const renderedFlat = computed(() => visibleViolations.value.slice(0, flatLimit.value));
+
+/** 键盘浏览的顺序与列表显示顺序一致，分组视图跳过折叠的组。 */
+const navOrder = computed<{ violation: UnifiedRuleViolation; groupKey: string | null; index: number }[]>(() => {
+  if (!groupByRule.value) {
+    return visibleViolations.value.map((violation, index) => ({ violation, groupKey: null, index }));
+  }
+  return groupedViolations.value.flatMap((group) =>
+    collapsedGroups.value.includes(group.key)
+      ? []
+      : group.violations.map((violation, index) => ({ violation, groupKey: group.key, index })),
+  );
+});
+
+const activeNavIndex = computed(() =>
+  navOrder.value.findIndex((item) => item.violation.key === state.activeViolationKey),
+);
+
+const truncatedResults = computed(() =>
+  state.results.filter((r) => r.truncated || r.violationTotal > r.violations.length),
+);
+
+const truncatedByRule = computed(() => new Map(truncatedResults.value.map((r) => [`${r.engine}:${r.id}`, r])));
+
+const truncatedNotice = computed(() => {
+  const list = truncatedResults.value;
+  if (list.length === 0) return null;
+  if (list.length === 1) {
+    const r = list[0]!;
+    return `${r.id} 共 ${r.violationTotal} 项，后端只返回前 ${r.violations.length} 项；收窄专业或选集后重跑可看全部。`;
+  }
+  const missing = list.reduce((acc, r) => acc + Math.max(0, r.violationTotal - r.violations.length), 0);
+  return `${list.length} 条规则结果过多，共有 ${missing} 项没有列出；收窄专业或选集后重跑可看全部。`;
+});
+
 const trayFilterCount = computed(
   () => (resultAccuracyFilter.value !== 'all' ? 1 : 0) + resultDisciplines.value.length + (copyOnly.value ? 1 : 0),
 );
@@ -281,6 +338,58 @@ const activeFilterChips = computed(() => {
 
 const hasEngineRuns = computed(() => state.engineRuns.length > 0);
 
+const failedRuns = computed(() => (state.running ? [] : state.engineRuns.filter((r) => r.status === 'failed')));
+
+/** 单个引擎的失败在结果区逐条说明，顶部只报其他错误。 */
+const runErrorBanner = computed(() => {
+  if (!state.runError) return null;
+  if (failedRuns.value.some((r) => r.error === state.runError)) return null;
+  return describeRuleCheckError(state.runError);
+});
+
+/** 四套目录一条规则都没拿到时的报错；目录加载本身不抛错，失败都记在告警里。 */
+const catalogUnavailable = computed(() => {
+  if (state.catalogLoading || state.catalog.length > 0) return null;
+  if (state.catalogError) return state.catalogError;
+  if (state.catalogLoaded && state.catalogWarnings.length > 0) return state.catalogWarnings[0]!;
+  return null;
+});
+
+const ruleOutcomes = computed(() => {
+  const map = new Map<string, number>();
+  for (const r of state.results) map.set(`${r.engine}:${r.id}`, r.violationTotal);
+  return map;
+});
+
+const failedEngines = computed(() => new Set(failedRuns.value.map((r) => r.engine)));
+
+const hasRunOutcome = computed(() => hasEngineRuns.value || state.results.length > 0);
+
+const catalogRows = computed(() =>
+  catalogOnlyHit.value
+    ? filteredCatalog.value.filter((row) => ['hit', 'failed'].includes(ruleOutcome(row).kind))
+    : filteredCatalog.value,
+);
+
+const catalogSections = computed(() => {
+  const order: string[] = [...RULE_CHECK_DISCIPLINES];
+  const byDiscipline = new Map<string, UnifiedRuleCatalogRow[]>();
+  for (const row of catalogRows.value) {
+    const rows = byDiscipline.get(row.discipline) ?? [];
+    rows.push(row);
+    byDiscipline.set(row.discipline, rows);
+  }
+  const rank = (d: string) => (order.includes(d) ? order.indexOf(d) : order.length);
+  return Array.from(byDiscipline.entries())
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([discipline, rows]) => ({
+      discipline,
+      rows,
+      selected: rows.filter((r) => state.selectedRuleIds.includes(r.id)).length,
+      hits: rows.filter((r) => ruleOutcome(r).kind === 'hit').length,
+    }));
+});
+
 const engineRunsDone = computed(() => state.engineRuns.filter((r) => r.status !== 'running').length);
 
 const runningClock = computed(() =>
@@ -318,6 +427,11 @@ watch(
 
 onBeforeUnmount(() => {
   if (clockTimer) clearInterval(clockTimer);
+});
+
+watch(visibleViolations, () => {
+  flatLimit.value = PAGE_SIZE;
+  groupLimits.value = {};
 });
 
 onMounted(() => {
@@ -363,6 +477,116 @@ function engineRunTime(run: RuleCheckEngineRun): string {
     return run.startedAt === null ? '' : formatRuleCheckClock(nowMs.value - run.startedAt);
   }
   return run.elapsedMs === null ? '' : formatRuleCheckDuration(run.elapsedMs);
+}
+
+type RuleOutcomeKind = 'hit' | 'pass' | 'failed' | 'none';
+
+function ruleOutcome(row: UnifiedRuleCatalogRow): { kind: RuleOutcomeKind; count: number } {
+  const total = ruleOutcomes.value.get(`${row.engine}:${row.id}`);
+  if (total !== undefined) return total > 0 ? { kind: 'hit', count: total } : { kind: 'pass', count: 0 };
+  if (failedEngines.value.has(row.engine)) return { kind: 'failed', count: 0 };
+  return { kind: 'none', count: 0 };
+}
+
+function outcomeLabel(outcome: { kind: RuleOutcomeKind; count: number }): string {
+  if (outcome.kind === 'hit') return `✕ ${outcome.count}`;
+  if (outcome.kind === 'pass') return '✓ 通过';
+  if (outcome.kind === 'failed') return '失败';
+  return '未运行';
+}
+
+function outcomeClass(kind: RuleOutcomeKind): string {
+  if (kind === 'hit') return 'border-destructive/30 bg-destructive/10 text-destructive';
+  if (kind === 'pass') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700';
+  if (kind === 'failed') return 'border-amber-500/30 bg-amber-500/15 text-amber-700';
+  return 'border-border text-muted-foreground';
+}
+
+type CatalogSection = { discipline: string; rows: UnifiedRuleCatalogRow[]; selected: number };
+
+function sectionSelectState(section: CatalogSection): 'all' | 'some' | 'none' {
+  if (section.selected === 0) return 'none';
+  return section.selected === section.rows.length ? 'all' : 'some';
+}
+
+function toggleSectionSelection(section: CatalogSection) {
+  const ids = section.rows.map((r) => r.id);
+  if (sectionSelectState(section) === 'all') {
+    state.selectedRuleIds = state.selectedRuleIds.filter((id) => !ids.includes(id));
+  } else {
+    state.selectedRuleIds = Array.from(new Set([...state.selectedRuleIds, ...ids]));
+  }
+}
+
+function toggleSection(discipline: string) {
+  const idx = collapsedSections.value.indexOf(discipline);
+  if (idx >= 0) collapsedSections.value.splice(idx, 1);
+  else collapsedSections.value.push(discipline);
+}
+
+async function copyCatalogError() {
+  try {
+    await navigator.clipboard.writeText(
+      [state.catalogError, ...state.catalogWarnings].filter(Boolean).join('\n'),
+    );
+  } catch {
+    return;
+  }
+  catalogErrorCopied.value = true;
+  setTimeout(() => {
+    catalogErrorCopied.value = false;
+  }, 1200);
+}
+
+function groupLimit(groupKey: string): number {
+  return groupLimits.value[groupKey] ?? PAGE_SIZE;
+}
+
+function showMoreInGroup(groupKey: string) {
+  groupLimits.value = { ...groupLimits.value, [groupKey]: groupLimit(groupKey) + PAGE_SIZE };
+}
+
+function scrollActiveIntoView() {
+  const key = state.activeViolationKey;
+  if (!key || !listRef.value) return;
+  const row = Array.from(listRef.value.querySelectorAll<HTMLElement>('[data-violation-key]'))
+    .find((el) => el.dataset.violationKey === key);
+  row?.scrollIntoView?.({ block: 'nearest' });
+}
+
+function moveActive(delta: number) {
+  const order = navOrder.value;
+  if (order.length === 0) return;
+  const current = activeNavIndex.value;
+  const next = current < 0
+    ? (delta > 0 ? 0 : order.length - 1)
+    : Math.min(order.length - 1, Math.max(0, current + delta));
+  const item = order[next]!;
+  if (item.groupKey === null) {
+    if (item.index >= flatLimit.value) flatLimit.value = item.index + 1;
+  } else if (item.index >= groupLimit(item.groupKey)) {
+    groupLimits.value = { ...groupLimits.value, [item.groupKey]: item.index + 1 };
+  }
+  state.activeViolationKey = item.violation.key;
+  if (expandedKey.value !== null) expandedKey.value = item.violation.key;
+  void nextTick(scrollActiveIntoView);
+}
+
+function handleListKeydown(event: KeyboardEvent) {
+  const tag = (event.target as HTMLElement | null)?.tagName ?? '';
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveActive(event.key === 'ArrowDown' ? 1 : -1);
+  } else if (event.key === 'Enter') {
+    const idx = activeNavIndex.value;
+    if (idx < 0 || tag === 'BUTTON') return;
+    event.preventDefault();
+    void focusViolation(navOrder.value[idx]!.violation);
+  } else if (event.key === 'Escape' && expandedKey.value !== null) {
+    event.preventDefault();
+    expandedKey.value = null;
+  }
 }
 
 function toggleGroupCollapsed(groupKey: string) {
@@ -505,6 +729,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
 function handleSelectViolation(violation: UnifiedRuleViolation) {
   state.activeViolationKey = violation.key;
   expandedKey.value = expandedKey.value === violation.key ? null : violation.key;
+  listRef.value?.focus({ preventScroll: true });
 }
 
 async function handleIsolateViolation(violation: UnifiedRuleViolation) {
@@ -694,6 +919,7 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
     <!-- 主视图切换 Tab -->
     <div class="flex items-center gap-4 border-b border-border px-3">
       <button type="button"
+        data-testid="rule-check-catalog-tab"
         class="inline-flex items-center gap-1 border-b-2 py-1.5 text-[12px] font-medium transition-colors"
         :class="
           activeTab === 'catalog'
@@ -719,68 +945,162 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
           {{ summaryStats.totalReported }}
         </span>
       </button>
-      <span class="flex-1" />
-      <div v-if="activeTab === 'catalog'" class="flex items-center gap-1.5 text-[11px]">
-        <button type="button" class="text-primary hover:underline" @click="selectAllFiltered()">全选</button>
-        <span class="text-muted-foreground">/</span>
-        <button type="button" class="text-muted-foreground hover:underline" @click="clearRuleSelection()">清空</button>
-      </div>
     </div>
 
-    <!-- 错误与告警提示 -->
-    <div v-if="state.catalogError || state.runError" class="border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-destructive">
-      {{ state.runError || state.catalogError }}
-    </div>
-    <div v-if="state.catalogWarnings.length > 0 || state.runWarnings.length > 0"
-      class="max-h-20 overflow-y-auto border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-300">
-      <div v-for="(w, i) in [...state.catalogWarnings, ...state.runWarnings]" :key="i">
-        · {{ w }}
-      </div>
+    <!-- 运行出错（单个引擎失败另在结果区逐条说明） -->
+    <div v-if="runErrorBanner"
+      data-testid="rule-check-run-error"
+      class="flex items-start gap-1.5 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive"
+      :title="state.runError ?? ''">
+      <CircleX class="mt-px h-3.5 w-3.5 shrink-0" />
+      <span class="min-w-0">{{ runErrorBanner }}</span>
     </div>
 
-    <!-- Tab 1: 规则目录 -->
+    <!-- Tab 1: 规则目录（按专业分组，运行后每条显示本次结果） -->
     <div v-if="activeTab === 'catalog'" class="flex flex-1 flex-col overflow-hidden">
-      <div class="border-b border-border px-3 py-1.5">
-        <div class="relative">
-          <Search class="pointer-events-none absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
-          <input v-model="state.searchKeyword"
-            type="text"
-            placeholder="搜索规则 id / 标题 / 规范要求 / #工单号…"
-            class="w-full rounded border border-border bg-background py-1 pl-7 pr-2 text-[11px] focus:border-primary focus:outline-none" />
+      <div class="space-y-1.5 border-b border-border px-3 py-1.5">
+        <div class="flex items-center gap-1.5">
+          <div class="relative min-w-0 flex-1">
+            <Search class="pointer-events-none absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
+            <input v-model="state.searchKeyword"
+              type="text"
+              placeholder="搜索规则 id / 标题 / 规范要求 / #工单号…"
+              class="w-full rounded border border-border bg-background py-1 pl-7 pr-2 text-[11px] focus:border-primary focus:outline-none" />
+          </div>
+          <button v-if="hasRunOutcome"
+            type="button"
+            data-testid="rule-check-catalog-only-hit"
+            class="shrink-0 rounded border px-1.5 py-0.5 text-[10px] transition-colors"
+            :class="
+              catalogOnlyHit
+                ? 'border-primary bg-primary/10 font-medium text-primary'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted'
+            "
+            :aria-pressed="catalogOnlyHit"
+            @click="catalogOnlyHit = !catalogOnlyHit">
+            只看有检出
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5 text-[10px]">
+          <span data-testid="rule-check-selection-hint"
+            :class="state.selectedRuleIds.length > 0 ? 'text-primary' : 'text-muted-foreground'">
+            {{ state.selectedRuleIds.length > 0 ? `已选 ${state.selectedRuleIds.length} 条，只运行已选` : '未勾选：运行当前筛选的全部规则' }}
+          </span>
+          <span class="flex-1" />
+          <button type="button" class="text-primary hover:underline" @click="selectAllFiltered()">全选</button>
+          <span class="text-muted-foreground">/</span>
+          <button type="button" class="text-muted-foreground hover:underline" @click="clearRuleSelection()">清空</button>
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto divide-y divide-border">
-        <div v-if="state.catalogLoading" class="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-          <LoaderCircle class="h-4 w-4 animate-spin" />
-          正在加载规则目录…
+      <div v-if="state.catalogWarnings.length > 0 && !catalogUnavailable"
+        data-testid="rule-check-catalog-warnings"
+        class="space-y-0.5 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-300">
+        <div v-for="(w, i) in state.catalogWarnings" :key="i" class="flex items-start gap-1">
+          <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
+          <span class="min-w-0">{{ w }}</span>
         </div>
-        <div v-else-if="filteredCatalog.length === 0" class="py-8 text-center text-muted-foreground">
-          无匹配规则条目
+      </div>
+
+      <div class="flex-1 overflow-y-auto">
+        <div v-if="state.catalogLoading" data-testid="rule-check-catalog-loading" class="space-y-3 px-3 py-3" aria-busy="true">
+          <div v-for="n in 4" :key="n" class="flex animate-pulse items-start gap-2">
+            <span class="h-3.5 w-3.5 shrink-0 rounded bg-muted" />
+            <span class="flex-1 space-y-1.5">
+              <span class="block h-2 w-20 rounded bg-muted" />
+              <span class="block h-2 w-48 rounded bg-muted/70" />
+            </span>
+          </div>
+          <div class="text-center text-[11px] text-muted-foreground">正在加载规则目录…</div>
         </div>
-        <div v-for="row in filteredCatalog"
-          :key="`${row.engine}:${row.id}`"
-          class="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-muted/50"
-          @click="toggleRuleSelection(row.id)">
-          <component :is="state.selectedRuleIds.includes(row.id) ? CheckSquare : Square"
-            class="mt-0.5 h-3.5 w-3.5 shrink-0"
-            :class="state.selectedRuleIds.includes(row.id) ? 'text-primary' : 'text-muted-foreground'" />
-          <div class="min-w-0 flex-1 space-y-0.5">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span class="font-mono font-medium text-foreground">{{ row.id }}</span>
-              <span class="rounded bg-muted px-1 py-0.2 text-[10px] text-muted-foreground">{{ row.discipline }}</span>
-              <span class="rounded border border-border px-1 py-0.2 text-[10px] text-muted-foreground">
-                {{ RULE_CHECK_ENGINE_LABELS[row.engine] }}
-              </span>
-              <span class="font-mono text-[10px] text-muted-foreground">#{{ row.issue }}</span>
-            </div>
-            <div class="text-[11px] text-foreground">{{ row.title }}</div>
-            <div class="font-mono text-[10px] text-muted-foreground">规范：{{ row.requirement }}</div>
+        <div v-else-if="catalogUnavailable"
+          data-testid="rule-check-catalog-error"
+          class="flex flex-col items-center gap-1.5 px-6 py-8 text-center">
+          <span class="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+            <PlugZap class="h-5 w-5 text-destructive" />
+          </span>
+          <div class="text-[13px] font-semibold text-foreground">规则目录加载失败</div>
+          <div class="text-[11px] text-muted-foreground">{{ describeRuleCheckError(catalogUnavailable) }}。确认 gen-model 已启动后再试。</div>
+          <div class="flex items-center gap-1.5 pt-1">
+            <button type="button"
+              data-testid="rule-check-catalog-retry"
+              class="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground hover:opacity-90"
+              @click="loadCatalogs()">
+              <RotateCcw class="h-3 w-3" />
+              重试
+            </button>
+            <button type="button"
+              class="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"
+              @click="copyCatalogError()">
+              <Copy class="h-3 w-3" />
+              {{ catalogErrorCopied ? '已复制' : '复制错误信息' }}
+            </button>
           </div>
         </div>
+        <div v-else-if="catalogSections.length === 0" class="py-8 text-center text-muted-foreground">
+          {{ catalogOnlyHit ? '本次没有检出的规则' : '无匹配规则条目' }}
+        </div>
+        <section v-for="section in catalogSections"
+          :key="section.discipline"
+          data-testid="rule-check-catalog-section">
+          <div class="sticky top-0 z-[1] flex items-center gap-1.5 border-b border-border bg-muted px-3 py-1">
+            <button type="button"
+              data-testid="rule-check-catalog-section-select"
+              class="shrink-0"
+              :title="sectionSelectState(section) === 'all' ? `取消勾选${section.discipline}全部规则` : `勾选${section.discipline}全部规则`"
+              @click="toggleSectionSelection(section)">
+              <component :is="sectionSelectState(section) === 'all' ? CheckSquare : sectionSelectState(section) === 'some' ? SquareMinus : Square"
+                class="h-3.5 w-3.5"
+                :class="sectionSelectState(section) === 'none' ? 'text-muted-foreground' : 'text-primary'" />
+            </button>
+            <button type="button"
+              data-testid="rule-check-catalog-section-toggle"
+              class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              :aria-expanded="!collapsedSections.includes(section.discipline)"
+              @click="toggleSection(section.discipline)">
+              <span class="text-[11px] font-semibold text-foreground">{{ section.discipline }}</span>
+              <span class="truncate text-[10px] text-muted-foreground">
+                {{ section.rows.length }} 条<template v-if="section.selected > 0"> · 已选 {{ section.selected }}</template><template v-if="hasRunOutcome && section.hits > 0"> · {{ section.hits }} 条有检出</template>
+              </span>
+              <span class="flex-1" />
+              <component :is="collapsedSections.includes(section.discipline) ? ChevronRight : ChevronDown"
+                class="h-3 w-3 shrink-0 text-muted-foreground" />
+            </button>
+          </div>
+          <template v-if="!collapsedSections.includes(section.discipline)">
+            <div v-for="row in section.rows"
+              :key="`${row.engine}:${row.id}`"
+              data-testid="rule-check-catalog-row"
+              class="flex cursor-pointer items-start gap-2 border-b border-border/60 px-3 py-2"
+              :class="state.selectedRuleIds.includes(row.id) ? 'bg-primary/5' : 'hover:bg-muted/50'"
+              @click="toggleRuleSelection(row.id)">
+              <component :is="state.selectedRuleIds.includes(row.id) ? CheckSquare : Square"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                :class="state.selectedRuleIds.includes(row.id) ? 'text-primary' : 'text-muted-foreground'" />
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono font-medium text-foreground">{{ row.id }}</span>
+                  <span class="rounded border border-border px-1 text-[10px] text-muted-foreground">
+                    {{ RULE_CHECK_ENGINE_LABELS[row.engine] }}
+                  </span>
+                  <span class="font-mono text-[10px] text-muted-foreground">#{{ row.issue }}</span>
+                  <span class="flex-1" />
+                  <span v-if="hasRunOutcome"
+                    data-testid="rule-check-catalog-result"
+                    :data-outcome="ruleOutcome(row).kind"
+                    class="shrink-0 rounded border px-1.5 py-px font-mono text-[10px]"
+                    :class="outcomeClass(ruleOutcome(row).kind)">
+                    {{ outcomeLabel(ruleOutcome(row)) }}
+                  </span>
+                </div>
+                <div class="text-[11px] text-foreground">{{ row.title }}</div>
+                <div class="font-mono text-[10px] text-muted-foreground">规范：{{ row.requirement }}</div>
+              </div>
+            </div>
+          </template>
+        </section>
       </div>
     </div>
-
     <!-- Tab 2: 校验结果与三维高亮定位 -->
     <div v-else class="flex flex-1 flex-col overflow-hidden">
       <!-- 运行中：分引擎进度 -->
@@ -818,6 +1138,54 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
           </button>
           <span v-else class="shrink-0 font-mono text-[10px] text-muted-foreground">{{ engineRunTime(run) }}</span>
         </div>
+      </div>
+
+      <!-- 引擎失败：写清原因，可单独重试 -->
+      <div v-for="run in failedRuns"
+        :key="`fail-${run.engine}`"
+        data-testid="rule-check-engine-failure"
+        class="border-b border-destructive/30 bg-destructive/10 px-3 py-1.5">
+        <div class="flex items-center gap-1.5">
+          <CircleX class="h-3.5 w-3.5 shrink-0 text-destructive" />
+          <span class="text-[11px] font-semibold text-destructive">{{ run.label }} 没有跑完</span>
+          <span class="flex-1" />
+          <button type="button"
+            :data-testid="`rule-check-engine-failure-retry-${run.engine}`"
+            class="inline-flex shrink-0 items-center gap-1 rounded border border-destructive/30 bg-background px-1.5 py-0.5 text-[10px] text-destructive hover:bg-destructive/10"
+            @click="retryEngine(run.engine)">
+            <RotateCcw class="h-3 w-3" />
+            重试
+          </button>
+        </div>
+        <div class="mt-0.5 text-[11px] text-destructive/90">
+          {{ describeRuleCheckError(run.error ?? '') }}{{ state.engineRuns.length > failedRuns.length ? `；其余 ${state.engineRuns.length - failedRuns.length} 个引擎的结果照常显示` : '' }}。
+        </div>
+        <details class="mt-0.5 text-[10px] text-muted-foreground">
+          <summary class="cursor-pointer select-none">技术细节</summary>
+          <div class="break-all font-mono">{{ run.error }}</div>
+        </details>
+      </div>
+
+      <!-- 提示默认折叠 -->
+      <div v-if="state.runWarnings.length > 0"
+        class="border-b border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+        <button type="button"
+          data-testid="rule-check-warnings-toggle"
+          class="flex w-full items-center gap-1.5 px-3 py-1 text-left text-[11px]"
+          :aria-expanded="warningsOpen"
+          @click="warningsOpen = !warningsOpen">
+          <TriangleAlert class="h-3 w-3 shrink-0" />
+          <span class="shrink-0 font-semibold">{{ state.runWarnings.length }} 条提示</span>
+          <span v-if="!warningsOpen" class="min-w-0 flex-1 truncate text-[10px] opacity-80">{{ state.runWarnings[0] }}</span>
+          <span v-else class="flex-1" />
+          <component :is="warningsOpen ? ChevronUp : ChevronDown" class="h-3 w-3 shrink-0" />
+        </button>
+        <ul v-if="warningsOpen" data-testid="rule-check-warnings-list" class="space-y-0.5 px-3 pb-1.5 text-[11px]">
+          <li v-for="(w, i) in state.runWarnings" :key="i" class="flex gap-1">
+            <span>·</span>
+            <span class="min-w-0">{{ w }}</span>
+          </li>
+        </ul>
       </div>
 
       <!-- 本次结果概览：统计格兼作严重度筛选 -->
@@ -920,6 +1288,13 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
           <span class="text-[10px]" :class="branAllSummary.bransFailed > 0 ? 'text-amber-700' : 'text-muted-foreground'">
             读取失败 {{ branAllSummary.bransFailed }} 根
           </span>
+        </div>
+
+        <div v-if="truncatedNotice"
+          data-testid="rule-check-truncated-notice"
+          class="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-800 dark:text-amber-300">
+          <TriangleAlert class="mt-px h-3 w-3 shrink-0" />
+          <span class="min-w-0">{{ truncatedNotice }}</span>
         </div>
 
         <div v-if="!state.running && hasEngineRuns" data-testid="rule-check-engine-status" class="flex flex-wrap gap-1">
@@ -1118,18 +1493,48 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto">
+      <div ref="listRef"
+        data-testid="rule-check-result-list"
+        tabindex="0"
+        class="flex-1 overflow-y-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40"
+        @keydown="handleListKeydown">
         <div v-if="state.running && state.batches.length === 0" class="flex items-center justify-center gap-2 py-8 text-muted-foreground">
           <LoaderCircle class="h-4 w-4 animate-spin" />
           正在执行规范校验…
         </div>
-        <div v-else-if="state.results.length === 0" class="py-8 text-center text-muted-foreground">
-          {{ hasEngineRuns ? '本次没有返回规则结果' : '点击右上角「执行校验」运行规则评测' }}
+        <div v-else-if="state.results.length === 0 && hasEngineRuns" class="py-8 text-center text-muted-foreground">
+          本次没有返回规则结果
+        </div>
+        <div v-else-if="state.results.length === 0"
+          data-testid="rule-check-empty-not-run"
+          class="flex flex-col items-center gap-1.5 px-6 py-8 text-center">
+          <span class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+            <CirclePlay class="h-5 w-5 text-muted-foreground" />
+          </span>
+          <div class="text-[13px] font-semibold text-foreground">点「{{ runLabel }}」开始</div>
+          <div class="text-[11px] text-muted-foreground">
+            {{
+              catalogUnavailable
+                ? '规则目录没加载成功，先到「规则目录」重试'
+                : state.selectedRuleIds.length > 0
+                  ? `只运行已勾选的 ${state.selectedRuleIds.length} 条规则`
+                  : `没勾选规则时运行当前筛选的全部 ${filteredCatalog.length} 条`
+            }}
+          </div>
+          <div class="text-[10px] text-muted-foreground/70">{{ settingsSummary }}</div>
         </div>
         <template v-else>
-          <div v-if="allViolations.length === 0 && onlyViolationsFilter" class="space-y-1 py-8 text-center">
-            <div class="text-emerald-600">全部 {{ summaryStats.rulesRun }} 条已执行规则 0 违规通过</div>
-            <button type="button" class="text-[11px] text-primary hover:underline" @click="onlyViolationsFilter = false">
+          <div v-if="allViolations.length === 0 && onlyViolationsFilter"
+            data-testid="rule-check-all-passed"
+            class="flex flex-col items-center gap-1.5 px-6 py-8 text-center">
+            <span class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
+              <CircleCheck class="h-5 w-5 text-emerald-600" />
+            </span>
+            <div class="text-[13px] font-semibold text-emerald-700">{{ summaryStats.rulesRun }} 条规则全部通过</div>
+            <div class="text-[11px] text-muted-foreground">
+              用时 {{ formatRuleCheckDuration(state.runElapsedMs) }}<template v-if="preciseSummary"> · 精确复核剔除 {{ preciseSummary.cleared }} 项误报</template>
+            </div>
+            <button type="button" class="text-[11px] font-medium text-primary hover:underline" @click="onlyViolationsFilter = false">
               查看通过的规则
             </button>
           </div>
@@ -1172,10 +1577,16 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
                     <span class="text-muted-foreground/50">·</span>
                     <span data-testid="rule-check-group-precise" class="font-mono text-emerald-700">{{ groupPreciseLabel(group.key) }}</span>
                   </template>
+                  <template v-if="truncatedByRule.get(group.key)">
+                    <span class="text-muted-foreground/50">·</span>
+                    <span data-testid="rule-check-group-truncated" class="text-amber-700">
+                      只列前 {{ truncatedByRule.get(group.key)?.violations.length }} / {{ truncatedByRule.get(group.key)?.violationTotal }}
+                    </span>
+                  </template>
                 </div>
               </div>
               <template v-if="!collapsedGroups.includes(group.key)">
-                <RuleCheckViolationRow v-for="v in group.violations"
+                <RuleCheckViolationRow v-for="v in group.violations.slice(0, groupLimit(group.key))"
                   :key="v.key"
                   :violation="v"
                   :active="state.activeViolationKey === v.key"
@@ -1186,13 +1597,21 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
                   @focus="focusViolation"
                   @isolate="handleIsolateViolation"
                   @only-rule="handleOnlyRule" />
+                <button v-if="group.violations.length > groupLimit(group.key)"
+                  type="button"
+                  data-testid="rule-check-group-show-more"
+                  class="flex w-full items-center justify-center gap-1 border-b border-border py-1.5 text-[11px] font-medium text-primary hover:bg-muted/40"
+                  @click="showMoreInGroup(group.key)">
+                  <ChevronsDown class="h-3 w-3" />
+                  再显示 {{ Math.min(PAGE_SIZE, group.violations.length - groupLimit(group.key)) }} 条（本组还有 {{ group.violations.length - groupLimit(group.key) }} 条）
+                </button>
               </template>
             </div>
           </template>
 
           <!-- 平铺视图 -->
           <template v-else>
-            <RuleCheckViolationRow v-for="v in visibleViolations"
+            <RuleCheckViolationRow v-for="v in renderedFlat"
               :key="v.key"
               :violation="v"
               :active="state.activeViolationKey === v.key"
@@ -1203,6 +1622,14 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
               @focus="focusViolation"
               @isolate="handleIsolateViolation"
               @only-rule="handleOnlyRule" />
+            <button v-if="visibleViolations.length > flatLimit"
+              type="button"
+              data-testid="rule-check-show-more"
+              class="flex w-full items-center justify-center gap-1 border-b border-border py-1.5 text-[11px] font-medium text-primary hover:bg-muted/40"
+              @click="flatLimit += PAGE_SIZE">
+              <ChevronsDown class="h-3 w-3" />
+              再显示 {{ Math.min(PAGE_SIZE, visibleViolations.length - flatLimit) }} 条（还有 {{ visibleViolations.length - flatLimit }} 条）
+            </button>
           </template>
 
           <div v-if="state.running" class="flex items-center justify-center gap-1.5 py-3 text-[10px] text-muted-foreground">
@@ -1222,6 +1649,19 @@ function handleOnlyRule(violation: UnifiedRuleViolation) {
             </div>
           </div>
         </template>
+      </div>
+
+      <!-- 键盘浏览提示 -->
+      <div v-if="allViolations.length > 0"
+        data-testid="rule-check-result-footer"
+        class="flex items-center gap-1.5 border-t border-border bg-muted/30 px-3 py-1 text-[10px] text-muted-foreground">
+        <kbd class="rounded border border-border bg-background px-1 font-mono text-[9px]">↑↓</kbd>切换
+        <kbd class="rounded border border-border bg-background px-1 font-mono text-[9px]">Enter</kbd>定位
+        <kbd class="rounded border border-border bg-background px-1 font-mono text-[9px]">Esc</kbd>收起
+        <span class="flex-1" />
+        <span data-testid="rule-check-result-position" class="font-mono">
+          {{ activeNavIndex >= 0 ? `第 ${activeNavIndex + 1} / ${navOrder.length} 项` : `${visibleViolations.length} 项` }}
+        </span>
       </div>
     </div>
   </div>

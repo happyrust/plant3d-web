@@ -119,6 +119,7 @@ onBeforeUnmount(() => {
 <template>
   <div data-testid="rule-check-violation-row"
     :data-violation-key="violation.key"
+    :data-active="active ? 'true' : undefined"
     class="cursor-pointer border-b border-l-[3px] border-border/60 transition-colors"
     :class="active ? 'border-l-primary bg-primary/5' : [severity.stripe, 'hover:bg-muted/40']"
     :aria-expanded="expanded"

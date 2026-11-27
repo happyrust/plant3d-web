@@ -70,6 +70,22 @@ export function countViolationsByDiscipline(violations: UnifiedRuleViolation[]):
   return counts;
 }
 
+/** 把网络与 gen-model 的报错改成一句话；认不出来的原样返回。 */
+export function describeRuleCheckError(message: string): string {
+  if (/Failed to fetch|NetworkError|ECONNREFUSED|ERR_CONNECTION|fetch failed/i.test(message)) {
+    return '连不上 gen-model（后端没有响应）';
+  }
+  const http = /HTTP (\d{3})/.exec(message);
+  if (http) {
+    const code = Number(http[1]);
+    if (code === 404) return 'gen-model 没有这个接口（可能是旧版本后端）';
+    if (code >= 500) return `gen-model 服务出错（HTTP ${code}）`;
+    if (code >= 400) return `gen-model 拒绝了请求（HTTP ${code}）`;
+  }
+  if (/timed? ?out|超时/i.test(message)) return '请求超时';
+  return message;
+}
+
 /** 850 → `850 ms`，52010 → `52.0 s`，161000 → `2 分 41 秒`。 */
 export function formatRuleCheckDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—';

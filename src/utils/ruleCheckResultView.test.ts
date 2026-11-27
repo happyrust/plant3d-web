@@ -4,6 +4,7 @@ import {
   countViolationsByAccuracy,
   countViolationsByDiscipline,
   countViolationsByResultSeverity,
+  describeRuleCheckError,
   filterRuleViolations,
   formatRuleCheckClock,
   formatRuleCheckDuration,
@@ -118,5 +119,14 @@ describe('ruleCheckResultView', () => {
     expect(violationGapLabel(mk({}))).toBeNull();
     expect(violationGaugeRatio(below)).toBeCloseTo(0.521);
     expect(violationGaugeRatio(above)).toBeNull();
+  });
+
+  it('turns network and backend errors into one plain sentence', () => {
+    expect(describeRuleCheckError('gen-model 请求失败 GET http://localhost:8022/api/v1/rule-check/rooms/run: Failed to fetch'))
+      .toBe('连不上 gen-model（后端没有响应）');
+    expect(describeRuleCheckError('HTTP 503 Service Unavailable: {"error":"attrs offline"}')).toBe('gen-model 服务出错（HTTP 503）');
+    expect(describeRuleCheckError('HTTP 404 Not Found')).toBe('gen-model 没有这个接口（可能是旧版本后端）');
+    expect(describeRuleCheckError('request timed out after 120s')).toBe('请求超时');
+    expect(describeRuleCheckError('请先输入 BRAN refno')).toBe('请先输入 BRAN refno');
   });
 });
