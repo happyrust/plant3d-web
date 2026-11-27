@@ -1052,7 +1052,7 @@ test.describe('视图操作焦点', () => {
     await expect.poll(() => dimensionActive(page), { message: '点「线性」之后应该进入创建会话' }).toBe(true);
     expectUntouched('尺寸创建中', await holdThenDrag(page, live, first));
 
-    // 上面那一下拖动在尺寸工具里算什么由它自己定：取消掉，干干净净地用两次单击建一条
+    // 上面那一下拖动在尺寸工具里算什么由它自己定：取消掉，干干净净地建一条——两次单击拾点，第三次放置（#75）
     await page.getByTestId('dimension.cancel').click();
     await expect.poll(() => dimensionActive(page), { message: '取消之后会话应该结束' }).toBe(false);
     await linear.click();
@@ -1060,16 +1060,32 @@ test.describe('视图操作焦点', () => {
     const beforeCreate = await snap(page);
     await press(page, live, first);
     await press(page, live, second);
-    await expect.poll(async () => (await dimensionState(page)).records, { message: '两次单击之后应该建出一条尺寸' }).toBe(1);
+    expect((await dimensionState(page)).records, '拾完两点还在放置阶段，没有提交').toBe(0);
+    // 放置落点：两个拾点的中点沿连线法向偏 60 px，哪一侧还在画布上用哪一侧
+    const along = px(first, second) || 1;
+    let place: Pt | null = null;
+    for (const side of [1, -1]) {
+      const at: Pt = {
+        x: Math.round((first.x + second.x) / 2 - ((second.y - first.y) / along) * 60 * side),
+        y: Math.round((first.y + second.y) / 2 + ((second.x - first.x) / along) * 60 * side),
+      };
+      if (at.x < 80 || at.y < 80 || at.x > live.rect.width - 180 || at.y > live.rect.height - 80) continue;
+      if (!(await onCanvas(page, at))) continue;
+      place = at;
+      break;
+    }
+    expect(place, '画布上要有放置尺寸的落点').not.toBeNull();
+    await press(page, live, place!);
+    await expect.poll(async () => (await dimensionState(page)).records, { message: '拾两点再放置之后应该建出一条尺寸' }).toBe(1);
     const afterCreate = await snap(page);
-    expectCameraStill(beforeCreate.pose, afterCreate.pose, '建尺寸的两次单击');
+    expectCameraStill(beforeCreate.pose, afterCreate.pose, '建尺寸的三次单击');
     expect(afterCreate.remembered, '建尺寸不该改记住的旋转中心').toEqual(remembered);
 
-    // 二、拖动已有尺寸的标签。演示场景只有几毫米大，新建尺寸的默认偏移是 150 mm，标签在画布外很远的地方：
-    // 把相机沿视线拉远，直到标签进到画布里。尺寸系统只跟「渲染帧里 controls.update() 挪出来」的相机变化，
-    // 这里是直接摆的相机，所以手动通知它一次。
+    // 二、拖动已有尺寸的标签。标签跟着第三次单击的落点，原视距下就在画布里；那里拾不到标签时把相机沿视线
+    // 一档一档拉远再找。尺寸系统只跟「渲染帧里 controls.update() 挪出来」的相机变化，这里是直接摆的相机，
+    // 所以手动通知它一次。
     let label: DimensionState['label'] = null;
-    for (const factor of [12, 16, 24, 32, 48, 64]) {
+    for (const factor of [1, 2, 4, 8, 12, 16, 24, 32, 48, 64]) {
       const far: CameraSpot = {
         pos: add(scene.basePose.target, mul(sub(scene.basePose.pos, scene.basePose.target), factor)),
         target: scene.basePose.target,
@@ -1084,7 +1100,7 @@ test.describe('视图操作焦点', () => {
       label = at;
       break;
     }
-    expect(label, '拉远之后尺寸的标签应该进到画布里').not.toBeNull();
+    expect(label, '尺寸的标签应该在画布里（原视距没有就拉远找）').not.toBeNull();
     const placementBefore = (await dimensionState(page)).placement;
 
     const x = live.rect.left + label!.x;
