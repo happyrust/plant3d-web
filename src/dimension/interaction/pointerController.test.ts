@@ -448,6 +448,112 @@ describe('DimensionPointerController', () => {
     expect(session.pointerMove).toHaveBeenCalledTimes(3);
   });
 
+  /** 一条拖不动的尺寸（只读的外部标注）：命中得到，开不出编辑会话 */
+  function readOnlyHit() {
+    const viewport = {
+      hitTest: vi.fn(() => ({ dimensionId: 'read-only', part: 'label', distancePx: 0 })),
+      setHover: vi.fn(),
+      setSelection: vi.fn(),
+      setPreview: vi.fn(),
+    };
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport,
+      applyCommand: vi.fn(),
+    });
+    controller.setEditSessionFactory(() => null);
+    return { viewport, controller };
+  }
+
+  it('#205 相机拖动闸门开着：按在拖不动的图形上不消费、不选中；原地抬起才选中，并认领这次单击', () => {
+    const { viewport, controller } = readOnlyHit();
+    controller.setCameraDragGate(() => true);
+
+    expect(controller.pointerDown(event(30, 50))).toEqual({ consumed: false });
+    expect(viewport.setSelection).not.toHaveBeenCalled();
+    expect(controller.hasPendingClick).toBe(true);
+
+    // 手抖两三个像素不算拖
+    expect(controller.pointerMove(event(32, 52, { buttons: HELD.primary }))).toEqual({ consumed: false });
+    const up = event(32, 52);
+    // 抬起不消费：相机接了这次按下，要收到抬起才会结束它那边的拖动
+    expect(controller.pointerUp(up)).toEqual({ consumed: false });
+    expect(viewport.setSelection).toHaveBeenCalledTimes(1);
+    expect(viewport.setSelection).toHaveBeenCalledWith('read-only');
+    expect(controller.ownsClick(up)).toBe(true);
+    expect(controller.hasPendingClick).toBe(false);
+
+    // 下一次按下之后，上一次的认领作废
+    controller.pointerDown(event(30, 50));
+    expect(controller.ownsClick(up)).toBe(false);
+  });
+
+  it('#205 相机拖动闸门开着：从拖不动的图形上拖出去是相机的拖动，抬起不选中、不认领', () => {
+    const { viewport, controller } = readOnlyHit();
+    controller.setCameraDragGate(() => true);
+
+    expect(controller.pointerDown(event(30, 50))).toEqual({ consumed: false });
+    expect(controller.pointerMove(event(40, 50, { buttons: HELD.primary }))).toEqual({ consumed: false });
+    expect(controller.hasPendingClick).toBe(false);
+    // 拖回原地也还是拖动
+    controller.pointerMove(event(30, 50, { buttons: HELD.primary }));
+    const up = event(30, 50);
+    expect(controller.pointerUp(up)).toEqual({ consumed: false });
+    expect(viewport.setSelection).not.toHaveBeenCalled();
+    expect(controller.ownsClick(up)).toBe(false);
+  });
+
+  it('#205 相机拖动闸门开着：拖得动的图形照旧在按下时选中、开编辑会话并消费', () => {
+    const { viewport, controller } = readOnlyHit();
+    const session = {
+      kind: 'linear',
+      phase: 'ready',
+      pointerMove: vi.fn(),
+      pointerDown: vi.fn(),
+      commit: vi.fn(() => null),
+      cancel: vi.fn(),
+      flip: vi.fn(),
+    } as any;
+    controller.setEditSessionFactory(() => session);
+    controller.setCameraDragGate(() => true);
+
+    expect(controller.pointerDown(event(30, 50))).toEqual({ consumed: true, requestRender: true });
+    expect(viewport.setSelection).toHaveBeenCalledWith('read-only');
+    expect(controller.hasActiveSession).toBe(true);
+    expect(controller.hasPendingClick).toBe(false);
+  });
+
+  it('#205 相机拖动闸门关着（工具模式）：拖不动的图形照旧在按下时选中并消费，抬起不认领', () => {
+    const { viewport, controller } = readOnlyHit();
+    controller.setCameraDragGate(() => false);
+
+    expect(controller.pointerDown(event(30, 50))).toEqual({ consumed: true, requestRender: true });
+    expect(viewport.setSelection).toHaveBeenCalledWith('read-only');
+    expect(controller.hasPendingClick).toBe(false);
+    const up = event(30, 50);
+    expect(controller.pointerUp(up)).toEqual({ consumed: false });
+    expect(controller.ownsClick(up)).toBe(false);
+    expect(viewport.setSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('#205 挂着的单击在 pointercancel、在「没有键按着」的移动（抬起没送到）之后作废', () => {
+    const { viewport, controller } = readOnlyHit();
+    controller.setCameraDragGate(() => true);
+
+    controller.pointerDown(event(30, 50));
+    controller.pointerCancel();
+    expect(controller.hasPendingClick).toBe(false);
+    controller.pointerUp(event(30, 50));
+    expect(viewport.setSelection).not.toHaveBeenCalled();
+
+    controller.pointerDown(event(30, 50));
+    expect(controller.hasPendingClick).toBe(true);
+    controller.pointerMove(event(30, 50, { buttons: 0 }));
+    expect(controller.hasPendingClick).toBe(false);
+    controller.pointerUp(event(30, 50));
+    expect(viewport.setSelection).not.toHaveBeenCalled();
+  });
+
   it('Backspace 退回上一步并发布步骤；第一步时不消费', () => {
     const controller = new DimensionPointerController({
       canvas: createCanvas(),

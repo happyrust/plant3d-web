@@ -2691,6 +2691,8 @@ function attachPicking() {
     // pointerdown 被尺寸 overlay 捕获阶段消费（点中了尺寸图形）：本次点击不做场景拾取——
     // 否则 up 落在尺寸/空白上，GPU 拾取未命中，会把尺寸绑定刚选中的目标构件又清掉。
     if (!down) return;
+    // 点中的是拖不动的尺寸图形时，尺寸层把按下留给了相机，到抬起才认领这次单击（#205）：同样不做场景拾取。
+    if (dimensionSystem?.pointer.ownsClick(e)) return;
     // 分屏只认左键单击（down 为 null 已在上面拦掉）
     if (splitReady && e.button !== 0) return;
 
@@ -2828,7 +2830,8 @@ function attachToolsInput() {
   };
   const onUp = (e: PointerEvent) => {
     if (isModelUnitSplitCompareReady()) return;
-    tools.onCanvasPointerUp(canvas, e);
+    // 导航态下工具这边也做单击选中：被尺寸层认领的单击同样不拾场景（#205）
+    tools.onCanvasPointerUp(canvas, e, { clickTaken: dimensionSystem?.pointer.ownsClick(e) === true });
     requestRender();
   };
   const onCancel = (e: PointerEvent) => {
@@ -3244,6 +3247,11 @@ async function initializeDimensionViewport(): Promise<void> {
   // 测量草稿进行中落点优先：暂停尺寸的悬停/左键选中（E3D 心智）。
   result.system.pointer.setInteractionGate(
     () => !xeokitMeasurementToolsRef.value?.currentMeasurement.value,
+  );
+  // 导航态下，按在拖不动的尺寸图形（只读标注）上的那一下留给相机：按住拖是转视角，原地抬起才是选中（#205）。
+  // 工具模式和分屏对比下照旧在按下时消费，免得工具、分屏点选把这次按下当成自己的。
+  result.system.pointer.setCameraDragGate(
+    () => (!store.toolMode.value || store.toolMode.value === 'none') && !isModelUnitSplitCompareReady(),
   );
   // 反向选择绑定：场景中点选尺寸图形 → 选中对应 xeokit 测量记录；
   // BRAN 净距标注（external，不挂测量记录）点中 = 拾取目标构件，跟点模型本体同一套选中路径。
@@ -4288,7 +4296,9 @@ onMounted(async () => {
     {
       enabled: true,
       longPressDelay: 300,
-      allowLongPress: () => !store.toolMode.value || store.toolMode.value === 'none',
+      // 按在尺寸图形上、按下留给了相机的那一次不算长按（#205）：慢一点的单击是在选标注，不该顺带记下或取消旋转中心
+      allowLongPress: () => (!store.toolMode.value || store.toolMode.value === 'none')
+        && !dimensionSystem?.pointer.hasPendingClick,
       resolveSelectedBounds: (target) => {
         const compat = compatViewerRef.value;
         if (!compat) return null;
