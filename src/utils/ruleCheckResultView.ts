@@ -9,6 +9,9 @@ export type RuleCheckResultSeverityFilter =
 
 export type RuleCheckResultAccuracyFilter = 'all' | 'exact' | 'aabb';
 
+/** 「Copy-of 副本」标记的可搜文字：关键词输入「副本」或「copy」就能筛出带标记的行。 */
+const COPY_TAG_TEXT = 'copy-of 副本';
+
 export type RuleCheckResultFilterOptions = {
   severity: RuleCheckResultSeverityFilter;
   keyword: string;
@@ -83,6 +86,7 @@ export function filterRuleViolations(
       || v.targetLabel.toLowerCase().includes(kw)
       || (v.roomNum?.toLowerCase().includes(kw) ?? false)
       || (v.branchRefno?.toLowerCase().includes(kw) ?? false)
+      || (v.copyNamed === true && COPY_TAG_TEXT.includes(kw))
       || `#${v.issue}`.includes(kw)
       || v.highlightRefnos.some((r) => r.toLowerCase().includes(kw))
     );

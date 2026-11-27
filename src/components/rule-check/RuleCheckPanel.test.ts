@@ -341,6 +341,7 @@ describe('RuleCheckPanel', () => {
               margin_mm: -500,
               highlight_refnos: ['24381_11', '24381_21'],
               accuracy: 'aabb',
+              copy_named: true,
             },
           ],
         },
@@ -366,6 +367,7 @@ describe('RuleCheckPanel', () => {
       el.textContent?.trim(),
     );
     expect(badges).toEqual(['精算', '估算']);
+    expect(host.querySelectorAll('[data-testid="rule-check-copy-badge"]').length).toBe(1);
     expect(host.textContent).toContain('外表面 290.0 mm');
 
     host.querySelector<HTMLButtonElement>('[data-testid="rule-check-accuracy-filter-aabb"]')!.click();

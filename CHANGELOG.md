@@ -9,6 +9,7 @@
 - 校审 Phase 3：节点名称只用编制 / 校对 / 审核 / 批准。嵌入页打开校审时三维视口占一半以上，模型树默认折叠。待审核列表去掉没有动作的筛选按钮，发起人显示姓名。三条确认入口共用一份当前完整草稿。净距、管距和空间计算的本机缓存按同一次算出的用户与草稿键保存，并只保留最近 20 条。
 - 校审 Phase B：gen-model 在外部流程模式下拒绝 submit / return / start-review（`WORKFLOW_MODE_EXTERNAL`，可用 `PLANT_REVIEW_ALLOW_INTERNAL_WORKFLOW=1` 放行）。`workflow/sync` 查询额外返回 `returned`、`return_reason`、`last_action`，嵌入恢复优先使用这三项。
 - 规范校验：「精确复核」开关让最小净距类规则先用包围盒估算、再按三维网格外表面距离精算：结果行标「精算 / 估算」，汇总剔除的误报与缺网格数，可按口径筛选。BRAN 拓扑可切「全项目」逐根批量运行，汇总已检 / 失败根数，违规行带所在 BRAN。CSV 末尾追加口径、网格外表面距与所在 BRAN 三列。需要带 `precise` 与 `bran/run-all` 的 gen-model；旧后端下界面与原来一致。设计稿见 `ui/规范校验/rule-check.pen`。
+- 规范校验：违规行带「Copy-of 副本」标记。源或目标（或其所在 BRAN / PIPE）叫 E3D 复制名 `Copy-of-…` 时，多半是复制后没挪开、叠在原件上的副本；只做标记、照报，关键词「副本」可筛，CSV 追加「复制副本」列。需要带 `copy_named` 的 gen-model。
 
 ## [0.2.8] — 2026-10-26
 

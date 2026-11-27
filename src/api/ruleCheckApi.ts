@@ -50,6 +50,8 @@ export interface SpatialViolationJson {
   accuracy?: string;
   /** 网格外表面距（mm，未扣隔热层），只在 `precise=1` 且两侧都有网格时返回。 */
   exact_surface_mm?: number;
+  /** 源或目标（或其所在 BRAN / PIPE）叫 E3D 复制名 `Copy-of-…`；为 false 时后端不输出。 */
+  copy_named?: boolean;
 }
 
 export interface SpatialPreciseStatsJson {
@@ -289,6 +291,8 @@ export interface UnifiedRuleViolation {
   exactSurfaceMm?: number;
   /** 全项目 BRAN 汇总时违规所在的 BRAN。 */
   branchRefno?: string;
+  /** 一侧是 E3D 复制出来的副本（名字带 `Copy-of-` 前缀）。 */
+  copyNamed?: boolean;
 }
 
 export interface UnifiedPreciseStats {
@@ -619,6 +623,7 @@ export function normalizeSpatialResponse(res: SpatialRuleCheckResponse): Unified
           highlightRefnos: (v.highlight_refnos ?? []).map(normalizeRuleRefnoToken).filter(Boolean),
           accuracy,
           exactSurfaceMm: v.exact_surface_mm,
+          copyNamed: v.copy_named === true || undefined,
           detail: `${v.source.noun} ${srcRef} ↔ ${v.target.noun} ${tgtRef} 实测 ${v.measured_mm.toFixed(1)} ${r.unit}（${basis}规范 ${r.requirement}，阈值 ${v.threshold_mm.toFixed(1)} ${r.unit}）`,
         };
       }),

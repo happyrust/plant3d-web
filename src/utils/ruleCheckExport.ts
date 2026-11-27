@@ -71,6 +71,7 @@ const CSV_HEADERS = [
   '口径',
   '网格外表面距(mm)',
   '所在BRAN',
+  '复制副本',
 ] as const;
 
 function formatNumber(n?: number): string {
@@ -116,6 +117,7 @@ export function buildRuleCheckCsv(violations: UnifiedRuleViolation[]): string {
       formatAccuracy(v.accuracy),
       formatNumber(v.exactSurfaceMm),
       v.branchRefno ?? '',
+      v.copyNamed ? '是' : '',
     ];
     lines.push(row.map(escapeCsvCell).join(','));
   }

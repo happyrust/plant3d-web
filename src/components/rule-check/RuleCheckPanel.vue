@@ -115,6 +115,8 @@ const BRAN_SCOPE_OPTIONS: { key: RuleCheckBranScope; label: string }[] = [
 
 const ENGINE_OPTIONS: RuleCheckEngineFilter[] = ['all', 'spatial', 'bran', 'rooms', 'attrs'];
 
+const COPY_BADGE_TITLE = '源或目标（或其所在 BRAN / PIPE）叫 E3D 复制名 Copy-of-…：多半是复制后没挪开、与原件重叠的副本';
+
 const showPreciseToggle = computed(
   () => state.activeEngine === 'all' || state.activeEngine === 'spatial',
 );
@@ -821,6 +823,12 @@ async function focusViolation(violation: UnifiedRuleViolation) {
                         :title="accuracyBadge(v)?.title">
                         {{ accuracyBadge(v)?.label }}
                       </span>
+                      <span v-if="v.copyNamed"
+                        data-testid="rule-check-copy-badge"
+                        class="rounded border border-border bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground"
+                        :title="COPY_BADGE_TITLE">
+                        Copy-of 副本
+                      </span>
                       <span v-if="v.roomNum" class="font-mono text-[10px] text-muted-foreground">房 {{ v.roomNum }}</span>
                       <span v-if="v.branchRefno" class="font-mono text-[10px] text-muted-foreground">BRAN {{ v.branchRefno }}</span>
                       <span v-if="v.hasColumn" class="rounded bg-amber-500/15 px-1 text-[10px] text-amber-700">有柱</span>
@@ -865,6 +873,12 @@ async function focusViolation(violation: UnifiedRuleViolation) {
                     :class="accuracyBadge(v)?.cls"
                     :title="accuracyBadge(v)?.title">
                     {{ accuracyBadge(v)?.label }}
+                  </span>
+                  <span v-if="v.copyNamed"
+                    data-testid="rule-check-copy-badge"
+                    class="rounded border border-border bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground"
+                    :title="COPY_BADGE_TITLE">
+                    Copy-of 副本
                   </span>
                   <span class="font-mono font-medium">{{ v.ruleId }}</span>
                   <span class="rounded bg-muted px-1 text-[10px] text-muted-foreground">{{ v.discipline }}</span>

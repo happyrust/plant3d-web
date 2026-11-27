@@ -348,6 +348,7 @@ describe('ruleCheckApi', () => {
               margin_mm: -100,
               highlight_refnos: ['24383/1102', '24383/1131'],
               accuracy: 'aabb',
+              copy_named: true,
             },
           ],
         },
@@ -361,6 +362,8 @@ describe('ruleCheckApi', () => {
     expect(estimated!.accuracy).toBe('aabb');
     expect(estimated!.exactSurfaceMm).toBeUndefined();
     expect(estimated!.detail).toContain('包围盒估算');
+    expect(exact!.copyNamed).toBeUndefined();
+    expect(estimated!.copyNamed).toBe(true);
     expect(spatial.results[0]!.precise).toEqual({
       refinable: true,
       aabbFindings: 500,

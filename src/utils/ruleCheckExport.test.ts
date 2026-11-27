@@ -88,6 +88,7 @@ describe('ruleCheckExport', () => {
         detail: '净距不足',
         accuracy: 'exact',
         exactSurfaceMm: 52.1,
+        copyNamed: true,
       },
       {
         key: 'k4',
@@ -106,9 +107,9 @@ describe('ruleCheckExport', () => {
       },
     ]);
     const lines = csv.slice(1).trim().split('\r\n');
-    expect(lines[0]!.endsWith('详情,口径,网格外表面距(mm),所在BRAN')).toBe(true);
-    expect(lines[1]!.endsWith('净距不足,网格精算,52.1,')).toBe(true);
-    expect(lines[2]!.endsWith('直管段不足,,,24381_145018')).toBe(true);
+    expect(lines[0]!.endsWith('详情,口径,网格外表面距(mm),所在BRAN,复制副本')).toBe(true);
+    expect(lines[1]!.endsWith('净距不足,网格精算,52.1,,是')).toBe(true);
+    expect(lines[2]!.endsWith('直管段不足,,,24381_145018,')).toBe(true);
   });
 
   it('builds structured schema v1 JSON report and formats timestamp', () => {

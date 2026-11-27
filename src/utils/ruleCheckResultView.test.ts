@@ -27,6 +27,7 @@ function mk(partial: Partial<UnifiedRuleViolation>): UnifiedRuleViolation {
     detail: partial.detail ?? '净距不足',
     accuracy: partial.accuracy,
     branchRefno: partial.branchRefno,
+    copyNamed: partial.copyNamed,
   };
 }
 
@@ -76,5 +77,11 @@ describe('ruleCheckResultView', () => {
     expect(filterRuleViolations(rows, { severity: 'all', keyword: '', accuracy: 'exact' }).map((v) => v.key)).toEqual(['e']);
     expect(filterRuleViolations(rows, { severity: 'all', keyword: '', accuracy: 'aabb' }).map((v) => v.key)).toEqual(['a']);
     expect(filterRuleViolations(rows, { severity: 'all', keyword: '145018' }).map((v) => v.key)).toEqual(['b']);
+  });
+
+  it('finds rows tagged as E3D copies by the keyword 副本 or copy', () => {
+    const rows: UnifiedRuleViolation[] = [mk({ key: 'c', copyNamed: true }), mk({ key: 'o' })];
+    expect(filterRuleViolations(rows, { severity: 'all', keyword: '副本' }).map((v) => v.key)).toEqual(['c']);
+    expect(filterRuleViolations(rows, { severity: 'all', keyword: 'Copy' }).map((v) => v.key)).toEqual(['c']);
   });
 });
