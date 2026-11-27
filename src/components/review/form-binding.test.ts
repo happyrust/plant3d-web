@@ -259,7 +259,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     app.unmount();
     host.remove();
-  }, 10000);
+  });
 
   it('allows adding components in external workflow mode', async () => {
     sessionStorage.setItem('plant3d_workflow_mode', 'external');
@@ -348,7 +348,7 @@ describe('InitiateReviewPanel form binding', () => {
         writable: true,
       });
     }
-  }, 10000);
+  });
 
   it('shows success feedback, closes the panel, and emits created/close after submit succeeds', async () => {
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
@@ -402,7 +402,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     app.unmount();
     host.remove();
-  }, 10000);
+  });
 
   it('keeps the panel rendered until the dock wrapper handles close events', async () => {
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
