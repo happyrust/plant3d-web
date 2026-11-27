@@ -188,15 +188,24 @@ export function layoutGridAnnotations(
 
 /**
  * 绘制列表或视线变化时整批替换 `grid` 来源。清空绘制列表会把该来源的记录全部撤下。
+ *
+ * 只在记录变了的时候发布（#197）。`setView` 在相机变化的每一帧都会被调到，而注册表每发布一次，
+ * 视口就把全部外部记录重新规范化、再做一次全量重排——相机运动的重排节流管不到这种失效。
+ * 所以没有网格可画、此前也没发布过的时候什么都不做；有网格时算出来的记录与上次发布的相同也不重发。
+ *
+ * 还没管住的一种：GRIDCY 的半径引线跟着视线连续变化，视线每变一帧记录都不同，照样每帧重发。
+ * 宿主开始喂 `setDrawList` 之前，要先把这个来源并进相机重排的节流。
  */
 export class GridAnnotationSource {
-  private drawList: readonly GridDrawPrimitive[] = [];
+  private supported: ReturnType<typeof collectSupportedGrids> = [];
   private view: GridAnnotationView | null = null;
+  /** 上次发布出去的记录的序列化结果；空串表示该来源此刻没有记录。 */
+  private published = '';
 
   constructor(private readonly publish: (records: readonly ExternalDimensionRecord[]) => void) {}
 
   setDrawList(drawList: readonly GridDrawPrimitive[]): void {
-    this.drawList = drawList;
+    this.supported = collectSupportedGrids(drawList);
     this.rebuild();
   }
 
@@ -206,15 +215,17 @@ export class GridAnnotationSource {
   }
 
   clear(): void {
-    this.drawList = [];
+    this.supported = [];
     this.rebuild();
   }
 
   private rebuild(): void {
-    if (!this.view) {
-      this.publish([]);
-      return;
-    }
-    this.publish(layoutGridAnnotations(collectSupportedGrids(this.drawList), this.view));
+    const records = this.view && this.supported.length > 0
+      ? layoutGridAnnotations(this.supported, this.view)
+      : [];
+    const next = records.length > 0 ? JSON.stringify(records) : '';
+    if (next === this.published) return;
+    this.publish(records);
+    this.published = next;
   }
 }

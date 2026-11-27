@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ExternalDimensionRegistry } from '../services/externalDimensionRegistry';
 
@@ -112,5 +112,43 @@ describe('grid annotations (#78)', () => {
 
     source.clear();
     expect(registry.snapshot.records.map(record => record.id)).toEqual(['measurement:1']);
+  });
+
+  it('publishes nothing while there is no grid to draw, however often the view changes (#197)', () => {
+    const publish = vi.fn();
+    const source = new GridAnnotationSource(publish);
+
+    source.setView({ forward: [0, 0, -1] });
+    source.setView({ forward: [0.3, 0, -1] });
+    source.setDrawList([{ id: 'nope', noun: 'EQUI' }]);
+    source.setView(null);
+    source.clear();
+
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('republishes only when the records change (#197)', () => {
+    const publish = vi.fn();
+    const source = new GridAnnotationSource(publish);
+
+    source.setDrawList([plane]);
+    expect(publish).not.toHaveBeenCalled();
+
+    source.setView({ forward: [0, 0, -1] });
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publish.mock.calls[0]?.[0]).toHaveLength(1);
+
+    // 同一条视线、同一份绘制列表再来一遍，记录没变，不重发。
+    source.setView({ forward: [0, 0, -1] });
+    source.setView({ forward: [0, 0, -2] });
+    source.setDrawList([plane]);
+    expect(publish).toHaveBeenCalledTimes(1);
+
+    // 转到侧看：记录没了，撤下一次；继续侧着转不再发。
+    source.setView({ forward: [0, 1, 0] });
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(publish.mock.calls[1]?.[0]).toEqual([]);
+    source.setView({ forward: [1, 1, 0] });
+    expect(publish).toHaveBeenCalledTimes(2);
   });
 });

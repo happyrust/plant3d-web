@@ -524,4 +524,64 @@ describe('createDimensionSystem', () => {
     // kind instead of inferring a full-layout frame from `layoutMs > 0`.
     expect(breakdown.kind).toBe('layout');
   });
+
+  it('leaves the external registry alone and keeps the layout throttle when only the camera moves (#197)', async () => {
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.set(0, 0, 10);
+    camera.updateMatrixWorld(true);
+    const onFrame = vi.fn();
+    const harness = createHarness({
+      viewer: createViewerAdapter({ getCamera: () => camera }),
+      onFrame,
+    });
+    const system = await createdSystem(harness);
+    const record: ExternalDimensionRecord = {
+      id: 'mbd-1',
+      source: 'mbd',
+      sourceLabel: 'MBD',
+      role: 'external',
+      layout: {
+        id: 'mbd-1',
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [{ from: [-1, 0, 0], to: [1, 0, 0], part: 'dimension' }],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+      },
+    };
+
+    // 钉住时钟：下面的相机变化全部落在重排节流的间隔之内，放不放行全量布局不随机器快慢变。
+    let clock = 1_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      system.replaceExternalSource('mbd', [record]);
+      system.notifyViewerChanged();
+      harness.flush();
+      expect(system.viewport.getLayouts().map(layout => layout.dimensionId)).toEqual(['mbd-1']);
+
+      const published = vi.fn();
+      const unsubscribe = system.externalRegistry.subscribe(published);
+      // subscribe() 会先把当前快照重放一次，不算数。
+      published.mockClear();
+      onFrame.mockClear();
+
+      for (let frame = 1; frame <= 5; frame += 1) {
+        clock += 1;
+        camera.position.set(0.02 * frame, 0, 10);
+        camera.updateMatrixWorld(true);
+        system.notifyViewerChanged();
+        harness.flush();
+      }
+      unsubscribe();
+
+      expect(published).not.toHaveBeenCalled();
+      expect(
+        onFrame.mock.calls.filter(([, breakdown]) => breakdown.kind === 'layout'),
+      ).toHaveLength(0);
+    } finally {
+      nowSpy.mockRestore();
+      system.dispose();
+    }
+  });
 });
