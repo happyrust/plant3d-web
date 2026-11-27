@@ -296,6 +296,13 @@ const initError = ref<string | null>(null);
 let rafId: number | null = null;
 let needsRender = true;
 let isRendering = false;
+/**
+ * 相机控制器自上一个出画帧以来报过 `change`（#203）。滚轮缩放是 OrbitControls 在事件回调里就应用完的，
+ * `renderFrame` 在本帧 `controls.update()` 前后量不出差，尺寸层要靠这个标记才知道相机动过。
+ * 不能改成「每个出画帧都拿相机矩阵与上一次逐位比」：`controls.update()` 每调一次位置都有浮点抖动，
+ * 逐位比永远不等，同步→重绘→再同步会自己转起来，静止时也停不下。
+ */
+let controlsChangedSinceFrame = false;
 
 watch(
   initError,
@@ -3758,8 +3765,11 @@ function renderFrame() {
     viewCullControllerRef.value?.update(dtxViewer.camera, viewportCssHeight());
     if (cameraChanged) {
       tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+    }
+    if (cameraChanged || controlsChangedSinceFrame) {
       dimensionSystem?.notifyViewerChanged();
     }
+    controlsChangedSinceFrame = false;
 
     syncGlobalEdgeOverlay();
 
@@ -5248,6 +5258,7 @@ onMounted(async () => {
   }
 
   const onControlsChange = () => {
+    controlsChangedSinceFrame = true;
     if (isRendering) {
       needsRender = true;
       return;
