@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, shallowRef } from 'vue';
 
 import type { GenModelV1RequestOptions } from '@/api/genModelV1Api';
 
@@ -28,6 +28,28 @@ export type RuleCheckEngineFilter = 'all' | RuleCheckEngine;
 
 /** BRAN 拓扑规则的运行范围：单根 BRAN，或全项目逐根。 */
 export type RuleCheckBranScope = 'single' | 'all';
+
+export type RuleCheckEngineRunStatus = 'running' | 'done' | 'failed' | 'cancelled';
+
+/** 一次运行里单个引擎的状态；用时是前端计的墙钟时间。 */
+export interface RuleCheckEngineRun {
+  engine: RuleCheckEngine;
+  label: string;
+  status: RuleCheckEngineRunStatus;
+  startedAt: number | null;
+  elapsedMs: number | null;
+  rulesRun: number;
+  violationTotal: number;
+  error: string | null;
+}
+
+export const RULE_CHECK_ENGINE_ORDER: RuleCheckEngine[] = ['spatial', 'bran', 'rooms', 'attrs'];
+
+interface EngineRunPlan {
+  engine: RuleCheckEngine;
+  label: string;
+  run: (options: GenModelV1RequestOptions) => Promise<UnifiedRuleCheckBatchResult>;
+}
 
 export const RULE_CHECK_DISCIPLINES = ['水工', '布置', '仪控', '通风', '电气'] as const;
 
@@ -62,19 +84,36 @@ function createInitialState() {
     runWarnings: [] as string[],
     batches: [] as UnifiedRuleCheckBatchResult[],
     results: [] as UnifiedRuleResult[],
+    engineRuns: [] as RuleCheckEngineRun[],
+    /** 各引擎后端耗时之和。 */
     totalElapsedMs: 0,
+    runStartedAt: null as number | null,
+    /** 从点运行到最后一个引擎结束的墙钟时间。 */
+    runElapsedMs: 0,
     lastRunAt: null as number | null,
     activeViolationKey: null as string | null,
   };
 }
 
 const state = reactive(createInitialState());
-const activeController = ref<AbortController | null>(null);
+const activeController = shallowRef<AbortController | null>(null);
+let lastPlans: EngineRunPlan[] = [];
+let planWarnings: string[] = [];
 
 export function resetRuleCheckStore() {
   activeController.value?.abort();
   activeController.value = null;
+  lastPlans = [];
+  planWarnings = [];
   Object.assign(state, createInitialState());
+}
+
+function isAbortError(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === 'AbortError';
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 export function parseScopeRefnoList(raw: string): string[] {
@@ -229,16 +268,152 @@ export function useRuleCheck() {
   function clearResults() {
     state.batches = [];
     state.results = [];
+    state.engineRuns = [];
     state.runWarnings = [];
     state.runError = null;
     state.totalElapsedMs = 0;
+    state.runElapsedMs = 0;
+    state.runStartedAt = null;
     state.activeViolationKey = null;
+    planWarnings = [];
   }
 
   function cancelRun() {
     activeController.value?.abort();
     activeController.value = null;
+    const now = Date.now();
+    for (const run of state.engineRuns) {
+      if (run.status !== 'running') continue;
+      run.status = 'cancelled';
+      run.elapsedMs = now - (run.startedAt ?? now);
+    }
+    if (state.runStartedAt !== null) state.runElapsedMs = now - state.runStartedAt;
     state.running = false;
+  }
+
+  /** 按当前筛选与勾选拆出要跑的引擎；显式只跑 BRAN 却没填 refno 时抛错。 */
+  function buildRunPlans(): { plans: EngineRunPlan[]; warnings: string[] } {
+    const selectedSet = new Set(state.selectedRuleIds);
+    const targetRows = selectedSet.size > 0
+      ? state.catalog.filter((r) => selectedSet.has(r.id))
+      : filteredCatalog.value;
+
+    const byEngine: Record<RuleCheckEngine, string[]> = {
+      spatial: [],
+      bran: [],
+      rooms: [],
+      attrs: [],
+    };
+    for (const row of targetRows) {
+      byEngine[row.engine].push(row.id);
+    }
+
+    const explicitEngines: RuleCheckEngine[] = state.activeEngine === 'all'
+      ? RULE_CHECK_ENGINE_ORDER
+      : [state.activeEngine];
+
+    const warnings: string[] = [];
+    const plans: EngineRunPlan[] = [];
+    const scopeRefnos = parseScopeRefnoList(state.attrScopeText);
+    const precise = state.precise;
+    const runAllForEngine = state.catalog.length === 0
+      || (selectedSet.size === 0 && state.activeDiscipline === 'all' && !state.searchKeyword.trim());
+
+    for (const eng of explicitEngines) {
+      const ids = byEngine[eng];
+      if (!runAllForEngine && ids.length === 0) continue;
+      const passIds = runAllForEngine ? undefined : ids;
+      const label = RULE_CHECK_ENGINE_LABELS[eng];
+
+      if (eng === 'spatial') {
+        plans.push({
+          engine: eng,
+          label,
+          run: (opts) => runSpatialRuleCheck(passIds, opts, { precise }).then(normalizeSpatialResponse),
+        });
+      } else if (eng === 'bran') {
+        if (state.branScope === 'all') {
+          plans.push({
+            engine: eng,
+            label: 'BRAN 全项目',
+            run: (opts) => runBranRuleCheckAll(passIds, opts).then(normalizeBranRunAllResponse),
+          });
+          continue;
+        }
+        const bran = state.branRefno.trim();
+        if (!bran) {
+          if (state.activeEngine === 'bran') {
+            throw new Error('请先输入或从三维选择一条 BRAN 的 refno（如 24381_145018）再运行 BRAN 拓扑校验');
+          }
+          warnings.push('未填 BRAN refno，已跳过 BRAN 拓扑规则（切至「BRAN 拓扑」填入 refno 可单独运行）');
+          continue;
+        }
+        plans.push({
+          engine: eng,
+          label,
+          run: (opts) => runBranRuleCheck(bran, passIds, opts).then(normalizeBranResponse),
+        });
+      } else if (eng === 'rooms') {
+        plans.push({
+          engine: eng,
+          label,
+          run: (opts) => runRoomRuleCheck(passIds, opts).then(normalizeRoomResponse),
+        });
+      } else if (eng === 'attrs') {
+        const scope = scopeRefnos.length > 0 ? scopeRefnos : undefined;
+        plans.push({
+          engine: eng,
+          label,
+          run: (opts) => runAttrRuleCheck(passIds, scope, opts).then(normalizeAttrResponse),
+        });
+      }
+    }
+    return { plans, warnings };
+  }
+
+  function mergeBatch(engine: RuleCheckEngine, batch: UnifiedRuleCheckBatchResult) {
+    const batches = [...state.batches.filter((b) => b.engine !== engine), batch];
+    batches.sort((a, b) => RULE_CHECK_ENGINE_ORDER.indexOf(a.engine) - RULE_CHECK_ENGINE_ORDER.indexOf(b.engine));
+    state.batches = batches;
+    state.results = batches.flatMap((b) => b.results);
+    state.runWarnings = [...planWarnings, ...batches.flatMap((b) => b.warnings)];
+    state.totalElapsedMs = batches.reduce((acc, b) => acc + (b.elapsedMs ?? 0), 0);
+  }
+
+  /** 跑一个引擎并把结果并入当前结果，返回是否成功。 */
+  async function executePlan(
+    plan: EngineRunPlan,
+    options: GenModelV1RequestOptions,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const run = state.engineRuns.find((r) => r.engine === plan.engine);
+    if (!run) return false;
+    run.status = 'running';
+    run.startedAt = Date.now();
+    run.elapsedMs = null;
+    run.error = null;
+    try {
+      const batch = await plan.run(options);
+      if (signal.aborted) {
+        run.status = 'cancelled';
+        return false;
+      }
+      mergeBatch(plan.engine, batch);
+      run.status = 'done';
+      run.rulesRun = batch.rulesRun;
+      run.violationTotal = batch.results.reduce((acc, r) => acc + r.violationTotal, 0);
+      return true;
+    } catch (err) {
+      if (signal.aborted || isAbortError(err)) {
+        run.status = 'cancelled';
+      } else {
+        run.status = 'failed';
+        run.error = errorMessage(err);
+      }
+      return false;
+    } finally {
+      run.elapsedMs = Date.now() - (run.startedAt ?? Date.now());
+    }
   }
 
   async function runChecks(options?: GenModelV1RequestOptions): Promise<void> {
@@ -252,7 +427,13 @@ export function useRuleCheck() {
     state.runWarnings = [];
     state.batches = [];
     state.results = [];
+    state.engineRuns = [];
+    state.totalElapsedMs = 0;
+    state.runElapsedMs = 0;
+    state.runStartedAt = Date.now();
     state.activeViolationKey = null;
+    planWarnings = [];
+    lastPlans = [];
 
     const reqOptions: GenModelV1RequestOptions = {
       ...options,
@@ -260,98 +441,65 @@ export function useRuleCheck() {
     };
 
     try {
-      const selectedSet = new Set(state.selectedRuleIds);
-      const targetRows = selectedSet.size > 0
-        ? state.catalog.filter((r) => selectedSet.has(r.id))
-        : filteredCatalog.value;
+      const { plans, warnings } = buildRunPlans();
+      planWarnings = warnings;
+      lastPlans = plans;
+      state.runWarnings = [...warnings];
+      state.engineRuns = plans.map((plan) => ({
+        engine: plan.engine,
+        label: plan.label,
+        status: 'running' as const,
+        startedAt: state.runStartedAt,
+        elapsedMs: null,
+        rulesRun: 0,
+        violationTotal: 0,
+        error: null,
+      }));
 
-      const byEngine: Record<RuleCheckEngine, string[]> = {
-        spatial: [],
-        bran: [],
-        rooms: [],
-        attrs: [],
-      };
-      for (const row of targetRows) {
-        byEngine[row.engine].push(row.id);
+      const outcomes = await Promise.all(plans.map((plan) => executePlan(plan, reqOptions, controller.signal)));
+
+      if (!controller.signal.aborted && outcomes.length > 0 && outcomes.every((ok) => !ok)) {
+        const failed = state.engineRuns.find((r) => r.status === 'failed');
+        if (failed?.error) state.runError = failed.error;
       }
-
-      const explicitEngines: RuleCheckEngine[] = state.activeEngine === 'all'
-        ? (['spatial', 'bran', 'rooms', 'attrs'] as RuleCheckEngine[])
-        : [state.activeEngine];
-
-      const warnings: string[] = [];
-      const tasks: Promise<UnifiedRuleCheckBatchResult>[] = [];
-      const scopeRefnos = parseScopeRefnoList(state.attrScopeText);
-
-      for (const eng of explicitEngines) {
-        const ids = byEngine[eng];
-        const runAllForEngine = state.catalog.length === 0
-          || (selectedSet.size === 0 && state.activeDiscipline === 'all' && !state.searchKeyword.trim());
-        if (!runAllForEngine && ids.length === 0) continue;
-        const passIds = runAllForEngine ? undefined : ids;
-
-        if (eng === 'spatial') {
-          tasks.push(
-            runSpatialRuleCheck(passIds, reqOptions, { precise: state.precise }).then(normalizeSpatialResponse),
-          );
-        } else if (eng === 'bran') {
-          if (state.branScope === 'all') {
-            tasks.push(runBranRuleCheckAll(passIds, reqOptions).then(normalizeBranRunAllResponse));
-            continue;
-          }
-          const bran = state.branRefno.trim();
-          if (!bran) {
-            if (state.activeEngine === 'bran') {
-              throw new Error('请先输入或从三维选择一条 BRAN 的 refno（如 24381_145018）再运行 BRAN 拓扑校验');
-            }
-            warnings.push('未填 BRAN refno，已跳过 BRAN 拓扑规则（切至「BRAN 拓扑」填入 refno 可单独运行）');
-            continue;
-          }
-          tasks.push(runBranRuleCheck(bran, passIds, reqOptions).then(normalizeBranResponse));
-        } else if (eng === 'rooms') {
-          tasks.push(runRoomRuleCheck(passIds, reqOptions).then(normalizeRoomResponse));
-        } else if (eng === 'attrs') {
-          tasks.push(
-            runAttrRuleCheck(
-              passIds,
-              scopeRefnos.length > 0 ? scopeRefnos : undefined,
-              reqOptions,
-            ).then(normalizeAttrResponse),
-          );
-        }
-      }
-
-      const settled = await Promise.allSettled(tasks);
-      const batches: UnifiedRuleCheckBatchResult[] = [];
-      for (const item of settled) {
-        if (item.status === 'fulfilled') {
-          batches.push(item.value);
-          warnings.push(...item.value.warnings);
-        } else {
-          const msg = item.reason instanceof Error ? item.reason.message : String(item.reason);
-          warnings.push(`部分引擎执行失败：${msg}`);
-        }
-      }
-
-      if (batches.length === 0 && settled.length > 0 && settled.every((s) => s.status === 'rejected')) {
-        const firstErr = (settled[0] as PromiseRejectedResult).reason;
-        throw firstErr instanceof Error ? firstErr : new Error(String(firstErr));
-      }
-
-      state.batches = batches;
-      state.results = batches.flatMap((b) => b.results);
-      state.runWarnings = warnings;
-      state.totalElapsedMs = batches.reduce((acc, b) => acc + (b.elapsedMs ?? 0), 0);
       state.lastRunAt = Date.now();
     } catch (err) {
-      if ((err as { name?: string })?.name !== 'AbortError') {
-        state.runError = err instanceof Error ? err.message : String(err);
+      if (!isAbortError(err)) {
+        state.runError = errorMessage(err);
       }
     } finally {
       if (activeController.value === controller) {
         activeController.value = null;
+        state.running = false;
+        state.runElapsedMs = Date.now() - (state.runStartedAt ?? Date.now());
       }
-      state.running = false;
+    }
+  }
+
+  /** 单独重跑上一轮里的某个引擎，结果替换该引擎原有的结果。 */
+  async function retryEngine(engine: RuleCheckEngine, options?: GenModelV1RequestOptions): Promise<void> {
+    const plan = lastPlans.find((p) => p.engine === engine);
+    const run = state.engineRuns.find((r) => r.engine === engine);
+    if (!plan || !run || run.status === 'running') return;
+
+    const current = activeController.value;
+    if (state.running && current) {
+      await executePlan(plan, { ...options, signal: options?.signal ?? current.signal }, current.signal);
+      return;
+    }
+
+    const controller = new AbortController();
+    activeController.value = controller;
+    state.running = true;
+    state.runError = null;
+    try {
+      await executePlan(plan, { ...options, signal: options?.signal ?? controller.signal }, controller.signal);
+      state.lastRunAt = Date.now();
+    } finally {
+      if (activeController.value === controller) {
+        activeController.value = null;
+        state.running = false;
+      }
     }
   }
 
@@ -371,5 +519,6 @@ export function useRuleCheck() {
     clearResults,
     cancelRun,
     runChecks,
+    retryEngine,
   };
 }

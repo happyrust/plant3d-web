@@ -2,9 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   countViolationsByAccuracy,
+  countViolationsByDiscipline,
   countViolationsByResultSeverity,
   filterRuleViolations,
+  formatRuleCheckClock,
+  formatRuleCheckDuration,
   groupViolationsByRule,
+  ruleViolationKey,
+  violationGapLabel,
+  violationGaugeRatio,
 } from './ruleCheckResultView';
 
 import type { UnifiedRuleViolation } from '@/api/ruleCheckApi';
@@ -83,5 +89,34 @@ describe('ruleCheckResultView', () => {
     const rows: UnifiedRuleViolation[] = [mk({ key: 'c', copyNamed: true }), mk({ key: 'o' })];
     expect(filterRuleViolations(rows, { severity: 'all', keyword: '副本' }).map((v) => v.key)).toEqual(['c']);
     expect(filterRuleViolations(rows, { severity: 'all', keyword: 'Copy' }).map((v) => v.key)).toEqual(['c']);
+  });
+
+  it('narrows rows by discipline, by one rule, and to E3D copies', () => {
+    expect(countViolationsByDiscipline(sample)).toEqual({ 布置: 2, 仪控: 1, 电气: 2 });
+    expect(filterRuleViolations(sample, { severity: 'all', keyword: '', disciplines: ['电气'] }).map((v) => v.key)).toEqual(['4', '5']);
+    expect(
+      filterRuleViolations(sample, { severity: 'all', keyword: '', ruleKey: ruleViolationKey(sample[2]!) }).map((v) => v.key),
+    ).toEqual(['3']);
+    const rows: UnifiedRuleViolation[] = [mk({ key: 'c', copyNamed: true }), mk({ key: 'o' })];
+    expect(filterRuleViolations(rows, { severity: 'all', keyword: '', copyOnly: true }).map((v) => v.key)).toEqual(['c']);
+  });
+
+  it('formats durations and the running clock for people', () => {
+    expect(formatRuleCheckDuration(850)).toBe('850 ms');
+    expect(formatRuleCheckDuration(52010)).toBe('52.0 s');
+    expect(formatRuleCheckDuration(161000)).toBe('2 分 41 秒');
+    expect(formatRuleCheckDuration(120000)).toBe('2 分');
+    expect(formatRuleCheckDuration(3_720_000)).toBe('1 小时 2 分');
+    expect(formatRuleCheckClock(72_400)).toBe('01:12');
+  });
+
+  it('says how far a measurement misses its threshold', () => {
+    const below: UnifiedRuleViolation = { ...mk({}), measuredMm: 52.1, thresholdMm: 100, marginMm: -47.9 };
+    const above: UnifiedRuleViolation = { ...mk({}), measuredMm: 1212, thresholdMm: 1200, marginMm: 12 };
+    expect(violationGapLabel(below)).toBe('差 47.9');
+    expect(violationGapLabel(above)).toBe('超 12.0');
+    expect(violationGapLabel(mk({}))).toBeNull();
+    expect(violationGaugeRatio(below)).toBeCloseTo(0.521);
+    expect(violationGaugeRatio(above)).toBeNull();
   });
 });

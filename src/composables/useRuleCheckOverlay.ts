@@ -16,7 +16,8 @@ export type RuleCheckOverlayCategory =
   | 'semi_auto'
   | 'reminder';
 
-export type RuleCheckOverlayMode = 'firezone' | 'all';
+/** `isolate`：只给传入的那几条违规着色（面板里的「隔离显示」），其余构件透视。 */
+export type RuleCheckOverlayMode = 'firezone' | 'all' | 'isolate';
 
 export interface RuleCheckOverlayPaletteItem {
   category: RuleCheckOverlayCategory;

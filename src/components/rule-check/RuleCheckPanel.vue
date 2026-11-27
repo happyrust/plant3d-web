@@ -1,34 +1,46 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import {
+  ArrowRight,
   CheckSquare,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
+  CircleCheck,
+  CircleStop,
+  CircleX,
   Crosshair,
   Download,
   FileJson,
-  Flame,
+  GitBranch,
   Layers,
   List,
-  Loader2,
-  Palette,
+  ListFilter,
+  LoaderCircle,
   Play,
   RefreshCw,
   RotateCcw,
   Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
   Square,
   X,
 } from 'lucide-vue-next';
 
-import type { UnifiedPreciseStats, UnifiedRuleViolation } from '@/api/ruleCheckApi';
+import RuleCheckViolationRow from './RuleCheckViolationRow.vue';
+
+import type { RuleCheckEngine, UnifiedPreciseStats, UnifiedRuleViolation } from '@/api/ruleCheckApi';
 
 import {
+  parseScopeRefnoList,
   RULE_CHECK_DISCIPLINES,
   RULE_CHECK_ENGINE_LABELS,
   useRuleCheck,
   type RuleCheckBranScope,
   type RuleCheckEngineFilter,
+  type RuleCheckEngineRun,
 } from '@/composables/useRuleCheck';
 import {
   RULE_CHECK_OVERLAY_PALETTE,
@@ -47,9 +59,13 @@ import {
 } from '@/utils/ruleCheckExport';
 import {
   countViolationsByAccuracy,
+  countViolationsByDiscipline,
   countViolationsByResultSeverity,
   filterRuleViolations,
+  formatRuleCheckClock,
+  formatRuleCheckDuration,
   groupViolationsByRule,
+  ruleViolationKey,
   type RuleCheckResultAccuracyFilter,
   type RuleCheckResultSeverityFilter,
 } from '@/utils/ruleCheckResultView';
@@ -71,6 +87,7 @@ const {
   clearResults,
   cancelRun,
   runChecks,
+  retryEngine,
 } = ruleCheck;
 
 const selectionStore = useSelectionStore();
@@ -86,24 +103,25 @@ const OVERLAY_LEGEND_CATEGORIES: RuleCheckOverlayCategory[] = [
   'reminder',
 ];
 
-const activeTab = ref<'catalog' | 'results'>('catalog');
-const onlyViolationsFilter = ref(true);
-const resultSeverityFilter = ref<RuleCheckResultSeverityFilter>('all');
-const resultAccuracyFilter = ref<RuleCheckResultAccuracyFilter>('all');
-const resultKeyword = ref('');
-const groupByRule = ref(false);
-const collapsedGroups = ref<string[]>([]);
+type SeverityCellKey = Exclude<RuleCheckResultSeverityFilter, 'all'>;
 
-const RESULT_SEVERITY_OPTIONS: { key: RuleCheckResultSeverityFilter; label: string }[] = [
-  { key: 'all', label: '全部' },
-  { key: 'violation', label: '违规' },
-  { key: 'reminder', label: '提醒' },
-  { key: 'semi_auto', label: '半自动' },
-  { key: 'firezone', label: '火灾分区' },
+const SEVERITY_CELLS: { key: SeverityCellKey; label: string; dot: string }[] = [
+  { key: 'violation', label: '违规', dot: 'bg-destructive' },
+  { key: 'reminder', label: '提醒', dot: 'bg-sky-500' },
+  { key: 'semi_auto', label: '半自动', dot: 'bg-violet-500' },
+  { key: 'firezone', label: '火灾分区', dot: 'bg-amber-500' },
 ];
 
+const SEVERITY_LABELS: Record<RuleCheckResultSeverityFilter, string> = {
+  all: '全部',
+  violation: '违规',
+  reminder: '提醒',
+  semi_auto: '半自动',
+  firezone: '火灾分区',
+};
+
 const ACCURACY_OPTIONS: { key: RuleCheckResultAccuracyFilter; label: string }[] = [
-  { key: 'all', label: '全部口径' },
+  { key: 'all', label: '全部' },
   { key: 'exact', label: '精算' },
   { key: 'aabb', label: '估算' },
 ];
@@ -115,25 +133,43 @@ const BRAN_SCOPE_OPTIONS: { key: RuleCheckBranScope; label: string }[] = [
 
 const ENGINE_OPTIONS: RuleCheckEngineFilter[] = ['all', 'spatial', 'bran', 'rooms', 'attrs'];
 
-const COPY_BADGE_TITLE = '源或目标（或其所在 BRAN / PIPE）叫 E3D 复制名 Copy-of-…：多半是复制后没挪开、与原件重叠的副本';
+const ENGINE_SHORT_LABELS: Record<RuleCheckEngine, string> = {
+  spatial: '空间',
+  bran: 'BRAN',
+  rooms: '房间',
+  attrs: '属性',
+};
+
+type OverlaySegmentKey = 'off' | Exclude<RuleCheckOverlayMode, 'isolate'>;
+
+const OVERLAY_SEGMENTS: { key: OverlaySegmentKey; label: string; testid: string }[] = [
+  { key: 'off', label: '关', testid: 'rule-check-clear-overlay-btn' },
+  { key: 'firezone', label: '火灾', testid: 'rule-check-firezone-overlay-btn' },
+  { key: 'all', label: '分级', testid: 'rule-check-all-overlay-btn' },
+];
+
+const activeTab = ref<'catalog' | 'results'>('catalog');
+const settingsOpen = ref(state.engineRuns.length === 0 && state.results.length === 0);
+const filterTrayOpen = ref(false);
+const onlyViolationsFilter = ref(true);
+const resultSeverityFilter = ref<RuleCheckResultSeverityFilter>('all');
+const resultAccuracyFilter = ref<RuleCheckResultAccuracyFilter>('all');
+const resultDisciplines = ref<string[]>([]);
+const onlyRuleKey = ref<string | null>(null);
+const copyOnly = ref(false);
+const resultKeyword = ref('');
+const groupByRule = ref(false);
+const collapsedGroups = ref<string[]>([]);
+const expandedKey = ref<string | null>(null);
+const nowMs = ref(Date.now());
+
+const runLabel = computed(() =>
+  state.selectedRuleIds.length > 0 ? `运行已选 (${state.selectedRuleIds.length})` : '执行校验',
+);
 
 const showPreciseToggle = computed(
   () => state.activeEngine === 'all' || state.activeEngine === 'spatial',
 );
-
-const preciseSummary = computed(() => summaryStats.value.precise);
-
-const branAllSummary = computed(() => summaryStats.value.branAll);
-
-const resultAccuracyCounts = computed(() => countViolationsByAccuracy(allViolations.value));
-
-const preciseStatsByRule = computed(() => {
-  const map = new Map<string, UnifiedPreciseStats>();
-  for (const r of state.results) {
-    if (r.precise?.refinable) map.set(`${r.engine}:${r.id}`, r.precise);
-  }
-  return map;
-});
 
 const showBranInput = computed(
   () => state.activeEngine === 'bran' || state.activeEngine === 'all',
@@ -143,29 +179,146 @@ const showScopeInput = computed(
   () => state.activeEngine === 'attrs' || state.activeEngine === 'all',
 );
 
+const settingsSummary = computed(() => {
+  const parts = [
+    state.activeEngine === 'all' ? '全部引擎' : RULE_CHECK_ENGINE_LABELS[state.activeEngine],
+    state.activeDiscipline === 'all' ? '全专业' : state.activeDiscipline,
+  ];
+  if (state.selectedRuleIds.length > 0) parts.push(`已选 ${state.selectedRuleIds.length} 条`);
+  if (showPreciseToggle.value && state.precise) parts.push('精确复核');
+  if (showBranInput.value) {
+    const bran = state.branRefno.trim();
+    parts.push(state.branScope === 'all' ? 'BRAN 全项目' : bran ? `BRAN ${bran}` : 'BRAN 未填');
+  }
+  const scopeCount = showScopeInput.value ? parseScopeRefnoList(state.attrScopeText).length : 0;
+  if (scopeCount > 0) parts.push(`选集 ${scopeCount}`);
+  return parts.join(' · ');
+});
+
+const preciseSummary = computed(() => summaryStats.value.precise);
+
+const branAllSummary = computed(() => summaryStats.value.branAll);
+
+const resultAccuracyCounts = computed(() => countViolationsByAccuracy(allViolations.value));
+
+const resultDisciplineCounts = computed(() => countViolationsByDiscipline(allViolations.value));
+
+const hasCopyNamed = computed(() => allViolations.value.some((v) => v.copyNamed === true));
+
+const preciseStatsByRule = computed(() => {
+  const map = new Map<string, UnifiedPreciseStats>();
+  for (const r of state.results) {
+    if (r.precise?.refinable) map.set(`${r.engine}:${r.id}`, r.precise);
+  }
+  return map;
+});
+
 const resultSeverityCounts = computed(() => countViolationsByResultSeverity(allViolations.value));
+
+const severityBarSegments = computed(() => {
+  const c = resultSeverityCounts.value;
+  return [
+    { key: 'violation', n: c.violation, cls: 'bg-destructive' },
+    { key: 'reminder', n: c.reminder, cls: 'bg-sky-500' },
+    { key: 'semi_auto', n: c.semi_auto, cls: 'bg-violet-500' },
+  ].filter((s) => s.n > 0);
+});
 
 const visibleViolations = computed(() =>
   filterRuleViolations(allViolations.value, {
     severity: resultSeverityFilter.value,
     keyword: resultKeyword.value,
     accuracy: resultAccuracyFilter.value,
+    disciplines: resultDisciplines.value,
+    ruleKey: onlyRuleKey.value,
+    copyOnly: copyOnly.value,
   }),
 );
 
 const groupedViolations = computed(() => groupViolationsByRule(visibleViolations.value));
 
+const trayFilterCount = computed(
+  () => (resultAccuracyFilter.value !== 'all' ? 1 : 0) + resultDisciplines.value.length + (copyOnly.value ? 1 : 0),
+);
+
 const isResultFiltered = computed(
   () => resultSeverityFilter.value !== 'all'
     || resultAccuracyFilter.value !== 'all'
+    || resultDisciplines.value.length > 0
+    || onlyRuleKey.value !== null
+    || copyOnly.value
     || resultKeyword.value.trim().length > 0,
 );
 
-function toggleGroupCollapsed(groupKey: string) {
-  const idx = collapsedGroups.value.indexOf(groupKey);
-  if (idx >= 0) collapsedGroups.value.splice(idx, 1);
-  else collapsedGroups.value.push(groupKey);
-}
+const activeFilterChips = computed(() => {
+  const chips: { key: string; label: string; clear: () => void }[] = [];
+  if (resultSeverityFilter.value !== 'all') {
+    chips.push({
+      key: 'severity',
+      label: `严重度：${SEVERITY_LABELS[resultSeverityFilter.value]}`,
+      clear: () => { resultSeverityFilter.value = 'all'; },
+    });
+  }
+  if (resultAccuracyFilter.value !== 'all') {
+    chips.push({
+      key: 'accuracy',
+      label: `口径：${resultAccuracyFilter.value === 'exact' ? '精算' : '估算'}`,
+      clear: () => { resultAccuracyFilter.value = 'all'; },
+    });
+  }
+  for (const disc of resultDisciplines.value) {
+    chips.push({ key: `disc:${disc}`, label: `专业：${disc}`, clear: () => toggleResultDiscipline(disc) });
+  }
+  if (onlyRuleKey.value) {
+    const ruleId = onlyRuleKey.value.slice(onlyRuleKey.value.indexOf(':') + 1);
+    chips.push({ key: 'rule', label: `规则：${ruleId}`, clear: () => { onlyRuleKey.value = null; } });
+  }
+  if (copyOnly.value) {
+    chips.push({ key: 'copy', label: '只看副本', clear: () => { copyOnly.value = false; } });
+  }
+  return chips;
+});
+
+const hasEngineRuns = computed(() => state.engineRuns.length > 0);
+
+const engineRunsDone = computed(() => state.engineRuns.filter((r) => r.status !== 'running').length);
+
+const runningClock = computed(() =>
+  state.runStartedAt === null ? '00:00' : formatRuleCheckClock(nowMs.value - state.runStartedAt),
+);
+
+const lastRunTime = computed(() =>
+  state.lastRunAt === null
+    ? ''
+    : new Date(state.lastRunAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+);
+
+const overlaySegment = computed<OverlaySegmentKey | null>(() => {
+  if (overlayState.activeMode === null) return 'off';
+  return overlayState.activeMode === 'isolate' ? null : overlayState.activeMode;
+});
+
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+
+watch(
+  () => state.running,
+  (running) => {
+    if (running && !clockTimer) {
+      nowMs.value = Date.now();
+      clockTimer = setInterval(() => {
+        nowMs.value = Date.now();
+      }, 1000);
+    } else if (!running && clockTimer) {
+      clearInterval(clockTimer);
+      clockTimer = null;
+    }
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (clockTimer) clearInterval(clockTimer);
+});
 
 onMounted(() => {
   if (!state.catalogLoaded && !state.catalogLoading) {
@@ -173,31 +326,105 @@ onMounted(() => {
   }
 });
 
-async function handleRunChecks() {
-  clearOverlay();
+function engineOptionLabel(eng: RuleCheckEngineFilter): string {
+  return eng === 'all' ? '全部' : RULE_CHECK_ENGINE_LABELS[eng];
+}
+
+function engineRunIcon(run: RuleCheckEngineRun) {
+  if (run.status === 'running') return LoaderCircle;
+  if (run.status === 'done') return CircleCheck;
+  if (run.status === 'failed') return CircleX;
+  return CircleStop;
+}
+
+function engineRunIconClass(run: RuleCheckEngineRun): string {
+  if (run.status === 'running') return 'animate-spin text-primary';
+  if (run.status === 'done') return 'text-emerald-600';
+  if (run.status === 'failed') return 'text-destructive';
+  return 'text-muted-foreground';
+}
+
+function engineRunBarClass(run: RuleCheckEngineRun): string {
+  if (run.status === 'running') return 'bg-primary/60 animate-pulse';
+  if (run.status === 'done') return 'bg-emerald-500';
+  if (run.status === 'failed') return 'bg-destructive';
+  return 'bg-muted-foreground/40';
+}
+
+function engineRunText(run: RuleCheckEngineRun): string {
+  if (run.status === 'running') return run.label === 'BRAN 全项目' ? '全项目逐根检查…' : '运行中…';
+  if (run.status === 'done') return `${run.rulesRun} 条 · 检出 ${run.violationTotal}`;
+  if (run.status === 'failed') return run.error ?? '失败';
+  return '已取消';
+}
+
+function engineRunTime(run: RuleCheckEngineRun): string {
+  if (run.status === 'running') {
+    return run.startedAt === null ? '' : formatRuleCheckClock(nowMs.value - run.startedAt);
+  }
+  return run.elapsedMs === null ? '' : formatRuleCheckDuration(run.elapsedMs);
+}
+
+function toggleGroupCollapsed(groupKey: string) {
+  const idx = collapsedGroups.value.indexOf(groupKey);
+  if (idx >= 0) collapsedGroups.value.splice(idx, 1);
+  else collapsedGroups.value.push(groupKey);
+}
+
+function toggleSeverityCell(key: SeverityCellKey) {
+  resultSeverityFilter.value = resultSeverityFilter.value === key ? 'all' : key;
+}
+
+function toggleResultDiscipline(disc: string) {
+  const idx = resultDisciplines.value.indexOf(disc);
+  if (idx >= 0) resultDisciplines.value.splice(idx, 1);
+  else resultDisciplines.value.push(disc);
+}
+
+function clearAllFilters() {
   resultSeverityFilter.value = 'all';
   resultAccuracyFilter.value = 'all';
+  resultDisciplines.value = [];
+  onlyRuleKey.value = null;
+  copyOnly.value = false;
   resultKeyword.value = '';
+}
+
+function resetResultView() {
+  clearAllFilters();
   collapsedGroups.value = [];
+  expandedKey.value = null;
+  filterTrayOpen.value = false;
+}
+
+async function handleRunChecks() {
+  clearOverlay();
+  resetResultView();
+  settingsOpen.value = false;
   activeTab.value = 'results';
   await runChecks();
 }
 
 function handleClearResults() {
   clearOverlay();
-  resultSeverityFilter.value = 'all';
-  resultAccuracyFilter.value = 'all';
-  resultKeyword.value = '';
-  collapsedGroups.value = [];
+  resetResultView();
   clearResults();
 }
 
-async function handleToggleOverlay(mode: RuleCheckOverlayMode) {
-  if (overlayState.activeMode === mode) {
+function isOverlaySegmentDisabled(key: OverlaySegmentKey): boolean {
+  if (overlayState.applying) return true;
+  if (key === 'firezone') return summaryStats.value.firezones === 0;
+  if (key === 'all') return allViolations.value.length === 0;
+  return false;
+}
+
+async function setOverlayMode(key: OverlaySegmentKey) {
+  if (key === 'off') {
     clearOverlay();
     return;
   }
-  await applyOverlay(visibleViolations.value, { mode, xrayOthers: overlayState.xrayOthers });
+  if (overlayState.activeMode === key) return;
+  await applyOverlay(visibleViolations.value, { mode: key, xrayOthers: overlayState.xrayOthers });
 }
 
 function handleExportCsv() {
@@ -210,12 +437,15 @@ function handleExportCsv() {
 }
 
 function handleExportJson() {
+  const failures = state.engineRuns
+    .filter((r) => r.status === 'failed')
+    .map((r) => `${r.label} 执行失败：${r.error ?? ''}`);
   const json = buildRuleCheckJson({
     summary: {
       ...summaryStats.value,
       totalElapsedMs: state.totalElapsedMs,
     },
-    warnings: [...state.catalogWarnings, ...state.runWarnings],
+    warnings: [...state.catalogWarnings, ...state.runWarnings, ...failures],
     batches: state.batches,
     results: state.results,
     violations: visibleViolations.value,
@@ -239,48 +469,6 @@ function handleAppendScopeFromSelection() {
   if (refno) {
     appendScopeRefno(refno);
   }
-}
-
-function severityBadge(v: UnifiedRuleViolation): { label: string; cls: string } {
-  if (v.highlightColor === 'red') {
-    return { label: '扩散性火灾', cls: 'bg-red-500/15 text-red-600 border-red-500/30' };
-  }
-  if (v.highlightColor === 'yellow') {
-    return { label: '局部性火灾', cls: 'bg-amber-500/15 text-amber-700 border-amber-500/30' };
-  }
-  if (v.severity === 'reminder') {
-    return { label: '提醒', cls: 'bg-sky-500/15 text-sky-700 border-sky-500/30' };
-  }
-  if (v.severity === 'semi_auto') {
-    return { label: '半自动复核', cls: 'bg-violet-500/15 text-violet-700 border-violet-500/30' };
-  }
-  return { label: '违规', cls: 'bg-destructive/15 text-destructive border-destructive/30' };
-}
-
-/** 精算行始终标注；估算只在本次开了精确复核时标注（未开时全部结果都是包围盒口径）。 */
-function accuracyBadge(v: UnifiedRuleViolation): { label: string; cls: string; title: string } | null {
-  if (v.accuracy === 'exact') {
-    return {
-      label: '精算',
-      cls: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30',
-      title: '三维网格外表面距离',
-    };
-  }
-  if (v.accuracy === 'aabb' && preciseSummary.value) {
-    return {
-      label: '估算',
-      cls: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
-      title: '包围盒距离：缺网格或规则不参与精算',
-    };
-  }
-  return null;
-}
-
-/** 实测值已扣隔热层时，另列未扣的网格外表面距。 */
-function exactSurfaceNote(v: UnifiedRuleViolation): string | null {
-  if (v.exactSurfaceMm === undefined || v.measuredMm === undefined) return null;
-  if (Math.abs(v.exactSurfaceMm - v.measuredMm) < 0.05) return null;
-  return `外表面 ${v.exactSurfaceMm.toFixed(1)}${v.unit ? ` ${v.unit}` : ''}`;
 }
 
 function groupPreciseLabel(groupKey: string): string | null {
@@ -308,67 +496,103 @@ async function focusRefnos(rawRefnos: string[]) {
   }
 }
 
-/** 点击违规行 → 装载/可见/高亮全部关联构件，并将三维相机飞至其联合包围盒。 */
+/** 点击定位 → 装载/可见/高亮全部关联构件，并将三维相机飞至其联合包围盒。 */
 async function focusViolation(violation: UnifiedRuleViolation) {
   state.activeViolationKey = violation.key;
   await focusRefnos(violation.highlightRefnos);
+}
+
+function handleSelectViolation(violation: UnifiedRuleViolation) {
+  state.activeViolationKey = violation.key;
+  expandedKey.value = expandedKey.value === violation.key ? null : violation.key;
+}
+
+async function handleIsolateViolation(violation: UnifiedRuleViolation) {
+  state.activeViolationKey = violation.key;
+  await applyOverlay([violation], { mode: 'isolate', xrayOthers: true });
+  await focusRefnos(violation.highlightRefnos);
+}
+
+function handleOnlyRule(violation: UnifiedRuleViolation) {
+  onlyRuleKey.value = ruleViolationKey(violation);
 }
 </script>
 
 <template>
   <div class="flex h-full flex-col bg-background text-foreground text-xs">
     <!-- 顶部栏 -->
-    <div class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="font-semibold text-sm truncate">规范校验</span>
-        <span class="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
-          data-testid="rule-check-total-count">
-          {{ engineCounts.all }} 条
-        </span>
-      </div>
-      <div class="flex items-center gap-1.5">
+    <div class="flex items-center gap-2 border-b border-border px-3 py-2">
+      <ShieldCheck class="h-4 w-4 shrink-0 text-primary" />
+      <span class="truncate text-sm font-semibold">规范校验</span>
+      <span class="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+        data-testid="rule-check-total-count">
+        {{ engineCounts.all }} 条
+      </span>
+      <span class="flex-1" />
+      <template v-if="state.running">
+        <span data-testid="rule-check-run-clock" class="font-mono text-[11px] text-muted-foreground">已用 {{ runningClock }}</span>
         <button type="button"
-          class="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
-          :disabled="state.catalogLoading"
-          title="重新加载四套引擎规则目录"
-          @click="loadCatalogs()">
-          <RefreshCw class="h-3 w-3" :class="{ 'animate-spin': state.catalogLoading }" />
-          刷新目录
-        </button>
-        <button v-if="state.running"
-          type="button"
-          class="inline-flex items-center gap-1 rounded bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground hover:opacity-90"
+          data-testid="rule-check-cancel-btn"
+          class="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted"
           @click="cancelRun()">
           <X class="h-3 w-3" />
           取消
         </button>
-        <button v-else
-          type="button"
+      </template>
+      <template v-else>
+        <button type="button"
+          class="inline-flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          :disabled="state.catalogLoading"
+          title="重新加载四套引擎规则目录"
+          @click="loadCatalogs()">
+          <RefreshCw class="h-3 w-3" :class="{ 'animate-spin': state.catalogLoading }" />
+        </button>
+        <button type="button"
           data-testid="rule-check-run-btn"
           class="inline-flex items-center gap-1 rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           :disabled="state.catalogLoading"
           @click="handleRunChecks()">
           <Play class="h-3 w-3" />
-          {{ state.selectedRuleIds.length > 0 ? `运行已选 (${state.selectedRuleIds.length})` : '执行校验' }}
+          {{ runLabel }}
         </button>
-      </div>
+      </template>
     </div>
 
-    <!-- 引擎与专业筛选 -->
-    <div class="space-y-2 border-b border-border px-3 py-2">
-      <div class="flex flex-wrap gap-1">
+    <!-- 运行设置：运行后收成一行摘要 -->
+    <button v-if="!settingsOpen"
+      type="button"
+      data-testid="rule-check-settings-summary"
+      class="flex w-full items-center gap-1.5 border-b border-border bg-muted/30 px-3 py-1.5 text-left hover:bg-muted/50"
+      @click="settingsOpen = true">
+      <SlidersHorizontal class="h-3 w-3 shrink-0 text-muted-foreground" />
+      <span class="min-w-0 flex-1 truncate text-[11px] text-foreground/80">{{ settingsSummary }}</span>
+      <span class="shrink-0 text-[11px] font-medium text-primary">调整</span>
+      <ChevronDown class="h-3 w-3 shrink-0 text-primary" />
+    </button>
+    <div v-else data-testid="rule-check-settings" class="space-y-2 border-b border-border bg-muted/20 px-3 py-2">
+      <div class="flex items-center gap-1.5">
+        <SlidersHorizontal class="h-3 w-3 text-muted-foreground" />
+        <span class="text-[11px] font-semibold text-foreground/80">运行设置</span>
+        <span class="text-[10px] text-muted-foreground/70">运行后自动收起</span>
+        <span class="flex-1" />
+        <button type="button"
+          data-testid="rule-check-settings-toggle"
+          class="inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline"
+          @click="settingsOpen = false">
+          收起
+          <ChevronUp class="h-3 w-3" />
+        </button>
+      </div>
+
+      <div class="flex flex-wrap gap-0.5 rounded-md border border-border bg-background p-0.5">
         <button v-for="eng in ENGINE_OPTIONS"
           :key="eng"
           type="button"
-          class="rounded border px-2 py-0.5 text-[11px] transition-colors"
-          :class="
-            state.activeEngine === eng
-              ? 'border-primary bg-primary/10 font-medium text-primary'
-              : 'border-border bg-card text-muted-foreground hover:bg-muted'
-          "
+          class="flex flex-auto flex-col items-center whitespace-nowrap rounded px-1.5 py-0.5 transition-colors"
+          :class="state.activeEngine === eng ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
           @click="state.activeEngine = eng">
-          {{ RULE_CHECK_ENGINE_LABELS[eng] }}
-          <span class="ml-0.5 font-mono opacity-80">{{ engineCounts[eng] }}</span>
+          <span class="text-[11px] font-medium">{{ engineOptionLabel(eng) }}</span>
+          <span class="font-mono text-[10px] opacity-80">{{ engineCounts[eng] }}</span>
         </button>
       </div>
 
@@ -378,7 +602,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
           :class="
             state.activeDiscipline === 'all'
               ? 'border-primary bg-primary/10 font-medium text-primary'
-              : 'border-border text-muted-foreground hover:bg-muted'
+              : 'border-border bg-background text-muted-foreground hover:bg-muted'
           "
           @click="state.activeDiscipline = 'all'">
           全专业 <span class="font-mono">{{ disciplineCounts.all ?? 0 }}</span>
@@ -390,7 +614,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
           :class="
             state.activeDiscipline === disc
               ? 'border-primary bg-primary/10 font-medium text-primary'
-              : 'border-border text-muted-foreground hover:bg-muted'
+              : 'border-border bg-background text-muted-foreground hover:bg-muted'
           "
           @click="state.activeDiscipline = disc">
           {{ disc }} <span class="font-mono">{{ disciplineCounts[disc] ?? 0 }}</span>
@@ -400,12 +624,18 @@ async function focusViolation(violation: UnifiedRuleViolation) {
       <!-- 精确复核：最小净距类规则按三维网格精算 -->
       <label v-if="showPreciseToggle"
         data-testid="rule-check-precise-toggle"
-        class="flex cursor-pointer items-start gap-2 rounded border px-2 py-1.5"
-        :class="state.precise ? 'border-primary/40 bg-primary/5' : 'border-border'">
+        class="flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5"
+        :class="state.precise ? 'border-primary/40 bg-primary/5' : 'border-border bg-background'">
         <input v-model="state.precise"
           type="checkbox"
           data-testid="rule-check-precise-input"
-          class="mt-0.5 rounded" />
+          class="peer sr-only" />
+        <span class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40"
+          :class="state.precise ? 'bg-primary' : 'bg-muted-foreground/40'"
+          aria-hidden="true">
+          <span class="absolute h-3 w-3 rounded-full bg-white shadow transition-transform"
+            :class="state.precise ? 'translate-x-3.5' : 'translate-x-0.5'" />
+        </span>
         <span class="min-w-0 space-y-0.5">
           <span class="block text-[11px] font-medium text-foreground">精确复核（网格外表面距离）</span>
           <span class="block text-[10px] leading-snug text-muted-foreground">
@@ -416,8 +646,8 @@ async function focusViolation(violation: UnifiedRuleViolation) {
 
       <!-- BRAN 与交互选集输入 -->
       <div v-if="showBranInput" class="flex items-center gap-1.5">
-        <label class="w-16 shrink-0 text-[11px] text-muted-foreground">BRAN</label>
-        <div class="flex shrink-0 overflow-hidden rounded border border-border" data-testid="rule-check-bran-scope">
+        <label class="w-10 shrink-0 text-[11px] text-muted-foreground">BRAN</label>
+        <div class="flex shrink-0 overflow-hidden rounded border border-border bg-background" data-testid="rule-check-bran-scope">
           <button v-for="opt in BRAN_SCOPE_OPTIONS"
             :key="opt.key"
             type="button"
@@ -438,7 +668,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
           :placeholder="state.branScope === 'all' ? '全项目逐根运行 BRAN 拓扑规则（耗时较长）' : '如 24381_145018（BRAN 拓扑规则必填）'"
           class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-[11px] focus:border-primary focus:outline-none disabled:opacity-50" />
         <button type="button"
-          class="shrink-0 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
+          class="shrink-0 rounded border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
           title="填入当前三维选中构件的 refno"
           :disabled="state.branScope === 'all'"
           @click="handleFillBranFromSelection()">
@@ -447,13 +677,13 @@ async function focusViolation(violation: UnifiedRuleViolation) {
       </div>
 
       <div v-if="showScopeInput" class="flex items-center gap-1.5">
-        <label class="w-16 shrink-0 text-[11px] text-muted-foreground">交互选集</label>
+        <label class="w-10 shrink-0 text-[11px] text-muted-foreground">选集</label>
         <input v-model="state.attrScopeText"
           type="text"
           placeholder="可选：逗号分隔 refno（通道/火灾/点选支架）"
-          class="flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-[11px] focus:border-primary focus:outline-none" />
+          class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-[11px] focus:border-primary focus:outline-none" />
         <button type="button"
-          class="shrink-0 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted"
+          class="shrink-0 rounded border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
           title="按序追加当前三维选中构件"
           @click="handleAppendScopeFromSelection()">
           +选中
@@ -462,41 +692,38 @@ async function focusViolation(violation: UnifiedRuleViolation) {
     </div>
 
     <!-- 主视图切换 Tab -->
-    <div class="flex items-center justify-between border-b border-border px-3">
-      <div class="flex">
-        <button type="button"
-          class="border-b-2 px-3 py-1.5 text-[12px] font-medium transition-colors"
-          :class="
-            activeTab === 'catalog'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          "
-          @click="activeTab = 'catalog'">
-          规则目录 ({{ filteredCatalog.length }})
-        </button>
-        <button type="button"
-          data-testid="rule-check-results-tab"
-          class="border-b-2 px-3 py-1.5 text-[12px] font-medium transition-colors"
-          :class="
-            activeTab === 'results'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          "
-          @click="activeTab = 'results'">
-          校验结果 ({{ summaryStats.totalReported }})
-        </button>
-      </div>
+    <div class="flex items-center gap-4 border-b border-border px-3">
+      <button type="button"
+        class="inline-flex items-center gap-1 border-b-2 py-1.5 text-[12px] font-medium transition-colors"
+        :class="
+          activeTab === 'catalog'
+            ? 'border-foreground text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
+        @click="activeTab = 'catalog'">
+        规则目录
+        <span class="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">{{ filteredCatalog.length }}</span>
+      </button>
+      <button type="button"
+        data-testid="rule-check-results-tab"
+        class="inline-flex items-center gap-1 border-b-2 py-1.5 text-[12px] font-medium transition-colors"
+        :class="
+          activeTab === 'results'
+            ? 'border-foreground text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
+        @click="activeTab = 'results'">
+        校验结果
+        <span class="rounded px-1 font-mono text-[10px]"
+          :class="summaryStats.totalReported > 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'">
+          {{ summaryStats.totalReported }}
+        </span>
+      </button>
+      <span class="flex-1" />
       <div v-if="activeTab === 'catalog'" class="flex items-center gap-1.5 text-[11px]">
         <button type="button" class="text-primary hover:underline" @click="selectAllFiltered()">全选</button>
         <span class="text-muted-foreground">/</span>
         <button type="button" class="text-muted-foreground hover:underline" @click="clearRuleSelection()">清空</button>
-      </div>
-      <div v-else-if="state.results.length > 0" class="flex items-center gap-2 text-[11px]">
-        <label class="inline-flex items-center gap-1 text-muted-foreground">
-          <input v-model="onlyViolationsFilter" type="checkbox" class="rounded" />
-          仅看有检出
-        </label>
-        <button type="button" class="text-muted-foreground hover:underline" @click="handleClearResults()">清空</button>
       </div>
     </div>
 
@@ -525,7 +752,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
 
       <div class="flex-1 overflow-y-auto divide-y divide-border">
         <div v-if="state.catalogLoading" class="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-          <Loader2 class="h-4 w-4 animate-spin" />
+          <LoaderCircle class="h-4 w-4 animate-spin" />
           正在加载规则目录…
         </div>
         <div v-else-if="filteredCatalog.length === 0" class="py-8 text-center text-muted-foreground">
@@ -556,106 +783,58 @@ async function focusViolation(violation: UnifiedRuleViolation) {
 
     <!-- Tab 2: 校验结果与三维高亮定位 -->
     <div v-else class="flex flex-1 flex-col overflow-hidden">
-      <div v-if="state.results.length > 0"
-        class="grid grid-cols-4 gap-1.5 border-b border-border bg-muted/30 px-3 py-2 text-center">
-        <div class="rounded border border-border bg-card py-1">
-          <div class="font-mono text-sm font-semibold">{{ summaryStats.rulesRun }}</div>
-          <div class="text-[10px] text-muted-foreground">已跑规则</div>
+      <!-- 运行中：分引擎进度 -->
+      <div v-if="state.running && hasEngineRuns" data-testid="rule-check-progress" class="space-y-1.5 border-b border-border px-3 py-2">
+        <div class="flex items-center gap-1.5">
+          <LoaderCircle class="h-3.5 w-3.5 animate-spin text-primary" />
+          <span class="text-[12px] font-semibold">正在校验</span>
+          <span class="font-mono text-[11px] text-muted-foreground">{{ engineRunsDone }} / {{ state.engineRuns.length }} 完成</span>
+          <span class="flex-1" />
+          <span class="text-[10px] text-muted-foreground">先完成的先出结果</span>
         </div>
-        <div class="rounded border border-border bg-card py-1">
-          <div class="font-mono text-sm font-semibold text-destructive">{{ summaryStats.violations }}</div>
-          <div class="text-[10px] text-muted-foreground">违规项</div>
+        <div class="flex gap-0.5">
+          <span v-for="run in state.engineRuns"
+            :key="run.engine"
+            class="h-1 flex-1 rounded-full"
+            :class="engineRunBarClass(run)" />
         </div>
-        <div class="rounded border border-border bg-card py-1">
-          <div class="font-mono text-sm font-semibold text-amber-600">
-            {{ summaryStats.reminders + summaryStats.semiAuto + summaryStats.firezones }}
-          </div>
-          <div class="text-[10px] text-muted-foreground">提醒/标注</div>
-        </div>
-        <div class="rounded border border-border bg-card py-1">
-          <div class="font-mono text-sm font-semibold">{{ state.totalElapsedMs }} ms</div>
-          <div class="text-[10px] text-muted-foreground">耗时</div>
-        </div>
-      </div>
-
-      <!-- 精确复核与全项目 BRAN 的运行汇总 -->
-      <div v-if="preciseSummary || branAllSummary"
-        data-testid="rule-check-run-summary"
-        class="space-y-0.5 border-b border-border bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
-        <div v-if="preciseSummary" data-testid="rule-check-precise-summary" class="flex flex-wrap items-center gap-x-2">
-          <span class="font-medium text-foreground">精确复核</span>
-          <span>估算 <span class="font-mono">{{ preciseSummary.aabbFindings }}</span> 项</span>
-          <span>→ 精算剔除 <span class="font-mono text-emerald-700">{{ preciseSummary.cleared }}</span> 项误报</span>
-          <span>
-            · 缺网格
-            <span class="font-mono" :class="preciseSummary.unavailable > 0 ? 'text-amber-700' : ''">{{ preciseSummary.unavailable }}</span>
-            对
-          </span>
-          <span>· 可精算规则 <span class="font-mono">{{ preciseSummary.refinableRules }}</span> 条</span>
-        </div>
-        <div v-if="branAllSummary" data-testid="rule-check-bran-all-summary" class="flex flex-wrap items-center gap-x-2">
-          <span class="font-medium text-foreground">全项目 BRAN</span>
-          <span>
-            已检 <span class="font-mono">{{ branAllSummary.bransChecked }}</span>/<span class="font-mono">{{ branAllSummary.bransTotal }}</span> 根
-          </span>
-          <span>
-            · 读取失败
-            <span class="font-mono" :class="branAllSummary.bransFailed > 0 ? 'text-amber-700' : ''">{{ branAllSummary.bransFailed }}</span>
-            根
-          </span>
+        <div v-for="run in state.engineRuns"
+          :key="run.engine"
+          :data-testid="`rule-check-engine-run-${run.engine}`"
+          :data-status="run.status"
+          class="flex items-center gap-1.5">
+          <component :is="engineRunIcon(run)" class="h-3.5 w-3.5 shrink-0" :class="engineRunIconClass(run)" />
+          <span class="w-[72px] shrink-0 truncate text-[11px] font-medium">{{ run.label }}</span>
+          <span class="min-w-0 flex-1 truncate text-[10px]"
+            :class="run.status === 'failed' ? 'text-destructive' : 'text-muted-foreground'"
+            :title="engineRunText(run)">{{ engineRunText(run) }}</span>
+          <button v-if="run.status === 'failed'"
+            type="button"
+            :data-testid="`rule-check-engine-retry-${run.engine}`"
+            class="inline-flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted"
+            @click="retryEngine(run.engine)">
+            <RotateCcw class="h-3 w-3" />
+            重试
+          </button>
+          <span v-else class="shrink-0 font-mono text-[10px] text-muted-foreground">{{ engineRunTime(run) }}</span>
         </div>
       </div>
 
-      <!-- 三维着色覆盖层与报告导出工具条 -->
-      <div v-if="state.results.length > 0"
-        class="space-y-1.5 border-b border-border bg-card/60 px-3 py-1.5">
-        <div class="flex flex-wrap items-center justify-between gap-1.5">
-          <div class="flex flex-wrap items-center gap-1">
-            <button type="button"
-              data-testid="rule-check-firezone-overlay-btn"
-              class="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40"
-              :class="
-                overlayState.activeMode === 'firezone'
-                  ? 'border-red-500 bg-red-500/15 font-medium text-red-600'
-                  : 'border-border bg-background hover:bg-muted'
-              "
-              :disabled="overlayState.applying || summaryStats.firezones === 0"
-              title="按火灾分区红（扩散性）/黄（局部性）对三维构件批量着色"
-              @click="handleToggleOverlay('firezone')">
-              <Flame class="h-3 w-3" />
-              火灾着色 ({{ summaryStats.firezones }})
-            </button>
-            <button type="button"
-              data-testid="rule-check-all-overlay-btn"
-              class="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40"
-              :class="
-                overlayState.activeMode === 'all'
-                  ? 'border-primary bg-primary/15 font-medium text-primary'
-                  : 'border-border bg-background hover:bg-muted'
-              "
-              :disabled="overlayState.applying || allViolations.length === 0"
-              title="按火灾色与违规分级对全部涉事构件批量着色"
-              @click="handleToggleOverlay('all')">
-              <Palette class="h-3 w-3" />
-              分级着色
-            </button>
-            <label class="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-              <input v-model="overlayState.xrayOthers" type="checkbox" class="rounded" />
-              背景透视
-            </label>
-            <button v-if="overlayState.activeMode !== null"
-              type="button"
-              data-testid="rule-check-clear-overlay-btn"
-              class="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              @click="clearOverlay()">
-              <RotateCcw class="h-3 w-3" />
-              还原
-            </button>
-          </div>
-          <div class="flex items-center gap-1">
+      <!-- 本次结果概览：统计格兼作严重度筛选 -->
+      <div v-if="state.batches.length > 0 || (!state.running && hasEngineRuns)"
+        data-testid="rule-check-overview"
+        class="space-y-2 border-b border-border px-3 py-2">
+        <div class="flex items-center gap-1.5">
+          <span class="shrink-0 text-[12px] font-semibold">本次结果</span>
+          <span v-if="state.running" class="truncate text-[11px] text-muted-foreground">陆续并入中…</span>
+          <span v-else data-testid="rule-check-run-meta" class="truncate text-[11px] text-muted-foreground">
+            {{ lastRunTime }} · 用时 {{ formatRuleCheckDuration(state.runElapsedMs) }}
+          </span>
+          <span class="flex-1" />
+          <template v-if="state.results.length > 0">
             <button type="button"
               data-testid="rule-check-export-csv-btn"
-              class="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"
+              class="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:bg-muted"
               title="导出中文 Excel 兼容 UTF-8 BOM CSV 报告"
               @click="handleExportCsv()">
               <Download class="h-3 w-3" />
@@ -663,13 +842,259 @@ async function focusViolation(violation: UnifiedRuleViolation) {
             </button>
             <button type="button"
               data-testid="rule-check-export-json-btn"
-              class="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"
+              class="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:bg-muted"
               title="导出完整结构化 JSON 校验报告"
               @click="handleExportJson()">
               <FileJson class="h-3 w-3" />
               JSON
             </button>
+          </template>
+          <button v-if="!state.running"
+            type="button"
+            data-testid="rule-check-clear-results-btn"
+            class="shrink-0 text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+            @click="handleClearResults()">
+            清空
+          </button>
+        </div>
+
+        <template v-if="state.results.length > 0">
+          <div class="grid grid-cols-4 gap-1">
+            <button v-for="cell in SEVERITY_CELLS"
+              :key="cell.key"
+              type="button"
+              :data-testid="`rule-check-result-filter-${cell.key}`"
+              class="rounded-md border px-1.5 py-1 text-left transition-colors"
+              :class="
+                resultSeverityFilter === cell.key
+                  ? 'border-foreground/60 bg-muted/60'
+                  : 'border-border bg-background hover:bg-muted/40'
+              "
+              :aria-pressed="resultSeverityFilter === cell.key"
+              @click="toggleSeverityCell(cell.key)">
+              <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="cell.dot" />
+                <span class="truncate">{{ cell.label }}</span>
+              </span>
+              <span class="block font-mono text-sm font-semibold"
+                :class="resultSeverityCounts[cell.key] > 0 ? 'text-foreground' : 'text-muted-foreground/50'">
+                {{ resultSeverityCounts[cell.key] }}
+              </span>
+            </button>
           </div>
+          <div v-if="severityBarSegments.length > 0" class="flex h-1 gap-px overflow-hidden rounded-full bg-border">
+            <span v-for="seg in severityBarSegments"
+              :key="seg.key"
+              class="h-full basis-0"
+              :class="seg.cls"
+              :style="{ flexGrow: seg.n }" />
+          </div>
+        </template>
+
+        <div v-if="preciseSummary"
+          data-testid="rule-check-precise-summary"
+          class="space-y-0.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2 py-1.5 text-[11px]">
+          <div class="flex items-center gap-1.5">
+            <Sparkles class="h-3 w-3 text-emerald-700" />
+            <span class="font-semibold text-emerald-700">精确复核</span>
+            <span class="flex-1" />
+            <span class="text-[10px]" :class="preciseSummary.unavailable > 0 ? 'text-amber-700' : 'text-muted-foreground'">
+              缺网格 {{ preciseSummary.unavailable }} 对{{ preciseSummary.unavailable > 0 ? '，保留估算' : '' }}
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-1.5 font-mono">
+            <span class="text-foreground/80">估算 {{ preciseSummary.aabbFindings }}</span>
+            <ArrowRight class="h-3 w-3 text-muted-foreground" />
+            <span class="text-emerald-700">精算剔除 {{ preciseSummary.cleared }}</span>
+            <ArrowRight class="h-3 w-3 text-muted-foreground" />
+            <span class="font-semibold">保留 {{ Math.max(0, preciseSummary.aabbFindings - preciseSummary.cleared) }}</span>
+            <span class="text-[10px] text-muted-foreground">· 可精算规则 {{ preciseSummary.refinableRules }} 条</span>
+          </div>
+        </div>
+
+        <div v-if="branAllSummary" data-testid="rule-check-bran-all-summary" class="flex items-center gap-1.5 text-[11px]">
+          <GitBranch class="h-3 w-3 text-muted-foreground" />
+          <span class="font-medium text-foreground/80">全项目 BRAN</span>
+          <span class="font-mono">已检 {{ branAllSummary.bransChecked }} / {{ branAllSummary.bransTotal }} 根</span>
+          <span class="flex-1" />
+          <span class="text-[10px]" :class="branAllSummary.bransFailed > 0 ? 'text-amber-700' : 'text-muted-foreground'">
+            读取失败 {{ branAllSummary.bransFailed }} 根
+          </span>
+        </div>
+
+        <div v-if="!state.running && hasEngineRuns" data-testid="rule-check-engine-status" class="flex flex-wrap gap-1">
+          <span v-for="run in state.engineRuns"
+            :key="run.engine"
+            :data-testid="`rule-check-engine-chip-${run.engine}`"
+            :data-status="run.status"
+            class="inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px]"
+            :class="
+              run.status === 'failed'
+                ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                : 'border-border bg-muted/40 text-foreground/80'
+            "
+            :title="run.status === 'failed' ? `${run.label}：${run.error ?? ''}` : run.label">
+            <component :is="engineRunIcon(run)" class="h-3 w-3" :class="engineRunIconClass(run)" />
+            {{ ENGINE_SHORT_LABELS[run.engine] }}
+            <button v-if="run.status === 'failed'"
+              type="button"
+              :data-testid="`rule-check-engine-retry-${run.engine}`"
+              class="font-medium underline-offset-2 hover:underline"
+              @click="retryEngine(run.engine)">
+              重试
+            </button>
+            <span v-else class="font-mono text-muted-foreground">{{ engineRunTime(run) }}</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- 结果工具条：搜索 + 筛选托盘 + 视图切换 + 三维着色 -->
+      <div v-if="allViolations.length > 0" class="space-y-1.5 border-b border-border px-3 py-1.5">
+        <div class="flex items-center gap-1.5">
+          <div class="relative min-w-0 flex-1">
+            <Search class="pointer-events-none absolute left-2 top-1.5 h-3 w-3 text-muted-foreground" />
+            <input v-model="resultKeyword"
+              type="text"
+              data-testid="rule-check-result-search"
+              placeholder="筛选结果：规则 / 房号 / refno / 详情…"
+              class="w-full rounded border border-border bg-background py-0.5 pl-6 pr-2 text-[11px] focus:border-primary focus:outline-none" />
+          </div>
+          <button type="button"
+            data-testid="rule-check-filter-toggle"
+            class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] transition-colors"
+            :class="
+              filterTrayOpen
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border bg-background text-foreground/80 hover:bg-muted'
+            "
+            :aria-expanded="filterTrayOpen"
+            @click="filterTrayOpen = !filterTrayOpen">
+            <ListFilter class="h-3 w-3" />
+            筛选
+            <span v-if="trayFilterCount > 0" class="rounded-full bg-primary px-1 font-mono text-[9px] text-primary-foreground">{{ trayFilterCount }}</span>
+          </button>
+          <div class="flex shrink-0 rounded border border-border bg-muted/40 p-px">
+            <button type="button"
+              data-testid="rule-check-flat-view-btn"
+              title="平铺列表"
+              class="inline-flex h-5 w-6 items-center justify-center rounded-sm"
+              :class="!groupByRule ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :aria-pressed="!groupByRule"
+              @click="groupByRule = false">
+              <List class="h-3 w-3" />
+            </button>
+            <button type="button"
+              data-testid="rule-check-group-toggle-btn"
+              title="按规则分组"
+              class="inline-flex h-5 w-6 items-center justify-center rounded-sm"
+              :class="groupByRule ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :aria-pressed="groupByRule"
+              @click="groupByRule = true">
+              <Layers class="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+
+        <div v-if="filterTrayOpen" data-testid="rule-check-filter-tray" class="space-y-1.5 rounded-md border border-border bg-muted/30 p-2">
+          <div v-if="preciseSummary" class="flex items-center gap-1.5" data-testid="rule-check-accuracy-filter">
+            <span class="w-7 shrink-0 text-[10px] text-muted-foreground">口径</span>
+            <div class="flex rounded border border-border bg-background p-px">
+              <button v-for="opt in ACCURACY_OPTIONS"
+                :key="opt.key"
+                type="button"
+                :data-testid="`rule-check-accuracy-filter-${opt.key}`"
+                class="rounded-sm px-1.5 py-0.5 text-[10px] transition-colors"
+                :class="
+                  resultAccuracyFilter === opt.key
+                    ? 'bg-primary/10 font-medium text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                "
+                @click="resultAccuracyFilter = opt.key">
+                {{ opt.label }} <span class="font-mono">{{ resultAccuracyCounts[opt.key] }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="flex items-start gap-1.5">
+            <span class="w-7 shrink-0 pt-0.5 text-[10px] text-muted-foreground">专业</span>
+            <div class="flex flex-wrap gap-1">
+              <button v-for="(count, disc) in resultDisciplineCounts"
+                :key="disc"
+                type="button"
+                :data-testid="`rule-check-discipline-filter-${disc}`"
+                class="rounded border px-1.5 py-0.5 text-[10px] transition-colors"
+                :class="
+                  resultDisciplines.includes(String(disc))
+                    ? 'border-primary bg-primary/10 font-medium text-primary'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                "
+                @click="toggleResultDiscipline(String(disc))">
+                {{ disc }} <span class="font-mono">{{ count }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span class="w-7 shrink-0 text-[10px] text-muted-foreground">其他</span>
+            <label v-if="hasCopyNamed" class="inline-flex items-center gap-1 text-[11px] text-foreground/80">
+              <input v-model="copyOnly" type="checkbox" data-testid="rule-check-copy-only" class="rounded" />
+              只看 Copy-of 副本
+            </label>
+            <label class="inline-flex items-center gap-1 text-[11px] text-foreground/80">
+              <input :checked="!onlyViolationsFilter"
+                type="checkbox"
+                data-testid="rule-check-show-passed"
+                class="rounded"
+                @change="onlyViolationsFilter = !($event.target as HTMLInputElement).checked" />
+              显示通过的规则
+            </label>
+            <span class="flex-1" />
+            <button type="button"
+              data-testid="rule-check-clear-filters"
+              class="text-[10px] text-primary hover:underline"
+              @click="clearAllFilters()">
+              清除全部
+            </button>
+          </div>
+        </div>
+
+        <div v-if="isResultFiltered" class="flex flex-wrap items-center gap-1">
+          <button v-for="chip in activeFilterChips"
+            :key="chip.key"
+            type="button"
+            data-testid="rule-check-active-filter"
+            class="inline-flex items-center gap-0.5 rounded-full border border-primary/30 bg-primary/10 py-px pl-1.5 pr-1 text-[10px] text-primary hover:bg-primary/15"
+            :title="`移除：${chip.label}`"
+            @click="chip.clear()">
+            {{ chip.label }}
+            <X class="h-2.5 w-2.5" />
+          </button>
+          <span class="flex-1" />
+          <span data-testid="rule-check-result-filtered-count" class="shrink-0 font-mono text-[10px] text-primary">{{ visibleViolations.length }}/{{ allViolations.length }}</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-[10px] text-muted-foreground">三维着色</span>
+          <div class="flex rounded border border-border bg-muted/40 p-px">
+            <button v-for="seg in OVERLAY_SEGMENTS"
+              :key="seg.key"
+              type="button"
+              :data-testid="seg.testid"
+              class="rounded-sm px-2 py-0.5 text-[10px] transition-colors disabled:opacity-40"
+              :class="
+                overlaySegment === seg.key
+                  ? 'bg-background font-medium text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              :disabled="isOverlaySegmentDisabled(seg.key)"
+              :aria-pressed="overlaySegment === seg.key"
+              @click="setOverlayMode(seg.key)">
+              {{ seg.label }}<span v-if="seg.key === 'firezone'" class="ml-0.5 font-mono">{{ summaryStats.firezones }}</span>
+            </button>
+          </div>
+          <label class="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <input v-model="overlayState.xrayOthers" type="checkbox" class="rounded" />
+            透视其余
+          </label>
+          <span v-if="overlayState.activeMode === 'isolate'" class="text-[10px] font-medium text-primary">隔离显示中</span>
         </div>
 
         <!-- 激活着色时的实时图例 -->
@@ -693,78 +1118,20 @@ async function focusViolation(violation: UnifiedRuleViolation) {
         </div>
       </div>
 
-      <!-- 结果筛选与按规则分组工具条 -->
-      <div v-if="allViolations.length > 0"
-        class="space-y-1.5 border-b border-border bg-background px-3 py-1.5">
-        <div class="flex flex-wrap items-center justify-between gap-1">
-          <div class="flex flex-wrap gap-1">
-            <button v-for="opt in RESULT_SEVERITY_OPTIONS"
-              :key="opt.key"
-              type="button"
-              :data-testid="`rule-check-result-filter-${opt.key}`"
-              class="rounded border px-1.5 py-0.5 text-[10px] transition-colors"
-              :class="
-                resultSeverityFilter === opt.key
-                  ? 'border-primary bg-primary/10 font-medium text-primary'
-                  : 'border-border text-muted-foreground hover:bg-muted'
-              "
-              @click="resultSeverityFilter = opt.key">
-              {{ opt.label }} <span class="font-mono">{{ resultSeverityCounts[opt.key] }}</span>
-            </button>
-          </div>
-          <button type="button"
-            data-testid="rule-check-group-toggle-btn"
-            class="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted"
-            :class="groupByRule ? 'border-primary bg-primary/10 text-primary font-medium' : 'text-muted-foreground'"
-            title="切换按规则分组折叠视图或平铺列表"
-            @click="groupByRule = !groupByRule">
-            <component :is="groupByRule ? Layers : List" class="h-3 w-3" />
-            {{ groupByRule ? '按规则分组' : '平铺列表' }}
-          </button>
-        </div>
-        <div v-if="preciseSummary" class="flex flex-wrap items-center gap-1" data-testid="rule-check-accuracy-filter">
-          <button v-for="opt in ACCURACY_OPTIONS"
-            :key="opt.key"
-            type="button"
-            :data-testid="`rule-check-accuracy-filter-${opt.key}`"
-            class="rounded border px-1.5 py-0.5 text-[10px] transition-colors"
-            :class="
-              resultAccuracyFilter === opt.key
-                ? 'border-primary bg-primary/10 font-medium text-primary'
-                : 'border-border text-muted-foreground hover:bg-muted'
-            "
-            @click="resultAccuracyFilter = opt.key">
-            {{ opt.label }} <span class="font-mono">{{ resultAccuracyCounts[opt.key] }}</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <div class="relative flex-1">
-            <Search class="pointer-events-none absolute left-2 top-1.5 h-3 w-3 text-muted-foreground" />
-            <input v-model="resultKeyword"
-              type="text"
-              data-testid="rule-check-result-search"
-              placeholder="筛选结果：规则 / 房号 / refno / 详情…"
-              class="w-full rounded border border-border bg-background py-0.5 pl-6 pr-2 text-[11px] focus:border-primary focus:outline-none" />
-          </div>
-          <span v-if="isResultFiltered"
-            data-testid="rule-check-result-filtered-count"
-            class="shrink-0 font-mono text-[10px] text-primary">
-            {{ visibleViolations.length }}/{{ allViolations.length }}
-          </span>
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-y-auto divide-y divide-border">
-        <div v-if="state.running" class="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-          <Loader2 class="h-4 w-4 animate-spin" />
+      <div class="flex-1 overflow-y-auto">
+        <div v-if="state.running && state.batches.length === 0" class="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+          <LoaderCircle class="h-4 w-4 animate-spin" />
           正在执行规范校验…
         </div>
         <div v-else-if="state.results.length === 0" class="py-8 text-center text-muted-foreground">
-          点击右上角「执行校验」运行规则评测
+          {{ hasEngineRuns ? '本次没有返回规则结果' : '点击右上角「执行校验」运行规则评测' }}
         </div>
         <template v-else>
-          <div v-if="allViolations.length === 0 && onlyViolationsFilter" class="py-8 text-center text-emerald-600">
-            全部 {{ summaryStats.rulesRun }} 条已执行规则 0 违规通过
+          <div v-if="allViolations.length === 0 && onlyViolationsFilter" class="space-y-1 py-8 text-center">
+            <div class="text-emerald-600">全部 {{ summaryStats.rulesRun }} 条已执行规则 0 违规通过</div>
+            <button type="button" class="text-[11px] text-primary hover:underline" @click="onlyViolationsFilter = false">
+              查看通过的规则
+            </button>
           </div>
           <div v-else-if="visibleViolations.length === 0" class="py-8 text-center text-muted-foreground">
             当前筛选条件下无匹配违规项
@@ -774,142 +1141,76 @@ async function focusViolation(violation: UnifiedRuleViolation) {
           <template v-else-if="groupByRule">
             <div v-for="group in groupedViolations"
               :key="group.key"
-              data-testid="rule-check-violation-group"
-              class="divide-y divide-border/60">
-              <div class="bg-muted/40 px-3 py-1.5">
-                <div class="flex items-center justify-between gap-2">
+              data-testid="rule-check-violation-group">
+              <div class="border-b border-border bg-muted/40 px-3 py-1.5">
+                <div class="flex items-center gap-1.5">
                   <button type="button"
                     data-testid="rule-check-group-header"
                     class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    :aria-expanded="!collapsedGroups.includes(group.key)"
                     @click="toggleGroupCollapsed(group.key)">
                     <component :is="collapsedGroups.includes(group.key) ? ChevronRight : ChevronDown"
                       class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span class="shrink-0 whitespace-nowrap font-mono font-semibold text-foreground">{{ group.ruleId }}</span>
-                    <span class="shrink-0 whitespace-nowrap rounded bg-muted px-1 text-[10px] text-muted-foreground">
-                      {{ group.discipline }}
-                    </span>
-                    <span class="truncate text-[11px] text-muted-foreground">{{ group.title }}</span>
-                    <span class="shrink-0 rounded bg-destructive/15 px-1.5 font-mono text-[10px] text-destructive">
-                      {{ group.violations.length }}
-                    </span>
+                    <span class="truncate text-[11px] text-muted-foreground" :title="group.title">{{ group.title }}</span>
                   </button>
+                  <span class="shrink-0 rounded-full border border-destructive/30 bg-destructive/10 px-1.5 font-mono text-[10px] font-semibold text-destructive">
+                    {{ group.violations.length }}
+                  </span>
                   <button type="button"
                     data-testid="rule-check-focus-group-btn"
-                    class="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] hover:border-primary hover:text-primary disabled:opacity-40"
+                    title="定位本组"
+                    class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-40"
                     :disabled="group.allHighlightRefnos.length === 0"
                     @click="focusRefnos(group.allHighlightRefnos)">
                     <Crosshair class="h-3 w-3" />
-                    定位本组
                   </button>
                 </div>
-                <div v-if="groupPreciseLabel(group.key)"
-                  data-testid="rule-check-group-precise"
-                  class="mt-0.5 pl-5 font-mono text-[10px] text-emerald-700">
-                  {{ groupPreciseLabel(group.key) }}
+                <div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 pl-5 text-[10px] text-muted-foreground">
+                  <span>{{ group.discipline }}</span>
+                  <template v-if="groupPreciseLabel(group.key)">
+                    <span class="text-muted-foreground/50">·</span>
+                    <span data-testid="rule-check-group-precise" class="font-mono text-emerald-700">{{ groupPreciseLabel(group.key) }}</span>
+                  </template>
                 </div>
               </div>
               <template v-if="!collapsedGroups.includes(group.key)">
-                <div v-for="v in group.violations"
+                <RuleCheckViolationRow v-for="v in group.violations"
                   :key="v.key"
-                  data-testid="rule-check-violation-row"
-                  class="space-y-1 pl-6 pr-3 py-2 transition-colors hover:bg-muted/50"
-                  :class="{ 'bg-primary/5': state.activeViolationKey === v.key }">
-                  <div class="flex items-center justify-between gap-2">
-                    <div class="flex flex-wrap items-center gap-1 min-w-0">
-                      <span class="rounded border px-1.5 py-0.2 text-[10px] font-medium"
-                        :class="severityBadge(v).cls">
-                        {{ severityBadge(v).label }}
-                      </span>
-                      <span v-if="accuracyBadge(v)"
-                        data-testid="rule-check-accuracy-badge"
-                        class="rounded border px-1.5 py-0.2 text-[10px] font-medium"
-                        :class="accuracyBadge(v)?.cls"
-                        :title="accuracyBadge(v)?.title">
-                        {{ accuracyBadge(v)?.label }}
-                      </span>
-                      <span v-if="v.copyNamed"
-                        data-testid="rule-check-copy-badge"
-                        class="rounded border border-border bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground"
-                        :title="COPY_BADGE_TITLE">
-                        Copy-of 副本
-                      </span>
-                      <span v-if="v.roomNum" class="font-mono text-[10px] text-muted-foreground">房 {{ v.roomNum }}</span>
-                      <span v-if="v.branchRefno" class="font-mono text-[10px] text-muted-foreground">BRAN {{ v.branchRefno }}</span>
-                      <span v-if="v.hasColumn" class="rounded bg-amber-500/15 px-1 text-[10px] text-amber-700">有柱</span>
-                    </div>
-                    <button type="button"
-                      data-testid="rule-check-focus-btn"
-                      class="inline-flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] hover:border-primary hover:text-primary disabled:opacity-40"
-                      :disabled="v.highlightRefnos.length === 0"
-                      @click="focusViolation(v)">
-                      <Crosshair class="h-3 w-3" />
-                      定位高亮
-                    </button>
-                  </div>
-                  <div class="text-[11px] leading-snug text-foreground">{{ v.detail }}</div>
-                  <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] text-muted-foreground">
-                    <span v-if="v.measuredMm !== undefined">实测 {{ v.measuredMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
-                    <span v-if="v.thresholdMm !== undefined">阈值 {{ v.thresholdMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
-                    <span v-if="exactSurfaceNote(v)">{{ exactSurfaceNote(v) }}</span>
-                    <span v-if="v.highlightRefnos.length > 0">高亮 {{ v.highlightRefnos.join(', ') }}</span>
-                  </div>
-                </div>
+                  :violation="v"
+                  :active="state.activeViolationKey === v.key"
+                  :expanded="expandedKey === v.key"
+                  :show-rule="false"
+                  :precise-run="preciseSummary !== null"
+                  @select="handleSelectViolation"
+                  @focus="focusViolation"
+                  @isolate="handleIsolateViolation"
+                  @only-rule="handleOnlyRule" />
               </template>
             </div>
           </template>
 
           <!-- 平铺视图 -->
           <template v-else>
-            <div v-for="v in visibleViolations"
+            <RuleCheckViolationRow v-for="v in visibleViolations"
               :key="v.key"
-              data-testid="rule-check-violation-row"
-              class="space-y-1 px-3 py-2 transition-colors hover:bg-muted/50"
-              :class="{ 'bg-primary/5': state.activeViolationKey === v.key }">
-              <div class="flex items-center justify-between gap-2">
-                <div class="flex flex-wrap items-center gap-1 min-w-0">
-                  <span class="rounded border px-1.5 py-0.2 text-[10px] font-medium"
-                    :class="severityBadge(v).cls">
-                    {{ severityBadge(v).label }}
-                  </span>
-                  <span v-if="accuracyBadge(v)"
-                    data-testid="rule-check-accuracy-badge"
-                    class="rounded border px-1.5 py-0.2 text-[10px] font-medium"
-                    :class="accuracyBadge(v)?.cls"
-                    :title="accuracyBadge(v)?.title">
-                    {{ accuracyBadge(v)?.label }}
-                  </span>
-                  <span v-if="v.copyNamed"
-                    data-testid="rule-check-copy-badge"
-                    class="rounded border border-border bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground"
-                    :title="COPY_BADGE_TITLE">
-                    Copy-of 副本
-                  </span>
-                  <span class="font-mono font-medium">{{ v.ruleId }}</span>
-                  <span class="rounded bg-muted px-1 text-[10px] text-muted-foreground">{{ v.discipline }}</span>
-                  <span v-if="v.roomNum" class="font-mono text-[10px] text-muted-foreground">房 {{ v.roomNum }}</span>
-                  <span v-if="v.branchRefno" class="font-mono text-[10px] text-muted-foreground">BRAN {{ v.branchRefno }}</span>
-                  <span v-if="v.hasColumn" class="rounded bg-amber-500/15 px-1 text-[10px] text-amber-700">有柱</span>
-                </div>
-                <button type="button"
-                  data-testid="rule-check-focus-btn"
-                  class="inline-flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] hover:border-primary hover:text-primary disabled:opacity-40"
-                  :disabled="v.highlightRefnos.length === 0"
-                  @click="focusViolation(v)">
-                  <Crosshair class="h-3 w-3" />
-                  定位高亮
-                </button>
-              </div>
-              <div class="text-[11px] leading-snug text-foreground">{{ v.detail }}</div>
-              <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] text-muted-foreground">
-                <span v-if="v.measuredMm !== undefined">实测 {{ v.measuredMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
-                <span v-if="v.thresholdMm !== undefined">阈值 {{ v.thresholdMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
-                <span v-if="exactSurfaceNote(v)">{{ exactSurfaceNote(v) }}</span>
-                <span v-if="v.highlightRefnos.length > 0">高亮 {{ v.highlightRefnos.join(', ') }}</span>
-              </div>
-            </div>
+              :violation="v"
+              :active="state.activeViolationKey === v.key"
+              :expanded="expandedKey === v.key"
+              :show-rule="true"
+              :precise-run="preciseSummary !== null"
+              @select="handleSelectViolation"
+              @focus="focusViolation"
+              @isolate="handleIsolateViolation"
+              @only-rule="handleOnlyRule" />
           </template>
 
-          <!-- 非过滤模式下展示 0 违规通过规则汇总 -->
+          <div v-if="state.running" class="flex items-center justify-center gap-1.5 py-3 text-[10px] text-muted-foreground">
+            <LoaderCircle class="h-3 w-3 animate-spin" />
+            其余引擎跑完后自动并入
+          </div>
+
+          <!-- 显示通过的规则 -->
           <div v-if="!onlyViolationsFilter" class="bg-muted/20 px-3 py-2">
             <div class="mb-1 text-[11px] font-medium text-muted-foreground">通过规则（0 违规）</div>
             <div class="flex flex-wrap gap-1">

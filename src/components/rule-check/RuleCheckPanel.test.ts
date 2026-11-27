@@ -67,6 +67,14 @@ async function flushUi() {
   await nextTick();
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('RuleCheckPanel', () => {
   let host: HTMLDivElement;
   let app: ReturnType<typeof createApp> | null = null;
@@ -370,9 +378,116 @@ describe('RuleCheckPanel', () => {
     expect(host.querySelectorAll('[data-testid="rule-check-copy-badge"]').length).toBe(1);
     expect(host.textContent).toContain('外表面 290.0 mm');
 
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-filter-toggle"]')!.click();
+    await flushUi();
     host.querySelector<HTMLButtonElement>('[data-testid="rule-check-accuracy-filter-aabb"]')!.click();
     await flushUi();
     expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(1);
+    expect(host.querySelector('[data-testid="rule-check-active-filter"]')?.textContent).toContain('口径：估算');
     expect(host.querySelector('[data-testid="rule-check-result-filtered-count"]')?.textContent?.trim()).toBe('1/3');
+  });
+
+  it('folds the run settings into a one-line summary after a run and reopens them on demand', async () => {
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+    expect(host.querySelector('[data-testid="rule-check-settings"]')).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    expect(host.querySelector('[data-testid="rule-check-settings"]')).toBeNull();
+    const summary = host.querySelector<HTMLButtonElement>('[data-testid="rule-check-settings-summary"]');
+    expect(summary?.textContent).toContain('全部引擎 · 全专业');
+    expect(summary?.textContent).toContain('BRAN 未填');
+    expect(host.querySelector('[data-testid="rule-check-run-meta"]')?.textContent).toMatch(/用时 \d+ ms/);
+
+    summary!.click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="rule-check-settings"]')).not.toBeNull();
+  });
+
+  it('shows per-engine progress, lists finished engines first, and retries a failed engine alone', async () => {
+    const attrResponse = await runAttrRuleCheckMock();
+    runAttrRuleCheckMock.mockClear();
+    const attrs = deferred<unknown>();
+    runAttrRuleCheckMock.mockReturnValueOnce(attrs.promise);
+    runRoomRuleCheckMock.mockRejectedValueOnce(new Error('gen-model 请求失败 GET /api/v1/rule-check/rooms/run: Failed to fetch'));
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const runStatus = (engine: string) =>
+      host.querySelector(`[data-testid="rule-check-engine-run-${engine}"]`)?.getAttribute('data-status');
+    expect(host.querySelector('[data-testid="rule-check-progress"]')).not.toBeNull();
+    expect(runStatus('spatial')).toBe('done');
+    expect(runStatus('rooms')).toBe('failed');
+    expect(runStatus('attrs')).toBe('running');
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(1);
+
+    attrs.resolve(attrResponse);
+    await flushUi();
+
+    expect(host.querySelector('[data-testid="rule-check-progress"]')).toBeNull();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(2);
+    const roomsChip = () => host.querySelector('[data-testid="rule-check-engine-chip-rooms"]');
+    expect(roomsChip()?.getAttribute('data-status')).toBe('failed');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-engine-retry-rooms"]')!.click();
+    await flushUi();
+
+    expect(runRoomRuleCheckMock).toHaveBeenCalledTimes(2);
+    expect(runSpatialRuleCheckMock).toHaveBeenCalledTimes(1);
+    expect(roomsChip()?.getAttribute('data-status')).toBe('done');
+  });
+
+  it('expands a row into details, isolates it in 3D, and narrows the list to its rule', async () => {
+    const setObjectColor = vi.fn();
+    const setObjectsXRayed = vi.fn();
+    viewerContextStub.viewerRef.value = {
+      __dtxLayer: {
+        getAllObjectIds: () => ['o:24381_10:0', 'o:24381_20:0', 'o:24381_500:0'],
+        setObjectColor,
+        resetObjectColor: vi.fn(),
+      },
+      requestRender: vi.fn(),
+      scene: {
+        getLoadedRefnos: () => ['24381_10', '24381_20', '24381_500'],
+        ensureRefnos: vi.fn(),
+        setObjectsVisible: vi.fn(),
+        setObjectsSelected: vi.fn(),
+        setObjectsXRayed,
+        getAABB: vi.fn(() => null),
+      },
+      cameraFlight: { flyTo: vi.fn() },
+    };
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    host.querySelectorAll<HTMLElement>('[data-testid="rule-check-violation-row"]')[0]!.click();
+    await flushUi();
+    const details = host.querySelector('[data-testid="rule-check-violation-details"]');
+    expect(details?.textContent).toContain('规范要求');
+    expect(details?.textContent).toContain('24381_10, 24381_20');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-detail-isolate"]')!.click();
+    await flushUi();
+    expect(setObjectColor).toHaveBeenCalledTimes(2);
+    expect(setObjectsXRayed).toHaveBeenCalledWith(['24381_500'], true);
+    expect(host.textContent).toContain('隔离显示中');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-detail-only-rule"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(1);
+    expect(host.querySelector('[data-testid="rule-check-active-filter"]')?.textContent).toContain('规则：LAY-189');
+    expect(host.querySelector('[data-testid="rule-check-result-filtered-count"]')?.textContent?.trim()).toBe('1/2');
   });
 });

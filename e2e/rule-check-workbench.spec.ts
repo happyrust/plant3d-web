@@ -343,12 +343,12 @@ test('全量运行四套引擎校验，验证徽标渲染、火灾分区着色�
   expect(capturedUrls.rooms).toBeDefined();
   expect(capturedUrls.attrs?.searchParams.get('refno')).toBe('24381_10,24381_20');
 
-  // 验证分级 / 有柱 / 火灾分区红黄徽标全部渲染
+  // 验证分级 / 有柱 / 火灾分区红黄徽标全部渲染（概览统计格也写「提醒」，只在违规行里找）
   await expect(page.getByText('配电室 R101 盘前局部有柱，通道净宽不足')).toBeVisible();
-  await expect(page.getByText('有柱', { exact: true })).toBeVisible();
-  await expect(page.getByText('扩散性火灾', { exact: true })).toBeVisible();
-  await expect(page.getByText('局部性火灾', { exact: true })).toBeVisible();
-  await expect(page.getByText('提醒', { exact: true })).toBeVisible();
+  await expect(rows.getByText('有柱', { exact: true })).toBeVisible();
+  await expect(rows.getByText('扩散性火灾', { exact: true })).toBeVisible();
+  await expect(rows.getByText('局部性火灾', { exact: true })).toBeVisible();
+  await expect(rows.getByText('提醒', { exact: true })).toBeVisible();
 
   // 在浏览器侧注入轻量 DTX 视口桩，使离线无后端场景也能完整验通「定位高亮」「火灾着色」「还原」全链路
   await page.evaluate(async () => {

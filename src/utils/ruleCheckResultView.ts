@@ -16,6 +16,11 @@ export type RuleCheckResultFilterOptions = {
   severity: RuleCheckResultSeverityFilter;
   keyword: string;
   accuracy?: RuleCheckResultAccuracyFilter;
+  /** 只留这些专业；空数组不限。 */
+  disciplines?: string[];
+  /** 只留这条规则（`ruleViolationKey` 的值）。 */
+  ruleKey?: string | null;
+  copyOnly?: boolean;
 };
 
 export type RuleCheckResultSeverityCounts = Record<RuleCheckResultSeverityFilter, number>;
@@ -53,6 +58,54 @@ export function countViolationsByResultSeverity(
   return counts;
 }
 
+export function ruleViolationKey(v: Pick<UnifiedRuleViolation, 'engine' | 'ruleId'>): string {
+  return `${v.engine}:${v.ruleId}`;
+}
+
+export function countViolationsByDiscipline(violations: UnifiedRuleViolation[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const v of violations) {
+    counts[v.discipline] = (counts[v.discipline] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** 850 → `850 ms`，52010 → `52.0 s`，161000 → `2 分 41 秒`。 */
+export function formatRuleCheckDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)} s`;
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`;
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+}
+
+/** 运行中的计时：72000 → `01:12`。 */
+export function formatRuleCheckClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/** 实测与阈值差多少：低于下限写「差」，超过上限写「超」（`margin_mm` = 实测 − 阈值）。 */
+export function violationGapLabel(v: Pick<UnifiedRuleViolation, 'marginMm'>): string | null {
+  if (v.marginMm === undefined || !Number.isFinite(v.marginMm) || Math.abs(v.marginMm) < 0.05) return null;
+  const abs = Math.abs(v.marginMm).toFixed(1);
+  return v.marginMm < 0 ? `差 ${abs}` : `超 ${abs}`;
+}
+
+/** 下限类违规的实测 / 阈值比（0–1），用于行内比例条；其余情况不画。 */
+export function violationGaugeRatio(
+  v: Pick<UnifiedRuleViolation, 'measuredMm' | 'thresholdMm' | 'marginMm'>,
+): number | null {
+  if (v.measuredMm === undefined || v.thresholdMm === undefined || v.thresholdMm <= 0) return null;
+  if (v.marginMm === undefined || v.marginMm >= 0) return null;
+  return Math.min(1, Math.max(0, v.measuredMm / v.thresholdMm));
+}
+
 export function countViolationsByAccuracy(
   violations: UnifiedRuleViolation[],
 ): RuleCheckResultAccuracyCounts {
@@ -75,6 +128,9 @@ export function filterRuleViolations(
     if (options.severity === 'semi_auto' && v.severity !== 'semi_auto') return false;
     if (options.severity === 'violation' && v.severity !== 'violation') return false;
     if (options.accuracy && options.accuracy !== 'all' && v.accuracy !== options.accuracy) return false;
+    if (options.disciplines && options.disciplines.length > 0 && !options.disciplines.includes(v.discipline)) return false;
+    if (options.ruleKey && ruleViolationKey(v) !== options.ruleKey) return false;
+    if (options.copyOnly && v.copyNamed !== true) return false;
 
     if (!kw) return true;
     return (
@@ -99,7 +155,7 @@ export function groupViolationsByRule(
   const map = new Map<string, RuleViolationGroup>();
 
   for (const v of violations) {
-    const key = `${v.engine}:${v.ruleId}`;
+    const key = ruleViolationKey(v);
     let group = map.get(key);
     if (!group) {
       group = {

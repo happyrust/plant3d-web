@@ -278,4 +278,92 @@ describe('useRuleCheck', () => {
     expect(store.summaryStats.value.branAll).toEqual({ bransTotal: 10, bransChecked: 9, bransFailed: 1 });
     expect(store.state.totalElapsedMs).toBe(1500);
   });
+
+  it('records each engine run, keeps the other engines when one fails, and retries only the failed one', async () => {
+    runSpatialRuleCheckMock.mockResolvedValue({ tree_state: 'ready', rules_run: 1, elapsed_ms: 10, warnings: [], results: [] });
+    runRoomRuleCheckMock
+      .mockRejectedValueOnce(new Error('rooms offline'))
+      .mockResolvedValue({ tree_state: 'ready', room_count: 1, rules_run: 1, elapsed_ms: 4, warnings: [], results: [] });
+    runAttrRuleCheckMock.mockResolvedValue({ elapsed_ms: 2, results: [] });
+
+    const store = useRuleCheck();
+    await store.loadCatalogs();
+    await store.runChecks();
+
+    expect(store.state.runError).toBeNull();
+    expect(store.state.engineRuns.map((r) => [r.engine, r.status])).toEqual([
+      ['spatial', 'done'],
+      ['rooms', 'failed'],
+      ['attrs', 'done'],
+    ]);
+    expect(store.state.engineRuns[1]!.error).toBe('rooms offline');
+    expect(store.state.batches.map((b) => b.engine)).toEqual(['spatial', 'attrs']);
+
+    await store.retryEngine('rooms');
+
+    expect(runRoomRuleCheckMock).toHaveBeenCalledTimes(2);
+    expect(runSpatialRuleCheckMock).toHaveBeenCalledTimes(1);
+    expect(store.state.engineRuns.find((r) => r.engine === 'rooms')?.status).toBe('done');
+    expect(store.state.batches.map((b) => b.engine)).toEqual(['spatial', 'rooms', 'attrs']);
+    expect(store.state.running).toBe(false);
+  });
+
+  it('reports the engine error when every engine of the run fails', async () => {
+    runSpatialRuleCheckMock.mockRejectedValue(new Error('spatial tree not ready'));
+
+    const store = useRuleCheck();
+    await store.loadCatalogs();
+    store.state.activeEngine = 'spatial';
+    await store.runChecks();
+
+    expect(store.state.runError).toBe('spatial tree not ready');
+    expect(store.state.engineRuns.map((r) => r.status)).toEqual(['failed']);
+  });
+
+  it('merges a finished engine while others still run and keeps it when the run is cancelled', async () => {
+    let resolveAttrs!: (value: unknown) => void;
+    runSpatialRuleCheckMock.mockResolvedValue({
+      tree_state: 'ready',
+      rules_run: 1,
+      elapsed_ms: 10,
+      warnings: [],
+      results: [
+        {
+          id: 'HYD-001',
+          issue: 315,
+          discipline: '水工',
+          title: '水工净距',
+          requirement: '>=300mm',
+          unit: 'mm',
+          source_items: 1,
+          target_items: 1,
+          violation_total: 0,
+          truncated: false,
+          violations: [],
+        },
+      ],
+    });
+    runRoomRuleCheckMock.mockResolvedValue({ elapsed_ms: 1, results: [] });
+    runAttrRuleCheckMock.mockReturnValue(new Promise((resolve) => {
+      resolveAttrs = resolve;
+    }));
+
+    const store = useRuleCheck();
+    await store.loadCatalogs();
+    const running = store.runChecks();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(store.state.running).toBe(true);
+    expect(store.state.results.map((r) => r.id)).toEqual(['HYD-001']);
+    expect(store.state.engineRuns.find((r) => r.engine === 'attrs')?.status).toBe('running');
+
+    store.cancelRun();
+    expect(store.state.running).toBe(false);
+    expect(store.state.engineRuns.find((r) => r.engine === 'attrs')?.status).toBe('cancelled');
+
+    resolveAttrs({ elapsed_ms: 1, results: [] });
+    await running;
+    expect(store.state.batches.map((b) => b.engine)).toEqual(['spatial', 'rooms']);
+    expect(store.state.results.map((r) => r.id)).toEqual(['HYD-001']);
+  });
 });
