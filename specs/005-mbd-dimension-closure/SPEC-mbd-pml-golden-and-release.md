@@ -1,6 +1,6 @@
 # Specification & Runbook: `mbd-pml-golden-and-release`（Spec 005 · Module 4）
 
-**Status**: Ready for Release Window & E3D Host（成文就绪；实际推送 `publish` 分支与 E3D 上机采集需人工窗口触发）  
+**Status**: Ready for Release Window & E3D Host（成文就绪；实际推送 `publish` 分支与 E3D 上机采集需人工窗口触发。2026-11-23 已执行一轮：前端已部署，服务端构建没有启动，见第 5 节）  
 **Module**: `mbd-pml-golden-and-release`（`specs/005-mbd-dimension-closure/CAPABILITY-MAP.md` 第四模块）  
 **Prerequisites Completed**:
 - Module 1 (`mbd-mainline-convergence`): `plant-mbd` `github/main` @ `3dbf13ae`、`gen-model` `origin/refactor` @ `229f50329`、`plant3d-web` `origin/main` @ `4f08e2a6`
@@ -68,8 +68,10 @@
 
 当生产服务器已确认运行带 `meta.coverage` 的服务端版本后，在 `plant3d-web` 执行一次小提交收口 `#144`：
 
-- [ ] 删除 `src/dimension/ui/DimensionPanelDock.vue`（及相关辅助文件）中按 `layoutMode` 名称猜测的 `PARTIAL_LAYOUT_MODES` 兜底逻辑；
-- [ ] 确保缺省 `meta.coverage` 的标注包不再误报「本分支标注不完整」，而声明了 `meta.coverage` 且缺失期望类别的标注包照常列出缺失种类；
+> 2026-11-27 补记：`#144` 已在 `6c050f83`（2026-11-23）完成并关票，早于本节要求的「`#143` Step 5 验证通过之后」。前两项已做，`PARTIAL_LAYOUT_MODES` 在 `src/` 里已经零命中。第三项里「已核对的服务器服务端版本号」没有，因为服务端还没上线。由此产生的部署顺序约束见第 5 节。
+
+- [x] 删除 `src/dimension/ui/DimensionPanelDock.vue`（及相关辅助文件）中按 `layoutMode` 名称猜测的 `PARTIAL_LAYOUT_MODES` 兜底逻辑；
+- [x] 确保缺省 `meta.coverage` 的标注包不再误报「本分支标注不完整」，而声明了 `meta.coverage` 且缺失期望类别的标注包照常列出缺失种类；
 - [ ] 运行 `tgrep "PARTIAL_LAYOUT_MODES" src/` 确认全仓零命中，跑通 `DimensionPanelDock.test.ts`、`npm run type-check` 与 `npx eslint --max-warnings=0`，并在提交说明中写明已核对的服务器服务端版本号。
 
 ---
@@ -109,3 +111,27 @@
 - 将九类至少 18 份真实 PML 导出 JSON 放入 `vendor/plant-mbd` PML 对照目录并接入 CI 门禁测试；
 - 每条 `pml diff` 差异逐一落实去向（小偏差直接修求解器附提交号、有意修正登记裁决号、大项单独立票）；
 - 将 `D-PIPE-046`、`D-CIVIL-017`、`D-CIVIL-025`、`D-CIVIL-026`、`D-SUPP4-003`、`D-SUPP4-029`、`D-SUPP4-033` 等条款从「读代码推断」更新为「实机核对过」；若用户提供含项目定制 UDA 的工程库则同步核验 `#149`。
+
+---
+
+## 5. 执行记录
+
+### 2026-11-23
+
+- 依赖仓预查后按 2.3 的顺序执行。前端经 `deploy-ubuntu.yml` 手工触发，从 `plant3d-web` `main` `5b7277e7` 部署成功。
+- `gen-model` `refactor` 快进推到 `publish`（`0f8d8cc3b`），`linux-binary.yml` 的作业没有启动：GitHub Actions 返回账单 / 消费限额错误。
+- 八仓按远端精确提交在干净目录里 `cargo check` 通过，0 错误。
+- 用户确认关闭 GitHub CI、本阶段以本地验证为准。`#143` 保留开启，等手工或非 CI 方式升级服务器上的服务端二进制。
+- `#144` 同日完成（`6c050f83`）。
+
+### 2026-11-27 复核
+
+只读核对，依据是 Actions 运行记录与各仓远端分支，没有碰服务器：
+
+- 服务端最近一次成功部署仍是 10-26 的 `83aa3c250`。它只有 `/api/mbd/v2/pipe/{refno}`，没有按对象取数的端点，所以服务器上只有管道能出 MBD 标注。
+- `publish` 仍在 `0f8d8cc3b`，落后 `refactor` 209 笔，其中包括批量端点 `POST /api/mbd/v2/objects`（`dc288f4b9`）。2.1 表里的提交号是 11-18 的实测值，下次发布前要重新核对。
+- 前端仍是 `5b7277e7`。`main` 在它之后又有 44 笔，包括 `#144`、`#192` 与交互式尺寸 M4 的各 PR。
+
+### 部署顺序约束
+
+`#144` 之后的前端对不带 `meta.coverage` 的标注包不再提示「标注不完整」。服务端升级之前不要从 `main` 重新部署前端，否则旧服务端出的管道包缺类别时，面板上不会有任何提示。顺序是先升服务端、核对标注包带覆盖声明，再部署前端。
