@@ -434,15 +434,35 @@ describe('RuleCheckPanel', () => {
 
     expect(host.querySelector('[data-testid="rule-check-progress"]')).toBeNull();
     expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(2);
-    const roomsChip = () => host.querySelector('[data-testid="rule-check-engine-chip-rooms"]');
-    expect(roomsChip()?.getAttribute('data-status')).toBe('failed');
+    const failure = () => host.querySelector('[data-testid="rule-check-engine-failure"]');
+    expect(failure()?.textContent).toContain('房间语义 没有跑完');
 
-    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-engine-retry-rooms"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-engine-failure-retry-rooms"]')!.click();
     await flushUi();
 
     expect(runRoomRuleCheckMock).toHaveBeenCalledTimes(2);
     expect(runSpatialRuleCheckMock).toHaveBeenCalledTimes(1);
-    expect(roomsChip()?.getAttribute('data-status')).toBe('done');
+    expect(failure()).toBeNull();
+  });
+
+  it('asks for a second click before clearing the results', async () => {
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    const clearBtn = () => host.querySelector<HTMLButtonElement>('[data-testid="rule-check-clear-results-btn"]');
+    const rowCount = () => host.querySelectorAll('[data-testid="rule-check-violation-row"]').length;
+    clearBtn()!.click();
+    await flushUi();
+    expect(clearBtn()?.textContent).toContain('再点一次');
+    expect(rowCount()).toBe(2);
+
+    clearBtn()!.click();
+    await flushUi();
+    expect(rowCount()).toBe(0);
+    expect(host.querySelector('[data-testid="rule-check-empty-not-run"]')).not.toBeNull();
   });
 
   it('expands a row into details, isolates it in 3D, and narrows the list to its rule', async () => {
