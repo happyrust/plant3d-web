@@ -399,11 +399,22 @@ const candidate = {
 - `pointerup`
 - `pointercancel`
 
-有活动编辑会话或命中尺寸时，系统会调用 `preventDefault()` 和 `stopImmediatePropagation()`；未消费时事件继续交给查看器旋转、选择等逻辑。因此：
+系统消费一个事件时会调用 `preventDefault()` 和 `stopImmediatePropagation()`；未消费时事件继续交给查看器旋转、选择等逻辑。消费与否按下面的规则：
+
+- 只认主键。右键、中键的按下和抬起不消费，只有右键或中键按着时的移动也不消费，有活动会话也一样：它们是相机的平移、缩放和宿主的右键菜单。
+- 有活动编辑会话时，主键的按下、抬起和其余的移动都归会话，全部消费。
+- 没有会话、也没有键按着时，光标悬停在尺寸图形上的移动会置悬停并消费。主键按着而没有会话时的移动不消费、不置悬停：那是相机旋转这类别人的拖动。
+- 主键按在拖得动的图形上（编辑工厂给出了会话）：按下时选中并消费，之后的拖动归这个会话。
+- 主键按在拖不动的图形上（只读的外部标注，或编辑工厂返回 `null`）：
+  - 宿主用 `pointer.setCameraDragGate(() => true)` 打开了相机拖动闸门时，按下不消费，留给相机去转；抬起时位移不超过 3 CSS 像素才算单击、才选中。抬起本身也不消费，相机要收到它才会结束自己的拖动。
+  - 闸门没开时，按下时选中并消费。
+
+因此：
 
 - 不需要把原生指针事件再手工转发给 `system.pointer`。
 - 宿主自己的捕获阶段监听器若注册得更早，仍可能先收到事件。
-- 尺寸命中会优先于后续注册的普通模型拾取逻辑。
+- 尺寸命中会优先于后续注册的普通模型拾取逻辑。闸门开着时，单击拖不动的图形这一项要宿主配合：在自己的 `pointerup` 处理里先问 `pointer.ownsClick(event)`，是就不再做模型拾取。
+- 闸门开着时，宿主若有「长按」之类的按住手势，用 `pointer.hasPendingClick` 判断这次按住是不是落在尺寸图形上，是就不要当成长按。
 
 ## 创建和管理用户尺寸
 
@@ -1149,6 +1160,10 @@ type CreateDimensionSystemResult =
 | --- | --- |
 | `start(session)` | 启动编辑会话并取消旧会话 |
 | `setEditSessionFactory(factory)` | 为命中的现有尺寸创建编辑会话 |
+| `setInteractionGate(gate)` | 返回 `false` 时暂停悬停和主键选中（例如测量草稿进行中）；活动会话不受影响 |
+| `setCameraDragGate(gate)` | 返回 `true` 时，主键按在拖不动的图形上留给相机，原地抬起才选中 |
+| `ownsClick(event)` | 这次 `pointerup` 是否被认领成单击尺寸图形；宿主的模型点选据此跳过 |
+| `hasPendingClick` | 有一次留给相机的按下还没抬起；宿主据此不把它当成长按 |
 | `setCommitResultHandler(handler)` | 统一处理提交失败或异常 |
 | `pointerMove/Down/Up()` | 原生事件入口；facade 已自动绑定 |
 | `pointerCancel()` | 取消活动会话 |
