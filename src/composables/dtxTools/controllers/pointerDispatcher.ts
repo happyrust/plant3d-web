@@ -26,6 +26,14 @@ export type PointerDispatcherDeps = {
   host: ReturnType<typeof createOverlayHost>;
 };
 
+export type CanvasPointerUpOptions = Readonly<{
+  /**
+   * 这次抬起已经被尺寸层认领成「单击尺寸图形」（#205）。按下记录照常清掉，但不再当成场景上的单击去拾取：
+   * 否则会选上标注背后的构件，或者把尺寸选中联动选上的构件清掉。
+   */
+  clickTaken?: boolean;
+}>;
+
 export function createPointerDispatcher(ctx: DtxToolsContext, deps: PointerDispatcherDeps) {
   const { picker, cloudFlow, pick, measure, host } = deps;
 
@@ -72,7 +80,7 @@ export function createPointerDispatcher(ctx: DtxToolsContext, deps: PointerDispa
 
   }
 
-  function onCanvasPointerUp(canvas: HTMLCanvasElement, e: PointerEvent) {
+  function onCanvasPointerUp(canvas: HTMLCanvasElement, e: PointerEvent, options: CanvasPointerUpOptions = {}) {
     if (!ctx.ready.value) return;
 
     const mode = ctx.store.toolMode.value;
@@ -135,6 +143,8 @@ export function createPointerDispatcher(ctx: DtxToolsContext, deps: PointerDispa
       return;
     }
     clickTracker.value = { down: null, moved: false };
+
+    if (options.clickTaken) return;
 
     if (mode === 'none') {
       // 普通模式下的点击选择，支持 Shift 多选

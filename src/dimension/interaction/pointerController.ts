@@ -72,6 +72,15 @@ function isSecondaryButton(event: PointerLikeEvent): boolean {
   return (event.button ?? PRIMARY_BUTTON) !== PRIMARY_BUTTON;
 }
 
+/** 按下之后挪动超过这么多像素就算拖动、不算单击。和宿主点选判「拖过没有」用的是同一个数。 */
+const CLICK_SLOP_PX = 3;
+
+function movedBeyondClickSlop(from: Vec2, to: Vec2): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  return dx * dx + dy * dy > CLICK_SLOP_PX * CLICK_SLOP_PX;
+}
+
 const NOT_CONSUMED: PointerDispatchResult = { consumed: false };
 const CONSUMED: PointerDispatchResult = {
   consumed: true,
@@ -86,6 +95,11 @@ export class DimensionPointerController {
     | ((outcome: DimensionCommitOutcome) => void)
     | null = null;
   private interactionGate: (() => boolean) | null = null;
+  private cameraDragGate: (() => boolean) | null = null;
+  /** 按在拖不动的图形上、按下留给了相机的那一次：抬起时没挪过才算单击。 */
+  private pendingClick: Readonly<{ dimensionId: string; screen: Vec2 }> | null = null;
+  /** 认领成「单击尺寸图形」的那一次抬起，按事件对象本身认。 */
+  private ownedClick: object | null = null;
   private hoverId: string | null = null;
   private disposed = false;
   private readonly statusListeners = new Set<(status: DimensionSessionStatus | null) => void>();
@@ -147,6 +161,29 @@ export class DimensionPointerController {
     if (gate && !gate()) this.setHover(null);
   }
 
+  /**
+   * 宿主可注入的相机拖动闸门（#205）：返回 true 时，按在拖不动的尺寸图形（只读的外部标注、没有编辑会话可开的部位）上
+   * 的那一下不消费，留给相机去转；抬起时没挪过才算单击、才选中。标注一密，画布上大半都是这种图形，按下就消费的话
+   * 相机没地方起拖。
+   * 不注入或返回 false 时照旧在按下时选中并消费：工具模式下要这样，免得工具把这次按下当成自己的。
+   */
+  setCameraDragGate(gate: (() => boolean) | null): void {
+    this.cameraDragGate = gate;
+  }
+
+  /** 此刻有一次按在尺寸图形上、留给了相机的按下还没抬起。宿主据此不把这次按住当成「长按记旋转中心」。 */
+  get hasPendingClick(): boolean {
+    return this.pendingClick !== null;
+  }
+
+  /**
+   * 这次抬起是不是被尺寸认领成了「单击尺寸图形」。抬起本身没有消费（相机要收到它），宿主的场景点选要先问这一句再拾取：
+   * 否则抬起落在尺寸或空白上，拾取未命中，会把尺寸选中联动选上的构件又清掉。
+   */
+  ownsClick(event: object): boolean {
+    return this.ownedClick !== null && this.ownedClick === event;
+  }
+
   setCommitResultHandler(
     handler: ((outcome: DimensionCommitOutcome) => void) | null,
   ): void {
@@ -166,7 +203,14 @@ export class DimensionPointerController {
       return CONSUMED;
     }
     // 主键按着而尺寸这边没有会话：是别人的拖动（相机旋转）。拦下来的话，光标经过标注的那几步相机收不到。
-    if (primaryHeld) return NOT_CONSUMED;
+    if (primaryHeld) {
+      if (this.pendingClick && movedBeyondClickSlop(this.pendingClick.screen, screen)) {
+        this.pendingClick = null;
+      }
+      return NOT_CONSUMED;
+    }
+    // 没有键按着了还挂着一次单击：那次抬起没送到（在窗口外松的手），不能留到下一次抬起去认。
+    this.pendingClick = null;
     if (this.interactionGate && !this.interactionGate()) {
       this.setHover(null);
       return NOT_CONSUMED;
@@ -182,6 +226,8 @@ export class DimensionPointerController {
 
   pointerDown(event: PointerLikeEvent): PointerDispatchResult {
     if (this.disposed || isSecondaryButton(event)) return NOT_CONSUMED;
+    this.pendingClick = null;
+    this.ownedClick = null;
     const screen = this.toScreen(event);
     if (this.activeSession) {
       this.activeSession.pointerDown(screen);
@@ -198,14 +244,19 @@ export class DimensionPointerController {
       this.input.hitTolerancePx ?? 6,
     );
     if (!hit) return NOT_CONSUMED;
-    this.input.viewport.setSelection(hit.dimensionId);
     const editSession = this.editSessionFactory?.(hit, screen) ?? null;
+    if (!editSession && this.cameraDragGate?.()) {
+      this.pendingClick = { dimensionId: hit.dimensionId, screen };
+      return NOT_CONSUMED;
+    }
+    this.input.viewport.setSelection(hit.dimensionId);
     if (editSession) this.start(editSession);
     return CONSUMED;
   }
 
   pointerUp(event: PointerLikeEvent): PointerDispatchResult {
-    if (this.disposed || !this.activeSession || isSecondaryButton(event)) return NOT_CONSUMED;
+    if (this.disposed || isSecondaryButton(event)) return NOT_CONSUMED;
+    if (!this.activeSession) return this.releasePendingClick(event);
     const screen = this.toScreen(event);
     if (this.activeSession.phase !== 'ready') {
       this.activeSession.pointerMove(screen);
@@ -236,7 +287,21 @@ export class DimensionPointerController {
     return CONSUMED;
   }
 
+  /**
+   * 按下留给了相机的那一次的抬起：没挪过就是单击，选中并记下认领；挪过就是相机的拖动，什么都不做。
+   * 两种都不消费：相机接了按下，要收到抬起才会结束它那边的拖动。
+   */
+  private releasePendingClick(event: PointerLikeEvent): PointerDispatchResult {
+    const click = this.pendingClick;
+    this.pendingClick = null;
+    if (!click || movedBeyondClickSlop(click.screen, this.toScreen(event))) return NOT_CONSUMED;
+    this.input.viewport.setSelection(click.dimensionId);
+    this.ownedClick = event;
+    return NOT_CONSUMED;
+  }
+
   pointerCancel(): PointerDispatchResult {
+    this.pendingClick = null;
     if (this.disposed || !this.activeSession) return NOT_CONSUMED;
     this.activeSession.cancel();
     this.activeSession = null;

@@ -1,5 +1,5 @@
 /**
- * 尺寸只认主键，不拦别人的拖动（#205 第一步）。
+ * 尺寸图形不拦相机（#205）。两组：尺寸只认主键、不拦别人的拖动；只读标注上按住左键拖是转视角、原地抬起才是选中。
  *
  * 尺寸层在画布上用捕获阶段接指针事件，接下来的就 `stopImmediatePropagation()`，相机收不到。它原先判断接不接时
  * 不看是哪个键、有没有键按着：右键、中键按在标注上相机动不了，用户尺寸的标签会被右键、中键拖走，创建过程中
@@ -8,7 +8,10 @@
  * 场景是 primitives demo，不依赖后端：一条用户线性尺寸（拾两点再放置），外加一条同一对点、摆在另一侧的只读外部尺寸。
  * 量法是真实的 `page.mouse` 输入加相机位姿，不比截图。
  *
- * 左键按在尺寸图形上的行为（创建中按住再拖、拖标签，相机都不动）由 `dtx-view-focus.spec.ts` 守着，这里只补单击选中。
+ * 创建中左键按住再拖相机不动，由 `dtx-view-focus.spec.ts` 守着，不在这里。
+ *
+ * 第二组的来由：只读标注拖不动，尺寸层却在按下时就把事件拿走，按住拖什么都不发生。标注一密，画布上大半是标签卡片，
+ * 相机没地方起拖。现在导航态下这一下留给相机，抬起时没挪过才算单击；工具模式下照旧。
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -22,6 +25,8 @@ type Scene = {
   rect: Rect;
   /** 能拾到模型表面的一点（画布坐标） */
   surface: Pt;
+  /** 能拾到模型表面、又不压着尺寸图形的一点 */
+  freeSurface: Pt;
   /** 没有模型、没有尺寸图形的一点，离两个标签都远 */
   empty: Pt;
   userId: string;
@@ -34,8 +39,15 @@ const PAN_MIN = 0.03;
 /** 缩放算数：视距变化超过这个比例。空白处同样的中键拖动约 0.06 */
 const DOLLY_MIN = 0.02;
 
+/** 长按记旋转中心的门槛是 300ms，留足余量 */
+const LONG_PRESS_MS = 700;
+
 const dist = (a: number[], b: number[]): number => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 const px = (a: Pt, b: Pt): number => Math.hypot(a.x - b.x, a.y - b.y);
+const angleDeg = (a: number[], b: number[]): number => {
+  const d = Math.abs(a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]! + a[3]! * b[3]!);
+  return (2 * Math.acos(Math.min(1, d)) * 180) / Math.PI;
+};
 
 const readPose = (page: Page): Promise<Pose> => page.evaluate(() => {
   const viewer = (window as any).__dtxViewer;
@@ -67,6 +79,34 @@ const sessionPhase = (page: Page): Promise<string> => page.evaluate(() => {
 const userPlacement = (page: Page): Promise<unknown> => page.evaluate(
   () => (window as any).__viewerContext.dimensionSystem.value.document.state.records[0].placement,
 );
+
+const selectedDimension = (page: Page): Promise<string | null> => page.evaluate(
+  () => (window as any).__viewerContext.dimensionSystem.value.viewport.getSelection(),
+);
+
+/** 场景里选中的构件 */
+const selectedObjects = (page: Page): Promise<string[]> => page.evaluate(
+  () => [...((window as any).__xeokitViewer?.scene?.selectedObjectIds ?? [])],
+);
+
+/** 长按记下的旋转中心；没有记是 null */
+const rememberedPivot = (page: Page): Promise<number[] | null> => page.evaluate(
+  () => (window as any).__dtxPivot.getRememberedPivot()?.toArray() ?? null,
+);
+
+/** 在画布上的一点按下再松开，中间不移动。holdMs 超过 300 就是长按 */
+async function press(page: Page, rect: Rect, at: Pt, holdMs = 40): Promise<void> {
+  const x = rect.left + at.x;
+  const y = rect.top + at.y;
+  await page.mouse.move(x - 3, y - 3);
+  await page.waitForTimeout(80);
+  await page.mouse.move(x, y);
+  await page.waitForTimeout(150);
+  await page.mouse.down();
+  await page.waitForTimeout(holdMs);
+  await page.mouse.up();
+  await page.waitForTimeout(450);
+}
 
 /** 这条尺寸的标签中心（画布坐标）和大小，并确认中心那一点命中的就是它的标签 */
 async function labelCentre(page: Page, id: string): Promise<Pt & { width: number; height: number }> {
@@ -112,6 +152,8 @@ async function drag(page: Page, rect: Rect, at: Pt, button: Button, delta: [numb
   const end = await readPose(page);
   const viewDistance = dist(before.pos, before.target) || 1;
   return {
+    /** 相机转了多少度 */
+    rotateDeg: angleDeg(before.quat, end.quat),
     /** 观察中心挪了多少，除以视距 */
     targetShift: dist(before.target, end.target) / viewDistance,
     /** 视距变成了原来的几倍 */
@@ -166,7 +208,7 @@ async function openSceneWithDimensions(page: Page): Promise<Scene> {
         if (inside && uncovered(candidate)) { place = candidate; break; }
       }
     }
-    return { rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, a, b, place, empties };
+    return { rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, a, b, place, surface, empties };
   });
   expect(scan.a && scan.b && scan.place, '演示场景里要找得到两个拾点和一个放置点').toBeTruthy();
   const rect = scan.rect;
@@ -214,7 +256,16 @@ async function openSceneWithDimensions(page: Page): Promise<Scene> {
   }
   expect(empty, '画布上要有一处没有模型、没有尺寸图形的空白').not.toBeNull();
 
-  return { rect, surface: scan.a!, empty: empty!, userId, base: await readPose(page) };
+  let freeSurface: Pt | null = null;
+  for (const point of scan.surface) {
+    if (px(point, userLabel) < 120 || px(point, readOnlyLabel) < 120) continue;
+    if (await overDimension(page, point)) continue;
+    freeSurface = point;
+    break;
+  }
+  expect(freeSurface, '构件表面要有一处不压尺寸图形的点').not.toBeNull();
+
+  return { rect, surface: scan.a!, freeSurface: freeSurface!, empty: empty!, userId, base: await readPose(page) };
 }
 
 test.use({ viewport: { width: 1600, height: 1000 } });
@@ -246,9 +297,7 @@ test.describe('尺寸只认主键', () => {
     const before = await readPose(page);
     await page.mouse.click(scene.rect.left + label.x, scene.rect.top + label.y);
     await page.waitForTimeout(400);
-    expect(await page.evaluate(
-      () => (window as any).__viewerContext.dimensionSystem.value.viewport.getSelection(),
-    ), '主键单击标签应该选中这条尺寸').toBe(READ_ONLY_ID);
+    expect(await selectedDimension(page), '主键单击标签应该选中这条尺寸').toBe(READ_ONLY_ID);
     const after = await readPose(page);
     expect(dist(before.pos, after.pos) / (dist(before.pos, before.target) || 1), '单击标签相机不该动').toBeLessThan(1e-6);
   });
@@ -334,5 +383,72 @@ test.describe('尺寸只认主键', () => {
     expect(moves.all, '拖动期间应该有移动事件').toBeGreaterThanOrEqual(40);
     expect(moves.passed, '尺寸层没有会话，别人的拖动它不该拦').toBe(moves.all);
     expect(dist(before.pos, after.pos) / (dist(before.pos, before.target) || 1), '相机应该转起来了').toBeGreaterThan(0.05);
+  });
+});
+
+test.describe('只读标注不拦相机', () => {
+  test('在只读标签上按住左键拖：相机照常转，标注不被选中；用户尺寸的标签照旧是拖标签', async ({ page }) => {
+    const scene = await openSceneWithDimensions(page);
+    await page.evaluate(() => (window as any).__viewerContext.dimensionSystem.value.viewport.setSelection(null));
+
+    await setPose(page, scene.base);
+    const fromEmpty = await drag(page, scene.rect, scene.empty, 'left', [150, 50]);
+    expect(fromEmpty.rotateDeg, '对照：空白处左键拖，相机应该转').toBeGreaterThan(5);
+
+    await setPose(page, scene.base);
+    const fromLabel = await drag(page, scene.rect, await labelCentre(page, READ_ONLY_ID), 'left', [150, 50]);
+    expect(fromLabel.rotateDeg, '从只读标签上起拖，相机转的角度应该和从空白处起拖相当').toBeGreaterThan(fromEmpty.rotateDeg * 0.5);
+    expect(await selectedDimension(page), '拖动不是单击，不该选中这条标注').toBeNull();
+    expect(await sessionPhase(page)).toBe('');
+
+    // 拖得动的照旧：用户尺寸的标签按住拖，标签跟着走，相机不转
+    await setPose(page, scene.base);
+    const placementBefore = await userPlacement(page);
+    const fromUserLabel = await drag(page, scene.rect, await labelCentre(page, scene.userId), 'left', [60, -48]);
+    expect(fromUserLabel.rotateDeg, '拖用户尺寸的标签，相机不该转').toBeLessThan(0.01);
+    expect(await userPlacement(page), '用户尺寸的标签应该被拖动了').not.toEqual(placementBefore);
+  });
+
+  test('单击只读标签：选中它，场景里已有的选中不被清掉；慢一点的单击不动记住的旋转中心', async ({ page }) => {
+    const scene = await openSceneWithDimensions(page);
+
+    // 先在构件上长按：记下旋转中心；松手等于一次单击，顺带选中这个构件
+    await press(page, scene.rect, scene.freeSurface, LONG_PRESS_MS);
+    const remembered = await rememberedPivot(page);
+    expect(remembered, '在构件上长按应该记下旋转中心').not.toBeNull();
+    const selected = await selectedObjects(page);
+    expect(selected, '长按松手应该选中按住的构件').toHaveLength(1);
+
+    for (const [what, holdMs] of [['单击', 40], ['按住 0.7 秒再松手', LONG_PRESS_MS]] as const) {
+      await page.evaluate(() => (window as any).__viewerContext.dimensionSystem.value.viewport.setSelection(null));
+      await setPose(page, scene.base);
+      const before = await readPose(page);
+      await press(page, scene.rect, await labelCentre(page, READ_ONLY_ID), holdMs);
+      const after = await readPose(page);
+
+      expect(await selectedDimension(page), `${what}只读标签应该选中这条标注`).toBe(READ_ONLY_ID);
+      expect(await selectedObjects(page), `${what}只读标签不该触发场景拾取，已有的选中不变`).toEqual(selected);
+      expect(await rememberedPivot(page), `${what}只读标签不该记下或取消旋转中心`).toEqual(remembered);
+      expect(angleDeg(before.quat, after.quat), `${what}只读标签相机不该转`).toBeLessThan(0.01);
+    }
+  });
+
+  test('工具模式下照旧：按在只读标签上由尺寸选中并拿走，按住拖相机不转', async ({ page }) => {
+    const scene = await openSceneWithDimensions(page);
+    await page.evaluate(() => (window as any).__viewerContext.dimensionSystem.value.viewport.setSelection(null));
+    await page.evaluate(() => (window as any).__viewerToolStore.setToolMode('xeokit_measure_distance'));
+    // 切工具模式会出提示条，画布可能变尺寸：等它停下来，重新量画布
+    await page.waitForTimeout(800);
+    const rect = await page.evaluate(() => {
+      const r = (document.querySelector('canvas.viewer') as HTMLCanvasElement).getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    });
+    await setPose(page, scene.base);
+
+    const fromLabel = await drag(page, rect, await labelCentre(page, READ_ONLY_ID), 'left', [150, 50]);
+    expect(fromLabel.rotateDeg, '测量态下从只读标签上起拖，相机不该转').toBeLessThan(0.01);
+    expect(await selectedDimension(page), '测量态下按在只读标签上，按下时就选中').toBe(READ_ONLY_ID);
+
+    await page.evaluate(() => (window as any).__viewerToolStore.setToolMode('none'));
   });
 });
