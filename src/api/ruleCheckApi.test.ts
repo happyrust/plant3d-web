@@ -12,11 +12,13 @@ import {
   fetchAllRuleCatalogs,
   normalizeAttrResponse,
   normalizeBranResponse,
+  normalizeBranRunAllResponse,
   normalizeRoomResponse,
   normalizeRuleRefnoToken,
   normalizeSpatialResponse,
   runAttrRuleCheck,
   runBranRuleCheck,
+  runBranRuleCheckAll,
   runRoomRuleCheck,
   runSpatialRuleCheck,
 } from './ruleCheckApi';
@@ -96,9 +98,19 @@ describe('ruleCheckApi', () => {
       query: { rules: 'HYD-001,LAY-189' },
     });
 
+    await runSpatialRuleCheck(['HYD-001'], undefined, { precise: true });
+    expect(genModelV1FetchMock).toHaveBeenLastCalledWith('/api/v1/rule-check/run', {
+      query: { rules: 'HYD-001', precise: '1' },
+    });
+
     await runBranRuleCheck('24381/145018', ['INST-222']);
     expect(genModelV1FetchMock).toHaveBeenLastCalledWith('/api/v1/rule-check/bran/run', {
       query: { refno: '24381_145018', rules: 'INST-222' },
+    });
+
+    await runBranRuleCheckAll(['INST-222']);
+    expect(genModelV1FetchMock).toHaveBeenLastCalledWith('/api/v1/rule-check/bran/run-all', {
+      query: { rules: 'INST-222' },
     });
 
     await runRoomRuleCheck(['ELEC-250']);
@@ -295,5 +307,112 @@ describe('ruleCheckApi', () => {
     expect(bran.results[0]!.violations[0]!.unit).toBe('%');
     expect(bran.results[0]!.violations[0]!.highlightRefnos).toEqual(['24381_145033', '24381_145035']);
     expect(bran.results[0]!.violations[1]!.highlightRefnos).toEqual(['24381_145018']);
+  });
+
+  it('maps accuracy, exact surface distance and per-rule precise stats from a precise spatial run', () => {
+    const spatial = normalizeSpatialResponse({
+      tree_state: 'Ready',
+      precise: true,
+      rules_run: 1,
+      elapsed_ms: 52,
+      warnings: [],
+      results: [
+        {
+          id: 'hvac-001',
+          issue: 287,
+          discipline: '通风',
+          title: '两风管净距',
+          requirement: '≥100 mm',
+          unit: 'mm',
+          source_items: 9021,
+          target_items: 9021,
+          violation_total: 2,
+          truncated: false,
+          precise: { refinable: true, aabb_findings: 500, candidates: 640, exact: 640, unavailable: 0, cleared: 498 },
+          violations: [
+            {
+              source: { refno: '24381_58129', noun: 'STRT' },
+              target: { refno: '24383_75979', noun: 'ELBO' },
+              measured_mm: 52.1,
+              threshold_mm: 100,
+              margin_mm: -47.9,
+              highlight_refnos: ['24381/58129', '24383/75979'],
+              accuracy: 'exact-surface',
+              exact_surface_mm: 52.1,
+            },
+            {
+              source: { refno: '24383_1102', noun: 'BOX' },
+              target: { refno: '24383_1131', noun: 'CYLI' },
+              measured_mm: 0,
+              threshold_mm: 100,
+              margin_mm: -100,
+              highlight_refnos: ['24383/1102', '24383/1131'],
+              accuracy: 'aabb',
+            },
+          ],
+        },
+      ],
+    });
+    expect(spatial.precise).toBe(true);
+    const [exact, estimated] = spatial.results[0]!.violations;
+    expect(exact!.accuracy).toBe('exact');
+    expect(exact!.exactSurfaceMm).toBe(52.1);
+    expect(exact!.detail).toContain('网格精算');
+    expect(estimated!.accuracy).toBe('aabb');
+    expect(estimated!.exactSurfaceMm).toBeUndefined();
+    expect(estimated!.detail).toContain('包围盒估算');
+    expect(spatial.results[0]!.precise).toEqual({
+      refinable: true,
+      aabbFindings: 500,
+      candidates: 640,
+      exact: 640,
+      unavailable: 0,
+      cleared: 498,
+    });
+  });
+
+  it('normalizes project-wide BRAN results and keeps the branch of each violation', () => {
+    const batch = normalizeBranRunAllResponse({
+      brans_total: 3,
+      brans_checked: 2,
+      brans_failed: 1,
+      rules_run: 1,
+      elapsed_ms: 900,
+      warnings: ['24381/150022 分支查询失败'],
+      results: [
+        {
+          id: 'hyd-007',
+          issue: 320,
+          discipline: '水工',
+          title: '相邻弯管间直管段最小距离',
+          requirement: '按外径对照表 mm',
+          unit: 'mm',
+          brans_checked: 2,
+          checked_pairs: 6,
+          violation_total: 1,
+          truncated: false,
+          violations: [
+            {
+              branch_refno: '24381/145018',
+              source: { refno: '24381_145031', noun: 'ELBO', order: 3 },
+              target: { refno: '24381_145034', noun: 'ELBO', order: 4 },
+              measured_mm: 86,
+              threshold_mm: 114,
+              margin_mm: -28,
+              highlight_refnos: [],
+              detail: '直管段不足',
+            },
+          ],
+        },
+      ],
+    });
+    expect(batch.bransTotal).toBe(3);
+    expect(batch.bransChecked).toBe(2);
+    expect(batch.bransFailed).toBe(1);
+    expect(batch.elapsedMs).toBe(900);
+    const v = batch.results[0]!.violations[0]!;
+    expect(v.branchRefno).toBe('24381_145018');
+    expect(v.highlightRefnos).toEqual(['24381_145031', '24381_145034']);
+    expect(v.unit).toBe('mm');
   });
 });

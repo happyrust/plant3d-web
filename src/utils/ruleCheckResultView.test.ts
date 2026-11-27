@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  countViolationsByAccuracy,
   countViolationsByResultSeverity,
   filterRuleViolations,
   groupViolationsByRule,
@@ -24,6 +25,8 @@ function mk(partial: Partial<UnifiedRuleViolation>): UnifiedRuleViolation {
     highlightColor: partial.highlightColor,
     highlightRefnos: partial.highlightRefnos ?? ['24381_10'],
     detail: partial.detail ?? '净距不足',
+    accuracy: partial.accuracy,
+    branchRefno: partial.branchRefno,
   };
 }
 
@@ -60,5 +63,18 @@ describe('ruleCheckResultView', () => {
     expect(groups[0]!.ruleId).toBe('LAY-189');
     expect(groups[0]!.violations).toHaveLength(2);
     expect(groups[0]!.allHighlightRefnos).toEqual(['24381_10', '24381_20', '24381_30']);
+  });
+
+  it('counts and filters by accuracy and matches the BRAN of project-wide rows', () => {
+    const rows: UnifiedRuleViolation[] = [
+      mk({ key: 'e', accuracy: 'exact' }),
+      mk({ key: 'a', accuracy: 'aabb' }),
+      mk({ key: 'n' }),
+      mk({ key: 'b', engine: 'bran', ruleId: 'hyd-007', branchRefno: '24381_145018' }),
+    ];
+    expect(countViolationsByAccuracy(rows)).toEqual({ all: 4, exact: 1, aabb: 1 });
+    expect(filterRuleViolations(rows, { severity: 'all', keyword: '', accuracy: 'exact' }).map((v) => v.key)).toEqual(['e']);
+    expect(filterRuleViolations(rows, { severity: 'all', keyword: '', accuracy: 'aabb' }).map((v) => v.key)).toEqual(['a']);
+    expect(filterRuleViolations(rows, { severity: 'all', keyword: '145018' }).map((v) => v.key)).toEqual(['b']);
   });
 });

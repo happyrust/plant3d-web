@@ -21,12 +21,13 @@ import {
   X,
 } from 'lucide-vue-next';
 
-import type { UnifiedRuleViolation } from '@/api/ruleCheckApi';
+import type { UnifiedPreciseStats, UnifiedRuleViolation } from '@/api/ruleCheckApi';
 
 import {
   RULE_CHECK_DISCIPLINES,
   RULE_CHECK_ENGINE_LABELS,
   useRuleCheck,
+  type RuleCheckBranScope,
   type RuleCheckEngineFilter,
 } from '@/composables/useRuleCheck';
 import {
@@ -45,9 +46,11 @@ import {
   triggerTextDownload,
 } from '@/utils/ruleCheckExport';
 import {
+  countViolationsByAccuracy,
   countViolationsByResultSeverity,
   filterRuleViolations,
   groupViolationsByRule,
+  type RuleCheckResultAccuracyFilter,
   type RuleCheckResultSeverityFilter,
 } from '@/utils/ruleCheckResultView';
 
@@ -86,6 +89,7 @@ const OVERLAY_LEGEND_CATEGORIES: RuleCheckOverlayCategory[] = [
 const activeTab = ref<'catalog' | 'results'>('catalog');
 const onlyViolationsFilter = ref(true);
 const resultSeverityFilter = ref<RuleCheckResultSeverityFilter>('all');
+const resultAccuracyFilter = ref<RuleCheckResultAccuracyFilter>('all');
 const resultKeyword = ref('');
 const groupByRule = ref(false);
 const collapsedGroups = ref<string[]>([]);
@@ -98,7 +102,36 @@ const RESULT_SEVERITY_OPTIONS: { key: RuleCheckResultSeverityFilter; label: stri
   { key: 'firezone', label: '火灾分区' },
 ];
 
+const ACCURACY_OPTIONS: { key: RuleCheckResultAccuracyFilter; label: string }[] = [
+  { key: 'all', label: '全部口径' },
+  { key: 'exact', label: '精算' },
+  { key: 'aabb', label: '估算' },
+];
+
+const BRAN_SCOPE_OPTIONS: { key: RuleCheckBranScope; label: string }[] = [
+  { key: 'single', label: '单根' },
+  { key: 'all', label: '全项目' },
+];
+
 const ENGINE_OPTIONS: RuleCheckEngineFilter[] = ['all', 'spatial', 'bran', 'rooms', 'attrs'];
+
+const showPreciseToggle = computed(
+  () => state.activeEngine === 'all' || state.activeEngine === 'spatial',
+);
+
+const preciseSummary = computed(() => summaryStats.value.precise);
+
+const branAllSummary = computed(() => summaryStats.value.branAll);
+
+const resultAccuracyCounts = computed(() => countViolationsByAccuracy(allViolations.value));
+
+const preciseStatsByRule = computed(() => {
+  const map = new Map<string, UnifiedPreciseStats>();
+  for (const r of state.results) {
+    if (r.precise?.refinable) map.set(`${r.engine}:${r.id}`, r.precise);
+  }
+  return map;
+});
 
 const showBranInput = computed(
   () => state.activeEngine === 'bran' || state.activeEngine === 'all',
@@ -114,13 +147,16 @@ const visibleViolations = computed(() =>
   filterRuleViolations(allViolations.value, {
     severity: resultSeverityFilter.value,
     keyword: resultKeyword.value,
+    accuracy: resultAccuracyFilter.value,
   }),
 );
 
 const groupedViolations = computed(() => groupViolationsByRule(visibleViolations.value));
 
 const isResultFiltered = computed(
-  () => resultSeverityFilter.value !== 'all' || resultKeyword.value.trim().length > 0,
+  () => resultSeverityFilter.value !== 'all'
+    || resultAccuracyFilter.value !== 'all'
+    || resultKeyword.value.trim().length > 0,
 );
 
 function toggleGroupCollapsed(groupKey: string) {
@@ -138,6 +174,7 @@ onMounted(() => {
 async function handleRunChecks() {
   clearOverlay();
   resultSeverityFilter.value = 'all';
+  resultAccuracyFilter.value = 'all';
   resultKeyword.value = '';
   collapsedGroups.value = [];
   activeTab.value = 'results';
@@ -147,6 +184,7 @@ async function handleRunChecks() {
 function handleClearResults() {
   clearOverlay();
   resultSeverityFilter.value = 'all';
+  resultAccuracyFilter.value = 'all';
   resultKeyword.value = '';
   collapsedGroups.value = [];
   clearResults();
@@ -215,6 +253,38 @@ function severityBadge(v: UnifiedRuleViolation): { label: string; cls: string } 
     return { label: '半自动复核', cls: 'bg-violet-500/15 text-violet-700 border-violet-500/30' };
   }
   return { label: '违规', cls: 'bg-destructive/15 text-destructive border-destructive/30' };
+}
+
+/** 精算行始终标注；估算只在本次开了精确复核时标注（未开时全部结果都是包围盒口径）。 */
+function accuracyBadge(v: UnifiedRuleViolation): { label: string; cls: string; title: string } | null {
+  if (v.accuracy === 'exact') {
+    return {
+      label: '精算',
+      cls: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30',
+      title: '三维网格外表面距离',
+    };
+  }
+  if (v.accuracy === 'aabb' && preciseSummary.value) {
+    return {
+      label: '估算',
+      cls: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
+      title: '包围盒距离：缺网格或规则不参与精算',
+    };
+  }
+  return null;
+}
+
+/** 实测值已扣隔热层时，另列未扣的网格外表面距。 */
+function exactSurfaceNote(v: UnifiedRuleViolation): string | null {
+  if (v.exactSurfaceMm === undefined || v.measuredMm === undefined) return null;
+  if (Math.abs(v.exactSurfaceMm - v.measuredMm) < 0.05) return null;
+  return `外表面 ${v.exactSurfaceMm.toFixed(1)}${v.unit ? ` ${v.unit}` : ''}`;
+}
+
+function groupPreciseLabel(groupKey: string): string | null {
+  const stats = preciseStatsByRule.value.get(groupKey);
+  if (!stats) return null;
+  return `估算 ${stats.aabbFindings} → 剔除 ${stats.cleared}`;
 }
 
 /** 装载/可见/高亮指定构件集合，并将三维相机飞至联合包围盒。 */
@@ -325,16 +395,50 @@ async function focusViolation(violation: UnifiedRuleViolation) {
         </button>
       </div>
 
+      <!-- 精确复核：最小净距类规则按三维网格精算 -->
+      <label v-if="showPreciseToggle"
+        data-testid="rule-check-precise-toggle"
+        class="flex cursor-pointer items-start gap-2 rounded border px-2 py-1.5"
+        :class="state.precise ? 'border-primary/40 bg-primary/5' : 'border-border'">
+        <input v-model="state.precise"
+          type="checkbox"
+          data-testid="rule-check-precise-input"
+          class="mt-0.5 rounded" />
+        <span class="min-w-0 space-y-0.5">
+          <span class="block text-[11px] font-medium text-foreground">精确复核（网格外表面距离）</span>
+          <span class="block text-[10px] leading-snug text-muted-foreground">
+            最小净距类规则先用包围盒估算初筛，再按三维网格精算剔除误报；缺网格的保留估算结果，耗时会增加。
+          </span>
+        </span>
+      </label>
+
       <!-- BRAN 与交互选集输入 -->
       <div v-if="showBranInput" class="flex items-center gap-1.5">
         <label class="w-16 shrink-0 text-[11px] text-muted-foreground">BRAN</label>
+        <div class="flex shrink-0 overflow-hidden rounded border border-border" data-testid="rule-check-bran-scope">
+          <button v-for="opt in BRAN_SCOPE_OPTIONS"
+            :key="opt.key"
+            type="button"
+            :data-testid="`rule-check-bran-scope-${opt.key}`"
+            class="px-1.5 py-1 text-[11px] transition-colors"
+            :class="
+              state.branScope === opt.key
+                ? 'bg-primary/10 font-medium text-primary'
+                : 'text-muted-foreground hover:bg-muted'
+            "
+            @click="state.branScope = opt.key">
+            {{ opt.label }}
+          </button>
+        </div>
         <input v-model="state.branRefno"
           type="text"
-          placeholder="如 24381_145018（BRAN 拓扑规则必填）"
-          class="flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-[11px] focus:border-primary focus:outline-none" />
+          :disabled="state.branScope === 'all'"
+          :placeholder="state.branScope === 'all' ? '全项目逐根运行 BRAN 拓扑规则（耗时较长）' : '如 24381_145018（BRAN 拓扑规则必填）'"
+          class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-[11px] focus:border-primary focus:outline-none disabled:opacity-50" />
         <button type="button"
-          class="shrink-0 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted"
+          class="shrink-0 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
           title="填入当前三维选中构件的 refno"
+          :disabled="state.branScope === 'all'"
           @click="handleFillBranFromSelection()">
           取选中
         </button>
@@ -472,6 +576,34 @@ async function focusViolation(violation: UnifiedRuleViolation) {
         </div>
       </div>
 
+      <!-- 精确复核与全项目 BRAN 的运行汇总 -->
+      <div v-if="preciseSummary || branAllSummary"
+        data-testid="rule-check-run-summary"
+        class="space-y-0.5 border-b border-border bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+        <div v-if="preciseSummary" data-testid="rule-check-precise-summary" class="flex flex-wrap items-center gap-x-2">
+          <span class="font-medium text-foreground">精确复核</span>
+          <span>估算 <span class="font-mono">{{ preciseSummary.aabbFindings }}</span> 项</span>
+          <span>→ 精算剔除 <span class="font-mono text-emerald-700">{{ preciseSummary.cleared }}</span> 项误报</span>
+          <span>
+            · 缺网格
+            <span class="font-mono" :class="preciseSummary.unavailable > 0 ? 'text-amber-700' : ''">{{ preciseSummary.unavailable }}</span>
+            对
+          </span>
+          <span>· 可精算规则 <span class="font-mono">{{ preciseSummary.refinableRules }}</span> 条</span>
+        </div>
+        <div v-if="branAllSummary" data-testid="rule-check-bran-all-summary" class="flex flex-wrap items-center gap-x-2">
+          <span class="font-medium text-foreground">全项目 BRAN</span>
+          <span>
+            已检 <span class="font-mono">{{ branAllSummary.bransChecked }}</span>/<span class="font-mono">{{ branAllSummary.bransTotal }}</span> 根
+          </span>
+          <span>
+            · 读取失败
+            <span class="font-mono" :class="branAllSummary.bransFailed > 0 ? 'text-amber-700' : ''">{{ branAllSummary.bransFailed }}</span>
+            根
+          </span>
+        </div>
+      </div>
+
       <!-- 三维着色覆盖层与报告导出工具条 -->
       <div v-if="state.results.length > 0"
         class="space-y-1.5 border-b border-border bg-card/60 px-3 py-1.5">
@@ -588,6 +720,21 @@ async function focusViolation(violation: UnifiedRuleViolation) {
             {{ groupByRule ? '按规则分组' : '平铺列表' }}
           </button>
         </div>
+        <div v-if="preciseSummary" class="flex flex-wrap items-center gap-1" data-testid="rule-check-accuracy-filter">
+          <button v-for="opt in ACCURACY_OPTIONS"
+            :key="opt.key"
+            type="button"
+            :data-testid="`rule-check-accuracy-filter-${opt.key}`"
+            class="rounded border px-1.5 py-0.5 text-[10px] transition-colors"
+            :class="
+              resultAccuracyFilter === opt.key
+                ? 'border-primary bg-primary/10 font-medium text-primary'
+                : 'border-border text-muted-foreground hover:bg-muted'
+            "
+            @click="resultAccuracyFilter = opt.key">
+            {{ opt.label }} <span class="font-mono">{{ resultAccuracyCounts[opt.key] }}</span>
+          </button>
+        </div>
         <div class="flex items-center gap-1.5">
           <div class="relative flex-1">
             <Search class="pointer-events-none absolute left-2 top-1.5 h-3 w-3 text-muted-foreground" />
@@ -637,6 +784,11 @@ async function focusViolation(violation: UnifiedRuleViolation) {
                   <span class="font-mono font-semibold text-foreground">{{ group.ruleId }}</span>
                   <span class="rounded bg-muted px-1 text-[10px] text-muted-foreground">{{ group.discipline }}</span>
                   <span class="truncate text-[11px] text-muted-foreground">{{ group.title }}</span>
+                  <span v-if="groupPreciseLabel(group.key)"
+                    data-testid="rule-check-group-precise"
+                    class="shrink-0 font-mono text-[10px] text-emerald-700">
+                    {{ groupPreciseLabel(group.key) }}
+                  </span>
                   <span class="shrink-0 rounded bg-destructive/15 px-1.5 font-mono text-[10px] text-destructive">
                     {{ group.violations.length }}
                   </span>
@@ -662,7 +814,15 @@ async function focusViolation(violation: UnifiedRuleViolation) {
                         :class="severityBadge(v).cls">
                         {{ severityBadge(v).label }}
                       </span>
+                      <span v-if="accuracyBadge(v)"
+                        data-testid="rule-check-accuracy-badge"
+                        class="rounded border px-1.5 py-0.2 text-[10px] font-medium"
+                        :class="accuracyBadge(v)?.cls"
+                        :title="accuracyBadge(v)?.title">
+                        {{ accuracyBadge(v)?.label }}
+                      </span>
                       <span v-if="v.roomNum" class="font-mono text-[10px] text-muted-foreground">房 {{ v.roomNum }}</span>
+                      <span v-if="v.branchRefno" class="font-mono text-[10px] text-muted-foreground">BRAN {{ v.branchRefno }}</span>
                       <span v-if="v.hasColumn" class="rounded bg-amber-500/15 px-1 text-[10px] text-amber-700">有柱</span>
                     </div>
                     <button type="button"
@@ -678,6 +838,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
                   <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] text-muted-foreground">
                     <span v-if="v.measuredMm !== undefined">实测 {{ v.measuredMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
                     <span v-if="v.thresholdMm !== undefined">阈值 {{ v.thresholdMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
+                    <span v-if="exactSurfaceNote(v)">{{ exactSurfaceNote(v) }}</span>
                     <span v-if="v.highlightRefnos.length > 0">高亮 {{ v.highlightRefnos.join(', ') }}</span>
                   </div>
                 </div>
@@ -698,9 +859,17 @@ async function focusViolation(violation: UnifiedRuleViolation) {
                     :class="severityBadge(v).cls">
                     {{ severityBadge(v).label }}
                   </span>
+                  <span v-if="accuracyBadge(v)"
+                    data-testid="rule-check-accuracy-badge"
+                    class="rounded border px-1.5 py-0.2 text-[10px] font-medium"
+                    :class="accuracyBadge(v)?.cls"
+                    :title="accuracyBadge(v)?.title">
+                    {{ accuracyBadge(v)?.label }}
+                  </span>
                   <span class="font-mono font-medium">{{ v.ruleId }}</span>
                   <span class="rounded bg-muted px-1 text-[10px] text-muted-foreground">{{ v.discipline }}</span>
                   <span v-if="v.roomNum" class="font-mono text-[10px] text-muted-foreground">房 {{ v.roomNum }}</span>
+                  <span v-if="v.branchRefno" class="font-mono text-[10px] text-muted-foreground">BRAN {{ v.branchRefno }}</span>
                   <span v-if="v.hasColumn" class="rounded bg-amber-500/15 px-1 text-[10px] text-amber-700">有柱</span>
                 </div>
                 <button type="button"
@@ -716,6 +885,7 @@ async function focusViolation(violation: UnifiedRuleViolation) {
               <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] text-muted-foreground">
                 <span v-if="v.measuredMm !== undefined">实测 {{ v.measuredMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
                 <span v-if="v.thresholdMm !== undefined">阈值 {{ v.thresholdMm.toFixed(1) }}{{ v.unit ? ` ${v.unit}` : '' }}</span>
+                <span v-if="exactSurfaceNote(v)">{{ exactSurfaceNote(v) }}</span>
                 <span v-if="v.highlightRefnos.length > 0">高亮 {{ v.highlightRefnos.join(', ') }}</span>
               </div>
             </div>

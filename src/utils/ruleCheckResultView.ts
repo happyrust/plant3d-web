@@ -7,12 +7,17 @@ export type RuleCheckResultSeverityFilter =
   | 'semi_auto'
   | 'firezone';
 
+export type RuleCheckResultAccuracyFilter = 'all' | 'exact' | 'aabb';
+
 export type RuleCheckResultFilterOptions = {
   severity: RuleCheckResultSeverityFilter;
   keyword: string;
+  accuracy?: RuleCheckResultAccuracyFilter;
 };
 
 export type RuleCheckResultSeverityCounts = Record<RuleCheckResultSeverityFilter, number>;
+
+export type RuleCheckResultAccuracyCounts = Record<RuleCheckResultAccuracyFilter, number>;
 
 export type RuleViolationGroup = {
   key: string;
@@ -45,6 +50,17 @@ export function countViolationsByResultSeverity(
   return counts;
 }
 
+export function countViolationsByAccuracy(
+  violations: UnifiedRuleViolation[],
+): RuleCheckResultAccuracyCounts {
+  const counts: RuleCheckResultAccuracyCounts = { all: violations.length, exact: 0, aabb: 0 };
+  for (const v of violations) {
+    if (v.accuracy === 'exact') counts.exact += 1;
+    else if (v.accuracy === 'aabb') counts.aabb += 1;
+  }
+  return counts;
+}
+
 export function filterRuleViolations(
   violations: UnifiedRuleViolation[],
   options: RuleCheckResultFilterOptions,
@@ -55,6 +71,7 @@ export function filterRuleViolations(
     if (options.severity === 'reminder' && v.severity !== 'reminder') return false;
     if (options.severity === 'semi_auto' && v.severity !== 'semi_auto') return false;
     if (options.severity === 'violation' && v.severity !== 'violation') return false;
+    if (options.accuracy && options.accuracy !== 'all' && v.accuracy !== options.accuracy) return false;
 
     if (!kw) return true;
     return (
@@ -65,6 +82,7 @@ export function filterRuleViolations(
       || v.sourceLabel.toLowerCase().includes(kw)
       || v.targetLabel.toLowerCase().includes(kw)
       || (v.roomNum?.toLowerCase().includes(kw) ?? false)
+      || (v.branchRefno?.toLowerCase().includes(kw) ?? false)
       || `#${v.issue}`.includes(kw)
       || v.highlightRefnos.some((r) => r.toLowerCase().includes(kw))
     );

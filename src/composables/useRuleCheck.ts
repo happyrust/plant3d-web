@@ -6,14 +6,18 @@ import {
   fetchAllRuleCatalogs,
   normalizeAttrResponse,
   normalizeBranResponse,
+  normalizeBranRunAllResponse,
   normalizeRoomResponse,
   normalizeRuleRefnoToken,
   normalizeSpatialResponse,
   runAttrRuleCheck,
   runBranRuleCheck,
+  runBranRuleCheckAll,
   runRoomRuleCheck,
   runSpatialRuleCheck,
   type RuleCheckEngine,
+  type UnifiedBranRunAllSummary,
+  type UnifiedPreciseSummary,
   type UnifiedRuleCatalogRow,
   type UnifiedRuleCheckBatchResult,
   type UnifiedRuleResult,
@@ -21,6 +25,9 @@ import {
 } from '@/api/ruleCheckApi';
 
 export type RuleCheckEngineFilter = 'all' | RuleCheckEngine;
+
+/** BRAN 拓扑规则的运行范围：单根 BRAN，或全项目逐根。 */
+export type RuleCheckBranScope = 'single' | 'all';
 
 export const RULE_CHECK_DISCIPLINES = ['水工', '布置', '仪控', '通风', '电气'] as const;
 
@@ -47,6 +54,8 @@ function createInitialState() {
 
     branRefno: '',
     attrScopeText: '',
+    precise: false,
+    branScope: 'single' as RuleCheckBranScope,
 
     running: false,
     runError: null as string | null,
@@ -135,6 +144,27 @@ export function useRuleCheck() {
         else violations += 1;
       }
     }
+    let precise: UnifiedPreciseSummary | null = null;
+    if (state.batches.some((b) => b.precise)) {
+      precise = { refinableRules: 0, aabbFindings: 0, cleared: 0, candidates: 0, exact: 0, unavailable: 0 };
+      for (const r of state.results) {
+        if (!r.precise?.refinable) continue;
+        precise.refinableRules += 1;
+        precise.aabbFindings += r.precise.aabbFindings;
+        precise.cleared += r.precise.cleared;
+        precise.candidates += r.precise.candidates;
+        precise.exact += r.precise.exact;
+        precise.unavailable += r.precise.unavailable;
+      }
+    }
+    const runAllBatch = state.batches.find((b) => b.bransTotal !== undefined);
+    const branAll: UnifiedBranRunAllSummary | null = runAllBatch
+      ? {
+        bransTotal: runAllBatch.bransTotal ?? 0,
+        bransChecked: runAllBatch.bransChecked ?? 0,
+        bransFailed: runAllBatch.bransFailed ?? 0,
+      }
+      : null;
     return {
       rulesRun: state.results.length,
       totalReported,
@@ -142,6 +172,8 @@ export function useRuleCheck() {
       reminders,
       semiAuto,
       firezones,
+      precise,
+      branAll,
     };
   });
 
@@ -259,8 +291,14 @@ export function useRuleCheck() {
         const passIds = runAllForEngine ? undefined : ids;
 
         if (eng === 'spatial') {
-          tasks.push(runSpatialRuleCheck(passIds, reqOptions).then(normalizeSpatialResponse));
+          tasks.push(
+            runSpatialRuleCheck(passIds, reqOptions, { precise: state.precise }).then(normalizeSpatialResponse),
+          );
         } else if (eng === 'bran') {
+          if (state.branScope === 'all') {
+            tasks.push(runBranRuleCheckAll(passIds, reqOptions).then(normalizeBranRunAllResponse));
+            continue;
+          }
           const bran = state.branRefno.trim();
           if (!bran) {
             if (state.activeEngine === 'bran') {

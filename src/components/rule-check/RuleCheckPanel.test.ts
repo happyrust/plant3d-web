@@ -5,12 +5,14 @@ const {
   fetchAllRuleCatalogsMock,
   runSpatialRuleCheckMock,
   runBranRuleCheckMock,
+  runBranRuleCheckAllMock,
   runRoomRuleCheckMock,
   runAttrRuleCheckMock,
 } = vi.hoisted(() => ({
   fetchAllRuleCatalogsMock: vi.fn(),
   runSpatialRuleCheckMock: vi.fn(),
   runBranRuleCheckMock: vi.fn(),
+  runBranRuleCheckAllMock: vi.fn(),
   runRoomRuleCheckMock: vi.fn(),
   runAttrRuleCheckMock: vi.fn(),
 }));
@@ -22,6 +24,7 @@ vi.mock('@/api/ruleCheckApi', async () => {
     fetchAllRuleCatalogs: fetchAllRuleCatalogsMock,
     runSpatialRuleCheck: runSpatialRuleCheckMock,
     runBranRuleCheck: runBranRuleCheckMock,
+    runBranRuleCheckAll: runBranRuleCheckAllMock,
     runRoomRuleCheck: runRoomRuleCheckMock,
     runAttrRuleCheck: runAttrRuleCheckMock,
   };
@@ -149,6 +152,7 @@ describe('RuleCheckPanel', () => {
       ],
     });
     runBranRuleCheckMock.mockReset();
+    runBranRuleCheckAllMock.mockReset();
     viewerContextStub.viewerRef.value = null;
   });
 
@@ -296,5 +300,77 @@ describe('RuleCheckPanel', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="rule-check-group-header"]')!.click();
     await flushUi();
     expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(0);
+  });
+
+  it('requests precise review and labels exact and estimated rows with an accuracy filter', async () => {
+    runSpatialRuleCheckMock.mockResolvedValue({
+      tree_state: 'ready',
+      precise: true,
+      rules_run: 1,
+      elapsed_ms: 9,
+      warnings: [],
+      results: [
+        {
+          id: 'LAY-189',
+          issue: 189,
+          discipline: '布置',
+          title: '净距规则',
+          requirement: '>=500mm',
+          unit: 'mm',
+          source_items: 3,
+          target_items: 3,
+          violation_total: 2,
+          truncated: false,
+          precise: { refinable: true, aabb_findings: 5, candidates: 7, exact: 6, unavailable: 1, cleared: 3 },
+          violations: [
+            {
+              source: { refno: '24381_10', noun: 'PIPE' },
+              target: { refno: '24381_20', noun: 'WALL' },
+              measured_mm: 240,
+              threshold_mm: 500,
+              margin_mm: -260,
+              highlight_refnos: ['24381_10', '24381_20'],
+              accuracy: 'exact-surface',
+              exact_surface_mm: 290,
+            },
+            {
+              source: { refno: '24381_11', noun: 'PIPE' },
+              target: { refno: '24381_21', noun: 'WALL' },
+              measured_mm: 0,
+              threshold_mm: 500,
+              margin_mm: -500,
+              highlight_refnos: ['24381_11', '24381_21'],
+              accuracy: 'aabb',
+            },
+          ],
+        },
+      ],
+    });
+
+    app = createApp({ render: () => h(RuleCheckPanel) });
+    app.mount(host);
+    await flushUi();
+
+    const preciseInput = host.querySelector<HTMLInputElement>('[data-testid="rule-check-precise-input"]');
+    expect(preciseInput).not.toBeNull();
+    preciseInput!.checked = true;
+    preciseInput!.dispatchEvent(new Event('change'));
+    await flushUi();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-run-btn"]')!.click();
+    await flushUi();
+
+    expect(runSpatialRuleCheckMock).toHaveBeenCalledWith(undefined, expect.anything(), { precise: true });
+    expect(host.querySelector('[data-testid="rule-check-precise-summary"]')?.textContent).toContain('精算剔除');
+    const badges = Array.from(host.querySelectorAll('[data-testid="rule-check-accuracy-badge"]')).map((el) =>
+      el.textContent?.trim(),
+    );
+    expect(badges).toEqual(['精算', '估算']);
+    expect(host.textContent).toContain('外表面 290.0 mm');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="rule-check-accuracy-filter-aabb"]')!.click();
+    await flushUi();
+    expect(host.querySelectorAll('[data-testid="rule-check-violation-row"]').length).toBe(1);
+    expect(host.querySelector('[data-testid="rule-check-result-filtered-count"]')?.textContent?.trim()).toBe('1/3');
   });
 });

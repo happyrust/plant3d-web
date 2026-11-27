@@ -1,5 +1,7 @@
 import type {
   RuleCheckEngine,
+  UnifiedBranRunAllSummary,
+  UnifiedPreciseSummary,
   UnifiedRuleCheckBatchResult,
   UnifiedRuleResult,
   UnifiedRuleViolation,
@@ -26,6 +28,8 @@ export type RuleCheckExportSummary = {
   semiAuto: number;
   firezones: number;
   totalElapsedMs: number;
+  precise?: UnifiedPreciseSummary | null;
+  branAll?: UnifiedBranRunAllSummary | null;
 }
 
 export type RuleCheckExportPayload = {
@@ -64,6 +68,9 @@ const CSV_HEADERS = [
   '裕度(mm)',
   '涉事高亮refno',
   '详情',
+  '口径',
+  '网格外表面距(mm)',
+  '所在BRAN',
 ] as const;
 
 function formatNumber(n?: number): string {
@@ -74,6 +81,12 @@ function formatNumber(n?: number): string {
 function formatHighlightColor(color?: UnifiedRuleViolation['highlightColor']): string {
   if (color === 'red') return '红(扩散性火灾)';
   if (color === 'yellow') return '黄(局部性火灾)';
+  return '';
+}
+
+function formatAccuracy(accuracy?: UnifiedRuleViolation['accuracy']): string {
+  if (accuracy === 'exact') return '网格精算';
+  if (accuracy === 'aabb') return '包围盒估算';
   return '';
 }
 
@@ -100,6 +113,9 @@ export function buildRuleCheckCsv(violations: UnifiedRuleViolation[]): string {
       formatNumber(v.marginMm),
       v.highlightRefnos.join(';'),
       v.detail,
+      formatAccuracy(v.accuracy),
+      formatNumber(v.exactSurfaceMm),
+      v.branchRefno ?? '',
     ];
     lines.push(row.map(escapeCsvCell).join(','));
   }
@@ -122,6 +138,10 @@ export function buildRuleCheckJson(payload: RuleCheckExportPayload): string {
       rulesRun: b.rulesRun,
       elapsedMs: b.elapsedMs,
       warnings: b.warnings,
+      precise: b.precise,
+      bransTotal: b.bransTotal,
+      bransChecked: b.bransChecked,
+      bransFailed: b.bransFailed,
     })),
     results: payload.results.map((r) => ({
       engine: r.engine,
@@ -134,6 +154,7 @@ export function buildRuleCheckJson(payload: RuleCheckExportPayload): string {
       violationTotal: r.violationTotal,
       truncated: r.truncated,
       warnings: r.warnings,
+      precise: r.precise,
     })),
     violations: payload.violations,
   };
