@@ -48,9 +48,18 @@ function createSession(onPreview = vi.fn()) {
   });
 }
 
-function event(clientX: number, clientY: number) {
-  return { clientX, clientY };
+function event(
+  clientX: number,
+  clientY: number,
+  mouse: { button?: number; buttons?: number } = {},
+) {
+  return { clientX, clientY, ...mouse };
 }
+
+const RIGHT = 2;
+const MIDDLE = 1;
+/** `PointerEvent.buttons` 的位：主键 1、右键 2、中键 4 */
+const HELD = { primary: 1, right: 2, middle: 4 };
 
 describe('DimensionPointerController', () => {
   it('keeps pointer moves preview-only and applies exactly once on pointer-up', () => {
@@ -315,6 +324,128 @@ describe('DimensionPointerController', () => {
       requestRender: true,
     });
     expect(viewport.setSelection).toHaveBeenCalledWith('xeokit-measurement:m1');
+  });
+
+  it('#205 右键、中键按在尺寸图形上：不选中、不开编辑会话、不消费，留给相机', () => {
+    const viewport = {
+      hitTest: vi.fn(() => ({ dimensionId: 'existing', part: 'label', distancePx: 0 })),
+      setHover: vi.fn(),
+      setSelection: vi.fn(),
+      setPreview: vi.fn(),
+    };
+    const factory = vi.fn(() => null);
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport,
+      applyCommand: vi.fn(),
+    });
+    controller.setEditSessionFactory(factory);
+
+    for (const button of [RIGHT, MIDDLE]) {
+      expect(controller.pointerDown(event(30, 50, { button }))).toEqual({ consumed: false });
+      expect(controller.pointerUp(event(30, 50, { button }))).toEqual({ consumed: false });
+    }
+    expect(viewport.setSelection).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+    expect(controller.hasActiveSession).toBe(false);
+
+    // 主键照旧：选中并消费
+    expect(controller.pointerDown(event(30, 50, { button: 0 }))).toEqual({ consumed: true, requestRender: true });
+    expect(viewport.setSelection).toHaveBeenCalledWith('existing');
+  });
+
+  it('#205 创建会话进行中：右键、中键单击不算拾点，抬起也不提交', () => {
+    const applyCommand = vi.fn(() => ({ ok: true as const }));
+    const viewport = {
+      hitTest: vi.fn(() => null),
+      setHover: vi.fn(),
+      setSelection: vi.fn(),
+      setPreview: vi.fn(),
+    };
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport,
+      applyCommand,
+    });
+    controller.start(createSession(viewport.setPreview));
+
+    for (const button of [RIGHT, MIDDLE]) {
+      expect(controller.pointerDown(event(20, 30, { button }))).toEqual({ consumed: false });
+      expect(controller.pointerUp(event(20, 30, { button }))).toEqual({ consumed: false });
+    }
+    expect(controller.sessionStatus?.phase).toBe('pick-first');
+
+    // 主键拾两点、按下定放置，会话就绪；这时右键抬起不能替主键提交
+    controller.pointerDown(event(20, 30));
+    controller.pointerDown(event(120, 30));
+    controller.pointerUp(event(120, 30));
+    controller.pointerDown(event(130, 60));
+    expect(controller.sessionStatus?.phase).toBe('ready');
+    expect(controller.pointerUp(event(130, 60, { button: RIGHT }))).toEqual({ consumed: false });
+    expect(applyCommand).not.toHaveBeenCalled();
+    expect(controller.hasActiveSession).toBe(true);
+
+    expect(controller.pointerUp(event(130, 60))).toEqual({ consumed: true, requestRender: true });
+    expect(applyCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('#205 没有尺寸会话时，有键按着的移动是别人的拖动：不做命中测试、不置悬停、不消费', () => {
+    const viewport = {
+      hitTest: vi.fn(() => ({ dimensionId: 'existing', part: 'label', distancePx: 0 })),
+      setHover: vi.fn(),
+      setSelection: vi.fn(),
+      setPreview: vi.fn(),
+    };
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport,
+      applyCommand: vi.fn(),
+    });
+
+    for (const buttons of [HELD.primary, HELD.right, HELD.middle, HELD.primary | HELD.right]) {
+      expect(controller.pointerMove(event(30, 50, { buttons }))).toEqual({ consumed: false });
+    }
+    expect(viewport.hitTest).not.toHaveBeenCalled();
+    expect(viewport.setHover).not.toHaveBeenCalled();
+
+    // 没有键按着的移动照旧：命中就置悬停并消费
+    expect(controller.pointerMove(event(30, 50, { buttons: 0 }))).toEqual({ consumed: true, requestRender: true });
+    expect(viewport.setHover).toHaveBeenCalledWith('existing');
+  });
+
+  it('#205 有尺寸会话时，只有右键或中键按着的移动是相机手势：不交给会话、不消费', () => {
+    const session = {
+      kind: 'linear',
+      phase: 'pick-first',
+      pointerMove: vi.fn(),
+      pointerDown: vi.fn(),
+      commit: vi.fn(() => null),
+      cancel: vi.fn(),
+      flip: vi.fn(),
+      back: vi.fn(() => false),
+    } as any;
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport: {
+        hitTest: vi.fn(() => null),
+        setHover: vi.fn(),
+        setSelection: vi.fn(),
+        setPreview: vi.fn(),
+      },
+      applyCommand: vi.fn(),
+    });
+    controller.start(session);
+
+    for (const buttons of [HELD.right, HELD.middle, HELD.right | HELD.middle]) {
+      expect(controller.pointerMove(event(30, 50, { buttons }))).toEqual({ consumed: false });
+    }
+    expect(session.pointerMove).not.toHaveBeenCalled();
+
+    // 没有键按着（创建中的预览）、主键按着（拖标签）、主键加别的键：都还是会话的
+    for (const buttons of [0, HELD.primary, HELD.primary | HELD.right]) {
+      expect(controller.pointerMove(event(30, 50, { buttons }))).toEqual({ consumed: true, requestRender: true });
+    }
+    expect(session.pointerMove).toHaveBeenCalledTimes(3);
   });
 
   it('Backspace 退回上一步并发布步骤；第一步时不消费', () => {
